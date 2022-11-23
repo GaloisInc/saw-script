@@ -453,12 +453,17 @@ Proof.
       reflexivity.
 Qed.
 
+
 (** * mbox_copy *)
 
+Definition Mbox_cons_valid (strt len : bitvector 64) : Prop :=
+  isBvule 64 strt (intToBv 64 128) /\
+  isBvule 64 len (bvSub 64 (intToBv 64 128) strt).
+
 Definition mbox_copy_precond : Mbox -> Prop :=
-  Mbox__rec (fun _ => Prop) True (fun strt len _ _ _ =>
-    isBvule 64 strt (intToBv 64 128) /\
-    isBvule 64 len (bvSub 64 (intToBv 64 128) strt)).
+  Mbox__rec (fun _ => Prop)
+            True
+            (fun strt len _ _ _ => Mbox_cons_valid strt len).
 
 Definition empty_mbox_d := genBVVec 64 (intToBv 64 128) (bitvector 8) (fun i _ => bvNat 8 0).
 
@@ -480,12 +485,14 @@ Definition mbox_copy_postcond
                a single mbox with the given `start` and `len`, and the given
                `dat` with the range 0 to `start` zeroed out. *)
             (fun strt len m' _ d =>
-              exists (pf0 : isBvule 64 strt (intToBv 64 128))
-                     (pf1 : isBvule 64 len (bvSub 64 (intToBv 64 128) strt)),
-              r = (Mbox_cons strt len m'
-                             (conjSliceBVVec strt len pf0 pf1 d d),
-                   Mbox_cons strt len Mbox_nil
-                             (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d)))
+              exists (valid : Mbox_cons_valid strt len),
+              match valid with
+              | conj pf0 pf1 =>
+                  r = (Mbox_cons strt len m'
+                                 (conjSliceBVVec strt len pf0 pf1 d d),
+                       Mbox_cons strt len Mbox_nil
+                                 (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))
+              end)
             m.
 
 Lemma mbox_copy_spec_ref m
@@ -506,27 +513,33 @@ Proof.
     + exact (m0 = m1).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - unfold mbox_copy_precond, mbox_copy_postcond, conjSliceBVVec in *.
+  - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
+           empty_mbox_d, conjSliceBVVec in *.
   - prove_refinement_continue.
     + (* Many of these goals, such as the one below, are simple exercises in
          instantiating existential variables. *)
-      do 2 (unshelve eexists; try eassumption). reflexivity.
+      unshelve eexists. try eauto. reflexivity.
     + (* Many of the other goals have contradictory hypotheses, which we can
          reveal using a helper lemma. *)
       rewrite bvuleWithProof_not in H. contradiction.
-    + do 2 (unshelve eexists; try eassumption). reflexivity.
+    + unshelve eexists. try eauto. reflexivity.
     + rewrite bvuleWithProof_not in H0. contradiction.
-    + do 2 (unshelve eexists; try eassumption). reflexivity.
+    + unshelve eexists. try eauto. reflexivity.
     + rewrite bvuleWithProof_not in H1. contradiction.
-    + do 2 (unshelve eexists; try eassumption). reflexivity.
+    + unshelve eexists. try eauto. reflexivity.
     + rewrite bvuleWithProof_not in H2. contradiction.
 
       (* This time, only one side of the equality mentions existential
          variables, so don't use unshelve. *)
-    + do 2 eexists. reflexivity.
-    + do 2 eexists. reflexivity.
+    + eexists (conj a1 a2).
+      rewrite transMbox_Mbox_nil_r.
+      reflexivity.
+    + reflexivity.
+    + eexists (conj a1 a2).
+      rewrite transMbox_Mbox_nil_r.
+      reflexivity.
 
-    + do 2 (unshelve eexists; try eassumption). reflexivity.
+    + unshelve eexists. try eauto. reflexivity.
 
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
@@ -535,6 +548,102 @@ Proof.
       * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
         destruct (not_isBvslt_bvsmax _ _ H1).
 Qed.
+
+Definition mbox_copy_spec
+           : forall (m : Mbox),
+             mbox_copy_precond m -> Mbox * Mbox :=
+  Mbox__rec (fun m' => mbox_copy_precond m' -> Mbox * Mbox)
+            (fun _ => (Mbox_nil, Mbox_nil))
+            (fun strt len m' _ d valid =>
+              match valid with
+              | conj pf0 pf1 =>
+                  (Mbox_cons strt len m'
+                             (conjSliceBVVec strt len pf0 pf1 d d),
+                   Mbox_cons strt len Mbox_nil
+                             (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))
+              end).
+
+Lemma mbox_copy_spec_ref__alt m
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_copy m)
+      (total_spec (fun m' => mbox_copy_precond m')
+                  (fun m' r => exists (precond : mbox_copy_precond m'),
+                               r = mbox_copy_spec m' precond)
+                  m).
+Proof.
+  unfold mbox_copy, mbox_copy__bodies, mboxNewSpec.
+  (* Yikes! The below functions may or may not be defined depending on what
+     machine compiled mbox.bc *)
+  try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
+  try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
+  prove_refinement.
+  - wellfounded_none.
+  - prepost_case 0 0.
+    + exact (m0 = m1).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - unfold mbox_copy_precond, Mbox_cons_valid, empty_mbox_d, conjSliceBVVec in *.
+  - prove_refinement_continue.
+    + eexists; reflexivity.
+    + eexists; reflexivity.
+    + (* Many of these goals, such as the one below, are simple exercises in
+         instantiating existential variables. *)
+      unshelve eexists. try eauto. reflexivity.
+    + (* Many of the other goals have contradictory hypotheses, which we can
+         reveal using a helper lemma. *)
+      rewrite bvuleWithProof_not in H. contradiction.
+    + unshelve eexists. try eauto. reflexivity.
+    + rewrite bvuleWithProof_not in H0. contradiction.
+    + unshelve eexists. try eauto. reflexivity.
+    + rewrite bvuleWithProof_not in H1. contradiction.
+    + unshelve eexists. try eauto. reflexivity.
+    + rewrite bvuleWithProof_not in H2. contradiction.
+
+      (* This time, only one side of the equality mentions existential
+         variables, so don't use unshelve. *)
+    + eexists (conj a1 a2). reflexivity.
+    + eexists (conj a1 a2). reflexivity.
+
+    + unshelve eexists. try eauto. reflexivity.
+
+    + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
+      destruct e_if.
+      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
+        destruct (not_isBvslt_bvsmin _ _ H1).
+      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
+        destruct (not_isBvslt_bvsmax _ _ H1).
+Qed.
+
+
+(** * mbox_copy_chain *)
+
+Definition mbox_copy_chain_precond : Mbox -> Prop :=
+  Mbox__rec (fun _ => Prop) True (fun strt len _ rec _ =>
+    Mbox_cons_valid strt len /\ rec).
+
+Definition mbox_copy_chain_spec
+             (m : Mbox) (len : bitvector 64)
+           : mbox_copy_chain_precond m -> Mbox * Mbox :=
+  Mbox__rec (fun m' => mbox_copy_chain_precond m' -> Mbox * Mbox)
+            (fun _ => (Mbox_nil, Mbox_nil))
+            (fun strt len m' rec d valid =>
+              match valid with
+              | conj (conj pf0 pf1) pfrec =>
+                  let '(head0, head1) := mbox_copy_spec (Mbox_cons strt len m' d) (conj pf0 pf1) in
+                  let '(tail0, tail1) := rec pfrec in
+                  (transMbox head0 tail0, transMbox tail0 tail1)
+              end)
+            m.
+
+Lemma mbox_copy_chain_spec_ref m len
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_copy_chain m len)
+      (total_spec (fun m' => mbox_copy_chain_precond m')
+                  (fun m' r => exists (precond : mbox_copy_chain_precond m'),
+                               r = mbox_copy_chain_spec m' len precond)
+                  m).
+Admitted. (* TODO *)
+
 
 (** * mbox_randomize *)
 
