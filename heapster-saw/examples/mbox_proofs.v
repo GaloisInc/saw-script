@@ -23,7 +23,7 @@ Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet. *)
 Require Import Examples.mbox_gen.
 Import mbox.
 
-Instance QuantType_Mbox : QuantType Mbox.
+Local Instance QuantType_Mbox : QuantType Mbox.
 Admitted.
 
 
@@ -100,8 +100,8 @@ Proof. intros eq; discriminate eq. Qed.
 #[global] Hint Extern 101 (IntroArg _ (Just _ _ = Nothing _) _) =>
   apply IntroArg_eq_Just_Nothing : refines.
 
-  
-(* Boolean equality automation *)
+
+(* bitvector (in)equality automation *)
 
 Lemma simpl_llvm_bool_eq (b : bool) :
   not (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
@@ -114,6 +114,52 @@ Proof. rewrite simpl_llvm_bool_eq; eauto. Defined.
 
 #[local] Hint Extern 101 (IntroArg _ (not (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
   simple eapply simpl_llvm_bool_eq_IntroArg : refines.
+
+Polymorphic Lemma bvuleWithProof_not :
+  forall w a b,
+  bvuleWithProof w a b = Nothing _ <-> ~ (isBvule w a b).
+Proof.
+  unfold bvuleWithProof, isBvule.
+  split.
+  - intros H0 H1.
+    rewrite H1 in H0. simpl.
+    discriminate.
+  - intros H.
+    destruct (bvule w a b).
+      + contradiction.
+      + reflexivity.
+Qed.
+
+Polymorphic Lemma bvuleWithProof_not_IntroArg n w a b goal :
+  IntroArg n (~ (isBvule w a b)) (fun _ => goal) ->
+  IntroArg n (bvuleWithProof w a b = Nothing _) (fun _ => goal).
+Proof. intros H eq; apply H; apply bvuleWithProof_not; eauto. Qed.
+ 
+#[local] Hint Extern 101 (IntroArg _ (bvuleWithProof _ _ _ = Nothing _) _) =>
+  simple apply bvuleWithProof_not_IntroArg || shelve : refines.
+
+Polymorphic Lemma bvultWithProof_not :
+  forall w a b,
+  bvultWithProof w a b = Nothing _ <-> ~ (isBvult w a b).
+Proof.
+  unfold bvultWithProof, isBvult.
+  split.
+  - intros H0 H1.
+    rewrite H1 in H0. simpl.
+    discriminate.
+  - intros H.
+    destruct (bvult w a b).
+      + contradiction.
+      + reflexivity.
+Qed.
+
+Polymorphic Lemma bvultWithProof_not_IntroArg n w a b goal :
+  IntroArg n (~ (isBvult w a b)) (fun _ => goal) ->
+  IntroArg n (bvultWithProof w a b = Nothing _) (fun _ => goal).
+Proof. intros H eq; apply H; apply bvultWithProof_not; eauto. Qed.
+
+#[local] Hint Extern 101 (IntroArg _ (bvultWithProof _ _ _ = Nothing _) _) =>
+  apply bvultWithProof_not_IntroArg : refines.
 
 
 (* Mbox destruction automation *)
@@ -154,6 +200,11 @@ Global Hint Extern 100 (spec_refines _ _ _ (either _ _ _ _ _ (unfoldMbox ?m)) _)
 Global Hint Extern 100 (spec_refines _ _ _ _ (either _ _ _ _ _ (unfoldMbox ?m))) =>
   either_unfoldMbox m : refines.
 
+Global Hint Extern 100 (Shelve (Mbox__rec _ _ _ _)) =>
+  cbn [ Mbox__rec Mbox_rect ] : refines.
+Global Hint Extern 100 (Shelve (Mbox_rect _ _ _ _)) =>
+  cbn [ Mbox__rec Mbox_rect ] : refines.
+
 Lemma transMbox_Mbox_nil_r m : transMbox m Mbox_nil = m.
 Proof.
   induction m; eauto.
@@ -167,7 +218,7 @@ Proof.
   simpl; f_equal; eauto.
 Qed.
 
-Hint Rewrite transMbox_Mbox_nil_r (*transMbox_assoc*) : refines.
+#[local] Hint Rewrite transMbox_Mbox_nil_r (*transMbox_assoc*) : refines.
 
 
 (* Helper functions and lemmas *)
@@ -179,35 +230,6 @@ Lemma mbox_chain_length_transMbox m1 m2 :
   mbox_chain_length (transMbox m1 m2) = mbox_chain_length m1 + mbox_chain_length m2.
 Proof. induction m1; simpl; eauto. Qed.
 
-Lemma bvuleWithProof_not :
-  forall w a b,
-  bvuleWithProof w a b = Nothing _ <-> ~ (isBvule w a b).
-Proof.
-  unfold bvuleWithProof, isBvule.
-  split.
-  - intros H0 H1.
-    rewrite H1 in H0. simpl.
-    discriminate.
-  - intros H.
-    destruct (bvule w a b).
-      + contradiction.
-      + reflexivity.
-Qed.
-
-Lemma bvultWithProof_not :
-  forall w a b,
-  bvultWithProof w a b = Nothing _ <-> ~ (isBvult w a b).
-Proof.
-  unfold bvultWithProof, isBvult.
-  split.
-  - intros H0 H1.
-    rewrite H1 in H0. simpl.
-    discriminate.
-  - intros H.
-    destruct (bvult w a b).
-      + contradiction.
-      + reflexivity.
-Qed.
 
 (** * mbox_free_chain *)
 
@@ -394,7 +416,7 @@ Lemma mbox_len_spec_ref__dec_args m
                   (fun '(_, m1', m2') r => r = (transMbox m1' m2', mbox_len_spec (transMbox m1' m2')))
                   (1, Mbox_nil, m)).
 Proof.
-  unfold mbox_len, mbox_len__bodies, Mbox_def.
+  unfold mbox_len, mbox_len__bodies.
   prove_refinement.
   - wellfounded_decreasing_nat.
     exact (a + mbox_chain_length m1).
@@ -407,16 +429,11 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue.
-    + rewrite H.
-      rewrite transMbox_Mbox_nil_r.
-      reflexivity.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
-    + rewrite H.
-      rewrite transMbox_Mbox_nil_r.
-      rewrite transMbox_assoc.
+    + rewrite transMbox_assoc.
       reflexivity.
 Qed.
 
@@ -440,16 +457,11 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue.
-    + rewrite H.
-      rewrite transMbox_Mbox_nil_r.
-      reflexivity.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
-    + rewrite H.
-      rewrite transMbox_Mbox_nil_r.
-      rewrite transMbox_assoc.
+    + rewrite transMbox_assoc.
       reflexivity.
 Qed.
 
@@ -515,38 +527,19 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
-  - prove_refinement_continue.
-    + (* Many of these goals, such as the one below, are simple exercises in
-         instantiating existential variables. *)
-      unshelve eexists. try eauto. reflexivity.
-    + (* Many of the other goals have contradictory hypotheses, which we can
-         reveal using a helper lemma. *)
-      rewrite bvuleWithProof_not in H. contradiction.
-    + unshelve eexists. try eauto. reflexivity.
-    + rewrite bvuleWithProof_not in H0. contradiction.
-    + unshelve eexists. try eauto. reflexivity.
-    + rewrite bvuleWithProof_not in H1. contradiction.
-    + unshelve eexists. try eauto. reflexivity.
-    + rewrite bvuleWithProof_not in H2. contradiction.
-
-      (* This time, only one side of the equality mentions existential
-         variables, so don't use unshelve. *)
-    + eexists (conj a1 a2).
-      rewrite transMbox_Mbox_nil_r.
+    prove_refinement_continue.
+    + (* FIXME: Why doesn't the automation do this? *)
+      unshelve eexists; [ split; shelve | simpl ].
       reflexivity.
-    + reflexivity.
-    + eexists (conj a1 a2).
-      rewrite transMbox_Mbox_nil_r.
-      reflexivity.
-
-    + unshelve eexists. try eauto. reflexivity.
-
-    + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
+    + (* The only non-trivial case: *)
+      rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
         destruct (not_isBvslt_bvsmin _ _ H1).
       * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
         destruct (not_isBvslt_bvsmax _ _ H1).
+    (* All the remaining existential variables don't matter *)
+    + Unshelve. all: eauto.
 Qed.
 
 Definition mbox_copy_spec
@@ -582,36 +575,17 @@ Proof.
     + exact (m0 = m1).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - unfold mbox_copy_precond, Mbox_cons_valid, empty_mbox_d, conjSliceBVVec in *.
-  - prove_refinement_continue.
-    + eexists; reflexivity.
-    + eexists; reflexivity.
-    + (* Many of these goals, such as the one below, are simple exercises in
-         instantiating existential variables. *)
-      unshelve eexists. try eauto. reflexivity.
-    + (* Many of the other goals have contradictory hypotheses, which we can
-         reveal using a helper lemma. *)
-      rewrite bvuleWithProof_not in H. contradiction.
-    + unshelve eexists. try eauto. reflexivity.
-    + rewrite bvuleWithProof_not in H0. contradiction.
-    + unshelve eexists. try eauto. reflexivity.
-    + rewrite bvuleWithProof_not in H1. contradiction.
-    + unshelve eexists. try eauto. reflexivity.
-    + rewrite bvuleWithProof_not in H2. contradiction.
-
-      (* This time, only one side of the equality mentions existential
-         variables, so don't use unshelve. *)
-    + eexists (conj a1 a2). reflexivity.
-    + eexists (conj a1 a2). reflexivity.
-
-    + unshelve eexists. try eauto. reflexivity.
-
+  - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
+           empty_mbox_d, conjSliceBVVec in *.
+    prove_refinement_continue.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
         destruct (not_isBvslt_bvsmin _ _ H1).
       * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
         destruct (not_isBvslt_bvsmax _ _ H1).
+    (* All the remaining existential variables don't matter *)
+    Unshelve. all: eauto.
 Qed.
 
 
