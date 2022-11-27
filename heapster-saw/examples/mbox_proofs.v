@@ -1,4 +1,5 @@
 From Coq          Require Import Lists.List.
+From Coq          Require Import Logic.FunctionalExtensionality.
 From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
@@ -160,6 +161,50 @@ Proof. intros H eq; apply H; apply bvultWithProof_not; eauto. Qed.
 
 #[local] Hint Extern 101 (IntroArg _ (bvultWithProof _ _ _ = Nothing _) _) =>
   apply bvultWithProof_not_IntroArg : refines.
+
+Lemma bvAdd_Sub_cancel w a b :
+      bvAdd w a (bvSub w b a) = b.
+Proof. holds_for_bits_up_to_3. Qed.
+
+Lemma UIP_bool (x y : bool) (p1 p2 : x = y) : p1 = p2.
+Proof.
+  apply Eqdep_dec.UIP_dec. apply Bool.bool_dec.
+Qed.
+
+Lemma updSlice_slice_identity
+        (m : BVVec 64 bv64_128 (bitvector 8))
+        (strt len : bitvector 64)
+        (pf0 : isBvule 64 strt bv64_128)
+        (pf1 : isBvule 64 len (bvSub 64 bv64_128 strt)) :
+      updSliceBVVec 64 bv64_128 (bitvector 8) m strt len
+        (sliceBVVec 64 bv64_128 (bitvector 8) strt len pf0 pf1 m) = m.
+Proof.
+  rewrite <- (gen_at_BVVec _ _ _ m) at 3.
+  unfold updSliceBVVec.
+  f_equal.
+  extensionality i. extensionality pf.
+  destruct (bvule 64 strt i) eqn:X.
+  - destruct (bvultWithProof 64 (bvSub 64 i strt) len) eqn:Y; simpl.
+    * reflexivity.
+    * unfold sliceBVVec, takeBVVec, dropBVVec.
+      do 2 rewrite at_gen_BVVec.
+      generalize
+        (bvult_sub_add_bvult 64
+          (bvSub 64 i strt)
+          strt
+          bv64_128 pf0
+          (trans_bvult_bvule
+            64
+            (bvSub 64 i strt)
+            len
+            (bvSub 64 bv64_128 strt)
+            e
+            pf1)) as H.
+    rewrite bvAdd_Sub_cancel. intros H.
+    rewrite (UIP_bool _ _ H pf).
+    reflexivity.
+  - reflexivity.
+Qed.
 
 
 (* Mbox destruction automation *)
@@ -544,16 +589,14 @@ Qed.
 
 Definition mbox_copy_spec
            : forall (m : Mbox),
-             mbox_copy_precond m -> Mbox * Mbox :=
-  Mbox__rec (fun m' => mbox_copy_precond m' -> Mbox * Mbox)
-            (fun _ => (Mbox_nil, Mbox_nil))
+             mbox_copy_precond m -> Mbox :=
+  Mbox__rec (fun m' => mbox_copy_precond m' -> Mbox)
+            (fun _ => Mbox_nil)
             (fun strt len m' _ d valid =>
               match valid with
               | conj pf0 pf1 =>
-                  (Mbox_cons strt len m'
-                             (conjSliceBVVec strt len pf0 pf1 d d),
-                   Mbox_cons strt len Mbox_nil
-                             (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))
+                  Mbox_cons strt len Mbox_nil
+                            (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d)
               end).
 
 Lemma mbox_copy_spec_ref__alt m
@@ -561,7 +604,7 @@ Lemma mbox_copy_spec_ref__alt m
       (mbox_copy m)
       (total_spec (fun m' => mbox_copy_precond m')
                   (fun m' r => exists (precond : mbox_copy_precond m'),
-                               r = mbox_copy_spec m' precond)
+                               r = (m', mbox_copy_spec m' precond))
                   m).
 Proof.
   unfold mbox_copy, mbox_copy__bodies, mboxNewSpec.
@@ -575,9 +618,12 @@ Proof.
     + exact (m0 = m1).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
+  - unfold mbox_copy_precond, mbox_copy_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
     prove_refinement_continue.
+    + rewrite updSlice_slice_identity.
+      unfold conjSliceBVVec.
+      reflexivity.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
@@ -588,6 +634,8 @@ Proof.
     Unshelve. all: eauto.
 Qed.
 
+#[local] Hint Resolve mbox_copy_spec_ref__alt : refines_proofs.
+
 
 (** * mbox_copy_chain *)
 
@@ -596,28 +644,50 @@ Definition mbox_copy_chain_precond : Mbox -> Prop :=
     Mbox_cons_valid strt len /\ rec).
 
 Definition mbox_copy_chain_spec
-             (m : Mbox) (len : bitvector 64)
-           : mbox_copy_chain_precond m -> Mbox * Mbox :=
-  Mbox__rec (fun m' => mbox_copy_chain_precond m' -> Mbox * Mbox)
-            (fun _ => (Mbox_nil, Mbox_nil))
-            (fun strt len m' rec d valid =>
-              match valid with
-              | conj (conj pf0 pf1) pfrec =>
-                  let '(head0, head1) := mbox_copy_spec (Mbox_cons strt len m' d) (conj pf0 pf1) in
-                  let '(tail0, tail1) := rec pfrec in
-                  (transMbox head0 tail0, transMbox tail0 tail1)
-              end)
-            m.
+           : forall (m : Mbox),
+             bitvector 64 -> mbox_copy_chain_precond m -> Mbox :=
+  Mbox__rec (fun m => bitvector 64 -> mbox_copy_chain_precond m -> Mbox)
+            (fun _ _ => Mbox_nil)
+            (fun strt len m rec d src_len valid =>
+              if bvEq 64 len (intToBv 64 0)
+                then Mbox_nil
+                else match valid with
+                     | conj pf pfrec =>
+                       let head := mbox_copy_spec (Mbox_cons strt len m d) pf in
+                       match head with
+                       | Mbox_nil => Mbox_nil
+                       | Mbox_cons strt' len' m' d' =>
+                         if bvuge 64 len' src_len
+                           then Mbox_cons strt' src_len m' d'
+                           else let rest := rec (bvSub 64 src_len len') pfrec in
+                                match rest with
+                                | Mbox_nil => head
+                                | Mbox_cons _ _ _ _ => mbox_concat_spec head rest
+                                end
+                       end
+                     end).
 
 Lemma mbox_copy_chain_spec_ref m len
   : spec_refines eqPreRel eqPostRel eq
       (mbox_copy_chain m len)
-      (total_spec (fun m' => mbox_copy_chain_precond m')
-                  (fun m' r => exists (precond : mbox_copy_chain_precond m'),
-                               r = mbox_copy_chain_spec m' len precond)
-                  m).
-Admitted. (* TODO *)
-
+      (total_spec (fun '(m', _) => mbox_copy_chain_precond m')
+                  (fun '(m', len') r => exists (precond : mbox_copy_chain_precond m'),
+                                        r = (m', mbox_copy_chain_spec m' len' precond))
+                  (m, len)).
+Proof.
+  unfold mbox_copy_chain, mbox_copy_chain__bodies.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (mbox_chain_length m0).
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ x = x0).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
+    (* Loops forever :(
+    prove_refinement_continue.
+    *)
+Admitted.
 
 (** * mbox_randomize *)
 
