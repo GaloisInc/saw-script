@@ -245,10 +245,68 @@ Global Hint Extern 100 (spec_refines _ _ _ (either _ _ _ _ _ (unfoldMbox ?m)) _)
 Global Hint Extern 100 (spec_refines _ _ _ _ (either _ _ _ _ _ (unfoldMbox ?m))) =>
   either_unfoldMbox m : refines.
 
-Global Hint Extern 100 (Shelve (Mbox__rec _ _ _ _)) =>
-  cbn [ Mbox__rec Mbox_rect ] : refines.
-Global Hint Extern 100 (Shelve (Mbox_rect _ _ _ _)) =>
-  cbn [ Mbox__rec Mbox_rect ] : refines.
+Ltac RelGoal_unfoldMbox m :=
+  lazymatch m with
+  | Mbox_nil =>
+    simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
+    unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
+    cbn [ Datatypes.fst Datatypes.snd projT1 ]
+  | Mbox_cons _ _ _ _ =>
+    simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
+    unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
+    cbn [ Datatypes.fst Datatypes.snd projT1 ]
+  | _ => let strt := fresh "strt" in
+         let len  := fresh "len" in
+         let m0   := fresh "m" in
+         let d    := fresh "d" in destruct m as [| strt len m0 d ];
+                                  [ RelGoal_unfoldMbox Mbox_nil
+                                  | RelGoal_unfoldMbox (Mbox_cons strt len m0 d) ]
+  end.
+
+Global Hint Extern 101 (RelGoal (Mbox__rec _ _ _ ?m)) =>
+  progress RelGoal_unfoldMbox m : refines.
+Global Hint Extern 101 (RelGoal (Mbox_rect _ _ _ ?m)) =>
+  progress RelGoal_unfoldMbox m : refines.
+Global Hint Extern 101 (RelGoal (Mbox__rec _ _ _ ?m = _)) =>
+  progress RelGoal_unfoldMbox m : refines.
+Global Hint Extern 101 (RelGoal (Mbox_rect _ _ _ ?m = _)) =>
+  progress RelGoal_unfoldMbox m : refines.
+Global Hint Extern 101 (RelGoal (_ = Mbox__rec _ _ _ ?m)) =>
+  progress RelGoal_unfoldMbox m : refines.
+Global Hint Extern 101 (RelGoal (_ = Mbox_rect _ _ _ ?m)) =>
+  progress RelGoal_unfoldMbox m : refines.
+
+Global Hint Extern 100 (Shelve (Mbox__rec _ _ _ ?m)) =>
+  progress RelGoal_unfoldMbox m : refines.
+Global Hint Extern 100 (Shelve (Mbox_rect _ _ _ ?m)) =>
+  progress RelGoal_unfoldMbox m : refines.
+
+Lemma IntroArg_eq_Mbox_nil_nil n goal :
+  goal -> IntroArg n (Mbox_nil = Mbox_nil) (fun _ => goal).
+Proof. do 2 intro; eauto. Qed.
+
+Lemma IntroArg_eq_Mbox_cons_cons n strt1 strt2 len1 len2 m1 m2 d1 d2 goal :
+  IntroArg n (strt1 = strt2) (fun _ => IntroArg n (len1 = len2) (fun _ =>
+  IntroArg n (m1 = m2) (fun _ => IntroArg n (d1 = d2) (fun _ => goal)))) ->
+  IntroArg n (Mbox_cons strt1 len1 m1 d1 = Mbox_cons strt2 len2 m2 d2) (fun _ => goal).
+Proof. intros H eq; dependent destruction eq; apply H; eauto. Qed.
+
+Lemma IntroArg_eq_Mbox_nil_cons n strt len m d goal :
+  IntroArg n (Mbox_nil = Mbox_cons strt len m d) (fun _ => goal).
+Proof. intro eq; dependent destruction eq. Qed.
+
+Lemma IntroArg_eq_Mbox_cons_nil n strt len m d goal :
+  IntroArg n (Mbox_cons strt len m d = Mbox_nil) (fun _ => goal).
+Proof. intro eq; dependent destruction eq. Qed.
+
+Global Hint Extern 101 (Mbox_nil = Mbox_nil) =>
+  simple apply IntroArg_eq_Mbox_nil_nil : refines.
+Global Hint Extern 101 (Mbox_cons _ _ _ _ = Mbox_cons _ _ _ _) =>
+  simple apply IntroArg_eq_Mbox_cons_cons : refines.
+Global Hint Extern 101 (Mbox_nil = Mbox_cons _ _ _ _) =>
+  simple apply IntroArg_eq_Mbox_nil_cons : refines.
+  Global Hint Extern 101 (Mbox_cons _ _ _ _ = Mbox_nil) =>
+    simple apply IntroArg_eq_Mbox_nil_cons : refines.
 
 Lemma transMbox_Mbox_nil_r m : transMbox m Mbox_nil = m.
 Proof.
@@ -431,7 +489,7 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - prove_refinement_continue.
-    all: rewrite e_if; reflexivity.
+    all: cbn [ Mbox_rect ]; rewrite e_if; reflexivity.
 Qed.
 
 
@@ -573,11 +631,7 @@ Proof.
   - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
     prove_refinement_continue.
-    + (* FIXME: Why doesn't the automation do this? *)
-      unshelve eexists; [ split; shelve | simpl ].
-      reflexivity.
-    + (* The only non-trivial case: *)
-      rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
+    + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
         destruct (not_isBvslt_bvsmin _ _ H1).
@@ -709,7 +763,7 @@ Definition MBOX_NULL_ERROR := intToBv 32 23.
      `i < m->strt` or `i >= m->len`.
    - Otherwise, the function returns `MBOX_NULL_ERROR`. *)
 Definition mbox_randomize_postcond m r : Prop :=
-  Mbox_rect (fun _ => Prop)
+  Mbox__rec (fun _ => Prop)
             (r = (Mbox_nil, MBOX_NULL_ERROR))
             (fun strt len m _ d =>
               exists d', (forall i (pf : isBvult 64 i bv64_128),
@@ -736,25 +790,14 @@ Proof.
     + exact (m0 = m1 /\ a = 1 + mbox_head_len_sub_strt m0).
     + exact (r = r0).
     prepost_case 1 0.
-    + exact (mbox_randomize_invar x x0 x1 /\
-             Mbox_cons x x0 m0 a = m1 /\
-             a0 = bvToNat 64 (bvSub 64 x0 x1)).
+    + exact (Mbox_cons x x0 m0 a = m1 /\
+             a0 = bvToNat 64 (bvSub 64 x0 x1) /\
+             mbox_randomize_invar x x0 x1).
     + exact (r = r0).
     prepost_exclude_remaining.
   - unfold mbox_head_len_sub_strt, mbox_randomize_precond,
            mbox_randomize_postcond, mbox_randomize_invar in *.
     prove_refinement_continue.
-    (* FIXME: Why don't these `Mbox_rect`s get unfolded?? *)
-    all: cbn [ Mbox_rect ] in * |-;
-         try match goal with
-         | |- Mbox_rect _ _ _ _ => cbn [ Mbox_rect ] in *; split; eauto
-         end.
-    (* FIXME: Once the above is fixed, add automatic destruction of exists, etc. *)
-    all: try (destruct H2 as [d' []]); try (eexists; split; intros).
-    + apply H2; eauto.
-    + rewrite transMbox_Mbox_nil_r in H3; eauto.
-    + apply H2; eauto.
-    + rewrite transMbox_Mbox_nil_r in H3; eauto.
     all: admit.
 Admitted.
 
