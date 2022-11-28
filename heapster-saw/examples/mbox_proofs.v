@@ -264,22 +264,22 @@ Ltac RelGoal_unfoldMbox m :=
   end.
 
 Global Hint Extern 101 (RelGoal (Mbox__rec _ _ _ ?m)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 Global Hint Extern 101 (RelGoal (Mbox_rect _ _ _ ?m)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 Global Hint Extern 101 (RelGoal (Mbox__rec _ _ _ ?m = _)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 Global Hint Extern 101 (RelGoal (Mbox_rect _ _ _ ?m = _)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 Global Hint Extern 101 (RelGoal (_ = Mbox__rec _ _ _ ?m)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 Global Hint Extern 101 (RelGoal (_ = Mbox_rect _ _ _ ?m)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 
 Global Hint Extern 100 (Shelve (Mbox__rec _ _ _ ?m)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 Global Hint Extern 100 (Shelve (Mbox_rect _ _ _ ?m)) =>
-  progress RelGoal_unfoldMbox m : refines.
+  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
 
 Lemma IntroArg_eq_Mbox_nil_nil n goal :
   goal -> IntroArg n (Mbox_nil = Mbox_nil) (fun _ => goal).
@@ -738,9 +738,8 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
-    (* Loops forever :(
     prove_refinement_continue.
-    *)
+    all: admit.
 Admitted.
 
 (** * mbox_randomize *)
