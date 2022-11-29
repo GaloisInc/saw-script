@@ -410,7 +410,6 @@ Proof.
     prepost_exclude_remaining.
   - time "mbox_concat_chains_spec_ref__dec_args" prove_refinement_continue.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
-      rewrite mbox_rect_identity.
       rewrite transMbox_assoc; reflexivity.
     + rewrite transMbox_assoc; reflexivity.
 Time Qed.
@@ -436,7 +435,6 @@ Proof.
     prepost_exclude_remaining.
   - time "mbox_concat_chains_spec_ref__fuel" prove_refinement_continue.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
-      rewrite mbox_rect_identity.
       rewrite transMbox_assoc; reflexivity.
     + rewrite transMbox_assoc; reflexivity.
 Time Qed.
@@ -816,7 +814,7 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_split_at_precond, mbox_split_at_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
-    prove_refinement_continue.
+    time "mbox_split_at_spec_ref" prove_refinement_continue.
     + instantiate (1 := conj H H0).
       destruct H as [X Y].
       simpl.
@@ -828,11 +826,16 @@ Proof.
       rewrite e_if.
       rewrite e_if0.
       reflexivity.
-    + instantiate (1 := conj H (ex_proj1 H1)).
+    + unshelve instantiate (1 := _).
+      { rewrite transMbox_Mbox_nil_r in H1.
+        exact (ex_proj1 H1). }
       destruct H1.
       destruct H as [X Y].
       simpl.
-    + instantiate (1 := conj H (ex_proj1 H1)).
+      admit.
+    + unshelve instantiate (1 := _).
+      { rewrite transMbox_Mbox_nil_r in H1.
+        exact (conj H (ex_proj1 H1)). }
       destruct H1.
       destruct H as [X Y].
       simpl.
