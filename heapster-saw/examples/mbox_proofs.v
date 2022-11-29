@@ -102,6 +102,60 @@ Proof. intros eq; discriminate eq. Qed.
   apply IntroArg_eq_Just_Nothing : refines.
 
 
+(* sawLet automation *)
+
+Definition spec_refines_sawLet_const_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) A (x : A) t1 t2 :
+  spec_refines RPre RPost RR t1 t2 ->
+  spec_refines RPre RPost RR (sawLet_def _ _ x (fun _ => t1)) t2 := fun pf => pf.
+Definition spec_refines_sawLet_const_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) A (x : A) t1 t2 :
+  spec_refines RPre RPost RR t1 t2 ->
+  spec_refines RPre RPost RR t1 (sawLet_def _ _ x (fun _ => t2)) := fun pf => pf.
+
+Definition spec_refines_sawLet_bv_l_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) w (x : bitvector w) k1 t2 :
+  IntroArg Any _ (fun a => IntroArg SAWLet (a = x) (fun _ =>
+    spec_refines RPre RPost RR (k1 a) t2)) ->
+  spec_refines RPre RPost RR (sawLet_def _ _ x k1) t2.
+Proof. intro H; eapply H; eauto. Qed.
+Definition spec_refines_sawLet_bv_r_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) w (x : bitvector w) t1 k2 :
+  IntroArg Any _ (fun a => IntroArg SAWLet (a = x) (fun _ =>
+    spec_refines RPre RPost RR t1 (k2 a))) ->
+  spec_refines RPre RPost RR t1 (sawLet_def _ _ x k2).
+Proof. intro H; eapply H; eauto. Qed.
+
+Definition spec_refines_sawLet_unfold_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) A (x : A) k1 t2 :
+  spec_refines RPre RPost RR (k1 x) t2 ->
+  spec_refines RPre RPost RR (sawLet_def _ _ x k1) t2 := fun pf => pf.
+Definition spec_refines_sawLet_unfold_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) A (x : A) t1 k2 :
+  spec_refines RPre RPost RR t1 (k2 x) ->
+  spec_refines RPre RPost RR t1 (sawLet_def _ _ x k2) := fun pf => pf.
+
+Ltac spec_refines_sawLet_l :=
+  first [ simple apply spec_refines_sawLet_const_l
+        | simple apply spec_refines_sawLet_bv_l_IntroArg
+        | simple apply spec_refines_sawLet_unfold_l ].
+Ltac spec_refines_sawLet_r :=
+  first [ simple apply spec_refines_sawLet_const_r
+        | simple apply spec_refines_sawLet_bv_r_IntroArg
+        | simple apply spec_refines_sawLet_unfold_r ].
+
+#[global] Hint Extern 101 (spec_refines _ _ _ (sawLet_def _ _ _ _) _) =>
+  spec_refines_sawLet_l : refines.
+#[global] Hint Extern 101 (spec_refines _ _ _ _ (sawLet_def _ _ _ _ )) =>
+  spec_refines_sawLet_r : refines.
+
+
 (* bitvector (in)equality automation *)
 
 Lemma simpl_llvm_bool_eq (b : bool) :
@@ -209,14 +263,14 @@ Qed.
 
 (* Mbox destruction automation *)
 
-Lemma refinesM_either_unfoldMbox_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+Lemma spec_refines_either_unfoldMbox_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
   (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
   (RR : Rel R1 R2) f g (P : SpecM E2 Γ2 R2) :
   spec_refines RPre RPost RR (f tt) P ->
   spec_refines RPre RPost RR (either _ _ _ f g (unfoldMbox Mbox_nil)) P.
 Proof. eauto. Qed.
 
-Lemma refinesM_either_unfoldMbox_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+Lemma spec_refines_either_unfoldMbox_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
   (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
   (RR : Rel R1 R2) strt len m d f g (P : SpecM E2 Γ2 R2) :
   spec_refines RPre RPost RR (g (strt, (len, (m, d)))) P ->
@@ -226,9 +280,9 @@ Proof. eauto. Qed.
 Ltac either_unfoldMbox m :=
   lazymatch m with
   | Mbox_nil =>
-    simple apply refinesM_either_unfoldMbox_nil_l
+    simple apply spec_refines_either_unfoldMbox_nil_l
   | Mbox_cons ?strt ?len ?m0 ?d =>
-    simple apply (refinesM_either_unfoldMbox_cons_l _ _ _ _ _ _ _ _ _ strt len m0 d)
+    simple apply (spec_refines_either_unfoldMbox_cons_l _ _ _ _ _ _ _ _ _ strt len m0 d)
   | _ => let strt := fresh "strt" in
          let len  := fresh "len" in
          let m0   := fresh "m" in
@@ -843,6 +897,9 @@ Proof.
       rewrite e_if0.
       rewrite e_if1.
       admit.
+    + admit.
+    + admit.
+    + admit.
     + admit.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if2.
       destruct e_if2.
