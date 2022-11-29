@@ -694,16 +694,16 @@ Qed.
 (** * mbox_copy_chain *)
 
 Definition mbox_copy_chain_precond : Mbox -> Prop :=
-  Mbox__rec (fun _ => Prop) True (fun strt len _ rec _ =>
+  Mbox_rect (fun _ => Prop) True (fun strt len _ rec _ =>
     Mbox_cons_valid strt len /\ rec).
 
 Definition mbox_copy_chain_spec
            : forall (m : Mbox),
              bitvector 64 -> mbox_copy_chain_precond m -> Mbox :=
-  Mbox__rec (fun m => bitvector 64 -> mbox_copy_chain_precond m -> Mbox)
+  Mbox_rect (fun m => bitvector 64 -> mbox_copy_chain_precond m -> Mbox)
             (fun _ _ => Mbox_nil)
             (fun strt len m rec d src_len valid =>
-              if bvEq 64 len (intToBv 64 0)
+              if bvEq 64 src_len (intToBv 64 0)
                 then Mbox_nil
                 else match valid with
                      | conj pf pfrec =>
@@ -720,6 +720,14 @@ Definition mbox_copy_chain_spec
                                 end
                        end
                      end).
+
+Lemma mbox_copy_chain_len_0
+      (m : Mbox)
+      (precond : mbox_copy_chain_precond m) :
+  mbox_copy_chain_spec m (intToBv 64 0) precond = Mbox_nil.
+Proof.
+  destruct m; reflexivity.
+Qed.
 
 Lemma mbox_copy_chain_spec_ref m len
   : spec_refines eqPreRel eqPostRel eq
@@ -739,8 +747,109 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
     prove_refinement_continue.
-    all: admit.
+    + rewrite bvEq_eq in e_if.
+      replace x
+        with (intToBv 64 0)
+        by bvEq_eq.
+      rewrite mbox_copy_chain_len_0.
+      reflexivity.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
 Admitted.
+
+
+(** * mbox_split_at *)
+
+Definition mbox_split_at_precond : Mbox -> bitvector 64 -> Prop :=
+  Mbox_rect (fun _ => bitvector 64 -> Prop)
+            (fun _ => True)
+            (fun _ len _ rec _ ix =>
+              Mbox_cons_valid ix (bvSub 64 len ix) /\ rec (bvSub 64 ix len)).
+
+Definition mbox_split_at_spec :
+           forall (m : Mbox) (ix : bitvector 64),
+           mbox_split_at_precond m ix -> Mbox * Mbox :=
+  Mbox_rect (fun m => forall (ix : bitvector 64), mbox_split_at_precond m ix -> Mbox * Mbox)
+            (fun _ _ => (Mbox_nil, Mbox_nil))
+            (fun strt len m rec d ix precond =>
+              match precond with
+              | conj (conj pf0 pf1) precond_rec =>
+                  if bvEq 64 ix (intToBv 64 0)
+                    then (Mbox_nil, Mbox_cons strt len m d)
+                    else
+                  if bvEq 64 ix len
+                    then (Mbox_cons strt len Mbox_nil d, m)
+                    else
+                  if bvult 64 len ix
+                    then rec (bvSub 64 ix len) precond_rec
+                    else (Mbox_cons strt ix Mbox_nil d,
+                          Mbox_cons (intToBv 64 0) (bvSub 64 len ix) m
+                                    (conjSliceBVVec ix (bvSub 64 len ix)
+                                                    pf0 pf1 empty_mbox_d d))
+              end).
+
+Lemma mbox_split_at_spec_ref m ix
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_split_at m ix)
+      (total_spec (fun '(m, ix) => mbox_split_at_precond m ix)
+                  (fun '(m, ix) r => exists (precond : mbox_split_at_precond m ix),
+                                     r = mbox_split_at_spec m ix precond)
+                  (m, ix)).
+Proof.
+  unfold mbox_split_at, mbox_split_at__bodies, mboxNewSpec.
+  (* Yikes! The below functions may or may not be defined depending on what
+     machine compiled mbox.bc *)
+  try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
+  try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (mbox_chain_length m0).
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ x = x0).
+    + exact (r = r0).
+    prepost_exclude_remaining.
+  - unfold mbox_split_at_precond, mbox_split_at_spec, Mbox_cons_valid,
+           empty_mbox_d, conjSliceBVVec in *.
+    prove_refinement_continue.
+    + instantiate (1 := conj H H0).
+      destruct H as [X Y].
+      simpl.
+      rewrite e_if.
+      reflexivity.
+    + instantiate (1 := conj H H0).
+      destruct H as [X Y].
+      simpl.
+      rewrite e_if.
+      rewrite e_if0.
+      reflexivity.
+    + instantiate (1 := conj H (ex_proj1 H1)).
+      destruct H1.
+      destruct H as [X Y].
+      simpl.
+    + instantiate (1 := conj H (ex_proj1 H1)).
+      destruct H1.
+      destruct H as [X Y].
+      simpl.
+      rewrite e_if.
+      rewrite e_if0.
+      rewrite e_if1.
+      admit.
+    + admit.
+    + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if2.
+      destruct e_if2.
+      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
+        destruct (not_isBvslt_bvsmin _ _ H1).
+      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
+        destruct (not_isBvslt_bvsmax _ _ H1).
+Admitted.
+
 
 (** * mbox_randomize *)
 
