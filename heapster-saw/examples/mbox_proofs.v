@@ -352,8 +352,8 @@ Proof.
     + exact (m0 = m1 /\ a = 0).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
-Qed.
+  - time "mbox_free_chain_spec_ref" prove_refinement_continue.
+Time Qed.
 
 
 (** * mbox_concat *)
@@ -375,8 +375,8 @@ Proof.
     + exact (m = m3 /\ m0 = m4).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
-Qed.
+  - time "mbox_concat_spec_ref" prove_refinement_continue.
+Time Qed.
 
 #[local] Hint Resolve mbox_concat_spec_ref : refines_proofs.
 
@@ -408,12 +408,12 @@ Proof.
     + exact (m = m4 /\ Mbox_cons x x0 m3 a = m5 /\ m0 = m6 /\ a0 = 0).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
+  - time "mbox_concat_chains_spec_ref__dec_args" prove_refinement_continue.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
       rewrite mbox_rect_identity.
       rewrite transMbox_assoc; reflexivity.
     + rewrite transMbox_assoc; reflexivity.
-Qed.
+Time Qed.
 
 Lemma mbox_concat_chains_spec_ref__fuel m1 m2
   : spec_refines eqPreRel eqPostRel eq
@@ -434,12 +434,12 @@ Proof.
              a0 = mbox_chain_length m3).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
+  - time "mbox_concat_chains_spec_ref__fuel" prove_refinement_continue.
     + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
       rewrite mbox_rect_identity.
       rewrite transMbox_assoc; reflexivity.
     + rewrite transMbox_assoc; reflexivity.
-Qed.
+Time Qed.
 
 
 (** * mbox_detach *)
@@ -461,8 +461,8 @@ Proof.
     + exact (m0 = m1).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
-Qed.
+  - time "mbox_detach_spec_ref" prove_refinement_continue.
+Time Qed.
 
 
 (** * mbox_drop *)
@@ -488,9 +488,9 @@ Proof.
     + exact (m0 = m1 /\ x0 = x1).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
+  - time "mbox_drop_spec_ref" prove_refinement_continue.
     all: cbn [ Mbox_rect ]; rewrite e_if; reflexivity.
-Qed.
+Time Qed.
 
 
 (** * mbox_len *)
@@ -531,14 +531,14 @@ Proof.
               /\ mbox_len_spec m0 = x).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
+  - time "mbox_len_spec_ref__dec_args" prove_refinement_continue.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
     + rewrite transMbox_assoc.
       reflexivity.
-Qed.
+Time Qed.
 
 Lemma mbox_len_spec_ref__fuel m
   : spec_refines eqPreRel eqPostRel eq
@@ -559,14 +559,14 @@ Proof.
               /\ mbox_len_spec m0 = x).
     + exact (r = r0).
     prepost_exclude_remaining.
-  - prove_refinement_continue.
+  - time "mbox_len_spec_ref__fuel" prove_refinement_continue.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
       reflexivity.
     + rewrite transMbox_assoc.
       reflexivity.
-Qed.
+Time Qed.
 
 
 (** * mbox_copy *)
@@ -630,7 +630,7 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
-    prove_refinement_continue.
+    time "mbox_copy_spec_ref" prove_refinement_continue.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
@@ -639,7 +639,7 @@ Proof.
         destruct (not_isBvslt_bvsmax _ _ H1).
     (* All the remaining existential variables don't matter *)
     + Unshelve. all: eauto.
-Qed.
+Time Qed.
 
 Definition mbox_copy_spec
            : forall (m : Mbox),
@@ -674,9 +674,8 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_precond, mbox_copy_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
-    prove_refinement_continue.
+    time "mbox_copy_spec_ref__alt" prove_refinement_continue.
     + rewrite updSlice_slice_identity.
-      unfold conjSliceBVVec.
       reflexivity.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
@@ -686,7 +685,7 @@ Proof.
         destruct (not_isBvslt_bvsmax _ _ H1).
     (* All the remaining existential variables don't matter *)
     Unshelve. all: eauto.
-Qed.
+Time Qed.
 
 #[local] Hint Resolve mbox_copy_spec_ref__alt : refines_proofs.
 
@@ -746,7 +745,7 @@ Proof.
     + exact (r = r0).
     prepost_exclude_remaining.
   - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
-    prove_refinement_continue.
+    time "mbox_copy_chain_spec_ref" prove_refinement_continue.
     + rewrite bvEq_eq in e_if.
       replace x
         with (intToBv 64 0)
@@ -905,7 +904,7 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_head_len_sub_strt, mbox_randomize_precond,
            mbox_randomize_postcond, mbox_randomize_invar in *.
-    prove_refinement_continue.
+    time "mbox_randomize_spec_ref" prove_refinement_continue.
     all: admit.
 Admitted.
 
