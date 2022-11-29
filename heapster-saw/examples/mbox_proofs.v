@@ -754,6 +754,11 @@ Definition mbox_copy_chain_precond : Mbox -> Prop :=
   Mbox_rect (fun _ => Prop) True (fun strt len _ rec _ =>
     Mbox_cons_valid strt len /\ rec).
 
+(*
+(*
+Here is the 'naïve' functional translation...
+*)
+
 Definition mbox_copy_chain_spec
            : forall (m : Mbox),
              bitvector 64 -> mbox_copy_chain_precond m -> Mbox :=
@@ -762,29 +767,45 @@ Definition mbox_copy_chain_spec
             (fun strt len m rec d src_len valid =>
               if bvEq 64 src_len (intToBv 64 0)
                 then Mbox_nil
-                else match valid with
-                     | conj pf pfrec =>
-                       let head := mbox_copy_spec (Mbox_cons strt len m d) pf in
-                       match head with
-                       | Mbox_nil => Mbox_nil
-                       | Mbox_cons strt' len' m' d' =>
-                         if bvuge 64 len' src_len
-                           then Mbox_cons strt' src_len m' d'
-                           else let rest := rec (bvSub 64 src_len len') pfrec in
-                                match rest with
-                                | Mbox_nil => head
-                                | Mbox_cons _ _ _ _ => mbox_concat_spec head rest
-                                end
-                       end
-                     end).
+                else
+              match valid with
+              | conj pf pfrec =>
+                let head := mbox_copy_spec (Mbox_cons strt len m d) pf in
+                match head with
+                | Mbox_nil => Mbox_nil
+                | Mbox_cons strt' len' m' d' =>
+                  if bvule 64 src_len len'
+                    then Mbox_cons strt' src_len m' d'
+                    else let rest := rec (bvSub 64 src_len len') pfrec in
+                         match rest with
+                         | Mbox_nil => head
+                         | Mbox_cons _ _ _ _ => mbox_concat_spec head rest
+                         end
+                end
+              end).
+*)
 
-Lemma mbox_copy_chain_len_0
-      (m : Mbox)
-      (precond : mbox_copy_chain_precond m) :
-  mbox_copy_chain_spec m (intToBv 64 0) precond = Mbox_nil.
-Proof.
-  destruct m; reflexivity.
-Qed.
+(*
+And here is a simplified version that evaluates away the calls to
+mbox_copy_spec and mbox_concat_spec.
+*)
+Definition mbox_copy_chain_spec
+           : forall (m : Mbox),
+             bitvector 64 -> mbox_copy_chain_precond m -> Mbox :=
+  Mbox_rect (fun m => bitvector 64 -> mbox_copy_chain_precond m -> Mbox)
+            (fun _ _ => Mbox_nil)
+            (fun strt len m rec d src_len valid =>
+              if bvEq 64 src_len (intToBv 64 0)
+                then Mbox_nil
+                else
+              match valid with
+              | conj (conj pf0 pf1) pfrec =>
+                let d_copy := conjSliceBVVec strt len pf0 pf1 empty_mbox_d d in
+                let head := Mbox_cons strt len Mbox_nil d_copy in
+                if bvule 64 src_len len
+                  then Mbox_cons strt src_len Mbox_nil d_copy
+                  else Mbox_cons strt len (rec (bvSub 64 src_len len) pfrec) d_copy
+              end).
 
 Lemma mbox_copy_chain_precond_to_copy_precond :
   forall (m : Mbox),
@@ -795,13 +816,21 @@ Proof.
   - destruct copy_chain_precond. assumption.
 Qed.
 
-Lemma mbox_copy_chain_spec_ref m len
+Lemma mbox_copy_chain_len_0
+      (m : Mbox)
+      (precond : mbox_copy_chain_precond m) :
+  mbox_copy_chain_spec m (intToBv 64 0) precond = Mbox_nil.
+Proof.
+  destruct m; reflexivity.
+Qed.
+
+Lemma mbox_copy_chain_spec_ref m src_len
   : spec_refines eqPreRel eqPostRel eq
-      (mbox_copy_chain m len)
+      (mbox_copy_chain m src_len)
       (total_spec (fun '(m', _) => mbox_copy_chain_precond m')
-                  (fun '(m', len') r => exists (precond : mbox_copy_chain_precond m'),
-                                        r = (m', mbox_copy_chain_spec m' len' precond))
-                  (m, len)).
+                  (fun '(m', src_len') r => exists (precond : mbox_copy_chain_precond m'),
+                                            r = (m', mbox_copy_chain_spec m' src_len' precond))
+                  (m, src_len)).
 Proof.
   unfold mbox_copy_chain, mbox_copy_chain__bodies.
   prove_refinement.
@@ -813,21 +842,53 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
     time "mbox_copy_chain_spec_ref" prove_refinement_continue.
-    + unfold mbox_copy_chain_spec.
-      rewrite bvEq_eq in e_if.
+    + rewrite bvEq_eq in e_if.
       replace x
         with (intToBv 64 0)
         by bvEq_eq.
       rewrite mbox_copy_chain_len_0.
       reflexivity.
     + apply (mbox_copy_chain_precond_to_copy_precond _ H).
+    + instantiate (1 := H).
+      rewrite transMbox_Mbox_nil_r in H0.
+      destruct H0 as [precond e].
+      injection e as X Y.
+      rewrite X.
+      f_equal.
+      admit.
+    + rewrite transMbox_Mbox_nil_r in H0.
+      destruct H0 as [precond e].
+      injection e as X Y.
+      subst.
+      reflexivity.
+    + unshelve instantiate (1 := H).
+      rewrite transMbox_Mbox_nil_r in H0.
+      destruct H0 as [precond e].
+      injection e as e1 e2.
+      subst.
+      destruct H as [[X Y] Z].
+      simpl.
+      rewrite e_if.
+      f_equal. (* Why are there separate len and len0 variables here? *)
+      admit.
     + admit.
+    + rewrite transMbox_Mbox_nil_r in H0.
+      destruct H0 as [precond e].
+      injection e as X Y.
+      rewrite <- X.
+      reflexivity.
     + admit.
-    + admit.
-    + admit.
-    + admit.
-    + admit.
-    + admit.
+    + unshelve instantiate (1 := _).
+      { revert H1. revert r0.
+        rewrite transMbox_Mbox_nil_r in *.
+        intros r0 H1.
+
+        destruct H0, H1.
+        injection H0 as X Y.
+        rewrite <- X. rewrite <- X in H.
+        destruct H.
+        split; assumption. }
+      admit.
     + admit.
 Admitted.
 
