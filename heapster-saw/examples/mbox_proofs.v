@@ -624,6 +624,8 @@ Proof.
       reflexivity.
 Time Qed.
 
+#[local] Hint Resolve mbox_len_spec_ref__fuel : refines_proofs.
+
 
 (** * mbox_copy *)
 
@@ -955,6 +957,20 @@ Definition mbox_split_at_precond : Mbox -> bitvector 64 -> Prop :=
             (fun _ len _ rec _ ix =>
               Mbox_cons_valid ix (bvSub 64 len ix) /\ rec (bvSub 64 ix len)).
 
+Lemma mbox_split_at_precond_proof_irrel :
+  forall (m : Mbox)
+         (ix : bitvector 64)
+         (p1 p2 : mbox_split_at_precond m ix),
+  p1 = p2.
+Proof.
+  intros m. induction m; intros ix p1 p2.
+  - destruct p1, p2. reflexivity.
+  - destruct p1 as [X1 Y1], p2 as [X2 Y2].
+    f_equal.
+    + apply Mbox_cons_valid_proof_irrel.
+    + apply IHm.
+Qed.
+
 Definition mbox_split_at_spec :
            forall (m : Mbox) (ix : bitvector 64),
            mbox_split_at_precond m ix -> Mbox * Mbox :=
@@ -973,7 +989,7 @@ Definition mbox_split_at_spec :
                     then let res := rec (bvSub 64 ix len) precond_rec in
                          (Mbox_cons strt len (fst res) d, snd res)
                     else (Mbox_cons strt ix Mbox_nil d,
-                          Mbox_cons (intToBv 64 0) (bvSub 64 len ix) m
+                          Mbox_cons (bvNat 64 0) (bvSub 64 len ix) m
                                     (updSliceBVVec 64 bv64_128 _ empty_mbox_d (intToBv 64 0) (bvSub 64 len ix)
                                       (sliceBVVec 64 bv64_128 _ ix (bvSub 64 len ix) pf0 pf1 d)))
               end).
@@ -996,7 +1012,7 @@ Proof.
     exact (mbox_chain_length m0).
   - prepost_case 0 0.
     + exact (m0 = m1 /\ x = x0).
-    + exact (r = r0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
     prepost_exclude_remaining.
   - unfold mbox_split_at_precond, mbox_split_at_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
@@ -1011,25 +1027,35 @@ Proof.
     + simpl.
       rewrite e_if.
       rewrite e_if0.
-
       unshelve instantiate (1 := _).
       { simpl. split.
         * apply H.
-        * revert H1. revert r0.
-          rewrite transMbox_Mbox_nil_r.
-          intros r0 H1.
-          destruct H1 as [precond e].
-          apply precond.
+        * apply H0.
       }
       destruct H as [X Y].
       rewrite e_if1.
       reflexivity.
-    + revert H1. revert r0.
+    + revert H1. revert r_m1 r_m2.
       rewrite transMbox_Mbox_nil_r.
-      intros r0 H1.
+      intros r_m1 r_m2 H1.
       destruct H1 as [precond e].
-      rewrite e.
+      replace H0
+        with precond
+        by (apply mbox_split_at_precond_proof_irrel).
+      apply (f_equal fst) in e.
+      simpl in e.
+      subst r_m1.
       reflexivity.
+    + revert H1. revert r_m1 r_m2.
+      rewrite transMbox_Mbox_nil_r.
+      intros r_m1 r_m2 H1.
+      destruct H1 as [precond e].
+      replace H0
+        with precond
+        by (apply mbox_split_at_precond_proof_irrel).
+      apply (f_equal snd) in e.
+      simpl in e.
+      assumption.
     + rewrite bvSub_n_zero in H.
       destruct H0.
       specialize
@@ -1043,16 +1069,22 @@ Proof.
       contradiction.
     + destruct H2 as [H2contra H4].
       contradiction.
-    + simpl. split.
-      * instantiate (2 := a0).
-        instantiate (1 := a1).
-        exists (conj (conj a0 a1) H3).
-        rewrite e_if.
-        rewrite e_if0.
-        rewrite e_if1.
-        reflexivity.
-    + rewrite updSlice_slice_identity.
+    + rewrite e_if.
+      rewrite e_if0.
+      rewrite e_if1.
+      unshelve instantiate (1 := _).
+      { simpl. split.
+        * apply H2.
+        * apply H3.
+      }
+      instantiate (2 := a0).
+      instantiate (1 := a1).
+      destruct H2 as [X Y].
+      replace a0 with X by (apply UIP_bool).
+      replace a1 with Y by (apply UIP_bool).
       reflexivity.
+    + rewrite updSlice_slice_identity.
+      split; reflexivity.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if2.
       destruct e_if2.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
@@ -1066,6 +1098,64 @@ Proof.
                [H: isBvule 64 ?x (intToBv 64 128) /\ isBvule 64 (bvSub 64 ?len ?x) (bvSub 64 (intToBv 64 128) ?x) |- _] =>
                  (destruct H; assumption)
                end).
+Qed.
+
+#[local] Hint Resolve mbox_split_at_spec_ref : refines_proofs.
+
+
+(** * mbox_detach_from_end *)
+
+Definition mbox_detach_from_end_precond
+             (m : Mbox)
+             (length_from_end : bitvector 64)
+         : Prop :=
+  mbox_split_at_precond m (bvSub 64 (mbox_len_spec m) length_from_end).
+
+Definition mbox_detach_from_end_spec
+             (m : Mbox)
+             (length_from_end : bitvector 64)
+             (precond : mbox_detach_from_end_precond m length_from_end)
+         : Mbox * Mbox :=
+  mbox_split_at_spec m (bvSub 64 (mbox_len_spec m) length_from_end) precond.
+
+Lemma mbox_detach_from_end_spec_ref m length_from_end
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_detach_from_end m length_from_end)
+      (total_spec (fun '(m', length_from_end') =>
+                    mbox_detach_from_end_precond m' length_from_end')
+                  (fun '(m', length_from_end') r =>
+                    exists (precond : mbox_detach_from_end_precond m' length_from_end'),
+                    r = mbox_detach_from_end_spec m' length_from_end' precond)
+                  (m, length_from_end)).
+Proof.
+  unfold mbox_detach_from_end, mbox_detach_from_end__bodies.
+  prove_refinement.
+  - wellfounded_none.
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ x = x0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
+    prepost_exclude_remaining.
+  - unfold mbox_detach_from_end_precond, mbox_detach_from_end_spec.
+  - time "mbox_detach_from_end_spec_ref" prove_refinement_continue.
+    Ltac busywork H0 a := (simpl in *;
+                           revert H0;
+                           revert a;
+                           do 2 rewrite transMbox_Mbox_nil_r;
+                           intros a H0).
+    + unshelve instantiate (1 := _).
+      { busywork H0 a.
+        apply a.
+      }
+      busywork H0 a.
+      rewrite -> H0.
+      reflexivity.
+    + unshelve instantiate (1 := _).
+      { busywork H0 a.
+        apply a.
+      }
+      busywork H0 a.
+      rewrite -> H0.
+      reflexivity.
 Qed.
 
 
