@@ -4117,6 +4117,16 @@ primitives = Map.fromList
     , "current Heapster SAW module."
     ]
 
+  , prim "heapster_set_event_type"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_set_event_type)
+    Experimental
+    [ "Set the event type for the remaining Heapster translations to a SAW "
+    , "core term of type EvType. It is recommended that this is done at most "
+    , "once in a SAW script, at the beginning, because changing the event type "
+    , "yields incompatible specifications."
+    ]
+
   , prim "heapster_print_fun_trans"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_print_fun_trans)

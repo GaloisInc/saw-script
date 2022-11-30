@@ -50,6 +50,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_assume_fun_rename
        , heapster_assume_fun_rename_prim
        , heapster_assume_fun_multi
+       , heapster_set_event_type
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
@@ -1205,6 +1206,17 @@ heapster_typecheck_fun_rename_rs bic opts henv fn_name fn_name_to perms_string =
   heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,
                                                      perms_string)]
 -}
+
+-- | Set the event type for the remaining Heapster translations
+heapster_set_event_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                           String -> TopLevel ()
+heapster_set_event_type _bic _opts henv term_string =
+  do sc <- getSharedContext
+     ev_tp <-
+       liftIO $ completeOpenTerm sc $ dataTypeOpenTerm "Prelude.EvType" []
+     ev_id <- parseAndInsDef henv "HeapsterEv" ev_tp term_string
+     liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env ->
+       env { permEnvSpecMEventType = ev_id }
 
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()

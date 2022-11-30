@@ -1,0 +1,28 @@
+
+module io where
+
+import Prelude;
+
+bitvector : Nat -> sort 0;
+bitvector n = Vec n Bool;
+
+data ioEvArgs : sort 0 where {
+  writeEv : bitvector 32 -> (len:bitvector 64) -> BVVec 64 len (bitvector 8) ->
+            ioEvArgs;
+  readEv : bitvector 32 -> ioEvArgs;
+}
+
+-- The type of buffers of a given length
+buffer : bitvector 64 -> sort 0;
+buffer len = BVVec 64 len (bitvector 8);
+
+ioEvRet : ioEvArgs -> sort 0;
+ioEvRet args =
+  ioEvArgs#rec
+    (\ (_:ioEvArgs) -> sort 0)
+    (\ (_:bitvector 32) (len:bitvector 64) (_:buffer len) -> bitvector 64)
+    (\ (_:bitvector 32) -> Sigma (bitvector 64) (\ (len:bitvector 64) -> buffer len))
+  args;
+
+ioEv : EvType;
+ioEv = Build_EvType ioEvArgs ioEvRet;

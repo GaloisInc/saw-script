@@ -36,3 +36,5 @@ global_var_gen.v
 global_var_proofs.v
 sha512_gen.v
 #sha512_proofs.v
+io_gen.v
+io_proofs.v
