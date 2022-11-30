@@ -36,6 +36,12 @@ Admitted.
 #[local] Hint Extern 901 (IntroArg Any Mbox_def _) =>
   let e := fresh "m" in IntroArg_intro e : refines prepostcond.
 
+#[local] Hint Extern 901 (IntroArg RetAny (bitvector _) _) =>
+  let e := fresh "r_x" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg RetAny Mbox _) =>
+  let e := fresh "r_m" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg RetAny Mbox_def _) =>
+  let e := fresh "r_m" in IntroArg_intro e : refines prepostcond.
 
 (* Maybe automation - FIXME move to EnTree.Automation *)
 
@@ -269,22 +275,29 @@ Proof. holds_for_bits_up_to_3. Qed.
 
 (* Mbox destruction automation *)
 
+Arguments FunsTo_Nil {a}.
+Arguments FunsTo_Cons {a tp}.
+
 Lemma spec_refines_either_unfoldMbox_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
   (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
   (RR : Rel R1 R2) f g (P : SpecM E2 Γ2 R2) :
   spec_refines RPre RPost RR (f tt) P ->
-  spec_refines RPre RPost RR (either _ _ _ f g (unfoldMbox Mbox_nil)) P.
+  spec_refines RPre RPost RR (eithers _ (FunsTo_Cons f (FunsTo_Cons g FunsTo_Nil))
+                                        (unfoldMbox Mbox_nil)) P.
 Proof. eauto. Qed.
 
 Lemma spec_refines_either_unfoldMbox_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
   (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
   (RR : Rel R1 R2) strt len m d f g (P : SpecM E2 Γ2 R2) :
   spec_refines RPre RPost RR (g (strt, (len, (m, d)))) P ->
-  spec_refines RPre RPost RR (either _ _ _ f g (unfoldMbox (Mbox_cons strt len m d))) P.
+  spec_refines RPre RPost RR (eithers _ (FunsTo_Cons f (FunsTo_Cons g FunsTo_Nil))
+                                        (unfoldMbox (Mbox_cons strt len m d))) P.
 Proof. eauto. Qed.
 
-Ltac either_unfoldMbox m :=
-  lazymatch m with
+Ltac eithers_unfoldMbox m :=
+  let m' := eval cbn [ SAWCoreScaffolding.fst SAWCoreScaffolding.snd
+                       Datatypes.fst Datatypes.snd projT1 ] in m in
+  lazymatch m' with
   | Mbox_nil =>
     simple apply spec_refines_either_unfoldMbox_nil_l
   | Mbox_cons ?strt ?len ?m0 ?d =>
@@ -292,18 +305,19 @@ Ltac either_unfoldMbox m :=
   | _ => let strt := fresh "strt" in
          let len  := fresh "len" in
          let m0   := fresh "m" in
-         let d    := fresh "d" in destruct m as [| strt len m0 d ];
-                                  [ either_unfoldMbox Mbox_nil
-                                  | either_unfoldMbox (Mbox_cons strt len m0 d) ];
-                                  simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
-                                  unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
-                                  cbn [ Datatypes.fst Datatypes.snd projT1 ]
+         let d    := fresh "d" in
+         destruct m' as [| strt len m0 d ] eqn:?;
+         [ eithers_unfoldMbox Mbox_nil
+         | eithers_unfoldMbox (Mbox_cons strt len m0 d) ];
+         simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
+         unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
+         cbn [ Datatypes.fst Datatypes.snd projT1 ]
   end.
 
-Global Hint Extern 100 (spec_refines _ _ _ (either _ _ _ _ _ (unfoldMbox ?m)) _) =>
-  either_unfoldMbox m : refines.
-Global Hint Extern 100 (spec_refines _ _ _ _ (either _ _ _ _ _ (unfoldMbox ?m))) =>
-  either_unfoldMbox m : refines.
+Global Hint Extern 100 (spec_refines _ _ _ (eithers _ _ (unfoldMbox ?m)) _) =>
+  eithers_unfoldMbox m : refines.
+Global Hint Extern 100 (spec_refines _ _ _ _ (eithers _ _ (unfoldMbox ?m))) =>
+  eithers_unfoldMbox m : refines.
 
 Ltac RelGoal_unfoldMbox m :=
   lazymatch m with
@@ -312,7 +326,7 @@ Ltac RelGoal_unfoldMbox m :=
     unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
     cbn [ Datatypes.fst Datatypes.snd projT1 ]
   | Mbox_cons _ _ _ _ =>
-    simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
+    simpl foldMbox in *; cbn [ Mbox__rec Mbox_rect ] in *;
     unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
     cbn [ Datatypes.fst Datatypes.snd projT1 ]
   | _ => let strt := fresh "strt" in
@@ -323,18 +337,8 @@ Ltac RelGoal_unfoldMbox m :=
                                   | RelGoal_unfoldMbox (Mbox_cons strt len m0 d) ]
   end.
 
-Global Hint Extern 101 (RelGoal (Mbox__rec _ _ _ ?m)) =>
-  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
-Global Hint Extern 101 (RelGoal (Mbox_rect _ _ _ ?m)) =>
-  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
-Global Hint Extern 101 (RelGoal (Mbox__rec _ _ _ ?m = _)) =>
-  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
-Global Hint Extern 101 (RelGoal (Mbox_rect _ _ _ ?m = _)) =>
-  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
-Global Hint Extern 101 (RelGoal (_ = Mbox__rec _ _ _ ?m)) =>
-  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
-Global Hint Extern 101 (RelGoal (_ = Mbox_rect _ _ _ ?m)) =>
-  progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
+Global Hint Extern 901 (RelGoal _) =>
+  progress (simpl foldMbox in *; cbn [ Mbox__rec Mbox_rect ] in *) : refines.
 
 Global Hint Extern 100 (Shelve (Mbox__rec _ _ _ ?m)) =>
   progress cbn [ Mbox__rec Mbox_rect ] in * : refines.
@@ -381,7 +385,7 @@ Proof.
   simpl; f_equal; eauto.
 Qed.
 
-#[local] Hint Rewrite transMbox_Mbox_nil_r (*transMbox_assoc*) : refines.
+#[local] Hint Rewrite transMbox_Mbox_nil_r transMbox_assoc : refines.
 
 
 (* Helper functions and lemmas *)
@@ -433,7 +437,7 @@ Proof.
   - wellfounded_none.
   - prepost_case 0 0.
     + exact (m = m3 /\ m0 = m4).
-    + exact (r = r0).
+    + exact (r_m = r_m0).
     prepost_exclude_remaining.
   - time "mbox_concat_spec_ref" prove_refinement_continue.
 Time Qed.
@@ -463,15 +467,14 @@ Proof.
     exact (a + mbox_chain_length m0).
   - prepost_case 0 0.
     + exact (Mbox_nil = m3 /\ m = m4 /\ m0 = m5 /\ a = 1).
-    + exact (r = r0).
+    + exact (r_m = r_m0).
     prepost_case 1 0.
     + exact (m = m4 /\ Mbox_cons x x0 m3 a = m5 /\ m0 = m6 /\ a0 = 0).
-    + exact (r = r0).
+    + exact (r_m = r_m0).
     prepost_exclude_remaining.
   - time "mbox_concat_chains_spec_ref__dec_args" prove_refinement_continue.
-    + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
-      rewrite transMbox_assoc; reflexivity.
-    + rewrite transMbox_assoc; reflexivity.
+    + rewrite mbox_chain_length_transMbox, Nat.add_comm.
+      reflexivity.
 Time Qed.
 
 Lemma mbox_concat_chains_spec_ref__fuel m1 m2
@@ -487,16 +490,15 @@ Proof.
     exact a.
   - prepost_case 0 0.
     + exact (m = m3 /\ m0 = m4 /\ a = mbox_chain_length m).
-    + exact (r = r0).
+    + exact (r_m = r_m0).
     prepost_case 1 0.
     + exact (transMbox m (Mbox_cons x x0 m3 a) = m4 /\ m0 = m5 /\
              a0 = mbox_chain_length m3).
-    + exact (r = r0).
+    + exact (r_m = r_m0).
     prepost_exclude_remaining.
   - time "mbox_concat_chains_spec_ref__fuel" prove_refinement_continue.
-    + rewrite mbox_chain_length_transMbox, Nat.add_comm; simpl.
-      rewrite transMbox_assoc; reflexivity.
-    + rewrite transMbox_assoc; reflexivity.
+    + rewrite mbox_chain_length_transMbox, Nat.add_comm.
+      reflexivity.
 Time Qed.
 
 
@@ -517,7 +519,7 @@ Proof.
   - wellfounded_none.
   - prepost_case 0 0.
     + exact (m0 = m1).
-    + exact (r = r0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
     prepost_exclude_remaining.
   - time "mbox_detach_spec_ref" prove_refinement_continue.
 Time Qed.
@@ -544,10 +546,10 @@ Proof.
     exact (mbox_chain_length m0).
   - prepost_case 0 0.
     + exact (m0 = m1 /\ x0 = x1).
-    + exact (r = r0).
+    + exact (r_m = r_m0).
     prepost_exclude_remaining.
   - time "mbox_drop_spec_ref" prove_refinement_continue.
-    all: cbn [ Mbox_rect ]; rewrite e_if; reflexivity.
+    all: rewrite e_if; reflexivity.
 Time Qed.
 
 
@@ -583,18 +585,16 @@ Proof.
     exact (a + mbox_chain_length m1).
   - prepost_case 0 0.
     + exact (m0 = m2 /\ m1 = Mbox_nil /\ 1 = a).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
   - prepost_case 1 0.
     + exact (m0 = m2 /\ m1 = m3 /\ 0 = a
               /\ mbox_len_spec m0 = x).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
     prepost_exclude_remaining.
   - time "mbox_len_spec_ref__dec_args" prove_refinement_continue.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
-      reflexivity.
-    + rewrite transMbox_assoc.
       reflexivity.
 Time Qed.
 
@@ -611,18 +611,16 @@ Proof.
     exact (a + a0).
   - prepost_case 0 0.
     + exact (m0 = m1 /\ 1 = a /\ mbox_chain_length m0 = a0).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
   - prepost_case 1 0.
     + exact (transMbox m0 m1 = m2 /\ 0 = a /\ mbox_chain_length m1 = a0
               /\ mbox_len_spec m0 = x).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
     prepost_exclude_remaining.
   - time "mbox_len_spec_ref__fuel" prove_refinement_continue.
     + rewrite mbox_len_spec_transMbox.
       simpl.
       rewrite bvAdd_id_l.
-      reflexivity.
-    + rewrite transMbox_assoc.
       reflexivity.
 Time Qed.
 
@@ -684,7 +682,7 @@ Proof.
   - wellfounded_none.
   - prepost_case 0 0.
     + exact (m0 = m1).
-    + exact (r = r0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
     prepost_exclude_remaining.
   - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
@@ -728,7 +726,7 @@ Proof.
   - wellfounded_none.
   - prepost_case 0 0.
     + exact (m0 = m1).
-    + exact (r = r0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
     prepost_exclude_remaining.
   - unfold mbox_copy_precond, mbox_copy_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
@@ -838,10 +836,13 @@ Proof.
     exact (mbox_chain_length m0).
   - prepost_case 0 0.
     + exact (m0 = m1 /\ x = x0).
-    + exact (r = r0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
     prepost_exclude_remaining.
   - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
     time "mbox_copy_chain_spec_ref" prove_refinement_continue.
+    all: try (rewrite transMbox_Mbox_nil_r in H0;
+              destruct H0 as [ precod e ];
+              injection e as X Y).
     + rewrite bvEq_eq in e_if.
       replace x
         with (intToBv 64 0)
@@ -849,19 +850,18 @@ Proof.
       rewrite mbox_copy_chain_len_0.
       reflexivity.
     + apply (mbox_copy_chain_precond_to_copy_precond _ H).
-    + instantiate (1 := H).
-      rewrite transMbox_Mbox_nil_r in H0.
-      destruct H0 as [precond e].
-      injection e as X Y.
-      rewrite X.
-      f_equal.
-      admit.
-    + rewrite transMbox_Mbox_nil_r in H0.
-      destruct H0 as [precond e].
-      injection e as X Y.
-      subst.
+    + rewrite X.
       reflexivity.
-    + unshelve instantiate (1 := H).
+    + rewrite <- X.
+      admit.
+    + exact X.
+    + rewrite <- X.
+      reflexivity.
+    + exact X.
+    + rewrite <- X.
+      (* I FIGURED OUT WHAT'S WRONG I'M GOING TO BED *)
+
+      unshelve instantiate (1 := H).
       rewrite transMbox_Mbox_nil_r in H0.
       destruct H0 as [precond e].
       injection e as e1 e2.
@@ -878,7 +878,15 @@ Proof.
       rewrite <- X.
       reflexivity.
     + admit.
-    + unshelve instantiate (1 := _).
+    + unfold encodes, FunStackE_encodes', FunStackE_encodes in r0.
+             FrameCallRet, LRTOutput, nthLRT, nth_default' in r0.
+      cbn [ encodes FunStackE_encodes' FunStackE_encodes ] in r0.
+      cbv - [ FrameCallRet transMbox ] in r0.
+      unfold FrameCallRet, LRTOutput, nthLRT, nth_default' in r0.
+      cbn [ FrameCallRet LRTOutput nthLRT nth_default ] in r0.
+      let call' := eval cbn in (unary1Call (transMbox m2 Mbox_nil, bvSub 64 x len)) in
+      change (FrameCallRet (unary1Frame (Mbox * bitvector 64) (Mbox * Mbox)) call') in r0.
+      unshelve instantiate (1 := _).
       { revert H1. revert r0.
         rewrite transMbox_Mbox_nil_r in *.
         intros r0 H1.
