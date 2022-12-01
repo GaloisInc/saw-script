@@ -272,6 +272,16 @@ Lemma isBvule_bvSub_remove w a b c :
   isBvule w a b.
 Proof. holds_for_bits_up_to_3. Qed.
 
+Lemma isBvult_impl_lt_bvToNat w a b :
+  isBvult w a b -> bvToNat w a < bvToNat w b.
+Admitted.
+
+Lemma isBvult_bvSub_bvAdd_1 w x y :
+  isBvult w y x ->
+  isBvult w (bvSub w x (bvAdd w y (intToBv w 1)))
+            (bvSub w x y).
+Proof. holds_for_bits_up_to_3. Qed.
+
 
 (* Mbox destruction automation *)
 
@@ -1161,6 +1171,44 @@ Qed.
 
 (** * mbox_randomize *)
 
+Lemma atBVVec_upd_out_of_range w len A a v i j pf1 pf2 :
+  bvEq w i j = false ->
+  atBVVec w len A v i pf1 =
+  atBVVec w len A (updBVVec w len A v j a) i pf2.
+Admitted.
+
+(* True iff both inputs are Mbox_null, or both inputs are
+   Mbox_cons where the values of strt, len, and m are equal,
+   and the values of d are equal only outside of the range
+   defined by strt and len. *)
+Definition mbox_eq_up_to_head_data (m1 m2 : Mbox) : Prop :=
+  Mbox__rec (fun _ => Prop)
+            (Mbox__rec (fun _ => Prop) True (fun _ _ _ _ _ => False) m2)
+            (fun strt1 len1 m1 _ d1 =>
+             Mbox__rec (fun _ => Prop) False (fun strt2 len2 m2 _ d2 =>
+             strt1 = strt2 /\ len1 = len2 /\ m1 = m2 /\
+             forall i (pf : isBvult 64 i bv64_128),
+               isBvslt 64 i strt1 \/ isBvsle 64 len1 i ->
+               atBVVec _ _ _ d1 i pf = atBVVec _ _ _ d2 i pf) m2) m1.
+
+Lemma mbox_eq_up_to_head_data_trans m1 m2 m3 :
+  mbox_eq_up_to_head_data m1 m2 ->
+  mbox_eq_up_to_head_data m2 m3 ->
+  mbox_eq_up_to_head_data m1 m3.
+Proof.
+  destruct m1 as [|strt1 len1 m1 d1],
+           m2 as [|strt2 len2 m2 d2],
+           m3 as [|strt3 len3 m3 d3]; simpl.
+  all: intros; contradiction || eauto.
+  destruct H as [? [? []]], H0 as [? [? []]]; repeat split; eauto.
+  - transitivity strt2; eauto.
+  - transitivity len2; eauto.
+  - transitivity m2; eauto.
+  - intros. transitivity (atBVVec 64 bv64_128 (bitvector 8) d2 i pf).
+    + apply H3. eauto.
+    + apply H6. destruct H, H1. eauto.
+Qed.
+
 Definition mbox_head_len_sub_strt : Mbox -> nat :=
   Mbox_rect (fun _ => nat) 0 (fun strt len _ _ _ =>
     bvToNat 64 (bvSub 64 len strt)).
@@ -1174,18 +1222,9 @@ Definition mbox_randomize_precond : Mbox -> Prop :=
 Definition SUCCESS         := intToBv 32 0.
 Definition MBOX_NULL_ERROR := intToBv 32 23.
 
-(* - If `m` is non-null, the function returns `SUCCESS` and `m->data` is set to
-     some `data'` such that `m->data[i] = data'[i]` for all `i` such that
-     `i < m->strt` or `i >= m->len`.
-   - Otherwise, the function returns `MBOX_NULL_ERROR`. *)
-Definition mbox_randomize_postcond m r : Prop :=
-  Mbox__rec (fun _ => Prop)
-            (r = (Mbox_nil, MBOX_NULL_ERROR))
-            (fun strt len m _ d =>
-              exists d', (forall i (pf : isBvult 64 i bv64_128),
-                           isBvslt 64 i strt \/ isBvsle 64 len i ->
-                           atBVVec _ _ _ d i pf = atBVVec _ _ _ d' i pf)
-                         /\ r = (Mbox_cons strt len m d', SUCCESS)) m.
+Definition mbox_randomize_ret m :=
+  Mbox__rec (fun _ => bitvector 32) MBOX_NULL_ERROR
+            (fun _ _ _ _ _ => SUCCESS) m.
 
 Definition mbox_randomize_invar (strt len i : bitvector 64) : Prop :=
   (* strt <= i <= len *)
@@ -1195,7 +1234,8 @@ Lemma mbox_randomize_spec_ref m
   : spec_refines eqPreRel eqPostRel eq
       (mbox_randomize m)
       (total_spec (fun '(_, m') => mbox_randomize_precond m')
-                  (fun '(_, m') r => mbox_randomize_postcond m' r)
+                  (fun '(_, m') '(r_m, r_x) => mbox_eq_up_to_head_data m' r_m
+                                               /\ r_x = mbox_randomize_ret m')
                   (1 + mbox_head_len_sub_strt m, m)).
 Proof.
   unfold mbox_randomize, mbox_randomize__bodies, randSpec.
@@ -1204,18 +1244,71 @@ Proof.
     exact a.
   - prepost_case 0 0.
     + exact (m0 = m1 /\ a = 1 + mbox_head_len_sub_strt m0).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
     prepost_case 1 0.
     + exact (Mbox_cons x x0 m0 a = m1 /\
              a0 = bvToNat 64 (bvSub 64 x0 x1) /\
              mbox_randomize_invar x x0 x1).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
     prepost_exclude_remaining.
   - unfold mbox_head_len_sub_strt, mbox_randomize_precond,
-           mbox_randomize_postcond, mbox_randomize_invar in *.
+           mbox_randomize_invar in *.
     time "mbox_randomize_spec_ref" prove_refinement_continue.
-    all: admit.
-Admitted.
+    (* mbox_eq_up_to_head_data goals *)
+    1-3: rewrite transMbox_Mbox_nil_r in H2.
+    1-3: destruct H2.
+    1-3: assumption.
+    (* Showing the error case of the array bounds check is impossible by virtue *)
+    (* of our loop invariant *)
+    1-2: enough (isBvult 64 call3 (intToBv 64 128)) by contradiction.
+    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: rewrite isBvult_def in e_if; rewrite e_if.
+    1-2: eapply isBvult_to_isBvslt_pos; [| reflexivity | assumption ].
+    1-2: rewrite H1, H3; reflexivity.
+    (* Showing the loop invariant holds inductively *)
+    1-9: destruct H1 as [?H [?H ?H]]; try assumption.
+    + apply isBvult_impl_lt_bvToNat, isBvult_bvSub_bvAdd_1; eauto.
+    + rewrite H. apply isBvsle_suc_r.
+      rewrite H0, H4.
+      reflexivity.
+    + apply isBvslt_to_isBvsle_suc.
+      apply isBvult_to_isBvslt_pos; eauto.
+      * rewrite H1; eauto.
+      * rewrite <- H3; eauto.
+    (* more step mbox_eq_up_to_head_data goals *)
+    1-3: rewrite transMbox_Mbox_nil_r in H3.
+    1-3: destruct H3.
+    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: rewrite H in H1. rewrite <- H0 in H6.
+    1-2: rewrite isBvult_def in e_if.
+    1-2: apply isBvult_to_isBvslt_pos in e_if;
+         [| assumption | rewrite <- H0; assumption ].
+    1-2: eapply mbox_eq_up_to_head_data_trans; eauto.
+    1-2: repeat split; eauto; intros.
+    1-2: apply atBVVec_upd_out_of_range.
+    1-2: destruct H7 as [?H | ?H]; [| rewrite bvEq_sym ].
+    1-4: apply isBvslt_to_bvEq_false.
+    + rewrite <- H; assumption.
+    + rewrite H7 in e_if; assumption.
+    + rewrite <- H; assumption.
+    + rewrite H7 in e_if; assumption.
+    + rewrite H4. simpl. reflexivity.
+    (* Showing the error case of the overflow check is impossible by virtue of *)
+    (* our loop invariant *)
+    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: rewrite H in H1; rewrite <- H0 in H3.
+    1-2: rewrite and_bool_eq_false in e_if0.
+    1-2: do 2 rewrite isBvslt_def_opp in e_if0.
+    1-2: destruct e_if0 as [?e_if | ?e_if];
+         [ rewrite <- H1 in e_if0 | rewrite H3 in e_if0 ].
+    1-4: vm_compute in e_if0; discriminate e_if0.
+    (* final mbox_eq_up_to_head_data goals *)
+    + simpl. repeat split.
+    + simpl. repeat split.
+    (* All the remaining existential variables don't matter *)
+    Unshelve.
+    all: eauto.
+Qed.
 
 
 
