@@ -538,6 +538,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
+          - exercises
         ghc: ["8.10.7"]
     steps:
       - uses: actions/checkout@v2

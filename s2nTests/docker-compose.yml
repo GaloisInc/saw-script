@@ -32,3 +32,11 @@ services:
     image: blst
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+
+  exercises:
+    build:
+      context: ..
+      dockerfile: ${PWD:-.}/docker/exercises.dockerfile
+    image: exercises
+    volumes:
+      - ${PWD:-.}/bin:/saw-bin:rw
