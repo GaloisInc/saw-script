@@ -3,5 +3,5 @@
 #define HELLO "Hello, World!"
 
 void hello_world () {
-  write (2, HELLO, sizeof(HELLO));
+  write (1, HELLO, sizeof(HELLO));
 }

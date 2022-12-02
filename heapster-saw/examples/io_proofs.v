@@ -14,3 +14,6 @@ Local Open Scope entree_scope.
 
 Require Import Examples.io_gen.
 Import io.
+
+Print hello_world__bodies.
+Print __x1_write.
