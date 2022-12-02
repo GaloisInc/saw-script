@@ -1,5 +1,5 @@
 include "helpers.saw";
-import "salsa20.cry";
+import "Salsa20.cry";
 
 let oneptr_update_func (type : LLVMType) (name : String) (f : Term) = do {
     (x, p) <- pointer_to_fresh type name;

@@ -16,6 +16,5 @@ z3 --version
 yices --version
 yices-smt2 --version
 
-# TODO: Add all tests
-saw sha512/exercise.saw
-saw sha512/solution.saw
+# Run SAW over all exercises and solutions
+find . -name solution.saw -o -name exercise.saw | xargs -I % sh -c "saw % || exit 255"
