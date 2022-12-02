@@ -37,7 +37,7 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..))
+import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..), try)
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
@@ -561,6 +561,16 @@ instance MonadFail TopLevel where
 runTopLevel :: IsValue a => TopLevel a -> TopLevelRO -> TopLevelRW -> IO (Value, TopLevelRW)
 runTopLevel (TopLevel_ m) ro rw =
   runStateContT (runReaderT m ro) (\a s -> return (toValue a,s)) rw
+
+-- | A version of `Control.Monad.Catch.bracket` specialized to `TopLevel`. We
+-- can't use the former because it requires `TopLevel` to implement
+-- `Control.Monad.Catch.MonadMask`, which it can't do.
+bracketTopLevel :: TopLevel a -> (a -> TopLevel c) -> (a -> TopLevel b) -> TopLevel b
+bracketTopLevel acquire release action =
+  do  resource <- acquire
+      try (action resource) >>= \case
+        Left (bad :: X.SomeException) -> release resource >> throwM bad
+        Right good -> release resource >> pure good
 
 instance MonadIO TopLevel where
   liftIO = io

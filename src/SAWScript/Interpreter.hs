@@ -38,7 +38,7 @@ import Data.Traversable hiding ( mapM )
 import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
-import Control.Monad.Catch (catch, throwM)
+-- import Control.Monad.Catch (bracket, catch, throwM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -391,18 +391,17 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain = do
-  opts <- getOptions
-  oldPath <- io getCurrentDirectory
-  backtrack oldPath $
-    do  { io $ setCurrentDirectory (takeDirectory file)
-        ; stmts <- io $ SAWScript.Import.loadFile opts file
-        ; mapM_ stmtWithPrint stmts
-        ; when runMain interpretMain
-        ; io $ setCurrentDirectory oldPath
-        }
-  writeVerificationSummary
+interpretFile file runMain = 
+  bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
+    interp = 
+      do  opts <- getOptions
+          io $ setCurrentDirectory (takeDirectory file)
+          stmts <- io $ SAWScript.Import.loadFile opts file
+          mapM_ stmtWithPrint stmts
+          when runMain interpretMain
+          writeVerificationSummary
+
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                                              map (\l -> "\t"  ++ l) (lines str)
@@ -412,12 +411,6 @@ interpretFile file runMain = do
                                                           printOutFn o lvl (withPos str) })
                                   (interpretStmt False s)
                            else interpretStmt False s
-
-    backtrack :: FilePath -> TopLevel a -> TopLevel a
-    backtrack oldPath action =
-      action
-        `catch`
-        (\(e :: X.SomeException) -> io (setCurrentDirectory oldPath) >> throwM e)
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: TopLevel ()
