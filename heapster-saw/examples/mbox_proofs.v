@@ -272,6 +272,16 @@ Lemma isBvule_bvSub_remove w a b c :
   isBvule w a b.
 Proof. holds_for_bits_up_to_3. Qed.
 
+Lemma isBvult_impl_lt_bvToNat w a b :
+  isBvult w a b -> bvToNat w a < bvToNat w b.
+Admitted.
+
+Lemma isBvult_bvSub_bvAdd_1 w x y :
+  isBvult w y x ->
+  isBvult w (bvSub w x (bvAdd w y (intToBv w 1)))
+            (bvSub w x y).
+Proof. holds_for_bits_up_to_3. Qed.
+
 
 (* Mbox destruction automation *)
 
@@ -624,12 +634,23 @@ Proof.
       reflexivity.
 Time Qed.
 
+#[local] Hint Resolve mbox_len_spec_ref__fuel : refines_proofs.
+
 
 (** * mbox_copy *)
 
 Definition Mbox_cons_valid (strt len : bitvector 64) : Prop :=
   isBvule 64 strt (intToBv 64 128) /\
   isBvule 64 len (bvSub 64 (intToBv 64 128) strt).
+
+Lemma Mbox_cons_valid_proof_irrel
+        (strt len : bitvector 64)
+        (p1 p2 : Mbox_cons_valid strt len) :
+  p1 = p2.
+Proof.
+  destruct p1 as [X1 Y1], p2 as [X2 Y2].
+  f_equal; apply UIP_bool.
+Qed.
 
 Definition mbox_copy_precond : Mbox -> Prop :=
   Mbox__rec (fun _ => Prop)
@@ -709,6 +730,15 @@ Definition mbox_copy_spec
                             (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d)
               end).
 
+Lemma mbox_copy_nil (m : Mbox) (precond : mbox_copy_precond m) :
+  mbox_copy_spec m precond = Mbox_nil ->
+  m = Mbox_nil.
+Proof.
+  destruct m, precond; simpl.
+  - reflexivity.
+  - discriminate.
+Qed.
+
 Lemma mbox_copy_spec_ref__alt m
   : spec_refines eqPreRel eqPostRel eq
       (mbox_copy m)
@@ -752,41 +782,6 @@ Definition mbox_copy_chain_precond : Mbox -> Prop :=
   Mbox_rect (fun _ => Prop) True (fun strt len _ rec _ =>
     Mbox_cons_valid strt len /\ rec).
 
-(*
-(*
-Here is the 'naïve' functional translation...
-*)
-
-Definition mbox_copy_chain_spec
-           : forall (m : Mbox),
-             bitvector 64 -> mbox_copy_chain_precond m -> Mbox :=
-  Mbox_rect (fun m => bitvector 64 -> mbox_copy_chain_precond m -> Mbox)
-            (fun _ _ => Mbox_nil)
-            (fun strt len m rec d src_len valid =>
-              if bvEq 64 src_len (intToBv 64 0)
-                then Mbox_nil
-                else
-              match valid with
-              | conj pf pfrec =>
-                let head := mbox_copy_spec (Mbox_cons strt len m d) pf in
-                match head with
-                | Mbox_nil => Mbox_nil
-                | Mbox_cons strt' len' m' d' =>
-                  if bvule 64 src_len len'
-                    then Mbox_cons strt' src_len m' d'
-                    else let rest := rec (bvSub 64 src_len len') pfrec in
-                         match rest with
-                         | Mbox_nil => head
-                         | Mbox_cons _ _ _ _ => mbox_concat_spec head rest
-                         end
-                end
-              end).
-*)
-
-(*
-And here is a simplified version that evaluates away the calls to
-mbox_copy_spec and mbox_concat_spec.
-*)
 Definition mbox_copy_chain_spec
            : forall (m : Mbox),
              bitvector 64 -> mbox_copy_chain_precond m -> Mbox :=
@@ -822,6 +817,19 @@ Proof.
   destruct m; reflexivity.
 Qed.
 
+Lemma mbox_copy_chain_precond_proof_irrel
+        (m : Mbox)
+        (p1 p2 : mbox_copy_chain_precond m) :
+  p1 = p2.
+Proof.
+  induction m.
+  - destruct p1, p2. reflexivity.
+  - destruct p1 as [X1 Y1], p2 as [X2 Y2].
+    f_equal.
+    + apply Mbox_cons_valid_proof_irrel.
+    + apply IHm.
+Qed.
+
 Lemma mbox_copy_chain_spec_ref m src_len
   : spec_refines eqPreRel eqPostRel eq
       (mbox_copy_chain m src_len)
@@ -840,9 +848,6 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_chain_precond, mbox_copy_chain_spec, Mbox_cons_valid.
     time "mbox_copy_chain_spec_ref" prove_refinement_continue.
-    all: try (rewrite transMbox_Mbox_nil_r in H0;
-              destruct H0 as [ precod e ];
-              injection e as X Y).
     + rewrite bvEq_eq in e_if.
       replace x
         with (intToBv 64 0)
@@ -850,55 +855,108 @@ Proof.
       rewrite mbox_copy_chain_len_0.
       reflexivity.
     + apply (mbox_copy_chain_precond_to_copy_precond _ H).
-    + rewrite X.
+    + revert Heqm1. revert a.
+      rewrite transMbox_Mbox_nil_r.
+      intros a Heqm1.
+      apply mbox_copy_nil in Heqm1.
+      subst m0.
       reflexivity.
-    + rewrite <- X.
-      admit.
-    + exact X.
-    + rewrite <- X.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      symmetry. assumption.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      subst m0.
       reflexivity.
-    + exact X.
-    + rewrite <- X.
-      (* I FIGURED OUT WHAT'S WRONG I'M GOING TO BED *)
-
-      unshelve instantiate (1 := H).
-      rewrite transMbox_Mbox_nil_r in H0.
-      destruct H0 as [precond e].
-      injection e as e1 e2.
-      subst.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      symmetry. assumption.
+    + revert Heqm1. revert a.
+      rewrite transMbox_Mbox_nil_r in *.
+      intros a Heqm1.
+      instantiate (1 := H).
+      subst m0.
+      destruct a as [pf0 pf1].
       destruct H as [[X Y] Z].
+      simpl in Heqm1.
+      injection Heqm1 as h1 h2 h3 h4.
+      subst strt len m1 d.
       simpl.
       rewrite e_if.
-      f_equal. (* Why are there separate len and len0 variables here? *)
-      admit.
-    + admit.
-    + rewrite transMbox_Mbox_nil_r in H0.
-      destruct H0 as [precond e].
-      injection e as X Y.
-      rewrite <- X.
+      rewrite e_if0.
+      replace pf0 with X by (apply UIP_bool).
+      replace pf1 with Y by (apply UIP_bool).
+    + reflexivity.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      subst m0.
+      destruct H as [XY Z].
+      apply Z.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      subst m0.
       reflexivity.
-    + admit.
-    + unfold encodes, FunStackE_encodes', FunStackE_encodes in r0.
-             FrameCallRet, LRTOutput, nthLRT, nth_default' in r0.
-      cbn [ encodes FunStackE_encodes' FunStackE_encodes ] in r0.
-      cbv - [ FrameCallRet transMbox ] in r0.
-      unfold FrameCallRet, LRTOutput, nthLRT, nth_default' in r0.
-      cbn [ FrameCallRet LRTOutput nthLRT nth_default ] in r0.
-      let call' := eval cbn in (unary1Call (transMbox m2 Mbox_nil, bvSub 64 x len)) in
-      change (FrameCallRet (unary1Frame (Mbox * bitvector 64) (Mbox * Mbox)) call') in r0.
-      unshelve instantiate (1 := _).
-      { revert H1. revert r0.
-        rewrite transMbox_Mbox_nil_r in *.
-        intros r0 H1.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      subst m0.
+      destruct H as [XY Z].
+      apply Z.
+    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      subst m0.
+      destruct H0 as [precond e].
+      injection e as e1 e2.
+      rewrite transMbox_Mbox_nil_r in e1.
+      subst r_m1.
+      reflexivity.
+    + revert Heqm1. revert a.
+      rewrite transMbox_Mbox_nil_r in *.
+      intros a Heqm1.
+      instantiate (1 := H).
+      subst m0.
+      destruct a as [pf0 pf1].
+      destruct H as [[X Y] Z].
+      simpl in Heqm1.
+      injection Heqm1 as h1 h2 h3 h4.
+      subst strt len m1 d.
+      simpl.
+      rewrite e_if.
+      rewrite e_if0.
+      destruct H0 as [precond e].
+      injection e as e1 e2.
+      replace Z
+        with precond
+        by (apply mbox_copy_chain_precond_proof_irrel).
+      rewrite <- e2.
+      replace pf0 with X by (apply UIP_bool).
+      replace pf1 with Y by (apply UIP_bool).
+      reflexivity.
+    + rewrite transMbox_Mbox_nil_r in *.
+      subst m0.
+      destruct H0 as [precond e].
+      injection e as e1 e2.
+      subst r_m1.
+      reflexivity.
+    + revert Heqm1. revert a.
+      rewrite transMbox_Mbox_nil_r in *.
+      intros a Heqm1.
+      instantiate (1 := H).
+      subst m0.
+      destruct a as [pf0 pf1].
+      destruct H as [[X Y] Z].
+      simpl in Heqm1.
+      injection Heqm1 as h1 h2 h3 h4.
+      subst strt len m1 d.
+      simpl.
+      rewrite e_if.
+      rewrite e_if0.
+      destruct H0 as [precond e].
+      injection e as e1 e2.
+      replace Z
+        with precond
+        by (apply mbox_copy_chain_precond_proof_irrel).
+      rewrite <- e2.
+      replace pf0 with X by (apply UIP_bool).
+      replace pf1 with Y by (apply UIP_bool).
+      reflexivity.
+    (* All the remaining existential variables don't matter *)
+    Unshelve. all: eauto.
+Qed.
 
-        destruct H0, H1.
-        injection H0 as X Y.
-        rewrite <- X. rewrite <- X in H.
-        destruct H.
-        split; assumption. }
-      admit.
-    + admit.
-Admitted.
+#[local] Hint Resolve mbox_copy_chain_spec_ref : refines_proofs.
 
 
 (** * mbox_split_at *)
@@ -908,6 +966,20 @@ Definition mbox_split_at_precond : Mbox -> bitvector 64 -> Prop :=
             (fun _ => True)
             (fun _ len _ rec _ ix =>
               Mbox_cons_valid ix (bvSub 64 len ix) /\ rec (bvSub 64 ix len)).
+
+Lemma mbox_split_at_precond_proof_irrel :
+  forall (m : Mbox)
+         (ix : bitvector 64)
+         (p1 p2 : mbox_split_at_precond m ix),
+  p1 = p2.
+Proof.
+  intros m. induction m; intros ix p1 p2.
+  - destruct p1, p2. reflexivity.
+  - destruct p1 as [X1 Y1], p2 as [X2 Y2].
+    f_equal.
+    + apply Mbox_cons_valid_proof_irrel.
+    + apply IHm.
+Qed.
 
 Definition mbox_split_at_spec :
            forall (m : Mbox) (ix : bitvector 64),
@@ -927,7 +999,7 @@ Definition mbox_split_at_spec :
                     then let res := rec (bvSub 64 ix len) precond_rec in
                          (Mbox_cons strt len (fst res) d, snd res)
                     else (Mbox_cons strt ix Mbox_nil d,
-                          Mbox_cons (intToBv 64 0) (bvSub 64 len ix) m
+                          Mbox_cons (bvNat 64 0) (bvSub 64 len ix) m
                                     (updSliceBVVec 64 bv64_128 _ empty_mbox_d (intToBv 64 0) (bvSub 64 len ix)
                                       (sliceBVVec 64 bv64_128 _ ix (bvSub 64 len ix) pf0 pf1 d)))
               end).
@@ -950,7 +1022,7 @@ Proof.
     exact (mbox_chain_length m0).
   - prepost_case 0 0.
     + exact (m0 = m1 /\ x = x0).
-    + exact (r = r0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
     prepost_exclude_remaining.
   - unfold mbox_split_at_precond, mbox_split_at_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
@@ -965,25 +1037,35 @@ Proof.
     + simpl.
       rewrite e_if.
       rewrite e_if0.
-
       unshelve instantiate (1 := _).
       { simpl. split.
         * apply H.
-        * revert H1. revert r0.
-          rewrite transMbox_Mbox_nil_r.
-          intros r0 H1.
-          destruct H1 as [precond e].
-          apply precond.
+        * apply H0.
       }
       destruct H as [X Y].
       rewrite e_if1.
       reflexivity.
-    + revert H1. revert r0.
+    + revert H1. revert r_m1 r_m2.
       rewrite transMbox_Mbox_nil_r.
-      intros r0 H1.
+      intros r_m1 r_m2 H1.
       destruct H1 as [precond e].
-      rewrite e.
+      replace H0
+        with precond
+        by (apply mbox_split_at_precond_proof_irrel).
+      apply (f_equal fst) in e.
+      simpl in e.
+      subst r_m1.
       reflexivity.
+    + revert H1. revert r_m1 r_m2.
+      rewrite transMbox_Mbox_nil_r.
+      intros r_m1 r_m2 H1.
+      destruct H1 as [precond e].
+      replace H0
+        with precond
+        by (apply mbox_split_at_precond_proof_irrel).
+      apply (f_equal snd) in e.
+      simpl in e.
+      assumption.
     + rewrite bvSub_n_zero in H.
       destruct H0.
       specialize
@@ -997,16 +1079,22 @@ Proof.
       contradiction.
     + destruct H2 as [H2contra H4].
       contradiction.
-    + simpl. split.
-      * instantiate (2 := a0).
-        instantiate (1 := a1).
-        exists (conj (conj a0 a1) H3).
-        rewrite e_if.
-        rewrite e_if0.
-        rewrite e_if1.
-        reflexivity.
-    + rewrite updSlice_slice_identity.
+    + rewrite e_if.
+      rewrite e_if0.
+      rewrite e_if1.
+      unshelve instantiate (1 := _).
+      { simpl. split.
+        * apply H2.
+        * apply H3.
+      }
+      instantiate (2 := a0).
+      instantiate (1 := a1).
+      destruct H2 as [X Y].
+      replace a0 with X by (apply UIP_bool).
+      replace a1 with Y by (apply UIP_bool).
       reflexivity.
+    + rewrite updSlice_slice_identity.
+      split; reflexivity.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if2.
       destruct e_if2.
       * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
@@ -1022,8 +1110,104 @@ Proof.
                end).
 Qed.
 
+#[local] Hint Resolve mbox_split_at_spec_ref : refines_proofs.
+
+
+(** * mbox_detach_from_end *)
+
+Definition mbox_detach_from_end_precond
+             (m : Mbox)
+             (length_from_end : bitvector 64)
+         : Prop :=
+  mbox_split_at_precond m (bvSub 64 (mbox_len_spec m) length_from_end).
+
+Definition mbox_detach_from_end_spec
+             (m : Mbox)
+             (length_from_end : bitvector 64)
+             (precond : mbox_detach_from_end_precond m length_from_end)
+         : Mbox * Mbox :=
+  mbox_split_at_spec m (bvSub 64 (mbox_len_spec m) length_from_end) precond.
+
+Lemma mbox_detach_from_end_spec_ref m length_from_end
+  : spec_refines eqPreRel eqPostRel eq
+      (mbox_detach_from_end m length_from_end)
+      (total_spec (fun '(m', length_from_end') =>
+                    mbox_detach_from_end_precond m' length_from_end')
+                  (fun '(m', length_from_end') r =>
+                    exists (precond : mbox_detach_from_end_precond m' length_from_end'),
+                    r = mbox_detach_from_end_spec m' length_from_end' precond)
+                  (m, length_from_end)).
+Proof.
+  unfold mbox_detach_from_end, mbox_detach_from_end__bodies.
+  prove_refinement.
+  - wellfounded_none.
+  - prepost_case 0 0.
+    + exact (m0 = m1 /\ x = x0).
+    + exact (r_m = r_m1 /\ r_m0 = r_m2).
+    prepost_exclude_remaining.
+  - unfold mbox_detach_from_end_precond, mbox_detach_from_end_spec.
+  - time "mbox_detach_from_end_spec_ref" prove_refinement_continue.
+    Ltac busywork H0 a := (simpl in *;
+                           revert H0;
+                           revert a;
+                           do 2 rewrite transMbox_Mbox_nil_r;
+                           intros a H0).
+    + unshelve instantiate (1 := _).
+      { busywork H0 a.
+        apply a.
+      }
+      busywork H0 a.
+      rewrite -> H0.
+      reflexivity.
+    + unshelve instantiate (1 := _).
+      { busywork H0 a.
+        apply a.
+      }
+      busywork H0 a.
+      rewrite -> H0.
+      reflexivity.
+Qed.
+
 
 (** * mbox_randomize *)
+
+Lemma atBVVec_upd_out_of_range w len A a v i j pf1 pf2 :
+  bvEq w i j = false ->
+  atBVVec w len A v i pf1 =
+  atBVVec w len A (updBVVec w len A v j a) i pf2.
+Admitted.
+
+(* True iff both inputs are Mbox_null, or both inputs are
+   Mbox_cons where the values of strt, len, and m are equal,
+   and the values of d are equal only outside of the range
+   defined by strt and len. *)
+Definition mbox_eq_up_to_head_data (m1 m2 : Mbox) : Prop :=
+  Mbox__rec (fun _ => Prop)
+            (Mbox__rec (fun _ => Prop) True (fun _ _ _ _ _ => False) m2)
+            (fun strt1 len1 m1 _ d1 =>
+             Mbox__rec (fun _ => Prop) False (fun strt2 len2 m2 _ d2 =>
+             strt1 = strt2 /\ len1 = len2 /\ m1 = m2 /\
+             forall i (pf : isBvult 64 i bv64_128),
+               isBvslt 64 i strt1 \/ isBvsle 64 len1 i ->
+               atBVVec _ _ _ d1 i pf = atBVVec _ _ _ d2 i pf) m2) m1.
+
+Lemma mbox_eq_up_to_head_data_trans m1 m2 m3 :
+  mbox_eq_up_to_head_data m1 m2 ->
+  mbox_eq_up_to_head_data m2 m3 ->
+  mbox_eq_up_to_head_data m1 m3.
+Proof.
+  destruct m1 as [|strt1 len1 m1 d1],
+           m2 as [|strt2 len2 m2 d2],
+           m3 as [|strt3 len3 m3 d3]; simpl.
+  all: intros; contradiction || eauto.
+  destruct H as [? [? []]], H0 as [? [? []]]; repeat split; eauto.
+  - transitivity strt2; eauto.
+  - transitivity len2; eauto.
+  - transitivity m2; eauto.
+  - intros. transitivity (atBVVec 64 bv64_128 (bitvector 8) d2 i pf).
+    + apply H3. eauto.
+    + apply H6. destruct H, H1. eauto.
+Qed.
 
 Definition mbox_head_len_sub_strt : Mbox -> nat :=
   Mbox_rect (fun _ => nat) 0 (fun strt len _ _ _ =>
@@ -1038,18 +1222,9 @@ Definition mbox_randomize_precond : Mbox -> Prop :=
 Definition SUCCESS         := intToBv 32 0.
 Definition MBOX_NULL_ERROR := intToBv 32 23.
 
-(* - If `m` is non-null, the function returns `SUCCESS` and `m->data` is set to
-     some `data'` such that `m->data[i] = data'[i]` for all `i` such that
-     `i < m->strt` or `i >= m->len`.
-   - Otherwise, the function returns `MBOX_NULL_ERROR`. *)
-Definition mbox_randomize_postcond m r : Prop :=
-  Mbox__rec (fun _ => Prop)
-            (r = (Mbox_nil, MBOX_NULL_ERROR))
-            (fun strt len m _ d =>
-              exists d', (forall i (pf : isBvult 64 i bv64_128),
-                           isBvslt 64 i strt \/ isBvsle 64 len i ->
-                           atBVVec _ _ _ d i pf = atBVVec _ _ _ d' i pf)
-                         /\ r = (Mbox_cons strt len m d', SUCCESS)) m.
+Definition mbox_randomize_ret m :=
+  Mbox__rec (fun _ => bitvector 32) MBOX_NULL_ERROR
+            (fun _ _ _ _ _ => SUCCESS) m.
 
 Definition mbox_randomize_invar (strt len i : bitvector 64) : Prop :=
   (* strt <= i <= len *)
@@ -1059,7 +1234,8 @@ Lemma mbox_randomize_spec_ref m
   : spec_refines eqPreRel eqPostRel eq
       (mbox_randomize m)
       (total_spec (fun '(_, m') => mbox_randomize_precond m')
-                  (fun '(_, m') r => mbox_randomize_postcond m' r)
+                  (fun '(_, m') '(r_m, r_x) => mbox_eq_up_to_head_data m' r_m
+                                               /\ r_x = mbox_randomize_ret m')
                   (1 + mbox_head_len_sub_strt m, m)).
 Proof.
   unfold mbox_randomize, mbox_randomize__bodies, randSpec.
@@ -1068,18 +1244,71 @@ Proof.
     exact a.
   - prepost_case 0 0.
     + exact (m0 = m1 /\ a = 1 + mbox_head_len_sub_strt m0).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
     prepost_case 1 0.
     + exact (Mbox_cons x x0 m0 a = m1 /\
              a0 = bvToNat 64 (bvSub 64 x0 x1) /\
              mbox_randomize_invar x x0 x1).
-    + exact (r = r0).
+    + exact (r_m = r_m0 /\ r_x = r_x0).
     prepost_exclude_remaining.
   - unfold mbox_head_len_sub_strt, mbox_randomize_precond,
-           mbox_randomize_postcond, mbox_randomize_invar in *.
+           mbox_randomize_invar in *.
     time "mbox_randomize_spec_ref" prove_refinement_continue.
-    all: admit.
-Admitted.
+    (* mbox_eq_up_to_head_data goals *)
+    1-3: rewrite transMbox_Mbox_nil_r in H2.
+    1-3: destruct H2.
+    1-3: assumption.
+    (* Showing the error case of the array bounds check is impossible by virtue *)
+    (* of our loop invariant *)
+    1-2: enough (isBvult 64 call3 (intToBv 64 128)) by contradiction.
+    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: rewrite isBvult_def in e_if; rewrite e_if.
+    1-2: eapply isBvult_to_isBvslt_pos; [| reflexivity | assumption ].
+    1-2: rewrite H1, H3; reflexivity.
+    (* Showing the loop invariant holds inductively *)
+    1-9: destruct H1 as [?H [?H ?H]]; try assumption.
+    + apply isBvult_impl_lt_bvToNat, isBvult_bvSub_bvAdd_1; eauto.
+    + rewrite H. apply isBvsle_suc_r.
+      rewrite H0, H4.
+      reflexivity.
+    + apply isBvslt_to_isBvsle_suc.
+      apply isBvult_to_isBvslt_pos; eauto.
+      * rewrite H1; eauto.
+      * rewrite <- H3; eauto.
+    (* more step mbox_eq_up_to_head_data goals *)
+    1-3: rewrite transMbox_Mbox_nil_r in H3.
+    1-3: destruct H3.
+    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: rewrite H in H1. rewrite <- H0 in H6.
+    1-2: rewrite isBvult_def in e_if.
+    1-2: apply isBvult_to_isBvslt_pos in e_if;
+         [| assumption | rewrite <- H0; assumption ].
+    1-2: eapply mbox_eq_up_to_head_data_trans; eauto.
+    1-2: repeat split; eauto; intros.
+    1-2: apply atBVVec_upd_out_of_range.
+    1-2: destruct H7 as [?H | ?H]; [| rewrite bvEq_sym ].
+    1-4: apply isBvslt_to_bvEq_false.
+    + rewrite <- H; assumption.
+    + rewrite H7 in e_if; assumption.
+    + rewrite <- H; assumption.
+    + rewrite H7 in e_if; assumption.
+    + rewrite H4. simpl. reflexivity.
+    (* Showing the error case of the overflow check is impossible by virtue of *)
+    (* our loop invariant *)
+    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: rewrite H in H1; rewrite <- H0 in H3.
+    1-2: rewrite and_bool_eq_false in e_if0.
+    1-2: do 2 rewrite isBvslt_def_opp in e_if0.
+    1-2: destruct e_if0 as [?e_if | ?e_if];
+         [ rewrite <- H1 in e_if0 | rewrite H3 in e_if0 ].
+    1-4: vm_compute in e_if0; discriminate e_if0.
+    (* final mbox_eq_up_to_head_data goals *)
+    + simpl. repeat split.
+    + simpl. repeat split.
+    (* All the remaining existential variables don't matter *)
+    Unshelve.
+    all: eauto.
+Qed.
 
 
 
