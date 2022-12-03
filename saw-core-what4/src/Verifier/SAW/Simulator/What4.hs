@@ -580,8 +580,10 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- selectV merger maxValue valueFn index returns valueFn v when index has value v
--- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
+-- @selectV sym merger maxValue valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
+-- if-then-else operator. If the index is greater than @maxValue@, then it
+-- returns @valueFn maxValue@.
 selectV :: forall sym b.
   Sym sym =>
   sym ->
@@ -595,7 +597,12 @@ selectV sym merger maxValue valueFn vx =
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = do
-      p <- SW.bvAtBE sym vx (toInteger j)
+      -- NB: `i` counts down in each iteration, so we use bvAtLE (a
+      -- little-endian indexing function) to ensure that the bits are processed
+      -- in big-endian order. Alternatively, we could have `i` count up and use
+      -- bvAtBE (a big-endian indexing function), but we use bvAtLE as it is
+      -- slightly cheaper to compute.
+      p <- SW.bvAtLE sym vx (toInteger j)
       merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 instance Show (SArray sym) where
