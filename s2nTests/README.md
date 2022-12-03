@@ -15,5 +15,6 @@ Running `make <target>` on one of the following targets will use the `saw` binar
 - `hmac-failure`
 - `awslc`
 - `blst`
+- `exercises`
 
 `make` alone with no targets will run all of the proofs.

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -xe
 
+# This script checks all of the exercise and solution files.  It is only
+# intended to be executed by the saw-script CI system.
+
 cd /workdir
 mkdir bin
 cp /saw-bin/saw bin/saw
