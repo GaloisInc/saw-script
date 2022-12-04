@@ -17,6 +17,7 @@ module SAWScript.Proof
   ( Prop
   , splitConj
   , splitDisj
+  , recoverEqTrue
   , unfoldProp
   , simplifyProp
   , hoistIfsInProp
@@ -363,6 +364,13 @@ splitSequent sc sqt =
                 Nothing -> return Nothing
 
     UnfocusedSequent _ _ -> return Nothing
+
+-- | Convert a proposition of the form Eq x True to EqTrue x
+recoverEqTrue :: SharedContext -> Prop -> IO Prop
+recoverEqTrue sc (Prop (asPiList -> (bs, tm))) =
+  case asEqTrue tm of
+    Just x -> Prop <$> (scPiList sc bs =<< scEqTrue sc x)
+    Nothing -> pure $ Prop tm
 
 -- | Unfold all the constants appearing in the proposition
 --   whose VarIndex is found in the given set.

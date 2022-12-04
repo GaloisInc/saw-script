@@ -1716,6 +1716,11 @@ primitives = Map.fromList
     Current
     [ "Reduce the current goal to beta-normal form." ]
 
+  , prim "recover_eqtrue"      "ProofScript ()"
+    (pureVal recover_eqtrue)
+    Experimental
+    [ "Convert a goal of the form Eq x True into EqTrue x." ]
+
   , prim "goal_apply"          "Theorem -> ProofScript ()"
     (pureVal goal_apply)
     Experimental

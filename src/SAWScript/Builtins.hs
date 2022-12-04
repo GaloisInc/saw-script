@@ -641,6 +641,13 @@ normalize_sequent =
        sqt' <- io $ normalizeSequent sc (goalSequent goal)
        return (sqt', NormalizeSequentEvidence sqt')
 
+recover_eqtrue :: ProofScript ()
+recover_eqtrue =
+  execTactic $ tacticChange $ \goal ->
+  do sc <- getSharedContext
+     sqt' <- traverseSequentWithFocus (io . recoverEqTrue sc) (goalSequent goal)
+     return (sqt', ConversionEvidence sqt')
+
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
