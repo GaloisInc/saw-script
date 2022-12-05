@@ -72,7 +72,7 @@ data MRFailure
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
   | MalformedLetRecTypes Term
-  | MalformedDefsFun Term
+  | MalformedDefs Term
   | MalformedComp Term
   | NotCompFunType Term
   | AssertionNotProvable Term
@@ -141,7 +141,7 @@ instance PrettyInCtx MRFailure where
   prettyInCtx (CompsDoNotRefine m1 m2) =
     ppWithPrefixSep "Could not prove refinement: " m1 "|=" m2
   prettyInCtx (ReturnNotError t) =
-    ppWithPrefix "errorM computation not equal to:" (ReturnM t)
+    ppWithPrefix "errorS computation not equal to:" (RetS t)
   prettyInCtx (FunsNotEq nm1 nm2) =
     vsepM [return "Named functions not equal:",
            prettyInCtx nm1, prettyInCtx nm2]
@@ -151,8 +151,8 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Recursive unfolding of function inside its own body:" nm
   prettyInCtx (MalformedLetRecTypes t) =
     ppWithPrefix "Not a ground LetRecTypes list:" t
-  prettyInCtx (MalformedDefsFun t) =
-    ppWithPrefix "Cannot handle letRecM recursive definitions term:" t
+  prettyInCtx (MalformedDefs t) =
+    ppWithPrefix "Cannot handle multiFixS recursive definitions term:" t
   prettyInCtx (MalformedComp t) =
     ppWithPrefix "Could not handle computation:" t
   prettyInCtx (NotCompFunType tp) =
@@ -192,8 +192,8 @@ showMRFailureNoCtx = showMRFailure . mrFailureWithoutCtx
 data MRVarInfo
      -- | An existential variable, that might be instantiated
   = EVarInfo (Maybe Term)
-    -- | A letrec-bound function, with its body
-  | FunVarInfo Term
+    -- | A recursive function bound by @multiFixS@, with its body
+  | CallVarInfo Term
 
 -- | A map from 'MRVar's to their info
 type MRVarMap = Map MRVar MRVarInfo
@@ -522,7 +522,7 @@ doTypeProj _ _ =
 
 -- | Get and normalize the type of a 'FunName'
 funNameType :: FunName -> MRM Term
-funNameType (LetRecName var) = liftSC1 scWhnf $ mrVarType var
+funNameType (CallSName var) = liftSC1 scWhnf $ mrVarType var
 funNameType (EVarFunName var) = liftSC1 scWhnf $ mrVarType var
 funNameType (GlobalName gd projs) =
   liftSC1 scWhnf (globalDefType gd) >>= \gd_tp ->
@@ -535,6 +535,10 @@ mrApplyAll f args = liftSC2 scApplyAllBeta f args
 -- | Apply a 'Term' to a single argument and beta-reduce in Mr. Monad
 mrApply :: Term -> Term -> MRM Term
 mrApply f arg = mrApplyAll f [arg]
+
+-- | Return the unit type as a 'Type'
+mrUnitType :: MRM Type
+mrUnitType = Type <$> liftSC0 scUnitType
 
 -- | Build a constructor application in Mr. Monad
 mrCtorApp :: Ident -> [Term] -> MRM Term
@@ -575,16 +579,16 @@ mrTypeOf t =
 mrConvertible :: Term -> Term -> MRM Bool
 mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 
--- | Take a 'FunName' @f@ for a monadic function of type @vars -> CompM a@ and
--- compute the type @CompM [args/vars]a@ of @f@ applied to @args@. Return the
--- type @[args/vars]a@ that @CompM@ is applied to.
+-- | Take a 'FunName' @f@ for a monadic function of type @vars -> SpecM a@ and
+-- compute the type @SpecM [args/vars]a@ of @f@ applied to @args@. Return the
+-- type @[args/vars]a@ that @SpecM@ is applied to.
 mrFunOutType :: FunName -> [Term] -> MRM Term
 mrFunOutType fname args =
   mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
-    (asCompM -> Just tp) -> liftSC1 scWhnf tp
+    (asSpecM -> Just tp) -> liftSC1 scWhnf tp
     _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
             pp_fname <- mrPPInCtx fname
-            debugPrint 0 "mrFunOutType: function does not have CompM return type"
+            debugPrint 0 "mrFunOutType: function does not have SpecM return type"
             debugPretty 0 ("Function:" <> pp_fname <> " with type: " <> pp_ftype)
             error "mrFunOutType"
 
@@ -726,7 +730,7 @@ mrVarInfo var = Map.lookup var <$> mrVars
 extCnsToFunName :: ExtCns Term -> MRM FunName
 extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
   Just (EVarInfo _) -> return $ EVarFunName var
-  Just (FunVarInfo _) -> return $ LetRecName var
+  Just (CallVarInfo _) -> return $ CallSName var
   Nothing
     | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
       return $ GlobalName glob []
@@ -746,9 +750,9 @@ mrGlobalDefBody ident = asConstant <$> liftSC1 scGlobalDef ident >>= \case
 
 -- | Get the body of a function @f@ if it has one
 mrFunNameBody :: FunName -> MRM (Maybe Term)
-mrFunNameBody (LetRecName var) =
+mrFunNameBody (CallSName var) =
   mrVarInfo var >>= \case
-  Just (FunVarInfo body) -> return $ Just body
+  Just (CallVarInfo body) -> return $ Just body
   _ -> error "mrFunBody: unknown letrec var"
 mrFunNameBody (GlobalName glob projs)
   | Just body <- globalDefBody glob

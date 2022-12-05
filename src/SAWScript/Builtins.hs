@@ -2138,7 +2138,7 @@ monadifyTypedTerm sc t =
 ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
 ensureMonadicTerm sc t
   | TypedTermOther tp <- ttType t =
-    io (Prover.isCompFunType sc tp) >>= \case
+    io (Prover.isSpecFunType sc tp) >>= \case
       True -> return t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t

@@ -2941,13 +2941,33 @@ primitive forallS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
 primitive existsS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
                     SpecM E stack a;
 
+-- Assume a proposition holds
 primitive assumeS : (E:EvType) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E stack #();
+
+-- Assume a Boolean value is true
+assumeBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
+assumeBoolS E stack b = assumeS E stack (EqTrue b);
+
+-- Assert a proposition holds
 primitive assertS : (E:EvType) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E stack #();
 
+-- Assert a Boolean value is true
+assertBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
+assertBoolS E stack b = assertS E stack (EqTrue b);
+
+-- Lift a computation in the empty stack to an arbitrary stack
 primitive liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
                        SpecM E emptyFunStack A -> SpecM E stack A;
+
+-- The computation that nondeterministically chooses one computation or another.
+-- As a specification, represents the disjunction of two specifications.
+orS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) ->
+      SpecM E stack a -> SpecM E stack a -> SpecM E stack a;
+orS E stack a m1 m2 =
+  bindS E stack Bool a (existsS E stack Bool)
+        (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
 
 -- Return the type represented by a LetRecType
 LRTType : (E:EvType) -> FunStack -> LetRecType -> sort 0;

@@ -81,10 +81,10 @@ asProjAll (asPairSelector -> Just ((asProjAll -> (t, projs)), isRight))
 asProjAll t = (t, [])
 
 -- | Names of functions to be used in computations, which are either names bound
--- by letrec to for recursive calls to fixed-points, existential variables, or
+-- by @multiFixS@ for recursive calls to fixed-points, existential variables, or
 -- (possibly projections of) of global named constants
 data FunName
-  = LetRecName MRVar | EVarFunName MRVar | GlobalName GlobalDef [TermProj]
+  = CallSName MRVar | EVarFunName MRVar | GlobalName GlobalDef [TermProj]
   deriving (Eq, Ord, Show)
 
 -- | Recognize a 'Term' as (possibly a projection of) a global name
@@ -101,7 +101,7 @@ asGlobalFunName _ = Nothing
 
 -- | Convert a 'FunName' to an unshared term, for printing
 funNameTerm :: FunName -> Term
-funNameTerm (LetRecName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
+funNameTerm (CallSName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
 funNameTerm (EVarFunName var) = Unshared $ FTermF $ ExtCns $ unMRVar var
 funNameTerm (GlobalName gdef []) = globalDefTerm gdef
 funNameTerm (GlobalName gdef (TermProjLeft:projs)) =
@@ -170,27 +170,27 @@ mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
 mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
 mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 
--- | A Haskell representation of a @CompM@ in "monadic normal form"
+-- | A Haskell representation of a @SpecM@ in "monadic normal form"
 data NormComp
-  = ReturnM Term -- ^ A term @returnM a x@
-  | ErrorM Term -- ^ A term @errorM a str@
+  = RetS Term -- ^ A term @retS _ _ a x@
+  | ErrorS Term -- ^ A term @errorS _ _ a str@
   | Ite Term Comp Comp -- ^ If-then-else computation
   | Eithers [EitherElim] Term -- ^ A multi-way sum elimination
   | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
-  | OrM Comp Comp -- ^ an @orM@ computation
-  | AssertingM Term Comp -- ^ an @assertingM@ computation
-  | AssumingM Term Comp -- ^ an @assumingM@ computation
-  | ExistsM Type CompFun -- ^ an @existsM@ computation
-  | ForallM Type CompFun -- ^ a @forallM@ computation
+  | OrS Comp Comp -- ^ an @orS@ computation
+  | AssertBoolBind Term CompFun -- ^ the bind of an @assertBoolS@ computation
+  | AssumeBoolBind Term CompFun -- ^ the bind of an @assumeBoolS@ computation
+  | ExistsBind Type CompFun -- ^ the bind of an @existsS@ computation
+  | ForallBind Type CompFun -- ^ the bind of a @forallS@ computation
   | FunBind FunName [Term] CompFun
-    -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
+    -- ^ Bind a monadic function with @N@ arguments in an @a -> SpecM b@ term
   deriving (Generic, Show)
 
 -- | An eliminator for an @Eithers@ type is a pair of the type of the disjunct
 -- and a function from that type to the output type
 type EitherElim = (Type,CompFun)
 
--- | A computation function of type @a -> CompM b@ for some @a@ and @b@
+-- | A computation function of type @a -> SpecM b@ for some @a@ and @b@
 data CompFun
      -- | An arbitrary term
   = CompFunTerm Term
@@ -221,20 +221,20 @@ compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType (CompFunReturn t) = Just t
 compFunInputType _ = Nothing
 
--- | A computation of type @CompM a@ for some @a@
+-- | A computation of type @SpecM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving (Generic, Show)
 
--- | Match a type as being of the form @CompM a@ for some @a@
-asCompM :: Term -> Maybe Term
-asCompM (asApp -> Just (isGlobalDef "Prelude.CompM" -> Just (), tp)) =
+-- | Match a type as being of the form @SpecM E stack a@ for some @a@
+asSpecM :: Term -> Maybe Term
+asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [_, _, tp])) =
   return tp
-asCompM _ = fail "not a CompM type!"
+asSpecM _ = fail "not a SpecM type!"
 
 -- | Test if a type normalizes to a monadic function type of 0 or more arguments
-isCompFunType :: SharedContext -> Term -> IO Bool
-isCompFunType sc t = scWhnf sc t >>= \case
-  (asPiList -> (_, asCompM -> Just _)) -> return True
+isSpecFunType :: SharedContext -> Term -> IO Bool
+isSpecFunType sc t = scWhnf sc t >>= \case
+  (asPiList -> (_, asSpecM -> Just _)) -> return True
   _ -> return False
 
 
@@ -550,7 +550,7 @@ instance PrettyInCtx TermProj where
   prettyInCtx (TermProjRecord fld) = return (pretty '.' <> pretty fld)
 
 instance PrettyInCtx FunName where
-  prettyInCtx (LetRecName var) = prettyInCtx var
+  prettyInCtx (CallSName var) = prettyInCtx var
   prettyInCtx (EVarFunName var) = prettyInCtx var
   prettyInCtx (GlobalName g projs) =
     foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (ppName $
@@ -566,15 +566,18 @@ instance PrettyInCtx Comp where
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm t) = prettyInCtx t
   prettyInCtx (CompFunReturn t) =
-    prettyAppList [return "returnM", parens <$> prettyInCtx t]
+    prettyAppList [return "retS", return "_", return "_",
+                   parens <$> prettyInCtx t]
   prettyInCtx (CompFunComp f g) =
     prettyAppList [prettyInCtx f, return ">=>", prettyInCtx g]
 
 instance PrettyInCtx NormComp where
-  prettyInCtx (ReturnM t) =
-    prettyAppList [return "returnM", return "_", parens <$> prettyInCtx t]
-  prettyInCtx (ErrorM str) =
-    prettyAppList [return "errorM", return "_", parens <$> prettyInCtx str]
+  prettyInCtx (RetS t) =
+    prettyAppList [return "retS", return "_", return "_", return "_",
+                   parens <$> prettyInCtx t]
+  prettyInCtx (ErrorS str) =
+    prettyAppList [return "errorS", return "_", return "_", return "_",
+                   parens <$> prettyInCtx str]
   prettyInCtx (Ite cond t1 t2) =
     prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
@@ -585,21 +588,23 @@ instance PrettyInCtx NormComp where
     prettyAppList [return "maybe", parens <$> prettyInCtx tp,
                    return (parens "CompM _"), parens <$> prettyInCtx m,
                    parens <$> prettyInCtx f, parens <$> prettyInCtx mayb]
-  prettyInCtx (OrM t1 t2) =
-    prettyAppList [return "orM", return "_",
+  prettyInCtx (OrS t1 t2) =
+    prettyAppList [return "orS", return "_", return "_", return "_",
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
-  prettyInCtx (AssertingM cond t) =
-    prettyAppList [return "assertingM", parens <$> prettyInCtx cond,
-                   parens <$> prettyInCtx t]
-  prettyInCtx (AssumingM cond t) =
-    prettyAppList [return "assumingM", parens <$> prettyInCtx cond,
-                   parens <$> prettyInCtx t]
-  prettyInCtx (ExistsM tp f) =
-    prettyAppList [return "existsM", prettyInCtx tp, return "_",
-                   parens <$> prettyInCtx f]
-  prettyInCtx (ForallM tp f) =
-    prettyAppList [return "forallM", prettyInCtx tp, return "_",
-                   parens <$> prettyInCtx f]
+  prettyInCtx (AssertBoolBind cond k) =
+    prettyAppList [return "assertBoolS", return "_", return "_",
+                   parens <$> prettyInCtx cond, return ">>=",
+                   parens <$> prettyInCtx k]
+  prettyInCtx (AssumeBoolBind cond k) =
+    prettyAppList [return "assumeBoolS", return "_", return "_",
+                   parens <$> prettyInCtx cond, return ">>=",
+                   parens <$> prettyInCtx k]
+  prettyInCtx (ExistsBind tp k) =
+    prettyAppList [return "existsS", return "_", return "_", prettyInCtx tp,
+                   return ">>=", parens <$> prettyInCtx k]
+  prettyInCtx (ForallBind tp k) =
+    prettyAppList [return "forallS", return "_", return "_", prettyInCtx tp,
+                   return ">>=", parens <$> prettyInCtx k]
   prettyInCtx (FunBind f args (CompFunReturn _)) =
     prettyTermApp (funNameTerm f) args
   prettyInCtx (FunBind f [] k) =
