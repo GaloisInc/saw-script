@@ -195,6 +195,12 @@ data MRVarInfo
     -- | A recursive function bound by @multiFixS@, with its body
   | CallVarInfo Term
 
+instance PrettyInCtx MRVarInfo where
+  prettyInCtx (EVarInfo maybe_t) =
+    prettyAppList [ return "EVar", parens <$> prettyInCtx maybe_t]
+  prettyInCtx (CallVarInfo t) =
+    prettyAppList [ return "CallVar", parens <$> prettyInCtx t]
+
 -- | A map from 'MRVar's to their info
 type MRVarMap = Map MRVar MRVarInfo
 
@@ -807,12 +813,13 @@ mrFreshVar nm tp = MRVar <$> liftSC2 scFreshEC nm tp
 -- | Set the info associated with an 'MRVar', assuming it has not been set
 mrSetVarInfo :: MRVar -> MRVarInfo -> MRM ()
 mrSetVarInfo var info =
-  modify $ \st ->
-  st { mrsVars =
-         Map.alter (\case
-                       Just _ -> error "mrSetVarInfo"
-                       Nothing -> Just info)
-         var (mrsVars st) }
+  debugPretty 3 ("mrSetVarInfo" <+> ppInEmptyCtx var <+> "=" <+> ppInEmptyCtx info) >>
+  (modify $ \st ->
+   st { mrsVars =
+          Map.alter (\case
+                        Just _ -> error "mrSetVarInfo"
+                        Nothing -> Just info)
+          var (mrsVars st) })
 
 -- | Make a fresh existential variable of the given type, abstracting out all
 -- the current uvars and returning the new evar applied to all current uvars

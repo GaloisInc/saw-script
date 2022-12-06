@@ -209,26 +209,28 @@ mrReplaceCallsWithTerms tms =
 mrFreshCallVars :: Term -> Term -> Term -> Term -> MRM [MRVar]
 mrFreshCallVars ev stack frame defs_tm =
   do
-    -- First, make fresh function constants for all the recursive functions
+    -- First, make fresh function constants for all the recursive functions,
+    -- noting that each constant must abstract out the current uvar context
+    new_stack <- liftSC2 scGlobalApply "Prelude.pushFunStack" [frame, stack]
     lrts <- liftSC1 scWhnf frame >>= \case
        (asList1 -> Just lrts) -> return lrts
        _ -> throwMRFailure (MalformedLetRecTypes frame)
-    new_stack <- liftSC2 scGlobalApply "Prelude.pushFunStack" [frame, stack]
     fun_tps <- forM lrts $ \lrt ->
-      liftSC2 scGlobalApply "Prelude.LRTType" [ev, new_stack, lrt]
+      piUVarsM =<< liftSC2 scGlobalApply "Prelude.LRTType" [ev, new_stack, lrt]
     fun_vars <- mapM (mrFreshVar "F") fun_tps
-    fun_tms <- mapM mrVarTerm fun_vars
 
-    -- Next, match on the tuple of recursive function definitions, and replace
-    -- all recursive calls in them with our new variable terms
-    defs <- case asNestedPairs defs_tm of
-      Just defs -> mapM (mrReplaceCallsWithTerms fun_tms) defs
+    -- Next, match on the tuple of recursive function definitions and convert
+    -- each definition to a function body, by lambda-abstracting all the current
+    -- uvars and then replacing all recursive calls in each function body with
+    -- our new variable terms (which are applied to the current uvars; see
+    -- mrVarTerm)
+    fun_tms <- mapM mrVarTerm fun_vars
+    bodies <- case asNestedPairs defs_tm of
+      Just defs -> mapM (mrReplaceCallsWithTerms fun_tms >=> lambdaUVarsM) defs
       Nothing -> throwMRFailure (MalformedDefs defs_tm)
 
     -- Remember the body associated with each fresh function constant
-    zipWithM_ (\f body ->
-                lambdaUVarsM body >>= \cl_body ->
-                mrSetVarInfo f (CallVarInfo cl_body)) fun_vars defs
+    zipWithM_ (\f body -> mrSetVarInfo f (CallVarInfo body)) fun_vars bodies
 
     -- Finally, return the fresh function variables
     return fun_vars
@@ -295,10 +297,12 @@ normComp (CompTerm t) =
       do
         -- Bind fresh function vars for the new recursive functions
         fun_vars <- mrFreshCallVars ev stack frame defs
-        -- Return the @i@th variable to args as a normalized computation
+        -- Return the @i@th variable to args as a normalized computation, noting
+        -- that it must be applied to all of the uvars as well as the args
         let var = CallSName (fun_vars !! (fromIntegral i))
-        out_tp <- mrFunOutType var args
-        return $ FunBind var args (CompFunReturn $ Type out_tp)
+        all_args <- (++ args) <$> getAllUVarTerms
+        out_tp <- mrFunOutType var all_args
+        return $ FunBind var all_args (CompFunReturn $ Type out_tp)
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
