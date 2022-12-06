@@ -149,17 +149,6 @@ import SAWScript.Prover.MRSolver.SMT
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
 
--- | Pattern-match on a @LetRecTypes@ list in normal form and return a list of
--- the types it specifies, each in normal form and with uvars abstracted out
-asLRTList :: Term -> MRM [Term]
-asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Nil", [])) =
-  return []
-asLRTList (asCtor -> Just (primName -> "Prelude.LRT_Cons", [lrt, lrts])) =
-  do tp <- liftSC2 scGlobalApply "Prelude.lrtToType" [lrt]
-     tp_norm_closed <- liftSC1 scWhnf tp >>= piUVarsM
-     (tp_norm_closed :) <$> asLRTList lrts
-asLRTList t = throwMRFailure (MalformedLetRecTypes t)
-
 -- | Match a right-nested series of pairs. This is similar to 'asTupleValue'
 -- except that it expects a unit value to always be at the end.
 asNestedPairs :: Recognizer Term [Term]
@@ -218,9 +207,12 @@ mrReplaceCallsWithTerms tms =
 -- | Bind fresh function variables for a @multiFixS@ with the given list of
 -- @LetRecType@s and tuple of definitions for the function bodies
 mrFreshCallVars :: Term -> Term -> Term -> Term -> MRM [MRVar]
-mrFreshCallVars ev stack (frame@(asList1 -> Just lrts)) defs_tm =
+mrFreshCallVars ev stack frame defs_tm =
   do
     -- First, make fresh function constants for all the recursive functions
+    lrts <- liftSC1 scWhnf frame >>= \case
+       (asList1 -> Just lrts) -> return lrts
+       _ -> throwMRFailure (MalformedLetRecTypes frame)
     new_stack <- liftSC2 scGlobalApply "Prelude.pushFunStack" [frame, stack]
     fun_tps <- forM lrts $ \lrt ->
       liftSC2 scGlobalApply "Prelude.LRTType" [ev, new_stack, lrt]
@@ -240,9 +232,6 @@ mrFreshCallVars ev stack (frame@(asList1 -> Just lrts)) defs_tm =
 
     -- Finally, return the fresh function variables
     return fun_vars
-
-mrFreshCallVars _ _ frame _ =
-  throwMRFailure (MalformedLetRecTypes frame)
 
 
 -- | Normalize a 'Term' of monadic type to monadic normal form
