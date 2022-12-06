@@ -163,6 +163,13 @@ skip = IdentSpecialTreatment
   , atUseSite = UsePreserve
   }
 
+-- | The Coq built-in @Datatypes@ module
+datatypesModule :: ModuleName
+datatypesModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Init.Datatypes
+  mkModuleName ["Datatypes", "Init", "Coq"]
+
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
@@ -270,7 +277,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Bool",          mapsTo sawDefinitionsModule "Bool")
   , ("boolEq",        mapsTo sawDefinitionsModule "boolEq")
   , ("boolEq__eq",    mapsTo sawDefinitionsModule "boolEq__eq")
-  , ("False",         mapsTo sawDefinitionsModule "false")
+  , ("False",         mapsTo datatypesModule "false")
   , ("ite",           mapsTo sawDefinitionsModule "ite")
   , ("iteDep",        mapsTo sawDefinitionsModule "iteDep")
   , ("iteDep_True",   mapsTo sawDefinitionsModule "iteDep_True")
@@ -281,7 +288,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
   , ("or",            mapsTo sawDefinitionsModule "or")
   , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
-  , ("True",          mapsTo sawDefinitionsModule "true")
+  , ("True",          mapsTo datatypesModule "true")
   , ("xor",           mapsTo sawDefinitionsModule "xor")
   , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
   ]

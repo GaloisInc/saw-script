@@ -485,13 +485,6 @@ Qed.
 
 Hint Extern 1 (StartAutomation _) => progress compute_bv_funs: refinesFun.
 
-Lemma true_eq_scaffolding_true : Datatypes.true = SAWCoreScaffolding.true.
-Proof. reflexivity. Qed.
-Lemma false_eq_scaffolding_false : Datatypes.false = SAWCoreScaffolding.false.
-Proof. reflexivity. Qed.
-
-Hint Rewrite true_eq_scaffolding_true false_eq_scaffolding_false : SAWCoreBitvectors_eqs.
-
 Ltac FreshIntroArg_bv_eq T :=
   let e := fresh in
     IntroArg_intro e;
@@ -694,10 +687,6 @@ Proof. intros H eq; apply H; eauto. Qed.
 Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) true _ _ = _) _) =>
    simple apply IntroArg_iteDep_Maybe_Eq_true : refinesFun.
 Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) false _ _ = _) _) =>
-simple apply IntroArg_iteDep_Maybe_Eq_false : refinesFun.
-Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) Datatypes.true _ _ = _) _) =>
-   simple apply IntroArg_iteDep_Maybe_Eq_true : refinesFun.
-Hint Extern 1 (IntroArg _ (iteDep (fun _ => Maybe (Eq _ _ _)) Datatypes.false _ _ = _) _) =>
    simple apply IntroArg_iteDep_Maybe_Eq_false : refinesFun.
 
 Lemma IntroArg_isBvsle_def n w a b goal
