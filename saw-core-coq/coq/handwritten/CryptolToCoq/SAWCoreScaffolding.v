@@ -42,6 +42,7 @@ Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited (b x))
 Global Hint Extern 5 (Inhabited ?A) =>
   (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
 
+(** DEPRECATED: Use [string] instead. *)
 Definition String := String.string.
 
 Instance Inhabited_String : Inhabited String :=
@@ -62,14 +63,29 @@ Definition Unit        := tt.
 Definition UnitType    := unit.
 Definition UnitType__rec := unit_rect.
 
+(** DEPRECATED: Use [bool] instead. *)
 Definition Bool   := bool.
+
+(** DEPRECATED: Use [eq] instead. *)
 Definition Eq     := @eq.
+
+(** DEPRECATED: Use [eq_refl] instead. *)
 Definition Refl   := @eq_refl.
+
 Definition ite (a : Type) (b : Bool) (t e : a) : a := if b then t else e.
+
+(** DEPRECATED: Use [andb] instead. *)
 Definition and    := andb.
+
+(** DEPRECATED: Use [negb] instead. *)
 Definition not      := negb.
+
+(** DEPRECATED: Use [orb] instead. *)
 Definition or     := orb.
+
+(** DEPRECATED: Use [xorb] instead. *)
 Definition xor    := xorb.
+
 Definition boolEq := Coq.Bool.Bool.eqb.
 
 Instance Inhabited_Unit : Inhabited UnitType :=
@@ -159,7 +175,10 @@ Definition sawCoerce {T : Type} (a b : Type) (_ : T) (x : a) := x.
 (* TODO: doesn't actually coerce *)
 Definition sawUnsafeCoerce (a b : Type) (x : a) := x.
 
+(** DEPRECATED: Use [nat] instead. *)
 Definition Nat := nat.
+
+(** DEPRECATED: Use [nat_rect] instead. *)
 Definition Nat_rect := nat_rect.
 
 Instance Inhabited_Nat : Inhabited Nat :=
@@ -201,12 +220,19 @@ Definition divModNat (x y : Nat) : (Nat * Nat) :=
     (p, y' - q)
   end.
 
+(** DEPRECATED: Use [id] instead. *)
 Definition id := @id.
+
 Definition PairType := prod.
 Definition PairValue := @pair.
 Definition Pair__rec := prod_rect.
+
+(** DEPRECATED: Use [fst] instead. *)
 Definition fst {A B} := @fst A B.
+
+(** DEPRECATED: Use [snd] instead. *)
 Definition snd {A B} := @snd A B.
+
 Definition Zero := O.
 Definition Succ := S.
 
