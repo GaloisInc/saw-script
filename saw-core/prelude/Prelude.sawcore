@@ -3004,6 +3004,34 @@ primitive multiFixS :
   (call : FrameCall frame) ->
   SpecM E stack (FrameCallRet frame call);
 
+-- Build a frame with a single function of a single input type
+singletonFrame : (a:sort 0) -> (b:a -> sort 0) -> List1 LetRecType;
+singletonFrame a b =
+  Cons1 LetRecType (LRT_Fun a (\ (x:a) -> LRT_Ret (b x))) (Nil1 LetRecType);
+
+-- Build a stack with a single singleton frame
+singletonStack : (a:sort 0) -> (b:a -> sort 0) -> FunStack;
+singletonStack a b = pushFunStack (singletonFrame a b) emptyFunStack;
+
+-- Helper type for fixS
+fixSFun : (E:EvType) -> (stack:FunStack) ->
+          (a:sort 0) -> (b:a -> sort 0) -> sort 0;
+fixSFun E stack a b =
+  (x:a) -> SpecM E (pushFunStack (singletonFrame a b) stack) (b x);
+
+-- Bind a single recursive function with a single input and pass it the given
+-- input argument
+fixS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> (b:a -> sort 0) ->
+       (fixSFun E stack a b -> fixSFun E stack a b) ->
+       (x:a) -> SpecM E stack (b x);
+fixS E stack a b body_f x_top =
+  multiFixS
+    E stack (singletonFrame a b)
+    (body_f (\ (x:a) ->
+               callS E stack (singletonFrame a b)
+                     (mkFrameCall (singletonFrame a b) 0 x)), ())
+    (mkFrameCall (singletonFrame a b) 0 x_top);
+
 -- Apply a pure function to the result of a computation
 fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->
         SpecM E stack a ->
