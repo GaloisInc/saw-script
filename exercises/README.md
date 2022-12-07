@@ -25,9 +25,20 @@ to write a proof from scratch.  The `salsa20` proofs are simpler than the
 `sha512` proof, but the challenge comes from writing a proof without any
 signposting or helper functions.
 
+## Building Bitcode ##
+
+To run the exercises and solutions, you'll first need to build the bitcode for
+all of the C programs.  To do this, simply run the `Makefile` in `common`:
+
+```bash
+cd common
+make
+```
+
 ## Continuous Integration (CI) ##
 
-To ensure these exercises stay up to date, we have integrated them with our
-CI system.  Our CI runs the `ci-entrypoint.sh` script, which in term runs SAW
-over all of the exercises and solutions.  This script is not intended to be
-used outside of a CI system.
+To ensure these exercises stay up to date, we have integrated them with our CI
+system.  Our CI runs the `ci-entrypoint.sh` script in a docker container
+defined by `Dockerfile`, which in term runs SAW over all of the exercises and
+solutions.  This script and docker image are not intended to be used outside of
+a CI system.

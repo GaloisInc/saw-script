@@ -14,8 +14,8 @@ m <- llvm_load_module "u128.bc";
 // implementation contains an error.  To help diagnose the issue, uncomment the
 // llvm_verify command and run SAW to see the error.
 // Use `simplify (cryptol_ss())` and `print_goal` to aid in debugging.
-// Correct the C code, recompile with `make u128.bc`, and verify that the proof
-// goes through.
+// Correct the C code, recompile `u128.bc`, and verify that the proof goes
+// through.
 
 let increment_u128_spec = do {
     (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 128);

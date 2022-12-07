@@ -20,5 +20,8 @@ z3 --version
 yices --version
 yices-smt2 --version
 
+# Build bitcode for all C programs
+(cd common && make)
+
 # Run SAW over all exercises and solutions
 find . -name solution.saw -o -name exercise.saw | xargs -I % sh -c "saw % || exit 255"

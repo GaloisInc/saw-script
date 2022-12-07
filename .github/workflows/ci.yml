@@ -589,12 +589,6 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: ./exercises/bin
 
-      - shell: bash
-        working-directory: exercises
-        run: |
-          docker-compose pull
-          grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
-
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
 

@@ -107,9 +107,9 @@ llvm_verify
 
 // To remedy this, break the body of the outer loop in the selection_sort C
 // implementation into `swap_array` and `argmin` functions like the Cryptol
-// specification.  Write a new function `selection_sort_composed` that uses your
-// new C helper functions.  Run `make swap.bc` to rebuild the LLVM bitcode
-// file.  The C functions should have the following type signatures:
+// specification.  Write a new function `selection_sort_composed` that uses
+// your new C helper functions.  Rebuild the `swap.bc` LLVM bitcode file.  The
+// C functions should have the following type signatures:
 
 // void swap_array(uint32_t *a, size_t i, size_t j);
 // size_t argmin(const uint32_t *a, size_t len);
@@ -154,9 +154,9 @@ argmin_ovs <- for (eval_list {{ [1..a_len] : [a_len][64]}}) (\len ->
 // Part 9:  wacky_sort Functional Correctness
 ////////////////////////////////////////////////////////////////////////////////
 
-// Uncomment `wacky_sort` in `swap.c` and rebuild with `make swap.bc`.  Use
-// `llvm_verify` to prove that `wacky_sort` satisfies the `selection_sort_spec`
-// from Part 5 for `len=8`.  Use overrides for all of the function calls within.
+// Uncomment `wacky_sort` in `swap.c` and rebuild `swap.bc`.  Use `llvm_verify`
+// to prove that `wacky_sort` satisfies the `selection_sort_spec` from Part 5
+// for `len=8`.  Use overrides for all of the function calls within.
 
 // Remember: Use `w4_unint_z3` to leave Cryptol functions uninterpreted
 //  * w4_unint_z3 ["some_function"]

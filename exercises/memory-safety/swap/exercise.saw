@@ -74,6 +74,6 @@ let selection_sort_spec size = do {
 ///////////////////////////////////////////////////////////////////////////////
 
 // Introduce a memory error into the selection_sort C implementation (for
-// example, causing an out-of-bounds write) and run `make swap.bc`.  What
+// example, causing an out-of-bounds write) and rebuild `swap.bc`.  What
 // happens now when you run your proof?  Can you fool SAW with a memory error
 // it fails to detect?
