@@ -47,8 +47,8 @@ let a_len = 4;
 // Play with the `len` paramter for this exercise.  At len=4 it solves quickly.
 // At len=8, the term has blown up.  Will it solve at all?
 llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec a_len) (do {
-    simplify (cryptol_ss());
-    print_goal;
+    //simplify (cryptol_ss());
+    //print_goal;
     z3;
 });
 
@@ -110,8 +110,8 @@ sort_ov <- llvm_verify swapmod "selection_sort_composed"
     (selection_sort_spec a_len)
     (do {
         //unfolding ["selection_sort"];
-        simplify (cryptol_ss());
-        print_goal;
+        //simplify (cryptol_ss());
+        //print_goal;
         w4_unint_z3 [];
 });
 
@@ -120,7 +120,7 @@ llvm_verify swapmod "wacky_sort"
     true
     (selection_sort_spec a_len)
     (do {
-        simplify (cryptol_ss());
-        print_goal;
+        //simplify (cryptol_ss());
+        //print_goal;
         w4_unint_z3 ["selection_sort"];
 });

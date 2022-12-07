@@ -62,19 +62,19 @@ let selection_sort_spec len = do {
 };
 
 llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec 2) (do {
-    simplify (cryptol_ss());
-    print_goal;
+    //simplify (cryptol_ss());
+    //print_goal;
     z3;
 });
 
 llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec 3) (do {
-    simplify (cryptol_ss());
-    print_goal;
+    //simplify (cryptol_ss());
+    //print_goal;
     z3;
 });
 
 llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec 8) (do {
-    simplify (cryptol_ss());
-    print_goal;
+    //simplify (cryptol_ss());
+    //print_goal;
     z3;
 });

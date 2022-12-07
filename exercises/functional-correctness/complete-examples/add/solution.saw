@@ -15,7 +15,7 @@ m <- llvm_load_module "add.bc";
 
 // Verify the `add` function satisfies its specification
 llvm_verify m "add" [] true add_spec (do {
-     simplify (cryptol_ss());
-     print_goal;
+     //simplify (cryptol_ss());
+     //print_goal;
      z3;
 });

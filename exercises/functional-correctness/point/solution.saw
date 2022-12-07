@@ -25,10 +25,7 @@ let point_eq_spec = do {
 
 point_eq_ov <- llvm_verify m "point_eq" [] true
     point_eq_spec
-    (do {
-        print_goal;
-        w4_unint_z3 [];
-});
+    (w4_unint_z3 []);
 
 let alloc_assign_point p = do {
     p_ptr <- llvm_alloc (llvm_struct "struct.point");
@@ -48,10 +45,7 @@ let point_new_spec = do {
 
 point_new_ov <- llvm_verify m "point_new" [] true
     point_new_spec
-    (do {
-        print_goal;
-        w4_unint_z3 [];
-});
+    (w4_unint_z3 []);
 
 let point_copy_spec = do {
     (p, p_ptr) <- fresh_point_readonly "p";
@@ -64,10 +58,7 @@ let point_copy_spec = do {
 
 point_copy_ov <- llvm_verify m "point_copy" [point_new_ov] true
     point_copy_spec
-    (do {
-        print_goal;
-        w4_unint_z3 [];
-});
+    (w4_unint_z3 []);
 
 let point_add_spec = do {
     let zero_term = llvm_term {{ 0 : [32] }};
@@ -88,7 +79,4 @@ llvm_verify m "point_add"
     [point_new_ov, point_copy_ov, point_eq_ov]
     true
     point_add_spec
-    (do {
-        print_goal;
-        w4_unint_z3 [];
-});
+    (w4_unint_z3 []);

@@ -12,7 +12,7 @@ let pop_cryptol_check = do {
 llvm_verify popmod "pop_count" [] true pop_cryptol_check (do {
      //unfolding ["popCount"];
      //simplify (cryptol_ss());
-     print_goal;
+     //print_goal;
      z3;
 });
 

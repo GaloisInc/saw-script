@@ -17,7 +17,7 @@ llvm_verify m "increment_u128"
     true
     increment_u128_spec
     (do {
-        print_goal;
+        //print_goal;
         w4_unint_z3 [];
 });
 
@@ -53,6 +53,6 @@ llvm_verify m "eq_u128"
     true
     eq_u128_spec
     (do {
-        print_goal;
+        //print_goal;
         w4_unint_z3 [];
 });
