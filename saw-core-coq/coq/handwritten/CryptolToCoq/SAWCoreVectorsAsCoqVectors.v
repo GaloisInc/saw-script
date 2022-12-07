@@ -8,6 +8,7 @@ From Coq Require Import Strings.String.
 From Coq Require Import Vectors.Vector.
 From Coq Require Import Bool.Bool.
 From Coq Require Import BinNums.
+From Coq Require Import ZifyClasses.
 
 From CryptolToCoq Require Import SAWCoreScaffolding.
 
@@ -23,6 +24,17 @@ From Coq Require Export PArith.BinPos.
 Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
+
+(* Work around https://github.com/coq/coq/issues/16803. Without this, using
+   `lia` on `bitvector` values will fail to typecheck on pre-8.17 versions of
+   Coq. Once our Coq support window shifts enough, we can drop this workaround.
+*)
+Constraint Vec.u1 <= mkapp2.u0.
+Constraint Vec.u1 <= mkapp2.u1.
+Constraint Vec.u1 <= mkapp2.u2.
+Constraint Vec.u1 <= mkrel.u0.
+Constraint Vec.u1 <= mkapp.u0.
+Constraint Vec.u1 <= mkapp.u1.
 
 Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
   refine (
