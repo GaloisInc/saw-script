@@ -538,7 +538,6 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-          - exercises
         ghc: ["8.10.7"]
     steps:
       - uses: actions/checkout@v2
@@ -572,6 +571,45 @@ jobs:
           chmod +x bin/*
           make ${{ matrix.s2n-target }}
 
+  exercises:
+    name: "Test SAW exercises"
+    needs: build
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        ghc: ["8.10.7"]
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          mkdir -p exercises/bin
+
+      - name: Download previously-built SAW
+        uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: ./exercises/bin
+
+      - shell: bash
+        working-directory: exercises
+        run: |
+          docker-compose pull
+          grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
+
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+
+      - shell: bash
+        name: "make exercises container"
+        working-directory: exercises
+        run: docker build -t exercises .
+
+      - shell: bash
+        name: "run exercises"
+        working-directory: exercises
+        run: |
+          chmod +x bin/*
+          docker run -v $PWD/bin:/saw-bin exercises
+
   # Indicates sufficient CI success for the purposes of mergify merging the pull
   # request, see .github/mergify.yml. This is done instead of enumerating each
   # instance of each job in the mergify configuration for a number of reasons:
@@ -586,5 +624,6 @@ jobs:
       - saw-remote-api-tests
       - cabal-test
       - s2n-tests
+      - exercises
     steps:
       - run: "true"
