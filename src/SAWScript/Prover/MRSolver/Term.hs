@@ -170,6 +170,15 @@ mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
 mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
 mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 
+-- | A Haskell representation of the two non-type parameters of @SpecM@
+data SpecMParams = SpecMParams { specMEvType :: Term,
+                                 specMStack :: Term }
+                 deriving (Generic, Show)
+
+-- | Convert a 'SpecMParams' to a list of arguments
+specMParamsArgs :: SpecMParams -> [Term]
+specMParamsArgs (SpecMParams ev stack) = [ev, stack]
+
 -- | A Haskell representation of a @SpecM@ in "monadic normal form"
 data NormComp
   = RetS Term -- ^ A term @retS _ _ a x@
@@ -193,42 +202,52 @@ type EitherElim = (Type,CompFun)
 -- | A computation function of type @a -> SpecM b@ for some @a@ and @b@
 data CompFun
      -- | An arbitrary term
-  = CompFunTerm Term
+  = CompFunTerm SpecMParams Term
     -- | A special case for the term @\ (x:a) -> returnM a x@
-  | CompFunReturn Type
+  | CompFunReturn SpecMParams Type
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving (Generic, Show)
 
+-- | Apply 'CompFunReturn' to a pair of a 'SpecMParams' and a 'Term'
+mkCompFunReturn :: (SpecMParams, Term) -> CompFun
+mkCompFunReturn (params, tp) = CompFunReturn params $ Type tp
+
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
 compFunComp :: CompFun -> CompFun -> CompFun
-compFunComp (CompFunReturn _) f = f
-compFunComp f (CompFunReturn _) = f
+compFunComp (CompFunReturn _ _) f = f
+compFunComp f (CompFunReturn _ _) = f
 compFunComp f g = CompFunComp f g
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- textual name bound by that lambda
 compFunVarName :: CompFun -> Maybe LocalName
-compFunVarName (CompFunTerm t) = asLambdaName t
+compFunVarName (CompFunTerm _ t) = asLambdaName t
 compFunVarName (CompFunComp f _) = compFunVarName f
 compFunVarName _ = Nothing
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- input type for it
 compFunInputType :: CompFun -> Maybe Type
-compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
+compFunInputType (CompFunTerm _ (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
-compFunInputType (CompFunReturn t) = Just t
+compFunInputType (CompFunReturn _ t) = Just t
 compFunInputType _ = Nothing
+
+-- | Get the @SpecM@ non-type parameters from a 'CompFun'
+compFunSpecMParams :: CompFun -> SpecMParams
+compFunSpecMParams (CompFunTerm params _) = params
+compFunSpecMParams (CompFunReturn params _) = params
+compFunSpecMParams (CompFunComp f _) = compFunSpecMParams f
 
 -- | A computation of type @SpecM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving (Generic, Show)
 
 -- | Match a type as being of the form @SpecM E stack a@ for some @a@
-asSpecM :: Term -> Maybe Term
-asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [_, _, tp])) =
-  return tp
+asSpecM :: Term -> Maybe (SpecMParams, Term)
+asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, stack, tp])) =
+  return (SpecMParams { specMEvType = ev, specMStack = stack }, tp)
 asSpecM _ = fail "not a SpecM type!"
 
 -- | Test if a type normalizes to a monadic function type of 0 or more arguments
@@ -455,6 +474,7 @@ instance TermLike Natural where
   substTermLike _ _ = return
 
 deriving anyclass instance TermLike Type
+deriving instance TermLike SpecMParams
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp
@@ -564,8 +584,8 @@ instance PrettyInCtx Comp where
     prettyAppList [ return "returnM", return "_", parens <$> prettyInCtx t]
 
 instance PrettyInCtx CompFun where
-  prettyInCtx (CompFunTerm t) = prettyInCtx t
-  prettyInCtx (CompFunReturn t) =
+  prettyInCtx (CompFunTerm _ t) = prettyInCtx t
+  prettyInCtx (CompFunReturn _ t) =
     prettyAppList [return "retS", return "_", return "_",
                    parens <$> prettyInCtx t]
   prettyInCtx (CompFunComp f g) =
@@ -605,7 +625,7 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallBind tp k) =
     prettyAppList [return "forallS", return "_", return "_", prettyInCtx tp,
                    return ">>=", parens <$> prettyInCtx k]
-  prettyInCtx (FunBind f args (CompFunReturn _)) =
+  prettyInCtx (FunBind f args (CompFunReturn _ _)) =
     prettyTermApp (funNameTerm f) args
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]

@@ -587,11 +587,11 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 
 -- | Take a 'FunName' @f@ for a monadic function of type @vars -> SpecM a@ and
 -- compute the type @SpecM [args/vars]a@ of @f@ applied to @args@. Return the
--- type @[args/vars]a@ that @SpecM@ is applied to.
-mrFunOutType :: FunName -> [Term] -> MRM Term
+-- type @[args/vars]a@ that @SpecM@ is applied to, along with its parameters.
+mrFunOutType :: FunName -> [Term] -> MRM (SpecMParams, Term)
 mrFunOutType fname args =
   mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
-    (asSpecM -> Just tp) -> liftSC1 scWhnf tp
+    (asSpecM -> Just (params, tp)) -> (params,) <$> liftSC1 scWhnf tp
     _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
             pp_fname <- mrPPInCtx fname
             debugPrint 0 "mrFunOutType: function does not have SpecM return type"
@@ -997,7 +997,7 @@ mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps
 -- are 'Term's that can have the current uvars free
 withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
 withFunAssump fname args rhs m =
-  do k <- CompFunReturn <$> Type <$> mrFunOutType fname args
+  do k <- mkCompFunReturn <$> mrFunOutType fname args
      mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k) "|=" rhs
      ctx <- mrUVars
      assumps <- mrFunAssumps
@@ -1077,7 +1077,7 @@ mrGetDataTypeAssump x = HashMap.lookup x <$> mrDataTypeAssumps
 -- | Convert a 'FunAssumpRHS' to a 'NormComp'
 mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM NormComp
 mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
-  FunBind f args <$> CompFunReturn <$> Type <$> mrFunOutType f args
+  FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
 mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = return rhs
 
 

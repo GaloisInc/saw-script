@@ -256,20 +256,22 @@ normComp (CompTerm t) =
       mrApplyAll f args >>= normCompTerm
     (isGlobalDef "Prelude.retS" -> Just (), [_, _, _, x]) ->
       return $ RetS x
-    (isGlobalDef "Prelude.bindS" -> Just (), [_, _, _, _, m, f]) ->
+    (isGlobalDef "Prelude.bindS" -> Just (), [e, stack, _, _, m, f]) ->
       do norm <- normCompTerm m
-         normBind norm (CompFunTerm f)
+         normBind norm (CompFunTerm (SpecMParams e stack) f)
     (isGlobalDef "Prelude.errorS" -> Just (), [_, _, _, str]) ->
       return (ErrorS str)
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
-    (isGlobalDef "Prelude.either" -> Just (), [ltp, rtp, _, f, g, eith]) ->
-      return $ Eithers [(Type ltp, CompFunTerm f),
-                        (Type rtp, CompFunTerm g)] eith
+    (isGlobalDef "Prelude.either" -> Just (),
+     [ltp, rtp, (asSpecM -> Just (params, _)), f, g, eith]) ->
+      return $ Eithers [(Type ltp, CompFunTerm params f),
+                        (Type rtp, CompFunTerm params g)] eith
     (isGlobalDef "Prelude.eithers" -> Just (),
      [_, (matchEitherElims -> Just elims), eith]) ->
       return $ Eithers elims eith
-    (isGlobalDef "Prelude.maybe" -> Just (), [tp, _, m, f, mayb]) ->
+    (isGlobalDef "Prelude.maybe" -> Just (),
+     [tp, (asSpecM -> Just (params, _)), m, f, mayb]) ->
       do tp' <- case asApplyAll tp of
                   -- Always unfold: is_bvult, is_bvule
                   (tpf@(asGlobalDef -> Just ident), args)
@@ -277,21 +279,25 @@ normComp (CompTerm t) =
                     , Just (_, Just body) <- asConstant tpf ->
                       mrApplyAll body args
                   _ -> return tp
-         return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm f) mayb
+         return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm params f) mayb
     (isGlobalDef "Prelude.orS" -> Just (), [_, _, _, m1, m2]) ->
       return $ OrS (CompTerm m1) (CompTerm m2)
-    (isGlobalDef "Prelude.assertBoolS" -> Just (), [_, _, cond]) ->
+    (isGlobalDef "Prelude.assertBoolS" -> Just (), [ev, stack, cond]) ->
       do unit_tp <- mrUnitType
-         return $ AssertBoolBind cond (CompFunReturn unit_tp)
-    (isGlobalDef "Prelude.assumeBoolS" -> Just (), [_, _, cond]) ->
+         return $ AssertBoolBind cond (CompFunReturn
+                                       (SpecMParams ev stack) unit_tp)
+    (isGlobalDef "Prelude.assumeBoolS" -> Just (), [ev, stack, cond]) ->
       do unit_tp <- mrUnitType
-         return $ AssumeBoolBind cond (CompFunReturn unit_tp)
-    (isGlobalDef "Prelude.existsS" -> Just (), [_, _, tp]) ->
+         return $ AssumeBoolBind cond (CompFunReturn
+                                       (SpecMParams ev stack) unit_tp)
+    (isGlobalDef "Prelude.existsS" -> Just (), [ev, stack, tp]) ->
       do unit_tp <- mrUnitType
-         return $ ExistsBind (Type tp) (CompFunReturn unit_tp)
-    (isGlobalDef "Prelude.forallS" -> Just (), [_, _, tp]) ->
+         return $ ExistsBind (Type tp) (CompFunReturn
+                                        (SpecMParams ev stack) unit_tp)
+    (isGlobalDef "Prelude.forallS" -> Just (), [ev, stack, tp]) ->
       do unit_tp <- mrUnitType
-         return $ ForallBind (Type tp) (CompFunReturn unit_tp)
+         return $ ForallBind (Type tp) (CompFunReturn
+                                        (SpecMParams ev stack) unit_tp)
     (isGlobalDef "Prelude.multiFixS" -> Just (),
      [ev, stack, frame, defs, (asMkFrameCall -> Just (_, i, args))]) ->
       do
@@ -301,8 +307,7 @@ normComp (CompTerm t) =
         -- that it must be applied to all of the uvars as well as the args
         let var = CallSName (fun_vars !! (fromIntegral i))
         all_args <- (++ args) <$> getAllUVarTerms
-        out_tp <- mrFunOutType var all_args
-        return $ FunBind var all_args (CompFunReturn $ Type out_tp)
+        FunBind var all_args <$> mkCompFunReturn <$> mrFunOutType var all_args
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
@@ -398,12 +403,11 @@ normComp (CompTerm t) =
     -- FIXME: substitute for evars if they have been instantiated
     ((asExtCns -> Just ec), args) ->
       do fun_name <- extCnsToFunName ec
-         fun_tp <- Type <$> mrFunOutType fun_name args
-         return $ FunBind fun_name args (CompFunReturn fun_tp)
+         FunBind fun_name args <$> mkCompFunReturn <$>
+           mrFunOutType fun_name args
 
     ((asGlobalFunName -> Just f), args) ->
-      do fun_tp <- Type <$> mrFunOutType f args
-         return $ FunBind f args (CompFunReturn fun_tp)
+      FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
 
     _ -> throwMRFailure (MalformedComp t)
 
@@ -428,6 +432,7 @@ normBind (ExistsBind tp f) k = return $ ExistsBind tp (compFunComp f k)
 normBind (ForallBind tp f) k = return $ ForallBind tp (compFunComp f k)
 normBind (FunBind f args k1) k2
   -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
+  {-
   | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
   , (a:b:args_rest) <- args =
     do f' <- mrGlobalDef "CryptolM.bvVecMapInvarBindM"
@@ -442,17 +447,19 @@ normBind (FunBind f args k1) k2
     do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
        c <- compFunReturnType k2
        return $ FunBind f (args_pre ++ [cont']) (CompFunReturn (Type c))
-  | otherwise = return $ FunBind f args (compFunComp k1 k2)
+  | otherwise -} = return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
 normBindTerm :: Term -> CompFun -> MRM NormComp
 normBindTerm t f = normCompTerm t >>= \m -> normBind m f
 
+{-
 -- | Get the return type of a 'CompFun'
 compFunReturnType :: CompFun -> MRM Term
-compFunReturnType (CompFunTerm t) = mrTypeOf t
+compFunReturnType (CompFunTerm _ t) = mrTypeOf t
 compFunReturnType (CompFunComp _ g) = compFunReturnType g
 compFunReturnType (CompFunReturn (Type t)) = return t
+-}
 
 -- | Apply a computation function to a term argument to get a computation
 applyCompFun :: CompFun -> Term -> MRM Comp
@@ -460,32 +467,34 @@ applyCompFun (CompFunComp f g) t =
   -- (f >=> g) t == f t >>= g
   do comp <- applyCompFun f t
      return $ CompBind comp g
-applyCompFun (CompFunReturn _) t =
+applyCompFun (CompFunReturn _ _) t =
   return $ CompReturn t
-applyCompFun (CompFunTerm f) t = CompTerm <$> mrApplyAll f [t]
+applyCompFun (CompFunTerm _ f) t = CompTerm <$> mrApplyAll f [t]
 
 -- | Convert a 'CompFun' into a 'Term'
 compFunToTerm :: CompFun -> MRM Term
-compFunToTerm (CompFunTerm t) = return t
+compFunToTerm (CompFunTerm _ t) = return t
 compFunToTerm (CompFunComp f g) =
   do f' <- compFunToTerm f
      g' <- compFunToTerm g
      f_tp <- mrTypeOf f'
      g_tp <- mrTypeOf g'
      case (f_tp, g_tp) of
-       (asPi -> Just (_, a, asSpecM -> Just b),
-        asPi -> Just (_, _, asSpecM -> Just c)) ->
+       (asPi -> Just (_, a, asSpecM -> Just (params, b)),
+        asPi -> Just (_, _, asSpecM -> Just (_, c))) ->
          -- we explicitly unfold @Prelude.composeM@ here so @mrApplyAll@ will
          -- beta-reduce
          let nm = maybe "ret_val" id (compFunVarName f) in
          mrLambdaLift [(nm, a)] (b, c, f', g') $ \[arg] (b', c', f'', g'') ->
            do app <- mrApplyAll f'' [arg]
-              liftSC2 scGlobalApply "Prelude.bindM" [b', c', app, g'']
+              liftSC2 scGlobalApply "Prelude.bindS" (specMParamsArgs params ++
+                                                     [b', c', app, g''])
        _ -> error "compFunToTerm: type(s) not of the form: a -> SpecM b"
-compFunToTerm (CompFunReturn (Type a)) =
+compFunToTerm (CompFunReturn params (Type a)) =
   mrLambdaLift [("ret_val", a)] a $ \[ret_val] (a') ->
-    liftSC2 scGlobalApply "Prelude.returnM" [a', ret_val]
+    liftSC2 scGlobalApply "Prelude.retS" (specMParamsArgs params ++ [a', ret_val])
 
+{-
 -- | Convert a 'Comp' into a 'Term'
 compToTerm :: Comp -> MRM Term
 compToTerm (CompTerm t) = return t
@@ -500,6 +509,7 @@ compToTerm (CompBind m f) =
        (asPi -> Just (_, a, asSpecM -> Just b)) ->
          liftSC2 scGlobalApply "Prelude.bindM" [a, b, m', f']
        _ -> error "compToTerm: type not of the form: a -> SpecM b"
+-}
 
 -- | Apply a 'CompFun' to a term and normalize the resulting computation
 applyNormCompFun :: CompFun -> Term -> MRM NormComp
@@ -510,8 +520,8 @@ matchEitherElims :: Term -> Maybe [EitherElim]
 matchEitherElims (asCtor ->
                   Just (primName -> "Prelude.FunsTo_Nil", [_])) = Just []
 matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
-                                  [_, tp, f, rest])) =
-  ((Type tp, CompFunTerm f):) <$>
+                                  [asSpecM -> Just (params, _), tp, f, rest])) =
+  ((Type tp, CompFunTerm params f):) <$>
   matchEitherElims rest
 matchEitherElims _ = Nothing
 
@@ -913,12 +923,12 @@ mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
 mrRefines' (FunBind (CallSName f) args1 k1) (FunBind (CallSName f') args2 k2)
   | f == f' && length args1 == length args2 =
     zipWithM_ mrAssertProveEq args1 args2 >>
-    mrFunOutType (CallSName f) args1 >>= \tp ->
+    mrFunOutType (CallSName f) args1 >>= \(_, tp) ->
     mrRefinesFun tp k1 tp k2
 
 mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
-  mrFunOutType f1 args1 >>= \tp1 ->
-  mrFunOutType f2 args2 >>= \tp2 ->
+  mrFunOutType f1 args1 >>= \(_, tp1) ->
+  mrFunOutType f2 args2 >>= \(_, tp2) ->
   findInjConvs tp1 Nothing tp2 Nothing >>= \mb_convs ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
@@ -1207,14 +1217,15 @@ askMRSolverH f t1 t2 =
      case (m1, m2) of
        -- If t1 and t2 are both named functions, our result is the opaque
        -- FunAssump that forall xs. f1 xs |= f2 xs'
-       (FunBind f1 args1 (CompFunReturn _), FunBind f2 args2 (CompFunReturn _)) ->
+       (FunBind f1 args1 (CompFunReturn _ _),
+        FunBind f2 args2 (CompFunReturn _ _)) ->
          mrUVars >>= \uvar_ctx ->
          return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
                                         fassumpArgs = args1,
                                         fassumpRHS = OpaqueFunAssump f2 args2 })
        -- If just t1 is a named function, our result is the rewrite FunAssump
        -- that forall xs. f1 xs |= m2
-       (FunBind f1 args1 (CompFunReturn _), _) ->
+       (FunBind f1 args1 (CompFunReturn _ _), _) ->
          mrUVars >>= \uvar_ctx ->
          return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
                                         fassumpArgs = args1,
