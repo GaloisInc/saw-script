@@ -588,7 +588,7 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 -- | Take a 'FunName' @f@ for a monadic function of type @vars -> SpecM a@ and
 -- compute the type @SpecM [args/vars]a@ of @f@ applied to @args@. Return the
 -- type @[args/vars]a@ that @SpecM@ is applied to, along with its parameters.
-mrFunOutType :: FunName -> [Term] -> MRM (SpecMParams, Term)
+mrFunOutType :: FunName -> [Term] -> MRM (SpecMParams Term, Term)
 mrFunOutType fname args =
   mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
     (asSpecM -> Just (params, tp)) -> (params,) <$> liftSC1 scWhnf tp

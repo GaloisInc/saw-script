@@ -170,13 +170,8 @@ mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
 mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
 mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 
--- | A Haskell representation of the two non-type parameters of @SpecM@
-data SpecMParams = SpecMParams { specMEvType :: Term,
-                                 specMStack :: Term }
-                 deriving (Generic, Show)
-
 -- | Convert a 'SpecMParams' to a list of arguments
-specMParamsArgs :: SpecMParams -> [Term]
+specMParamsArgs :: SpecMParams Term -> [Term]
 specMParamsArgs (SpecMParams ev stack) = [ev, stack]
 
 -- | A Haskell representation of a @SpecM@ in "monadic normal form"
@@ -202,15 +197,15 @@ type EitherElim = (Type,CompFun)
 -- | A computation function of type @a -> SpecM b@ for some @a@ and @b@
 data CompFun
      -- | An arbitrary term
-  = CompFunTerm SpecMParams Term
+  = CompFunTerm (SpecMParams Term) Term
     -- | A special case for the term @\ (x:a) -> returnM a x@
-  | CompFunReturn SpecMParams Type
+  | CompFunReturn (SpecMParams Term) Type
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving (Generic, Show)
 
 -- | Apply 'CompFunReturn' to a pair of a 'SpecMParams' and a 'Term'
-mkCompFunReturn :: (SpecMParams, Term) -> CompFun
+mkCompFunReturn :: (SpecMParams Term, Term) -> CompFun
 mkCompFunReturn (params, tp) = CompFunReturn params $ Type tp
 
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
@@ -235,7 +230,7 @@ compFunInputType (CompFunReturn _ t) = Just t
 compFunInputType _ = Nothing
 
 -- | Get the @SpecM@ non-type parameters from a 'CompFun'
-compFunSpecMParams :: CompFun -> SpecMParams
+compFunSpecMParams :: CompFun -> SpecMParams Term
 compFunSpecMParams (CompFunTerm params _) = params
 compFunSpecMParams (CompFunReturn params _) = params
 compFunSpecMParams (CompFunComp f _) = compFunSpecMParams f
@@ -245,7 +240,7 @@ data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving (Generic, Show)
 
 -- | Match a type as being of the form @SpecM E stack a@ for some @a@
-asSpecM :: Term -> Maybe (SpecMParams, Term)
+asSpecM :: Term -> Maybe (SpecMParams Term, Term)
 asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, stack, tp])) =
   return (SpecMParams { specMEvType = ev, specMStack = stack }, tp)
 asSpecM _ = fail "not a SpecM type!"
@@ -474,7 +469,7 @@ instance TermLike Natural where
   substTermLike _ _ = return
 
 deriving anyclass instance TermLike Type
-deriving instance TermLike SpecMParams
+deriving instance TermLike (SpecMParams Term)
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp

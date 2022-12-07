@@ -69,11 +69,11 @@ noErrorsRec1 <- parse_core
       \ (\\ (f: fixSFun VoidEv emptyFunStack \
                       \ (Vec 64 Bool) (\\ (_:Vec 64 Bool) -> Vec 64 Bool)) \
           \ (x:Vec 64 Bool) -> \
-          \ orS VoidEv (singletonStack (Vec 64 Bool) \
-                                     \ (\\ (_:Vec 64 Bool) -> Vec 64 Bool)) \
+          \ orS VoidEv (fixSStack (Vec 64 Bool) \
+                                \ (\\ (_:Vec 64 Bool) -> Vec 64 Bool)) \
               \ (Vec 64 Bool) \
-              \ (existsS VoidEv (singletonStack (Vec 64 Bool) \
-                                              \ (\\ (_:Vec 64 Bool) -> Vec 64 Bool)) \
+              \ (existsS VoidEv (fixSStack (Vec 64 Bool) \
+                                         \ (\\ (_:Vec 64 Bool) -> Vec 64 Bool)) \
                          \ (Vec 64 Bool)) \
               \ (f x))";
 

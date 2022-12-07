@@ -2949,6 +2949,13 @@ primitive assumeS : (E:EvType) -> (stack:FunStack) ->
 assumeBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
 assumeBoolS E stack b = assumeS E stack (EqTrue b);
 
+-- The specification which assumes that the first argument is True and then
+-- runs the second argument
+assumingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
+            SpecM E stack a -> SpecM E stack a;
+assumingS E stack a cond m =
+  bindS E stack #() a (assumeBoolS E stack cond) (\ (_:#()) -> m);
+
 -- Assert a proposition holds
 primitive assertS : (E:EvType) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E stack #();
@@ -2956,6 +2963,13 @@ primitive assertS : (E:EvType) -> (stack:FunStack) ->
 -- Assert a Boolean value is true
 assertBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
 assertBoolS E stack b = assertS E stack (EqTrue b);
+
+-- The specification which asserts that the first argument is True and then
+-- runs the second argument
+assertingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
+            SpecM E stack a -> SpecM E stack a;
+assertingS E stack a cond m =
+  bindS E stack #() a (assertBoolS E stack cond) (\ (_:#()) -> m);
 
 -- Lift a computation in the empty stack to an arbitrary stack
 primitive liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
