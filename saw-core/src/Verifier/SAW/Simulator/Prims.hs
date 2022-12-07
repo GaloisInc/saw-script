@@ -769,7 +769,7 @@ atWithDefaultOp bp =
       VNat i ->
         case x of
           VVector xv -> lift (force (vecIdx d xv (fromIntegral i))) -- FIXME dangerous fromIntegral
-          VWord xw -> lift (VBool <$> bpBvAt bp xw (fromIntegral i)) -- FIXME dangerous fromIntegral
+          VWord xw -> lift (bpBvAtWithDefault bp (fromIntegral n) (force d) xw (fromIntegral i)) -- FIXME dangerous fromIntegral
           _ -> throwE "atOp: expected vector"
       VBVToNat _sz i | bpIsSymbolicEvaluator bp -> do
         iv <- lift (toBits (bpUnpack bp) i)
@@ -777,12 +777,29 @@ atWithDefaultOp bp =
           VVector xv ->
             lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
           VWord xw ->
-            lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
+            lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral
           _ -> throwE "atOp: expected vector"
 
       VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "atWithDefault: symbolic integer TODO"
 
       _ -> throwE $ "atOp: expected Nat, got " <> Text.pack (show idx)
+
+-- | @bpBvAtWithDefault bp w d vw i@ returns @bpBvAt bp vw i@ if @i@ is between
+-- @0@ (inclusive) and @w@ (exclusive), the bit width of @vw@. Otherwise, it
+-- returns @d@.
+bpBvAtWithDefault ::
+  VMonad l =>
+  BasePrims l ->
+  Int ->
+  MValue l ->
+  VWord l ->
+  Int ->
+  MValue l
+bpBvAtWithDefault bp w d vw i
+  | 0 <= i && i < w
+  = VBool <$> bpBvAt bp vw i
+  | otherwise
+  = d
 
 -- upd :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a -> Vec n a;
 updOp :: (VMonadLazy l, Show (Extra l)) => BasePrims l -> Prim l

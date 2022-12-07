@@ -461,7 +461,7 @@ data SimplImpl ps_in ps_out where
 
   -- | For any unit-typed variable @x@ and unit-type expression @e@, prove
   -- @x:eq(e)@
-  -- 
+  --
   -- > (x:unit,e:unit) . -o x:eq(e)
   SImpl_UnitEq :: ExprVar UnitType -> PermExpr UnitType ->
                   SimplImpl RNil (RNil :> UnitType)
@@ -1596,15 +1596,6 @@ idLocalPermImpl = LocalPermImpl $ PermImpl_Done $ LocalImplRet Refl
 
 -- type IsLLVMPointerTypeList w ps = RAssign ((:~:) (LLVMPointerType w)) ps
 
-instance NuMatchingAny1 EqPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 (LocalImplRet ps) where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 (OrListDisj ps a) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 -- Many of these types are mutually recursive. Moreover, Template Haskell
 -- declaration splices strictly separate top-level groups, so if we were to
 -- write each $(mkNuMatching [t| ... |]) splice individually, the splices
@@ -2659,7 +2650,7 @@ orListPerm or_list = foldr1 ValPerm_Or $ orListDisjs or_list
 mbOrListPerm :: Mb ctx (OrList ps a disj) -> Mb ctx (ValuePerm a)
 mbOrListPerm = mbMapCl $(mkClosed [| orListPerm |])
 
--- | Build an 'MbPermSets' 
+-- | Build an 'MbPermSets'
 orListMbPermSets :: PermSet (ps :> a) -> ExprVar a -> OrList ps a disjs ->
                     MbPermSets disjs
 orListMbPermSets _ _ MNil = MbPermSets_Nil
