@@ -225,7 +225,8 @@ mrFreshCallVars ev stack frame defs_tm =
     -- our new variable terms (which are applied to the current uvars; see
     -- mrVarTerm)
     fun_tms <- mapM mrVarTerm fun_vars
-    bodies <- case asNestedPairs defs_tm of
+    defs_tm' <- liftSC1 scWhnf defs_tm
+    bodies <- case asNestedPairs defs_tm' of
       Just defs -> mapM (mrReplaceCallsWithTerms fun_tms >=> lambdaUVarsM) defs
       Nothing -> throwMRFailure (MalformedDefs defs_tm)
 

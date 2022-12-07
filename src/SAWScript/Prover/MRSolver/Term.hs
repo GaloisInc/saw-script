@@ -597,11 +597,11 @@ instance PrettyInCtx NormComp where
     prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
   prettyInCtx (Eithers elims eith) =
-    prettyAppList [return "eithers", return (parens "CompM _"),
+    prettyAppList [return "eithers", return (parens "SpecM _ _ _"),
                    prettyInCtx (map snd elims), parens <$> prettyInCtx eith]
   prettyInCtx (MaybeElim tp m f mayb) =
     prettyAppList [return "maybe", parens <$> prettyInCtx tp,
-                   return (parens "CompM _"), parens <$> prettyInCtx m,
+                   return (parens "SpecM _ _ _"), parens <$> prettyInCtx m,
                    parens <$> prettyInCtx f, parens <$> prettyInCtx mayb]
   prettyInCtx (OrS t1 t2) =
     prettyAppList [return "orS", return "_", return "_", return "_",
