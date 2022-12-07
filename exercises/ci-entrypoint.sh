@@ -7,9 +7,10 @@ set -xe
 cd /workdir
 mkdir bin
 cp /saw-bin/saw bin/saw
-
-wget --quiet -O solvers.zip "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20220902/ubuntu-22.04-bin.zip"
-(cd bin && unzip -o ../solvers.zip)
+cp /saw-bin/abc bin/abc
+cp /saw-bin/yices bin/yices
+cp /saw-bin/yices-smt2 bin/yices-smt2
+cp /saw-bin/z3 bin/z3
 chmod +x bin/*
 
 export PATH=/workdir/bin:$PATH
