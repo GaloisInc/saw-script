@@ -2,7 +2,7 @@
 // Exercise: 128-bit Unsigned Int Memory Safety
 ///////////////////////////////////////////////////////////////////////////////
 
-include "helpers.saw";
+include "../../common/helpers.saw";
 
 m <- llvm_load_module "u128.bc";
 
@@ -22,8 +22,8 @@ m <- llvm_load_module "u128.bc";
 // `llvm_verify` command yields an error.  Why?  Fix the proof.
 
 let eq_u128_spec = do {
-    (x, x_ptr) <- pointer_to_fresh (llvm_int 128) "x";
-    (y, y_ptr) <- pointer_to_fresh (llvm_int 128) "y";
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 128);
+    (y, y_ptr) <- ptr_to_fresh "y" (llvm_int 128);
 
     llvm_execute_func [x_ptr, y_ptr];
 

@@ -4,14 +4,14 @@
 
 // `include` in SAW works like #include in C: it inlines the contents of the
 // included file.
-include "helpers.saw";
+include "../../common/helpers.saw";
 
 ///////////////////////////////////////////////////////////////////////////////
 // Part 1: Swap Different Pointers Spec
 ///////////////////////////////////////////////////////////////////////////////
 
 // Write a memory safety spec for `swap`.  Assume that the caller passes in two
-// different pointers for both arguments.  Use `pointer_to_fresh` from
+// different pointers for both arguments.  Use `ptr_to_fresh` from
 // `helpers.saw` in your specification.  Feel free to use both the `add` example
 // and your `popcount` exercises as a guide!
 

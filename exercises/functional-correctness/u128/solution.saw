@@ -1,9 +1,9 @@
-include "helpers.saw";
+include "../../common/helpers.saw";
 
 m <- llvm_load_module "u128.bc";
 
 let increment_u128_spec = do {
-    (x, x_ptr) <- pointer_to_fresh (llvm_int 128) "x";
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 128);
 
     llvm_execute_func [x_ptr];
 
@@ -33,8 +33,8 @@ llvm_verify m "increment_u128"
 // each. If they are equal, and in particular if n is zero, bcmp() returns 0.
 // Otherwise it returns a nonzero result."
 let bcmp_spec size = do {
-    (s1, s1_ptr) <- pointer_to_fresh (llvm_array size (llvm_int 8)) "s1";
-    (s2, s2_ptr) <- pointer_to_fresh (llvm_array size (llvm_int 8)) "s2";
+    (s1, s1_ptr) <- ptr_to_fresh "s1" (llvm_array size (llvm_int 8));
+    (s2, s2_ptr) <- ptr_to_fresh "s2" (llvm_array size (llvm_int 8));
 
     llvm_execute_func [ s1_ptr, s2_ptr, llvm_term {{ `size : [64]}} ];
 
@@ -44,8 +44,8 @@ let bcmp_spec size = do {
 bcmp_16_ov <- llvm_unsafe_assume_spec m "bcmp" (bcmp_spec 16);
 
 let eq_u128_spec = do {
-    (x, x_ptr) <- pointer_to_fresh (llvm_int 128) "x";
-    (y, y_ptr) <- pointer_to_fresh (llvm_int 128) "y";
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 128);
+    (y, y_ptr) <- ptr_to_fresh "y" (llvm_int 128);
 
     llvm_execute_func [x_ptr, y_ptr];
 

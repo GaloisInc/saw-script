@@ -1,4 +1,4 @@
-include "helpers.saw";
+include "../../common/helpers.saw";
 swapmod <- llvm_load_module "swap.bc";
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -6,8 +6,8 @@ swapmod <- llvm_load_module "swap.bc";
 ///////////////////////////////////////////////////////////////////////////////
 
 let swap_diff_spec = do {
-    (x, xp) <- pointer_to_fresh (llvm_int 32) "x";
-    (y, yp) <- pointer_to_fresh (llvm_int 32) "y";
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
 
     llvm_execute_func [xp, yp];
 
@@ -33,7 +33,7 @@ llvm_verify swapmod "xor_swap" [] true swap_diff_spec z3;
 ///////////////////////////////////////////////////////////////////////////////
 
 let swap_same_spec = do {
-    (x, xp) <- pointer_to_fresh (llvm_int 32) "x";
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
 
     llvm_execute_func [xp, xp];
 
@@ -52,7 +52,7 @@ swap_same_ov <- llvm_verify swapmod "swap" [] true swap_same_spec z3;
 ///////////////////////////////////////////////////////////////////////////////
 
 let selection_sort_spec len = do {
-    (a, a_ptr) <- pointer_to_fresh (llvm_array len (llvm_int 32)) "a";
+    (a, a_ptr) <- ptr_to_fresh "a" (llvm_array len (llvm_int 32));
 
     llvm_execute_func [a_ptr, (llvm_term {{ `len : [64]}})];
 

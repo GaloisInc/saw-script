@@ -1,17 +1,17 @@
-include "helpers.saw";
+include "../../common/helpers.saw";
 import "Salsa20.cry";
 
 let oneptr_update_func (type : LLVMType) (name : String) (f : Term) = do {
-    (x, p) <- pointer_to_fresh type name;
+    (x, p) <- ptr_to_fresh name type;
     llvm_execute_func [p];
     llvm_points_to p (llvm_term {{ f x }});
 };
 
 let quarterround_setup : CrucibleSetup () = do {
-    (y0, p0) <- pointer_to_fresh (llvm_int 32) "y0";
-    (y1, p1) <- pointer_to_fresh (llvm_int 32) "y1";
-    (y2, p2) <- pointer_to_fresh (llvm_int 32) "y2";
-    (y3, p3) <- pointer_to_fresh (llvm_int 32) "y3";
+    (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
+    (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
+    (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
+    (y3, p3) <- ptr_to_fresh "y3" (llvm_int 32);
 
     llvm_execute_func [p0, p1, p2, p3];
 
@@ -35,8 +35,8 @@ let salsa20_setup =
   oneptr_update_func (llvm_array 64 (llvm_int 8)) "seq" {{ Salsa20 }};
 
 let salsa20_expansion_32 = do {
-    (n, pn) <- pointer_to_fresh_readonly (llvm_array 16 (llvm_int 8)) "n";
-    (k, pk) <- pointer_to_fresh_readonly (llvm_array 32 (llvm_int 8)) "k";
+    (n, pn) <- ptr_to_fresh_readonly "n" (llvm_array 16 (llvm_int 8));
+    (k, pk) <- ptr_to_fresh_readonly "k" (llvm_array 32 (llvm_int 8));
 
     pks <- llvm_alloc (llvm_array 64 (llvm_int 8));
 
@@ -47,9 +47,9 @@ let salsa20_expansion_32 = do {
 };
 
 let s20_encrypt32 n = do {
-    (key, pkey) <- pointer_to_fresh_readonly (llvm_array 32 (llvm_int 8)) "key";
-    (v, pv)     <- pointer_to_fresh_readonly (llvm_array 8  (llvm_int 8)) "nonce";
-    (m, pm)     <- pointer_to_fresh (llvm_array n (llvm_int 8)) "buf";
+    (key, pkey) <- ptr_to_fresh_readonly "key" (llvm_array 32 (llvm_int 8));
+    (v, pv)     <- ptr_to_fresh_readonly "nonce" (llvm_array 8  (llvm_int 8));
+    (m, pm)     <- ptr_to_fresh "buf" (llvm_array n (llvm_int 8));
 
     llvm_execute_func [ pkey
                           , pv

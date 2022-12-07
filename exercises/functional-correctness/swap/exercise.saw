@@ -2,7 +2,7 @@
 // Exercise: Swap
 ////////////////////////////////////////////////////////////////////////////////
 
-include "helpers.saw";
+include "../../common/helpers.saw";
 swapmod <- llvm_load_module "swap.bc";
 import "Swap.cry";
 
@@ -14,8 +14,8 @@ import "Swap.cry";
 // re-run the proofs.
 
 let swap_diff_spec = do {
-    (x, xp) <- pointer_to_fresh (llvm_int 32) "x";
-    (y, yp) <- pointer_to_fresh (llvm_int 32) "y";
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
 
     llvm_execute_func [xp, yp];
 
@@ -33,7 +33,7 @@ swap_diff_ov <- llvm_verify swapmod "swap" [] true swap_diff_spec z3;
 llvm_verify swapmod "xor_swap" [] true swap_diff_spec z3;
 
 let swap_same_spec = do {
-    (x, x_ptr) <- pointer_to_fresh (llvm_int 32) "x";
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 32);
 
     llvm_execute_func [x_ptr, x_ptr];
 
@@ -85,7 +85,7 @@ swap_same_ov <- llvm_verify swapmod "swap" [] true swap_same_spec z3;
 //     during development would be tricky.
 
 let selection_sort_spec len = do {
-    (a, a_ptr) <- pointer_to_fresh (llvm_array len (llvm_int 32)) "a";
+    (a, a_ptr) <- ptr_to_fresh "a" (llvm_array len (llvm_int 32));
 
     llvm_execute_func [a_ptr, (llvm_term {{ `len : [64]}})];
 

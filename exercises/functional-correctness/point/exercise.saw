@@ -3,7 +3,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 
-include "helpers.saw";
+include "../../common/helpers.saw";
 import "Point.cry";
 
 m <- llvm_load_module "point.bc";
@@ -19,8 +19,8 @@ m <- llvm_load_module "point.bc";
 //     llvm_struct_value [ <field_0>, <field_1>, ... <field_n> ];
 
 let point_eq_spec = do {
-    (p1, p1_ptr) <- pointer_to_fresh_readonly (llvm_struct "struct.point") "p1";
-    (p2, p2_ptr) <- pointer_to_fresh_readonly (llvm_struct "struct.point") "p2";
+    (p1, p1_ptr) <- ptr_to_fresh_readonly "p1" (llvm_struct "struct.point");
+    (p2, p2_ptr) <- ptr_to_fresh_readonly "p2" (llvm_struct "struct.point");
 
     llvm_execute_func [p1_ptr, p2_ptr];
 
@@ -42,18 +42,18 @@ let point_new_spec = do {
 
     llvm_execute_func [ llvm_term p_x, llvm_term p_y ];
 
-    (ret, ret_ptr) <- pointer_to_fresh (llvm_struct "struct.point") "ret";
+    (ret, ret_ptr) <- ptr_to_fresh "ret" (llvm_struct "struct.point");
     llvm_return ret_ptr;
 };
 
 point_new_ov <- llvm_verify m "point_new" [] true point_new_spec z3;
 
 let point_copy_spec = do {
-    (p, p_ptr) <- pointer_to_fresh_readonly (llvm_struct "struct.point") "p";
+    (p, p_ptr) <- ptr_to_fresh_readonly "p" (llvm_struct "struct.point");
 
     llvm_execute_func [p_ptr];
 
-    (ret, ret_ptr) <- pointer_to_fresh (llvm_struct "struct.point") "ret";
+    (ret, ret_ptr) <- ptr_to_fresh "ret" (llvm_struct "struct.point");
     llvm_return ret_ptr;
 };
 
@@ -71,12 +71,12 @@ let point_add_spec = do {
     zero_global <- llvm_fresh_var "zero_global" (llvm_struct "struct.point");
     llvm_points_to (llvm_global "ZERO") (llvm_term zero_global);
 
-    (p1, p1_ptr) <- pointer_to_fresh_readonly (llvm_struct "struct.point") "p1";
-    (p2, p2_ptr) <- pointer_to_fresh_readonly (llvm_struct "struct.point") "p2";
+    (p1, p1_ptr) <- ptr_to_fresh_readonly "p1" (llvm_struct "struct.point");
+    (p2, p2_ptr) <- ptr_to_fresh_readonly "p2" (llvm_struct "struct.point");
 
     llvm_execute_func [p1_ptr, p2_ptr];
 
-    (ret, ret_ptr) <- pointer_to_fresh (llvm_struct "struct.point") "ret";
+    (ret, ret_ptr) <- ptr_to_fresh "ret" (llvm_struct "struct.point");
     llvm_return ret_ptr;
 };
 
