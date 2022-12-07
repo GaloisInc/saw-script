@@ -35,9 +35,11 @@ mr_solver_test is_elem is_elem;
 
 is_elem_noErrorsSpec <- parse_core
   "\\ (x:Vec 64 Bool) (y:List (Vec 64 Bool)) -> \
-    \ fixM (Vec 64 Bool * List (Vec 64 Bool)) \
+    \ fixS VoidEv emptyFunStack \
+    \      (Vec 64 Bool * List (Vec 64 Bool)) \
     \      (\\ (pr : Vec 64 Bool * List (Vec 64 Bool)) -> Vec 64 Bool) \
-    \      (\\ (rec : (x : Vec 64 Bool * List (Vec 64 Bool)) -> CompM (Vec 64 Bool)) \
+    \      (\\ (rec : (x : Vec 64 Bool * List (Vec 64 Bool)) -> \
+    \                 SpecM (pushFunStack (singletonFrame a b) stack) (Vec 64 Bool)) \
     \          (x : Vec 64 Bool * List (Vec 64 Bool)) -> \
     \          orM (Vec 64 Bool) \
     \              (existsM (Vec 64 Bool) (Vec 64 Bool) (returnM (Vec 64 Bool))) \
