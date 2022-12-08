@@ -31,8 +31,7 @@ mr_solver_test is_head is_head;
 
 is_elem <- parse_core_mod "linked_list" "is_elem";
 
-//mr_solver_set_debug_level 1;
-// mr_solver_test is_elem is_elem;
+mr_solver_test is_elem is_elem;
 
 is_elem_noErrorsSpec <- parse_core
   "\\ (x:Vec 64 Bool) (y:List (Vec 64 Bool)) -> \
