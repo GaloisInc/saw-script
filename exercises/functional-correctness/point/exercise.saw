@@ -49,7 +49,7 @@ let point_new_spec = do {
 point_new_ov <- llvm_verify m "point_new" [] true point_new_spec z3;
 
 let point_copy_spec = do {
-    (p, p_ptr) <- ptr_to_fresh "p" (llvm_struct "struct.point");
+    (p, p_ptr) <- ptr_to_fresh_readonly "p" (llvm_struct "struct.point");
 
     llvm_execute_func [p_ptr];
 
