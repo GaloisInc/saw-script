@@ -1,0 +1,42 @@
+///////////////////////////////////////////////////////////////////////////////
+// Exercise: 128-bit Unsigned Int Memory Safety
+///////////////////////////////////////////////////////////////////////////////
+
+include "../../common/helpers.saw";
+
+m <- llvm_load_module "u128.bc";
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 1: increment_u128
+///////////////////////////////////////////////////////////////////////////////
+
+// Write a memory safety spec for increment_u128 that interprets its input
+// argument as a single 128-bit integer, rather than an array.  Prove that the C
+// function satisfies your specification
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 2: eq_u128 error
+///////////////////////////////////////////////////////////////////////////////
+
+// Below you'll find a specification for eq_u128.  However, uncommenting the
+// `llvm_verify` command yields an error.  Why?  Fix the proof.
+
+let eq_u128_spec = do {
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 128);
+    (y, y_ptr) <- ptr_to_fresh "y" (llvm_int 128);
+
+    llvm_execute_func [x_ptr, y_ptr];
+
+    // NOTE: A C `bool` has type `llvm_int 1`.
+    ret <- llvm_fresh_var "ret" (llvm_int 1);
+    llvm_return (llvm_term ret);
+};
+
+// llvm_verify m "eq_u128" [] true eq_u128_spec z3;
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 3: eq_u128 Readonly Arguments
+///////////////////////////////////////////////////////////////////////////////
+
+// Adapt your specs from Part 2 to make use of readonly pointers.  Check that
+// you did so correctly by re-running your eq_u128 proof.
