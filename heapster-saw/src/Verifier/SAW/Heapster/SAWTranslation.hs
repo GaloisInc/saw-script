@@ -4137,8 +4137,7 @@ translateCurryLocalPermImpl ::
   ImpTransM ext blocks tops rets ps ctx OpenTerm
 translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
   lambdaTransM "x_local" tp_trans2 $ \pctx2 ->
-  local (\info -> info { itiReturnType = typeTransType1 tp_trans_out,
-                         itiFunStack = EmptyFunStack }) $
+  local (\info -> info { itiReturnType = typeTransType1 tp_trans_out }) $
   withPermStackM
     (const (RL.append vars1 vars2))
     (const (RL.append pctx1 pctx2))
