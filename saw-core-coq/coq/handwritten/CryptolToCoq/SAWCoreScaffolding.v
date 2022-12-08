@@ -220,18 +220,9 @@ Definition divModNat (x y : nat) : (nat * nat) :=
     (p, y' - q)
   end.
 
-(** DEPRECATED: Use [id] instead. *)
-Definition id := @id.
-
 Definition PairType := prod.
 Definition PairValue := @pair.
 Definition Pair__rec := prod_rect.
-
-(** DEPRECATED: Use [fst] instead. *)
-Definition fst {A B} := @fst A B.
-
-(** DEPRECATED: Use [snd] instead. *)
-Definition snd {A B} := @snd A B.
 
 (* NOTE: SAW core pair projections do not take type arguments, so these must be
 implicit arguments in the translation *)
