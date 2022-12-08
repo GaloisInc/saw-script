@@ -788,7 +788,10 @@ mrProveRel het t1 t2 =
      tp1 <- mrTypeOf t1 >>= mrSubstEVars
      tp2 <- mrTypeOf t2 >>= mrSubstEVars
      tps_eq <- mrConvertible tp1 tp2
-     if not het && not tps_eq then return False
+     if not het && not tps_eq
+     then do mrDebugPPPrefixSep 2 (nm ++ ": Failure, types not equal:")
+                                  tp1 "and" tp2
+             return False
      else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
              res <- withTermInCtx cond_in_ctx mrProvable
              debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
