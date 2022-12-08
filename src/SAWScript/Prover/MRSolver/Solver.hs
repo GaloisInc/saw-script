@@ -129,6 +129,7 @@ import Numeric.Natural (Natural)
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
+import Control.Monad.Reader
 import Control.Monad.Except
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -193,13 +194,25 @@ asCallS _ = Nothing
 -- either and maybe eliminators). But the implementation here should give the
 -- correct result for any code we are actually going to see...
 mrReplaceCallsWithTerms :: [Term] -> Term -> MRM Term
-mrReplaceCallsWithTerms tms =
-  memoFixTermFun $ \recurse t -> case t of
+mrReplaceCallsWithTerms top_tms top_t =
+  flip runReaderT top_tms $
+  flip memoFixTermFun top_t $ \recurse t -> case t of
   (asCallS -> Just (_, i, args)) ->
-    mrApplyAll (tms!!(fromIntegral i)) args
+    -- Replace a CallS with its corresponding term
+    ask >>= \tms -> lift $ mrApplyAll (tms!!(fromIntegral i)) args
   (asApplyAll ->
    (isGlobalDef "Prelude.multiFixS" -> Just (), _)) ->
     -- Don't recurse inside another multiFixS, since it binds new calls
+    return t
+  (asLambda -> Just (x, tp, body)) ->
+    -- Lift our terms when we recurse inside a binder; also, not that we don't
+    -- expect to lift types, so we leave tp alone
+    do tms <- ask
+       tms' <- liftTermLike 0 1 tms
+       body' <- local (const tms') $ recurse body
+       lift $ liftSC3 scLambda x tp body'
+  (asPi -> Just _) ->
+    -- We don't expect to lift types, so we leave them alone
     return t
   _ -> traverseSubterms recurse t
 
@@ -227,7 +240,7 @@ mrFreshCallVars ev stack frame defs_tm =
     fun_tms <- mapM mrVarTerm fun_vars
     defs_tm' <- liftSC1 scWhnf defs_tm
     bodies <- case asNestedPairs defs_tm' of
-      Just defs -> mapM (mrReplaceCallsWithTerms fun_tms >=> lambdaUVarsM) defs
+      Just defs -> mapM (lambdaUVarsM >=> mrReplaceCallsWithTerms fun_tms) defs
       Nothing -> throwMRFailure (MalformedDefs defs_tm)
 
     -- Remember the body associated with each fresh function constant
