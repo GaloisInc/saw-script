@@ -86,6 +86,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , checkSpecReturnType
     , verifyPrestate
     , verifyPoststate
+    , getPoststateObligations
     , withCfgAndBlockId
     , registerOverride
     ) where
@@ -1668,33 +1669,11 @@ verifyPoststate cc mspec env0 globals ret mdMap =
           modifyIORef mdMap (Map.insert ann md)
           Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
-     obligations <- io $
-       do obls <- Crucible.getProofObligations bak
-          Crucible.clearProofObligations bak
-          return (maybe [] Crucible.goalsToList obls)
-
-     finalMdMap <- io $ readIORef mdMap
-     sc_obligations <- io $ mapM (verifyObligation sc finalMdMap) obligations
+     sc_obligations <- io $ getPoststateObligations sc bak mdMap
      return (sc_obligations, st)
 
   where
     sym = cc^.ccSym
-
-    verifyObligation sc finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
-      do st <- Common.sawCoreState sym
-         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
-         conclTerm  <- toSC sym st concl
-         obligation <- scImplies sc hypTerm conclTerm
-         let defaultMd = MS.ConditionMetadata
-                         { MS.conditionLoc = loc
-                         , MS.conditionTags = mempty
-                         , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = ""
-                         }
-         let md = fromMaybe defaultMd $
-                    do ann <- W4.getAnnotation sym concl
-                       Map.lookup ann finalMdMap
-         return (show err, md, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
@@ -1709,6 +1688,38 @@ verifyPoststate cc mspec env0 globals ret mdMap =
         (Nothing     , Just _ )     ->
           fail "verifyPoststate: unexpected llvm_return specification"
         _ -> return ()
+
+getPoststateObligations ::
+  Crucible.IsSymBackend Sym bak =>
+  SharedContext ->
+  bak ->
+  IORef MetadataMap ->
+  IO [(String, MS.ConditionMetadata, Term)]
+getPoststateObligations sc bak mdMap =
+  do obligations <- maybe [] Crucible.goalsToList <$> Crucible.getProofObligations bak
+     Crucible.clearProofObligations bak
+
+     finalMdMap <- readIORef mdMap
+     mapM (verifyObligation finalMdMap) obligations
+
+  where
+    sym = Crucible.backendGetSym bak
+
+    verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
+      do st <- Common.sawCoreState sym
+         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
+         conclTerm <- toSC sym st concl
+         obligation <- scImplies sc hypTerm conclTerm
+         let defaultMd = MS.ConditionMetadata
+                         { MS.conditionLoc = loc
+                         , MS.conditionTags = mempty
+                         , MS.conditionType = "safety assertion"
+                         , MS.conditionContext = ""
+                         }
+         let md = fromMaybe defaultMd $
+                    do ann <- W4.getAnnotation sym concl
+                       Map.lookup ann finalMdMap
+         return (show err, md, obligation)
 
 --------------------------------------------------------------------------------
 
