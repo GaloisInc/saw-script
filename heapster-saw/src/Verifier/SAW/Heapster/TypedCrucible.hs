@@ -2241,12 +2241,9 @@ getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 -- | Output a string representing a variable given optional information such as
 -- a base name and a C name
 dbgStringPP ::
-  Maybe String -- ^ The base name of the variable (e.g., "top", "arg", etc.)
-  ->
-  Maybe String -- ^ The C name of the variable, if applicable
-  ->
-  TypeRepr a -- ^ The type of the variable
-  ->
+  Maybe String {- ^ The base name of the variable (e.g., "top", "arg", etc.) -} ->
+  Maybe String {- ^ The C name of the variable, if applicable -} ->
+  TypeRepr a {- ^ The type of the variable -} ->
   String
 dbgStringPP _          (Just d) _  = "C[" ++ d ++ "]"
 dbgStringPP (Just str) _        tp = str ++ "_" ++ typeBaseName tp
@@ -2265,14 +2262,10 @@ stmtHandleUnitVars ns =
 
 -- | Remember the type of a free variable, and ensure that it has a permission
 setVarType ::
-  Maybe String  -- ^ The base name of the variable (e.g., "top", "arg", etc.)
-  ->
-  Maybe String  -- ^ The C name of the variable, if applicable
-  ->
-  ExprVar a     -- ^ The Hobbits variable itself
-  ->
-  TypeRepr a    -- ^ The type of the variable
-  ->
+  Maybe String {- ^ The base name of the variable (e.g., "top", "arg", etc.) -} ->
+  Maybe String {- ^ The C name of the variable, if applicable -} ->
+  ExprVar a    {- ^ The Hobbits variable itself -} ->
+  TypeRepr a   {- ^ The type of the variable -} ->
   PermCheckM ext cblocks blocks tops rets r ps r ps ()
 setVarType maybe_str dbg x tp =
     (modify $ \st ->
@@ -2285,8 +2278,7 @@ setVarType maybe_str dbg x tp =
 
 -- | Remember the types of a sequence of free variables
 setVarTypes ::
-  Maybe String -- ^ The bsae name of the variable (e.g., "top", "arg", etc.)
-  ->
+  Maybe String {- ^ The bsae name of the variable (e.g., "top", "arg", etc.) -} ->
   RAssign (Constant (Maybe String)) tps ->
   RAssign Name tps ->
   CruCtx tps ->
