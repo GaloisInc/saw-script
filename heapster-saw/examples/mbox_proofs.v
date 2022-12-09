@@ -24,8 +24,6 @@ Module BoolDecidableEqDepSet := DecidableEqDepSet BoolDecidableSet. *)
 Require Import Examples.mbox_gen.
 Import mbox.
 
-Local Instance QuantType_Mbox : QuantType Mbox.
-Admitted.
 
 
 (* QOL: nicer names for bitvector and mbox arguments *)
@@ -42,6 +40,7 @@ Admitted.
   let e := fresh "r_m" in IntroArg_intro e : refines prepostcond. 
 #[local] Hint Extern 901 (IntroArg RetAny Mbox_def _) =>
   let e := fresh "r_m" in IntroArg_intro e : refines prepostcond.
+
 
 (* Maybe automation - FIXME move to EnTree.Automation *)
 
@@ -283,6 +282,59 @@ Lemma isBvult_bvSub_bvAdd_1 w x y :
 Proof. holds_for_bits_up_to_3. Qed.
 
 
+(* QuantType instance for Mbox *)
+
+Global Instance QuantType_bitvector {w} : QuantType (bitvector w) :=
+  { quantEnc := QEnc_nat;
+    quantEnum := bvNat w;
+    quantEnumInv := bvToNat w;
+    quantEnumSurjective := bvNat_bvToNat_id w }.
+
+Lemma gen_sawAt_eq n a v `{Inhabited a} : 
+  gen n a (sawAt n a v) = v.
+Proof. dependent induction v; simpl; f_equal. apply IHv. Qed.
+
+Program Global Instance QuantType_BVVec_bitvector {w len A}
+  `{Inhabited A} `{QuantType A} : QuantType (BVVec w len A) :=
+  { quantEnc := QEnc_fun QEnc_nat (quantEnc (A:=A));
+    quantEnum := fun f => gen _ _ (fun i => quantEnum (f i));
+    quantEnumInv := fun v i => quantEnumInv (sawAt _ _ v i) }.
+Next Obligation.
+  erewrite <- gen_sawAt_eq with (v := a) at 1.
+  apply gen_domain_eq; intro.
+  apply quantEnumSurjective.
+Qed.
+
+Fixpoint mbox_to_list (m : Mbox) : list (bitvector 64 * bitvector 64 *
+                                         BVVec 64 bv64_128 (bitvector 8)) :=
+  match m with
+  | Mbox_nil => nil
+  | Mbox_cons strt len m' d => (strt, len, d) :: mbox_to_list m'
+  end.
+
+Fixpoint mbox_from_list (l : list (bitvector 64 * bitvector 64 *
+                                   BVVec 64 bv64_128 (bitvector 8))) : Mbox :=
+  match l with
+  | nil => Mbox_nil
+  | (strt, len, d) :: l' => Mbox_cons strt len (mbox_from_list l') d
+  end.
+
+Lemma QuantType_Mbox_surjective m :
+  mbox_from_list (quantEnum (quantEnumInv (mbox_to_list m))) = m.
+Proof.
+  rewrite quantEnumSurjective.
+  induction m; simpl; f_equal; eauto.
+Qed.
+
+Program Global Instance QuantType_Mbox : QuantType Mbox :=
+  { quantEnc :=
+      quantEnc (A := list (bitvector 64 * bitvector 64 *
+                           BVVec 64 bv64_128 (bitvector 8)));
+    quantEnum := fun s => mbox_from_list (quantEnum s);
+    quantEnumInv := fun m => quantEnumInv (mbox_to_list m);
+    quantEnumSurjective := QuantType_Mbox_surjective }.
+
+
 (* Mbox destruction automation *)
 
 Arguments FunsTo_Nil {a}.
@@ -316,36 +368,20 @@ Ltac eithers_unfoldMbox m :=
          let len  := fresh "len" in
          let m0   := fresh "m" in
          let d    := fresh "d" in
-         destruct m' as [| strt len m0 d ] eqn:?;
+         let eq   := fresh "e_destruct" in
+         destruct m' as [| strt len m0 d ] eqn:eq;
          [ eithers_unfoldMbox Mbox_nil
          | eithers_unfoldMbox (Mbox_cons strt len m0 d) ];
          simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
          unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
-         cbn [ Datatypes.fst Datatypes.snd projT1 ]
+         cbn [ Datatypes.fst Datatypes.snd projT1 ];
+         revert eq; apply (IntroArg_fold Destruct)
   end.
 
 Global Hint Extern 100 (spec_refines _ _ _ (eithers _ _ (unfoldMbox ?m)) _) =>
   eithers_unfoldMbox m : refines.
 Global Hint Extern 100 (spec_refines _ _ _ _ (eithers _ _ (unfoldMbox ?m))) =>
   eithers_unfoldMbox m : refines.
-
-Ltac RelGoal_unfoldMbox m :=
-  lazymatch m with
-  | Mbox_nil =>
-    simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
-    unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
-    cbn [ Datatypes.fst Datatypes.snd projT1 ]
-  | Mbox_cons _ _ _ _ =>
-    simpl foldMbox in *; cbn [ Mbox__rec Mbox_rect ] in *;
-    unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
-    cbn [ Datatypes.fst Datatypes.snd projT1 ]
-  | _ => let strt := fresh "strt" in
-         let len  := fresh "len" in
-         let m0   := fresh "m" in
-         let d    := fresh "d" in destruct m as [| strt len m0 d ];
-                                  [ RelGoal_unfoldMbox Mbox_nil
-                                  | RelGoal_unfoldMbox (Mbox_cons strt len m0 d) ]
-  end.
 
 Global Hint Extern 901 (RelGoal _) =>
   progress (simpl foldMbox in *; cbn [ Mbox__rec Mbox_rect ] in *) : refines.
@@ -379,8 +415,8 @@ Global Hint Extern 101 (Mbox_cons _ _ _ _ = Mbox_cons _ _ _ _) =>
   simple apply IntroArg_eq_Mbox_cons_cons : refines.
 Global Hint Extern 101 (Mbox_nil = Mbox_cons _ _ _ _) =>
   simple apply IntroArg_eq_Mbox_nil_cons : refines.
-  Global Hint Extern 101 (Mbox_cons _ _ _ _ = Mbox_nil) =>
-    simple apply IntroArg_eq_Mbox_nil_cons : refines.
+Global Hint Extern 101 (Mbox_cons _ _ _ _ = Mbox_nil) =>
+  simple apply IntroArg_eq_Mbox_nil_cons : refines.
 
 Lemma transMbox_Mbox_nil_r m : transMbox m Mbox_nil = m.
 Proof.
@@ -399,6 +435,13 @@ Qed.
 
 
 (* Helper functions and lemmas *)
+
+Tactic Notation "rewrite_transMbox_Mbox_nil_r_dep" "in" ident(H1) :=
+  revert H1; rewrite transMbox_Mbox_nil_r; intros H1.
+Tactic Notation "rewrite_transMbox_Mbox_nil_r_dep" "in" ident(H1) ident(H2) :=
+  revert H1 H2; rewrite transMbox_Mbox_nil_r; intros H1 H2.
+Tactic Notation "rewrite_transMbox_Mbox_nil_r_dep" "in" ident(H1) ident(H2) ident(H3) :=
+  revert H1 H2 H3; rewrite transMbox_Mbox_nil_r; intros H1 H2 H3.
 
 Definition mbox_chain_length := 
   Mbox_rect (fun _ => nat) O (fun _ _ _ rec _ => S rec).
@@ -455,7 +498,7 @@ Time Qed.
 #[local] Hint Resolve mbox_concat_spec_ref : refines_proofs.
 
 
-(** * mbox_concat_chains *)
+(** * mbox_concat_chains (two proofs) *)
 
 Lemma mbox_rect_identity m :
   Mbox_rect _ Mbox_nil (fun strt len _ rec d => Mbox_cons strt len rec d) m = m.
@@ -464,6 +507,10 @@ Proof. induction m; simpl; try f_equal; eauto. Qed.
 Definition mbox_concat_chains_spec (m1 m2 : Mbox) : Mbox :=
   if mbox_chain_length m1 =? 0 then Mbox_nil else transMbox m1 m2.
 
+(* Proof 1: A version where the arguments to total_spec match the recursive
+   structure of the function: with one argument keeping track of the Mbox
+   blocks seen, and the other keeping track of the blocks yet to be seen.
+   Thus, the decreasing nat is just the length of this second Mbox. *)
 Lemma mbox_concat_chains_spec_ref__dec_args m1 m2
   : spec_refines eqPreRel eqPostRel eq
       (mbox_concat_chains m1 m2)
@@ -487,6 +534,9 @@ Proof.
       reflexivity.
 Time Qed.
 
+(* Proof 2: A version where one argument to total_spec is designated as the
+   'fuel' - in this case starting at mbox_chain_length m1 and decreasing
+   each call - but the actual Mbox argument (m1) stays constant. *)
 Lemma mbox_concat_chains_spec_ref__fuel m1 m2
   : spec_refines eqPreRel eqPostRel eq
       (mbox_concat_chains m1 m2)
@@ -563,7 +613,7 @@ Proof.
 Time Qed.
 
 
-(** * mbox_len *)
+(** * mbox_len (two proofs) *)
 
 Definition mbox_len_spec : Mbox -> bitvector 64 :=
   Mbox__rec (fun _ =>  bitvector 64) (intToBv 64 0)
@@ -582,6 +632,10 @@ Proof.
     reflexivity.
 Qed.
 
+(* Proof 1: A version where the arguments to total_spec match the recursive
+   structure of the function: with one argument keeping track of the Mbox
+   blocks seen, and the other keeping track of the blocks yet to be seen.
+   Thus, the decreasing nat is just the length of this second Mbox. *)
 Lemma mbox_len_spec_ref__dec_args m
   : spec_refines eqPreRel eqPostRel eq
       (mbox_len m)
@@ -608,6 +662,9 @@ Proof.
       reflexivity.
 Time Qed.
 
+(* Proof 1: A version where one argument to total_spec is designated as the
+   'fuel' - in this case starting at mbox_chain_length m and decreasing
+   each call - but the actual Mbox argument (m) stays constant. *)
 Lemma mbox_len_spec_ref__fuel m
   : spec_refines eqPreRel eqPostRel eq
       (mbox_len m)
@@ -665,59 +722,6 @@ Definition conjSliceBVVec (strt len : bitvector 64) pf0 pf1 d0 d1 : BVVec 64 bv6
   updSliceBVVec 64 (intToBv 64 128) _ d0 strt len
     (sliceBVVec 64 (intToBv 64 128) _ strt len pf0 pf1 d1).
 
-Definition mbox_copy_postcond
-             (m : Mbox)
-             (r : Mbox * Mbox)
-           : Prop :=
-  Mbox__rec (fun _ => Prop)
-            (* If the input Mbox is empty, return an empty Mbox. *)
-            (r = (Mbox_nil, Mbox_nil))
-            (* If the input Mbox is non-empty, then decompose it into its
-               `start`, `len`, and `dat`. Return an mbox chain consisting of
-               a single mbox with the given `start` and `len`, and the given
-               `dat` with the range 0 to `start` zeroed out. *)
-            (fun strt len m' _ d =>
-              exists (valid : Mbox_cons_valid strt len),
-              match valid with
-              | conj pf0 pf1 =>
-                  r = (Mbox_cons strt len m'
-                                 (conjSliceBVVec strt len pf0 pf1 d d),
-                       Mbox_cons strt len Mbox_nil
-                                 (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))
-              end)
-            m.
-
-Lemma mbox_copy_spec_ref m
-  : spec_refines eqPreRel eqPostRel eq
-      (mbox_copy m)
-      (total_spec (fun m' => mbox_copy_precond m')
-                  (fun m' r => mbox_copy_postcond m' r)
-                  m).
-Proof.
-  unfold mbox_copy, mbox_copy__bodies, mboxNewSpec.
-  (* Yikes! The below functions may or may not be defined depending on what
-     machine compiled mbox.bc *)
-  try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
-  try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
-  prove_refinement.
-  - wellfounded_none.
-  - prepost_case 0 0.
-    + exact (m0 = m1).
-    + exact (r_m = r_m1 /\ r_m0 = r_m2).
-    prepost_exclude_remaining.
-  - unfold mbox_copy_precond, mbox_copy_postcond, Mbox_cons_valid,
-           empty_mbox_d, conjSliceBVVec in *.
-    time "mbox_copy_spec_ref" prove_refinement_continue.
-    + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
-      destruct e_if.
-      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
-        destruct (not_isBvslt_bvsmin _ _ H1).
-      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
-        destruct (not_isBvslt_bvsmax _ _ H1).
-    (* All the remaining existential variables don't matter *)
-    + Unshelve. all: eauto.
-Time Qed.
-
 Definition mbox_copy_spec
            : forall (m : Mbox),
              mbox_copy_precond m -> Mbox :=
@@ -739,7 +743,7 @@ Proof.
   - discriminate.
 Qed.
 
-Lemma mbox_copy_spec_ref__alt m
+Lemma mbox_copy_spec_ref m
   : spec_refines eqPreRel eqPostRel eq
       (mbox_copy m)
       (total_spec (fun m' => mbox_copy_precond m')
@@ -760,20 +764,20 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_copy_precond, mbox_copy_spec, Mbox_cons_valid,
            empty_mbox_d, conjSliceBVVec in *.
-    time "mbox_copy_spec_ref__alt" prove_refinement_continue.
+    time "mbox_copy_spec_ref" prove_refinement_continue.
     + rewrite updSlice_slice_identity.
       reflexivity.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if.
       destruct e_if.
-      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
-        destruct (not_isBvslt_bvsmin _ _ H1).
-      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
-        destruct (not_isBvslt_bvsmax _ _ H1).
+      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H.
+        destruct (not_isBvslt_bvsmin _ _ H).
+      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H.
+        destruct (not_isBvslt_bvsmax _ _ H).
     (* All the remaining existential variables don't matter *)
     Unshelve. all: eauto.
 Time Qed.
 
-#[local] Hint Resolve mbox_copy_spec_ref__alt : refines_proofs.
+#[local] Hint Resolve mbox_copy_spec_ref : refines_proofs.
 
 
 (** * mbox_copy_chain *)
@@ -854,68 +858,63 @@ Proof.
         by bvEq_eq.
       rewrite mbox_copy_chain_len_0.
       reflexivity.
-    + apply (mbox_copy_chain_precond_to_copy_precond _ H).
-    + revert Heqm1. revert a.
-      rewrite transMbox_Mbox_nil_r.
-      intros a Heqm1.
-      apply mbox_copy_nil in Heqm1.
+    + apply (mbox_copy_chain_precond_to_copy_precond _ e_assume).
+    + rewrite_transMbox_Mbox_nil_r_dep in a e_destruct.
+      apply mbox_copy_nil in e_destruct.
       subst m0.
       reflexivity.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       symmetry. assumption.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       subst m0.
       reflexivity.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       symmetry. assumption.
-    + revert Heqm1. revert a.
-      rewrite transMbox_Mbox_nil_r in *.
-      intros a Heqm1.
-      instantiate (1 := H).
+    + rewrite_transMbox_Mbox_nil_r_dep in a e_destruct e_destruct0.
+      instantiate (1 := e_assume).
       subst m0.
       destruct a as [pf0 pf1].
-      destruct H as [[X Y] Z].
-      simpl in Heqm1.
-      injection Heqm1 as h1 h2 h3 h4.
+      destruct e_assume as [[X Y] Z].
+      simpl in e_destruct.
+      injection e_destruct as h1 h2 h3 h4.
       subst strt len m1 d.
       simpl.
       rewrite e_if.
       rewrite e_if0.
       replace pf0 with X by (apply UIP_bool).
       replace pf1 with Y by (apply UIP_bool).
-    + reflexivity.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+      reflexivity.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       subst m0.
-      destruct H as [XY Z].
+      destruct e_assume as [XY Z].
       apply Z.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       subst m0.
       reflexivity.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       subst m0.
-      destruct H as [XY Z].
+      destruct e_assume as [XY Z].
       apply Z.
-    + rewrite transMbox_Mbox_nil_r in Heqm2.
+    + rewrite transMbox_Mbox_nil_r in e_destruct0.
       subst m0.
-      destruct H0 as [precond e].
+      destruct H as [precond e].
       injection e as e1 e2.
       rewrite transMbox_Mbox_nil_r in e1.
       subst r_m1.
       reflexivity.
-    + revert Heqm1. revert a.
+    + rewrite_transMbox_Mbox_nil_r_dep in a e_destruct.
       rewrite transMbox_Mbox_nil_r in *.
-      intros a Heqm1.
-      instantiate (1 := H).
+      instantiate (1 := e_assume).
       subst m0.
       destruct a as [pf0 pf1].
-      destruct H as [[X Y] Z].
-      simpl in Heqm1.
-      injection Heqm1 as h1 h2 h3 h4.
+      destruct e_assume as [[X Y] Z].
+      simpl in e_destruct.
+      injection e_destruct as h1 h2 h3 h4.
       subst strt len m1 d.
       simpl.
       rewrite e_if.
       rewrite e_if0.
-      destruct H0 as [precond e].
+      destruct H as [precond e].
       injection e as e1 e2.
       replace Z
         with precond
@@ -926,24 +925,23 @@ Proof.
       reflexivity.
     + rewrite transMbox_Mbox_nil_r in *.
       subst m0.
-      destruct H0 as [precond e].
+      destruct H as [precond e].
       injection e as e1 e2.
       subst r_m1.
       reflexivity.
-    + revert Heqm1. revert a.
+    + rewrite_transMbox_Mbox_nil_r_dep in a e_destruct.
       rewrite transMbox_Mbox_nil_r in *.
-      intros a Heqm1.
-      instantiate (1 := H).
+      instantiate (1 := e_assume).
       subst m0.
       destruct a as [pf0 pf1].
-      destruct H as [[X Y] Z].
-      simpl in Heqm1.
-      injection Heqm1 as h1 h2 h3 h4.
+      destruct e_assume as [[X Y] Z].
+      simpl in e_destruct.
+      injection e_destruct as h1 h2 h3 h4.
       subst strt len m1 d.
       simpl.
       rewrite e_if.
       rewrite e_if0.
-      destruct H0 as [precond e].
+      destruct H as [precond e].
       injection e as e1 e2.
       replace Z
         with precond
@@ -1038,36 +1036,29 @@ Proof.
       rewrite e_if.
       rewrite e_if0.
       unshelve instantiate (1 := _).
-      { simpl. split.
-        * apply H.
-        * apply H0.
-      }
-      destruct H as [X Y].
+      { split; assumption. }
+      destruct e_assume as [X Y].
       rewrite e_if1.
       reflexivity.
-    + revert H1. revert r_m1 r_m2.
-      rewrite transMbox_Mbox_nil_r.
-      intros r_m1 r_m2 H1.
-      destruct H1 as [precond e].
-      replace H0
+    + rewrite_transMbox_Mbox_nil_r_dep in r_m1 r_m2 H.
+      destruct H as [precond e].
+      replace e_assume0
         with precond
         by (apply mbox_split_at_precond_proof_irrel).
       apply (f_equal fst) in e.
       simpl in e.
       subst r_m1.
       reflexivity.
-    + revert H1. revert r_m1 r_m2.
-      rewrite transMbox_Mbox_nil_r.
-      intros r_m1 r_m2 H1.
-      destruct H1 as [precond e].
-      replace H0
+    + rewrite_transMbox_Mbox_nil_r_dep in r_m1 r_m2 H.
+      destruct H as [precond e].
+      replace e_assume0
         with precond
         by (apply mbox_split_at_precond_proof_irrel).
       apply (f_equal snd) in e.
       simpl in e.
       assumption.
     + rewrite bvSub_n_zero in H.
-      destruct H0.
+      destruct e_assume.
       specialize
         (isBvule_bvSub_remove
           _ (bvSub 64 len x)
@@ -1075,21 +1066,18 @@ Proof.
           x i i0)
         as Hcontra.
       contradiction.
-    + destruct H1 as [H0contra H3].
+    + destruct e_assume as [H0contra H3].
       contradiction.
-    + destruct H2 as [H2contra H4].
+    + destruct e_assume as [H2contra H4].
       contradiction.
     + rewrite e_if.
       rewrite e_if0.
       rewrite e_if1.
       unshelve instantiate (1 := _).
-      { simpl. split.
-        * apply H2.
-        * apply H3.
-      }
+      { split; assumption. }
       instantiate (2 := a0).
       instantiate (1 := a1).
-      destruct H2 as [X Y].
+      destruct e_assume as [X Y].
       replace a0 with X by (apply UIP_bool).
       replace a1 with Y by (apply UIP_bool).
       reflexivity.
@@ -1097,17 +1085,12 @@ Proof.
       split; reflexivity.
     + rewrite and_bool_eq_false, 2 isBvslt_def_opp in e_if2.
       destruct e_if2.
-      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H1.
-        destruct (not_isBvslt_bvsmin _ _ H1).
-      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H1.
-        destruct (not_isBvslt_bvsmax _ _ H1).
+      * change (intToBv 64 9223372036854775808) with (bvsmin 64) in H.
+        destruct (not_isBvslt_bvsmin _ _ H).
+      * change (intToBv 64 9223372036854775807) with (bvsmax 64) in H.
+        destruct (not_isBvslt_bvsmax _ _ H).
     (* All the remaining existential variables don't matter *)
-    Unshelve.
-    all: (simpl; eauto).
-    all: try (match goal with
-               [H: isBvule 64 ?x (intToBv 64 128) /\ isBvule 64 (bvSub 64 ?len ?x) (bvSub 64 (intToBv 64 128) ?x) |- _] =>
-                 (destruct H; assumption)
-               end).
+    Unshelve. all: (try destruct e_assume; simpl; eauto).
 Qed.
 
 #[local] Hint Resolve mbox_split_at_spec_ref : refines_proofs.
@@ -1147,35 +1130,32 @@ Proof.
     prepost_exclude_remaining.
   - unfold mbox_detach_from_end_precond, mbox_detach_from_end_spec.
   - time "mbox_detach_from_end_spec_ref" prove_refinement_continue.
-    Ltac busywork H0 a := (simpl in *;
-                           revert H0;
-                           revert a;
-                           do 2 rewrite transMbox_Mbox_nil_r;
-                           intros a H0).
+    Ltac busywork a e_assert := simpl in *;
+      repeat rewrite_transMbox_Mbox_nil_r_dep in a e_assert.
     + unshelve instantiate (1 := _).
-      { busywork H0 a.
-        apply a.
-      }
-      busywork H0 a.
-      rewrite -> H0.
+      { busywork a e_assert. apply a. } 
+      busywork a e_assert.
+      rewrite -> e_assert.
       reflexivity.
     + unshelve instantiate (1 := _).
-      { busywork H0 a.
-        apply a.
-      }
-      busywork H0 a.
-      rewrite -> H0.
+      { busywork a e_assert. apply a. }
+      busywork a e_assert.
+      rewrite -> e_assert.
       reflexivity.
 Qed.
 
 
 (** * mbox_randomize *)
 
-Lemma atBVVec_upd_out_of_range w len A a v i j pf1 pf2 :
+Lemma atBVVec_upd_out_of_range w len A a v i j pf :
   bvEq w i j = false ->
-  atBVVec w len A v i pf1 =
-  atBVVec w len A (updBVVec w len A v j a) i pf2.
-Admitted.
+  atBVVec w len A v i pf =
+  atBVVec w len A (updBVVec w len A v j a) i pf.
+Proof.
+  intros. unfold updBVVec.
+  rewrite at_gen_BVVec.
+  rewrite H. reflexivity.
+Qed.
 
 (* True iff both inputs are Mbox_null, or both inputs are
    Mbox_cons where the values of strt, len, and m are equal,
@@ -1255,550 +1235,56 @@ Proof.
            mbox_randomize_invar in *.
     time "mbox_randomize_spec_ref" prove_refinement_continue.
     (* mbox_eq_up_to_head_data goals *)
-    1-3: rewrite transMbox_Mbox_nil_r in H2.
-    1-3: destruct H2.
+    1-3: rewrite transMbox_Mbox_nil_r in H.
+    1-3: destruct H.
     1-3: assumption.
     (* Showing the error case of the array bounds check is impossible by virtue *)
     (* of our loop invariant *)
     1-2: enough (isBvult 64 call3 (intToBv 64 128)) by contradiction.
-    1-2: destruct H1 as [?H [?H ?H]].
+    1-2: destruct e_assume as [?e_assume [?e_assume ?e_assume]].
     1-2: rewrite isBvult_def in e_if; rewrite e_if.
     1-2: eapply isBvult_to_isBvslt_pos; [| reflexivity | assumption ].
-    1-2: rewrite H1, H3; reflexivity.
+    1-2: rewrite e_assume, e_assume0; reflexivity.
     (* Showing the loop invariant holds inductively *)
-    1-9: destruct H1 as [?H [?H ?H]]; try assumption.
+    1-9: destruct e_assume as [?e_assume [?e_assume ?e_assume]]; try assumption.
     + apply isBvult_impl_lt_bvToNat, isBvult_bvSub_bvAdd_1; eauto.
     + rewrite H. apply isBvsle_suc_r.
-      rewrite H0, H4.
+      rewrite H0, e_assume1.
       reflexivity.
     + apply isBvslt_to_isBvsle_suc.
       apply isBvult_to_isBvslt_pos; eauto.
-      * rewrite H1; eauto.
-      * rewrite <- H3; eauto.
+      * rewrite e_assume; eauto.
+      * rewrite <- e_assume0; eauto.
     (* more step mbox_eq_up_to_head_data goals *)
-    1-3: rewrite transMbox_Mbox_nil_r in H3.
-    1-3: destruct H3.
-    1-2: destruct H1 as [?H [?H ?H]].
-    1-2: rewrite H in H1. rewrite <- H0 in H6.
+    1-3: rewrite transMbox_Mbox_nil_r in H2.
+    1-3: destruct H2.
+    1-2: destruct e_assume as [?e_assume [?e_assume ?e_assume]].
+    1-2: rewrite H in e_assume.
     1-2: rewrite isBvult_def in e_if.
     1-2: apply isBvult_to_isBvslt_pos in e_if;
          [| assumption | rewrite <- H0; assumption ].
     1-2: eapply mbox_eq_up_to_head_data_trans; eauto.
     1-2: repeat split; eauto; intros.
     1-2: apply atBVVec_upd_out_of_range.
-    1-2: destruct H7 as [?H | ?H]; [| rewrite bvEq_sym ].
+    1-2: destruct H4 as [?H | ?H]; [| rewrite bvEq_sym ].
     1-4: apply isBvslt_to_bvEq_false.
     + rewrite <- H; assumption.
-    + rewrite H7 in e_if; assumption.
+    + rewrite H4 in e_if; assumption.
     + rewrite <- H; assumption.
-    + rewrite H7 in e_if; assumption.
-    + rewrite H4. simpl. reflexivity.
+    + rewrite H4 in e_if; assumption.
+    + rewrite H3. simpl. reflexivity.
     (* Showing the error case of the overflow check is impossible by virtue of *)
     (* our loop invariant *)
-    1-2: destruct H1 as [?H [?H ?H]].
-    1-2: rewrite H in H1; rewrite <- H0 in H3.
+    1-2: destruct e_assume as [?e_assume [?e_assume ?e_assume]].
+    1-2: rewrite H in e_assume; rewrite <- H0 in e_assume1.
     1-2: rewrite and_bool_eq_false in e_if0.
     1-2: do 2 rewrite isBvslt_def_opp in e_if0.
     1-2: destruct e_if0 as [?e_if | ?e_if];
-         [ rewrite <- H1 in e_if0 | rewrite H3 in e_if0 ].
+         [ rewrite <- e_assume in e_if0 | rewrite e_assume1 in e_if0 ].
     1-4: vm_compute in e_if0; discriminate e_if0.
     (* final mbox_eq_up_to_head_data goals *)
     + simpl. repeat split.
     + simpl. repeat split.
     (* All the remaining existential variables don't matter *)
-    Unshelve.
-    all: eauto.
+    Unshelve. all: eauto.
 Qed.
-
-
-
-
-(* ========================================================================== *)
-
-
-Definition mbox_randomize_precond : Mbox -> Prop :=
-  Mbox__rec (fun _ => Prop) True (fun strt len _ _ _ =>
-    (* 0 <= strt <= len < 128 *)
-    isBvsle 64 (intToBv 64 0) strt /\ isBvsle 64 strt len /\
-    isBvslt 64 len (intToBv 64 128)).
-
-Definition mbox_randomize_invar (strt len i : bitvector 64) : Prop :=
-  (* 0 <= strt <= i <= len < 128 *)
-  isBvsle 64 (intToBv 64 0) strt /\ isBvsle 64 strt i /\
-  isBvsle 64 i len /\ isBvslt 64 len (intToBv 64 128).
-
-Lemma no_errors_mbox_randomize
-  : refinesFun mbox_randomize (fun m => assumingM (mbox_randomize_precond m) noErrorsSpec).
-Proof.
-  unfold mbox_randomize, mbox_randomize__tuple_fun, mbox_randomize_precond.
-  prove_refinement_match_letRecM_l.
-  - exact (fun strt len m d i => assumingM (mbox_randomize_invar strt len i) noErrorsSpec).
-  unfold noErrorsSpec, randSpec, mbox_randomize_invar.
-  time "no_errors_mbox_randomize" prove_refinement.
-  (* All the `Mbox_def` and `Vec 32 bool` goals are only every used in *)
-  (* impossible cases, so they can be set to whatever Coq chooses. These *)
-  (* calls to `assumption` also take care of showing that the loop invariant *)
-  (* holds initially from our precondition, and a few of the cases of showing *)
-  (* that the loop invariant holds inductively (see below). *)
-  all: try assumption.
-  (* Showing the error case of the array bounds check is impossible by virtue *)
-  (* of our loop invariant *)
-  - assert (isBvsle 64 (intToBv 64 0) a4) by (rewrite e_assuming0; eauto).
-    assert (isBvsle 64 (intToBv 64 0) a1) by (rewrite H; eauto).
-    apply isBvult_to_isBvslt_pos in e_if; eauto.
-    assert (isBvult 64 a4 (intToBv 64 128)).
-    + apply isBvult_to_isBvslt_pos; [ eauto | reflexivity | ].
-      rewrite e_if; eauto.
-    + rewrite H1 in e_maybe; discriminate e_maybe.
-  (* Showing the loop invariant holds inductively (the remaining two cases) *)
-  - rewrite e_assuming1; apply isBvsle_suc_r.
-    rewrite e_assuming2, e_assuming3.
-    reflexivity.
-  - apply isBvslt_to_isBvsle_suc.
-    apply isBvult_to_isBvslt_pos in e_if.
-    + assumption.
-    + rewrite e_assuming0; eauto.
-    + rewrite e_assuming0, e_assuming1; eauto.
-  (* Showing the error case of the overflow check is impossible by virtue of *)
-  (* our loop invariant *)
-  - rewrite <- e_assuming1, <- e_assuming0 in e_if0.
-    vm_compute in e_if0; discriminate e_if0.
-  - rewrite e_assuming2, e_assuming3 in e_if0.
-    vm_compute in e_if0; discriminate e_if0.
-  - destruct a; inversion e_either. destruct e_assuming; assumption.
-  - destruct a; inversion e_either. destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]].
-    assumption.
-  - destruct a; inversion e_either. destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]].
-    assumption.
-Qed.
-
-(*
-  In English, the spec for `mbox_randomize m` is:
-  - If `m` is non-null, the function returns `SUCCESS` and `m->data` is set to
-    some `data'` such that `m->data[i] = data'[i]` for all `i` such that
-    `i < m->strt` or `i >= m->len`.
-  - Otherwise, the function returns MBOX_NULL_ERROR.
-*)
-
-Definition SUCCESS         := intToBv 32 0.
-Definition MBOX_NULL_ERROR := intToBv 32 23.
-
-Definition mbox_randomize_non_null_spec strt len m d : CompM (Mbox * bitvector 32) :=
-  existsM (fun d' => assertM (forall i (pf : isBvult 64 i bv64_128),
-                                isBvslt 64 i strt \/ isBvsle 64 len i ->
-                                atBVVec _ _ _ d i pf = atBVVec _ _ _ d' i pf) >>
-                     returnM (Mbox_cons strt len m d', SUCCESS)).
-
-Definition mbox_randomize_spec : Mbox -> CompM (Mbox * bitvector 32) :=
-  Mbox__rec (fun _ => CompM (Mbox * bitvector 32))
-          (returnM (Mbox_nil, MBOX_NULL_ERROR))
-          (fun strt len m _ d => mbox_randomize_non_null_spec strt len m d).
-
-Lemma mbox_randomize_spec_ref :
-  refinesFun mbox_randomize (fun m => assumingM (mbox_randomize_precond m) (mbox_randomize_spec m)).
-Proof.
-  unfold mbox_randomize, mbox_randomize__tuple_fun, mbox_randomize_precond, mbox_randomize_spec.
-  prove_refinement_match_letRecM_l.
-  - exact (fun strt len m d i =>
-             assumingM (mbox_randomize_invar strt len i)
-                       (mbox_randomize_non_null_spec strt len m d)).
-  unfold noErrorsSpec, randSpec, mbox_randomize_invar.
-  time "mbox_randomize_spec_ref" prove_refinement.
-  (* All but the noted cases are the same as `no_errors_mbox_randomize` above *)
-  all: try assumption.
-  (* Showing the error case of the array bounds check is impossible by virtue *)
-  (* of our loop invariant *)
-  - assert (isBvsle 64 (intToBv 64 0) a4) by (rewrite e_assuming0; eauto).
-    assert (isBvsle 64 (intToBv 64 0) a1) by (rewrite H; eauto).
-    apply isBvult_to_isBvslt_pos in e_if; eauto.
-    assert (isBvult 64 a4 (intToBv 64 128)).
-    + apply isBvult_to_isBvslt_pos; [ eauto | reflexivity | ].
-      rewrite e_if; eauto.
-    + rewrite H1 in e_maybe; discriminate e_maybe.
-  (* Showing the loop invariant holds inductively (the remaining two cases) *)
-  - rewrite e_assuming1; apply isBvsle_suc_r.
-    rewrite e_assuming2, e_assuming3.
-    reflexivity.
-  - apply isBvslt_to_isBvsle_suc.
-    apply isBvult_to_isBvslt_pos in e_if.
-    + assumption.
-    + rewrite e_assuming0; eauto.
-    + rewrite e_assuming0, e_assuming1; eauto.
-  (* Unique to this proof: Showing our spec works for the recursive case *)
-  - rewrite transMbox_Mbox_nil_r; simpl.
-    unfold mbox_randomize_non_null_spec.
-    prove_refinement.
-    + exact e_exists0.
-    + prove_refinement; intros.
-      rewrite <- e_assert; eauto.
-      unfold updBVVec; rewrite at_gen_BVVec.
-      enough (bvEq 64 i a4 = false) by (rewrite H0; reflexivity).
-      destruct H.
-      * apply isBvslt_to_bvEq_false.
-        rewrite e_assuming1 in H; eauto.
-      * rewrite bvEq_sym.
-        apply isBvslt_to_bvEq_false.
-        apply isBvult_to_isBvslt_pos in e_if.
-        -- rewrite H in e_if; eauto.
-        -- rewrite e_assuming0; eauto.
-        -- rewrite e_assuming0, e_assuming1; eauto.
-  (* Showing the error case of the overflow check is impossible by virtue of *)
-  (* our loop invariant *)
-  - rewrite <- e_assuming1, <- e_assuming0 in e_if0.
-    vm_compute in e_if0; discriminate e_if0.
-  - rewrite e_assuming2, e_assuming3 in e_if0.
-    vm_compute in e_if0; discriminate e_if0.
-  (* Unique to this proof: Showing our spec works for the base case *)
-  - rewrite transMbox_Mbox_nil_r; simpl.
-    unfold mbox_randomize_non_null_spec.
-    prove_refinement.
-    + exact a3.
-    + prove_refinement.
-  - destruct a; try discriminate. reflexivity.
-  - destruct a; inversion e_either.
-    destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]]. assumption.
-  - destruct a; inversion e_either.
-    destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]]. assumption.
-  - destruct a; inversion e_either.
-    destruct e_assuming as [ Ha1 [ Ha2 Ha3 ]]. assumption.
-  - destruct a; inversion e_either. simpl. rewrite transMbox_Mbox_nil_r.
-    reflexivity.
-Qed.
-
-
-Lemma no_errors_mbox_drop
-  : refinesFun mbox_drop (fun _ _ => noErrorsSpec).
-Proof.
-  unfold mbox_drop, mbox_drop__tuple_fun, noErrorsSpec.
-  (* Set Ltac Profiling. *)
-  time "no_errors_mbox_drop" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-Time Qed.
-
-Definition mbox_drop_spec : Mbox -> bitvector 64 -> Mbox :=
-  Mbox__rec _ (fun _ => Mbox_nil) (fun strt len next rec d ix =>
-    if bvuge 64 ix len
-    then Mbox_cons (intToBv 64 0) (intToBv 64 0) (rec (bvSub 64 ix len)) d
-    else Mbox_cons (bvAdd 64 strt ix) (bvSub 64 len ix) next d).
-
-Lemma mbox_drop_spec_ref
-  : refinesFun mbox_drop (fun x ix => returnM (mbox_drop_spec x ix)).
-Proof.
-  unfold mbox_drop, mbox_drop__tuple_fun, mbox_drop_spec.
-  (* Set Ltac Profiling. *)
-  time "mbox_drop_spec_ref" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-  - simpl. destruct a; try discriminate e_either. reflexivity.
-  - simpl. destruct a; try discriminate e_either.
-    inversion e_either. simpl. rewrite <- H0 in e_if. simpl in e_if.
-    unfold isBvule in e_if. rewrite e_if. simpl.
-    repeat rewrite transMbox_Mbox_nil_r.
-    reflexivity.
-  - destruct a; simpl in e_either; inversion e_either.
-    rewrite <- H0 in e_if. simpl in e_if. simpl.
-    assert (bvule 64 v0 a0 = false); [ apply isBvult_def_opp; assumption | ].
-    rewrite H. simpl. rewrite transMbox_Mbox_nil_r.
-    reflexivity.
-Time Qed.
-
-
-Lemma mbox_free_chain_spec_ref
-  : refinesFun mbox_free_chain (fun _ => returnM (intToBv 32 0)).
-Proof.
-  unfold mbox_free_chain, mbox_free_chain__tuple_fun, mboxFreeSpec.
-  prove_refinement_match_letRecM_l.
-  - exact (fun _ => returnM (intToBv 32 0)).
-  (* Set Ltac Profiling. *)
-  time "mbox_free_chain_spec_ref" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-Time Qed.
-
-Lemma no_errors_mbox_free_chain
-  : refinesFun mbox_free_chain (fun _ => noErrorsSpec).
-Proof.
-  rewrite mbox_free_chain_spec_ref.
-  unfold noErrorsSpec.
-  prove_refinement.
-Qed.
-
-
-Lemma no_errors_mbox_concat
-  : refinesFun mbox_concat (fun _ _ => noErrorsSpec).
-Proof.
-  unfold mbox_concat, mbox_concat__tuple_fun, noErrorsSpec.
-  (* Set Ltac Profiling. *)
-  time "no_errors_mbox_concat" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-Time Qed.
-
-Definition mbox_concat_spec (x y : Mbox) : Mbox :=
-  Mbox__rec _ Mbox_nil (fun strt len _ _ d => Mbox_cons strt len y d) x.
-
-Lemma mbox_concat_spec_ref
-  : refinesFun mbox_concat (fun x y => returnM (mbox_concat_spec x y)).
-Proof.
-  unfold mbox_concat, mbox_concat__tuple_fun, mbox_concat_spec.
-  (* Set Ltac Profiling. *)
-  time "mbox_concat_spec_ref" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-  - destruct a; simpl in e_either; try discriminate e_either. reflexivity.
-  - destruct a; simpl in e_either; inversion e_either.
-    rewrite transMbox_Mbox_nil_r. reflexivity.
-Time Qed.
-
-(* Add `mbox_concat_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
-   and mbox_concat_spec when rewriting, and the only workaround I know right now is this :/ *)
-Definition mbox_concat_spec_ref' : ltac:(let tp := type of mbox_concat_spec_ref in
-                                         let tp' := eval unfold refinesFun, mbox_concat_spec in tp
-                                          in exact tp') := mbox_concat_spec_ref.
-Hint Rewrite mbox_concat_spec_ref' : refinement_proofs.
-
-
-Lemma no_errors_mbox_concat_chains
-  : refinesFun mbox_concat_chains (fun _ _ => noErrorsSpec).
-Proof.
-  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
-  prove_refinement_match_letRecM_l.
-  - exact (fun _ _ _ _ _ _ => noErrorsSpec).
-  unfold noErrorsSpec.
-  (* Set Ltac Profiling. *)
-  time "no_errors_mbox_concat_chains" prove_refinement with NoRewrite.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-Time Qed.
-
-Definition mbox_concat_chains_spec (x y : Mbox) : Mbox :=
-  Mbox__rec (fun _ => Mbox) Mbox_nil (fun _ _ _ _ _ =>
-    Mbox__rec (fun _ => Mbox) x (fun _ _ _ _ _ =>
-      transMbox x y) y) x.
-
-Lemma mbox_concat_chains_spec_ref
-  : refinesFun mbox_concat_chains (fun x y => returnM (mbox_concat_chains_spec x y)).
-Proof.
-  unfold mbox_concat_chains, mbox_concat_chains__tuple_fun.
-  prove_refinement_match_letRecM_l.
-  - intros x y strt len next d.
-    exact (returnM (transMbox x (Mbox_cons strt len (transMbox next y) d))).
-  unfold mbox_concat_chains_spec.
-  time "mbox_concat_chains_spec_ref" prove_refinement.
-  - destruct a5; simpl in e_either; inversion e_either.
-    repeat rewrite transMbox_Mbox_nil_r; reflexivity.
-  - destruct a5; simpl in e_either; inversion e_either.
-    repeat rewrite transMbox_Mbox_nil_r; reflexivity.
-  - destruct a; simpl in e_either; inversion e_either. reflexivity.
-  - destruct a; simpl in e_either; inversion e_either.
-    destruct a0; simpl in e_either0; inversion e_either0.
-    rewrite transMbox_Mbox_nil_r; reflexivity.
-  - destruct a; simpl in e_either; inversion e_either.
-    destruct a0; simpl in e_either0; inversion e_either0.
-    simpl; repeat rewrite transMbox_Mbox_nil_r; reflexivity.
-Time Qed.
-
-
-Lemma no_errors_mbox_detach
-  : refinesFun mbox_detach (fun _ => noErrorsSpec).
-Proof.
-  unfold mbox_detach, mbox_detach__tuple_fun, noErrorsSpec.
-  (* Set Ltac Profiling. *)
-  time "no_errors_mbox_detach" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-Time Qed.
-
-Definition mbox_detach_spec : Mbox -> Mbox * Mbox :=
-  Mbox__rec _ (Mbox_nil, Mbox_nil)
-            (fun strt len next _ d => (next, (Mbox_cons strt len Mbox_nil d))).
-
-Lemma mbox_detach_spec_ref
-  : refinesFun mbox_detach (fun x => returnM (mbox_detach_spec x)).
-Proof.
-  unfold mbox_detach, mbox_detach__tuple_fun, mbox_detach, mbox_detach_spec.
-  (* Set Ltac Profiling. *)
-  time "mbox_detach_spec_ref" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-  - destruct a; simpl in e_either; inversion e_either. reflexivity.
-  - destruct a; simpl in e_either; inversion e_either.
-    rewrite transMbox_Mbox_nil_r; reflexivity.
-Time Qed.
-
-(* Add `mbox_detach_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
-   and mbox_detach_spec when rewriting, and the only workaround I know right now is this :/ *)
-Definition mbox_detach_spec_ref' : ltac:(let tp := type of mbox_detach_spec_ref in
-                                         let tp' := eval unfold refinesFun, mbox_detach_spec in tp
-                                          in exact tp') := mbox_detach_spec_ref.
-Hint Rewrite mbox_detach_spec_ref' : refinement_proofs.
-
-
-Lemma no_errors_mbox_len
-  : refinesFun mbox_len (fun _ => noErrorsSpec).
-Proof.
-  unfold mbox_len, mbox_len__tuple_fun.
-  prove_refinement_match_letRecM_l.
-  - exact (fun _ _ _ => noErrorsSpec).
-  unfold noErrorsSpec.
-  (* Set Ltac Profiling. *)
-  time "no_errors_mbox_len" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-Time Qed.
-
-Definition mbox_len_spec : Mbox -> bitvector 64 :=
-  Mbox__rec (fun _ =>  bitvector 64) (intToBv 64 0)
-          (fun strt len m rec d => bvAdd 64 rec len).
-
-Lemma mbox_len_spec_ref
-  : refinesFun mbox_len (fun m => returnM (m, mbox_len_spec m)).
-Proof.
-  unfold mbox_len, mbox_len__tuple_fun.
-  prove_refinement_match_letRecM_l.
-  - exact (fun m1 rec m2 => returnM (transMbox m1 m2, bvAdd 64 rec (mbox_len_spec m2))).
-  unfold mbox_len_spec.
-  (* Set Ltac Profiling. *)
-  time "mbox_len_spec_ref" prove_refinement.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-  all: try rewrite bvAdd_id_r; try rewrite bvAdd_id_l; try reflexivity.
-  - destruct a2; simpl in e_either; inversion e_either.
-    repeat rewrite transMbox_Mbox_nil_r. rewrite bvAdd_id_r. reflexivity.
-  - destruct a2; simpl in e_either; inversion e_either.
-    repeat rewrite transMbox_Mbox_nil_r. simpl.
-    rewrite bvAdd_assoc. rewrite (bvAdd_comm _ v0). reflexivity.
-  - repeat rewrite transMbox_Mbox_nil_r. reflexivity.
-Time Qed.
-
-
-Definition mbox_copy_precond : Mbox -> Prop :=
-  Mbox__rec (fun _ => Prop) True (fun strt len _ _ _ =>
-    isBvslt 64 (intToBv 64 0) strt /\ isBvule 64 strt (intToBv 64 128) /\
-    isBvule 64 len (bvSub 64 (intToBv 64 128) strt)).
-
-(* This proof takes a bit to complete. Since we're also going to prove spec_ref,
-   we can prove no-errors faster using that proof (see below) *)
-(* Lemma no_errors_mbox_copy *)
-(*   : refinesFun mbox_copy (fun m => assumingM (mbox_copy_precond m) noErrorsSpec). *)
-(* Proof. *)
-(*   unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec. *)
-(*   unfold mbox_copy_precond, noErrorsSpec. *)
-(*   (* Yikes! The below functions may or may not be defined depending on what *)
-(*      machine compiled mbox.bc *) *)
-(*   try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64. *)
-(*   try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk. *)
-(*   Set Printing Depth 1000. *)
-(*   time "no_errors_mbox_copy" prove_refinement with NoRewrite. *)
-(*   all: try assumption. *)
-(*   - rewrite e_assuming0 in e_maybe. *)
-(*     discriminate e_maybe. *)
-(*   - rewrite e_assuming1 in e_maybe0. *)
-(*     discriminate e_maybe0. *)
-(*   - rewrite a in e_maybe1. *)
-(*     discriminate e_maybe1. *)
-(*   - rewrite e_assuming1 in e_maybe2. *)
-(*     discriminate e_maybe2. *)
-(*   - rewrite <- e_assuming in e_if. *)
-(*     vm_compute in e_if; discriminate e_if. *)
-(*   - rewrite <- isBvult_to_isBvslt_pos in e_if. *)
-(*     + rewrite e_assuming0 in e_if. *)
-(*       vm_compute in e_if; discriminate e_if. *)
-(*     + reflexivity. *)
-(*     + apply isBvslt_to_isBvsle. *)
-(*       assumption. *)
-(* Time Qed. *)
-
-Definition empty_mbox_d := genBVVec 64 (intToBv 64 128) (bitvector 8) (fun i _ => bvNat 8 0).
-
-(* TODO give this a better name and explain what it does *)
-Definition conjSliceBVVec (strt len : bitvector 64) pf0 pf1 d0 d1 : BVVec 64 bv64_128 (bitvector 8) :=
-  updSliceBVVec 64 (intToBv 64 128) _ d0 strt len
-    (sliceBVVec 64 (intToBv 64 128) _ strt len pf0 pf1 d1).
-
-(* Given a `start`, `len`, and `dat` of a single Mbox, return an mbox chain consisting of
-   a single mbox with `id` 0,  the given `start` and `len`, and the given `dat` with the
-   range 0 to `start` zeroed out. *)
-Definition mbox_copy_spec_cons strt len m d : CompM (Mbox * Mbox) :=
-  assumingM (isBvslt 64 (intToBv 64 0) strt)
-    (forallM (fun pf0 : isBvule 64 strt (intToBv 64 128) =>
-      (forallM (fun pf1 : isBvule 64 len (bvSub 64 (intToBv 64 128) strt) =>
-        returnM (Mbox_cons strt len m
-                           (conjSliceBVVec strt len pf0 pf1 d d),
-                (Mbox_cons strt len Mbox_nil
-                           (conjSliceBVVec strt len pf0 pf1 empty_mbox_d d))))))).
-
-Definition mbox_copy_spec : Mbox -> CompM (Mbox * Mbox) :=
-  Mbox__rec (fun _ => CompM  (Mbox * Mbox)) (returnM (Mbox_nil, Mbox_nil))
-          (fun strt len m _ d => mbox_copy_spec_cons strt len m d).
-
-Lemma eithers2_either {A B C} (f: A -> C) (g: B -> C) e :
-  eithers _ (FunsTo_Cons _ _ f (FunsTo_Cons _ _ g (FunsTo_Nil _))) e =
-  either _ _ _ f g e.
-Proof.
-  destruct e; reflexivity.
-Qed.
-
-Lemma mbox_copy_spec_ref : refinesFun mbox_copy mbox_copy_spec.
-Proof.
-  unfold mbox_copy, mbox_copy__tuple_fun, mboxNewSpec.
-  unfold mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d.
-  (* Yikes! The below functions may or may not be defined depending on what
-     machine compiled mbox.bc *)
-  try unfold llvm__x2ememcpy__x2ep0i8__x2ep0i8__x2ei64.
-  try unfold llvm__x2eobjectsize__x2ei64__x2ep0i8, __memcpy_chk.
-  Set Printing Depth 1000.
-  (* Expect this to take on the order of 15 seconds, removing the `NoRewrite`
-     adds another 5 seconds and only simplifies the proof in the one noted spot *)
-  (* Set Ltac Profiling. *)
-  time "mbox_copy_spec_ref" prove_refinement with NoRewrite.
-  (* Show Ltac Profile. Reset Ltac Profile. *)
-  all: try discriminate e_either.
-  - destruct a; simpl in e_either; inversion e_either. reflexivity.
-  - simpl in e_either0. discriminate e_either0.
-  - destruct a; simpl in e_either; inversion e_either. simpl.
-    apply refinesM_assumingM_r; intro.
-    apply refinesM_forallM_r; intro.
-    unfold isBvule in a2.
-    rewrite <- H0 in e_maybe; simpl in e_maybe.
-    rewrite a2 in e_maybe. simpl in e_maybe. discriminate e_maybe.
-  - destruct a; simpl in e_either; inversion e_either. simpl.
-    apply refinesM_assumingM_r; intro.
-    apply refinesM_forallM_r; intro.
-    apply refinesM_forallM_r; intro.
-    rewrite <- H0 in e_maybe0. simpl in e_maybe0.
-    unfold isBvule in a4; rewrite a4 in e_maybe0.
-    simpl in e_maybe0. discriminate e_maybe0.
-  - destruct a; simpl in e_either; inversion e_either. simpl.
-    apply refinesM_assumingM_r; intro.
-    apply refinesM_forallM_r; intro.
-    apply refinesM_forallM_r; intro.
-    rewrite <- H0 in e_maybe1. simpl in e_maybe1.
-    unfold isBvule in a4. rewrite a4 in e_maybe1.
-    simpl in e_maybe1. discriminate e_maybe1.
-  - destruct a; simpl in e_either; inversion e_either. simpl.
-    apply refinesM_assumingM_r; intro.
-    apply refinesM_forallM_r; intro.
-    apply refinesM_forallM_r; intro.
-    rewrite <- H0 in e_maybe2. simpl in e_maybe2.
-    unfold isBvule in a6. rewrite a6 in e_maybe2.
-    simpl in e_maybe2. discriminate e_maybe2.
-  - destruct a; simpl in e_either; inversion e_either. simpl.
-    prove_refinement with NoRewrite.
-    subst a0. simpl. repeat rewrite transMbox_Mbox_nil_r.
-    destruct a1; simpl in e_either0; inversion e_either0.
-    simpl. unfold conjSliceBVVec.
-    replace a4 with e_forall; [ replace a5 with e_forall0;
-                                [ reflexivity | ] | ];
-    apply BoolDecidableEqDepSet.UIP.
-  - elimtype False; apply (not_isBvslt_bvsmin _ _ e_if).
-  - elimtype False; apply (not_isBvslt_bvsmax _ _ e_if).
-Time Qed.
-
-Lemma no_errors_mbox_copy
-  : refinesFun mbox_copy (fun m => assumingM (mbox_copy_precond m) noErrorsSpec).
-Proof.
-  rewrite mbox_copy_spec_ref.
-  unfold mbox_copy_spec, mbox_copy_spec_cons, mbox_copy_precond, noErrorsSpec.
-  intro; apply refinesM_assumingM_r; intro e_assuming.
-  induction a; simpl in *.
-  all: repeat prove_refinement.
-Qed.
-
-(* Add `mbox_copy_spec_ref` to the hint database. Unfortunately, Coq will not unfold refinesFun
-   and mbox_copy_spec when rewriting, and the only workaround I know right now is this :/ *)
-Definition mbox_copy_spec_ref' : ltac:(let tp := type of mbox_copy_spec_ref in
-                                       let tp' := eval unfold refinesFun, mbox_copy_spec, mbox_copy_spec_cons, empty_mbox_d in tp
-                                        in exact tp') := mbox_copy_spec_ref.
-Hint Rewrite mbox_copy_spec_ref' : refinement_proofs.
