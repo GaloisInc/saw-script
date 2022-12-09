@@ -141,8 +141,7 @@ rename ident = IdentSpecialTreatment
   }
 
 -- Replace any occurrences of identifier applied to @n@ arguments with the
--- supplied Coq term. If @n=0@ and the supplied Coq term is an identifier then
--- this is the same as 'rename'.
+-- supplied Coq term
 replaceDropArgs :: Int -> Coq.Term -> IdentSpecialTreatment
 replaceDropArgs n term = IdentSpecialTreatment
   { atDefSite = DefSkip
@@ -163,9 +162,32 @@ skip = IdentSpecialTreatment
   , atUseSite = UsePreserve
   }
 
+-- | The Coq built-in @Datatypes@ module
+datatypesModule :: ModuleName
+datatypesModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Init.Datatypes
+  mkModuleName ["Datatypes", "Init", "Coq"]
+
+-- | The Coq built-in @Logic@ module
+logicModule :: ModuleName
+logicModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Init.Logic
+  mkModuleName ["Logic", "Init", "Coq"]
+
+-- | The Coq built-in @String@ module.
+stringModule :: ModuleName
+stringModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Strings.String
+  mkModuleName ["String", "Strings", "Coq"]
+
+-- | The @SAWCoreScaffolding@ module
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
+-- | The @CompM@ module
 compMModule :: ModuleName
 compMModule = mkModuleName ["CompM"]
 
@@ -265,25 +287,25 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Boolean
   ++
-  [ ("and",           mapsTo sawDefinitionsModule "and")
+  [ ("Bool",          mapsTo datatypesModule "bool")
+  , ("True",          mapsTo datatypesModule "true")
+  , ("False",         mapsTo datatypesModule "false")
+  , ("and",           mapsTo datatypesModule "andb")
   , ("and__eq",       mapsTo sawDefinitionsModule "and__eq")
-  , ("Bool",          mapsTo sawDefinitionsModule "Bool")
+  , ("or",            mapsTo datatypesModule "orb")
+  , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
+  , ("xor",           mapsTo datatypesModule "xorb")
+  , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
+  , ("not",           mapsTo datatypesModule "negb")
+  , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
   , ("boolEq",        mapsTo sawDefinitionsModule "boolEq")
   , ("boolEq__eq",    mapsTo sawDefinitionsModule "boolEq__eq")
-  , ("False",         mapsTo sawDefinitionsModule "false")
   , ("ite",           mapsTo sawDefinitionsModule "ite")
   , ("iteDep",        mapsTo sawDefinitionsModule "iteDep")
   , ("iteDep_True",   mapsTo sawDefinitionsModule "iteDep_True")
   , ("iteDep_False",  mapsTo sawDefinitionsModule "iteDep_False")
   , ("ite_bit",       skip) -- FIXME: change this
   , ("ite_eq_iteDep", mapsTo sawDefinitionsModule "ite_eq_iteDep")
-  , ("not",           mapsTo sawDefinitionsModule "not")
-  , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
-  , ("or",            mapsTo sawDefinitionsModule "or")
-  , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
-  , ("True",          mapsTo sawDefinitionsModule "true")
-  , ("xor",           mapsTo sawDefinitionsModule "xor")
-  , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
   ]
 
   -- Pairs
@@ -297,9 +319,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Equality
   ++
-  [ ("Eq",      mapsTo sawDefinitionsModule "Eq")
+  [ ("Eq",      mapsToExpl logicModule "eq")
   , ("Eq__rec", mapsTo sawDefinitionsModule "Eq__rec")
-  , ("Refl",    mapsTo sawDefinitionsModule "Refl")
+  , ("Refl",    mapsToExpl logicModule "eq_refl")
   ]
 
   -- Nat le
@@ -312,20 +334,20 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Strings
   ++
-  [ ("String", mapsTo sawDefinitionsModule "String")
+  [ ("String", mapsTo stringModule "string")
   , ("equalString", mapsTo sawDefinitionsModule "equalString")
   , ("appendString", mapsTo sawDefinitionsModule "appendString")
   ]
 
   -- Utility functions
   ++
-  [ ("id", mapsTo sawDefinitionsModule "id")
+  [ ("id", mapsTo datatypesModule "id")
   ]
 
   -- Natural numbers
   ++
   [ ("divModNat", mapsTo sawDefinitionsModule "divModNat")
-  , ("Nat",       mapsTo sawDefinitionsModule "Nat")
+  , ("Nat",       mapsTo datatypesModule "nat")
   , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
   , ("Zero",      mapsTo sawCoreScaffoldingModule   "Zero")
   , ("Succ",      mapsTo sawCoreScaffoldingModule   "Succ")
@@ -508,7 +530,7 @@ escapeIdent str
 
 zipSnippet :: String
 zipSnippet = [i|
-Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
+Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   : Vec (minNat m n) (a * b) :=
   match
     xs in Vector.t _ m'
