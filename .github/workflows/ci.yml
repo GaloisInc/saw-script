@@ -277,11 +277,15 @@ jobs:
 
       - uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.12.x
+          ocaml-compiler: 4.14.x
 
       - run: opam repo add coq-released https://coq.inria.fr/opam/released
 
-      - run: opam install -y coq=8.13.2 coq-bits=1.1.0
+      - run: opam install -y coq=8.15.2 coq-bits=1.1.0
+
+        # If you change the entree-specs commit below, make sure you update the
+        # documentation in saw-core-coq/README.md accordingly.
+      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#b011f29680fdde87489bc06ae98bfff0f97795b3
 
       # FIXME: the following steps generate Coq libraries for the SAW core to
       # Coq translator and builds them; if we do other Coq tests, these steps
