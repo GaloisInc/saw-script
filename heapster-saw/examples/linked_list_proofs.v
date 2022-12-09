@@ -312,7 +312,7 @@ Section any.
               (returnM (intToBv 64 0))
               (fun y l' rec =>
                  f y >>= fun call_ret_val =>
-                  if not (bvEq 64 call_ret_val (intToBv 64 0))
+                  if negb (bvEq 64 call_ret_val (intToBv 64 0))
                   then returnM (intToBv 64 1) else rec).
 
   Lemma any_fun_ref : refinesFun any any_fun.

@@ -89,6 +89,6 @@ Proof.
   all: try rewrite IHD; try rewrite IHD1; try rewrite IHD2; try rewrite H; try easy.
   (* All that remains is the IRT_BVVec case, which requires functional extensionality
      and the fact that genBVVec and atBVVec define an isomorphism *)
-  intros; rewrite <- (gen_at_BVVec _ _ _ u).
+  etransitivity; [ | apply gen_at_BVVec ].
   f_equal; repeat (apply functional_extensionality_dep; intro); eauto.
 Qed.
