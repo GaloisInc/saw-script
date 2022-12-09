@@ -53,6 +53,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Applicative hiding (empty)
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.Identity hiding (ap)
 import Control.Monad.State hiding (ap)
 import Control.Monad.Reader hiding (ap)
@@ -905,45 +906,38 @@ data PermEnv = PermEnv {
 -- * Template Haskell–generated instances
 ----------------------------------------------------------------------
 
-instance NuMatchingAny1 PermExpr where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 ValuePerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 VarAndPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 ExprAndPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 DistPerms where
-  nuMatchingAny1Proof = nuMatchingProof
-
-$(mkNuMatching [t| forall a . BVFactor a |])
-$(mkNuMatching [t| RWModality |])
-$(mkNuMatching [t| forall b args w. NamedShapeBody b args w |])
-$(mkNuMatching [t| forall b args w. NamedShape b args w |])
-$(mkNuMatching [t| forall w . LLVMFieldShape w |])
-$(mkNuMatching [t| forall a . PermExpr a |])
-$(mkNuMatching [t| forall w. BVRange w |])
-$(mkNuMatching [t| forall a. MbRangeForType a |])
-$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])
-$(mkNuMatching [t| forall w. BVProp w |])
-$(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
-$(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
-$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
-$(mkNuMatching [t| forall w . LLVMBlockPerm w |])
-$(mkNuMatching [t| forall ns. NameSortRepr ns |])
-$(mkNuMatching [t| forall ns args a. NameReachConstr ns args a |])
-$(mkNuMatching [t| forall ns args a. NamedPermName ns args a |])
-$(mkNuMatching [t| forall a. PermOffset a |])
-$(mkNuMatching [t| forall ghosts args gouts ret. FunPerm ghosts args gouts ret |])
-$(mkNuMatching [t| forall a . AtomicPerm a |])
-$(mkNuMatching [t| forall a . ValuePerm a |])
--- $(mkNuMatching [t| forall as. ValuePerms as |])
-$(mkNuMatching [t| forall a . VarAndPerm a |])
-$(mkNuMatching [t| forall a . ExprAndPerm a |])
+-- Many of these types are mutually recursive. Moreover, Template Haskell
+-- declaration splices strictly separate top-level groups, so if we were to
+-- write each $(mkNuMatching [t| ... |]) splice individually, the splices
+-- involving mutually recursive types would not typecheck. As a result, we
+-- must put everything into a single splice so that it forms a single top-level
+-- group.
+$(concatMapM mkNuMatching
+  [ [t| forall a . BVFactor a |]
+  , [t| RWModality |]
+  , [t| forall b args w. NamedShapeBody b args w |]
+  , [t| forall b args w. NamedShape b args w |]
+  , [t| forall w . LLVMFieldShape w |]
+  , [t| forall a . PermExpr a |]
+  , [t| forall w. BVRange w |]
+  , [t| forall a. MbRangeForType a |]
+  , [t| forall a. NuMatching a => SomeTypedMb a |]
+  , [t| forall w. BVProp w |]
+  , [t| forall w sz . LLVMFieldPerm w sz |]
+  , [t| forall w . LLVMArrayBorrow w |]
+  , [t| forall w . LLVMArrayPerm w |]
+  , [t| forall w . LLVMBlockPerm w |]
+  , [t| forall ns. NameSortRepr ns |]
+  , [t| forall ns args a. NameReachConstr ns args a |]
+  , [t| forall ns args a. NamedPermName ns args a |]
+  , [t| forall a. PermOffset a |]
+  , [t| forall ghosts args gouts ret. FunPerm ghosts args gouts ret |]
+  , [t| forall a . AtomicPerm a |]
+  , [t| forall a . ValuePerm a |]
+  -- , [t| forall as. ValuePerms as |]
+  , [t| forall a . VarAndPerm a |]
+  , [t| forall a . ExprAndPerm a |]
+  ])
 
 $(mkNuMatching [t| forall w . LLVMArrayIndex w |])
 $(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
@@ -2214,7 +2208,7 @@ mbRangeFTDelete
     bvRangeDelete rng1 rng2
 mbRangeFTDelete mb_rng _ = [mb_rng]
 
--- | Delete all ranges in any of a list of ranges from 
+-- | Delete all ranges in any of a list of ranges from
 mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
                     [MbRangeForType a]
 mbRangeFTsDelete rngs_l rngs_r =

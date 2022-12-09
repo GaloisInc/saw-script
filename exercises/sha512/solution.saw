@@ -1,0 +1,463 @@
+/* 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
+
+import "SHA512.cry";
+
+include "../common/helpers.saw";
+
+
+// Load LLVM bytecode
+m <- llvm_load_module "sha512.bc";
+
+
+/*
+ * SHA512 defines
+ */
+// Size of a block in bytes
+let SHA512_CBLOCK = 128;
+
+// Length of message digest in bytes
+let SHA512_DIGEST_LENGTH = 64;
+
+// Size of the SHA512 context struct
+let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Specifications
+
+/*
+ * This section of the SAW script contains specifications of the functions that
+ * SAW will verify.  Each specification can be broken down into 3 components:
+ * preconditions, a function call description, and postconditions.
+ *
+ * A precondition is a predicate that must be true prior to the application of
+ * a function for the specification's postcondition to hold.  Preconditions are
+ * typically restrictions on function inputs or global state.  For example, a
+ * function that returns the first element of an array might have a
+ * precondition that the array is not empty.  A specification makes no
+ * guarantees about how the function acts when the precondition is violated.
+ * In a SAW specification, preconditions are the statements that come before a
+ * function call description.  If a function has no preconditions we say that
+ * the precondition is "true", meaning that the postcondition holds for all
+ * possible inputs and program states.
+ *
+ * A function call description tells SAW how to call the function being
+ * specified.  It has the form:
+ *     llvm_execute_func [<list of arguments>]
+ * These arguments are typically from the preconditions, specification inputs,
+ * global variables, and literals.  SAW does not actually execute the function,
+ * but rather uses symbolic execution to examine all possible executions
+ * through the function, subject to precondition constraints.  For example,
+ * if a precondition states that a variable `sha_ptr` is a pointer to an
+ * `sha512_state_st` struct:
+ *     ctx_ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+ * And the function call description takes `sha_ptr` as an input:
+ *     llvm_execute_func [sha_ptr];
+ * Then SAW will reason about the function over all possible `sha512_state_st`
+ * structs.  We call `sha_ptr` a symbol because SAW does not evaluate it, but
+ * rather treats it as the set of all possible `sha512_state_st` structs.
+ *
+ * A postcondition is a predicate that must be true following the application
+ * of a function, assuming the function's precondition held.  From a logic
+ * perspective, you can think of this as:
+ *     (<conjunction of preconditions> /\ <function application>) ->
+ *     <conjunction of postconditions>
+ * where "/\" is logical AND and "->" is logical implication.  If a SAW proof
+ * succeeds, then SAW guarantees that the postconditions hold following function
+ * application, so long as the function's preconditions held just prior to the
+ * function's application.  In a SAW specification, postconditions are the
+ * statements that come after a function call description.  If a function has
+ * no postconditions, then we say that the postcondition is "true", meaning
+ * that the specification makes no guarantees about the function's behavior.
+ */
+
+/*
+ * Specifications of functions Sigma0, Sigma1, sigma0, sigma1, and Ch
+ */
+let Sigma0_spec = do {
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ S0 x }});
+};
+
+let Sigma1_spec = do {
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ S1 x }});
+};
+
+let sigma0_spec = do {
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ s0 x }});
+};
+
+let sigma1_spec = do {
+  x <- llvm_fresh_var "x" i64;
+  llvm_execute_func [llvm_term x];
+  llvm_return (llvm_term {{ s1 x }});
+};
+
+let Ch_spec = do {
+  x <- llvm_fresh_var "x" i64;
+  y <- llvm_fresh_var "y" i64;
+  z <- llvm_fresh_var "z" i64;
+  llvm_execute_func [llvm_term x, llvm_term y, llvm_term z];
+  llvm_return (llvm_term {{ Ch x y z }});
+};
+
+/*
+ * Specification of block function for SHA512
+ */
+let sha512_block_data_order_spec = do {
+  // Precondition: `state_ptr` points to an array of 8 64 bit integers
+  (state, state_ptr) <- ptr_to_fresh "state" (llvm_array 8 i64);
+
+  // Precondition: `data_ptr` points to a const message block
+  (data, data_ptr) <- ptr_to_fresh_readonly "data" (llvm_array SHA512_CBLOCK i8);
+
+  // Call function with `state_ptr`, `data_ptr`, and the value `1`
+  llvm_execute_func [state_ptr, data_ptr, llvm_term {{ 1 : [64] }}];
+
+  // Postcondition: The data pointed to by `state_ptr` is equivalent to the
+  // return value of the processBlock_Common Cryptol spec function applied to `state`
+  // and `data`.
+  llvm_points_to state_ptr (llvm_term {{ processBlock_Common state (split (join data)) }});
+};
+
+
+/*
+ * Helpers for specifying the SHA512 structs
+ */
+/*
+ * The next functions all specify structs used in the C SHA implementation.
+ * Most of the statements in these are of the form:
+ *    llvm_points_to (llvm_field ptr "name") (llvm_term {{ term }})
+ * which indicates that the field `name` of the struct pointed to by `ptr`
+ * contains the value `term`.
+ * All statements that do not match these two forms are documented inline
+ */
+
+// Specify the sha512_state_st struct from a SHAState
+let points_to_sha512_state_st_common ptr (h, sz, block, n) num = do {
+  llvm_points_to (llvm_field ptr "h") (llvm_term h);
+
+  // Specify `sha512_state_st.Nl` and `sha512_state_st.Nh` contain `sz`
+  llvm_points_to_at_type (llvm_field ptr "Nl") i128 (llvm_term sz);
+
+  if eval_bool {{ `num == 0 }} then do {
+    // Do not specify anything about `sha512_state_st.p`
+    return ();
+  } else do {
+    // Specify that the first `num` bytes of `sha512_state_st.p` match the
+    // first `num` bits of `state.block`.
+    // Untyped check because the size of `sha512_state_st.p` does not match
+    // the size of (take`{num} state.block) unless `num` == `SHA512_CBLOCK`
+    llvm_points_to_untyped (llvm_field ptr "p") (llvm_term block);
+  };
+
+  llvm_points_to (llvm_field ptr "num") (llvm_term n);
+  llvm_points_to (llvm_field ptr "md_len") (llvm_term {{ `SHA512_DIGEST_LENGTH : [32] }});
+};
+
+let pointer_to_fresh_sha512_state_st name n = do {
+  // Hash value
+  h <- llvm_fresh_var (str_concat name ".h") (llvm_array 8 i64);
+  // Message block
+  block <- if eval_bool {{ `n == 0 }} then do {
+    // Do not specify anything about `sha512_state_st.p`
+    return {{ [] : [0][8] }};
+  } else do {
+    llvm_fresh_var (str_concat name ".block") (llvm_array n i8);
+  };
+  // Size
+  sz <- llvm_fresh_var (str_concat name ".sz") i128;
+  // Build SHAState, padding `block` with zeros to fit
+  let state = {{ { h = h, block = (block # zero) : [SHA512_CBLOCK][8], n = `n : [32], sz = sz } }};
+
+  // `ptr` is a pointer to a `sha512_state_st` struct
+  ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+  points_to_sha512_state_st_common ptr (h, sz, block, {{ `n : [32]}}) n;
+
+  return (state, ptr);
+};
+
+// Specify the sha512_state_st struct from a SHAState
+let points_to_sha512_state_st ptr state num = do {
+ points_to_sha512_state_st_common
+   ptr
+   ({{ state.h }}, {{ state.sz }}, {{ take`{num} state.block }}, {{ state.n }}) num;
+};
+
+
+/*
+ * Specifications of SHA512_Init, SHA512_Update, SHA512_Final,
+ * and SHA512.
+ */
+let SHA512_Init_spec = do {
+  // Precondition: `sha_ptr` is a pointer to a `sha512_state_st` struct
+  sha_ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+
+  // Call function with `sha_ptr`
+  llvm_execute_func [sha_ptr];
+
+  // Postcondition: `sha_ptr` holds an initialized SHA512 context
+  points_to_sha512_state_st
+    sha_ptr
+    {{ { h = SHAH0, block = zero : [SHA512_CBLOCK][8], n = 0 : [32], sz = 0 : [128] } }}
+    0;
+
+  // Postcondition: The function returns 1
+  llvm_return (llvm_term {{ 1 : [32] }});
+};
+
+let SHA512_Update_spec num len = do {
+  // Precondition: `sha_ptr` is a pointer to a `sha512_state_st` struct
+  // Precondition: `sha512_ctx` is a fresh Cryptol SHAState
+  // Precondition: `sha_ptr` matches `sha512_ctx`.  The message blocks
+  // of the two must only match up to the first `num` bits.
+  (sha512_ctx, sha_ptr) <- pointer_to_fresh_sha512_state_st "sha512_ctx" num;
+
+  // Precondition: `data` is a fresh array of `len` bytes, and `data_ptr`
+  // points to `data`.
+  (data, data_ptr) <- ptr_to_fresh_readonly "data" (llvm_array len i8);
+
+  // Call function with `sha_ptr`, `data_ptr`, and `len` as arguments.
+  llvm_execute_func [sha_ptr, data_ptr, llvm_term {{ `len : [64] }}];
+
+  // Postcondition: The context `sha_ptr` points to matches the result
+  // of executing the cryptol function `SHAUpdate` on `sha512_ctx` and
+  // `data`, with the exception of the message block, which must only match up
+  // to the first `(num + len) % SHA512_CBLOCK` bytes.  This is because the
+  // C implementation does not clear the unused bytes of message block, and
+  // therefore the tail end of the block contains garbage.
+  points_to_sha512_state_st
+    sha_ptr
+    {{ SHAUpdate sha512_ctx data }} (eval_size {| (num + len) % SHA512_CBLOCK |});
+
+  // Postcondition: The function returns 1
+  llvm_return (llvm_term {{ 1 : [32] }});
+};
+
+let SHA512_Final_spec num = do {
+  // Precondition: `out_ptr` is allocated and points to an array
+  // of `SHA512_DIGEST_LENGTH` bytes.
+  out_ptr <- llvm_alloc (llvm_array SHA512_DIGEST_LENGTH i8);
+
+  // Precondition: `sha_ptr` is a pointer to a `sha512_state_st` struct
+  // Precondition: `sha512_ctx` is a fresh Cryptol SHAState
+  // Precondition: `sha_ptr` matches `sha512_ctx`.  The message blocks
+  // of the two must only match up to the first `num` bits.
+  (sha512_ctx, sha_ptr) <- pointer_to_fresh_sha512_state_st "sha512_ctx" num;
+  
+  // Call function with `out_ptr`, and `sha_ptr`.
+  llvm_execute_func [out_ptr, sha_ptr];
+  
+  // Postcondition: The data pointed to by `out_ptr` matches the message
+  // digest returned by the Cryptol function `SHAFinal`.  The reverses,
+  // splits, and joins transform the Cryptol function's big endian output to
+  // little endian.
+  llvm_points_to out_ptr (llvm_term {{ split`{SHA512_DIGEST_LENGTH} (SHAFinal sha512_ctx) }});
+
+  // Postcondition: The function returns 1
+  llvm_return (llvm_term {{ 1 : [32] }});
+};
+
+let SHA512_spec len = do {
+  // Precondition: `data` is a fresh const array of `len` bytes, and `data_ptr`
+  // points to `data`.
+  (data, data_ptr) <- ptr_to_fresh_readonly "data" (llvm_array len i8);
+
+  // Precondition: `out_ptr` is allocated and points to an array
+  // of `SHA512_DIGEST_LENGTH` bytes.
+  out_ptr <- llvm_alloc (llvm_array SHA512_DIGEST_LENGTH i8);
+    
+  // Call function with arguments data_ptr, len, and out_ptr.
+  llvm_execute_func
+    [ data_ptr
+    , llvm_term {{ `len : [64] }}
+    , out_ptr
+    ];
+  
+  // Postcondition: The data pointed to by `out_ptr` matches the message
+  // digest returned by the Cryptol function `SHAImp`.  The reverses,
+  // splits, and joins transform the Cryptol function's big endian output to
+  // little endian.
+  llvm_points_to out_ptr (llvm_term {{ split`{SHA512_DIGEST_LENGTH} (SHAImp data) }});
+
+  // Postcondition: The function returns the pointer `out_ptr`.
+  llvm_return out_ptr;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Proof commands
+
+// Verify functions Sigma0, Sigma1, sigma0, sigma1, and Ch
+// satisfy their specifications
+
+Sigma0_ov <- llvm_verify m "Sigma0"
+  []
+  true
+  Sigma0_spec
+  (w4_unint_z3 []);
+
+Sigma1_ov <- llvm_verify m "Sigma1"
+  []
+  true
+  Sigma1_spec
+  (w4_unint_z3 []);
+
+sigma0_ov <- llvm_verify m "sigma0"
+  []
+  true
+  sigma0_spec
+  (w4_unint_z3 []);
+
+sigma1_ov <- llvm_verify m "sigma1"
+  []
+  true
+  sigma1_spec
+  (w4_unint_z3 []);
+
+Ch_ov <- llvm_verify m "Ch"
+  []
+  true
+  Ch_spec
+  (w4_unint_z3 []);
+
+// Verify the block data function satisfies the bounded
+// `sha512_block_data_order_spec` specification
+
+sha512_block_data_order_ov <- llvm_verify m "sha512_block_data_order"
+  [Sigma0_ov, Sigma1_ov, sigma0_ov, sigma1_ov, Ch_ov]
+  true
+  sha512_block_data_order_spec
+  (w4_unint_z3 ["S0", "S1", "s0", "s1", "Ch"]);
+
+
+// Verify the `SHA512_Init` C function satisfies the `SHA512_Init_spec`
+// specification
+SHA512_Init_ov <- llvm_verify m "SHA512_Init"
+  []
+  true
+  SHA512_Init_spec
+  (w4_unint_z3 []);
+
+
+// Verify the `SHA512_Update` C function satisfies the
+// `SHA512_Update_spec` specification.
+// There are 3 cases to consider to ensure the proof covers all possible code
+// paths through the update function
+
+SHA512_Update_0_240_ov <- llvm_verify m "SHA512_Update"
+  [sha512_block_data_order_ov]
+  true
+  // num=0, len=240 covers the case with one call to the block function,
+  // on one block from data, and the rest of data copied in c->data
+  (SHA512_Update_spec 0 240)
+  (w4_unint_z3 ["processBlock_Common"]);
+SHA512_Update_0_127_ov <- llvm_verify m "SHA512_Update"
+  [sha512_block_data_order_ov]
+  true
+  // num=0, len=127 covers the case without any calls to the block function,
+  // and data copied in c->data
+  (SHA512_Update_spec 0 127)
+  (w4_unint_z3 ["processBlock_Common"]);
+SHA512_Update_127_241_ov <- llvm_verify m "SHA512_Update"
+  [sha512_block_data_order_ov]
+  true
+  // num=127, len=241 covers the case with two calls to the block function,
+  // the first one on c->data, the second one on one block from data,
+  // and the rest of data copied in c->data
+  (SHA512_Update_spec 127 241)
+  (w4_unint_z3 ["processBlock_Common"]);
+
+
+// Verify the `SHA512_Final` C function satisfies the
+// `SHA512_Final_spec` specification.
+// There are 2 cases to consider to ensure the proof covers all possible code
+// paths through the update function
+
+SHA512_Final_111_ov <- llvm_verify m "SHA512_Final"
+  [sha512_block_data_order_ov]
+  true
+  // num=111 covers the case with one call to the block function
+  (SHA512_Final_spec 111)
+  (w4_unint_z3 ["processBlock_Common"]);
+SHA512_Final_112_ov <- llvm_verify m "SHA512_Final"
+  [sha512_block_data_order_ov]
+  true
+  // num=112 covers the case with two calls to the block function
+  (SHA512_Final_spec 112)
+  (w4_unint_z3 ["processBlock_Common"]);
+
+
+// Verify the `SHA512` C function satisfies the `SHA512_spec`
+// specification
+llvm_verify m "SHA512"
+  [SHA512_Init_ov, SHA512_Update_0_240_ov, SHA512_Final_112_ov]
+  true
+  (SHA512_spec 240)
+  (w4_unint_z3 ["processBlock_Common"]);
+
+
+let quick_check = true;
+let target_num = 128;
+
+if quick_check then do {
+  return ();
+} else do {
+  // this covers the case with all lengths given a target_num.
+  print (str_concat "Verifying SHA512_Update at target_num=" (show target_num));
+  let verify_update_at_len len = do {
+    print (str_concat "Verifying SHA512_Update at len=" (show len));
+    llvm_verify m "SHA512_Update"
+        [sha512_block_data_order_ov]
+        true
+        (SHA512_Update_spec target_num len)
+        (w4_unint_z3 ["processBlock_Common"]);
+  };
+  // Given a fixed `num`, the `lens` cover all possible parameters especially below cases:
+  // When len = (SHA512_CBLOCK - 1), this covers the case without any calls to the block function, 
+  //   and data copied in c->data.
+  // When len = (SHA512_CBLOCK + 1), this covers the case with one call to the block function, 
+  //   on one block from data, and the rest of data copied in c->data.
+  // When len = (SHA512_CBLOCK + 1), this covers the case with two calls to the block function,
+  //   the first one on c->data,  the second one on one block from data, and the rest of data copied in c->data.
+  // Note: when num = 0, 'len = 256' check fails due to 'sha512_block_data_order' limit.
+  if eval_bool {{ `target_num == 0 }} then do {
+    lens <- for (eval_list {{ [0 .. (2 * SHA512_CBLOCK - 1)] : [2 * SHA512_CBLOCK][64] }})
+      (\x -> (return (eval_int x)) : (TopLevel Int));
+    for lens verify_update_at_len;
+  } else do {
+    lens <- for (eval_list {{ [0 .. (2 * SHA512_CBLOCK + 1 - target_num)] : [2 * SHA512_CBLOCK + 2 - target_num][64] }})
+      (\x -> (return (eval_int x)) : (TopLevel Int));
+    for lens verify_update_at_len;
+  };
+  return ();
+};
+
+// range of valid indices in the internal block ([0 .. (SHA512_CBLOCK - 1)])
+nums <- for (eval_list {{ [0 .. (SHA512_CBLOCK - 1)] : [SHA512_CBLOCK][64] }})
+  (\x -> (return (eval_int x)) : (TopLevel Int));
+
+if quick_check then do {
+  return ();
+} else do {
+  let verify_final_at_num num = do {
+    print (str_concat "Verifying SHA512_Final at num=" (show num));
+    llvm_verify m "SHA512_Final"
+      [sha512_block_data_order_ov]
+      true
+      (SHA512_Final_spec num)
+      (w4_unint_z3 ["processBlock_Common"]);
+  };
+  for nums verify_final_at_num;
+  return ();
+};
+
