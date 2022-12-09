@@ -164,15 +164,15 @@ Ltac spec_refines_sawLet_r :=
 (* bitvector (in)equality automation *)
 
 Lemma simpl_llvm_bool_eq (b : bool) :
-  not (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
+  negb (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
 Proof. destruct b; eauto. Qed.
 
 Definition simpl_llvm_bool_eq_IntroArg n (b1 b2 : bool) (goal : Prop) :
   IntroArg n (b1 = b2) (fun _ => goal) ->
-  IntroArg n (not (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
+  IntroArg n (negb (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
 Proof. rewrite simpl_llvm_bool_eq; eauto. Defined.
 
-#[local] Hint Extern 101 (IntroArg _ (not (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
+#[local] Hint Extern 101 (IntroArg _ (negb (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
   simple eapply simpl_llvm_bool_eq_IntroArg : refines.
 
 Polymorphic Lemma bvuleWithProof_not :
@@ -357,8 +357,7 @@ Lemma spec_refines_either_unfoldMbox_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
 Proof. eauto. Qed.
 
 Ltac eithers_unfoldMbox m :=
-  let m' := eval cbn [ SAWCoreScaffolding.fst SAWCoreScaffolding.snd
-                       Datatypes.fst Datatypes.snd projT1 ] in m in
+  let m' := eval cbn [ fst snd projT1 ] in m in
   lazymatch m' with
   | Mbox_nil =>
     simple apply spec_refines_either_unfoldMbox_nil_l
@@ -373,8 +372,7 @@ Ltac eithers_unfoldMbox m :=
          [ eithers_unfoldMbox Mbox_nil
          | eithers_unfoldMbox (Mbox_cons strt len m0 d) ];
          simpl foldMbox; cbn [ Mbox__rec Mbox_rect ] in *;
-         unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
-         cbn [ Datatypes.fst Datatypes.snd projT1 ];
+         cbn [ fst snd projT1 ];
          revert eq; apply (IntroArg_fold Destruct)
   end.
 

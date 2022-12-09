@@ -35,15 +35,15 @@ Import linked_list.
 (* bitvector (in)equality automation *)
 
 Lemma simpl_llvm_bool_eq (b : bool) :
-  not (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
+  negb (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
 Proof. destruct b; eauto. Qed.
 
 Definition simpl_llvm_bool_eq_IntroArg n (b1 b2 : bool) (goal : Prop) :
   IntroArg n (b1 = b2) (fun _ => goal) ->
-  IntroArg n (not (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
+  IntroArg n (negb (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
 Proof. rewrite simpl_llvm_bool_eq; eauto. Defined.
 
-#[local] Hint Extern 101 (IntroArg _ (not (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
+#[local] Hint Extern 101 (IntroArg _ (negb (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
   simple eapply simpl_llvm_bool_eq_IntroArg : refines.
 
 
@@ -69,8 +69,7 @@ Lemma spec_refines_either_unfoldList_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
 Proof. eauto. Qed.
 
 Ltac eithers_unfoldList A l :=
-  let l' := eval cbn [ SAWCoreScaffolding.fst SAWCoreScaffolding.snd
-                       Datatypes.fst Datatypes.snd projT1 ] in l in
+  let l' := eval cbn [ fst snd projT1 ] in l in
   lazymatch l' with
   | nil =>
     simple apply (spec_refines_either_unfoldList_nil_l _ _ _ _ _ _ _ _ _ A)
@@ -82,8 +81,7 @@ Ltac eithers_unfoldList A l :=
          destruct l' as [| a l0 ] eqn:eq;
          [ eithers_unfoldList A (@nil A) | eithers_unfoldList A (a :: l0) ];
          simpl foldList; cbn [ list_rect ] in *;
-         unfold SAWCoreScaffolding.fst, SAWCoreScaffolding.snd;
-         cbn [ Datatypes.fst Datatypes.snd projT1 ];
+         cbn [ fst snd projT1 ];
          revert eq; apply (IntroArg_fold Destruct)
   end.
 
