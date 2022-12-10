@@ -2310,7 +2310,7 @@ setMonadification sc cry_str saw_str =
      let (tp_to_check, macro) =
            case Monadify.monEnvLookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
              Just existing_macro -> (cry_saw_tp, existing_macro)
-             Nothing -> (cry_mon_tp, Monadify.argGlobalMacro cry_nmi saw_ident)
+             Nothing -> (cry_mon_tp, Monadify.argGlobalMacro cry_nmi saw_ident False)
      liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) tp_to_check
 
      -- Step 4: Add the generated macro

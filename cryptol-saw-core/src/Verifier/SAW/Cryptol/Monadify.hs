@@ -216,6 +216,10 @@ asTypedGlobalDef t =
 data SpecMParams tm = SpecMParams { specMEvType :: tm, specMStack :: tm }
                       deriving (Generic, Show)
 
+-- | Convert a 'SpecMParams' to a list of terms
+paramsToTerms :: SpecMParams tm -> [tm]
+paramsToTerms SpecMParams { specMEvType = ev, specMStack = stack } = [ev,stack]
+
 -- | The implicit argument version of 'SpecMParams'
 type HasSpecMParams = (?specMParams :: SpecMParams OpenTerm)
 
@@ -651,15 +655,22 @@ applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
                      MonTerm
 applyMonTermMulti = foldl applyMonTerm
 
--- | Build a 'MonTerm' from a global of a given argument type
-mkGlobalArgMonTerm :: HasSpecMParams => MonType -> Ident -> ArgMonTerm
-mkGlobalArgMonTerm tp ident = fromArgTerm tp (globalOpenTerm ident)
+-- | Build a 'MonTerm' from a global of a given argument type, applying it to
+-- the current 'SpecMParams' if the 'Bool' flag is 'True'
+mkGlobalArgMonTerm :: HasSpecMParams => MonType -> Ident -> Bool -> ArgMonTerm
+mkGlobalArgMonTerm tp ident params_p =
+  fromArgTerm tp (if params_p
+                  then applyGlobalOpenTerm ident (paramsToTerms ?specMParams)
+                  else globalOpenTerm ident)
 
--- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type
-mkSemiPureGlobalDefTerm :: HasSpecMParams => GlobalDef -> ArgMonTerm
-mkSemiPureGlobalDefTerm glob =
-  fromSemiPureTerm (monadifyType [] $
-                    globalDefType glob) (globalDefOpenTerm glob)
+-- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type, applying it to
+-- the current 'SpecMParams' if the 'Bool' flag is 'True'
+mkSemiPureGlobalDefTerm :: HasSpecMParams => GlobalDef -> Bool -> ArgMonTerm
+mkSemiPureGlobalDefTerm glob params_p =
+  fromSemiPureTerm (monadifyType [] $ globalDefType glob)
+  (if params_p
+   then applyOpenTermMulti (globalDefOpenTerm glob) (paramsToTerms ?specMParams)
+   else globalDefOpenTerm glob)
 
 -- | Build a 'MonTerm' from a constructor with the given 'PrimName'
 mkCtorArgMonTerm :: HasSpecMParams => PrimName Term -> ArgMonTerm
@@ -689,25 +700,30 @@ monMacro0 mtrm = MonMacro 0 (\_ _ -> return mtrm)
 -- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
 -- (See 'fromSemiPureTermFun'.) Because we can't get access to the type of the
 -- global until we apply the macro, we monadify its type at macro application
--- time.
-semiPureGlobalMacro :: Ident -> Ident -> MonMacro
-semiPureGlobalMacro from to =
+-- time. The 'Bool' flag indicates whether the current 'SpecMParams' should also
+-- be passed as the first two arguments to the "to" global.
+semiPureGlobalMacro :: Ident -> Ident -> Bool -> MonMacro
+semiPureGlobalMacro from to params_p =
   MonMacro 0 $ \glob args ->
   if globalDefName glob == ModuleIdentifier from && args == [] then
     return $ ArgMonTerm $
-    fromSemiPureTerm (monadifyType [] $ globalDefType glob) (globalOpenTerm to)
+    fromSemiPureTerm (monadifyType [] $ globalDefType glob)
+    (if params_p then applyGlobalOpenTerm to (paramsToTerms ?specMParams)
+     else globalOpenTerm to)
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
--- | Make a 'MonMacro' that maps a named global to a global of argument
--- type. Because we can't get access to the type of the global until we apply
--- the macro, we monadify its type at macro application time.
-argGlobalMacro :: NameInfo -> Ident -> MonMacro
-argGlobalMacro from to =
+-- | Make a 'MonMacro' that maps a named global to a global of argument type.
+-- Because we can't get access to the type of the global until we apply the
+-- macro, we monadify its type at macro application time. The 'Bool' flag
+-- indicates whether the current 'SpecMParams' should also be passed as the
+-- first two arguments to the "to" global.
+argGlobalMacro :: NameInfo -> Ident -> Bool -> MonMacro
+argGlobalMacro from to params_p =
   MonMacro 0 $ \glob args ->
   if globalDefName glob == from && args == [] then
     return $ ArgMonTerm $
-    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
+    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to params_p
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
@@ -1095,7 +1111,7 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
     [(asDataType -> Just (num, []))]
       | primName num == "Cryptol.Num" ->
         return $ ArgMonTerm $
-        mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqM"
+        mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqS" True
     _ ->
       fail "Monadification failed: unsafeAssert applied to non-Num type"
 
@@ -1180,9 +1196,10 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
 
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
 -- to a global of semi-pure type that takes an additional argument of type
--- @isFinite n@
-fin1Macro :: Ident -> Ident -> MonMacro
-fin1Macro from to =
+-- @isFinite n@. The 'Bool' flag indicates whether the current 'SpecMParams'
+-- should be passed as the first two arguments to @to@.
+fin1Macro :: Ident -> Ident -> Bool -> MonMacro
+fin1Macro from to params_p =
   MonMacro 1 $ \glob args ->
   do if globalDefName glob == ModuleIdentifier from && length args == 1 then
        return ()
@@ -1195,7 +1212,10 @@ fin1Macro from to =
      -- Apply the type of @glob@ to n, and apply @to@ to n and fin_pf
      let glob_tp = monadifyType [] $ globalDefType glob
      let glob_tp_app = applyMonType glob_tp $ Left n_mtp
-     let to_app = applyOpenTermMulti (globalOpenTerm to) [n, toArgTerm fin_pf]
+     let to_app =
+           applyOpenTermMulti (globalOpenTerm to)
+           ((if params_p then (paramsToTerms ?specMParams ++) else id)
+            [n, toArgTerm fin_pf])
      -- Finally, return @to n fin_pf@ as a MonTerm of monadified type @to_tp n@
      return $ ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
 
@@ -1233,25 +1253,28 @@ fixMacro = MonMacro 2 $ \_ args -> case args of
 type MacroMapping = (NameInfo, MonMacro)
 
 -- | Build a 'MacroMapping' for an identifier to a semi-pure named function
-mmSemiPure :: Ident -> Ident -> MacroMapping
-mmSemiPure from_id to_id =
-  (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id)
+mmSemiPure :: Ident -> Ident -> Bool -> MacroMapping
+mmSemiPure from_id to_id params_p =
+  (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to a semi-pure named function
 -- whose first argument is a @Num@ that requires an @isFinite@ proof
-mmSemiPureFin1 :: Ident -> Ident -> MacroMapping
-mmSemiPureFin1 from_id to_id =
-  (ModuleIdentifier from_id, fin1Macro from_id to_id)
+mmSemiPureFin1 :: Ident -> Ident -> Bool -> MacroMapping
+mmSemiPureFin1 from_id to_id params_p =
+  (ModuleIdentifier from_id, fin1Macro from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to itself as a semi-pure function
 mmSelf :: Ident -> MacroMapping
 mmSelf self_id =
-  (ModuleIdentifier self_id, semiPureGlobalMacro self_id self_id)
+  (ModuleIdentifier self_id, semiPureGlobalMacro self_id self_id False)
 
--- | Build a 'MacroMapping' from an identifier to a function of argument type
-mmArg :: Ident -> Ident -> MacroMapping
-mmArg from_id to_id = (ModuleIdentifier from_id,
-                       argGlobalMacro (ModuleIdentifier from_id) to_id)
+-- | Build a 'MacroMapping' from an identifier to a function of argument type,
+-- where the 'Bool' flag indicates whether the current 'SpecMArgs' should be
+-- passed as additional arguments to the "to" identifier
+mmArg :: Ident -> Ident -> Bool -> MacroMapping
+mmArg from_id to_id params_p =
+  (ModuleIdentifier from_id,
+   argGlobalMacro (ModuleIdentifier from_id) to_id params_p)
 
 -- | Build a 'MacroMapping' from an identifier and a custom 'MonMacro'
 mmCustom :: Ident -> MonMacro -> MacroMapping
@@ -1277,42 +1300,42 @@ defaultMonTable =
   , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
 
     -- Top-level sequence functions
-  , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"
-  , mmSemiPure "Cryptol.seq_cong1" "CryptolM.mseq_cong1"
-  , mmArg "Cryptol.eListSel" "CryptolM.eListSelM"
+  , mmArg "Cryptol.seqMap" "CryptolM.seqMapM" True
+  , mmSemiPure "Cryptol.seq_cong1" "CryptolM.mseq_cong1" True
+  , mmArg "Cryptol.eListSel" "CryptolM.eListSelM" True
 
     -- List comprehensions
-  , mmArg "Cryptol.from" "CryptolM.fromM"
+  , mmArg "Cryptol.from" "CryptolM.fromM" True
     -- FIXME: continue here...
 
     -- PEq constraints
-  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq"
-  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
+  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
 
     -- PCmp constraints
-  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq"
-  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
+  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
 
     -- PSignedCmp constraints
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq"
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
+  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq"
+  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
 
     -- PLogic constraints
-  , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq"
-  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool"
+  , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True
+  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
 
     -- PRing constraints
-  , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq"
-  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool"
+  , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq" True
+  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
 
     -- PIntegral constraints
-  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
 
     -- PLiteral constraints
-  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM"
+  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
 
     -- The Cryptol Literal primitives
   , mmSelf "Cryptol.ecNumber"
@@ -1334,27 +1357,27 @@ defaultMonTable =
   , mmSelf "Cryptol.ecGtEq"
 
     -- Sequences
-  , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM"
-  , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM"
-  , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM"
-  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM"
-  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM"
-  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM"
-  , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM"
-  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM"
-  , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM"
-  , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM"
-  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM"
-  , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM"
-  , mmArg "Cryptol.ecAt" "CryptolM.ecAtM"
-  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM"
+  , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM" True
+  , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM" True
+  , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM" True
+  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
+  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
+  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM" True
+  , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM" True
+  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
+  , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM" True
+  , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM" True
+  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
+  , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM" True
+  , mmArg "Cryptol.ecAt" "CryptolM.ecAtM" True
+  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM" True
   -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
   -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
-  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM"
+  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
   -- , mmSemiPureNthFin 5 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM"
-  , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM"
-  , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM"
-  , mmArg "Cryptol.ecError" "CryptolM.ecErrorM"
+  , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM" True
+  , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM" True
+  , mmArg "Cryptol.ecError" "CryptolM.ecErrorM" True
   ]
 
 
