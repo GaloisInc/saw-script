@@ -6,12 +6,26 @@ From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From CryptolToCoq Require Export CompM.
 
+From EnTree Require Export
+     Basics.HeterogeneousRelations
+     Basics.QuantType
+     Ref.SpecM.
+
+(***
+ *** sawLet
+ ***)
+
 Definition sawLet_def A B (x : A) (y : A -> B) := y x.
 
 Global Notation "'sawLet' v ':=' x 'in' y" := (sawLet_def _ _ x (fun v => y))
   (at level 70, v at level 99, right associativity).
 Global Notation "'sawLet' v ':' A ':=' x 'in' y" := (sawLet_def A _ x (fun v => y))
   (at level 70, v at level 99, right associativity).
+
+
+(***
+ *** The Inhabited typeclass
+ ***)
 
 (** A typeclass we use to restrict applications of the "error" axiom
   * to inhabited types. This allows the axiom to be realizable, and
@@ -41,6 +55,11 @@ Global Instance Inhabited_Intro (a:Type) (b:a -> Type) (Hb: forall x, Inhabited 
 
 Global Hint Extern 5 (Inhabited ?A) =>
   (apply (@MkInhabited A); intuition (eauto with typeclass_instances inh)) : typeclass_instances.
+
+
+(***
+ *** Definitions for things in the Prelude
+ ***)
 
 (** DEPRECATED: Use [string] instead. *)
 Definition String := String.string.
@@ -237,6 +256,11 @@ Global Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} 
 Global Instance Inhabited_prod (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (prod a b) :=
     MkInhabited (prod a b) (pair inhabitant inhabitant).
 
+
+(***
+ *** Integers
+ ***)
+
 Definition Integer := Z.
 Definition intAdd : Integer -> Integer -> Integer := Z.add.
 Definition intSub : Integer -> Integer -> Integer := Z.sub.
@@ -261,6 +285,10 @@ Global Instance Inhabited_Z : Inhabited Z :=
 Global Hint Resolve (0%Z : Z) : inh.
 Global Hint Resolve (0%Z : Integer) : inh.
 
+
+(***
+ *** IntMod
+ ***)
 
 (* NOTE: the following will be nonsense for values of n <= 1 *)
 Definition IntMod (n : nat) := Z.

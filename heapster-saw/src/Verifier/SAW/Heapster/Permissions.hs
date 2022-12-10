@@ -837,7 +837,7 @@ data PermVarSubst (ctx :: RList CrucibleType) where
   PermVarSubst_Cons :: PermVarSubst ctx -> Name tp -> PermVarSubst (ctx :> tp)
 
 -- | An entry in a permission environment that associates a permission and
--- corresponding SAW identifier with a Crucible function handle
+-- translation with a Crucible function handle
 data PermEnvFunEntry where
   PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
                      FunPerm ghosts args gouts ret -> Ident ->
@@ -853,10 +853,13 @@ data SomeNamedShape where
                     SomeNamedShape
 
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
--- a permission and a translation of that permission
+-- a permission and a translation of that permission to either a list of terms
+-- or a recursive call to the @n@th function in the most recently bound frame of
+-- recursive functions
 data PermEnvGlobalEntry where
   PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
-                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
+                        ValuePerm (LLVMPointerType w) ->
+                        Either Natural [OpenTerm] ->
                         PermEnvGlobalEntry
 
 -- | The different sorts hints for blocks
@@ -883,6 +886,10 @@ data BlockHint blocks init ret args where
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
+-- | The default event type uses the @Void@ type for events
+defaultSpecMEventType :: Ident
+defaultSpecMEventType = fromString "Prelude.VoidEv"
+
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
 data PermEnv = PermEnv {
@@ -890,7 +897,8 @@ data PermEnv = PermEnv {
   permEnvNamedPerms :: [SomeNamedPerm],
   permEnvNamedShapes :: [SomeNamedShape],
   permEnvGlobalSyms :: [PermEnvGlobalEntry],
-  permEnvHints :: [Hint]
+  permEnvHints :: [Hint],
+  permEnvSpecMEventType :: Ident
   }
 
 
@@ -2519,6 +2527,16 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
   where
     ValPerm_LLVMBlockShape sh = ValPerm_Conj [Perm_LLVMBlockShape sh]
 
+-- | The conjunction of exactly 1 @llvmfunptr@ permission
+pattern ValPerm_LLVMFunPtr :: () =>
+                              (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
+                              TypeRepr (FunctionHandleType cargs ret) ->
+                              ValuePerm (FunctionHandleType cargs ret) ->
+                              ValuePerm a
+pattern ValPerm_LLVMFunPtr tp p <- ValPerm_Conj [Perm_LLVMFunPtr tp p]
+  where
+    ValPerm_LLVMFunPtr tp p = ValPerm_Conj [Perm_LLVMFunPtr tp p]
+
 -- | A single @lowned@ permission
 pattern ValPerm_LOwned :: () => (a ~ LifetimeType) => [PermExpr LifetimeType] ->
                           CruCtx ps_in -> CruCtx ps_out ->
@@ -2560,6 +2578,14 @@ pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
 -- | A single @any@ permission
 pattern ValPerm_Any :: ValuePerm a
 pattern ValPerm_Any = ValPerm_Conj [Perm_Any]
+
+-- | A single function permission
+pattern ValPerm_Fun :: () => (a ~ FunctionHandleType cargs ret) =>
+                       FunPerm ghosts (CtxToRList cargs) gouts ret ->
+                       ValuePerm a
+pattern ValPerm_Fun fun_perm <- ValPerm_Conj [Perm_Fun fun_perm]
+  where
+    ValPerm_Fun fun_perm = ValPerm_Conj [Perm_Fun fun_perm]
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil
@@ -8042,7 +8068,7 @@ isJoinPointHint _ = False
 
 -- | The empty 'PermEnv'
 emptyPermEnv :: PermEnv
-emptyPermEnv = PermEnv [] [] [] [] []
+emptyPermEnv = PermEnv [] [] [] [] [] defaultSpecMEventType
 
 -- | Add a 'NamedPerm' to a permission environment
 permEnvAddNamedPerm :: PermEnv -> NamedPerm ns args a -> PermEnv
@@ -8154,7 +8180,7 @@ permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p [t] : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (Right [t]) : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
 permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
@@ -8163,7 +8189,7 @@ permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
 permEnvAddGlobalSymFunMulti env sym (w :: f w) ps_ts =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtrs w $ map fst ps_ts in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (map snd ps_ts) : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (Right $ map snd ps_ts) : permEnvGlobalSyms env }
 
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
 permEnvAddGlobalSyms :: PermEnv -> [PermEnvGlobalEntry] -> PermEnv
@@ -8244,15 +8270,16 @@ lookupNamedShape env nm =
 -- | Look up the permissions and translation for a 'GlobalSymbol' at a
 -- particular machine word width
 lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
-                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+                      Maybe (ValuePerm (LLVMPointerType w),
+                             Either Natural [OpenTerm])
 lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
   helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
-            Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+            Maybe (ValuePerm (LLVMPointerType w), Either Natural [OpenTerm])
   helper  (PermEnvGlobalEntry sym'
-            (p :: ValuePerm (LLVMPointerType w')) t:_) sym w
+            (p :: ValuePerm (LLVMPointerType w')) tr:_) sym w
     | sym' == sym
     , Just Refl <- testEquality w (knownNat :: NatRepr w') =
-      Just (p, t)
+      Just (p, tr)
   helper (_:entries) sym w = helper entries sym w
   helper [] _ _ = Nothing
 
