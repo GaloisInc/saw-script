@@ -37,6 +37,7 @@ import Verifier.SAW.Heapster.UntypedAST
 '.'             { Located $$ TDot                       }
 ','             { Located $$ TComma                     }
 '+'             { Located $$ TPlus                      }
+'-'             { Located $$ TMinus                     }
 '*'             { Located $$ TStar                      }
 '@'             { Located $$ TAt                        }
 '-o'            { Located $$ TLoli                      }
@@ -135,6 +136,7 @@ expr ::                                         { AstExpr }
   | NAT                                         { ExNat (pos $1) (locThing $1) }
   | 'unit'                                      { ExUnit (pos $1) }
   | expr '+' expr                               { ExAdd (pos $2) $1 $3 }
+  | '-' expr                                    { ExNeg (pos $1) $2 }
   | expr '*' expr                               { ExMul (pos $2) $1 $3 }
   | 'struct' '(' list(expr) ')'                 { ExStruct (pos $1) $3 }
   | lifetime 'array' '(' expr ',' expr ',' '<' expr ',' '*' expr ',' expr ')'

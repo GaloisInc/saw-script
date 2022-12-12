@@ -22,6 +22,7 @@ data Token
   | TSemicolon          -- ^ symbol @;@
   | TComma              -- ^ symbol @,@
   | TPlus               -- ^ symbol @+@
+  | TMinus              -- ^ symbol @-@
   | TStar               -- ^ symbol @*@
   | TAt                 -- ^ symbol @\@@
   | TLoli               -- ^ symbol @-o@
@@ -105,6 +106,7 @@ describeToken t =
     TComma              -> "','"
     TSemicolon          -> "';'"
     TPlus               -> "'+'"
+    TMinus              -> "'-'"
     TStar               -> "'*'"
     TAt                 -> "'@'"
     TLoli               -> "'-o'"
