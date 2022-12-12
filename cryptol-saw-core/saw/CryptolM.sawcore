@@ -35,7 +35,7 @@ checkFinite =
 -- Assert that a Num is finite, or fail
 assertFiniteS : (E:EvType) -> (stack:FunStack) -> (n:Num) ->
                 SpecM E stack (isFinite n);
-assertFiniteM E stack n =
+assertFiniteS E stack n =
   maybe (isFinite n) (SpecM E stack (isFinite n))
         (errorS E stack (isFinite n) "assertFiniteM: Num not finite")
         (retS E stack (isFinite n))
@@ -56,7 +56,7 @@ Num_rec_fin p f =
 -- The type of monadified sequences, which are just vectors for finite length
 -- but are sequences of computations for streams
 mseq : (E:EvType) -> (stack:FunStack) -> Num -> sort 0 -> sort 0;
-mseq num E stack a =
+mseq E stack num a =
   Num_rec (\ (_:Num) -> sort 0) (\ (n:Nat) -> Vec n a)
           (Stream (SpecM E stack a)) num;
 
@@ -240,7 +240,7 @@ eListSelM : (E:EvType) -> (stack:FunStack) ->
             SpecM E stack a;
 eListSelM E stack a =
   Num_rec (\ (n:Num) -> mseq E stack n a -> Nat -> SpecM E stack a)
-          (\ (n:Nat) -> atM n a)
+          (\ (n:Nat) -> atM E stack n a)
           (eListSel (SpecM E stack a) TCInf);
 
 
@@ -301,9 +301,9 @@ PCmpMSeq E stack =
               (\ (n:Nat) -> PCmpVec n);
 
 PCmpMSeqBool : (E:EvType) -> (stack:FunStack) ->
-               (n : Num) -> isFinite n -> PCmp (seq n Bool);
+               (n : Num) -> isFinite n -> PCmp (mseq E stack n Bool);
 PCmpMSeqBool E stack =
-  Num_rec_fin (\ (n:Num) -> PCmp (seq n Bool)) PCmpWord;
+  Num_rec_fin (\ (n:Num) -> PCmp (mseq E stack n Bool)) PCmpWord;
 
 -- PSignedCmp
 PSignedCmpMSeq : (E:EvType) -> (stack:FunStack) ->
@@ -317,7 +317,7 @@ PSignedCmpMSeq E stack =
 PSignedCmpMSeqBool : (E:EvType) -> (stack:FunStack) ->
                      (n : Num) -> isFinite n -> PSignedCmp (mseq E stack n Bool);
 PSignedCmpMSeqBool E stack =
-  Num_rec_fin (\ (n:Num) -> PSignedCmp (seq n Bool)) PSignedCmpWord;
+  Num_rec_fin (\ (n:Num) -> PSignedCmp (mseq E stack n Bool)) PSignedCmpWord;
 
 
 -- PZero
@@ -427,7 +427,7 @@ ecShiftLM E stack =
 ecShiftRM : (E:EvType) -> (stack:FunStack) ->
             (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
             mseq E stack m a -> ix -> mseq E stack m a;
-ecShiftRM E satck =
+ecShiftRM E stack =
   Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
                         mseq E stack m a -> ix -> mseq E stack m a)
           (\ (m:Nat) -> ecShiftR (TCNum m))
@@ -598,7 +598,7 @@ ecAtM E stack n_top a ix pix =
   Num_rec
     (\ (n:Num) -> mseq E stack n a -> ix -> SpecM E stack a)
     (\ (n:Nat) (v:Vec n a) ->
-       pix.posNegCases (SpecM E stack a) (atM n a v)
+       pix.posNegCases (SpecM E stack a) (atM E stack n a v)
                        (\ (_:Nat) ->
                           errorS E stack a "ecAtM: invalid sequence index"))
     (\ (s:Stream (SpecM E stack a)) ->
