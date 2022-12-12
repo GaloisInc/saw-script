@@ -211,9 +211,6 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
 
-sawCoreScaffoldingModule :: ModuleName
-sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
-
 preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
 
@@ -246,7 +243,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   Map.fromList $
 
   -- sawLet
-  [ ("sawLet", mapsTo sawCoreScaffoldingModule "sawLet_def") ]
+  [ ("sawLet", mapsTo sawDefinitionsModule "sawLet_def") ]
 
   -- Unsafe SAW features
   ++
@@ -363,8 +360,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("divModNat", mapsTo sawDefinitionsModule "divModNat")
   , ("Nat",       mapsTo datatypesModule "nat")
   , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
-  , ("Zero",      mapsTo sawCoreScaffoldingModule   "Zero")
-  , ("Succ",      mapsTo sawCoreScaffoldingModule   "Succ")
+  , ("Zero",      mapsTo sawDefinitionsModule "Zero")
+  , ("Succ",      mapsTo sawDefinitionsModule "Succ")
   ]
 
   -- Vectors
