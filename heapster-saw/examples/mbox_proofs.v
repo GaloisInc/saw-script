@@ -6,6 +6,7 @@ From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SpecMExtra.
 From EnTree       Require Import Automation.
 Import SAWCorePrelude.

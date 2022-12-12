@@ -1,8 +1,10 @@
 From Bits Require Import operations.
 From Bits Require Import spec.
 
+From Coq Require Import FunctionalExtensionality.
 From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
+From Coq Require Import Peano_dec.
 From Coq Require Import PeanoNat.
 From Coq Require Import Strings.String.
 From Coq Require Import Vectors.Vector.
@@ -35,6 +37,27 @@ Constraint Vec.u1 <= mkapp2.u2.
 Constraint Vec.u1 <= mkrel.u0.
 Constraint Vec.u1 <= mkapp.u0.
 Constraint Vec.u1 <= mkapp.u1.
+
+Lemma Vec_0_nil :
+  forall (a : Type) (v : Vec 0 a),
+  v = [].
+Proof.
+  intros a v.
+  apply (case0 (fun v' => v' = [])).
+  reflexivity.
+Qed.
+
+Lemma Vec_S_cons :
+  forall (n : nat) (a : Type) (v : Vec (S n) a),
+  exists (x : a) (xs : Vec n a),
+  v = x::xs.
+Proof.
+  intros n a v.
+  apply (caseS (fun n' v' => exists (x : a) (xs : Vec n' a), v' = x::xs)).
+  intros x m xs.
+  exists x. exists xs.
+  reflexivity.
+Qed.
 
 Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
   refine (
@@ -115,6 +138,15 @@ Fixpoint atWithDefault (n : nat) (a : Type) (default : a) (v : Vec n a) (index :
   ).
 Defined.
 
+Fixpoint atWithProof (n : nat) (a : Type) (v : Vec n a) (i : nat) :
+    IsLtNat i n -> a :=
+  match i as i', n as n' return Vec n' a -> IsLtNat i' n' -> a with
+  | _,   O   => fun _ prf =>
+                match Nat.nlt_0_r _ prf with end
+  | O,   S y => fun v' prf => Vector.hd v'
+  | S x, S y => fun v' prf => atWithProof y a (Vector.tl v') x (le_S_n _ _ prf)
+  end v.
+
 Definition map (a b : Type) (f : a -> b) (n : nat) (xs : Vec n a) :=
   VectorDef.map f xs.
 
@@ -175,6 +207,15 @@ Proof.
   }
 Qed.
 
+Fixpoint genWithProof (n : nat) (a : Type) :
+    (forall (i : nat), IsLtNat i n -> a) -> Vec n a :=
+  match n as n' return (forall (i : nat), IsLtNat i n' -> a) -> Vec n' a with
+  | O   => fun _ => Vector.nil a
+  | S m => fun f => Vector.cons a (f 0 (le_n_S _ _ (le_0_n _)))
+                                m (genWithProof m a
+                                               (fun i prf => f (S i) (le_n_S _ _ prf)))
+  end.
+
 (* NOTE: This version of `zip` accepts two vectors of different size, unlike the
  * one in `CoqVectorsExtra.v` *)
 Fixpoint zipFunctional (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
@@ -198,6 +239,41 @@ Fixpoint zipFunctional (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
 Definition zipWithFunctional
            (a b c : Type) (f : a -> b -> c) (n : nat) (xs : Vec n a) (ys : Vec n b) :=
   VectorDef.map (fun p => f (fst p) (snd p)) (zipFunctional _ _ _ _ xs ys).
+
+Lemma at_gen_Vec :
+  forall (n : nat) (a : Type)
+         (f : forall i : nat, IsLtNat i n -> a)
+         (ix : nat) (pf : IsLtNat ix n),
+  atWithProof n a (genWithProof n a f) ix pf = f ix pf.
+Proof.
+  intros n a f.
+  induction n; intros ix pf.
+  - destruct (Nat.nlt_0_r ix pf).
+  - induction ix.
+    + simpl.
+      rewrite (le_unique _ _ (le_n_S 0 n (le_0_n n)) pf).
+      reflexivity.
+    + simpl.
+      rewrite IHn.
+      rewrite (le_unique _ _ (le_n_S (Succ ix) n (le_S_n (S ix) n pf)) pf).
+      reflexivity.
+Qed.
+
+Lemma gen_at_Vec :
+  forall (n : nat) (a : Type) (x : Vec n a),
+  genWithProof n a (atWithProof n a x) = x.
+Proof.
+  intros n a x.
+  induction n.
+  - rewrite (Vec_0_nil a x). reflexivity.
+  - destruct (Vec_S_cons n a x) as [y [ys Yeq]].
+    subst x. simpl.
+    rewrite <- (IHn ys) at 1.
+    do 2 f_equal.
+    extensionality i. extensionality prf.
+    rewrite (le_unique _ _ (le_S_n (S i) n (le_n_S (Succ i) n prf)) prf).
+    reflexivity.
+Qed.
 
 Notation bitvector n := (Vec n bool).
 
