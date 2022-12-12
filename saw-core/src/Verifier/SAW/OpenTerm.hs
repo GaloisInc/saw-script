@@ -36,7 +36,7 @@ module Verifier.SAW.OpenTerm (
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
-  arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
+  arrowOpenTerm, letOpenTerm, sawLetOpenTerm, list1OpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -411,6 +411,13 @@ sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
 sawLetOpenTerm x tp tp_ret rhs body_f =
   applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
+
+-- | Build an 'OpenTerm' of type @List1 tp@ from 'OpenTerm's of type @tp@
+list1OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
+list1OpenTerm tp xs =
+  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
+  (ctorOpenTerm "Prelude.Nil1" [tp])
+  xs
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this
