@@ -241,6 +241,13 @@ Definition isBvult_to_bvEq_false w a b : isBvult w a b -> bvEq w a b = false.
 Proof. holds_for_bits_up_to_3. Qed.
 
 
+(** Other lemmas about bitvector equalities **)
+
+(** DEPRECATED: Use [bvNat_bvToNat] instead. *)
+Definition bvNat_bvToNat_id w a : bvNat w (bvToNat w a) = a :=
+  bvNat_bvToNat w a.
+
+
 (** Other lemmas about bitvector inequalities **)
 
 Definition not_isBvslt_bvsmin w a : ~ isBvslt w a (bvsmin w).

@@ -472,7 +472,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bveq_sameL",           skip)
   , ("bveq_sameR",           skip)
   , ("bveq_same2",           skip)
-  , ("bvNat_bvToNat",        skip)
   , ("ite_split_cong",       skip)
   , ("ite_join_cong",        skip)
   , ("map_map",              skip)
