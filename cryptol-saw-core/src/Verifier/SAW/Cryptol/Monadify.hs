@@ -223,6 +223,33 @@ paramsToTerms SpecMParams { specMEvType = ev, specMStack = stack } = [ev,stack]
 -- | The implicit argument version of 'SpecMParams'
 type HasSpecMParams = (?specMParams :: SpecMParams OpenTerm)
 
+-- | Build a @LetRecType@ for a nested pi type
+lrtFromMonType :: HasSpecMParams => MonType -> OpenTerm
+lrtFromMonType (MTyForall x k body_f) =
+  ctorOpenTerm "Prelude.LRT_Fun"
+  [monKindOpenTerm k,
+   lambdaOpenTerm x (monKindOpenTerm k) (\tp -> lrtFromMonType $
+                                                body_f $ MTyBase k tp)]
+lrtFromMonType (MTyArrow mtp1 mtp2) =
+  ctorOpenTerm "Prelude.LRT_Fun"
+  [toArgType mtp1,
+   lambdaOpenTerm "_" (toArgType mtp1) (\_ -> lrtFromMonType mtp2)]
+lrtFromMonType mtp =
+  ctorOpenTerm "Prelude.LRT_Ret" [toArgType mtp]
+
+-- | Push a frame of recursive functions with the given 'MonType's onto a
+-- @FunStack@
+--
+-- FIXME HERE: This will give the incorrect type if any of the 'MonType's are
+-- higher-order, meaning they themselves take in or return types containing
+-- @SpecM@. In order to fix this, we will need a more general @LetRecType@.
+pushSpecMFrame :: HasSpecMParams => [MonType] -> OpenTerm -> OpenTerm
+pushSpecMFrame tps stack =
+  let frame =
+        list1OpenTerm (dataTypeOpenTerm "Prelude.LetRecType" []) $
+        map lrtFromMonType tps in
+  applyGlobalOpenTerm "Prelude.pushFunStack" [frame, stack]
+
 -- | The empty function stack
 emptyStackOpenTerm :: OpenTerm
 emptyStackOpenTerm = globalOpenTerm "Prelude.emptyFunStack"
@@ -343,7 +370,8 @@ toArgType (MTyForall x k body) =
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "CryptolM.mseq") [n, toArgType t]
+  applyOpenTermMulti (globalOpenTerm "CryptolM.mseq")
+  [specMEvType ?specMParams, specMStack ?specMParams, n, toArgType t]
 toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTyRecord tps) =
@@ -805,6 +833,7 @@ newtype MonadifyM a =
   deriving (Functor, Applicative, Monad,
             MonadReader MonadifyROState, MonadState MonadifyMemoTable)
 
+-- | Run a 'MonadifyM' computation with the current 'SpecMParams'
 usingSpecMParams :: (HasSpecMParams => MonadifyM a) -> MonadifyM a
 usingSpecMParams m =
   do st <- ask
@@ -812,6 +841,12 @@ usingSpecMParams m =
      let stack = monStStack st
      let ?specMParams = (SpecMParams { specMEvType = ev,
                                        specMStack = stack }) in m
+
+-- | Push a frame of recursive functions onto the current 'SpecMParams'
+pushingSpecMParamsM :: [MonType] -> MonadifyM a -> MonadifyM a
+pushingSpecMParamsM tps m =
+  usingSpecMParams $
+  local (\rost -> rost { monStStack = pushSpecMFrame tps (monStStack rost) }) m
 
 instance Fail.MonadFail MonadifyM where
   fail str =
@@ -901,14 +936,15 @@ argifyMonTerm (CompMonTerm mtp trm) =
        [specMEvType ?specMParams, specMStack ?specMParams, tp, top_ret_tp, trm,
         lambdaOpenTerm "x" tp (toCompTerm . k . fromArgTerm mtp)]
 
--- | Build a proof of @isFinite n@ by calling @assertFiniteM@ and binding the
+-- | Build a proof of @isFinite n@ by calling @assertFiniteS@ and binding the
 -- result to an 'ArgMonTerm'
-assertIsFinite :: MonType -> MonadifyM ArgMonTerm
+assertIsFinite :: HasSpecMParams => MonType -> MonadifyM ArgMonTerm
 assertIsFinite (MTyNum n) =
   argifyMonTerm (CompMonTerm
                  (mkMonType0 (applyOpenTerm
                               (globalOpenTerm "CryptolM.isFinite") n))
-                 (applyOpenTerm (globalOpenTerm "CryptolM.assertFiniteM") n))
+                 (applyGlobalOpenTerm "CryptolM.assertFiniteS"
+                  [specMEvType ?specMParams, specMStack ?specMParams, n]))
 assertIsFinite _ =
   fail ("assertIsFinite applied to non-Num argument")
 
@@ -996,7 +1032,8 @@ monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
      return $ fromArgTerm mtp $
        applyOpenTermMulti (globalOpenTerm "CryptolM.seqToMseq")
-       [n, toArgType mtp_elem,
+       [specMEvType ?specMParams, specMStack ?specMParams,
+        n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
 monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
   do mtrm <- monadifyArg Nothing trm
@@ -1219,31 +1256,19 @@ fin1Macro from to params_p =
      -- Finally, return @to n fin_pf@ as a MonTerm of monadified type @to_tp n@
      return $ ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
 
--- | Helper function: build a @LetRecType@ for a nested pi type
-lrtFromMonType :: HasSpecMParams => MonType -> OpenTerm
-lrtFromMonType (MTyForall x k body_f) =
-  ctorOpenTerm "Prelude.LRT_Fun"
-  [monKindOpenTerm k,
-   lambdaOpenTerm x (monKindOpenTerm k) (\tp -> lrtFromMonType $
-                                                body_f $ MTyBase k tp)]
-lrtFromMonType (MTyArrow mtp1 mtp2) =
-  ctorOpenTerm "Prelude.LRT_Fun"
-  [toArgType mtp1,
-   lambdaOpenTerm "_" (toArgType mtp1) (\_ -> lrtFromMonType mtp2)]
-lrtFromMonType mtp =
-  ctorOpenTerm "Prelude.LRT_Ret" [toArgType mtp]
-
 -- | The macro for fix
 --
 -- FIXME: does not yet handle mutual recursion
 fixMacro :: MonMacro
 fixMacro = MonMacro 2 $ \_ args -> case args of
   [tp@(asPi -> Just _), f] ->
-    do mtp <- monadifyTypeM tp
-       amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
+    let orig_params = ?specMParams in
+    monadifyTypeM tp >>= \mtp ->
+    pushingSpecMParamsM [mtp] $
+    do amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
        return $ fromCompTerm mtp $
          applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixS")
-         [specMEvType ?specMParams, specMStack ?specMParams,
+         [specMEvType orig_params, specMStack orig_params,
           lrtFromMonType mtp, toCompTerm amtrm_f]
   [(asRecordType -> Just _), _] ->
     fail "Monadification failed: cannot yet handle mutual recursion"
