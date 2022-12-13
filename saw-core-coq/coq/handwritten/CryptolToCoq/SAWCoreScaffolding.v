@@ -224,6 +224,11 @@ Definition IsLeNat__rec
             | le_S _ m H => Hstep m H (rec m H)
             end.
 
+(* We could have SAW autogenerate this definition in SAWCorePrelude, but it is
+   convenient to place it here so that it can be used in
+   SAWCoreVectorsAsCoqVectors.v, which cannot import SAWCorePrelude. *)
+Definition IsLtNat := @lt.
+
 (* Definition minNat := Nat.min. *)
 
 Definition uncurry (a b c : Type) (f : a -> b -> c) (p : a * (b * unit)) : c  :=

@@ -211,9 +211,6 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
 
-sawCoreScaffoldingModule :: ModuleName
-sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
-
 preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
 
@@ -246,7 +243,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   Map.fromList $
 
   -- sawLet
-  [ ("sawLet", mapsTo sawCoreScaffoldingModule "sawLet_def") ]
+  [ ("sawLet", mapsTo sawDefinitionsModule "sawLet_def") ]
 
   -- Unsafe SAW features
   ++
@@ -337,12 +334,13 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Refl",    mapsToExpl logicModule "eq_refl")
   ]
 
-  -- Nat le
+  -- Nat le/lt
   ++
   [ ("IsLeNat"     , mapsTo sawDefinitionsModule "IsLeNat")
   , ("IsLeNat__rec", mapsTo sawDefinitionsModule "IsLeNat__rec")
   , ("IsLeNat_base", mapsTo sawDefinitionsModule "IsLeNat_base")
   , ("IsLeNat_succ", mapsTo sawDefinitionsModule "IsLeNat_succ")
+  , ("IsLtNat"     , mapsTo sawDefinitionsModule "IsLtNat")
   ]
 
   -- Strings
@@ -362,15 +360,17 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("divModNat", mapsTo sawDefinitionsModule "divModNat")
   , ("Nat",       mapsTo datatypesModule "nat")
   , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
-  , ("Zero",      mapsTo sawCoreScaffoldingModule   "Zero")
-  , ("Succ",      mapsTo sawCoreScaffoldingModule   "Succ")
+  , ("Zero",      mapsTo sawDefinitionsModule "Zero")
+  , ("Succ",      mapsTo sawDefinitionsModule "Succ")
   ]
 
   -- Vectors
   ++
   [ ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
   , ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
+  , ("at_gen_BVVec",  mapsTo preludeExtraModule "at_gen_BVVec")
   , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
+  , ("atWithProof",   mapsTo vectorsModule "atWithProof")
   , ("at_single",     skip) -- is boring, could be proved on the Coq side
   , ("bvAdd",         mapsTo vectorsModule "bvAdd")
   , ("bvLg2",         mapsTo vectorsModule "bvLg2")
@@ -394,6 +394,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
   , ("foldl",         mapsTo vectorsModule "foldl")
+  , ("gen_at_BVVec",  mapsTo preludeExtraModule "gen_at_BVVec")
+  , ("genWithProof",  mapsTo vectorsModule "genWithProof")
   , ("scanl",         mapsTo vectorsModule "scanl")
   , ("gen",           mapsTo vectorsModule "gen")
   , ("rotateL",       mapsTo vectorsModule "rotateL")
@@ -472,7 +474,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bveq_sameL",           skip)
   , ("bveq_sameR",           skip)
   , ("bveq_same2",           skip)
-  , ("bvNat_bvToNat",        skip)
   , ("ite_split_cong",       skip)
   , ("ite_join_cong",        skip)
   , ("map_map",              skip)

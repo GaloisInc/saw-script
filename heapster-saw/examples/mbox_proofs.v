@@ -6,6 +6,7 @@ From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SpecMExtra.
 From EnTree       Require Import Automation.
 Import SAWCorePrelude.
@@ -28,16 +29,16 @@ Import mbox.
 
 (* QOL: nicer names for bitvector and mbox arguments *)
 #[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
-  let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
+  let e := fresh "x" in IntroArg_intro e : refines prepostcond.
 #[local] Hint Extern 901 (IntroArg Any Mbox _) =>
-  let e := fresh "m" in IntroArg_intro e : refines prepostcond. 
+  let e := fresh "m" in IntroArg_intro e : refines prepostcond.
 #[local] Hint Extern 901 (IntroArg Any Mbox_def _) =>
   let e := fresh "m" in IntroArg_intro e : refines prepostcond.
 
 #[local] Hint Extern 901 (IntroArg RetAny (bitvector _) _) =>
-  let e := fresh "r_x" in IntroArg_intro e : refines prepostcond. 
+  let e := fresh "r_x" in IntroArg_intro e : refines prepostcond.
 #[local] Hint Extern 901 (IntroArg RetAny Mbox _) =>
-  let e := fresh "r_m" in IntroArg_intro e : refines prepostcond. 
+  let e := fresh "r_m" in IntroArg_intro e : refines prepostcond.
 #[local] Hint Extern 901 (IntroArg RetAny Mbox_def _) =>
   let e := fresh "r_m" in IntroArg_intro e : refines prepostcond.
 
@@ -194,7 +195,7 @@ Polymorphic Lemma bvuleWithProof_not_IntroArg n w a b goal :
   IntroArg n (~ (isBvule w a b)) (fun _ => goal) ->
   IntroArg n (bvuleWithProof w a b = Nothing _) (fun _ => goal).
 Proof. intros H eq; apply H; apply bvuleWithProof_not; eauto. Qed.
- 
+
 #[local] Hint Extern 101 (IntroArg _ (bvuleWithProof _ _ _ = Nothing _) _) =>
   simple apply bvuleWithProof_not_IntroArg || shelve : refines.
 
@@ -288,9 +289,9 @@ Global Instance QuantType_bitvector {w} : QuantType (bitvector w) :=
   { quantEnc := QEnc_nat;
     quantEnum := bvNat w;
     quantEnumInv := bvToNat w;
-    quantEnumSurjective := bvNat_bvToNat_id w }.
+    quantEnumSurjective := bvNat_bvToNat w }.
 
-Lemma gen_sawAt_eq n a v `{Inhabited a} : 
+Lemma gen_sawAt_eq n a v `{Inhabited a} :
   gen n a (sawAt n a v) = v.
 Proof. dependent induction v; simpl; f_equal. apply IHv. Qed.
 
@@ -441,7 +442,7 @@ Tactic Notation "rewrite_transMbox_Mbox_nil_r_dep" "in" ident(H1) ident(H2) :=
 Tactic Notation "rewrite_transMbox_Mbox_nil_r_dep" "in" ident(H1) ident(H2) ident(H3) :=
   revert H1 H2 H3; rewrite transMbox_Mbox_nil_r; intros H1 H2 H3.
 
-Definition mbox_chain_length := 
+Definition mbox_chain_length :=
   Mbox_rect (fun _ => nat) O (fun _ _ _ rec _ => S rec).
 
 Lemma mbox_chain_length_transMbox m1 m2 :
@@ -500,7 +501,7 @@ Time Qed.
 
 Lemma mbox_rect_identity m :
   Mbox_rect _ Mbox_nil (fun strt len _ rec d => Mbox_cons strt len rec d) m = m.
-Proof. induction m; simpl; try f_equal; eauto. Qed. 
+Proof. induction m; simpl; try f_equal; eauto. Qed.
 
 Definition mbox_concat_chains_spec (m1 m2 : Mbox) : Mbox :=
   if mbox_chain_length m1 =? 0 then Mbox_nil else transMbox m1 m2.
@@ -1131,7 +1132,7 @@ Proof.
     Ltac busywork a e_assert := simpl in *;
       repeat rewrite_transMbox_Mbox_nil_r_dep in a e_assert.
     + unshelve instantiate (1 := _).
-      { busywork a e_assert. apply a. } 
+      { busywork a e_assert. apply a. }
       busywork a e_assert.
       rewrite -> e_assert.
       reflexivity.
