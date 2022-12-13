@@ -726,7 +726,7 @@ mrVarTerm (MRVar ec) =
 -- long as we only use the resulting term in computation branches where we know
 -- the proposition holds.
 mrDummyProof :: Term -> MRM Term
-mrDummyProof tp = piUVarsM tp >>= mrFreshVar "pf" >>= mrVarTerm
+mrDummyProof tp = mrFreshVar "pf" tp >>= mrVarTerm
 
 -- | Get the 'VarInfo' associated with a 'MRVar'
 mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
@@ -807,8 +807,13 @@ mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
 
 -- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
 -- free uvars
+mrFreshVarCl :: LocalName -> Term -> MRM MRVar
+mrFreshVarCl nm tp = MRVar <$> liftSC2 scFreshEC nm tp
+
+-- | Make a fresh 'MRVar' of type @(u1:tp1) -> ... (un:tpn) -> tp@, where the
+-- @ui@ are all the current uvars
 mrFreshVar :: LocalName -> Term -> MRM MRVar
-mrFreshVar nm tp = MRVar <$> liftSC2 scFreshEC nm tp
+mrFreshVar nm tp = piUVarsM tp >>= mrFreshVarCl nm
 
 -- | Set the info associated with an 'MRVar', assuming it has not been set
 mrSetVarInfo :: MRVar -> MRVarInfo -> MRM ()
@@ -825,8 +830,7 @@ mrSetVarInfo var info =
 -- the current uvars and returning the new evar applied to all current uvars
 mrFreshEVar :: LocalName -> Type -> MRM Term
 mrFreshEVar nm (Type tp) =
-  do tp' <- piUVarsM tp
-     var <- mrFreshVar nm tp'
+  do var <- mrFreshVar nm tp
      mrSetVarInfo var (EVarInfo Nothing)
      mrVarTerm var
 

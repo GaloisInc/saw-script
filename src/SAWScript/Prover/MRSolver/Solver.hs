@@ -229,7 +229,7 @@ mrFreshCallVars ev stack frame defs_tm =
        (asList1 -> Just lrts) -> return lrts
        _ -> throwMRFailure (MalformedLetRecTypes frame)
     fun_tps <- forM lrts $ \lrt ->
-      piUVarsM =<< liftSC2 scGlobalApply "Prelude.LRTType" [ev, new_stack, lrt]
+      liftSC2 scGlobalApply "Prelude.LRTType" [ev, new_stack, lrt]
     fun_vars <- mapM (mrFreshVar "F") fun_tps
 
     -- Next, match on the tuple of recursive function definitions and convert
@@ -323,6 +323,27 @@ normComp (CompTerm t) =
         all_args <- (++ args) <$> getAllUVarTerms
         FunBind var all_args <$> mkCompFunReturn <$> mrFunOutType var all_args
 
+    (isGlobalDef "Prelude.multiArgFixS" -> Just (), ev:stack:lrt:body:args) ->
+      do
+        -- Bind a fresh function var for the new recursive function
+        body_tp <- mrTypeOf body
+        fun_tp <- case asPi body_tp of
+          Just (_, tp_in, _) -> return tp_in
+          Nothing -> throwMRFailure (MalformedDefs body)
+        fun_var <- mrFreshVar "F" fun_tp
+        fun_tm <- mrVarTerm fun_var
+
+        -- Set the new function var to have body applied to it
+        body_app <- mrApply body fun_tm >>= lambdaUVarsM
+        mrSetVarInfo fun_var (CallVarInfo body_app)
+
+        -- Return the function variable applied to args as a normalized
+        -- computation, noting that it must be applied to all of the uvars as
+        -- well as the args
+        let var = CallSName fun_var
+        all_args <- (++ args) <$> getAllUVarTerms
+        FunBind var all_args <$> mkCompFunReturn <$> mrFunOutType var all_args
+
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
     (asGlobalDef -> Just "CryptolM.vecMapM", [a, b, (asBvToNat -> Just (w, n)),
@@ -393,7 +414,8 @@ normComp (CompTerm t) =
     -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
     (f@(asGlobalDef -> Just ident), args)
       | ident `elem` ["Prelude.sawLet", "Prelude.invariantHint",
-                      "Cryptol.Num_rec"]
+                      "Cryptol.Num_rec", "Prelude.multiArgFixS",
+                      "Prelude.lrtLambda"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 
