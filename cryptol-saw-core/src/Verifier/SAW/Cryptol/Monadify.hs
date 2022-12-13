@@ -604,6 +604,28 @@ fromCompTerm :: HasSpecMParams => MonType -> OpenTerm -> MonTerm
 fromCompTerm mtp t | isBaseType mtp = CompMonTerm mtp t
 fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
 
+-- | Take a function of type @A1 -> ... -> An -> SpecM E emptyFunStack B@ and
+-- lift the stack of the output type to an arbitrary @stack@ parameter using
+-- @liftStackS@
+class LiftCompStack a where
+  liftCompStack :: HasSpecMParams => a -> a
+
+instance LiftCompStack ArgMonTerm where
+  liftCompStack t@(BaseMonTerm _ _) =
+    -- A pure term need not be lifted, because it is not computational
+    t
+  liftCompStack (FunMonTerm nm tp_in tp_out body) =
+    FunMonTerm nm tp_in tp_out $ \x -> liftCompStack $ body x
+  liftCompStack (ForallMonTerm nm k body) =
+    ForallMonTerm nm k $ \x -> liftCompStack $ body x
+
+instance LiftCompStack MonTerm where
+  liftCompStack (ArgMonTerm amtrm) = ArgMonTerm $ liftCompStack amtrm
+  liftCompStack (CompMonTerm mtp trm) =
+    CompMonTerm mtp $
+    applyGlobalOpenTerm "Prelude.liftStackS"
+    [specMEvType ?specMParams, specMStack ?specMParams, toArgType mtp, trm]
+
 -- | Test if a monadification type @tp@ is pure, meaning @MT(tp)=tp@
 monTypeIsPure :: MonType -> Bool
 monTypeIsPure (MTyForall _ _ _) = False -- NOTE: this could potentially be true
@@ -684,9 +706,11 @@ applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
 applyMonTermMulti = foldl applyMonTerm
 
 -- | Build a 'MonTerm' from a global of a given argument type, applying it to
--- the current 'SpecMParams' if the 'Bool' flag is 'True'
+-- the current 'SpecMParams' if the 'Bool' flag is 'True' and lifting it using
+-- @liftStackS@ if it is 'False'
 mkGlobalArgMonTerm :: HasSpecMParams => MonType -> Ident -> Bool -> ArgMonTerm
 mkGlobalArgMonTerm tp ident params_p =
+  (if params_p then id else liftCompStack) $
   fromArgTerm tp (if params_p
                   then applyGlobalOpenTerm ident (paramsToTerms ?specMParams)
                   else globalOpenTerm ident)
@@ -719,7 +743,7 @@ mkCtorArgMonTerm pn =
 -- before deciding how to monadify itself
 data MonMacro = MonMacro {
   macroNumArgs :: Int,
-  macroApply :: HasSpecMParams => GlobalDef -> [Term] -> MonadifyM MonTerm }
+  macroApply :: GlobalDef -> [Term] -> MonadifyM MonTerm }
 
 -- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term
 monMacro0 :: MonTerm -> MonMacro
@@ -732,7 +756,7 @@ monMacro0 mtrm = MonMacro 0 (\_ _ -> return mtrm)
 -- be passed as the first two arguments to the "to" global.
 semiPureGlobalMacro :: Ident -> Ident -> Bool -> MonMacro
 semiPureGlobalMacro from to params_p =
-  MonMacro 0 $ \glob args ->
+  MonMacro 0 $ \glob args -> usingSpecMParams $
   if globalDefName glob == ModuleIdentifier from && args == [] then
     return $ ArgMonTerm $
     fromSemiPureTerm (monadifyType [] $ globalDefType glob)
@@ -744,11 +768,13 @@ semiPureGlobalMacro from to params_p =
 -- | Make a 'MonMacro' that maps a named global to a global of argument type.
 -- Because we can't get access to the type of the global until we apply the
 -- macro, we monadify its type at macro application time. The 'Bool' flag
--- indicates whether the current 'SpecMParams' should also be passed as the
--- first two arguments to the "to" global.
+-- indicates whether the "to" global is polymorphic in the event type and
+-- function stack; if so, the current 'SpecMParams' are passed as its first two
+-- arguments, and otherwise the returned computation is lifted with
+-- @liftStackS@.
 argGlobalMacro :: NameInfo -> Ident -> Bool -> MonMacro
 argGlobalMacro from to params_p =
-  MonMacro 0 $ \glob args ->
+  MonMacro 0 $ \glob args -> usingSpecMParams $
   if globalDefName glob == from && args == [] then
     return $ ArgMonTerm $
     mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to params_p
@@ -833,14 +859,19 @@ newtype MonadifyM a =
   deriving (Functor, Applicative, Monad,
             MonadReader MonadifyROState, MonadState MonadifyMemoTable)
 
--- | Run a 'MonadifyM' computation with the current 'SpecMParams'
-usingSpecMParams :: (HasSpecMParams => MonadifyM a) -> MonadifyM a
-usingSpecMParams m =
+-- | Get the current 'SpecMParams' in a 'MonadifyM' computation
+askSpecMParams :: MonadifyM (SpecMParams OpenTerm)
+askSpecMParams =
   do st <- ask
      let ev = monEnvEvType $ monStEnv st
      let stack = monStStack st
-     let ?specMParams = (SpecMParams { specMEvType = ev,
-                                       specMStack = stack }) in m
+     return (SpecMParams { specMEvType = ev, specMStack = stack })
+
+-- | Run a 'MonadifyM' computation with the current 'SpecMParams'
+usingSpecMParams :: (HasSpecMParams => MonadifyM a) -> MonadifyM a
+usingSpecMParams m =
+  do params <- askSpecMParams
+     let ?specMParams = params in m
 
 -- | Push a frame of recursive functions onto the current 'SpecMParams'
 pushingSpecMParamsM :: [MonType] -> MonadifyM a -> MonadifyM a
@@ -1137,6 +1168,7 @@ monadifyEtaExpand env ctx stack top_mtp mtp t args =
 -- compared and dispatches to the proper comparison function
 unsafeAssertMacro :: MonMacro
 unsafeAssertMacro = MonMacro 1 $ \_ ts ->
+  usingSpecMParams $
   let numFunType =
         MTyForall "n" (MKType $ mkSort 0) $ \n ->
         MTyForall "m" (MKType $ mkSort 0) $ \m ->
@@ -1155,7 +1187,7 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
 -- | The macro for if-then-else, which contains any binds in a branch to that
 -- branch
 iteMacro :: MonMacro
-iteMacro = MonMacro 4 $ \_ args ->
+iteMacro = MonMacro 4 $ \_ args -> usingSpecMParams $
   do let (tp, cond, branch1, branch2) =
            case args of
              [t1, t2, t3, t4] -> (t1, t2, t3, t4)
@@ -1179,6 +1211,7 @@ iteMacro = MonMacro 4 $ \_ args ->
 -- application @either a b c@ to @either a b (CompM c)@
 eitherMacro :: MonMacro
 eitherMacro = MonMacro 3 $ \_ args ->
+  usingSpecMParams $
   do let (tp_a, tp_b, tp_c) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
@@ -1199,7 +1232,7 @@ eitherMacro = MonMacro 3 $ \_ args ->
 -- to @invariantHint (CompM a) cond m@ and which contains any binds in the body
 -- to the body
 invariantHintMacro :: MonMacro
-invariantHintMacro = MonMacro 3 $ \_ args ->
+invariantHintMacro = MonMacro 3 $ \_ args -> usingSpecMParams $
   do let (tp, cond, m) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
@@ -1217,6 +1250,7 @@ invariantHintMacro = MonMacro 3 $ \_ args ->
 -- body to the body
 assertingOrAssumingMacro :: Bool -> MonMacro
 assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
+  usingSpecMParams $
   do let (tp, cond, m) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
@@ -1224,11 +1258,12 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
      atrm_cond <- monadifyArg (Just boolMonType) cond
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
+     params <- askSpecMParams
      let ident = if doAsserting then "Prelude.assertingS"
                                 else "Prelude.assumingS"
      return $ fromCompTerm mtp $
        applyOpenTermMulti (globalOpenTerm ident)
-       [specMEvType ?specMParams, specMStack ?specMParams,
+       [specMEvType params, specMStack params,
         toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
@@ -1237,7 +1272,7 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
 -- should be passed as the first two arguments to @to@.
 fin1Macro :: Ident -> Ident -> Bool -> MonMacro
 fin1Macro from to params_p =
-  MonMacro 1 $ \glob args ->
+  MonMacro 1 $ \glob args -> usingSpecMParams $
   do if globalDefName glob == ModuleIdentifier from && length args == 1 then
        return ()
        else error ("Monadification macro for " ++ show from ++
@@ -1262,14 +1297,14 @@ fin1Macro from to params_p =
 fixMacro :: MonMacro
 fixMacro = MonMacro 2 $ \_ args -> case args of
   [tp@(asPi -> Just _), f] ->
-    let orig_params = ?specMParams in
-    monadifyTypeM tp >>= \mtp ->
-    pushingSpecMParamsM [mtp] $
-    do amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
-       return $ fromCompTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixS")
-         [specMEvType orig_params, specMStack orig_params,
-          lrtFromMonType mtp, toCompTerm amtrm_f]
+    do orig_params <- askSpecMParams
+       mtp <- monadifyTypeM tp
+       pushingSpecMParamsM [mtp] $ usingSpecMParams $ do
+         amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
+         return $ fromCompTerm mtp $
+           applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixS")
+           [specMEvType orig_params, specMStack orig_params,
+            lrtFromMonType mtp, toCompTerm amtrm_f]
   [(asRecordType -> Just _), _] ->
     fail "Monadification failed: cannot yet handle mutual recursion"
   _ -> error "fixMacro: malformed arguments!"
