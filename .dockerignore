@@ -3,6 +3,7 @@
 .DS_Store
 .cabal-sandbox
 cabal.sandbox.config
+cabal.project.local
 .ghc.environment.x86_64-darwin-*
 s2nTests
 

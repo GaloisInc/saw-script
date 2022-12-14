@@ -1,5 +1,5 @@
 enable_experimental;
-env <- heapster_init_env_from_file_debug "io.sawcore" "io.bc";
+env <- heapster_init_env_from_file "io.sawcore" "io.bc";
 
 // Set the event type
 heapster_set_event_type env "ioEv";

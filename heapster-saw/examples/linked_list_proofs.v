@@ -16,88 +16,6 @@ Require Import Examples.linked_list_gen.
 Import linked_list.
 
 
-(* FIXME move to EnTree.Automation *)
-
-Lemma spec_refines_either_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR A B f g eith (P : SpecM E2 Γ2 R2) :
-  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR (f a) P) ->
-  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR (g b) P) ->
-  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P.
-Proof. destruct eith; intros; eauto. Qed.
-
-Lemma spec_refines_either_r (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR (P : SpecM E1 Γ1 R1) A B f g eith :
-  (forall a, eith = Left _ _ a -> spec_refines RPre RPost RR P (f a)) ->
-  (forall b, eith = Right _ _ b -> spec_refines RPre RPost RR P (g b)) ->
-  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith).
-Proof. destruct eith; intros; eauto. Qed.
-
-Definition spec_refines_either_l_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR A B f g eith (P : SpecM E2 Γ2 R2) :
-  (IntroArg Any A (fun a =>
-   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
-   spec_refines RPre RPost RR (f a) P))) ->
-  (IntroArg Any B (fun b =>
-   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
-   spec_refines RPre RPost RR (g b) P))) ->
-  spec_refines RPre RPost RR (either A B (SpecM E1 Γ1 R1) f g eith) P :=
-  spec_refines_either_l E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR A B f g eith P.
-
-Definition spec_refines_either_r_IntroArg (E1 E2 : EvType) Γ1 Γ2 R1 R2
-  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
-  RR A B f g eith (P : SpecM E1 Γ1 R1) :
-  (IntroArg Any A (fun a =>
-   IntroArg Hyp (eith = Left _ _ a) (fun _ =>
-   spec_refines RPre RPost RR P (f a)))) ->
-  (IntroArg Any B (fun b =>
-   IntroArg Hyp (eith = Right _ _ b) (fun _ =>
-   spec_refines RPre RPost RR P (g b)))) ->
-  spec_refines RPre RPost RR P (either A B (SpecM E2 Γ2 R2) f g eith) :=
-  spec_refines_either_r E1 E2 Γ1 Γ2 R1 R2 RPre RPost RR P A B f g eith.
-
-#[global] Hint Extern 101 (spec_refines _ _ _ (either _ _ _ _ _ _) _) =>
-  simple apply spec_refines_either_l_IntroArg : refines.
-#[global] Hint Extern 101 (spec_refines _ _ _ _ (either _ _ _ _ _ _)) =>
-  simple apply spec_refines_either_r_IntroArg : refines.
-
-Lemma IntroArg_eq_Left_const n A B (x y : A) (goal : Prop)
-  : IntroArg n (x = y) (fun _ => goal) ->
-    IntroArg n (Left A B x = Left A B y) (fun _ => goal).
-Proof. intros H eq; apply H; injection eq; eauto. Qed.
-Lemma IntroArg_eq_Right_const n A B (x y : B) (goal : Prop)
-  : IntroArg n (x = y) (fun _ => goal) ->
-    IntroArg n (Right A B x = Right A B y) (fun _ => goal).
-Proof. intros H eq; apply H; injection eq; eauto. Qed.
-Lemma IntroArg_eq_Left_Right n A B (x : A) (y : B) goal
-  : IntroArg n (Left A B x = Right A B y) goal.
-Proof. intros eq; discriminate eq. Qed.
-Lemma IntroArg_eq_Right_Left n A B (x : A) (y : B) goal
-  : IntroArg n (Right A B y = Left A B x) goal.
-Proof. intros eq; discriminate eq. Qed.
-
-#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Left _ _ _) _) =>
-  simple apply IntroArg_eq_Left_const : refines.
-#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Right _ _ _) _) =>
-  simple apply IntroArg_eq_Right_const : refines.
-#[global] Hint Extern 101 (IntroArg _ (Left _ _ _ = Right _ _ _) _) =>
-  apply IntroArg_eq_Left_Right : refines.
-#[global] Hint Extern 101 (IntroArg _ (Right _ _ _ = Left _ _ _) _) =>
-  apply IntroArg_eq_Right_Left : refines.
-
-(* List destruction automation *)
-Ltac list_destruction l :=
-  let l' := fresh l in destruct l as [| ? l'];
-  simpl SAWCorePrelude.unfoldList in *.
-#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
-                                           (Left _ _ _)) _) =>
-  list_destruction l : refines.
-#[global] Hint Extern 102 (IntroArg ?n (eq (SAWCorePrelude.unfoldList _ ?l)
-                                           (Right _ _ _)) _) =>
-  list_destruction l : refines.
-
 (* QOL: nicer names for bitvector and list arguments *)
 #[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
   let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
@@ -106,6 +24,105 @@ Ltac list_destruction l :=
 #[local] Hint Extern 901 (IntroArg Any (List_def _) _) =>
   let e := fresh "l" in IntroArg_intro e : refines prepostcond. 
 
+#[local] Hint Extern 901 (IntroArg RetAny (bitvector _) _) =>
+  let e := fresh "r_x" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg RetAny list _) =>
+  let e := fresh "r_l" in IntroArg_intro e : refines prepostcond. 
+#[local] Hint Extern 901 (IntroArg RetAny List_def _) =>
+  let e := fresh "r_l" in IntroArg_intro e : refines prepostcond.
+
+
+(* bitvector (in)equality automation *)
+
+Lemma simpl_llvm_bool_eq (b : bool) :
+  negb (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
+Proof. destruct b; eauto. Qed.
+
+Definition simpl_llvm_bool_eq_IntroArg n (b1 b2 : bool) (goal : Prop) :
+  IntroArg n (b1 = b2) (fun _ => goal) ->
+  IntroArg n (negb (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
+Proof. rewrite simpl_llvm_bool_eq; eauto. Defined.
+
+#[local] Hint Extern 101 (IntroArg _ (negb (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
+  simple eapply simpl_llvm_bool_eq_IntroArg : refines.
+
+
+(* List destruction automation *)
+
+Arguments FunsTo_Nil {a}.
+Arguments FunsTo_Cons {a tp}.
+
+Lemma spec_refines_either_unfoldList_nil_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) A f g (P : SpecM E2 Γ2 R2) :
+  spec_refines RPre RPost RR (f tt) P ->
+  spec_refines RPre RPost RR (eithers _ (FunsTo_Cons f (FunsTo_Cons g FunsTo_Nil))
+                                        (unfoldList A nil)) P.
+Proof. eauto. Qed.
+
+Lemma spec_refines_either_unfoldList_cons_l (E1 E2 : EvType) Γ1 Γ2 R1 R2
+  (RPre : SpecPreRel E1 E2 Γ1 Γ2) (RPost : SpecPostRel E1 E2 Γ1 Γ2)
+  (RR : Rel R1 R2) A a l f g (P : SpecM E2 Γ2 R2) :
+  spec_refines RPre RPost RR (g (a, l)) P ->
+  spec_refines RPre RPost RR (eithers _ (FunsTo_Cons f (FunsTo_Cons g FunsTo_Nil))
+                                        (unfoldList A (a :: l))) P.
+Proof. eauto. Qed.
+
+Ltac eithers_unfoldList A l :=
+  let l' := eval cbn [ fst snd projT1 ] in l in
+  lazymatch l' with
+  | nil =>
+    simple apply (spec_refines_either_unfoldList_nil_l _ _ _ _ _ _ _ _ _ A)
+  | ?a :: ?l0 =>
+    simple apply (spec_refines_either_unfoldList_cons_l _ _ _ _ _ _ _ _ _ A a l0)
+  | _ => let a  := fresh "x" in
+         let l0 := fresh "l0" in
+         let eq := fresh "e_destruct" in
+         destruct l' as [| a l0 ] eqn:eq;
+         [ eithers_unfoldList A (@nil A) | eithers_unfoldList A (a :: l0) ];
+         simpl foldList; cbn [ list_rect ] in *;
+         cbn [ fst snd projT1 ];
+         revert eq; apply (IntroArg_fold Destruct)
+  end.
+
+Global Hint Extern 100 (spec_refines _ _ _ (eithers _ _ (unfoldList ?A ?l)) _) =>
+  eithers_unfoldList A l : refines.
+Global Hint Extern 100 (spec_refines _ _ _ _ (eithers _ _ (unfoldList ?A ?l))) =>
+  eithers_unfoldList A l : refines.
+
+Global Hint Extern 901 (RelGoal _) =>
+  progress (simpl foldList in *; cbn [ list_rect ] in *) : refines.
+
+Global Hint Extern 100 (Shelve (list_rect _ _ _ ?m)) =>
+  progress cbn [ list_rect ] in * : refines.
+Global Hint Extern 100 (Shelve (list_rect _ _ _ ?m)) =>
+  progress cbn [ list_rect ] in * : refines.
+
+Lemma IntroArg_eq_list_nil_nil n A goal :
+  goal -> IntroArg n (@nil A = nil) (fun _ => goal).
+Proof. do 2 intro; eauto. Qed.
+
+Lemma IntroArg_eq_list_cons_cons n A (a1 a2 : A) l1 l2 goal :
+  IntroArg n (a1 = a2) (fun _ => IntroArg n (l1 = l1) (fun _ => goal)) ->
+  IntroArg n (a1 :: l1 = a2 :: l2) (fun _ => goal).
+Proof. intros H eq; dependent destruction eq; apply H; eauto. Qed.
+
+Lemma IntroArg_eq_list_nil_cons n A (a : A) l goal :
+  IntroArg n (nil = a :: l) (fun _ => goal).
+Proof. intro eq; dependent destruction eq. Qed.
+
+Lemma IntroArg_eq_list_cons_nil n A (a : A) l goal :
+  IntroArg n (a :: l = nil) (fun _ => goal).
+Proof. intro eq; dependent destruction eq. Qed.
+
+Global Hint Extern 101 (nil = nil) =>
+  simple apply IntroArg_eq_list_nil_nil : refines.
+Global Hint Extern 101 (_ :: _ = _ :: _) =>
+  simple apply IntroArg_eq_list_cons_cons : refines.
+Global Hint Extern 101 (nil = _ :: _) =>
+  simple apply IntroArg_eq_list_nil_cons : refines.
+Global Hint Extern 101 (_ :: _ = nil) =>
+  simple apply IntroArg_eq_list_nil_cons : refines.
 
 Lemma is_elem_spec_ref x l :
   spec_refines eqPreRel eqPostRel eq
@@ -124,10 +141,18 @@ Proof.
     + exact (r = r0).
     + prepost_exclude_remaining.
   - time "is_elem_spec_ref" prove_refinement_continue.
-    all: try (left; easy || right; easy).
+    all: try ((left ; split; [eauto | easy]) ||
+              (right; split; [eauto | easy])); simpl.
+    1-2: apply bvEq_eq in e_if; eauto.
+    1-2: apply bvEq_neq in e_if.
+    1-2: destruct H as [[]|[]]; [ left | right ].
+    1-4: split; eauto.
+    1-2: intros []; eauto.
+Qed.
 
 
-(* =============== OLD BELOW =============== *)
+(* =========== TODO: Update the below with the new automation =========== *)
+(*
 
 Lemma no_errors_is_elem x l :
   spec_refines eqPreRel eqPostRel eq (is_elem x l) no_errors_spec.
@@ -285,7 +310,7 @@ Section any.
               (returnM (intToBv 64 0))
               (fun y l' rec =>
                  f y >>= fun call_ret_val =>
-                  if not (bvEq 64 call_ret_val (intToBv 64 0))
+                  if negb (bvEq 64 call_ret_val (intToBv 64 0))
                   then returnM (intToBv 64 1) else rec).
 
   Lemma any_fun_ref : refinesFun any any_fun.
@@ -372,3 +397,5 @@ Proof.
   unfold sorted_insert_no_malloc, sorted_insert_no_malloc__tuple_fun, sorted_insert_fun.
   time "sorted_insert_no_malloc_fun_ref" prove_refinement.
 Qed.
+
+*)

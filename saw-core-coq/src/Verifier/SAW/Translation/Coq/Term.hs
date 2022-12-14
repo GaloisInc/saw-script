@@ -280,9 +280,9 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]
     PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse translateTerm [x, y]
     PairLeft t    ->
-      Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.fst") <*> traverse translateTerm [t]
+      Coq.App <$> pure (Coq.Var "fst") <*> traverse translateTerm [t]
     PairRight t   ->
-      Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.snd") <*> traverse translateTerm [t]
+      Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> translateIdentWithArgs (primName n) (is ++ as)
     CtorApp n is as -> translateIdentWithArgs (primName n) (is ++ as)

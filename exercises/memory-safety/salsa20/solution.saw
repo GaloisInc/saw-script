@@ -1,0 +1,81 @@
+include "../../common/helpers.saw";
+
+let oneptr_update_func (type : LLVMType) (name : String) = do {
+    (x, p) <- ptr_to_fresh name type;
+    llvm_execute_func [p];
+    x' <- llvm_fresh_var (str_concat name "'") type;
+    llvm_points_to p (llvm_term x');
+};
+
+let quarterround_setup : CrucibleSetup () = do {
+    (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
+    (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
+    (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
+    (y3, p3) <- ptr_to_fresh "y3" (llvm_int 32);
+
+    llvm_execute_func [p0, p1, p2, p3];
+
+    y0' <- llvm_fresh_var "y0'" (llvm_int 32);
+    y1' <- llvm_fresh_var "y1'" (llvm_int 32);
+    y2' <- llvm_fresh_var "y2'" (llvm_int 32);
+    y3' <- llvm_fresh_var "y3'" (llvm_int 32);
+
+    llvm_points_to p0 (llvm_term y0');
+    llvm_points_to p1 (llvm_term y1');
+    llvm_points_to p2 (llvm_term y2');
+    llvm_points_to p3 (llvm_term y3');
+};
+
+let rowround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "y";
+
+let columnround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x";
+
+let doubleround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x";
+
+let salsa20_setup =
+  oneptr_update_func (llvm_array 64 (llvm_int 8)) "seq";
+
+let salsa20_expansion_32 = do {
+    (n, pn) <- ptr_to_fresh_readonly "n" (llvm_array 16 (llvm_int 8));
+    (k, pk) <- ptr_to_fresh_readonly "k" (llvm_array 32 (llvm_int 8));
+
+    pks <- llvm_alloc (llvm_array 64 (llvm_int 8));
+
+    llvm_execute_func [pk, pn, pks];
+
+    rks <- llvm_fresh_var "rks" (llvm_array 64 (llvm_int 8));
+    llvm_points_to pks (llvm_term rks);
+};
+
+let s20_encrypt32 n = do {
+    (key, pkey) <- ptr_to_fresh_readonly "key" (llvm_array 32 (llvm_int 8));
+    (v, pv)     <- ptr_to_fresh_readonly "nonce" (llvm_array 8  (llvm_int 8));
+    (m, pm)     <- ptr_to_fresh "buf" (llvm_array n (llvm_int 8));
+
+    llvm_execute_func [ pkey
+                          , pv
+                          , llvm_term {{ 0 : [32] }}
+                          , pm
+                          , llvm_term {{ `n : [32] }}
+                          ];
+
+    m' <- llvm_fresh_var "m'" (llvm_array n (llvm_int 8));
+    llvm_points_to pm (llvm_term m');
+
+    ret <- llvm_fresh_var "ret" (llvm_int 32);
+    llvm_return (llvm_term ret);
+};
+
+m      <- llvm_load_module "salsa20.bc";
+qr     <- llvm_verify m "s20_quarterround" []      true quarterround_setup   z3;
+rr     <- llvm_verify m "s20_rowround"     [qr]    true rowround_setup       z3;
+cr     <- llvm_verify m "s20_columnround"  [qr]    true columnround_setup    z3;
+dr     <- llvm_verify m "s20_doubleround"  [cr,rr] true doubleround_setup    z3;
+s20    <- llvm_verify m "s20_hash"         [dr]    true salsa20_setup        z3;
+s20e32 <- llvm_verify m "s20_expand32"     [s20]   true  salsa20_expansion_32 z3;
+s20encrypt_63 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 63) z3;
+s20encrypt_64 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 64) z3;
+s20encrypt_65 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) z3;

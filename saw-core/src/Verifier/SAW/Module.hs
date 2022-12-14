@@ -152,7 +152,7 @@ data Ctor =
     -- where the @ps@ are the parameters and the @ix@s are the indices of
     -- datatype @d@
   , ctorIotaReduction ::
-       Term -> {- ^ recursor term -}
+       Term {- ^ recursor term -} ->
        Map VarIndex Term {- ^ constructor eliminators -} ->
        [Term] {- ^ constructor arguments -} ->
        IO Term

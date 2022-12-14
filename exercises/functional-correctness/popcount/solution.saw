@@ -1,0 +1,24 @@
+import "Popcount.cry";
+
+popmod <- llvm_load_module "popcount.bc";
+
+let pop_cryptol_check = do {
+     x <- llvm_fresh_var "x" (llvm_int 32);
+     llvm_execute_func [llvm_term x];
+     llvm_return ( llvm_term {{ popCount x }} );
+};
+
+// same verification against Cryptol spec
+llvm_verify popmod "pop_count" [] true pop_cryptol_check (do {
+     //unfolding ["popCount"];
+     //simplify (cryptol_ss());
+     //print_goal;
+     z3;
+});
+
+// Begin Cryptol additional verifications
+// another tricky implementation
+llvm_verify popmod "pop_count_mul" [] true pop_cryptol_check yices;
+
+// verify the while loop version
+llvm_verify popmod "pop_count_sparse" [] true pop_cryptol_check yices;

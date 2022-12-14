@@ -1218,8 +1218,8 @@ primitive bvNat : (n : Nat) -> Nat -> Vec n Bool;
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 
-axiom bvNat_bvToNat_id : (n : Nat) -> (x : Vec n Bool) ->
-                         Eq (Vec n Bool) (bvNat n (bvToNat n x)) x;
+axiom bvNat_bvToNat : (n : Nat) -> (x : Vec n Bool) ->
+                      Eq (Vec n Bool) (bvNat n (bvToNat n x)) x;
 
 bvAt : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
      -> a;
@@ -1946,7 +1946,7 @@ atBVVec n len a x ix pf =
     (bvult_to_IsLtNat n len (bvToNat n ix)
       (trans Bool (bvult n (bvNat n (bvToNat n ix)) len) (bvult n ix len) True
         (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
-          (bvNat_bvToNat_id n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
+          (bvNat_bvToNat n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
         pf));
 
 -- Indexing a generated BVVec just returns the generating function
@@ -3234,12 +3234,6 @@ axiom bveq_same2 : (n : Nat)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
-
-axiom bvNat_bvToNat : (n : Nat)
-              -> (x : Vec n Bool)
-              -> Eq (Vec n Bool)
-                    (bvNat n (bvToNat n x))
-                    x;
 
 axiom ite_split_cong : (b : Bool) -> (x : Vec 384 Bool) -> (y : Vec 384 Bool)
                -> Eq (Vec 12 (Vec 32 Bool))

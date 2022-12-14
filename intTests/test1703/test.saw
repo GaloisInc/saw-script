@@ -1,0 +1,15 @@
+import "test.cry";
+
+let weird_spec = do {
+  cv <- llvm_fresh_var "cv" (llvm_array 8 (llvm_int 32));
+  cv_p <- llvm_alloc (llvm_array 8 (llvm_int 32));
+  llvm_points_to cv_p (llvm_term {{ cv }});
+  i <- llvm_fresh_var "i" (llvm_int 8);
+
+  llvm_execute_func [cv_p, llvm_term i];
+
+  llvm_return (llvm_term {{ weird cv i }});
+};
+
+m <- llvm_load_module "test.bc";
+llvm_verify m "weird" [] false weird_spec (w4_unint_z3 []);

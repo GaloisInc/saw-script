@@ -1,0 +1,5 @@
+weird : [8][32] -> [8] -> [32]
+weird cv i = k
+    where
+        k = cvs @ i
+        cvs = cv # cvs
