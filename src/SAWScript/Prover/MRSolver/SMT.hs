@@ -247,7 +247,18 @@ readBackValueNoConfig err_str sc tv v =
   let cfg = error $ "FIXME: need the simulator config in " ++ err_str
    in readBackValue sc cfg tv v
 
+-- | A primitive that returns a global as a term
+primGlobal :: SharedContext -> Ident -> TmPrim
+primGlobal sc glob =
+  Prim $ do tp <- scTypeOfGlobal sc glob
+            tp_tp <- scTypeOf sc tp >>= scWhnf sc
+            s <- case asSort tp_tp of
+              Just s -> return s
+              Nothing -> fail "primGlobal: expected sort"
+            VExtra <$> VExtraTerm (VTyTerm s tp) <$> scGlobalDef sc glob
+
 -- | Implementations of primitives for normalizing Mr Solver terms
+-- FIXME: eventually we need to add the current event type to this list
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
   [ -- Don't unfold @genBVVec@ or @genCryM when normalizing
@@ -313,14 +324,22 @@ smtNormPrims sc = Map.fromList
                tm' <- smtNorm sc tm
                return $ VExtra $ VExtraTerm a tm') 
     ),
-    -- Don't normalize applications of @CompM@
-    ("Prelude.CompM",
-     PrimFilterFun "CompM" (\case
-                               TValue tv -> return tv
-                               _ -> mzero) $ \tv ->
-      Prim (do tv_trm <- readBackTValueNoConfig "smtNormPrims (CompM)" sc tv
-               TValue <$> VTyTerm (mkSort 0) <$>
-                 scGlobalApply sc "Prelude.CompM" [tv_trm]))
+    -- Don't normalize applications of @SpecM@ and its arguments
+    ("Prelude.SpecM",
+     PrimStrict $ \ev -> PrimStrict $ \stack -> PrimStrict $ \tp ->
+      Prim $
+      do ev_tp <- VTyTerm (mkSort 1) <$> scDataTypeApp sc "Prelude.EvType" []
+         ev_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc ev_tp ev
+         stack_tp <- VTyTerm (mkSort 1) <$> scGlobalDef sc "Prelude.FunStack"
+         stack_tm <-
+           readBackValueNoConfig "smtNormPrims (SpecM)" sc stack_tp stack
+         tp_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc (VSort $
+                                                                   mkSort 0) tp
+         ret_tm <- scGlobalApply sc "Prelude.SpecM" [ev_tm,stack_tm,tp_tm]
+         return $ TValue $ VTyTerm (mkSort 0) ret_tm),
+    ("Prelude.VoidEv", primGlobal sc "Prelude.VoidEv"),
+    ("Prelude.emptyFunStack", primGlobal sc "Prelude.emptyFunStack"),
+    ("Prelude.pushFunStack", primGlobal sc "Prelude.pushFunStack")
   ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
