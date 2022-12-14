@@ -1,0 +1,12 @@
+module Point where
+
+type Point = {x : [32], y : [32]}
+
+POINT_ZERO : Point
+POINT_ZERO = zero
+
+point_add : Point -> Point -> Point
+point_add p1 p2 = { x = p1.x + p2.x, y = p1.y + p2.y }
+
+point_add_commutes : Point -> Point -> Bit
+property point_add_commutes p1 p2 = point_add p1 p2 == point_add p2 p1

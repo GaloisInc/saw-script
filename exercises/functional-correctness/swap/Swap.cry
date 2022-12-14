@@ -1,0 +1,46 @@
+module Swap where
+
+// Given a list and two indices, return a new list with the values at the
+// indices swapped.
+swap_list : {n} [n][32] -> [64] -> [64] -> [n][32]
+swap_list lst i j = update (update lst i jval) j ival
+    where ival = lst @ i
+          jval = lst @ j
+
+
+// Returns the index of the smallest element in a list
+argmin : {n} (fin n) => [n][32] -> [64]
+argmin lst =
+    (foldl' min (-1 : [32], -1 : [64]) [(x, i) | x <- lst | i <- [0...]]).1
+
+selection_sort : {n} (fin n, 64 >= width n) => [n][32] -> [n][32]
+selection_sort lst = go`{0} lst
+    where
+        // Recursively process `lst`.  Places the smallest value at `idx` and
+        // recurses with `idx + 1`.
+        go : {idx} (fin idx, fin n, 64 >= width idx, 64 >= width n, n >= idx)
+          => [n][32]
+          -> [n][32]
+        go acc =
+            if `idx == `n
+            then acc
+            // Note to the curious: The `min n (idx + 1)` type parameter below
+            // is a weird hack.  Cryptol is concerned about overflowing `idx` on
+            // the recursive call to `go` and needs to be reassured that `idx`
+            // will never exceed `n` (which itself is constrained to be a 64-bit
+            // value by the `64 >= width n` type constraint).  You should not
+            // feel like you need to deeply understand this.  Cryptol is not
+            // well suited for situations where a list changes sizes in a
+            // recursive function.  Thankfully this case is rare in
+            // cryptography.
+            else go`{min n (idx + 1)}
+                    (swap_list acc `idx (`idx + (argmin (drop`{idx} acc))))
+
+// Check that if you pass the same value for i and j to swap_list, you get the
+// same list back.
+swap_list_same : {n} (fin n) => [64] -> [n][32] -> Bit
+property swap_list_same i lst = undefined
+
+// Check that selection_sort is equivalent to Cryptol's built in 'sort' function
+sort_eq : {n} (fin n, 64 >= width n) => [n][32] -> Bit
+property sort_eq lst = undefined

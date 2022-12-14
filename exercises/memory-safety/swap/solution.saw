@@ -1,0 +1,80 @@
+include "../../common/helpers.saw";
+swapmod <- llvm_load_module "swap.bc";
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 1: Swap Different Pointers Spec
+///////////////////////////////////////////////////////////////////////////////
+
+let swap_diff_spec = do {
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
+
+    llvm_execute_func [xp, yp];
+
+    x' <- llvm_fresh_var "x'" (llvm_int 32);
+    y' <- llvm_fresh_var "y'" (llvm_int 32);
+
+    llvm_points_to xp (llvm_term x');
+    llvm_points_to yp (llvm_term y');
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 2: Swap Different Pointers Proofs
+///////////////////////////////////////////////////////////////////////////////
+
+// Verify swap
+swap_diff_ov <- llvm_verify swapmod "swap" [] true swap_diff_spec z3;
+
+// Verify xor_swap
+llvm_verify swapmod "xor_swap" [] true swap_diff_spec z3;
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 3: Swap Same Pointers Spec
+///////////////////////////////////////////////////////////////////////////////
+
+let swap_same_spec = do {
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+
+    llvm_execute_func [xp, xp];
+
+    x' <- llvm_fresh_var "x'" (llvm_int 32);
+    llvm_points_to xp (llvm_term x');
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 4: Swap Same Pointers Proofs
+///////////////////////////////////////////////////////////////////////////////
+
+swap_same_ov <- llvm_verify swapmod "swap" [] true swap_same_spec z3;
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 5: Selection Sort Spec
+///////////////////////////////////////////////////////////////////////////////
+
+let selection_sort_spec len = do {
+    (a, a_ptr) <- ptr_to_fresh "a" (llvm_array len (llvm_int 32));
+
+    llvm_execute_func [a_ptr, (llvm_term {{ `len : [64]}})];
+
+    a' <- llvm_fresh_var "a'" (llvm_array len (llvm_int 32));
+
+    llvm_points_to a_ptr (llvm_term a');
+};
+
+llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec 2) (do {
+    //simplify (cryptol_ss());
+    //print_goal;
+    z3;
+});
+
+llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec 3) (do {
+    //simplify (cryptol_ss());
+    //print_goal;
+    z3;
+});
+
+llvm_verify swapmod "selection_sort" [swap_diff_ov, swap_same_ov] true (selection_sort_spec 8) (do {
+    //simplify (cryptol_ss());
+    //print_goal;
+    z3;
+});

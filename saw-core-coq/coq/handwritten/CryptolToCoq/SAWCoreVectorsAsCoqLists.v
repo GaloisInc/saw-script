@@ -2,10 +2,22 @@ From Coq.Lists          Require Import List.
 From Coq.Numbers.NatInt Require        NZLog.
 From Coq.Strings        Require        String.
 From CryptolToCoq       Require Import SAWCoreScaffolding.
+From Coq                Require Import ZifyClasses.
 
 Import ListNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := list a.
+
+(* Work around https://github.com/coq/coq/issues/16803. Without this, using
+   `lia` on `bitvector` values will fail to typecheck on pre-8.17 versions of
+   Coq. Once our Coq support window shifts enough, we can drop this workaround.
+*)
+Constraint Vec.u1 <= mkapp2.u0.
+Constraint Vec.u1 <= mkapp2.u1.
+Constraint Vec.u1 <= mkapp2.u2.
+Constraint Vec.u1 <= mkrel.u0.
+Constraint Vec.u1 <= mkapp.u0.
+Constraint Vec.u1 <= mkapp.u1.
 
 Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
   refine (

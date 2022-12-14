@@ -18,7 +18,7 @@ id _ x = x;
 -- FIXME: We eventually need to remove this, as it violates soundness...
 primitive fix : (a : sort 1) -> (a -> a) -> a;
 
-sawLet : (a b : sort 0) -> a -> (a -> b) -> b;
+sawLet : (a b : sort 1) -> a -> (a -> b) -> b;
 sawLet _ _ x f = f x;
 
 
@@ -109,6 +109,16 @@ RecordType__rec
   (r : RecordType s a b)
   : p r
   = RecordType#rec s a b p f1 r;
+
+
+--------------------------------------------------------------------------------
+-- The Void type
+
+data Void : sort 0 where { }
+
+-- Eliminate a Void to any type
+elimVoid : (a:sort 1) -> Void -> a;
+elimVoid a v = Void#rec (\ (_:Void) -> a) v;
 
 
 --------------------------------------------------------------------------------
@@ -1208,8 +1218,8 @@ primitive bvNat : (n : Nat) -> Nat -> Vec n Bool;
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
 primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 
-axiom bvNat_bvToNat_id : (n : Nat) -> (x : Vec n Bool) ->
-                         Eq (Vec n Bool) (bvNat n (bvToNat n x)) x;
+axiom bvNat_bvToNat : (n : Nat) -> (x : Vec n Bool) ->
+                      Eq (Vec n Bool) (bvNat n (bvToNat n x)) x;
 
 bvAt : (n : Nat) -> (a : isort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
      -> a;
@@ -1890,8 +1900,8 @@ genBVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a;
 genBVVec n len a f =
   genWithProof (bvToNat n len) a
-    (\(i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
-      f (bvNat n i) (IsLtNat_to_bvult n len i pf));
+    (\ (i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
+       f (bvNat n i) (IsLtNat_to_bvult n len i pf));
 
 -- Generate a BVVec from the elements of an existing vector, using a default
 -- value when we run out of the existing vector
@@ -1936,7 +1946,7 @@ atBVVec n len a x ix pf =
     (bvult_to_IsLtNat n len (bvToNat n ix)
       (trans Bool (bvult n (bvNat n (bvToNat n ix)) len) (bvult n ix len) True
         (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
-          (bvNat_bvToNat_id n ix) Bool (\(y:Vec n Bool) -> bvult n y len))
+          (bvNat_bvToNat n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
         pf));
 
 -- Indexing a generated BVVec just returns the generating function
@@ -2762,6 +2772,353 @@ test_fun6 x =
        (f2:(Vec 64 Bool -> CompM (Vec 64 Bool))) ->
       f1 x);
 
+
+--------------------------------------------------------------------------------
+-- ITree Specification monad
+
+-- Lists at sort 1
+data List1 (a:sort 1) : sort 1 where {
+  Nil1 : List1 a;
+  Cons1 : a -> List1 a -> List1 a;
+}
+
+-- An event type is a type of events plus a mapping from events to their return
+-- types
+data EvType : sort 1 where {
+   Build_EvType : (E:sort 0) -> (E -> sort 0) -> EvType;
+}
+
+-- Get the type for an EvType
+evTypeType : EvType -> sort 0;
+evTypeType e =
+  EvType#rec (\ (_:EvType) -> sort 0) (\ (E:sort 0) (_:E -> sort 0) -> E) e;
+
+-- Get the return type for an event
+evRetType : (E:EvType) -> evTypeType E -> sort 0;
+evRetType e =
+  EvType#rec (\ (E:EvType) -> evTypeType E -> sort 0)
+             (\ (E:sort 0) (evTypeEnc:E -> sort 0) -> evTypeEnc) e;
+
+-- The EvType with Void as the event type
+VoidEv : EvType;
+VoidEv = Build_EvType Void (elimVoid (sort 0));
+
+-- Build the dependent type { a1:A1 & { a2:A2 & ... { an:An & unit } ... }} of
+-- inputs to the LetRecType (LRT_Fun A1 (\ a1 -> ...))
+LRTInput : LetRecType -> sort 0;
+LRTInput lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> sort 0)
+  (\ (_:sort 0) -> #())
+  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> Sigma a b)
+  lrt;
+
+-- Build the output type (R a1 ... an) of the application of a LetRecType
+-- (LRT_Fun A1 (\ a1 -> ... (LRT_Fun An (\ an -> LRT_Ret R a1 ... an))))
+-- function to the arguments a1 ... an in an LRTInput
+LRTOutput : (lrt:LetRecType) -> LRTInput lrt -> sort 0;
+LRTOutput lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> LRTInput lrt -> sort 0)
+  (\ (R:sort 0) (_:LRTInput (LRT_Ret R)) -> R)
+  (\ (a:sort 0) (lrtF : a -> LetRecType)
+     (rec : (x:a) -> LRTInput (lrtF x) -> sort 0)
+     (args: Sigma a (\ (x:a) -> LRTInput (lrtF x))) ->
+     rec (Sigma_proj1 a (\ (x:a) -> LRTInput (lrtF x)) args)
+         (Sigma_proj2 a (\ (x:a) -> LRTInput (lrtF x)) args))
+  lrt;
+
+-- Build the function type (a1:A1) -> ... -> (an:An) -> B from the LetRecType
+-- (LRT_Fun A1 (\ a1 -> ...))
+lrt1Pi : (lrt:LetRecType) -> (LRTInput lrt -> sort 0) -> sort 0;
+lrt1Pi lrt_top =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> (LRTInput lrt -> sort 0) -> sort 0)
+  (\ (_:sort 0) (F:#() -> sort 0) -> F ())
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> (LRTInput (lrtF x) -> sort 0) -> sort 0)
+     (F : LRTInput (LRT_Fun a lrtF) -> sort 0) ->
+     (x:a) -> rec x (\ (args : LRTInput (lrtF x)) ->
+                       F (exists a (\ (y:a) -> LRTInput (lrtF y)) x args)))
+  lrt_top;
+
+-- Build an lrtPi function from a unary function on an LRTInput
+lrtLambda : (lrt:LetRecType) -> (F: LRTInput lrt -> sort 0) ->
+            ((args: LRTInput lrt) -> F args) -> lrt1Pi lrt F;
+lrtLambda lrt_top =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> (F: LRTInput lrt -> sort 0) ->
+                         ((args: LRTInput lrt) -> F args) -> lrt1Pi lrt F)
+  (\ (_:sort 0) -> \ (F: #() -> sort 0) (f : (args:#()) -> F args) -> f ())
+  (\ (a:sort 0) (lrtF: a -> LetRecType)
+     (rec: (x:a) -> (F: LRTInput (lrtF x) -> sort 0) ->
+                    ((args: LRTInput (lrtF x)) -> F args) -> lrt1Pi (lrtF x) F)
+     (F: LRTInput (LRT_Fun a lrtF) -> sort 0)
+     (f : (args: LRTInput (LRT_Fun a lrtF)) -> F args) (x:a) ->
+     rec x (\ (args:LRTInput (lrtF x)) ->
+              F (exists a (\ (y:a) -> LRTInput (lrtF y)) x args))
+           (\ (args:LRTInput (lrtF x)) ->
+              f (exists a (\ (y:a) -> LRTInput (lrtF y)) x args)))
+  lrt_top;
+
+-- A recursive frame is a list of types for recursive functions all bound
+-- same time
+RecFrame : sort 1;
+RecFrame = (List1 LetRecType);
+
+-- Get the nth element of a RecFrame, or void -> void if n is too big
+nthLRT : List1 LetRecType -> Nat -> LetRecType;
+nthLRT lrts =
+  List1#rec
+  LetRecType
+  (\ (lrts:List1 LetRecType) -> Nat -> LetRecType)
+  (\ (_:Nat) -> LRT_Fun Void (\ (_:Void) -> LRT_Ret Void))
+  (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
+     Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
+  lrts;
+
+-- A recursive call to one of the functions in a RecFrame
+data FrameCall (frame : RecFrame) : sort 0 where {
+  FrameCallOfArgs : (n:Nat) -> LRTInput (nthLRT frame n) -> FrameCall frame;
+}
+
+-- Make a recursive call from its individual arguments
+mkFrameCall : (frame:RecFrame) -> (n:Nat) ->
+              lrt1Pi (nthLRT frame n) (\ (_:LRTInput (nthLRT frame n)) ->
+                                         FrameCall frame);
+mkFrameCall frame n =
+  lrtLambda (nthLRT frame n) (\ (_:LRTInput (nthLRT frame n)) -> FrameCall frame)
+            (\ (args:LRTInput (nthLRT frame n)) -> FrameCallOfArgs frame n args);
+
+-- The return type for calling a recursive function in a RecFrame
+FrameCallRet : (frame:RecFrame) -> FrameCall frame -> sort 0;
+FrameCallRet frame call =
+  FrameCall#rec
+  frame
+  (\ (_:FrameCall frame) -> sort 0)
+  (\ (n:Nat) (args:LRTInput (nthLRT frame n)) -> LRTOutput (nthLRT frame n) args)
+  call;
+
+-- A function stack is a list of values of type LetRecTypes, which intuitively
+-- represents a stack of bindings of mutually recursive functions
+FunStack : sort 1;
+FunStack = List1 (List1 LetRecType);
+
+-- The empty FunStack
+emptyFunStack : FunStack;
+emptyFunStack = Nil1 (List1 LetRecType);
+
+-- Push a frame, represented by a LetRecTypes list, onto the top of a FunStack
+pushFunStack : List1 LetRecType -> FunStack -> FunStack;
+pushFunStack frame stack = Cons1 (List1 LetRecType) frame stack;
+
+-- The monad for specifications (FIXME: document this!)
+primitive SpecM : (E:EvType) -> FunStack -> sort 0 -> sort 0;
+
+
+-- Return for SpecM
+primitive retS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> a ->
+                 SpecM E stack a;
+
+-- Bind for SpecM
+primitive bindS : (E:EvType) -> (stack:FunStack) ->
+                  (a b:sort 0) -> SpecM E stack a ->
+                  (a -> SpecM E stack b) -> SpecM E stack b;
+
+-- Trigger an event in type E, returning its return type
+primitive triggerS : (E:EvType) -> (stack:FunStack) -> (e:evTypeType E) ->
+                     SpecM E stack (evRetType E e);
+
+-- Signal an error in SpecM
+primitive errorS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> String ->
+                   SpecM E stack a;
+
+-- The spec that universally quantifies over all return values of type a
+primitive forallS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
+                    SpecM E stack a;
+
+-- The spec that existentially quantifies over all return values of type a
+primitive existsS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
+                    SpecM E stack a;
+
+primitive assumeS : (E:EvType) -> (stack:FunStack) ->
+                    (p:Prop) -> SpecM E stack #();
+primitive assertS : (E:EvType) -> (stack:FunStack) ->
+                    (p:Prop) -> SpecM E stack #();
+
+primitive liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
+                       SpecM E emptyFunStack A -> SpecM E stack A;
+
+-- Return the type represented by a LetRecType
+LRTType : (E:EvType) -> FunStack -> LetRecType -> sort 0;
+LRTType E stack lrt =
+  LetRecType#rec
+  (\ (lrt:LetRecType) -> sort 0)
+  (\ (r:sort 0) -> SpecM E stack r)
+  (\ (a:sort 0) (_:a -> LetRecType) (b:a -> sort 0) -> (x:a) -> b x)
+  lrt;
+
+-- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
+-- is the result of calling LRTType on the ith LetRecType in a list
+FrameTuple : (E:EvType) -> FunStack -> List1 LetRecType -> sort 0;
+FrameTuple E stack lrts =
+  List1#rec
+  LetRecType
+  (\ (_:List1 LetRecType) -> sort 0)
+  #()
+  (\ (lrt:LetRecType) (_:List1 LetRecType) (rest:sort 0) ->
+     (LRTType E stack lrt) * rest)
+  lrts;
+
+-- A recursive call to a function in the top frame of a function stack
+primitive callS :
+  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
+  (call : FrameCall frame) ->
+  SpecM E (pushFunStack frame stack) (FrameCallRet frame call);
+
+-- Bind a collection of recursive functions whose types are given by a frame of
+-- LetRecTypes and whose bodies are given by an FrameTuple, and call the nth one
+primitive multiFixS :
+  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
+  FrameTuple E (pushFunStack frame stack) frame ->
+  (call : FrameCall frame) ->
+  SpecM E stack (FrameCallRet frame call);
+
+-- Apply a pure function to the result of a computation
+fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->
+        SpecM E stack a ->
+        SpecM E stack b;
+fmapS E stack a b f m =
+      bindS E stack a b m (\ (x:a) -> retS E stack b (f x));
+
+-- Apply a computation of a function to a computation of an argument
+applyS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) ->
+         SpecM E stack (a -> b) ->
+         SpecM E stack a -> SpecM E stack b;
+applyS E stack a b fm m =
+  bindS E stack (a -> b) b fm (\ (f:a -> b) ->
+    bindS E stack a b m (\ (x:a) -> retS E stack b (f x)));
+
+-- Apply a binary pure function to a computation
+fmapS2 : (E:EvType) -> (stack:FunStack) -> (a b c:sort 0) -> (a -> b -> c) ->
+         SpecM E stack a -> SpecM E stack b ->
+         SpecM E stack c;
+fmapS2 E stack a b c f m1 m2 =
+  applyS E stack b c (fmapS E stack a (b -> c) f m1) m2;
+
+-- Apply a trinary pure function to a computation
+fmapS3 : (E:EvType) -> (stack:FunStack) ->
+         (a b c d:sort 0) -> (a -> b -> c -> d) ->
+         SpecM E stack a -> SpecM E stack b ->
+         SpecM E stack c -> SpecM E stack d;
+fmapS3 E stack a b c d f m1 m2 m3 =
+  applyS E stack c d (fmapS2 E stack a b (c -> d) f m1 m2) m3;
+
+-- Bind two values and pass them to a binary function
+bindS2 : (E:EvType) -> (stack:FunStack) -> (a b c:sort 0) ->
+         SpecM E stack a ->
+         SpecM E stack b -> (a -> b -> SpecM E stack c) ->
+         SpecM E stack c;
+bindS2 E stack a b c m1 m2 k =
+  bindS E stack a c m1
+  (\ (x:a) -> bindS E stack b c m2 (\ (y:b) -> k x y));
+
+-- Bind three values and pass them to a trinary function
+bindS3 : (E:EvType) -> (stack:FunStack) ->
+         (a b c d:sort 0) -> SpecM E stack a ->
+         SpecM E stack b -> SpecM E stack c ->
+         (a -> b -> c -> SpecM E stack d) -> SpecM E stack d;
+bindS3 E stack a b c d m1 m2 m3 k =
+  bindS E stack a d m1
+        (\ (x:a) -> bindS2 E stack b c d m2 m3 (k x));
+
+-- A version of bind that takes the function first
+bindApplyS : (E:EvType) -> (stack:FunStack) ->
+             (a b:sort 0) -> (a -> SpecM E stack b) ->
+             SpecM E stack a -> SpecM E stack b;
+bindApplyS E stack a b k m =
+  bindS E stack a b m k;
+
+-- A version of bindS2 that takes the function first
+bindApplyS2 : (E:EvType) -> (stack:FunStack) ->
+              (a b c:sort 0) -> (a -> b -> SpecM E stack c) ->
+              SpecM E stack a -> SpecM E stack b ->
+              SpecM E stack c;
+bindApplyS2 E stack a b c k m1 m2 =
+  bindS2 E stack a b c m1 m2 k;
+
+-- A version of bindS3 that takes the function first
+bindApplyS3 : (E:EvType) -> (stack:FunStack) ->
+              (a b c d:sort 0) -> (a -> b -> c -> SpecM E stack d) ->
+              SpecM E stack a -> SpecM E stack b ->
+              SpecM E stack c -> SpecM E stack d;
+bindApplyS3 E stack a b c d k m1 m2 m3 =
+  bindS3 E stack a b c d m1 m2 m3 k;
+
+-- Compose two monadic functions
+composeS : (E:EvType) -> (stack:FunStack) ->
+           (a b c:sort 0) -> (a -> SpecM E stack b) ->
+           (b -> SpecM E stack c) -> a -> SpecM E stack c;
+composeS E stack a b c k1 k2 x =
+  bindS E stack b c (k1 x) k2;
+
+-- Tuple a type onto the input and output types of a monadic function
+tupleSpecMFunBoth : (E:EvType) -> (stack:FunStack) ->
+                    (a b c:sort 0) -> (a -> SpecM E stack b) ->
+                    (c * a -> SpecM E stack (c * b));
+tupleSpecMFunBoth E stack a b c k =
+  \ (x: c * a) ->
+    bindS E stack b (c * b) (k x.(2))
+          (\ (y:b) -> retS E stack (c*b) (x.(1), y));
+
+-- Tuple a value onto the output of a monadic function
+tupleSpecMFunOut : (E:EvType) -> (stack:FunStack) -> (a b c:sort 0) ->
+  c -> (a -> SpecM E stack b) -> (a -> SpecM E stack (c*b));
+tupleSpecMFunOut E stack a b c x f =
+  \ (y:a) -> bindS E stack b (c*b) (f y)
+             (\ (z:b) -> retS E stack (c*b) (x,z));
+
+-- Map a monadic function across a vector
+mapS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
+       (b:isort 0) -> (a -> SpecM E stack b) -> (n:Nat) -> Vec n a ->
+       SpecM E stack (Vec n b);
+mapS E stack a b f =
+  Nat__rec
+    (\ (n:Nat) -> Vec n a -> SpecM E stack (Vec n b))
+    (\ (_:Vec 0 a) -> retS E stack (Vec 0 b) (EmptyVec b))
+    (\ (n:Nat) (rec_f:Vec n a -> SpecM E stack (Vec n b))
+       (v:Vec (Succ n) a) ->
+      fmapS2 E stack b (Vec n b) (Vec (Succ n) b)
+        (\ (hd:b) (tl:Vec n b) -> ConsVec b hd n tl)
+        (f (head n a v))
+        (rec_f (tail n a v)));
+
+-- Map a monadic function across a BVVec
+mapBVVecS : (E:EvType) -> (stack:FunStack) ->
+            (a : sort 0) -> (b : isort 0) -> (a -> SpecM E stack b) ->
+            (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
+            SpecM E stack (BVVec n len b);
+mapBVVecS E stack a b f n len = mapS E stack a b f (bvToNat n len);
+
+-- Append two BVVecs and cast the resulting size, if possible
+appendCastBVVecS : (E:EvType) -> (stack:FunStack) ->
+                   (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
+                   BVVec n len1 a -> BVVec n len2 a ->
+                   SpecM E stack (BVVec n len3 a);
+appendCastBVVecS E stack n len1 len2 len3 a v1 v2 =
+  maybe
+    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (SpecM E stack (BVVec n len3 a))
+    (errorS E stack (BVVec n len3 a) "Could not cast BVVec")
+    (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
+       retS
+         E stack (BVVec n len3 a)
+         (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
+                 (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
+                          (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
+                 (appendBVVec n len1 len2 a v1 v2)))
+    (bvEqWithProof n (bvAdd n len1 len2) len3);
+
+
 --------------------------------------------------------------------------------
 -- SMT Array
 
@@ -2795,12 +3152,6 @@ axiom bveq_same2 : (n : Nat)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
-
-axiom bvNat_bvToNat : (n : Nat)
-              -> (x : Vec n Bool)
-              -> Eq (Vec n Bool)
-                    (bvNat n (bvToNat n x))
-                    x;
 
 axiom ite_split_cong : (b : Bool) -> (x : Vec 384 Bool) -> (y : Vec 384 Bool)
                -> Eq (Vec 12 (Vec 32 Bool))

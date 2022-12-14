@@ -5,8 +5,9 @@ import Prelude;
 SigBV1 : sort 0 -> sort 0;
 SigBV1 a = Sigma (Vec 1 Bool) (\ (_:Vec 1 Bool) -> a);
 
-getSBoxValueSpec : Vec 64 Bool -> CompM (Vec 64 Bool);
-getSBoxValueSpec x = returnM (Vec 64 Bool) x;
+getSBoxValueSpec : Vec 64 Bool ->
+                   SpecM VoidEv emptyFunStack (Vec 64 Bool);
+getSBoxValueSpec x = retS VoidEv emptyFunStack (Vec 64 Bool) x;
 
 -- Harcoded 64 length bitvector value 16, used for mbox definitions
 bv64_16 : Vec 64 Bool;
@@ -68,15 +69,17 @@ transMbox m1 m2 =
   (\ (strt : Vec 64 Bool) (len : Vec 64 Bool) (_ : Mbox) (rec : Mbox) (vec : BVVec 64 bv64_128 (Vec 8 Bool)) -> Mbox_cons strt len rec vec)
   m1;
 
-mboxNewSpec : CompM (Mbox);
+mboxNewSpec : SpecM VoidEv emptyFunStack (Mbox);
 mboxNewSpec =
-  returnM Mbox (Mbox_cons (bvNat 64 0) (bvNat 64 0) Mbox_nil (genBVVec 64 bv64_128 (Vec 8 Bool) (\ (i:Vec 64 Bool) (_:is_bvult 64 i bv64_128) -> (bvNat 8 0))));
+  retS VoidEv emptyFunStack Mbox
+       (Mbox_cons (bvNat 64 0) (bvNat 64 0) Mbox_nil (genBVVec 64 bv64_128 (Vec 8 Bool) (\ (i:Vec 64 Bool) (_:is_bvult 64 i bv64_128) -> (bvNat 8 0))));
 
-mboxFreeSpec : BVVec 64 bv64_128 (Vec 8 Bool) -> CompM (Vec 32 Bool);
-mboxFreeSpec _ = returnM (Vec 32 Bool) (bvNat 32 0);
+mboxFreeSpec : BVVec 64 bv64_128 (Vec 8 Bool) ->
+               SpecM VoidEv emptyFunStack (Vec 32 Bool);
+mboxFreeSpec _ = retS VoidEv emptyFunStack (Vec 32 Bool) (bvNat 32 0);
 
-mboxAllFreedSpec : CompM (Vec 1 Bool);
-mboxAllFreedSpec = returnM (Vec 1 Bool) (bvNat 1 0);
+mboxAllFreedSpec : SpecM VoidEv emptyFunStack (Vec 1 Bool);
+mboxAllFreedSpec = retS VoidEv emptyFunStack (Vec 1 Bool) (bvNat 1 0);
 
-randSpec : CompM (Vec 32 Bool);
-randSpec = existsM (Vec 32 Bool) (Vec 32 Bool) (\ (x : Vec 32 Bool) -> returnM (Vec 32 Bool) x);
+randSpec : SpecM VoidEv emptyFunStack (Vec 32 Bool);
+randSpec = existsS VoidEv emptyFunStack (Vec 32 Bool);
