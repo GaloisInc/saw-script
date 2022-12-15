@@ -13,8 +13,8 @@ In this document, we use the following metavariables to refer to different sorts
   `sh`               | Shape expression
   `l`                | Lifetime expression
   `p`                | Value permission
-                     
-                     
+
+
 
 Value Types
 ================
@@ -71,8 +71,8 @@ In addition to the above expressions, we also have shape expressions, which we s
 | `sh1 orsh sh2`              | `llvmshape w` | A disjunctive shape. `sh1` and `sh2` need not have the same size. |
 | `sh1 ; sh2`                 | `llvmshape w` | A sequence of two shapes |
 | `[l]ptrsh(rw,sh)`           | `llvmshape w` | A shape for a pointer to another memory block, i.e. a memblock permission, with a given shape. This memblock permission will have the same read/write and lifetime modalities as the memblock permission containing this pointer shape, unless they are specifically overridden by the pointer shape; i.e., we have that `[l]memblock(rw,off,len,[l']ptrsh(rw',sh)) = [l]memblock(rw,off,len, fieldsh([l']memblock(rw',0,len(sh),sh)))`, where `rw'` and/or `l'` can be `Nothing`, in which case they default to `rw` and `l`, respectively. |
-| `fieldsh(p)`                | `llvmshape w` | A shape for a single pointer field, given a permission that acts on a pointer of unknown size. |
-| `fieldsh(sz,p)`             | `llvmshape w` | Like `fieldsh(p)`, but where the permission acts on a pointer of size `sz`. |
+| `fieldsh(sz,p)`             | `llvmshape w` | A shape for a single pointer field, given a permission `p` that acts on a pointer of size `sz`. |
+| `fieldsh(p)`                | `llvmshape w` | Equivalent to `fieldsh(w,p)`. |
 | `arraysh(s,len,sh)`         | `llvmshape w` | A shape for an array with the given stride, length (in number of elements = total length / stride), and fields `sh` |
 | `exsh x:a.sh`               | `llvmshape w` | An existential shape |
 | `falsesh`                    | `llvmshape w` | The unsatisfiable or contradictory shape |
