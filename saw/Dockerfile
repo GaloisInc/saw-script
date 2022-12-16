@@ -29,7 +29,7 @@ RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal v2-exec which saw) /home/saw/rootfs/usr/local/bin/saw
 WORKDIR /home/saw//rootfs/usr/local/bin
-RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20220902/ubuntu-22.04-bin.zip"
+RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20221212/ubuntu-22.04-bin.zip"
 RUN unzip solvers.zip && rm solvers.zip && chmod +x *
 USER root
 RUN chown -R root:root /home/saw/rootfs
