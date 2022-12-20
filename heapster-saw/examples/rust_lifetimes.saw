@@ -26,12 +26,13 @@ heapster_assume_fun env "llvm.uadd.with.overflow.i64"
   "(). arg0:int64<>, arg1:int64<> -o \
      \ ret:struct(int64<>,int1<>)"
   "\\ (x y:Vec 64 Bool) -> \
-    \ returnM (Vec 64 Bool * Vec 1 Bool) \
-    \         (bvAdd 64 x y, gen 1 Bool (\\ (_:Nat) -> bvCarry 64 x y))";
+    \ retS VoidEv emptyFunStack (Vec 64 Bool * Vec 1 Bool) \
+    \      (bvAdd 64 x y, gen 1 Bool (\\ (_:Nat) -> bvCarry 64 x y))";
 
 // llvm.expect.i1
 heapster_assume_fun env "llvm.expect.i1"
-  "().arg0:int1<>, arg1:int1<> -o ret:int1<>" "\\ (x y:Vec 1 Bool) -> returnM (Vec 1 Bool) x";
+  "().arg0:int1<>, arg1:int1<> -o ret:int1<>"
+  "\\ (x y:Vec 1 Bool) -> retS VoidEv emptyFunStack (Vec 1 Bool) x";
 
 // core::panicking::panic
 //panic_sym <- heapster_find_symbol env "5panic";
@@ -43,6 +44,8 @@ heapster_assume_fun env "llvm.expect.i1"
  *** Type-Checked Functions
  ***/
 
+// FIXME: Get this working again
+/*
 // mux_mut_refs_u64
 mux_mut_refs_u64_sym <- heapster_find_symbol env "16mux_mut_refs_u64";
 heapster_typecheck_fun_rename env mux_mut_refs_u64_sym "mux_mut_refs_u64"
@@ -86,6 +89,7 @@ use_mux3_mut_refs_onel_sym <- heapster_find_symbol env "22use_mux3_mut_refs_onel
 heapster_typecheck_fun_rename env use_mux3_mut_refs_onel_sym
   "use_mux3_mut_refs_onel"
   "<'a> fn (x1: &'a mut u64, x2: &'a mut u64, x3: &'a mut u64) -> u64";
+*/
 
 /***
  *** Export to Coq

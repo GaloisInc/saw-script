@@ -121,7 +121,7 @@ Proof.
 Qed.
 
 Lemma gen_sawAt T {HT : Inhabited T}
-  : forall (m : Nat) a, gen m T (fun i => sawAt m T a i) = a.
+  : forall (m : nat) a, gen m T (fun i => sawAt m T a i) = a.
 Proof.
   apply Vector.t_ind.
   {

@@ -1,0 +1,29 @@
+module Swap where
+
+// Given a list and two indices, return a new list with the values at the
+// indices swapped.
+swap_list : {n} [n][32] -> [64] -> [64] -> [n][32]
+swap_list lst i j = update (update lst i jval) j ival
+    where ival = lst @ i
+          jval = lst @ j
+
+argmin : {n} (fin n) => [n][32] -> [64]
+argmin lst =
+    (foldl' min (-1 : [32], -1 : [64]) [(x, i) | x <- lst | i <- [0...]]).1
+
+selection_sort : {n} (fin n, 64 >= width n) => [n][32] -> [n][32]
+selection_sort lst = go`{0} lst
+    where
+        go : {idx} (fin idx, fin n, 64 >= width idx, 64 >= width n, n >= idx) => [n][32] -> [n][32]
+        go acc =
+            if `idx == `n
+            then acc
+            else go`{min n (idx + 1)}
+                    (swap_list acc `idx (`idx + (argmin (drop`{idx} acc))))
+
+// NOTE: Have to be careful.  Just running :check on this will likely crash because a random index is likely out of bounds (especailly because `n will default to 0)
+swap_list_same : {n} (fin n) => [64] -> [n][32] -> Bit
+property swap_list_same i lst = (swap_list lst i i) == lst
+
+sort_eq : {n} (fin n, 64 >= width n) => [n][32] -> Bit
+property sort_eq lst = selection_sort lst == sort lst

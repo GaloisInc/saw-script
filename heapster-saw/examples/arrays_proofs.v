@@ -41,6 +41,7 @@ Proof.
      there are multiple. For this poof though, it doesn't. *)
   all: try assumption.
   (* Proving that the loop invariant holds inductively: *)
+  - discriminate e_maybe.
   - transitivity a2.
     + assumption.
     + apply isBvsle_suc_r; eauto.
@@ -251,6 +252,7 @@ Proof.
       rewrite <- e_assuming; reflexivity.
   - (* (e_if4 is a contradiction) *)
     admit.
+  - admit.
   - rewrite e_assuming.
     change (intToBv 64 2) with (bvAdd 64 (intToBv 64 1) (intToBv 64 1)).
     rewrite <- bvAdd_assoc.
