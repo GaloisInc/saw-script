@@ -16,35 +16,15 @@ Require Import Examples.linked_list_gen.
 Import linked_list.
 
 
-(* QOL: nicer names for bitvector and list arguments *)
-#[local] Hint Extern 901 (IntroArg Any (bitvector _) _) =>
-  let e := fresh "x" in IntroArg_intro e : refines prepostcond. 
+(* QOL: nicer names for list arguments *)
 #[local] Hint Extern 901 (IntroArg Any (list _) _) =>
   let e := fresh "l" in IntroArg_intro e : refines prepostcond. 
 #[local] Hint Extern 901 (IntroArg Any (List_def _) _) =>
   let e := fresh "l" in IntroArg_intro e : refines prepostcond. 
-
-#[local] Hint Extern 901 (IntroArg RetAny (bitvector _) _) =>
-  let e := fresh "r_x" in IntroArg_intro e : refines prepostcond. 
 #[local] Hint Extern 901 (IntroArg RetAny list _) =>
   let e := fresh "r_l" in IntroArg_intro e : refines prepostcond. 
 #[local] Hint Extern 901 (IntroArg RetAny List_def _) =>
   let e := fresh "r_l" in IntroArg_intro e : refines prepostcond.
-
-
-(* bitvector (in)equality automation *)
-
-Lemma simpl_llvm_bool_eq (b : bool) :
-  negb (bvEq 1 (if b then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b.
-Proof. destruct b; eauto. Qed.
-
-Definition simpl_llvm_bool_eq_IntroArg n (b1 b2 : bool) (goal : Prop) :
-  IntroArg n (b1 = b2) (fun _ => goal) ->
-  IntroArg n (negb (bvEq 1 (if b1 then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = b2) (fun _ => goal).
-Proof. rewrite simpl_llvm_bool_eq; eauto. Defined.
-
-#[local] Hint Extern 101 (IntroArg _ (negb (bvEq 1 (if _ then intToBv 1 (-1) else intToBv 1 0) (intToBv 1 0)) = _) _) =>
-  simple eapply simpl_llvm_bool_eq_IntroArg : refines.
 
 
 (* List destruction automation *)
