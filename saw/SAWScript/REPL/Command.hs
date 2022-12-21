@@ -43,7 +43,7 @@ import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
 import Data.List (intercalate)
 import System.FilePath((</>), isPathSeparator)
-import System.Directory(getHomeDirectory,setCurrentDirectory,doesDirectoryExist)
+import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
 
 -- SAWScript imports
@@ -124,6 +124,8 @@ commandList  =
     "exit the REPL"
   , CommandDescr ":cd" (FilenameArg cdCmd)
     "set the current working directory"
+  , CommandDescr ":pwd" (NoArg pwdCmd)
+    "display the current working directory"
   ]
 
 genHelp :: [CommandDescr] -> [String]
@@ -193,6 +195,9 @@ cdCmd f | null f = io $ putStrLn $ "[error] :cd requires a path argument"
   if exists
     then io $ setCurrentDirectory f
     else raise $ DirectoryNotFound f
+
+pwdCmd :: REPL ()
+pwdCmd = io $ getCurrentDirectory >>= putStrLn
 
 -- SAWScript commands ----------------------------------------------------------
 
