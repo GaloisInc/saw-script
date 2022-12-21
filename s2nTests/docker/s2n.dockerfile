@@ -1,18 +1,36 @@
-FROM ubuntu:18.04
+FROM ubuntu:22.04
 
 RUN apt-get update -y -q && \
     apt-get install -y software-properties-common && \
     apt-get update -q -y && \
     apt install -y \
-    clang-3.9 \
     curl \
     gcc \
+    g++ \
     git \
-    llvm-3.9 \
     make \
     sudo \
+    unzip \
+    indent \
+    kwstyle \
+    libssl-dev \
+    tcpdump \
+    valgrind \
+    lcov \
+    m4 \
+    nettle-dev \
+    nettle-bin \
+    pkg-config \
+    zlib1g-dev \
+    python3-pip \
+    tox \
+    libncurses5 \
+    libtinfo-dev \
     && \
     rm -rf /var/lib/apt/lists/*
+RUN curl -OL https://releases.llvm.org/3.9.0/clang+llvm-3.9.0-x86_64-linux-gnu-ubuntu-16.04.tar.xz && \
+    tar xf clang+llvm-3.9.0-x86_64-linux-gnu-ubuntu-16.04.tar.xz && \
+    cp -r clang+llvm-3.9.0-x86_64-linux-gnu-ubuntu-16.04/* /usr
 
 WORKDIR /saw-script
 RUN mkdir -p /saw-script && \

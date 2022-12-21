@@ -192,10 +192,12 @@ translateIdentWithArgs i args = do
           mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
           (Text.pack targetName))
           <$> mapM translateTerm args
-    applySpecialTreatment _identToCoq (UseReplaceDropArgs n replacement)
-      | length args >= n =
-        Coq.App replacement <$> mapM translateTerm (drop n args)
-    applySpecialTreatment _identToCoq (UseReplaceDropArgs n _) =
+    applySpecialTreatment _identToCoq (UseMacro n macroFun)
+      | length args >= n
+      , (m_args, args') <- splitAt n args =
+        do f <- macroFun <$> mapM translateTerm m_args
+           Coq.App f <$> mapM translateTerm args'
+    applySpecialTreatment _identToCoq (UseMacro n _) =
       errorTermM (unwords
         [ "Identifier"
         , show i
@@ -256,7 +258,7 @@ translateIdentToIdent i =
     UsePreserve -> return $ Just (mkIdent translatedModuleName (identBaseName i))
     UseRename   targetModule targetName _ ->
       return $ Just $ mkIdent (fromMaybe translatedModuleName targetModule) (Text.pack targetName)
-    UseReplaceDropArgs _ _ -> return Nothing
+    UseMacro _ _ -> return Nothing
   where
     translatedModuleName = translateModuleName (identModule i)
 
@@ -278,9 +280,9 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]
     PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse translateTerm [x, y]
     PairLeft t    ->
-      Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.fst") <*> traverse translateTerm [t]
+      Coq.App <$> pure (Coq.Var "fst") <*> traverse translateTerm [t]
     PairRight t   ->
-      Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.snd") <*> traverse translateTerm [t]
+      Coq.App <$> pure (Coq.Var "snd") <*> traverse translateTerm [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> translateIdentWithArgs (primName n) (is ++ as)
     CtorApp n is as -> translateIdentWithArgs (primName n) (is ++ as)

@@ -1,0 +1,120 @@
+/* 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
+
+import "SHA512.cry";
+
+include "../common/helpers.saw";
+
+
+// Load LLVM bytecode
+m <- llvm_load_module "sha512.bc";
+
+////////////////////////////////////////////////////////////////////////////////
+// SHA-512
+////////////////////////////////////////////////////////////////////////////////
+
+// To help you get to the interesting bits sooner, you're given all of the
+// constants below
+
+/*
+ * SHA512 defines
+ */
+// Size of a block in bytes
+let SHA512_CBLOCK = 128;
+
+// Length of message digest in bytes
+let SHA512_DIGEST_LENGTH = 64;
+
+// Size of the SHA512 context struct
+let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
+
+////////////////////////////////////////////////////////////////////////////////
+// BEGIN Part 1
+////////////////////////////////////////////////////////////////////////////////
+
+// Prove the C function `sha512_block_data_order` satisfies the Cryptol
+// specification `processBlock_Common`.
+
+// NOTE: The proof may take a few seconds to go through.  The sample solution
+// takes about 5 seconds on a reasonably modern laptop.  If your proof has been
+// running for over 30 seconds you can assume it is wrong.
+
+////////////////////////////////////////////////////////////////////////////////
+// END Part 1
+////////////////////////////////////////////////////////////////////////////////
+
+// Helper functions to help you get to the interesting bit of part 2
+
+/*
+ * Helpers for specifying the SHA512 structs
+ */
+/*
+ * The next functions all specify structs used in the C SHA implementation.
+ * Most of the statements in these are of the form:
+ *    llvm_points_to (llvm_field ptr "name") (llvm_term {{ term }})
+ * which indicates that the field `name` of the struct pointed to by `ptr`
+ * contains the value `term`.
+ * All statements that do not match these two forms are documented inline
+ */
+
+// Specify the sha512_state_st struct from a SHAState
+let points_to_sha512_state_st_common ptr (h, sz, block, n) num = do {
+  llvm_points_to (llvm_field ptr "h") (llvm_term h);
+
+  // Specify `sha512_state_st.Nl` and `sha512_state_st.Nh` contain `sz`
+  llvm_points_to_at_type (llvm_field ptr "Nl") i128 (llvm_term sz);
+
+  if eval_bool {{ `num == 0 }} then do {
+    // Do not specify anything about `sha512_state_st.p`
+    return ();
+  } else do {
+    // Specify that the first `num` bytes of `sha512_state_st.p` match the
+    // first `num` bits of `state.block`.
+    // Untyped check because the size of `sha512_state_st.p` does not match
+    // the size of (take`{num} state.block) unless `num` == `SHA512_CBLOCK`
+    llvm_points_to_untyped (llvm_field ptr "p") (llvm_term block);
+  };
+
+  llvm_points_to (llvm_field ptr "num") (llvm_term n);
+  llvm_points_to (llvm_field ptr "md_len") (llvm_term {{ `SHA512_DIGEST_LENGTH : [32] }});
+};
+
+let pointer_to_fresh_sha512_state_st name n = do {
+  // Hash value
+  h <- llvm_fresh_var (str_concat name ".h") (llvm_array 8 i64);
+  // Message block
+  block <- if eval_bool {{ `n == 0 }} then do {
+    // Do not specify anything about `sha512_state_st.p`
+    return {{ [] : [0][8] }};
+  } else do {
+    llvm_fresh_var (str_concat name ".block") (llvm_array n i8);
+  };
+  // Size
+  sz <- llvm_fresh_var (str_concat name ".sz") i128;
+  // Build SHAState, padding `block` with zeros to fit
+  let state = {{ { h = h, block = (block # zero) : [SHA512_CBLOCK][8], n = `n : [32], sz = sz } }};
+
+  // `ptr` is a pointer to a `sha512_state_st` struct
+  ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+  points_to_sha512_state_st_common ptr (h, sz, block, {{ `n : [32]}}) n;
+
+  return (state, ptr);
+};
+
+// Specify the sha512_state_st struct from a SHAState
+let points_to_sha512_state_st ptr state num = do {
+ points_to_sha512_state_st_common
+   ptr
+   ({{ state.h }}, {{ state.sz }}, {{ take`{num} state.block }}, {{ state.n }}) num;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 2
+////////////////////////////////////////////////////////////////////////////////
+
+// Prove the C function SHA512 equal to the Cryptol specification SHAImp.
+// Ensure your proofs provide good code coverage by running multiple proofs with
+// different sizes/lengths that cover distinct paths through the program.

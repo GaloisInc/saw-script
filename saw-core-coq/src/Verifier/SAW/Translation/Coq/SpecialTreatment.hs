@@ -66,9 +66,9 @@ data UseSiteTreatment
     --   symbol, which indicates to Coq that all implicit arguments should be
     --   treated as explicit.
   | UseRename   (Maybe ModuleName) String Bool
-    -- | Drop the first @n@ SAWCore arguments to this identifier, then replace
-    --   the occurence with the given Coq term.
-  | UseReplaceDropArgs  Int Coq.Term
+    -- | Apply a macro function to the translations of the first @n@ SAWCore
+    -- arguments of this identifier
+  | UseMacro Int ([Coq.Term] -> Coq.Term)
 
 data IdentSpecialTreatment = IdentSpecialTreatment
   { atDefSite :: DefSiteTreatment
@@ -101,7 +101,7 @@ findSpecialTreatment ident = do
         }
   pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
 
--- Use `mapsTo` for identifiers whose definition has a matching definition
+-- | Use `mapsTo` for identifiers whose definition has a matching definition
 -- already on the Coq side.  As such, their definition can be skipped, and use
 -- sites can be replaced by the appropriate call.
 mapsTo :: ModuleName -> String -> IdentSpecialTreatment
@@ -110,17 +110,27 @@ mapsTo targetModule targetName = IdentSpecialTreatment
   , atUseSite = UseRename (Just targetModule) targetName False
   }
 
--- Like @mapsTo@ but use an explicit variable reference so
+-- | Like 'mapsTo' but use an explicit variable reference so
 -- that all implicit arguments must be provided.
 mapsToExpl :: ModuleName -> String -> IdentSpecialTreatment
 mapsToExpl targetModule targetName = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UseRename (Just targetModule) targetName True
   }
--- Use `realize` for axioms that can be realized, or for primitives that must be
--- realized.  While some primitives can be written directly in a standalone Coq
--- module, some primitives depend on code from the extracted module, and are
--- depended upon by following code in the same module.  Such primitives can
+
+-- | Like 'mapsToExpl' but add an @n@th argument that is inferred by Coq
+mapsToExplInferArg :: String -> Int -> IdentSpecialTreatment
+mapsToExplInferArg targetName argNum = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseMacro argNum (\args ->
+                                  Coq.App (Coq.ExplVar targetName)
+                                  (args ++ [Coq.Var "_"]))
+  }
+
+-- | Use `realize` for axioms that can be realized, or for primitives that must
+-- be realized. While some primitives can be written directly in a standalone
+-- Coq module, some primitives depend on code from the extracted module, and are
+-- depended upon by following code in the same module. Such primitives can
 -- therefore *neither* be defined a priori, *nor* a posteriori, and must be
 -- realized where they were originally declared.
 realize :: String -> IdentSpecialTreatment
@@ -129,9 +139,9 @@ realize code = IdentSpecialTreatment
   , atUseSite = UsePreserve
   }
 
--- Use `rename` for identifiers whose definition can be translated, but has to
--- be renamed.  This is useful for certain definitions whose name on the
--- SAWCore/Cryptol side clashes with names on the Coq side.  For instance, `at`
+-- | Use `rename` for identifiers whose definition can be translated, but has to
+-- be renamed. This is useful for certain definitions whose name on the
+-- SAWCore/Cryptol side clashes with names on the Coq side. For instance, `at`
 -- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
 -- Also useful for translation notations, until they are better supported.
 rename :: String -> IdentSpecialTreatment
@@ -140,34 +150,59 @@ rename ident = IdentSpecialTreatment
   , atUseSite = UseRename Nothing ident False
   }
 
--- Replace any occurrences of identifier applied to @n@ arguments with the
--- supplied Coq term. If @n=0@ and the supplied Coq term is an identifier then
--- this is the same as 'rename'.
+-- | Replace any occurrences of identifier applied to @n@ arguments with the
+-- supplied Coq term
 replaceDropArgs :: Int -> Coq.Term -> IdentSpecialTreatment
 replaceDropArgs n term = IdentSpecialTreatment
   { atDefSite = DefSkip
-  , atUseSite = UseReplaceDropArgs n term
+  , atUseSite = UseMacro n (const term)
   }
 
--- A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
+-- | A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
 -- an identifier with the supplied Coq term
 replace :: Coq.Term -> IdentSpecialTreatment
 replace = replaceDropArgs 0
 
 
--- Use `skip` for identifiers that are already defined in the appropriate module
--- on the Coq side.
+-- | Use `skip` for identifiers that are already defined in the appropriate
+-- module on the Coq side.
 skip :: IdentSpecialTreatment
 skip = IdentSpecialTreatment
   { atDefSite = DefSkip
   , atUseSite = UsePreserve
   }
 
+-- | The Coq built-in @Datatypes@ module
+datatypesModule :: ModuleName
+datatypesModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Init.Datatypes
+  mkModuleName ["Datatypes", "Init", "Coq"]
+
+-- | The Coq built-in @Logic@ module
+logicModule :: ModuleName
+logicModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Init.Logic
+  mkModuleName ["Logic", "Init", "Coq"]
+
+-- | The Coq built-in @String@ module.
+stringModule :: ModuleName
+stringModule =
+  -- NOTE: SAW core convention is most specific module name component first, so
+  -- this is really Coq.Strings.String
+  mkModuleName ["String", "Strings", "Coq"]
+
+-- | The @SAWCoreScaffolding@ module
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
+-- | The @CompM@ module
 compMModule :: ModuleName
 compMModule = mkModuleName ["CompM"]
+
+specMModule :: ModuleName
+specMModule = mkModuleName ["SpecM"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
@@ -175,9 +210,6 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
 
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
-
-sawCoreScaffoldingModule :: ModuleName
-sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
 
 preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
@@ -211,7 +243,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   Map.fromList $
 
   -- sawLet
-  [ ("sawLet", mapsTo sawCoreScaffoldingModule "sawLet_def") ]
+  [ ("sawLet", mapsTo sawDefinitionsModule "sawLet_def") ]
 
   -- Unsafe SAW features
   ++
@@ -265,25 +297,25 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Boolean
   ++
-  [ ("and",           mapsTo sawDefinitionsModule "and")
+  [ ("Bool",          mapsTo datatypesModule "bool")
+  , ("True",          mapsTo datatypesModule "true")
+  , ("False",         mapsTo datatypesModule "false")
+  , ("and",           mapsTo datatypesModule "andb")
   , ("and__eq",       mapsTo sawDefinitionsModule "and__eq")
-  , ("Bool",          mapsTo sawDefinitionsModule "Bool")
+  , ("or",            mapsTo datatypesModule "orb")
+  , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
+  , ("xor",           mapsTo datatypesModule "xorb")
+  , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
+  , ("not",           mapsTo datatypesModule "negb")
+  , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
   , ("boolEq",        mapsTo sawDefinitionsModule "boolEq")
   , ("boolEq__eq",    mapsTo sawDefinitionsModule "boolEq__eq")
-  , ("False",         mapsTo sawDefinitionsModule "false")
   , ("ite",           mapsTo sawDefinitionsModule "ite")
   , ("iteDep",        mapsTo sawDefinitionsModule "iteDep")
   , ("iteDep_True",   mapsTo sawDefinitionsModule "iteDep_True")
   , ("iteDep_False",  mapsTo sawDefinitionsModule "iteDep_False")
   , ("ite_bit",       skip) -- FIXME: change this
   , ("ite_eq_iteDep", mapsTo sawDefinitionsModule "ite_eq_iteDep")
-  , ("not",           mapsTo sawDefinitionsModule "not")
-  , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
-  , ("or",            mapsTo sawDefinitionsModule "or")
-  , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
-  , ("True",          mapsTo sawDefinitionsModule "true")
-  , ("xor",           mapsTo sawDefinitionsModule "xor")
-  , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
   ]
 
   -- Pairs
@@ -297,45 +329,48 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Equality
   ++
-  [ ("Eq",      mapsTo sawDefinitionsModule "Eq")
+  [ ("Eq",      mapsToExpl logicModule "eq")
   , ("Eq__rec", mapsTo sawDefinitionsModule "Eq__rec")
-  , ("Refl",    mapsTo sawDefinitionsModule "Refl")
+  , ("Refl",    mapsToExpl logicModule "eq_refl")
   ]
 
-  -- Nat le
+  -- Nat le/lt
   ++
   [ ("IsLeNat"     , mapsTo sawDefinitionsModule "IsLeNat")
   , ("IsLeNat__rec", mapsTo sawDefinitionsModule "IsLeNat__rec")
   , ("IsLeNat_base", mapsTo sawDefinitionsModule "IsLeNat_base")
   , ("IsLeNat_succ", mapsTo sawDefinitionsModule "IsLeNat_succ")
+  , ("IsLtNat"     , mapsTo sawDefinitionsModule "IsLtNat")
   ]
 
   -- Strings
   ++
-  [ ("String", mapsTo sawDefinitionsModule "String")
+  [ ("String", mapsTo stringModule "string")
   , ("equalString", mapsTo sawDefinitionsModule "equalString")
   , ("appendString", mapsTo sawDefinitionsModule "appendString")
   ]
 
   -- Utility functions
   ++
-  [ ("id", mapsTo sawDefinitionsModule "id")
+  [ ("id", mapsTo datatypesModule "id")
   ]
 
   -- Natural numbers
   ++
   [ ("divModNat", mapsTo sawDefinitionsModule "divModNat")
-  , ("Nat",       mapsTo sawDefinitionsModule "Nat")
+  , ("Nat",       mapsTo datatypesModule "nat")
   , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
-  , ("Zero",      mapsTo sawCoreScaffoldingModule   "Zero")
-  , ("Succ",      mapsTo sawCoreScaffoldingModule   "Succ")
+  , ("Zero",      mapsTo sawDefinitionsModule "Zero")
+  , ("Succ",      mapsTo sawDefinitionsModule "Succ")
   ]
 
   -- Vectors
   ++
   [ ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
   , ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
+  , ("at_gen_BVVec",  mapsTo preludeExtraModule "at_gen_BVVec")
   , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
+  , ("atWithProof",   mapsTo vectorsModule "atWithProof")
   , ("at_single",     skip) -- is boring, could be proved on the Coq side
   , ("bvAdd",         mapsTo vectorsModule "bvAdd")
   , ("bvLg2",         mapsTo vectorsModule "bvLg2")
@@ -359,6 +394,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
   , ("foldl",         mapsTo vectorsModule "foldl")
+  , ("gen_at_BVVec",  mapsTo preludeExtraModule "gen_at_BVVec")
+  , ("genWithProof",  mapsTo vectorsModule "genWithProof")
   , ("scanl",         mapsTo vectorsModule "scanl")
   , ("gen",           mapsTo vectorsModule "gen")
   , ("rotateL",       mapsTo vectorsModule "rotateL")
@@ -437,7 +474,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bveq_sameL",           skip)
   , ("bveq_sameR",           skip)
   , ("bveq_same2",           skip)
-  , ("bvNat_bvToNat",        skip)
   , ("ite_split_cong",       skip)
   , ("ite_join_cong",        skip)
   , ("map_map",              skip)
@@ -469,9 +505,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("assuming",             skip)
   , ("fixM",                 replace (Coq.App (Coq.ExplVar "fixM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
-  , ("LetRecType",           mapsTo compMModule "LetRecType")
-  , ("LRT_Ret",              mapsTo compMModule "LRT_Ret")
-  , ("LRT_Fun",              mapsTo compMModule "LRT_Fun")
+  , ("LetRecType",           mapsTo specMModule "LetRecType")
+  , ("LRT_Ret",              mapsTo specMModule "LRT_Ret")
+  , ("LRT_Fun",              mapsTo specMModule "LRT_Fun")
   , ("lrtToType",            mapsTo compMModule "lrtToType")
   , ("LetRecTypes",          mapsTo compMModule "LetRecTypes")
   , ("LRT_Cons",             mapsTo compMModule "LRT_Cons")
@@ -480,6 +516,35 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("lrtTupleType",         mapsTo compMModule "lrtTupleType")
   , ("multiFixM",            mapsToExpl compMModule "multiFixM")
   , ("letRecM",              mapsToExpl compMModule "letRecM")
+  ]
+
+  -- The specification monad
+  ++
+  [ ("EvType",               mapsTo specMModule "EvType")
+  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
+  , ("evTypeType",           mapsTo specMModule "evTypeType")
+  , ("evRetType",            mapsTo specMModule "evRetType")
+  , ("SpecM",                mapsToExpl specMModule "SpecM")
+  , ("retS",                 mapsToExpl specMModule "RetS")
+  , ("bindS",                mapsToExpl specMModule "BindS")
+  , ("errorS",               mapsToExpl specMModule "ErrorS")
+  , ("liftStackS",           mapsToExpl specMModule "liftStackS")
+  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 3)
+  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 3)
+  , ("FunStack",             mapsTo specMModule "FunStack")
+  , ("LRTInput",             mapsToExpl specMModule "LRTInput")
+  , ("LRTOutput",            mapsToExpl specMModule "LRTOutput")
+  , ("lrt1Pi",               mapsToExpl specMModule "lrtPi")
+  , ("lrtLambda",            mapsToExpl specMModule "lrtLambda")
+  , ("nthLRT",               mapsToExpl specMModule "nthLRT")
+  , ("FrameCall",            mapsToExpl specMModule "FrameCall")
+  , ("FrameCallOfArgs",      mapsToExpl specMModule "FrameCallOfArgs")
+  , ("mkFrameCall",          mapsToExpl specMModule "mkFrameCall")
+  , ("FrameCallRet",         mapsToExpl specMModule "FrameCallRet")
+  , ("LRTType",              mapsToExpl specMModule "LRTType")
+  , ("FrameTuple",           mapsToExpl specMModule "FrameTuple")
+  , ("callS",                mapsToExpl specMModule "CallS")
+  , ("multiFixS",            mapsToExpl specMModule "MultiFixS")
   ]
 
   -- Dependent pairs
@@ -499,6 +564,21 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
   ]
 
+  -- Lists at sort 1
+  ++
+  [ ("List1", replace (Coq.ExplVar "Datatypes.list"))
+  , ("Nil1", replace (Coq.ExplVar "Datatypes.nil"))
+  , ("Cons1", replace (Coq.ExplVar "Datatypes.cons"))
+  ]
+
+  -- Lists at sort 2
+  ++
+  [ ("List2", replace (Coq.ExplVar "Datatypes.list"))
+  , ("Nil2", replace (Coq.ExplVar "Datatypes.nil"))
+  , ("Cons2", replace (Coq.ExplVar "Datatypes.cons"))
+  , ("List2__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
+  ]
+
 escapeIdent :: String -> String
 escapeIdent str
   | all okChar str = str
@@ -508,7 +588,7 @@ escapeIdent str
 
 zipSnippet :: String
 zipSnippet = [i|
-Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
+Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   : Vec (minNat m n) (a * b) :=
   match
     xs in Vector.t _ m'
