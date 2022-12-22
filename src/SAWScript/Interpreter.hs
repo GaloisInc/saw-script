@@ -390,13 +390,17 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain = do
-  opts <- getOptions
-  stmts <- io $ SAWScript.Import.loadFile opts file
-  mapM_ stmtWithPrint stmts
-  when runMain interpretMain
-  writeVerificationSummary
+interpretFile file runMain = 
+  bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
+    interp = 
+      do  opts <- getOptions
+          io $ setCurrentDirectory (takeDirectory file)
+          stmts <- io $ SAWScript.Import.loadFile opts file
+          mapM_ stmtWithPrint stmts
+          when runMain interpretMain
+          writeVerificationSummary
+
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                                              map (\l -> "\t"  ++ l) (lines str)
@@ -520,12 +524,9 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
   let ro'' = case mbProofSubshell of
               Nothing -> ro'
               Just m  -> ro'{ roProofSubshell = m }
-  oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
-  setCurrentDirectory (takeDirectory file')
   _ <- runTopLevel (interpretFile file' True) ro'' rw
             `X.catch` (handleException opts)
-  setCurrentDirectory oldpath
   return ()
 
 -- Primitives ------------------------------------------------------------------
@@ -711,11 +712,8 @@ set_crucible_timeout t = do
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
-  oldpath <- io $ getCurrentDirectory
   file' <- io $ canonicalizePath file
-  io $ setCurrentDirectory (takeDirectory file')
   interpretFile file' False
-  io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
