@@ -2870,14 +2870,20 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_LLVMArrayEmpty x mb_ap |] ->
-    do (w_term, _, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
-       let arr_term =
-             applyOpenTermMulti (globalOpenTerm "Prelude.emptyBVVec")
-             [w_term, elem_tp]
-       withPermStackM (:>: translateVar x)
-         (\pctx ->
-           pctx :>:
-           PTrans_Conj [APTrans_LLVMArray $ typeTransF ap_tp_trans [arr_term]])
+    do (w_tm, _, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
+       -- First we build a term of type Vec 0 elem_tp using EmptyVec
+       let vec_tm = applyGlobalOpenTerm "Prelude.EmptyVec" [elem_tp]
+       -- Next, we build a computation that casts it to BVVec w 0x0 elem_tp
+       let w = fromIntegral $ natVal2 mb_ap
+       let bvZero_nat_tm =
+             applyGlobalOpenTerm "Prelude.bvToNat"
+             [w_tm, bvLitOpenTerm (replicate w False)]
+       vec_cast_m <-
+         applyNamedSpecOpM "Prelude.castVecS" [elem_tp, natOpenTerm 0,
+                                               bvZero_nat_tm, vec_tm]
+       bindSpecMTransM vec_cast_m ap_tp_trans "empty_vec" $ \ptrans_arr ->
+         withPermStackM (:>: translateVar x)
+         (\pctx -> pctx :>: PTrans_Conj [APTrans_LLVMArray ptrans_arr])
          m
 
 -- translate1/translateClosed ( zeroOfType <- get the default element )

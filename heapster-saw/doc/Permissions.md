@@ -53,6 +53,7 @@ Any crucible type can have a variable of that type, and that thing is an express
 | `n`                          | `nat`              | A literal natural number |
 | `n`                          | `bv w`             | A literal bitvector |
 | `b1 + b2`                    | `bv w`             | Sum of two bitvectors |
+| `-b`                         | `bv w`             | 2's complement negation of a bitvector |
 | `b1 * b2`                    | `bv w`             | Linear multiplication of two bitvectors, meaning that one of the operands must be a constant |
 | `struct(e1,..,en)`           | `struct(a1,..,an)` | A (crucible) struct is a tuple of expressions for each argument of the struct type. Crucible structs are different from C structs, and we only use crucible structs when we need to, otherwise C structs are described manually as pointers into chunks of memory |
 | `llvmword(e)`                | `llvmptr(w)`       | An LLVM value that represents a word, i.e. whose region identifier is 0, given a bitvector expression `e:bv w` |
