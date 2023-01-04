@@ -37,8 +37,10 @@ import Control.Monad.State
 -- import Control.Monad.Cont
 import GHC.TypeLits
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
+import Control.Monad.Extra (concatMapM)
 
 import Data.Parameterized.Some
+import Data.Parameterized.BoolRepr
 
 import Prettyprinter
 
@@ -204,6 +206,15 @@ traceM f = do
   dlevel <- view wsDebugLevel <$> get
   str <- renderDoc <$> f <$> view wsPPInfo <$> get
   debugTraceTraceLvl dlevel str $ return ()
+
+-- | Unfold an 'AtomicPerm' if it is a named conjunct, otherwise leave it alone
+widUnfoldConjPerm :: AtomicPerm a -> WideningM [AtomicPerm a]
+widUnfoldConjPerm (Perm_NamedConj npn args off)
+  | TrueRepr <- nameCanFoldRepr npn =
+    do env <- use wsPermEnv
+       let np = requireNamedPerm env npn
+       return $ unfoldConjPerm np args off
+widUnfoldConjPerm p = return [p]
 
 
 ----------------------------------------------------------------------
@@ -653,6 +664,13 @@ widenAtomicPerms' _ tp@(LLVMFrameRepr w) (Perm_LLVMFrame frmps1 : ps1) ps2
                        (LLVMPointerRepr w)) (map fst frmps1) (map fst frmps2)
        (Perm_LLVMFrame (zip es (map snd frmps1)) :) <$>
          widenAtomicPerms tp ps1 (deleteNth i ps2)
+
+-- If either side has unfoldable named permissions, unfold them and recurse
+widenAtomicPerms' _ tp ps1 ps2
+  | any isFoldableConjPerm (ps1 ++ ps2)
+  = do ps1' <- concatMapM widUnfoldConjPerm ps1
+       ps2' <- concatMapM widUnfoldConjPerm ps2
+       widenAtomicPerms tp ps1' ps2'
 
 -- Default: cannot widen p1 against any p2 on the right, so drop it and recurse
 widenAtomicPerms' _ tp (_ : ps1) ps2 = widenAtomicPerms tp ps1 ps2

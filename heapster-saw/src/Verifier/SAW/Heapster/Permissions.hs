@@ -6249,6 +6249,20 @@ unfoldPerm :: NameSortCanFold ns ~ 'True => NamedPerm ns args a ->
 unfoldPerm (NamedPerm_Defined dp) = unfoldDefinedPerm dp
 unfoldPerm (NamedPerm_Rec rp) = unfoldRecPerm rp
 
+-- | Unfold a unfoldable conjunctive named permission to a list of conjuncts
+unfoldConjPerm :: NameSortIsConj ns ~ 'True => NameSortCanFold ns ~ 'True =>
+                  NamedPerm ns args a -> PermExprs args -> PermOffset a ->
+                  [AtomicPerm a]
+unfoldConjPerm npn args off
+  | ValPerm_Conj conjs <- unfoldPerm npn args off = conjs
+unfoldConjPerm npn args off
+  | ValPerm_Named npn' args' off' <- unfoldPerm npn args off
+  , TrueRepr <- nameIsConjRepr npn' =
+    [Perm_NamedConj npn' args' off']
+unfoldConjPerm _ _ _ =
+  -- NOTE: this should never happen
+  error "unfoldConjPerm"
+
 -- | Test if two expressions are definitely unequal
 exprsUnequal :: PermExpr a -> PermExpr a -> Bool
 exprsUnequal (PExpr_Var _) _ = False
