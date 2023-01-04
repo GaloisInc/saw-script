@@ -5791,9 +5791,30 @@ recombinePerm' x (ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
   recombinePermConj x x_ps p >>>
   recombinePerm x (ValPerm_Conj ps)
 recombinePerm' x x_p (ValPerm_Named npn args off)
+  -- When recombining a conjuctive named permission, turn it into a conjunction
+  -- and recombine it
   | TrueRepr <- nameIsConjRepr npn =
     implNamedToConjM x npn args off >>>
     recombinePermExpl x x_p (ValPerm_Conj1 $ Perm_NamedConj npn args off)
+recombinePerm' x x_p (ValPerm_Named npn args off)
+  -- When recombining a non-conjuctive but unfoldable named permission, unfold
+  -- it and recombine it
+  | TrueRepr <- nameCanFoldRepr npn =
+    implUnfoldNamedM x npn args off >>>= \p' ->
+    recombinePermExpl x x_p p'
+recombinePerm' x x_p@(ValPerm_Named npn args off) p
+  -- When recombining into a conjuctive named permission, turn it into a
+  -- conjunction and recombine it
+  | TrueRepr <- nameIsConjRepr npn =
+    implPushM x x_p >>> implNamedToConjM x npn args off >>>
+    let x_p' = ValPerm_Conj1 $ Perm_NamedConj npn args off in
+    implPopM x x_p' >>> recombinePermExpl x x_p' p
+recombinePerm' x x_p@(ValPerm_Named npn args off) p
+  -- When recombining into a non-conjuctive but unfoldable named permission, unfold
+  -- it and recombine it
+  | TrueRepr <- nameCanFoldRepr npn =
+    implPushM x x_p >>> implUnfoldNamedM x npn args off >>>= \x_p' ->
+    implPopM x x_p' >>> recombinePermExpl x x_p' p
 recombinePerm' x _ p = implDropM x p
 
 -- | Recombine a single conjuct @x:p@ on top of the stack back into the existing
