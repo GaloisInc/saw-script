@@ -4748,37 +4748,46 @@ mbExBlockToSubShape a =
   mbMapCl ($(mkClosed [| exBlockToSubShape |]) `clApply` toClosed a)
 
 -- | Split a block permission into portions that are before and after a given
--- offset, if possible, assuming the offset is in the block permission
-splitLLVMBlockPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                      LLVMBlockPerm w ->
-                      Maybe (LLVMBlockPerm w, LLVMBlockPerm w)
-splitLLVMBlockPerm off bp
+-- offset, if possible, assuming the offset is in the block permission. The
+-- supplied function provides a partial substitution from variables of
+-- 'LLVMBlockType' to their shapes, in order to split @eqsh@ shapes.
+splitLLVMBlockPerm ::
+  (1 <= w, KnownNat w) =>
+  (ExprVar (LLVMBlockType w) -> Maybe (PermExpr (LLVMShapeType w))) ->
+  PermExpr (BVType w) -> LLVMBlockPerm w ->
+  Maybe (LLVMBlockPerm w, LLVMBlockPerm w)
+splitLLVMBlockPerm _ off bp
   | bvEq off (llvmBlockOffset bp)
   = Just (bp { llvmBlockLen = bvInt 0, llvmBlockShape = PExpr_EmptyShape },
           bp)
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_EmptyShape) =
+splitLLVMBlockPerm _ off bp@(llvmBlockShape -> PExpr_EmptyShape) =
   Just (bp { llvmBlockLen = bvSub off (llvmBlockOffset bp) },
         bp { llvmBlockOffset = off,
              llvmBlockLen = bvSub (llvmBlockEndOffset bp) off })
-splitLLVMBlockPerm off bp@(LLVMBlockPerm { llvmBlockShape = sh })
+splitLLVMBlockPerm blsubst off bp@(LLVMBlockPerm { llvmBlockShape = sh })
   | Just sh_len <- llvmShapeLength sh
   , bvLt sh_len (bvSub off (llvmBlockOffset bp)) =
     -- If we are splitting after the end of the natural length of a shape, then
     -- pad out the block permission to its natural length and fall back to the
     -- sequence shape case below
-    splitLLVMBlockPerm off (bp { llvmBlockShape =
-                                   PExpr_SeqShape sh PExpr_EmptyShape })
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_Var _) = Nothing
-splitLLVMBlockPerm off bp@(llvmBlockShape ->
-                           PExpr_NamedShape maybe_rw maybe_l nmsh args)
+    splitLLVMBlockPerm blsubst off (bp { llvmBlockShape =
+                                         PExpr_SeqShape sh PExpr_EmptyShape })
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_Var _) = Nothing
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape ->
+                                   PExpr_NamedShape maybe_rw maybe_l nmsh args)
   | TrueRepr <- namedShapeCanUnfoldRepr nmsh
   , Just sh' <- unfoldModalizeNamedShape maybe_rw maybe_l nmsh args =
-    splitLLVMBlockPerm off (bp { llvmBlockShape = sh' })
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
+    splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh' })
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape ->
+                                   PExpr_EqShape _len (PExpr_Var b))
+  -- FIXME: make sure the returned shape fits into len bytes!
+  | Just sh <- blsubst b
+  = splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh })
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
+splitLLVMBlockPerm _ off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
   | Just (ix, BV.BV 0) <-
       bvMatchFactorPlusConst (bytesToInteger stride) (bvSub off $
                                                       llvmBlockOffset bp)
@@ -4788,18 +4797,18 @@ splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
           bp { llvmBlockOffset = off,
                llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                llvmBlockShape = PExpr_ArrayShape (bvSub len ix) stride sh })
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
   | Just sh1_len <- llvmShapeLength sh1
   , off_diff <- bvSub off (llvmBlockOffset bp)
   , bvLt off_diff sh1_len
-  = splitLLVMBlockPerm off (bp { llvmBlockLen = sh1_len,
-                                 llvmBlockShape = sh1 }) >>= \(bp1,bp2) ->
+  = splitLLVMBlockPerm blsubst off (bp { llvmBlockLen = sh1_len,
+                                         llvmBlockShape = sh1 }) >>= \(bp1,bp2) ->
     Just (bp1,
           bp2 { llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                 llvmBlockShape = PExpr_SeqShape (llvmBlockShape bp2) sh2 })
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
   | Just sh1_len <- llvmShapeLength sh1
-  = splitLLVMBlockPerm off
+  = splitLLVMBlockPerm blsubst off
     (bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) sh1_len,
           llvmBlockLen = bvSub (llvmBlockLen bp) sh1_len,
           llvmBlockShape = sh2 }) >>= \(bp1,bp2) ->
@@ -4807,16 +4816,16 @@ splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
                 llvmBlockLen = bvAdd (llvmBlockLen bp1) sh1_len,
                 llvmBlockShape = PExpr_SeqShape sh1 (llvmBlockShape bp1) },
           bp2)
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_OrShape sh1 sh2) =
-  do (bp1_L,bp1_R) <- splitLLVMBlockPerm off (bp { llvmBlockShape = sh1 })
-     (bp2_L,bp2_R) <- splitLLVMBlockPerm off (bp { llvmBlockShape = sh2 })
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_OrShape sh1 sh2) =
+  do (bp1_L,bp1_R) <- splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh1 })
+     (bp2_L,bp2_R) <- splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh2 })
      let or_helper bp1 bp2 =
            bp1 { llvmBlockShape =
                    PExpr_OrShape (llvmBlockShape bp1) (llvmBlockShape bp2)}
      Just (or_helper bp1_L bp2_L, or_helper bp1_R bp2_R)
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ExShape mb_sh) =
-  case mbMatch $ fmap (\sh -> splitLLVMBlockPerm off
-                                (bp { llvmBlockShape = sh })) mb_sh of
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_ExShape mb_sh) =
+  case mbMatch $ fmap (\sh -> splitLLVMBlockPerm blsubst off
+                              (bp { llvmBlockShape = sh })) mb_sh of
     [nuMP| Just (mb_bp1,mb_bp2) |] ->
       let off_diff = bvSub off (llvmBlockOffset bp) in
       Just (bp { llvmBlockLen = off_diff,
@@ -4825,7 +4834,7 @@ splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ExShape mb_sh) =
                  llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                  llvmBlockShape = PExpr_ExShape (fmap llvmBlockShape mb_bp2) })
     _ -> Nothing
-splitLLVMBlockPerm _ _ = Nothing
+splitLLVMBlockPerm _ _ _ = Nothing
 
 -- | Remove a range of offsets from a block permission, if possible, yielding a
 -- list of block permissions for the remaining offsets
@@ -4836,12 +4845,12 @@ remLLVMBLockPermRange rng bp
 remLLVMBLockPermRange rng bp =
   do (bps_l, bp') <-
        if bvInRange (bvRangeOffset rng) (llvmBlockRange bp) then
-         do (bp_l,bp') <- splitLLVMBlockPerm (bvRangeOffset rng) bp
+         do (bp_l,bp') <- splitLLVMBlockPerm (const Nothing) (bvRangeOffset rng) bp
             return ([bp_l],bp')
        else return ([],bp)
      bp_r <-
        if bvInRange (bvRangeEnd rng) (llvmBlockRange bp) then
-         snd <$> splitLLVMBlockPerm (bvRangeEnd rng) bp
+         snd <$> splitLLVMBlockPerm (const Nothing) (bvRangeEnd rng) bp
        else return bp'
      return (bps_l ++ [bp_r])
 
