@@ -55,6 +55,8 @@ import qualified Data.Foldable as Fold
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Prettyprinter
@@ -106,11 +108,14 @@ data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
                      , ppMaxDepth :: Maybe Int
+                     , ppNoInlineMemo :: [MemoVar]
+                     , ppNoInlineIdx :: Set TermIndex -- move to PPState?
                      , ppMinSharing :: Int }
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
 defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
+                         ppNoInlineMemo = mempty, ppNoInlineIdx = mempty,
                          ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
 
 -- | Options for printing with a maximum depth
@@ -293,18 +298,33 @@ withBoundVarM basename m =
 -- bound to the given term index, passing the new memoization variable to the
 -- computation. If the flag is true, use the global table, otherwise use the
 -- local table.
-withMemoVar :: Bool -> TermIndex -> (MemoVar -> PPM a) -> PPM a
+withMemoVar :: Bool -> TermIndex -> (Maybe MemoVar -> PPM a) -> PPM a
 withMemoVar global_p idx f =
-  do memo_var <- ppNextMemoVar <$> ask
-     local (\s -> add_to_table global_p memo_var s) (f memo_var)
-       where
-         add_to_table True v st =
-           st { ppNextMemoVar = v + 1,
-                ppGlobalMemoTable = IntMap.insert idx v (ppGlobalMemoTable st) }
-         add_to_table False v st =
-           st { ppNextMemoVar = v + 1,
-                ppLocalMemoTable = IntMap.insert idx v (ppLocalMemoTable st) }
+  do
+    memoVar <- asks ppNextMemoVar
+    memoSkips <- asks (ppNoInlineMemo . ppOpts)
+    idxSkips <- asks (ppNoInlineIdx . ppOpts)
+    case memoSkips of
+      (skip:_) | skip == memoVar -> local (updateMemoVar . addIdxSkip . removeMemoSkip) (f Nothing)
+      _ | idx `Set.member` idxSkips -> f Nothing
+      _ -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
+  where
+    bind = if global_p then bindGlobal else bindLocal
 
+    bindGlobal memoVar PPState{ .. } =
+      PPState { ppGlobalMemoTable = IntMap.insert idx memoVar ppGlobalMemoTable, .. }
+
+    bindLocal memoVar PPState{ .. } =
+      PPState { ppLocalMemoTable = IntMap.insert idx memoVar ppLocalMemoTable, .. }
+
+    removeMemoSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineMemo = tail ppNoInlineMemo, .. }, .. }
+
+    addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert idx ppNoInlineIdx, .. }, .. }
+
+    updateMemoVar PPState{ .. } =
+      PPState { ppNextMemoVar = ppNextMemoVar + 1, .. }
 
 --------------------------------------------------------------------------------
 -- * The Pretty-Printing of Specific Constructs
@@ -664,8 +684,9 @@ ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
   do isBound <- isJust <$> memoLookupM idx
      if isBound then ppLets global_p idxs bindings baseDoc else
        do doc_rhs <- ppTerm' PrecTerm t_rhs
-          withMemoVar global_p idx $ \memo_var ->
-            ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
+          withMemoVar global_p idx $ \case
+            Just memo_var -> ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
+            Nothing -> ppLets global_p idxs bindings baseDoc
 
 
 -- | Pretty-print a term inside a binder for a variable of the given name,

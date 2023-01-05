@@ -36,7 +36,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.IORef
-import Data.List (isPrefixOf, isInfixOf)
+import Data.List (isPrefixOf, isInfixOf, sort)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
@@ -462,6 +462,17 @@ print_goal =
      nenv <- io (scGetNamingEnv sc)
      let output = prettySequent opts nenv (goalSequent goal)
      printOutLnTop Info (unlines [goalSummary goal, output])
+
+print_goal_inline :: [Int] -> ProofScript ()
+print_goal_inline noInline =
+  execTactic $ tacticId $ \goal ->
+    do
+      opts <- getTopLevelPPOpts
+      let opts' = opts { ppNoInlineMemo = sort noInline } 
+      sc <- getSharedContext
+      nenv <- io (scGetNamingEnv sc)
+      let output = prettySequent opts' nenv (goalSequent goal)
+      printOutLnTop Info (unlines [goalSummary goal, output])
 
 print_goal_summary :: ProofScript ()
 print_goal_summary =
