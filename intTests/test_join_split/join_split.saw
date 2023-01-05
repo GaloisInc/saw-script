@@ -1,0 +1,10 @@
+enable_experimental; // for `goal_normalize`
+
+join_split_thm_z3 <- prove_print z3 {{ \x -> join`{each=32, parts=4, a=Bool} (split x) == x }};
+
+join_split_thm_manual <- prove_print (do {
+    goal_normalize ["ecJoin", "ecSplit"];
+    simplify (addsimp join_split_thm_z3 empty_ss);
+    goal_eval_unint ["ecJoin", "ecSplit"];
+    trivial;
+}) {{ \x -> join`{each=32, parts=4, a=Bool} (split x) == x }};
