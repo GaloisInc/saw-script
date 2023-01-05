@@ -294,10 +294,12 @@ withBoundVarM basename m =
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
 
--- | Run a computation in the context of a fresh "memoization variable" that is
--- bound to the given term index, passing the new memoization variable to the
--- computation. If the flag is true, use the global table, otherwise use the
--- local table.
+-- | Attempt to memoize the given term (index) 'idx' and run a computation in
+-- the context that the attempt produces. If memoization succeeds, the context
+-- will contain a binding (global in scope if 'global_p' is set, local if not)
+-- of a fresh memoization variable to the term, and the fresh variable will be
+-- supplied to the computation. If memoization fails, the context will not
+-- contain such a binding, and no fresh variable will be supplied.
 withMemoVar :: Bool -> TermIndex -> (Maybe MemoVar -> PPM a) -> PPM a
 withMemoVar global_p idx f =
   do
@@ -305,6 +307,10 @@ withMemoVar global_p idx f =
     memoSkips <- asks (ppNoInlineMemo . ppOpts)
     idxSkips <- asks (ppNoInlineIdx . ppOpts)
     case memoSkips of
+      -- Even if we must skip this memoization variable, we still want to
+      -- "pretend" we memoized by calling `updateMemoVar`, so that non-inlined
+      -- memoization identifiers are kept constant between two
+      -- otherwise-identical terms with differing inline strategies.
       (skip:_) | skip == memoVar -> local (updateMemoVar . addIdxSkip . removeMemoSkip) (f Nothing)
       _ | idx `Set.member` idxSkips -> f Nothing
       _ -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
