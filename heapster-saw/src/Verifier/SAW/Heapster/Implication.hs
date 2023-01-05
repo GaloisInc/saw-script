@@ -5519,8 +5519,8 @@ permIndicesForProvingOffset ps _ _
 permIndicesForProvingOffset ps imprecise_p off =
   let ixs_holdss = flip findMaybeIndices ps $ \p ->
         case llvmPermContainsOffset off p of
-          Just (_, True) -> Just True
-          Just _ | llvmPermContainsArray p && imprecise_p -> Just False
+          Just (_, holds) | holds || imprecise_p -> Just holds
+          -- Just _ | llvmPermContainsArray p && imprecise_p -> Just False
           _ -> Nothing in
   case find (\(_,holds) -> holds) ixs_holdss of
     Just (i,_) -> [i]

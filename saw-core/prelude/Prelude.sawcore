@@ -3100,6 +3100,22 @@ mapBVVecS : (E:EvType) -> (stack:FunStack) ->
             SpecM E stack (BVVec n len b);
 mapBVVecS E stack a b f n len = mapS E stack a b f (bvToNat n len);
 
+-- Cast a vector between lengths, testing that those lengths are equal
+castVecS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) ->
+           (n1 : Nat) -> (n2 : Nat) -> Vec n1 a ->
+           SpecM E stack (Vec n2 a);
+castVecS E stack a n1 n2 v =
+  maybe
+    (Eq Nat n1 n2) (SpecM E stack (Vec n2 a))
+    (errorS E stack (Vec n2 a) "Could not cast Vec")
+    (\ (pf:Eq Nat n1 n2) ->
+       retS
+         E stack (Vec n2 a)
+         (coerce (Vec n1 a) (Vec n2 a)
+                 (eq_cong Nat n1 n2 pf (sort 0) (\ (n:Nat) -> Vec n a))
+                 v))
+    (proveEqNat n1 n2);
+
 -- Append two BVVecs and cast the resulting size, if possible
 appendCastBVVecS : (E:EvType) -> (stack:FunStack) ->
                    (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
