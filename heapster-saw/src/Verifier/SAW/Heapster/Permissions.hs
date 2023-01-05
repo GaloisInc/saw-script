@@ -4838,19 +4838,26 @@ splitLLVMBlockPerm _ _ _ = Nothing
 
 -- | Remove a range of offsets from a block permission, if possible, yielding a
 -- list of block permissions for the remaining offsets
-remLLVMBLockPermRange :: (1 <= w, KnownNat w) => BVRange w -> LLVMBlockPerm w ->
+remLLVMBlockPermRange :: (1 <= w, KnownNat w) => BVRange w -> LLVMBlockPerm w ->
                          Maybe [LLVMBlockPerm w]
-remLLVMBLockPermRange rng bp
+remLLVMBlockPermRange rng bp
   | bvRangeSubset (llvmBlockRange bp) rng = Just []
-remLLVMBLockPermRange rng bp =
+remLLVMBlockPermRange rng bp =
   do (bps_l, bp') <-
+       -- If the beginning of rng lies inside the range of bp, split bp into
+       -- block permissions before and after the beginning of rng; otherwise,
+       -- lump all of bp into the "after" bucket. The call to splitLLVMBlockPerm
+       -- uses an empty substitution because remLLVMBlockPermRange itself is
+       -- assuming an empty substitution
        if bvInRange (bvRangeOffset rng) (llvmBlockRange bp) then
          do (bp_l,bp') <- splitLLVMBlockPerm (const Nothing) (bvRangeOffset rng) bp
             return ([bp_l],bp')
        else return ([],bp)
      bp_r <-
+       -- Split bp', the permissions after the beginning of rng, into those
+       -- before and after the end of rng
        if bvInRange (bvRangeEnd rng) (llvmBlockRange bp) then
-         snd <$> splitLLVMBlockPerm (const Nothing) (bvRangeEnd rng) bp
+         snd <$> splitLLVMBlockPerm (const Nothing) (bvRangeEnd rng) bp'
        else return bp'
      return (bps_l ++ [bp_r])
 
