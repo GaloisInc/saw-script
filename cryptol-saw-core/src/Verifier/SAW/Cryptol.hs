@@ -44,7 +44,6 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.SimpType as ST
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
@@ -231,11 +230,10 @@ importPC sc pc =
     C.PFLiteral        -> panic "importPC PFLiteral" []
     C.PValidFloat      -> panic "importPC PValidFloat" []
 
--- | Normalize according to Cryptol's rules, then translate size types to SAW
--- values of type Num and value types to SAW types of sort 0.
+-- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
 importType :: SharedContext -> Env -> C.Type -> IO Term
 importType sc env ty =
-  case ST.tRebuild ty of
+  case ty of
     C.TVar tvar ->
       case tvar of
         C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
