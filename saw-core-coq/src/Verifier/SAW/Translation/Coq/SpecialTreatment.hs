@@ -260,9 +260,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- coercions
   ++
   [ ("coerce",      mapsTo sawDefinitionsModule "coerce")
-  , ("coerce__def", skip)
-  , ("coerce__eq",  skip)
-  , ("rcoerce",     skip)
+  , ("coerce__def", mapsTo sawDefinitionsModule "coerce")
+  , ("coerce__eq",  replace (Coq.Var "eq_refl"))
+  , ("uip",         replace (Coq.Var "UIP"))
   ]
 
   -- Unit
