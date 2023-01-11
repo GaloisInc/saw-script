@@ -4,6 +4,7 @@ From Coq Require Import ZArith.Zdiv.
 From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
+From Coq Require Export Logic.Eqdep.
 From CryptolToCoq Require Export CompM.
 
 From EnTree Require Export
@@ -133,6 +134,11 @@ Definition coerce (a b : sort 0) (p : @eq (sort 0) a b) (x : a) : b :=
   match p in eq _ a' return a' with
   | eq_refl _ => x
   end
+.
+Check eq_sym.
+
+Definition rcoerce (a b : sort 0) (p : @eq (sort 0) b a) (x : a) : b :=
+  coerce a b (eq_sym p) x
 .
 
 (* SAW's prelude defines iteDep as a bool eliminator whose arguments are
