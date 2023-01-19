@@ -5142,6 +5142,11 @@ lrtsOpenTerm lrts =
   (ctorOpenTerm "Prelude.Nil1" [tp])
   lrts
 
+-- | Make the type @List1 LetRecType@ of recursive function frames
+frameTypeOpenTerm :: OpenTerm
+frameTypeOpenTerm = dataTypeOpenTerm "Prelude.List1" [dataTypeOpenTerm
+                                                      "Prelude.LetRecType" []]
+
 -- | FIXME HERE NOW: docs
 tcTranslateAddCFGs ::
   HasPtrWidth w => SharedContext -> ModuleName -> PermEnv -> ChecksFlag ->
@@ -5164,16 +5169,22 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
           ("With type:\n" ++ permPrettyString emptyPPInfo fun_perm) $
           tcCFG ?ptrWidth tmp_env1 endianness dlevel fun_perm cfg
 
-    -- Next, generate a list of all the LetRecTypes in all of the functions,
-    -- along with a list of indices into that list of where the LRTs of each
-    -- function are in that list
+    -- Next, generate a frame, i.e., a list of all the LetRecTypes in all of the
+    -- functions, along with a list of indices into that list of where the LRTs
+    -- of each function are in that list, and make a definition for the frame
     let gen_lrts_ixs (i::Natural) (SomeTypedCFG _ _ tcfg : tcfgs') =
           let lrts = translateCFGLRTs env tcfg in
           (i, lrts) : gen_lrts_ixs (i + fromIntegral (length lrts)) tcfgs'
         gen_lrts_ixs _ [] = []
     let (fun_ixs, lrtss) = unzip $ gen_lrts_ixs 0 tcfgs
     let lrts = concat lrtss
-    let frame = lrtsOpenTerm lrts
+    frame_tm <- completeNormOpenTerm sc $ lrtsOpenTerm lrts
+    let frame_ident =
+          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+                                ++ "__frame")
+    frame_tp <- completeNormOpenTerm sc frameTypeOpenTerm
+    scInsertDef sc mod_name frame_ident frame_tp frame_tm
+    let frame = globalOpenTerm frame_ident
     let stack = singleFunStack frame
 
     -- Now, generate a SAW core tuple of all the bodies of mutually recursive
