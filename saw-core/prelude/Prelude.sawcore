@@ -128,12 +128,15 @@ data Eq (t : sort 1) (x : t) : t -> Prop where {
     Refl : Eq t x x;
   }
 
-
 -- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
 -- structure of the Eq type
 Eq__rec : (t : sort 1) -> (x : t) -> (p : (y : t) -> Eq t x y -> sort 1) ->
            p x (Refl t x) -> (y : t) -> (pf : Eq t x y) -> p y pf;
 Eq__rec t x p f1 y pf = Eq#rec t x p f1 y pf;
+
+-- Uniqueness of Identity Proofs, a core logical principle of, e.g., Coq
+axiom uip : (t : sort 1) -> (x : t) -> (y : t) -> (pf1 pf2 : Eq t x y) ->
+            Eq (Eq t x y) pf1 pf2;
 
 -- Congruence closure for equality
 eq_cong : (t : sort 1) -> (x : t) -> (y : t) -> Eq t x y ->
@@ -194,44 +197,92 @@ inverse_eta_rule a b f g H =
 -- Unchecked assertion that two types are equal.
 axiom unsafeAssert : (a : sort 1) -> (x : a) -> (y : a) -> Eq a x y;
 
-
+-- Coerce from one type to a provably equal type. This is actually definable in
+-- the logic (see coerce__def, below), but we leave it as a primitive so it does
+-- not evaluate and can be specialized by simulation.
 primitive coerce : (a b : sort 0) -> Eq (sort 0) a b -> a -> b;
 
+-- The actual definition of coerce
 coerce__def : (a b : sort 0) -> Eq (sort 0) a b -> a -> b;
 coerce__def a b eq x =
    Eq__rec (sort 0) a (\ (b':sort 0) -> \ (eq':Eq (sort 0) a b') -> b') x b eq;
 
+-- Assertion that coerce equals coerce__def
 axiom coerce__eq :
   Eq ((a b : sort 0) -> Eq (sort 0) a b -> a -> b) coerce coerce__def;
 
-
+-- Coercion to the same type is a no-op
 -- NOTE: this is equivalent to UIP / Axiom K
-{-
-coerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) -> Eq a (coerce a a q x) x;
-coerce_same a (Refl _ _) x = Refl a x;
--}
+coerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) ->
+              Eq a (coerce a a q x) x;
+coerce_same a q x =
+  trans a (coerce a a q x) (coerce__def a a q x) x
+        (eq_cong
+           ((a b : sort 0) -> Eq (sort 0) a b -> a -> b)
+           coerce coerce__def coerce__eq a
+           (\ (f:(a b : sort 0) -> Eq (sort 0) a b -> a -> b) -> f a a q x))
+        (eq_cong
+           (Eq (sort 0) a a) q (Refl (sort 0) a)
+           (uip (sort 0) a a q (Refl (sort 0) a))
+           a (\ (q':Eq (sort 0) a a) -> coerce__def a a q' x));
 
+-- Multiple steps of coerce__def can be combined using transitivity
+coerce__def_trans : (a b c : sort 0) -> (pf1 : Eq (sort 0) a b) ->
+                    (pf2 : Eq (sort 0) b c) -> (x : a) ->
+                    Eq c (coerce__def b c pf2 (coerce__def a b pf1 x))
+                         (coerce__def a c (trans (sort 0) a b c pf1 pf2) x);
+coerce__def_trans a b c pf1 pf2 x =
+  Eq__rec
+    (sort 0) b
+    (\ (c' : sort 0) (pf2' : Eq (sort 0) b c') ->
+       Eq c' (coerce__def b c' pf2' (coerce__def a b pf1 x))
+             (coerce__def a c' (trans (sort 0) a b c' pf1 pf2') x))
+    (Refl b (coerce__def a b pf1 x))
+    c pf2;
+
+-- Multiple steps of coercion can be combined using transitivity
+coerce_trans : (a b c : sort 0) -> (pf1 : Eq (sort 0) a b) ->
+               (pf2 : Eq (sort 0) b c) -> (x : a) ->
+               Eq c (coerce b c pf2 (coerce a b pf1 x))
+                    (coerce a c (trans (sort 0) a b c pf1 pf2) x);
+coerce_trans a b c pf1 pf2 x =
+  trans4
+    c (coerce b c pf2 (coerce a b pf1 x))
+    (coerce__def b c pf2 (coerce__def a b pf1 x))
+    (coerce__def a c (trans (sort 0) a b c pf1 pf2) x)
+    (coerce a c (trans (sort 0) a b c pf1 pf2) x)
+    (eq_cong ((t u : sort 0) -> Eq (sort 0) t u -> t -> u)
+             coerce coerce__def coerce__eq c
+             (\ (f:(a b : sort 0) -> Eq (sort 0) a b -> a -> b) ->
+                (f b c pf2 (f a b pf1 x))))
+    (coerce__def_trans a b c pf1 pf2 x)
+    (eq_cong ((t u : sort 0) -> Eq (sort 0) t u -> t -> u)
+             coerce__def coerce
+             (sym ((t u : sort 0) -> Eq (sort 0) t u -> t -> u)
+                  coerce coerce__def coerce__eq) c
+             (\ (f:(a b : sort 0) -> Eq (sort 0) a b -> a -> b) ->
+                (f a c (trans (sort 0) a b c pf1 pf2) x)));
+
+-- Coerce "backwards", i.e., using an equality in the opposite direction
 rcoerce : (a b : sort 0) -> Eq (sort 0) a b -> b -> a;
 rcoerce a b q = coerce b a (sym (sort 0) a b q);
 
+-- Coercion from the same type is a no-op
 -- NOTE: this is equivalent to UIP / Axiom K
-{-
-rcoerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) -> Eq a (rcoerce a a q x) x;
+rcoerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) ->
+               Eq a (rcoerce a a q x) x;
 rcoerce_same a q x = coerce_same a (sym (sort 0) a a q) x;
--}
 
+-- Coerce without a proof of equality (which is unsafe)
 unsafeCoerce : (a b : sort 0) -> a -> b;
 unsafeCoerce a b = coerce a b (unsafeAssert (sort 0) a b);
 
-axiom unsafeCoerce_same : (a : sort 0) -> (x : a) ->
-                           Eq a (unsafeCoerce a a x) x;
-
--- NOTE: We could prove unsafeCoerce_same if we were willing to allow UIP...
-{-
+-- unsafeCoerce to the same type is a no-op
 unsafeCoerce_same : (a : sort 0) -> (x : a) -> Eq a (unsafeCoerce a a x) x;
 unsafeCoerce_same a x = coerce_same a (unsafeAssert (sort 0) a a) x;
--}
 
+-- If two domain types are equal, then function types from them to the same
+-- output type are equal
 piCong0 : (r x y : sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
 piCong0 r x y eq =
   Eq__rec
@@ -240,6 +291,8 @@ piCong0 r x y eq =
        Eq (sort 0) (x -> r) (y' -> r))
     (Refl (sort 0) (x -> r)) y eq;
 
+-- If two co-domain types are equal, then function types to them from the same
+-- input type are equal
 piCong1 : (r x y : sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (r -> x) (r -> y));
 piCong1 r x y eq =
   Eq__rec
@@ -3181,6 +3234,22 @@ mapBVVecS : (E:EvType) -> (stack:FunStack) ->
             (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
             SpecM E stack (BVVec n len b);
 mapBVVecS E stack a b f n len = mapS E stack a b f (bvToNat n len);
+
+-- Cast a vector between lengths, testing that those lengths are equal
+castVecS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) ->
+           (n1 : Nat) -> (n2 : Nat) -> Vec n1 a ->
+           SpecM E stack (Vec n2 a);
+castVecS E stack a n1 n2 v =
+  maybe
+    (Eq Nat n1 n2) (SpecM E stack (Vec n2 a))
+    (errorS E stack (Vec n2 a) "Could not cast Vec")
+    (\ (pf:Eq Nat n1 n2) ->
+       retS
+         E stack (Vec n2 a)
+         (coerce (Vec n1 a) (Vec n2 a)
+                 (eq_cong Nat n1 n2 pf (sort 0) (\ (n:Nat) -> Vec n a))
+                 v))
+    (proveEqNat n1 n2);
 
 -- Append two BVVecs and cast the resulting size, if possible
 appendCastBVVecS : (E:EvType) -> (stack:FunStack) ->

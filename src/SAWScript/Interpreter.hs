@@ -390,13 +390,17 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain = do
-  opts <- getOptions
-  stmts <- io $ SAWScript.Import.loadFile opts file
-  mapM_ stmtWithPrint stmts
-  when runMain interpretMain
-  writeVerificationSummary
+interpretFile file runMain = 
+  bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
+    interp = 
+      do  opts <- getOptions
+          io $ setCurrentDirectory (takeDirectory file)
+          stmts <- io $ SAWScript.Import.loadFile opts file
+          mapM_ stmtWithPrint stmts
+          when runMain interpretMain
+          writeVerificationSummary
+
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                                              map (\l -> "\t"  ++ l) (lines str)
@@ -520,12 +524,9 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
   let ro'' = case mbProofSubshell of
               Nothing -> ro'
               Just m  -> ro'{ roProofSubshell = m }
-  oldpath <- getCurrentDirectory
   file' <- canonicalizePath file
-  setCurrentDirectory (takeDirectory file')
   _ <- runTopLevel (interpretFile file' True) ro'' rw
             `X.catch` (handleException opts)
-  setCurrentDirectory oldpath
   return ()
 
 -- Primitives ------------------------------------------------------------------
@@ -711,11 +712,8 @@ set_crucible_timeout t = do
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
-  oldpath <- io $ getCurrentDirectory
   file' <- io $ canonicalizePath file
-  io $ setCurrentDirectory (takeDirectory file')
   interpretFile file' False
-  io $ setCurrentDirectory oldpath
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
@@ -4060,7 +4058,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)
     Experimental
-    [ "heapster_assume_fun nm perms trans assumes that function nm has"
+    [ "heapster_assume_fun env nm perms trans assumes that function nm has"
     , " permissions perms and translates to the SAW core term trans"
     ]
 
@@ -4068,7 +4066,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun_rename)
     Experimental
-    [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
+    [ "heapster_assume_fun_rename env nm nm_to perms trans assumes that function nm"
     , " has permissions perms and translates to the SAW core term trans. If"
     , " trans is not an identifier then it is bound to the defined name nm_to."
     ]
@@ -4078,7 +4076,7 @@ primitives = Map.fromList
     (bicVal heapster_assume_fun_rename_prim)
     Experimental
     [
-      "heapster_assume_fun_rename_prim nm nm_to perms assumes that function nm"
+      "heapster_assume_fun_rename_prim env nm nm_to perms assumes that function nm"
     , " has permissions perms as a primitive."
     ]
 
@@ -4086,7 +4084,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun_multi)
     Experimental
-    [ "heapster_assume_fun_multi nm [(perm1, trans1), ...] assumes that function"
+    [ "heapster_assume_fun_multi env nm [(perm1, trans1), ...] assumes that function"
     , " nm can be typed with 0 or more permissions, each with the corresponding"
     , " translation to SAW core"
     ]

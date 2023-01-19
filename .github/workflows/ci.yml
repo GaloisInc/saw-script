@@ -24,7 +24,7 @@ env:
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20220902"
+  SOLVER_PKG_VERSION: "snapshot-20221212"
 
   OCAML_VERSION: 4.09.x
 

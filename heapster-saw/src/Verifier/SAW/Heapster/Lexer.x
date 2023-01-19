@@ -27,6 +27,7 @@ $white+                         ;
 "."                             { token_ TDot           }
 ","                             { token_ TComma         }
 "+"                             { token_ TPlus          }
+"-"                             { token_ TMinus         }
 "*"                             { token_ TStar          }
 "@"                             { token_ TAt            }
 "-o"                            { token_ TLoli          }

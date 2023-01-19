@@ -129,7 +129,13 @@ zip_dist_with_solvers() {
   cp "$BIN/cvc4"       dist/bin/
   cp "$BIN/yices"      dist/bin/
   cp "$BIN/yices-smt2" dist/bin/
+  # Z3 4.8.14 has been known to nondeterministically time out with the AWSLC
+  # and BLST proofs, so we include both 4.8.8 and 4.8.14 so that we can fall
+  # back to 4.8.8 (a version known to work with the AWSLC and BLST proofs)
+  # where necessary. See #1772.
   cp "$BIN/z3"         dist/bin/
+  cp "$BIN/z3-4.8.8"   dist/bin/
+  cp "$BIN/z3-4.8.14"  dist/bin/
   cp -r dist "$sname"
   tar -cvzf "$sname".tar.gz "$sname"
 }

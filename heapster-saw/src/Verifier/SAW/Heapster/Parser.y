@@ -22,6 +22,8 @@ import Verifier.SAW.Heapster.UntypedAST
 
 }
 
+%expect 0 -- shift/reduce conflicts
+
 %tokentype      { Located Token                         }
 %token
 '('             { Located $$ TOpenParen                 }
@@ -37,6 +39,7 @@ import Verifier.SAW.Heapster.UntypedAST
 '.'             { Located $$ TDot                       }
 ','             { Located $$ TComma                     }
 '+'             { Located $$ TPlus                      }
+'-'             { Located $$ TMinus                     }
 '*'             { Located $$ TStar                      }
 '@'             { Located $$ TAt                        }
 '-o'            { Located $$ TLoli                      }
@@ -107,6 +110,7 @@ NAT             { (traverse tokenNat   -> Just $$)      }
 %left     '+'
 %left     '*'
 %nonassoc '@'
+%left NEGPREC
 
 %%
 
@@ -135,6 +139,9 @@ expr ::                                         { AstExpr }
   | NAT                                         { ExNat (pos $1) (locThing $1) }
   | 'unit'                                      { ExUnit (pos $1) }
   | expr '+' expr                               { ExAdd (pos $2) $1 $3 }
+    -- NB: Give negation the highest possible precedence to avoid shift/reduce
+    -- conflicts with other operators, such as + and *.
+  | '-' expr %prec NEGPREC                      { ExNeg (pos $1) $2 }
   | expr '*' expr                               { ExMul (pos $2) $1 $3 }
   | 'struct' '(' list(expr) ')'                 { ExStruct (pos $1) $3 }
   | lifetime 'array' '(' expr ',' expr ',' '<' expr ',' '*' expr ',' expr ')'
