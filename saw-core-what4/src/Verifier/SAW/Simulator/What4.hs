@@ -11,6 +11,7 @@
 -- (This module is derived from Verifier.SAW.Simulator.SBV)
 ------------------------------------------------------------------------
 
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds#-}
 {-# LANGUAGE DataKinds #-}
@@ -539,7 +540,7 @@ streamGetOp sym =
       VNat n -> lookupSStream xs n
       VBVToNat _ w ->
         do ilv <- toWord sym w
-           selectV sym (lazyMux @sym (muxBVal sym tp)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
+           selectV sym (lazyMux @sym (muxBVal sym tp)) (lookupSStream xs) ilv
       v -> panic "streamGetOp" ["Expected Nat value", show v]
 
 lookupSStream :: SValue sym -> Natural -> IO (SValue sym)
@@ -580,23 +581,28 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- @selectV sym merger maxValue valueFn vx@ treats @vx@ as an index, represented
--- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
--- if-then-else operator. If the index is greater than @maxValue@, then it
--- returns @valueFn maxValue@.
+-- @selectV sym merger valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup by constructing a mux
+-- tree, using @merger@ as an if-then-else operator.
+--
+-- This is very similar to @selectV@ in @saw-core:Verifier.SAW.Simulator.Prims@,
+-- but specialized to What4's needs. For more information on how this works,
+-- see the comments for @selectV@ in @saw-core@.
 selectV :: forall sym b.
   Sym sym =>
   sym ->
-  (SBool sym -> IO b -> IO b -> IO b) -> Natural -> (Natural -> IO b) -> SWord sym -> IO b
-selectV sym merger maxValue valueFn vx =
+  (SBool sym -> IO b -> IO b -> IO b) -> (Natural -> IO b) -> SWord sym -> IO b
+selectV sym merger valueFn vx =
   case SW.bvAsUnsignedInteger vx of
     Just i  -> valueFn (fromInteger i :: Natural)
     Nothing -> impl (swBvWidth vx) 0
   where
+    -- INVARIANT: @y@ will never exceed @(2 ^ bvWidth vx) - 1@ at any point, as
+    -- this is the maximum possible value that can be attained by setting all
+    -- @bvWidth vx@ bits in the bitmask.
     impl :: Int -> Natural -> IO b
-    impl _ x | x > maxValue || x < 0 = valueFn maxValue
-    impl 0 y = valueFn y
-    impl i y = do
+    impl 0 !y = valueFn y
+    impl i !y = do
       -- NB: `i` counts down in each iteration, so we use bvAtLE (a
       -- little-endian indexing function) to ensure that the bits are processed
       -- in big-endian order. Alternatively, we could have `i` count up and use

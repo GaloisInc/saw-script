@@ -314,21 +314,27 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- @selectV merger maxValue valueFn vx@ treats @vx@ as an index, represented
--- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
--- if-then-else operator. If the index is greater than @maxValue@, then it
--- returns @valueFn maxValue@.
-selectV :: (SBool -> b -> b -> b) -> Natural -> (Natural -> b) -> SWord -> b
-selectV merger maxValue valueFn vx =
+-- @selectV merger valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup by constructing a mux
+-- tree, using @merger@ as an if-then-else operator.
+--
+-- This is very similar to @selectV@ in @saw-core:Verifier.SAW.Simulator.Prims@,
+-- but specialized to SBV's needs. For more information on how this works, see
+-- the comments for @selectV@ in @saw-core@.
+selectV :: forall b. (SBool -> b -> b -> b) -> (Natural -> b) -> SWord -> b
+selectV merger valueFn vx =
   case svAsInteger vx of
     Just i
       | i >= 0    -> valueFn (fromInteger i)
       | otherwise -> panic "selectV" ["expected nonnegative integer", show i]
     Nothing -> impl (intSizeOf vx) 0
   where
-    impl _ x | x > maxValue || x < 0 = valueFn maxValue
-    impl 0 y = valueFn y
-    impl i y =
+    -- INVARIANT: @y@ will never exceed @(2 ^ intSizeOf vx) - 1@ at any point,
+    -- as this is the maximum possible value that can be attained by setting all
+    -- @intSizeOf vx@ bits in the bitmask.
+    impl :: Int -> Natural -> b
+    impl 0 !y = valueFn y
+    impl i !y =
       -- NB: `i` counts down in each iteration, so we use svTestBit (a
       -- little-endian indexing function) to ensure that the bits are processed
       -- in big-endian order. Alternatively, we could have `i` count up and use
@@ -531,7 +537,7 @@ streamGetOp =
     VNat n -> lookupSStream xs n
     VBVToNat _ w ->
       do ilv <- toWord w
-         selectV (lazyMux (muxBVal tp)) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+         selectV (lazyMux (muxBVal tp)) (lookupSStream xs) ilv
     v -> panic "SBV.streamGetOp" ["Expected Nat value", show v]
 
 

@@ -1,0 +1,23 @@
+m <- llvm_load_module "test.bc";
+
+let ptr_to_fresh_readonly (name : String) (type : LLVMType) = do {
+    x <- llvm_fresh_var name type;
+    p <- llvm_alloc_readonly type;
+    llvm_points_to p (llvm_term x);
+    return (x, p);
+};
+
+let get_spec size pos = do {
+    // Generate a fresh array and pointer to that array
+    (x, xp) <- ptr_to_fresh_readonly "x" (llvm_array size (llvm_int 8));
+
+    // Call the C function
+    llvm_execute_func [xp, llvm_term {{`size : [8]}}];
+
+    // Use Cryptol to access the correct position
+    let ret = {{x @ (`pos : [8])}};
+    // Return it using llvm_return
+    llvm_return (llvm_term ret);
+};
+
+last_100_ov <- llvm_verify m "get_last"  [] true (get_spec 100 100) z3;

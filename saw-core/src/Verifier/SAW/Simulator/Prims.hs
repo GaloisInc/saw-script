@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -484,18 +485,55 @@ wordBinRel pack op =
 ------------------------------------------------------------
 -- Utility functions
 
--- @selectV mux maxValue valueFn v@ treats the vector @v@ as an
--- index, represented as a big-endian list of bits. It does a binary
--- lookup, using @mux@ as an if-then-else operator. If the index is
--- greater than @maxValue@, then it returns @valueFn maxValue@.
-selectV :: (b -> a -> a -> a) -> Int -> (Int -> a) -> Vector b -> a
-selectV mux maxValue valueFn v = impl len 0
+-- @selectV mux valueFn v@ treats the vector @v@ as an index, represented as a
+-- big-endian list of bits. It does a binary lookup by constructing a mux tree,
+-- using @mux@ as an if-then-else operator.
+--
+-- The leaves of the mux tree contain @valueFn x@, where each @x@ is a bitmask
+-- representing the path from the root to that particular leaf. For example,
+-- here is what a mux tree would look like for a vector @v@ of length 2:
+--
+--                              /\
+--                             /  \
+--                            /    \
+--                           /      \
+-- MSB of @x@:              0        1
+--                         /\        /\
+--                        /  \      /  \
+-- LSB of @x@:           0    1    0    1
+--                       |    |    |    |
+--                       |    |    |    |
+-- Value of @x@ in     0b00 0b01 0b10 0b11
+-- @valueFn x@          (0)  (1)  (2)  (3)
+selectV :: forall b a. (b -> a -> a -> a) -> (Int -> a) -> Vector b -> a
+selectV mux valueFn v = impl len 0
   where
     len = V.length v
     err = panic "selectV: impossible"
-    impl _ x | x > maxValue || x < 0 = valueFn maxValue
-    impl 0 x = valueFn x
-    impl i x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
+
+    -- @impl i x@ recursively constructs the mux tree, where:
+    --
+    -- * @i@ counts down from @length v@ (the root of the tree) to @0@ (the
+    --   leaves of the tree)
+    --
+    -- * @x@ is the partial bitmask that has been computed thus far. Each
+    --   call to @impl i@ will set the @(i - 1)@th bit if @mux@ computes the
+    --   true branch, and will not set the @(i - 1)@th bit if @mux@ computes
+    --   the false branch.
+    --
+    -- INVARIANTS:
+    --
+    -- * @x@ will always be non-negative, as it starts at @0@ and increases
+    --   in value monotonically with each recursive call to @impl@. (We could
+    --   give @x@ the type 'Natural' to enforce this, but each of @selectV@'s
+    --   call sites expect an 'Int', using an 'Int' here is more convenient.)
+    --
+    -- * @x@ will never exceed @(2 ^ length v) - 1@ at any point, as this is the
+    --   maximum possible value that can be attained by setting all @length v@
+    --   bits in the bitmask.
+    impl :: Int -> Int -> a
+    impl 0 !x = valueFn x
+    impl i !x = mux (vecIdx err v (len - i)) (impl j (x `setBit` j)) (impl j x) where j = i - 1
 
 ------------------------------------------------------------
 -- Values for common primitives
@@ -775,9 +813,9 @@ atWithDefaultOp bp =
         iv <- lift (toBits (bpUnpack bp) i)
         case x of
           VVector xv ->
-            lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
+            lift $ selectV (lazyMuxValue bp tp) (force . vecIdx d xv) iv
           VWord xw ->
-            lift $ selectV (lazyMuxValue bp tp) (fromIntegral n - 1) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral
+            lift $ selectV (lazyMuxValue bp tp) (bpBvAtWithDefault bp (fromIntegral n) (force d) xw) iv -- FIXME dangerous fromIntegral
           _ -> throwE "atOp: expected vector"
 
       VIntToNat _i | bpIsSymbolicEvaluator bp -> panic "atWithDefault: symbolic integer TODO"
@@ -825,7 +863,7 @@ updOp bp =
       VBVToNat _sz (VVector iv) | bpIsSymbolicEvaluator bp -> lift $
         do let update i = return (VVector (xv V.// [(i, y)]))
            iv' <- V.mapM (liftM toBool . force) iv
-           selectV (lazyMuxValue bp (VVecType n tp)) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
+           selectV (lazyMuxValue bp (VVecType n tp)) update iv'
 
       VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "updOp: symbolic integer TODO"
 
