@@ -31,7 +31,7 @@ sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.
 opam init
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install -y coq-bits
-opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#b011f29680fdde87489bc06ae98bfff0f97795b3
+opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#52c4868f1f65c7ce74e90000214de27e23ba98fb
 ```
 
 We have pinned the `entree-specs` dependency's commit to ensure that it points
