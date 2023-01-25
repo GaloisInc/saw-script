@@ -426,7 +426,7 @@ typeCtxPureCtx :: MonadifyTypeCtx -> [(LocalName,Term)]
 typeCtxPureCtx = map (\(x,tp,_) -> (x,tp))
 
 -- | Monadify a type and convert it to its corresponding argument type
-monadifyTypeArgType :: HasCallStack => HasSpecMParams => MonadifyTypeCtx ->
+monadifyTypeArgType :: (HasCallStack, HasSpecMParams) => MonadifyTypeCtx ->
                        Term -> OpenTerm
 monadifyTypeArgType ctx t = toArgType $ monadifyType ctx t
 
@@ -439,7 +439,7 @@ applyMonType (MTyForall _ _ f) (Left mtp) = f mtp
 applyMonType _ _ = error "applyMonType: application at incorrect type"
 
 -- | Convert a SAW core 'Term' to a monadification type
-monadifyType :: HasCallStack => HasSpecMParams => MonadifyTypeCtx -> Term ->
+monadifyType :: (HasCallStack, HasSpecMParams) => MonadifyTypeCtx -> Term ->
                 MonType
 {-
 monadifyType ctx t
@@ -515,7 +515,7 @@ monadifyType ctx tp =
          ++ ppTermInTypeCtx ctx tp)
 
 -- | Monadify a type-level natural number
-monadifyTypeNat :: HasCallStack => HasSpecMParams => MonadifyTypeCtx -> Term ->
+monadifyTypeNat :: (HasCallStack, HasSpecMParams) => MonadifyTypeCtx -> Term ->
                    OpenTerm
 monadifyTypeNat _ (asNat -> Just n) = natOpenTerm n
 monadifyTypeNat ctx (asLocalVar -> Just i)
