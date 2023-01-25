@@ -21,5 +21,5 @@ sha1 (t, x, y, z) =
 fib : [64] -> [64]
 fib x = if x == 0 then 1 else x * fib (x - 1)
 
-fibSpecNoErrors : [64] -> [64]
-fibSpecNoErrors _ = noErrors
+// fibSpecNoErrors : [64] -> [64]
+// fibSpecNoErrors _ = noErrors

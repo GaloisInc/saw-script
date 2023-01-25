@@ -3,8 +3,8 @@ enable_experimental;
 import "SpecPrims.cry" as SpecPrims;
 import "monadify.cry";
 load_sawcore_from_file "../../cryptol-saw-core/saw/CryptolM.sawcore";
-set_monadification "SpecPrims::exists" "Prelude.existsM";
-set_monadification "SpecPrims::forall" "Prelude.forallM";
+set_monadification "SpecPrims::exists" "Prelude.existsS";
+set_monadification "SpecPrims::forall" "Prelude.forallS";
 
 let run_test name cry_term mon_term_expected =
   do { print (str_concat "Test: " name);
