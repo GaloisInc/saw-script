@@ -1171,6 +1171,9 @@ provePrim script t = do
     _ -> return ()
   return res
 
+-- | @proveHelper nm script t f@ attempts to prove @t@ as a theorem with name
+-- @nm@ using the script @script@. Function @f@ converts @t@ to a 'Prop', and
+-- should be either 'termToProp' or 'predicateToProp'.
 proveHelper ::
   String ->
   ProofScript () ->
