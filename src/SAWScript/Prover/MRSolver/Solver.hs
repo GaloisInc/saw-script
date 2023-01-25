@@ -128,7 +128,7 @@ import Data.Either
 import Numeric.Natural (Natural)
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
-import Data.Bits (shiftL)
+-- import Data.Bits (shiftL)
 import Control.Monad.Reader
 import Control.Monad.Except
 import qualified Data.Map as Map
@@ -323,7 +323,7 @@ normComp (CompTerm t) =
         all_args <- (++ args) <$> getAllUVarTerms
         FunBind var all_args <$> mkCompFunReturn <$> mrFunOutType var all_args
 
-    (isGlobalDef "Prelude.multiArgFixS" -> Just (), ev:stack:lrt:body:args) ->
+    (isGlobalDef "Prelude.multiArgFixS" -> Just (), _ev:_stack:_lrt:body:args) ->
       do
         -- Bind a fresh function var for the new recursive function
         body_tp <- mrTypeOf body
@@ -346,8 +346,8 @@ normComp (CompTerm t) =
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
-    (asGlobalDef -> Just "CryptolM.vecMapM", [a, b, (asBvToNat -> Just (w, n)),
-                                              f, xs]) ->
+    (asGlobalDef -> Just "CryptolM.vecMapM", [_a, _b, (asBvToNat -> Just (_w, _n)),
+                                              _f, _xs]) ->
       error "FIXME HERE NOW: need SpecM version of vecMapM"
       {-
       do invar <- mrAssumptions
@@ -357,8 +357,8 @@ normComp (CompTerm t) =
 
     -- Convert `atM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecAtM`
-    (asGlobalDef -> Just "CryptolM.atM", [(asBvToNat -> Just (w1, n)), a, xs,
-                                          (asBvToNat -> Just (w2, i))]) ->
+    (asGlobalDef -> Just "CryptolM.atM", [(asBvToNat -> Just (_w1, _n)), _a, _xs,
+                                          (asBvToNat -> Just (_w2, _i))]) ->
       error "FIXME HERE NOW: need SpecM version of atM"
       {-
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
@@ -370,10 +370,10 @@ normComp (CompTerm t) =
     -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.atM", [n_tm@(asNat -> Just n), a, xs,
+    (asGlobalDef -> Just "CryptolM.atM", [_n_tm@(asNat -> Just _n), _a, _xs,
                                           (asBvToNat ->
-                                             Just (w_tm@(asNat -> Just w),
-                                                   i))]) ->
+                                             Just (_w_tm@(asNat -> Just _w),
+                                                   _i))]) ->
       error "FIXME HERE NOW: need SpecM version of atM"
       {-
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
@@ -385,8 +385,8 @@ normComp (CompTerm t) =
 
     -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecUpdateM`
-    (asGlobalDef -> Just "CryptolM.updateM", [(asBvToNat -> Just (w1, n)), a, xs,
-                                              (asBvToNat -> Just (w2, i)), x]) ->
+    (asGlobalDef -> Just "CryptolM.updateM", [(asBvToNat -> Just (_w1, _n)), _a, _xs,
+                                              (asBvToNat -> Just (_w2, _i)), _x]) ->
       error "FIXME HERE NOW: need SpecM version of updateM"
       {-
       do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
@@ -399,8 +399,8 @@ normComp (CompTerm t) =
     -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
     (asGlobalDef -> Just "CryptolM.updateM",
-     [n_tm@(asNat -> Just n), a, xs, (asBvToNat ->
-                                      Just (w_tm@(asNat -> Just w), i)), x]) ->
+     [_n_tm@(asNat -> Just _n), _a, _xs, (asBvToNat ->
+                                      Just (_w_tm@(asNat -> Just _w), _i)), _x]) ->
       error "FIXME HERE NOW: need SpecM version of updateM"
       {-
       do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
