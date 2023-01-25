@@ -1452,12 +1452,24 @@ ensureCryptolMLoaded sc =
   if is_loaded then return () else
     scLoadCryptolMModule sc
 
--- | Monadify a type to its argument type and complete it to a 'Term'
-monadifyCompleteArgType :: SharedContext -> MonadifyEnv -> Term ->
+-- | Monadify a type to its argument type and complete it to a 'Term',
+-- additionally quantifying over the event type and function stack if the
+-- supplied 'Bool' is 'True'
+monadifyCompleteArgType :: SharedContext -> MonadifyEnv -> Term -> Bool ->
                            IO Term
-monadifyCompleteArgType sc env tp =
-  let ?specMParams = monEnvParams env in
-  completeOpenTerm sc $ monadifyTypeArgType [] tp
+monadifyCompleteArgType sc env tp poly_p =
+  completeOpenTerm sc $
+  if poly_p then
+    -- Parameter polymorphism means pi-quantification over E and stack
+    (piOpenTerm "E" (dataTypeOpenTerm "Prelude.EvType" []) $ \e ->
+      piOpenTerm "stack" (globalOpenTerm "Prelude.FunStack") $ \st ->
+      let ?specMParams = SpecMParams { specMEvType = e, specMStack = st } in
+      -- NOTE: even though E and stack are free variables here, they are not
+      -- free in tp, which is a closed term, so we do not list them in the
+      -- MonadifyTypeCtx argument of monadifyTypeArgType
+      monadifyTypeArgType [] tp)
+  else
+    let ?specMParams = monEnvParams env in monadifyTypeArgType [] tp
 
 -- | Monadify a term of the specified type to a 'MonTerm' and then complete that
 -- 'MonTerm' to a SAW core 'Term', or 'fail' if this is not possible

@@ -2266,8 +2266,8 @@ mrSolverSetDebug dlvl =
   modify (\rw -> rw { rwMRSolverEnv =
                         Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
 
-setMonadification :: SharedContext -> String -> String -> TopLevel ()
-setMonadification sc cry_str saw_str =
+setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
+setMonadification sc cry_str saw_str poly_p =
   do rw <- get
 
      -- Step 1: convert the first string to a Cryptol name
@@ -2297,7 +2297,8 @@ setMonadification sc cry_str saw_str =
              scTypeOf sc cry_nm_trans
          _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
      cry_mon_tp <-
-       liftIO $ Monadify.monadifyCompleteArgType sc (rwMonadify rw) cry_saw_tp
+       liftIO $
+       Monadify.monadifyCompleteArgType sc (rwMonadify rw) cry_saw_tp poly_p
 
      -- Step 3: convert the second string to a typed SAW core term, and if it
      -- has an existing macro, check that it has the same type as the type for
@@ -2310,7 +2311,8 @@ setMonadification sc cry_str saw_str =
      let (tp_to_check, macro) =
            case Monadify.monEnvLookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
              Just existing_macro -> (cry_saw_tp, existing_macro)
-             Nothing -> (cry_mon_tp, Monadify.argGlobalMacro cry_nmi saw_ident False)
+             Nothing -> (cry_mon_tp,
+                         Monadify.argGlobalMacro cry_nmi saw_ident poly_p)
      liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) tp_to_check
 
      -- Step 4: Add the generated macro
