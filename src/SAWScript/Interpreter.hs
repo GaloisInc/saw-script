@@ -3788,11 +3788,13 @@ primitives = Map.fromList
     [ "Monadify a Cryptol term, converting it to a form where all recursion"
     , " and errors are represented as monadic operators"]
 
-  , prim "set_monadification" "String -> String -> TopLevel Term"
+  , prim "set_monadification" "String -> String -> Bool -> TopLevel Term"
     (scVal setMonadification)
     Experimental
     [ "Set the monadification of a specific Cryptol identifer to a SAW core "
-    , "identifier of monadic type" ]
+    , "identifier of monadic type. The supplied Boolean flag indicates if the "
+    , "SAW core term is polymorphic in the event type and function stack of the"
+    , "SpecM monad."]
 
   , prim "heapster_init_env"
     "String -> String -> TopLevel HeapsterEnv"
