@@ -393,7 +393,11 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("coerceVec",     mapsTo vectorsModule "coerceVec")
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
+  , ("foldr_nil",     mapsTo vectorsModule "foldr_nil")
+  , ("foldr_cons",    mapsTo vectorsModule "foldr_cons")
   , ("foldl",         mapsTo vectorsModule "foldl")
+  , ("foldl_nil",     mapsTo vectorsModule "foldl_nil")
+  , ("foldl_cons",    mapsTo vectorsModule "foldl_cons")
   , ("gen_at_BVVec",  mapsTo preludeExtraModule "gen_at_BVVec")
   , ("genWithProof",  mapsTo vectorsModule "genWithProof")
   , ("scanl",         mapsTo vectorsModule "scanl")
@@ -409,6 +413,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("zip",           realize zipSnippet)
   -- cannot map directly to Vector.t because arguments are in a different order
   , ("Vec",           mapsTo vectorsModule "Vec")
+  , ("head",          mapsTo vectorsModule "head")
+  , ("tail",          mapsTo vectorsModule "tail")
   ]
 
   -- Streams

@@ -202,7 +202,7 @@ scMatch ::
   IO (Maybe (Map DeBruijnIndex Term))
 scMatch sc pat term =
   runMaybeT $
-  do --lift $ putStrLn $ "********** scMatch **********"
+  do -- lift $ putStrLn $ "********** scMatch **********"
      MatchState inst cs <- match 0 [] pat term emptyMatchState
      mapM_ (check inst) cs
      return inst
@@ -231,13 +231,13 @@ scMatch sc pat term =
               | j < depth -> go (j : js) t
             _ -> Nothing
 
-    match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState -> MaybeT IO MatchState
+    match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
+             MaybeT IO MatchState
     match _ _ (STApp i fv _) (STApp j _ _) s
       | fv == emptyBitSet && i == j = return s
     match depth env x y s@(MatchState m cs) =
-      --do
-      --lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x
-      --lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y
+      -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
+      -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y) >>
       case asVarPat depth x of
         Just (i, js) ->
           do -- ensure parameter variables are distinct
@@ -268,6 +268,11 @@ scMatch sc pat term =
                Just y3 -> if y2 == y3 then return (MatchState m' cs) else mzero
         Nothing ->
           case (unwrapTermF x, unwrapTermF y) of
+            (_, FTermF (NatLit n))
+              | Just (c, [x']) <- R.asCtor x
+              , primName c == preludeSuccIdent && n > 0 ->
+                do y' <- lift $ scNat sc (n-1)
+                   match depth env x' y' s
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
               case zipWithFlatTermF (match depth env) xf yf of

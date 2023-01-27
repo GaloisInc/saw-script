@@ -1153,6 +1153,22 @@ primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -
 primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
 primitive scanl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> Vec (addNat 1 n) b;
 
+-- Axioms defining foldr
+axiom foldr_nil : (a b : sort 0) -> (f : a -> b -> b) -> (x : b) ->
+                  (v : Vec 0 a) -> Eq b (foldr a b 0 f x v) x;
+axiom foldr_cons : (a b : sort 0) -> (n : Nat) -> (f : a -> b -> b) -> (x : b) ->
+                   (v : Vec (Succ n) a) ->
+                   Eq b (foldr a b (Succ n) f x v)
+                        (f (head n a v) (foldr a b n f x (tail n a v)));
+
+-- Axioms defining foldl
+axiom foldl_nil : (a b : sort 0) -> (f : b -> a -> b) -> (x : b) ->
+                  (v : Vec 0 a) -> Eq b (foldl a b 0 f x v) x;
+axiom foldl_cons : (a b : sort 0) -> (n : Nat) -> (f : b -> a -> b) -> (x : b) ->
+                   (v : Vec (Succ n) a) ->
+                   Eq b (foldl a b (Succ n) f x v)
+                        (foldl a b n f (f x (head n a v)) (tail n a v));
+
 reverse : (n : Nat) -> (a : isort 0) -> Vec n a -> Vec n a;
 reverse n a xs = gen n a (\ (i : Nat) -> at n a xs (subNat (subNat n 1) i));
 
