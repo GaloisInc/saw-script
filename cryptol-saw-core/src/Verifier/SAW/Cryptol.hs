@@ -1050,6 +1050,9 @@ importExpr sc env expr =
     C.ELocated _ e ->
       importExpr sc env e
 
+    C.EPropGuards {} ->
+      error "Using contsraint guards is not yet supported by SAW."
+
   where
     the :: Maybe a -> IO a
     the = maybe (panic "importExpr" ["internal type error"]) return
@@ -1063,6 +1066,9 @@ importExpr sc env expr =
 importExpr' :: SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
 importExpr' sc env schema expr =
   case expr of
+    C.EPropGuards {} ->
+      error "Using contsraint guards is not yet supported by SAW."
+
     C.ETuple es ->
       do ty <- the (C.isMono schema)
          ts <- the (C.tIsTuple ty)
@@ -1284,6 +1290,10 @@ importDeclGroup declOpts sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
+
+    C.DForeign {} ->
+      error "`foreign` imports may not be used in SAW specifications"
+
     C.DExpr expr ->
       do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
          t' <- importSchema sc env (C.dSignature decl)
@@ -1329,6 +1339,8 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
      let extractDeclExpr decl =
            case C.dDefinition decl of
              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
+             C.DForeign {} ->
+               error "`foreign` imports may not be used in SAW specifications"
              C.DPrim ->
                 panic "importDeclGroup"
                         [ "Primitive declarations cannot be recursive:"
@@ -1366,6 +1378,9 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
+    C.DForeign {} ->
+      error "`foreign` imports may not be used in SAW specifications"
+
     C.DPrim
      | TopLevelDeclGroup primOpts <- declOpts -> do
         rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
@@ -1480,7 +1495,7 @@ tNoUser initialTy =
   case C.tNoUser initialTy of
     C.TNewtype nt _ -> C.TRec $ C.ntFields nt
     t -> t
-  
+
 
 -- | Deconstruct a cryptol tuple type as a pair according to the
 -- saw-core tuple type encoding.
@@ -1596,6 +1611,10 @@ importMatches sc env [C.Let decl]
 
 importMatches sc env (C.Let decl : matches) =
   case C.dDefinition decl of
+
+    C.DForeign {} ->
+      error "`foreign` imports may not be used in SAW specifications"
+
     C.DPrim -> do
      panic "importMatches" ["Primitive declarations not allowed in 'let':", show (C.dName decl)]
     C.DExpr expr -> do
