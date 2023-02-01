@@ -315,7 +315,8 @@ jobs:
               cd saw-remote-api/python/
               poetry update
               poetry install
-              poetry run mypy saw_client/
+              poetry run mypy --install-types --non-interactive saw_client/ || true
+              poetry run mypy --install-types --non-interactive saw_client/
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
@@ -337,7 +338,7 @@ jobs:
 
       - uses: actions/setup-python@v2
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - uses: abatilo/actions-poetry@v2.0.0
         with:
