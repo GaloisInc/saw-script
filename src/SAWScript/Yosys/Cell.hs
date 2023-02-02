@@ -215,7 +215,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
   "$mod" -> bvBinaryOp . liftBinary sc $ SC.scBvURem sc
   -- "$modfloor" -> _
   "$logic_not" -> do
-    w <- outputWidth
+    w <- connWidth "A"
     ta <- asBitwiseTerm <$> input "A"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     res <- liftIO $ SC.scNot sc anz
@@ -238,7 +238,37 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     ty <- liftIO $ SC.scBitvector sc width
     res <- liftIO $ SC.scIte sc ty snz tb ta
     output $ CellTerm res (connWidthNat "A") (connSigned "A")
-  "$pmux" -> throw YosysErrorUnsupportedPmux
+  "$pmux" -> do
+    ta <- asBitwiseTerm <$> input "A"
+    tb <- asBitwiseTerm <$> input "B"
+    ts <- asBitwiseTerm <$> input "S"
+
+    width <- connWidth "A"
+    widthBv <- liftIO . SC.scBitvector sc $ connWidthNat "A"
+    swidth <- connWidth "S"
+    bool <- liftIO $ SC.scBoolType sc
+    nat <- liftIO $ SC.scNatType sc
+    splitb <- liftIO $ SC.scSplit sc swidth width bool tb
+    zero <- liftIO $ SC.scNat sc 0
+    accTy <- liftIO $ SC.scPairType sc nat widthBv
+    defaultAcc <- liftIO $ SC.scPairValue sc zero ta
+
+    bitEC <- liftIO $ SC.scFreshEC sc "bit" bool
+    accEC <- liftIO $ SC.scFreshEC sc "acc" accTy
+    fun <- liftIO . SC.scAbstractExts sc [bitEC, accEC] =<< do
+      bit <- liftIO $ SC.scExtCns sc bitEC
+      acc <- liftIO $ SC.scExtCns sc accEC
+      idx <- liftIO $ SC.scPairLeft sc acc
+      aval <- liftIO $ SC.scPairRight sc acc
+      bval <- liftIO $ SC.scAtWithDefault sc swidth widthBv aval splitb idx
+      newidx <- liftIO $ SC.scAddNat sc idx width
+      newval <- liftIO $ SC.scIte sc widthBv bit bval aval
+      liftIO $ SC.scPairValue sc newidx newval
+
+    scFoldr <- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "foldr"
+    resPair <- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
+    res <- liftIO $ SC.scPairRight sc resPair
+    output $ CellTerm res (connWidthNat "A") (connSigned "Y")
   "$adff" -> throw $ YosysErrorUnsupportedFF "$adff"
   "$sdff" -> throw $ YosysErrorUnsupportedFF "$sdff"
   "$aldff" -> throw $ YosysErrorUnsupportedFF "$aldff"
@@ -324,7 +354,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     bvReduce :: Bool -> SC.Term -> m (Maybe SC.Term)
     bvReduce boolIdentity boolFun = do
       CellTerm t _ _ <- input "A"
-      w <- outputWidth
+      w <- connWidth "A"
       boolTy <- liftIO $ SC.scBoolType sc
       identity <- liftIO $ SC.scBool sc boolIdentity
       scFoldr <- liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "foldr"
