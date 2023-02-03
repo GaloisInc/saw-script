@@ -1,0 +1,26 @@
+enable_experimental;
+
+let use_lemmas lemmas =
+    simplify (addsimps lemmas
+              (add_prelude_eqs ["foldl_cons","foldl_nil","head_gen","tail_gen"] (cryptol_ss())));
+
+let proveit p script =
+  do {
+    print (str_concat "Proving " (show_term p));
+    time (prove_print script p);
+  };
+
+import "tupletest.cry";
+
+fnc_lemma <- proveit {{ \x y z i -> (fnc' (fnc (x, y, z) i) i).0 == x }} z3;
+
+proveit {{ foldFunctionInverse }} do {
+    unfolding [ "foldFunctionInverse"
+              , "foldFunction"
+              , "foldFunction'"
+              ];
+    goal_normalize ["fnc", "fnc'"];
+    simplify (add_prelude_eqs ["foldl_cons","foldl_nil",
+                               "head_gen","tail_gen"] (cryptol_ss()));
+    z3;
+};
