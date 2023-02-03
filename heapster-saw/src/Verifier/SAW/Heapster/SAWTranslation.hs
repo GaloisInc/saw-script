@@ -4465,8 +4465,8 @@ translateApply nm f perms =
 translateCallEntry :: forall ext exprExt tops args ghosts blocks ctx rets.
                       PermCheckExtC ext exprExt => String ->
                       TypedEntryTrans ext blocks tops rets args ghosts ->
-                      Mb ctx (RAssign ExprVar (tops :++: args)) ->
-                      Mb ctx (RAssign ExprVar ghosts) ->
+                      Mb' ctx (RAssign ExprVar (tops :++: args)) ->
+                      Mb' ctx (RAssign ExprVar ghosts) ->
                       ImpTransM ext blocks tops rets
                       ((tops :++: args) :++: ghosts) ctx OpenTerm
 translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
@@ -5083,13 +5083,6 @@ data SomeCFGAndPerm ext where
   SomeCFGAndPerm :: GlobalSymbol -> String -> CFG ext blocks inits ret ->
                     FunPerm ghosts (CtxToRList inits) gouts ret ->
                     SomeCFGAndPerm ext
-
--- | An existentially quantified tuple of a 'TypedCFG', its 'GlobalSymbol', and
--- a 'String' name we want to translate it to
-data SomeTypedCFG ext where
-  SomeTypedCFG :: GlobalSymbol -> String ->
-                  TypedCFG ext blocks ghosts inits gouts ret ->
-                  SomeTypedCFG ext
 
 -- | Extract the 'GlobalSymbol' from a 'SomeCFGAndPerm'
 someCFGAndPermSym :: SomeCFGAndPerm ext -> GlobalSymbol

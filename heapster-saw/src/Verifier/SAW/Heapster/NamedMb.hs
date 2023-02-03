@@ -65,8 +65,6 @@ emptyMb' :: a -> Mb' RNil a
 emptyMb' = Mb' MNil . emptyMb
 
 mkNuMatching [t| forall a. StringF a |]
-instance NuMatchingAny1 StringF where
-    nuMatchingAny1Proof = nuMatchingProof
 
 instance Liftable (StringF a) where
     mbLift (mbMatch -> [nuMP| StringF x |]) = StringF (mbLift x)

@@ -26,6 +26,7 @@ import Data.Type.RList ( mapToList )
 import GHC.Natural (Natural)
 import Lang.Crucible.FunctionHandle ( FnHandle )
 import Lang.Crucible.LLVM.Bytes ( Bytes )
+import Lang.Crucible.LLVM.DataLayout (EndianForm)
 import Lang.Crucible.Types
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Datatype as TH
@@ -131,11 +132,12 @@ class JsonExport1 f where
 instance JsonExport1 BaseTypeRepr
 instance JsonExport1 TypeRepr
 instance JsonExport1 (Name :: CrucibleType -> Type)
-instance JsonExport1 LOwnedPerm
 instance JsonExport1 PermExpr
 instance JsonExport1 ValuePerm
 instance JsonExport1 VarAndPerm
 instance JsonExport1 Proxy
+instance JsonExport1 ExprAndPerm
+instance JsonExport1 (OrListDisj ps a) 
 
 -- This code generates generic JSON generation instances for
 -- algebraic data types.
@@ -194,14 +196,15 @@ let fields :: String -> TH.ConstructorVariant -> [TH.ExpQ] -> TH.ExpQ
     typesNeeded =
         [''AtomicPerm, ''BaseTypeRepr, ''BoolRepr, ''BVFactor, ''BVProp,
         ''BVRange, ''CruCtx, ''FloatInfoRepr, ''FloatPrecisionRepr,
-        ''FnHandle, ''FunPerm, ''LLVMArrayBorrow, ''LLVMArrayField,
+        ''FnHandle, ''FunPerm, ''LLVMArrayBorrow,
         ''LLVMArrayIndex, ''LLVMArrayPerm, ''LLVMBlockPerm, ''LLVMFieldPerm,
-        ''LLVMFieldShape, ''LOwnedPerm, ''NamedPermName, ''NamedShape,
+        ''LLVMFieldShape, ''NamedPermName, ''NamedShape,
         ''NamedShapeBody, ''NameReachConstr, ''NameSortRepr, ''NatRepr,
         ''PermExpr, ''PermOffset, ''StringInfoRepr, ''SymbolRepr, ''TypeRepr,
         ''ValuePerm, ''RWModality, ''PermImpl1, ''Member, ''SimplImpl,
         ''VarAndPerm, ''LocalPermImpl, ''LifetimeFunctor, ''NamedPerm,
-        ''RecPerm, ''OpaquePerm, ''DefinedPerm, ''ReachMethods, ''MbPermImpls
+        ''RecPerm, ''OpaquePerm, ''DefinedPerm, ''ReachMethods, ''MbPermImpls,
+        ''ExprAndPerm, ''OrListDisj, ''EndianForm
         ]
 
  in traverse generateJsonExport typesNeeded

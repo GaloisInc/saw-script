@@ -1146,9 +1146,6 @@ debugTraceTraceLvl = debugTrace traceDebugLevel
 debugTracePretty :: DebugLevel -> DebugLevel -> Doc ann -> a -> a
 debugTracePretty req dlevel d a = debugTrace req dlevel (renderDoc d) a
 
--- | The constant string functor
-newtype StringF a = StringF { unStringF :: String }
-
 -- | Convert a type to a base name for printing variables of that type
 typeBaseName :: TypeRepr a -> String
 typeBaseName UnitRepr = "u"

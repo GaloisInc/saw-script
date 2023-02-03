@@ -766,7 +766,7 @@ data TypedStmtSeq ext blocks tops rets ps_in where
   TypedConsStmt :: !ProgramLoc ->
                    !(TypedStmt ext stmt_rets ps_in ps_next) ->
                    !(RAssign Proxy stmt_rets) ->
-                   !(Mb stmt_rets (TypedStmtSeq ext blocks tops rets ps_next)) ->
+                   !(Mb' stmt_rets (TypedStmtSeq ext blocks tops rets ps_next)) ->
                    TypedStmtSeq ext blocks tops rets ps_in
 
   -- | Typed version of 'TermStmt', which terminates the current block
@@ -1207,7 +1207,7 @@ data TypedEntry phase ext blocks tops rets args ghosts =
     typedEntryPermsOut :: !(MbValuePerms (tops :++: rets)),
     -- | The type-checked body of the entrypoint
     typedEntryBody :: !(TransData phase
-                        (Mb ((tops :++: args) :++: ghosts)
+                        (Mb' ((tops :++: args) :++: ghosts)
                          (TypedStmtSeq ext blocks tops rets
                           ((tops :++: args) :++: ghosts))))
   }
@@ -1655,8 +1655,8 @@ data TypedCFG
              }
 
 data SomeTypedCFG ext where
-  SomeTypedCFG :: PermCheckExtC ext =>
-    TypedCFG ext blocks ghosts inits ret -> SomeTypedCFG ext
+  SomeTypedCFG :: PermCheckExtC ext exprExt =>
+    TypedCFG ext blocks ghosts inits gouts ret -> SomeTypedCFG ext
 
 -- | Get the input permissions for a 'CFG'
 tpcfgInputPerms :: TypedCFG ext blocks ghosts inits gouts ret ->
@@ -1975,7 +1975,7 @@ runPermCheckM ::
               () ps_out
               r ((tops :++: args) :++: ghosts)
               ()) ->
-  TopPermCheckM ext cblocks blocks tops rets (Mb ((tops :++: args) :++: ghosts) r)
+  TopPermCheckM ext cblocks blocks tops rets (Mb' ((tops :++: args) :++: ghosts) r)
 runPermCheckM names entryID args ghosts mb_perms_in m =
   get >>= \(TopPermCheckState {..}) ->
   let args_prxs = cruCtxProxies args
@@ -4499,14 +4499,6 @@ permGetPPInfo = gets stPPInfo
 -- | Get the current prefix string to give context to error messages
 getErrorPrefix :: PermCheckM ext cblocks blocks tops ret r ps r ps (Doc ())
 getErrorPrefix = gets (fromMaybe emptyDoc . stErrPrefix)
-
--- | Emit debugging output using the current 'PPInfo'
-stmtTraceM :: (PPInfo -> Doc ()) ->
-              PermCheckM ext cblocks blocks tops ret r ps r ps String
-stmtTraceM f =
-  do doc <- f <$> permGetPPInfo
-     let str = renderDoc doc
-     trace str (pure str)
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: StmtError -> PermCheckM ext cblocks blocks tops ret r1 ps1

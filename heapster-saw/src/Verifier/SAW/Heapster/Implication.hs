@@ -68,6 +68,7 @@ import Verifier.SAW.Heapster.GenMonad
 import GHC.Stack
 import Unsafe.Coerce
 import Data.Functor.Constant (Constant(..))
+import Data.Functor.Product (Product(..))
 
 
 
@@ -1684,6 +1685,8 @@ $(concatMapM mkNuMatching
   , [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |]
   , [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |]
   , [t| forall ps ps'. LocalImplRet ps ps' |]
+  , [t| ImplError |]
+  , [t| LifetimeErrorType |]
   ])
 
 -- | A splitting of an existential list of permissions into a prefix, a single
@@ -4850,7 +4853,7 @@ implEndLifetimeM ps l tps_in tps_out ps_in ps_out
     implTraceM (\i -> pretty "Ending lifetime:" <+> permPretty i l) >>>
     implDropLifetimePermsM l >>>
     recombinePermsPartial ps (DistPermsCons dps_out l ValPerm_LFinished)
-implEndLifetimeM _ _ _ _ = implFailM (LifetimeError EndLifetimeError)
+implEndLifetimeM _ _ _ _ _ _ = implFailM (LifetimeError EndLifetimeError)
 
 -- | Drop any permissions of the form @x:[l]p@ in the primary permissions for
 -- @x@, which are supplied as an argument
@@ -9229,7 +9232,6 @@ proveVarsImplAppendIntAssoc4 ps_in (ps1 :: prx1 ps1) (ps2 :: prx2 ps2) ps
   , ps12 <- Proxy :: Proxy (ps1 :++: ps2)
   , Refl <- RL.appendAssoc ps1 ps2 ps_prxs =
     proveVarsImplAppendIntAssoc ps_in ps12 ps
->>>>>>> master
 
 -- | Prove a list of existentially-quantified distinguished permissions and put
 -- those proofs onto the stack. This is the same as 'proveVarsImplAppendInt'
@@ -9457,19 +9459,6 @@ instance ErrorPretty ImplError where
     sep [ pretty f <> colon <+> pretty "Could not prove"
         , doc ]
 
-
-$(mkNuMatching [t| forall a. EqPerm a |])
-$(mkNuMatching [t| forall ps a. NuMatching a => EqProofStep ps a |])
-$(mkNuMatching [t| forall ps a. NuMatching a => EqProof ps a |])
-$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
-$(mkNuMatching [t| LifetimeErrorType |])
-$(mkNuMatching [t| ImplError |])
-$(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
-$(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
-$(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
-$(mkNuMatching [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |])
-$(mkNuMatching [t| forall ps ps'. LocalImplRet ps ps' |])
-=======
 -- | Try to prove @x:p@, returning whether or not this was successful
 checkVarImpl ::
   PermSet ps_in ->
@@ -9489,4 +9478,3 @@ checkVarImpl ps act = 0 /= permImplSucceeds (evalState st (toClosed 0))
            LittleEndian
            act
            (\_ -> return (Constant ()))
->>>>>>> master

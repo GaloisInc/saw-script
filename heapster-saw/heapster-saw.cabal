@@ -56,6 +56,7 @@ library
     Verifier.SAW.Heapster.Lexer
     Verifier.SAW.Heapster.LLVMGlobalConst
     Verifier.SAW.Heapster.Located
+    Verifier.SAW.Heapster.NamedMb
     Verifier.SAW.Heapster.JSONExport
     Verifier.SAW.Heapster.ParsedCtx
     Verifier.SAW.Heapster.Parser
