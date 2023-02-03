@@ -15,6 +15,7 @@ Description:
 
 extra-source-files:
     saw/Cryptol.sawcore
+    saw/CryptolM.sawcore
 
 library
   build-depends:
@@ -28,6 +29,7 @@ library
     data-inttrie >= 0.1.4,
     integer-gmp,
     modern-uri,
+    mtl,
     panic,
     saw-core,
     saw-core-aig,
@@ -44,7 +46,9 @@ library
      Verifier.SAW.Cryptol
      Verifier.SAW.Cryptol.Panic
      Verifier.SAW.Cryptol.Prelude
+     Verifier.SAW.Cryptol.PreludeM
      Verifier.SAW.Cryptol.Simpset
+     Verifier.SAW.Cryptol.Monadify
      Verifier.SAW.CryptolEnv
      Verifier.SAW.TypedTerm
   GHC-options: -Wall -Werror
@@ -67,7 +71,7 @@ executable css
 
   hs-source-dirs : css
   main-is : Main.hs
-  GHC-options: -Wall -O2 -rtsopts -pgmlc++
+  GHC-options: -Wall -O2 -threaded -rtsopts -pgmlc++
   extra-libraries:      stdc++
 
 test-suite cryptol-saw-core-tc-test
@@ -85,3 +89,5 @@ test-suite cryptol-saw-core-tc-test
     cryptol-saw-core,
     heredoc >= 0.2,
     saw-core
+
+  GHC-options: -threaded

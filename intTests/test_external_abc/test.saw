@@ -16,16 +16,16 @@ let q_unsat = {{ \(x:[8]) -> x != 0 /\ x+x == x }};
 
 write_verilog "write_verilog_unsat.v" q_unsat;
 write_smtlib2_w4 "write_smtlib2_w4_unsat.smt2" q_unsat;
-write_aig_external "write_aig_external_unsat.aig" q_unsat;
-write_cnf_external "write_aig_external_unsat.cnf" q_unsat;
+write_aig_external "./write_aig_external_unsat.aig" q_unsat;
+write_cnf_external "./write_aig_external_unsat.cnf" q_unsat;
 
 // A formula that is satisfiable.
 let q_sat = {{ \(x:[8]) -> x+x == x }};
 
 write_verilog "write_verilog_sat.v" q_sat;
 write_smtlib2_w4 "write_smtlib2_w4_sat.smt2" q_sat;
-write_aig_external "write_aig_external_sat.aig" q_sat;
-write_cnf_external "write_aig_external_sat.cnf" q_sat;
+write_aig_external "./write_aig_external_sat.aig" q_sat;
+write_cnf_external "./write_aig_external_sat.cnf" q_sat;
 
 fails (prove_print sbv_abc q_sat);
 fails (prove_print w4_abc_smtlib2 q_sat);
@@ -44,8 +44,8 @@ let order_res = {{ ([[0x02,0x03],[0x04,0x05]], 0x81050fff) }};
 
 // Check that Verilog counterexamples are in the right order
 sr1 <- sat w4_abc_verilog order_term;
-caseSatResult sr1 undefined (\t -> prove_print yices {{ t == order_res }});
+caseSatResult sr1 (fail "ABC verilog sat fail") (\t -> prove_print yices {{ t == order_res }});
 
 // Check that AIGER counterexamples are in the right order
 sr2 <- sat w4_abc_aiger order_term;
-caseSatResult sr2 undefined (\t -> prove_print yices {{ t == order_res }});
+caseSatResult sr2 (fail "ABC aiger sat fail") (\t -> prove_print yices {{ t == order_res }});

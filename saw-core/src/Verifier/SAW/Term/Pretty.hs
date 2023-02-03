@@ -6,6 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternGuards #-}
 
 {- |
 Module      : Verifier.SAW.Term.Pretty
@@ -35,11 +36,15 @@ module Verifier.SAW.Term.Pretty
   , PPModule(..), PPDecl(..)
   , ppPPModule
   , scTermCount
+  , scTermCountAux
+  , scTermCountMany
   , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
+  , ppTermContainerWithNames
   ) where
 
+import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
 import Control.Monad.Reader
 import Control.Monad.State.Strict as State
@@ -62,6 +67,7 @@ import qualified Data.IntMap.Strict as IntMap
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Utils (panic)
+import Verifier.SAW.Recognizer
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -173,8 +179,19 @@ lookupVarName False _ i = Text.pack ('!' : show i)
 freshName :: [LocalName] -> LocalName -> LocalName
 freshName used name
   | name == "_" = name
-  | elem name used = freshName used (name <> "'")
+  | elem name used = freshName used (nextName name)
   | otherwise = name
+
+-- | Generate a variant of a name by incrementing the number at the
+-- end, or appending the number 1 if there is none.
+nextName :: LocalName -> LocalName
+nextName = Text.pack . reverse . go . reverse . Text.unpack
+  where
+    go :: String -> String
+    go (c : cs)
+      | c == '9'  = '0' : go cs
+      | isDigit c = succ c : cs
+    go cs = '1' : cs
 
 -- | Add a new variable with the given base name to the local variable list,
 -- returning both the fresh name actually used and the new variable list. As a
@@ -467,12 +484,29 @@ ppFlatTermF prec tf =
     RecordValue alist ->
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
-    Sort s -> return $ viaShow s
+    Sort s h -> return ((if h then pretty ("i"::String) else mempty) <> viaShow s)
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
+    ArrayValue (asBoolType -> Just _) args
+      | Just bits <- mapM asBool $ V.toList args ->
+        if length bits `mod` 4 == 0 then
+          return $ pretty ("0x" ++ ppBitsToHex bits)
+        else
+          return $ pretty ("0b" ++ map (\b -> if b then '1' else '0') bits)
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecTerm) (V.toList args)
     StringLit s -> return $ viaShow s
     ExtCns cns -> annotate ExtCnsStyle <$> ppBestName (ecName cns)
+
+-- | Pretty-print a big endian list of bit values as a hexadecimal number
+ppBitsToHex :: [Bool] -> String
+ppBitsToHex (b8:b4:b2:b1:bits') =
+  intToDigit (8 * toInt b8 + 4 * toInt b4 + 2 * toInt b2 + toInt b1) :
+  ppBitsToHex bits'
+  where toInt True = 1
+        toInt False = 0
+ppBitsToHex [] = ""
+ppBitsToHex bits =
+  panic "ppBitsToHex" ["length of bit list is not a multiple of 4", show bits]
 
 -- | Pretty-print a name, using the best unambiguous alias from the
 -- naming environment.
@@ -527,7 +561,17 @@ type OccurrenceMap = IntMap (Term, Int)
 -- side of an application are excluded. (FIXME: why?) The boolean flag indicates
 -- whether to descend under lambdas and other binders.
 scTermCount :: Bool -> Term -> OccurrenceMap
-scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
+scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty
+
+-- | Returns map that associates each term index appearing in the list of terms to the
+-- number of occurrences in the shared term. Subterms that are on the left-hand
+-- side of an application are excluded. (FIXME: why?) The boolean flag indicates
+-- whether to descend under lambdas and other binders.
+scTermCountMany :: Bool -> [Term] -> OccurrenceMap
+scTermCountMany doBinders ts = execState (scTermCountAux doBinders ts)  IntMap.empty
+
+scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
+scTermCountAux doBinders = go
   where go :: [Term] -> State OccurrenceMap ()
         go [] = return ()
         go (t:r) =
@@ -544,14 +588,22 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
                   recurse
           where
             recurse = go (r ++ argsAndSubterms t)
+
         argsAndSubterms (unwrapTermF -> App f arg) = arg : argsAndSubterms f
         argsAndSubterms h =
           case unwrapTermF h of
-            Lambda _ t1 _ | not doBinders -> [t1]
-            Pi _ t1 _     | not doBinders -> [t1]
-            Constant{}                    -> []
-            FTermF (Primitive _)          -> []
-            tf                            -> Fold.toList tf
+            Lambda _ t1 _ | not doBinders  -> [t1]
+            Pi _ t1 _     | not doBinders  -> [t1]
+            Constant{}                     -> []
+            FTermF (Primitive _)           -> []
+            FTermF (DataTypeApp _ ps xs)   -> ps ++ xs
+            FTermF (CtorApp _ ps xs)       -> ps ++ xs
+            FTermF (RecursorType _ ps m _) -> ps ++ [m]
+            FTermF (Recursor crec)         -> recursorParams crec ++
+                                              [recursorMotive crec] ++
+                                              map fst (Map.elems (recursorElims crec))
+            tf                             -> Fold.toList tf
+
 
 -- | Return true if the printing of the given term should be memoized; we do not
 -- want to memoize the printing of terms that are "too small"
@@ -578,38 +630,42 @@ shouldMemoizeTerm t =
 ppTermWithMemoTable :: Prec -> Bool -> Term -> PPM SawDoc
 ppTermWithMemoTable prec global_p trm = do
      min_occs <- ppMinSharing <$> ppOpts <$> ask
-     ppLets (occ_map_elems min_occs) [] where
+     let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm
+     ppLets global_p occPairs [] (ppTerm' prec trm)
 
-  -- Generate an occurrence map for trm, filtering out terms that only occur
-  -- once, that are "too small" to memoize, and, for the global table, terms
-  -- that are not closed
-  occ_map_elems min_occs =
-    IntMap.assocs $
+-- Filter an occurrence map, filtering out terms that only occur
+-- once, that are "too small" to memoize, and, for the global table, terms
+-- that are not closed
+filterOccurenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
+filterOccurenceMap min_occs global_p =
     IntMap.filter
-    (\(t,cnt) ->
-      cnt >= min_occs && shouldMemoizeTerm t &&
-      (if global_p then looseVars t == emptyBitSet else True)) $
-    scTermCount global_p trm
+      (\(t,cnt) ->
+        cnt >= min_occs && shouldMemoizeTerm t &&
+        (if global_p then looseVars t == emptyBitSet else True))
 
-  -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
-  -- Term and then add it to the memoization table of subsequent printing. The
-  -- pretty-printing of these terms is reverse-accumulated in the second
-  -- list. Finally, print trm with a let-binding for the bound terms.
-  ppLets :: [(TermIndex, (Term, Int))] -> [(MemoVar, SawDoc)] -> PPM SawDoc
 
-  -- Special case: don't print let-binding if there are no bound vars
-  ppLets [] [] = ppTerm' prec trm
-  -- When we have run out of (idx,term) pairs, pretty-print a let binding for
-  -- all the accumulated bindings around the term
-  ppLets [] bindings = ppLetBlock (reverse bindings) <$> ppTerm' prec trm
-  -- To add an (idx,term) pair, first check if idx is already bound, and, if
-  -- not, add a new MemoVar bind it to idx
-  ppLets ((idx, (t_rhs,_)):idxs) bindings =
-    do isBound <- isJust <$> memoLookupM idx
-       if isBound then ppLets idxs bindings else
-         do doc_rhs <- ppTerm' prec t_rhs
-            withMemoVar global_p idx $ \memo_var ->
-              ppLets idxs ((memo_var, doc_rhs):bindings)
+-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
+-- Term and then add it to the memoization table of subsequent printing. The
+-- pretty-printing of these terms is reverse-accumulated in the second
+-- list. Finally, print the given base document in the context of let-bindings
+-- for the bound terms.
+ppLets :: Bool -> [(TermIndex, (Term, Int))] -> [(MemoVar, SawDoc)] -> PPM SawDoc -> PPM SawDoc
+
+-- Special case: don't print let-binding if there are no bound vars
+ppLets _ [] [] baseDoc = baseDoc
+
+-- When we have run out of (idx,term) pairs, pretty-print a let binding for
+-- all the accumulated bindings around the term
+ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
+
+-- To add an (idx,term) pair, first check if idx is already bound, and, if
+-- not, add a new MemoVar bind it to idx
+ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
+  do isBound <- isJust <$> memoLookupM idx
+     if isBound then ppLets global_p idxs bindings baseDoc else
+       do doc_rhs <- ppTerm' PrecTerm t_rhs
+          withMemoVar global_p idx $ \memo_var ->
+            ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
 
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
@@ -658,7 +714,8 @@ renderSawDoc :: PPOpts -> SawDoc -> String
 renderSawDoc ppOpts doc =
   Text.Lazy.unpack (renderLazy (style (layoutPretty layoutOpts doc)))
   where
-    layoutOpts = LayoutOptions (AvailablePerLine 80 0.8)
+    -- ribbon width 64, with effectively unlimited right margin
+    layoutOpts = LayoutOptions (AvailablePerLine 8000 0.008)
     style = if ppColor ppOpts then reAnnotateS colorStyle else unAnnotateS
 
 -- | Pretty-print a term and render it to a string, using the given options
@@ -695,6 +752,22 @@ showTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> String
 showTermWithNames opts ne trm =
   renderSawDoc opts $ ppTermWithNames opts ne trm
 
+
+ppTermContainerWithNames ::
+  (Traversable m) =>
+  (m SawDoc -> SawDoc) ->
+  PPOpts -> SAWNamingEnv -> m Term -> SawDoc
+ppTermContainerWithNames ppContainer opts ne trms =
+  let min_occs = ppMinSharing opts
+      global_p = True
+      occPairs = IntMap.assocs $
+                   filterOccurenceMap min_occs global_p $
+                   flip execState mempty $
+                   traverse (\t -> scTermCountAux global_p [t]) $
+                   trms
+   in runPPM opts ne $ ppLets global_p occPairs []
+        (ppContainer <$> traverse (ppTerm' PrecTerm) trms)
+
 --------------------------------------------------------------------------------
 -- * Pretty-printers for Modules and Top-level Constructs
 --------------------------------------------------------------------------------
@@ -707,6 +780,7 @@ data PPModule = PPModule [ModuleName] [PPDecl]
 data PPDecl
   = PPTypeDecl Ident [(LocalName, Term)] [(LocalName, Term)] Sort [(Ident, Term)]
   | PPDefDecl Ident Term (Maybe Term)
+  | PPInjectCode Text.Text Text.Text
 
 -- | Pretty-print a 'PPModule'
 ppPPModule :: PPOpts -> PPModule -> SawDoc
@@ -730,3 +804,6 @@ ppPPModule opts (PPModule importNames decls) =
       case defBody of
         Just body -> Just <$> ppTerm' PrecTerm body
         Nothing -> return Nothing
+
+    ppDecl (PPInjectCode ns text) =
+      pure (pretty ("injectCode"::Text.Text) <+> viaShow ns <+> viaShow text)

@@ -1,0 +1,87 @@
+///////////////////////////////////////////////////////////////////////////////
+// Exercise: Point Functional Correctness
+///////////////////////////////////////////////////////////////////////////////
+
+
+include "../../common/helpers.saw";
+import "Point.cry";
+
+m <- llvm_load_module "point.bc";
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 1: Simple Point Equality
+///////////////////////////////////////////////////////////////////////////////
+
+// Convert the memory safety spec below into a functional correctness
+// specification.
+
+// You can specify the values in a struct by using llvm_struct_value:
+//     llvm_struct_value [ <field_0>, <field_1>, ... <field_n> ];
+
+let point_eq_spec = do {
+    (p1, p1_ptr) <- ptr_to_fresh_readonly "p1" (llvm_struct "struct.point");
+    (p2, p2_ptr) <- ptr_to_fresh_readonly "p2" (llvm_struct "struct.point");
+
+    llvm_execute_func [p1_ptr, p2_ptr];
+
+    ret <- llvm_fresh_var "ret" (llvm_int 1);
+    llvm_return (llvm_term ret);
+};
+
+point_eq_ov <- llvm_verify m "point_eq" [] true point_eq_spec z3;
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 2: Point Allocation
+///////////////////////////////////////////////////////////////////////////////
+
+// Convert the memory safety proofs below into functional correctness proofs.
+
+let point_new_spec = do {
+    p_x <- llvm_fresh_var "p_x" (llvm_int 32);
+    p_y <- llvm_fresh_var "p_y" (llvm_int 32);
+
+    llvm_execute_func [ llvm_term p_x, llvm_term p_y ];
+
+    (ret, ret_ptr) <- ptr_to_fresh "ret" (llvm_struct "struct.point");
+    llvm_return ret_ptr;
+};
+
+point_new_ov <- llvm_verify m "point_new" [] true point_new_spec z3;
+
+let point_copy_spec = do {
+    (p, p_ptr) <- ptr_to_fresh_readonly "p" (llvm_struct "struct.point");
+
+    llvm_execute_func [p_ptr];
+
+    (ret, ret_ptr) <- ptr_to_fresh "ret" (llvm_struct "struct.point");
+    llvm_return ret_ptr;
+};
+
+point_copy_ov <- llvm_verify m "point_copy" [point_new_ov] true point_copy_spec z3;
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 3: Point Addition
+///////////////////////////////////////////////////////////////////////////////
+
+// Convert the memory safety proof below into a proof that the C `point_add`
+// function is equivalent to the Cryptol `point_add` function  in Point.cry.
+
+let point_add_spec = do {
+    llvm_alloc_global "ZERO";
+    zero_global <- llvm_fresh_var "zero_global" (llvm_struct "struct.point");
+    llvm_points_to (llvm_global "ZERO") (llvm_term zero_global);
+
+    (p1, p1_ptr) <- ptr_to_fresh_readonly "p1" (llvm_struct "struct.point");
+    (p2, p2_ptr) <- ptr_to_fresh_readonly "p2" (llvm_struct "struct.point");
+
+    llvm_execute_func [p1_ptr, p2_ptr];
+
+    (ret, ret_ptr) <- ptr_to_fresh "ret" (llvm_struct "struct.point");
+    llvm_return ret_ptr;
+};
+
+llvm_verify m "point_add"
+    [point_new_ov, point_copy_ov, point_eq_ov]
+    true
+    point_add_spec
+    z3;

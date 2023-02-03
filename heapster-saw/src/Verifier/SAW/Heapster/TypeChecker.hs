@@ -32,6 +32,8 @@ module Verifier.SAW.Heapster.TypeChecker (
   ) where
 
 import Control.Monad
+import qualified Data.BitVector.Sized as BV
+import Data.BitVector.Sized (BV)
 import Data.Functor.Product
 import Data.Functor.Constant
 import GHC.TypeLits (Nat, KnownNat)
@@ -346,22 +348,38 @@ tcNat e           = tcError (pos e) "Expected integer"
 -- | Check for a bitvector expression
 tcBV :: (KnownNat w, 1 <= w) => AstExpr -> Tc (PermExpr (BVType w))
 tcBV (ExAdd _ x y) = bvAdd <$> tcBV x <*> tcBV y
+tcBV (ExNeg _ x)   = bvNegate <$> tcBV x
 tcBV e             = tcBVFactor e
 
 -- | Check for a bitvector factor. This is limited to
 -- variables, constants, and multiplication by a constant.
 tcBVFactor :: (KnownNat w, 1 <= w) => AstExpr -> Tc (PermExpr (BVType w))
+-- Constants
 tcBVFactor (ExNat _ i) = pure (bvInt (fromIntegral i))
-tcBVFactor (ExMul _ (ExNat _ i) (ExVar p name Nothing Nothing)) =
-  do Some tn <- tcTypedName p name
-     bvMult i . PExpr_Var <$> tcCastTyped p knownRepr tn
-tcBVFactor (ExMul _ (ExVar p name Nothing Nothing) (ExNat _ i)) =
-  do Some tn <- tcTypedName p name
-     bvMult i . PExpr_Var <$> tcCastTyped p knownRepr tn
+-- Multiplication by a constant
+tcBVFactor (ExMul _ c (ExVar p name Nothing Nothing)) =
+  do c' <- asBVConst c
+     Some tn <- tcTypedName p name
+     bvMultBV c' . PExpr_Var <$> tcCastTyped p knownRepr tn
+tcBVFactor (ExMul _ (ExVar p name Nothing Nothing) c) =
+  do c' <- asBVConst c
+     Some tn <- tcTypedName p name
+     bvMultBV c' . PExpr_Var <$> tcCastTyped p knownRepr tn
+-- Variables
 tcBVFactor (ExVar p name Nothing Nothing) =
   do Some tn <- tcTypedName p name
      PExpr_Var <$> tcCastTyped p knownRepr tn
 tcBVFactor e = tcError (pos e) "Expected BV factor"
+
+-- | Check for an integer literal, which can be negative. If one is found,
+-- convert it to a 'BV'. Fail otherwise.
+asBVConst :: (KnownNat w, 1 <= w) => AstExpr -> Tc (BV w)
+asBVConst (ExNat _ i) =
+  pure $ BV.mkBV knownNat $ toInteger i
+asBVConst (ExNeg _ (ExNat _ i)) =
+  pure $ BV.negate knownNat $ BV.mkBV knownNat $ toInteger i
+asBVConst e =
+  tcError (pos e) "Expected integer or negated integer"
 
 -- | Check for a struct literal
 tcStruct :: CtxRepr fs -> AstExpr -> Tc (PermExpr (StructType fs))
@@ -421,21 +439,22 @@ tcLLVMShape (ExOrSh _ x y) = PExpr_OrShape <$> tcKExpr x <*> tcKExpr y
 tcLLVMShape (ExExSh _ var vartype sh) =
   do Some ktp'@KnownReprObj <- tcTypeKnown vartype
      fmap PExpr_ExShape $ mbM $ nu \z ->
-       withExprVar var (unKnownReprObj ktp') z (tcLLVMShape sh)
+       withExprVar var (unKnownReprObj ktp') z (tcKExpr sh)
 tcLLVMShape (ExSeqSh _ x y) = PExpr_SeqShape <$> tcKExpr x <*> tcKExpr y
 tcLLVMShape ExEmptySh{} = pure PExpr_EmptyShape
-tcLLVMShape (ExEqSh _ v) = PExpr_EqShape <$> tcKExpr v
+tcLLVMShape (ExEqSh _ len v) = PExpr_EqShape <$> tcKExpr len <*> tcKExpr v
 tcLLVMShape (ExPtrSh _ maybe_l maybe_rw sh) =
   PExpr_PtrShape
   <$> traverse tcKExpr maybe_l
   <*> traverse tcKExpr maybe_rw
   <*> tcKExpr sh
 tcLLVMShape (ExFieldSh _ w fld) = PExpr_FieldShape <$> tcLLVMFieldShape_ w fld
-tcLLVMShape (ExArraySh _ len stride flds) =
+tcLLVMShape (ExArraySh _ len stride sh) =
   PExpr_ArrayShape
   <$> tcKExpr len
   <*> (Bytes . fromIntegral <$> tcNatural stride)
-  <*> traverse (uncurry tcLLVMFieldShape_) flds
+  <*> tcKExpr sh
+tcLLVMShape (ExFalseSh _) = pure PExpr_FalseShape
 tcLLVMShape e = tcError (pos e) "Expected shape"
 
 -- | Field and array helper for 'tcLLVMShape'
@@ -466,6 +485,7 @@ tcValPermInCtx ctx tp = inParsedCtxM ctx . const . tcValPerm tp
 -- | Parse a value permission of a known type
 tcValPerm :: TypeRepr a -> AstExpr -> Tc (ValuePerm a)
 tcValPerm _  ExTrue{} = pure ValPerm_True
+tcValPerm _  ExFalse{} = pure ValPerm_False
 tcValPerm ty (ExOr _ x y) = ValPerm_Or <$> tcValPerm ty x <*> tcValPerm ty y
 tcValPerm ty (ExEq _ e) = ValPerm_Eq <$> tcExpr ty e
 tcValPerm ty (ExExists _ var vartype e) =
@@ -522,13 +542,26 @@ tcAtomicPerm (LLVMFrameRepr w) e = withKnownNat w (tcFrameAtomic e)
 tcAtomicPerm (LLVMBlockRepr w) e = withKnownNat w (tcBlockAtomic e)
 tcAtomicPerm (StructRepr tys) e = tcStructAtomic tys e
 tcAtomicPerm LifetimeRepr e = tcLifetimeAtomic e
+tcAtomicPerm _ (ExAny _) = return Perm_Any
 tcAtomicPerm _ e = tcError (pos e) "Expected perm"
+
+-- | Build a field permission using an 'LLVMFieldShape'
+fieldPermFromShape :: (KnownNat w, 1 <= w) => PermExpr RWModalityType ->
+                      PermExpr LifetimeType -> PermExpr (BVType w) ->
+                      LLVMFieldShape w -> AtomicPerm (LLVMPointerType w)
+fieldPermFromShape rw l off (LLVMFieldShape p) =
+  Perm_LLVMField $ LLVMFieldPerm rw l off p
 
 -- | Check an LLVM pointer atomic permission expression
 tcPointerAtomic :: (KnownNat w, 1 <= w) => AstExpr -> Tc (AtomicPerm (LLVMPointerType w))
-tcPointerAtomic (ExPtr p l rw off sz c) =
-  llvmArrayFieldToAtomicPerm <$> tcArrayFieldPerm (ArrayPerm p l rw off sz c)
-tcPointerAtomic (ExArray _ x y z w) = Perm_LLVMArray <$> tcArrayAtomic x y z w
+tcPointerAtomic (ExPtr _ l rw off sz c) =
+  fieldPermFromShape
+  <$> tcKExpr rw
+  <*> tcOptLifetime l
+  <*> tcKExpr off
+  <*> tcLLVMFieldShape_ sz c
+tcPointerAtomic (ExArray _ l rw off len stride sh) =
+  Perm_LLVMArray <$> tcArrayAtomic l rw off len stride sh
 tcPointerAtomic (ExMemblock _ l rw off len sh) = Perm_LLVMBlock <$> tcMemblock l rw off len sh
 tcPointerAtomic (ExFree      _ x  ) = Perm_LLVMFree <$> tcKExpr x
 tcPointerAtomic (ExLlvmFunPtr _ n w f) = tcFunPtrAtomic n w f
@@ -564,26 +597,17 @@ tcMemblock l rw off len sh =
 
 -- | Check an atomic array permission literal
 tcArrayAtomic ::
-  (KnownNat w, 1 <= w) => AstExpr -> AstExpr -> AstExpr -> [ArrayPerm] -> Tc (LLVMArrayPerm w)
-tcArrayAtomic off len stride fields =
+  (KnownNat w, 1 <= w) => Maybe AstExpr -> AstExpr -> AstExpr -> AstExpr ->
+  AstExpr -> AstExpr -> Tc (LLVMArrayPerm w)
+tcArrayAtomic l rw off len stride sh =
   LLVMArrayPerm
-  <$> tcKExpr off
+  <$> tcKExpr rw
+  <*> tcOptLifetime l
+  <*> tcKExpr off
   <*> tcKExpr len
   <*> (Bytes . fromIntegral <$> tcNatural stride)
-  <*> traverse tcArrayFieldPerm fields
+  <*> tcKExpr sh
   <*> pure []
-
--- | Check a single field of an array permission
-tcArrayFieldPerm :: forall w. (KnownNat w, 1 <= w) => ArrayPerm -> Tc (LLVMArrayField w)
-tcArrayFieldPerm (ArrayPerm _ l rw off sz c) =
-  do llvmFieldLifetime <- tcOptLifetime l
-     llvmFieldRW <- tcExpr RWModalityRepr rw
-     llvmFieldOffset <- tcKExpr off :: Tc (PermExpr (BVType w))
-     Some (Pair w LeqProof) <- maybe (pure (Some (Pair (knownNat :: NatRepr w) LeqProof)))
-                               tcPositive sz
-     withKnownNat w do
-      llvmFieldContents <- withKnownNat w (tcValPerm (LLVMPointerRepr w) c)
-      pure (LLVMArrayField LLVMFieldPerm{..})
 
 -- | Check a frame permission literal
 tcFrameAtomic :: (KnownNat w, 1 <= w) => AstExpr -> Tc (AtomicPerm (LLVMFrameType w))
@@ -603,27 +627,26 @@ tcBlockAtomic e = tcError (pos e) "Expected llvmblock perm"
 
 -- | Check a lifetime permission literal
 tcLifetimeAtomic :: AstExpr -> Tc (AtomicPerm LifetimeType)
-tcLifetimeAtomic (ExLOwned _ ls x y) =
-  do Some x' <- tcLOwnedPerms x
-     Some y' <- tcLOwnedPerms y
+tcLifetimeAtomic (ExLOwned _ ls ps_in ps_out) =
+  do Some ps_in' <- tcDistPerms ps_in
+     Some ps_out' <- tcDistPerms ps_out
      ls' <- mapM tcKExpr ls
-     pure (Perm_LOwned ls' x' y')
+     let eps_in = distPermsToExprPerms $ unTypeDistPerms ps_in'
+     let eps_out = distPermsToExprPerms $ unTypeDistPerms ps_out'
+     pure (Perm_LOwned ls' (typedDistPermsCtx ps_in')
+           (typedDistPermsCtx ps_out') eps_in eps_out)
 tcLifetimeAtomic (ExLCurrent _ l) = Perm_LCurrent <$> tcOptLifetime l
 tcLifetimeAtomic (ExLFinished _) = return Perm_LFinished
 tcLifetimeAtomic e = tcError (pos e) "Expected lifetime perm"
 
--- | Helper for lowned permission checking
-tcLOwnedPerms :: [(Located String,AstExpr)] -> Tc (Some LOwnedPerms)
-tcLOwnedPerms [] = pure (Some MNil)
-tcLOwnedPerms ((Located p n,e):xs) =
+-- | Check a sequence @x1:p1, ..., xn:pn@ of variables and permissions
+tcDistPerms :: [(Located String,AstExpr)] -> Tc (Some TypedDistPerms)
+tcDistPerms [] = pure (Some MNil)
+tcDistPerms ((Located p n,e):xs) =
   do Some (Typed tp x) <- tcTypedName p n
      perm <- tcValPerm tp e
-     lop <- case varAndPermLOwnedPerm (VarAndPerm x perm) of
-              Just lop -> return lop
-              Nothing -> tcError (pos e) ("Not a valid lifetime ownership permission: "
-                                         ++ permPrettyString emptyPPInfo perm)
-     Some lops <- tcLOwnedPerms xs
-     pure (Some (lops :>: lop))
+     Some ps <- tcDistPerms xs
+     pure (Some (ps :>: Typed tp (VarAndPerm x perm)))
 
 -- | Helper for checking permission offsets
 tcPermOffset :: TypeRepr a -> Pos -> Maybe AstExpr -> Tc (PermOffset a)
@@ -684,17 +707,22 @@ tcSortedMbValuePerms ctx perms =
 
 -- | Check a function permission of the form
 --
--- > (x1:tp1, ...). arg1:p1, ... -o arg1:p1', ..., argn:pn', ret:p_ret
+-- > (x1:tp1, ...). arg1:p1, ... -o
+-- >   (y1:tp1', ..., ym:tpm'). arg1:p1', ..., argn:pn', ret:p_ret
 --
 -- for some arbitrary context @x1:tp1, ...@ of ghost variables
 tcFunPerm :: CruCtx args -> TypeRepr ret -> AstFunPerm -> Tc (SomeFunPerm args ret)
-tcFunPerm args ret (AstFunPerm _ untyCtx ins outs) =
+tcFunPerm args ret (AstFunPerm _ untyCtx ins untyCtxOut outs) =
   do Some ghosts_ctx@(ParsedCtx _ ghosts) <- tcCtx untyCtx
+     Some gouts_ctx@(ParsedCtx _ gouts) <- tcCtx untyCtxOut
      let args_ctx = mkArgsParsedCtx args
-         ghosts_args_ctx = appendParsedCtx ghosts_ctx args_ctx
-     perms_in  <- tcSortedMbValuePerms ghosts_args_ctx ins
-     perms_out <- tcSortedMbValuePerms (consParsedCtx "ret" ret ghosts_args_ctx) outs
-     pure (SomeFunPerm (FunPerm ghosts args ret perms_in perms_out))
+         perms_in_ctx = appendParsedCtx ghosts_ctx args_ctx
+         perms_out_ctx =
+           appendParsedCtx (appendParsedCtx ghosts_ctx args_ctx)
+           (consParsedCtx "ret" ret gouts_ctx)
+     perms_in  <- tcSortedMbValuePerms perms_in_ctx ins
+     perms_out <- tcSortedMbValuePerms perms_out_ctx outs
+     pure (SomeFunPerm (FunPerm ghosts args gouts ret perms_in perms_out))
 
 ----------------------------------------------------------------------
 -- * Parsing Permission Sets and Function Permissions

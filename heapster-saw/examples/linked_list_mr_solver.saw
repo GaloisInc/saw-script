@@ -1,0 +1,66 @@
+include "linked_list.saw";
+
+/***
+ *** Setup Cryptol environment
+ ***/
+
+include "either.saw";
+
+list_tp <- parse_core "\\ (a:sort 0) -> List a";
+cryptol_add_prim_type "LinkedList" "List" list_tp;
+
+fold_fun <- parse_core "foldList";
+cryptol_add_prim "LinkedList" "foldList" fold_fun;
+
+unfold_fun <- parse_core "unfoldList";
+cryptol_add_prim "LinkedList" "unfoldList" unfold_fun;
+
+import "linked_list.cry";
+
+
+/***
+ *** The actual tests
+ ***/
+
+heapster_typecheck_fun env "is_head"
+  "(). arg0:int64<>, arg1:List<int64<>,always,R> -o \
+     \ arg0:true, arg1:true, ret:int64<>";
+
+is_head <- parse_core_mod "linked_list" "is_head";
+mr_solver_test is_head is_head;
+
+is_elem <- parse_core_mod "linked_list" "is_elem";
+
+mr_solver_test is_elem is_elem;
+
+is_elem_noErrorsSpec <- parse_core
+  "\\ (x:Vec 64 Bool) (y:List (Vec 64 Bool)) -> \
+    \ fixS VoidEv emptyFunStack \
+    \      (Vec 64 Bool * List (Vec 64 Bool)) \
+    \      (\\ (_ : Vec 64 Bool * List (Vec 64 Bool)) -> Vec 64 Bool) \
+    \      (\\ (f : fixSFun VoidEv emptyFunStack \
+    \                       (Vec 64 Bool * List (Vec 64 Bool)) \
+    \                       (\\ (pr : Vec 64 Bool * List (Vec 64 Bool)) -> \
+    \                           Vec 64 Bool)) \
+    \          (x : Vec 64 Bool * List (Vec 64 Bool)) -> \
+    \          orS VoidEv (fixSStack (Vec 64 Bool * List (Vec 64 Bool)) \
+    \                        (\\ (_ : Vec 64 Bool * List (Vec 64 Bool)) -> \
+    \                            Vec 64 Bool)) \
+    \              (Vec 64 Bool) \
+    \              (existsS VoidEv (fixSStack (Vec 64 Bool * List (Vec 64 Bool)) \
+    \                                (\\ (_ : Vec 64 Bool * List (Vec 64 Bool)) -> \
+    \                                    Vec 64 Bool)) \
+    \                       (Vec 64 Bool)) \
+    \              (f x)) (x, y)";
+mr_solver_test is_elem is_elem_noErrorsSpec;
+
+mr_solver_prove is_elem {{ is_elem_spec }};
+
+
+monadify_term {{ Right }};
+monadify_term {{ Left }};
+monadify_term {{ nil }};
+monadify_term {{ cons }};
+
+sorted_insert_no_malloc <- parse_core_mod "linked_list" "sorted_insert_no_malloc";
+mr_solver_prove sorted_insert_no_malloc {{ sorted_insert_spec }};

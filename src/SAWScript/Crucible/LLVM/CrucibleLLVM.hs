@@ -16,7 +16,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
     -- * Re-exports from "Lang.Crucible.LLVM"
     llvmGlobals
   , llvmExtensionImpl
-  , registerModuleFn
+  , registerLazyModule
     -- * Re-exports from "Lang.Crucible.LLVM.Bytes"
   , Bytes
   , bytesToBits
@@ -73,12 +73,14 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , ModuleTranslation
   , llvmMemVar
   , toStorableType
-  , cfgMap
   , transContext
   , llvmPtrWidth
   , LLVMContext
   , translateModule
   , llvmDeclToFunHandleRepr'
+  , TranslationOptions(..)
+  , defaultTranslationOptions
+  , getTranslatedCFG
     -- * Re-exports from "Lang.Crucible.LLVM.MemModel"
   , doResolveGlobal
   , Mem
@@ -134,7 +136,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   ) where
 
 import Lang.Crucible.LLVM
-  (llvmGlobals, llvmExtensionImpl, registerModuleFn)
+  (llvmGlobals, llvmExtensionImpl, registerLazyModule)
 
 import Lang.Crucible.LLVM.Bytes
   (Bytes, bytesToBits, bytesToInteger, toBytes)
@@ -165,8 +167,9 @@ import Lang.Crucible.LLVM.Globals
   (GlobalInitializerMap, initializeMemoryConstGlobals, makeGlobalMap, populateConstGlobals)
 
 import Lang.Crucible.LLVM.Translation
-  (llvmMemVar, cfgMap, transContext, llvmPtrWidth, llvmTypeCtx,
-   ModuleTranslation, LLVMContext, translateModule, llvmDeclToFunHandleRepr')
+  (llvmMemVar, transContext, llvmPtrWidth, llvmTypeCtx,
+   ModuleTranslation, LLVMContext, translateModule, llvmDeclToFunHandleRepr',
+   TranslationOptions(..), defaultTranslationOptions, getTranslatedCFG )
 
 import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeRaw, storeConstRaw, mallocRaw, mallocConstRaw,

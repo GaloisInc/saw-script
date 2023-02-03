@@ -1,0 +1,683 @@
+-------------------------------------------------------------------------------
+-- Cryptol primitives for SAWCore
+
+module CryptolM where
+
+-- import Prelude;
+import Cryptol;
+
+
+--------------------------------------------------------------------------------
+-- Monadic assertions
+
+primitive proveEqNum : (n m:Num) -> Maybe (Eq Num n m);
+
+-- A version of unsafeAssert specialized to the Num type
+numAssertEqS : (E:EvType) -> (stack:FunStack) -> (n m:Num) ->
+               SpecM E stack (Eq Num n m);
+numAssertEqS E stack n m =
+  maybe (Eq Num n m) (SpecM E stack (Eq Num n m))
+        (errorS E stack (Eq Num n m) "numAssertEqS: assertion failed")
+        (retS E stack (Eq Num n m))
+        (proveEqNum n m);
+
+-- A proof that a Num is finite
+isFinite : Num -> Prop;
+isFinite = Num_rec (\ (_:Num) -> Prop) (\ (_:Nat) -> TrueProp) FalseProp;
+
+-- Check whether a Num is finite
+checkFinite : (n:Num) -> Maybe (isFinite n);
+checkFinite =
+  Num_rec (\ (n:Num) -> Maybe (isFinite n))
+          (\ (n:Nat) -> Just (isFinite (TCNum n)) (Refl Bool True))
+          (Nothing (isFinite TCInf));
+
+-- Assert that a Num is finite, or fail
+assertFiniteS : (E:EvType) -> (stack:FunStack) -> (n:Num) ->
+                SpecM E stack (isFinite n);
+assertFiniteS E stack n =
+  maybe (isFinite n) (SpecM E stack (isFinite n))
+        (errorS E stack (isFinite n) "assertFiniteM: Num not finite")
+        (retS E stack (isFinite n))
+        (checkFinite n);
+
+-- Recurse over a Num known to be finite
+Num_rec_fin : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) ->
+              (n:Num) -> isFinite n -> p n;
+Num_rec_fin p f =
+  Num_rec (\ (n:Num) -> isFinite n -> p n)
+          (\ (n:Nat) (_:TrueProp) -> f n)
+          (efq1 (p TCInf));
+
+
+--------------------------------------------------------------------------------
+-- Monadic Sequences
+
+-- The type of monadified sequences, which are just vectors for finite length
+-- but are sequences of computations for streams
+mseq : (E:EvType) -> (stack:FunStack) -> Num -> sort 0 -> sort 0;
+mseq E stack num a =
+  Num_rec (\ (_:Num) -> sort 0) (\ (n:Nat) -> Vec n a)
+          (Stream (SpecM E stack a)) num;
+
+{-
+bvVecMapInvarBindM : (E:EvType) -> (stack:FunStack) ->
+                     (a b c : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                     (a -> SpecM E stack b) -> BVVec n len a ->
+                     Bool -> (BVVec n len b -> SpecM E stack c) ->
+                     SpecM E stack c;
+bvVecMapInvarBindM E stack a b c n len f xs invar cont =
+  bindS E stack (BVVec n len b) c
+    (existsS E stack (BVVec n len b)) (\ (ys0:BVVec n len b) ->
+    multiArgFixS
+      E stack
+      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+       LRT_Ret c)))
+      (\ (rec : Vec n Bool -> BVVec n len b ->
+                SpecM E (pushFunStack
+                         (singletonFrame
+                          (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                           LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                           LRT_Ret c)))) stack) c)
+         (i:Vec n Bool) (ys:BVVec n len b) ->
+         invariantHint
+           (SpecM E (pushFunStack
+                     (singletonFrame
+                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                       LRT_Ret c)))) stack) c)
+           (and (bvule n i len) invar)
+           (maybe (is_bvult n i len)
+                  (SpecM E (pushFunStack
+                     (singletonFrame
+                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                       LRT_Ret c)))) stack) c)
+                  (cont ys)
+                  (\ (pf:is_bvult n i len) ->
+                     bindS E stack b c
+                           (f (atBVVec n len a xs i pf))
+                           (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
+                                           (updBVVec n len b ys i y)))
+                  (bvultWithProof n i len)))
+      (bvNat n 0) ys0);
+
+bvVecMapInvarM : (E:EvType) -> (stack:FunStack) ->
+                 (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                 (a -> SpecM E stack b) -> BVVec n len a ->
+                 Bool -> SpecM E stack (BVVec n len b);
+bvVecMapInvarM E stack a b n len f xs invar =
+  bvVecMapInvarBindM E stack a b (BVVec n len b) n len f xs invar
+                                                 (retS E stack (BVVec n len b));
+
+bvVecMapM : (E:EvType) -> (stack:FunStack) ->
+            (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+            (a -> SpecM E stack b) -> BVVec n len a ->
+            SpecM E stack (BVVec n len b);
+bvVecMapM E stack a b n len f xs = bvVecMapInvarM E stack a b n len f xs True;
+
+vecMapInvarBindM : (E:EvType) -> (stack:FunStack) ->
+                   (a b c : isort 0) -> (n : Nat) -> (a -> SpecM E stack b) ->
+                   Vec n a -> Bool -> (Vec n b -> SpecM E stack c) ->
+                   SpecM E stack c;
+vecMapInvarBindM E stack a b c n f xs invar cont =
+  existsM (Vec n b) c (\ (ys0:Vec n b) ->
+    multiArgFixM
+      (LRT_Fun Nat (\ (_:Nat) ->
+       LRT_Fun (Vec n b) (\ (_:Vec n b) ->
+       LRT_Ret c)))
+      (\ (rec : Nat -> Vec n b -> SpecM E stack c) (i:Nat) (ys:Vec n b) ->
+         invariantHint (SpecM E stack c) (and (ltNat i (Succ n)) invar)
+           (maybe (IsLtNat i n) (SpecM E stack c)
+                  (cont ys)
+                  (\ (pf:IsLtNat i n) ->
+                     bindS E stack b c
+                           (f (atWithProof n a xs i pf))
+                           (\ (y:b) -> rec (Succ i)
+                                           (updWithProof n b ys i y pf)))
+                  (proveLtNat i n)))
+      0 ys0);
+
+vecMapInvarM : (E:EvType) -> (stack:FunStack) ->
+               (a b : isort 0) -> (n : Nat) -> (a -> SpecM E stack b) ->
+               Vec n a -> Bool -> SpecM E stack (Vec n b);
+vecMapInvarM E stack a b n f xs invar =
+  vecMapInvarBindM E stack a b (Vec n b) n f xs invar (retS E stack (Vec n b));
+
+vecMapM : (E:EvType) -> (stack:FunStack) -> (a b : isort 0) -> (n : Nat) ->
+          (a -> SpecM E stack b) -> Vec n a -> SpecM E stack (Vec n b);
+vecMapM E stack a b n f xs = vecMapInvarM E stack a b n f xs True;
+-}
+
+primitive
+vecMapM : (E:EvType) -> (stack:FunStack) -> (a b : isort 0) -> (n : Nat) ->
+          (a -> SpecM E stack b) -> Vec n a -> SpecM E stack (Vec n b);
+
+-- Computational version of seqMap
+seqMapM : (E:EvType) -> (stack:FunStack) ->
+          (a b : sort 0) -> (n : Num) -> (a -> SpecM E stack b) ->
+          mseq E stack n a -> SpecM E stack (mseq E stack n b);
+seqMapM E stack a b n_top f =
+  Num_rec (\ (n:Num) -> mseq E stack n a -> SpecM E stack (mseq E stack n b))
+          (\ (n:Nat) -> vecMapM E stack a b n f)
+          (\ (s:Stream (SpecM E stack a)) ->
+             retS E stack (Stream (SpecM E stack b))
+                  (streamMap (SpecM E stack a) (SpecM E stack b)
+                             (\ (m:SpecM E stack a) -> bindS E stack a b m f) s))
+          n_top;
+
+mseq_cong1 : (E:EvType) -> (stack:FunStack) ->
+             (m : Num) -> (n : Num) -> (a : sort 0) ->
+             Eq Num m n -> Eq (sort 0) (mseq E stack m a) (mseq E stack n a);
+mseq_cong1 E stack m n a eq_mn =
+  eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> mseq E stack x a);
+
+-- Convert a seq to an mseq
+seqToMseq : (E:EvType) -> (stack:FunStack) ->
+            (n:Num) -> (a:sort 0) -> seq n a -> mseq E stack n a;
+seqToMseq E stack n_top a =
+  Num_rec (\ (n:Num) -> seq n a -> mseq E stack n a)
+          (\ (n:Nat) (v:Vec n a) -> v)
+          (streamMap a (SpecM E stack a) (retS E stack a))
+          n_top;
+
+
+--------------------------------------------------------------------------------
+-- Auxiliary functions
+
+bvVecAtM : (E:EvType) -> (stack:FunStack) ->
+           (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+           BVVec n len a -> Vec n Bool -> SpecM E stack a;
+bvVecAtM E stack n len a xs i =
+  maybe (is_bvult n i len) (SpecM E stack a)
+        (errorS E stack a "bvVecAtM: invalid sequence index")
+        (\ (pf:is_bvult n i len) -> retS E stack a (atBVVec n len a xs i pf))
+        (bvultWithProof n i len);
+
+atM : (E:EvType) -> (stack:FunStack) ->
+      (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> SpecM E stack a;
+atM E stack n a xs i =
+  maybe (IsLtNat i n) (SpecM E stack a)
+        (errorS E stack a "atM: invalid sequence index")
+        (\ (pf:IsLtNat i n) -> retS E stack a (atWithProof n a xs i pf))
+        (proveLtNat i n);
+
+bvVecUpdateM : (E:EvType) -> (stack:FunStack) ->
+               (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+               BVVec n len a -> Vec n Bool -> a ->
+               SpecM E stack (BVVec n len a);
+bvVecUpdateM E stack n len a xs i x =
+  maybe (is_bvult n i len) (SpecM E stack (BVVec n len a))
+        (errorS E stack (BVVec n len a) "bvVecUpdateM: invalid sequence index")
+        (\ (_:is_bvult n i len) -> retS E stack (BVVec n len a)
+                                        (updBVVec n len a xs i x))
+        (bvultWithProof n i len);
+
+fromBVVecUpdateM : (E:EvType) -> (stack:FunStack) ->
+                   (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+                   BVVec n len a -> Vec n Bool -> a ->
+                   a -> (m : Nat) -> SpecM E stack (Vec m a);
+fromBVVecUpdateM E stack n len a xs i x def m =
+  maybe (is_bvult n i len) (SpecM E stack (Vec m a))
+        (errorS E stack (Vec m a) "bvVecUpdateM: invalid sequence index")
+        (\ (_:is_bvult n i len) -> retS E stack (Vec m a)
+                                        (genFromBVVec n len a
+                                          (updBVVec n len a xs i x) def m))
+        (bvultWithProof n i len);
+
+updateM : (E:EvType) -> (stack:FunStack) ->
+          (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a ->
+          SpecM E stack (Vec n a);
+updateM E stack n a xs i x =
+  maybe (IsLtNat i n) (SpecM E stack (Vec n a))
+        (errorS E stack (Vec n a) "updateM: invalid sequence index")
+        (\ (pf:IsLtNat i n) -> retS E stack (Vec n a) (updWithProof n a xs i x pf))
+        (proveLtNat i n);
+
+eListSelM : (E:EvType) -> (stack:FunStack) ->
+            (a : isort 0) -> (n : Num) -> mseq E stack n a -> Nat ->
+            SpecM E stack a;
+eListSelM E stack a =
+  Num_rec (\ (n:Num) -> mseq E stack n a -> Nat -> SpecM E stack a)
+          (\ (n:Nat) -> atM E stack n a)
+          (eListSel (SpecM E stack a) TCInf);
+
+
+--------------------------------------------------------------------------------
+-- List comprehensions
+
+-- FIXME
+primitive
+fromM : (E:EvType) -> (stack:FunStack) ->
+        (a b : sort 0) -> (m n : Num) -> mseq E stack m a ->
+        (a -> SpecM E stack (mseq E stack n b)) ->
+        SpecM E stack (seq (tcMul m n) (a * b));
+
+-- FIXME
+primitive
+mletM : (E:EvType) -> (stack:FunStack) ->
+        (a b : sort 0) -> (n : Num) -> a ->
+        (a -> SpecM E stack (mseq E stack n b)) ->
+        SpecM E stack (mseq E stack n (a * b));
+
+-- FIXME
+primitive
+seqZipM : (E:EvType) -> (stack:FunStack) ->
+          (a b : sort 0) -> (m n : Num) -> mseq E stack m a ->
+          mseq E stack n b -> SpecM E stack (mseq E stack (tcMin m n) (a * b));
+{-
+seqZipM a b m n ms1 ms2 =
+  seqMap
+    (CompM a * CompM b) (CompM (a * b)) (tcMin m n)
+    (\ (p : CompM a * CompM b) ->
+       bindM2 a b (a*b) p.(1) p.(2) (\ (x:a) (y:b) -> returnM (a*b) (x,y)))
+    (seqZip (CompM a) (CompM b) m n ms1 ms2);
+-}
+
+
+--------------------------------------------------------------------------------
+-- Monadic versions of the Cryptol typeclass instances
+
+-- PEq
+PEqMSeq : (E:EvType) -> (stack:FunStack) ->
+          (n:Num) -> isFinite n -> (a:isort 0) -> PEq a ->
+          PEq (mseq E stack n a);
+PEqMSeq E stack =
+  Num_rec_fin (\ (n:Num) -> (a:isort 0) -> PEq a -> PEq (mseq E stack n a))
+              (\ (n:Nat) -> PEqVec n);
+
+PEqMSeqBool : (E:EvType) -> (stack:FunStack) ->
+              (n : Num) -> isFinite n -> PEq (mseq E stack n Bool);
+PEqMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PEq (mseq E stack n Bool)) PEqWord;
+
+-- PCmp
+PCmpMSeq : (E:EvType) -> (stack:FunStack) ->
+           (n:Num) -> isFinite n -> (a:isort 0) -> PCmp a ->
+           PCmp (mseq E stack n a);
+PCmpMSeq E stack =
+  Num_rec_fin (\ (n:Num) -> (a:isort 0) -> PCmp a -> PCmp (mseq E stack n a))
+              (\ (n:Nat) -> PCmpVec n);
+
+PCmpMSeqBool : (E:EvType) -> (stack:FunStack) ->
+               (n : Num) -> isFinite n -> PCmp (mseq E stack n Bool);
+PCmpMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PCmp (mseq E stack n Bool)) PCmpWord;
+
+-- PSignedCmp
+PSignedCmpMSeq : (E:EvType) -> (stack:FunStack) ->
+                 (n:Num) -> isFinite n -> (a:isort 0) -> PSignedCmp a ->
+                 PSignedCmp (mseq E stack n a);
+PSignedCmpMSeq E stack =
+  Num_rec_fin (\ (n:Num) -> (a:isort 0) -> PSignedCmp a ->
+                 PSignedCmp (mseq E stack n a))
+              (\ (n:Nat) -> PSignedCmpVec n);
+
+PSignedCmpMSeqBool : (E:EvType) -> (stack:FunStack) ->
+                     (n : Num) -> isFinite n -> PSignedCmp (mseq E stack n Bool);
+PSignedCmpMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PSignedCmp (mseq E stack n Bool)) PSignedCmpWord;
+
+
+-- PZero
+PZeroSpecM : (E:EvType) -> (stack:FunStack) ->
+             (a : sort 0) -> PZero a -> PZero (SpecM E stack a);
+PZeroSpecM E stack = retS E stack;
+
+PZeroMSeq : (E:EvType) -> (stack:FunStack) ->
+            (n : Num) -> (a : sort 0) -> PZero a -> PZero (mseq E stack n a);
+PZeroMSeq E stack n_top a pa =
+  Num_rec (\ (n:Num) -> PZero (mseq E stack n a))
+          (\ (n:Nat) -> seqConst (TCNum n) a pa)
+          (seqConst TCInf (SpecM E stack a) (retS E stack a pa))
+          n_top;
+
+-- PLogic
+PLogicSpecM : (E:EvType) -> (stack:FunStack) ->
+              (a : sort 0) -> PLogic a -> PLogic (SpecM E stack a);
+PLogicSpecM E stack a pa =
+  { logicZero = retS E stack a (pa.logicZero)
+  , and  = fmapS2 E stack a a a (pa.and)
+  , or   = fmapS2 E stack a a a (pa.or)
+  , xor  = fmapS2 E stack a a a (pa.xor)
+  , not  = fmapS E stack a a (pa.not)
+  };
+
+PLogicMSeq : (E:EvType) -> (stack:FunStack) ->
+             (n : Num) -> (a : isort 0) -> PLogic a ->
+             PLogic (mseq E stack n a);
+PLogicMSeq E stack n_top a pa =
+  Num_rec (\ (n:Num) -> PLogic (mseq E stack n a))
+          (\ (n:Nat) -> PLogicVec n a pa)
+          (PLogicStream (SpecM E stack a) (PLogicSpecM E stack a pa))
+          n_top;
+
+PLogicMSeqBool : (E:EvType) -> (stack:FunStack) ->
+                 (n : Num) -> isFinite n -> PLogic (mseq E stack n Bool);
+PLogicMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PLogic (mseq E stack n Bool)) PLogicWord;
+
+-- PRing
+PRingSpecM : (E:EvType) -> (stack:FunStack) ->
+             (a : sort 0) -> PRing a -> PRing (SpecM E stack a);
+PRingSpecM E stack a pa =
+  { ringZero = retS E stack a (pa.ringZero)
+  , add = fmapS2 E stack a a a (pa.add)
+  , sub = fmapS2 E stack a a a (pa.sub)
+  , mul = fmapS2 E stack a a a (pa.mul)
+  , neg = fmapS E stack a a (pa.neg)
+  , int = \ (i : Integer) -> retS E stack a (pa.int i)
+  };
+
+PRingMSeq : (E:EvType) -> (stack:FunStack) ->
+            (n : Num) -> (a : isort 0) -> PRing a -> PRing (mseq E stack n a);
+PRingMSeq E stack n_top a pa =
+  Num_rec (\ (n:Num) -> PRing (mseq E stack n a))
+          (\ (n:Nat) -> PRingVec n a pa)
+          (PRingStream (SpecM E stack a) (PRingSpecM E stack a pa))
+          n_top;
+
+PRingMSeqBool : (E:EvType) -> (stack:FunStack) ->
+                (n : Num) -> isFinite n -> PRing (mseq E stack n Bool);
+PRingMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PRing (mseq E stack n Bool)) PRingWord;
+
+-- Integral
+PIntegralMSeqBool : (E:EvType) -> (stack:FunStack) ->
+                    (n : Num) -> isFinite n -> PIntegral (mseq E stack n Bool);
+PIntegralMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PIntegral (mseq E stack n Bool)) PIntegralWord;
+
+-- PLiteral
+PLiteralSeqBoolM : (E:EvType) -> (stack:FunStack) ->
+                   (n : Num) -> isFinite n -> PLiteral (mseq E stack n Bool);
+PLiteralSeqBoolM E stack =
+  Num_rec_fin (\ (n:Num) -> PLiteral (mseq E stack n Bool)) bvNat;
+
+
+--------------------------------------------------------------------------------
+-- Monadic versions of the Cryptol primitives
+
+
+-- Sequences
+
+-- Alternate versions of gen and at to get around the behavior of the default prims
+genCryM : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
+genCryM = gen;
+atCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
+atCryM = at;
+
+-- FIXME: a number of the non-monadic versions of these functions contain calls
+-- to finNumRec, which calls error on non-finite numbers. The monadic versions
+-- of these, below, should be reimplemented to not contain finNumRec, but to
+-- just use Num_rec_fin directly, rather than using it and then calling out to
+-- the non-monadic version with finNumRec.
+
+ecShiftLM : (E:EvType) -> (stack:FunStack) ->
+            (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+            mseq E stack m a -> ix -> mseq E stack m a;
+ecShiftLM E stack =
+  Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+                        mseq E stack m a -> ix -> mseq E stack m a)
+          (\ (m:Nat) -> ecShiftL (TCNum m))
+          (\ (ix a : sort 0) (pix:PIntegral ix) (pa:PZero a) ->
+             ecShiftL TCInf ix (SpecM E stack a) pix (PZeroSpecM E stack a pa));
+
+ecShiftRM : (E:EvType) -> (stack:FunStack) ->
+            (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+            mseq E stack m a -> ix -> mseq E stack m a;
+ecShiftRM E stack =
+  Num_rec (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+                        mseq E stack m a -> ix -> mseq E stack m a)
+          (\ (m:Nat) -> ecShiftR (TCNum m))
+          (\ (ix a : sort 0) (pix:PIntegral ix) (pa:PZero a) ->
+             ecShiftR TCInf ix (SpecM E stack a) pix (PZeroSpecM E stack a pa));
+
+ecSShiftRM : (E:EvType) -> (stack:FunStack) ->
+             (n : Num) -> isFinite n -> (ix : sort 0) -> PIntegral ix ->
+             mseq E stack n Bool -> ix -> mseq E stack n Bool;
+ecSShiftRM E stack =
+  Num_rec_fin
+    (\ (n:Num) -> (ix : sort 0) -> PIntegral ix -> mseq E stack n Bool -> ix ->
+                  mseq E stack n Bool)
+    (\ (n:Nat) -> ecSShiftR (TCNum n));
+
+ecRotLM : (E:EvType) -> (stack:FunStack) ->
+          (m : Num) -> isFinite m -> (ix a : sort 0) -> PIntegral ix ->
+          mseq E stack m a -> ix -> mseq E stack m a;
+ecRotLM E stack =
+  Num_rec_fin
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> mseq E stack m a -> ix ->
+       mseq E stack m a)
+    (\ (m:Nat) -> ecRotL (TCNum m));
+
+ecRotRM : (E:EvType) -> (stack:FunStack) ->
+          (m : Num) -> isFinite m -> (ix a : sort 0) -> PIntegral ix ->
+          mseq E stack m a -> ix -> mseq E stack m a;
+ecRotRM E stack =
+  Num_rec_fin
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> mseq E stack m a -> ix ->
+       mseq E stack m a)
+    (\ (m:Nat) -> ecRotR (TCNum m));
+
+ecCatM : (E:EvType) -> (stack:FunStack) ->
+         (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
+         mseq E stack m a -> mseq E stack n a -> mseq E stack (tcAdd m n) a;
+ecCatM E stack =
+  Num_rec_fin
+    (\ (m:Num) -> (n:Num) -> (a:sort 0) -> mseq E stack m a -> mseq E stack n a ->
+                  mseq E stack (tcAdd m n) a)
+    (\ (m:Nat) ->
+       Num_rec
+         (\ (n:Num) -> (a:isort 0) -> Vec m a -> mseq E stack n a ->
+            mseq E stack (tcAdd (TCNum m) n) a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> append m n a)
+         -- Case for (TCNum m, TCInf)
+         (\ (a:isort 0) (v:Vec m a) ->
+            streamAppend (SpecM E stack a) m
+                         (map a (SpecM E stack a) (retS E stack a) m v)));
+
+-- FIXME
+primitive
+ecTakeM : (E:EvType) -> (stack:FunStack) ->
+          (m n : Num) -> (a : sort 0) -> mseq E stack (tcAdd m n) a ->
+          mseq E stack m a;
+{-
+ecTakeM =
+  Num_rec (\ (m:Num) -> (n:Num) -> (a:sort 0) -> mseq (tcAdd m n) a -> mseq m a)
+          (\ (m:Nat) -> ecTake (TCNum m))
+          (\ (n:Num) (a:sort 0) (s:Stream (CompM a)) ->
+             ecTake TCInf n (CompM a) s);
+-}
+
+-- An alternate version of join from Prelude to get around the default Prim
+joinCryM : (m n : Nat) -> (a : isort 0) ->
+           Vec m (Vec n a) -> Vec (mulNat m n) a;
+joinCryM m n a v =
+  genCryM (mulNat m n) a (\ (i : Nat) ->
+    atCryM n a (at m (Vec n a) v (divNat i n)) (modNat i n));
+
+-- FIXME
+primitive
+ecDropM : (E:EvType) -> (stack:FunStack) ->
+          (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
+          mseq E stack (tcAdd m n) a -> mseq E stack n a;
+
+ecJoinM : (E:EvType) -> (stack:FunStack) -> 
+          (m n : Num) -> (a : sort 0) -> mseq E stack m (mseq E stack n a) ->
+          mseq E stack (tcMul m n) a;
+ecJoinM E stack =
+  Num_rec
+    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> mseq E stack m (mseq E stack n a) ->
+       mseq E stack (tcMul m n) a)
+    (\ (m:Nat) ->
+       finNumRec
+         (\ (n:Num) -> (a:isort 0) -> Vec m (mseq E stack n a) ->
+            mseq E stack (tcMul (TCNum m) n) a)
+         -- Case for (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> joinCryM m n a))
+         -- No case for (TCNum m, TCInf), shoudn't happen
+    (finNumRec
+       (\ (n:Num) -> (a:isort 0) -> Stream (SpecM E stack (mseq E stack n a)) ->
+          mseq E stack (tcMul TCInf n) a)
+       -- Case for (TCInf, TCNum n)
+       (\ (n:Nat) -> \ (a:isort 0) ->
+          natCase
+            (\ (n':Nat) -> Stream (SpecM E stack (Vec n' a)) ->
+               mseq E stack (if0Nat Num n' (TCNum 0) TCInf) a)
+            (\ (s:Stream (SpecM E stack (Vec 0 a))) -> EmptyVec a)
+            (\ (n':Nat) -> \ (s:Stream (SpecM E stack (Vec (Succ n') a))) ->
+               MkStream (SpecM E stack a) (\ (i:Nat) ->
+                  fmapS E stack (Vec (Succ n') a) a
+                    (\ (v:Vec (Succ n') a) -> at (Succ n') a v (modNat i (Succ n')))
+                    (streamGet (SpecM E stack (Vec (Succ n') a)) s
+                               (divNat i (Succ n'))) ))
+            n));
+       -- No case for (TCInf, TCInf), shouldn't happen
+
+-- An alternate version of split from Prelude to get around the default Prim
+splitCryM : (m n : Nat) -> (a : isort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+splitCryM m n a v =
+  genCryM m (Vec n a) (\ (i : Nat) ->
+    genCryM n a (\ (j : Nat) ->
+      atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
+
+ecSplitM : (E:EvType) -> (stack:FunStack) ->
+           (m n : Num) -> (a : sort 0) -> mseq E stack (tcMul m n) a ->
+           mseq E stack m (mseq E stack n a);
+ecSplitM E stack =
+  Num_rec
+    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> mseq E stack (tcMul m n) a ->
+       mseq E stack m (mseq E stack n a))
+    (\ (m:Nat) ->
+       finNumRec
+         (\ (n:Num) -> (a:isort 0) -> mseq E stack (tcMul (TCNum m) n) a ->
+            Vec m (mseq E stack n a))
+         -- Case for (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> splitCryM m n a))
+         -- No case for (TCNum m, TCInf), shouldn't happen
+    (finNumRec
+       (\ (n:Num) -> (a:isort 0) -> mseq E stack (tcMul TCInf n) a ->
+          Stream (SpecM E stack (mseq E stack n a)))
+       -- Case for (TCInf, TCNum n)
+       (\ (n:Nat) -> \ (a:isort 0) ->
+          natCase
+            (\ (n':Nat) ->
+               mseq E stack (if0Nat Num n' (TCNum 0) TCInf) a ->
+               Stream (SpecM E stack (Vec n' a)))
+            (\ (xs : Vec 0 a) -> streamConst (SpecM E stack (Vec 0 a))
+                                             (retS E stack (Vec 0 a) xs))
+            (\ (n':Nat) (xs : Stream (SpecM E stack a)) -> 
+               streamMap (Vec (Succ n') (SpecM E stack a))
+                         (SpecM E stack (Vec (Succ n') a))
+                         (vecMapM E stack (SpecM E stack a) a (Succ n')
+                                  (id (SpecM E stack a)))
+                         (streamSplit (SpecM E stack a) (Succ n') xs))
+            n));
+       -- No case for (TCInf, TCInf), shouldn't happen
+
+ecReverseM : (E:EvType) -> (stack:FunStack) ->
+             (n : Num) -> isFinite n -> (a : sort 0) -> mseq E stack n a ->
+             mseq E stack n a;
+ecReverseM E stack =
+  Num_rec_fin (\ (n:Num) -> (a : sort 0) -> mseq E stack n a -> mseq E stack n a)
+              (\ (n:Nat) -> ecReverse (TCNum n));
+
+-- FIXME
+primitive
+ecTransposeM : (E:EvType) -> (stack:FunStack) ->
+               (m n : Num) -> (a : sort 0) -> mseq E stack m (mseq E stack n a) ->
+               mseq E stack n (mseq E stack m a);
+
+ecAtM : (E:EvType) -> (stack:FunStack) ->
+        (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix ->
+        mseq E stack n a -> ix -> SpecM E stack a;
+ecAtM E stack n_top a ix pix =
+  Num_rec
+    (\ (n:Num) -> mseq E stack n a -> ix -> SpecM E stack a)
+    (\ (n:Nat) (v:Vec n a) ->
+       pix.posNegCases (SpecM E stack a) (atM E stack n a v)
+                       (\ (_:Nat) ->
+                          errorS E stack a "ecAtM: invalid sequence index"))
+    (\ (s:Stream (SpecM E stack a)) ->
+       pix.posNegCases (SpecM E stack a) (streamGet (SpecM E stack a) s)
+                       (\ (_:Nat) ->
+                          errorS E stack a "ecAtM: invalid sequence index"))
+    n_top;
+
+ecUpdateM : (E:EvType) -> (stack:FunStack) ->
+            (n : Num) -> (a : isort 0) -> (ix : sort 0) -> PIntegral ix ->
+            mseq E stack n a -> ix -> a -> SpecM E stack (mseq E stack n a);
+ecUpdateM E stack n_top a ix pix =
+  Num_rec
+    (\ (n:Num) -> mseq E stack n a -> ix -> a ->
+       SpecM E stack (mseq E stack n a))
+    (\ (n:Nat) (v:Vec n a) (i:ix) (x:a) ->
+       pix.posNegCases (SpecM E stack (Vec n a))
+                       (\ (i:Nat) -> updateM E stack n a v i x)
+                       (\ (_:Nat) -> errorS E stack (Vec n a)
+                                            "ecUpdateM: invalid sequence index") i)
+    (\ (s:Stream (SpecM E stack a)) (i:ix) (x:a) ->
+       pix.posNegCases (SpecM E stack (Stream (SpecM E stack a)))
+                       (\ (i:Nat) ->
+                          retS E stack (Stream (SpecM E stack a))
+                               (streamUpd (SpecM E stack a) s i
+                                          (retS E stack a x)))
+                       (\ (_:Nat) -> errorS E stack (Stream (SpecM E stack a))
+                                            "ecUpdateM: invalid sequence index") i)
+    n_top;
+
+-- FIXME
+primitive
+ecAtBackM : (E:EvType) -> (stack:FunStack) ->
+            (n : Num) -> isFinite n -> (a ix : sort 0) -> PIntegral ix ->
+            mseq E stack n a -> ix -> SpecM E stack a;
+
+-- FIXME
+primitive
+ecFromToM : (E:EvType) -> (stack:FunStack) ->
+            (first : Num) -> isFinite first -> (last : Num) -> isFinite last ->
+            (a : isort 0) -> PLiteral a ->
+            mseq E stack (tcAdd (TCNum 1) (tcSub last first)) a;
+
+-- FIXME
+primitive
+ecFromToLessThanM : (E:EvType) -> (stack:FunStack) ->
+                    (first : Num) -> isFinite first -> (bound : Num) ->
+                    (a : isort 0) -> PLiteralLessThan a ->
+                    mseq E stack (tcSub bound first) a;
+
+-- FIXME
+primitive
+ecFromThenToM :
+  (E:EvType) -> (stack:FunStack) ->
+  (first next last : Num) -> (a : sort 0) -> (len : Num) -> isFinite len ->
+  PLiteral a -> PLiteral a -> PLiteral a -> mseq E stack len a;
+
+ecInfFromM : (E:EvType) -> (stack:FunStack) ->
+             (a : sort 0) -> PIntegral a -> a -> mseq E stack TCInf a;
+ecInfFromM E stack a pa x =
+  MkStream (SpecM E stack a)
+           (\ (i : Nat) ->
+              retS E stack a (pa.integralRing.add
+                              x (pa.integralRing.int (natToInt i))));
+
+ecInfFromThenM : (E:EvType) -> (stack:FunStack) ->
+                 (a : sort 0) -> PIntegral a -> a -> a -> mseq E stack TCInf a;
+ecInfFromThenM E stack a pa x y =
+  MkStream (SpecM E stack a)
+           (\ (i : Nat) ->
+              retS E stack a (pa.integralRing.add x
+                   (pa.integralRing.mul (pa.integralRing.sub y x)
+                                        (pa.integralRing.int (natToInt i)))));
+
+ecErrorM : (E:EvType) -> (stack:FunStack) ->
+           (a : sort 0) -> (len : Num) -> mseq E stack len (Vec 8 Bool) ->
+           SpecM E stack a;
+ecErrorM E stack a len msg =
+  errorS E stack a "encountered call to the Cryptol 'error' function";
+
+
+--------------------------------------------------------------------------------

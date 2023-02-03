@@ -1,24 +1,26 @@
 
-module StringSet where
+module string_set where
 
 import Prelude;
 
-listInsertM : (a : sort 0) -> List a -> a -> CompM (List a);
+listInsertM : (a : sort 0) -> List a -> a ->
+              SpecM VoidEv emptyFunStack (List a);
 listInsertM a l s =
-  returnM (List a) (Cons a s l);
+  retS VoidEv emptyFunStack (List a) (Cons a s l);
 
 listRemoveM : (a : sort 0) -> (a -> a -> Bool) -> List a -> a ->
-              CompM (List a * a * #());
+              SpecM VoidEv emptyFunStack (List a * a);
 listRemoveM a test_eq l s =
-  returnM
-    (List a * a * #())
+  retS
+    VoidEv emptyFunStack
+    (List a * a)
     (List__rec
       a (\ (_:List a) -> List a)
       (Nil a)
       (\ (s':a) (_:List a) (rec:List a) ->
          ite (List a) (test_eq s s') rec (Cons a s' rec))
       l,
-     s, ());
+     s);
 
 ----------------------------------------------------------------------
 -- Helper defs for Heapster examples
@@ -26,18 +28,21 @@ listRemoveM a test_eq l s =
 stringList : sort 0;
 stringList = List String;
 
-stringListInsertM : List String -> String -> CompM (List String);
+stringListInsertM : List String -> String ->
+                    SpecM VoidEv emptyFunStack (List String);
 stringListInsertM l s =
-  returnM (List String) (Cons String s l);
+  retS VoidEv emptyFunStack (List String) (Cons String s l);
 
-stringListRemoveM : List String -> String -> CompM (stringList * String * #());
+stringListRemoveM : List String -> String ->
+                    SpecM VoidEv emptyFunStack (stringList * String);
 stringListRemoveM l s =
-  returnM
-    (stringList * String * #())
+  retS
+    VoidEv emptyFunStack
+    (stringList * String)
     (List__rec
       String (\ (_:List String) -> List String)
       (Nil String)
       (\ (s':String) (_:List String) (rec:List String) ->
          ite (List String) (equalString s s') rec (Cons String s' rec))
       l,
-     s, ());
+     s);

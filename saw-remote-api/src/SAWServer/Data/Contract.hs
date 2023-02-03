@@ -11,6 +11,7 @@ module SAWServer.Data.Contract
   , Allocated(..)
   , GhostValue(..)
   , PointsTo(..)
+  , PointsToBitfield(..)
   ) where
 
 import Control.Applicative
@@ -34,13 +35,15 @@ data Contract ty cryptolExpr =
     , preAllocated  :: [Allocated ty]
     , preGhostValues  :: [GhostValue cryptolExpr]
     , prePointsTos  :: [PointsTo ty cryptolExpr]
-    , argumentVals  :: [CrucibleSetupVal cryptolExpr]
+    , prePointsToBitfields :: [PointsToBitfield ty cryptolExpr]
+    , argumentVals  :: [CrucibleSetupVal ty cryptolExpr]
     , postVars      :: [ContractVar ty]
     , postConds     :: [cryptolExpr]
     , postAllocated :: [Allocated ty]
     , postGhostValues :: [GhostValue cryptolExpr]
     , postPointsTos :: [PointsTo ty cryptolExpr]
-    , returnVal     :: Maybe (CrucibleSetupVal cryptolExpr)
+    , postPointsToBitfields :: [PointsToBitfield ty cryptolExpr]
+    , returnVal     :: Maybe (CrucibleSetupVal ty cryptolExpr)
     }
     deriving stock (Functor, Foldable, Traversable)
 
@@ -61,10 +64,17 @@ data Allocated ty =
 
 data PointsTo ty cryptolExpr =
   PointsTo
-    { pointer           :: CrucibleSetupVal cryptolExpr
-    , pointsTo          :: CrucibleSetupVal cryptolExpr
+    { pointer           :: CrucibleSetupVal ty cryptolExpr
+    , pointsTo          :: CrucibleSetupVal ty cryptolExpr
     , checkPointsToType :: Maybe (CheckPointsToType ty)
     , condition         :: Maybe cryptolExpr
+    } deriving stock (Functor, Foldable, Traversable)
+
+data PointsToBitfield ty cryptolExpr =
+  PointsToBitfield
+    { bfPointer   :: CrucibleSetupVal ty cryptolExpr
+    , bfFieldName :: Text
+    , bfPointsTo  :: CrucibleSetupVal ty cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
 
 data CheckAgainstTag
@@ -85,6 +95,13 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsTo ty cryptolExp
                <*> o .:  "points to"
                <*> o .:? "check points to type"
                <*> o .:? "condition"
+
+instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsToBitfield ty cryptolExpr) where
+  parseJSON =
+    withObject "Points-to-bitfield relationship" $ \o ->
+      PointsToBitfield <$> o .: "pointer"
+                       <*> o .: "field name"
+                       <*> o .: "points to"
 
 instance FromJSON cryptolExpr => FromJSON (GhostValue cryptolExpr) where
   parseJSON =
@@ -115,12 +132,14 @@ instance (FromJSON ty, FromJSON e) => FromJSON (Contract ty e) where
              <*> o .:  "pre allocated"
              <*> o .:? "pre ghost values" .!= []
              <*> o .:  "pre points tos"
+             <*> o .:? "pre points to bitfields" .!= []
              <*> o .:  "argument vals"
              <*> o .:  "post vars"
              <*> o .:  "post conds"
              <*> o .:  "post allocated"
              <*> o .:? "post ghost values" .!= []
              <*> o .:  "post points tos"
+             <*> o .:? "post points to bitfields" .!= []
              <*> o .:? "return val"
 
 instance FromJSON CheckAgainstTag where

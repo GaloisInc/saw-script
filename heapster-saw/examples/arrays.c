@@ -91,3 +91,46 @@ uint64_t sum_2d (int64_t **arr, uint64_t l1, uint64_t l2) {
   }
   return sum;
 }
+
+/* Finds the sum of the elements of an array by incrementing the given pointer
+   instead of using a for loop over an index */
+uint64_t sum_inc_ptr(const uint8_t *arr, size_t len) {
+  uint64_t sum = 0;
+  while (len--) {
+    sum += arr[0];
+    arr += 1;
+  }
+  return sum;
+}
+
+/* Like the above, but uses an array of int64_t */
+uint64_t sum_inc_ptr_64(const uint64_t *arr, size_t len) {
+  uint64_t sum = 0;
+  while (len--) {
+    sum += arr[0];
+    arr += 8;
+  }
+  return sum;
+}
+
+/* For an array of even length, returns the sum of the even components of the
+   array minus the sum of the odd components of an array */
+uint64_t even_odd_sums_diff(const uint64_t *arr, size_t len) {
+  uint64_t sum = 0;
+  for (uint64_t i = 1; i < len; i += 2) {
+    sum += arr[i-1] - arr[i];
+  }
+  return sum;
+}
+
+uint64_t alloc_sum_array_test (void) {
+  uint64_t X[8];
+  X[0] = 0; X[1] = 1; X[2] = 2; X[3] = 3;
+  X[4] = 4; X[5] = 5; X[6] = 6; X[7] = 7;
+  /*
+  for (uint64_t i = 0; i < 16; ++i) {
+    X[i] = i;
+  }
+  */
+  return sum_inc_ptr_64 (X, 8);
+}

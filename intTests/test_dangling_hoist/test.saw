@@ -1,0 +1,22 @@
+enable_experimental;
+
+prove_extcore do {
+    print_goal;
+    check_goal;
+    hoist_ifs_in_goal;
+    print_goal;
+    check_goal;
+    admit "sure";
+  }
+  (parse_core "(x : Integer) -> (y:Integer) -> (z:Integer) -> (b:Bool) -> EqTrue (intEq z (ite Integer b x y)) -> EqTrue (ite Bool b (intEq z x) (intEq z y))");
+
+
+prove_extcore do {
+    print_goal;
+    check_goal;
+    goal_eval;
+    print_goal;
+    check_goal;
+    admit "sure";
+  }
+  (parse_core "(x : Integer) -> (y:Integer) -> (z:Integer) -> (b:Bool) -> EqTrue (intEq z (ite Integer b x y)) -> EqTrue (ite Bool b (intEq z x) (intEq z y))");

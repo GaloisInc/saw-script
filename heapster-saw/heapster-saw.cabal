@@ -28,6 +28,7 @@ library
     reflection,
     -- ansi-wl-pprint,
     prettyprinter >= 1.7.0,
+    pretty,
     transformers,
     mtl,
     containers,
@@ -39,7 +40,8 @@ library
     hobbits ^>= 1.4,
     aeson ^>= 1.5,
     th-abstraction,
-    template-haskell
+    template-haskell,
+    extra
   hs-source-dirs: src
   build-tool-depends:
     alex:alex,
@@ -48,9 +50,11 @@ library
     Verifier.SAW.Heapster.CruUtil
     Verifier.SAW.Heapster.GenMonad
     Verifier.SAW.Heapster.IDESupport
+    Verifier.SAW.Heapster.HintExtract
     Verifier.SAW.Heapster.Implication
     Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer
+    Verifier.SAW.Heapster.LLVMGlobalConst
     Verifier.SAW.Heapster.Located
     Verifier.SAW.Heapster.JSONExport
     Verifier.SAW.Heapster.ParsedCtx
@@ -67,3 +71,25 @@ library
     Verifier.SAW.Heapster.Widening
   GHC-options: -Wall
   default-language: Haskell2010
+
+test-suite prover_tests
+  type: exitcode-stdio-1.0
+  hs-source-dirs: proverTests
+
+  ghc-options: -Wall -threaded
+  default-language: Haskell2010
+
+  main-is: Main.hs
+
+  build-depends: base
+               , directory
+               , filemanip
+               , filepath
+               , process
+               , tasty
+               , tasty-hunit
+               , tasty-expected-failure
+               , heapster-saw
+               , hobbits ^>= 1.4
+               , crucible
+               , crucible-llvm

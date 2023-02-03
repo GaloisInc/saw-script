@@ -6,7 +6,7 @@
 module Mir.Compositional.Clobber
 where
 
-import Control.Lens ((^.), (^?), (%=), ix)
+import Control.Lens ((^.), (^?), ix)
 import Control.Monad.Except
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
@@ -23,9 +23,6 @@ import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
-import qualified Crux.Model as Crux
-import Crux.Types (HasModel(..))
-
 import Mir.Generator (CollectionState, collection, staticMap, StaticVar(..))
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Mir as M
@@ -39,7 +36,7 @@ import Mir.Compositional.Convert
 
 -- | Replace each primitive value within `rv` with a fresh symbolic variable.
 clobberSymbolic :: forall sym p t st fs tp rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
 clobberSymbolic sym loc nameStr shp rv = go shp rv
@@ -76,7 +73,7 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
 -- immutable (`&`) access.  So this function modifies only the portions of `rv`
 -- that lie within an `UnsafeCell` and leaves the rest unchanged.
 clobberImmutSymbolic :: forall sym p t st fs tp rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
 clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
@@ -118,7 +115,7 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
 
 -- | Construct a fresh symbolic `RegValue` of type `tp`.
 freshSymbolic :: forall sym p t st fs tp rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym -> ProgramLoc -> String -> TypeShape tp ->
     OverrideSim (p sym) sym MIR rtp args ret (RegValue sym tp)
 freshSymbolic sym loc nameStr shp = go shp
@@ -129,7 +126,9 @@ freshSymbolic sym loc nameStr shp = go shp
     go (PrimShape _ btpr) = do
         let nameSymbol = W4.safeSymbol nameStr
         expr <- liftIO $ W4.freshConstant sym nameSymbol btpr
-        stateContext . cruciblePersonality . personalityModel %= Crux.addVar loc nameStr btpr expr
+        let ev = CreateVariableEvent loc nameStr btpr expr
+        ovrWithBackend $ \bak ->
+          liftIO $ addAssumptions bak (singleEvent ev)
         return expr
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)
@@ -155,7 +154,7 @@ freshSymbolic sym loc nameStr shp = go shp
 -- might write through the old ref before replacing it with a new one.
 
 clobberGlobals :: forall sym p t st fs rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym -> ProgramLoc -> String -> CollectionState ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 clobberGlobals sym loc nameStr cs = do
@@ -173,7 +172,7 @@ clobberGlobals sym loc nameStr cs = do
         writeGlobal gv rv'
 
 clobberGlobalsOverride :: forall sym p t st fs rtp args ret.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p, HasCallStack) =>
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     CollectionState ->
     OverrideSim (p sym) sym MIR rtp args ret ()
 clobberGlobalsOverride cs = do

@@ -41,6 +41,7 @@ module Verifier.SAW.SharedTerm
   , alphaEquiv
   , alistAllFields
   , scRegisterName
+  , scLookupNameInfo
   , scResolveName
   , scResolveNameByURI
   , scResolveUnambiguous
@@ -59,6 +60,10 @@ module Verifier.SAW.SharedTerm
   , SharedContext
   , mkSharedContext
   , scGetModuleMap
+  , SharedContextCheckpoint
+  , checkpointSharedContext
+  , restoreSharedContext
+  , scGetNamingEnv
     -- ** Low-level generic term constructors
   , scTermF
   , scFlatTermF
@@ -70,6 +75,7 @@ module Verifier.SAW.SharedTerm
   , scExtCns
   , scGlobalDef
   , scRegisterGlobal
+  , scFreshenGlobalIdent
     -- ** Recursors and datatypes
   , scRecursorElimTypes
   , scRecursorRetTypeType
@@ -97,14 +103,18 @@ module Verifier.SAW.SharedTerm
   , scCtorApp
   , scApplyCtor
   , scSort
+  , scISort
     -- *** Variables and constants
   , scLocalVar
   , scConstant
   , scConstant'
+  , scOpaqueConstant
   , scLookupDef
     -- *** Functions and function application
   , scApply
   , scApplyAll
+  , scApplyBeta
+  , scApplyAllBeta
   , scGlobalApply
   , scFun
   , scFunAll
@@ -160,6 +170,8 @@ module Verifier.SAW.SharedTerm
   , scXor
   , scBoolEq
   , scIte
+  , scAndList
+  , scOrList
   -- *** Natural numbers
   , scNat
   , scNatType
@@ -207,6 +219,7 @@ module Verifier.SAW.SharedTerm
   , scBvToNat
   , scBvAt
   , scBvConst
+  , scBvLit
   , scFinVal
   , scBvForall
   , scUpdBvFun
@@ -231,6 +244,9 @@ module Verifier.SAW.SharedTerm
   , scArrayLookup
   , scArrayUpdate
   , scArrayEq
+  , scArrayCopy
+  , scArraySet
+  , scArrayRangeEq
     -- ** Utilities
 --  , scTrue
 --  , scFalse
@@ -253,7 +269,11 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
   , scSharedSize
+  , scSharedSizeAux
+  , scSharedSizeMany
   , scTreeSize
+  , scTreeSizeAux
+  , scTreeSizeMany
   ) where
 
 import Control.Applicative
@@ -264,7 +284,7 @@ import Control.Lens
 import Control.Monad.State.Strict as State
 import Control.Monad.Reader
 import Data.Bits
-import Data.List (inits)
+import Data.List (inits, find)
 import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
@@ -273,7 +293,7 @@ import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef')
+import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
@@ -351,6 +371,31 @@ data SharedContext = SharedContext
   , scFreshGlobalVar :: IO VarIndex
   }
 
+data SharedContextCheckpoint =
+  SCC
+  { sccModuleMap :: ModuleMap
+  , sccNamingEnv :: SAWNamingEnv
+  , sccGlobalEnv :: HashMap Ident Term
+  }
+
+checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
+checkpointSharedContext sc =
+  do mmap <- readIORef (scModuleMap sc)
+     nenv <- readIORef (scNamingEnv sc)
+     genv <- readIORef (scGlobalEnv sc)
+     return SCC
+            { sccModuleMap = mmap
+            , sccNamingEnv = nenv
+            , sccGlobalEnv = genv
+            }
+
+restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
+restoreSharedContext scc sc =
+  do writeIORef (scModuleMap sc) (sccModuleMap scc)
+     writeIORef (scNamingEnv sc) (sccNamingEnv scc)
+     writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
+     return sc
+
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
@@ -372,6 +417,11 @@ scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, (
       case registerName i nmi env of
         Left uri -> throw (DuplicateNameException uri)
         Right env' -> env'
+
+scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
+scLookupNameInfo sc i = do
+  env <- readIORef $ scNamingEnv sc
+  pure . Map.lookup i $ resolvedNames env
 
 scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
 scResolveUnambiguous sc nm =
@@ -436,6 +486,16 @@ scRegisterGlobal sc ident t =
         Just _ -> (m, True)
         Nothing -> (HMap.insert ident t m, False)
 
+-- | Find a variant of an identifier that is not already being used as a global,
+-- by possibly adding a numeric suffix
+scFreshenGlobalIdent :: SharedContext -> Ident -> IO Ident
+scFreshenGlobalIdent sc ident =
+  readIORef (scGlobalEnv sc) >>= \gmap ->
+  return $ fromJust $ find (\i -> not $ HMap.member i gmap) $
+  ident : map (mkIdent (identModule ident) .
+               Text.append (identBaseName ident) .
+               Text.pack . show) [(0::Integer) ..]
+
 -- | Create a function application term.
 scApply :: SharedContext
         -> Term -- ^ The function to apply
@@ -478,6 +538,10 @@ scCtorApp sc c_id args =
   do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
      scCtorAppParams sc (ctorPrimName ctor) params args'
+
+-- | Get the current naming environment
+scGetNamingEnv :: SharedContext -> IO SAWNamingEnv
+scGetNamingEnv sc = readIORef (scNamingEnv sc)
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
@@ -837,7 +901,7 @@ scWhnf sc t0 =
                                                                      args' <- mapM memo args
                                                                      t' <- scDataTypeAppParams sc d ps' args'
                                                                      foldM reapply t' xs
-    go xs                     (asConstant -> Just (_,body))     = do go xs body
+    go xs                     (asConstant -> Just (_,Just body)) = go xs body
     go xs                     t                                 = foldM reapply t xs
 
     betaReduce :: (?cache :: Cache IO TermIndex Term) =>
@@ -885,8 +949,9 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
 
        goF :: Cache IO TermIndex Term -> TermF Term -> TermF Term -> IO Bool
 
-       goF c (Constant _ x) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
-       goF c x (Constant _ y) | unfoldConst = join (goF c <$> return x <*> whnf c y)
+       goF _c (Constant ecx _) (Constant ecy _) | ecVarIndex ecx == ecVarIndex ecy = pure True
+       goF c (Constant _ (Just x)) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
+       goF c x (Constant _ (Just y)) | unfoldConst = join (goF c <$> return x <*> whnf c y)
 
        goF c (FTermF ftf1) (FTermF ftf2) =
                case zipWithFlatTermF (go c) ftf1 ftf2 of
@@ -1051,7 +1116,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
                Just (Map.lookup fld -> Just f_tp) -> return f_tp
                Just _ -> fail "Record field not in record type"
                Nothing -> fail "Record project of non-record type"
-        Sort s -> lift $ scSort sc (sortOf s)
+        Sort s _ -> lift $ scSort sc (sortOf s)
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
           n <- scNat sc (fromIntegral (V.length vs))
@@ -1266,6 +1331,17 @@ betaNormalize sc t0 =
 scApplyAll :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAll sc = foldlM (scApply sc)
 
+-- | Apply a function to an argument, beta-reducing if the function is a lambda
+scApplyBeta :: SharedContext -> Term -> Term -> IO Term
+scApplyBeta sc (asLambda -> Just (_, _, body)) arg =
+  instantiateVar sc 0 arg body
+scApplyBeta sc f arg = scApply sc f arg
+
+-- | Apply a function 'Term' to zero or more arguments, beta reducing any time
+-- the function is a lambda
+scApplyAllBeta :: SharedContext -> Term -> [Term] -> IO Term
+scApplyAllBeta sc = foldlM (scApplyBeta sc)
+
 -- | Returns the defined constant with the given 'Ident'. Fails if no
 -- such constant exists in the module.
 scLookupDef :: SharedContext -> Ident -> IO Term
@@ -1284,7 +1360,11 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scFlatTermF sc (Sort s)
+scSort sc s = scFlatTermF sc (Sort s False)
+
+-- | Create a term from a 'Sort', and set the advisory "inhabited" flag
+scISort :: SharedContext -> Sort -> IO Term
+scISort sc s = scFlatTermF sc (Sort s True)
 
 -- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term
@@ -1466,7 +1546,7 @@ scConstant sc name rhs ty =
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
      ec <- scFreshEC sc name ty'
-     t <- scTermF sc (Constant ec rhs')
+     t <- scTermF sc (Constant ec (Just rhs'))
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1489,10 +1569,24 @@ scConstant' sc nmi rhs ty =
      i <- scFreshGlobalVar sc
      scRegisterName sc i nmi
      let ec = EC i nmi ty'
-     t <- scTermF sc (Constant ec rhs')
+     t <- scTermF sc (Constant ec (Just rhs'))
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
+
+-- | Create an abstract and opaque constant with the specified name and type.
+--   Such a constant has no definition and, unlike an @ExtCns@, is not subject
+--   to substitution.
+scOpaqueConstant ::
+  SharedContext ->
+  NameInfo ->
+  Term {- ^ type of the constant -} ->
+  IO Term
+scOpaqueConstant sc nmi ty =
+  do i <- scFreshGlobalVar sc
+     scRegisterName sc i nmi
+     let ec = EC i nmi ty
+     scTermF sc (Constant ec Nothing)
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
@@ -1624,6 +1718,25 @@ scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
 scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
+
+-- | Build a conjunction from a list of boolean terms.
+scAndList :: SharedContext -> [Term] -> IO Term
+scAndList sc = conj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just True
+    conj [] = scBool sc True
+    conj [x] = return x
+    conj (x : xs) = foldM (scAnd sc) x xs
+
+-- | Build a conjunction from a list of boolean terms.
+scOrList :: SharedContext -> [Term] -> IO Term
+scOrList sc = disj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just False
+    disj [] = scBool sc False
+    disj [x] = return x
+    disj (x : xs) = foldM (scOr sc) x xs
+
 
 -- | Create a term applying @Prelude.append@ to two vectors.
 --
@@ -1971,13 +2084,22 @@ scBvToNat sc n x = do
     n' <- scNat sc n
     scGlobalApply sc "Prelude.bvToNat" [n',x]
 
--- | Create a term computing a bitvector of the given length representing the
--- given 'Integer' value (if possible).
+-- | Create a @bvNat@ term computing a bitvector of the given length
+-- representing the given 'Integer' value (if possible).
 scBvConst :: SharedContext -> Natural -> Integer -> IO Term
 scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
   x <- scNat sc w
   y <- scNat sc $ fromInteger $ v .&. (1 `shiftL` fromIntegral w - 1)
   scGlobalApply sc "Prelude.bvNat" [x, y]
+
+-- | Create a vector literal term computing a bitvector of the given length
+-- representing the given 'Integer' value (if possible).
+scBvLit :: SharedContext -> Natural -> Integer -> IO Term
+scBvLit sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
+  do bool_tp <- scBoolType sc
+     bits <- mapM (scBool sc . testBit v)
+                  [(fromIntegral w - 1), (fromIntegral w - 2) .. 0]
+     scVector sc bool_tp bits
 
 -- TODO: This doesn't appear to be used anywhere, and "FinVal" doesn't appear
 -- in Prelude.sawcore... can this be deleted?
@@ -2230,7 +2352,7 @@ scArrayConstant sc a b e = scGlobalApply sc "Prelude.arrayConstant" [a, b, e]
 scArrayLookup :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scArrayLookup sc a b f i = scGlobalApply sc "Prelude.arrayLookup" [a, b, f, i]
 
--- Create a term computing an array updated at a particular index.
+-- | Create a term computing an array updated at a particular index.
 --
 -- > arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 scArrayUpdate :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
@@ -2241,6 +2363,21 @@ scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude.arrayUpdate" [a, b, f, i,
 -- > arrayEq : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
 scArrayEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scArrayEq sc a b x y = scGlobalApply sc "Prelude.arrayEq" [a, b, x, y]
+
+-- > arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Array (Vec n Bool) a;
+-- > arrayCopy n a dest_arr dest_idx src_arr src_idx len
+scArrayCopy :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArrayCopy sc n a f i g j l = scGlobalApply sc "Prelude.arrayCopy" [n, a, f, i, g, j, l]
+
+-- > arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
+-- > arraySet n a arr idx val len
+scArraySet :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArraySet sc n a f i e l = scGlobalApply sc "Prelude.arraySet" [n, a, f, i, e, l]
+
+-- > arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
+-- > arrayRangeEq n a lhs_arr lhs_idx rhs_arr rhs_idx len
+scArrayRangeEq :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a, f, i, g, j, l]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.
@@ -2293,7 +2430,7 @@ getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
 
-getConstantSet :: Term -> Map VarIndex (NameInfo, Term, Term)
+getConstantSet :: Term -> Map VarIndex (NameInfo, Term, Maybe Term)
 getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
   where
     go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
@@ -2463,13 +2600,13 @@ scUnfoldConstantSet sc b names t0 = do
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _) rhs
+          Constant (EC idx _ _) (Just rhs)
             | Set.member idx names == b -> go rhs
             | otherwise                 -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant (EC ecidx _ _) rhs
+          Constant (EC ecidx _ _) (Just rhs)
             | Set.member ecidx names == b -> go rhs
             | otherwise                   -> return t
           _ -> scTermF sc =<< traverse go tf
@@ -2487,13 +2624,13 @@ scUnfoldConstantSet' sc b names t0 = do
   let go :: Term -> ChangeT IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC idx _ _) rhs
+          Constant (EC idx _ _) (Just rhs)
             | Set.member idx names == b -> taint (go rhs)
             | otherwise                 -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
-          Constant (EC ecidx _ _) rhs
+          Constant (EC ecidx _ _) (Just rhs)
             | Set.member ecidx names == b -> taint (go rhs)
             | otherwise                   -> pure t
           _ -> useChangeCache tcache idx $
@@ -2503,7 +2640,13 @@ scUnfoldConstantSet' sc b names t0 = do
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer
-scSharedSize = fst . go (0, Set.empty)
+scSharedSize = fst . scSharedSizeAux (0, Set.empty)
+
+scSharedSizeMany :: [Term] -> Integer
+scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)
+
+scSharedSizeAux :: (Integer, Set TermIndex) -> Term -> (Integer, Set TermIndex)
+scSharedSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (strictPair (sz + 1) seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
@@ -2516,7 +2659,13 @@ strictPair x y = x `seq` y `seq` (x, y)
 -- | Return the number of nodes that would be used by the given
 -- @Term@ if it were represented as a tree instead of a DAG.
 scTreeSize :: Term -> Integer
-scTreeSize = fst . go (0, Map.empty)
+scTreeSize = fst . scTreeSizeAux (0, Map.empty)
+
+scTreeSizeMany :: [Term] -> Integer
+scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)
+
+scTreeSizeAux :: (Integer, Map TermIndex Integer) -> Term -> (Integer, Map TermIndex Integer)
+scTreeSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (sz + 1, seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =

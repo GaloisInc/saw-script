@@ -32,7 +32,6 @@ module Verifier.SAW.Heapster.IRTTranslation (
   ) where
 
 import Numeric.Natural
-import Data.Foldable
 import Data.Functor.Const
 import GHC.TypeLits
 import Control.Monad.Reader
@@ -61,13 +60,6 @@ completeOpenTermTyped :: SharedContext -> OpenTerm -> IO TypedTerm
 completeOpenTermTyped sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM termM sc Nothing []
-
--- | Build an element of type ListSort from a list of types
--- TODO Move this to OpenTerm.hs?
-listSortOpenTerm :: [OpenTerm] -> OpenTerm
-listSortOpenTerm [] = ctorOpenTerm "Prelude.LS_Nil" []
-listSortOpenTerm (tp:tps) =
-  ctorOpenTerm "Prelude.LS_Cons" [tp, listSortOpenTerm tps]
 
 -- | Get the result of applying 'exprCtxToTerms' to the current expression
 -- translation context
@@ -103,7 +95,7 @@ instance ContainsIRTRecName (PermExpr a) where
     containsIRTRecName n args
   containsIRTRecName n (PExpr_PtrShape _ _ sh) = containsIRTRecName n sh
   containsIRTRecName n (PExpr_FieldShape fsh) = containsIRTRecName n fsh
-  containsIRTRecName n (PExpr_ArrayShape _ _ fshs) = containsIRTRecName n fshs
+  containsIRTRecName n (PExpr_ArrayShape _ _ sh) = containsIRTRecName n sh
   containsIRTRecName n (PExpr_SeqShape sh1 sh2) =
     containsIRTRecName n sh1 || containsIRTRecName n sh2
   containsIRTRecName n (PExpr_OrShape sh1 sh2) =
@@ -133,6 +125,7 @@ instance ContainsIRTRecName (ValuePerm a) where
     containsIRTRecName n args
   containsIRTRecName _ (ValPerm_Var _ _) = False
   containsIRTRecName n (ValPerm_Conj ps) = containsIRTRecName n ps
+  containsIRTRecName _ ValPerm_False = False
 
 instance ContainsIRTRecName (RAssign ValuePerm tps) where
   containsIRTRecName _ MNil = False
@@ -142,7 +135,7 @@ instance ContainsIRTRecName (RAssign ValuePerm tps) where
 instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_LLVMField fp) = containsIRTRecName n fp
   containsIRTRecName n (Perm_LLVMArray arrp) =
-    containsIRTRecName n (llvmArrayFields arrp)
+    containsIRTRecName n (llvmArrayCellShape arrp)
   containsIRTRecName n (Perm_LLVMBlock bp) =
     containsIRTRecName n (llvmBlockShape bp)
   containsIRTRecName _ (Perm_LLVMFree _) = False
@@ -154,15 +147,14 @@ instance ContainsIRTRecName (AtomicPerm a) where
   containsIRTRecName n (Perm_NamedConj _ args _) = containsIRTRecName n args
   containsIRTRecName n (Perm_LLVMFrame fperm) =
     containsIRTRecName n (map fst fperm)
-  containsIRTRecName _ (Perm_LOwned _ _ _) = False
+  containsIRTRecName _ (Perm_LOwned _ _ _ _ _) = False
+  containsIRTRecName _ (Perm_LOwnedSimple _ _) = False
   containsIRTRecName _ (Perm_LCurrent _) = False
   containsIRTRecName _ Perm_LFinished = False
   containsIRTRecName n (Perm_Struct ps) = containsIRTRecName n ps
   containsIRTRecName _ (Perm_Fun _) = False
   containsIRTRecName _ (Perm_BVProp _) = False
-
-instance ContainsIRTRecName (LLVMArrayField w) where
-  containsIRTRecName n (LLVMArrayField fp) = containsIRTRecName n fp
+  containsIRTRecName _ Perm_Any = False
 
 instance ContainsIRTRecName (LLVMFieldPerm w sz) where
   containsIRTRecName n fp = containsIRTRecName n $ llvmFieldContents fp
@@ -190,7 +182,8 @@ runIRTTyVarsTransM :: PermEnv -> IRTRecName args -> CruCtx args ->
                       Either String a
 runIRTTyVarsTransM env n_rec argsCtx m = runReaderT m ctx
   where args_trans = RL.map (\tp -> Const $ typeTransTypes $
-                               runNilTypeTransM (translateClosed tp) env)
+                               runNilTypeTransM env noChecks $
+                               translateClosed tp)
                             (cruCtxToTypes argsCtx)
         ctx = IRTTyVarsTransCtx n_rec args_trans MNil env
 
@@ -278,8 +271,8 @@ translateCompletePermIRTTyVars sc env npn_rec args p =
     Left err -> fail err
     Right (tps, ixs) ->
       do tm <- completeOpenTermTyped sc $
-               runNilTypeTransM (lambdaExprCtx args $
-                                  listSortOpenTerm <$> sequence tps) env
+               runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                              listSortOpenTerm <$> sequence tps)
          return (tm, setIRTVarIdxs ixs)
 
 -- | Given the a recursive shape being defined, translate the shape's body to
@@ -297,8 +290,8 @@ translateCompleteShapeIRTTyVars sc env nmsh_rec =
     Left err -> fail err
     Right (tps, ixs) ->
       do tm <- completeOpenTermTyped sc $
-               runNilTypeTransM (lambdaExprCtx args $
-                                  listSortOpenTerm <$> sequence tps) env
+               runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                              listSortOpenTerm <$> sequence tps)
          return (tm, setIRTVarIdxs ixs)
 
 -- | Types from which we can get IRT type variables, e.g. ValuePerm
@@ -321,6 +314,7 @@ instance IRTTyVars (ValuePerm a) where
     [nuMP| ValPerm_Var x _ |] ->
       irtTTranslateVar mb_p x
     [nuMP| ValPerm_Conj ps |] -> irtTyVars ps
+    [nuMP| ValPerm_False |] -> return ([], IRTVarsNil)
 
 -- | Get all IRT type variables in a binding, including any type variables
 -- from the bound variable
@@ -402,8 +396,7 @@ instance IRTTyVars (AtomicPerm a) where
     [nuMP| Perm_LLVMField fld |] ->
       irtTyVars (fmap llvmFieldContents fld)
     [nuMP| Perm_LLVMArray mb_ap |] ->
-         irtTyVars $ fmap (fmap llvmArrayFieldToAtomicPerm . llvmArrayFields)
-                          mb_ap
+      irtTyVars $ mbLLVMArrayCellShape mb_ap
     [nuMP| Perm_LLVMBlock bp |] ->
       irtTyVars (fmap llvmBlockShape bp)
     [nuMP| Perm_LLVMFree _ |] -> return ([], IRTVarsNil)
@@ -415,7 +408,9 @@ instance IRTTyVars (AtomicPerm a) where
     [nuMP| Perm_NamedConj npn args off |] ->
       namedPermIRTTyVars mb_p npn args off
     [nuMP| Perm_LLVMFrame _ |] -> return ([], IRTVarsNil)
-    [nuMP| Perm_LOwned _ _ _ |] ->
+    [nuMP| Perm_LOwned _ _ _ _ _ |] ->
+      throwError "lowned permission in an IRT definition!"
+    [nuMP| Perm_LOwnedSimple _ _ |] ->
       throwError "lowned permission in an IRT definition!"
     [nuMP| Perm_LCurrent _ |] -> return ([], IRTVarsNil)
     [nuMP| Perm_LFinished |] -> return ([], IRTVarsNil)
@@ -424,6 +419,8 @@ instance IRTTyVars (AtomicPerm a) where
       throwError "fun perm in an IRT definition!"
     [nuMP| Perm_BVProp _ |] ->
       throwError "BVProp in an IRT definition!"
+    [nuMP| Perm_Any |] ->
+      throwError "any perm in an IRT definition!"
 
 -- | Get all IRT type variables in a shape expression
 instance IRTTyVars (PermExpr (LLVMShapeType w)) where
@@ -459,10 +456,10 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
                   _ -> do sh' <- irtTSubstExt mb_sh
                           let sh_trans = transTupleTerm <$> translate sh'
                           return ([sh_trans], IRTVar ())
-    [nuMP| PExpr_EqShape _ |] -> return ([], IRTVarsNil)
+    [nuMP| PExpr_EqShape _ _ |] -> return ([], IRTVarsNil)
     [nuMP| PExpr_PtrShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_FieldShape fsh |] -> irtTyVars fsh
-    [nuMP| PExpr_ArrayShape _ _ fshs |] -> irtTyVars fshs
+    [nuMP| PExpr_ArrayShape _ _ sh |] -> irtTyVars sh
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
       do (tps1, ixs1) <- irtTyVars sh1
          (tps2, ixs2) <- irtTyVars sh2
@@ -472,6 +469,7 @@ instance IRTTyVars (PermExpr (LLVMShapeType w)) where
          (tps2, ixs2) <- irtTyVars sh2
          return (tps1 ++ tps2, IRTVarsAppend ixs1 ixs2)
     [nuMP| PExpr_ExShape sh |] -> irtTyVars sh -- see the instance for Binding!
+    [nuMP| PExpr_FalseShape |] -> return ([], IRTVarsNil)
 
 -- | Get all IRT type variables in a field shape
 instance IRTTyVars (LLVMFieldShape w) where
@@ -540,11 +538,10 @@ irtCtorOpenTerm c all_args =
 
 -- | Like 'tupleOfTypes' but with @IRT_prod@
 irtProd :: [OpenTerm] -> IRTDescTransM ctx OpenTerm
+irtProd [] = irtCtorOpenTerm "Prelude.IRT_unit" []
 irtProd [x] = return x
-irtProd xs =
-  do irtUnit <- irtCtorOpenTerm "Prelude.IRT_unit" []
-     foldrM (\x xs' -> irtCtorOpenTerm "Prelude.IRT_prod" [x, xs'])
-            irtUnit xs
+irtProd (x:xs) =
+  irtProd xs >>= \xs' -> irtCtorOpenTerm "Prelude.IRT_prod" [x, xs']
 
 -- | A singleton list containing the result of 'irtCtorOpenTerm'
 irtCtor :: Ident -> [OpenTerm] -> IRTDescTransM ctx [OpenTerm]
@@ -578,8 +575,8 @@ translateCompleteIRTDesc sc env tyVarsIdent args p ixs =
              [ applyOpenTermMulti (globalOpenTerm tyVarsIdent)
                                   (exprCtxToTerms ectx) ]
      tp <- completeOpenTerm sc $
-           runNilTypeTransM (translateClosed args >>= \tptrans ->
-                              piTransM "e" tptrans irtDescOpenTerm) env
+           runNilTypeTransM env noChecks (translateClosed args >>= \tptrans ->
+                                           piTransM "e" tptrans irtDescOpenTerm)
      return $ TypedTerm tm tp
 
 -- | Types from which we can get IRT type descriptions, e.g. ValuePerm
@@ -599,6 +596,9 @@ instance IRTDescs (ValuePerm a) where
       do x1 <- irtDesc p1 ixs1
          x2 <- irtDesc p2 ixs2
          irtCtor "Prelude.IRT_Either" [x1, x2]
+    ([nuMP| ValPerm_Exists p |], IRTVarsCons ix _)
+      | [nuMP| ValPerm_Eq _ |] <- mbMatch (mbCombine RL.typeCtxProxies p) ->
+        irtCtor "Prelude.IRT_varT" [natOpenTerm ix]
     ([nuMP| ValPerm_Exists p |], IRTVarsCons ix ixs') ->
       do let tp = mbBindingType p
          tp_trans <- tupleTypeTrans <$> translateClosed tp
@@ -647,10 +647,8 @@ instance IRTDescs (AtomicPerm a) where
       do let w = natVal2 mb_ap
              w_term = natOpenTerm w
          len_term <- translate1 (fmap llvmArrayLen mb_ap)
-         let mb_flds = fmap (fmap llvmArrayFieldToAtomicPerm . llvmArrayFields)
-                            mb_ap
-         xs_term <- irtDesc mb_flds ixs
-         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, xs_term]
+         sh_desc_term <- irtDesc (mbLLVMArrayCellShape mb_ap) ixs
+         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, sh_desc_term]
     ([nuMP| Perm_LLVMBlock bp |], _) ->
       irtDescs (fmap llvmBlockShape bp) ixs
     ([nuMP| Perm_LLVMFree _ |], _) -> return []
@@ -662,7 +660,9 @@ instance IRTDescs (AtomicPerm a) where
     ([nuMP| Perm_NamedConj npn args off |], _) ->
       namedPermIRTDescs npn args off ixs
     ([nuMP| Perm_LLVMFrame _ |], _) -> return []
-    ([nuMP| Perm_LOwned _ _ _ |], _) ->
+    ([nuMP| Perm_LOwned _ _ _ _ _ |], _) ->
+      error "lowned permission made it to IRTDesc translation"
+    ([nuMP| Perm_LOwnedSimple _ _ |], _) ->
       error "lowned permission made it to IRTDesc translation"
     ([nuMP| Perm_LCurrent _ |], _) -> return []
     ([nuMP| Perm_LFinished |], _) -> return []
@@ -672,13 +672,15 @@ instance IRTDescs (AtomicPerm a) where
       error "fun perm made it to IRTDesc translation"
     ([nuMP| Perm_BVProp _ |], _) ->
       error "BVProp made it to IRTDesc translation"
+    ([nuMP| Perm_Any |], _) ->
+      error "any perm made it to IRTDesc translation"
 
 -- | Get the IRTDescs associated to a shape expression
 instance IRTDescs (PermExpr (LLVMShapeType w)) where
   irtDescs mb_expr ixs = case (mbMatch mb_expr, ixs) of
     ([nuMP| PExpr_Var _ |], _) -> irtVarTDesc ixs
     ([nuMP| PExpr_EmptyShape |], _) -> return []
-    ([nuMP| PExpr_EqShape _ |], _) -> return []
+    ([nuMP| PExpr_EqShape _ _ |], _) -> return []
     ([nuMP| PExpr_NamedShape _ _ nmsh args |], _) ->
       case (mbMatch $ namedShapeBody <$> nmsh, ixs) of
         (_, IRTRecVar) ->
@@ -691,12 +693,12 @@ instance IRTDescs (PermExpr (LLVMShapeType w)) where
       irtDescs sh ixs
     ([nuMP| PExpr_FieldShape fsh |], _) ->
       irtDescs fsh ixs
-    ([nuMP| PExpr_ArrayShape mb_len _ mb_fshs |], _) ->
+    ([nuMP| PExpr_ArrayShape mb_len _ mb_sh |], _) ->
       do let w = natVal4 mb_len
              w_term = natOpenTerm w
          len_term <- translate1 mb_len
-         xs_term <- irtDesc mb_fshs ixs
-         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, xs_term]
+         sh_desc_term <- irtDesc mb_sh ixs
+         irtCtor "Prelude.IRT_BVVec" [w_term, len_term, sh_desc_term]
     ([nuMP| PExpr_SeqShape sh1 sh2 |], IRTVarsAppend ixs1 ixs2) ->
       do x1 <- irtDesc sh1 ixs1
          x2 <- irtDesc sh2 ixs2
@@ -741,8 +743,8 @@ translateCompleteIRTDef :: SharedContext -> PermEnv ->
                            IO TypedTerm
 translateCompleteIRTDef sc env tyVarsIdent descIdent args =
   completeOpenTermTyped sc $
-  runNilTypeTransM (lambdaExprCtx args $
-                     irtDefinition tyVarsIdent descIdent) env
+  runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                 irtDefinition tyVarsIdent descIdent)
 
 -- | Given identifiers whose definitions in the shared context are the results
 -- of corresponding calls to 'translateCompleteIRTDef',
@@ -754,8 +756,8 @@ translateCompleteIRTFoldFun :: SharedContext -> PermEnv ->
                                IO Term
 translateCompleteIRTFoldFun sc env tyVarsIdent descIdent _ args =
   completeOpenTerm sc $
-  runNilTypeTransM (lambdaExprCtx args $
-                     irtFoldFun tyVarsIdent descIdent) env
+  runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                 irtFoldFun tyVarsIdent descIdent)
 
 -- | Given identifiers whose definitions in the shared context are the results
 -- of corresponding calls to 'translateCompleteIRTDef',
@@ -767,8 +769,8 @@ translateCompleteIRTUnfoldFun :: SharedContext -> PermEnv ->
                                  IO Term
 translateCompleteIRTUnfoldFun sc env tyVarsIdent descIdent _ args =
   completeOpenTerm sc $
-  runNilTypeTransM (lambdaExprCtx args $
-                     irtUnfoldFun tyVarsIdent descIdent) env
+  runNilTypeTransM env noChecks (lambdaExprCtx args $
+                                 irtUnfoldFun tyVarsIdent descIdent)
 
 -- | Get the terms for the arguments to @IRT@, @foldIRT@, and @unfoldIRT@
 -- given the appropriate identifiers

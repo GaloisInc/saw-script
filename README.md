@@ -41,7 +41,8 @@ To build SAWScript and related utilities from source:
 
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
-    to install them: <https://www.haskell.org/ghcup/>
+    to install them: <https://www.haskell.org/ghcup/>. We recommend
+    Cabal 3.4 or newer, and GHC 8.8, 8.10, or 9.0.
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
@@ -70,7 +71,7 @@ SAW can analyze LLVM programs (usually derived from C, but potentially
 for other languages). The only tool strictly required for this is a
 compiler that can generate LLVM bitcode, such as `clang`. However,
 having the full LLVM tool suite available can be useful. We have tested
-SAW with LLVM and `clang` versions from 3.5 to 11.0, as well as the
+SAW with LLVM and `clang` versions from 3.5 to 12.0, as well as the
 version of `clang` bundled with Apple Xcode. We welcome bug reports on
 any failure to parse bitcode from LLVM versions in that range.
 
@@ -78,6 +79,11 @@ Note that successful parsing doesn't necessarily mean that verification
 will be possible for all language constructs. There are various
 instructions that are not supported during verification. However,
 any failure during `llvm_load_module` should be considered a bug.
+
+## Notes on Windows
+
+If you have trouble loading the SAW REPL on Windows, try invoking it
+with the `--no-color` option.
 
 ## Related Packages
 
@@ -142,7 +148,7 @@ unix-time
 
 Much of the work on SAW has been funded by, and lots of design input was
 provided by the team at the [NSA's Laboratory for Advanced Cybersecurity
-Research](https://www.nsa.gov/what-we-do/research/cybersecurity-research/),
+Research](https://www.nsa.gov/Research/NSA-Mission-Oriented-Research/LAC/),
 including Brad Martin, Frank Taylor, and Sean Weaver.
 
 Portions of SAW are also based upon work supported by the Office

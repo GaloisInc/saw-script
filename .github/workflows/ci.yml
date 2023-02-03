@@ -1,3 +1,10 @@
+# Overall configuration notes:
+# - Artifact uploads for binaries are from GHC 8.10.7
+# - Builds for Ubuntu happen on 22.04. We also include a single configuration
+#   for 20.04 to increase our Linux coverage.
+# - Docker builds happen nightly, on manual invocation, and on release branch commits
+# Please update this comment as those details change.
+
 name: SAWScript
 on:
   push:
@@ -10,20 +17,20 @@ on:
 
 env:
   CACHE_VERSION: 1
+  DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
 
-  # Solver versions - also update in the following locations:
+  # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
+  # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
-  Z3_VERSION: "4.8.10"
-  CVC4_VERSION: "4.1.8"
-  YICES_VERSION: "2.6.2"
+  SOLVER_PKG_VERSION: "snapshot-20221212"
 
   OCAML_VERSION: 4.09.x
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -60,33 +67,60 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04]
-        ghc: ["8.8.4", "8.10.3"]
+        os: [ubuntu-22.04, macos-12, windows-latest]
+        ghc: ["8.8.4", "8.10.7", "9.0.2"]
+        run-tests: [true]
         include:
-          - os: macos-latest
+          - os: ubuntu-20.04
+            ghc: "8.10.7"
+            run-tests: false
+        exclude:
+          # Exclude 8.8 on macOS 12 due to
+          # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
+          - os: macos-12
             ghc: "8.8.4"
+            run-tests: true
           - os: windows-latest
             ghc: "8.8.4"
+            run-tests: true
+          # Exclude 9.0 on Windows for now until
+          # https://github.com/commercialhaskell/stackage/issues/6400
+          # is resolved
+          - os: windows-latest
+            ghc: "9.0.2"
+            run-tests: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
       - uses: actions/checkout@v2
       - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
+           git submodule update --init
 
       - id: config
         shell: bash
         run: |
-          NAME="${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64"
+          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64"
           .github/ci.sh output name $NAME
-          echo "NAME=${{ needs.config.outputs.name }}-${{ runner.os }}-x86_64" >> $GITHUB_ENV
+          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64" >> $GITHUB_ENV
 
       - uses: haskell/actions/setup@v1
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
+
+      - name: Post-GHC installation fixups on Windows
+        shell: bash
+        if: runner.os == 'Windows'
+        run: |
+          # A workaround for https://github.com/Mistuke/CabalChoco/issues/5
+          cabal user-config update -a "extra-include-dirs: \"\""
+          cabal user-config update -a "extra-lib-dirs: \"\""
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/cache@v2
         name: Cache cabal store
@@ -94,9 +128,9 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
           restore-keys: |
-            ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
         shell: bash
@@ -107,32 +141,26 @@ jobs:
             saw/SAWScript/Version.hs
           rm -f saw/SAWScript/Version.hs.bak
 
-      - id: abc
-        shell: bash
-        run: .github/ci.sh build_abc
-        if: runner.os != 'Windows'
-
       - shell: bash
         run: .github/ci.sh build
+
+      - shell: bash
+        env:
+          RELEASE: ${{ needs.config.outputs.release }}
+        run: .github/ci.sh build_cryptol
 
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
         id: cabal-test-suites
         with:
           targets: |
             integration_tests
+            test-sawcore
             cryptol-saw-core-tc-test
+            prover_tests
           dest: dist-tests
 
-      - if: |
-          matrix.ghc == '8.8.4' &&
-          runner.os != 'Windows'
-        uses: actions/upload-artifact@v2
-        with:
-          path: ${{ steps.abc.outputs.path }}
-          name: abc-${{ runner.os }}
-
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.8.4'"
+        if: "matrix.ghc == '8.10.7'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -146,14 +174,24 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist $NAME
 
-      - if: matrix.ghc == '8.8.4' && needs.config.outputs.release == 'true'
+      - shell: bash
+        run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
+
+      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.8.4'
+      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $NAME-with-solvers.tar.gz
+
+      - if: matrix.ghc == '8.10.7'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -161,24 +199,26 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: "matrix.ghc == '8.8.4'"
+      - if: matrix.ghc == '8.10.7'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - if: matrix.ghc == '8.10.7' && matrix.run-tests
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
-      - if: "matrix.os == 'ubuntu-18.04'"
-        uses: actions/upload-artifact@v2
-        with:
-          name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
-          path: "dist/bin/saw"
-
-  ocaml-tests:
+  mr-solver-tests:
     needs: [build]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-12]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -187,25 +227,77 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - name: Update PATH to include SAW
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+
+      - working-directory: examples/mr_solver
+        shell: bash
+        run: |
+          saw monadify.saw
+          saw mr_solver_unit_tests.saw
+
+  heapster-tests:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-12]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - name: Update PATH to include SAW
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
+
       - uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: 4.09.x  # coq-bits claims to support < 4.10 only
+          ocaml-compiler: 4.14.x
 
       - run: opam repo add coq-released https://coq.inria.fr/opam/released
 
-      - run: opam install --unlock-base -y coq=8.12.2 coq-bits=1.0.0
+      - run: opam install -y coq=8.15.2 coq-bits=1.1.0
 
+        # If you change the entree-specs commit below, make sure you update the
+        # documentation in saw-core-coq/README.md accordingly.
+      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#52c4868f1f65c7ce74e90000214de27e23ba98fb
+
+      # FIXME: the following steps generate Coq libraries for the SAW core to
+      # Coq translator and builds them; if we do other Coq tests, these steps
+      # should become their own build artifact, to avoid re-compiling the Coq
+      # libraries
       - working-directory: saw-core-coq/coq
-        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
+        shell: bash
+        run: opam exec -- make -j
 
       - working-directory: heapster-saw/examples
-        run: PATH="$PWD/dist/bin:$PATH" opam exec -- make -j
+        shell: bash
+        run: opam exec -- make -j
 
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
@@ -214,12 +306,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: ubuntu-18.04
-          - test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: macos-latest
-          - test: saw-remote-api/scripts/check_docs.sh
-            os: ubuntu-18.04
+          - name: Install and test
+            test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: ubuntu-22.04
+          # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
+          - name: Install on MacOS
+            test: |
+              cd saw-remote-api/python/
+              poetry update
+              poetry install
+              poetry run mypy saw_client/
+            os: macos-12
+          - name: Check docs
+            test: saw-remote-api/scripts/check_docs.sh
+            os: ubuntu-22.04
     steps:
       - uses: actions/checkout@v2
         with:
@@ -227,17 +327,13 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
           name: "${{ runner.os }}-bins"
           path: dist/bin
-
-      - if: runner.os != 'Windows'
-        uses: actions/download-artifact@v2
-        with:
-          path: dist/bin
-          name: abc-${{ runner.os }}
 
       - uses: actions/setup-python@v2
         with:
@@ -247,7 +343,7 @@ jobs:
         with:
           poetry-version: 1.1.5
 
-      - name: ${{ matrix.test }}
+      - name: ${{ matrix.name }}
         shell: bash
         run: |
           chmod +x dist/bin/*
@@ -267,18 +363,19 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-18.04]
+        os: [ubuntu-22.04]
         continue-on-error: [false]
         include:
           - suite: integration_tests
-            os: macos-latest
+            os: macos-12
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
             os: windows-latest
+            timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
           - suite: integration_tests
-            os: macos-latest
+            os: macos-12
             continue-on-error: false
           - suite: integration_tests
             os: windows-latest
@@ -290,6 +387,8 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -299,12 +398,6 @@ jobs:
       - shell: bash
         if: "runner.os != 'Windows'"
         run: chmod +x dist/bin/*
-
-      - if: runner.os != 'Windows'
-        uses: actions/download-artifact@v2
-        with:
-          path: bin
-          name: abc-${{ runner.os }}
 
       - shell: bash
         if: runner.os != 'Windows'
@@ -334,8 +427,9 @@ jobs:
           dist-tests/${{ matrix.suite }}
 
   build-push-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [config]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -433,9 +527,9 @@ jobs:
 
   s2n-tests:
     name: "Test s2n proofs"
-    timeout-minutes: 60
+    timeout-minutes: 120
     needs: build
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -448,7 +542,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.8.4", "8.10.3"]
+        ghc: ["8.10.7"]
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -457,13 +551,8 @@ jobs:
       - name: Download previously-built SAW
         uses: actions/download-artifact@v2
         with:
-          name: "saw-Linux-${{ matrix.ghc }}"
+          name: "${{ runner.os }}-bins"
           path: ./s2nTests/bin
-
-      - uses: actions/download-artifact@v2
-        with:
-          path: ./s2nTests/bin
-          name: abc-${{ runner.os }}
 
       - shell: bash
         working-directory: s2nTests
@@ -486,6 +575,39 @@ jobs:
           chmod +x bin/*
           make ${{ matrix.s2n-target }}
 
+  exercises:
+    name: "Test SAW exercises"
+    needs: build
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        ghc: ["8.10.7"]
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          mkdir -p exercises/bin
+
+      - name: Download previously-built SAW
+        uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: ./exercises/bin
+
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+
+      - shell: bash
+        name: "make exercises container"
+        working-directory: exercises
+        run: docker build -t exercises .
+
+      - shell: bash
+        name: "run exercises"
+        working-directory: exercises
+        run: |
+          chmod +x bin/*
+          docker run -v $PWD/bin:/saw-bin exercises
+
   # Indicates sufficient CI success for the purposes of mergify merging the pull
   # request, see .github/mergify.yml. This is done instead of enumerating each
   # instance of each job in the mergify configuration for a number of reasons:
@@ -493,13 +615,13 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs:
       - build
-      - ocaml-tests
+      - heapster-tests
       - saw-remote-api-tests
       - cabal-test
-      - build-push-image
       - s2n-tests
+      - exercises
     steps:
       - run: "true"

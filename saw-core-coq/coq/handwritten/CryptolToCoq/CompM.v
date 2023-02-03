@@ -5,6 +5,7 @@
 From Coq Require Import Program.Basics.
 From Coq Require Export Morphisms Setoid.
 From Coq Require Import Strings.String.
+From EnTree Require Export Ref.SpecM.
 
 (***
  *** The Monad Typeclasses
@@ -93,7 +94,7 @@ Class MonadFix M `{Monad M} `{MonadLeqOp M} `{MonadFixOp M} : Prop :=
  ***)
 
 (* The set monad = the sets over a given type *)
-Definition SetM (A:Type) : Type := A -> Prop.
+Polymorphic Definition SetM (A:Type) : Type := A -> Prop.
 
 (* Equivalence of two sets = they contain the same elements *)
 Instance MonadEqOp_SetM : MonadEqOp SetM :=
@@ -191,7 +192,7 @@ Qed.
  ***)
 
 (* The option transformer just adds "option" around the type A *)
-Definition OptionT (M:Type -> Type) (A:Type) : Type := M (option A).
+Polymorphic Definition OptionT (M:Type -> Type) (A:Type) : Type := M (option A).
 
 (* Equivalence in OptionT is just the underlying equivlence *)
 Instance MonadEqOp_OptionT M `{MonadEqOp M} : MonadEqOp (OptionT M) :=
@@ -410,7 +411,7 @@ Proof.
  *** The Computation Monad = the Option-Set Monad
  ***)
 
-Definition CompM : Type -> Type := OptionT SetM.
+Polymorphic Definition CompM : Type -> Type := OptionT SetM.
 
 
 (***
@@ -418,10 +419,13 @@ Definition CompM : Type -> Type := OptionT SetM.
  ***)
 
 (* An inductive description of a type A1 -> A2 -> ... -> An -> CompM B *)
+(*
 Inductive LetRecType : Type :=
 | LRT_Ret (B:Type) : LetRecType
 | LRT_Fun (A:Type) (lrtF:A -> LetRecType) : LetRecType
 .
+*)
+Definition LetRecType := SpecM.LetRecType.
 
 (* Convert a LetRecType to the type it represents *)
 Fixpoint lrtToType (lrt:LetRecType) : Type :=
@@ -528,7 +532,7 @@ Definition multiFixM {lrts:LetRecTypes}
   multiTupleFixM lrts (fun fs => lrtApply F fs).
 
 (* A letrec construct for binding 0 or more mutually recursive functions *)
-Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
+Definition letRecM (lrts : LetRecTypes) {B} (F: lrtPi lrts (lrtTupleType lrts))
            (body:lrtPi lrts (CompM B)) : CompM B :=
   lrtApply body (multiFixM F).
 
@@ -887,6 +891,9 @@ Qed.
 
 Definition assertM (P:Prop) : CompM unit :=
   existsM (fun pf:P => returnM tt).
+
+Definition assertingM {A} (P:Prop) (m:CompM A) : CompM A :=
+  assertM P >> m.
 
 Definition assertM_eq (P:Prop) (pf:P) : assertM P ~= returnM tt.
 Proof.

@@ -53,7 +53,7 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
-import           SAWScript.Proof (TheoremNonce)
+import           SAWScript.Proof (TheoremNonce, TheoremSummary)
 
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
@@ -66,6 +66,32 @@ nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
 data PrePost
   = PreState | PostState
   deriving (Eq, Ord, Show)
+
+--------------------------------------------------------------------------------
+-- *** Extension-specific information
+
+type family CrucibleContext ext :: Type
+
+-- | How to specify allocations in this syntax extension
+type family AllocSpec ext :: Type
+
+-- | The type of identifiers for types in this syntax extension
+type family TypeName ext :: Type
+
+-- | The type of types of the syntax extension we're dealing with
+type family ExtType ext :: Type
+
+-- | The types that can appear in casts
+type family CastType ext :: Type
+
+-- | The type of points-to assertions
+type family PointsTo ext :: Type
+
+-- | The type of global allocations
+type family AllocGlobal ext :: Type
+
+-- | The type of \"resolved\" state
+type family ResolvedState ext :: Type
 
 --------------------------------------------------------------------------------
 -- ** SetupValue
@@ -85,6 +111,8 @@ type family HasSetupArray ext :: Bool
 type family HasSetupElem ext :: Bool
 type family HasSetupField ext :: Bool
 type family HasSetupGlobal ext :: Bool
+type family HasSetupCast ext :: Bool
+type family HasSetupUnion ext :: Bool
 type family HasSetupGlobalInitializer ext :: Bool
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
@@ -99,6 +127,9 @@ data SetupValue ext where
   SetupArray  :: B (HasSetupArray ext) -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: B (HasSetupElem ext) -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: B (HasSetupField ext) -> SetupValue ext -> String -> SetupValue ext
+  SetupCast   :: B (HasSetupCast ext) -> SetupValue ext -> CastType ext -> SetupValue ext
+  SetupUnion  :: B (HasSetupUnion ext) -> SetupValue ext -> String -> SetupValue ext
+
   -- | A pointer to a global variable
   SetupGlobal :: B (HasSetupGlobal ext) -> String -> SetupValue ext
   -- | This represents the value of a global's initializer.
@@ -114,8 +145,11 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   , c (B (HasSetupArray ext))
   , c (B (HasSetupElem ext))
   , c (B (HasSetupField ext))
+  , c (B (HasSetupCast ext))
+  , c (B (HasSetupUnion ext))
   , c (B (HasSetupGlobal ext))
   , c (B (HasSetupGlobalInitializer ext))
+  , c (CastType ext)
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
@@ -128,7 +162,7 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 --   are implementation details and won't be familiar to users.
 --   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
 --   with @PP.pretty@ instead.
-ppSetupValue :: SetupValue ext -> PP.Doc ann
+ppSetupValue :: Show (CastType ext) => SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> ppAllocIndex i
@@ -139,6 +173,8 @@ ppSetupValue setupval = case setupval of
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
+  SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ u)
+  SetupCast _ v tp -> PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show tp)
   SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
   SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")
   where
@@ -243,96 +279,23 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions
 
---------------------------------------------------------------------------------
--- *** ResolvedState
-
--- | A datatype to keep track of which parts of the simulator state -- have been initialized already. For each allocation unit or global,
--- we keep a list of element-paths that identify the initialized
--- sub-components.
-data ResolvedState =
-  ResolvedState
-    { _rsAllocs :: Map AllocIndex [[Either String Int]]
-    , _rsGlobals :: Map String [[Either String Int]]
-    }
-  deriving (Eq, Ord, Show)
-
-makeLenses ''ResolvedState
-
-emptyResolvedState :: ResolvedState
-emptyResolvedState = ResolvedState Map.empty Map.empty
-
--- | Record the initialization of the pointer represented by the given
--- SetupValue.
-markResolved ::
-  SetupValue ext ->
-  [Either String Int] {-^ path within this object (if any) -} ->
-  ResolvedState ->
-  ResolvedState
-markResolved val0 path0 rs = go path0 val0
-  where
-    go path val =
-      case val of
-        SetupVar n         -> rs & rsAllocs %~ Map.alter (ins path) n
-        SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
-        SetupElem _ v idx  -> go (Right idx : path) v
-        SetupField _ v fld -> go (Left fld : path) v
-        _                  -> rs
-
-    ins path Nothing = Just [path]
-    ins path (Just paths) = Just (path : paths)
-
--- | Test whether the pointer represented by the given SetupValue has
--- been initialized already.
-testResolved ::
-  SetupValue ext ->
-  [Either String Int] {-^ path within this object (if any) -} ->
-  ResolvedState ->
-  Bool
-testResolved val0 path0 rs = go path0 val0
-  where
-    go path val =
-      case val of
-        SetupVar n         -> test path (Map.lookup n (_rsAllocs rs))
-        SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
-        SetupElem _ v idx  -> go (Right idx : path) v
-        SetupField _ v fld -> go (Left fld : path) v
-        _                  -> False
-
-    test _ Nothing = False
-    test path (Just paths) = any (overlap path) paths
-
-    overlap (x : xs) (y : ys) = x == y && overlap xs ys
-    overlap [] _ = True
-    overlap _ [] = True
-
---------------------------------------------------------------------------------
--- *** Extension-specific information
-
-type family CrucibleContext ext :: Type
-
--- | How to specify allocations in this syntax extension
-type family AllocSpec ext :: Type
-
--- | The type of identifiers for types in this syntax extension
-type family TypeName ext :: Type
-
--- | The type of types of the syntax extension we're dealing with
-type family ExtType ext :: Type
-
--- | The type of points-to assertions
-type family PointsTo ext :: Type
-
--- | The type of global allocations
-type family AllocGlobal ext :: Type
+data ConditionMetadata =
+  ConditionMetadata
+  { conditionLoc  :: ProgramLoc
+  , conditionTags :: Set String
+  , conditionType :: String
+  , conditionContext :: String
+  }
+ deriving (Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 -- *** StateSpec
 
 data SetupCondition ext where
-  SetupCond_Equal    :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
-  SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition ext
+  SetupCond_Equal    :: ConditionMetadata -> SetupValue ext -> SetupValue ext -> SetupCondition ext
+  SetupCond_Pred     :: ConditionMetadata -> TypedTerm -> SetupCondition ext
   SetupCond_Ghost    :: B (HasGhostState ext) ->
-                        ProgramLoc ->
+                        ConditionMetadata ->
                         GhostGlobal ->
                         TypedTerm ->
                         SetupCondition ext
@@ -399,13 +362,29 @@ data ProofMethod
 
 type SpecNonce ext = Nonce GlobalNonceGenerator (ProvedSpec ext)
 
+-- | Data collected about discharged verification conditions (VCs).
+--   Verification conditions arise when proving function specifications
+--   due to, e.g., safety conditions, specification postconditions, and
+--   preconditions of called override functions.
+data VCStats =
+  VCStats
+  { vcMetadata    :: ConditionMetadata -- ^ Metadata describing why the VC arose
+  , vcSolverStats :: SolverStats       -- ^ Statistics about any solvers used when proving this VC
+  , vcThmSummary  :: TheoremSummary    -- ^ A summary of the proof status of this VC
+  , vcIdent       :: TheoremNonce      -- ^ A unique identifier for this VC
+  , vcDeps        :: Set TheoremNonce  -- ^ A collection of the theorems the proof of this VC relied on
+  , vcElapsedTime :: NominalDiffTime   -- ^ The time required to prove this VC
+  }
+
 data ProvedSpec ext =
   ProvedSpec
   { _psSpecIdent   :: Nonce GlobalNonceGenerator (ProvedSpec ext)
   , _psProofMethod :: ProofMethod
   , _psSpec        :: CrucibleMethodSpecIR ext
   , _psSolverStats :: SolverStats -- ^ statistics about the proof that produced this
-  , _psTheoremDeps :: Set TheoremNonce -- ^ theorems depended on by this proof
+  , _psVCStats     :: [VCStats]
+       -- ^ Stats about the individual verification conditions produced
+       --   by the proof of this specification
   , _psSpecDeps    :: Set (SpecNonce ext)
                         -- ^ Other proved specifications this proof depends on
   , _psElapsedTime :: NominalDiffTime -- ^ The time elapsed during the proof of this specification
@@ -417,13 +396,13 @@ mkProvedSpec ::
   ProofMethod ->
   CrucibleMethodSpecIR ext ->
   SolverStats ->
-  Set TheoremNonce ->
+  [VCStats] ->
   Set (SpecNonce ext) ->
   NominalDiffTime ->
   IO (ProvedSpec ext)
-mkProvedSpec m mspec stats thms sps elapsed =
+mkProvedSpec m mspec stats vcStats sps elapsed =
   do n <- freshNonce globalNonceGenerator
-     let ps = ProvedSpec n m mspec stats thms sps elapsed
+     let ps = ProvedSpec n m mspec stats vcStats sps elapsed
      return ps
 
 -- TODO: remove when what4 switches to prettyprinter

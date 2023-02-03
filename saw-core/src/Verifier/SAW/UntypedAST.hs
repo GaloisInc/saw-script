@@ -62,7 +62,7 @@ import Verifier.SAW.TypedAST
 
 data Term
   = Name (PosPair Text)
-  | Sort Pos Sort
+  | Sort Pos Sort Bool
   | App Term Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
@@ -84,6 +84,8 @@ data Term
   | StringLit Pos Text
     -- | Vector literal.
   | VecLit Pos [Term]
+    -- | Bitvector literal.
+  | BVLit Pos [Bool]
   | BadTerm Pos
  deriving (Show, TH.Lift)
 
@@ -110,7 +112,7 @@ instance Positioned Term where
   pos t =
     case t of
       Name i               -> pos i
-      Sort p _             -> p
+      Sort p _ _           -> p
       Lambda p _ _         -> p
       App x _              -> pos x
       Pi p _ _             -> p
@@ -128,6 +130,7 @@ instance Positioned Term where
       NatLit p _           -> p
       StringLit p _        -> p
       VecLit p _           -> p
+      BVLit p _            -> p
       BadTerm p            -> p
 
 instance Positioned TermVar where
@@ -153,6 +156,8 @@ data Decl
      -- ^ A declaration of a term having a definition, with variables
    | TypedDef (PosPair Text) [(TermVar, Term)] Term Term
      -- ^ A definition of something with a specific type, with parameters
+   | InjectCodeDecl Text Text
+     -- ^ Some raw text to inject into a translation
   deriving (Show, TH.Lift)
 
 -- | A set of constraints on what 'String' names to import from a module

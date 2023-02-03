@@ -74,7 +74,7 @@ command-line options:
 
 `-b path, --java-bin-dirs`
 
-  ~ Specfy a colon-delimited list of paths to search for a Java
+  ~ Specify a colon-delimited list of paths to search for a Java
     executable.
 
 `-d num, --sim-verbose=num`
@@ -498,7 +498,7 @@ understand the role of the Cryptol language in SAW.
 
 # Cryptol and its Role in SAW
 
-Cyptol is a domain-specific language originally designed for the
+Cryptol is a domain-specific language originally designed for the
 high-level specification of cryptographic algorithms. It is general
 enough, however, to describe a wide variety of programs, and is
 particularly applicable to describing computations that operate on
@@ -1082,7 +1082,7 @@ Whether proving small lemmas (in the form of rewrite rules) or a
 top-level theorem, the process builds on the idea of a *proof script*
 that is run by one of the top level proof commands.
 
-* `prove_print : ProofScript SatResult -> Term -> TopLevel Theorem`
+* `prove_print : ProofScript () -> Term -> TopLevel Theorem`
 takes a proof script (which we'll describe next) and a `Term`. The
 `Term` should be of function type with a return value of `Bool` (`Bit`
 at the Cryptol level). It will then use the proof script to attempt to
@@ -1090,11 +1090,11 @@ show that the `Term` returns `True` for all possible inputs. If it is
 successful, it will print `Valid` and return a `Theorem`. If not, it
 will abort.
 
-* `sat_print : ProofScript SatResult -> Term -> TopLevel ()` is similar
+* `sat_print : ProofScript () -> Term -> TopLevel ()` is similar
 except that it looks for a *single* value for which the `Term` evaluates
 to `True` and prints out that value, returning nothing.
 
-* `prove_core : ProofScript SatResult -> String -> TopLevel Theorem`
+* `prove_core : ProofScript () -> String -> TopLevel Theorem`
 proves and returns a `Theorem` from a string in SAWCore syntax.
 
 ## Automated Tactics
@@ -1197,11 +1197,11 @@ provers is to unfold everything before sending a goal to a prover.
 However, with some provers it is possible to indicate that specific
 named subterms should be represented as uninterpreted functions.
 
-* `unint_cvc4 : [String] -> ProofScript SatResult`
+* `unint_cvc4 : [String] -> ProofScript ()`
 
-* `unint_yices : [String] -> ProofScript SatResult`
+* `unint_yices : [String] -> ProofScript ()`
 
-* `unint_z3 : [String] -> ProofScript SatResult`
+* `unint_z3 : [String] -> ProofScript ()`
 
 The list of `String` arguments in these cases indicates the names of the
 subterms to leave folded, and therefore present as uninterpreted
@@ -1212,13 +1212,38 @@ Ultimately, we plan to implement a more generic tactic that leaves
 certain constants uninterpreted in whatever prover is ultimately used
 (provided that uninterpreted functions are expressible in the prover).
 
+Note that each of the `unint_*` tactics have variants that are prefixed
+with `sbv_` and `w4_`. The `sbv_`-prefixed tactics make use of the SBV
+library to represent and solve SMT queries:
+
+* `sbv_unint_cvc4 : [String] -> ProofScript ()`
+
+* `sbv_unint_yices : [String] -> ProofScript ()`
+
+* `sbv_unint_z3 : [String] -> ProofScript ()`
+
+The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
+
+* `w4_unint_cvc4 : [String] -> ProofScript ()`
+
+* `w4_unint_yices : [String] -> ProofScript ()`
+
+* `w4_unint_z3 : [String] -> ProofScript ()`
+
+In most specifications, the choice of SBV versus What4 is not important, as
+both libraries are broadly compatible in terms of functionality. There are some
+situations where one library may outpeform the other, however, due to
+differences in how each library represents certain SMT queries. There are also
+some experimental features that are only supported with What4 at the moment,
+such as `enable_lax_loads_and_stores`.
+
 ## Other External Provers
 
 In addition to the built-in automated provers already discussed, SAW
 supports more generic interfaces to other arbitrary theorem provers
 supporting specific interfaces.
 
-* `external_aig_solver : String -> [String] -> ProofScript SatResult`
+* `external_aig_solver : String -> [String] -> ProofScript ()`
 supports theorem provers that can take input as a single-output AIGER
 file. The first argument is the name of the executable to run. The
 second argument is the list of command-line parameters to pass to that
@@ -1226,7 +1251,7 @@ executable. Any element of this list equal to `"%f"` will be replaced
 with the name of the temporary AIGER file generated for the proof goal.
 The output from the solver is expected to be in DIMACS solution format.
 
-* `external_cnf_solver : String -> [String] -> ProofScript SatResult`
+* `external_cnf_solver : String -> [String] -> ProofScript ()`
 works similarly but for SAT solvers that take input in DIMACS CNF format
 and produce output in DIMACS solution format.
 
@@ -1237,15 +1262,15 @@ until a later time, there are functions to write the current goal to a
 file in various formats, and then assume that the goal is valid through
 the rest of the script.
 
-* `offline_aig : String -> ProofScript SatResult`
+* `offline_aig : String -> ProofScript ()`
 
-* `offline_cnf : String -> ProofScript SatResult`
+* `offline_cnf : String -> ProofScript ()`
 
-* `offline_extcore : String -> ProofScript SatResult`
+* `offline_extcore : String -> ProofScript ()`
 
-* `offline_smtlib2 : String -> ProofScript SatResult`
+* `offline_smtlib2 : String -> ProofScript ()`
 
-* `offline_unint_smtlib2 : [String] -> String -> ProofScript SatResult`
+* `offline_unint_smtlib2 : [String] -> String -> ProofScript ()`
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
@@ -1259,25 +1284,30 @@ listed in its first argument as uninterpreted functions.
 Some proofs can be completed using unsound placeholders, or using
 techniques that do not require significant computation.
 
-* `assume_unsat : ProofScript SatResult` indicates that the current goal
-should be assumed to be unsatisfiable. At the moment,
-`jvm_verify` and `llvm_verify` (described below) run
-their proofs in a satisfiability-checking (negated) context, so
-`assume_unsat` indicates that the property being checked should be
-assumed to be true. This is likely to change in the future.
+* `assume_unsat : ProofScript ()` indicates that the current goal
+should be assumed to be unsatisfiable. This is an alias for
+`assume_valid`. Users should prefer to use `admit` instead.
 
-* `assume_valid : ProofScript ProofResult` indicates that the current
-goal should be assumed to be valid.
+* `assume_valid : ProofScript ()` indicates that the current
+goal should be assumed to be valid.  Users should prefer to
+use `admit` instead
 
-* `quickcheck : Int -> ProofScript SatResult` runs the goal on the given
+* `admit : String -> ProofScript ()` indicates that the current
+goal should be assumed to be valid without proof. The given
+string should be used to record why the user has decided to
+assume this proof goal.
+
+* `quickcheck : Int -> ProofScript ()` runs the goal on the given
 number of random inputs, and succeeds if the result of evaluation is
 always `True`. This is unsound, but can be helpful during proof
 development, or as a way to provide some evidence for the validity of a
 specification believed to be true but difficult or infeasible to prove.
 
-* `trivial : ProofScript SatResult` states that the current goal should
-be trivially true (i.e., the constant `True` or a function that
-immediately returns `True`). It fails if that is not the case.
+* `trivial : ProofScript ()` states that the current goal should
+be trivially true. This tactic recognizes instances of equality
+that can be demonstrated by conversion alone. In particular
+it is able to prove `EqTrue x` goals where `x` reduces to
+the constant value `True`. It fails if this is not the case.
 
 ## Multiple Goals
 
@@ -1302,6 +1332,11 @@ variable in the current proof goal, returning the variable as a `Term`.
 
 * `goal_when : String -> ProofScript () -> ProofScript ()` will run the
 given proof script only when the goal name contains the given string.
+
+* `goal_exact : Term -> ProofScript ()` will attempt to use the given
+term as an exact proof for the current goal. This tactic will succeed
+whever the type of the given term exactly matches the current goal,
+and will fail otherwise.
 
 * `split_goal : ProofScript ()` will split a goal of the form
 `Prelude.and prop1 prop2` into two separate goals `prop1` and `prop2`.
@@ -1353,9 +1388,6 @@ operate on AIGs.
 * `bitblast : Term -> TopLevel AIG` represents a `Term` as an `AIG` by
 "blasting" all of its primitive operations (things like bit-vector
 addition) down to the level of individual bits.
-
-* `cec : AIG -> AIG -> TopLevel ProofResult` compares two `AIG` values,
-returning a `ProofResult` representing whether the two are equivalent.
 
 * `load_aig : String -> TopLevel AIG` loads an `AIG` from an external
 AIGER file.
@@ -1854,7 +1886,7 @@ llvm_verify :
   String ->
   [CrucibleMethodSpec] ->
   Bool ->
-  CrucibleSetup () ->
+  LLVMSetup () ->
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpec
 ~~~~
@@ -1883,7 +1915,7 @@ jvm_verify :
   TopLevel JVMMethodSpec
 ~~~~
 
-Now we describe how to construct a value of type `CrucibleSetup ()` (or
+Now we describe how to construct a value of type `LLVMSetup ()` (or
 `JVMSetup ()`).
 
 ## Structure of a Specification
@@ -1897,7 +1929,7 @@ A specifications for Crucible consists of three logical components:
 * A specification of the expected final value of the program state.
 
 These three portions of the specification are written in sequence within
-a `do` block of `CrucibleSetup` (or `JVMSetup`) type. The command
+a `do` block of `LLVMSetup` (or `JVMSetup`) type. The command
 `llvm_execute_func` (or `jvm_execute_func`) separates the
 specification of the initial state from the specification of the final
 state, and specifies the arguments to the function in terms of the
@@ -1914,7 +1946,7 @@ contain fresh variables. These are created in a specification with the
 `llvm_fresh_var` and `jvm_fresh_var` commands rather than
 `fresh_symbolic`.
 
-* `llvm_fresh_var : String -> LLVMType -> CrucibleSetup Term`
+* `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
 
 * `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
@@ -1990,14 +2022,14 @@ Once the initial state has been configured, the `llvm_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
-* `llvm_execute_func : [SetupValue] -> CrucibleSetup ()`
+* `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
 verified use the `llvm_return` or `jvm_return` command.
 
-* `llvm_return : SetupValue -> CrucibleSetup ()`
+* `llvm_return : SetupValue -> LLVMSetup ()`
 * `jvm_return : JVMValue -> JVMSetup ()`
 
 ## A First Simple Example
@@ -2044,7 +2076,7 @@ and more complex systems than otherwise possible.
 The `llvm_verify` and `jvm_verify` functions return values of
 type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
 values are opaque objects that internally contain both the information
-provided in the associated `JVMSetup` or `CrucibleSetup` blocks and
+provided in the associated `JVMSetup` or `LLVMSetup` blocks and
 the results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
@@ -2096,7 +2128,7 @@ point to allocated memory before they are called. The `llvm_alloc`
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.
 
-* `llvm_alloc : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_alloc : LLVMType -> LLVMSetup SetupValue`
 
 This command returns a `SetupValue` consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
@@ -2119,7 +2151,7 @@ In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
 
-* `llvm_fresh_pointer : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
 
 The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
 JVM:
@@ -2129,7 +2161,7 @@ JVM:
 
 One final, slightly more obscure command is the following:
 
-* `llvm_alloc_readonly : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
 
 This works like `llvm_alloc` except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
@@ -2149,7 +2181,7 @@ appropriate. In most cases, however, it's more useful to state that a
 pointer points to some specific (usually symbolic) value, which you can
 do with the `llvm_points_to` command.
 
-* `llvm_points_to : SetupValue -> SetupValue -> CrucibleSetup ()`
+* `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
 and states that the memory specified by that pointer should contain the
 value given in the second argument (which may be any type of
@@ -2164,10 +2196,11 @@ type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
 * `llvm_points_to_untyped : SetupValue -> SetupValue ->
-CrucibleSetup ()` works like `llvm_points_to` but omits type
+LLVMSetup ()` works like `llvm_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
-reinterpretation is intentional.
+reinterpretation is intentional. As an alternative, one
+may instead use `llvm_cast_pointer` to line up the static types.
 
 ## Working with Compound Types
 
@@ -2181,7 +2214,7 @@ is the array index. For `struct` values, it is the field index.
 
 * `llvm_field : SetupValue -> String -> SetupValue` yields a pointer
 to a particular named `struct` field, if debugging information is
-available in the bitcode
+available in the bitcode.
 
 Either of these functions can be used with `llvm_points_to` to
 specify the value of a particular array element or `struct` field.
@@ -2198,7 +2231,7 @@ of `llvm_fresh_var` and `llvm_elem` or `llvm_field` commands.
 However, the following function can simplify the common case
 where you want every element or field to have a fresh value.
 
-* `llvm_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue`
 
 The `llvm_struct_value` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
@@ -2207,6 +2240,34 @@ that every field immediately follows the previous in memory. The
 following command will create values of such types:
 
 * `llvm_packed_struct_value : [SetupValue] -> SetupValue`
+
+C programs will sometimes make use of pointer casting to implement
+various kinds of polymorphic behaviors, either via direct pointer
+casts, or by using `union` types to codify the pattern. To reason
+about such cases, the following operation is useful.
+
+* `llvm_cast_pointer : SetupValue -> LLVMType -> SetupValue`
+
+This function function casts the type of the input value (which must be a
+pointer) so that it points to values of the given type.  This mainly
+affects the results of subsequent `llvm_field` and `llvm_elem` calls,
+and any eventual `points_to` statements that the resulting pointer
+flows into.  This is especially useful for dealing with C `union`
+types, as the type information provided by LLVM is imprecise in these
+cases.
+
+We can automate the process of applying pointer casts if we have debug
+information avaliable:
+
+* `llvm_union : SetupValue -> String -> SetupValue`
+
+Given a pointer setup value, this attempts to select the named union
+branch and cast the type of the pointer. For this to work, debug
+symbols must be included; moreover, the process of correlating LLVM
+type information with information contained in debug symbols is a bit
+heuristic. If `llvm_union` cannot figure out how to cast a pointer,
+one can fall back on the more manual `llvm_cast_pointer` instead.
+
 
 In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
@@ -2218,12 +2279,84 @@ the value of an array element.
 * `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
 
+### Bitfields
+
+SAW has experimental support for specifying `struct`s with bitfields, such as
+in the following example:
+
+~~~~ .c
+struct s {
+  uint8_t x:1;
+  uint8_t y:1;
+};
+~~~~
+
+Normally, a `struct` with two `uint8_t` fields would have an overall size of
+two bytes. However, because the `x` and `y` fields are declared with bitfield
+syntax, they are instead packed together into a single byte.
+
+Because bitfields have somewhat unusual memory representations in LLVM, some
+special care is required to write SAW specifications involving bitfields. For
+this reason, there is a dedicated `llvm_points_to_bitfield` function for this
+purpose:
+
+* `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> LLVMSetup ()`
+
+The type of `llvm_points_to_bitfield` is similar that of `llvm_points_to`,
+except that it takes the name of a field within a bitfield as an additional
+argument. For example, here is how to assert that the `y` field in the `struct`
+example above should be `0`:
+
+~~~~
+ss <- llvm_alloc (llvm_alias "struct.s");
+llvm_points_to_bitfield ss "y" (llvm_term {{ 0 : [1] }});
+~~~~
+
+Note that the type of the right-hand side value (`0`, in this example) must
+be a bitvector whose length is equal to the size of the field within the
+bitfield. In this example, the `y` field was declared as `y:1`, so `y`'s value
+must be of type `[1]`.
+
+Note that the following specification is _not_ equivalent to the one above:
+
+~~~~
+ss <- llvm_alloc (llvm_alias "struct.s");
+llvm_points_to (llvm_field ss "y") (llvm_term {{ 0 : [1] }});
+~~~~
+
+`llvm_points_to` works quite differently from `llvm_points_to_bitfield` under
+the hood, so using `llvm_points_to` on bitfields will almost certainly not work
+as expected.
+
+In order to use `llvm_points_to_bitfield`, one must also use the
+`enable_lax_loads_and_stores` command:
+
+* `enable_lax_loads_and_stores: TopLevel ()`
+
+Both `llvm_points_to_bitfield` and `enable_lax_loads_and_stores` are
+experimental commands, so these also require using `enable_experimental` before
+they can be used.
+
+The `enable_lax_loads_and_stores` command relaxes some
+of SAW's assumptions about uninitialized memory, which is necessary to make
+`llvm_points_to_bitfield` work under the hood. For example, reading from
+uninitialized memory normally results in an error in SAW, but with
+`enable_lax_loads_and_stores`, such a read will instead return a symbolic
+value. At present, `enable_lax_loads_and_stores` only works with What4-based
+tactics (e.g., `w4_unint_z3`); using it with SBV-based tactics
+(e.g., `sbv_unint_z3`) will result in an error.
+
+Note that SAW relies on LLVM debug metadata in order to determine which struct
+fields reside within a bitfield. As a result, you must pass `-g` to `clang` when
+compiling code involving bitfields in order for SAW to be able to reason about
+them.
+
 ## Global variables
 
 Mutable global variables that are accessed in a function must first be allocated
 by calling `llvm_alloc_global` on the name of the global.
 
-* `llvm_alloc_global : String -> CrucibleSetup ()`
+* `llvm_alloc_global : String -> LLVMSetup ()`
 
 This ensures that all global variables that might influence the function are
 accounted for explicitly in the specification: if `llvm_alloc_global` is
@@ -2328,17 +2461,21 @@ rise to specific final conditions. For these cases, you can specify an
 arbitrary predicate as a precondition or post-condition, using any
 values in scope at the time.
 
-* `llvm_precond : Term -> CrucibleSetup ()`
-* `llvm_postcond : Term -> CrucibleSetup ()`
+* `llvm_precond : Term -> LLVMSetup ()`
+* `llvm_postcond : Term -> LLVMSetup ()`
+* `llvm_assert : Term -> LLVMSetup ()`
 * `jvm_precond : Term -> JVMSetup ()`
 * `jvm_postcond : Term -> JVMSetup ()`
+* `jvm_assert : Term -> JVMSetup ()`
 
-These two commands take `Term` arguments, and therefore cannot describe
-the values of pointers. The `llvm_equal` command states that two
-`SetupValue`s should be equal, and can be used in either the initial or
-the final state.
+These commands take `Term` arguments, and therefore cannot describe
+the values of pointers. The "assert" variants will work in either pre-
+or post-conditions, and are useful when defining helper functions
+that, e.g., state datastructure invariants that make sense in both
+phases.  The `llvm_equal` command states that two `SetupValue`s should
+be equal, and can be used in either the initial or the final state.
 
-* `llvm_equal : SetupValue -> SetupValue -> CrucibleSetup ()`
+* `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
 
 The use of `llvm_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
@@ -2354,7 +2491,7 @@ simulation of the function. To skip simulation altogether, one can use:
 
 ~~~
 llvm_unsafe_assume_spec :
-  LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec
+  LLVMModule -> String -> LLVMSetup () -> TopLevel CrucibleMethodSpec
 ~~~
 
 Or, in the experimental JVM implementation:
@@ -2501,7 +2638,7 @@ Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
 function can be used to specify its value:
 
-* `llvm_ghost_value : Ghost -> Term -> CrucibleSetup ()`
+* `llvm_ghost_value : Ghost -> Term -> LLVMSetup ()`
 
 Currently, this function can only be used for LLVM verification, though
 that will likely be generalized in the future. It can be used in either
@@ -2546,7 +2683,7 @@ above.
 #### Utility Functions
 
 We first define the function
-`alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue`.
+`alloc_init : LLVMType -> Term -> LLVMSetup SetupValue`.
 
 `alloc_init ty v` returns a `SetupValue` consisting of a pointer to memory
 allocated and initialized to a value `v` of type `ty`. `alloc_init_readonly`
@@ -2569,7 +2706,7 @@ let alloc_init_readonly ty v = do {
 ~~~~
 
 We now define
-`ptr_to_fresh : String -> LLVMType -> CrucibleSetup (Term, SetupValue)`.
+`ptr_to_fresh : String -> LLVMType -> LLVMSetup (Term, SetupValue)`.
 
 `ptr_to_fresh n ty` returns a pair `(x, p)` consisting of a fresh symbolic
 variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
@@ -2591,7 +2728,7 @@ let ptr_to_fresh_readonly n ty = do {
 ~~~~
 
 Finally, we define
-`oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()`.
+`oneptr_update_func : String -> LLVMType -> Term -> LLVMSetup ()`.
 
 `oneptr_update_func n ty f` specifies the behavior of a function that takes
 a single pointer (with a printable name given by `n`) to memory containing a
@@ -2620,7 +2757,7 @@ Cryptol implementation and it is asserted that the pointers do in fact point to
 these expected values.
 
 ~~~~
-let quarterround_setup : CrucibleSetup () = do {
+let quarterround_setup : LLVMSetup () = do {
     (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
     (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
     (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
@@ -2757,3 +2894,223 @@ let main : TopLevel () = do {
 ~~~~
 
 [^4]: https://en.wikipedia.org/wiki/Salsa20
+
+
+# Extraction to the Coq theorem prover
+
+In addition to the (semi-)automatic and compositional proof modes
+already discussed above, SAW has experimental support for exporting
+Cryptol and SAWCore values as terms to the Coq proof assistant[^5].
+This is intended to support more manual proof efforts for properties
+that go beyond what SAW can support (for example, proofs requiring
+induction) or for connecting to preexisting formalizations in Coq
+of useful algorithms (e.g. the fiat crypto library[^6]).
+
+This support consists of two related pieces. The first piece is a library of
+formalizations of the primitives underlying Cryptol and SAWCore and
+various supporting concepts that help bridge the conceptual gap
+between SAW and Coq.  The second piece is a term translation
+that maps the syntactic forms of SAWCore onto corresponding
+concepts in Coq syntax, designed to dovetail with the concepts
+defined in the support library.  SAWCore is a quite similar language
+to the core calculus underlying Coq, so much of this translation is
+quite straightforward; however, the languages are not exactly
+equivalent, and there are some tricky cases that mostly arise from
+Cryptol code that can only be partially supported.  We will note
+these restrictions later in the manual.
+
+We expect this extraction process to work with a fairly wide range of Coq
+versions, as we are not using bleeding-edge Coq features. It has been
+most fully tested with Coq version 8.13.2.
+
+## Support Library
+
+In order to make use of SAW's extraction capabilities, one must first
+compile the support library using Coq so that the included definitions
+and theorems can be referenced by the extracted code. From the top
+directory of the SAW source tree, the source code for this support
+library can be found in the `saw-core-coq/coq` subdirectory.
+In this subdirectory you will find a `_CoqProject` and a `Makefile`.
+A simple `make` invocation should be enough to compile
+all the necessary files, assuming Coq is installed and `coqc` is
+available in the user's `PATH`. HTML documentation for the support
+library can also be generated by `make html` from the same directory.
+
+Once the library is compiled, the recommended way to import
+it into your subsequent development is by adding the following
+lines to your `_CoqProject` file:
+
+```
+-Q <SAWDIR>/saw-core-coq/coq/generated/CryptolToCoq CryptolToCoq
+-Q <SAWDIR>/saw-core-coq/coq/handwritten/CryptolToCoq CryptolToCoq
+```
+
+Here `<SAWDIR>` refers to the location on your system where the
+SAWScript source tree is checked out. This will add the relevant
+library files to the `CryptolToCoq` namespace, where the extraction
+process will expect to find them.
+
+The support library for extraction is broken into two parts: those
+files which are handwritten, versus those that are automatically
+generated. The handwritten files are generally fairly readable and
+are reasonable for human inspection; they define most of the
+interesting pipe-fitting that allows Cryptol and SAWCore definitions
+to connect to corresponding Coq concepts.  In particular the
+file `SAWCoreScaffolding.v` file defines most of the bindings of base
+types to Coq types, and the `SAWCoreVectorsAsCoqVectors.v` defines the
+core bitvector operations. The automatically generated files are direct
+translations of the SAWCore source files
+(`saw-core/prelude/Prelude.sawcore` and
+`cryptol-saw-core/saw/Cryptol.sawcore`) that correspond to the
+standard libraries for SAWCore and Cryptol, respectively.
+
+The autogenerated files are intended to be kept up-to-date with
+changes in the corresponding `sawcore` files, and end users should
+not need to generate them. Nonetheless, if they are out of sync for some
+reason, these files may be regenerated using the `saw` executable
+by running `(cd saw-core-coq; saw saw/generate_scaffolding.saw)`
+from the top-level of the SAW source directory before compiling them
+with Coq as described above.
+
+You may also note some additional files and concepts in the standard
+library, such as `CompM.v`, and a variety of lemmas and definitions
+related to it. These definitions are related to the "heapster" system,
+which form a separate use-case for the SAWCore to Coq translation.
+These definitions will not be used for code extracted from Cryptol.
+
+## Cryptol module extraction
+
+There are several modes of use for the SAW to Coq term extraction
+facility, but the easiest to use is whole Cryptol module extraction.
+This will extract all the definitions in the given Cryptol module,
+together with it's transitive dependencies, into a single Coq module
+which can then be compiled and pulled into subsequence developments.
+
+Suppose we have a Cryptol source file named `source.cry` and we want
+to generate a Coq file named `output.v`.  We can accomplish this by
+running the following commands in saw (either directly from the `saw`
+command prompt, or via a script file)
+
+```
+enable_experimental;
+write_coq_cryptol_module "source.cry" "output.v" [] [];
+```
+
+In this default mode, identifiers in the Cryptol source will be
+directly translated into identifiers in Coq. This may occasionally
+cause problems if source identifiers clash with Coq keywords or
+preexisting definitions. The third argument to
+`write_coq_cryptol_module` can be used to remap such names if
+necessary by giving a list of `(in,out)` pairs of names.  The fourth
+argument is a list of source identifiers to skip translating, if
+desired.  Authoritative online documentation for this command can be
+obtained directly from the `saw` executable via `:help
+write_coq_cryptol_module` after `enable_experimental`.
+
+The resulting "output.v" file will have some of the usual hallmarks of
+computer-generated code; it will have poor formatting and, explicit
+parenthesis and fully-qualified names.  Thankfully, once loaded into
+Coq, the Coq pretty-printer will do a much better job of rendering
+these terms in a somewhat human-readable way.
+
+## Proofs involving uninterpreted functions
+
+It is possible to write a Cryptol module that references uninterpreted
+functions by using the `primitive` keyword to declare them in your
+Cryptol source. Primitive Cryptol declarations will be translated into
+Coq section variables; as usual in Coq, uses of these section
+variables will be translated into additional parameters to the
+definitions from outside the section.  In this way, consumers of
+the translated module can instantiate the declared Cryptol functions
+with corresponding terms in subsequent Coq developments.
+
+Although the Cryptol interpreter itself will not be able to compute
+with declared but undefined functions of this sort, they can be used
+both to provide specifications for functions to be verified with
+`llvm_verify` or `jvm_verify` and also for Coq extraction.
+
+For example, if I write the following Cryptol source file:
+
+```
+primitive f : Integer -> Integer
+
+g : Integer -> Bool
+g x = f (f x) > 0
+```
+
+After extraction, the generated term `g` will have Coq type:
+
+```
+(Integer -> Integer) -> Integer -> Bool
+```
+
+## Translation limitations and caveats
+
+Translation from Cryptol to Coq has a number of fundamental
+limitations that must be addressed. The most severe of these is that
+Cryptol is a fully general-recursive language, and may exhibit runtime
+errors directly via calls to the `error` primitive, or via partial
+operations (such as indexing a sequence out-of-bounds).  The internal
+language of Coq, by contrast, is a strongly-normalizing language of
+total functions.  As such, our translation is unable to extract all
+Cryptol programs.
+
+### Recursive programs
+
+The most severe of the currently limitations for our system
+is that the translation is unable to translate any recursive Cryptol
+program.  Doing this would require us to attempt to find some
+termination argument for the recursive function sufficient to satisfy
+Coq; for now, no attempt is made to do so. if you attempt to
+extract a recursive function, SAW will produce an error
+about a "malformed term" with `Prelude.fix` as the head symbol.
+
+Certain limited kinds of recursion are available via the
+`foldl` Cryptol primitive operation, which is translated directly
+into a fold operation in Coq. This is sufficient for many basic
+iterative algorithms.
+
+### Type coercions
+
+Another limitation of the translation system is that Cryptol uses SMT
+solvers during its typechecking process and uses the results of solver
+proofs to justify some of its typing judgments. When extracting these
+terms to Coq, type equality coercions must be generated. Currently, we
+do not have a good way to transport the reasoning done inside
+Cryptol's typechecker into Coq, so we just supply a very simple `Ltac`
+tactic to discharge these coercions (see `solveUnsafeAssert` in
+`CryptolPrimitivesForSAWCoreExtra.v`).  This tactic is able to
+discover simple coercions, but for anything nontrivial it may
+fail. The result will be a typechecking failure when compiling the
+generated code in Coq when the tactic fails. If you encounter this
+problem, it may be possible to enhance the `solveUnsafeAssert` tactic
+to cover your use case.
+
+### Error terms
+
+A final caveat that is worth mentioning is that Cryptol can sometimes
+produce runtime errors. These can arise from explicit calls to the
+`error` primitive, or from partially defined operations (e.g.,
+division by zero or sequence access out of bounds).  Such instances
+are translated to occurrences of an unrealized Coq axiom named `error`.
+In order to avoid introducing an inconsistent environment, the `error`
+axiom is restricted to apply only to inhabited types. All the types
+arising from Cryptol programs are inhabited, so this is no problem
+in principle. However, collecting and passing this information around
+on the Coq side is a little tricky.
+
+The main technical device we use here is the `Inhabited` type class;
+it simply asserts that a type has some distinguished inhabitant.  We
+provide instances for the base types and type constructors arising
+from Cryptol, so the necessary instances ought to be automatically
+constructed when needed.  However, polymorphic Cryptol functions add
+some complications, as type arguments must also come together with
+evidence that they are inhabited. The translation process takes care
+to add the necessary `Inhabited` arguments, so everything ought to
+work out. However, if Coq typechecking of generated code fails with
+errors about `Inhabited` class instances, it likely represents some
+problem with this aspect of the translation.
+
+
+[^5]: https://coq.inria.fr
+[^6]: https://github.com/mit-plv/fiat-crypto

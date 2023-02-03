@@ -46,6 +46,7 @@ module Verifier.SAW.Recognizer
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
+  , asArrayValue
   , asStringLit
   , asLambda
   , asLambdaList
@@ -55,9 +56,11 @@ module Verifier.SAW.Recognizer
   , asConstant
   , asExtCns
   , asSort
+  , asISort
     -- * Prelude recognizers.
   , asBool
   , asBoolType
+  , asNatType
   , asIntegerType
   , asIntModType
   , asBitvectorType
@@ -74,6 +77,7 @@ import Control.Lens
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
@@ -286,6 +290,11 @@ asUnsignedConcreteBv term = do
   (n :*: v) <- asBvNat term
   return $ mod v (2 ^ n)
 
+asArrayValue :: Recognizer Term (Term, [Term])
+asArrayValue (unwrapTermF -> FTermF (ArrayValue tp tms)) =
+  return (tp, V.toList tms)
+asArrayValue _ = Nothing
+
 asStringLit :: Recognizer Term Text
 asStringLit t = do StringLit i <- asFTermF t; return i
 
@@ -313,8 +322,8 @@ asLocalVar :: Recognizer Term DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = Nothing
 
-asConstant :: Recognizer Term (ExtCns Term, Term)
-asConstant (unwrapTermF -> Constant ec t) = return (ec, t)
+asConstant :: Recognizer Term (ExtCns Term, Maybe Term)
+asConstant (unwrapTermF -> Constant ec mt) = return (ec, mt)
 asConstant _ = Nothing
 
 asExtCns :: Recognizer Term (ExtCns Term)
@@ -328,8 +337,17 @@ asSort :: Recognizer Term Sort
 asSort t = do
   ftf <- asFTermF t
   case ftf of
-    Sort s -> return s
+    Sort s _ -> return s
     _      -> Nothing
+
+asISort :: Recognizer Term Sort
+asISort t = do
+  ftf <- asFTermF t
+  case ftf of
+    Sort s True -> return s
+    _           -> Nothing
+
+
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: Recognizer Term Bool
@@ -339,6 +357,11 @@ asBool _ = Nothing
 
 asBoolType :: Recognizer Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
+
+asNatType :: Recognizer Term ()
+asNatType (asDataType -> Just (o, []))
+  | primName o == preludeNatIdent = return ()
+asNatType _ = Nothing
 
 asIntegerType :: Recognizer Term ()
 asIntegerType = isGlobalDef "Prelude.Integer"
@@ -372,7 +395,14 @@ asEq t =
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term
-asEqTrue = isGlobalDef "Prelude.EqTrue" @> return
+asEqTrue t =
+  case (isGlobalDef "Prelude.EqTrue" @> return) t of
+    Just x -> Just x
+    Nothing ->
+      do (a,x,y) <- asEq t
+         isGlobalDef "Prelude.Bool" a
+         isGlobalDef "Prelude.True" y
+         return x
 
 asArrayType :: Recognizer Term (Term :*: Term)
 asArrayType = (isGlobalDef "Prelude.Array" @> return) <@> return

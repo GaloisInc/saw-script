@@ -16,11 +16,17 @@ import SAWServer.CryptolSetup
       cryptolLoadModule,
       cryptolLoadFileDescr,
       cryptolLoadFile )
+import SAWServer.Data.JVMType()
+import SAWServer.Eval
+    ( evalIntDescr,
+      evalInt,
+      evalBoolDescr,
+      evalBool )
 import SAWServer.Ghost
     ( createGhostVariableDescr,
       createGhostVariable )
---import SAWServer.JVMCrucibleSetup
---import SAWServer.JVMVerify
+import SAWServer.JVMCrucibleSetup
+import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
     ( llvmLoadModuleDescr, llvmLoadModule )
 import SAWServer.LLVMVerify
@@ -34,6 +40,11 @@ import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
 import SAWServer.SetOption ( setOptionDescr, setOption )
+import SAWServer.Yosys
+    ( yosysImportDescr, yosysImport,
+      yosysVerifyDescr, yosysVerify,
+      yosysImportSequentialDescr, yosysImportSequential,
+      yosysExtractSequentialDescr, yosysExtractSequential )
 
 
 main :: IO ()
@@ -74,11 +85,18 @@ sawMethods =
      saveTermDescr
      saveTerm
   -- JVM
-  {-
-  , Argo.command "SAW/JVM/load class" (Doc.Paragraph [Doc.Text "TODO"]) jvmLoadClass
-  , Argo.command "SAW/JVM/verify"     (Doc.Paragraph [Doc.Text "TODO"]) jvmVerify
-  , Argo.command "SAW/JVM/assume"     (Doc.Paragraph [Doc.Text "TODO"]) jvmAssume
-  -}
+  , Argo.command
+     "SAW/JVM/load class"
+     jvmLoadClassDescr
+     jvmLoadClass
+  , Argo.command
+     "SAW/JVM/verify"
+     jvmVerifyDescr
+     jvmVerify
+  , Argo.command
+     "SAW/JVM/assume"
+     jvmAssumeDescr
+     jvmAssume
   -- LLVM
   , Argo.command
      "SAW/LLVM/load module"
@@ -96,6 +114,23 @@ sawMethods =
      "SAW/LLVM/assume"
      llvmAssumeDescr
      llvmAssume
+  -- Yosys
+  , Argo.command
+     "SAW/Yosys/import"
+     yosysImportDescr
+     yosysImport
+  , Argo.command
+     "SAW/Yosys/verify"
+     yosysVerifyDescr
+     yosysVerify
+  , Argo.command
+     "SAW/Yosys/import sequential"
+     yosysImportSequentialDescr
+     yosysImportSequential
+  , Argo.command
+     "SAW/Yosys/extract sequential"
+     yosysExtractSequentialDescr
+     yosysExtractSequential
   -- General
   , Argo.command
      "SAW/create ghost variable"
@@ -109,6 +144,14 @@ sawMethods =
      "SAW/prove"
      proveDescr
      prove
+  , Argo.command
+     "SAW/eval int"
+     evalIntDescr
+     evalInt
+  , Argo.command
+     "SAW/eval bool"
+     evalBoolDescr
+     evalBool
   , Argo.command
      "SAW/set option"
      setOptionDescr

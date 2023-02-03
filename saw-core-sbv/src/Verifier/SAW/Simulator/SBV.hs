@@ -118,6 +118,7 @@ prims =
   , Prims.bpMuxBool  = pure3 svIte
   , Prims.bpMuxWord  = pure3 svIte
   , Prims.bpMuxInt   = pure3 svIte
+  , Prims.bpMuxArray = unsupportedSBVPrimitive "bpMuxArray"
   , Prims.bpMuxExtra = muxSbvExtra
     -- Booleans
   , Prims.bpTrue   = svTrue
@@ -184,6 +185,9 @@ prims =
   , Prims.bpArrayLookup = unsupportedSBVPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedSBVPrimitive "bpArrayUpdate"
   , Prims.bpArrayEq = unsupportedSBVPrimitive "bpArrayEq"
+  , Prims.bpArrayCopy = unsupportedSBVPrimitive "bpArrayCopy"
+  , Prims.bpArraySet = unsupportedSBVPrimitive "bpArraySet"
+  , Prims.bpArrayRangeEq = unsupportedSBVPrimitive "bpArrayRangeEq"
   }
 
 unsupportedSBVPrimitive :: String -> a
@@ -310,8 +314,10 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- selectV merger maxValue valueFn index returns valueFn v when index has value v
--- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
+-- @selectV merger maxValue valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
+-- if-then-else operator. If the index is greater than @maxValue@, then it
+-- returns @valueFn maxValue@.
 selectV :: (SBool -> b -> b -> b) -> Natural -> (Natural -> b) -> SWord -> b
 selectV merger maxValue valueFn vx =
   case svAsInteger vx of
@@ -322,7 +328,13 @@ selectV merger maxValue valueFn vx =
   where
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
-    impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
+    impl i y =
+      -- NB: `i` counts down in each iteration, so we use svTestBit (a
+      -- little-endian indexing function) to ensure that the bits are processed
+      -- in big-endian order. Alternatively, we could have `i` count up and use
+      -- svAt (a big-endian indexing function), but we use svTestBit as it is
+      -- slightly cheaper to compute.
+      merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
@@ -660,8 +672,7 @@ mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
 
 sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
-  do true <- liftIO (scBool sc True)
-     t <- liftIO (foldM (scAnd sc) true (satAsserts query))
+  do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
      let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecName ec))) fot

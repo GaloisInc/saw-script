@@ -1,4 +1,96 @@
-# Unreleased version
+# Nightly
+
+* New commands `enable_what4_eval` and `disable_what4_eval` to enable or
+  disable What4 translation for SAWCore expressions during Crucible symbolic
+  execution.
+
+* New command `llvm_alloc_sym_init` like `llvm_alloc`, but assume that the
+  allocation is initialized with symbolic bytes.  New commands
+  `disable_alloc_sym_init_check` and `enable_alloc_sym_init_check` to
+  disable or enable the allocation initialization check associated with
+  `llvm_alloc_sym_init` during override application.
+
+* New command `set_crucible_timeout` to set the timeout for the SMT solver
+  during the LLVM and X86 Crucible symbolic execution. This is used for
+  path-sat checks, and sat checks when applying overrides.
+
+* New command `w4_unint_z3_using` like `w4_unint_z3`, but use the given Z3
+  tactic.
+
+* A new `llvm_points_to_bitfield` command has been introduced, providing a
+  version of `llvm_points_to` that is specifically tailored for structs
+  containing bitfields. In order to use `llvm_points_to_bitfield`, one must
+  also use the new `enable_lax_loads_and_stores` command, which relaxes some
+  of Crucible's assumptions about reading from uninitialized memory. (This
+  command also comes with a corresponding `disable_lax_loads_and_stores`
+  command.) For more details on how each of these commands should be used,
+  consult the "Bitfields" section of the SAW manual.
+
+* A new `llvm_cast_pointer` function has been added that allows users
+  to directly specify that a pointer should be treated as pointing to
+  a particular type. This mainly affects the results of subsequent
+  `llvm_field` and `llvm_elem` calls.  This is especially useful for
+  dealing with C `union` types, as the type information provided by
+  LLVM is imprecise in these cases.
+
+* A new `llvm_union` function has been added that uses debug
+  information to allow users to select fields from `union` types by
+  name. This automates the process of manually applying
+  `llvm_cast_pointer` with the type of the selected union field. Just
+  as with `llvm_field`, debug symbols are required for `llvm_union` to
+  work correctly.
+
+* A new highly experimental `llvm_verify_fixpoint_x86` function that
+  allows partial correctness verification of loops using loop
+  invariants instead of full symbolic unrolling. Only certain very simple
+  styles of loops can currently be accommodated, and the user is
+  required to provide a term that describes how the live variables in
+  the loop evolve over an iteration.
+
+* A new experimental facility for "tagging" proof obligations in
+  specifications and later using those tags to make decisions
+  in proof tactics. See the new `llvm_setup_with_tag`,
+  `goal_has_tags`, and `goal_has_some_tag` commands.
+
+* A new experimental option (toggled via
+  `enable_single_override_special_case` and
+  `disable_single_override_special_case`) which changes the handling
+  for cases where an overriden function has only one override that
+  could possibly apply. When the special case handling is enabled,
+  preconditions for the override are asserted separately, maintaining
+  their individual metadata instead of being combined into a single
+  precondition for the entire override. This may be advantageous if
+  proving the individual goals is easier than the conjunction of all
+  of them, or if different tactics are needed for different subgoals.
+  Currently, this option only applies to LLVM verifications.
+
+* Experimental interactive features. Using the new `subshell`
+  and `proof_subshell` commands, a user can regain a command-line
+  interface in the middle of a running script for experimentation
+  and exploration purposes. In addition `callcc` and `checkpoint`
+  allow the user to have more flexibility with restoring prior states
+  and executing the remaining context of a proof in such an
+  interactive session.
+
+* A significant overhaul of the SAW proof and tactics system.  Under
+  the hood, tactics now manipulate _sequents_ instead of just
+  propositions. This allows more the user to specify more precise goal
+  rearrangements, and provides a much nicer interface for proof
+  exploration (especially with the new `proof_subshell`). There are a
+  variety of new tactics that provide the user with control over proof
+  steps that is similar to that found in an interactive theorem prover.
+  Proofs that do not make use of the new experimental tactics should
+  see no substantive changes, so this is expected to be a highly
+  backward-compatible change.
+
+* The experimental and rarely-used `goal_assume` tactic has been
+  removed. The use case it was targeting is better solved via sequents.
+
+* A new experimental `llvm_verify_x86_with_invariant` command that
+  allows verification certain kinds of simple loops by using a
+  user-provided loop invariant.
+
+# Version 0.9
 
 ## New Features
 
@@ -20,12 +112,30 @@ Several improvements have been made to JVM verification:
   "current" status, so that `enable_experimental` is no longer
   necessary for JVM verification.
 
+* The RPC API now includes methods for Java verification, as described [here](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawjvmload-class-command).
+
 A new `enable_lax_pointer_ordering` function exists, which relaxes the
 restrictions that Crucible imposes on comparisons between pointers from
 different allocation blocks.
 
 A SAW value of type `Bool` can now be brought into scope in Cryptol expressions
 as a value of type `Bit`.
+
+A new `hoist_ifs_in_goal` proof tactic works like `hoist_ifs` but on the
+current goal in a proof script.
+
+The verification summaries produced when specifying the `-s` flag now
+contain much more detailed information. When producing JSON output (`-f
+json`), the tool in the `verif-viewer` directory can be used to
+translate it to GraphViz format.
+
+Two new experimental functions can evaluate SAWCore terms into simpler
+forms. The `normalize_term` function simplifies the given term by fully
+evaluating it with the SAWCore symbolic simulator but keeping it in
+SAWCore format. The `extract_uninterp` function allows certain
+uninterpreted functions to be replaced with extra inputs and constraints
+on those inputs, allowing propositional solvers to prove goals involving
+uninterpreted functions.
 
 ## Changes
 
@@ -51,6 +161,42 @@ as a value of type `Bit`.
   for performance, and could likely be made more efficient. Please file
   [issues](https://github.com/galoisinc/saw-script/issues) for
   performance regressions you encounter!
+
+  The removal of the linked-in ABC version means that the `abc` tactic
+  now requires an external `abc` executable. You can get this by
+  downloading a `with-solvers` package from the releases page, by
+  downloading a solver package from the [`what4-solvers`
+  repository](https://github.com/GaloisInc/what4-solvers), or by
+  building it yourself from the [ABC
+  repository](https://github.com/berkeley-abc/abc).
+
+* The LLVM bitcode reader now should support files from any LLVM version
+  between 3.6 and 12.
+
+## Bug Fixes
+
+* Overall, closed issues #109, #120, #128, #156, #233, #316, #320, #324,
+  #523, #561, #624, #689, #722, #727, #746, #869, #872, #900, #975,
+  #982, #1033, #1035, #1045, #1066, #1098, #1120, #1135, #1140, #1144,
+  #1147, #1148, #1152, #1166, #1171, #1175, #1182, #1184, #1186, #1211,
+  #1224, #1226, #1230, #1256, #1260, #1263, #1269, #1280, #1285, #1299,
+  #1307, #1308, #1311, #1318, #1341, #1355, #1367, #1375, #1381, #1388,
+  #1389, #1390, #1404, #1411, #1420, #1430, and #1438.
+
+* Overall, merged pull requests #942, #1117, #1185, #1191, #1204, #1205,
+  #1206, #1207, #1208, #1209, #1212, #1213, #1214, #1216, #1218, #1219,
+  #1267, #1270, #1272, #1274, #1275, #1276, #1278, #1279, #1281, #1282,
+  #1283, #1284, #1286, #1288, #1289, #1290, #1292, #1293, #1294, #1295,
+  #1297, #1298, #1300, #1309, #1310, #1313, #1315, #1317, #1319, #1320,
+  #1321, #1323, #1325, #1327, #1328, #1329, #1330, #1331, #1332, #1334,
+  #1335, #1336, #1337, #1342, #1343, #1345, #1346, #1349, #1351, #1356,
+  #1357, #1364, #1365, #1366, #1368, #1369, #1370, #1371, #1373, #1374,
+  #1378, #1379, #1380, #1384, #1385, #1391, #1392, #1393, #1394, #1396,
+  #1397, #1398, #1399, #1401, #1402, #1403, #1405, #1406, #1410, #1413,
+  #1414, #1415, #1416, #1422, #1423, #1424, #1426, #1427, #1428, #1429,
+  #1431, #1432, #1433, #1434, #1435, #1437, #1439, #1440, #1441, #1443,
+  #1444, #1445, #1446, #1448, #1449, #1450, #1451, #1453, #1454, #1455,
+  #1456, #1457, #1458, #1459, #1463, #1464, #1465, #1466, and #1468.
 
 # Version 0.8
 

@@ -22,6 +22,8 @@ import Verifier.SAW.Heapster.UntypedAST
 
 }
 
+%expect 0 -- shift/reduce conflicts
+
 %tokentype      { Located Token                         }
 %token
 '('             { Located $$ TOpenParen                 }
@@ -37,6 +39,7 @@ import Verifier.SAW.Heapster.UntypedAST
 '.'             { Located $$ TDot                       }
 ','             { Located $$ TComma                     }
 '+'             { Located $$ TPlus                      }
+'-'             { Located $$ TMinus                     }
 '*'             { Located $$ TStar                      }
 '@'             { Located $$ TAt                        }
 '-o'            { Located $$ TLoli                      }
@@ -47,6 +50,8 @@ import Verifier.SAW.Heapster.UntypedAST
 '<=u'           { Located $$ TUnsignedLe                }
 'or'            { Located $$ TOr                        }
 'true'          { Located $$ TTrue                      }
+'false'         { Located $$ TFalse                     }
+'any'           { Located $$ TAny                       }
 'empty'         { Located $$ TEmpty                     }
 'exists'        { Located $$ TExists                    }
 'eq'            { Located $$ TEq                        }
@@ -72,6 +77,7 @@ import Verifier.SAW.Heapster.UntypedAST
 'struct'        { Located $$ TStruct                    }
 'shape'         { Located $$ TShape                     }
 'emptysh'       { Located $$ TEmptySh                   }
+'falsesh'       { Located $$ TFalseSh                   }
 'eqsh'          { Located $$ TEqSh                      }
 'ptrsh'         { Located $$ TPtrSh                     }
 'fieldsh'       { Located $$ TFieldSh                   }
@@ -104,6 +110,7 @@ NAT             { (traverse tokenNat   -> Just $$)      }
 %left     '+'
 %left     '*'
 %nonassoc '@'
+%left NEGPREC
 
 %%
 
@@ -132,10 +139,13 @@ expr ::                                         { AstExpr }
   | NAT                                         { ExNat (pos $1) (locThing $1) }
   | 'unit'                                      { ExUnit (pos $1) }
   | expr '+' expr                               { ExAdd (pos $2) $1 $3 }
+    -- NB: Give negation the highest possible precedence to avoid shift/reduce
+    -- conflicts with other operators, such as + and *.
+  | '-' expr %prec NEGPREC                      { ExNeg (pos $1) $2 }
   | expr '*' expr                               { ExMul (pos $2) $1 $3 }
   | 'struct' '(' list(expr) ')'                 { ExStruct (pos $1) $3 }
-  | 'array' '(' expr ',' '<' expr ',' '*' expr ',' '[' list(llvmFieldPermArray) ']' ')'
-                                                { ExArray (pos $1) $3 $6 $9 $12 }
+  | lifetime 'array' '(' expr ',' expr ',' '<' expr ',' '*' expr ',' expr ')'
+                                                { ExArray (pos $2) $1 $4 $6 $9 $12 $14 }
   | 'llvmword' '(' expr ')'                     { ExLlvmWord (pos $1) $3 }
   | 'llvmfunptr' '{' expr ',' expr '}' '(' funPerm ')'
                                                 { ExLlvmFunPtr (pos $1) $3 $5 $8 }
@@ -153,20 +163,23 @@ expr ::                                         { AstExpr }
 -- Shapes
 
   | 'emptysh'                                   { ExEmptySh (pos $1) }
+  | 'falsesh'                                   { ExFalseSh (pos $1) }
   | expr 'orsh' expr                            { ExOrSh (pos $2) $1 $3 }
   | expr ';' expr                               { ExSeqSh (pos $2) $1 $3 }
-  | 'eqsh' '(' expr ')'                         { ExEqSh (pos $1) $3 }
+  | 'eqsh' '(' expr ',' expr ')'                { ExEqSh (pos $1) $3 $5 }
   | lifetime 'ptrsh' '(' expr ',' expr ')'      { ExPtrSh (pos $2) $1 (Just $4) $6 }
   | lifetime 'ptrsh' '('          expr ')'      { ExPtrSh (pos $2) $1 Nothing $4 }
   | 'fieldsh' '(' expr ',' expr ')'             { ExFieldSh (pos $1) (Just $3) $5 }
   | 'fieldsh' '('          expr ')'             { ExFieldSh (pos $1) Nothing $3 }
-  | 'arraysh' '(' expr ',' expr ',' '[' list(shape) ']' ')'
-                                                { ExArraySh (pos $1) $3 $5 $8 }
+  | 'arraysh' '(' '<' expr ',' '*' expr ',' expr ')'
+                                                { ExArraySh (pos $1) $4 $7 $9 }
   | 'exsh' IDENT ':' type '.' expr              { ExExSh (pos $1) (locThing $2) $4 $6 }
 
 -- Value Permissions
 
   | 'true'                                      { ExTrue (pos $1) }
+  | 'false'                                     { ExFalse (pos $1) }
+  | 'any'                                       { ExAny (pos $1) }
   | expr 'or' expr                              { ExOr (pos $2) $1 $3 }
   | 'eq' '(' expr ')'                           { ExEq (pos $1) $3 }
   | 'exists' IDENT ':' type '.' expr            { ExExists (pos $1) (locThing $2) $4 $6 }
@@ -195,10 +208,6 @@ expr ::                                         { AstExpr }
 frameEntry ::                                   { (AstExpr, Natural) }
   : expr ':' NAT                                { ($1, locThing $3) }
 
-shape ::                                        { (Maybe AstExpr, AstExpr) }
-  :  expr                                       { (Nothing, $1)         }
-  |  '(' expr ',' expr ')'                      { (Just $2, $4)         }
-
 identArgs ::                                    { Maybe [AstExpr]       }
   :                                             { Nothing               }
   | '<' list(expr) '>'                          { Just $2               }
@@ -209,7 +218,9 @@ permOffset ::                                   { Maybe AstExpr         }
 
 funPerm ::                                      { AstFunPerm }
   : '(' ctx ')' '.' funPermList '-o' funPermList
-                                                { AstFunPerm (pos $6) $2 $5 $7 }
+                                                { AstFunPerm (pos $6) $2 $5 [] $7 }
+  | '(' ctx ')' '.' funPermList '-o' '(' ctx ')' '.' funPermList
+                                                { AstFunPerm (pos $6) $2 $5 $8 $11 }
 
 funPermList ::                                  { [(Located String, AstExpr)] }
   : 'empty'                                     { []                    }

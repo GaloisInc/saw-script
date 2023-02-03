@@ -3,34 +3,6 @@ module rust_lifetimes where
 
 import Prelude;
 
--- The translation of the permission int1<>
-int1Trans : sort 0;
-int1Trans = Sigma (Vec 1 Bool) (\ (_:Vec 1 Bool) -> #());
-
--- Build an int1Trans from a 1-bit bitvector
-mkInt1Trans : Vec 1 Bool -> int1Trans;
-mkInt1Trans bv = exists (Vec 1 Bool) (\ (_:Vec 1 Bool) -> #()) bv ();
-
--- Build an int1Trans from a 1-bit bitvector
-unInt1Trans : int1Trans -> Vec 1 Bool;
-unInt1Trans bv = Sigma_proj1 (Vec 1 Bool) (\ (_:Vec 1 Bool) -> #()) bv;
-
--- The translation of the permission int8<>
-int8Trans : sort 0;
-int8Trans = Sigma (Vec 8 Bool) (\ (_:Vec 8 Bool) -> #());
-
--- The translation of the permission int64<>
-int64Trans : sort 0;
-int64Trans = Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #());
-
--- Build an int64Trans from a 64-bit bitvector
-mkInt64Trans : Vec 64 Bool -> int64Trans;
-mkInt64Trans bv = exists (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) bv ();
-
--- Build an int64Trans from a 64-bit bitvector
-unInt64Trans : int64Trans -> Vec 64 Bool;
-unInt64Trans bv = Sigma_proj1 (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) bv;
-
 unfoldListPermH : (a:sort 0) -> List a -> Either #() (#() * a * List a);
 unfoldListPermH a l =
   List__rec a (\ (_:List a) -> Either #() (#() * a * List a))

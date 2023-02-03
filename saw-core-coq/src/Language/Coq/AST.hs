@@ -29,6 +29,8 @@ data Term
     -- | A variable that needs to be printed with a leading at sign in order to
     -- make all arguments explicit
   | ExplVar Ident
+    -- | A ascription @tm : tp@ of a type to a term
+  | Ascription Term Term
   | NatLit Integer
   | ZLit Integer
   | List [Term]
@@ -42,10 +44,12 @@ type Type = Term
 
 data Binder
   = Binder Ident (Maybe Type)
+  | ImplicitBinder Ident (Maybe Type)
     deriving (Show)
 
 data PiBinder
   = PiBinder (Maybe Ident) Type
+  | PiImplicitBinder (Maybe Ident) Type
     deriving (Show)
 
 -- Because saw-core does not give very helpful access to the parameters and
@@ -70,6 +74,9 @@ data Decl
   = Axiom Ident Type
   | Comment String
   | Definition Ident [Binder] (Maybe Type) Term
+  | Parameter Ident Type
+  | Variable Ident Type
   | InductiveDecl Inductive
+  | Section Ident [Decl]
   | Snippet String
   deriving (Show)

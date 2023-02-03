@@ -31,6 +31,7 @@ module SAWScript.X86Spec
   , inMem
   , (===)
   , Opts(..)
+  , optsSym
   , KnownType
   , intLit
   , litByte
@@ -103,10 +104,12 @@ import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Backend
-          (addAssumption, getProofObligations, goalsToList
-          ,assert, CrucibleAssumption(..)
-          ,ProofGoal(..), labeledPredMsg)
-
+          ( addAssumption, getProofObligations, goalsToList
+          , assert, CrucibleAssumption(..)
+          , ProofGoal(..), labeledPredMsg
+          , HasSymInterface(backendGetSym)
+          , SomeBackend(..), IsSymBackend
+          )
 import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.OverrideSim
 import Lang.Crucible.CFG.Common
@@ -120,7 +123,10 @@ import Lang.Crucible.Types
 import Verifier.SAW.SharedTerm
   (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
 import Data.Macaw.Memory(RegionIndex)
-import Data.Macaw.Symbolic(GlobalMap, ToCrucibleType, LookupFunctionHandle(..), MacawCrucibleRegTypes)
+import Data.Macaw.Symbolic
+  ( GlobalMap(..), ToCrucibleType, LookupFunctionHandle(..)
+  , MacawCrucibleRegTypes, MacawSimulatorState
+  )
 import Data.Macaw.Symbolic.Backend ( crucArchRegTypes )
 import Data.Macaw.X86.X86Reg
 import Data.Macaw.X86.Symbolic
@@ -135,7 +141,7 @@ import Cryptol.ModuleSystem.Name(Name)
 import Cryptol.ModuleSystem.Interface(ifTySyns)
 import Cryptol.TypeCheck.AST(TySyn(tsDef))
 import Cryptol.TypeCheck.TypePat(aNat)
-import Cryptol.Utils.PP(render,pp)
+import Cryptol.Utils.PP(pp)
 import Cryptol.Utils.Patterns(matchMaybe)
 
 import SAWScript.Crucible.Common (Sym, sawCoreState)
@@ -179,10 +185,16 @@ type Post = 'Post
 
 
 data Opts = Opts
-  { optsSym :: Sym
+  { optsBackend :: SomeBackend Sym
   , optsMvar :: GlobalVar Mem
   , optsCry :: CryptolEnv
   }
+
+optsWithBackend :: Opts -> (forall bak. IsSymBackend Sym bak => bak -> a) -> a
+optsWithBackend opts k = case optsBackend opts of SomeBackend bak -> k bak
+
+optsSym :: Opts -> Sym
+optsSym opts = optsWithBackend opts backendGetSym
 
 (*.) :: Integer -> Unit -> Bytes
 n *. u = toBytes (fromInteger n * bs)
@@ -464,7 +476,8 @@ freshVal sym t ptrOk nm =
       Left err -> error ("Invalid symbol name " ++ show s ++ ": " ++ show err)
       Right a -> return a
 
-getLoc :: Crucible.HasLLVMAnn Sym => Loc t -> Sym -> State -> IO (RegValue Sym t)
+getLoc :: (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Loc t -> Opts -> State -> IO (RegValue Sym t)
 getLoc l =
   case l of
 
@@ -474,13 +487,12 @@ getLoc l =
                 _           -> fail ("[getLoc] Invalid register: " ++ show r)
 
     InMem w lm n ->
-      \sym s ->
-      do obj <- getLoc lm sym s
-         let mem = stateMem s
-         let ?ptrWidth = knownNat
-         loc <- adjustPtr sym mem obj n
-         doLoad sym mem loc (llvmBytes w) (locRepr l) noAlignment
-
+      \opts s -> optsWithBackend opts $ \bak ->
+         do obj <- getLoc lm opts s
+            let mem = stateMem s
+            let ?ptrWidth = knownNat
+            loc <- adjustPtr bak mem obj n
+            doLoad bak mem loc (llvmBytes w) (locRepr l) noAlignment
 
 ptrTy :: (1 <= w) => NatRepr w -> TypeRepr (LLVMPointerType (8 * w))
 ptrTy wb
@@ -490,7 +502,8 @@ ptrTy wb
 llvmBytes :: NatRepr w -> StorageType
 llvmBytes w = bitvectorType (toBytes (natValue w))
 
-setLoc :: Crucible.HasLLVMAnn Sym => Loc t -> Sym -> RegValue Sym t -> State -> IO State
+setLoc :: (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Loc t -> Opts -> RegValue Sym t -> State -> IO State
 setLoc l =
 
   case l of
@@ -501,24 +514,28 @@ setLoc l =
           Nothing -> fail ("[setLoc] Invalid register: " ++ show r)
 
     InMem w lm n ->
-      \sym v s ->
-          do obj <- getLoc lm sym s
+      \opts v s ->
+        optsWithBackend opts $ \bak ->
+          do let sym = backendGetSym bak
+             obj <- getLoc lm opts s
              let mem = stateMem s
              let ?ptrWidth = knownNat
-             loc <- adjustPtr sym mem obj n
+             loc <- adjustPtr bak mem obj n
 
              let lty = llvmBytes w
                  ty  = locRepr l
              val <- packMemValue sym lty ty v
-             let alignment = noAlignment -- default to byte-aligned (FIXME)
-             mem1 <- storeConstRaw sym mem loc lty alignment val
+             let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
+             mem1 <- storeConstRaw bak mem loc lty alignment val
 
              return s { stateMem = mem1 }
 
 
 class Eval p where
   type S p
-  eval :: Crucible.HasLLVMAnn Sym => V p t -> Opts -> S p -> IO (RegValue Sym t)
+  eval ::
+    (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+    V p t -> Opts -> S p -> IO (RegValue Sym t)
   curState :: f p -> S p -> State
   setCurState :: f p -> State -> S p -> S p
 
@@ -531,7 +548,7 @@ instance Eval Pre where
     case val of
       CryFun w f xs  -> \opts s -> evalCryFun opts s w f xs
       IntLit w n     -> \opts _ -> evIntLit (optsSym opts) w n
-      Loc l          -> \opts s -> getLoc l (optsSym opts) s
+      Loc l          -> \opts s -> getLoc l opts s
   curState _ s = s
   setCurState _ s _ = s
 
@@ -541,42 +558,46 @@ instance Eval Post where
     case val of
       CryFun w f xs   -> \opts s         -> evalCryFun opts s w f xs
       IntLit w n      -> \opts _         -> evIntLit (optsSym opts) w n
-      Loc l           -> \opts (_,post)  -> getLoc l (optsSym opts) post
-      PreLoc l        -> \opts (pre,_)   -> getLoc l (optsSym opts) pre
+      Loc l           -> \opts (_,post)  -> getLoc l opts post
+      PreLoc l        -> \opts (pre,_)   -> getLoc l opts pre
       PreAddPtr l i u -> \opts (pre,_) ->
-        do let sym = optsSym opts
-           ptr <- getLoc l sym pre
-           adjustPtr sym (stateMem pre) ptr (bytesToInteger (i *. u))
+        do ptr <- getLoc l opts pre
+           optsWithBackend opts $ \bak ->
+             adjustPtr bak (stateMem pre) ptr (bytesToInteger (i *. u))
 
   curState _ (_,s) = s
   setCurState _ s (s1,_) = (s1,s)
 
-evalCry :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> CryArg p -> S p -> IO Term
+evalCry ::
+  forall p.
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> CryArg p -> S p -> IO Term
 evalCry opts cry s =
-  do let sym = optsSym opts
-     st <- sawCoreState sym
-     let sc = saw_ctx st
-     case cry of
-       CryNat n -> scNat sc (fromInteger n)
+  optsWithBackend opts $ \bak ->
+      do let sym = backendGetSym bak
+         st <- sawCoreState sym
+         let sc = saw_ctx st
+         case cry of
+           CryNat n -> scNat sc (fromInteger n)
 
-       Cry v -> toSC sym st =<< projectLLVM_bv sym =<< eval v opts s
+           Cry v -> toSC sym st =<< projectLLVM_bv bak =<< eval v opts s
 
-       CryArrCur ptr n u ->
-         unitByteSize u $ \byteW ->
-         do vs <- readArr opts ptr n byteW s (curState (Proxy @p) s)
-            terms <- mapM (\x -> toSC sym st =<< projectLLVM_bv sym x) vs
-            ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
-            scVector sc ty terms
+           CryArrCur ptr n u ->
+             unitByteSize u $ \byteW ->
+             do vs <- readArr opts ptr n byteW s (curState (Proxy @p) s)
+                terms <- mapM (\x -> toSC sym st =<< projectLLVM_bv bak x) vs
+                ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+                scVector sc ty terms
 
-       CryArrPre ptr n u ->
-         unitByteSize u $ \byteW ->
-         do vs <- readArr opts ptr n byteW s (fst s)
-            terms <- mapM (\x -> toSC sym st =<< projectLLVM_bv sym x) vs
-            ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
-            scVector sc ty terms
+           CryArrPre ptr n u ->
+             unitByteSize u $ \byteW ->
+             do vs <- readArr opts ptr n byteW s (fst s)
+                terms <- mapM (\x -> toSC sym st =<< projectLLVM_bv bak x) vs
+                ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+                scVector sc ty terms
 
 evalCryFunGen ::
-  (Eval p, Crucible.HasLLVMAnn Sym) =>
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   S p ->
   BaseTypeRepr t ->
@@ -592,7 +613,7 @@ evalCryFunGen opts s ty f xs =
 
 -- | Cryptol function that returns a list of bit-vectors.
 evalCryFunArr ::
-  (1 <= w, Eval p, Crucible.HasLLVMAnn Sym) =>
+  (1 <= w, Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   S p ->
   Integer ->
@@ -616,7 +637,7 @@ evalCryFunArr opts s n w f xs =
 
 -- | Cryptol function that returns a bitvector of the given len
 evalCryFun ::
-  (1 <= w, Eval p, Crucible.HasLLVMAnn Sym) =>
+  (1 <= w, Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   S p ->
   NatRepr w ->
@@ -626,7 +647,9 @@ evalCryFun ::
 evalCryFun opts s w f xs =
   llvmPointer_bv (optsSym opts) =<< evalCryFunGen opts s (BaseBVRepr w) f xs
 
-evalProp :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> Prop p -> S p -> IO (Pred Sym)
+evalProp ::
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> Prop p -> S p -> IO (Pred Sym)
 evalProp opts p s =
   case p of
     Same t x y ->
@@ -650,7 +673,7 @@ evalProp opts p s =
 
 
 readArr :: forall w p.
-  (1 <= w, Eval p, Crucible.HasLLVMAnn Sym) =>
+  (1 <= w, Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   V p (LLVMPointerType 64) ->
   Integer ->
@@ -659,19 +682,19 @@ readArr :: forall w p.
   State ->
   IO [ LLVMPtr Sym (8 * w) ]
 readArr opts ptr n wBytes s sMem =
-  do ptrV <- eval ptr opts s
-     LeqProof <- return (leqMulPos (Proxy @8) (Proxy @w))
-     let sym    = optsSym opts
-         mem    = stateMem sMem
-         wBits  = natMultiply (knownNat @8) wBytes
-         cruT   = LLVMPointerRepr wBits
-         llT    = llvmBytes wBytes
-         getAt i =
-           do let ?ptrWidth = knownNat
-              loc <- adjustPtr sym mem ptrV (i * toInteger (natValue wBytes))
-              doLoad sym mem loc llT cruT noAlignment
+  optsWithBackend opts $ \bak ->
+      do ptrV <- eval ptr opts s
+         LeqProof <- return (leqMulPos (Proxy @8) (Proxy @w))
+         let mem    = stateMem sMem
+             wBits  = natMultiply (knownNat @8) wBytes
+             cruT   = LLVMPointerRepr wBits
+             llT    = llvmBytes wBytes
+             getAt i =
+               do let ?ptrWidth = knownNat
+                  loc <- adjustPtr bak mem ptrV (i * toInteger (natValue wBytes))
+                  doLoad bak mem loc llT cruT noAlignment
 
-     mapM getAt [ 0 .. n - 1 ]
+         mapM getAt [ 0 .. n - 1 ]
 
 
 evalSame ::
@@ -685,10 +708,13 @@ evalSame sym t v1 v2 =
 
 
 -- | Add an assertion to the post-condition.
-doAssert :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String, Prop p) -> IO ()
+doAssert ::
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> S p -> (String, Prop p) -> IO ()
 doAssert opts s (msg,p) =
   do pr <- evalProp opts p s
-     assert (optsSym opts) pr (AssertFailureSimError msg "")
+     optsWithBackend opts $ \bak ->
+       assert bak pr (AssertFailureSimError msg "")
 
 
 --------------------------------------------------------------------------------
@@ -786,8 +812,12 @@ getEq (_,p) mp =
     Same t v       (Loc x) -> addEqLocVal t x v mp
     _                      -> mp
 
-makeEquiv :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> Pair Rep (Equiv p) -> IO (S p)
+makeEquiv ::
+  forall p.
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> S p -> Pair Rep (Equiv p) -> IO (S p)
 makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
+ optsWithBackend opts $ \bak ->
   do -- Note that (at least currently) the `ys` do not
      -- depend on the current state: they are all either `Lit`
      -- or SAW terms, or `PreLoc`.  This is why we can evaluate
@@ -810,7 +840,7 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
 
      vs <- mapM (\v -> eval v opts s) ys
 
-     let sym = optsSym opts
+     let sym = backendGetSym bak
      let pName = Proxy :: Proxy p
      let cur = curState pName s
 
@@ -818,15 +848,15 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
                    v : us -> return (v,us)
                    [] -> case xs of
                            [] -> error "[makeEquiv] Empty equivalence class"
-                           l : _ -> do v <- getLoc l sym cur
+                           l : _ -> do v <- getLoc l opts cur
                                        return (v,[])
 
-     s1 <- foldM (\s' y -> setLoc y sym v s') cur xs
+     s1 <- foldM (\s' y -> setLoc y opts v s') cur xs
 
      let same a =
            do p <- evalSame sym t v a
               let loc = mkProgramLoc "<makeEquiv>" InternalPos
-              addAssumption sym
+              addAssumption bak
                 $ GenericAssumption loc "equivalance class assumption" p
 
      mapM_ same rest
@@ -834,40 +864,49 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
      return (setCurState pName s1 s)
 
 
-makeEquivs :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> RepMap p -> S p -> IO (S p)
+makeEquivs ::
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> RepMap p -> S p -> IO (S p)
 makeEquivs opts mp s = foldM (makeEquiv opts) s (MapF.toList (repBy mp))
 
 
 
-addAsmp :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String,Prop p) -> IO ()
+addAsmp ::
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> S p -> (String,Prop p) -> IO ()
 addAsmp opts s (msg,p) =
   case p of
     Same _ (Loc _) _ -> return ()
     Same _ _ (Loc _) -> return ()
     CryPostMem {}    -> return ()
 
-    _ -> do p' <- evalProp opts p s
-            let loc = mkProgramLoc "<addAssmp>" InternalPos -- FIXME
-            addAssumption (optsSym opts) (GenericAssumption loc msg p')
+    _ -> optsWithBackend opts $ \bak ->
+           do p' <- evalProp opts p s
+              let loc = mkProgramLoc "<addAssmp>" InternalPos -- FIXME
+              addAssumption bak (GenericAssumption loc msg p')
 
-setCryPost :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String,Prop p) -> IO (S p)
+setCryPost ::
+  forall p.
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> S p -> (String,Prop p) -> IO (S p)
 setCryPost opts s (_nm,p) =
+  optsWithBackend opts $ \bak ->
   case p of
-    CryPostMem ptr n u f xs ->
+    (CryPostMem ptr n u f xs) ->
       unitBitSize  u $ \bitW ->
       unitByteSize u $ \byteW ->
       do vs   <- evalCryFunArr opts s n bitW f xs
          ptrV <- eval ptr opts s
          let llT  = llvmBytes byteW
              cruT = LLVMPointerRepr bitW
-             sym  = optsSym opts
+             sym  = backendGetSym bak
 
          let doSet mem (i,v) =
                do let ?ptrWidth = knownNat
-                  loc <- adjustPtr sym mem ptrV (bytesToInteger (i *. u))
+                  loc <- adjustPtr bak mem ptrV (bytesToInteger (i *. u))
                   val <- packMemValue sym llT cruT v
-                  let alignment = noAlignment -- default to byte-aligned (FIXME)
-                  storeConstRaw sym mem loc llT alignment val
+                  let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
+                  storeConstRaw bak mem loc llT alignment val
 
          let cur   = Proxy @p
              curSt = curState cur s :: State
@@ -878,7 +917,9 @@ setCryPost opts s (_nm,p) =
 
 
 addAssumptions ::
-  forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> [(String, Prop p)] -> IO State
+  forall p.
+  (Eval p, ?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> S p -> [(String, Prop p)] -> IO State
 addAssumptions opts s0 ps =
   do let mp = foldr getEq emptyRepMap ps
      s1 <- makeEquivs opts mp s0
@@ -890,15 +931,17 @@ addAssumptions opts s0 ps =
 --------------------------------------------------------------------------------
 
 -- | Allocate a memory region.
-allocate :: Crucible.HasLLVMAnn Sym => Sym -> Area -> State -> IO (LLVMPtr Sym 64, State)
-allocate sym ar s =
+allocate ::
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> Area -> State -> IO (LLVMPtr Sym 64, State)
+allocate opts ar s =
   case areaMode ar of
     RO -> do (base,p,m1) <- alloc Immutable
-             m2     <- fillFresh sym withPtrs base uni names m1
+             m2     <- fillFresh opts withPtrs base uni names m1
              return (p, s { stateMem = m2 })
 
     RW -> do (base,p,m1) <- alloc Mutable
-             m2 <- fillFresh sym withPtrs base uni names m1
+             m2 <- fillFresh opts withPtrs base uni names m1
              return (p, s { stateMem = m2 })
 
     WO -> do (_,p,m1) <- alloc Mutable
@@ -907,13 +950,15 @@ allocate sym ar s =
   withPtrs = areaHasPointers ar
 
   alloc mut =
-    do let ?ptrWidth = knownNat @64
-       let szInt = bytesToInteger (uncurry (*.) (areaSize ar))
-       sz <- bvLit sym knownNat (BV.mkBV knownNat szInt)
-       let alignment = noAlignment -- default to byte-aligned (FIXME)
-       (base,mem) <- doMalloc sym HeapAlloc mut (areaName ar) (stateMem s) sz alignment
-       ptr <- adjustPtr sym mem base (bytesToInteger (areaPtr ar))
-       return (base,ptr,mem)
+    optsWithBackend opts $ \bak ->
+      do let sym = backendGetSym bak
+         let ?ptrWidth = knownNat @64
+         let szInt = bytesToInteger (uncurry (*.) (areaSize ar))
+         sz <- bvLit sym knownNat (BV.mkBV knownNat szInt)
+         let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
+         (base,mem) <- doMalloc bak HeapAlloc mut (areaName ar) (stateMem s) sz alignment
+         ptr <- adjustPtr bak mem base (bytesToInteger (areaPtr ar))
+         return (base,ptr,mem)
 
   (num,uni) = areaSize ar
 
@@ -922,63 +967,75 @@ allocate sym ar s =
           | i <- take (fromInteger num) [ 0 :: Int .. ] ]
 
 fillFresh ::
-  Crucible.HasLLVMAnn Sym =>
-  Sym -> Bool -> LLVMPtr Sym 64 -> Unit ->
-  [String] -> MemImpl Sym -> IO (MemImpl Sym)
-fillFresh sym ptrOk p u todo mem =
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts ->
+  Bool ->
+  LLVMPtr Sym 64 ->
+  Unit ->
+  [String] ->
+  MemImpl Sym ->
+  IO (MemImpl Sym)
+fillFresh opts ptrOk p u todo mem =
   unitByteSize u $ \w ->
+  optsWithBackend opts $ \bak ->
   case todo of
     [] -> return mem
     nm : more ->
-      do let ?ptrWidth = knownNat
+      do let sym = backendGetSym bak
+         let ?ptrWidth = knownNat
          let ty        = ptrTy w
          let elS       = toInteger (natValue w)
          let lty       = bitvectorType (toBytes elS)
          val <- packMemValue sym lty ty =<< freshVal sym ty ptrOk nm
          -- Here we use the write that ignore mutability.
          -- This is because we are writinging initialization code.
-         let alignment = noAlignment -- default to byte-aligned (FIXME)
-         mem1 <- storeConstRaw sym mem p lty alignment val
-         p1   <- adjustPtr sym mem1 p elS
-         fillFresh sym ptrOk p1 u more mem1
+         let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
+         mem1 <- storeConstRaw bak mem p lty alignment val
+         p1   <- adjustPtr bak mem1 p elS
+         fillFresh opts ptrOk p1 u more mem1
 
 
 -- | Make an allocation.  Used when verifying.
-doAlloc :: Crucible.HasLLVMAnn Sym => Sym -> State -> Alloc -> IO State
-doAlloc sym s (l := a) =
-  do (p,s1) <- allocate sym a s
-     setLoc l sym p s1
+doAlloc ::
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> State -> Alloc -> IO State
+doAlloc opts s (l := a) =
+  do (p,s1) <- allocate opts a s
+     setLoc l opts p s1
 
 -- | Fill-in a memory area with fresh values.
 -- This has no effect if the area is RO.
 clobberArea ::
-  Crucible.HasLLVMAnn Sym =>
-  Sym -> MemImpl Sym -> LLVMPtr Sym 64 -> Area -> IO (MemImpl Sym)
-clobberArea sym mem p ar =
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> MemImpl Sym -> LLVMPtr Sym 64 -> Area -> IO (MemImpl Sym)
+clobberArea opts mem p ar =
   case areaMode ar of
     RO -> return mem
-    _  ->
-      do base <- adjustPtr sym mem p (negate (bytesToInteger (areaPtr ar)))
+    _  -> optsWithBackend opts $ \bak ->
+      do base <- adjustPtr bak mem p (negate (bytesToInteger (areaPtr ar)))
          let (num,uni) = areaSize ar
              xs = take (fromInteger num)
                   [ areaName ar ++ "_" ++ show uni ++ "_at_" ++ show i
                                                       | i <- [ 0 :: Int .. ]]
-         fillFresh sym (areaHasPointers ar) base uni xs mem
+         fillFresh opts (areaHasPointers ar) base uni xs mem
 
 
 -- | Lookup the value for an allocation in the existing state.
 -- Used when overriding.
 -- Returns the start and end of the allocation.
-checkAlloc :: Crucible.HasLLVMAnn Sym => Sym -> State -> Alloc -> IO (LLVMPtr Sym 64, LLVMPtr Sym 64)
-checkAlloc sym s (l := a) =
-  do p1 <- getLoc l sym s
-     let mem = stateMem s
-     p2 <- adjustPtr sym mem p1 (negate (bytesToInteger (areaPtr a)))
+checkAlloc ::
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Opts -> State -> Alloc -> IO (LLVMPtr Sym 64, LLVMPtr Sym 64)
+checkAlloc opts s (l := a) =
+  optsWithBackend opts $ \bak ->
+    do let mem = stateMem s
+       p1 <- getLoc l opts s
+       p2 <- adjustPtr bak mem p1 (negate (bytesToInteger (areaPtr a)))
 
-     -- Make sure that we have a pointer and it is big enough.
-     let siI = bytesToInteger $ uncurry (*.) (areaSize a)
-     p3 <- adjustPtr sym mem p2 siI
-     return (p2,p3)
+       -- Make sure that we have a pointer and it is big enough.
+       let siI = bytesToInteger $ uncurry (*.) (areaSize a)
+       p3 <- adjustPtr bak mem p2 siI
+       return (p2,p3)
 
 -- | Implements a layer to map 'LLVMPtr's to their underlying allocations, as
 -- tracked by the 'RegionIndex' map
@@ -996,16 +1053,17 @@ checkAlloc sym s (l := a) =
 -- 'RegionIndex' map would translate it into a real 'LLVMPtr' since the only map
 -- entry (established in 'setupGlobals') is for 0.
 mkGlobalMap ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Map.Map RegionIndex (LLVMPtr Sym 64) ->
   GlobalMap Sym Crucible.Mem 64
-mkGlobalMap rmap sym mem region off =
-  mapConcreteRegion <|> passThroughConcreteRegion <|> mapSymbolicRegion
-  where
+mkGlobalMap rmap = GlobalMap $ \bak mem region off ->
+  let
+    sym = backendGetSym bak
+
     mapConcreteRegion = maybe mzero id (addOffset <$> thisRegion)
     thisRegion = join (findRegion <$> asNat region)
     findRegion r = Map.lookup (fromIntegral r) rmap
-    addOffset p = doPtrAddOffset sym mem p off
+    addOffset p = doPtrAddOffset bak mem p off
       where ?ptrWidth = knownNat
     passThroughConcreteRegion =
       case asNat region of
@@ -1020,9 +1078,11 @@ mkGlobalMap rmap sym mem region off =
       adjustedPtr <- addOffset basePtr
       muxLLVMPtr sym isEqRegion adjustedPtr others
 
+  in mapConcreteRegion <|> passThroughConcreteRegion <|> mapSymbolicRegion
+
 -- | Setup globals in a single read-only region (index 0).
 setupGlobals ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   [(String,Integer,Unit,[Integer])] ->
   [(String,Integer,Int -> Specification)] ->
@@ -1037,14 +1097,15 @@ setupGlobals opts gs fs s
                           | (x,y) <- overlaps ]
 
   | otherwise =
+    optsWithBackend opts $ \bak ->
     do let endGlob = case last regions of
                        (_,start,n) -> start + bytesToInteger n
            size    = maximum (endGlob : fundAddrs)
 
        let ?ptrWidth = knownNat @64
        sz <- bvLit sym knownNat (BV.mkBV knownNat size)
-       let alignment = noAlignment -- default to byte-aligned (FIXME)
-       (p,mem) <- doMalloc sym GlobalAlloc Immutable "Globals" (stateMem s) sz alignment
+       let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
+       (p,mem) <- doMalloc bak GlobalAlloc Immutable "Globals" (stateMem s) sz alignment
 
        let Just base = asNat (fst (llvmPointerView p))
 
@@ -1063,19 +1124,22 @@ setupGlobals opts gs fs s
                  return $
                     ( (base,a)
                     , \_ -> LookupFunctionHandle $ \st _ _ ->
-                         do
-                            let sty = crucArchRegTypes x86_64MacawSymbolicFns
+                         do let sty = crucArchRegTypes x86_64MacawSymbolicFns
                             let rty = StructRepr sty
                             let o = mkOverride' fname rty $ do
+                                      -- NB, grab the backend from the override monad;
+                                      -- this may be different than the one available now
+                                      -- while setting up the globals
+                                      bak' <- _ctxBackend <$> getContext
+
                                       ent <- liftIO $ atomicModifyIORef' entryCounter $
                                                              \e -> (e + 1, e)
                                       -- liftIO $ putStrLn ("ENTER " ++ _f)
-                                      sym' <- getSymInterface
                                       RegMap args <- getOverrideArgs
                                       mem' <- readGlobal (optsMvar opts)
                                       let st0 = State { stateRegs = regValue (Ctx.last args), stateMem = mem' }
                                       -- liftIO $ debugPPReg RCX st0
-                                      st1 <- liftIO $ overrideMode (sp ent) opts { optsSym = sym' } st0
+                                      st1 <- liftIO $ overrideMode (sp ent) opts{ optsBackend = bak' } st0
                                       -- liftIO $ debugPPReg RCX st1
                                       writeGlobal (optsMvar opts) (stateMem st1)
                                       -- liftIO $ putStrLn ("EXIT " ++ _f)
@@ -1108,20 +1172,22 @@ setupGlobals opts gs fs s
     | otherwise                    = Just (r1,r2)
 
   writeGlob base mem (_,start,u,els) =
-    do p <- adjustPtr sym mem base start
-       snd <$> foldM (writeU u) (p,mem) els
+    optsWithBackend opts $ \bak ->
+      do p <- adjustPtr bak mem base start
+         snd <$> foldM (writeU u) (p,mem) els
 
   writeU u (p,mem) v =
     unitBitSize u $ \w ->
+    optsWithBackend opts $ \bak ->
       do let sz = 1 *. u
              szI = bytesToInteger sz
              lty = bitvectorType sz
          z    <- natLit sym 0
          val  <- LLVMValInt z <$> bvLit sym w (BV.mkBV w v)
          let ?ptrWidth = knownNat
-         let alignment = noAlignment -- default to byte-aligned (FIXME)
-         mem1 <- storeConstRaw sym mem p lty alignment val
-         p1   <- adjustPtr sym mem1 p szI
+         let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
+         mem1 <- storeConstRaw bak mem p lty alignment val
+         p1   <- adjustPtr bak mem1 p szI
          return (p1,mem1)
 
 debugPPReg ::
@@ -1131,20 +1197,21 @@ debugPPReg r s =
   do let Just (RV v) = lookupX86Reg r (stateRegs s)
      putStrLn (show r ++ " = " ++ show (ppPtr v))
 
-_debugDumpGoals :: Sym -> IO ()
-_debugDumpGoals sym =
-  do obls <- maybe [] goalsToList <$> getProofObligations sym
-     mapM_ sh (toList obls)
+_debugDumpGoals :: Opts -> IO ()
+_debugDumpGoals opts =
+  optsWithBackend opts $ \bak ->
+    do obls <- maybe [] goalsToList <$> getProofObligations bak
+       mapM_ sh (toList obls)
   where
   sh (ProofGoal _hyps g) = print (view labeledPredMsg g)
 
 
-type Overrides = Map (Natural,Integer) (Sym -> LookupFunctionHandle Sym X86_64)
+type Overrides = Map (Natural,Integer) (Sym -> LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64)
 
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
 verifyMode ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Specification ->
   Opts ->
   IO ( (GlobalMap Sym Crucible.Mem 64, Overrides)
@@ -1155,14 +1222,16 @@ verifyMode spec opts =
   do let sym = optsSym opts
      s0 <- freshState sym
      (globs,s1) <- setupGlobals opts (specGlobsRO spec) (specCalls spec) s0
-     s2 <- foldM (doAlloc sym) s1 $ sortBy cmpAlloc $ specAllocs spec
+     s2 <- foldM (doAlloc opts) s1 $ sortBy cmpAlloc $ specAllocs spec
      s3 <- addAssumptions opts s2 (specPres spec)
      let post sF = mapM_ (doAssert opts (s3,sF)) (specPosts spec)
      return (globs, s3, post)
 
 -- | Ensure that writable areas do not overlap with any other areas.
-checkOverlaps :: Crucible.HasLLVMAnn Sym => Sym -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()
-checkOverlaps sym = check
+checkOverlaps ::
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+   Opts -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()
+checkOverlaps opts = check
   where
   check (p : ps) = mapM_ (nonOverLap p) ps >> check ps
   check []       = return ()
@@ -1172,33 +1241,37 @@ checkOverlaps sym = check
     | areaMode ar1 == RO && areaMode ar2 == RO = return ()
 
     | otherwise =
-    do let (a1,x1) = llvmPointerView p1
-           (_, x2) = llvmPointerView p2
-           (b1,y1) = llvmPointerView q1
-           (_,y2)  = llvmPointerView q2
-       opt1 <- notPred sym =<< natEq sym a1 b1
-       opt2 <- bvUle sym x2 y1
-       opt3 <- bvUle sym y2 x1
-       ok <- orPred sym opt1 =<< orPred sym opt2 opt3
-       let msg = unlines
-             [ "Potentially aliased pointers:"
-             , "*** " ++ show (ppPtr p1)
-             , "*** " ++ show (ppPtr q1)
-             ]
-       assert sym ok $ AssertFailureSimError msg ""
+    optsWithBackend opts $ \bak ->
+      do let sym = backendGetSym bak
+         let (a1,x1) = llvmPointerView p1
+             (_, x2) = llvmPointerView p2
+             (b1,y1) = llvmPointerView q1
+             (_,y2)  = llvmPointerView q2
+         opt1 <- notPred sym =<< natEq sym a1 b1
+         opt2 <- bvUle sym x2 y1
+         opt3 <- bvUle sym y2 x1
+         ok <- orPred sym opt1 =<< orPred sym opt2 opt3
+         let msg = unlines
+               [ "Potentially aliased pointers:"
+               , "*** " ++ show (ppPtr p1)
+               , "*** " ++ show (ppPtr q1)
+               ]
+         assert bak ok $ AssertFailureSimError msg ""
 
 -- | Use a specification to replace the execution of a function.
-overrideMode :: Crucible.HasLLVMAnn Sym => Specification -> Opts -> State -> IO State
+overrideMode ::
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
+  Specification -> Opts -> State -> IO State
 overrideMode spec opts s =
   do let sym = optsSym opts
      let orderedAllocs = sortBy cmpAlloc (specAllocs spec)
-     as <- mapM (checkAlloc sym s) orderedAllocs    -- check sizes
-     checkOverlaps sym (zip as (map allocArea orderedAllocs)) -- check distinct
+     as <- mapM (checkAlloc opts s) orderedAllocs    -- check sizes
+     checkOverlaps opts (zip as (map allocArea orderedAllocs)) -- check distinct
      mapM_ (doAssert opts s) (specPres spec)         -- assert pre-condition
 
      newRegs <- stateRegs <$> freshState sym
 
-     mem1 <- foldM (\s' (p,a) -> clobberArea sym s' p a) (stateMem s)
+     mem1 <- foldM (\s' (p,a) -> clobberArea opts s' p a) (stateMem s)
            $ reverse $ zip (map fst as) [ a | _ := a <- orderedAllocs ]
 
      let sNew1 = State { stateMem = mem1, stateRegs = newRegs  }
@@ -1250,7 +1323,7 @@ lookupCry x mp =
                               )
     Right a -> Right a
 
-  where ppName = render . pp
+  where ppName = show . pp
 
 
 
@@ -1259,14 +1332,15 @@ lookupCry x mp =
 
 
 adjustPtr ::
-  Crucible.HasLLVMAnn Sym =>
-  Sym ->
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym, IsSymBackend Sym bak) =>
+  bak ->
   MemImpl Sym ->
   LLVMPtr Sym 64 ->
   Integer ->
   IO (LLVMPtr Sym 64)
-adjustPtr sym mem ptr amt
+adjustPtr bak mem ptr amt
   | amt == 0  = return ptr
   | otherwise =
     do let ?ptrWidth = knownNat
-       doPtrAddOffset sym mem ptr =<< bvLit sym knownNat (BV.mkBV knownNat amt)
+       let sym = backendGetSym bak
+       doPtrAddOffset bak mem ptr =<< bvLit sym knownNat (BV.mkBV knownNat amt)

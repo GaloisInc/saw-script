@@ -58,11 +58,16 @@ ppIdent = text
 ppBinder :: Binder -> Doc ann
 ppBinder (Binder x Nothing)  = ppIdent x
 ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm PrecNone t)
+ppBinder (ImplicitBinder x Nothing)  = braces (ppIdent x)
+ppBinder (ImplicitBinder x (Just t)) = braces (ppIdent x <+> colon <+> ppTerm PrecNone t)
 
 ppPiBinder :: PiBinder -> Doc ann
 ppPiBinder (PiBinder Nothing t)  = ppTerm PrecApp t <+> text "->"
 ppPiBinder (PiBinder (Just x) t) =
   text "forall" <+> parens (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
+ppPiBinder (PiImplicitBinder Nothing t)  = braces (ppTerm PrecApp t) <+> text "->"
+ppPiBinder (PiImplicitBinder (Just x) t) =
+  text "forall" <+> braces (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
 
 ppBinders :: [Binder] -> Doc ann
 ppBinders = hsep . map ppBinder
@@ -124,8 +129,15 @@ ppTerm p e =
     ExplVar x ->
       parensIf (p > PrecApp) $
       string "@" <> ppIdent x
+    Ascription tm tp ->
+      parensIf (p > PrecLambda)
+      (ppTerm PrecApp tm <+> text ":" <+> ppTerm PrecApp tp)
     NatLit i ->
-      integer i
+      if i > 1000 then
+        -- Explicitly convert from Z if an integer is too big
+        parensIf (p > PrecLambda) (text "Z.to_nat" <+> integer i <> text "%Z")
+      else
+        integer i
     ZLit i ->
       -- we use hex unless our integer is a positive or negitive digit
       if abs i > 9  then let ui = toInteger (fromInteger i :: Word64)
@@ -146,6 +158,12 @@ ppDecl decl = case decl of
   Axiom nm ty ->
     (nest 2 $
      hsep ([text "Axiom", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+  Parameter nm ty ->
+    (nest 2 $
+     hsep ([text "Parameter", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+  Variable nm ty ->
+    (nest 2 $
+     hsep ([text "Variable", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
   Comment s ->
     text "(*" <+> text s <+> text "*)" <> hardline
   Definition nm bs mty body ->
@@ -157,6 +175,12 @@ ppDecl decl = case decl of
      , ppTerm PrecNone body <> period
      ]) <> hardline
   InductiveDecl ind -> ppInductive ind
+  Section nm ds ->
+    vsep $ concat
+     [ [ hsep [text "Section", text nm, period] ]
+     , map (indent 2 . ppDecl) ds
+     , [ hsep [text "End", text nm, period] ]
+     ]
   Snippet s -> text s
 
 ppConstructor :: Constructor -> Doc ann

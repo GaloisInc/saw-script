@@ -1,10 +1,10 @@
 module Verifier.SAW.SATQuery
 ( SATQuery(..)
 , SATResult(..)
+, SATAssert(..)
 , satQueryAsTerm
 ) where
 
-import Control.Monad (foldM)
 import Data.Map (Map)
 import Data.Set (Set)
 
@@ -42,15 +42,25 @@ data SATQuery =
       --   the solver. Models will not report values
       --   for uninterpreted values.
 
-  , satAsserts   :: [Term]
-      -- ^ A collection of assertions.  These should
-      --   all be terms of type @Bool@.  The overall
+  , satAsserts   :: [SATAssert]
+      -- ^ A collection of assertions. The overall
       --   query should be understood as the conjunction
       --   of these terms.
   }
--- TODO, allow first-order propositions in addition to Boolean terms.
 
--- | The result of a sat query.  In the event a model is found,
+-- | The type of assertions we can make to a solver. These
+--   are either boolean terms, or universally-quantified
+--   statements. At present, only the What4 backends can
+--   handle universally quantified statments, and only
+--   some of the solvers will accept them without errors.
+data SATAssert
+   = BoolAssert Term -- ^ A boolean term to be asserted
+   | UniversalAssert [(ExtCns Term, FirstOrderType)] [Term] Term
+          -- ^ A universally-quantified assertion, consisting of a
+          --   collection of first-order variables, a sequence
+          --   of boolean hypotheses, and a boolean conclusion
+
+-- | The result of a sat query. In the event a model is found,
 --   return a mapping from the @ExtCns@ variables to values.
 data SATResult
   = Unsatisfiable
@@ -59,10 +69,21 @@ data SATResult
 
 -- | Compute the conjunction of all the assertions
 --   in this SAT query as a single term of type Bool.
+--
+--   This method of reducing a sat query to a boolean
+--   cannot be used for universally-quantified assertions,
+--   and will raise an error if it encounters one.
 satQueryAsTerm :: SharedContext -> SATQuery -> IO Term
 satQueryAsTerm sc satq =
   case satAsserts satq of
          [] -> scBool sc True
-         (x:xs) -> foldM (scAnd sc) x xs
--- TODO, we may have to rethink this function
---  once we allow first-order statements.
+         (BoolAssert x:xs) -> loop x xs
+         (UniversalAssert{} : _) -> univFail
+ where
+   univFail = fail "satQueryAsTerm : Solver backend cannot handle universally-quantifed assertions"
+
+   loop x [] = return x
+   loop x (BoolAssert y:xs) =
+     do x' <- scAnd sc x y
+        loop x' xs
+   loop _ (UniversalAssert{} : _) = univFail

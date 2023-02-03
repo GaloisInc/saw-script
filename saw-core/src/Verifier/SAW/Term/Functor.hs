@@ -57,7 +57,8 @@ module Verifier.SAW.Term.Functor
   , Sort, mkSort, propSort, sortOf, maxSort
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, completeBitSet, singletonBitSet
+  , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
+  , smallestBitSetElem
   , looseVars, smallestFreeVar
   ) where
 
@@ -87,9 +88,6 @@ import qualified Verifier.SAW.TermNet as Net
 type DeBruijnIndex = Int
 type FieldName = Text
 type LocalName = Text
-
-instance (Hashable k, Hashable a) => Hashable (Map k a) where
-    hashWithSalt x m = hashWithSalt x (Map.assocs m)
 
 instance Hashable a => Hashable (Vector a) where
     hashWithSalt x v = hashWithSalt x (V.toList v)
@@ -193,8 +191,17 @@ data FlatTermF e
   | RecordProj e !FieldName
 
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
-    -- "type" iff it has type @Sort s@ for some s
-  | Sort !Sort
+    -- "type" iff it has type @Sort s@ for some s.
+    --
+    -- The extra boolean argument is an advisory flag that is used to
+    -- indicate that types in this sort are expected to be inhabited.
+    -- In the concrete syntax "isort" is used to indicate cases where
+    -- this flag is set.  This flag is mostly ignored, but is used in
+    -- the Coq export process to indicate where "Inhabited" class
+    -- instances are necessary in function definitions. Note in particular
+    -- that this flag does not affect typechecking, so missing or overeager
+    -- "isort" annotations will only be detected via the Coq export.
+  | Sort !Sort !Bool
 
     -- Primitive builtin values
     -- | Natural number with given value.
@@ -308,7 +315,8 @@ zipWithFlatTermF f = go
     go (RecordProj e1 fld1) (RecordProj e2 fld2)
       | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
 
-    go (Sort sx) (Sort sy) | sx == sy = Just (Sort sx)
+    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (hx && hy))
+         -- /\ NB, it's not entirely clear how the inhabited flag should be propagated
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)
@@ -333,7 +341,7 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant !(ExtCns e) !e
+    | Constant !(ExtCns e) !(Maybe e)
       -- ^ An abstract constant packaged with its type and definition.
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
@@ -401,15 +409,15 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec _             -> Net.Atom (toAbsoluteName (ecName ec))
+      Constant ec _             -> Net.Atom (toShortName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (Primitive pn)     -> Net.Atom (identText (primName pn))
-      FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
+      FTermF (Primitive pn)     -> Net.Atom (identBaseName (primName pn))
+      FTermF (Sort s _)         -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identText (primName c))) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identText (primName c))) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identBaseName (primName c))) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term
@@ -448,6 +456,12 @@ intersectBitSets (BitSet i1) (BitSet i2) = BitSet (i1 .&. i2)
 decrBitSet :: BitSet -> BitSet
 decrBitSet (BitSet i) = BitSet (shiftR i 1)
 
+-- | Decrement all elements of a 'BitSet' by some non-negative amount @N@,
+-- removing any value less than @N@. This is the same as calling 'decrBitSet'
+-- @N@ times.
+multiDecrBitSet :: Int -> BitSet -> BitSet
+multiDecrBitSet n (BitSet i) = BitSet (shiftR i n)
+
 -- | The 'BitSet' containing all elements less than a given index @i@
 completeBitSet :: Int -> BitSet
 completeBitSet i = BitSet (bit i - 1)
@@ -463,6 +477,16 @@ smallestBitSetElem (BitSet i) = Just $ go 0 i where
     | otherwise = shft + countTrailingZeros xw
     where xw :: Word64
           xw = fromInteger x
+
+-- | Compute the list of all elements of a 'BitSet'
+bitSetElems :: BitSet -> [Int]
+bitSetElems = go 0 where
+  -- Return the addition of shft to all elements of a BitSet
+  go :: Int -> BitSet -> [Int]
+  go shft bs = case smallestBitSetElem bs of
+    Nothing -> []
+    Just i ->
+      shft + i : go (shft + i + 1) (multiDecrBitSet (i + 1) bs)
 
 -- | Compute the free variables of a term given free variables for its immediate
 -- subterms

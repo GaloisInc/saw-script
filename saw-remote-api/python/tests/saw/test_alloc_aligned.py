@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, FreshVar, SetupVal, cryptol, struct, LLVMType, array_ty, i8, i64
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, FreshVar, SetupVal, struct, LLVMType, array_ty, i8, i64
 from typing import Tuple
 
 
@@ -16,7 +17,7 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tu
 
 
 def int_to_64_cryptol(length: int):
-    return cryptol("`{i}:[64]".format(i=length))
+    return cry_f("`{length}:[64]")
 
 
 def buffer_type(length: int) -> LLVMType:

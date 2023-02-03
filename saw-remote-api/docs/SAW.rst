@@ -132,6 +132,119 @@ No return fields
 
 
 
+SAW/JVM/load class (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Load the JVM class with the given name for later verification.
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name of the class on the server.
+  
+  
+
+``class name``
+  The java class to load.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/JVM/verify (command)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify the named JVM method meets its specification.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The module of the function being verified.
+  
+  
+
+``function``
+  The function being verified.
+  
+  
+
+``lemmas``
+  The specifications to use for other functions during this verification.
+  
+  
+
+``check sat``
+  Whether or not to enable path satisfiability checking.
+  
+  
+
+``contract``
+  The specification to verify for the function.
+  
+  
+
+``script``
+  The script to use to prove the validity of the resulting verification conditions.
+  
+  
+
+``lemma name``
+  The name to refer to this verification/contract by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/JVM/assume (command)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Assume the named JVM method meets its specification.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The LLVM  module containing the function.
+  
+  
+
+``function``
+  The function we are assuming a contract for.
+  
+  
+
+``contract``
+  The specification to assume for the function.
+  
+  
+
+``lemma name``
+  The name to refer to this assumed contract by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
 SAW/LLVM/load module (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -306,6 +419,145 @@ No return fields
 
 
 
+SAW/Yosys/import (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Import a file produced by the Yosys "write_json" command
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer to the record of Yosys modules by later.
+  
+  
+
+``path``
+  The path to the Yosys JSON file to import.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/Yosys/verify (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify that the named HDL module meets its specification
+
+Parameter fields
+++++++++++++++++
+
+
+``import``
+  The imported Yosys file.
+  
+  
+
+``module``
+  The HDL module to verify.
+  
+  
+
+``preconds``
+  Any preconditions for the verificatiion.
+  
+  
+
+``spec``
+  The specification to verify for the module.
+  
+  
+
+``lemmas``
+  The lemmas to use for other modules during this verification.
+  
+  
+
+``script``
+  The script to use to prove the validity of the resulting verification conditions.
+  
+  
+
+``lemma name``
+  The name to refer to the result by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/Yosys/import sequential (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Import a sequential circuit from a file produced by the Yosys "write_json" command
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer to the record of Yosys modules by later.
+  
+  
+
+``path``
+  The path to the Yosys JSON file to import.
+  
+  
+
+``module``
+  The sequential module within the Yosys JSON file to analyze.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/Yosys/extract sequential (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Extract a term from a sequential circuit
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer extracted term by later.
+  
+  
+
+``cycles``
+  The number of cycles over which to iterate the term.
+  
+  
+
+``module``
+  The name of the sequential module to analyze.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
 SAW/create ghost variable (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -392,6 +644,54 @@ Return fields
   
 
 
+SAW/eval int (command)
+~~~~~~~~~~~~~~~~~~~~~~
+
+Attempt to evaluate the given term to a concrete integer.
+
+Parameter fields
+++++++++++++++++
+
+
+``expr``
+  The Cryptol expression to evaluate.
+  
+  
+
+Return fields
++++++++++++++
+
+
+``value``
+  The integer value of the expresssion.
+  
+  
+
+
+SAW/eval bool (command)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Attempt to evaluate the given term to a concrete boolean.
+
+Parameter fields
+++++++++++++++++
+
+
+``expr``
+  The Cryptol expression to evaluate.
+  
+  
+
+Return fields
++++++++++++++
+
+
+``value``
+  The boolean value of the expresssion.
+  
+  
+
+
 SAW/set option (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -402,7 +702,7 @@ Parameter fields
 
 
 ``option``
-  The option to set and its accompanying value (i.e., true or false); one of the following:``lax arithmetic``, ``lax pointer ordering``, ``SMT array memory model``, or ``What4 hash consing``
+  The option to set and its accompanying value (i.e., true or false); one of the following:``lax arithmetic``, ``lax pointer ordering``, ``lax loads and stores``, ``debug intrinsics``, ``SMT array memory model``, ``What4 hash consing``, or ``What4 eval``
   
   
 

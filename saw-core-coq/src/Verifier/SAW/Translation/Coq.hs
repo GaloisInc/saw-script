@@ -135,19 +135,21 @@ translateSAWModule configuration m =
      ]
 
 translateCryptolModule ::
+  Coq.Ident {- ^ Section name -} ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [String] ->
   CryptolModule ->
   Either (TranslationError Term) (Doc ann)
-translateCryptolModule configuration globalDecls m =
+translateCryptolModule nm configuration globalDecls m =
   let decls = CryptolModuleTranslation.translateCryptolModule
               configuration
               globalDecls
               m
   in
-  vcat . map Coq.ppDecl <$> decls
+  Coq.ppDecl . Coq.Section nm <$> decls
 
-moduleDeclName :: ModuleDecl -> String
-moduleDeclName (TypeDecl (DataType { dtName })) = identName dtName
-moduleDeclName (DefDecl  (Def      { defIdent })) = identName defIdent
+moduleDeclName :: ModuleDecl -> Maybe String
+moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)
+moduleDeclName (DefDecl  (Def      { defIdent })) = Just (identName defIdent)
+moduleDeclName InjectCodeDecl{} = Nothing

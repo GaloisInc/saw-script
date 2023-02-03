@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Set, Union, Tuple, Any, IO
+from typing import List, Optional, Set, Union, Tuple, Any, IO, TextIO
 import uuid
 import sys
 import time
@@ -14,6 +14,7 @@ from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
 from . import exceptions
+from . import option
 from . import proofscript
 
 __designated_connection = None  # type: Optional[connection.SAWConnection]
@@ -145,7 +146,9 @@ def connect(command: Union[str, ServerConnection, None] = None,
             cryptol_path: Optional[str] = None,
             persist: bool = False,
             url : Optional[str] = None,
-            reset_server : bool = False) -> None:
+            reset_server : bool = False,
+            verify : Union[bool, str] = True,
+            log_dest : Optional[TextIO] = None) -> None:
     """
     Connect to a (possibly new) Saw server process.
 
@@ -182,7 +185,9 @@ def connect(command: Union[str, ServerConnection, None] = None,
             command=command,
             cryptol_path=cryptol_path,
             persist=persist,
-            url=url)
+            url=url,
+            verify=verify,
+            log_dest=log_dest)
     elif reset_server:
         __designated_connection.reset_server()
     else:
@@ -229,6 +234,13 @@ def disconnect() -> None:
     if __designated_connection is not None:
         __designated_connection.disconnect()
     __designated_connection = None
+
+
+def logging(on : bool, *, dest : TextIO = sys.stderr) -> None:
+    """Whether to log received and transmitted JSON."""
+    global __designated_connection
+    if __designated_connection is not None:
+        __designated_connection.logging(on=on,dest=dest)
 
 
 class View:
@@ -346,7 +358,7 @@ class LogResults(View):
     def on_abort(self) -> None:
         print("🛑  Aborting proof script.", file=self.file)
 
-        
+
 def view(v: View) -> None:
     """Add a view to the global list of views. Future verification results will
        be handed to this view, and its on_finish() handler will be called at
@@ -369,6 +381,130 @@ def create_ghost_variable(name: str) -> llvm.GhostVariable:
     __get_designated_connection().create_ghost_variable(name, server_name)
     return llvm.GhostVariable(name, server_name)
 
+
+@dataclass
+class JVMClass:
+    class_name: str
+    server_name: str
+
+
+def jvm_load_class(class_name: str) -> JVMClass:
+    name = __fresh_server_name(class_name)
+    __get_designated_connection().jvm_load_class(name, class_name).result()
+    return JVMClass(class_name, name)
+
+# TODO: this is almost identical to llvm_assume. Can we reduce duplication?
+def jvm_assume(cls: JVMClass,
+               method_name: str,
+               contract: llvm.Contract,
+               lemma_name_hint: Optional[str] = None) -> VerificationResult:
+    """Assume that the given method satisfies the given contract. Returns an
+    override linking the method and contract that can be passed as an
+    argument in calls to `jvm_verify`
+    """
+    if lemma_name_hint is None:
+        lemma_name_hint = contract.__class__.__name__ + "_" + method_name
+    name = __fresh_server_name(lemma_name_hint)
+
+    result: VerificationResult
+    try:
+        conn = __get_designated_connection()
+        res = conn.jvm_assume(cls.class_name,
+                              method_name,
+                              contract.to_json(),
+                              name)
+        result = AssumptionSucceeded(server_name=name,
+                                     contract=contract,
+                                     stdout=res.stdout(),
+                                     stderr=res.stderr())
+        __global_success = True
+        # If something stopped us from even **assuming**...
+    except exceptions.VerificationError as err:
+        __global_success = False
+        result = AssumptionFailed(server_name=name,
+                                  assumptions=[],
+                                  contract=contract,
+                                  exception=err)
+    except Exception as err:
+        __global_success = False
+        for view in __designated_views:
+            view.on_python_exception(err)
+        raise err from None
+
+    return result
+
+# TODO: this is almost identical to llvm_verify. Can we reduce duplication?
+def jvm_verify(cls: JVMClass,
+               method_name: str,
+               contract: llvm.Contract,
+               lemmas: List[VerificationResult] = [],
+               check_sat: bool = False,
+               script: Optional[proofscript.ProofScript] = None,
+               lemma_name_hint: Optional[str] = None) -> VerificationResult:
+    """Verify that the given method satisfies the given contract. Returns an
+    override linking the method and contract that can be passed as an
+    argument in further calls to `jvm_verify`
+    """
+
+    if script is None:
+        script = proofscript.ProofScript([proofscript.z3([])])
+    if lemma_name_hint is None:
+        lemma_name_hint = contract.__class__.__name__ + "_" + method_name
+
+    name = __fresh_server_name(lemma_name_hint)
+
+    result: VerificationResult
+    conn = __get_designated_connection()
+
+    global __global_success
+    global __designated_views
+
+    try:
+        res = conn.jvm_verify(cls.class_name,
+                              method_name,
+                              [l.server_name for l in lemmas],
+                              check_sat,
+                              contract.to_json(),
+                              script.to_json(),
+                              name)
+
+        stdout = res.stdout()
+        stderr = res.stderr()
+        result = VerificationSucceeded(server_name=name,
+                                       assumptions=lemmas,
+                                       contract=contract,
+                                       stdout=stdout,
+                                       stderr=stderr)
+    # If the verification did not succeed...
+    except exceptions.VerificationError as err:
+        # FIXME add the goal as an assumption if it failed...?
+        result = VerificationFailed(server_name=name,
+                                    assumptions=lemmas,
+                                    contract=contract,
+                                    exception=err)
+    # If something else went wrong...
+    except Exception as err:
+        __global_success = False
+        for view in __designated_views:
+            view.on_python_exception(err)
+        raise err from None
+
+    # Log or otherwise process the verification result
+    for view in __designated_views:
+        if isinstance(result, VerificationSucceeded):
+            view.on_success(result)
+        elif isinstance(result, VerificationFailed):
+            view.on_failure(result)
+
+    # Note when any failure occurs
+    __global_success = __global_success and result.is_success()
+
+    # Abort the proof if we failed to assume a failed verification, otherwise
+    # return the result of the verification
+    if isinstance(result, AssumptionFailed):
+        raise result.exception from None
+
+    return result
 
 @dataclass
 class LLVMModule:
@@ -424,13 +560,11 @@ def llvm_assume(module: LLVMModule,
 def llvm_verify(module: LLVMModule,
                 function: str,
                 contract: llvm.Contract,
-                lemmas: Optional[List[VerificationResult]] = None,
+                lemmas: List[VerificationResult] = [],
                 check_sat: bool = False,
                 script: Optional[proofscript.ProofScript] = None,
                 lemma_name_hint: Optional[str] = None) -> VerificationResult:
 
-    if lemmas is None:
-        lemmas = []
     if script is None:
         script = proofscript.ProofScript([proofscript.z3([])])
     if lemma_name_hint is None:
@@ -499,8 +633,7 @@ def prove(goal: cryptoltypes.CryptolJSON,
     argument.
     """
     conn = __get_designated_connection()
-    res = conn.prove(cryptoltypes.to_cryptol(goal),
-                     proof_script.to_json()).result()
+    res = conn.prove(goal, proof_script.to_json()).result()
     pr = ProofResult()
     if res['status'] == 'valid':
         pr.valid = True
@@ -514,6 +647,32 @@ def prove(goal: cryptoltypes.CryptolJSON,
     else:
         pr.counterexample = None
     return pr
+
+def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
+    """Atempts to evaluate the given expression as a concrete integer.
+    """
+    conn = __get_designated_connection()
+    res = conn.eval_int(expr).result()
+    v = res['value']
+    if not isinstance(v, int):
+        raise ValueError(str(v) + " is not an integer")
+    return v
+
+def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
+    """Atempts to evaluate the given expression as a concrete boolean.
+    """
+    conn = __get_designated_connection()
+    res = conn.eval_bool(expr).result()
+    v = res['value']
+    if not isinstance(v, bool):
+        raise ValueError(str(v) + " is not a boolean")
+    return v
+
+def set_option(option : option.SAWOption, value : bool) -> None:
+    """Set a boolean-valued SAW option."""
+    global __designated_connection
+    if __designated_connection is not None:
+        __designated_connection.set_option(option=option,value=value)
 
 @atexit.register
 def script_exit() -> None:

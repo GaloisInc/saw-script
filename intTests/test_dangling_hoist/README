@@ -1,0 +1,6 @@
+This test is related to https://github.com/GaloisInc/saw-script/issues/1316
+Previously, the hoist_ifs_in_goal and goal_eval tactics would not properly
+take care of the dependencies arising from Pi binders and this would
+result in dangling variables. This test exercises those tactics
+with dependent binders to check that this does not occur.
+

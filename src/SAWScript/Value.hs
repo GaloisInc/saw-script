@@ -37,17 +37,17 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..), MonadMask(..),
-                            MonadCatch(..), catches, Handler(..))
+import Control.Monad.Catch (MonadThrow(..), MonadCatch(..), catches, Handler(..), try)
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (MonadState(..), StateT(..), get, gets, put)
+import Control.Monad.State (StateT(..), gets)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
+import Data.Foldable(foldrM)
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -63,6 +63,7 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
+import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
@@ -73,20 +74,24 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
-import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
+import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Prover.MRSolver.Term as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
+import SAWScript.Yosys.IR
+import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
+import SAWScript.Yosys.State (YosysSequential)
 
-import Verifier.SAW.Name (toShortName)
+import Verifier.SAW.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
 import Verifier.SAW.CryptolEnv as CEnv
+import Verifier.SAW.Cryptol.Monadify as Monadify
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
-import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
-                                                       ppTerm, scPrettyTerm)
+import qualified Verifier.SAW.Term.Pretty as SAWCorePP
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 
@@ -105,12 +110,14 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 
-import Lang.Crucible.LLVM.ArraySizeProfile
+import           Lang.Crucible.Utils.StateContT
+import           Lang.Crucible.LLVM.ArraySizeProfile
 
 import           What4.ProgramLoc (ProgramLoc(..))
 
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible (SomeTypedCFG(..))
+import Verifier.SAW.Heapster.SAWTranslation (ChecksFlag)
 
 -- Values ----------------------------------------------------------------------
 
@@ -159,6 +166,10 @@ data Value
   | VAIG AIGNetwork
   | VCFG SAW_CFG
   | VGhostVar CMS.GhostGlobal
+  | VYosysModule YosysIR
+  | VYosysImport YosysImport
+  | VYosysSequential YosysSequential
+  | VYosysTheorem YosysTheorem
 
 type SAWSimpset = Simpset TheoremNonce
 
@@ -187,6 +198,10 @@ data HeapsterEnv = HeapsterEnv {
   -- ^ The list of underlying 'LLVMModule's that we are translating
   heapsterEnvTCFGs :: IORef [Some SomeTypedCFG]
   -- ^ The typed CFGs for output debugging/IDE info
+  heapsterEnvDebugLevel :: IORef DebugLevel,
+  -- ^ The current debug level
+  heapsterEnvChecksFlag :: IORef ChecksFlag
+  -- ^ Whether translation checks are currently enabled
   }
 
 showHeapsterEnv :: HeapsterEnv -> String
@@ -286,24 +301,24 @@ showSimpset opts ss =
     ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
-showsPrecValue :: PPOpts -> Int -> Value -> ShowS
-showsPrecValue opts p v =
+showsPrecValue :: PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
+showsPrecValue opts nenv p v =
   case v of
     VBool True -> showString "true"
     VBool False -> showString "false"
     VString s -> shows s
     VInteger n -> shows n
-    VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts 0) vs
-    VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts 0) vs
-    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts 0 v' . showString ")"
+    VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts nenv 0) vs
+    VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts nenv 0) vs
+    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
     VMaybe Nothing -> showString "Nothing"
     VRecord m -> showBraces $ commaSep $ map showFld (M.toList m)
                    where
                      showFld (n, fv) =
-                       showString n . showString "=" . showsPrecValue opts 0 fv
+                       showString n . showString "=" . showsPrecValue opts nenv 0 fv
 
     VLambda {} -> showString "<<function>>"
-    VTerm t -> showString (SAWCorePP.scPrettyTerm opts' (ttTerm t))
+    VTerm t -> showString (SAWCorePP.showTermWithNames opts' nenv (ttTerm t))
     VType sig -> showString (pretty sig)
     VReturn {} -> showString "<<monadic>>"
     VBind {} -> showString "<<monadic>>"
@@ -312,7 +327,7 @@ showsPrecValue opts p v =
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
-      showParen True (showString (prettyProp opts' (thmProp thm)))
+      showParen True (showString (prettyProp opts' nenv (thmProp thm)))
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
@@ -334,6 +349,10 @@ showsPrecValue opts p v =
     VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
+    VYosysModule _ -> showString "<<Yosys module>>"
+    VYosysImport _ -> showString "<<Yosys import>>"
+    VYosysSequential _ -> showString "<<Yosys sequential>>"
+    VYosysTheorem _ -> showString "<<Yosys theorem>>"
     VJVMSetup _      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
@@ -341,7 +360,7 @@ showsPrecValue opts p v =
     opts' = sawPPOpts opts
 
 instance Show Value where
-    showsPrec p v = showsPrecValue defaultPPOpts p v
+    showsPrec p v = showsPrecValue defaultPPOpts emptySAWNamingEnv p v
 
 indexValue :: Value -> Value -> Value
 indexValue (VArray vs) (VInteger x)
@@ -376,6 +395,29 @@ evaluateTypedTerm _sc (TypedTerm tp _) =
                  , show (CMS.ppTypedTermType tp)
                  ]
 
+-- NB, the precise locations of VTopLevel constructors in this
+--  operator are rather delicate, which is why we write it out
+--  here explicitly.
+toplevelCallCC :: Value
+toplevelCallCC = VLambda body
+  where
+   body (VLambda m) =
+     callCC $ \(k :: Value -> TopLevel Value) ->
+           m (VLambda (\v -> return (VTopLevel (k ((VTopLevel (return v)))))))
+   body _ = error "toplevelCallCC : expected lambda"
+
+toplevelSubshell :: Value
+toplevelSubshell = VLambda $ \_ ->
+  do m <- roSubshell <$> ask
+     env <- getLocalEnv
+     return (VTopLevel (toValue <$> withLocalEnv env m))
+
+proofScriptSubshell :: Value
+proofScriptSubshell = VLambda $ \_ ->
+  do m <- roProofSubshell <$> ask
+     env <- getLocalEnv
+     return (VProofScript (toValue <$> withLocalEnvProof env m))
+
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
 applyValue _ _ = throwTopLevel "applyValue"
@@ -406,18 +448,61 @@ data PrimitiveLifecycle
                          request at the moment. -}
   deriving (Eq, Ord, Show)
 
+data LocalBinding
+  = LocalLet SS.LName (Maybe SS.Schema) (Maybe String) Value
+  | LocalTypedef SS.Name SS.Type
+ deriving (Show)
+
+type LocalEnv = [LocalBinding]
+
+emptyLocal :: LocalEnv
+emptyLocal = []
+
+extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
+extendLocal x mt md v env = LocalLet x mt md v : env
+
+addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
+addTypedef name ty rw = rw { rwTypedef = M.insert name ty (rwTypedef rw) }
+
+mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
+mergeLocalEnv sc env rw = foldrM addBinding rw env
+  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
+
+getMergedEnv :: TopLevel TopLevelRW
+getMergedEnv =
+  do sc <- getSharedContext
+     env <- getLocalEnv
+     rw <- getTopLevelRW
+     liftIO $ mergeLocalEnv sc env rw
+
+
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
-  { roSharedContext :: SharedContext
-  , roJavaCodebase  :: JSS.Codebase
+  { roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roTheoremDB     :: TheoremDB
+  , roStackTrace    :: [String]
+    -- ^ SAWScript-internal backtrace for use
+    --   when displaying exceptions and such
+    --   NB, stored with most recent calls on
+    --   top of the stack.
+  , roSubshell      :: TopLevel ()
+    -- ^ An action for entering a subshell.  This
+    --   may raise an error if the current execution
+    --   mode doesn't support subshells (e.g., the remote API)
+
+  , roProofSubshell :: ProofScript ()
+    -- ^ An action for entering a subshell in proof mode.  This
+    --   may raise an error if the current execution
+    --   mode doesn't support subshells (e.g., the remote API)
+
+  , roLocalEnv      :: LocalEnv
   }
 
 data TopLevelRW =
@@ -427,8 +512,13 @@ data TopLevelRW =
   , rwTypedef :: Map SS.Name SS.Type
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
+  , rwMonadify :: Monadify.MonadifyEnv
+  , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
+  , rwSharedContext :: SharedContext
+  , rwTheoremDB :: TheoremDB
+
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
@@ -437,77 +527,181 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwLaxLoadsAndStores :: Bool
   , rwLaxPointerOrdering :: Bool
+  , rwDebugIntrinsics :: Bool
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
   , rwWhat4HashConsingX86 :: Bool
 
+  , rwWhat4Eval :: Bool
+
   , rwPreservedRegs :: [String]
   , rwStackBaseAlign :: Integer
+
+  , rwAllocSymInitCheck :: Bool
+
+  , rwCrucibleTimeout :: Integer
+
+  , rwPathSatSolver :: Common.PathSatSolver
+  , rwSkipSafetyProofs :: Bool
+  , rwSingleOverrideSpecialCase :: Bool
+  , rwSequentGoals :: Bool
   }
 
 newtype TopLevel a =
-  TopLevel (ReaderT TopLevelRO (ReaderT (IORef TopLevelRW) IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
+  TopLevel_ (ReaderT TopLevelRO (StateContT TopLevelRW (Value, TopLevelRW) IO) a)
+ deriving (Applicative, Functor, Generic, Generic1, Monad, MonadThrow, MonadCatch)
 
 deriving instance MonadReader TopLevelRO TopLevel
-
-instance MonadState TopLevelRW TopLevel where
-  get = TopLevel (lift (ReaderT readIORef))
-  put s = TopLevel (lift (ReaderT (flip writeIORef s)))
-  state f = TopLevel (lift (ReaderT (flip atomicModifyIORef (swap . f))))
-    where swap (x, y) = (y, x)
-
-instance Wrapped (TopLevel a) where
+deriving instance MonadState TopLevelRW TopLevel
+deriving instance MonadCont TopLevel
 
 instance MonadFail TopLevel where
   fail = throwTopLevel
 
-runTopLevel :: TopLevel a -> TopLevelRO -> IORef TopLevelRW -> IO a
-runTopLevel (TopLevel m) ro ref =
-  runReaderT (runReaderT m ro) ref
+runTopLevel :: IsValue a => TopLevel a -> TopLevelRO -> TopLevelRW -> IO (Value, TopLevelRW)
+runTopLevel (TopLevel_ m) ro rw =
+  runStateContT (runReaderT m ro) (\a s -> return (toValue a,s)) rw
+
+-- | A version of 'Control.Exception.bracket' specialized to 'TopLevel'. We
+-- can't use 'Control.Monad.Catch.bracket' because it requires 'TopLevel' to
+-- implement 'Control.Monad.Catch.MonadMask', which it can't do.
+bracketTopLevel :: TopLevel a -> (a -> TopLevel b) -> (a -> TopLevel c) -> TopLevel c
+bracketTopLevel acquire release action =
+  do  resource <- acquire
+      try (action resource) >>= \case
+        Left (bad :: X.SomeException) -> release resource >> throwM bad
+        Right good -> release resource >> pure good
+
+instance MonadIO TopLevel where
+  liftIO = io
 
 io :: IO a -> TopLevel a
-io f = liftIO f
+io f = (TopLevel_ (liftIO f))
        `catches`
        [ Handler (\(ex :: X86Unsupported) -> handleX86Unsupported ex)
        , Handler (\(ex :: X86Error) -> handleX86Error ex)
+       , Handler handleTopLevel
+       , Handler handleIO
        ]
   where
+    rethrow :: X.Exception ex => ex -> TopLevel a
+    rethrow ex =
+      do stk <- getStackTrace
+         throwM (SS.TraceException stk (X.SomeException ex))
+
+    handleTopLevel :: SS.TopLevelException -> TopLevel a
+    handleTopLevel e = rethrow e
+
+    handleIO :: X.IOException -> TopLevel a
+    handleIO e
+      | IOError.isUserError e =
+          do pos <- getPosition
+             rethrow (SS.TopLevelException pos (init . drop 12 $ show e))
+      | otherwise = rethrow e
+
     handleX86Unsupported (X86Unsupported s) =
-      throwTopLevel $ "Unsupported x86 feature: " ++ s
+      do pos <- getPosition
+         rethrow (SS.TopLevelException pos ("Unsupported x86 feature: " ++ s))
+
     handleX86Error (X86Error s) =
-      throwTopLevel $ "Error in x86 code: " ++ s
+      do pos <- getPosition
+         rethrow (SS.TopLevelException pos ("Error in x86 code: " ++ s))
+
+
+
+combineRW :: TopLevelCheckpoint -> TopLevelRW -> IO TopLevelRW
+combineRW (TopLevelCheckpoint chk scc) rw =
+  do cenv' <- CEnv.combineCryptolEnv (rwCryptol chk) (rwCryptol rw)
+     sc' <- restoreSharedContext scc (rwSharedContext rw)
+     return chk{ rwCryptol = cenv'
+               , rwSharedContext = sc'
+               }
+
+-- | Represents the mutable state of the TopLevel monad
+--   that can later be restored.
+data TopLevelCheckpoint =
+  TopLevelCheckpoint
+    TopLevelRW
+    SharedContextCheckpoint
+
+makeCheckpoint :: TopLevelRW -> IO TopLevelCheckpoint
+makeCheckpoint rw =
+  do scc <- checkpointSharedContext (rwSharedContext rw)
+     return (TopLevelCheckpoint rw scc)
+
+restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
+restoreCheckpoint chk =
+  do rw <- getTopLevelRW
+     rw' <- io (combineRW chk rw)
+     putTopLevelRW rw'
+
+-- | Capture the current state of the TopLevel monad
+--   and return an action that, if invoked, resets
+--   the state back to that point.
+checkpoint :: TopLevel (() -> TopLevel ())
+checkpoint = TopLevel_ $
+  do chk <- liftIO . makeCheckpoint =<< get
+     return $ \_ ->
+       do printOutLnTop Info "Restoring state from checkpoint"
+          restoreCheckpoint chk
+
+-- | Capture the current proof state and return an
+--   action that, if invoked, resets the state back to that point.
+proof_checkpoint :: ProofScript (() -> ProofScript ())
+proof_checkpoint =
+  do ps <- get
+     return $ \_ ->
+       do scriptTopLevel (printOutLnTop Info "Restoring proof state from checkpoint")
+          put ps
 
 throwTopLevel :: String -> TopLevel a
 throwTopLevel msg = do
   pos <- getPosition
-  X.throw $ SS.TopLevelException pos msg
+  stk <- getStackTrace
+  throwM (SS.TraceException stk (X.SomeException (SS.TopLevelException pos msg)))
 
 withPosition :: SS.Pos -> TopLevel a -> TopLevel a
-withPosition pos (TopLevel m) = TopLevel (local (\ro -> ro{ roPosition = pos }) m)
+withPosition pos (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roPosition = pos }) m)
+
+withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
+withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
+
+withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
+withLocalEnvProof env (ProofScript m) = 
+  ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
+
+getLocalEnv :: TopLevel LocalEnv
+getLocalEnv = TopLevel_ (asks roLocalEnv)
 
 getPosition :: TopLevel SS.Pos
-getPosition = TopLevel (asks roPosition)
+getPosition = TopLevel_ (asks roPosition)
+
+getStackTrace :: TopLevel [String]
+getStackTrace = TopLevel_ (reverse <$> asks roStackTrace)
 
 getSharedContext :: TopLevel SharedContext
-getSharedContext = TopLevel (asks roSharedContext)
+getSharedContext = TopLevel_ (rwSharedContext <$> get)
 
 getJavaCodebase :: TopLevel JSS.Codebase
-getJavaCodebase = TopLevel (asks roJavaCodebase)
+getJavaCodebase = TopLevel_ (asks roJavaCodebase)
+
+getTheoremDB :: TopLevel TheoremDB
+getTheoremDB = TopLevel_ (rwTheoremDB <$> get)
 
 getOptions :: TopLevel Options
-getOptions = TopLevel (asks roOptions)
+getOptions = TopLevel_ (asks roOptions)
 
 getProxy :: TopLevel AIGProxy
-getProxy = TopLevel (asks roProxy)
+getProxy = TopLevel_ (asks roProxy)
 
 getBasicSS :: TopLevel SAWSimpset
-getBasicSS = TopLevel (asks roBasicSS)
+getBasicSS = TopLevel_ (asks roBasicSS)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
-localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
+localOptions f (TopLevel_ m) = TopLevel_ (local (\x -> x {roOptions = f (roOptions x)}) m)
 
 printOutLnTop :: Verbosity -> String -> TopLevel ()
 printOutLnTop v s =
@@ -520,10 +714,10 @@ printOutTop v s =
        io $ printOutFn opts v s
 
 getHandleAlloc :: TopLevel Crucible.HandleAllocator
-getHandleAlloc = TopLevel (asks roHandleAlloc)
+getHandleAlloc = TopLevel_ (asks roHandleAlloc)
 
 getTopLevelRO :: TopLevel TopLevelRO
-getTopLevelRO = TopLevel ask
+getTopLevelRO = TopLevel_ ask
 
 getTopLevelRW :: TopLevel TopLevelRW
 getTopLevelRW = get
@@ -636,7 +830,7 @@ instance Applicative LLVMCrucibleSetupM where
 instance Monad LLVMCrucibleSetupM where
   return = pure
   LLVMCrucibleSetupM m >>= f =
-    LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
+    LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
 
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
@@ -660,8 +854,18 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
-runProofScript :: ProofScript a -> ProofGoal -> Maybe ProgramLoc -> Text -> TopLevel ProofResult
-runProofScript (ProofScript m) gl ploc rsn =
+-- TODO: remove the "reason" parameter and compute it from the
+--       initial proof goal instead
+runProofScript ::
+  ProofScript a ->
+  Prop ->
+  ProofGoal ->
+  Maybe ProgramLoc ->
+  Text ->
+  Bool {- ^ record the theorem in the database? -} ->
+  Bool {- ^ do we need to normalize the sequent goal? -} ->
+  TopLevel ProofResult
+runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
   do pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
@@ -669,8 +873,8 @@ runProofScript (ProofScript m) gl ploc rsn =
        Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
-            db <- roTheoremDB <$> getTopLevelRO
-            io (finishProof sc db pstate)
+            db <- rwTheoremDB <$> getTopLevelRW
+            io (finishProof sc db concl pstate recordThm useSequentGoals)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
@@ -700,6 +904,10 @@ class FromValue a where
 
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
     toValue f = VLambda (\v -> return (toValue (f (fromValue v))))
+
+instance (IsValue a, FromValue b) => FromValue (a -> TopLevel b) where
+    fromValue (VLambda f) = \x -> fromValue <$> f (toValue x)
+    fromValue _ = error "fromValue (->)"
 
 instance FromValue Value where
     fromValue x = x
@@ -753,8 +961,8 @@ instance IsValue a => IsValue (TopLevel a) where
 instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
+    fromValue (VBind pos m1 v2) = do
+      v1 <- withPosition pos (fromValue m1)
       m2 <- applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
@@ -764,11 +972,15 @@ instance IsValue a => IsValue (ProofScript a) where
 
 instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
+    -- Inject top-level computations automatically into proof scripts.
+    -- This should really only possible in interactive subshell mode; otherwise
+    --  the type system should keep this from happening.
+    fromValue (VTopLevel m) = ProofScript (lift (lift (fmap fromValue m)))
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- scriptTopLevel $ applyValue v2 v1
-      fromValue m2
+    fromValue (VBind pos m1 v2) = ProofScript $ do
+      v1 <- underExceptT (underStateT (withPosition pos)) (unProofScript (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
+      unProofScript (fromValue m2)
     fromValue _ = error "fromValue ProofScript"
 
 ---------------------------------------------------------------------------------
@@ -780,9 +992,10 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
       -- TODO: Should both of these be run with the new position?
-      v1 <- underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m1))
-      m2 <- lift $ applyValue v2 v1
-      underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m2))
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runLLVMCrucibleSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
+      runLLVMCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue a => IsValue (JVMSetupM a) where
@@ -791,9 +1004,10 @@ instance IsValue a => IsValue (JVMSetupM a) where
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = JVMSetupM $ do
-      v1 <- runJVMSetupM (fromValue m1)
-      m2 <- lift $ applyValue v2 v1
+    fromValue (VBind pos m1 v2) = JVMSetupM $ do
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runJVMSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
@@ -1012,6 +1226,34 @@ instance FromValue CMS.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
+instance IsValue YosysIR where
+  toValue = VYosysModule
+
+instance FromValue YosysIR where
+  fromValue (VYosysModule ir) = ir
+  fromValue v = error ("fromValue YosysIR: " ++ show v)
+
+instance IsValue YosysImport where
+  toValue = VYosysImport
+
+instance FromValue YosysImport where
+  fromValue (VYosysImport i) = i
+  fromValue v = error ("fromValue YosysImport: " ++ show v)
+
+instance IsValue YosysSequential where
+  toValue = VYosysSequential
+
+instance FromValue YosysSequential where
+  fromValue (VYosysSequential s) = s
+  fromValue v = error ("fromValue YosysSequential: " ++ show v)
+
+instance IsValue YosysTheorem where
+  toValue = VYosysTheorem
+
+instance FromValue YosysTheorem where
+  fromValue (VYosysTheorem thm) = thm
+  fromValue v = error ("fromValue YosysTheorem: " ++ show v)
+
 -- Error handling --------------------------------------------------------------
 
 underStateT :: (forall b. m b -> m b) -> StateT s m a -> StateT s m a
@@ -1033,42 +1275,17 @@ addTrace str val =
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
-        addTrace str `fmap` underStateT (addTraceTopLevel str) m
+        addTrace str `fmap` underReaderT (underStateT (addTraceTopLevel str)) m
+  -- TODO? JVM setup blocks too?
     _                -> val
-
--- | Wrap an action with a handler that catches and rethrows user
--- errors with an extended message.
-addTraceIO :: forall a. String -> IO a -> IO a
-addTraceIO str action = X.catches action
-  [ X.Handler handleTopLevel
-  , X.Handler handleTrace
-  , X.Handler handleIO
-  ]
-  where
-    rethrow msg = X.throwIO . SS.TraceException $ mconcat [str, ":\n", msg]
-    handleTopLevel :: SS.TopLevelException -> IO a
-    handleTopLevel e = rethrow $ show e
-    handleTrace (SS.TraceException msg) = rethrow msg
-    handleIO :: X.IOException -> IO a
-    handleIO e
-      | IOError.isUserError e = rethrow . init . drop 12 $ show e
-      | otherwise = X.throwIO e
-
--- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
-addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
-addTraceStateT str = underStateT (addTraceTopLevel str)
 
 addTraceProofScript :: String -> ProofScript a -> ProofScript a
 addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
 
--- | Similar to 'addTraceIO', but for reader monads built from 'TopLevel'.
-addTraceReaderT :: String -> ReaderT s TopLevel a -> ReaderT s TopLevel a
-addTraceReaderT str = underReaderT (addTraceTopLevel str)
-
--- | Similar to 'addTraceIO', but for the 'TopLevel' monad.
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
-addTraceTopLevel str action = action & _Wrapped' %~
-  underReaderT (underReaderT (liftIO . addTraceIO str))
+addTraceTopLevel str (TopLevel_ action) =
+  TopLevel_ (local (\ro -> ro{ roStackTrace = str : roStackTrace ro }) action)
+
 
 data SkeletonState = SkeletonState
   { _skelArgs :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]

@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "saw-client"
-version = "0.8.1"
+version = "0.9.1"
 readme = "README.md"
-description = "SAW client for the SAW 0.8 RPC server"
-authors = ["Andrew Kent <andrew@galois.com>", "Aaron Tomb <atomb@galois.com>"]
+description = "SAW client for the SAW 0.9 RPC server"
+authors = ["Galois, Inc. <saw@galois.com>"]
 license = "BSD License"
 include = [
     "LICENSE",
@@ -14,8 +14,8 @@ include = [
 python = "^3.8"
 requests = "^2.25.1"
 BitVector = "^3.4.9"
-cryptol = { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
-argo-client = "0.0.4"
+cryptol = "2.12.4" # { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
+argo-client = "0.0.10"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.812"

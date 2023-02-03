@@ -30,6 +30,7 @@ import Data.Monoid
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import qualified Control.Exception as Ex
+import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
@@ -50,12 +51,15 @@ import qualified System.Environment
 import qualified System.Exit as Exit
 import System.IO
 import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
+import System.FilePath (hasDrive, (</>))
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
+import qualified Verifier.SAW.Cryptol.Monadify as Monadify
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -68,6 +72,8 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
+import Verifier.SAW.Recognizer
+import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -76,6 +82,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.TermModel as TM
+import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
 import SAWScript.Position
 
@@ -104,7 +111,8 @@ import qualified Cryptol.Backend.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
-import qualified Cryptol.Utils.Ident as C (mkIdent, packModName)
+import qualified Cryptol.Utils.Ident as C (mkIdent, packModName,
+                                           textToModName, PrimIdent(..))
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import qualified SAWScript.SBVParser as SBV
@@ -113,6 +121,7 @@ import SAWScript.ImportAIG
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
+import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -131,7 +140,8 @@ import SAWScript.VerificationSummary
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
   opts <- fmap rwPPOpts getTopLevelRW
-  return (SV.showsPrecValue opts 0 v "")
+  nenv <- io . scGetNamingEnv =<< getSharedContext
+  return (SV.showsPrecValue opts nenv 0 v "")
 
 definePrim :: Text -> TypedTerm -> TopLevel TypedTerm
 definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
@@ -200,11 +210,13 @@ readSBV path unintlst =
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: TypedTerm -> TypedTerm -> TopLevel ()
 dsecPrint t1 t2 = do
-  withSystemTempFile ".aig" $ \path1 _handle1 -> do
-  withSystemTempFile ".aig" $ \path2 _handle2 -> do
-  Prover.writeSAIGInferLatches path1 t1
-  Prover.writeSAIGInferLatches path2 t2
-  io $ callCommand (abcDsec path1 path2)
+  write_t1 <- Prover.writeSAIGInferLatches t1
+  write_t2 <- Prover.writeSAIGInferLatches t2
+  io $ withSystemTempFile ".aig" $ \path1 _handle1 ->
+       withSystemTempFile ".aig" $ \path2 _handle2 ->
+        do write_t1 path1
+           write_t2 path2
+           callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
@@ -321,15 +333,17 @@ hoistIfsPrim t = do
 
   return t{ ttTerm = t' }
 
+isConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel Bool
+isConvertiblePrim x y = do
+   sc <- getSharedContext
+   io $ scConvertible sc False (ttTerm x) (ttTerm y)
+
 checkConvertiblePrim :: TypedTerm -> TypedTerm -> TopLevel ()
 checkConvertiblePrim x y = do
-   sc <- getSharedContext
-   str <- io $ do
-     c <- scConvertible sc False (ttTerm x) (ttTerm y)
-     pure (if c
-            then "Convertible"
-            else "Not convertible")
-   printOutLnTop Info str
+   c <- isConvertiblePrim x y
+   printOutLnTop Info (if c
+                        then "Convertible"
+                        else "Not convertible")
 
 
 readCore :: FilePath -> TopLevel TypedTerm
@@ -352,13 +366,13 @@ quickcheckGoal sc n = do
   execTactic $ tacticSolve $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
-    satq <- propToSATQuery sc mempty (goalProp goal)
+    satq <- sequentToSATQuery sc mempty (goalSequent goal)
     testGen <- prepareSATQuery sc satq
-    let stats = solverStats "quickcheck" (propSize (goalProp goal))
+    let stats = solverStats "quickcheck" (sequentSharedSize (goalSequent goal))
     runManyTests testGen n >>= \case
        Nothing ->
          do printOutLn opts Info $ "checked " ++ show n ++ " cases."
-            return (stats, SolveSuccess (QuickcheckEvidence n (goalProp goal)))
+            return (stats, SolveSuccess (QuickcheckEvidence n (goalSequent goal)))
        Just cex -> return (stats, SolveCounterexample cex)
 
 assumeValid :: ProofScript ()
@@ -367,8 +381,8 @@ assumeValid =
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      pos <- SV.getPosition
      let admitMsg = "assumeValid: " <> Text.pack (goalName goal)
-     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
+     let stats = solverStats "ADMITTED" (sequentSharedSize (goalSequent goal))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalSequent goal)))
 
 assumeUnsat :: ProofScript ()
 assumeUnsat =
@@ -376,16 +390,16 @@ assumeUnsat =
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      pos <- SV.getPosition
      let admitMsg = "assumeUnsat: " <> Text.pack (goalName goal)
-     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
+     let stats = solverStats "ADMITTED" (sequentSharedSize (goalSequent goal))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalSequent goal)))
 
 admitProof :: Text -> ProofScript ()
 admitProof msg =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
      pos <- SV.getPosition
-     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted msg pos (goalProp goal)))
+     let stats = solverStats "ADMITTED" (sequentSharedSize (goalSequent goal))
+     return (stats, SolveSuccess (Admitted msg pos (goalSequent goal)))
 
 trivial :: ProofScript ()
 trivial =
@@ -419,14 +433,62 @@ print_term_depth d t =
      output <- liftIO $ scShowTerm sc opts' t
      printOutLnTop Info output
 
+goalSummary :: ProofGoal -> String
+goalSummary goal = unlines $ concat
+  [ [ "Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal
+    , "at " ++ goalLoc goal
+    ]
+  , if Set.null (goalTags goal) then [] else
+      [ unwords ("Tags:" : map show (Set.toList (goalTags goal)))
+      ]
+  , if null (goalDesc goal) then [] else [ goalDesc goal ]
+  ]
+
+write_goal :: String -> ProofScript ()
+write_goal fp =
+  execTactic $ tacticId $ \goal ->
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     liftIO $ do
+       nenv <- scGetNamingEnv sc
+       let output = prettySequent opts nenv (goalSequent goal)
+       writeFile fp (unlines [goalSummary goal, output])
+
 print_goal :: ProofScript ()
 print_goal =
   execTactic $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
-     output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
-     printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
-     printOutLnTop Info output
+     nenv <- io (scGetNamingEnv sc)
+     let output = prettySequent opts nenv (goalSequent goal)
+     printOutLnTop Info (unlines [goalSummary goal, output])
+
+print_goal_summary :: ProofScript ()
+print_goal_summary =
+  execTactic $ tacticId $ \goal ->
+    printOutLnTop Info (goalSummary goal)
+
+print_focus :: ProofScript ()
+print_focus =
+  execTactic $ tacticId $ \goal ->
+    do opts <- getTopLevelPPOpts
+       sc <- getSharedContext
+       nenv <- io (scGetNamingEnv sc)
+       case sequentGetFocus (goalSequent goal) of
+         Nothing ->
+           printOutLnTop Warn "Sequent is not focused"
+         Just (Left (i,h)) ->
+           let output = ppProp opts nenv h in
+           printOutLnTop Info (unlines ["Hypothesis " ++ show i, show output])
+         Just (Right (i,c)) ->
+           let output = ppProp opts nenv c in
+           printOutLnTop Info (unlines ["Conclusion " ++ show i, show output])
+
+
+goal_num :: ProofScript Int
+goal_num =
+  execTactic $ tacticId $ \goal ->
+    return (goalNum goal)
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
@@ -434,47 +496,38 @@ print_goal_depth n =
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      let opts' = opts { ppMaxDepth = Just n }
-     output <- liftIO (scShowTerm sc opts' =<< propToTerm sc (goalProp goal))
-     printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-     printOutLnTop Info output
+     nenv <- io (scGetNamingEnv sc)
+     let output = prettySequent opts' nenv (goalSequent goal)
+     printOutLnTop Info (unlines [goalSummary goal, output])
 
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
-  do sc <- getSharedContext
-     tm <- io (propToTerm sc (goalProp goal))
+  do let cs = sequentConstantSet (goalSequent goal)
      mapM_ (printOutLnTop Info) $
-       [ show nm
-       | (_,(nm,_,_)) <- Map.toList (getConstantSet tm)
-       ]
+       [ show nm | (_,(nm,_,_)) <- Map.toList cs ]
 
 printGoalSize :: ProofScript ()
 printGoalSize =
   execTactic $ tacticId $ \goal ->
-  do sc <- getSharedContext
-     t  <- io (propToTerm sc (goalProp goal))
-     printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
-     printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
+  do printOutLnTop Info $ "Goal shared size: " ++ show (sequentSharedSize (goalSequent goal))
+     printOutLnTop Info $ "Goal unshared size: " ++ show (sequentTreeSize (goalSequent goal))
 
 resolveNames :: [String] -> TopLevel (Set VarIndex)
 resolveNames nms =
   do sc <- getSharedContext
-     Set.fromList <$> mapM (resolveName sc) nms
+     Set.fromList . mconcat <$> mapM (resolveName sc) nms
 
--- | Given a user-provided name, resolve it to some
---   'ExtCns' that represents an unfoldable 'Constant'
---   value or a fresh uninterpreted constant.
---
---   We first attempt to find the name in the local Cryptol
---   environment; if the name is found, attempt to resolve it to
---   an 'ExtCns' in the SAWCore environment.  If the given name
---   does not resolve to a cryptol value in the current environment that
---  maps to an 'ExtCns', then instead directly look it up
---  in the SAWCore naming environment.  If both stages
---  fail, then throw an exception.
-resolveName :: SharedContext -> String -> TopLevel VarIndex
+-- | Given a user-provided name, resolve it to (potentially several)
+-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- fresh uninterpreted constant.
+-- The given name is searched for in both the local Cryptol environment
+-- and the SAWCore naming environment. If it is found in neither, an
+-- exception is thrown.
+resolveName :: SharedContext -> String -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
+     scnms <- fmap fst <$> io (scResolveName sc tnm)
      let ?fileReader = StrictBS.readFile
      res <- io $ CEnv.resolveIdentifier cenv tnm
      case res of
@@ -484,14 +537,15 @@ resolveName sc nm =
               ImportedName uri _ ->
                 do resolvedName <- io $ scResolveNameByURI sc uri
                    case resolvedName of
-                     Just vi -> pure vi
-                     Nothing -> fallback
-              _ -> fallback
-       Nothing -> fallback
+                     Just vi -> pure $ vi:scnms
+                     Nothing -> fallback scnms
+              _ -> fallback scnms
+       Nothing -> fallback scnms
 
  where
  tnm = Text.pack nm
- fallback = fst <$> io (scResolveUnambiguous sc tnm)
+ fallback [] = fail $ "Could not resolve name: " <> show nm
+ fallback scnms = pure scnms
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
@@ -501,32 +555,122 @@ normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      modmap <- io (scGetModuleMap sc)
-     idxs <- mapM (resolveName sc) opaque
+     idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
      tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
+
+goal_normalize :: [String] -> ProofScript ()
+goal_normalize opaque =
+  execTactic $ tacticChange $ \goal ->
+    do sc <- getSharedContext
+       idxs <- mconcat <$> mapM (resolveName sc) opaque
+       modmap <- io (scGetModuleMap sc)
+       let opaqueSet = Set.fromList idxs
+       sqt' <- io $ traverseSequentWithFocus (normalizeProp sc modmap opaqueSet) (goalSequent goal)
+       return (sqt', NormalizePropEvidence opaqueSet)
+
+unfocus :: ProofScript ()
+unfocus =
+  execTactic $ tacticChange $ \goal ->
+    do let sqt' = unfocusSequent (goalSequent goal)
+       return (sqt', structuralEvidence sqt')
+
+focus_concl :: Integer -> ProofScript ()
+focus_concl i =
+  execTactic $ tacticChange $ \goal ->
+    case focusOnConcl i (goalSequent goal) of
+      Nothing -> fail "focus_concl : not enough conclusions"
+      Just sqt' -> return (sqt', structuralEvidence sqt')
+
+focus_hyp :: Integer -> ProofScript ()
+focus_hyp i =
+  execTactic $ tacticChange $ \goal ->
+    case focusOnHyp i (goalSequent goal) of
+      Nothing -> fail "focus_hyp : not enough hypotheses"
+      Just sqt' -> return (sqt', structuralEvidence sqt')
+
+delete_hyps :: [Integer] -> ProofScript ()
+delete_hyps hs =
+  execTactic $ tacticChange $ \goal ->
+    let sqt' = filterHyps (BlackList (Set.fromList hs)) (goalSequent goal)
+     in return (sqt', structuralEvidence sqt')
+
+retain_hyps :: [Integer] -> ProofScript ()
+retain_hyps hs =
+  execTactic $ tacticChange $ \goal ->
+    let sqt' = filterHyps (WhiteList (Set.fromList hs)) (goalSequent goal)
+     in return (sqt', structuralEvidence sqt')
+
+delete_concl :: [Integer] -> ProofScript ()
+delete_concl gs =
+  execTactic $ tacticChange $ \goal ->
+    let sqt' = filterConcls (BlackList (Set.fromList gs)) (goalSequent goal)
+     in return (sqt', structuralEvidence sqt')
+
+retain_concl :: [Integer] -> ProofScript ()
+retain_concl gs =
+  execTactic $ tacticChange $ \goal ->
+    let sqt' = filterConcls (WhiteList (Set.fromList gs)) (goalSequent goal)
+     in return (sqt', structuralEvidence sqt')
+
+
+goal_cut :: Term -> ProofScript ()
+goal_cut tm =
+  do -- TODO? Theres a bit of duplicated work here
+     -- and in boolToProp, termToProp.
+     -- maybe we can consolatate
+     sc <- SV.scriptTopLevel getSharedContext
+     p  <- SV.scriptTopLevel $ io $
+            do tp <- scWhnf sc =<< scTypeOf sc tm
+               case () of
+                 _ | Just () <- asBoolType tp
+                   -> boolToProp sc [] tm
+
+                   | Just s <- asSort tp, s == propSort
+                   -> termToProp sc tm
+
+                   | otherwise
+                   -> fail "goal_cut: expected Bool or Prop term"
+     execTactic (tacticCut sc p)
+
+normalize_sequent :: ProofScript ()
+normalize_sequent =
+  execTactic $ tacticChange $ \goal ->
+    do sc <- getSharedContext
+       sqt' <- io $ normalizeSequent sc (goalSequent goal)
+       return (sqt', NormalizeSequentEvidence sqt')
 
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unints' <- resolveNames unints
-     prop' <- io (unfoldProp sc unints' (goalProp goal))
-     return (prop', UnfoldEvidence unints')
+     sqt' <- traverseSequentWithFocus (io . unfoldProp sc unints') (goalSequent goal)
+     return (sqt', UnfoldEvidence unints')
 
 simplifyGoal :: SV.SAWSimpset -> ProofScript ()
 simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     (_,prop') <- io (simplifyProp sc ss (goalProp goal))
-     return (prop', RewriteEvidence ss)
+     sqt' <- traverseSequentWithFocus (\p -> snd <$> io (simplifyProp sc ss p)) (goalSequent goal)
+     return (sqt', RewriteEvidence [] ss)
+
+simplifyGoalWithLocals :: [Integer] -> SV.SAWSimpset -> ProofScript ()
+simplifyGoalWithLocals hs ss =
+  execTactic $ tacticChange $ \goal ->
+  do sc <- getSharedContext
+     ss' <- io (localHypSimpset sc (goalSequent goal) hs ss)
+     sqt' <- traverseSequentWithFocus
+               (\p -> snd <$> io (simplifyProp sc ss' p)) (goalSequent goal)
+     return (sqt', RewriteEvidence hs ss)
 
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
   execTactic $ tacticChange $ \goal ->
     do sc <- getSharedContext
-       p <- io $ hoistIfsInGoal sc (goalProp goal)
-       return (p, HoistIfsEvidence)
+       sqt' <- traverseSequentWithFocus (io . hoistIfsInProp sc) (goalSequent goal)
+       return (sqt', HoistIfsEvidence)
 
 term_type :: TypedTerm -> TopLevel C.Schema
 term_type tt =
@@ -542,8 +686,8 @@ goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     prop' <- io (evalProp sc unintSet (goalProp goal))
-     return (prop', EvalEvidence unintSet)
+     sqt' <- traverseSequentWithFocus (io . evalProp sc unintSet) (goalSequent goal)
+     return (sqt', EvalEvidence unintSet)
 
 extract_uninterp ::
   [String] {- ^ uninterpred identifiers -} ->
@@ -552,11 +696,11 @@ extract_uninterp ::
   TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
 extract_uninterp unints opaques tt =
   do sc <- getSharedContext
-     idxs <- mapM (resolveName sc) unints
+     idxs <- mconcat <$> mapM (resolveName sc) unints
      let unintSet = Set.fromList idxs
      mmap <- io (scGetModuleMap sc)
 
-     opaqueSet <- Set.fromList <$> mapM (resolveName sc) opaques
+     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
 
      boundECRef <- io (newIORef Set.empty)
      let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
@@ -600,6 +744,58 @@ extract_uninterp unints opaques tt =
      pure (tt', replList)
 
 
+congruence_for :: TypedTerm -> TopLevel TypedTerm
+congruence_for tt =
+  do sc <- getSharedContext
+     congTm <- io $ build_congruence sc (ttTerm tt)
+     io $ mkTypedTerm sc congTm
+
+-- | Given an input term, construct another term that
+--   represents a congruence law for that term.
+--   This term will be a Curry-Howard style theorem statement
+--   that can be dispatched to solvers, and should have
+--   type "Prop".
+--
+--   This will only work for terms that represent non-dependent
+--   functions.
+build_congruence :: SharedContext -> Term -> IO Term
+build_congruence sc tm =
+  do ty <- scTypeOf sc tm
+     case asPiList ty of
+       ([],_) -> fail "congruence_for: Term is not a function"
+       (pis, body) ->
+         if looseVars body == emptyBitSet then
+           loop pis []
+         else
+           fail "congruence_for: cannot build congruence for dependent functions"
+ where
+  loop ((nm,tp):pis) vars =
+    if looseVars tp == emptyBitSet then
+      do l <- scFreshEC sc (nm <> "_1") tp
+         r <- scFreshEC sc (nm <> "_2") tp
+         loop pis ((l,r):vars)
+     else
+       fail "congruence_for: cannot build congruence for dependent functions"
+
+  loop [] vars =
+    do lvars <- mapM (scExtCns sc . fst) (reverse vars)
+       rvars <- mapM (scExtCns sc . snd) (reverse vars)
+       let allVars = concat [ [l,r] | (l,r) <- reverse vars ]
+
+       basel <- scApplyAll sc tm lvars
+       baser <- scApplyAll sc tm rvars
+       baseeq <- scEqTrue sc =<< scEq sc basel baser
+
+       let f x (l,r) =
+             do l' <- scExtCns sc l
+                r' <- scExtCns sc r
+                eq <- scEqTrue sc =<< scEq sc l' r'
+                scFun sc eq x
+       finalEq <- foldM f baseeq vars
+
+       scGeneralizeExts sc allVars finalEq
+
+
 filterCryTerms :: SharedContext -> [Term] -> IO [TypedTerm]
 filterCryTerms sc = loop
   where
@@ -619,19 +815,33 @@ beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
-     prop' <- io (betaReduceProp sc (goalProp goal))
-     return (prop', id)
+     sqt' <- traverseSequentWithFocus (io . betaReduceProp sc) (goalSequent goal)
+     return (sqt', ConversionEvidence sqt')
 
 goal_apply :: Theorem -> ProofScript ()
 goal_apply thm =
   do sc <- SV.scriptTopLevel getSharedContext
      execTactic (tacticApply sc thm)
 
-goal_assume :: ProofScript Theorem
-goal_assume =
+goal_exact :: TypedTerm -> ProofScript ()
+goal_exact tm =
   do sc <- SV.scriptTopLevel getSharedContext
-     pos <- SV.scriptTopLevel SV.getPosition
-     execTactic (tacticAssume sc pos)
+     execTactic (tacticExact sc (ttTerm tm))
+
+goal_intro_hyp :: ProofScript ()
+goal_intro_hyp =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticIntroHyps sc 1)
+
+goal_intro_hyps :: Integer -> ProofScript ()
+goal_intro_hyps n =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticIntroHyps sc n)
+
+goal_revert_hyp :: Integer -> ProofScript ()
+goal_revert_hyp i =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticRevertHyp sc i)
 
 goal_intro :: Text -> ProofScript TypedTerm
 goal_intro s =
@@ -641,7 +851,22 @@ goal_intro s =
 goal_insert :: Theorem -> ProofScript ()
 goal_insert thm =
   do sc <- SV.scriptTopLevel getSharedContext
-     execTactic (tacticCut sc thm)
+     execTactic (tacticInsert sc thm [])
+
+goal_insert_and_specialize :: Theorem -> [TypedTerm] -> ProofScript ()
+goal_insert_and_specialize thm tms =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticInsert sc thm (map ttTerm tms))
+
+goal_specialize_hyp :: [TypedTerm] -> ProofScript ()
+goal_specialize_hyp ts =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticSpecializeHyp sc (map ttTerm ts))
+
+goal_apply_hyp :: Integer -> ProofScript ()
+goal_apply_hyp n =
+  do sc <- SV.scriptTopLevel getSharedContext
+     execTactic (tacticApplyHyp sc n)
 
 goal_num_when :: Int -> ProofScript () -> ProofScript ()
 goal_num_when n script =
@@ -656,6 +881,20 @@ goal_when str script =
      case psGoals s of
        g : _ | str `isInfixOf` goalName g -> script
        _ -> return ()
+
+goal_has_tags :: [String] -> ProofScript Bool
+goal_has_tags tags =
+  do s <- get
+     case psGoals s of
+       g : _ | Set.isSubsetOf (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False
+
+goal_has_some_tag :: [String] -> ProofScript Bool
+goal_has_some_tag tags =
+  do s <- get
+     case psGoals s of
+       g : _ | not $ Set.disjoint (Set.fromList tags) (goalTags g) -> return True
+       _ -> return False
 
 goal_num_ite :: Int -> ProofScript SV.Value -> ProofScript SV.Value -> ProofScript SV.Value
 goal_num_ite n s1 s2 =
@@ -677,14 +916,16 @@ satExternal doCNF execName args =
        sc <- SV.getSharedContext
        (mb, stats) <- Prover.abcSatExternal proxy sc doCNF execName args g
        case mb of
-         Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+         Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
          Just a  -> return (stats, SolveCounterexample a)
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim = Prover.writeAIG
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
-writeSAIGPrim = Prover.writeSAIGInferLatches
+writeSAIGPrim file tt =
+  do write_tt <- Prover.writeSAIGInferLatches tt
+     io $ write_tt file
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim = Prover.writeSAIG
@@ -713,23 +954,23 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
-applyProverToGoal :: (Prop -> TopLevel (Maybe CEX, SolverStats))
+applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f g = do
-  (mb, stats) <- f (goalProp g)
+  (mb, stats) <- f (goalSequent g)
   case mb of
-    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  (Prop -> TopLevel (Maybe CEX, SolverStats)) ->
+  (Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
   ProofScript ()
 wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
 
 wrapW4Prover ::
   ( Set VarIndex -> Bool ->
-    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
+    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   ProofScript ()
 wrapW4Prover f unints = do
@@ -739,7 +980,7 @@ wrapW4Prover f unints = do
 
 wrapW4ProveExporter ::
   ( Set VarIndex -> Bool -> FilePath ->
-    Prop -> TopLevel (Maybe CEX, SolverStats)) ->
+    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
   [String] ->
   String ->
   String ->
@@ -808,6 +1049,9 @@ w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
 w4_unint_z3 :: [String] -> ProofScript ()
 w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
 
+w4_unint_z3_using :: String -> [String] -> ProofScript ()
+w4_unint_z3_using tactic = wrapW4Prover (Prover.proveWhat4_z3_using tactic)
+
 w4_unint_cvc4 :: [String] -> ProofScript ()
 w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
 
@@ -836,8 +1080,8 @@ proveWithSATExporter ::
 proveWithSATExporter exporter unintSet path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
-     stats <- Prover.proveWithSATExporter exporter unintSet file (goalProp g)
-     return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+     stats <- Prover.proveWithSATExporter exporter unintSet file (goalSequent g)
+     return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 proveWithPropExporter ::
   (FilePath -> Prop -> TopLevel a) ->
@@ -848,8 +1092,10 @@ proveWithPropExporter ::
 proveWithPropExporter exporter path sep ext =
   execTactic $ tacticSolve $ \g ->
   do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
-     stats <- Prover.proveWithPropExporter exporter file (goalProp g)
-     return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+     sc <- getSharedContext
+     p <- io $ sequentToProp sc (goalSequent g)
+     stats <- Prover.proveWithPropExporter exporter file p
+     return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 offline_aig :: FilePath -> ProofScript ()
 offline_aig path =
@@ -907,8 +1153,17 @@ provePrim script t = do
   io $ checkBooleanSchema (ttType t)
   sc <- getSharedContext
   prop <- io $ predicateToProp sc Universal (ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
-  res <- SV.runProofScript script goal Nothing "prove_prim"
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum  = 0
+             , goalType = "prove"
+             , goalName = "prove_prim"
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalSequent = propToSequent prop
+             , goalTags = mempty
+             }
+  res <- SV.runProofScript script prop goal Nothing "prove_prim" True False
   case res of
     UnfinishedProof pst ->
       printOutLnTop Info $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)"
@@ -916,25 +1171,251 @@ provePrim script t = do
     _ -> return ()
   return res
 
+proveHelper ::
+  String ->
+  ProofScript () ->
+  Term ->
+  (Term -> TopLevel Prop) ->
+  TopLevel Theorem
+proveHelper nm script t f = do
+  prop <- f t
+  pos <- SV.getPosition
+  let goal = ProofGoal
+             { goalNum = 0
+             , goalType = "prove"
+             , goalName = nm
+             , goalLoc  = show pos
+             , goalDesc = ""
+             , goalSequent = propToSequent prop
+             , goalTags = mempty
+             }
+  opts <- rwPPOpts <$> getTopLevelRW
+  res <- SV.runProofScript script prop goal Nothing (Text.pack nm) True False
+  let failProof pst =
+         fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
+                          ++ SV.showsProofResult opts res ""
+  case res of
+    ValidProof _stats thm ->
+      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) t)
+         SV.returnProof thm
+    InvalidProof _stats _cex pst -> failProof pst
+    UnfinishedProof pst -> failProof pst
+
+-- | See the inline help for 'prove_by_bv_induction' in the interpreter
+--   for a description of what this is doing.
+proveByBVInduction ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+proveByBVInduction script t =
+  do sc <- getSharedContext
+     opts <- rwPPOpts <$> getTopLevelRW
+     ty <- io $ scTypeCheckError sc (ttTerm t)
+     io (checkInductionScheme sc opts [] ty) >>= \case
+       Nothing -> badTy opts ty
+       Just ([],_) -> badTy opts ty
+       Just (pis,w) ->
+
+         -- This is a whole bunch of gross SAWCore manipulation to build a custom
+         -- induction principle for the user-given theorem statement.
+         -- I don't know offhand of a less gross way to do this.
+
+         -- The basic pattern closely follows the definition of BV_complete_induction
+         -- from the SAWCore prelude. Here, we reproduce the statement of the corresponding
+         -- parts of BV_complete_induction to give a sense of what term we intend to produce
+         -- in each of the following sub-parts.
+
+         do wt  <- io $ scNat sc w
+            natty <- io $ scNatType sc
+            toNat  <- io $ scGlobalDef sc "Prelude.bvToNat"
+
+            -- The result type of the theorem.
+            --
+            --   (x : Vec w Bool) -> p x
+            thmResult <- io $
+                do vars <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis - 1]
+                   t1   <- scApplyAllBeta sc (ttTerm t) vars
+                   t2   <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
+                   t3   <- scPiList sc pis t2
+                   _    <- scTypeCheckError sc t3 -- sanity check
+                   return t3
+
+            -- The type of the main hypothesis to the induction scheme. This is what
+            -- the user will ultimately be asked to prove. Note that this includes
+            -- the induction hypothesis.
+            --
+            --   ((x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x)
+            thmHyp <- io $
+                do vars  <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis - 1]
+                   t1    <- scApplyAllBeta sc (ttTerm t) vars
+                   tsz   <- scTupleSelector sc t1 1 2 -- left element
+                   tbody <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- rightmost tuple element
+                   tsz_shft   <- incVars sc 0 (length pis) tsz
+
+                   bvult <- scGlobalDef sc "Prelude.bvult"
+                   islt  <- scEqTrue sc =<< scApplyAll sc bvult [wt, tsz, tsz_shft]
+
+                   tinner <- scPi sc "_" islt =<< incVars sc 0 1 tbody
+                   thyp   <- scPiList sc [ ("i_" <> nm, z) | (nm,z) <- pis ] tinner
+
+                   touter <- scPi sc "_" thyp =<< incVars sc 0 1 tbody
+                   scPiList sc pis touter
+
+            -- The "motive" we will pass to the 'Nat_complete_induction' principle.
+            --
+            --      (\ (n:Nat) -> (x:Vec w Bool) -> IsLeNat (bvToNat w x) n -> p x)
+            indMotive <- io $
+                do vars   <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis-1 ]
+                   indVar <- scLocalVar sc (length pis)
+                   t1     <- scApplyAllBeta sc (ttTerm t) vars
+                   tsz    <- scTupleSelector sc t1 1 2 -- left element
+                   tsz'   <- scApplyAll sc toNat [wt, tsz]
+                   teq    <- scDataTypeApp sc "Prelude.IsLeNat" [tsz', indVar]
+                   tbody  <- scEqTrue sc =<< scTupleSelector sc t1 2 2 -- right element
+                   t2     <- scPi sc "_" teq =<< incVars sc 0 1 tbody
+                   t3     <- scPiList sc pis t2
+                   scLambda sc "inductionVar" natty t3
+
+            -- This is the most complicated part of building the induction schema. Here we provide
+            -- the proof term required by 'Nat_complete_induction' that shows how to reduce our
+            -- current specific case to induction on natural numbers.
+            --
+            --      \ (H: (x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x)
+            --      \ (n:Nat) ->
+            --      \ (Hind : (m : Nat) -> (Hm : IsLtNat m n) -> (y : Vec w Bool) ->
+            --                (Hy : IsLeNat (bvToNat w y) m) -> p y) ->
+            --      \ (x : Vec w Bool) ->
+            --      \ (Hx : IsLeNat (bvToNat w x) n) ->
+            --        H x (\ (y:Vec w Bool) -> \ (Hult : is_bvult w y x) ->
+            --               Hind (bvToNat w y)
+            --                 (IsLeNat_transitive (Succ (bvToNat w y)) (bvToNat w x) n (bvultToIsLtNat w y x Hult) Hx)
+            --                 y (IsLeNat_base (bvToNat w y)))
+
+            indHypProof <- io $
+                do hEC  <- scFreshEC sc "H" thmHyp
+                   hVar <- scExtCns sc hEC
+                   nEC  <- scFreshEC sc "n" natty
+                   nVar <- scExtCns sc nEC
+                   hindEC <- scFreshEC sc "Hind" =<<
+                                do var0 <- scLocalVar sc 0
+                                   var1 <- scLocalVar sc 1
+                                   lt   <- scGlobalApply sc "Prelude.IsLtNat" [var0, nVar]
+                                   scPi sc "m" natty =<< scPi sc "_" lt =<< scApplyBeta sc indMotive var1
+                   hindVar <- scExtCns sc hindEC
+                   varECs <- mapM (uncurry (scFreshEC sc)) pis
+                   vars   <- mapM (scExtCns sc) varECs
+
+                   innerVarECs <- mapM (uncurry (scFreshEC sc)) [ ("i_" <> nm, z) | (nm,z) <- pis ]
+                   innerVars   <- mapM (scExtCns sc) innerVarECs
+
+                   outersz <- do t1   <- scApplyAllBeta sc (ttTerm t) vars
+                                 scTupleSelector sc t1 1 2 -- left element
+                   natoutersz <- scApplyAll sc toNat [wt, outersz]
+
+                   innersz <- do t1   <- scApplyAllBeta sc (ttTerm t) innerVars
+                                 scTupleSelector sc t1 1 2 -- left element
+                   natinnersz <- scApplyAll sc toNat [wt, innersz]
+
+                   succinnersz <- scCtorApp sc "Prelude.Succ" [natinnersz]
+
+                   bvltEC  <- scFreshEC sc "Hult" =<< scEqTrue sc =<< scBvULt sc wt innersz outersz
+                   bvltVar <- scExtCns sc bvltEC
+
+                   leEC    <- scFreshEC sc "Hle" =<<
+                                 scDataTypeApp sc "Prelude.IsLeNat" [natoutersz, nVar]
+                   leVar   <- scExtCns sc leEC
+
+                   refl_inner <- scCtorApp sc "Prelude.IsLeNat_base" [natinnersz]
+
+                   prf     <- do hyx <- scGlobalApply sc "Prelude.bvultToIsLtNat" [wt,innersz,outersz,bvltVar]
+                                 scGlobalApply sc "Prelude.IsLeNat_transitive" [succinnersz, natoutersz, nVar, hyx, leVar]
+                   inner   <- do body <- scApplyAll sc hindVar ([natinnersz,prf]++innerVars++[refl_inner])
+                                 scAbstractExts sc (innerVarECs ++ [bvltEC]) body
+
+                   body <- scApplyAll sc hVar (vars ++ [inner])
+
+                   scAbstractExts sc ([hEC, nEC, hindEC] ++ varECs ++ [leEC]) body
+
+            -- Now we put all the pieces together
+            --
+            -- \ (Hind : (x : Vec w Bool) -> ((y: Vec w Bool) -> is_bvult w y x -> p y) -> p x) ->
+            -- \ (x : Vec x Bool) ->
+            --    Nat_complete_induction indMotive (indHypProof Hind) (bvToNat w x) x (IsLeNat_base (bvToNat w x))
+            indApp <- io $
+                do vars   <- reverse <$> mapM (scLocalVar sc) [ 0 .. length pis-1 ]
+                   varH   <- scLocalVar sc (length pis)
+                   t1     <- scApplyAllBeta sc (ttTerm t) vars
+                   tsz    <- scTupleSelector sc t1 1 2 -- left element
+                   tsz'   <- scApplyAll sc toNat [wt, tsz]
+                   trefl  <- scCtorApp sc "Prelude.IsLeNat_base" [tsz']
+                   indHypArg <- scApplyBeta sc indHypProof varH
+                   ind    <- scGlobalApply sc "Prelude.Nat_complete_induction" ([indMotive,indHypArg,tsz'] ++ vars ++ [trefl])
+                   ind'   <- scLambdaList sc pis ind
+                   ind''  <- scLambda sc "Hind" thmHyp ind'
+
+                   _tp    <- scTypeCheckError sc ind'' -- sanity check
+                   return ind''
+
+            indAppTT <- io $ mkTypedTerm sc indApp
+
+            -- First produce a theorem value for our custom induction schemd by providing the
+            -- above as direct proof term.
+            ind_scheme_goal <- io $ scFun sc thmHyp thmResult
+            ind_scheme_theorem <- proveHelper "bv_induction_scheme" (goal_exact indAppTT) ind_scheme_goal (io . termToProp sc)
+
+            -- Now, set up a proof to actually prove the statement of interest by first immediately applying
+            -- our constructed induction schema, and then using the user-provided proof script.
+            let script' = goal_apply ind_scheme_theorem >> script
+            proveHelper "prove_by_bv_induction" script' thmResult (io . termToProp sc)
+
+ where
+  -- Here, we expect to see a collection of lambda bound terms, followed
+  -- by a tuple.  The first component must be a bitvector value, defining
+  -- the value we are performing induction on.  The second component is
+  -- a boolean value defining the proposition we are attempting to prove.
+  --
+  -- Return a list of the names and types of the lambda-bound variables,
+  -- and the width of the bitvector we are doing induction on.
+  checkInductionScheme sc opts pis ty =
+    do ty' <- scWhnf sc ty
+       case asPi ty' of
+         Just (nm,tp,body) -> checkInductionScheme sc opts ((nm,tp):pis) body
+         Nothing ->
+           case asTupleType ty' of
+             Just [bv, bool] ->
+               do bool' <- scWhnf sc bool
+                  bv'   <- scWhnf sc bv
+                  case (asVectorType bv', asBoolType bool') of
+                    (Just (w,vbool), Just ()) ->
+                      do w' <- scWhnf sc w
+                         vbool' <- scWhnf sc vbool
+                         case (asNat w', asBoolType vbool') of
+                           (Just n, Just ()) -> return (Just (reverse pis, n))
+                           _ -> return Nothing
+                    _ -> return Nothing
+             _ -> return Nothing
+
+  badTy opts ty =
+    fail $ unlines [ "Incorrect type for proof by induction!"
+                   , "Run `:help prove_by_bv_induction` to see a description of what is expected."
+                   , show (ppTerm (SV.sawPPOpts opts) ty)
+                   ]
+
 provePrintPrim ::
   ProofScript () ->
   TypedTerm ->
   TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  prop <- io $ predicateToProp sc Universal (ttTerm t)
-  let goal = ProofGoal 0 "prove" "prove" prop
-  opts <- rwPPOpts <$> getTopLevelRW
-  res <- SV.runProofScript script goal Nothing "prove_print_prim"
-  let failProof pst =
-         fail $ "prove: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
-                          ++ SV.showsProofResult opts res ""
-  case res of
-    ValidProof _stats thm ->
-      do printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
-         SV.returnProof thm
-    InvalidProof _stats _cex pst -> failProof pst
-    UnfinishedProof pst -> failProof pst
+  proveHelper "prove_print" script (ttTerm t) $ io . predicateToProp sc Universal
+
+provePropPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+provePropPrim script t = do
+  sc <- getSharedContext
+  proveHelper "prove_extcore" script (ttTerm t) $ io . termToProp sc
 
 satPrim ::
   ProofScript () ->
@@ -944,8 +1425,17 @@ satPrim script t =
   do io $ checkBooleanSchema (ttType t)
      sc <- getSharedContext
      prop <- io $ predicateToProp sc Existential (ttTerm t)
-     let goal = ProofGoal 0 "sat" "sat" prop
-     res <- SV.runProofScript script goal Nothing "sat"
+     pos <- SV.getPosition
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "sat"
+                , goalName = "sat"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalSequent = propToSequent prop
+                , goalTags = mempty
+                }
+     res <- SV.runProofScript script prop goal Nothing "sat" False False
      case res of
        InvalidProof stats cex _ -> return (SV.Sat stats cex)
        ValidProof stats _thm -> return (SV.Unsat stats)
@@ -1023,7 +1513,7 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
 unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  unints' <- mapM (resolveName sc) unints
+  unints' <- mconcat <$> mapM (resolveName sc) unints
   t' <- io $ scUnfoldConstants sc unints' t
   return (TypedTerm schema t')
 
@@ -1040,12 +1530,20 @@ addsimp thm ss =
        Nothing -> fail "addsimp: theorem not an equation"
        Just rule -> pure (addRule rule ss)
 
+addsimp_shallow :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
+addsimp_shallow thm ss =
+  do sc <- getSharedContext
+     io (propToRewriteRule sc (thmProp thm) (Just (thmNonce thm))) >>= \case
+       Nothing -> fail "addsimp: theorem not an equation"
+       Just rule -> pure (addRule (shallowRule rule) ss)
+
 -- TODO: remove this, it implicitly adds axioms
 addsimp' :: Term -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp' t ss =
-  case ruleOfProp t Nothing of
-    Nothing -> fail "addsimp': theorem not an equation"
-    Just rule -> pure (addRule rule ss)
+  do  sc <- getSharedContext
+      io (ruleOfProp sc t Nothing) >>= \case
+        Nothing -> fail "addsimp': theorem not an equation"
+        Just rule -> pure (addRule rule ss)
 
 addsimps :: [Theorem] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimps thms ss = foldM (flip addsimp) ss thms
@@ -1075,9 +1573,8 @@ check_goal =
        g : _ ->
          SV.scriptTopLevel $
          do sc <- getSharedContext
-            tm <- io (propToTerm sc (goalProp g))
-            check_term tm
-            return ()
+            opts <- getTopLevelPPOpts
+            io $ checkSequent sc opts (goalSequent g)
 
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
@@ -1099,6 +1596,11 @@ abstractSymbolicPrim (TypedTerm _ t) = do
 bindAllExts :: SharedContext -> Term -> IO Term
 bindAllExts sc body = scAbstractExts sc (getAllExts body) body
 
+term_apply :: TypedTerm -> [TypedTerm] -> TopLevel TypedTerm
+term_apply fn args =
+  do sc <- getSharedContext
+     io $ applyTypedTerms sc fn args
+
 lambda :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 lambda x = lambdas [x]
 
@@ -1112,6 +1614,29 @@ lambdas vars tt =
       case asTypedExtCns v of
         Just tec -> pure tec
         Nothing -> fail "lambda: argument not a valid symbolic variable"
+
+implies_term :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
+implies_term x y =
+  do sc <- getSharedContext
+     -- check that the given terms are props
+     _ <- io $ termToProp sc (ttTerm x)
+     _ <- io $ termToProp sc (ttTerm y)
+     z <- io $ scFun sc (ttTerm x) (ttTerm y)
+     io $ mkTypedTerm sc z
+
+generalize_term :: [TypedTerm] -> TypedTerm -> TopLevel TypedTerm
+generalize_term vars tt =
+  do tecs <- traverse checkVar vars
+     sc <- getSharedContext
+     tm <- io $ scGeneralizeExts sc (map tecExt tecs) (ttTerm tt)
+     _tp <- io $ scTypeCheckError sc tm -- sanity check the term
+     io $ mkTypedTerm sc tm
+
+  where
+    checkVar v =
+      case asTypedExtCns v of
+        Just tec -> pure tec
+        Nothing -> fail "generalize_term: argument not a valid symbolic variable"
 
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
@@ -1179,10 +1704,9 @@ caseSatResultPrim sr vUnsat vSat = do
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
 
-
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwTypes <$> getTopLevelRW
+  m <- rwTypes <$> SV.getMergedEnv
   opts <- getOptions
   let showLName = getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
@@ -1215,12 +1739,14 @@ timePrim a = do
   printOutLnTop Info $ printf "Time: %s\n" (show diff)
   return r
 
+failPrim :: String -> TopLevel SV.Value
+failPrim msg = fail msg
+
 failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
   topRO <- getTopLevelRO
   topRW <- getTopLevelRW
-  ref <- liftIO $ newIORef topRW
-  x <- liftIO $ Ex.try (runTopLevel m topRO ref)
+  x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
   case x of
     Left (ex :: Ex.SomeException) ->
       do liftIO $ putStrLn "== Anticipated failure message =="
@@ -1296,7 +1822,7 @@ term_theories unints t = do
   unintSet <- resolveNames unints
   hashConsing <- gets SV.rwWhat4HashConsing
   prop <- io (predicateToProp sc Universal (ttTerm t))
-  Prover.what4Theories unintSet hashConsing prop
+  Prover.what4Theories unintSet hashConsing (propToSequent prop)
 
 default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
@@ -1362,6 +1888,44 @@ eval_size s =
         Right _        -> fail "eval_size: not a numeric type"
     _ -> fail "eval_size: unsupported polymorphic type"
 
+int_to_term :: Int -> TopLevel TypedTerm
+int_to_term i
+  | i < 0 =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromInteger (negate (toInteger i))))
+        tm' <- io (scIntNeg sc =<< scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+  | otherwise =
+     do sc  <- getSharedContext
+        tm  <- io (scNat sc (fromIntegral i))
+        tm' <- io (scNatToInt sc tm)
+        io (mkTypedTerm sc tm')
+
+nat_to_term :: Int -> TopLevel TypedTerm
+nat_to_term i
+  | i >= 0 =
+      do sc <- getSharedContext
+         tm <- io $ scNat sc (fromIntegral i)
+         io $ mkTypedTerm sc tm
+
+  | otherwise =
+      fail ("nat_to_term: negative value " ++ show i)
+
+
+size_to_term :: C.Schema -> TopLevel TypedTerm
+size_to_term s =
+  do sc <- getSharedContext
+     tm <- io $ case s of
+                  C.Forall [] [] t ->
+                    case C.evalType mempty t of
+                      Left (C.Nat x) | x >= 0 ->
+                        scCtorApp sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scCtorApp sc "Cryptol.TCInf" []
+                      _ -> fail "size_to_term: not a numeric type"
+                  _ -> fail "size_to_term: unsupported polymorphic type"
+
+     return (TypedTerm (TypedTermKind C.KNum) tm)
+
 nthPrim :: [a] -> Int -> TopLevel a
 nthPrim [] _ = fail "nth: index too large"
 nthPrim (x : _) 0 = return x
@@ -1375,8 +1939,8 @@ tailPrim :: [a] -> TopLevel [a]
 tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
-parseCore :: String -> TopLevel Term
-parseCore input =
+parseCoreMod :: String -> String -> TopLevel Term
+parseCoreMod mnm_str input =
   do sc <- getSharedContext
      let base = "<interactive>"
          path = "<interactive>"
@@ -1387,15 +1951,26 @@ parseCore input =
            do let msg = show err
               printOutLnTop Opts.Error msg
               fail msg
-     let mnm = Just $ mkModuleName ["Cryptol"]
-     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     let mnm =
+           mkModuleName $ Text.splitOn (Text.pack ".") $ Text.pack mnm_str
+     _ <- io $ scFindModule sc mnm -- Check that mnm exists
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc (Just mnm) []
      case err_or_t of
        Left err -> fail (show err)
        Right (TC.TypedTerm x _) -> return x
 
+parseCore :: String -> TopLevel Term
+parseCore = parseCoreMod "Cryptol"
+
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
   t <- parseCore input
+  sc <- getSharedContext
+  io $ mkTypedTerm sc t
+
+parse_core_mod :: String -> String -> TopLevel TypedTerm
+parse_core_mod mnm input = do
+  t <- parseCoreMod mnm input
   sc <- getSharedContext
   io $ mkTypedTerm sc t
 
@@ -1404,8 +1979,18 @@ prove_core script input =
   do sc <- getSharedContext
      t <- parseCore input
      p <- io (termToProp sc t)
+     pos <- SV.getPosition
      opts <- rwPPOpts <$> getTopLevelRW
-     res <- SV.runProofScript script (ProofGoal 0 "prove" "prove" p) Nothing "prove_core"
+     let goal = ProofGoal
+                { goalNum = 0
+                , goalType = "prove"
+                , goalName = "prove_core"
+                , goalLoc  = show pos
+                , goalDesc = ""
+                , goalSequent = propToSequent p
+                , goalTags = mempty
+                }
+     res <- SV.runProofScript script p goal Nothing "prove_core" True False
      let failProof pst =
             fail $ "prove_core: " ++ show (length (psGoals pst)) ++ " unsolved subgoal(s)\n"
                                   ++ SV.showsProofResult opts res ""
@@ -1420,7 +2005,7 @@ core_axiom input =
      pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
      SV.returnProof thm
 
@@ -1429,9 +2014,17 @@ core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
      pos <- SV.getPosition
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      thm <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
+
+specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
+specialize_theorem thm ts =
+  do sc <- getSharedContext
+     db <- SV.getTheoremDB
+     pos <- SV.getPosition
+     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.returnProof thm'
 
 get_opt :: Int -> TopLevel String
 get_opt n = do
@@ -1481,7 +2074,7 @@ cryptol_load fileReader path = do
   rw <- getTopLevelRW
   let ce = rwCryptol rw
   let ?fileReader = fileReader
-  (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
+  (m, ce') <- io $ CEnv.loadCryptolModule sc CEnv.defaultPrimitiveOptions ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
@@ -1495,23 +2088,235 @@ cryptol_add_path path =
      let rw' = rw { rwCryptol = ce' }
      putTopLevelRW rw'
 
-mr_solver_tests :: [SharedContext -> IO Term]
-mr_solver_tests =
-  let helper nm = \sc -> scGlobalDef sc nm in
-  map helper
-  [ "Prelude.test_fun0", "Prelude.test_fun1", "Prelude.test_fun2"
-  , "Prelude.test_fun3", "Prelude.test_fun4", "Prelude.test_fun5"
-  , "Prelude.test_fun6"]
+cryptol_add_prim :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim mnm nm trm =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' =
+           env { CEnv.ePrims =
+                   Map.insert prim_name (ttTerm trm) (CEnv.ePrims env) }
+     putTopLevelRW (rw { rwCryptol = env' })
 
-testMRSolver :: Integer -> Integer -> TopLevel ()
-testMRSolver i1 i2 =
-  do sc <- getSharedContext
-     t1 <- liftIO $ (mr_solver_tests !! fromInteger i1) sc
-     t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
-     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
+cryptol_add_prim_type :: String -> String -> TypedTerm -> TopLevel ()
+cryptol_add_prim_type mnm nm tp =
+  do rw <- getTopLevelRW
+     let env = rwCryptol rw
+     let prim_name =
+           C.PrimIdent (C.textToModName $ Text.pack mnm) (Text.pack nm)
+     let env' = env { CEnv.ePrimTypes =
+                        Map.insert prim_name (ttTerm tp) (CEnv.ePrimTypes env) }
+     putTopLevelRW (rw { rwCryptol = env' })
+
+-- | Call 'Cryptol.importSchema' using a 'CEnv.CryptolEnv'
+importSchemaCEnv :: SharedContext -> CEnv.CryptolEnv -> Cryptol.Schema ->
+                    IO Term
+importSchemaCEnv sc cenv schema =
+  do cry_env <- let ?fileReader = StrictBS.readFile in CEnv.mkCryEnv cenv
+     Cryptol.importSchema sc cry_env schema
+
+monadifyTypedTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+monadifyTypedTerm sc t =
+  do rw <- get
+     let menv = rwMonadify rw
+     (ret_t, menv') <-
+       liftIO $
+       case ttType t of
+         TypedTermSchema schema ->
+           do tp <- importSchemaCEnv sc (rwCryptol rw) schema
+              Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
+         TypedTermKind _ ->
+           fail "monadify_term applied to a type"
+         TypedTermOther tp ->
+           Monadify.monadifyTermInEnv sc menv (ttTerm t) tp
+     modify (\s -> s { rwMonadify = menv' })
+     tp <- liftIO $ scTypeOf sc ret_t
+     return $ TypedTerm (TypedTermOther tp) ret_t
+
+-- | Ensure that a 'TypedTerm' has been monadified
+ensureMonadicTerm :: SharedContext -> TypedTerm -> TopLevel TypedTerm
+ensureMonadicTerm sc t
+  | TypedTermOther tp <- ttType t =
+    io (Prover.isSpecFunType sc tp) >>= \case
+      True -> return t
+      False -> monadifyTypedTerm sc t
+ensureMonadicTerm sc t = monadifyTypedTerm sc t
+
+-- | A wrapper for either 'Prover.askMRSolver' or 'Prover.assumeMRSolver' from
+-- @MRSolver.hs@: if the first argument is @Just str@, prints out @str@
+-- followed by an abridged version of the refinement being asked, then calls
+-- the given function, returning how long it took to execute
+mrSolver :: (SharedContext -> Prover.MREnv -> Maybe Integer -> Term -> Term -> IO a) ->
+            Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
+            TopLevel (NominalDiffTime, a)
+mrSolver f printStr sc t1 t2 =
+  do env <- rwMRSolverEnv <$> get
+     m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
+     m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
+     case printStr of
+       Nothing -> return ()
+       Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
+         "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
+                               " |= " <> ppTmHead m2
+     time1 <- liftIO getCurrentTime
+     res <- io $ f sc env Nothing m1 m2
+     time2 <- liftIO getCurrentTime
+     return (diffUTCTime time2 time1, res)
+  where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
+        collapseEta :: Term -> Term
+        collapseEta (asLambdaList -> (lamVars,
+                     asApplyAll -> (t@(smallestFreeVar -> Nothing),
+                                    mapM asLocalVar -> Just argVars)))
+          | argVars == [(length lamVars - 1), (length lamVars - 2) .. 0] = t
+        collapseEta t = t
+        -- Pretty-print the name of the top-level function call, followed by
+        -- "..." if it is given any arguments, or just "..." if there is no
+        -- top-level call
+        ppTmHead :: Term -> SawDoc
+        ppTmHead (asLambdaList -> (_,
+                  asApplyAll -> (t@(
+                  Prover.asProjAll -> (
+                  Monadify.asTypedGlobalDef -> Just _, _)), args))) =
+          ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
+        ppTmHead _ = "..."
+
+-- | Run Mr Solver to prove that the first term refines the second, adding
+-- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
+-- is true and this can be done, or printing an error message and exiting if it
+-- cannot.
+mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverProve addToEnv sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     let printStr = if addToEnv then "Proving" else "Testing"
+     (diff, res) <- mrSolver Prover.askMRSolver (Just printStr) sc t1 t2
      case res of
-       Just err -> io $ putStrLn $ Prover.showMRFailure err
-       Nothing -> io $ putStrLn "Success!"
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right (Just (fnm, fassump)) | addToEnv ->
+         let assump_str = case Prover.fassumpRHS fassump of
+                            Prover.OpaqueFunAssump _ _ -> "an opaque"
+                            Prover.RewriteFunAssump _ -> "a rewrite" in
+         printOutLnTop Info (
+           printf "[MRSolver] Success in %s, added as %s assumption"
+                  (show diff) (assump_str :: String)) >>
+         modify (\rw -> rw { rwMRSolverEnv =
+           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
+       _ ->
+         printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
+
+-- | Run Mr Solver to prove that the first term refines the second, returning
+-- true iff this can be done. This function will not modify the 'Prover.MREnv'.
+mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
+mrSolverQuery sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (diff, res) <- mrSolver Prover.askMRSolver (Just "Querying") sc t1 t2
+     case res of
+       Left _ | dlvl == 0 ->
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+         return False
+       Right _ ->
+         printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+         return True
+
+-- | Generate the 'Prover.FunAssump' which corresponds to the given refinement
+-- and add it to the 'Prover.MREnv'
+mrSolverAssume :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
+mrSolverAssume sc t1 t2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     (_, res) <- mrSolver Prover.assumeMRSolver (Just "Assuming") sc t1 t2
+     case res of
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure") >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failure") >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right (Just (fnm, fassump)) ->
+         printOutLnTop Info (
+           printf "[MRSolver] Success, added as an opaque assumption") >>
+         modify (\rw -> rw { rwMRSolverEnv =
+           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
+       _ ->
+         printOutLnTop Info $ printf $
+           "[MRSolver] Failure, given refinement cannot be interpreted as" ++
+                     " an assumption"
+
+-- | Set the debug level of the 'Prover.MREnv'
+mrSolverSetDebug :: Int -> TopLevel ()
+mrSolverSetDebug dlvl =
+  modify (\rw -> rw { rwMRSolverEnv =
+                        Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
+
+setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
+setMonadification sc cry_str saw_str poly_p =
+  do rw <- get
+
+     -- Step 1: convert the first string to a Cryptol name
+     cry_nm <-
+       let ?fileReader = StrictBS.readFile in
+       liftIO (CEnv.resolveIdentifier
+               (rwCryptol rw) (Text.pack cry_str)) >>= \case
+       Just n -> return n
+       Nothing -> fail ("No such Cryptol identifer: " ++ cry_str)
+     cry_nmi <- liftIO $ Cryptol.importName cry_nm
+
+     -- Step 2: get the monadified type for this Cryptol name
+     --
+     -- FIXME: not sure if this is the correct way to get the type of a Cryptol
+     -- name, so we are falling back on just translating the name to SAW core
+     -- and monadifying its type there
+     cry_saw_tp <-
+       liftIO $
+       case Map.lookup cry_nm (CEnv.eExtraTypes $ rwCryptol rw) of
+         Just schema ->
+           -- putStrLn ("Found Cryptol type for name: " ++ show cry_str) >>
+           importSchemaCEnv sc (rwCryptol rw) schema
+         Nothing
+           | Just cry_nm_trans <- Map.lookup cry_nm (CEnv.eTermEnv $
+                                                     rwCryptol rw) ->
+             -- putStrLn ("No Cryptol type for name: " ++ cry_str) >>
+             scTypeOf sc cry_nm_trans
+         _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
+     cry_mon_tp <-
+       liftIO $
+       Monadify.monadifyCompleteArgType sc (rwMonadify rw) cry_saw_tp poly_p
+
+     -- Step 3: convert the second string to a typed SAW core term, and if it
+     -- has an existing macro, check that it has the same type as the type for
+     -- the cryptol name, or if no macro exists, check that it has the same
+     -- type as the monadified type for the Cryptol name and generate a macro
+     -- which maps the Cryptol name to the SAW core term
+     let saw_ident = parseIdent saw_str
+     saw_trm <- liftIO $ scGlobalDef sc saw_ident
+     saw_tp <- liftIO $ scTypeOf sc saw_trm
+     let (tp_to_check, macro) =
+           case Monadify.monEnvLookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
+             Just existing_macro -> (cry_saw_tp, existing_macro)
+             Nothing -> (cry_mon_tp,
+                         Monadify.argGlobalMacro cry_nmi saw_ident poly_p)
+     liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) tp_to_check
+
+     -- Step 4: Add the generated macro
+     put (rw { rwMonadify = Monadify.monEnvAdd cry_nmi macro (rwMonadify rw) })
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
@@ -1541,15 +2346,24 @@ approxmc t = do
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
 
+set_path_sat_solver :: String -> TopLevel ()
+set_path_sat_solver nm =
+  case map toLower nm of
+    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
+    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
+    _ -> fail $ "Unknown path sat solver: " ++ show nm
+
 summarize_verification :: TopLevel ()
 summarize_verification =
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
-     io $ putStrLn $ prettyVerificationSummary summary
+     opts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+     nenv <- io . scGetNamingEnv =<< getSharedContext
+     io $ putStrLn $ prettyVerificationSummary opts nenv summary
 
 summarize_verification_json :: String -> TopLevel ()
 summarize_verification_json fpath =
@@ -1557,6 +2371,29 @@ summarize_verification_json fpath =
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
-     db <- roTheoremDB <$> getTopLevelRO
+     db <- SV.getTheoremDB
      summary <- io (computeVerificationSummary db jspecs lspecs thms)
      io (writeFile fpath (jsonVerificationSummary summary))
+
+writeVerificationSummary :: TopLevel ()
+writeVerificationSummary = do
+  do
+    db <- SV.getTheoremDB
+    values <- rwProofs <$> getTopLevelRW
+    let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+        lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+        thms    = [ t | SV.VTheorem t <- values ]
+    summary <- io (computeVerificationSummary db jspecs lspecs thms)
+    opts <- roOptions <$> getTopLevelRO
+    dir <- roInitWorkDir <$> getTopLevelRO
+    nenv <- io . scGetNamingEnv =<< getSharedContext
+    ppOpts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
+
+    case summaryFile opts of
+      Nothing -> return ()
+      Just f -> let
+        f' = if hasDrive f then f else dir </> f
+        formatSummary = case summaryFormat opts of
+                       JSON -> jsonVerificationSummary
+                       Pretty -> prettyVerificationSummary ppOpts nenv
+        in io $ writeFile f' $ formatSummary summary

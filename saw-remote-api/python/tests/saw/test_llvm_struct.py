@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 from saw_client import *
-from saw_client.llvm import Contract, SetupVal, FreshVar, cryptol, struct, LLVMType, void, array_ty, i32, alias_ty
+from saw_client.crucible import cry, cry_f
+from saw_client.llvm import Contract, SetupVal, FreshVar, struct, LLVMType, void, array_ty, i32, alias_ty
 
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
@@ -22,7 +23,7 @@ class SetContract(Contract):
         self.execute_func(p)
 
         self.points_to(p, struct(x_p))
-        self.points_to(x_p, cryptol('[0, 0] : [2][32]'))
+        self.points_to(x_p, cry('[0, 0] : [2][32]'))
         self.returns(void)
 
 
@@ -33,7 +34,7 @@ class AddContract(Contract):
 
         self.execute_func(p)
 
-        self.returns(cryptol(f'{x.name()}@0 + {x.name()}@1'))
+        self.returns_f('{x}@0 + {x}@1')
 
 
 class IdContract(Contract):

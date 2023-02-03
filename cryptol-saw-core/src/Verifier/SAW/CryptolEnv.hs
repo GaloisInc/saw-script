@@ -16,6 +16,7 @@ module Verifier.SAW.CryptolEnv
   , loadCryptolModule
   , bindCryptolModule
   , lookupCryptolModule
+  , combineCryptolEnv
   , importModule
   , bindTypedTerm
   , bindType
@@ -33,6 +34,9 @@ module Verifier.SAW.CryptolEnv
   , lookupIn
   , resolveIdentifier
   , meSolverConfig
+  , mkCryEnv
+  , C.ImportPrimitiveOptions(..)
+  , C.defaultPrimitiveOptions
   )
   where
 
@@ -83,8 +87,8 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import qualified Cryptol.Utils.Ident as C
 
-import Cryptol.Utils.PP
-import Cryptol.Utils.Ident (Ident, preludeName, preludeReferenceName
+import Cryptol.Utils.PP hiding ((</>))
+import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
                            , packIdent, interactiveName, identText
                            , packModName, textToModName, modNameChunks
                            , prelPrim)
@@ -123,6 +127,8 @@ data CryptolEnv = CryptolEnv
   , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
   , eExtraTSyns :: Map T.Name T.TySyn   -- ^ Extra Cryptol type synonyms in scope
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
+  , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
+  , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
   }
 
 
@@ -184,10 +190,12 @@ initCryptolEnv sc = do
   let modEnv1 = modEnv0 { ME.meSearchPath = cryptolPaths ++
                            (instDir </> "lib") : ME.meSearchPath modEnv0 }
 
-  -- Load Cryptol prelude
+  -- Load Cryptol prelude and magic Array module
   (_, modEnv2) <-
     liftModuleM modEnv1 $
-      MB.loadModuleFrom False (MM.FromModule preludeName)
+      do _ <- MB.loadModuleFrom False (MM.FromModule preludeName)
+         _ <- MB.loadModuleFrom False (MM.FromModule arrayName)
+         return ()
 
   -- Load Cryptol reference implementations
   ((_,refMod), modEnv) <-
@@ -208,12 +216,15 @@ initCryptolEnv sc = do
   return CryptolEnv
     { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing)
                     , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing)
+                    , (OnlyPublic, P.Import arrayName Nothing Nothing)
                     ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
     , eExtraTypes = Map.empty
     , eExtraTSyns = Map.empty
     , eTermEnv    = termEnv
+    , ePrims      = Map.empty
+    , ePrimTypes  = Map.empty
     }
 
 -- Parse -----------------------------------------------------------------------
@@ -294,6 +305,8 @@ mkCryEnv env =
      let cryEnv = C.emptyEnv
            { C.envE = fmap (\t -> (t, 0)) terms
            , C.envC = types'
+           , C.envPrims = ePrims env
+           , C.envPrimTypes = ePrimTypes env
            }
      return cryEnv
 
@@ -309,7 +322,7 @@ translateDeclGroups ::
   SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env dgs =
   do cryEnv <- mkCryEnv env
-     cryEnv' <- C.importTopLevelDeclGroups sc cryEnv dgs
+     cryEnv' <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv dgs
      termEnv' <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv')
 
      let decls = concatMap T.groupDecls dgs
@@ -328,10 +341,19 @@ genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
-  cryEnv <- C.importTopLevelDeclGroups sc cryEnv0 declGroups
+  cryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv0 declGroups
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
 --------------------------------------------------------------------------------
+
+
+combineCryptolEnv :: CryptolEnv -> CryptolEnv -> IO CryptolEnv
+combineCryptolEnv chkEnv newEnv =
+  do let newMEnv = eModuleEnv newEnv
+     let chkMEnv = eModuleEnv chkEnv
+     let menv' = chkMEnv{ ME.meNameSeeds = ME.meNameSeeds newMEnv }
+     return chkEnv{ eModuleEnv = menv' }
+
 
 checkNotParameterized :: T.Module -> IO ()
 checkNotParameterized m =
@@ -343,9 +365,12 @@ checkNotParameterized m =
 
 loadCryptolModule ::
   (?fileReader :: FilePath -> IO ByteString) =>
-  SharedContext -> CryptolEnv -> FilePath ->
+  SharedContext ->
+  C.ImportPrimitiveOptions ->
+  CryptolEnv ->
+  FilePath ->
   IO (CryptolModule, CryptolEnv)
-loadCryptolModule sc env path = do
+loadCryptolModule sc primOpts env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
   checkNotParameterized m
@@ -361,7 +386,9 @@ loadCryptolModule sc env path = do
   let isNew m' = T.mName m' `notElem` oldModNames
   let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv''
   let newDeclGroups = concatMap T.mDecls newModules
-  newCryEnv <- C.importTopLevelDeclGroups sc oldCryEnv newDeclGroups
+  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
+  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
+               C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
   newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
@@ -422,7 +449,9 @@ importModule sc env src as vis imps = do
   let isNew m' = T.mName m' `notElem` oldModNames
   let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv'
   let newDeclGroups = concatMap T.mDecls newModules
-  newCryEnv <- C.importTopLevelDeclGroups sc oldCryEnv newDeclGroups
+  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
+  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
+               C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cEnv newDeclGroups
   newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   return env { eImports = (vis, P.Import (T.mName m) as imps) : eImports env

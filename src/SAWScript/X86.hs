@@ -12,6 +12,7 @@ module SAWScript.X86
   , Fun(..)
   , Goal(..)
   , gGoal
+  , gLoc
   , getGoals
   , X86Error(..)
   , X86Unsupported(..)
@@ -35,11 +36,12 @@ import qualified Data.BitVector.Sized as BV
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
+import           Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
 import           System.IO(hFlush,stdout)
-import           Data.Maybe(mapMaybe)
+import           Data.Maybe(mapMaybe, fromMaybe)
 
 -- import Text.PrettyPrint.ANSI.Leijen(pretty)
 
@@ -73,7 +75,7 @@ import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
           (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
-          ,assumptionsPred)
+          ,assumptionsPred,IsSymBackend(..),SomeBackend(..),HasSymInterface(..))
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
@@ -104,6 +106,8 @@ import Data.Macaw.Symbolic( ArchRegStruct
                           , GlobalMap
                           , MacawSimulatorState(..)
                           , macawExtensions
+                          , unsupportedSyscalls
+                          , defaultMacawArchStmtExtensionOverride
                           )
 import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
 import Data.Macaw.Symbolic( MacawExt
@@ -127,18 +131,23 @@ import Verifier.SAW.Recognizer(asBool)
 import Verifier.SAW.Simulator.What4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
 
 -- Cryptol Verifier
-import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
+import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec hiding (Prop)
 import SAWScript.Proof(boolToProp, Prop)
-import SAWScript.Crucible.Common (newSAWCoreBackend, sawCoreState)
+import SAWScript.Crucible.Common.MethodSpec (ConditionMetadata(..))
+import SAWScript.Crucible.Common.Override (MetadataMap)
+import SAWScript.Crucible.Common
+  ( newSAWCoreBackend, newSAWCoreExprBuilder
+  , sawCoreState, SomeOnlineBackend(..)
+  , PathSatSolver
+  )
 
 
 --------------------------------------------------------------------------------
 -- Input Options
-
 
 -- | What we'd like done, plus additional information from the "outside world".
 data Options = Options
@@ -151,7 +160,7 @@ data Options = Options
   , archInfo :: ArchitectureInfo X86_64
     -- ^ Architectural flavor.  See "linuxInfo" and "bsdInfo".
 
-  , backend :: Sym
+  , backend :: SomeBackend Sym
     -- ^ The Crucible backend to use.
 
   , allocator :: HandleAllocator
@@ -181,24 +190,26 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 --------------------------------------------------------------------------------
 
-type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
+type CallHandler = Sym -> Macaw.LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
 proof ::
   (FilePath -> IO ByteString) ->
+  PathSatSolver ->
   ArchitectureInfo X86_64 ->
   FilePath {- ^ ELF binary -} ->
   Maybe FilePath {- ^ Cryptol spec, if any -} ->
   [(ByteString,Integer,Unit)] ->
   Fun ->
   IO (SharedContext,Integer,[Goal])
-proof fileReader archi file mbCry globs fun =
+proof fileReader pss archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
-     sym <- newSAWCoreBackend sc
+     sym <- newSAWCoreExprBuilder sc
+     SomeOnlineBackend bak <- newSAWCoreBackend pss sym
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar "saw_x86:llvm_memory" halloc
@@ -206,7 +217,7 @@ proof fileReader archi file mbCry globs fun =
        { fileName = file
        , function = fun
        , archInfo = archi
-       , backend = sym
+       , backend = SomeBackend bak
        , allocator = halloc
        , memvar = mvar
        , cryEnv = cenv
@@ -365,7 +376,7 @@ loadCry sym mb =
      env <- initCryptolEnv sc
      case mb of
        Nothing   -> return env
-       Just file -> snd <$> loadCryptolModule sc env file
+       Just file -> snd <$> loadCryptolModule sc defaultPrimitiveOptions env file
 
 
 --------------------------------------------------------------------------------
@@ -398,10 +409,15 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
-     let ?recordLLVMAnnotation = \_ _ -> return ()
+     -- TODO? do we need to pass in the mdMap into more places in this mode?
+     mdMap <- newIORef mempty
 
-     let sym   = backend opts
-         sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
+     let ?memOpts = Crucible.defaultMemOptions
+     let ?recordLLVMAnnotation = \_ _ _ -> return ()
+
+     let bak   = backend opts
+         sym   = case bak of SomeBackend b -> backendGetSym b
+         sopts = Opts { optsBackend = bak, optsCry = cryEnv opts, optsMvar = memvar opts }
 
      sfs <- registerSymFuns sopts
 
@@ -417,7 +433,7 @@ translate opts elf fun =
 
      addr <- doSim opts elf sfs name globs st checkPost
 
-     gs <- getGoals sym
+     gs <- getGoals bak mdMap
      sc <- saw_ctx <$> sawCoreState sym
      return (sc, addr, gs)
 
@@ -431,7 +447,7 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->
@@ -458,8 +474,9 @@ doSim opts elf sfs name (globs,overs) st checkPost =
 
      -- writeFile "XXX.hs" (show cfg)
 
-     let sym = backend opts
+     let sym  = case backend opts of SomeBackend bak -> backendGetSym bak
          mvar = memvar opts
+
      setSimulatorVerbosity 0 sym
 
      execResult <- statusBlock "  Simulating... " $ do
@@ -472,13 +489,15 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        -- The memory setup for this verifier does not have that problem, and
        -- thus does not need any additional validity predicates.
        let noExtraValidityPred _ _ _ _ = return Nothing
+       let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride
+       let lookupSyscall = unsupportedSyscalls "saw-script"
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
-           ctx = SimContext { _ctxSymInterface = sym
+           ctx = SimContext { _ctxBackend = backend opts
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
+                              , extensionImpl = macawExtensions archEvalFns mvar globs (callHandler overs sym) lookupSyscall noExtraValidityPred
                               , _functionBindings = FnBindings $
                                 insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
@@ -537,9 +556,12 @@ makeCFG opts elf name addr =
 data Goal = Goal
   { gAssumes :: [ Term ]              -- ^ Assuming these
   , gShows   :: Term                  -- ^ We need to show this
-  , gLoc     :: ProgramLoc            -- ^ The goal came from here
+  , gMd      :: ConditionMetadata     -- ^ Metadata about the goal
   , gMessage :: SimErrorReason        -- ^ We should say this if the proof fails
   }
+
+gLoc :: Goal -> ProgramLoc
+gLoc = conditionLoc . gMd
 
 -- | The proposition that needs proving (i.e., assumptions imply conclusion)
 gGoal :: SharedContext -> Goal -> IO Prop
@@ -563,19 +585,31 @@ gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
             []     -> return (gShows g)
             a : as -> scImplies sc a =<< go as
 
-getGoals :: Sym -> IO [Goal]
-getGoals sym =
-  do obls <- maybe [] goalsToList <$> getProofObligations sym
+getGoals :: SomeBackend Sym -> IORef MetadataMap -> IO [Goal]
+getGoals (SomeBackend bak) mdMap =
+  do finalMdMap <- readIORef mdMap
+     obls <- maybe [] goalsToList <$> getProofObligations bak
      st <- sawCoreState sym
-     mapM (toGoal st) obls
+     mapM (toGoal st finalMdMap) obls
   where
-  toGoal st (ProofGoal asmps g) =
+  sym = backendGetSym bak
+
+  toGoal st finalMdMap (ProofGoal asmps g) =
     do a1 <- toSC sym st =<< assumptionsPred sym asmps
        p  <- toSC sym st (g ^. labeledPred)
        let SimError loc msg = g^.labeledPredMsg
+       let defaultMd = ConditionMetadata
+                       { conditionLoc = loc
+                       , conditionTags = mempty
+                       , conditionType = "safety assertion"
+                       , conditionContext = ""
+                       }
+       let md = fromMaybe defaultMd $
+                  do ann <- W4.getAnnotation sym (g^.labeledPred)
+                     Map.lookup ann finalMdMap
        return Goal { gAssumes = [a1]
                    , gShows   = p
-                   , gLoc     = loc
+                   , gMd      = md
                    , gMessage = msg
                    }
 

@@ -5,41 +5,9 @@ import Prelude;
 SigBV1 : sort 0 -> sort 0;
 SigBV1 a = Sigma (Vec 1 Bool) (\ (_:Vec 1 Bool) -> a);
 
-BV1 : sort 0;
-BV1 = Sigma (Vec 1 Bool) (\ (_:Vec 1 Bool) -> #());
-
-mkBV1 : Vec 1 Bool -> BV1;
-mkBV1 x = exists (Vec 1 Bool) (\ (_:Vec 1 Bool) -> #()) x ();
-
-BV8 : sort 0;
-BV8 = Sigma (Vec 8 Bool) (\ (_:Vec 8 Bool) -> #());
-
-mkBV8 : Vec 8 Bool -> BV8;
-mkBV8 x = exists (Vec 8 Bool) (\ (_:Vec 8 Bool) -> #()) x ();
-
-getBV8 : BV8 -> Vec 8 Bool;
-getBV8 = Sigma_proj1 (Vec 8 Bool) (\ (_:Vec 8 Bool) -> #());
-
-BV32 : sort 0;
-BV32 = Sigma (Vec 32 Bool) (\ (_:Vec 32 Bool) -> #());
-
-mkBV32 : Vec 32 Bool -> BV32;
-mkBV32 x = exists (Vec 32 Bool) (\ (_:Vec 32 Bool) -> #()) x ();
-
-getBV32 : BV32 -> Vec 32 Bool;
-getBV32 = Sigma_proj1 (Vec 32 Bool) (\ (_:Vec 32 Bool) -> #());
-
-BV64 : sort 0;
-BV64 = Sigma (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #());
-
-mkBV64 : Vec 64 Bool -> BV64;
-mkBV64 x = exists (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #()) x ();
-
-getBV64 : BV64 -> Vec 64 Bool;
-getBV64 = Sigma_proj1 (Vec 64 Bool) (\ (_:Vec 64 Bool) -> #());
-
-getSBoxValueSpec : BV64 -> CompM BV64;
-getSBoxValueSpec x = returnM BV64 x;
+getSBoxValueSpec : Vec 64 Bool ->
+                   SpecM VoidEv emptyFunStack (Vec 64 Bool);
+getSBoxValueSpec x = retS VoidEv emptyFunStack (Vec 64 Bool) x;
 
 -- Harcoded 64 length bitvector value 16, used for mbox definitions
 bv64_16 : Vec 64 Bool;
@@ -51,7 +19,7 @@ bv64_128 = [False,False,False,False,False,False,False,False,False,False,False,Fa
 
 data Mbox : sort 0 where {
   Mbox_nil : Mbox;
-  Mbox_cons : BV64 -> BV64 -> Mbox -> BVVec 64 bv64_128 BV8 -> Mbox;
+  Mbox_cons : Vec 64 Bool -> Vec 64 Bool -> Mbox -> BVVec 64 bv64_128 (Vec 8 Bool) -> Mbox;
 }
 
 -- A definition for the Mbox datatype; currently needed as a workaround in Heapster
@@ -60,37 +28,37 @@ Mbox_def = Mbox;
 
 Mbox__rec : (P : Mbox -> sort 0) ->
             (P Mbox_nil) ->
-            ((strt:BV64) -> (len:BV64) -> (m:Mbox) -> P m -> (d:BVVec 64 bv64_128 BV8) -> P (Mbox_cons strt len m d)) ->
+            ((strt:Vec 64 Bool) -> (len:Vec 64 Bool) -> (m:Mbox) -> P m -> (d:BVVec 64 bv64_128 (Vec 8 Bool)) -> P (Mbox_cons strt len m d)) ->
             (m:Mbox) -> P m;
 Mbox__rec P f1 f2 m = Mbox#rec P f1 f2 m;
 
-unfoldMbox : Mbox -> Either #() (BV64 * BV64 * Mbox * BVVec 64 bv64_128 BV8 * #());
+unfoldMbox : Mbox -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool));
 unfoldMbox m =
-  Mbox__rec (\ (_:Mbox) -> Either #() (BV64 * BV64 * Mbox * BVVec 64 bv64_128 BV8 * #()))
-  (Left #() (BV64 * BV64 * Mbox * BVVec 64 bv64_128 BV8 * #()) ())
-  (\ (strt:BV64) (len:BV64) (m:Mbox) (_:Either #() (BV64 * BV64 * Mbox * BVVec 64 bv64_128 BV8 * #())) (d:BVVec 64 bv64_128 BV8) ->
-     Right #() (BV64 * BV64 * Mbox * BVVec 64 bv64_128 BV8 * #()) (strt, len, m, d, ()))
+  Mbox__rec (\ (_:Mbox) -> Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)))
+  (Left #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) ())
+  (\ (strt:Vec 64 Bool) (len:Vec 64 Bool) (m:Mbox) (_:Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool))) (d:BVVec 64 bv64_128 (Vec 8 Bool)) ->
+     Right #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) (strt, len, m, d))
   m;
 
-foldMbox : Either #() (BV64 * BV64 * Mbox * (BVVec 64 bv64_128 BV8) * #()) -> Mbox;
+foldMbox : Either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) -> Mbox;
 foldMbox =
-  either #() (BV64 * BV64 * Mbox * (BVVec 64 bv64_128 BV8) * #()) Mbox
+  either #() (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool)) Mbox
          (\ (_:#()) -> Mbox_nil)
-         (\ (tup : (BV64 * BV64 * Mbox * (BVVec 64 bv64_128 BV8) * #())) ->
-            Mbox_cons tup.1 tup.2 tup.3 tup.4);
+         (\ (tup : (Vec 64 Bool * Vec 64 Bool * Mbox * BVVec 64 bv64_128 (Vec 8 Bool))) ->
+            Mbox_cons tup.1 tup.2 tup.3 tup.(2).(2).(2));
 
 {-
 getMbox : (a : sort 0) -> Mbox a -> a;
 getMbox a =
   Mbox__rec a (\ (_ : Mbox a) -> a)
   (\ (x : a) -> x)
-  (\ (_ : BV64) (_ : BV64) (_ : Mbox a) (rec : a) (_ : BVVec 64 bv64_128 BV8) -> rec);
+  (\ (_ : Vec 64 Bool) (_ : Vec 64 Bool) (_ : Mbox a) (rec : a) (_ : BVVec 64 bv64_128 (Vec 8 Bool)) -> rec);
 
 putMbox : (a b : sort 0) -> Mbox a -> b -> Mbox b;
 putMbox a b m b_val =
   Mbox__rec a (\ (_ : Mbox a) -> Mbox b)
   (\ (_ : a) -> Mbox_nil b b_val)
-  (\ (strt : BV64) (len : BV64) (_ : Mbox a) (rec : Mbox b) (vec : BVVec 64 bv64_128 BV8) -> Mbox_cons b strt len rec vec)
+  (\ (strt : Vec 64 Bool) (len : Vec 64 Bool) (_ : Mbox a) (rec : Mbox b) (vec : BVVec 64 bv64_128 (Vec 8 Bool) -> Mbox_cons b strt len rec vec)
   m;
 -}
 
@@ -98,18 +66,20 @@ transMbox : Mbox -> Mbox -> Mbox;
 transMbox m1 m2 =
   Mbox__rec (\ (_ : Mbox) -> Mbox)
   m2
-  (\ (strt : BV64) (len : BV64) (_ : Mbox) (rec : Mbox) (vec : BVVec 64 bv64_128 BV8) -> Mbox_cons strt len rec vec)
+  (\ (strt : Vec 64 Bool) (len : Vec 64 Bool) (_ : Mbox) (rec : Mbox) (vec : BVVec 64 bv64_128 (Vec 8 Bool)) -> Mbox_cons strt len rec vec)
   m1;
 
-mboxNewSpec : CompM (Mbox);
+mboxNewSpec : SpecM VoidEv emptyFunStack (Mbox);
 mboxNewSpec =
-  returnM Mbox (Mbox_cons (mkBV64 (bvNat 64 0)) (mkBV64 (bvNat 64 0)) Mbox_nil (genBVVec 64 bv64_128 BV8 (\ (i:Vec 64 Bool) (_:is_bvult 64 i bv64_128) -> (mkBV8 (bvNat 8 0)))));
+  retS VoidEv emptyFunStack Mbox
+       (Mbox_cons (bvNat 64 0) (bvNat 64 0) Mbox_nil (genBVVec 64 bv64_128 (Vec 8 Bool) (\ (i:Vec 64 Bool) (_:is_bvult 64 i bv64_128) -> (bvNat 8 0))));
 
-mboxFreeSpec : BVVec 64 bv64_128 BV8 -> CompM BV32;
-mboxFreeSpec _ = returnM BV32 (mkBV32 (bvNat 32 0));
+mboxFreeSpec : BVVec 64 bv64_128 (Vec 8 Bool) ->
+               SpecM VoidEv emptyFunStack (Vec 32 Bool);
+mboxFreeSpec _ = retS VoidEv emptyFunStack (Vec 32 Bool) (bvNat 32 0);
 
-mboxAllFreedSpec : CompM BV1;
-mboxAllFreedSpec = returnM BV1 (mkBV1 (bvNat 1 0));
+mboxAllFreedSpec : SpecM VoidEv emptyFunStack (Vec 1 Bool);
+mboxAllFreedSpec = retS VoidEv emptyFunStack (Vec 1 Bool) (bvNat 1 0);
 
-randSpec : CompM BV32;
-randSpec = returnM BV32 (mkBV32 (bvNat 32 3));
+randSpec : SpecM VoidEv emptyFunStack (Vec 32 Bool);
+randSpec = existsS VoidEv emptyFunStack (Vec 32 Bool);

@@ -75,6 +75,7 @@ import Data.Kind(Type)
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad
+import Control.Monad.Trans
 
 import Data.Parameterized.Context
 
@@ -356,6 +357,12 @@ class Monad m => MonadTerm m where
                -- ^ NOTE: the first term in the list is substituted for the most
                -- recently-bound variable, i.e., deBruijn index 0
 
+instance (MonadTerm m, MonadTrans t, Monad (t m)) => MonadTerm (t m) where
+  mkTermF = lift . mkTermF
+  liftTerm n i t = lift $ liftTerm n i t
+  whnfTerm = lift . whnfTerm
+  substTerm n s t = lift $ substTerm n s t
+
 -- | Build a 'Term' from a 'FlatTermF' in a 'MonadTerm'
 mkFlatTermF :: MonadTerm m => FlatTermF Term -> m Term
 mkFlatTermF = mkTermF . FTermF
@@ -395,7 +402,7 @@ ctxVars2 vars1 vars2 =
 
 -- | Build a 'CtxTerm' for a 'Sort'
 ctxSort :: MonadTerm m => Sort -> m (CtxTerm ctx (Typ a))
-ctxSort s = CtxTerm <$> mkFlatTermF (Sort s)
+ctxSort s = CtxTerm <$> mkFlatTermF (Sort s False)
 
 -- | Apply two 'CtxTerm's
 ctxApply :: MonadTerm m => m (CtxTerm ctx (a -> b)) -> m (CtxTerm ctx a) ->

@@ -4,6 +4,8 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol
@@ -17,6 +19,7 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Cryptol where
 
 import Control.Monad (foldM, join, unless)
+import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
 import Data.List
@@ -43,7 +46,7 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
+  (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
@@ -51,6 +54,7 @@ import qualified Cryptol.Utils.Ident as C
   , ModPath(..), modPathSplit
   )
 import qualified Cryptol.Utils.RecordMap as C
+import Cryptol.TypeCheck.Type as C (Newtype(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
@@ -79,10 +83,13 @@ data Env = Env
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   , envRefPrims :: Map C.PrimIdent C.Expr
+  , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
+  , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty [] Map.empty
+emptyEnv =
+  Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -99,6 +106,8 @@ liftEnv env =
       , envC = envC env
       , envS = envS env
       , envRefPrims = envRefPrims env
+      , envPrims = envPrims env
+      , envPrimTypes = envPrimTypes env
       }
 
 bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
@@ -174,7 +183,7 @@ normalizeProp prop
 importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
-    C.KType       -> scSort sc (mkSort 0)
+    C.KType       -> scISort sc (mkSort 0)
     C.KNum        -> scDataTypeApp sc "Cryptol.Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
@@ -259,7 +268,11 @@ importType sc env ty =
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCAbstract{} -> panic "importType TODO: abstract type" []
+            C.TCAbstract (C.UserTC n _)
+              | Just prim <- C.asPrim n
+              , Just t <- Map.lookup prim (envPrimTypes env) ->
+                scApplyAllBeta sc t =<< traverse go tyargs
+              | True -> panic ("importType: unknown primitive type: " ++ show n) []
         C.PC pc ->
           case pc of
             C.PLiteral -> -- we omit first argument to class Literal
@@ -653,16 +666,33 @@ proveProp sc env prop =
 
         _ -> do panic "proveProp" [pretty prop]
 
-importPrimitive :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
-importPrimitive sc env n sch
+importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
+importPrimitive sc primOpts env n sch
+  -- lookup primitive in the main primitive lookup table
   | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims = term sc
+
+  -- lookup primitive in the main reference implementation lookup table
   | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
          nmi <- importName n
          scConstant' sc nmi e t
+
+  -- lookup primitive in the extra primitive lookup table
+  | Just nm <- C.asPrim n, Just t <- Map.lookup nm (envPrims env) = return t
+
+  -- Optionally, create an opaque constant representing the primitive
+  -- if it doesn't match one of the ones we know about.
+  | Just _ <- C.asPrim n, allowUnknownPrimitives primOpts =
+      do t <- importSchema sc env sch
+         nmi <- importName n
+         scOpaqueConstant sc nmi t
+
+  -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
+
   | otherwise = panic "Improper Cryptol primitive name" [show n]
+
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
@@ -731,6 +761,8 @@ prelPrims =
   , ("%$",           flip scGlobalDef "Cryptol.ecSMod")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
   , ("lg2",          flip scGlobalDef "Cryptol.ecLg2")         -- {n} (fin n) => [n] -> [n]
   , (">>$",          flip scGlobalDef "Cryptol.ecSShiftR")     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+  , ("toSignedInteger",
+                     flip scGlobalDef "Cryptol.toSignedInteger") -- {n} (fin n, n >= 1) => [n] -> Integer
 
     -- -- Rational primitives
   , ("ratio",        flip scGlobalDef "Cryptol.ecRatio")       -- Integer -> Integer -> Rational
@@ -796,7 +828,7 @@ prelPrims =
   , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
   , ("foldl",        flip scGlobalDef "Cryptol.ecFoldl")       -- {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
   , ("foldl'",       flip scGlobalDef "Cryptol.ecFoldlPrime")  -- {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
-
+  , ("scanl",        flip scGlobalDef "Cryptol.ecScanl")       -- {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
   , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
   , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
   , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} [n][8] -> a -> b -> b
@@ -809,6 +841,10 @@ arrayPrims =
   [ ("arrayConstant", flip scGlobalDef "Cryptol.ecArrayConstant") -- {a,b} b -> Array a b
   , ("arrayLookup",   flip scGlobalDef "Cryptol.ecArrayLookup") -- {a,b} Array a b -> a -> b
   , ("arrayUpdate",   flip scGlobalDef "Cryptol.ecArrayUpdate") -- {a,b} Array a b -> a -> b -> Array a b
+  , ("arrayCopy", flip scGlobalDef "Cryptol.ecArrayCopy") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Array [n] a
+  , ("arrayEq", flip scGlobalDef "Cryptol.ecArrayEq")     -- {a, b} (Array a b) -> (Array a b) -> Bool
+  , ("arraySet", flip scGlobalDef "Cryptol.ecArraySet") -- {n,a} Array [n] a -> [n] -> a -> [n] -> Array [n] a
+  , ("arrayRangeEqual", flip scGlobalDef "Cryptol.ecArrayRangeEq") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Bit
   ]
 
 floatPrims :: Map C.PrimIdent (SharedContext -> IO Term)
@@ -1242,9 +1278,9 @@ importName cnm =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
-importDeclGroup :: Bool -> SharedContext -> Env -> C.DeclGroup -> IO Env
+importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
-importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
+importDeclGroup declOpts sc env (C.Recursive [decl]) =
   case C.dDefinition decl of
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
@@ -1255,11 +1291,11 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
          let x = nameToLocalName (C.dName decl)
          f' <- scLambda sc x t' e'
          rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-         rhs' <- if isTopLevel then
-                    do nmi <- importName (C.dName decl)
-                       scConstant' sc nmi rhs t'
-                 else
-                   return rhs
+         rhs' <- case declOpts of
+                   TopLevelDeclGroup _ ->
+                     do nmi <- importName (C.dName decl)
+                        scConstant' sc nmi rhs t'
+                   NestedDeclGroup -> return rhs
          let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                         , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
          return env'
@@ -1269,7 +1305,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
 -- We handle this by "tupling up" all the declarations using a record and
 -- taking the fixpoint at this record type.  The desired declarations are then
 -- achieved by projecting the field names from this record.
-importDeclGroup isTopLevel sc env (C.Recursive decls) =
+importDeclGroup declOpts sc env (C.Recursive decls) =
   do -- build the environment for the declaration bodies
      let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
@@ -1316,11 +1352,11 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      let mkRhs d t =
            do let s = nameToFieldName (C.dName d)
               r <- scRecordSelect sc rhs s
-              if isTopLevel then
-                do nmi <- importName (C.dName d)
-                   scConstant' sc nmi r t
-              else
-                return r
+              case declOpts of
+                TopLevelDeclGroup _ ->
+                  do nmi <- importName (C.dName d)
+                     scConstant' sc nmi r t
+                NestedDeclGroup -> return r
      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
@@ -1328,32 +1364,51 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
                     }
      return env'
 
-importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
+importDeclGroup declOpts sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
     C.DPrim
-     | isTopLevel -> do
-        rhs <- importPrimitive sc env (C.dName decl) (C.dSignature decl)
+     | TopLevelDeclGroup primOpts <- declOpts -> do
+        rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
         let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
-                      , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
+                       }
         return env'
      | otherwise -> do
         panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
      rhs <- importExpr' sc env (C.dSignature decl) expr
-     rhs' <- if not isTopLevel then return rhs else do
-       nmi <- importName (C.dName decl)
-       t <- importSchema sc env (C.dSignature decl)
-       scConstant' sc nmi rhs t
+     rhs' <- case declOpts of
+               TopLevelDeclGroup _ ->
+                 do nmi <- importName (C.dName decl)
+                    t <- importSchema sc env (C.dSignature decl)
+                    scConstant' sc nmi rhs t
+               NestedDeclGroup -> return rhs
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
 
-importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
-importDeclGroups sc = foldM (importDeclGroup False sc)
+data ImportPrimitiveOptions =
+  ImportPrimitiveOptions
+  { allowUnknownPrimitives :: Bool
+    -- ^ Should unknown primitives be translated as fresh external constants?
+  }
 
-importTopLevelDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
-importTopLevelDeclGroups sc = foldM (importDeclGroup True sc)
+defaultPrimitiveOptions :: ImportPrimitiveOptions
+defaultPrimitiveOptions =
+  ImportPrimitiveOptions
+  { allowUnknownPrimitives = True
+  }
+
+data DeclGroupOptions
+  = TopLevelDeclGroup ImportPrimitiveOptions
+  | NestedDeclGroup
+
+importDeclGroups :: SharedContext -> Env -> [C.DeclGroup] -> IO Env
+importDeclGroups sc = foldM (importDeclGroup NestedDeclGroup sc)
+
+importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> Env -> [C.DeclGroup] -> IO Env
+importTopLevelDeclGroups sc primOpts = foldM (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
 coerceTerm :: SharedContext -> Env -> C.Type -> C.Type -> Term -> IO Term
 coerceTerm sc env t1 t2 e
@@ -1371,7 +1426,7 @@ proveEq sc env t1 t2
        t' <- importType sc env t1
        scCtorApp sc "Prelude.Refl" [s, t']
   | otherwise =
-    case (C.tNoUser t1, C.tNoUser t2) of
+    case (tNoUser t1, tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
         do n1' <- importType sc env n1
            n2' <- importType sc env n2
@@ -1419,6 +1474,14 @@ proveEq sc env t1 t2
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
 
+-- | Resolve user types (type aliases and newtypes) to their simpler SAW-compatible forms.
+tNoUser :: C.Type -> C.Type
+tNoUser initialTy =
+  case C.tNoUser initialTy of
+    C.TNewtype nt _ -> C.TRec $ C.ntFields nt
+    t -> t
+  
+
 -- | Deconstruct a cryptol tuple type as a pair according to the
 -- saw-core tuple type encoding.
 tIsPair :: C.Type -> Maybe (C.Type, C.Type)
@@ -1445,10 +1508,14 @@ importComp sc env lenT elemT expr mss =
               m <- importType sc env len
               a <- importType sc env ty
               (ys, n, b, argss, len') <- zipAll branches
-              zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
-              mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
               ab <- scTupleType sc [a, b]
-              return (zs, mn, ab, args : argss, C.tMin len len')
+              if len == len' then
+                do zs <- scGlobalApply sc "Cryptol.seqZipSame" [a, b, m, xs, ys]
+                   return (zs, m, ab, args : argss, len)
+              else
+                do zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
+                   mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
+                   return (zs, mn, ab, args : argss, C.tMin len len')
      (xs, n, a, argss, lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
@@ -1604,9 +1671,14 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case SC.evalSharedTerm modmap Map.empty Map.empty t of
-       SC.TValue tv -> return (asCryptolTypeValue tv)
-       _ -> return Nothing
+     catch
+       (case SC.evalSharedTerm modmap Map.empty Map.empty t of
+           -- NOTE: we make sure that asCryptolTypeValue gets evaluated, to
+           -- ensure that any panics in the simulator get caught here
+           SC.TValue tv
+             | Just !ret <- asCryptolTypeValue tv -> return $ Just ret
+           _ -> return Nothing)
+       (\ (_::SomeException) -> return Nothing)
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
@@ -1742,3 +1814,30 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
 
     _ -> panic "importFirstOrderValue"
                 ["Expected finite value of type:", show t, "but got", show v]
+
+-- | Generate functions to construct newtypes in the term environment.
+-- (I.e., make identity functions that take the record the newtype wraps.)
+genNewtypeConstructors :: SharedContext -> Map C.Name Newtype -> Env -> IO Env
+genNewtypeConstructors sc newtypes env0 =
+  foldM genConstr env0 newtypes
+  where
+    genConstr :: Env -> Newtype -> IO Env
+    genConstr env nt = do
+      constr <- importExpr sc env (newtypeConstr nt)
+      let env' = env { envE = Map.insert (ntName nt) (constr, 0) (envE env)
+                     , envC = Map.insert (ntName nt) (newtypeSchema nt) (envC env)
+                     }
+      return env'
+    newtypeConstr :: Newtype -> C.Expr
+    newtypeConstr nt = foldr tFn fn (C.ntParams nt)
+      where
+        paramName = C.asParamName (ntName nt)
+        recTy = C.TRec $ ntFields nt
+        fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
+        tFn tp body =
+          if elem (C.tpKind tp) [C.KType, C.KNum]
+            then C.ETAbs tp body
+            else panic "genNewtypeConstructors" ["illegal newtype parameter kind", show (C.tpKind tp)]
+    newtypeSchema :: Newtype -> C.Schema
+    newtypeSchema nt = C.Forall (ntParams nt) (ntConstraints nt)
+                       $ C.TRec (ntFields nt) `C.tFun` C.TRec (ntFields nt)

@@ -64,6 +64,7 @@ import qualified Control.Arrow as A
 
 import Data.Bits
 import Data.IORef
+import Data.Kind (Type)
 import Data.List (genericTake)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -95,7 +96,7 @@ import Verifier.SAW.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, i
 import qualified What4.Expr.Builder as B
 import           What4.Expr.GroundEval
 import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
-                                 IsExprBuilder,IsSymExprBuilder)
+                                 IsExprBuilder,IsSymExprBuilder, BoundVar)
 import qualified What4.Interface as W
 import           What4.BaseTypes
 import qualified What4.SWord as SW
@@ -117,7 +118,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
 -- for this backend
-data What4 (sym :: *)
+data What4 (sym :: Type)
 
 -- | A What4 symbolic array where the domain and co-domain types do not appear
 --   in the type
@@ -175,6 +176,7 @@ prims sym =
   , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = SW.bvIte  sym
   , Prims.bpMuxInt   = W.intIte  sym
+  , Prims.bpMuxArray = arrayIte sym
   , Prims.bpMuxExtra = muxWhat4Extra sym
     -- Booleans
   , Prims.bpTrue   = W.truePred  sym
@@ -241,6 +243,9 @@ prims sym =
   , Prims.bpArrayLookup = arrayLookup sym
   , Prims.bpArrayUpdate = arrayUpdate sym
   , Prims.bpArrayEq = arrayEq sym
+  , Prims.bpArrayCopy = arrayCopy sym
+  , Prims.bpArraySet = arraySet sym
+  , Prims.bpArrayRangeEq = arrayRangeEq sym
   }
 
 
@@ -575,8 +580,10 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- selectV merger maxValue valueFn index returns valueFn v when index has value v
--- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
+-- @selectV sym merger maxValue valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
+-- if-then-else operator. If the index is greater than @maxValue@, then it
+-- returns @valueFn maxValue@.
 selectV :: forall sym b.
   Sym sym =>
   sym ->
@@ -590,7 +597,12 @@ selectV sym merger maxValue valueFn vx =
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = do
-      p <- SW.bvAtBE sym vx (toInteger j)
+      -- NB: `i` counts down in each iteration, so we use bvAtLE (a
+      -- little-endian indexing function) to ensure that the bits are processed
+      -- in big-endian order. Alternatively, we could have `i` count up and use
+      -- bvAtBE (a big-endian indexing function), but we use bvAtLE as it is
+      -- slightly cheaper to compute.
+      p <- SW.bvAtLE sym vx (toInteger j)
       merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 instance Show (SArray sym) where
@@ -647,6 +659,75 @@ arrayUpdate sym arr idx elm
   | otherwise =
     panic "Verifier.SAW.Simulator.What4.Panic.arrayUpdate" ["argument type mismatch"]
 
+arrayCopy ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SWord sym ->
+  SArray sym ->
+  SWord sym ->
+  SWord sym ->
+  IO (SArray sym)
+arrayCopy sym dest_arr dest_idx src_arr src_idx len
+  | SArray dest_arr_expr <- dest_arr
+  , DBV dest_idx_expr <- dest_idx
+  , SArray src_arr_expr <- src_arr
+  , DBV src_idx_expr <- src_idx
+  , DBV len_expr <- len
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) _ <- W.exprType dest_arr_expr
+  , Just Refl <- testEquality (W.exprType dest_arr_expr) (W.exprType src_arr_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType dest_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType src_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
+    SArray <$> W.arrayCopy sym dest_arr_expr dest_idx_expr src_arr_expr src_idx_expr len_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayCopy" ["argument type mismatch"]
+
+arraySet ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SWord sym ->
+  SValue sym ->
+  SWord sym ->
+  IO (SArray sym)
+arraySet sym arr idx elm len
+  | SArray arr_expr <- arr
+  , DBV idx_expr <- idx
+  , Just (Some elm_expr) <- valueToSymExpr elm
+  , DBV len_expr <- len
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr <- W.exprType arr_expr
+  , Just Refl <- testEquality idx_repr (W.exprType idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType len_expr)
+  , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
+    SArray <$> W.arraySet sym arr_expr idx_expr elm_expr len_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arraySet" ["argument type mismatch"]
+
+arrayRangeEq ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SWord sym ->
+  SArray sym ->
+  SWord sym ->
+  SWord sym ->
+  IO (SBool sym)
+arrayRangeEq sym x_arr x_idx y_arr y_idx len
+  | SArray x_arr_expr <- x_arr
+  , DBV x_idx_expr <- x_idx
+  , SArray y_arr_expr <- y_arr
+  , DBV y_idx_expr <- y_idx
+  , DBV len_expr <- len
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) _ <- W.exprType x_arr_expr
+  , Just Refl <- testEquality (W.exprType x_arr_expr) (W.exprType y_arr_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType x_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType y_idx_expr)
+  , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
+    W.arrayRangeEq sym x_arr_expr x_idx_expr y_arr_expr y_idx_expr len_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayRangeEq" ["argument type mismatch"]
+
 arrayEq ::
   W.IsSymExprBuilder sym =>
   sym ->
@@ -663,6 +744,24 @@ arrayEq sym lhs_arr rhs_arr
     W.arrayEq sym lhs_arr_expr rhs_arr_expr
   | otherwise =
     panic "Verifier.SAW.Simulator.What4.Panic.arrayEq" ["argument type mismatch"]
+
+arrayIte ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  W.Pred sym ->
+  SArray sym ->
+  SArray sym ->
+  IO (SArray sym)
+arrayIte sym cond lhs_arr rhs_arr
+  | SArray lhs_arr_expr <- lhs_arr
+  , SArray rhs_arr_expr <- rhs_arr
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> lhs_idx_repr) lhs_elm_repr <- W.exprType lhs_arr_expr
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> rhs_idx_repr) rhs_elm_repr <- W.exprType rhs_arr_expr
+  , Just Refl <- testEquality lhs_idx_repr rhs_idx_repr
+  , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
+    SArray <$> W.arrayIte sym cond lhs_arr_expr rhs_arr_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayIte" ["argument type mismatch"]
 
 ----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as
@@ -700,7 +799,7 @@ w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
 ----------------------------------------------------------------------
 -- Uninterpreted function cache
 
-data SymFnWrapper sym :: Ctx.Ctx BaseType -> * where
+data SymFnWrapper sym :: Ctx.Ctx BaseType -> Type where
   SymFnWrapper :: !(W.SymFn sym args ret) -> SymFnWrapper sym (args Ctx.::> ret)
 
 type SymFnCache sym = Map W.SolverSymbol (MapF (Assignment BaseTypeRepr) (SymFnWrapper sym))
@@ -751,7 +850,7 @@ parseUninterpreted ::
 parseUninterpreted sym ref app ty =
   case ty of
     VPiType nm _ body
-      -> pure $ VFun nm $ \x -> 
+      -> pure $ VFun nm $ \x ->
            do x' <- force x
               app' <- applyUnintApp sym app x'
               t2 <- applyPiBody body (ready x')
@@ -869,6 +968,8 @@ applyUnintApp sym app0 v =
     VCtorApp i ps xv          -> foldM (applyUnintApp sym) app' =<< traverse force (ps++xv)
                                    where app' = suffixUnintApp ("_" ++ (Text.unpack (identBaseName (primName i)))) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
+    VBVToNat w v'             -> applyUnintApp sym app' v'
+                                   where app' = suffixUnintApp ("_" ++ show w) app0
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
     VFun _ _ ->
@@ -889,17 +990,117 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([(ExtCns Term, (Labeler sym, SValue sym))], SBool sym)
+  IO ([(ExtCns Term, (Labeler sym, SValue sym))], [SBool sym])
 w4Solve sym sc satq =
-  do t <- satQueryAsTerm sc satq
-     let varList  = Map.toList (satVariables satq)
+  do let varList  = Map.toList (satVariables satq)
      vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
      let varMap   = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
      ref <- newIORef Map.empty
-     bval <- w4SolveBasic sym sc mempty varMap ref (satUninterp satq) t
+
+     bvals <- mapM (w4SolveAssert sym sc varMap ref (satUninterp satq)) (satAsserts satq)
+     return (vars, bvals)
+
+
+w4SolveAssert :: forall sym.
+  IsSymExprBuilder sym =>
+  sym ->
+  SharedContext ->
+  Map VarIndex (SValue sym) {- ^ bindings for ExtCns values -} ->
+  IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
+  Set VarIndex {- ^ variables to hold uninterpreted -} ->
+  SATAssert ->
+  IO (SBool sym)
+w4SolveAssert sym sc varMap ref uninterp (BoolAssert x) =
+  do bval <- w4SolveBasic sym sc mempty varMap ref uninterp x
      case bval of
-       VBool v -> return (vars, v)
-       _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
+       VBool v -> return v
+       _ -> fail $ "w4SolveAssert: non-boolean result type. " ++ show bval
+
+w4SolveAssert sym sc varMap ref uninterp (UniversalAssert vars hyps concl) =
+  do g <- case hyps of
+            [] -> return concl
+            _  -> do h <- scAndList sc hyps
+                     scImplies sc h concl
+     (svals,bndvars) <- boundFOTs sym vars
+     let varMap' = foldl (\m ((ec,_fot), sval) -> Map.insert (ecVarIndex ec) sval m)
+                         varMap
+                         (zip vars svals) -- NB, boundFOTs will construct these lists to be the same length
+     bval <- w4SolveBasic sym sc mempty varMap' ref uninterp g
+     case bval of
+       VBool v ->
+         do final <- foldM (\p (Some bndvar) -> W.forallPred sym bndvar p) v bndvars
+            return final
+
+       _ -> fail $ "w4SolveAssert: non-boolean result type. " ++ show bval
+
+-- | Given a list of external constants with first-order types,
+--   descend in to the structure of those types (as needed) and construct
+--   corresponding What4 bound variables so we can bind them using
+--   a forall quantifier. At the same time construct @SValue@s containing
+--   those variables suitable for passing to the term evaluator as substituions
+--   for the given @ExtCns@ values. The length of the @SValue@ list returned
+--   will match the list of the input @ExtCns@ list, but the list of What4
+--   @BoundVar@s might not.
+--
+--   This procedure it capable of handling most first-order types, execpt
+--   that Array types must have base types as index and result types rather
+--   than more general first-order types. (TODO? should we actually restrict the
+--   @FirstOrderType@ in the same way?)
+boundFOTs :: forall sym.
+  IsSymExprBuilder sym =>
+  sym ->
+  [(ExtCns Term, FirstOrderType)] ->
+  IO ([SValue sym], [Some (BoundVar sym)])
+boundFOTs sym vars =
+  do (svals,(bndvars,_)) <- runStateT (mapM (uncurry handleVar) vars) ([], 0)
+     return (svals, bndvars)
+
+ where
+   freshBnd :: ExtCns Term -> W.BaseTypeRepr tp -> StateT ([Some (BoundVar sym)],Integer) IO (SymExpr sym tp)
+   freshBnd ec tpr =
+     do (vs,n) <- get
+        let nm = Text.unpack (toShortName (ecName ec)) ++ "." ++ show n
+        bvar <- lift (W.freshBoundVar sym (W.safeSymbol nm) tpr)
+        put (Some bvar : vs, n+1)
+        return (W.varExpr sym bvar)
+
+   handleVar :: ExtCns Term -> FirstOrderType -> StateT ([Some (BoundVar sym)], Integer) IO (SValue sym)
+   handleVar ec fot =
+     case fot of
+       FOTBit -> VBool <$> freshBnd ec BaseBoolRepr
+       FOTInt -> VInt  <$> freshBnd ec BaseIntegerRepr
+       FOTIntMod m -> VIntMod m <$> freshBnd ec BaseIntegerRepr
+
+       FOTVec n FOTBit ->
+         case somePosNat n of
+           Nothing -> -- n == 0
+             return (VWord ZBV)
+           Just (Some (PosNat nr)) ->
+             VWord . DBV <$> freshBnd ec (BaseBVRepr nr)
+
+       FOTVec n tp -> -- NB, not Bit
+         do vs  <- V.replicateM (fromIntegral n) (handleVar ec tp)
+            vs' <- traverse (return . ready) vs
+            return (VVector vs')
+
+       FOTRec tm ->
+         do vs  <- traverse (handleVar ec) tm
+            vs' <- traverse (return . ready) vs
+            return (vRecord vs')
+
+       FOTTuple ts ->
+         do vs  <- traverse (handleVar ec) ts
+            vs' <- traverse (return . ready) vs
+            return (vTuple vs')
+
+       FOTArray idx res
+         | Just (Some idx_repr) <- fotToBaseType idx
+         , Just (Some res_repr) <- fotToBaseType res
+
+         -> VArray . SArray <$> freshBnd ec (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) res_repr)
+
+         | otherwise -> fail ("boundFOTs: cannot handle " ++ show fot)
+
 
 --
 -- Pull out argument types until bottoming out at a non-Pi type
@@ -1229,13 +1430,13 @@ parseUninterpretedSAW sym st sc ref trm app ty =
               parseUninterpretedSAW sym st sc ref trm' app' t2
 
     VBoolType
-      -> VBool <$> mkUninterpretedSAW sym st ref trm app BaseBoolRepr
+      -> VBool <$> mkUninterpretedSAW sym st sc ref trm app BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpretedSAW sym st ref trm app BaseIntegerRepr
+      -> VInt  <$> mkUninterpretedSAW sym st sc ref trm app BaseIntegerRepr
 
     VIntModType n
-      -> VIntMod n <$> mkUninterpretedSAW sym st ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
+      -> VIntMod n <$> mkUninterpretedSAW sym st sc ref (ArgTermFromIntMod n trm) app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
@@ -1243,7 +1444,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
 
     VVecType n VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpretedSAW sym st ref trm app (BaseBVRepr w)
+      -> (VWord . DBV) <$> mkUninterpretedSAW sym st sc ref trm app (BaseBVRepr w)
 
     VVecType n ety | n >= 0
       ->  do ety' <- termOfTValue sc ety
@@ -1258,7 +1459,7 @@ parseUninterpretedSAW sym st sc ref trm app ty =
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> (VArray . SArray) <$>
-          mkUninterpretedSAW sym st ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+          mkUninterpretedSAW sym st sc ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VUnitType
       -> return VUnit
@@ -1276,12 +1477,16 @@ mkUninterpretedSAW ::
   forall n st fs t.
   B.ExprBuilder n st fs ->
   SAWCoreState n ->
+  SharedContext ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) ->
   ArgTerm ->
   UnintApp (SymExpr (B.ExprBuilder n st fs)) ->
   BaseTypeRepr t ->
   IO (SymExpr (B.ExprBuilder n st fs) t)
-mkUninterpretedSAW sym st ref trm (UnintApp nm args tys) ret =
+mkUninterpretedSAW sym st sc ref trm (UnintApp nm args tys) ret
+  | Just Refl <- testEquality Ctx.empty tys =
+    bindSAWTerm sym st ret =<< reconstructArgTerm trm sc []
+  | otherwise =
   do fn <- mkSymFn sym ref nm tys ret
      sawRegisterSymFunInterp st fn (reconstructArgTerm trm)
      W.applySymFn sym fn args
@@ -1303,6 +1508,7 @@ data ArgTerm
     -- ^ length, element type, list, index
   | ArgTermPairLeft ArgTerm
   | ArgTermPairRight ArgTerm
+  | ArgTermBVToNat Natural ArgTerm
 
 -- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
 -- The length of the list should be equal to the number of
@@ -1336,7 +1542,7 @@ reconstructArgTerm atrm sc ts =
              pure (x, ts1)
         ArgTermVector ty ats ->
           do (xs, ts1) <- parseList ats ts0
-             x <- scVector sc ty xs
+             x <- scVectorReduced sc ty xs
              return (x, ts1)
         ArgTermUnit ->
           do x <- scUnitValue sc
@@ -1372,6 +1578,10 @@ reconstructArgTerm atrm sc ts =
           do (x1, ts1) <- parse at1 ts0
              x <- scPairRight sc x1
              return (x, ts1)
+        ArgTermBVToNat w at1 ->
+          do (x1, ts1) <- parse at1 ts0
+             x <- scBvToNat sc w x1
+             pure (x, ts1)
 
     parseList :: [ArgTerm] -> [Term] -> IO ([Term], [Term])
     parseList [] ts0 = return ([], ts0)
@@ -1391,6 +1601,7 @@ mkArgTerm sc ty val =
     (VIntType, VInt _)   -> return ArgTermVar
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
+    (_, VArray{})        -> return ArgTermVar
     (VUnitType, VUnit)   -> return ArgTermUnit
     (VIntModType n, VIntMod _ _) -> pure (ArgTermToIntMod n ArgTermVar)
 
@@ -1421,6 +1632,15 @@ mkArgTerm sc ty val =
     (_, TValue tval) ->
       do x <- termOfTValue sc tval
          pure (ArgTermConst x)
+
+    (_, VNat n) ->
+      do x <- scNat sc n
+         pure (ArgTermConst x)
+
+    (_, VBVToNat w v) ->
+      do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral
+         x <- mkArgTerm sc (VVecType w' VBoolType) v
+         pure (ArgTermBVToNat w' x)
 
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
 

@@ -30,9 +30,9 @@ import Mir.Compositional.Clobber (clobberGlobalsOverride)
 
 
 compositionalOverrides ::
-    forall sym p t st fs args ret blocks rtp a r .
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasModel p) =>
-    Maybe (SomeOnlineSolver sym) ->
+    forall sym bak p t st fs args ret blocks rtp a r .
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    Maybe (SomeOnlineSolver sym bak) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->

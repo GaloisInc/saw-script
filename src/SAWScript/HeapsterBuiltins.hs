@@ -4,16 +4,21 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
+       , heapster_init_env_debug
        , heapster_init_env_from_file
+       , heapster_init_env_from_file_debug
        , heapster_init_env_for_files
+       , heapster_init_env_for_files_debug
        , load_sawcore_from_file
        , heapster_get_cfg
        , heapster_typecheck_fun
@@ -37,24 +42,31 @@ module SAWScript.HeapsterBuiltins
        , heapster_join_point_hint
        , heapster_find_symbol
        , heapster_find_symbols
+       , heapster_find_symbol_with_type
+       , heapster_find_symbols_with_type
+       , heapster_find_symbol_commands
        , heapster_find_trait_method_symbol
        , heapster_assume_fun
        , heapster_assume_fun_rename
        , heapster_assume_fun_rename_prim
        , heapster_assume_fun_multi
+       , heapster_set_event_type
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
        , heapster_dump_ide_info
+       , heapster_set_debug_level
+       , heapster_set_translation_checks
        ) where
 
 import Data.Maybe
-import qualified Data.Map as Map
 import Data.String
 import Data.List
 import Data.List.Extra (splitOn)
 import Data.IORef
 import Data.Functor.Product
+import Data.Functor.Constant (getConstant)
+import Control.Applicative ( (<|>) )
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -94,6 +106,9 @@ import Lang.Crucible.LLVM.TypeContext
 import Lang.Crucible.LLVM.DataLayout
 
 import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.Parser as L
+import qualified Text.LLVM.PP as L
+import qualified Text.PrettyPrint.HughesPJ as L (render)
 
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -104,17 +119,18 @@ import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
 import Verifier.SAW.Heapster.CruUtil
+import Verifier.SAW.Heapster.HintExtract
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.IRTTranslation
 import Verifier.SAW.Heapster.PermParser
 import Verifier.SAW.Heapster.ParsedCtx
 import qualified Verifier.SAW.Heapster.IDESupport as HIDE
+import Verifier.SAW.Heapster.LLVMGlobalConst
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
-
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
@@ -136,7 +152,7 @@ archReprWidth (X86Repr w) = w
 
 -- | Get the architecture of an LLVM module
 llvmModuleArchRepr :: LLVMModule arch -> ArchRepr arch
-llvmModuleArchRepr lm = llvmArch $ _transContext $ modTrans lm
+llvmModuleArchRepr lm = llvmArch $ view transContext $ modTrans lm
 
 -- | Get the bit width of the architecture of an LLVM module
 llvmModuleArchReprWidth :: LLVMModule arch -> NatRepr (ArchWidth arch)
@@ -151,17 +167,31 @@ lookupFunctionDecl :: LLVMModule arch -> String -> Maybe L.Declare
 lookupFunctionDecl lm nm =
   find ((fromString nm ==) . L.decName) $ L.modDeclares $ modAST lm
 
+-- | Look up the 'L.Define' for a symbol defined in an 'LLVMModule'
+lookupFunctionDef :: LLVMModule arch -> String -> Maybe L.Define
+lookupFunctionDef lm nm =
+  find ((fromString nm ==) . L.defName) $ L.modDefines $ modAST lm
+
+-- | Lookup a the singnature for a symbol in an 'LLVMModule'. This
+--   will find a signaure for either an external symbol, or for
+--   a defined symbol
+lookupFunctionDeclOrDef :: LLVMModule arch -> String -> Maybe L.Declare
+lookupFunctionDeclOrDef lm nm =
+  lookupFunctionDecl lm nm <|> (declareFromDefine <$> lookupFunctionDef lm nm)
+
 -- | Look up the Crucible CFG for a defined symbol in an 'LLVMModule'
-lookupFunctionCFG :: LLVMModule arch -> String -> Maybe (AnyCFG Lang.Crucible.LLVM.Extension.LLVM)
+lookupFunctionCFG :: LLVMModule arch -> String -> IO (Maybe (AnyCFG Lang.Crucible.LLVM.Extension.LLVM))
 lookupFunctionCFG lm nm =
-  snd <$> Map.lookup (fromString nm) (cfgMap $ modTrans lm)
+  getTranslatedCFG (modTrans lm) (fromString nm) >>= \case
+    Nothing -> return Nothing
+    Just (_,cfg,_warns) -> return (Just cfg)
 
 -- | Look up the argument and return types of a named function
 lookupFunctionType :: LLVMModule arch -> String ->
                       TopLevel (Some CtxRepr, Some TypeRepr)
 lookupFunctionType (lm :: LLVMModule arch) nm =
-  case (lookupFunctionDecl lm nm, lookupFunctionCFG lm nm) of
-    (Just decl, _) ->
+  case lookupFunctionDeclOrDef lm nm of
+    Just decl ->
       do let w = llvmModuleArchReprWidth lm
          leq1_proof <- case decideLeq (knownNat @1) w of
            Left pf -> return pf
@@ -174,22 +204,19 @@ lookupFunctionType (lm :: LLVMModule arch) nm =
          withLeqProof leq1_proof $ withLeqProof leq16_proof $
            llvmDeclToFunHandleRepr' @(ArchWidth arch) decl $ \args ret ->
            return (Some args, Some ret)
-    (_, Just (AnyCFG cfg)) ->
-      return (Some (cfgArgTypes cfg), Some (cfgReturnType cfg))
-    (Nothing, Nothing) ->
+    Nothing ->
       fail ("Could not find symbol: " ++ nm)
 
 -- | Look for the LLVM module in a 'HeapsterEnv' where a symbol is defined
 lookupModDefiningSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDefiningSym env nm =
-  find (\(Some lm) -> Map.member (fromString nm) (cfgMap $ modTrans lm)) $
+  find (\(Some lm) -> isJust (lookupFunctionDef lm nm)) $
   heapsterEnvLLVMModules env
 
 -- | Look for any LLVM module in a 'HeapsterEnv' containing a symbol
 lookupModContainingSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModContainingSym env nm =
-  find (\(Some lm) ->
-         isJust (lookupFunctionDecl lm nm) || isJust (lookupFunctionCFG lm nm)) $
+  find (\(Some lm) -> isJust (lookupFunctionDeclOrDef lm nm)) $
   heapsterEnvLLVMModules env
 
 -- | An LLVM module plus a CFG for a specific function in that module
@@ -197,12 +224,13 @@ data ModuleAndCFG arch =
   ModuleAndCFG (LLVMModule arch) (AnyCFG Lang.Crucible.LLVM.Extension.LLVM)
 
 -- | Look up the LLVM module and associated CFG for a symobl
-lookupLLVMSymbolModAndCFG :: HeapsterEnv -> String -> Maybe (Some ModuleAndCFG)
+lookupLLVMSymbolModAndCFG :: HeapsterEnv -> String -> IO (Maybe (Some ModuleAndCFG))
 lookupLLVMSymbolModAndCFG henv nm =
   case lookupModDefiningSym henv nm of
     Just (Some lm) ->
-      (Some . ModuleAndCFG lm) <$> lookupFunctionCFG lm nm
-    Nothing -> Nothing
+      do res <- lookupFunctionCFG lm nm
+         return ((Some . ModuleAndCFG lm) <$> res)
+    Nothing -> return Nothing
 
 heapster_default_env :: PermEnv
 heapster_default_env = emptyPermEnv
@@ -256,10 +284,53 @@ parseAndInsDef henv nm term_tp term_string =
          liftIO $ scInsertDef sc mnm term_ident term_tp term
          return term_ident
 
+-- | Build a 'HeapsterEnv' associated with the given SAW core module and the
+-- given 'LLVMModule's. Add any globals in the 'LLVMModule's to the returned
+-- 'HeapsterEnv'.
+mkHeapsterEnv :: DebugLevel -> ModuleName -> [Some LLVMModule] ->
+                 TopLevel HeapsterEnv
+mkHeapsterEnv dlevel saw_mod_name llvm_mods@(Some first_mod:_) =
+  do sc <- getSharedContext
+     let w = llvmModuleArchReprWidth first_mod
+     let endianness =
+           llvmDataLayout (modTrans first_mod ^. transContext ^. llvmTypeCtx)
+           ^. intLayout
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     let globals = concatMap (\(Some lm) -> L.modGlobals $ modAST lm) llvm_mods
+     env <-
+       liftIO $ withKnownNat w $ withLeqProof leq_proof $
+       foldM (permEnvAddGlobalConst sc saw_mod_name dlevel endianness w)
+       heapster_default_env globals
+     env_ref <- liftIO $ newIORef env
+     dlevel_ref <- liftIO $ newIORef dlevel
+     checks_ref <- liftIO $ newIORef doChecks
+     tcfg_ref <- liftIO $ newIORef []
+     return $ HeapsterEnv {
+       heapsterEnvSAWModule = saw_mod_name,
+       heapsterEnvPermEnvRef = env_ref,
+       heapsterEnvLLVMModules = llvm_mods,
+       heapsterEnvDebugLevel = dlevel_ref,
+       heapsterEnvChecksFlag = checks_ref,
+       heapsterEnvTCFGs = tcfg_ref
+       }
+mkHeapsterEnv _ _ [] = fail "mkHeapsterEnv: empty list of LLVM modules!"
 
-heapster_init_env :: BuiltinContext -> Options -> Text -> String ->
-                     TopLevel HeapsterEnv
-heapster_init_env _bic _opts mod_str llvm_filename =
+
+heapster_init_env :: BuiltinContext -> Options ->
+                     Text -> String -> TopLevel HeapsterEnv
+heapster_init_env bic opts mod_str llvm_filename =
+  heapster_init_env_gen bic opts noDebugLevel mod_str llvm_filename
+
+heapster_init_env_debug :: BuiltinContext -> Options ->
+                           Text -> String -> TopLevel HeapsterEnv
+heapster_init_env_debug bic opts mod_str llvm_filename =
+  heapster_init_env_gen bic opts traceDebugLevel mod_str llvm_filename
+
+heapster_init_env_gen :: BuiltinContext -> Options -> DebugLevel ->
+                         Text -> String -> TopLevel HeapsterEnv
+heapster_init_env_gen _bic _opts dlevel mod_str llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
      sc <- getSharedContext
      let saw_mod_name = mkModuleName [mod_str]
@@ -271,14 +342,7 @@ heapster_init_env _bic _opts mod_str llvm_filename =
      preludeMod <- liftIO $ scFindModule sc preludeModuleName
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
                                  emptyModule saw_mod_name)
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     tcfg_ref <- liftIO $ newIORef []
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod],
-       heapsterEnvTCFGs = tcfg_ref
-       }
+     mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
 
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
@@ -288,35 +352,47 @@ load_sawcore_from_file _ _ mod_filename =
 
 heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
                                TopLevel HeapsterEnv
-heapster_init_env_from_file _bic _opts mod_filename llvm_filename =
+heapster_init_env_from_file bic opts mod_filename llvm_filename =
+  heapster_init_env_from_file_gen
+  bic opts noDebugLevel mod_filename llvm_filename
+
+heapster_init_env_from_file_debug :: BuiltinContext -> Options ->
+                                     String -> String -> TopLevel HeapsterEnv
+heapster_init_env_from_file_debug bic opts mod_filename llvm_filename =
+  heapster_init_env_from_file_gen
+  bic opts traceDebugLevel mod_filename llvm_filename
+
+heapster_init_env_from_file_gen :: BuiltinContext -> Options -> DebugLevel ->
+                                   String -> String -> TopLevel HeapsterEnv
+heapster_init_env_from_file_gen _bic _opts dlevel mod_filename llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     tcfg_ref <- liftIO $ newIORef []
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = [llvm_mod],
-       heapsterEnvTCFGs = tcfg_ref
-       }
+     mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
 
-heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
-                               TopLevel HeapsterEnv
-heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
+heapster_init_env_for_files_gen :: BuiltinContext -> Options -> DebugLevel ->
+                                   String -> [String] ->
+                                   TopLevel HeapsterEnv
+heapster_init_env_for_files_gen _bic _opts dlevel mod_filename llvm_filenames =
   do llvm_mods <- mapM llvm_load_module llvm_filenames
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     perm_env_ref <- liftIO $ newIORef heapster_default_env
-     tcfg_ref <- liftIO $ newIORef []
-     return $ HeapsterEnv {
-       heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModules = llvm_mods,
-       heapsterEnvTCFGs = tcfg_ref
-       }
+     mkHeapsterEnv dlevel saw_mod_name llvm_mods
+
+heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
+                               TopLevel HeapsterEnv
+heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
+  heapster_init_env_for_files_gen _bic _opts noDebugLevel
+                                  mod_filename llvm_filenames
+
+heapster_init_env_for_files_debug :: BuiltinContext -> Options ->
+                                     String -> [String] ->
+                                     TopLevel HeapsterEnv
+heapster_init_env_for_files_debug _bic _opts mod_filename llvm_filenames =
+  heapster_init_env_for_files_gen _bic _opts traceDebugLevel
+                                  mod_filename llvm_filenames
 
 -- | Look up the CFG associated with a symbol name in a Heapster environment
 heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -567,9 +643,9 @@ heapster_define_reachability_perm _bic _opts henv
               _ -> Fail.fail "Incorrect type for last argument of reachability perm"
        let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
        let args = parsedCtxCtx args_ctx
-       trans_tp <- liftIO $
-         translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
-                                                 const $ ValuePermRepr tp)
+       trans_tp <- liftIO $ 
+         translateCompleteTypeInCtx sc env args $
+         nus (cruCtxProxies args) $ const $ ValuePermRepr tp
        trans_tp_ident <- parseAndInsDef henv nm trans_tp trans_tp_str
 
        -- Use permEnvAddRecPermM to tie the knot of adding a recursive
@@ -593,12 +669,12 @@ heapster_define_reachability_perm _bic _opts henv
                     (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
               -- Typecheck fold against body -o P<args>
               fold_fun_tp <- liftIO $
-                translateCompletePureFun sc tmp_env args (singletonValuePerms
-                                                          <$> or_tp) nm_tp
+                translateCompletePureFun sc tmp_env args (singletonValuePerms <$>
+                                                          or_tp) nm_tp
               -- Typecheck fold against P<args> -o body
               unfold_fun_tp <- liftIO $
-                translateCompletePureFun sc tmp_env args (singletonValuePerms
-                                                          <$> nm_tp) or_tp
+                translateCompletePureFun sc tmp_env args (singletonValuePerms <$>
+                                                          nm_tp) or_tp
               -- Build identifiers foldXXX and unfoldXXX
               fold_ident <-
                 parseAndInsDef henv ("fold" ++ nm) fold_fun_tp fold_fun_str
@@ -668,9 +744,8 @@ heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_st
      mb_len <- parseExprInCtxString env (BVRepr w) args_ctx len_str
      sc <- getSharedContext
      tp_tp <- liftIO $
-       translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
-                                               const $ ValuePermRepr $
-                                               LLVMShapeRepr w)
+       translateCompleteTypeInCtx sc env args $
+       nus (cruCtxProxies args) $ const $ ValuePermRepr $ LLVMShapeRepr w
      tp_id <- parseAndInsDef henv nm tp_tp tp_str
      let env' = withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -736,8 +811,8 @@ heapster_add_block_hints :: HeapsterEnv -> String -> [Int] ->
 heapster_add_block_hints henv nm blks hintF =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      Some (ModuleAndCFG _ (AnyCFG cfg)) <-
-       failOnNothing ("Could not find symbol definition: " ++ nm) $
-       lookupLLVMSymbolModAndCFG henv nm
+       failOnNothing ("Could not find symbol definition: " ++ nm) =<<
+         io (lookupLLVMSymbolModAndCFG henv nm)
      let h = cfgHandle cfg
          blocks = fmapFC blockInputs $ cfgBlockMap cfg
          block_idxs = fmapFC (blockIDIndex . blockID) $ cfgBlockMap cfg
@@ -822,6 +897,93 @@ heapster_find_symbol bic opts henv str =
     [] -> fail ("No symbol found matching string: " ++ str)
     _ -> fail ("Found multiple symbols matching string " ++ str ++ ": " ++
                concat (intersperse ", " $ map show syms))
+
+-- | Extract the 'String' name of an LLVM symbol
+symString :: L.Symbol -> String
+symString (L.Symbol str) = str
+
+-- | Extract the function type of an LLVM definition
+defFunType :: L.Define -> L.Type
+defFunType defn =
+  L.FunTy (L.defRetType defn) (map L.typedType
+                               (L.defArgs defn)) (L.defVarArgs defn)
+
+-- | Extract the function type of an LLVM declaration
+decFunType :: L.Declare -> L.Type
+decFunType decl =
+  L.FunTy (L.decRetType decl) (L.decArgs decl) (L.decVarArgs decl)
+
+-- | Search for all symbols with the supplied string as a substring that have
+-- the supplied LLVM type
+heapster_find_symbols_with_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                   String -> String -> TopLevel [String]
+heapster_find_symbols_with_type _bic _opts henv str tp_str =
+  case L.parseType tp_str of
+    Left err ->
+      fail ("Error parsing LLVM type: " ++ tp_str ++ "\n" ++ show err)
+    Right tp@(L.FunTy _ _ _) ->
+      return $
+      concatMap (\(Some lm) ->
+                  mapMaybe (\decl ->
+                             if isInfixOf str (symString $ L.decName decl) &&
+                                decFunType decl == tp
+                             then Just (symString $ L.decName decl) else Nothing)
+                  (L.modDeclares $ modAST lm)
+                  ++
+                  mapMaybe (\defn ->
+                             if isInfixOf str (symString $ L.defName defn) &&
+                                defFunType defn == tp
+                             then Just (symString $ L.defName defn) else Nothing)
+                  (L.modDefines $ modAST lm)) $
+      heapsterEnvLLVMModules henv
+    Right tp ->
+      fail ("Expected an LLVM function type, but found: " ++ show tp)
+
+-- | Search for a symbol by name and Crucible type in any LLVM module in a
+-- 'HeapsterEnv' that contains the supplied string as a substring
+heapster_find_symbol_with_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                  String -> String -> TopLevel String
+heapster_find_symbol_with_type bic opts henv str tp_str =
+  heapster_find_symbols_with_type bic opts henv str tp_str >>= \syms ->
+  case syms of
+    [sym] -> return sym
+    [] -> fail ("No symbol found matching string: " ++ str ++
+                " and type: " ++ tp_str)
+    _ -> fail ("Found multiple symbols matching string " ++ str ++
+               " and type: " ++ tp_str ++ ": " ++
+               concat (intersperse ", " $ map show syms))
+
+-- | Print a 'String' as a SAW-script string literal, escaping any double quotes
+-- or newlines
+print_as_saw_script_string :: String -> String
+print_as_saw_script_string str =
+  "\"" ++ concatMap (\c -> case c of
+                        '\"' -> "\\\""
+                        '\n' -> "\\\n\\"
+                        _ -> [c]) str ++ "\"";
+
+-- | Map a search string @str@ to a newline-separated sequence of SAW-script
+-- commands @"heapster_find_symbol_with_type str tp"@, one for each LLVM type
+-- @tp@ associated with a symbol whose name contains @str@
+heapster_find_symbol_commands :: BuiltinContext -> Options -> HeapsterEnv ->
+                                 String -> TopLevel String
+heapster_find_symbol_commands _bic _opts henv str =
+  return $
+  concatMap (\tp ->
+              "heapster_find_symbol_with_type env\n  \"" ++ str ++ "\"\n  " ++
+              print_as_saw_script_string (L.render $ L.ppType tp) ++ ";\n") $
+  concatMap (\(Some lm) ->
+              mapMaybe (\decl ->
+                         if isInfixOf str (symString $ L.decName decl)
+                         then Just (decFunType decl)
+                         else Nothing)
+              (L.modDeclares $ modAST lm)
+              ++
+              mapMaybe (\defn ->
+                         if isInfixOf str (symString $ L.defName defn)
+                         then Just (defFunType defn) else Nothing)
+              (L.modDefines $ modAST lm)) $
+  heapsterEnvLLVMModules henv
 
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
 -- corresponds to the supplied string, which should be of the form:
@@ -985,31 +1147,41 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
      let endianness =
            llvmDataLayout (modTrans lm ^. transContext ^. llvmTypeCtx)
            ^. intLayout
+     dlevel <- liftIO $ readIORef $ heapsterEnvDebugLevel henv
+     checks <- liftIO $ readIORef $ heapsterEnvChecksFlag henv
      LeqProof <- case decideLeq (knownNat @16) w of
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is < 16!"
      LeqProof <- case decideLeq (knownNat @1) w of
        Left pf -> return pf
        Right _ -> fail "PANIC: 1 > 16!"
-     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        do AnyCFG cfg <-
-            failOnNothing ("Could not find symbol definition: " ++ nm) $
-            lookupFunctionCFG lm nm
+            failOnNothing ("Could not find symbol definition: " ++ nm) =<<
+              io (lookupFunctionCFG lm nm)
+          env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
           SomeFunPerm fun_perm <-
-            tracePretty (pretty ("Fun args:" :: String) <+>
-                         permPretty emptyPPInfo args) $
             withKnownNat w $
             parseFunPermStringMaybeRust "permissions" w env args ret perms_string
+          let mods = [ modAST m | Some m <- heapsterEnvLLVMModules henv ]
+          hints <- case extractHints env mods fun_perm cfg of
+            Left err -> fail ("Error parsing LLVM-level hints: " ++ err)
+            Right hints -> return hints
+          let env' = foldlFC (\e h -> maybe e (permEnvAddHint e) (getConstant h))
+                             env
+                             hints
+          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
           return (SomeCFGAndPerm (GlobalSymbol $
                                   fromString nm) nm_to cfg fun_perm)
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      sc <- getSharedContext
      let saw_modname = heapsterEnvSAWModule henv
      (env', tcfgs) <- liftIO $
        let ?ptrWidth = w in
-       tcTranslateAddCFGs sc saw_modname env endianness some_cfgs_and_perms
+       tcTranslateAddCFGs sc saw_modname env checks endianness dlevel
+       some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
      liftIO $ modifyIORef (heapsterEnvTCFGs henv) (\old -> map Some tcfgs ++ old)
 
@@ -1038,6 +1210,17 @@ heapster_typecheck_fun_rename_rs bic opts henv fn_name fn_name_to perms_string =
                                                      perms_string)]
 -}
 
+-- | Set the event type for the remaining Heapster translations
+heapster_set_event_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                           String -> TopLevel ()
+heapster_set_event_type _bic _opts henv term_string =
+  do sc <- getSharedContext
+     ev_tp <-
+       liftIO $ completeOpenTerm sc $ dataTypeOpenTerm "Prelude.EvType" []
+     ev_id <- parseAndInsDef henv "HeapsterEv" ev_tp term_string
+     liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env ->
+       env { permEnvSpecMEventType = ev_id }
+
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()
 heapster_print_fun_trans _bic _opts henv fn_name =
@@ -1057,9 +1240,22 @@ heapster_export_coq _bic _opts henv filename =
      saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
      let coq_doc =
            vcat [preamble coq_trans_conf {
-                   postPreamble = "From CryptolToCoq Require Import SAWCorePrelude."},
+                   postPreamble =
+                       "From CryptolToCoq Require Import SAWCorePrelude.\n" ++
+                       "From CryptolToCoq Require Import SAWCoreBitvectors.\n" ++
+                       "From CryptolToCoq Require Import SpecMExtra.\n" },
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
+
+heapster_set_debug_level :: BuiltinContext -> Options -> HeapsterEnv ->
+                            Int -> TopLevel ()
+heapster_set_debug_level _ _ env l =
+  liftIO $ writeIORef (heapsterEnvDebugLevel env) (DebugLevel l)
+
+heapster_set_translation_checks :: BuiltinContext -> Options -> HeapsterEnv ->
+                                   Bool -> TopLevel ()
+heapster_set_translation_checks _ _ env f =
+  liftIO $ writeIORef (heapsterEnvChecksFlag env) (ChecksFlag f)
 
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()
@@ -1067,8 +1263,8 @@ heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =
   do let env = heapster_default_env -- FIXME: env should be an argument
      let _arch = llvmModuleArchRepr lm
      AnyCFG cfg <-
-       failOnNothing ("Could not find symbol: " ++ fn_name) $
-       lookupFunctionCFG lm fn_name
+       failOnNothing ("Could not find symbol: " ++ fn_name) =<<
+         io (lookupFunctionCFG lm fn_name)
      let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
      let ret = handleReturnType $ cfgHandle cfg
      SomeFunPerm fun_perm <- parseFunPermString "permissions" env args

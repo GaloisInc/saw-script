@@ -8,9 +8,10 @@ import Verifier.SAW.Heapster.Located
 -- @(context). inputs -o outputs@
 data AstFunPerm = AstFunPerm
   Pos
-  [(Located String, AstType)]
-  [(Located String, AstExpr)]
-  [(Located String, AstExpr)]   -- ^ @-o@ position, context, inputs, outputs
+  [(Located String, AstType)] -- ^ The context of ghost variables
+  [(Located String, AstExpr)] -- ^ The input permissions
+  [(Located String, AstType)] -- ^ The context of ghost output variables
+  [(Located String, AstExpr)] -- ^ The output permissions
   deriving Show
 
 -- | Unchecked array permission
@@ -44,16 +45,19 @@ data AstExpr
   | ExNat Pos Natural           -- ^ number literal
   | ExVar Pos String (Maybe [AstExpr]) (Maybe AstExpr) -- ^ identifier, shape arguments, offset
   | ExAdd Pos AstExpr AstExpr   -- ^ addition
+  | ExNeg Pos AstExpr           -- ^ negation
   | ExMul Pos AstExpr AstExpr   -- ^ multiplication or permission conjunction
   | ExRead Pos                  -- ^ read modality
   | ExWrite Pos                 -- ^ read/write modality
   | ExStruct Pos [AstExpr]      -- ^ struct literal with field expressions
   | ExLlvmWord Pos AstExpr      -- ^ llvmword with value
   | ExLlvmFrame Pos [(AstExpr, Natural)] -- ^ llvmframe literal
-  | ExOr Pos AstExpr AstExpr
+  | ExOr Pos AstExpr AstExpr    -- ^ or permission
+  | ExFalse Pos                 -- ^ false permission
+  | ExAny Pos                   -- ^ any permission
 
   | ExEmptySh Pos               -- ^ empty shape
-  | ExEqSh Pos AstExpr          -- ^ equal shape
+  | ExEqSh Pos AstExpr AstExpr  -- ^ equal shape
   | ExTrue Pos                  -- ^ trivial permission
   | ExExists Pos String AstType AstExpr -- ^ existentially quantified value
   | ExSeqSh Pos AstExpr AstExpr -- ^ sequenced shapes
@@ -61,7 +65,8 @@ data AstExpr
   | ExExSh Pos String AstType AstExpr -- ^ existentially quantified shape
   | ExFieldSh Pos (Maybe AstExpr) AstExpr -- ^ field shape
   | ExPtrSh Pos (Maybe AstExpr) (Maybe AstExpr) AstExpr -- ^ pointer shape
-  | ExArraySh Pos AstExpr AstExpr [(Maybe AstExpr, AstExpr)] -- array shape
+  | ExArraySh Pos AstExpr AstExpr AstExpr -- ^ array shape
+  | ExFalseSh Pos               -- ^ false shape
 
   | ExEqual Pos AstExpr AstExpr -- ^ equal bitvector proposition
   | ExNotEqual Pos AstExpr AstExpr -- ^ not-equal bitvector proposition
@@ -77,7 +82,7 @@ data AstExpr
   | ExPtr Pos (Maybe AstExpr) AstExpr AstExpr (Maybe AstExpr) AstExpr -- ^ pointer permission
   | ExMemblock Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr -- ^ memblock permission
   | ExLlvmFunPtr Pos AstExpr AstExpr AstFunPerm -- ^ function pointer permission
-  | ExArray Pos AstExpr AstExpr AstExpr [ArrayPerm] -- array permission
+  | ExArray Pos (Maybe AstExpr) AstExpr AstExpr AstExpr AstExpr AstExpr -- ^ array permission
   deriving Show
 
 -- | Returns outermost position
@@ -87,16 +92,19 @@ instance HasPos AstExpr where
   pos (ExNat        p _        ) = p
   pos (ExVar        p _ _ _    ) = p
   pos (ExAdd        p _ _      ) = p
+  pos (ExNeg        p _        ) = p
   pos (ExMul        p _ _      ) = p
   pos (ExRead       p          ) = p
   pos (ExWrite      p          ) = p
   pos (ExStruct     p _        ) = p
   pos (ExLlvmWord   p _        ) = p
   pos (ExEmptySh    p          ) = p
-  pos (ExEqSh       p _        ) = p
+  pos (ExEqSh       p _ _      ) = p
   pos (ExEq         p _        ) = p
   pos (ExOr         p _ _      ) = p
+  pos (ExFalse      p          ) = p
   pos (ExTrue       p          ) = p
+  pos (ExAny        p          ) = p
   pos (ExExists     p _ _ _    ) = p
   pos (ExSeqSh      p _ _      ) = p
   pos (ExOrSh       p _ _      ) = p
@@ -116,8 +124,9 @@ instance HasPos AstExpr where
   pos (ExMemblock   p _ _ _ _ _) = p
   pos (ExLlvmFunPtr p _ _ _    ) = p
   pos (ExLlvmFrame  p _        ) = p
-  pos (ExArray      p _ _ _ _  ) = p
+  pos (ExArray      p _ _ _ _ _ _) = p
   pos (ExArraySh    p _ _ _    ) = p
+  pos (ExFalseSh    p          ) = p
 
 -- | Returns outermost position
 instance HasPos AstType where
