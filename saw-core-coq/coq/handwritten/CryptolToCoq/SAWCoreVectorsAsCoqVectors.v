@@ -71,6 +71,18 @@ Defined.
 Definition head (n : nat) (a : Type) (v : Vec (S n) a) : a := hd v.
 Definition tail (n : nat) (a : Type) (v : Vec (S n) a) : Vec n a := tl v.
 
+Lemma head_gen (n : nat) (a : Type) (f : nat -> a) :
+  head n a (gen (Succ n) a f) = f 0.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma tail_gen (n : nat) (a : Type) (f : nat -> a) :
+  tail n a (gen (Succ n) a f) = gen n a (fun (i:Nat) => f (Succ i)).
+Proof.
+  reflexivity.
+Qed.
+
 Instance Inhabited_Vec (n:nat) (a:Type) {Ha:Inhabited a} : Inhabited (Vec n a) :=
   MkInhabited (Vec n a) (gen n a (fun _ => inhabitant)).
 

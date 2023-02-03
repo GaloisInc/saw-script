@@ -1096,6 +1096,14 @@ primitive gen : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
 primitive head : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> a;
 primitive tail : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> Vec n a;
 
+-- Axioms describing head and tail in terms of gen
+axiom head_gen : (n : Nat) -> (a : sort 0) -> (f : Nat -> a) ->
+                 Eq a (head n a (gen (Succ n) a f)) (f 0);
+
+axiom tail_gen : (n : Nat) -> (a : sort 0) -> (f : Nat -> a) ->
+                 Eq (Vec n a) (tail n a (gen (Succ n) a f))
+                              (gen n a (\ (i:Nat) -> f (Succ i)));
+
 -- An implementation for atWithDefault
 --
 -- FIXME: can we replace atWithDefault with this implementation? Or does some

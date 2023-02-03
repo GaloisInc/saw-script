@@ -415,6 +415,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Vec",           mapsTo vectorsModule "Vec")
   , ("head",          mapsTo vectorsModule "head")
   , ("tail",          mapsTo vectorsModule "tail")
+  , ("head_gen",      mapsTo vectorsModule "head_gen")
+  , ("tail_gen",      mapsTo vectorsModule "tail_gen")
   ]
 
   -- Streams
