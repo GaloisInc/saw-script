@@ -44,9 +44,10 @@ import What4.ProgramLoc
   )
 
 import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.Permissions
+import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.SAWTranslation (SomeTypedCFG (..))
 import Verifier.SAW.Heapster.JSONExport(ppToJson)
 import Data.Type.RList (mapRAssign)
 import Data.Functor.Constant
@@ -128,7 +129,7 @@ instance ToJSON IDELog
 class ExtractLogEntries a where
   extractLogEntries :: a -> ExtractionM ()
 
-instance (PermCheckExtC ext)
+instance (PermCheckExtC ext extExpr)
     => ExtractLogEntries
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
@@ -203,16 +204,16 @@ instance ExtractLogEntries
     extractLogEntries mbpis
   extractLogEntries MbPermImpls_Nil = pure ()
 
-instance (PermCheckExtC ext)
-  => ExtractLogEntries (TypedCFG ext blocks ghosts inits ret) where
+instance (PermCheckExtC ext extExpr)
+  => ExtractLogEntries (TypedCFG ext blocks ghosts inits gouts ret) where
     extractLogEntries tcfg = extractLogEntries $ tpcfgBlockMap tcfg
 
-instance (PermCheckExtC ext)
+instance (PermCheckExtC ext extExpr)
   => ExtractLogEntries (TypedBlockMap TransPhase ext blocks tops ret) where
   extractLogEntries tbm =
     sequence_ $ RL.mapToList extractLogEntries tbm
 
-instance (PermCheckExtC ext)
+instance (PermCheckExtC ext extExpr)
   => ExtractLogEntries (TypedBlock TransPhase ext blocks tops ret args) where
     extractLogEntries tb =
       mapM_ (\(Some te) -> extractLogEntries te) $ _typedBlockEntries tb
@@ -257,17 +258,17 @@ runWithLoc ppi =
   where
     runWithLocHelper :: PPInfo -> Some SomeTypedCFG -> [LogEntry]
     runWithLocHelper ppi' sstcfg = case sstcfg of
-      Some (SomeTypedCFG tcfg) -> do
+      Some (SomeTypedCFG _ _ tcfg) -> do
         let env = (ppi', getFirstProgramLoc tcfg, getFunctionName tcfg)
         execWriter (runReaderT (extractLogEntries tcfg) env)
 
-getFunctionName :: TypedCFG ext blocks ghosts inits ret -> String
+getFunctionName :: TypedCFG ext blocks ghosts inits gouts ret -> String
 getFunctionName tcfg = case tpcfgHandle tcfg of
-  TypedFnHandle _ handle -> show $ handleName handle
+  TypedFnHandle _ _ handle -> show $ handleName handle
 
 getFirstProgramLoc
-  :: PermCheckExtC ext
-  => TypedCFG ext blocks ghosts inits ret -> ProgramLoc
+  :: PermCheckExtC ext extExpr
+  => TypedCFG ext blocks ghosts inits gouts ret -> ProgramLoc
 getFirstProgramLoc tcfg =
   case listToMaybe $ catMaybes $
          RL.mapToList getFirstProgramLocBM $ tpcfgBlockMap tcfg of
@@ -275,14 +276,14 @@ getFirstProgramLoc tcfg =
     _ -> error "Unable to get initial program location"
 
 getFirstProgramLocBM
-  :: PermCheckExtC ext
+  :: PermCheckExtC ext extExpr
   => TypedBlock TransPhase ext blocks tops ret ctx
   -> Maybe ProgramLoc
 getFirstProgramLocBM block =
   listToMaybe $ mapMaybe helper (_typedBlockEntries block)
   where
     helper
-      :: PermCheckExtC ext
+      :: PermCheckExtC ext extExpr
       => Some (TypedEntry TransPhase ext blocks tops ret ctx)
       -> Maybe ProgramLoc
     helper ste = case ste of
@@ -291,7 +292,7 @@ getFirstProgramLocBM block =
 
 -- | From the sequence, get the first program location we encounter, which
 -- should correspond to the permissions for the entry point we want to log
-getFirstProgramLocTS :: PermCheckExtC ext
+getFirstProgramLocTS :: PermCheckExtC ext extExpr
   => TypedStmtSeq ext blocks tops ret ctx
   -> ProgramLoc
 getFirstProgramLocTS (TypedImplStmt (AnnotPermImpl _ pis)) =
@@ -300,14 +301,14 @@ getFirstProgramLocTS (TypedConsStmt loc _ _ _) = loc
 getFirstProgramLocTS (TypedTermStmt loc _) = loc
 
 getFirstProgramLocPI
-  :: PermCheckExtC ext
+  :: PermCheckExtC ext extExpr
   => PermImpl (TypedStmtSeq ext blocks tops ret) ctx
   -> ProgramLoc
 getFirstProgramLocPI (PermImpl_Done stmts) = getFirstProgramLocTS stmts
 getFirstProgramLocPI (PermImpl_Step _ mbps) = getFirstProgramLocMBPI mbps
 
 getFirstProgramLocMBPI
-  :: PermCheckExtC ext
+  :: PermCheckExtC ext extExpr
   => MbPermImpls (TypedStmtSeq ext blocks tops ret) ctx
   -> ProgramLoc
 getFirstProgramLocMBPI MbPermImpls_Nil =

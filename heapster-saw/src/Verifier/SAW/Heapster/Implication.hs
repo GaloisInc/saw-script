@@ -3802,26 +3802,14 @@ nameMapFind predicate nm =
 
 -- | Traverse a permissions to determine whether it refers to a particular variable.
 permContainsVar :: ExprVar a -> ValuePerm b -> Bool
-permContainsVar ev (ValPerm_Eq pe) = permExprContainsVar ev pe
-permContainsVar ev (ValPerm_Or l r) = permContainsVar ev l || permContainsVar ev r
-permContainsVar ev (ValPerm_Exists vp) = mbLift $ fmap (permContainsVar ev) vp
-permContainsVar ev (ValPerm_Named _ pe _) = 
-  or $ RL.mapToList (permExprContainsVar ev) pe
-permContainsVar _  (ValPerm_Var _ _) = False
-permContainsVar ev (ValPerm_Conj as) = any atomicHelper as
-  where
-    atomicHelper :: AtomicPerm a -> Bool
-    atomicHelper (Perm_NamedConj _ perms _) = 
-      or $ RL.mapToList (permExprContainsVar ev) perms
-    atomicHelper _ = False
+permContainsVar x p = NameSet.member x (freeVars p)
 
-
-permExprContainsVar :: ExprVar a -> PermExpr b -> Bool
-permExprContainsVar ev1 (PExpr_Var ev2) = case testEquality ev1 ev2 of
-  Just Refl -> ev1 == ev2
-  Nothing -> False
-permExprContainsVar _ _ = False
-
+-- | Build a 'DistPerms' sequence of a permission @y1:p1@ we currently hold such
+-- that @p1@ contains @x@, a permission @y2:p2@ we currently hold such that @p2@
+-- contains @p1@, etc.
+--
+-- FIXME: what is the purpose of this? Don't we want all permissions recursively
+-- containing @x@?
 findPermsContainingVar :: ExprVar tp -> ImplM vars s r ps ps (Some DistPerms)
 findPermsContainingVar x = 
   getPerms >>>= \perms ->

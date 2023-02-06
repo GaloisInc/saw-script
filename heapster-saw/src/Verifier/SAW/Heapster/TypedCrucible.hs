@@ -1654,10 +1654,6 @@ data TypedCFG
              , tpcfgEntryID :: !(TypedEntryID blocks inits)
              }
 
-data SomeTypedCFG ext where
-  SomeTypedCFG :: PermCheckExtC ext exprExt =>
-    TypedCFG ext blocks ghosts inits gouts ret -> SomeTypedCFG ext
-
 -- | Get the input permissions for a 'CFG'
 tpcfgInputPerms :: TypedCFG ext blocks ghosts inits gouts ret ->
                    MbValuePerms (ghosts :++: inits)

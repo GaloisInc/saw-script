@@ -22,6 +22,10 @@ data Mb' ctx a = Mb'
   }
   deriving Functor
 
+mbMap2' :: (a -> b -> c) -> Mb' ctx a -> Mb' ctx b -> Mb' ctx c
+mbMap2' f mb1 mb2 =
+  Mb' (_mbNames mb1) (mbMap2 f (_mbBinding mb1) (_mbBinding mb2))
+
 mbBinding :: Lens (Mb' ctx a) (Mb' ctx b) (Mb ctx a) (Mb ctx b)
 mbBinding f x = Mb' (_mbNames x) <$> f (_mbBinding x)
 
