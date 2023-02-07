@@ -1,0 +1,28 @@
+module tupletest where
+
+foldFunction : [8] -> [16] -> [16] -> [8]
+foldFunction x y z = output.0
+  where
+    output = foldl fnc (x, y, z) [0 .. 15]
+
+fnc : ([8], [16], [16]) -> [4] -> ([8], [16], [16])
+fnc (x, y, z) i = returnTup
+  where
+    returnTup = (x ^ take y' ^ take z', y', z')
+    y' = y <<< i
+    z' = z >>> i
+
+foldFunction' : [8] -> [16] -> [16] -> [8]
+foldFunction' x y z = output.0
+  where
+    output = foldl fnc' (x, y, z) [15, 14 .. 0]
+
+fnc' : ([8], [16], [16]) -> [4] -> ([8], [16], [16])
+fnc' (x, y, z) i = returnTup
+  where
+    returnTup = (x ^ take y ^ take z, y', z')
+    y' = y >>> i
+    z' = z <<< i
+
+property foldFunctionInverse x y z =
+    foldFunction' (foldFunction x y z) y z == x

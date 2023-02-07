@@ -158,6 +158,7 @@ first_order_match pat term = match pat term Map.empty
 -- occur as the 2nd argument of an @App@ constructor. This ensures
 -- that instantiations are well-typed.
 
+-- | Test if a term is a constant natural number
 asConstantNat :: Term -> Maybe Natural
 asConstantNat t =
   case R.asCtor t of
@@ -202,11 +203,13 @@ scMatch ::
   IO (Maybe (Map DeBruijnIndex Term))
 scMatch sc pat term =
   runMaybeT $
-  do --lift $ putStrLn $ "********** scMatch **********"
+  do -- lift $ putStrLn $ "********** scMatch **********"
      MatchState inst cs <- match 0 [] pat term emptyMatchState
      mapM_ (check inst) cs
      return inst
   where
+    -- Check that a constraint of the form pat = n for natural number literal n
+    -- is satisfied by the supplied substitution (aka instantiation) inst
     check :: Map DeBruijnIndex Term -> (Term, Natural) -> MaybeT IO ()
     check inst (t, n) = do
       --lift $ putStrLn $ "checking: " ++ show (t, n)
@@ -219,6 +222,11 @@ scMatch sc pat term =
         Just i | i == n -> return ()
         _ -> mzero
 
+    -- Check if a term is a higher-order variable pattern, i.e., a free variable
+    -- (meaning one that can match anything) applied to 0 or more bound variable
+    -- arguments. Depth is the number of variables bound by lambdas or pis since
+    -- the top of the current pattern, so "free" means >= the current depth and
+    -- "bound" means less than the current depth
     asVarPat :: Int -> Term -> Maybe (DeBruijnIndex, [DeBruijnIndex])
     asVarPat depth = go []
       where
@@ -231,13 +239,17 @@ scMatch sc pat term =
               | j < depth -> go (j : js) t
             _ -> Nothing
 
-    match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState -> MaybeT IO MatchState
+    -- Test if term y matches pattern x, meaning whether there is a substitution
+    -- to the free variables of x to make it equal to y. Depth is the number of
+    -- bound variables, so a "free" variable is a deBruijn index >= depth. Env
+    -- saves the names associated with those bound variables.
+    match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
+             MaybeT IO MatchState
     match _ _ (STApp i fv _) (STApp j _ _) s
       | fv == emptyBitSet && i == j = return s
     match depth env x y s@(MatchState m cs) =
-      --do
-      --lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x
-      --lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y
+      -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
+      -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y) >>
       case asVarPat depth x of
         Just (i, js) ->
           do -- ensure parameter variables are distinct
@@ -268,6 +280,11 @@ scMatch sc pat term =
                Just y3 -> if y2 == y3 then return (MatchState m' cs) else mzero
         Nothing ->
           case (unwrapTermF x, unwrapTermF y) of
+            (_, FTermF (NatLit n))
+              | Just (c, [x']) <- R.asCtor x
+              , primName c == preludeSuccIdent && n > 0 ->
+                do y' <- lift $ scNat sc (n-1)
+                   match depth env x' y' s
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
               case zipWithFlatTermF (match depth env) xf yf of
