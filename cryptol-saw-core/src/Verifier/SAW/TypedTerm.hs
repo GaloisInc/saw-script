@@ -19,7 +19,7 @@ import Cryptol.Utils.PP (pretty)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import Verifier.SAW.Cryptol (scCryptolType)
+import Verifier.SAW.Cryptol (scCryptolType, Env, importKind, importSchema)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
@@ -48,6 +48,13 @@ data TypedTermType
   | TypedTermOther  Term
  deriving Show
 
+
+-- | Convert the 'ttTerm' field of a 'TypedTerm' to a SAW core term
+ttTypeAsTerm :: SharedContext -> Env -> TypedTerm -> IO Term
+ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =
+  importSchema sc env schema
+ttTypeAsTerm sc _ (TypedTerm (TypedTermKind k) _) = importKind sc k
+ttTypeAsTerm _ _ (TypedTerm (TypedTermOther tp) _) = return tp
 
 ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
 ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))

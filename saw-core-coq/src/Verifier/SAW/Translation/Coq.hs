@@ -32,12 +32,13 @@ import           Verifier.SAW.Module
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Term.Functor
 -- import Verifier.SAW.Term.CtxTerm
-import qualified Verifier.SAW.Translation.Coq.CryptolModule    as CryptolModuleTranslation
+import qualified Verifier.SAW.Translation.Coq.CryptolModule    as CMT
 import qualified Verifier.SAW.Translation.Coq.SAWModule        as SAWModuleTranslation
 import           Verifier.SAW.Translation.Coq.Monad
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
 import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
 import           Verifier.SAW.TypedTerm
+import           Verifier.SAW.Cryptol (Env)
 --import Verifier.SAW.Term.Pretty
 -- import qualified Verifier.SAW.UntypedAST as Un
 
@@ -102,7 +103,7 @@ From Coq Require Import String.
 From Coq Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import #{vectorModule}.
-Import ListNotations.
+Import VectorNotations.
 
 (** Post-preamble section specified by you *)
 #{postPreamble}
@@ -111,13 +112,14 @@ Import ListNotations.
 |]
 
 translateTermAsDeclImports ::
-  TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) (Doc ann)
-translateTermAsDeclImports configuration name t = do
+  TranslationConfiguration -> Coq.Ident -> Term -> Term ->
+  Either (TranslationError Term) (Doc ann)
+translateTermAsDeclImports configuration name t tp = do
   doc <-
     TermTranslation.translateDefDoc
       configuration
       (TermTranslation.TranslationReader Nothing)
-      [] name t
+      [] name t tp
   return $ vcat [preamble configuration, hardline <> doc]
 
 translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
@@ -135,19 +137,16 @@ translateSAWModule configuration m =
      ]
 
 translateCryptolModule ::
+  SharedContext -> Env ->
   Coq.Ident {- ^ Section name -} ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [String] ->
   CryptolModule ->
-  Either (TranslationError Term) (Doc ann)
-translateCryptolModule nm configuration globalDecls m =
-  let decls = CryptolModuleTranslation.translateCryptolModule
-              configuration
-              globalDecls
-              m
-  in
-  Coq.ppDecl . Coq.Section nm <$> decls
+  IO (Either (TranslationError Term) (Doc ann))
+translateCryptolModule sc env nm configuration globalDecls m =
+  fmap (fmap (Coq.ppDecl . Coq.Section nm)) $
+  CMT.translateCryptolModule sc env configuration globalDecls m
 
 moduleDeclName :: ModuleDecl -> Maybe String
 moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)
