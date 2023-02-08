@@ -372,7 +372,7 @@ loadCryptolModule ::
   IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc primOpts env path = do
   let modEnv = eModuleEnv env
-  (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  (m, modEnv') <- liftModuleM modEnv (snd <$> MB.loadModuleByPath True path)
   checkNotParameterized m
 
   let ifaceDecls = getAllIfaceDecls modEnv'
@@ -439,7 +439,7 @@ importModule sc env src as vis imps = do
   (m, modEnv') <-
     liftModuleM modEnv $
     case src of
-      Left path -> MB.loadModuleByPath path
+      Left path -> snd <$> MB.loadModuleByPath True path
       Right mn -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
   checkNotParameterized m
 

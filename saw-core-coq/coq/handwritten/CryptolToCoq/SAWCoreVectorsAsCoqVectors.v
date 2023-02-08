@@ -68,6 +68,21 @@ Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
     ).
 Defined.
 
+Definition head (n : nat) (a : Type) (v : Vec (S n) a) : a := hd v.
+Definition tail (n : nat) (a : Type) (v : Vec (S n) a) : Vec n a := tl v.
+
+Lemma head_gen (n : nat) (a : Type) (f : nat -> a) :
+  head n a (gen (Succ n) a f) = f 0.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma tail_gen (n : nat) (a : Type) (f : nat -> a) :
+  tail n a (gen (Succ n) a f) = gen n a (fun (i:Nat) => f (Succ i)).
+Proof.
+  reflexivity.
+Qed.
+
 Instance Inhabited_Vec (n:nat) (a:Type) {Ha:Inhabited a} : Inhabited (Vec n a) :=
   MkInhabited (Vec n a) (gen n a (fun _ => inhabitant)).
 
@@ -156,11 +171,39 @@ Fixpoint foldr (a b : Type) (n : nat) (f : a -> b -> b) (base : b) (v : Vec n a)
   | Vector.cons hd _ tl => f hd (foldr _ _ _ f base tl)
   end.
 
+Lemma foldr_nil (a b : Type) (f : a -> b -> b) (base : b) (v : Vec 0 a) :
+  foldr a b 0 f base v = base.
+Proof.
+  rewrite (Vec_0_nil _ v). reflexivity.
+Qed.
+
+Lemma foldr_cons (a b : Type) (n : nat) (f : a -> b -> b) (base : b)
+  (v : Vec (S n) a) : foldr a b (S n) f base v = f (hd v) (foldr a b n f base (tl v)).
+Proof.
+  destruct (Vec_S_cons _ _ v) as [ x [ xs pf ]].
+  rewrite pf. reflexivity.
+Qed.
+
+
 Fixpoint foldl (a b : Type) (n : nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : b :=
   match v with
   | Vector.nil => acc
   | Vector.cons hd _ tl => foldl _ _ _ f (f acc hd) tl
   end.
+
+Lemma foldl_nil (a b : Type) (f : b -> a -> b) (base : b) (v : Vec 0 a) :
+  foldl a b 0 f base v = base.
+Proof.
+  rewrite (Vec_0_nil _ v). reflexivity.
+Qed.
+
+Lemma foldl_cons (a b : Type) (n : nat) (f : b -> a -> b) (base : b)
+  (v : Vec (S n) a) :
+  foldl a b (S n) f base v = foldl a b n f (f base (hd v)) (tl v).
+Proof.
+  destruct (Vec_S_cons _ _ v) as [ x [ xs pf ]].
+  rewrite pf. reflexivity.
+Qed.
 
 Fixpoint scanl (a b : Type) (n : nat) (f : b -> a -> b) (acc : b) (v : Vec n a) : Vec (S n) b :=
   match v in VectorDef.t _ n return Vec (S n) b with

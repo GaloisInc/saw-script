@@ -128,12 +128,15 @@ data Eq (t : sort 1) (x : t) : t -> Prop where {
     Refl : Eq t x x;
   }
 
-
 -- The eliminator for the Eq type at sort 1, assuming the usual parameter-index
 -- structure of the Eq type
 Eq__rec : (t : sort 1) -> (x : t) -> (p : (y : t) -> Eq t x y -> sort 1) ->
            p x (Refl t x) -> (y : t) -> (pf : Eq t x y) -> p y pf;
 Eq__rec t x p f1 y pf = Eq#rec t x p f1 y pf;
+
+-- Uniqueness of Identity Proofs, a core logical principle of, e.g., Coq
+axiom uip : (t : sort 1) -> (x : t) -> (y : t) -> (pf1 pf2 : Eq t x y) ->
+            Eq (Eq t x y) pf1 pf2;
 
 -- Congruence closure for equality
 eq_cong : (t : sort 1) -> (x : t) -> (y : t) -> Eq t x y ->
@@ -194,44 +197,92 @@ inverse_eta_rule a b f g H =
 -- Unchecked assertion that two types are equal.
 axiom unsafeAssert : (a : sort 1) -> (x : a) -> (y : a) -> Eq a x y;
 
-
+-- Coerce from one type to a provably equal type. This is actually definable in
+-- the logic (see coerce__def, below), but we leave it as a primitive so it does
+-- not evaluate and can be specialized by simulation.
 primitive coerce : (a b : sort 0) -> Eq (sort 0) a b -> a -> b;
 
+-- The actual definition of coerce
 coerce__def : (a b : sort 0) -> Eq (sort 0) a b -> a -> b;
 coerce__def a b eq x =
    Eq__rec (sort 0) a (\ (b':sort 0) -> \ (eq':Eq (sort 0) a b') -> b') x b eq;
 
+-- Assertion that coerce equals coerce__def
 axiom coerce__eq :
   Eq ((a b : sort 0) -> Eq (sort 0) a b -> a -> b) coerce coerce__def;
 
-
+-- Coercion to the same type is a no-op
 -- NOTE: this is equivalent to UIP / Axiom K
-{-
-coerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) -> Eq a (coerce a a q x) x;
-coerce_same a (Refl _ _) x = Refl a x;
--}
+coerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) ->
+              Eq a (coerce a a q x) x;
+coerce_same a q x =
+  trans a (coerce a a q x) (coerce__def a a q x) x
+        (eq_cong
+           ((a b : sort 0) -> Eq (sort 0) a b -> a -> b)
+           coerce coerce__def coerce__eq a
+           (\ (f:(a b : sort 0) -> Eq (sort 0) a b -> a -> b) -> f a a q x))
+        (eq_cong
+           (Eq (sort 0) a a) q (Refl (sort 0) a)
+           (uip (sort 0) a a q (Refl (sort 0) a))
+           a (\ (q':Eq (sort 0) a a) -> coerce__def a a q' x));
 
+-- Multiple steps of coerce__def can be combined using transitivity
+coerce__def_trans : (a b c : sort 0) -> (pf1 : Eq (sort 0) a b) ->
+                    (pf2 : Eq (sort 0) b c) -> (x : a) ->
+                    Eq c (coerce__def b c pf2 (coerce__def a b pf1 x))
+                         (coerce__def a c (trans (sort 0) a b c pf1 pf2) x);
+coerce__def_trans a b c pf1 pf2 x =
+  Eq__rec
+    (sort 0) b
+    (\ (c' : sort 0) (pf2' : Eq (sort 0) b c') ->
+       Eq c' (coerce__def b c' pf2' (coerce__def a b pf1 x))
+             (coerce__def a c' (trans (sort 0) a b c' pf1 pf2') x))
+    (Refl b (coerce__def a b pf1 x))
+    c pf2;
+
+-- Multiple steps of coercion can be combined using transitivity
+coerce_trans : (a b c : sort 0) -> (pf1 : Eq (sort 0) a b) ->
+               (pf2 : Eq (sort 0) b c) -> (x : a) ->
+               Eq c (coerce b c pf2 (coerce a b pf1 x))
+                    (coerce a c (trans (sort 0) a b c pf1 pf2) x);
+coerce_trans a b c pf1 pf2 x =
+  trans4
+    c (coerce b c pf2 (coerce a b pf1 x))
+    (coerce__def b c pf2 (coerce__def a b pf1 x))
+    (coerce__def a c (trans (sort 0) a b c pf1 pf2) x)
+    (coerce a c (trans (sort 0) a b c pf1 pf2) x)
+    (eq_cong ((t u : sort 0) -> Eq (sort 0) t u -> t -> u)
+             coerce coerce__def coerce__eq c
+             (\ (f:(a b : sort 0) -> Eq (sort 0) a b -> a -> b) ->
+                (f b c pf2 (f a b pf1 x))))
+    (coerce__def_trans a b c pf1 pf2 x)
+    (eq_cong ((t u : sort 0) -> Eq (sort 0) t u -> t -> u)
+             coerce__def coerce
+             (sym ((t u : sort 0) -> Eq (sort 0) t u -> t -> u)
+                  coerce coerce__def coerce__eq) c
+             (\ (f:(a b : sort 0) -> Eq (sort 0) a b -> a -> b) ->
+                (f a c (trans (sort 0) a b c pf1 pf2) x)));
+
+-- Coerce "backwards", i.e., using an equality in the opposite direction
 rcoerce : (a b : sort 0) -> Eq (sort 0) a b -> b -> a;
 rcoerce a b q = coerce b a (sym (sort 0) a b q);
 
+-- Coercion from the same type is a no-op
 -- NOTE: this is equivalent to UIP / Axiom K
-{-
-rcoerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) -> Eq a (rcoerce a a q x) x;
+rcoerce_same : (a : sort 0) -> (q : Eq (sort 0) a a) -> (x : a) ->
+               Eq a (rcoerce a a q x) x;
 rcoerce_same a q x = coerce_same a (sym (sort 0) a a q) x;
--}
 
+-- Coerce without a proof of equality (which is unsafe)
 unsafeCoerce : (a b : sort 0) -> a -> b;
 unsafeCoerce a b = coerce a b (unsafeAssert (sort 0) a b);
 
-axiom unsafeCoerce_same : (a : sort 0) -> (x : a) ->
-                           Eq a (unsafeCoerce a a x) x;
-
--- NOTE: We could prove unsafeCoerce_same if we were willing to allow UIP...
-{-
+-- unsafeCoerce to the same type is a no-op
 unsafeCoerce_same : (a : sort 0) -> (x : a) -> Eq a (unsafeCoerce a a x) x;
 unsafeCoerce_same a x = coerce_same a (unsafeAssert (sort 0) a a) x;
--}
 
+-- If two domain types are equal, then function types from them to the same
+-- output type are equal
 piCong0 : (r x y : sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (x -> r) (y -> r));
 piCong0 r x y eq =
   Eq__rec
@@ -240,6 +291,8 @@ piCong0 r x y eq =
        Eq (sort 0) (x -> r) (y' -> r))
     (Refl (sort 0) (x -> r)) y eq;
 
+-- If two co-domain types are equal, then function types to them from the same
+-- input type are equal
 piCong1 : (r x y : sort 0) -> Eq (sort 0) x y -> (Eq (sort 0) (r -> x) (r -> y));
 piCong1 r x y eq =
   Eq__rec
@@ -1043,6 +1096,14 @@ primitive gen : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
 primitive head : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> a;
 primitive tail : (n : Nat) -> (a : sort 0) -> Vec (Succ n) a -> Vec n a;
 
+-- Axioms describing head and tail in terms of gen
+axiom head_gen : (n : Nat) -> (a : sort 0) -> (f : Nat -> a) ->
+                 Eq a (head n a (gen (Succ n) a f)) (f 0);
+
+axiom tail_gen : (n : Nat) -> (a : sort 0) -> (f : Nat -> a) ->
+                 Eq (Vec n a) (tail n a (gen (Succ n) a f))
+                              (gen n a (\ (i:Nat) -> f (Succ i)));
+
 -- An implementation for atWithDefault
 --
 -- FIXME: can we replace atWithDefault with this implementation? Or does some
@@ -1099,6 +1160,22 @@ primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minN
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 primitive foldl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> b;
 primitive scanl : (a b : sort 0) -> (n : Nat) -> (b -> a -> b) -> b -> Vec n a -> Vec (addNat 1 n) b;
+
+-- Axioms defining foldr
+axiom foldr_nil : (a b : sort 0) -> (f : a -> b -> b) -> (x : b) ->
+                  (v : Vec 0 a) -> Eq b (foldr a b 0 f x v) x;
+axiom foldr_cons : (a b : sort 0) -> (n : Nat) -> (f : a -> b -> b) -> (x : b) ->
+                   (v : Vec (Succ n) a) ->
+                   Eq b (foldr a b (Succ n) f x v)
+                        (f (head n a v) (foldr a b n f x (tail n a v)));
+
+-- Axioms defining foldl
+axiom foldl_nil : (a b : sort 0) -> (f : b -> a -> b) -> (x : b) ->
+                  (v : Vec 0 a) -> Eq b (foldl a b 0 f x v) x;
+axiom foldl_cons : (a b : sort 0) -> (n : Nat) -> (f : b -> a -> b) -> (x : b) ->
+                   (v : Vec (Succ n) a) ->
+                   Eq b (foldl a b (Succ n) f x v)
+                        (foldl a b n f (f x (head n a v)) (tail n a v));
 
 reverse : (n : Nat) -> (a : isort 0) -> Vec n a -> Vec n a;
 reverse n a xs = gen n a (\ (i : Nat) -> at n a xs (subNat (subNat n 1) i));
@@ -2941,22 +3018,52 @@ primitive forallS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
 primitive existsS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
                     SpecM E stack a;
 
+-- Assume a proposition holds
 primitive assumeS : (E:EvType) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E stack #();
+
+-- Assume a Boolean value is true
+assumeBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
+assumeBoolS E stack b = assumeS E stack (EqTrue b);
+
+-- The specification which assumes that the first argument is True and then
+-- runs the second argument
+assumingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
+            SpecM E stack a -> SpecM E stack a;
+assumingS E stack a cond m =
+  bindS E stack #() a (assumeBoolS E stack cond) (\ (_:#()) -> m);
+
+-- Assert a proposition holds
 primitive assertS : (E:EvType) -> (stack:FunStack) ->
                     (p:Prop) -> SpecM E stack #();
 
+-- Assert a Boolean value is true
+assertBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
+assertBoolS E stack b = assertS E stack (EqTrue b);
+
+-- The specification which asserts that the first argument is True and then
+-- runs the second argument
+assertingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
+            SpecM E stack a -> SpecM E stack a;
+assertingS E stack a cond m =
+  bindS E stack #() a (assertBoolS E stack cond) (\ (_:#()) -> m);
+
+-- Lift a computation in the empty stack to an arbitrary stack
 primitive liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
                        SpecM E emptyFunStack A -> SpecM E stack A;
+
+-- The computation that nondeterministically chooses one computation or another.
+-- As a specification, represents the disjunction of two specifications.
+orS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) ->
+      SpecM E stack a -> SpecM E stack a -> SpecM E stack a;
+orS E stack a m1 m2 =
+  bindS E stack Bool a (existsS E stack Bool)
+        (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
 
 -- Return the type represented by a LetRecType
 LRTType : (E:EvType) -> FunStack -> LetRecType -> sort 0;
 LRTType E stack lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> sort 0)
-  (\ (r:sort 0) -> SpecM E stack r)
-  (\ (a:sort 0) (_:a -> LetRecType) (b:a -> sort 0) -> (x:a) -> b x)
-  lrt;
+  lrt1Pi lrt (\ (args:LRTInput lrt) -> SpecM E stack (LRTOutput lrt args));
 
 -- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
 -- is the result of calling LRTType on the ith LetRecType in a list
@@ -2983,6 +3090,58 @@ primitive multiFixS :
   FrameTuple E (pushFunStack frame stack) frame ->
   (call : FrameCall frame) ->
   SpecM E stack (FrameCallRet frame call);
+
+-- Build a frame with a single function
+singletonFrame : LetRecType -> List1 LetRecType;
+singletonFrame lrt = Cons1 LetRecType lrt (Nil1 LetRecType);
+
+-- Build a frame with a single function of a single input type
+fixSFrame : (a:sort 0) -> (b:a -> sort 0) -> List1 LetRecType;
+fixSFrame a b = singletonFrame (LRT_Fun a (\ (x:a) -> LRT_Ret (b x)));
+
+-- Build a stack with a single fixS frame
+fixSStack : (a:sort 0) -> (b:a -> sort 0) -> FunStack;
+fixSStack a b = pushFunStack (fixSFrame a b) emptyFunStack;
+
+-- Helper type for fixS
+fixSFun : (E:EvType) -> (stack:FunStack) ->
+          (a:sort 0) -> (b:a -> sort 0) -> sort 0;
+fixSFun E stack a b =
+  (x:a) -> SpecM E (pushFunStack (fixSFrame a b) stack) (b x);
+
+-- Bind a single recursive function with a single input and pass it the given
+-- input argument
+fixS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> (b:a -> sort 0) ->
+       (fixSFun E stack a b -> fixSFun E stack a b) ->
+       (x:a) -> SpecM E stack (b x);
+fixS E stack a b body_f x_top =
+  multiFixS
+    E stack (fixSFrame a b)
+    (body_f (\ (x:a) ->
+               callS E stack (fixSFrame a b)
+                     (mkFrameCall (fixSFrame a b) 0 x)), ())
+    (mkFrameCall (fixSFrame a b) 0 x_top);
+
+-- Build a multi-argument fixed-point of type A1 -> ... -> An -> SpecM B
+multiArgFixS : (E:EvType) -> (stack:FunStack) -> (lrt:LetRecType) ->
+               (LRTType E (pushFunStack (singletonFrame lrt) stack) lrt ->
+                LRTType E (pushFunStack (singletonFrame lrt) stack) lrt) ->
+               LRTType E stack lrt;
+multiArgFixS E stack lrt body_f =
+  lrtLambda
+    lrt (\ (args:LRTInput lrt) -> SpecM E stack (LRTOutput lrt args))
+    (\ (top_args:LRTInput lrt) ->
+       multiFixS
+         E stack (singletonFrame lrt)
+         (body_f
+            (lrtLambda
+               lrt (\ (args:LRTInput lrt) ->
+                      SpecM E (pushFunStack (singletonFrame lrt) stack)
+                            (LRTOutput lrt args))
+               (\ (args:LRTInput lrt) ->
+                  callS E stack (singletonFrame lrt)
+                        (FrameCallOfArgs (singletonFrame lrt) 0 args))), ())
+         (FrameCallOfArgs (singletonFrame lrt) 0 top_args));
 
 -- Apply a pure function to the result of a computation
 fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->

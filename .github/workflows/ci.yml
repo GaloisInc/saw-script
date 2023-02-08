@@ -285,7 +285,7 @@ jobs:
 
         # If you change the entree-specs commit below, make sure you update the
         # documentation in saw-core-coq/README.md accordingly.
-      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#b011f29680fdde87489bc06ae98bfff0f97795b3
+      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#52c4868f1f65c7ce74e90000214de27e23ba98fb
 
       # FIXME: the following steps generate Coq libraries for the SAW core to
       # Coq translator and builds them; if we do other Coq tests, these steps
@@ -315,7 +315,8 @@ jobs:
               cd saw-remote-api/python/
               poetry update
               poetry install
-              poetry run mypy saw_client/
+              poetry run mypy --install-types --non-interactive saw_client/ || true
+              poetry run mypy --install-types --non-interactive saw_client/
             os: macos-12
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
@@ -337,7 +338,7 @@ jobs:
 
       - uses: actions/setup-python@v2
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - uses: abatilo/actions-poetry@v2.0.0
         with:

@@ -13,7 +13,7 @@ module SAWScript.Prover.MRSolver
    MRFailure(..), showMRFailure, showMRFailureNoCtx,
    FunAssump(..), FunAssumpRHS(..),
    MREnv(..), emptyMREnv, mrEnvAddFunAssump, mrEnvSetDebugLevel,
-   asProjAll, isCompFunType) where
+   asProjAll, isSpecFunType) where
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad

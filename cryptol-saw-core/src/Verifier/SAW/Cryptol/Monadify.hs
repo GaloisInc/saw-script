@@ -5,7 +5,11 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol.Monadify
@@ -18,8 +22,8 @@ Portability : non-portable (language extensions)
 This module implements a "monadification" transformation, which converts "pure"
 SAW core terms that use inconsistent operations like @fix@ and convert them to
 monadic SAW core terms that use monadic versions of these operations that are
-consistent. The monad that is used is the @CompM@ monad that is axiomatized in
-the SAW cxore prelude. This is only a partial transformation, meaning that it
+consistent. The monad that is used is the @SpecM@ monad that is axiomatized in
+the SAW core prelude. This is only a partial transformation, meaning that it
 will fail on some SAW core terms. Specifically, it requires that all
 applications @f arg@ in a term either have a non-dependent function type for @f@
 (i.e., a function with type @'Pi' x a b@ where @x@ does not occur in @b@) or a
@@ -43,7 +47,7 @@ MT(_) = error
 
 CompMT(tp = Pi _ _ _) = MT(tp)
 CompMT(n : Num) = n
-CompMT(tp) = CompM MT(tp)
+CompMT(tp) = SpecM MT(tp)
 
 
 Term-level translation:
@@ -51,7 +55,7 @@ Term-level translation:
 MonArg(t : tp) ==> MT(tp)
 MonArg(t) =
   case Mon(t) of
-    m : CompM MT(a) => shift \k -> m >>= \x -> k x
+    m : SpecM MT(a) => shift \k -> m >>= \x -> k x
     _ => t
 
 Mon(t : tp) ==> MT(tp) or CompMT(tp)  (which are the same type for pis)
@@ -80,6 +84,7 @@ import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text as T
 import qualified Text.URI as URI
+import GHC.Generics (Generic)
 
 import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
@@ -206,6 +211,52 @@ asTypedGlobalDef t =
       Just $ GlobalDef (ecName ec) (ecVarIndex ec) (ecType ec) t Nothing
     _ -> Nothing
 
+-- | The event type and function stack arguments to the @SpecM@ type, using type
+-- @tm@ for terms
+data SpecMParams tm = SpecMParams { specMEvType :: tm, specMStack :: tm }
+                      deriving (Generic, Show)
+
+-- | Convert a 'SpecMParams' to a list of terms
+paramsToTerms :: SpecMParams tm -> [tm]
+paramsToTerms SpecMParams { specMEvType = ev, specMStack = stack } = [ev,stack]
+
+-- | The implicit argument version of 'SpecMParams'
+type HasSpecMParams = (?specMParams :: SpecMParams OpenTerm)
+
+-- | Build a @LetRecType@ for a nested pi type
+lrtFromMonType :: HasSpecMParams => MonType -> OpenTerm
+lrtFromMonType (MTyForall x k body_f) =
+  ctorOpenTerm "Prelude.LRT_Fun"
+  [monKindOpenTerm k,
+   lambdaOpenTerm x (monKindOpenTerm k) (\tp -> lrtFromMonType $
+                                                body_f $ MTyBase k tp)]
+lrtFromMonType (MTyArrow mtp1 mtp2) =
+  ctorOpenTerm "Prelude.LRT_Fun"
+  [toArgType mtp1,
+   lambdaOpenTerm "_" (toArgType mtp1) (\_ -> lrtFromMonType mtp2)]
+lrtFromMonType mtp =
+  ctorOpenTerm "Prelude.LRT_Ret" [toArgType mtp]
+
+-- | Push a frame of recursive functions with the given 'MonType's onto a
+-- @FunStack@
+--
+-- FIXME HERE: This will give the incorrect type if any of the 'MonType's are
+-- higher-order, meaning they themselves take in or return types containing
+-- @SpecM@. In order to fix this, we will need a more general @LetRecType@.
+pushSpecMFrame :: HasSpecMParams => [MonType] -> OpenTerm -> OpenTerm
+pushSpecMFrame tps stack =
+  let frame =
+        list1OpenTerm (dataTypeOpenTerm "Prelude.LetRecType" []) $
+        map lrtFromMonType tps in
+  applyGlobalOpenTerm "Prelude.pushFunStack" [frame, stack]
+
+-- | The empty function stack
+emptyStackOpenTerm :: OpenTerm
+emptyStackOpenTerm = globalOpenTerm "Prelude.emptyFunStack"
+
+-- | Build a 'SpecMParams' with the empty stack from an 'EvType'
+paramsOfEvType :: OpenTerm -> SpecMParams OpenTerm
+paramsOfEvType ev = SpecMParams ev emptyStackOpenTerm
 
 data MonKind = MKType Sort | MKNum | MKFun MonKind MonKind deriving Eq
 
@@ -313,13 +364,14 @@ applyKinds :: MonKind -> [MonType] -> Maybe MonKind
 applyKinds = foldM applyKind
 
 -- | Convert a 'MonType' to the argument type @MT(tp)@ it represents
-toArgType :: MonType -> OpenTerm
+toArgType :: HasSpecMParams => MonType -> OpenTerm
 toArgType (MTyForall x k body) =
   piOpenTerm x (monKindOpenTerm k) (\tp -> toCompType (body $ MTyBase k tp))
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "CryptolM.mseq") [n, toArgType t]
+  applyOpenTermMulti (globalOpenTerm "CryptolM.mseq")
+  [specMEvType ?specMParams, specMStack ?specMParams, n, toArgType t]
 toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTyRecord tps) =
@@ -328,10 +380,12 @@ toArgType (MTyBase _ t) = t
 toArgType (MTyNum n) = n
 
 -- | Convert a 'MonType' to the computation type @CompMT(tp)@ it represents
-toCompType :: MonType -> OpenTerm
+toCompType :: HasSpecMParams => MonType -> OpenTerm
 toCompType mtp@(MTyForall _ _ _) = toArgType mtp
 toCompType mtp@(MTyArrow _ _) = toArgType mtp
-toCompType mtp = applyOpenTerm (globalOpenTerm "Prelude.CompM") (toArgType mtp)
+toCompType mtp =
+  let SpecMParams { specMEvType = ev, specMStack = stack } = ?specMParams in
+  applyOpenTermMulti (globalOpenTerm "Prelude.SpecM") [ev, stack, toArgType mtp]
 
 -- | The mapping for monadifying Cryptol typeclasses
 -- FIXME: this is no longer needed, as it is now the identity
@@ -372,7 +426,8 @@ typeCtxPureCtx :: MonadifyTypeCtx -> [(LocalName,Term)]
 typeCtxPureCtx = map (\(x,tp,_) -> (x,tp))
 
 -- | Monadify a type and convert it to its corresponding argument type
-monadifyTypeArgType :: HasCallStack => MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeArgType :: (HasCallStack, HasSpecMParams) => MonadifyTypeCtx ->
+                       Term -> OpenTerm
 monadifyTypeArgType ctx t = toArgType $ monadifyType ctx t
 
 -- | Apply a monadified type to a type or term argument in the sense of
@@ -384,7 +439,8 @@ applyMonType (MTyForall _ _ f) (Left mtp) = f mtp
 applyMonType _ _ = error "applyMonType: application at incorrect type"
 
 -- | Convert a SAW core 'Term' to a monadification type
-monadifyType :: HasCallStack => MonadifyTypeCtx -> Term -> MonType
+monadifyType :: (HasCallStack, HasSpecMParams) => MonadifyTypeCtx -> Term ->
+                MonType
 {-
 monadifyType ctx t
   | trace ("\nmonadifyType:\n" ++ ppTermInTypeCtx ctx t) False = undefined
@@ -459,7 +515,8 @@ monadifyType ctx tp =
          ++ ppTermInTypeCtx ctx tp)
 
 -- | Monadify a type-level natural number
-monadifyTypeNat :: HasCallStack => MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeNat :: (HasCallStack, HasSpecMParams) => MonadifyTypeCtx -> Term ->
+                   OpenTerm
 monadifyTypeNat _ (asNat -> Just n) = natOpenTerm n
 monadifyTypeNat ctx (asLocalVar -> Just i)
   | i < length ctx
@@ -505,11 +562,12 @@ instance GetMonType MonTerm where
 
 -- | Convert a monadification term to a SAW core term of type @CompMT(tp)@
 class ToCompTerm a where
-  toCompTerm :: a -> OpenTerm
+  toCompTerm :: HasSpecMParams => a -> OpenTerm
 
 instance ToCompTerm ArgMonTerm where
   toCompTerm (BaseMonTerm mtp t) =
-    applyOpenTermMulti (globalOpenTerm "Prelude.returnM") [toArgType mtp, t]
+    applyOpenTermMulti (globalOpenTerm "Prelude.retS")
+    [specMEvType ?specMParams, specMStack ?specMParams, toArgType mtp, t]
   toCompTerm (FunMonTerm x tp_in _ body) =
     lambdaOpenTerm x (toArgType tp_in) (toCompTerm . body . fromArgTerm tp_in)
   toCompTerm (ForallMonTerm x k body) =
@@ -521,14 +579,14 @@ instance ToCompTerm MonTerm where
 
 
 -- | Convert an 'ArgMonTerm' to a SAW core term of type @MT(tp)@
-toArgTerm :: ArgMonTerm -> OpenTerm
+toArgTerm :: HasSpecMParams => ArgMonTerm -> OpenTerm
 toArgTerm (BaseMonTerm _ t) = t
 toArgTerm t = toCompTerm t
 
 
 -- | Build a monadification term from a term of type @MT(tp)@
 class FromArgTerm a where
-  fromArgTerm :: MonType -> OpenTerm -> a
+  fromArgTerm :: HasSpecMParams => MonType -> OpenTerm -> a
 
 instance FromArgTerm ArgMonTerm where
   fromArgTerm (MTyForall x k body) t =
@@ -542,9 +600,31 @@ instance FromArgTerm MonTerm where
   fromArgTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
 
 -- | Build a monadification term from a computational term of type @CompMT(tp)@
-fromCompTerm :: MonType -> OpenTerm -> MonTerm
+fromCompTerm :: HasSpecMParams => MonType -> OpenTerm -> MonTerm
 fromCompTerm mtp t | isBaseType mtp = CompMonTerm mtp t
 fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
+
+-- | Take a function of type @A1 -> ... -> An -> SpecM E emptyFunStack B@ and
+-- lift the stack of the output type to an arbitrary @stack@ parameter using
+-- @liftStackS@
+class LiftCompStack a where
+  liftCompStack :: HasSpecMParams => a -> a
+
+instance LiftCompStack ArgMonTerm where
+  liftCompStack t@(BaseMonTerm _ _) =
+    -- A pure term need not be lifted, because it is not computational
+    t
+  liftCompStack (FunMonTerm nm tp_in tp_out body) =
+    FunMonTerm nm tp_in tp_out $ \x -> liftCompStack $ body x
+  liftCompStack (ForallMonTerm nm k body) =
+    ForallMonTerm nm k $ \x -> liftCompStack $ body x
+
+instance LiftCompStack MonTerm where
+  liftCompStack (ArgMonTerm amtrm) = ArgMonTerm $ liftCompStack amtrm
+  liftCompStack (CompMonTerm mtp trm) =
+    CompMonTerm mtp $
+    applyGlobalOpenTerm "Prelude.liftStackS"
+    [specMEvType ?specMParams, specMStack ?specMParams, toArgType mtp, trm]
 
 -- | Test if a monadification type @tp@ is pure, meaning @MT(tp)=tp@
 monTypeIsPure :: MonType -> Bool
@@ -585,7 +665,8 @@ monTypeIsSemiPure (MTyNum _) = True
 -- > SemiP(Pi x Num b) = Pi x Num SemiP(b)
 -- > SemiP(Pi _ a b) = MT(a) -> SemiP(b)
 -- > SemiP(a) = MT(a)
-fromSemiPureTermFun :: MonType -> ([OpenTerm] -> OpenTerm) -> ArgMonTerm
+fromSemiPureTermFun :: HasSpecMParams => MonType -> ([OpenTerm] -> OpenTerm) ->
+                       ArgMonTerm
 fromSemiPureTermFun (MTyForall x k body) f =
   ForallMonTerm x k $ \tp ->
   ArgMonTerm $ fromSemiPureTermFun (body tp) (f . (toArgType tp:))
@@ -595,15 +676,15 @@ fromSemiPureTermFun (MTyArrow t1 t2) f =
 fromSemiPureTermFun tp f = BaseMonTerm tp (f [])
 
 -- | Like 'fromSemiPureTermFun' but use a term rather than a term function
-fromSemiPureTerm :: MonType -> OpenTerm -> ArgMonTerm
+fromSemiPureTerm :: HasSpecMParams => MonType -> OpenTerm -> ArgMonTerm
 fromSemiPureTerm mtp t = fromSemiPureTermFun mtp (applyOpenTermMulti t)
 
 -- | Build a 'MonTerm' that 'fail's when converted to a term
-failMonTerm :: MonType -> String -> MonTerm
+failMonTerm :: HasSpecMParams => MonType -> String -> MonTerm
 failMonTerm mtp str = fromArgTerm mtp (failOpenTerm str)
 
 -- | Build an 'ArgMonTerm' that 'fail's when converted to a term
-failArgMonTerm :: MonType -> String -> ArgMonTerm
+failArgMonTerm :: HasSpecMParams => MonType -> String -> ArgMonTerm
 failArgMonTerm tp str = fromArgTerm tp (failOpenTerm str)
 
 -- | Apply a monadified term to a type or term argument
@@ -624,18 +705,27 @@ applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
                      MonTerm
 applyMonTermMulti = foldl applyMonTerm
 
--- | Build a 'MonTerm' from a global of a given argument type
-mkGlobalArgMonTerm :: MonType -> Ident -> ArgMonTerm
-mkGlobalArgMonTerm tp ident = fromArgTerm tp (globalOpenTerm ident)
+-- | Build a 'MonTerm' from a global of a given argument type, applying it to
+-- the current 'SpecMParams' if the 'Bool' flag is 'True' and lifting it using
+-- @liftStackS@ if it is 'False'
+mkGlobalArgMonTerm :: HasSpecMParams => MonType -> Ident -> Bool -> ArgMonTerm
+mkGlobalArgMonTerm tp ident params_p =
+  (if params_p then id else liftCompStack) $
+  fromArgTerm tp (if params_p
+                  then applyGlobalOpenTerm ident (paramsToTerms ?specMParams)
+                  else globalOpenTerm ident)
 
--- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type
-mkSemiPureGlobalDefTerm :: GlobalDef -> ArgMonTerm
-mkSemiPureGlobalDefTerm glob =
-  fromSemiPureTerm (monadifyType [] $
-                    globalDefType glob) (globalDefOpenTerm glob)
+-- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type, applying it to
+-- the current 'SpecMParams' if the 'Bool' flag is 'True'
+mkSemiPureGlobalDefTerm :: HasSpecMParams => GlobalDef -> Bool -> ArgMonTerm
+mkSemiPureGlobalDefTerm glob params_p =
+  fromSemiPureTerm (monadifyType [] $ globalDefType glob)
+  (if params_p
+   then applyOpenTermMulti (globalDefOpenTerm glob) (paramsToTerms ?specMParams)
+   else globalDefOpenTerm glob)
 
 -- | Build a 'MonTerm' from a constructor with the given 'PrimName'
-mkCtorArgMonTerm :: PrimName Term -> ArgMonTerm
+mkCtorArgMonTerm :: HasSpecMParams => PrimName Term -> ArgMonTerm
 mkCtorArgMonTerm pn
   | not (isFirstOrderType (primType pn)) =
     failArgMonTerm (monadifyType [] $ primType pn)
@@ -662,30 +752,55 @@ monMacro0 mtrm = MonMacro 0 (\_ _ -> return mtrm)
 -- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
 -- (See 'fromSemiPureTermFun'.) Because we can't get access to the type of the
 -- global until we apply the macro, we monadify its type at macro application
--- time.
-semiPureGlobalMacro :: Ident -> Ident -> MonMacro
-semiPureGlobalMacro from to =
-  MonMacro 0 $ \glob args ->
+-- time. The 'Bool' flag indicates whether the current 'SpecMParams' should also
+-- be passed as the first two arguments to the "to" global.
+semiPureGlobalMacro :: Ident -> Ident -> Bool -> MonMacro
+semiPureGlobalMacro from to params_p =
+  MonMacro 0 $ \glob args -> usingSpecMParams $
   if globalDefName glob == ModuleIdentifier from && args == [] then
     return $ ArgMonTerm $
-    fromSemiPureTerm (monadifyType [] $ globalDefType glob) (globalOpenTerm to)
+    fromSemiPureTerm (monadifyType [] $ globalDefType glob)
+    (if params_p then applyGlobalOpenTerm to (paramsToTerms ?specMParams)
+     else globalOpenTerm to)
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
--- | Make a 'MonMacro' that maps a named global to a global of argument
--- type. Because we can't get access to the type of the global until we apply
--- the macro, we monadify its type at macro application time.
-argGlobalMacro :: NameInfo -> Ident -> MonMacro
-argGlobalMacro from to =
-  MonMacro 0 $ \glob args ->
+-- | Make a 'MonMacro' that maps a named global to a global of argument type.
+-- Because we can't get access to the type of the global until we apply the
+-- macro, we monadify its type at macro application time. The 'Bool' flag
+-- indicates whether the "to" global is polymorphic in the event type and
+-- function stack; if so, the current 'SpecMParams' are passed as its first two
+-- arguments, and otherwise the returned computation is lifted with
+-- @liftStackS@.
+argGlobalMacro :: NameInfo -> Ident -> Bool -> MonMacro
+argGlobalMacro from to params_p =
+  MonMacro 0 $ \glob args -> usingSpecMParams $
   if globalDefName glob == from && args == [] then
     return $ ArgMonTerm $
-    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to
+    mkGlobalArgMonTerm (monadifyType [] $ globalDefType glob) to params_p
   else
     error ("Monadification macro for " ++ show from ++ " applied incorrectly")
 
--- | An environment of named primitives and how to monadify them
-type MonadifyEnv = Map NameInfo MonMacro
+-- | An environment for monadification
+data MonadifyEnv = MonadifyEnv {
+  -- | How to monadify named functions
+  monEnvMonTable :: Map NameInfo MonMacro,
+  -- | The @EvType@ used for monadification
+  monEnvEvType :: OpenTerm
+  }
+
+-- | Build a 'SpecMParams' with the empty funciton stack from a 'MonadifyEnv'
+monEnvParams :: MonadifyEnv -> SpecMParams OpenTerm
+monEnvParams env = paramsOfEvType (monEnvEvType env)
+
+-- | Look up the monadification of a name in a 'MonadifyEnv'
+monEnvLookup :: NameInfo -> MonadifyEnv -> Maybe MonMacro
+monEnvLookup nmi env = Map.lookup nmi (monEnvMonTable env)
+
+-- | Add a monadification for a name to a 'MonadifyEnv'
+monEnvAdd :: NameInfo -> MonMacro -> MonadifyEnv -> MonadifyEnv
+monEnvAdd nmi macro env =
+  env { monEnvMonTable = Map.insert nmi macro (monEnvMonTable env) }
 
 -- | A context for monadifying 'Term's which maintains, for each deBruijn index
 -- in scope, both its original un-monadified type along with either a 'MonTerm'
@@ -726,9 +841,15 @@ data MonadifyROState = MonadifyROState {
   monStEnv :: MonadifyEnv,
   -- | The monadification context 
   monStCtx :: MonadifyCtx,
+  -- | The current @SpecM@ function stack
+  monStStack :: OpenTerm,
   -- | The monadified return type of the top-level term being monadified
   monStTopRetType :: OpenTerm
 }
+
+-- | Get the monadification table from a 'MonadifyROState'
+monStMonTable :: MonadifyROState -> Map NameInfo MonMacro
+monStMonTable = monEnvMonTable . monStEnv
 
 -- | The monad for monadifying SAW core terms
 newtype MonadifyM a =
@@ -738,8 +859,29 @@ newtype MonadifyM a =
   deriving (Functor, Applicative, Monad,
             MonadReader MonadifyROState, MonadState MonadifyMemoTable)
 
+-- | Get the current 'SpecMParams' in a 'MonadifyM' computation
+askSpecMParams :: MonadifyM (SpecMParams OpenTerm)
+askSpecMParams =
+  do st <- ask
+     let ev = monEnvEvType $ monStEnv st
+     let stack = monStStack st
+     return (SpecMParams { specMEvType = ev, specMStack = stack })
+
+-- | Run a 'MonadifyM' computation with the current 'SpecMParams'
+usingSpecMParams :: (HasSpecMParams => MonadifyM a) -> MonadifyM a
+usingSpecMParams m =
+  do params <- askSpecMParams
+     let ?specMParams = params in m
+
+-- | Push a frame of recursive functions onto the current 'SpecMParams'
+pushingSpecMParamsM :: [MonType] -> MonadifyM a -> MonadifyM a
+pushingSpecMParamsM tps m =
+  usingSpecMParams $
+  local (\rost -> rost { monStStack = pushSpecMFrame tps (monStStack rost) }) m
+
 instance Fail.MonadFail MonadifyM where
   fail str =
+    usingSpecMParams $
     do ret_tp <- topRetType
        shiftMonadifyM $ \_ -> failMonTerm (mkMonType0 ret_tp) str
 
@@ -755,7 +897,8 @@ shiftMonadifyM f = MonadifyM $ lift $ lift $ cont f
 resetMonadifyM :: OpenTerm -> MonadifyM MonTerm -> MonadifyM MonTerm
 resetMonadifyM ret_tp m =
   do ro_st <- ask
-     return $ runMonadifyM (monStEnv ro_st) (monStCtx ro_st) ret_tp m
+     return $
+       runMonadifyM (monStEnv ro_st) (monStCtx ro_st) (monStStack ro_st) ret_tp m
 
 -- | Get the monadified return type of the top-level term being monadified
 topRetType :: MonadifyM OpenTerm
@@ -765,18 +908,20 @@ topRetType = monStTopRetType <$> ask
 --
 -- FIXME: document the arguments
 runMonadifyM :: MonadifyEnv -> MonadifyCtx -> OpenTerm ->
-                MonadifyM MonTerm -> MonTerm
-runMonadifyM env ctx top_ret_tp m =
-  let ro_st = MonadifyROState env ctx top_ret_tp in
+                OpenTerm -> MonadifyM MonTerm -> MonTerm
+runMonadifyM env ctx stack top_ret_tp m =
+  let ro_st = MonadifyROState env ctx stack top_ret_tp in
   runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) emptyMemoTable) id
 
 -- | Run a monadification computation using a mapping for identifiers that have
 -- already been monadified and generate a SAW core term
 runCompleteMonadifyM :: MonadIO m => SharedContext -> MonadifyEnv ->
-                        Term -> MonadifyM MonTerm -> m Term
+                        Term -> MonadifyM MonTerm ->
+                        m Term
 runCompleteMonadifyM sc env top_ret_tp m =
+  let ?specMParams = monEnvParams env in
   liftIO $ completeOpenTerm sc $ toCompTerm $
-  runMonadifyM env [] (toArgType $ monadifyType [] top_ret_tp) m
+  runMonadifyM env [] emptyStackOpenTerm (toArgType $ monadifyType [] top_ret_tp) m
 
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
 memoMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
@@ -813,22 +958,24 @@ memoArgMonTerm i m =
 argifyMonTerm :: MonTerm -> MonadifyM ArgMonTerm
 argifyMonTerm (ArgMonTerm mtrm) = return mtrm
 argifyMonTerm (CompMonTerm mtp trm) =
+  usingSpecMParams $
   do let tp = toArgType mtp
      top_ret_tp <- topRetType
      shiftMonadifyM $ \k ->
        CompMonTerm (mkMonType0 top_ret_tp) $
-       applyOpenTermMulti (globalOpenTerm "Prelude.bindM")
-       [tp, top_ret_tp, trm,
+       applyOpenTermMulti (globalOpenTerm "Prelude.bindS")
+       [specMEvType ?specMParams, specMStack ?specMParams, tp, top_ret_tp, trm,
         lambdaOpenTerm "x" tp (toCompTerm . k . fromArgTerm mtp)]
 
--- | Build a proof of @isFinite n@ by calling @assertFiniteM@ and binding the
+-- | Build a proof of @isFinite n@ by calling @assertFiniteS@ and binding the
 -- result to an 'ArgMonTerm'
-assertIsFinite :: MonType -> MonadifyM ArgMonTerm
+assertIsFinite :: HasSpecMParams => MonType -> MonadifyM ArgMonTerm
 assertIsFinite (MTyNum n) =
   argifyMonTerm (CompMonTerm
                  (mkMonType0 (applyOpenTerm
                               (globalOpenTerm "CryptolM.isFinite") n))
-                 (applyOpenTerm (globalOpenTerm "CryptolM.assertFiniteM") n))
+                 (applyGlobalOpenTerm "CryptolM.assertFiniteS"
+                  [specMEvType ?specMParams, specMStack ?specMParams, n]))
 assertIsFinite _ =
   fail ("assertIsFinite applied to non-Num argument")
 
@@ -840,6 +987,7 @@ assertIsFinite _ =
 -- | Monadify a type in the context of the 'MonadifyM' monad
 monadifyTypeM :: HasCallStack => Term -> MonadifyM MonType
 monadifyTypeM tp =
+  usingSpecMParams $
   do ctx <- monStCtx <$> ask
      return $ monadifyType (ctxToTypeCtx ctx) tp
 
@@ -851,13 +999,13 @@ monadifyArg _ t
   = undefined
 -}
 monadifyArg mtp t@(STApp { stAppIndex = ix }) =
-  memoArgMonTerm ix $ monadifyTerm' mtp t
+  memoArgMonTerm ix $ usingSpecMParams $ monadifyTerm' mtp t
 monadifyArg mtp t =
-  monadifyTerm' mtp t >>= argifyMonTerm
+  usingSpecMParams (monadifyTerm' mtp t) >>= argifyMonTerm
 
 -- | Monadify a term to argument type and convert back to a term
 monadifyArgTerm :: HasCallStack => Maybe MonType -> Term -> MonadifyM OpenTerm
-monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
+monadifyArgTerm mtp t = usingSpecMParams (toArgTerm <$> monadifyArg mtp t)
 
 -- | Monadify a term
 monadifyTerm :: Maybe MonType -> Term -> MonadifyM MonTerm
@@ -867,19 +1015,21 @@ monadifyTerm _ t
   = undefined
 -}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
-  memoMonTerm ix $ monadifyTerm' mtp t
+  memoMonTerm ix $ usingSpecMParams $ monadifyTerm' mtp t
 monadifyTerm mtp t =
-  monadifyTerm' mtp t
+  usingSpecMParams $ monadifyTerm' mtp t
 
 -- | The main implementation of 'monadifyTerm', which monadifies a term given an
 -- optional monadification type. The type must be given for introduction forms
 -- (i.e.,, lambdas, pairs, and records), but is optional for elimination forms
 -- (i.e., applications, projections, and also in this case variables). Note that
 -- this means monadification will fail on terms with beta or tuple redexes.
-monadifyTerm' :: HasCallStack => Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' :: HasCallStack => HasSpecMParams =>
+                 Maybe MonType -> Term -> MonadifyM MonTerm
 monadifyTerm' (Just mtp) t@(asLambda -> Just _) =
-  ask >>= \(MonadifyROState { monStEnv = env, monStCtx = ctx }) ->
-  return $ monadifyLambdas env ctx mtp t
+  ask >>= \(MonadifyROState { monStEnv = env,
+                              monStCtx = ctx, monStStack = stack }) ->
+  return $ monadifyLambdas env ctx stack mtp t
 {-
 monadifyTerm' (Just mtp@(MTyForall _ _ _)) t =
   ask >>= \ro_st ->
@@ -913,7 +1063,8 @@ monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
      return $ fromArgTerm mtp $
        applyOpenTermMulti (globalOpenTerm "CryptolM.seqToMseq")
-       [n, toArgType mtp_elem,
+       [specMEvType ?specMParams, specMStack ?specMParams,
+        n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
 monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
   do mtrm <- monadifyArg Nothing trm
@@ -940,7 +1091,7 @@ monadifyTerm' _ (asTupleValue -> Just []) =
 monadifyTerm' _ (asCtor -> Just (pn, args)) =
   monadifyApply (ArgMonTerm $ mkCtorArgMonTerm pn) args
 monadifyTerm' _ (asApplyAll -> (asTypedGlobalDef -> Just glob, args)) =
-  (Map.lookup (globalDefName glob) <$> monStEnv <$> ask) >>= \case
+  (Map.lookup (globalDefName glob) <$> monStMonTable <$> ask) >>= \case
   Just macro ->
     do let (macro_args, reg_args) = splitAt (macroNumArgs macro) args
        mtrm_f <- macroApply macro glob macro_args
@@ -977,34 +1128,35 @@ monadifyApply f [] = return f
 
 -- | FIXME: documentation; get our type down to a base type before going into
 -- the MonadifyM monad
-monadifyLambdas :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
+monadifyLambdas :: HasCallStack => MonadifyEnv -> MonadifyCtx -> OpenTerm ->
                    MonType -> Term -> MonTerm
-monadifyLambdas env ctx (MTyForall _ k tp_f) (asLambda ->
-                                              Just (x, x_tp, body)) =
+monadifyLambdas env ctx stack (MTyForall _ k tp_f) (asLambda ->
+                                                    Just (x, x_tp, body)) =
   -- FIXME: check that monadifyKind x_tp == k
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
-  monadifyLambdas env ((x,x_tp,Left mtp) : ctx) (tp_f mtp) body
-monadifyLambdas env ctx (MTyArrow tp_in tp_out) (asLambda ->
-                                                 Just (x, x_tp, body)) =
+  monadifyLambdas env ((x,x_tp,Left mtp) : ctx) stack (tp_f mtp) body
+monadifyLambdas env ctx stack (MTyArrow tp_in tp_out) (asLambda ->
+                                                       Just (x, x_tp, body)) =
   -- FIXME: check that monadifyType x_tp == tp_in
   ArgMonTerm $ FunMonTerm x tp_in tp_out $ \arg ->
-  monadifyLambdas env ((x,x_tp,Right (ArgMonTerm arg)) : ctx) tp_out body
-monadifyLambdas env ctx tp t =
-  monadifyEtaExpand env ctx tp tp t []
+  monadifyLambdas env ((x,x_tp,Right (ArgMonTerm arg)) : ctx) stack tp_out body
+monadifyLambdas env ctx stack tp t =
+  monadifyEtaExpand env ctx stack tp tp t []
 
 -- | FIXME: documentation
-monadifyEtaExpand :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
+monadifyEtaExpand :: HasCallStack => MonadifyEnv -> MonadifyCtx -> OpenTerm ->
                      MonType -> MonType -> Term ->
                      [Either MonType ArgMonTerm] -> MonTerm
-monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
+monadifyEtaExpand env ctx stack top_mtp (MTyForall x k tp_f) t args =
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
-  monadifyEtaExpand env ctx top_mtp (tp_f mtp) t (args ++ [Left mtp])
-monadifyEtaExpand env ctx top_mtp (MTyArrow tp_in tp_out) t args =
+  monadifyEtaExpand env ctx stack top_mtp (tp_f mtp) t (args ++ [Left mtp])
+monadifyEtaExpand env ctx stack top_mtp (MTyArrow tp_in tp_out) t args =
   ArgMonTerm $ FunMonTerm "_" tp_in tp_out $ \arg ->
-  monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [Right arg])
-monadifyEtaExpand env ctx top_mtp mtp t args =
+  monadifyEtaExpand env ctx stack top_mtp tp_out t (args ++ [Right arg])
+monadifyEtaExpand env ctx stack top_mtp mtp t args =
+  let ?specMParams = (monEnvParams env) { specMStack = stack } in
   applyMonTermMulti
-  (runMonadifyM env ctx (toArgType mtp) (monadifyTerm (Just top_mtp) t))
+  (runMonadifyM env ctx stack (toArgType mtp) (monadifyTerm (Just top_mtp) t))
   args
 
 
@@ -1016,6 +1168,7 @@ monadifyEtaExpand env ctx top_mtp mtp t args =
 -- compared and dispatches to the proper comparison function
 unsafeAssertMacro :: MonMacro
 unsafeAssertMacro = MonMacro 1 $ \_ ts ->
+  usingSpecMParams $
   let numFunType =
         MTyForall "n" (MKType $ mkSort 0) $ \n ->
         MTyForall "m" (MKType $ mkSort 0) $ \m ->
@@ -1027,14 +1180,14 @@ unsafeAssertMacro = MonMacro 1 $ \_ ts ->
     [(asDataType -> Just (num, []))]
       | primName num == "Cryptol.Num" ->
         return $ ArgMonTerm $
-        mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqM"
+        mkGlobalArgMonTerm numFunType "CryptolM.numAssertEqS" True
     _ ->
       fail "Monadification failed: unsafeAssert applied to non-Num type"
 
 -- | The macro for if-then-else, which contains any binds in a branch to that
 -- branch
 iteMacro :: MonMacro
-iteMacro = MonMacro 4 $ \_ args ->
+iteMacro = MonMacro 4 $ \_ args -> usingSpecMParams $
   do let (tp, cond, branch1, branch2) =
            case args of
              [t1, t2, t3, t4] -> (t1, t2, t3, t4)
@@ -1058,6 +1211,7 @@ iteMacro = MonMacro 4 $ \_ args ->
 -- application @either a b c@ to @either a b (CompM c)@
 eitherMacro :: MonMacro
 eitherMacro = MonMacro 3 $ \_ args ->
+  usingSpecMParams $
   do let (tp_a, tp_b, tp_c) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
@@ -1078,7 +1232,7 @@ eitherMacro = MonMacro 3 $ \_ args ->
 -- to @invariantHint (CompM a) cond m@ and which contains any binds in the body
 -- to the body
 invariantHintMacro :: MonMacro
-invariantHintMacro = MonMacro 3 $ \_ args ->
+invariantHintMacro = MonMacro 3 $ \_ args -> usingSpecMParams $
   do let (tp, cond, m) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
@@ -1096,6 +1250,7 @@ invariantHintMacro = MonMacro 3 $ \_ args ->
 -- body to the body
 assertingOrAssumingMacro :: Bool -> MonMacro
 assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
+  usingSpecMParams $
   do let (tp, cond, m) =
            case args of
              [t1, t2, t3] -> (t1, t2, t3)
@@ -1103,18 +1258,21 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
      atrm_cond <- monadifyArg (Just boolMonType) cond
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
-     let ident = if doAsserting then "Prelude.assertingM"
-                                else "Prelude.assumingM"
+     params <- askSpecMParams
+     let ident = if doAsserting then "Prelude.assertingS"
+                                else "Prelude.assumingS"
      return $ fromCompTerm mtp $
        applyOpenTermMulti (globalOpenTerm ident)
-       [toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
+       [specMEvType params, specMStack params,
+        toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
 -- to a global of semi-pure type that takes an additional argument of type
--- @isFinite n@
-fin1Macro :: Ident -> Ident -> MonMacro
-fin1Macro from to =
-  MonMacro 1 $ \glob args ->
+-- @isFinite n@. The 'Bool' flag indicates whether the current 'SpecMParams'
+-- should be passed as the first two arguments to @to@.
+fin1Macro :: Ident -> Ident -> Bool -> MonMacro
+fin1Macro from to params_p =
+  MonMacro 1 $ \glob args -> usingSpecMParams $
   do if globalDefName glob == ModuleIdentifier from && length args == 1 then
        return ()
        else error ("Monadification macro for " ++ show from ++
@@ -1126,23 +1284,12 @@ fin1Macro from to =
      -- Apply the type of @glob@ to n, and apply @to@ to n and fin_pf
      let glob_tp = monadifyType [] $ globalDefType glob
      let glob_tp_app = applyMonType glob_tp $ Left n_mtp
-     let to_app = applyOpenTermMulti (globalOpenTerm to) [n, toArgTerm fin_pf]
+     let to_app =
+           applyOpenTermMulti (globalOpenTerm to)
+           ((if params_p then (paramsToTerms ?specMParams ++) else id)
+            [n, toArgTerm fin_pf])
      -- Finally, return @to n fin_pf@ as a MonTerm of monadified type @to_tp n@
      return $ ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
-
--- | Helper function: build a @LetRecType@ for a nested pi type
-lrtFromMonType :: MonType -> OpenTerm
-lrtFromMonType (MTyForall x k body_f) =
-  ctorOpenTerm "Prelude.LRT_Fun"
-  [monKindOpenTerm k,
-   lambdaOpenTerm x (monKindOpenTerm k) (\tp -> lrtFromMonType $
-                                                body_f $ MTyBase k tp)]
-lrtFromMonType (MTyArrow mtp1 mtp2) =
-  ctorOpenTerm "Prelude.LRT_Fun"
-  [toArgType mtp1,
-   lambdaOpenTerm "_" (toArgType mtp1) (\_ -> lrtFromMonType mtp2)]
-lrtFromMonType mtp =
-  ctorOpenTerm "Prelude.LRT_Ret" [toArgType mtp]
 
 -- | The macro for fix
 --
@@ -1150,11 +1297,14 @@ lrtFromMonType mtp =
 fixMacro :: MonMacro
 fixMacro = MonMacro 2 $ \_ args -> case args of
   [tp@(asPi -> Just _), f] ->
-    do mtp <- monadifyTypeM tp
-       amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
-       return $ fromCompTerm mtp $
-         applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixM")
-         [lrtFromMonType mtp, toCompTerm amtrm_f]
+    do orig_params <- askSpecMParams
+       mtp <- monadifyTypeM tp
+       pushingSpecMParamsM [mtp] $ usingSpecMParams $ do
+         amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
+         return $ fromCompTerm mtp $
+           applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixS")
+           [specMEvType orig_params, specMStack orig_params,
+            lrtFromMonType mtp, toCompTerm amtrm_f]
   [(asRecordType -> Just _), _] ->
     fail "Monadification failed: cannot yet handle mutual recursion"
   _ -> error "fixMacro: malformed arguments!"
@@ -1163,25 +1313,28 @@ fixMacro = MonMacro 2 $ \_ args -> case args of
 type MacroMapping = (NameInfo, MonMacro)
 
 -- | Build a 'MacroMapping' for an identifier to a semi-pure named function
-mmSemiPure :: Ident -> Ident -> MacroMapping
-mmSemiPure from_id to_id =
-  (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id)
+mmSemiPure :: Ident -> Ident -> Bool -> MacroMapping
+mmSemiPure from_id to_id params_p =
+  (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to a semi-pure named function
 -- whose first argument is a @Num@ that requires an @isFinite@ proof
-mmSemiPureFin1 :: Ident -> Ident -> MacroMapping
-mmSemiPureFin1 from_id to_id =
-  (ModuleIdentifier from_id, fin1Macro from_id to_id)
+mmSemiPureFin1 :: Ident -> Ident -> Bool -> MacroMapping
+mmSemiPureFin1 from_id to_id params_p =
+  (ModuleIdentifier from_id, fin1Macro from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to itself as a semi-pure function
 mmSelf :: Ident -> MacroMapping
 mmSelf self_id =
-  (ModuleIdentifier self_id, semiPureGlobalMacro self_id self_id)
+  (ModuleIdentifier self_id, semiPureGlobalMacro self_id self_id False)
 
--- | Build a 'MacroMapping' from an identifier to a function of argument type
-mmArg :: Ident -> Ident -> MacroMapping
-mmArg from_id to_id = (ModuleIdentifier from_id,
-                       argGlobalMacro (ModuleIdentifier from_id) to_id)
+-- | Build a 'MacroMapping' from an identifier to a function of argument type,
+-- where the 'Bool' flag indicates whether the current 'SpecMArgs' should be
+-- passed as additional arguments to the "to" identifier
+mmArg :: Ident -> Ident -> Bool -> MacroMapping
+mmArg from_id to_id params_p =
+  (ModuleIdentifier from_id,
+   argGlobalMacro (ModuleIdentifier from_id) to_id params_p)
 
 -- | Build a 'MacroMapping' from an identifier and a custom 'MonMacro'
 mmCustom :: Ident -> MonMacro -> MacroMapping
@@ -1189,7 +1342,12 @@ mmCustom from_id macro = (ModuleIdentifier from_id, macro)
 
 -- | The default monadification environment
 defaultMonEnv :: MonadifyEnv
-defaultMonEnv =
+defaultMonEnv = MonadifyEnv { monEnvMonTable = defaultMonTable,
+                              monEnvEvType = globalOpenTerm "Prelude.VoidEv" }
+
+-- | The default primitive monadification table
+defaultMonTable :: Map NameInfo MonMacro
+defaultMonTable =
   Map.fromList
   [
     -- Prelude functions
@@ -1202,42 +1360,42 @@ defaultMonEnv =
   , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
 
     -- Top-level sequence functions
-  , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"
-  , mmSemiPure "Cryptol.seq_cong1" "CryptolM.mseq_cong1"
-  , mmArg "Cryptol.eListSel" "CryptolM.eListSelM"
+  , mmArg "Cryptol.seqMap" "CryptolM.seqMapM" True
+  , mmSemiPure "Cryptol.seq_cong1" "CryptolM.mseq_cong1" True
+  , mmArg "Cryptol.eListSel" "CryptolM.eListSelM" True
 
     -- List comprehensions
-  , mmArg "Cryptol.from" "CryptolM.fromM"
+  , mmArg "Cryptol.from" "CryptolM.fromM" True
     -- FIXME: continue here...
 
     -- PEq constraints
-  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq"
-  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
+  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
 
     -- PCmp constraints
-  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq"
-  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
+  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
 
     -- PSignedCmp constraints
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq"
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
+  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq"
+  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
 
     -- PLogic constraints
-  , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq"
-  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool"
+  , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True
+  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
 
     -- PRing constraints
-  , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq"
-  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool"
+  , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq" True
+  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
 
     -- PIntegral constraints
-  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool"
+  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
 
     -- PLiteral constraints
-  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM"
+  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
 
     -- The Cryptol Literal primitives
   , mmSelf "Cryptol.ecNumber"
@@ -1259,27 +1417,27 @@ defaultMonEnv =
   , mmSelf "Cryptol.ecGtEq"
 
     -- Sequences
-  , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM"
-  , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM"
-  , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM"
-  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM"
-  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM"
-  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM"
-  , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM"
-  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM"
-  , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM"
-  , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM"
-  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM"
-  , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM"
-  , mmArg "Cryptol.ecAt" "CryptolM.ecAtM"
-  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM"
+  , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM" True
+  , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM" True
+  , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM" True
+  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
+  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
+  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM" True
+  , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM" True
+  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
+  , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM" True
+  , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM" True
+  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
+  , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM" True
+  , mmArg "Cryptol.ecAt" "CryptolM.ecAtM" True
+  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM" True
   -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
   -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
-  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM"
+  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
   -- , mmSemiPureNthFin 5 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM"
-  , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM"
-  , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM"
-  , mmArg "Cryptol.ecError" "CryptolM.ecErrorM"
+  , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM" True
+  , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM" True
+  , mmArg "Cryptol.ecError" "CryptolM.ecErrorM" True
   ]
 
 
@@ -1294,16 +1452,30 @@ ensureCryptolMLoaded sc =
   if is_loaded then return () else
     scLoadCryptolMModule sc
 
--- | Monadify a type to its argument type and complete it to a 'Term'
-monadifyCompleteArgType :: SharedContext -> Term -> IO Term
-monadifyCompleteArgType sc tp =
-  completeOpenTerm sc $ monadifyTypeArgType [] tp
+-- | Monadify a type to its argument type and complete it to a 'Term',
+-- additionally quantifying over the event type and function stack if the
+-- supplied 'Bool' is 'True'
+monadifyCompleteArgType :: SharedContext -> MonadifyEnv -> Term -> Bool ->
+                           IO Term
+monadifyCompleteArgType sc env tp poly_p =
+  completeOpenTerm sc $
+  if poly_p then
+    -- Parameter polymorphism means pi-quantification over E and stack
+    (piOpenTerm "E" (dataTypeOpenTerm "Prelude.EvType" []) $ \e ->
+      piOpenTerm "stack" (globalOpenTerm "Prelude.FunStack") $ \st ->
+      let ?specMParams = SpecMParams { specMEvType = e, specMStack = st } in
+      -- NOTE: even though E and stack are free variables here, they are not
+      -- free in tp, which is a closed term, so we do not list them in the
+      -- MonadifyTypeCtx argument of monadifyTypeArgType
+      monadifyTypeArgType [] tp)
+  else
+    let ?specMParams = monEnvParams env in monadifyTypeArgType [] tp
 
 -- | Monadify a term of the specified type to a 'MonTerm' and then complete that
 -- 'MonTerm' to a SAW core 'Term', or 'fail' if this is not possible
 monadifyCompleteTerm :: SharedContext -> MonadifyEnv -> Term -> Term -> IO Term
 monadifyCompleteTerm sc env trm tp =
-  runCompleteMonadifyM sc env tp $
+  runCompleteMonadifyM sc env tp $ usingSpecMParams $
   monadifyTerm (Just $ monadifyType [] tp) trm
 
 -- | Convert a name of a definition to the name of its monadified version
@@ -1322,6 +1494,7 @@ monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
                      NameInfo -> Maybe Term -> Term -> IO MonTerm
 monadifyNamedTerm sc env nmi maybe_trm tp =
   trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
+  let ?specMParams = monEnvParams env in
   do let mtp = monadifyType [] tp
      nmi' <- monadifyName nmi
      comp_tp <- completeOpenTerm sc $ toCompType mtp
@@ -1336,8 +1509,8 @@ monadifyNamedTerm sc env nmi maybe_trm tp =
 -- | Monadify a term with the specified type along with all constants it
 -- contains, adding the monadifications of those constants to the monadification
 -- environment
-monadifyTermInEnv :: SharedContext -> MonadifyEnv -> Term -> Term ->
-                     IO (Term, MonadifyEnv)
+monadifyTermInEnv :: SharedContext -> MonadifyEnv ->
+                     Term -> Term -> IO (Term, MonadifyEnv)
 monadifyTermInEnv sc top_env top_trm top_tp =
   flip runStateT top_env $
   do lift $ ensureCryptolMLoaded sc
@@ -1345,8 +1518,8 @@ monadifyTermInEnv sc top_env top_trm top_tp =
            map snd $ Map.toAscList $ getConstantSet top_trm
      forM_ const_infos $ \(nmi,tp,maybe_body) ->
        get >>= \env ->
-       if Map.member nmi env then return () else
+       if Map.member nmi (monEnvMonTable env) then return () else
          do mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
-            put $ Map.insert nmi (monMacro0 mtrm) env
+            modify $ monEnvAdd nmi (monMacro0 mtrm)
      env <- get
      lift $ monadifyCompleteTerm sc env top_trm top_tp
