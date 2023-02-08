@@ -433,6 +433,13 @@ withTopTranslationState m =
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Term -> Coq.Decl
 mkDefinition name (Coq.Lambda bs t) (Coq.Pi bs' tp)
   | length bs' == length bs =
+    -- NOTE: there are a number of cases where length bs /= length bs', such as
+    -- where the type of a definition is computed from some input (so might not
+    -- have any explicit pi-abstractions), or where the body of a definition is
+    -- a partially applied function (so might not have any lambdas). We could in
+    -- theory try to handle these more complex cases by assigning names to some
+    -- of the arguments, but it's not really necessary for the translation to be
+    -- correct, so we just do the simple thing here.
     Coq.Definition name bs (Just tp) t
 mkDefinition name t tp = Coq.Definition name [] (Just tp) t
 
@@ -668,11 +675,13 @@ defaultTermForType typ = do
 
     _ -> Except.throwError $ CannotCreateDefaultValue typ
 
+-- | Translate a SAW core term along with its type to a Coq term and its Coq
+-- type, and pass the results to the supplied function
 translateTermToDocWith ::
   TranslationConfiguration ->
   TranslationReader ->
-  [String] ->
-  [String] ->
+  [String] -> -- ^ globals that have already been translated
+  [String] -> -- ^ string names of local variables in scope
   (Coq.Term -> Coq.Term -> Doc ann) ->
   Term -> Term ->
   Either (TranslationError Term) (Doc ann)

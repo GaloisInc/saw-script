@@ -93,8 +93,11 @@ traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 text :: String -> Doc ann
 text = pretty
 
--- | Eventually, different modules may want different preambles.  For now,
--- we hardcode a sufficient set of imports for all our purposes.
+-- | Generate a preamble for a Coq file, containing a list of Coq imports. This
+-- includes standard imports, one of which is the @VectorNotations@ module to
+-- support the vector literals used to translate SAW core array values, along
+-- with any user-supplied imports in the 'postPreamble' field of the
+-- supplied 'TranslationConfiguration'.
 preamble :: TranslationConfiguration -> Doc ann
 preamble (TranslationConfiguration { vectorModule, postPreamble }) = text [i|
 (** Mandatory imports from saw-core-coq *)
@@ -122,6 +125,7 @@ translateTermAsDeclImports configuration name t tp = do
       [] name t tp
   return $ vcat [preamble configuration, hardline <> doc]
 
+-- | Translate a SAW core module to a Coq module
 translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
 translateSAWModule configuration m =
   let name = show $ translateModuleName (moduleName m)
@@ -136,6 +140,7 @@ translateSAWModule configuration m =
      , ""
      ]
 
+-- | Translate a Cryptol module to a Coq module
 translateCryptolModule ::
   SharedContext -> Env ->
   Coq.Ident {- ^ Section name -} ->
@@ -148,6 +153,7 @@ translateCryptolModule sc env nm configuration globalDecls m =
   fmap (fmap (Coq.ppDecl . Coq.Section nm)) $
   CMT.translateCryptolModule sc env configuration globalDecls m
 
+-- | Extract out the 'String' name of a declaration in a SAW core module
 moduleDeclName :: ModuleDecl -> Maybe String
 moduleDeclName (TypeDecl (DataType { dtName })) = Just (identName dtName)
 moduleDeclName (DefDecl  (Def      { defIdent })) = Just (identName defIdent)
