@@ -99,7 +99,7 @@ liftBinary :: forall m.
   SC.SharedContext ->
   (SC.Term -> SC.Term -> SC.Term -> IO SC.Term) -> -- (w : Nat) -> [w] -> [w] -> [w]
   CellTerm -> CellTerm -> m CellTerm
-liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) c2@(CellTerm { cellTermTerm = t2 }) = do
+liftBinary sc f c1@(CellTerm { cellTermTerm = t1 }) (CellTerm { cellTermTerm = t2 }) = do
   wt <- liftIO . SC.scNat sc $ cellTermWidth c1
   res <- liftIO $ f wt t1 t2
   pure $ c1 { cellTermTerm = res }
