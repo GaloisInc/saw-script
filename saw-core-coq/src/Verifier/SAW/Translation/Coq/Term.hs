@@ -16,6 +16,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Verifier.SAW.Translation.Coq
@@ -240,7 +241,8 @@ translateConstant ec maybe_body =
        Just body ->
          -- If the definition has a body, add it as a definition
          do b <- withTopTranslationState $ translateTermLet body
-            modify $ over topLevelDeclarations $ (mkDefinition renamed b :)
+            tp <- withTopTranslationState $ translateTermLet (ecType ec)
+            modify $ over topLevelDeclarations $ (mkDefinition renamed b tp :)
        Nothing ->
          -- If not, add it as a Coq Variable declaration
          do tp <- withTopTranslationState $ translateTermLet (ecType ec)
@@ -338,7 +340,8 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                   [Coq.NatLit (intValue w), Coq.ZLit (BV.asSigned w bv)])
     ArrayValue _ vec -> do
       elems <- Vector.toList <$> mapM translateTerm vec
-      return (Coq.App (Coq.Var "Vector.of_list") [Coq.List elems])
+      -- NOTE: with VectorNotations, this is actually a Coq vector literal
+      return $ Coq.List elems
     StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
 
     ExtCns ec -> translateConstant ec Nothing
@@ -425,9 +428,20 @@ withTopTranslationState m =
      modify $ set nextSharedName "var__0"
      m
 
-mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
-mkDefinition name (Coq.Lambda bs t) = Coq.Definition name bs Nothing t
-mkDefinition name t = Coq.Definition name [] Nothing t
+-- | Generate a Coq @Definition@ with a given name, body, and type, using the
+-- lambda-bound variable names for the variables if they are available
+mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Term -> Coq.Decl
+mkDefinition name (Coq.Lambda bs t) (Coq.Pi bs' tp)
+  | length bs' == length bs =
+    -- NOTE: there are a number of cases where length bs /= length bs', such as
+    -- where the type of a definition is computed from some input (so might not
+    -- have any explicit pi-abstractions), or where the body of a definition is
+    -- a partially applied function (so might not have any lambdas). We could in
+    -- theory try to handle these more complex cases by assigning names to some
+    -- of the arguments, but it's not really necessary for the translation to be
+    -- correct, so we just do the simple thing here.
+    Coq.Definition name bs (Just tp) t
+mkDefinition name t tp = Coq.Definition name [] (Just tp) t
 
 -- | Make sure a name is not used in the current environment, adding
 -- or incrementing a numeric suffix until we find an unused name. When
@@ -661,31 +675,36 @@ defaultTermForType typ = do
 
     _ -> Except.throwError $ CannotCreateDefaultValue typ
 
+-- | Translate a SAW core term along with its type to a Coq term and its Coq
+-- type, and pass the results to the supplied function
 translateTermToDocWith ::
   TranslationConfiguration ->
   TranslationReader ->
-  [String] ->
-  [String] ->
-  (Coq.Term -> Doc ann) ->
-  Term ->
+  [String] -> -- ^ globals that have already been translated
+  [String] -> -- ^ string names of local variables in scope
+  (Coq.Term -> Coq.Term -> Doc ann) ->
+  Term -> Term ->
   Either (TranslationError Term) (Doc ann)
-translateTermToDocWith configuration r globalDecls localEnv f t = do
-  (term, state) <-
-    runTermTranslationMonad configuration r globalDecls localEnv (translateTermLet t)
+translateTermToDocWith configuration r globalDecls localEnv f t tp_trm = do
+  ((term, tp), state) <-
+    runTermTranslationMonad configuration r globalDecls localEnv
+    ((,) <$> translateTermLet t <*> translateTermLet tp_trm)
   let decls = view topLevelDeclarations state
   return $
     vcat $
     [ (vcat . intersperse hardline . map Coq.ppDecl . reverse) decls
     , if null decls then mempty else hardline
-    , f term
+    , f term tp
     ]
 
+-- | Translate a SAW core 'Term' and its type (given as a 'Term') to a Coq
+-- definition with the supplied name
 translateDefDoc ::
   TranslationConfiguration ->
   TranslationReader ->
   [String] ->
-  Coq.Ident -> Term ->
+  Coq.Ident -> Term -> Term ->
   Either (TranslationError Term) (Doc ann)
 translateDefDoc configuration r globalDecls name =
   translateTermToDocWith configuration r globalDecls [name]
-  (Coq.ppDecl . mkDefinition name)
+  (\ t tp -> Coq.ppDecl $ mkDefinition name t tp)
