@@ -45,6 +45,7 @@ data AstExpr
   | ExNat Pos Natural           -- ^ number literal
   | ExVar Pos String (Maybe [AstExpr]) (Maybe AstExpr) -- ^ identifier, shape arguments, offset
   | ExAdd Pos AstExpr AstExpr   -- ^ addition
+  | ExNeg Pos AstExpr           -- ^ negation
   | ExMul Pos AstExpr AstExpr   -- ^ multiplication or permission conjunction
   | ExRead Pos                  -- ^ read modality
   | ExWrite Pos                 -- ^ read/write modality
@@ -91,6 +92,7 @@ instance HasPos AstExpr where
   pos (ExNat        p _        ) = p
   pos (ExVar        p _ _ _    ) = p
   pos (ExAdd        p _ _      ) = p
+  pos (ExNeg        p _        ) = p
   pos (ExMul        p _ _      ) = p
   pos (ExRead       p          ) = p
   pos (ExWrite      p          ) = p

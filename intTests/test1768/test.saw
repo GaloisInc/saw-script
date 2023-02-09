@@ -1,0 +1,5 @@
+import "test.cry";
+print {{ f 0b11 }};
+print {{ f 0b10 }};
+print {{ f 0b00 }};
+sat z3 {{ \x -> f x == zero }};

@@ -1,0 +1,162 @@
+////////////////////////////////////////////////////////////////////////////////
+// Exercise: Swap
+////////////////////////////////////////////////////////////////////////////////
+
+include "../../common/helpers.saw";
+swapmod <- llvm_load_module "swap.bc";
+import "Swap.cry";
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 1: Swap Functional Correctness
+////////////////////////////////////////////////////////////////////////////////
+
+// Convert the memory safety specs below into function correctness specs and
+// re-run the proofs.
+
+let swap_diff_spec = do {
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
+
+    llvm_execute_func [xp, yp];
+
+    x' <- llvm_fresh_var "x'" (llvm_int 32);
+    y' <- llvm_fresh_var "y'" (llvm_int 32);
+
+    llvm_points_to xp (llvm_term x');
+    llvm_points_to yp (llvm_term y');
+};
+
+// Verify swap satisfies swap_diff_spec
+swap_diff_ov <- llvm_verify swapmod "swap" [] true swap_diff_spec z3;
+
+// Verify xor_swap satisfies swap_diff_spec
+llvm_verify swapmod "xor_swap" [] true swap_diff_spec z3;
+
+let swap_same_spec = do {
+    (x, x_ptr) <- ptr_to_fresh "x" (llvm_int 32);
+
+    llvm_execute_func [x_ptr, x_ptr];
+
+    x' <- llvm_fresh_var "x'" (llvm_int 32);
+    llvm_points_to x_ptr (llvm_term x');
+};
+
+// Verify swap satisfies swap_same_spec
+swap_same_ov <- llvm_verify swapmod "swap" [] true swap_same_spec z3;
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 2: Swap XOR Same Pointer
+////////////////////////////////////////////////////////////////////////////////
+
+// Try to prove that swap_xor satisfies your swap_same_spec specification.  Why
+// does the proof fail?
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 3: swap_list_same Cryptol
+////////////////////////////////////////////////////////////////////////////////
+
+// Look through and understand the Cryptol in "Swap.cry".  To gain confidence in
+// the `swap_list` Cryptol function, fill in the property definition for
+// `swap_list_same`.  Prove the property using :prove for a few different values
+// of `n`.
+
+// Hint: You will also need to provide a concrete value for `i` when using
+// :prove.  Why?
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 4: sort_eq Cryptol
+////////////////////////////////////////////////////////////////////////////////
+
+// To gain confidence in the `selection_sort` function, fill in the property
+// definition for sort_eq.  Prove the property using :prove for n=4.
+// Quickcheck the property using :check for larger n values (such as n=128).
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 5: selection_sort Decomposition
+////////////////////////////////////////////////////////////////////////////////
+
+// Below you'll find a complete functional correctness proof for
+// `selection_sort`.  The specification takes a configurable size parameter
+// `len`, and the proof itself sets `len` to 4.  This proof works, but it has
+// some problems:
+//   * The proof is inefficient and does not terminate in a reasonable time for
+//     larger `len` values.
+//   * The generated SAW terms are massive and unreadable.  Debugging this proof
+//     during development would be tricky.
+
+let selection_sort_spec len = do {
+    (a, a_ptr) <- ptr_to_fresh "a" (llvm_array len (llvm_int 32));
+
+    llvm_execute_func [a_ptr, (llvm_term {{ `len : [64]}})];
+
+    llvm_points_to a_ptr (llvm_term {{ selection_sort a }});
+};
+
+// Uncomment the llvm_verify command below to check that the proof works.
+
+let a_len = 4;
+/*
+llvm_verify
+    swapmod
+    "selection_sort"
+    [swap_diff_ov, swap_same_ov]
+    true
+    (selection_sort_spec a_len)
+    z3;
+    */
+
+// To remedy this, break the body of the outer loop in the selection_sort C
+// implementation into `swap_array` and `argmin` functions like the Cryptol
+// specification.  Write a new function `selection_sort_composed` that uses
+// your new C helper functions.  Rebuild the `swap.bc` LLVM bitcode file.  The
+// C functions should have the following type signatures:
+
+// void swap_array(uint32_t *a, size_t i, size_t j);
+// size_t argmin(const uint32_t *a, size_t len);
+// void selection_sort_composed(uint32_t *a, size_t len);
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 6: Helper Function Functional Correctness
+////////////////////////////////////////////////////////////////////////////////
+
+// Prove your C `swap_array` and `argmin` functions equal to their Cryptol
+// counterparts for lists of size 8.
+
+// Remember: Use `llvm_precond` to further restrict inputs:
+//     * llvm_precond {{ <precondition> }};
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 7:  Functional Correctness
+////////////////////////////////////////////////////////////////////////////////
+
+// Uncomment the loop below and verify that all of the proofs pass.  If they
+// don't, fix your argmin spec or implementation.
+
+/*
+let a_len = 8;
+argmin_ovs <- for (eval_list {{ [1..a_len] : [a_len][64]}}) (\len ->
+    llvm_verify swapmod "argmin" [] true (argmin_spec (eval_int len)) z3;
+);
+*/
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 8:  selection_sort_composed Functional Correctness
+////////////////////////////////////////////////////////////////////////////////
+
+// Use `llvm_verify` to prove that your `selection_sort_composed` implementation
+// satisfies the `selection_sort_spec` spec from Part 5 for `len=8`.  Use the
+// overrides from your `swap_array` and `argmin` proofs.
+
+// Remember:  Use `concat` to join lists of overrides together
+//   * concat <list1> <list2>
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 9:  wacky_sort Functional Correctness
+////////////////////////////////////////////////////////////////////////////////
+
+// Uncomment `wacky_sort` in `swap.c` and rebuild `swap.bc`.  Use `llvm_verify`
+// to prove that `wacky_sort` satisfies the `selection_sort_spec` from Part 5
+// for `len=8`.  Use overrides for all of the function calls within.
+
+// Remember: Use `w4_unint_z3` to leave Cryptol functions uninterpreted
+//  * w4_unint_z3 ["some_function"]

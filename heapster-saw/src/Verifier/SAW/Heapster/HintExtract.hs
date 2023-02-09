@@ -49,12 +49,9 @@ type ExtractM = Except String
 extractHints ::
   forall ghosts args outs blocks init ret.
   PermEnv ->
-  [L.Module] ->
-  -- ^ The original source modules: used for finding constant values (i.e. spec strings)
-  FunPerm ghosts args outs ret ->
-  -- ^ The FunPerm corresponding to the CFG we are scanning
-  CFG LLVM blocks init ret ->
-  -- ^ The Crucible CFG for which to build the block hint map
+  [L.Module] {- ^ The original source modules: used for finding constant values (i.e. spec strings) -} ->
+  FunPerm ghosts args outs ret {- ^ The FunPerm corresponding to the CFG we are scanning -} ->
+  CFG LLVM blocks init ret {- ^ The Crucible CFG for which to build the block hint map -} ->  
   Either String (Ctx.Assignment (Constant (Maybe Hint)) blocks)
 extractHints env modules perm cfg =
   runExcept $ traverseFC extractHint (cfgBlockMap cfg)
@@ -90,10 +87,8 @@ data SomeHintSpec tops ctx where
 extractBlockHints ::
   forall blocks ret ctx tops.
   PermEnv -> 
-  Map.Map L.Symbol String -> 
-  -- ^ Globals map
-  CruCtx tops ->
-  -- ^ top context derived from current function's perm
+  Map.Map L.Symbol String {- ^ Globals map -} ->
+  CruCtx tops {- ^ top context derived from current function's perm -} ->
   Block LLVM blocks ret ctx ->
   ExtractM (Maybe (SomeHintSpec tops ctx))
 extractBlockHints env globals tops block = 
@@ -109,12 +104,9 @@ extractStmtsHint ::
   forall blocks ret ctx tops.
   String ->
   PermEnv -> 
-  Map.Map L.Symbol String -> 
-  -- ^ globals
-  CruCtx tops ->
-  -- ^ top context derived from current function's perm
-  CtxRepr ctx ->
-  -- ^ block arguments
+  Map.Map L.Symbol String {- ^ globals -} ->
+  CruCtx tops {- ^ top context derived from current function's perm -} ->
+  CtxRepr ctx {- ^ block arguments -} ->
   StmtSeq LLVM blocks ret ctx -> 
   ExtractM (Maybe (SomeHintSpec tops ctx))
 extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize 
@@ -160,14 +152,10 @@ extractHintFromSequence ::
   forall tops ctx rest blocks ret.
   String ->
   PermEnv -> 
-  Map.Map L.Symbol String ->
-  -- ^ globals
-  CruCtx tops ->
-  -- ^ toplevel context
-  CtxRepr ctx ->
-  -- ^ block arguments
-  Ctx.Size rest -> 
-  -- ^ keeps track of how deep we are into the current block
+  Map.Map L.Symbol String {- ^ globals -} ->
+  CruCtx tops {- ^ toplevel context -} ->
+  CtxRepr ctx {- ^ block arguments -} ->
+  Ctx.Size rest {- ^ keeps track of how deep we are into the current block -} ->
   StmtSeq LLVM blocks ret (ctx Ctx.<+> rest) -> 
   ExtractM (Maybe (SomeHintSpec tops ctx))
 extractHintFromSequence who env globals tops blockIns sz s =

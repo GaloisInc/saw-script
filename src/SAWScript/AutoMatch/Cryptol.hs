@@ -78,6 +78,7 @@ whereBindings _                       = Nothing
 declDefExpr :: AST.DeclDef -> Maybe AST.Expr
 declDefExpr = \case
    AST.DPrim      -> Nothing
+   AST.DForeign {} -> Nothing
    AST.DExpr expr -> Just expr
 
 -- | If a lambda is of the form @\(a,b,...,z) -> ...)@ then give the list of names bound in the tuple

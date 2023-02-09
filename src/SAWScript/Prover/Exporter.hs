@@ -67,7 +67,8 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule, ImportPrimitiveOptions(..))
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule,
+                                ImportPrimitiveOptions(..), mkCryEnv)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
@@ -455,7 +456,9 @@ writeCoqTerm name notations skips path t = do
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
-  case Coq.translateTermAsDeclImports configuration name t of
+  sc <- getSharedContext
+  tp <- io $ scTypeOf sc t
+  case Coq.translateTermAsDeclImports configuration name t tp of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
       "" -> print doc
@@ -496,7 +499,9 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let nm = takeBaseName inputFile
-  case Coq.translateCryptolModule nm configuration cryptolPreludeDecls cm of
+  cry_env <- mkCryEnv env
+  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
+  case res of
     Left e -> putStrLn $ show e
     Right cmDoc ->
       writeFile outputFile

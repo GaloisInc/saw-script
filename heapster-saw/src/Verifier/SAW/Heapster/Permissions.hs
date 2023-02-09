@@ -53,6 +53,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Applicative hiding (empty)
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.Identity hiding (ap)
 import Control.Monad.State hiding (ap)
 import Control.Monad.Reader hiding (ap)
@@ -836,7 +837,7 @@ data PermVarSubst (ctx :: RList CrucibleType) where
   PermVarSubst_Cons :: PermVarSubst ctx -> Name tp -> PermVarSubst (ctx :> tp)
 
 -- | An entry in a permission environment that associates a permission and
--- corresponding SAW identifier with a Crucible function handle
+-- translation with a Crucible function handle
 data PermEnvFunEntry where
   PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
                      FunPerm ghosts args gouts ret -> Ident ->
@@ -852,10 +853,13 @@ data SomeNamedShape where
                     SomeNamedShape
 
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
--- a permission and a translation of that permission
+-- a permission and a translation of that permission to either a list of terms
+-- or a recursive call to the @n@th function in the most recently bound frame of
+-- recursive functions
 data PermEnvGlobalEntry where
   PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
-                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
+                        ValuePerm (LLVMPointerType w) ->
+                        Either Natural [OpenTerm] ->
                         PermEnvGlobalEntry
 
 -- | The different sorts hints for blocks
@@ -882,6 +886,10 @@ data BlockHint blocks init ret args where
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
+-- | The default event type uses the @Void@ type for events
+defaultSpecMEventType :: Ident
+defaultSpecMEventType = fromString "Prelude.VoidEv"
+
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
 data PermEnv = PermEnv {
@@ -889,7 +897,8 @@ data PermEnv = PermEnv {
   permEnvNamedPerms :: [SomeNamedPerm],
   permEnvNamedShapes :: [SomeNamedShape],
   permEnvGlobalSyms :: [PermEnvGlobalEntry],
-  permEnvHints :: [Hint]
+  permEnvHints :: [Hint],
+  permEnvSpecMEventType :: Ident
   }
 
 
@@ -897,45 +906,38 @@ data PermEnv = PermEnv {
 -- * Template Haskell–generated instances
 ----------------------------------------------------------------------
 
-instance NuMatchingAny1 PermExpr where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 ValuePerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 VarAndPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 ExprAndPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 DistPerms where
-  nuMatchingAny1Proof = nuMatchingProof
-
-$(mkNuMatching [t| forall a . BVFactor a |])
-$(mkNuMatching [t| RWModality |])
-$(mkNuMatching [t| forall b args w. NamedShapeBody b args w |])
-$(mkNuMatching [t| forall b args w. NamedShape b args w |])
-$(mkNuMatching [t| forall w . LLVMFieldShape w |])
-$(mkNuMatching [t| forall a . PermExpr a |])
-$(mkNuMatching [t| forall w. BVRange w |])
-$(mkNuMatching [t| forall a. MbRangeForType a |])
-$(mkNuMatching [t| forall a. NuMatching a => SomeTypedMb a |])
-$(mkNuMatching [t| forall w. BVProp w |])
-$(mkNuMatching [t| forall w sz . LLVMFieldPerm w sz |])
-$(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
-$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
-$(mkNuMatching [t| forall w . LLVMBlockPerm w |])
-$(mkNuMatching [t| forall ns. NameSortRepr ns |])
-$(mkNuMatching [t| forall ns args a. NameReachConstr ns args a |])
-$(mkNuMatching [t| forall ns args a. NamedPermName ns args a |])
-$(mkNuMatching [t| forall a. PermOffset a |])
-$(mkNuMatching [t| forall ghosts args gouts ret. FunPerm ghosts args gouts ret |])
-$(mkNuMatching [t| forall a . AtomicPerm a |])
-$(mkNuMatching [t| forall a . ValuePerm a |])
--- $(mkNuMatching [t| forall as. ValuePerms as |])
-$(mkNuMatching [t| forall a . VarAndPerm a |])
-$(mkNuMatching [t| forall a . ExprAndPerm a |])
+-- Many of these types are mutually recursive. Moreover, Template Haskell
+-- declaration splices strictly separate top-level groups, so if we were to
+-- write each $(mkNuMatching [t| ... |]) splice individually, the splices
+-- involving mutually recursive types would not typecheck. As a result, we
+-- must put everything into a single splice so that it forms a single top-level
+-- group.
+$(concatMapM mkNuMatching
+  [ [t| forall a . BVFactor a |]
+  , [t| RWModality |]
+  , [t| forall b args w. NamedShapeBody b args w |]
+  , [t| forall b args w. NamedShape b args w |]
+  , [t| forall w . LLVMFieldShape w |]
+  , [t| forall a . PermExpr a |]
+  , [t| forall w. BVRange w |]
+  , [t| forall a. MbRangeForType a |]
+  , [t| forall a. NuMatching a => SomeTypedMb a |]
+  , [t| forall w. BVProp w |]
+  , [t| forall w sz . LLVMFieldPerm w sz |]
+  , [t| forall w . LLVMArrayBorrow w |]
+  , [t| forall w . LLVMArrayPerm w |]
+  , [t| forall w . LLVMBlockPerm w |]
+  , [t| forall ns. NameSortRepr ns |]
+  , [t| forall ns args a. NameReachConstr ns args a |]
+  , [t| forall ns args a. NamedPermName ns args a |]
+  , [t| forall a. PermOffset a |]
+  , [t| forall ghosts args gouts ret. FunPerm ghosts args gouts ret |]
+  , [t| forall a . AtomicPerm a |]
+  , [t| forall a . ValuePerm a |]
+  -- , [t| forall as. ValuePerms as |]
+  , [t| forall a . VarAndPerm a |]
+  , [t| forall a . ExprAndPerm a |]
+  ])
 
 $(mkNuMatching [t| forall w . LLVMArrayIndex w |])
 $(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
@@ -2206,7 +2208,7 @@ mbRangeFTDelete
     bvRangeDelete rng1 rng2
 mbRangeFTDelete mb_rng _ = [mb_rng]
 
--- | Delete all ranges in any of a list of ranges from 
+-- | Delete all ranges in any of a list of ranges from
 mbRangeFTsDelete :: [MbRangeForType a] -> [MbRangeForType a] ->
                     [MbRangeForType a]
 mbRangeFTsDelete rngs_l rngs_r =
@@ -2525,6 +2527,16 @@ pattern ValPerm_LLVMBlockShape sh <- ValPerm_Conj [Perm_LLVMBlockShape sh]
   where
     ValPerm_LLVMBlockShape sh = ValPerm_Conj [Perm_LLVMBlockShape sh]
 
+-- | The conjunction of exactly 1 @llvmfunptr@ permission
+pattern ValPerm_LLVMFunPtr :: () =>
+                              (a ~ LLVMPointerType w, 1 <= w, KnownNat w) =>
+                              TypeRepr (FunctionHandleType cargs ret) ->
+                              ValuePerm (FunctionHandleType cargs ret) ->
+                              ValuePerm a
+pattern ValPerm_LLVMFunPtr tp p <- ValPerm_Conj [Perm_LLVMFunPtr tp p]
+  where
+    ValPerm_LLVMFunPtr tp p = ValPerm_Conj [Perm_LLVMFunPtr tp p]
+
 -- | A single @lowned@ permission
 pattern ValPerm_LOwned :: () => (a ~ LifetimeType) => [PermExpr LifetimeType] ->
                           CruCtx ps_in -> CruCtx ps_out ->
@@ -2566,6 +2578,14 @@ pattern ValPerm_Struct ps <- ValPerm_Conj [Perm_Struct ps]
 -- | A single @any@ permission
 pattern ValPerm_Any :: ValuePerm a
 pattern ValPerm_Any = ValPerm_Conj [Perm_Any]
+
+-- | A single function permission
+pattern ValPerm_Fun :: () => (a ~ FunctionHandleType cargs ret) =>
+                       FunPerm ghosts (CtxToRList cargs) gouts ret ->
+                       ValuePerm a
+pattern ValPerm_Fun fun_perm <- ValPerm_Conj [Perm_Fun fun_perm]
+  where
+    ValPerm_Fun fun_perm = ValPerm_Conj [Perm_Fun fun_perm]
 
 pattern ValPerms_Nil :: () => (tps ~ RNil) => ValuePerms tps
 pattern ValPerms_Nil = MNil
@@ -4728,37 +4748,46 @@ mbExBlockToSubShape a =
   mbMapCl ($(mkClosed [| exBlockToSubShape |]) `clApply` toClosed a)
 
 -- | Split a block permission into portions that are before and after a given
--- offset, if possible, assuming the offset is in the block permission
-splitLLVMBlockPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                      LLVMBlockPerm w ->
-                      Maybe (LLVMBlockPerm w, LLVMBlockPerm w)
-splitLLVMBlockPerm off bp
+-- offset, if possible, assuming the offset is in the block permission. The
+-- supplied function provides a partial substitution from variables of
+-- 'LLVMBlockType' to their shapes, in order to split @eqsh@ shapes.
+splitLLVMBlockPerm ::
+  (1 <= w, KnownNat w) =>
+  (ExprVar (LLVMBlockType w) -> Maybe (PermExpr (LLVMShapeType w))) ->
+  PermExpr (BVType w) -> LLVMBlockPerm w ->
+  Maybe (LLVMBlockPerm w, LLVMBlockPerm w)
+splitLLVMBlockPerm _ off bp
   | bvEq off (llvmBlockOffset bp)
   = Just (bp { llvmBlockLen = bvInt 0, llvmBlockShape = PExpr_EmptyShape },
           bp)
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_EmptyShape) =
+splitLLVMBlockPerm _ off bp@(llvmBlockShape -> PExpr_EmptyShape) =
   Just (bp { llvmBlockLen = bvSub off (llvmBlockOffset bp) },
         bp { llvmBlockOffset = off,
              llvmBlockLen = bvSub (llvmBlockEndOffset bp) off })
-splitLLVMBlockPerm off bp@(LLVMBlockPerm { llvmBlockShape = sh })
+splitLLVMBlockPerm blsubst off bp@(LLVMBlockPerm { llvmBlockShape = sh })
   | Just sh_len <- llvmShapeLength sh
   , bvLt sh_len (bvSub off (llvmBlockOffset bp)) =
     -- If we are splitting after the end of the natural length of a shape, then
     -- pad out the block permission to its natural length and fall back to the
     -- sequence shape case below
-    splitLLVMBlockPerm off (bp { llvmBlockShape =
-                                   PExpr_SeqShape sh PExpr_EmptyShape })
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_Var _) = Nothing
-splitLLVMBlockPerm off bp@(llvmBlockShape ->
-                           PExpr_NamedShape maybe_rw maybe_l nmsh args)
+    splitLLVMBlockPerm blsubst off (bp { llvmBlockShape =
+                                         PExpr_SeqShape sh PExpr_EmptyShape })
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_Var _) = Nothing
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape ->
+                                   PExpr_NamedShape maybe_rw maybe_l nmsh args)
   | TrueRepr <- namedShapeCanUnfoldRepr nmsh
   , Just sh' <- unfoldModalizeNamedShape maybe_rw maybe_l nmsh args =
-    splitLLVMBlockPerm off (bp { llvmBlockShape = sh' })
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
-splitLLVMBlockPerm _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
+    splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh' })
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_NamedShape _ _ _ _) = Nothing
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape ->
+                                   PExpr_EqShape _len (PExpr_Var b))
+  -- FIXME: make sure the returned shape fits into len bytes!
+  | Just sh <- blsubst b
+  = splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh })
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_EqShape _ _) = Nothing
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_PtrShape _ _ _) = Nothing
+splitLLVMBlockPerm _ _ (llvmBlockShape -> PExpr_FieldShape _) = Nothing
+splitLLVMBlockPerm _ off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
   | Just (ix, BV.BV 0) <-
       bvMatchFactorPlusConst (bytesToInteger stride) (bvSub off $
                                                       llvmBlockOffset bp)
@@ -4768,18 +4797,18 @@ splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
           bp { llvmBlockOffset = off,
                llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                llvmBlockShape = PExpr_ArrayShape (bvSub len ix) stride sh })
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
   | Just sh1_len <- llvmShapeLength sh1
   , off_diff <- bvSub off (llvmBlockOffset bp)
   , bvLt off_diff sh1_len
-  = splitLLVMBlockPerm off (bp { llvmBlockLen = sh1_len,
-                                 llvmBlockShape = sh1 }) >>= \(bp1,bp2) ->
+  = splitLLVMBlockPerm blsubst off (bp { llvmBlockLen = sh1_len,
+                                         llvmBlockShape = sh1 }) >>= \(bp1,bp2) ->
     Just (bp1,
           bp2 { llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                 llvmBlockShape = PExpr_SeqShape (llvmBlockShape bp2) sh2 })
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
   | Just sh1_len <- llvmShapeLength sh1
-  = splitLLVMBlockPerm off
+  = splitLLVMBlockPerm blsubst off
     (bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) sh1_len,
           llvmBlockLen = bvSub (llvmBlockLen bp) sh1_len,
           llvmBlockShape = sh2 }) >>= \(bp1,bp2) ->
@@ -4787,16 +4816,16 @@ splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
                 llvmBlockLen = bvAdd (llvmBlockLen bp1) sh1_len,
                 llvmBlockShape = PExpr_SeqShape sh1 (llvmBlockShape bp1) },
           bp2)
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_OrShape sh1 sh2) =
-  do (bp1_L,bp1_R) <- splitLLVMBlockPerm off (bp { llvmBlockShape = sh1 })
-     (bp2_L,bp2_R) <- splitLLVMBlockPerm off (bp { llvmBlockShape = sh2 })
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_OrShape sh1 sh2) =
+  do (bp1_L,bp1_R) <- splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh1 })
+     (bp2_L,bp2_R) <- splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh2 })
      let or_helper bp1 bp2 =
            bp1 { llvmBlockShape =
                    PExpr_OrShape (llvmBlockShape bp1) (llvmBlockShape bp2)}
      Just (or_helper bp1_L bp2_L, or_helper bp1_R bp2_R)
-splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ExShape mb_sh) =
-  case mbMatch $ fmap (\sh -> splitLLVMBlockPerm off
-                                (bp { llvmBlockShape = sh })) mb_sh of
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_ExShape mb_sh) =
+  case mbMatch $ fmap (\sh -> splitLLVMBlockPerm blsubst off
+                              (bp { llvmBlockShape = sh })) mb_sh of
     [nuMP| Just (mb_bp1,mb_bp2) |] ->
       let off_diff = bvSub off (llvmBlockOffset bp) in
       Just (bp { llvmBlockLen = off_diff,
@@ -4805,23 +4834,30 @@ splitLLVMBlockPerm off bp@(llvmBlockShape -> PExpr_ExShape mb_sh) =
                  llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                  llvmBlockShape = PExpr_ExShape (fmap llvmBlockShape mb_bp2) })
     _ -> Nothing
-splitLLVMBlockPerm _ _ = Nothing
+splitLLVMBlockPerm _ _ _ = Nothing
 
 -- | Remove a range of offsets from a block permission, if possible, yielding a
 -- list of block permissions for the remaining offsets
-remLLVMBLockPermRange :: (1 <= w, KnownNat w) => BVRange w -> LLVMBlockPerm w ->
+remLLVMBlockPermRange :: (1 <= w, KnownNat w) => BVRange w -> LLVMBlockPerm w ->
                          Maybe [LLVMBlockPerm w]
-remLLVMBLockPermRange rng bp
+remLLVMBlockPermRange rng bp
   | bvRangeSubset (llvmBlockRange bp) rng = Just []
-remLLVMBLockPermRange rng bp =
+remLLVMBlockPermRange rng bp =
   do (bps_l, bp') <-
+       -- If the beginning of rng lies inside the range of bp, split bp into
+       -- block permissions before and after the beginning of rng; otherwise,
+       -- lump all of bp into the "after" bucket. The call to splitLLVMBlockPerm
+       -- uses an empty substitution because remLLVMBlockPermRange itself is
+       -- assuming an empty substitution
        if bvInRange (bvRangeOffset rng) (llvmBlockRange bp) then
-         do (bp_l,bp') <- splitLLVMBlockPerm (bvRangeOffset rng) bp
+         do (bp_l,bp') <- splitLLVMBlockPerm (const Nothing) (bvRangeOffset rng) bp
             return ([bp_l],bp')
        else return ([],bp)
      bp_r <-
+       -- Split bp', the permissions after the beginning of rng, into those
+       -- before and after the end of rng
        if bvInRange (bvRangeEnd rng) (llvmBlockRange bp) then
-         snd <$> splitLLVMBlockPerm (bvRangeEnd rng) bp
+         snd <$> splitLLVMBlockPerm (const Nothing) (bvRangeEnd rng) bp'
        else return bp'
      return (bps_l ++ [bp_r])
 
@@ -6219,6 +6255,20 @@ unfoldPerm :: NameSortCanFold ns ~ 'True => NamedPerm ns args a ->
               PermExprs args -> PermOffset a -> ValuePerm a
 unfoldPerm (NamedPerm_Defined dp) = unfoldDefinedPerm dp
 unfoldPerm (NamedPerm_Rec rp) = unfoldRecPerm rp
+
+-- | Unfold a unfoldable conjunctive named permission to a list of conjuncts
+unfoldConjPerm :: NameSortIsConj ns ~ 'True => NameSortCanFold ns ~ 'True =>
+                  NamedPerm ns args a -> PermExprs args -> PermOffset a ->
+                  [AtomicPerm a]
+unfoldConjPerm npn args off
+  | ValPerm_Conj conjs <- unfoldPerm npn args off = conjs
+unfoldConjPerm npn args off
+  | ValPerm_Named npn' args' off' <- unfoldPerm npn args off
+  , TrueRepr <- nameIsConjRepr npn' =
+    [Perm_NamedConj npn' args' off']
+unfoldConjPerm _ _ _ =
+  -- NOTE: this should never happen
+  error "unfoldConjPerm"
 
 -- | Test if two expressions are definitely unequal
 exprsUnequal :: PermExpr a -> PermExpr a -> Bool
@@ -8048,7 +8098,7 @@ isJoinPointHint _ = False
 
 -- | The empty 'PermEnv'
 emptyPermEnv :: PermEnv
-emptyPermEnv = PermEnv [] [] [] [] []
+emptyPermEnv = PermEnv [] [] [] [] [] defaultSpecMEventType
 
 -- | Add a 'NamedPerm' to a permission environment
 permEnvAddNamedPerm :: PermEnv -> NamedPerm ns args a -> PermEnv
@@ -8160,7 +8210,7 @@ permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p [t] : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (Right [t]) : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
 permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
@@ -8169,7 +8219,7 @@ permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
 permEnvAddGlobalSymFunMulti env sym (w :: f w) ps_ts =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtrs w $ map fst ps_ts in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (map snd ps_ts) : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (Right $ map snd ps_ts) : permEnvGlobalSyms env }
 
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
 permEnvAddGlobalSyms :: PermEnv -> [PermEnvGlobalEntry] -> PermEnv
@@ -8250,15 +8300,16 @@ lookupNamedShape env nm =
 -- | Look up the permissions and translation for a 'GlobalSymbol' at a
 -- particular machine word width
 lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
-                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+                      Maybe (ValuePerm (LLVMPointerType w),
+                             Either Natural [OpenTerm])
 lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
   helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
-            Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+            Maybe (ValuePerm (LLVMPointerType w), Either Natural [OpenTerm])
   helper  (PermEnvGlobalEntry sym'
-            (p :: ValuePerm (LLVMPointerType w')) t:_) sym w
+            (p :: ValuePerm (LLVMPointerType w')) tr:_) sym w
     | sym' == sym
     , Just Refl <- testEquality w (knownNat :: NatRepr w') =
-      Just (p, t)
+      Just (p, tr)
   helper (_:entries) sym w = helper entries sym w
   helper [] _ _ = Nothing
 

@@ -32,11 +32,11 @@ module Verifier.SAW.OpenTerm (
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   tupleOpenTerm', tupleTypeOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, extCnsOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
-  arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
+  arrowOpenTerm, letOpenTerm, sawLetOpenTerm, list1OpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -272,12 +272,39 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
   d' <- traverse typeInferComplete (dtPrimName dt)
   typeInferComplete $ DataTypeApp d' params args
 
--- | Build an 'OpenTerm' for a global name.
+-- | Build an 'OpenTerm' for a global name with a definition
 globalOpenTerm :: Ident -> OpenTerm
 globalOpenTerm ident =
   OpenTerm (do trm <- liftTCM scGlobalDef ident
                tp <- liftTCM scTypeOfGlobal ident
                return $ TypedTerm trm tp)
+
+-- | Build an 'OpenTerm' for an 'Ident', which can either refer to a definition,
+-- a constructor, or a datatype
+identOpenTerm :: Ident -> OpenTerm
+identOpenTerm ident =
+  OpenTerm $
+  do maybe_ctor <- liftTCM scFindCtor ident
+     maybe_dt <- liftTCM scFindDataType ident
+
+     -- First, determine the variables we need to abstract over and the function
+     -- for building an application of this identifier dependent on the class of
+     -- identifier
+     let (var_ctx, app_fun) =
+           case (maybe_ctor, maybe_dt) of
+             (Just ctor, _) -> (fst (asPiList (ctorType ctor)), scCtorApp)
+             (_, Just dt) -> (dtParams dt ++ dtIndices dt, scDataTypeApp)
+             (Nothing, Nothing) -> ([], scGlobalApply)
+
+     -- Build the term \ (x1:tp1) ... (xn:tpn) -> ident x1 ... xn as follows:
+     -- 1. Construct vars as the list x1 ... xn of terms, noting that xn has
+     --    deBruijn index 0 and x1 has deBruijn index (length var_ctx) - 1;
+     -- 2. Apply ident to those variables; and
+     -- 3. Lambda-abstract the variables.
+     vars <- reverse <$> mapM (liftTCM scLocalVar) [0 .. (length var_ctx) - 1]
+     ident_app <- liftTCM app_fun ident vars
+     lam <- liftTCM scLambdaList var_ctx ident_app
+     typeInferComplete lam
 
 -- | Build an 'OpenTerm' for an external constant
 extCnsOpenTerm :: ExtCns Term -> OpenTerm
@@ -384,6 +411,13 @@ sawLetOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
 sawLetOpenTerm x tp tp_ret rhs body_f =
   applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
+
+-- | Build an 'OpenTerm' of type @List1 tp@ from 'OpenTerm's of type @tp@
+list1OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
+list1OpenTerm tp xs =
+  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
+  (ctorOpenTerm "Prelude.Nil1" [tp])
+  xs
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this

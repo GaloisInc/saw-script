@@ -32,6 +32,8 @@ module Verifier.SAW.Heapster.TypeChecker (
   ) where
 
 import Control.Monad
+import qualified Data.BitVector.Sized as BV
+import Data.BitVector.Sized (BV)
 import Data.Functor.Product
 import Data.Functor.Constant
 import GHC.TypeLits (Nat, KnownNat)
@@ -346,22 +348,38 @@ tcNat e           = tcError (pos e) "Expected integer"
 -- | Check for a bitvector expression
 tcBV :: (KnownNat w, 1 <= w) => AstExpr -> Tc (PermExpr (BVType w))
 tcBV (ExAdd _ x y) = bvAdd <$> tcBV x <*> tcBV y
+tcBV (ExNeg _ x)   = bvNegate <$> tcBV x
 tcBV e             = tcBVFactor e
 
 -- | Check for a bitvector factor. This is limited to
 -- variables, constants, and multiplication by a constant.
 tcBVFactor :: (KnownNat w, 1 <= w) => AstExpr -> Tc (PermExpr (BVType w))
+-- Constants
 tcBVFactor (ExNat _ i) = pure (bvInt (fromIntegral i))
-tcBVFactor (ExMul _ (ExNat _ i) (ExVar p name Nothing Nothing)) =
-  do Some tn <- tcTypedName p name
-     bvMult i . PExpr_Var <$> tcCastTyped p knownRepr tn
-tcBVFactor (ExMul _ (ExVar p name Nothing Nothing) (ExNat _ i)) =
-  do Some tn <- tcTypedName p name
-     bvMult i . PExpr_Var <$> tcCastTyped p knownRepr tn
+-- Multiplication by a constant
+tcBVFactor (ExMul _ c (ExVar p name Nothing Nothing)) =
+  do c' <- asBVConst c
+     Some tn <- tcTypedName p name
+     bvMultBV c' . PExpr_Var <$> tcCastTyped p knownRepr tn
+tcBVFactor (ExMul _ (ExVar p name Nothing Nothing) c) =
+  do c' <- asBVConst c
+     Some tn <- tcTypedName p name
+     bvMultBV c' . PExpr_Var <$> tcCastTyped p knownRepr tn
+-- Variables
 tcBVFactor (ExVar p name Nothing Nothing) =
   do Some tn <- tcTypedName p name
      PExpr_Var <$> tcCastTyped p knownRepr tn
 tcBVFactor e = tcError (pos e) "Expected BV factor"
+
+-- | Check for an integer literal, which can be negative. If one is found,
+-- convert it to a 'BV'. Fail otherwise.
+asBVConst :: (KnownNat w, 1 <= w) => AstExpr -> Tc (BV w)
+asBVConst (ExNat _ i) =
+  pure $ BV.mkBV knownNat $ toInteger i
+asBVConst (ExNeg _ (ExNat _ i)) =
+  pure $ BV.negate knownNat $ BV.mkBV knownNat $ toInteger i
+asBVConst e =
+  tcError (pos e) "Expected integer or negated integer"
 
 -- | Check for a struct literal
 tcStruct :: CtxRepr fs -> AstExpr -> Tc (PermExpr (StructType fs))

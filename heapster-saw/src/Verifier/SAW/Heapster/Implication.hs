@@ -461,7 +461,7 @@ data SimplImpl ps_in ps_out where
 
   -- | For any unit-typed variable @x@ and unit-type expression @e@, prove
   -- @x:eq(e)@
-  -- 
+  --
   -- > (x:unit,e:unit) . -o x:eq(e)
   SImpl_UnitEq :: ExprVar UnitType -> PermExpr UnitType ->
                   SimplImpl RNil (RNil :> UnitType)
@@ -1596,15 +1596,6 @@ idLocalPermImpl = LocalPermImpl $ PermImpl_Done $ LocalImplRet Refl
 
 -- type IsLLVMPointerTypeList w ps = RAssign ((:~:) (LLVMPointerType w)) ps
 
-instance NuMatchingAny1 EqPerm where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 (LocalImplRet ps) where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 (OrListDisj ps a) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 -- Many of these types are mutually recursive. Moreover, Template Haskell
 -- declaration splices strictly separate top-level groups, so if we were to
 -- write each $(mkNuMatching [t| ... |]) splice individually, the splices
@@ -2659,7 +2650,7 @@ orListPerm or_list = foldr1 ValPerm_Or $ orListDisjs or_list
 mbOrListPerm :: Mb ctx (OrList ps a disj) -> Mb ctx (ValuePerm a)
 mbOrListPerm = mbMapCl $(mkClosed [| orListPerm |])
 
--- | Build an 'MbPermSets' 
+-- | Build an 'MbPermSets'
 orListMbPermSets :: PermSet (ps :> a) -> ExprVar a -> OrList ps a disjs ->
                     MbPermSets disjs
 orListMbPermSets _ _ MNil = MbPermSets_Nil
@@ -5528,8 +5519,8 @@ permIndicesForProvingOffset ps _ _
 permIndicesForProvingOffset ps imprecise_p off =
   let ixs_holdss = flip findMaybeIndices ps $ \p ->
         case llvmPermContainsOffset off p of
-          Just (_, True) -> Just True
-          Just _ | llvmPermContainsArray p && imprecise_p -> Just False
+          Just (_, holds) | holds || imprecise_p -> Just holds
+          -- Just _ | llvmPermContainsArray p && imprecise_p -> Just False
           _ -> Nothing in
   case find (\(_,holds) -> holds) ixs_holdss of
     Just (i,_) -> [i]
@@ -5586,12 +5577,12 @@ implElimLLVMBlockForOffset x bp imprecise_p off mb_p =
 -- as the one we are trying to prove.
 implGetLLVMPermForOffset ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
-  ExprVar (LLVMPointerType w) -> {- ^ the variable @x@ -}
-  [AtomicPerm (LLVMPointerType w)] -> {- ^ the permissions held for @x@ -}
-  Bool -> {- ^ whether imprecise matches are allowed -}
-  Bool -> {- ^ whether block permissions should be eliminated -}
-  PermExpr (BVType w) -> {- ^ the offset we are looking for -}
-  Mb vars (ValuePerm (LLVMPointerType w)) -> {- ^ the perm we want to prove -}
+  ExprVar (LLVMPointerType w) {- ^ the variable @x@ -} ->
+  [AtomicPerm (LLVMPointerType w)]  {- ^ the permissions held for @x@ -} ->
+  Bool {- ^ whether imprecise matches are allowed -} -> 
+  Bool  {- ^ whether block permissions should be eliminated -} ->
+  PermExpr (BVType w) {- ^ the offset we are looking for -} ->
+  Mb vars (ValuePerm (LLVMPointerType w)) {- ^ the perm we want to prove -} ->
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (AtomicPerm (LLVMPointerType w))
 
@@ -5800,9 +5791,30 @@ recombinePerm' x (ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
   recombinePermConj x x_ps p >>>
   recombinePerm x (ValPerm_Conj ps)
 recombinePerm' x x_p (ValPerm_Named npn args off)
+  -- When recombining a conjuctive named permission, turn it into a conjunction
+  -- and recombine it
   | TrueRepr <- nameIsConjRepr npn =
     implNamedToConjM x npn args off >>>
     recombinePermExpl x x_p (ValPerm_Conj1 $ Perm_NamedConj npn args off)
+recombinePerm' x x_p (ValPerm_Named npn args off)
+  -- When recombining a non-conjuctive but unfoldable named permission, unfold
+  -- it and recombine it
+  | TrueRepr <- nameCanFoldRepr npn =
+    implUnfoldNamedM x npn args off >>>= \p' ->
+    recombinePermExpl x x_p p'
+recombinePerm' x x_p@(ValPerm_Named npn args off) p
+  -- When recombining into a conjuctive named permission, turn it into a
+  -- conjunction and recombine it
+  | TrueRepr <- nameIsConjRepr npn =
+    implPushM x x_p >>> implNamedToConjM x npn args off >>>
+    let x_p' = ValPerm_Conj1 $ Perm_NamedConj npn args off in
+    implPopM x x_p' >>> recombinePermExpl x x_p' p
+recombinePerm' x x_p@(ValPerm_Named npn args off) p
+  -- When recombining into a non-conjuctive but unfoldable named permission, unfold
+  -- it and recombine it
+  | TrueRepr <- nameCanFoldRepr npn =
+    implPushM x x_p >>> implUnfoldNamedM x npn args off >>>= \x_p' ->
+    implPopM x x_p' >>> recombinePermExpl x x_p' p
 recombinePerm' x _ p = implDropM x p
 
 -- | Recombine a single conjuct @x:p@ on top of the stack back into the existing
