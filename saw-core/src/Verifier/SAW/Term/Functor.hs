@@ -364,7 +364,7 @@ data Term
   deriving (Show, Typeable)
 
 instance Hashable Term where
-  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
+  hashWithSalt salt STApp{ stAppHash = h } = salt `combine` 0x00000000 `hashWithSalt` hash h
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
 
 
