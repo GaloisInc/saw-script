@@ -356,6 +356,7 @@ type TermIndex = Int -- Word64
 data Term
   = STApp
      { stAppIndex    :: {-# UNPACK #-} !TermIndex
+     , stAppHash     :: {-# UNPACK #-} !Int -- The hash of the `stAppTermF` field
      , stAppFreeVars :: !BitSet -- Free variables
      , stAppTermF    :: !(TermF Term)
      }

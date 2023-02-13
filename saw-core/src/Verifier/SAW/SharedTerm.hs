@@ -288,6 +288,7 @@ import Data.List (inits, find)
 import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
+import Data.Hashable (hash)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
@@ -639,11 +640,13 @@ getTerm r a =
       Just t -> return (s, t)
       Nothing -> do
         i <- getUniqueInt
-        let t = STApp { stAppIndex = i
+        let h = hash a
+            t = STApp { stAppIndex = i
+                      , stAppHash = h
                       , stAppFreeVars = freesTermF (fmap looseVars a)
                       , stAppTermF = a
                       }
-        let s' = insertTFM a t s
+            s' = insertTFM a t s
         seq s' $ return (s', t)
 
 
