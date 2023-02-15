@@ -369,8 +369,8 @@ lookupTFM' (Hashed tf tfHash) tfm =
       IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
     _ -> IntMap.lookup tfHash (hashMapTFM tfm)
 
-insertTFM :: TermF Term -> a -> TermFMap a -> TermFMap a
-insertTFM tf = insertTFM' (hashed tf)
+_insertTFM :: TermF Term -> a -> TermFMap a -> TermFMap a
+_insertTFM tf = insertTFM' (hashed tf)
 
 insertTFM' :: Hashed (TermF Term) -> a -> TermFMap a -> TermFMap a
 insertTFM' (Hashed tf tfHash) x tfm =
