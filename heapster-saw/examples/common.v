@@ -79,9 +79,10 @@ Ltac PreCase_Trivial:=
 (* Ltac for trivial PostCase *) 
 Ltac list_zip ls1 ls2:=
   match ls1 with
-  | (?ls1', ?x) => match ls2 with
-                  | (?ls2', ?y) => apply Logic.and; [list_zip ls1' ls2' |
-                                                     exact (x = y)]
+  | (?x, ?ls1') => match ls2 with
+                  | (?y, ?ls2') =>
+                      apply Logic.and;
+                      [list_zip ls1' ls2' | exact (x = y)]
                   | _ => fail "Mismatched lists"
                   end
   | _ => exact (ls1 = ls2)
