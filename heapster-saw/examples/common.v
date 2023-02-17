@@ -14,8 +14,29 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SpecMExtra.
 From EnTree  Require Import Automation.
 
+Require Import Coq.Program.Tactics. (* Great tacticals, move to automation. Perhaps `Require Export`? *)
+
+
 Set Bullet Behavior "Strict Subproofs".
 
+
+(** *Basic Coq tactics These are natural extensions of the Coq
+  standard library. I generally try to use names that are compatible
+  with those used in opther projects to help new users.
+
+  We should consider moveing them at the top level
+ *)
+
+Ltac break_match:=
+          match goal with
+            |- context [match ?a with _ => _ end] => destruct a
+          end.
+Ltac break_match_hyp:=
+  match goal with
+    [ H:context [match ?a with _ => _ end] |- _] => destruct a
+  end.
+
+(** *Basic Spec definitions *)
 
 (* Spec when all events and returns are expected to be the same *)
 Definition spec_refines_eq {E Γ R}:
@@ -43,13 +64,13 @@ Ltac unfold_head T :=
   end.
 
 (* | Unfolds a function definition `func` and its body `func__bodies` *)
+Create HintDb automation.
 Ltac unfold_function:=
   try unfold spec_refines_eq, safety_spec;
-  match goal with
-  | |- spec_refines _ _ _ ?fun_applied _ =>
-      let T:= fun_applied in
-      unfold_head T
-  end.
+   match goal with
+   | |- spec_refines _ _ _ ?fun_applied _ => let T := fun_applied in
+                                             unfold_head T
+   end; autounfold with automation.
 
 (* The follwoing functions are for automatically matching arguments,
    in a spec trivial spec *)
@@ -105,3 +126,6 @@ Ltac solve_prepost_case n m:=
 Ltac solve_trivial_spec n m:=
   intros; unfold_function; prove_refinement;
     [wellfounded_none |  solve_prepost_case n m| prove_refinement_continue].
+
+Ltac solve_trivial_sidecondition :=
+         repeat break_match; repeat break_match_hyp; destruct_conjs; subst; tauto.

@@ -49,8 +49,8 @@ Lemma xor_swap_spec_ref (x y: bitvector 64) :
     (total_spec (fun _ =>  True) (fun xy r => r = xor_swap_spec (fst xy) (snd xy))
        (x,y)).
 Proof. solve_trivial_spec 0 0.
-    - apply bvXor_twice_l.
     - apply bvXor_twice_r.
+    - apply bvXor_twice_l.
 Qed.
       
 Local Hint Extern 10 (spec_refines eqPreRel eqPostRel eq (xor_swap _ _) _) =>
