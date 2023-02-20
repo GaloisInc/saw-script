@@ -364,7 +364,7 @@ data Term
   deriving (Show, Typeable)
 
 instance Hashable Term where
-  hashWithSalt salt STApp{ stAppHash = h } = hashWithSalt (hashWithSalt salt h) h
+  hashWithSalt salt STApp{ stAppHash = h } = salt `combine` 0x00000000 `hashWithSalt` (177573 + h) -- i.e. 5381 * 33 + h, inspired by djb2
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
 
 
