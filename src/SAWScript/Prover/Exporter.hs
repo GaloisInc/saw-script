@@ -70,6 +70,7 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule,
                                 ImportPrimitiveOptions(..), mkCryEnv)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import Verifier.SAW.Cryptol.Monadify (defaultMonEnv, monadifyCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Module (emptyModule, moduleDecls)
@@ -477,12 +478,13 @@ writeCoqProp name notations skips path t =
      writeCoqTerm name notations skips path tm
 
 writeCoqCryptolModule ::
+  Bool ->
   FilePath ->
   FilePath ->
   [(String, String)] ->
   [String] ->
   TopLevel ()
-writeCoqCryptolModule inputFile outputFile notations skips = io $ do
+writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -491,6 +493,8 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
   (cm, _) <- loadCryptolModule sc primOpts env inputFile
+  cry_env <- mkCryEnv env
+  cm' <- if mon then fst <$> monadifyCryptolModule sc cry_env defaultMonEnv cm else return cm
   let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
@@ -499,8 +503,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let nm = takeBaseName inputFile
-  cry_env <- mkCryEnv env
-  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
+  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm'
   case res of
     Left e -> putStrLn $ show e
     Right cmDoc ->

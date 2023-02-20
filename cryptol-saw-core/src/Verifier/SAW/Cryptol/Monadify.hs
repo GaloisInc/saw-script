@@ -90,6 +90,8 @@ import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.TypedTerm
+import Verifier.SAW.Cryptol (Env)
 -- import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
@@ -1487,12 +1489,12 @@ monadifyName (ImportedName uri _) =
   do frag <- URI.mkFragment (T.pack "M")
      return $ ImportedName (uri { URI.uriFragment = Just frag }) []
 
--- | Monadify a 'Term' of the specified type with an optional body, bind the
--- result to a fresh SAW core constant generated from the supplied name, and
--- then convert that constant back to a 'MonTerm'
-monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
-                     NameInfo -> Maybe Term -> Term -> IO MonTerm
-monadifyNamedTerm sc env nmi maybe_trm tp =
+-- | Monadify a 'Term' of the specified type with an optional body and bind the
+-- result to a fresh SAW core constant generated from the supplied name
+monadifyNamedTermH :: SharedContext -> MonadifyEnv ->
+                      NameInfo -> Maybe Term -> Term ->
+                      IO (MonType, Term)
+monadifyNamedTermH sc env nmi maybe_trm tp =
   trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
   let ?specMParams = monEnvParams env in
   do let mtp = monadifyType [] tp
@@ -1504,15 +1506,23 @@ monadifyNamedTerm sc env nmi maybe_trm tp =
            do trm' <- monadifyCompleteTerm sc env trm tp
               scConstant' sc nmi' trm' comp_tp
          Nothing -> scOpaqueConstant sc nmi' tp
+     return (mtp, const_trm)
+
+-- | Monadify a 'Term' of the specified type with an optional body, bind the
+-- result to a fresh SAW core constant generated from the supplied name, and
+-- then convert that constant back to a 'MonTerm'
+monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
+                     NameInfo -> Maybe Term -> Term -> IO MonTerm
+monadifyNamedTerm sc env nmi maybe_trm tp =
+  let ?specMParams = monEnvParams env in
+  do (mtp, const_trm) <- monadifyNamedTermH sc env nmi maybe_trm tp
      return $ fromCompTerm mtp $ closedOpenTerm const_trm
 
--- | Monadify a term with the specified type along with all constants it
--- contains, adding the monadifications of those constants to the monadification
--- environment
-monadifyTermInEnv :: SharedContext -> MonadifyEnv ->
-                     Term -> Term -> IO (Term, MonadifyEnv)
-monadifyTermInEnv sc top_env top_trm top_tp =
-  flip runStateT top_env $
+-- | Monadify all the constants contained in the given term, adding the
+-- monadifications of those constants to the monadification environment
+monadifyContainedConstants :: SharedContext -> MonadifyEnv -> Term -> IO MonadifyEnv
+monadifyContainedConstants sc top_env top_trm =
+  flip execStateT top_env $
   do lift $ ensureCryptolMLoaded sc
      let const_infos =
            map snd $ Map.toAscList $ getConstantSet top_trm
@@ -1521,5 +1531,27 @@ monadifyTermInEnv sc top_env top_trm top_tp =
        if Map.member nmi (monEnvMonTable env) then return () else
          do mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
             modify $ monEnvAdd nmi (monMacro0 mtrm)
-     env <- get
-     lift $ monadifyCompleteTerm sc env top_trm top_tp
+
+-- | Monadify a term with the specified type along with all constants it
+-- contains, adding the monadifications of those constants to the monadification
+-- environment
+monadifyTermInEnv :: SharedContext -> MonadifyEnv ->
+                     Term -> Term -> IO (Term, MonadifyEnv)
+monadifyTermInEnv sc top_env top_trm top_tp =
+  do env <- monadifyContainedConstants sc top_env top_trm
+     tm <- monadifyCompleteTerm sc env top_trm top_tp
+     return (tm, env)
+
+-- | Monadify each term in the given 'CryptolModule' along with all constants each
+-- contains, returning a new module which each term monadified, and adding the
+-- monadifications of all encountered constants to the monadification environment
+monadifyCryptolModule :: SharedContext -> Env -> MonadifyEnv ->
+                         CryptolModule -> IO (CryptolModule, MonadifyEnv)
+monadifyCryptolModule sc cry_env top_env (CryptolModule tysyns top_tts) =
+  flip runStateT top_env $
+  fmap (CryptolModule tysyns) $ flip mapM top_tts $ \top_tt -> StateT $ \env ->
+    do let top_tm = ttTerm top_tt
+       top_tp <- ttTypeAsTerm sc cry_env top_tt
+       (tm, env') <- monadifyTermInEnv sc env top_tm top_tp
+       tm' <- mkTypedTerm sc tm
+       return (tm', env')

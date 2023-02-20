@@ -1468,10 +1468,24 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal writeCoqCryptolModule)
+    (pureVal (writeCoqCryptolModule False))
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq."
+    , "The first argument is the file containing the module to export."
+    , "The second argument is the name of the file to output into,"
+    , "use an empty string to output to standard output."
+    , "The third argument is a list of pairs of notation substitutions:"
+    , "the operator on the left will be replaced with the identifier on"
+    , "the right, as we do not support notations on the Coq side."
+    , "The fourth argument is a list of identifiers to skip translating."
+    ]
+
+  , prim "write_coq_cryptol_module_monadic" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal (writeCoqCryptolModule True))
+    Experimental
+    [ "Write out a representation of a Cryptol module in Gallina syntax for"
+    , "Coq, using the monadified version of the given module."
     , "The first argument is the file containing the module to export."
     , "The second argument is the name of the file to output into,"
     , "use an empty string to output to standard output."
