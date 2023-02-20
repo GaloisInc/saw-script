@@ -1485,9 +1485,10 @@ monadifyName :: NameInfo -> IO NameInfo
 monadifyName (ModuleIdentifier ident) =
   return $ ModuleIdentifier $ mkIdent (identModule ident) $
   T.append (identBaseName ident) (T.pack "M")
-monadifyName (ImportedName uri _) =
+monadifyName (ImportedName uri aliases) =
   do frag <- URI.mkFragment (T.pack "M")
-     return $ ImportedName (uri { URI.uriFragment = Just frag }) []
+     let aliases' = concatMap (\a -> [a, T.append a (T.pack "#M")]) aliases
+     return $ ImportedName (uri { URI.uriFragment = Just frag }) aliases'
 
 -- | Monadify a 'Term' of the specified type with an optional body and bind the
 -- result to a fresh SAW core constant generated from the supplied name
