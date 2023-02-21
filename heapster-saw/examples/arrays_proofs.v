@@ -87,7 +87,6 @@ Ltac bvToInt_ineq:=
           apply lt_bvToInt |
           apply le_bvToInt].
 
-Ltac solve_bv_no_overflow:= try lia.
 Ltac remove_mods:=
   (*TODO: Add other operations*)
   try rewrite bvAdd_Zadd_mod_64;
@@ -96,22 +95,7 @@ Ltac remove_mods:=
   repeat rewrite bvToInt_intToBv_64;
   repeat rewrite BinInt.Z.mod_small.
 
-Ltac solve_bv_no_overflow_le:=
-  apply le_bvToInt;
-  remove_mods;
-  try solve_bv_no_overflow.
-
-
-Ltac solve_bv_no_overflow_lt:=
-  apply lt_bvToInt;
-  remove_mods;
-  (* TODO: prevent this from applying to all subgoals*)
-  repeat rewrite bvToInt_intToBv_64;
-  repeat rewrite BinInt.Z.mod_small;
-  try solve_bv_no_overflow.
-
-
-Ltac solve_bv_no_overflow::=
+Ltac solve_bv_no_overflow:=
   try lia;
   match goal with
   | |- isBvsle _ ?LHA ?RHS =>
