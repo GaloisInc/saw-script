@@ -14,18 +14,19 @@ Import c_data.
 
 Import SAWCorePrelude.
 
+
+Set Bullet Behavior "Strict Subproofs".
+
+Global Hint Unfold malloc: automation.
+
 Lemma no_errors_incr_u64_ptr_byte x:
   spec_refines_eq (incr_u64_ptr_byte x) (safety_spec (x)).
 Proof. solve_trivial_spec 0 0. Qed.
 
 Lemma no_errors_alloc_padded_struct :
-  refinesFun alloc_padded_struct noErrorsSpec.
-  unfold alloc_padded_struct, alloc_padded_struct__tuple_fun, noErrorsSpec, malloc.
-  time "no_errors_alloc_padded_struct" prove_refinement.
-Qed.
-
-Lemma no_errors_padded_struct_incr_all :
-  refinesFun padded_struct_incr_all (fun _ => noErrorsSpec).
-  unfold padded_struct_incr_all, padded_struct_incr_all__tuple_fun, noErrorsSpec.
-  time "no_errors_padded_struct_incr_all" prove_refinement.
-Qed.
+  spec_refines_eq alloc_padded_struct (safety_spec tt).
+Proof. solve_trivial_spec 0 0; solve_trivial_sidecondition. Qed.
+         
+Lemma no_errors_padded_struct_incr_all x0:
+  spec_refines_eq (padded_struct_incr_all x0) (safety_spec (x0)).
+Proof. solve_trivial_spec 0 0; solve_trivial_sidecondition. Qed.

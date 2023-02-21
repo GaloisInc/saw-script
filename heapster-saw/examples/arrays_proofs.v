@@ -1,4 +1,3 @@
-From Coq          Require Import Program.Basics.
 From Coq          Require Import Lists.List.
 From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
@@ -7,14 +6,122 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 
 From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import CompMExtra.
-
-Import SAWCorePrelude.
-
+From EnTree  Require Import Automation.
+Require Import Lia.
+From CryptolToCoq Require Import SAWCoreBitvectorsZifyU64.
+      
+Require Import Examples.common.
 Require Import Examples.arrays_gen.
 Import arrays.
 
+Import SAWCorePrelude.
+
 Import VectorNotations.
+
+Set Nested Proofs Allowed.
+Lemma UIP_bv :
+  forall {n} (x y : bitvector n) (p1 p2 : x = y), p1 = p2.
+Proof.
+  intros.
+  apply UIP_dec.
+  clear. intros.
+  refine (eq_dec _ boolEq _ n x y).
+  clear. intros.
+  split; intros H.
+  - destruct x; destruct y; auto.
+  - subst x. destruct y; reflexivity.
+Qed.
+Require Import Coq.Program.Tactics.
+
+Declare Scope bv_64.
+Local Open Scope bv_64.
+Bind Scope bv_64 with bitvector.
+
+Infix "+":= (bvAdd 64) (at level 50,  left associativity): bv_64.
+Infix "-":= (bvSub 64) (at level 50,  left associativity): bv_64.
+Infix "<":= (isBvslt 64) (at level 70): bv_64.
+Infix "<=":= (isBvsle 64) (at level 70): bv_64.
+
+(*This is a prototype of a tactic to solve all signed inequalities for
+Boolean vectors, as long as there is no overflow. Ideally, if the
+tactic fails, it will show you the bounds you need to prove that thre
+is no overflow. You probably missed them in your invariants.
+
+The idea is pretty simple: convert everything to to `Int` and, becasue
+there is no overflow, we can remove the module quantifiers and crush
+it with standard lia.
+
+TO DO:
+
+- Support all arith relations eq[ ], lt[ ], gt[ ], le[✓], ge[ ]
+
+- Don't directly apply rewrites to all subgoals for efficiency
+
+- Recognize when there is a terminal "node" to apply `lia`. Right now
+  we attempt lia at every step, whcih is wasteful.
+
+ *)
+
+Lemma eq_bvToInt:
+  forall n a b,
+    (BinInt.Z.lt (bvToInt n a) (bvToInt n b)) ->
+    isBvslt n a b.
+Proof.
+Admitted.
+Lemma lt_bvToInt:
+  forall n a b,
+    (BinInt.Z.lt (bvToInt n a) (bvToInt n b)) ->
+    isBvslt n a b.
+Proof.
+Admitted.
+Lemma le_bvToInt:
+  forall n a b,
+    (BinInt.Z.le (bvToInt n a) (bvToInt n b)) ->
+    isBvsle n a b.
+Proof.
+Admitted.
+
+
+Ltac bvToInt_ineq:=
+  first [apply eq_bvToInt |
+          apply lt_bvToInt |
+          apply le_bvToInt].
+
+Ltac solve_bv_no_overflow:= try lia.
+Ltac remove_mods:=
+  (*TODO: Add other operations*)
+  try rewrite bvAdd_Zadd_mod_64;
+  try rewrite bvSub_Zsub_mod_64;
+  try rewrite bvMul_Zmul_mod_64;
+  repeat rewrite bvToInt_intToBv_64;
+  repeat rewrite BinInt.Z.mod_small.
+
+Ltac solve_bv_no_overflow_le:=
+  apply le_bvToInt;
+  remove_mods;
+  try solve_bv_no_overflow.
+
+
+Ltac solve_bv_no_overflow_lt:=
+  apply lt_bvToInt;
+  remove_mods;
+  (* TODO: prevent this from applying to all subgoals*)
+  repeat rewrite bvToInt_intToBv_64;
+  repeat rewrite BinInt.Z.mod_small;
+  try solve_bv_no_overflow.
+
+
+Ltac solve_bv_no_overflow::=
+  try lia;
+  match goal with
+  | |- isBvsle _ ?LHA ?RHS =>
+      apply le_bvToInt
+  | |- isBvslt _ ?LHA ?RHS =>
+       apply lt_bvToInt
+  end; remove_mods;
+  try solve_bv_no_overflow.
+
+
 
 Definition bvMem_lo := intToBv 64 0xf000000000000000.
 Definition bvMem_hi := intToBv 64 0x0fffffffffffffff.
@@ -26,7 +133,120 @@ Definition zero_array_precond x
 Definition zero_array_invariant x x' i
   := isBvsle 64 (intToBv 64 0) i /\ isBvsle 64 i x /\ x = x'.
 
-Lemma no_errors_zero_array
+Record HeVector T :=
+  someVector {
+     hvLen1 : nat 
+    ; hvLen2 : _
+    ; theVector : BVVec hvLen1 hvLen2 T
+    }.
+Arguments someVector {T hvLen1 hvLen2} theVector.
+
+
+(* Simpler version of `inversion_sigma` where the inversion is only applied if the hyp has the same *)
+Ltac simple_inv_sigma:=
+  match goal with
+  | H: (_; ?x) = (_; ?y) |- _ => eapply inj_pair2 in H; try subst x
+  end.
+Ltac inv_with_sigma H:= inversion H; repeat simple_inv_sigma.
+Tactic Notation "inv_someVector" "in" "*" := 
+  match goal with H: someVector _ = someVector _ |- _ => inv_with_sigma H end.
+
+
+Lemma HeVectorToSigma:
+  forall len len' vec vec',
+  (exists (Plen : len = len'),
+    eq_rect len (fun x => BVVec 64 x (bitvector 64)) vec len' Plen = vec') ->
+  someVector vec = someVector vec'.
+Proof. intros * [Plen Heq]. subst len'.
+       rewrite <- eq_rect_eq in Heq; subst; auto.
+Qed.
+
+Hint Extern 101 (IntroArg ?n (someVector ?a = someVector ?b) _) =>
+       let e1 := argName n in IntroArg_intro e1;
+(eapply HeVectorToSigma in e1);
+revert e1; apply (IntroArg_fold n _ _) : refines prepostcond.
+
+Polymorphic Lemma IntroArg_someVector T n m a1 a2 b1 b2 (eq : a1 = a2) goal :
+  IntroArg n (eq_rect _ (fun x => BVVec m x T) b1 _ eq = b2) (fun _ => goal) ->
+  IntroArg n (@someVector T m a1 b1 = @someVector T m a2 b2) (fun _ => goal).
+Proof.
+  destruct eq.
+  intros HH a.
+  inv_with_sigma a.
+  eapply HH; reflexivity.
+Qed.
+
+Hint Extern 101 (IntroArg ?n ?A ?g) =>
+  simple apply IntroArg_someVector; idtac "Done it"
+  : refines prepostcond.
+
+Lemma no_errors_zero_array x y:
+  spec_refines_eq (zero_array x y)
+    (total_spec (fun '(len, vec, dec) =>  zero_array_precond len) (fun _ _ => True) (x,y, bvAdd _ x (intToBv _ 1))).
+Proof.
+  intros; unfold_function.
+  prove_refinement.
+  - wellfounded_decreasing_nat.
+    exact (bvToNat _ x1).
+  - prepost_case 0 0.
+    + exact (someVector a = someVector a0 /\
+            x = x1 /\
+            bvAdd _ x (intToBv _ 1) = x2).
+    + exact (someVector r = someVector r0).
+    + prepost_case 1 0.
+      * exact (someVector a = someVector a0 /\
+                 x = x2 /\
+                 x3 = bvSub _ x0 x1 /\
+                 zero_array_invariant x0 x x1).
+      * exact ( (someVector r = someVector r0)).
+      * prepost_exclude_remaining.
+  - prove_refinement_continue;
+      (* Need to add `inv_someVector` to the automation to reduce better*)
+      try inv_someVector in *.
+    (* with NoRewrite NoSolve *)
+    + reflexivity.
+    + assert (HH: isBvule _ x0 (bvsmax _)).
+      { clear - e_assume.
+        destruct e_assume.
+        eapply isBvule_to_isBvsle_pos; auto.
+        vm_compute; auto.
+        rewrite H0. vm_compute. reflexivity.
+      }
+      clear - HH. lia.
+    + reflexivity.
+    + repeat split. 
+      eapply e_assume.
+    + reflexivity.
+    + destruct_conjs; subst.
+      clear HPrePost HWf. lia.
+    + destruct_conjs; subst. auto.
+    + unfold zero_array_precond in *; destruct_conjs; subst; hnf; split.
+      * solve_bv_no_overflow. 
+      * split; auto.
+        solve_bv_no_overflow.
+    + reflexivity.
+    + unfold zero_array_precond, zero_array_invariant in *.
+      destruct_conjs; subst.
+      subst.
+      hnf.
+      rewrite and_bool_eq_false in *.
+      exfalso.
+      destruct e_if0 as [e_if0 | e_if0].
+      * eapply isBvslt_def_opp in e_if0.
+        rewrite <- i1 in e_if0.
+        vm_compute in e_if0; congruence.
+      * eapply isBvslt_def_opp in e_if0.
+        rewrite -> i2 in e_if0.
+        rewrite -> i0 in e_if0.
+        vm_compute in e_if0. congruence.
+    + reflexivity.
+      
+      Unshelve.
+      all: auto.
+      
+Qed.
+ 
+(* The old version
   : refinesFun zero_array (fun x _ => assumingM (zero_array_precond x) noErrorsSpec).
 Proof.
   unfold zero_array, zero_array__tuple_fun, zero_array_precond.
@@ -56,6 +276,8 @@ Proof.
     apply isBvslt_antirefl in e_if0; contradiction e_if0.
   (* The remaining cases are all taken care of by either prove_refinement or assumption! *)
 Qed.
+
+ *)
 
 
 Definition contains0_precond l

@@ -17,7 +17,7 @@ From EnTree  Require Import Automation.
 Require Import Coq.Program.Tactics. (* Great tacticals, move to automation. Perhaps `Require Export`? *)
 
 
-Set Bullet Behavior "Strict Subproofs".
+Global Set Bullet Behavior "Strict Subproofs".
 
 
 (** *Basic Coq tactics These are natural extensions of the Coq
