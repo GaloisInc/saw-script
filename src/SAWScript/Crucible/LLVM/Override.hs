@@ -1697,17 +1697,22 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                             W4.bvLit sym Crucible.PtrWidth $ BV.mkBV Crucible.PtrWidth $ fromIntegral sz_nat
                           maybe_matching_array <- liftIO $
                             Crucible.asMemMatchingArrayStore sym Crucible.PtrWidth ptr sz_bv (Crucible.memImplHeap mem)
-                          case maybe_matching_array of
-                            Just (ok, arr) ->
+                          res <- case maybe_matching_array of
+                            Just (ok, arr) -> return $ Right (ok, arr)
+                            Nothing -> liftIO $ Crucible.loadArrayConcreteSizeRaw sym mem ptr sz_nat alignment
+
+                          case res of
+                            Right (ok, arr) ->
                               do addAssert ok md $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
                                  st <- liftIO (sawCoreState sym)
                                  arr_tm <- liftIO $ toSC sym st arr
                                  instantiateExtMatchTerm sc cc md prepost arr_tm $ ttTerm expected_arr_tm
                                  return Nothing
 
-                            _ -> return $ Just errMsg
+                            Left{} -> return $ Just errMsg
 
-                     _ -> return $ Just errMsg
+                     Nothing -> return $ Just errMsg
+
 
 -- | Like 'matchPointsToValue', but specifically geared towards the needs
 -- of fields within bitfields. In particular, this performs all of the
