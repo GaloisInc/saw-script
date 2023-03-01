@@ -766,7 +766,7 @@ data TypedStmtSeq ext blocks tops rets ps_in where
   TypedConsStmt :: !ProgramLoc ->
                    !(TypedStmt ext stmt_rets ps_in ps_next) ->
                    !(RAssign Proxy stmt_rets) ->
-                   !(Mb' stmt_rets (TypedStmtSeq ext blocks tops rets ps_next)) ->
+                   !(NamedMb stmt_rets (TypedStmtSeq ext blocks tops rets ps_next)) ->
                    TypedStmtSeq ext blocks tops rets ps_in
 
   -- | Typed version of 'TermStmt', which terminates the current block
@@ -1207,7 +1207,7 @@ data TypedEntry phase ext blocks tops rets args ghosts =
     typedEntryPermsOut :: !(MbValuePerms (tops :++: rets)),
     -- | The type-checked body of the entrypoint
     typedEntryBody :: !(TransData phase
-                        (Mb' ((tops :++: args) :++: ghosts)
+                        (NamedMb ((tops :++: args) :++: ghosts)
                          (TypedStmtSeq ext blocks tops rets
                           ((tops :++: args) :++: ghosts))))
   }
@@ -1971,7 +1971,7 @@ runPermCheckM ::
               () ps_out
               r ((tops :++: args) :++: ghosts)
               ()) ->
-  TopPermCheckM ext cblocks blocks tops rets (Mb' ((tops :++: args) :++: ghosts) r)
+  TopPermCheckM ext cblocks blocks tops rets (NamedMb ((tops :++: args) :++: ghosts) r)
 runPermCheckM names entryID args ghosts mb_perms_in m =
   get >>= \(TopPermCheckState {..}) ->
   let args_prxs = cruCtxProxies args
@@ -1983,8 +1983,9 @@ runPermCheckM names entryID args ghosts mb_perms_in m =
              z <- state (allocateDebugNames (Just "ghost") (noNames' ghosts) ghosts)
              pure (x `rappend` y `rappend` z)
     in
-  liftInnerToTopM $ strongMbM' $
-  flip nuMultiWithElim1' (Mb' dbgs (mbValuePermsToDistPerms mb_perms_in)) $ \ns perms_in ->
+  liftInnerToTopM $ strongMbMNamed $
+  flip nuMultiWithElim1Named (NamedMb dbgs
+                              (mbValuePermsToDistPerms mb_perms_in)) $ \ns perms_in ->
   let (tops_args, ghosts_ns) = RL.split Proxy ghosts_prxs ns
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
       st1 = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names
@@ -2697,7 +2698,8 @@ emitStmt ::
 emitStmt tps names loc stmt =
   let pxys = cruCtxProxies tps in
   allocateDebugNamesM Nothing names tps >>>= \debugs ->
-  startBinding' debugs (fmap (TypedConsStmt loc stmt pxys) . strongMbM') >>>= \ns ->
+  startNamedBinding debugs (fmap (TypedConsStmt loc stmt pxys)
+                            . strongMbMNamed) >>>= \ns ->
   modify (\st -> st { stPPInfo = ppInfoApplyAllocation ns debugs (stPPInfo st)}) >>>
   setVarTypes ns tps >>>
   gmodify (modifySTCurPerms (applyTypedStmt stmt ns)) >>>
@@ -4175,7 +4177,7 @@ tcBlockEntryBody ::
   Block ext cblocks ret args ->
   TypedEntry TCPhase ext blocks tops (gouts :> ret) (CtxToRList args) ghosts ->
   TopPermCheckM ext cblocks blocks tops (gouts :> ret)
-    (Mb' ((tops :++: CtxToRList args) :++: ghosts)
+    (NamedMb ((tops :++: CtxToRList args) :++: ghosts)
       (TypedStmtSeq ext blocks tops (gouts :> ret)
        ((tops :++: CtxToRList args) :++: ghosts)))
 tcBlockEntryBody names blk entry@(TypedEntry {..}) =

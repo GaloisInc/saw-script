@@ -6764,21 +6764,25 @@ genSubstMb p s mbmb =
   mbM $ nuMulti p $ \ns -> genSubst (extSubstMulti s ns) (mbCombine p mbmb)
 
 
-instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx), Substable s a m, NuMatching a) => Substable s (Mb' ctx a) m where
-   genSubst = genSubstMb' given
+instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx),
+                             Substable s a m, NuMatching a) =>
+                            Substable s (NamedMb ctx a) m where
+   genSubst = genSubstNamedMb given
 
-instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Mb' RNil a) m where
-   genSubst = genSubstMb' RL.typeCtxProxies
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) =>
+                            Substable s (NamedMb RNil a) m where
+   genSubst = genSubstNamedMb RL.typeCtxProxies
 
-instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) => Substable s (Binding' c a) m where
-   genSubst = genSubstMb' RL.typeCtxProxies
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) =>
+                            Substable s (NamedBinding c a) m where
+   genSubst = genSubstNamedMb RL.typeCtxProxies
 
-genSubstMb' ::
+genSubstNamedMb ::
   Substable s a m =>
   NuMatching a =>
   RAssign Proxy ctx ->
-  s ctx' -> Mb ctx' (Mb' ctx a) -> m (Mb' ctx a)
-genSubstMb' p s mbmb = mbM' (fmap (genSubst s) (mbSink p mbmb))
+  s ctx' -> Mb ctx' (NamedMb ctx a) -> m (NamedMb ctx a)
+genSubstNamedMb p s mbmb = mbMNamed (fmap (genSubst s) (mbSink p mbmb))
 
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb
@@ -8493,7 +8497,7 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
-newtype SeenDetVarsClauses :: CrucibleType -> * where
+newtype SeenDetVarsClauses :: CrucibleType -> Type where
   SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
 
 -- | Generic function to compute the 'DetVarsClause's for a permission

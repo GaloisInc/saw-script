@@ -133,7 +133,7 @@ instance (PermCheckExtC ext extExpr)
     => ExtractLogEntries
          (TypedEntry TransPhase ext blocks tops ret args ghosts) where
   extractLogEntries te = do
-    let loc = mbLift' $ fmap getFirstProgramLocTS (typedEntryBody te)
+    let loc = mbLiftNamed $ fmap getFirstProgramLocTS (typedEntryBody te)
     withLoc loc (mb'ExtractLogEntries (typedEntryBody te))
     let entryId = mkLogEntryID $ typedEntryID te
     let callers = callerIDs $ typedEntryCallers te
@@ -227,7 +227,7 @@ mbExtractLogEntries ctx mb_a =
   execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)
 
 mb'ExtractLogEntries
-  :: ExtractLogEntries a => Mb' (ctx :: RList CrucibleType) a -> ExtractionM ()
+  :: ExtractLogEntries a => NamedMb (ctx :: RList CrucibleType) a -> ExtractionM ()
 mb'ExtractLogEntries mb_a =
   ReaderT $ \(ppi, loc, fname) ->
   tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x ->
@@ -288,7 +288,7 @@ getFirstProgramLocBM block =
       -> Maybe ProgramLoc
     helper ste = case ste of
       Some TypedEntry { typedEntryBody = stmts } ->
-        Just $ mbLift' $ fmap getFirstProgramLocTS stmts
+        Just $ mbLiftNamed $ fmap getFirstProgramLocTS stmts
 
 -- | From the sequence, get the first program location we encounter, which
 -- should correspond to the permissions for the entry point we want to log
