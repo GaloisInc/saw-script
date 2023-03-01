@@ -36,6 +36,11 @@ Ltac break_match_hyp:=
     [ H:context [match ?a with _ => _ end] |- _] => destruct a
   end.
 
+Ltac forget_as term name:=
+  let Hforget := fresh in
+  remember term as name eqn:Hforget; clear Hforget.
+
+
 (** *Basic Spec definitions *)
 
 (* Spec when all events and returns are expected to be the same *)
@@ -129,3 +134,21 @@ Ltac solve_trivial_spec n m:=
 
 Ltac solve_trivial_sidecondition :=
          repeat break_match; repeat break_match_hyp; destruct_conjs; subst; tauto.
+
+(** *Tactics for clarity*)
+
+(* | This tactic allows you to forget errors, the precondition,
+postcondition and relations to clearly see what we are proving.*)
+Ltac clarify_goal_tutorial:=
+  match goal with
+      |- context [ErrorS _ ?st] =>
+        let error_msg:=fresh "error_msg" in
+      forget_as st error_msg
+  end;
+  match goal with
+  |  |- Automation.spec_refines ?pre ?post ?RR _ _ =>
+        let PRE:=fresh "PRE" in
+        let POST:=fresh "POST" in
+        let Relation:=fresh "Relation" in
+       forget_as pre PRE; forget_as post POST; forget_as RR Relation
+  end.
