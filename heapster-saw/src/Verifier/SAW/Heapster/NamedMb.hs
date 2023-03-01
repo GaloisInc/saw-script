@@ -22,6 +22,16 @@ data Mb' ctx a = Mb'
   }
   deriving Functor
 
+mkNuMatching [t| forall a. StringF a |]
+
+instance Liftable (StringF a) where
+    mbLift (mbMatch -> [nuMP| StringF x |]) = StringF (mbLift x)
+
+instance LiftableAny1 StringF where
+    mbLiftAny1 = mbLift
+
+mkNuMatching [t| forall ctx a. NuMatching a => Mb' ctx a |]
+
 mbMap2' :: (a -> b -> c) -> Mb' ctx a -> Mb' ctx b -> Mb' ctx c
 mbMap2' f mb1 mb2 =
   Mb' (_mbNames mb1) (mbMap2 f (_mbBinding mb1) (_mbBinding mb2))
@@ -67,13 +77,3 @@ elimEmptyMb' = views mbBinding elimEmptyMb
 
 emptyMb' :: a -> Mb' RNil a
 emptyMb' = Mb' MNil . emptyMb
-
-mkNuMatching [t| forall a. StringF a |]
-
-instance Liftable (StringF a) where
-    mbLift (mbMatch -> [nuMP| StringF x |]) = StringF (mbLift x)
-
-instance LiftableAny1 StringF where
-    mbLiftAny1 = mbLift
-
-mkNuMatching [t| forall ctx a. NuMatching a => Mb' ctx a |]
