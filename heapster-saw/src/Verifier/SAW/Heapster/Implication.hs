@@ -382,6 +382,17 @@ data LifetimeErrorType where
   ImplicationLifetimeError :: LifetimeErrorType
   LifetimeCurrentError :: PP.Doc ann -> LifetimeErrorType
 
+$(concatMapM mkNuMatching
+  [ [t| ImplError |]
+  , [t| LifetimeErrorType |]
+  ])
+
+instance Liftable LifetimeErrorType where
+  mbLift e = case mbMatch e of
+    [nuMP| EndLifetimeError |] -> EndLifetimeError
+    [nuMP| ImplicationLifetimeError |] -> ImplicationLifetimeError
+    [nuMP| LifetimeCurrentError doc |] -> LifetimeCurrentError $ mbLift doc
+
 instance SubstVar PermVarSubst m =>
     Substable PermVarSubst ImplError m where
   genSubst s mb_impl = case mbMatch mb_impl of
@@ -413,12 +424,6 @@ instance SubstVar PermVarSubst m =>
       dp <- genSubst s mb_dp
       return $ ImplVariableError (mbLift doc) (mbLift f) (mbLift xdoc, x') (mbLift pdoc, p') (mbLift ctx) dp
    
-instance Liftable LifetimeErrorType where
-  mbLift e = case mbMatch e of
-    [nuMP| EndLifetimeError |] -> EndLifetimeError
-    [nuMP| ImplicationLifetimeError |] -> ImplicationLifetimeError
-    [nuMP| LifetimeCurrentError doc |] -> LifetimeCurrentError $ mbLift doc
-
 -- The reason this isn't just Show is to sort of future-proof things. For
 -- instance, we may want to dump a limited amount of information to stdout, but
 -- something more comprehensive to a log for an IDE.
@@ -1685,8 +1690,6 @@ $(concatMapM mkNuMatching
   , [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |]
   , [t| forall ps_in ps_out. LocalPermImpl ps_in ps_out |]
   , [t| forall ps ps'. LocalImplRet ps ps' |]
-  , [t| ImplError |]
-  , [t| LifetimeErrorType |]
   ])
 
 -- | A splitting of an existential list of permissions into a prefix, a single

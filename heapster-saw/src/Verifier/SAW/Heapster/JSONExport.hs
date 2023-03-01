@@ -54,6 +54,77 @@ class JsonExport a where
     default jsonExport :: ToJSON a => (?ppi::PPInfo) => a -> Value
     jsonExport = toJSON
 
+
+-- This code generates generic JSON generation instances for
+-- algebraic data types.
+--
+-- - All instances will generate an object.
+-- - The object will have a @tag@ field containing the name
+--   of the constructor used.
+-- - Record constructors will add each record field to the
+--   object using the field name
+-- - Normal constructors with fields will have a field called
+--   @contents@. If this constructor has more than one parameter
+--   the @contents@ field will have a list. Otherwise it will
+--   have a single element.
+let fields :: String -> TH.ConstructorVariant -> [TH.ExpQ] -> TH.ExpQ
+
+    -- Record constructor, use record field names as JSON field names
+    fields tag (TH.RecordConstructor fieldNames) xs =
+        TH.listE
+          $ [| ("tag", tag) |]
+          : [ [| (n, $x) |] | n <- TH.nameBase <$> fieldNames | x <- xs]
+
+    -- No fields, so just report the constructor tag
+    fields tag _ []  = [| [("tag", tag)] |]
+
+    -- One field, just report that field as @contents@
+    fields tag _ [x] = [| [("tag", tag), ("contents", $x)] |]
+
+    -- Multiple fields, report them as a list as @contents@
+    fields tag _ xs  = [| [("tag", tag), ("contents", Array $(TH.listE xs))] |]
+
+    clauses :: TH.DatatypeInfo -> [TH.ClauseQ]
+    clauses info =
+        [do fieldVars <- for [0..length (TH.constructorFields con)-1] $ \i ->
+                            TH.newName ("x" ++ show i)
+            TH.clause
+              [TH.conP (TH.constructorName con) (TH.varP <$> fieldVars)]
+              (TH.normalB [|
+                object
+                    $(fields
+                        (TH.nameBase (TH.constructorName con))
+                        (TH.constructorVariant con)
+                        [ [| jsonExport $(TH.varE v) |] | v <- fieldVars ]) |])
+              []
+        | con <- TH.datatypeCons info ]
+
+    generateJsonExport :: TH.Name -> TH.DecQ
+    generateJsonExport n =
+      do info <- TH.reifyDatatype n
+         let t = foldl TH.appT (TH.conT n)
+               $ zipWith (\c _ -> TH.varT (TH.mkName [c])) ['a'..]
+               $ TH.datatypeInstTypes info
+         TH.instanceD (TH.cxt []) [t|JsonExport $t|]
+           [TH.funD 'jsonExport (clauses info)]
+
+    typesNeeded :: [TH.Name]
+    typesNeeded =
+        [''AtomicPerm, ''BaseTypeRepr, ''BoolRepr, ''BVFactor, ''BVProp,
+        ''BVRange, ''CruCtx, ''FloatInfoRepr, ''FloatPrecisionRepr,
+        ''FnHandle, ''FunPerm, ''LLVMArrayBorrow,
+        ''LLVMArrayIndex, ''LLVMArrayPerm, ''LLVMBlockPerm, ''LLVMFieldPerm,
+        ''LLVMFieldShape, ''NamedPermName, ''NamedShape,
+        ''NamedShapeBody, ''NameReachConstr, ''NameSortRepr, ''NatRepr,
+        ''PermExpr, ''PermOffset, ''StringInfoRepr, ''SymbolRepr, ''TypeRepr,
+        ''ValuePerm, ''RWModality, ''PermImpl1, ''Member, ''SimplImpl,
+        ''VarAndPerm, ''LocalPermImpl, ''LifetimeFunctor, ''NamedPerm,
+        ''RecPerm, ''OpaquePerm, ''DefinedPerm, ''ReachMethods, ''MbPermImpls,
+        ''ExprAndPerm, ''OrListDisj, ''EndianForm
+        ]
+
+ in traverse generateJsonExport typesNeeded
+
 instance JsonExport (Name (t :: CrucibleType)) where
     jsonExport = toJSON . permPrettyString ?ppi
 
@@ -138,74 +209,3 @@ instance JsonExport1 VarAndPerm
 instance JsonExport1 Proxy
 instance JsonExport1 ExprAndPerm
 instance JsonExport1 (OrListDisj ps a) 
-
--- This code generates generic JSON generation instances for
--- algebraic data types.
---
--- - All instances will generate an object.
--- - The object will have a @tag@ field containing the name
---   of the constructor used.
--- - Record constructors will add each record field to the
---   object using the field name
--- - Normal constructors with fields will have a field called
---   @contents@. If this constructor has more than one parameter
---   the @contents@ field will have a list. Otherwise it will
---   have a single element.
-let fields :: String -> TH.ConstructorVariant -> [TH.ExpQ] -> TH.ExpQ
-
-    -- Record constructor, use record field names as JSON field names
-    fields tag (TH.RecordConstructor fieldNames) xs =
-        TH.listE
-          $ [| ("tag", tag) |]
-          : [ [| (n, $x) |] | n <- TH.nameBase <$> fieldNames | x <- xs]
-
-    -- No fields, so just report the constructor tag
-    fields tag _ []  = [| [("tag", tag)] |]
-
-    -- One field, just report that field as @contents@
-    fields tag _ [x] = [| [("tag", tag), ("contents", $x)] |]
-
-    -- Multiple fields, report them as a list as @contents@
-    fields tag _ xs  = [| [("tag", tag), ("contents", Array $(TH.listE xs))] |]
-
-    clauses :: TH.DatatypeInfo -> [TH.ClauseQ]
-    clauses info =
-        [do fieldVars <- for [0..length (TH.constructorFields con)-1] $ \i ->
-                            TH.newName ("x" ++ show i)
-            TH.clause
-              [TH.conP (TH.constructorName con) (TH.varP <$> fieldVars)]
-              (TH.normalB [|
-                object
-                    $(fields
-                        (TH.nameBase (TH.constructorName con))
-                        (TH.constructorVariant con)
-                        [ [| jsonExport $(TH.varE v) |] | v <- fieldVars ]) |])
-              []
-        | con <- TH.datatypeCons info ]
-
-    generateJsonExport :: TH.Name -> TH.DecQ
-    generateJsonExport n =
-      do info <- TH.reifyDatatype n
-         let t = foldl TH.appT (TH.conT n)
-               $ zipWith (\c _ -> TH.varT (TH.mkName [c])) ['a'..]
-               $ TH.datatypeInstTypes info
-         TH.instanceD (TH.cxt []) [t|JsonExport $t|]
-           [TH.funD 'jsonExport (clauses info)]
-
-    typesNeeded :: [TH.Name]
-    typesNeeded =
-        [''AtomicPerm, ''BaseTypeRepr, ''BoolRepr, ''BVFactor, ''BVProp,
-        ''BVRange, ''CruCtx, ''FloatInfoRepr, ''FloatPrecisionRepr,
-        ''FnHandle, ''FunPerm, ''LLVMArrayBorrow,
-        ''LLVMArrayIndex, ''LLVMArrayPerm, ''LLVMBlockPerm, ''LLVMFieldPerm,
-        ''LLVMFieldShape, ''NamedPermName, ''NamedShape,
-        ''NamedShapeBody, ''NameReachConstr, ''NameSortRepr, ''NatRepr,
-        ''PermExpr, ''PermOffset, ''StringInfoRepr, ''SymbolRepr, ''TypeRepr,
-        ''ValuePerm, ''RWModality, ''PermImpl1, ''Member, ''SimplImpl,
-        ''VarAndPerm, ''LocalPermImpl, ''LifetimeFunctor, ''NamedPerm,
-        ''RecPerm, ''OpaquePerm, ''DefinedPerm, ''ReachMethods, ''MbPermImpls,
-        ''ExprAndPerm, ''OrListDisj, ''EndianForm
-        ]
-
- in traverse generateJsonExport typesNeeded
-
