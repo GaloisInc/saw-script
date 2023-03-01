@@ -344,14 +344,14 @@ data TermFMap a
 
 emptyTFM :: TermFMap a
 emptyTFM = TermFMap mempty mempty
- 
+
 lookupTFM :: TermF Term -> TermFMap a -> Maybe a
 lookupTFM tf tfm =
   case tf of
     App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
       IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
     _ -> HMap.lookup tf (hashMapTFM tfm)
- 
+
 insertTFM :: TermF Term -> a -> TermFMap a -> TermFMap a
 insertTFM tf x tfm =
   case tf of
@@ -360,6 +360,7 @@ insertTFM tf x tfm =
           f (Just m) = Just (IntMap.insert j x m)
       in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
     _ -> tfm { hashMapTFM = HMap.insert tf x (hashMapTFM tfm) }
+
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
