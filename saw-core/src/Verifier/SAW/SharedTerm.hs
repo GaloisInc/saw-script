@@ -339,50 +339,27 @@ newtype Uninterp = Uninterp { getUninterp :: (String, Term) } deriving Show
 data TermFMap a
   = TermFMap
   { appMapTFM :: !(IntMap (IntMap a))
-  , hashMapTFM :: !(IntMap a)
-  -- ^ This was once a `HashMap (TermF Term) a`, and morally still maps `TermF
-  -- Term`s to `a`s, but does so by explicitly using term hashes as keys. The
-  -- switch was made because we want to be able to memoize `TermF Term` hashes
-  -- in `Term`s, so we need to compute/persist them ourselves outside of
-  -- manipulating these Maps. We give up the collision handling that `HashMap`s
-  -- offer, on the grounds that term hash collisions are `panic`-worthy.
+  , hashMapTFM :: !(HashMap (TermF Term) a)
   }
 
 emptyTFM :: TermFMap a
-emptyTFM = TermFMap IntMap.empty IntMap.empty
-
-data Hashed a
-  = Hashed
-  { hashedVal :: a
-  , hashedHash :: Int }
-
-hashed :: Hashable a => a -> Hashed a
-hashed x = Hashed { hashedVal = x, hashedHash = hash x }
-
+emptyTFM = TermFMap mempty mempty
+ 
 lookupTFM :: TermF Term -> TermFMap a -> Maybe a
-lookupTFM tf = lookupTFM' (hashed tf)
-
-lookupTFM' :: Hashed (TermF Term) -> TermFMap a -> Maybe a
-lookupTFM' (Hashed tf tfHash) tfm =
+lookupTFM tf tfm =
   case tf of
     App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
       IntMap.lookup i (appMapTFM tfm) >>= IntMap.lookup j
-    _ -> IntMap.lookup tfHash (hashMapTFM tfm)
-
-_insertTFM :: TermF Term -> a -> TermFMap a -> TermFMap a
-_insertTFM tf = insertTFM' (hashed tf)
-
-insertTFM' :: Hashed (TermF Term) -> a -> TermFMap a -> TermFMap a
-insertTFM' (Hashed tf tfHash) x tfm =
+    _ -> HMap.lookup tf (hashMapTFM tfm)
+ 
+insertTFM :: TermF Term -> a -> TermFMap a -> TermFMap a
+insertTFM tf x tfm =
   case tf of
     App (STApp{ stAppIndex = i }) (STApp{ stAppIndex = j}) ->
       let f Nothing = Just (IntMap.singleton j x)
           f (Just m) = Just (IntMap.insert j x m)
       in tfm { appMapTFM = IntMap.alter f i (appMapTFM tfm) }
-    _ -> tfm { hashMapTFM = IntMap.insertWith ins tfHash x (hashMapTFM tfm) }
-  where
-    ins _ _ = panic "insertTFM'" ["Term hash collision", "when inserting:", show tf]
-
+    _ -> tfm { hashMapTFM = HMap.insert tf x (hashMapTFM tfm) }
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
@@ -656,20 +633,19 @@ emptyAppCache = emptyTFM
 
 -- | Return term for application using existing term in cache if it is available.
 getTerm :: AppCacheRef -> TermF Term -> IO Term
-getTerm r a =
-  modifyMVar r $ \s -> do
-    case lookupTFM a s of
-      Just t -> return (s, t)
+getTerm cache termF =
+  modifyMVar cache $ \s -> do
+    case lookupTFM termF s of
+      Just term -> return (s, term)
       Nothing -> do
-        let h = hashed a
         i <- getUniqueInt
-        let t = STApp { stAppIndex = i
-                      , stAppHash = hashedHash h
-                      , stAppFreeVars = freesTermF (fmap looseVars a)
-                      , stAppTermF = hashedVal h
-                      }
-            s' = insertTFM' h t s
-        seq s' $ return (s', t)
+        let term = STApp { stAppIndex = i
+                         , stAppHash = hash termF
+                         , stAppFreeVars = freesTermF (fmap looseVars termF)
+                         , stAppTermF = termF
+                         }
+            s' = insertTFM termF term s
+        seq s' $ return (s', term)
 
 
 --------------------------------------------------------------------------------
