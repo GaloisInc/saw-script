@@ -38,7 +38,10 @@ library
     filepath,
     language-rust,
     hobbits ^>= 1.4,
-    extra,
+    aeson ^>= 1.5,
+    th-abstraction,
+    template-haskell,
+    extra
   hs-source-dirs: src
   build-tool-depends:
     alex:alex,
@@ -46,12 +49,15 @@ library
   exposed-modules:
     Verifier.SAW.Heapster.CruUtil
     Verifier.SAW.Heapster.GenMonad
+    Verifier.SAW.Heapster.IDESupport
     Verifier.SAW.Heapster.HintExtract
     Verifier.SAW.Heapster.Implication
     Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer
     Verifier.SAW.Heapster.LLVMGlobalConst
     Verifier.SAW.Heapster.Located
+    Verifier.SAW.Heapster.NamedMb
+    Verifier.SAW.Heapster.JSONExport
     Verifier.SAW.Heapster.ParsedCtx
     Verifier.SAW.Heapster.Parser
     Verifier.SAW.Heapster.Permissions
