@@ -383,8 +383,8 @@ alphaEquiv = term
     term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
     term (Unshared tf1) (STApp{stAppTermF = tf2}) = termf tf1 tf2
     term (STApp{stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
-    term (STApp{stAppIndex = i1, stAppTermF = tf1})
-         (STApp{stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
+    term (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
+         (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) = (i1 == i2 && h1 == h2) || termf tf1 tf2
 
     termf :: TermF Term -> TermF Term -> Bool
     termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
