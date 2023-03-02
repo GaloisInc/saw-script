@@ -33,6 +33,7 @@ module SAWScript.Proof
   , propToSATQuery
   , normalizeProp
   , checkProp
+  , unProp
 
   , Sequent
   , sequentGetFocus
@@ -55,6 +56,8 @@ module SAWScript.Proof
   , filterHyps
   , filterConcls
   , localHypSimpset
+  , SequentState(..)
+  , sequentState
 
   , CofinSet(..)
   , cofinSetMember
@@ -87,8 +90,9 @@ module SAWScript.Proof
   , Evidence(..)
   , checkEvidence
   , structuralEvidence
+  , leafEvidence
 
-  , Tactic
+  , Tactic(..)
   , withFirstGoal
   , tacticIntro
   , tacticApply
@@ -1071,6 +1075,9 @@ data Evidence
     --   applying structural rules, is an instance of the basic
     --   sequent calculus axiom, which connects a hypothesis to a conclusion.
   | AxiomEvidence
+
+  -- | TODO: Add some evidence
+  | MrSolverEvidence
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop

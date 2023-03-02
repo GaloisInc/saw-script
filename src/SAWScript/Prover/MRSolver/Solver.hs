@@ -141,9 +141,11 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 
+import SAWScript.Proof
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
 import SAWScript.Prover.MRSolver.SMT
+import SAWScript.Prover.SolverStats
 
 
 ----------------------------------------------------------------------
@@ -422,7 +424,7 @@ normComp (CompTerm t) =
     -- Always unfold recursors applied to constructors
     (asRecursorApp -> Just (rc, crec, _, arg), args)
       | Just (c, _, cargs) <- asCtorParams arg ->
-      do hd' <- liftSC4 scReduceRecursor rc crec c cargs 
+      do hd' <- liftSC4 scReduceRecursor rc crec c cargs
                   >>= liftSC1 betaNormalize
          t' <- mrApplyAll hd' args
          normCompTerm t'
@@ -940,7 +942,7 @@ mrRefines' m1 (OrS m2 m2') =
   mrOr (mrRefines m1 m2) (mrRefines m1 m2')
 mrRefines' (OrS m1 m1') m2 =
   mrRefines m1 m2 >> mrRefines m1' m2
-     
+
 -- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
 mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
@@ -1295,3 +1297,24 @@ assumeMRSolver sc env timeout t1 t2 =
      tp2 <- scTypeOf sc t2 >>= scWhnf sc
      runMRM sc timeout env $
        mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tp1 t1 tp2 t2
+
+-- | ...
+proveRefinement ::
+  SharedContext ->
+  MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  Tactic IO ()
+proveRefinement sc env timeout = Tactic $ \goal ->
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "tactic exact: focus required"
+    HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
+    ConclFocus (asApplyAll . unProp -> (asGlobalDef -> Just "Prelude.refinesS",
+                               [_E1, _E2, _stack1, _stack2,
+                                _RPre, _RPost, _R1, _R2, _RR,
+                                t1, t2])) _ ->
+      lift (askMRSolver sc env timeout t1 t2) >>= \case
+        Left err -> error (showMRFailure err)
+        Right res ->
+          do let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal))
+             return ((), stats, [], leafEvidence MrSolverEvidence)
+
