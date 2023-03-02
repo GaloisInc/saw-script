@@ -6,6 +6,12 @@ module CryptolM where
 -- import Prelude;
 import Cryptol;
 
+-- Alternate versions of gen and at to get around the behavior of the default prims
+genCryM : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
+genCryM = gen;
+atCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
+atCryM = at;
+
 
 --------------------------------------------------------------------------------
 -- Monadic assertions
@@ -116,43 +122,41 @@ bvVecMapM : (E:EvType) -> (stack:FunStack) ->
             (a -> SpecM E stack b) -> BVVec n len a ->
             SpecM E stack (BVVec n len b);
 bvVecMapM E stack a b n len f xs = bvVecMapInvarM E stack a b n len f xs True;
+-}
 
 vecMapInvarBindM : (E:EvType) -> (stack:FunStack) ->
-                   (a b c : isort 0) -> (n : Nat) -> (a -> SpecM E stack b) ->
+                   (a b c : isort 0) -> (n : Nat) -> (Nat -> a -> SpecM E stack b) ->
                    Vec n a -> Bool -> (Vec n b -> SpecM E stack c) ->
                    SpecM E stack c;
 vecMapInvarBindM E stack a b c n f xs invar cont =
-  existsM (Vec n b) c (\ (ys0:Vec n b) ->
-    multiArgFixM
-      (LRT_Fun Nat (\ (_:Nat) ->
-       LRT_Fun (Vec n b) (\ (_:Vec n b) ->
-       LRT_Ret c)))
-      (\ (rec : Nat -> Vec n b -> SpecM E stack c) (i:Nat) (ys:Vec n b) ->
-         invariantHint (SpecM E stack c) (and (ltNat i (Succ n)) invar)
-           (maybe (IsLtNat i n) (SpecM E stack c)
-                  (cont ys)
+  bindS E stack (Vec n b) c
+    (existsS E stack (Vec n b)) (\ (ys0:Vec n b) ->
+    multiArgFixS E stack
+      (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))
+      (\ (rec : Nat -> Vec n b -> SpecM E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) stack) c)
+         (i:Nat) (ys:Vec n b) ->
+         invariantHint (SpecM E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) stack) c) (and (ltNat i (Succ n)) invar)
+           (maybe (IsLtNat i n) (SpecM E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) stack) c)
+                  (pushStackS E (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) stack c
+                              (cont ys))
                   (\ (pf:IsLtNat i n) ->
-                     bindS E stack b c
-                           (f (atWithProof n a xs i pf))
+                     bindS E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) stack) b c
+                           (pushStackS E (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) stack b
+                                       (f i (atWithProof n a xs i pf)))
                            (\ (y:b) -> rec (Succ i)
                                            (updWithProof n b ys i y pf)))
                   (proveLtNat i n)))
       0 ys0);
 
 vecMapInvarM : (E:EvType) -> (stack:FunStack) ->
-               (a b : isort 0) -> (n : Nat) -> (a -> SpecM E stack b) ->
+               (a b : isort 0) -> (n : Nat) -> (Nat -> a -> SpecM E stack b) ->
                Vec n a -> Bool -> SpecM E stack (Vec n b);
 vecMapInvarM E stack a b n f xs invar =
   vecMapInvarBindM E stack a b (Vec n b) n f xs invar (retS E stack (Vec n b));
 
 vecMapM : (E:EvType) -> (stack:FunStack) -> (a b : isort 0) -> (n : Nat) ->
-          (a -> SpecM E stack b) -> Vec n a -> SpecM E stack (Vec n b);
+          (Nat -> a -> SpecM E stack b) -> Vec n a -> SpecM E stack (Vec n b);
 vecMapM E stack a b n f xs = vecMapInvarM E stack a b n f xs True;
--}
-
-primitive
-vecMapM : (E:EvType) -> (stack:FunStack) -> (a b : isort 0) -> (n : Nat) ->
-          (a -> SpecM E stack b) -> Vec n a -> SpecM E stack (Vec n b);
 
 -- Computational version of seqMap
 seqMapM : (E:EvType) -> (stack:FunStack) ->
@@ -160,7 +164,7 @@ seqMapM : (E:EvType) -> (stack:FunStack) ->
           mseq E stack n a -> SpecM E stack (mseq E stack n b);
 seqMapM E stack a b n_top f =
   Num_rec (\ (n:Num) -> mseq E stack n a -> SpecM E stack (mseq E stack n b))
-          (\ (n:Nat) -> vecMapM E stack a b n f)
+          (\ (n:Nat) -> vecMapM E stack a b n (\(i:Nat) -> f))
           (\ (s:Stream (SpecM E stack a)) ->
              retS E stack (Stream (SpecM E stack b))
                   (streamMap (SpecM E stack a) (SpecM E stack b)
@@ -261,19 +265,50 @@ mletM : (E:EvType) -> (stack:FunStack) ->
         (a -> SpecM E stack (mseq E stack n b)) ->
         SpecM E stack (mseq E stack n (a * b));
 
--- FIXME
-primitive
+-- An alternate version of zip from Prelude to get around the default Prim
+zipCryM : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
+zipCryM a b m n xs ys =
+  genCryM (minNat m n) (a * b) (\ (i:Nat) -> (atCryM m a xs i, atCryM n b ys i));
+
 seqZipM : (E:EvType) -> (stack:FunStack) ->
-          (a b : sort 0) -> (m n : Num) -> mseq E stack m a ->
-          mseq E stack n b -> SpecM E stack (mseq E stack (tcMin m n) (a * b));
-{-
-seqZipM a b m n ms1 ms2 =
-  seqMap
-    (CompM a * CompM b) (CompM (a * b)) (tcMin m n)
-    (\ (p : CompM a * CompM b) ->
-       bindM2 a b (a*b) p.(1) p.(2) (\ (x:a) (y:b) -> returnM (a*b) (x,y)))
-    (seqZip (CompM a) (CompM b) m n ms1 ms2);
--}
+          (a b : sort 0) -> (m n : Num) ->
+          mseq E stack m a -> mseq E stack n b ->
+          SpecM E stack (mseq E stack (tcMin m n) (a * b));
+seqZipM E stack a b m n =
+  Num_rec
+    (\ (m:Num) -> mseq E stack m a -> mseq E stack n b
+               -> SpecM E stack (mseq E stack (tcMin m n) (a * b)))
+    (\ (m : Nat) ->
+       Num_rec
+         (\ (n:Num) -> Vec m a -> mseq E stack n b
+                    -> SpecM E stack (mseq E stack (tcMin (TCNum m) n) (a * b)))
+         (\ (n:Nat) ->
+          \ (xs:Vec m a) -> \ (ys:Vec n b) ->
+            retS E stack (Vec (minNat m n) (a * b)) (zipCryM a b m n xs ys))
+         (\ (xs:Vec m a) -> \ (ys:Stream (SpecM E stack b)) ->
+            vecMapM E stack a (a * b) m
+              (\ (i : Nat) (x : a) ->
+                fmapS E stack b (a * b) (\ (y : b) -> (x,y))
+                  (streamGet (SpecM E stack b) ys i))
+              xs)
+         n)
+    (Num_rec
+       (\ (n:Num) -> Stream (SpecM E stack a) -> mseq E stack n b
+                  -> SpecM E stack (mseq E stack (tcMin TCInf n) (a * b)))
+       (\ (n:Nat) ->
+        \ (xs:Stream (SpecM E stack a)) -> \ (ys:Vec n b) ->
+          vecMapM E stack b (a * b) n
+            (\ (i : Nat) (y : b) ->
+              fmapS E stack a (a * b) (\ (x : a) -> (x,y))
+                (streamGet (SpecM E stack a) xs i))
+            ys)
+       (\ (xs:Stream (SpecM E stack a)) -> \ (ys:Stream (SpecM E stack b)) ->
+          retS E stack (Stream (SpecM E stack (a * b)))
+            (streamMap2 (SpecM E stack a) (SpecM E stack b) (SpecM E stack (a * b))
+               (fmapS2 E stack a b (a * b) (\ (x:a) -> \ (y:b) -> (x, y)))
+               xs ys))
+       n)
+    m;
 
 
 --------------------------------------------------------------------------------
@@ -401,12 +436,6 @@ PLiteralSeqBoolM E stack =
 
 
 -- Sequences
-
--- Alternate versions of gen and at to get around the behavior of the default prims
-genCryM : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
-genCryM = gen;
-atCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
-atCryM = at;
 
 -- FIXME: a number of the non-monadic versions of these functions contain calls
 -- to finNumRec, which calls error on non-finite numbers. The monadic versions
@@ -573,7 +602,7 @@ ecSplitM E stack =
                streamMap (Vec (Succ n') (SpecM E stack a))
                          (SpecM E stack (Vec (Succ n') a))
                          (vecMapM E stack (SpecM E stack a) a (Succ n')
-                                  (id (SpecM E stack a)))
+                                  (\(i:Nat) (x:SpecM E stack a) -> x))
                          (streamSplit (SpecM E stack a) (Succ n') xs))
             n));
        -- No case for (TCInf, TCInf), shouldn't happen

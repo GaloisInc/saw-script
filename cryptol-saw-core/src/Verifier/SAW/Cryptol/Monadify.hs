@@ -1230,6 +1230,25 @@ eitherMacro = MonMacro 3 $ \_ args ->
                             (MTyArrow (MTyArrow mtp_b mtp_c)
                              (MTyArrow (mkMonType0 tp_eith) mtp_c))) eith_app
 
+-- | The macro for uncurry, which converts the application @uncurry a b c@
+-- to @uncurry a b (CompM c)@
+uncurryMacro :: MonMacro
+uncurryMacro = MonMacro 3 $ \_ args ->
+  usingSpecMParams $
+  do let (tp_a, tp_b, tp_c) =
+           case args of
+             [t1, t2, t3] -> (t1, t2, t3)
+             _ -> error "uncurryMacro: wrong number of arguments!"
+     mtp_a <- monadifyTypeM tp_a
+     mtp_b <- monadifyTypeM tp_b
+     mtp_c <- monadifyTypeM tp_c
+     let unc_app = applyGlobalOpenTerm "Prelude.uncurry" [toArgType mtp_a,
+                                                          toArgType mtp_b,
+                                                          toCompType mtp_c]
+     let tp_tup = pairTypeOpenTerm (toArgType mtp_a) (toArgType mtp_b)
+     return $ fromCompTerm (MTyArrow (MTyArrow mtp_a (MTyArrow mtp_b mtp_c))
+                            (MTyArrow (mkMonType0 tp_tup) mtp_c)) unc_app
+
 -- | The macro for invariantHint, which converts @invariantHint a cond m@
 -- to @invariantHint (CompM a) cond m@ and which contains any binds in the body
 -- to the body
@@ -1357,6 +1376,7 @@ defaultMonTable =
   , mmCustom "Prelude.ite" iteMacro
   , mmCustom "Prelude.fix" fixMacro
   , mmCustom "Prelude.either" eitherMacro
+  , mmCustom "Prelude.uncurry" uncurryMacro
   , mmCustom "Prelude.invariantHint" invariantHintMacro
   , mmCustom "Prelude.asserting" (assertingOrAssumingMacro True)
   , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
@@ -1368,6 +1388,7 @@ defaultMonTable =
 
     -- List comprehensions
   , mmArg "Cryptol.from" "CryptolM.fromM" True
+  , mmArg "Cryptol.seqZip" "CryptolM.seqZipM" True
     -- FIXME: continue here...
 
     -- PEq constraints
@@ -1490,48 +1511,54 @@ monadifyName (ImportedName uri aliases) =
      let aliases' = concatMap (\a -> [a, T.append a (T.pack "#M")]) aliases
      return $ ImportedName (uri { URI.uriFragment = Just frag }) aliases'
 
--- | Monadify a 'Term' of the specified type with an optional body and bind the
--- result to a fresh SAW core constant generated from the supplied name
-monadifyNamedTermH :: SharedContext -> MonadifyEnv ->
-                      NameInfo -> Maybe Term -> Term ->
-                      IO (MonType, Term)
-monadifyNamedTermH sc env nmi maybe_trm tp =
+-- | The implementation of 'monadifyNamedTerm' in the @StateT MonadifyEnv IO@ monad
+monadifyNamedTermH :: SharedContext -> NameInfo -> Maybe Term -> Term ->
+                      StateT MonadifyEnv IO MonTerm
+monadifyNamedTermH sc nmi maybe_trm tp =
   trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
-  let ?specMParams = monEnvParams env in
+  get >>= \env -> let ?specMParams = monEnvParams env in
   do let mtp = monadifyType [] tp
-     nmi' <- monadifyName nmi
-     comp_tp <- completeOpenTerm sc $ toCompType mtp
+     nmi' <- lift $ monadifyName nmi
+     comp_tp <- lift $ completeOpenTerm sc $ toCompType mtp
      const_trm <-
        case maybe_trm of
          Just trm ->
-           do trm' <- monadifyCompleteTerm sc env trm tp
-              scConstant' sc nmi' trm' comp_tp
-         Nothing -> scOpaqueConstant sc nmi' tp
-     return (mtp, const_trm)
+          --  trace ("" ++ ppTermInMonCtx env trm ++ "\n\n") $
+           do trm' <- monadifyTermInEnvH sc trm tp
+              lift $ scConstant' sc nmi' trm' comp_tp
+         Nothing -> lift $ scOpaqueConstant sc nmi' tp
+     return $ fromCompTerm mtp $ closedOpenTerm const_trm
 
 -- | Monadify a 'Term' of the specified type with an optional body, bind the
 -- result to a fresh SAW core constant generated from the supplied name, and
--- then convert that constant back to a 'MonTerm'
+-- then convert that constant back to a 'MonTerm'. Like 'monadifyTermInEnv',
+-- this function also monadifies all constants the body contains, and adds
+-- the monadifications of those constants to the monadification environment.
 monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
-                     NameInfo -> Maybe Term -> Term -> IO MonTerm
+                     NameInfo -> Maybe Term -> Term ->
+                     IO (MonTerm, MonadifyEnv)
 monadifyNamedTerm sc env nmi maybe_trm tp =
-  let ?specMParams = monEnvParams env in
-  do (mtp, const_trm) <- monadifyNamedTermH sc env nmi maybe_trm tp
-     return $ fromCompTerm mtp $ closedOpenTerm const_trm
+  flip runStateT env $ monadifyNamedTermH sc nmi maybe_trm tp
 
--- | Monadify all the constants contained in the given term, adding the
--- monadifications of those constants to the monadification environment
-monadifyContainedConstants :: SharedContext -> MonadifyEnv -> Term -> IO MonadifyEnv
-monadifyContainedConstants sc top_env top_trm =
-  flip execStateT top_env $
+-- | The implementation of 'monadifyTermInEnv' in the @StateT MonadifyEnv IO@ monad
+monadifyTermInEnvH :: SharedContext -> Term -> Term ->
+                      StateT MonadifyEnv IO Term
+monadifyTermInEnvH sc top_trm top_tp =
   do lift $ ensureCryptolMLoaded sc
      let const_infos =
            map snd $ Map.toAscList $ getConstantSet top_trm
      forM_ const_infos $ \(nmi,tp,maybe_body) ->
        get >>= \env ->
-       if Map.member nmi (monEnvMonTable env) then return () else
-         do mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
+       if isPreludeName nmi ||
+          Map.member nmi (monEnvMonTable env) then return () else
+         do mtrm <- monadifyNamedTermH sc nmi maybe_body tp
             modify $ monEnvAdd nmi (monMacro0 mtrm)
+     env <- get
+     lift $ monadifyCompleteTerm sc env top_trm top_tp
+  where preludeModules = mkModuleName <$> [["Prelude"], ["Cryptol"]]
+        isPreludeName = \case
+          ModuleIdentifier ident -> identModule ident `elem` preludeModules
+          _ -> False
 
 -- | Monadify a term with the specified type along with all constants it
 -- contains, adding the monadifications of those constants to the monadification
@@ -1539,20 +1566,23 @@ monadifyContainedConstants sc top_env top_trm =
 monadifyTermInEnv :: SharedContext -> MonadifyEnv ->
                      Term -> Term -> IO (Term, MonadifyEnv)
 monadifyTermInEnv sc top_env top_trm top_tp =
-  do env <- monadifyContainedConstants sc top_env top_trm
-     tm <- monadifyCompleteTerm sc env top_trm top_tp
-     return (tm, env)
+  flip runStateT top_env $ monadifyTermInEnvH sc top_trm top_tp
+
+-- | The implementation of 'monadifyCryptolModule' in the @StateT MonadifyEnv IO@ monad
+monadifyCryptolModuleH :: SharedContext -> Env -> CryptolModule ->
+                          StateT MonadifyEnv IO CryptolModule
+monadifyCryptolModuleH sc cry_env (CryptolModule tysyns top_tts) =
+  fmap (CryptolModule tysyns) $ flip mapM top_tts $ \top_tt ->
+    do let top_tm = ttTerm top_tt
+       top_tp <- lift $ ttTypeAsTerm sc cry_env top_tt
+       tm <- monadifyTermInEnvH sc top_tm top_tp
+       tm' <- lift $ mkTypedTerm sc tm
+       return tm'
 
 -- | Monadify each term in the given 'CryptolModule' along with all constants each
 -- contains, returning a new module which each term monadified, and adding the
 -- monadifications of all encountered constants to the monadification environment
 monadifyCryptolModule :: SharedContext -> Env -> MonadifyEnv ->
                          CryptolModule -> IO (CryptolModule, MonadifyEnv)
-monadifyCryptolModule sc cry_env top_env (CryptolModule tysyns top_tts) =
-  flip runStateT top_env $
-  fmap (CryptolModule tysyns) $ flip mapM top_tts $ \top_tt -> StateT $ \env ->
-    do let top_tm = ttTerm top_tt
-       top_tp <- ttTypeAsTerm sc cry_env top_tt
-       (tm, env') <- monadifyTermInEnv sc env top_tm top_tp
-       tm' <- mkTypedTerm sc tm
-       return (tm', env')
+monadifyCryptolModule sc cry_env top_env cry_mod =
+  flip runStateT top_env $ monadifyCryptolModuleH sc cry_env cry_mod

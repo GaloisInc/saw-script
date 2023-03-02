@@ -3048,9 +3048,22 @@ assertingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
 assertingS E stack a cond m =
   bindS E stack #() a (assertBoolS E stack cond) (\ (_:#()) -> m);
 
+-- Lift a computation into a stack with an additional frame
+primitive pushStackS : (E:EvType) -> (frame:List1 LetRecType) ->
+                       (stack:FunStack) -> (A:sort 0) ->
+                       SpecM E stack A -> SpecM E (pushFunStack frame stack) A;
+
 -- Lift a computation in the empty stack to an arbitrary stack
-primitive liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
-                       SpecM E emptyFunStack A -> SpecM E stack A;
+liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
+             SpecM E emptyFunStack A -> SpecM E stack A;
+liftStackS E stack A m0 =
+  List1#rec
+  (List1 LetRecType)
+  (\ (stack:FunStack) -> SpecM E stack A)
+  m0
+  (\ (frame:List1 LetRecType) (stack:FunStack) (m:SpecM E stack A) ->
+     pushStackS E frame stack A m)
+  stack;
 
 -- The computation that nondeterministically chooses one computation or another.
 -- As a specification, represents the disjunction of two specifications.
