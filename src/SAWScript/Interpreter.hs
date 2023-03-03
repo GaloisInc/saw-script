@@ -1833,14 +1833,6 @@ primitives = Map.fromList
     , "inlining the variables that would otherwise be abstracted as `x@1`,"
     , " `x@9`, and `x@3`."
     ]
-  , prim "print_goal_inline_term"      "[String] -> ProofScript ()"
-    (pureVal print_goal_inline_term)
-    Experimental
-    [ "Print the current goal that a proof script is attempting to prove,"
-    , "without generating `let` bindings for the provided terms. For example"
-    , "`print_goal_inline [\"Vec 8 Bool\"]` will print the goal without"
-    , "inlining any occurrence of `Vec 8 Bool`."
-    ]
   , prim "write_goal" "String -> ProofScript ()"
     (pureVal write_goal)
     Current

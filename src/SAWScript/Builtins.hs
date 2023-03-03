@@ -474,19 +474,6 @@ print_goal_inline noInline =
       let output = prettySequent opts' nenv (goalSequent goal)
       printOutLnTop Info (unlines [goalSummary goal, output])
 
-print_goal_inline_term :: [String] -> ProofScript ()
-print_goal_inline_term termStrs =
-  execTactic $ tacticId $ \goal ->
-    do
-      terms <- mapM parseCore termStrs
-      let idxs = Set.fromList [idx | STApp idx _ _ <- terms]
-      opts <- getTopLevelPPOpts
-      let opts' = opts { ppNoInlineIdx = idxs }
-      sc <- getSharedContext
-      nenv <- io (scGetNamingEnv sc)
-      let output = prettySequent opts' nenv (goalSequent goal)
-      printOutLnTop Info (unlines [goalSummary goal, output])
-
 print_goal_summary :: ProofScript ()
 print_goal_summary =
   execTactic $ tacticId $ \goal ->
