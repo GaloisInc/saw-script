@@ -4177,6 +4177,13 @@ primitives = Map.fromList
     [ "Parse and print back a set of Heapster permissions for a function"
     ]
 
+  , prim "heapster_dump_ide_info"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_dump_ide_info)
+    Experimental
+    [ "Dump environment info to a JSON file for IDE integration."
+    ]
+
     ---------------------------------------------------------------------
 
   , prim "sharpSAT"  "Term -> TopLevel Integer"
