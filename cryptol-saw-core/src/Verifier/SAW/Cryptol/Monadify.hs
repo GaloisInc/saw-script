@@ -1526,7 +1526,7 @@ monadifyNamedTermH sc nmi maybe_trm tp =
           --  trace ("" ++ ppTermInMonCtx env trm ++ "\n\n") $
            do trm' <- monadifyTermInEnvH sc trm tp
               lift $ scConstant' sc nmi' trm' comp_tp
-         Nothing -> lift $ scOpaqueConstant sc nmi' tp
+         Nothing -> lift $ scOpaqueConstant sc nmi' comp_tp
      return $ fromCompTerm mtp $ closedOpenTerm const_trm
 
 -- | Monadify a 'Term' of the specified type with an optional body, bind the
