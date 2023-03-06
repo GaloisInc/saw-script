@@ -70,6 +70,7 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule,
                                 ImportPrimitiveOptions(..), mkCryEnv)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import Verifier.SAW.Cryptol.PreludeM (cryptolMModule, scLoadCryptolMModule)
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv, monadifyCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
@@ -530,16 +531,18 @@ writeCoqSAWCorePrelude outputFile notations skips = do
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
 
 writeCoqCryptolPrimitivesForSAWCore ::
-  FilePath ->
+  FilePath -> FilePath ->
   [(String, String)] ->
   [String] ->
   IO ()
-writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
+writeCoqCryptolPrimitivesForSAWCore outputFile outputFileM notations skips = do
   sc <- mkSharedContext
   () <- scLoadPreludeModule sc
   () <- scLoadCryptolModule sc
+  () <- scLoadCryptolMModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  m_mon <- scFindModule sc (Un.moduleName cryptolMModule)
   let configuration =
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
@@ -548,6 +551,10 @@ writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration
                                       , doc
                                       ])
+  let doc_mon = Coq.translateSAWModule configuration m_mon
+  writeFile outputFileM (show . vcat $ [ Coq.preamble configuration
+                                       , doc_mon
+                                       ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
