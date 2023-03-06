@@ -330,6 +330,10 @@ zipWithFlatTermF f = go
 
 -- Term Functor ----------------------------------------------------------------
 
+-- | A \"knot-tying\" structure for representing terms and term-like things.
+-- Often, this appears in context as the type \"'TermF' 'Term'\", in which case
+-- it represents a full 'Term' AST. The \"F\" stands for 'Functor', or
+-- occasionally for \"Former\".
 data TermF e
     = FTermF !(FlatTermF e)
       -- ^ The atomic, or builtin, term constructs
@@ -355,9 +359,11 @@ type TermIndex = Int -- Word64
 
 -- | For more information on the semantics of 'Term's, see the
 -- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
--- into two structures to facilitate creation of a 'Functor' instance for terms
--- (the \"F\" in 'TermF' stands for 'Functor') and to facilitate term object
--- reuse via hash-consing.
+-- into two structures to facilitate mutual structural recursion (sometimes
+-- referred to as the ["knot-tying"](https://wiki.haskell.org/Tying_the_Knot)
+-- pattern, sometimes referred to in terms of ["recursion
+-- schemes"](https://blog.sumtypeofway.com/posts/introduction-to-recursion-schemes.html))
+-- and term object reuse via hash-consing.
 data Term
   = STApp
     -- ^ This constructor \"wraps\" a 'TermF' 'Term', assigning it a
@@ -365,7 +371,7 @@ data Term
     -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
     -- in the course of a SAW invocation and needs to be lifted into a 'Term',
     -- we can see if we've already created a 'Term' wrapper for an identical
-    -- 'TermF', and if so reuse it. The implementation of hash-consed 'Term'
+    -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
     -- construction exists in 'Verifier.SAW.SharedTerm', in particular in the
     -- 'Verifier.SAW.SharedTerm.scTermF' field of the
     -- t'Verifier.SAW.SharedTerm.SharedContext' object.
@@ -380,7 +386,8 @@ data Term
      , stAppFreeVars :: !BitSet
        -- ^ The free variables associated with the 'stAppTermF' field.
      , stAppTermF    :: !(TermF Term)
-       -- ^ The underlying 'TermF' that this 'Term' wraps.
+       -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
+       -- knot" of the 'Term'/'TermF' recursion scheme.
      }
   | Unshared !(TermF Term)
     -- ^ Used for constructing 'Term's that don't need to be shared/reused.
