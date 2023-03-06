@@ -174,7 +174,7 @@ data NameInfo
   | -- | This name was imported from some other programming language/scope
     ImportedName
       URI      -- ^ An absolutely-qualified name, which is required to be unique
-      [Text]   -- ^ A collection of aliases for this name.  Sorter or "less-qualified"
+      [Text]   -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
                --   aliases should be nearer the front of the list
 
  deriving (Eq,Ord,Show)

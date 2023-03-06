@@ -353,14 +353,37 @@ instance Hashable e => Hashable (TermF e) -- automatically derived.
 
 type TermIndex = Int -- Word64
 
+-- | For more information on the semantics of 'Term's, see the
+-- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
+-- into two structures to facilitate creation of a 'Functor' instance for terms
+-- (the \"F\" in 'TermF' stands for 'Functor') and to facilitate term object
+-- reuse via hash-consing.
 data Term
   = STApp
+    -- ^ This constructor \"wraps\" a 'TermF' 'Term', assigning it a
+    -- guaranteed-unique integer identifier and caching its likely-unique hash.
+    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
+    -- in the course of a SAW invocation and needs to be lifted into a 'Term',
+    -- we can see if we've already created a 'Term' wrapper for an identical
+    -- 'TermF', and if so reuse it. The implementation of hash-consed 'Term'
+    -- construction exists in 'Verifier.SAW.SharedTerm', in particular in the
+    -- 'Verifier.SAW.SharedTerm.scTermF' field of the
+    -- t'Verifier.SAW.SharedTerm.SharedContext' object.
      { stAppIndex    :: {-# UNPACK #-} !TermIndex
-     , stAppHash     :: {-# UNPACK #-} !Int -- The hash of the `stAppTermF` field
-     , stAppFreeVars :: !BitSet -- Free variables
+       -- ^ The UID associated with a 'Term'. It is guaranteed unique across a
+       -- universe of properly-constructed 'Term's within a single SAW
+       -- invocation.
+     , stAppHash     :: {-# UNPACK #-} !Int
+       -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
+       -- with this 'Term'. This should be as unique as a hash can be, but is
+       -- not guaranteed unique as 'stAppIndex' is.
+     , stAppFreeVars :: !BitSet
+       -- ^ The free variables associated with the 'stAppTermF' field.
      , stAppTermF    :: !(TermF Term)
+       -- ^ The underlying 'TermF' that this 'Term' wraps.
      }
   | Unshared !(TermF Term)
+    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
   deriving (Show, Typeable)
 
 instance Hashable Term where
