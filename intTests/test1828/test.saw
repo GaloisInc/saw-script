@@ -1,0 +1,2 @@
+write_aig "left.aig" {{ \x -> x * 0x12345678 }};
+write_aig "right.aig" {{ \x -> 0x12345678 * x }};
