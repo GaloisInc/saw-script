@@ -690,7 +690,7 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 
-(* The following 2 lines allows better automatio*)
+(* The following 2 lines allows better automation *)
 Require Import Examples.common.
 Require Import Coq.Program.Tactics. (* Great tacticals, move to automation. Perhaps `Require Export`? *)
 
