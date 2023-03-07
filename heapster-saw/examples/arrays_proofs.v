@@ -229,39 +229,6 @@ Proof.
       all: auto.
       
 Qed.
- 
-(* The old version
-  : refinesFun zero_array (fun x _ => assumingM (zero_array_precond x) noErrorsSpec).
-Proof.
-  unfold zero_array, zero_array__tuple_fun, zero_array_precond.
-  prove_refinement_match_letRecM_l.
-  - exact (fun a' i _ _ _ _ => assumingM (zero_array_invariant a a' i) noErrorsSpec).
-  unfold zero_array_invariant, noErrorsSpec.
-  fold bvMem_lo; fold bvMem_hi.
-  time "no_errors_zero_array" prove_refinement.
-  (* A number of the remaining cases are covered exactly by hypotheses we already have in
-     scope (e.g. proving the loop invariant holds initially). Note that `prove_refinement`
-     doesn't do this automatically because it may matter which hypothesis is used, if
-     there are multiple. For this poof though, it doesn't. *)
-  all: try assumption.
-  (* Proving that the loop invariant holds inductively: *)
-  - discriminate e_maybe.
-  - transitivity a2.
-    + assumption.
-    + apply isBvsle_suc_r; eauto.
-      rewrite e_assuming2, e_assuming0.
-      reflexivity.
-  - apply isBvslt_to_isBvsle_suc.
-    apply isBvult_to_isBvslt_pos; assumption.
-  (* Proving that these branches are impossible, by virtue of our loop invariant: *)
-  - rewrite <- e_assuming1 in e_if0.
-    discriminate e_if0.
-  - rewrite e_assuming2, e_assuming0 in e_if0.
-    apply isBvslt_antirefl in e_if0; contradiction e_if0.
-  (* The remaining cases are all taken care of by either prove_refinement or assumption! *)
-Qed.
-
- *)
 
 
 Definition contains0_precond l

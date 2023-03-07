@@ -725,16 +725,22 @@ obviously will fail, since `add_mistyped` has an error. First, you
 will note that `add_mistyped` only takes one argument (since only one
 was defined in it's signature)
 
+```
 Lemma no_errors_add_mistyped (x: bitvector 64) :
   spec_refines_eq (add_mistyped x) (safety_spec (x)).
 Proof. solve_trivial_spec 0 0.
 
-(* After rewriting the terms for clarity, you can see the
-   remaining goal says that an `ErrorS` is a refinement of
-   `RetS`. In other words, it's trying to prove that a trivially
-   pure function has an error. That's obviously false. *)
-      clarify_goal_tutorial.
+	clarify_goal_tutorial.
+```
+
+After rewriting the terms for clarity, you can see the
+remaining goal says that an `ErrorS` is a refinement of
+`RetS`. In other words, it's trying to prove that a trivially
+pure function has an error. That's obviously false.
+
+```
 Abort.
+```
 
 Congratulations you have written your first Coq proofs with Heapster!
 
@@ -793,10 +799,10 @@ You will have to generate the `.vo` again to write proofs about
 produces no errors.
 
 ```
-
 Lemma no_errors_incr_ptr (x: bitvector 64) :
   spec_refines_eq (incr_ptr x) (safety_spec x).
-Proof.  solve_trivial_spec 0 0. Qed.```
+Proof.  solve_trivial_spec 0 0. Qed.
+```
 
 ### Structs
 
@@ -986,7 +992,9 @@ readability (see below for how to enable such pritty printing).
    else RetS p0, tt))
 ```
  
-The arguments `e0`, `e1` and `p1` correspond to the length `len`, the
+Notice there are two functions, the outermost one represents
+`zero_array` and the one inside represents the loop. in the latter,
+the arguments `e0`, `e1` and `p1` correspond to the length `len`, the
 offset `i`, and the array `arr`. Notice most of that the function
 performs several tests before executing any computation. The first two
 tests, which are within `if then else` blocks, check that the offset

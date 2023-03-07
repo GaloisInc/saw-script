@@ -10,8 +10,7 @@ Import CompMExtraNotation. Open Scope fun_syntax.
 
 (* The following 2 lines allows better automatio*)
 Require Import Examples.common.
-Require Import Coq.Program.Tactics. (* Great tacticals, move to automation. Perhaps `Require Export`? *)
-
+Require Import Coq.Program.Tactics.
 
 Require Import Examples.tutorial_c_gen.
 Import tutorial_c.
