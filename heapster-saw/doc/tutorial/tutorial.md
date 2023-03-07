@@ -1000,7 +1000,7 @@ handles option types) is not part of the original function but
 inserted by Heapster. It checks that the array access is within bounds
 `e1 <P e0`. The operator `<P` returns an optional proof of the array
 access being safe. If the check fails, the function reports a runtime
-error `errorS _ "ghost_bv <u top_bv"`.
+error `ErrorS _ "ghost_bv <u top_bv"`.
 
 If all the checks pass, then the function simply calls
 itself recursively, with the next index and array with a new entry zeroed out.
