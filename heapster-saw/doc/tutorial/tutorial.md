@@ -723,7 +723,7 @@ solve_trivial_spec 0 0. Qed.
 You can also attempt the same proof with `add_mistyped`, which
 obviously will fail, since `add_mistyped` has an error. First, you
 will note that `add_mistyped` only takes one argument (since only one
-was defined in it's signature)
+was defined in its signature)
 
 Lemma no_errors_add_mistyped (x: bitvector 64) :
   spec_refines_eq (add_mistyped x) (safety_spec (x)).
