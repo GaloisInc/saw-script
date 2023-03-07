@@ -690,7 +690,7 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
 
-(* The following 2 lines allows better automatio*)
+(* The following 2 lines allows better automation *)
 Require Import Examples.common.
 Require Import Coq.Program.Tactics. (* Great tacticals, move to automation. Perhaps `Require Export`? *)
 
@@ -723,7 +723,7 @@ solve_trivial_spec 0 0. Qed.
 You can also attempt the same proof with `add_mistyped`, which
 obviously will fail, since `add_mistyped` has an error. First, you
 will note that `add_mistyped` only takes one argument (since only one
-was defined in it's signature)
+was defined in its signature)
 
 ```
 Lemma no_errors_add_mistyped (x: bitvector 64) :
@@ -967,7 +967,7 @@ code.
 
 Let's go to `arrays_gen.v` (which has already been generated for you)
 and look for the definition of `zero_array__bodies`. You will
-notice that it calls `errorS` twice but, in this case that's not a
+notice that it calls `errorS` twice, but in this case, that's not a
 sign of a typing error! Heapster includes these errors to catch
 out-of-bounds array accesses and unrepresentable indices (i.e. index
 that can't be written as a machine integer). The code below is a
@@ -1008,7 +1008,7 @@ handles option types) is not part of the original function but
 inserted by Heapster. It checks that the array access is within bounds
 `e1 <P e0`. The operator `<P` returns an optional proof of the array
 access being safe. If the check fails, the function reports a runtime
-error `errorS _ "ghost_bv <u top_bv"`.
+error `ErrorS _ "ghost_bv <u top_bv"`.
 
 If all the checks pass, then the function simply calls
 itself recursively, with the next index and array with a new entry zeroed out.
