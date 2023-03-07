@@ -961,7 +961,7 @@ code.
 
 Let's go to `arrays_gen.v` (which has already been generated for you)
 and look for the definition of `zero_array__bodies`. You will
-notice that it calls `errorS` twice but, in this case that's not a
+notice that it calls `errorS` twice, but in this case, that's not a
 sign of a typing error! Heapster includes these errors to catch
 out-of-bounds array accesses and unrepresentable indices (i.e. index
 that can't be written as a machine integer). The code below is a
