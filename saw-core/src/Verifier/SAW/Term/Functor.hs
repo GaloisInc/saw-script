@@ -350,7 +350,24 @@ data TermF e
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
+-- See the commentary on 'Hashable Term' for a note on uniqueness.
 instance Hashable e => Hashable (TermF e) -- automatically derived.
+-- NB: we may someday wish to customize this instance, for a couple reasons.
+--
+-- 1. Hash 'Constant's based on their definition, if it exists, rather than
+-- always using both their type and definition (as the automatically derived
+-- instance does). Their type, represented as an 'ExtCns', contains unavoidable
+-- freshness derived from a global counter (via 'scFreshGlobalVar' as
+-- initialized in 'Verifier.SAW.SharedTerm.mkSharedContext'), but their
+-- definition does not necessarily contain the same freshness.
+--
+-- 2. Improve the default, XOR-based hashing scheme to improve collision
+-- resistance. A polynomial-based approach may be fruitful. For a constructor
+-- with fields numbered 1..n, evaluate a polynomial along the lines of:
+-- coeff(0) * salt ^ 0 + coeff(1) + salt ^ 1 + ... + coeff(n) * salt ^ n
+-- where
+-- coeff(0) = salt `hashWithSalt` <custom per-constructor salt>
+-- coeff(i) = salt `hashWithSalt` <field i>
 
 
 -- Term Datatype ---------------------------------------------------------------
@@ -394,6 +411,15 @@ data Term
   deriving (Show, Typeable)
 
 instance Hashable Term where
+  -- Why have 'Hashable' depend on the not-necessarily-unique hash instead of
+  -- the necessarily-unique index? Per #1830 (PR) and #1831 (issue), we want to
+  -- be able to derive a reference to terms based solely on their shape. Indices
+  -- have nothing to do with a term's shape - they're assigned sequentially when
+  -- building terms, according to the (arbitrary) order in which a term is
+  -- built. As for uniqueness, though hashing a term based on its subterms'
+  -- hashes introduces less randomness/freshness, it maintains plenty, and
+  -- provides benefits as described above. No code should ever rely on total
+  -- uniqueness of hashes, and terms are no exception.
   hashWithSalt salt STApp{ stAppHash = h } = salt `combine` 0x00000000 `hashWithSalt` h
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
 
