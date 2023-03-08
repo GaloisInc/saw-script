@@ -2215,12 +2215,9 @@ mrSolverProve addToEnv sc t1 t2 =
 
 -- | ...
 -- TODO: Maybe move somewhere else in this file?
-proveRefinement ::
-  SharedContext ->
-  Prover.MREnv {- ^ The Mr Solver environment -} ->
-  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  Tactic IO ()
-proveRefinement sc env timeout = {- TODO: Exec tactic -} Tactic $ \goal ->
+proveRefinement :: SharedContext -> Tactic TopLevel ()
+proveRefinement sc = {- TODO: Exec tactic -} Tactic $ \goal -> do
+  env <- gets rwMRSolverEnv
   case sequentState (goalSequent goal) of
     Unfocused -> fail "tactic exact: focus required"
     HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
@@ -2229,11 +2226,12 @@ proveRefinement sc env timeout = {- TODO: Exec tactic -} Tactic $ \goal ->
                                 _RPre, _RPost, _R1, _R2, _RR,
                                 t1, t2])) _ ->
       -- TODO: Use mrSolver defined in this file instead of calling askMrSolver
-      lift (Prover.askMRSolver sc env timeout t1 t2) >>= \case
+      liftIO (Prover.askMRSolver sc env Nothing t1 t2) >>= \case
         Left err -> error (Prover.showMRFailure err)
         Right res ->
           do let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal))
              return ((), stats, [], leafEvidence MrSolverEvidence)
+    _ -> error "TODO: Unhandled case"
 
 
 -- | Run Mr Solver to prove that the first term refines the second, returning
