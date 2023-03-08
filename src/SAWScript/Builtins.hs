@@ -2213,6 +2213,29 @@ mrSolverProve addToEnv sc t1 t2 =
        _ ->
          printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
 
+-- | ...
+-- TODO: Maybe move somewhere else in this file?
+proveRefinement ::
+  SharedContext ->
+  Prover.MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  Tactic IO ()
+proveRefinement sc env timeout = {- TODO: Exec tactic -} Tactic $ \goal ->
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "tactic exact: focus required"
+    HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
+    ConclFocus (asApplyAll . unProp -> (asGlobalDef -> Just "Prelude.refinesS",
+                               [_E1, _E2, _stack1, _stack2,
+                                _RPre, _RPost, _R1, _R2, _RR,
+                                t1, t2])) _ ->
+      -- TODO: Use mrSolver defined in this file instead of calling askMrSolver
+      lift (Prover.askMRSolver sc env timeout t1 t2) >>= \case
+        Left err -> error (Prover.showMRFailure err)
+        Right res ->
+          do let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal))
+             return ((), stats, [], leafEvidence MrSolverEvidence)
+
+
 -- | Run Mr Solver to prove that the first term refines the second, returning
 -- true iff this can be done. This function will not modify the 'Prover.MREnv'.
 mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
