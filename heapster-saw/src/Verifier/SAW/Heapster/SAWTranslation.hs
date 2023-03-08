@@ -76,6 +76,7 @@ import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.NamedMb
 
 import GHC.Stack
 
@@ -3294,7 +3295,6 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m
 
     | otherwise -> fail "translateSimplImpl: SImpl_IntroLLVMBlockNamed, unknown named shape"
-
   -- Elim for a recursive named shape applies the unfold function to the
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
@@ -3657,7 +3657,8 @@ translatePermImpl1 :: ImplTranslateF r ext blocks tops rets =>
 translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) of
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
-  ([nuMP| Impl1_Fail str |], _) -> pitmFail $ mbLift str
+  ([nuMP| Impl1_Fail err |], _) ->
+    tell ([mbLift (fmap ppError err)],HasFailures) >> mzero
 
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
@@ -4497,8 +4498,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
             withPermStackM
               (const $ RL.members ectx)
               (const $ typeTransF perms_trans $ transTerms stack)
-              (translate $ typedEntryBody entry)
-
+              (translate $ _mbBinding $ typedEntryBody entry)
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
@@ -4812,7 +4812,7 @@ instance PermCheckExtC ext exprExt =>
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
-      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) mb_seq)
+      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) (_mbBinding <$> mb_seq))
     [nuMP| TypedTermStmt _ term_stmt |] -> translate term_stmt
 
 instance PermCheckExtC ext exprExt =>
@@ -4983,7 +4983,7 @@ translateEntryBody stack mapTrans entry =
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
   do retType <- translateEntryRetType entry
      impTransM (RL.members pctx) pctx mapTrans stack retType $
-       translate $ typedEntryBody entry
+       translate $ _mbBinding $ typedEntryBody entry
 
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
@@ -5087,7 +5087,7 @@ data SomeCFGAndPerm ext where
 -- | An existentially quantified tuple of a 'TypedCFG', its 'GlobalSymbol', and
 -- a 'String' name we want to translate it to
 data SomeTypedCFG ext where
-  SomeTypedCFG :: GlobalSymbol -> String ->
+  SomeTypedCFG :: PermCheckExtC ext exprExt => GlobalSymbol -> String ->
                   TypedCFG ext blocks ghosts inits gouts ret ->
                   SomeTypedCFG ext
 
@@ -5151,7 +5151,7 @@ frameTypeOpenTerm = dataTypeOpenTerm "Prelude.List1" [dataTypeOpenTerm
 tcTranslateAddCFGs ::
   HasPtrWidth w => SharedContext -> ModuleName -> PermEnv -> ChecksFlag ->
   EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
-  IO PermEnv
+  IO (PermEnv, [SomeTypedCFG LLVM])
 tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
   withKnownNat ?ptrWidth $
   do
@@ -5235,7 +5235,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
            let perm = mkPtrFunPerm $ tpcfgFunPerm cfg
            return $ PermEnvGlobalEntry sym perm (Right [globalOpenTerm ident]))
       tcfgs fun_ixs
-    return $ permEnvAddGlobalSyms env new_entries
+    return (permEnvAddGlobalSyms env new_entries, tcfgs)
 
 
 ----------------------------------------------------------------------
