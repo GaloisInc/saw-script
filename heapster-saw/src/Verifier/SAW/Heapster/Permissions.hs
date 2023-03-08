@@ -90,6 +90,7 @@ import Verifier.SAW.Term.Functor (ModuleName)
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm hiding (Constant)
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.Heapster.NamedMb
 
 import Verifier.SAW.Heapster.CruUtil
 
@@ -1145,9 +1146,6 @@ debugTraceTraceLvl = debugTrace traceDebugLevel
 debugTracePretty :: DebugLevel -> DebugLevel -> Doc ann -> a -> a
 debugTracePretty req dlevel d a = debugTrace req dlevel (renderDoc d) a
 
--- | The constant string functor
-newtype StringF a = StringF { unStringF :: String }
-
 -- | Convert a type to a base name for printing variables of that type
 typeBaseName :: TypeRepr a -> String
 typeBaseName UnitRepr = "u"
@@ -1184,16 +1182,24 @@ emptyPPInfo = PPInfo NameMap.empty Map.empty
 
 -- | Add an expression variable to a 'PPInfo' with the given base name
 ppInfoAddExprName :: String -> ExprVar a -> PPInfo -> PPInfo
-ppInfoAddExprName base _ _
+ppInfoAddExprName base x ppi =
+  let (ppi', str) = ppInfoAllocateName base ppi in
+  ppInfoApplyName x str ppi'
+
+ppInfoApplyName :: Name (x :: CrucibleType) -> String -> PPInfo -> PPInfo
+ppInfoApplyName x str ppi =
+  ppi { ppExprNames = NameMap.insert x (StringF str) (ppExprNames ppi) }
+
+ppInfoAllocateName :: String -> PPInfo -> (PPInfo, String)
+ppInfoAllocateName base _
   | length base == 0 || isDigit (last base) =
     error ("ppInfoAddExprName: invalid base name: " ++ base)
-ppInfoAddExprName base x (PPInfo { .. }) =
+ppInfoAllocateName base ppi =
   let (i',str) =
-        case Map.lookup base ppBaseNextInt of
+        case Map.lookup base (ppBaseNextInt ppi) of
           Just i -> (i+1, base ++ show i)
           Nothing -> (1, base) in
-  PPInfo { ppExprNames = NameMap.insert x (StringF str) ppExprNames,
-           ppBaseNextInt = Map.insert base i' ppBaseNextInt }
+  (ppi { ppBaseNextInt = Map.insert base i' (ppBaseNextInt ppi) }, str)
 
 -- | Add a sequence of variables to a 'PPInfo' with the given base name
 ppInfoAddExprNames :: String -> RAssign Name (tps :: RList CrucibleType) ->
@@ -1202,12 +1208,33 @@ ppInfoAddExprNames _ MNil info = info
 ppInfoAddExprNames base (ns :>: n) info =
   ppInfoAddExprNames base ns $ ppInfoAddExprName base n info
 
+-- |
+ppInfoAllocateExprNames ::
+  String {- ^ base name -} ->
+  RAssign pxy (tps :: RList CrucibleType) ->
+  PPInfo ->
+  (PPInfo, RAssign StringF tps)
+ppInfoAllocateExprNames _ MNil info = (info, MNil)
+ppInfoAllocateExprNames base (ns :>: _) ppi =
+  case ppInfoAllocateName base ppi of
+    (ppi1, str) ->
+      case ppInfoAllocateExprNames base ns ppi1 of
+        (ppi2, ns') -> (ppi2, ns' :>: StringF str)
+
 -- | Add a sequence of variables to a 'PPInfo' using their 'typeBaseName's
 ppInfoAddTypedExprNames :: CruCtx tps -> RAssign Name tps -> PPInfo -> PPInfo
 ppInfoAddTypedExprNames _ MNil info = info
 ppInfoAddTypedExprNames (CruCtxCons tps tp) (ns :>: n) info =
   ppInfoAddTypedExprNames tps ns $ ppInfoAddExprName (typeBaseName tp) n info
 
+ppInfoApplyAllocation ::
+  RAssign Name (tps :: RList CrucibleType) ->
+  RAssign StringF tps ->
+  PPInfo ->
+  PPInfo
+ppInfoApplyAllocation MNil MNil ppi = ppi
+ppInfoApplyAllocation (ns :>: n) (ss :>: StringF s) ppi =
+  ppInfoApplyAllocation ns ss (ppInfoApplyName n s ppi)
 
 type PermPPM = Reader PPInfo
 
@@ -1351,7 +1378,22 @@ permPrettyExprMb :: PermPretty a =>
                     Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
 permPrettyExprMb f = permPrettyMb (\ns_pp a -> f ns_pp (permPrettyM a))
 
-instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
+
+-- | Pretty-print an expression-like construct in a name-binding using
+-- a function that combines the pretty-printed names along with the
+-- pretty-printed body of the name-binding, using the types of the
+-- found names to generate their string names
+permPrettyExprMbTyped :: PermPretty a =>
+  CruCtx ctx ->
+  (RAssign (Constant (Doc ann)) ctx -> PermPPM (Doc ann) -> PermPPM (Doc ann)) ->
+  Mb (ctx :: RList CrucibleType) a -> PermPPM (Doc ann)
+permPrettyExprMbTyped ctx f mb =
+  fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
+  local (ppInfoAddTypedExprNames ctx ns) $
+  do docs <- traverseRAssign (\n -> Constant <$> permPrettyM n) ns
+     f docs $ permPrettyM a
+
+instance (PermPretty a) => PermPretty (Mb (ctx :: RList CrucibleType) a) where
   permPrettyM =
     permPrettyExprMb $ \docs ppm ->
     (\pp -> ppEncList True (RL.toList docs) <> dot <> line <> pp) <$> ppm
@@ -1748,7 +1790,7 @@ instance PermPretty (PermExpr a) where
        pp2 <- permPrettyM sh2
        return $ nest 2 $ sep [pp1 <+> pretty "orsh", pp2]
   permPrettyM (PExpr_ExShape mb_sh) =
-    flip permPrettyExprMb mb_sh $ \(_ :>: Constant pp_n) ppm ->
+    flip (permPrettyExprMbTyped (CruCtxNil `CruCtxCons` knownRepr)) mb_sh $ \(_ :>: Constant pp_n) ppm ->
     do pp <- ppm
        return $ sep [pretty "exsh" <+> pp_n <> dot, pp]
   permPrettyM PExpr_FalseShape = return $ pretty "falsesh"
@@ -3477,8 +3519,8 @@ instance PermPretty (ValuePerm a) where
     (\pp1 pp2 -> hang 2 (pp1 <> softline <> pretty "or" <+> pp2))
     <$> permPrettyM p1 <*> permPrettyM p2
   permPrettyM (ValPerm_Exists mb_p) =
-    flip permPrettyExprMb mb_p $ \(_ :>: Constant pp_n) ppm ->
-    (\pp -> pretty "exists" <+> pp_n <> dot <+> pp) <$> ppm
+    flip (permPrettyExprMbTyped (CruCtxNil `CruCtxCons` knownRepr)) mb_p $ \(_ :>: Constant pp_n) ppm ->
+    (\pp -> hang 2 (pretty "exists" <+> pp_n <> dot <+> pp)) <$> ppm
   permPrettyM (ValPerm_Named n args off) =
     do n_pp <- permPrettyM n
        args_pp <- permPrettyM args
@@ -3686,7 +3728,6 @@ instance PermPretty (ExprAndPerm a) where
 
 instance PermPrettyF ExprAndPerm where
   permPrettyMF = permPrettyM
-
 
 -- | Embed a 'ValuePerm' in a 'PermExpr' - like 'PExpr_ValPerm' but maps
 -- 'ValPerm_Var's to 'PExpr_Var's
@@ -6722,6 +6763,27 @@ genSubstMb ::
 genSubstMb p s mbmb =
   mbM $ nuMulti p $ \ns -> genSubst (extSubstMulti s ns) (mbCombine p mbmb)
 
+
+instance {-# INCOHERENT #-} (Given (RAssign Proxy ctx),
+                             Substable s a m, NuMatching a) =>
+                            Substable s (NamedMb ctx a) m where
+   genSubst = genSubstNamedMb given
+
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) =>
+                            Substable s (NamedMb RNil a) m where
+   genSubst = genSubstNamedMb RL.typeCtxProxies
+
+instance {-# INCOHERENT #-} (Substable s a m, NuMatching a) =>
+                            Substable s (NamedBinding c a) m where
+   genSubst = genSubstNamedMb RL.typeCtxProxies
+
+genSubstNamedMb ::
+  Substable s a m =>
+  NuMatching a =>
+  RAssign Proxy ctx ->
+  s ctx' -> Mb ctx' (NamedMb ctx a) -> m (NamedMb ctx a)
+genSubstNamedMb p s mbmb = mbMNamed (fmap (genSubst s) (mbSink p mbmb))
+
 instance SubstVar s m => Substable s (Member ctx a) m where
   genSubst _ mb_memb = return $ mbLift mb_memb
 
@@ -6736,6 +6798,10 @@ instance (NuMatchingAny1 f, Substable1 s f m) =>
   genSubst s mb_xs = case mbMatch mb_xs of
     [nuMP| MNil |] -> return MNil
     [nuMP| xs :>: x |] -> (:>:) <$> genSubst s xs <*> genSubst1 s x
+
+instance (NuMatchingAny1 f, Substable1 s f m) =>
+         Substable1 s (RAssign f) m where
+  genSubst1 = genSubst
 
 instance (NuMatchingAny1 f, Substable1 s f m) =>
          Substable s (Assignment f ctx) m where
@@ -8431,7 +8497,7 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
-newtype SeenDetVarsClauses :: CrucibleType -> * where
+newtype SeenDetVarsClauses :: CrucibleType -> Type where
   SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
 
 -- | Generic function to compute the 'DetVarsClause's for a permission

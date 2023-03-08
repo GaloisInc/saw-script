@@ -1341,7 +1341,17 @@ psStats = _psStats
 -- forall x in ps1, exists y in ps2 where x == y
 propsSubset :: SharedContext -> [Prop] -> [Prop] -> IO Bool
 propsSubset sc ps1 ps2 =
-  and <$> sequence [ propsElem sc x ps2 | x <- ps1 ]
+  -- For each x, check if x exists in ps2 by checking term identity using stAppIndex
+  -- If the check succeeds, return True. Otherwise use propsElem to do the more expensive
+  -- convertibility check.
+  and <$> sequence [ if idSubset (unProp x) then pure True else propsElem sc x ps2 | x <- ps1 ]
+  where
+    ps2Ids = foldr (\x idents -> case (unProp x) of
+                                   STApp{ stAppIndex = ident } -> Set.insert ident idents
+                                   _ -> idents)
+                   Set.empty ps2
+    idSubset STApp{ stAppIndex = ident } = Set.member ident ps2Ids
+    idSubset _ = False
 
 -- exists y in ps where x == y
 propsElem :: SharedContext -> Prop -> [Prop] -> IO Bool
