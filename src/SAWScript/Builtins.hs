@@ -2215,8 +2215,8 @@ mrSolverProve addToEnv sc t1 t2 =
 
 -- | ...
 -- TODO: Maybe move somewhere else in this file?
-proveRefinement :: SharedContext -> Tactic TopLevel ()
-proveRefinement sc = {- TODO: Exec tactic -} Tactic $ \goal -> do
+proveRefinement :: SharedContext -> ProofScript ()
+proveRefinement sc = execTactic $ Tactic $ \goal -> do
   env <- gets rwMRSolverEnv
   case sequentState (goalSequent goal) of
     Unfocused -> fail "tactic exact: focus required"

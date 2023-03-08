@@ -3780,6 +3780,11 @@ primitives = Map.fromList
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
 
+  , prim "prove_refinement" "ProofScript ()"
+    (scVal proveRefinement)
+    Experimental
+    [ "TODO: Docs" ]
+
     ---------------------------------------------------------------------
 
   , prim "monadify_term" "Term -> TopLevel Term"
