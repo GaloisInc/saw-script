@@ -3011,11 +3011,11 @@ primitive errorS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> String ->
                    SpecM E stack a;
 
 -- The spec that universally quantifies over all return values of type a
-primitive forallS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
+primitive forallS : (E:EvType) -> (stack:FunStack) -> (a:qsort 0) ->
                     SpecM E stack a;
 
 -- The spec that existentially quantifies over all return values of type a
-primitive existsS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
+primitive existsS : (E:EvType) -> (stack:FunStack) -> (a:qsort 0) ->
                     SpecM E stack a;
 
 -- Assume a proposition holds

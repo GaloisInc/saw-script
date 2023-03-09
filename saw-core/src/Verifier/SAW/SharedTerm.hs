@@ -104,6 +104,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scSort
   , scISort
+  , scSortWithFlags
     -- *** Variables and constants
   , scLocalVar
   , scConstant
@@ -1360,11 +1361,15 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scFlatTermF sc (Sort s False)
+scSort sc s = scFlatTermF sc (Sort s noFlags)
+
+-- | Create a term from a 'Sort', and set the given advisory flags
+scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
+scSortWithFlags sc s h = scFlatTermF sc (Sort s h)
 
 -- | Create a term from a 'Sort', and set the advisory "inhabited" flag
 scISort :: SharedContext -> Sort -> IO Term
-scISort sc s = scFlatTermF sc (Sort s True)
+scISort sc s = scSortWithFlags sc s $ noFlags { flagInhabited = True }
 
 -- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term

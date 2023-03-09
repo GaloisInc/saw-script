@@ -137,7 +137,7 @@ typedSubsTermType :: TypedSubsTerm -> TypedSubsTerm
 typedSubsTermType tst =
   TypedSubsTerm { tpSubsIndex = Nothing, tpSubsFreeVars = tpSubsFreeVars tst,
                   tpSubsTermF = tpSubsTypeF tst,
-                  tpSubsTypeF = FTermF (Sort (tpSubsSort tst) False),
+                  tpSubsTypeF = FTermF (Sort (tpSubsSort tst) noFlags),
                   tpSubsSort = sortOf (tpSubsSort tst) }
 
 -- | Count the number of right-nested pi-abstractions of a 'TypedSubsTerm'

@@ -464,10 +464,9 @@ translateParam ::
   TermTranslationMonad m =>
   (LocalName, Term) -> m [Coq.Binder]
 translateParam (n, ty) =
-  translateBinder n ty >>= \case
-    Left (n',ty') -> return [Coq.Binder n' (Just ty')]
-    Right (n',ty',nh,nhty) ->
-      return [Coq.Binder n' (Just ty'), Coq.ImplicitBinder nh (Just nhty)]
+  translateBinder n ty >>= \(n',ty',nhs) ->
+    return $ Coq.Binder n' (Just ty') :
+             map (\(nh,nhty) -> Coq.ImplicitBinder nh (Just nhty)) nhs
 
 translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalTranslationState $ do
@@ -479,44 +478,44 @@ translatePiBinder ::
   TermTranslationMonad m => (LocalName, Term) -> m [Coq.PiBinder]
 translatePiBinder (n, ty) =
   translateBinder n ty >>= \case
-    Left (n',ty')
+    (n',ty',[])
       | n == "_"  -> return [Coq.PiBinder Nothing ty']
       | otherwise -> return [Coq.PiBinder (Just n') ty']
-    Right (n',ty',nh,nhty) ->
-      return [Coq.PiBinder (Just n') ty', Coq.PiImplicitBinder (Just nh) nhty]
+    (n',ty',nhs) ->
+      return $ Coq.PiBinder (Just n') ty' :
+               map (\(nh,nhty) -> Coq.PiImplicitBinder (Just nh) nhty) nhs
 
 translateBinder ::
   TermTranslationMonad m =>
   LocalName ->
   Term ->
-  m (Either (Coq.Ident,Coq.Type) (Coq.Ident,Coq.Type,Coq.Ident,Coq.Type))
-translateBinder n ty@(asPiList -> (args, asISort -> Just _s)) =
+  m (Coq.Ident,Coq.Type,[(Coq.Ident,Coq.Type)])
+translateBinder n ty@(asPiList -> (args, asSortWithFlags -> mb_sort)) =
   do ty' <- translateTerm ty
      n' <- freshenAndBindName n
-     hty' <- translateInhHyp args (Coq.Var n')
-     hn' <- translateLocalIdent ("Inh_" <> n )
-     return $ Right (n',ty',hn',hty')
-translateBinder n ty =
-  do ty' <- translateTerm ty
-     n'  <- freshenAndBindName n
-     return $ Left (n',ty')
+     let flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
+         flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
+                           ("QT", "QuantType")]
+     nhs <- forM (zip flagValues flagLocalNames) $ \(fi,(prefix,tc)) ->
+       if not fi then return []
+       else do nhty <- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')
+               nh <- translateLocalIdent (prefix <> "_" <> n)
+               return [(nh,nhty)]
+     return (n',ty',concat nhs)
 
-translateInhHyp ::
+translateImplicitHyp ::
   TermTranslationMonad m =>
-  [(LocalName, Term)] -> Coq.Term -> m Coq.Term
-translateInhHyp [] tm = return (Coq.App (Coq.Var "SAWCoreScaffolding.Inhabited") [tm])
-translateInhHyp args tm = withLocalTranslationState $
+  Coq.Term -> [(LocalName, Term)] -> Coq.Term -> m Coq.Term
+translateImplicitHyp tc [] tm = return (Coq.App tc [tm])
+translateImplicitHyp tc args tm = withLocalTranslationState $
   do args' <- mapM (uncurry translateBinder) args
      return $ Coq.Pi (concatMap mkPi args')
-                (Coq.App (Coq.Var "SAWCoreScaffolding.Inhabited") [Coq.App tm (map mkArg args')])
+                (Coq.App tc [Coq.App tm (map mkArg args')])
  where
-  mkPi (Left (nm,ty)) =
-    [Coq.PiBinder (Just nm) ty]
-  mkPi (Right (nm,ty,hnm,hty)) =
-    [Coq.PiBinder (Just nm) ty, Coq.PiImplicitBinder (Just hnm) hty]
-
-  mkArg (Left (nm,_)) = Coq.Var nm
-  mkArg (Right (nm,_,_,_)) = Coq.Var nm
+  mkPi (nm,ty,nhs) =
+    Coq.PiBinder (Just nm) ty :
+    map (\(nh,nhty) -> Coq.PiImplicitBinder (Just nh) nhty) nhs
+  mkArg (nm,_,_) = Coq.Var nm
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident

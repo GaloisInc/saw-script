@@ -55,6 +55,7 @@ module Verifier.SAW.Term.Functor
   , alistAllFields
     -- * Sorts
   , Sort, mkSort, propSort, sortOf, maxSort
+  , SortFlags(..), noFlags, cbnFlags, sortFlagsToList, sortFlagsFromList
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
@@ -132,6 +133,50 @@ maxSort :: [Sort] -> Sort
 maxSort [] = propSort
 maxSort ss = maximum ss
 
+-- | This type represents a set of advisory flags for 'Sort's that are mostly
+-- ignored, but are used in the Coq export process to indicate where various
+-- typeclass instances are necessary in function definitions. In the concrete
+-- syntax "isort", "qsort", etc. is used to indicate cases where these flags
+-- are set. Note in particular that this flag does not affect typechecking,
+-- so missing or overeager "isort"/"qsort" annotations will only be detected
+-- via the Coq export.
+--
+-- * If 'flagInhabited' is 'True', an implicit @Inhabited@ typeclass argument
+--   will be added during Coq translation. In the concrete syntax, an "i" is
+--   prepended to the sort (e.g. "isort").
+-- * If 'flagQuantType' is 'True', an implicit @QuantType@ typeclass argument
+--   will be added during Coq translation. In the concrete syntax, an "q" is
+--   prepended to the sort (e.g. "qsort", "qisort").
+data SortFlags = SortFlags { flagInhabited :: Bool
+                           , flagQuantType :: Bool }
+    deriving (Eq, Ord, Generic, TH.Lift)
+
+instance Hashable SortFlags -- automatically derived
+
+instance Show SortFlags where
+  showsPrec _ (SortFlags i q) =
+    showString $ (if q then "q" else "") ++
+                 (if i then "i" else "")
+
+-- | The 'SortFlags' object with no flags set
+noFlags :: SortFlags
+noFlags = SortFlags False False
+
+-- | Combine two 'SortFlags' by setting each flag in the result if and only if
+-- it flag is set in both inputs
+cbnFlags :: SortFlags -> SortFlags -> SortFlags
+cbnFlags (SortFlags i1 q1) (SortFlags i2 q2) =
+  SortFlags (i1 && i2) (q1 && q2)
+
+-- | Convert a 'SortFlags' to a list of 'Bool's, indicating which flags are set
+sortFlagsToList :: SortFlags -> [Bool]
+sortFlagsToList (SortFlags i q) = [i, q]
+
+-- | Build a 'SortFlags' from a list of 'Bool's indicating which flags are set
+sortFlagsFromList :: [Bool] -> SortFlags
+sortFlagsFromList h = SortFlags (isTrue h 0) (isTrue h 1)
+  where isTrue xs i = i < length xs && xs !! i
+
 
 -- Flat Terms ------------------------------------------------------------------
 
@@ -191,17 +236,9 @@ data FlatTermF e
   | RecordProj e !FieldName
 
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
-    -- "type" iff it has type @Sort s@ for some s.
-    --
-    -- The extra boolean argument is an advisory flag that is used to
-    -- indicate that types in this sort are expected to be inhabited.
-    -- In the concrete syntax "isort" is used to indicate cases where
-    -- this flag is set.  This flag is mostly ignored, but is used in
-    -- the Coq export process to indicate where "Inhabited" class
-    -- instances are necessary in function definitions. Note in particular
-    -- that this flag does not affect typechecking, so missing or overeager
-    -- "isort" annotations will only be detected via the Coq export.
-  | Sort !Sort !Bool
+    -- "type" iff it has type @Sort s@ for some s. See 'SortFlags' for an
+    -- explanation of the extra argument.
+  | Sort !Sort !SortFlags
 
     -- Primitive builtin values
     -- | Natural number with given value.
@@ -315,8 +352,8 @@ zipWithFlatTermF f = go
     go (RecordProj e1 fld1) (RecordProj e2 fld2)
       | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
 
-    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (hx && hy))
-         -- /\ NB, it's not entirely clear how the inhabited flag should be propagated
+    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (cbnFlags hx hy))
+         -- /\ NB, it's not entirely clear how the flags should be propagated
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
     go (ArrayValue tx vx) (ArrayValue ty vy)

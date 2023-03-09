@@ -56,7 +56,7 @@ module Verifier.SAW.Recognizer
   , asConstant
   , asExtCns
   , asSort
-  , asISort
+  , asSortWithFlags
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -340,12 +340,12 @@ asSort t = do
     Sort s _ -> return s
     _      -> Nothing
 
-asISort :: Recognizer Term Sort
-asISort t = do
+asSortWithFlags :: Recognizer Term (Sort, SortFlags)
+asSortWithFlags t = do
   ftf <- asFTermF t
   case ftf of
-    Sort s True -> return s
-    _           -> Nothing
+    Sort s h -> return (s, h)
+    _      -> Nothing
 
 
 

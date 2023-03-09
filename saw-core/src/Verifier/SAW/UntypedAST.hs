@@ -33,6 +33,7 @@ module Verifier.SAW.UntypedAST
   , mkTupleSelector
   , FieldName
   , Sort, mkSort, propSort, sortOf
+  , SortFlags(..), noFlags, cbnFlags, sortFlagsToList, sortFlagsFromList
   , badTerm
   , module Verifier.SAW.Position
   , moduleName
@@ -56,13 +57,14 @@ import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, propSort, sortOf
+  , SortFlags(..), noFlags, cbnFlags, sortFlagsToList, sortFlagsFromList
   , FieldName, DefQualifier
   , LocalName
   )
 
 data Term
   = Name (PosPair Text)
-  | Sort Pos Sort Bool
+  | Sort Pos Sort SortFlags
   | App Term Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
