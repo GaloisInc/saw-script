@@ -441,12 +441,6 @@ PLiteralSeqBoolM E stack =
 
 -- Sequences
 
--- FIXME: a number of the non-monadic versions of these functions contain calls
--- to finNumRec, which calls error on non-finite numbers. The monadic versions
--- of these, below, should be reimplemented to not contain finNumRec, but to
--- just use Num_rec_fin directly, rather than using it and then calling out to
--- the non-monadic version with finNumRec.
-
 ecShiftLM : (E:EvType) -> (stack:FunStack) ->
             (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
             mseq E stack m a -> ix -> mseq E stack m a;
@@ -539,20 +533,20 @@ ecDropM : (E:EvType) -> (stack:FunStack) ->
           mseq E stack (tcAdd m n) a -> mseq E stack n a;
 
 ecJoinM : (E:EvType) -> (stack:FunStack) -> 
-          (m n : Num) -> (a : isort 0) -> mseq E stack m (mseq E stack n a) -
-          mseq E stack (tcMul m n) a;
+          (m n : Num) -> isFinite n -> (a : isort 0) ->
+          mseq E stack m (mseq E stack n a) -> mseq E stack (tcMul m n) a;
 ecJoinM E stack =
   Num_rec
-    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> mseq E stack m (mseq E stack n a) ->
-       mseq E stack (tcMul m n) a)
+    (\ (m:Num) -> (n:Num) -> isFinite n -> (a:isort 0) ->
+       mseq E stack m (mseq E stack n a) -> mseq E stack (tcMul m n) a)
     (\ (m:Nat) ->
-       finNumRec
+       Num_rec_fin
          (\ (n:Num) -> (a:isort 0) -> Vec m (mseq E stack n a) ->
             mseq E stack (tcMul (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:isort 0) -> joinCryM m n a))
          -- No case for (TCNum m, TCInf), shoudn't happen
-    (finNumRec
+    (Num_rec_fin
        (\ (n:Num) -> (a:isort 0) -> Stream (SpecM E stack (mseq E stack n a)) ->
           mseq E stack (tcMul TCInf n) a)
        -- Case for (TCInf, TCNum n)
@@ -578,20 +572,20 @@ splitCryM m n a v =
       atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
 
 ecSplitM : (E:EvType) -> (stack:FunStack) ->
-           (m n : Num) -> (a : qisort 0) -> mseq E stack (tcMul m n) a ->\
-           mseq E stack m (mseq E stack n a);
+           (m n : Num) -> isFinite n -> (a : qisort 0) ->
+           mseq E stack (tcMul m n) a -> mseq E stack m (mseq E stack n a);
 ecSplitM E stack =
   Num_rec
-    (\ (m:Num) -> (n:Num) -> (a:qisort 0) -> mseq E stack (tcMul m n) a ->
-       mseq E stack m (mseq E stack n a))
+    (\ (m:Num) -> (n:Num) -> isFinite n -> (a:qisort 0) ->
+       mseq E stack (tcMul m n) a -> mseq E stack m (mseq E stack n a))
     (\ (m:Nat) ->
-       finNumRec
+       Num_rec_fin
          (\ (n:Num) -> (a:qisort 0) -> mseq E stack (tcMul (TCNum m) n) a ->
             Vec m (mseq E stack n a))
          -- Case for (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:qisort 0) -> splitCryM m n a))
          -- No case for (TCNum m, TCInf), shouldn't happen
-    (finNumRec
+    (Num_rec_fin
        (\ (n:Num) -> (a:qisort 0) -> mseq E stack (tcMul TCInf n) a ->
           Stream (SpecM E stack (mseq E stack n a)))
        -- Case for (TCInf, TCNum n)

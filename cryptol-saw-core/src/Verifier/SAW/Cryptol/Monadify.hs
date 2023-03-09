@@ -1287,28 +1287,33 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
        [specMEvType params, specMStack params,
         toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
--- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
--- to a global of semi-pure type that takes an additional argument of type
--- @isFinite n@. The 'Bool' flag indicates whether the current 'SpecMParams'
+-- | @finMacro i from to params_p@ makes a 'MonMacro' that maps a named global
+-- @from@ whose @i@th argument is @n:Num@ to a named global @to@ of semi-pure
+-- type that takes an additional argument of type @isFinite n@ as its @(i+1)@th
+-- argument. The @params_p@ flag indicates whether the current 'SpecMParams'
 -- should be passed as the first two arguments to @to@.
-fin1Macro :: Ident -> Ident -> Bool -> MonMacro
-fin1Macro from to params_p =
-  MonMacro 1 $ \glob args -> usingSpecMParams $
-  do if globalDefName glob == ModuleIdentifier from && length args == 1 then
+finMacro :: Int -> Ident -> Ident -> Bool -> MonMacro
+finMacro i from to params_p =
+  MonMacro (i+1) $ \glob args -> usingSpecMParams $
+  do if globalDefName glob == ModuleIdentifier from && length args == i+1 then
        return ()
        else error ("Monadification macro for " ++ show from ++
                    " applied incorrectly")
-     -- Monadify the first arg, n, and build a proof it is finite
-     n_mtp <- monadifyTypeM (head args)
+     -- Monadify the first @i@ args
+     args_mtps <- mapM monadifyTypeM (init args)
+     let args_m = map toArgType args_mtps
+     -- Monadify the @i@th arg, @n:Num@, and build a proof it is finite
+     n_mtp <- monadifyTypeM (last args)
      let n = toArgType n_mtp
      fin_pf <- assertIsFinite n_mtp
-     -- Apply the type of @glob@ to n, and apply @to@ to n and fin_pf
+     -- Apply the type of @glob@ to the monadified arguments and @n@,
+     -- and apply @to@ to the monadified arguments, @n@, and @fin_pf@
      let glob_tp = monadifyType [] $ globalDefType glob
-     let glob_tp_app = applyMonType glob_tp $ Left n_mtp
+     let glob_tp_app = foldl applyMonType glob_tp (map Left (args_mtps ++ [n_mtp]))
      let to_app =
            applyOpenTermMulti (globalOpenTerm to)
            ((if params_p then (paramsToTerms ?specMParams ++) else id)
-            [n, toArgTerm fin_pf])
+            args_m ++ [n, toArgTerm fin_pf])
      -- Finally, return @to n fin_pf@ as a MonTerm of monadified type @to_tp n@
      return $ ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
 
@@ -1339,10 +1344,10 @@ mmSemiPure from_id to_id params_p =
   (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to a semi-pure named function
--- whose first argument is a @Num@ that requires an @isFinite@ proof
-mmSemiPureFin1 :: Ident -> Ident -> Bool -> MacroMapping
-mmSemiPureFin1 from_id to_id params_p =
-  (ModuleIdentifier from_id, fin1Macro from_id to_id params_p)
+-- whose @i@th argument argument is a @Num@ that requires an @isFinite@ proof
+mmSemiPureFin :: Int -> Ident -> Ident -> Bool -> MacroMapping
+mmSemiPureFin i from_id to_id params_p =
+  (ModuleIdentifier from_id, finMacro i from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to itself as a semi-pure function
 mmSelf :: Ident -> MacroMapping
@@ -1392,33 +1397,33 @@ defaultMonTable =
     -- FIXME: continue here...
 
     -- PEq constraints
-  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
-  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
+  , mmSemiPureFin 0 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
+  , mmSemiPureFin 0 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
 
     -- PCmp constraints
-  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
-  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
+  , mmSemiPureFin 0 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
+  , mmSemiPureFin 0 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
 
     -- PSignedCmp constraints
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
+  , mmSemiPureFin 0 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
+  , mmSemiPureFin 0 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
+  , mmSemiPureFin 0 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
 
     -- PLogic constraints
   , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True
-  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
+  , mmSemiPureFin 0 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
 
     -- PRing constraints
   , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq" True
-  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
+  , mmSemiPureFin 0 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
 
     -- PIntegral constraints
-  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
+  , mmSemiPureFin 0 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
 
     -- PLiteral constraints
-  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
+  , mmSemiPureFin 0 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
 
     -- The Cryptol Literal primitives
   , mmSelf "Cryptol.ecNumber"
@@ -1443,20 +1448,21 @@ defaultMonTable =
   , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM" True
   , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM" True
   , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM" True
-  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
-  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
-  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM" True
+  , mmSemiPureFin 0 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
+  , mmSemiPureFin 0 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
+  , mmSemiPureFin 0 "Cryptol.ecCat" "CryptolM.ecCatM" True
   , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM" True
-  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
-  , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM" True
-  , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM" True
-  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
+  , mmSemiPureFin 0 "Cryptol.ecDrop" "CryptolM.ecDropM" True
+  , mmSemiPureFin 0 "Cryptol.ecDrop" "CryptolM.ecDropM" True
+  , mmSemiPureFin 1 "Cryptol.ecJoin" "CryptolM.ecJoinM" True
+  , mmSemiPureFin 1 "Cryptol.ecSplit" "CryptolM.ecSplitM" True
+  , mmSemiPureFin 0 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
   , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM" True
   , mmArg "Cryptol.ecAt" "CryptolM.ecAtM" True
   , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM" True
   -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
   -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
-  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
+  , mmSemiPureFin 0 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
   -- , mmSemiPureNthFin 5 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM"
   , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM" True
   , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM" True

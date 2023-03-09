@@ -547,12 +547,14 @@ writeCoqCryptolPrimitivesForSAWCore outputFile outputFileM notations skips = do
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
+  let configuration_mon =
+        withImportCryptolPrimitivesForSAWCore configuration
   let doc = Coq.translateSAWModule configuration m
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration
                                       , doc
                                       ])
-  let doc_mon = Coq.translateSAWModule configuration m_mon
-  writeFile outputFileM (show . vcat $ [ Coq.preamble configuration
+  let doc_mon = Coq.translateSAWModule configuration_mon m_mon
+  writeFile outputFileM (show . vcat $ [ Coq.preamble configuration_mon
                                        , doc_mon
                                        ])
 
