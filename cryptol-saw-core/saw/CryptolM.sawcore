@@ -190,6 +190,12 @@ seqToMseq E stack n_top a =
           (streamMap a (SpecM E stack a) (retS E stack a))
           n_top;
 
+vecSequenceM : (E:EvType) -> (stack:FunStack) ->
+               (a : qsort 0) -> (n : Nat) ->
+               Vec n (SpecM E stack a) -> SpecM E stack (Vec n a);
+vecSequenceM E stack a n =
+  vecMapM E stack (SpecM E stack a) a n (\(i:Nat) (x:SpecM E stack a) -> x);
+
 
 --------------------------------------------------------------------------------
 -- Auxiliary functions
@@ -506,18 +512,32 @@ ecCatM E stack =
             streamAppend (SpecM E stack a) m
                          (map a (SpecM E stack a) (retS E stack a) m v)));
 
--- FIXME
-primitive
 ecTakeM : (E:EvType) -> (stack:FunStack) ->
-          (m n : Num) -> (a : sort 0) -> mseq E stack (tcAdd m n) a ->
-          mseq E stack m a;
-{-
-ecTakeM =
-  Num_rec (\ (m:Num) -> (n:Num) -> (a:sort 0) -> mseq (tcAdd m n) a -> mseq m a)
-          (\ (m:Nat) -> ecTake (TCNum m))
-          (\ (n:Num) (a:sort 0) (s:Stream (CompM a)) ->
-             ecTake TCInf n (CompM a) s);
--}
+          (m n : Num) -> (a : qisort 0) -> mseq E stack (tcAdd m n) a ->
+          SpecM E stack (mseq E stack m a);
+ecTakeM E stack =
+  Num_rec
+    (\ (m:Num) -> (n:Num) -> (a:qisort 0) -> mseq E stack (tcAdd m n) a ->
+       SpecM E stack (mseq E stack m a))
+    (\ (m:Nat) ->
+       Num_rec
+         (\ (n:Num) -> (a:qisort 0) -> mseq E stack (tcAdd (TCNum m) n) a ->
+            SpecM E stack (Vec m a))
+         -- The case (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:qisort 0) -> \ (xs: Vec (addNat m n) a) ->
+            retS E stack (Vec m a) (take a m n xs))
+         -- The case (TCNum m, infinity)
+         (\ (a:qisort 0) -> \ (xs: Stream (SpecM E stack a)) ->
+            vecSequenceM E stack a m (streamTake (SpecM E stack a) m xs)))
+    (Num_rec
+      (\ (n:Num) -> (a:qisort 0) -> mseq E stack (tcAdd TCInf n) a ->
+         SpecM E stack (Stream (SpecM E stack a)))
+        -- The case (TCInf, TCNum n)
+        (\ (n:Nat) -> \ (a:qisort 0) -> \ (xs:Stream (SpecM E stack a)) ->
+           retS E stack (Stream (SpecM E stack a)) xs)
+        -- The case (TCInf, TCInf)
+        (\ (a:qisort 0) -> \ (xs:Stream (SpecM E stack a)) ->
+           retS E stack (Stream (SpecM E stack a)) xs));
 
 -- An alternate version of join from Prelude to get around the default Prim
 joinCryM : (m n : Nat) -> (a : isort 0) ->
@@ -599,8 +619,7 @@ ecSplitM E stack =
             (\ (n':Nat) (xs : Stream (SpecM E stack a)) -> 
                streamMap (Vec (Succ n') (SpecM E stack a))
                          (SpecM E stack (Vec (Succ n') a))
-                         (vecMapM E stack (SpecM E stack a) a (Succ n')
-                                  (\(i:Nat) (x:SpecM E stack a) -> x))
+                         (vecSequenceM E stack a (Succ n'))
                          (streamSplit (SpecM E stack a) (Succ n') xs))
             n));
        -- No case for (TCInf, TCInf), shouldn't happen
