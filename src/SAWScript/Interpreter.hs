@@ -1826,7 +1826,7 @@ primitives = Map.fromList
     [ "Print the current goal that a proof script is attempting to prove." ]
   , prim "print_goal_inline"   "[Int] -> ProofScript ()"
     (pureVal print_goal_inline)
-    Experimental
+    Current
     [ "Print the current goal that a proof script is attempting to prove,"
     , "without generating `let` bindings for the provided indices. For"
     , "example, `print_goal_inline [1,9,3]` will print the goal without"
