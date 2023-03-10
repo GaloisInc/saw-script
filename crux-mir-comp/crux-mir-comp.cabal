@@ -37,6 +37,7 @@ library
                  bv-sized,
                  bytestring,
                  crux,
+                 crucible-mir,
                  crux-mir,
                  template-haskell,
                  saw-core,

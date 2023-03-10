@@ -23,6 +23,7 @@ packages:
     deps/crucible/crucible-concurrency
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
+    deps/crucible/crucible-mir
     deps/crucible/crucible-symio
     deps/crucible/crucible-syntax
     deps/crucible/crux
