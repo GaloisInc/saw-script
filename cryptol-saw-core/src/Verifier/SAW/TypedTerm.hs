@@ -25,6 +25,8 @@ import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
+import Debug.Trace
+
 -- Typed terms -----------------------------------------------------------------
 
 -- | Within SAWScript, we represent an object language term as a
@@ -69,10 +71,13 @@ mkTypedTerm :: SharedContext -> Term -> IO TypedTerm
 mkTypedTerm sc trm = do
   ty <- scTypeOf sc trm
   ct <- scCryptolType sc ty
-  let ttt = case ct of
-        Nothing        -> TypedTermOther ty
-        Just (Left k)  -> TypedTermKind k
-        Just (Right t) -> TypedTermSchema (C.tMono t)
+  ttt <- case ct of
+        Nothing        -> do traceIO "TypedTermOther"
+                             return $ TypedTermOther ty
+        Just (Left k)  -> do traceIO "TypedTermKind"
+                             return $ TypedTermKind k
+        Just (Right t) -> do traceIO "typedTermSchema"
+                             return $ TypedTermSchema (C.tMono t)
   return (TypedTerm ttt trm)
 
 -- | Apply a function-typed 'TypedTerm' to an argument.
