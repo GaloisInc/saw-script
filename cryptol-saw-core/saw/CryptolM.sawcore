@@ -539,18 +539,26 @@ ecTakeM E stack =
         (\ (a:qisort 0) -> \ (xs:Stream (SpecM E stack a)) ->
            retS E stack (Stream (SpecM E stack a)) xs));
 
+ecDropM : (E:EvType) -> (stack:FunStack) ->
+          (m : Num) -> isFinite m -> (n : Num) -> (a : isort 0) ->
+          mseq E stack (tcAdd m n) a -> mseq E stack n a;
+ecDropM E stack =
+  Num_rec_fin
+    (\ (m:Num) -> (n:Num) -> (a:isort 0) -> mseq E stack (tcAdd m n) a -> mseq E stack n a)
+    (\ (m:Nat) ->
+       Num_rec
+         (\ (n:Num) -> (a:isort 0) -> mseq E stack (tcAdd (TCNum m) n) a -> mseq E stack n a)
+         -- The case (TCNum m, TCNum n)
+         (\ (n:Nat) -> \ (a:isort 0) -> drop a m n)
+         -- The case (TCNum m, infinity)
+         (\ (a:isort 0) -> streamDrop (SpecM E stack a) m));
+
 -- An alternate version of join from Prelude to get around the default Prim
 joinCryM : (m n : Nat) -> (a : isort 0) ->
            Vec m (Vec n a) -> Vec (mulNat m n) a;
 joinCryM m n a v =
   genCryM (mulNat m n) a (\ (i : Nat) ->
     atCryM n a (at m (Vec n a) v (divNat i n)) (modNat i n));
-
--- FIXME
-primitive
-ecDropM : (E:EvType) -> (stack:FunStack) ->
-          (m : Num) -> isFinite m -> (n : Num) -> (a : sort 0) ->
-          mseq E stack (tcAdd m n) a -> mseq E stack n a;
 
 ecJoinM : (E:EvType) -> (stack:FunStack) -> 
           (m n : Num) -> isFinite n -> (a : isort 0) ->
