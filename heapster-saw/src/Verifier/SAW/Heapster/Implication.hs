@@ -3700,6 +3700,16 @@ getDistPermsProxies = rlToProxies <$> getDistPerms
 getTopDistPerm :: ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 getTopDistPerm x = use (implStatePerms . topDistPerm x)
 
+-- | Get the top permission in the stack, which is expected to be a conjuction,
+-- and return its conjuncts. If it is not a conjunction, raise an 'error', using
+-- the supplied 'String' as the caller in the error message.
+getTopDistConj :: String -> ExprVar a ->
+                  ImplM vars s r (ps :> a) (ps :> a) [AtomicPerm a]
+getTopDistConj caller x =
+  use (implStatePerms . topDistPerm x) >>>= \case
+  ValPerm_Conj ps -> return ps
+  _ -> error (caller ++ ": unexpected non-conjunctive permission")
+
 -- | Get a sequence of the top @N@ permissions on the stack
 getTopDistPerms :: prx1 ps1 -> RAssign prx2 ps2 ->
                    ImplM vars s r (ps1 :++: ps2) (ps1 :++: ps2) (DistPerms ps2)
@@ -4209,8 +4219,10 @@ implIntroStructAllFields ::
   ImplM vars s r (ps :> StructType ctx) (ps :++: CtxToRList ctx
                                          :> StructType ctx) ()
 implIntroStructAllFields x =
-  getTopDistPerm x >>>= \(ValPerm_Conj1 (Perm_Struct ps)) ->
-  implIntroStructFields x ps (RL.members ps)
+  getTopDistPerm x >>>= \case
+  (ValPerm_Conj1 (Perm_Struct ps)) ->
+    implIntroStructFields x ps (RL.members ps)
+  _ -> error "implIntroStructAllFields: malformed input permission"
 
 -- | Eliminate a permission @x:ptr((rw,off) |-> p)@ into permissions
 -- @x:ptr((rw,off) |-> eq(y))@ and @y:p@ for a fresh variable @y@, returning the
@@ -6468,10 +6480,12 @@ proveNeededPerm _ (NeededEq eq_perm) =
   return (Some MNil)
 proveNeededPerm vars (NeededRange x rng@(MbRangeForLLVMType _ _ _ _)) =
   proveSomeMbPerm x (someMbPermForRange vars rng) >>>
-  getTopDistPerm x >>>= \(ValPerm_LLVMBlock bp) ->
-  case NameSet.toRAssign (findEqVarFieldsInShape (llvmBlockShape bp)) of
-    NameSet.SomeRAssign ns ->
-      Some <$> traverseRAssign (\n -> VarAndPerm n <$> getPerm n) ns
+  getTopDistPerm x >>>= \case
+  (ValPerm_LLVMBlock bp) ->
+    case NameSet.toRAssign (findEqVarFieldsInShape (llvmBlockShape bp)) of
+      NameSet.SomeRAssign ns ->
+        Some <$> traverseRAssign (\n -> VarAndPerm n <$> getPerm n) ns
+  _ -> error "proveNeededPerm: expected block permission"
 
 -- | Prove the permissions represented by a sequence of 'NeededPerms', returning
 -- zero or more auxiliary permissions that are also needed
@@ -6732,7 +6746,7 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
     let mb_fp1 = fmap (flip llvmFieldSetContents
                        (ValPerm_Eq (PExpr_Var y))) mb_fp in
     proveVarLLVMFieldH x (Perm_LLVMField fp') off mb_fp1 >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp1) ->
+    getTopDistPerm x >>>= \p_top1 ->
 
     -- Next, prove the rest of mb_fp, at offset off+sz_bytes and with contents
     -- equal to some variable z
@@ -6744,13 +6758,18 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
                           llvmFieldContents = ValPerm_Eq (PExpr_Var z) })
           mb_fp in
     withExtVarsM (proveVarImplInt x $ mbValPerm_LLVMField mb_fp2) >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp2) ->
+    getTopDistPerm x >>>= \p_top2 ->
 
     -- Finally, combine these two pieces of mb_fp into a single permission, and
     -- use this permission to prove the one we needed to begin with
-    implLLVMFieldConcat x fp1 fp2 >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp_concat) ->
-    proveVarLLVMFieldH x (Perm_LLVMField fp_concat) off mb_fp
+    case (p_top1, p_top2) of
+      (ValPerm_LLVMField fp1, ValPerm_LLVMField fp2) ->
+        implLLVMFieldConcat x fp1 fp2 >>>
+        getTopDistPerm x >>>= \case
+        (ValPerm_LLVMField fp_concat) ->
+          proveVarLLVMFieldH x (Perm_LLVMField fp_concat) off mb_fp
+        _ -> error "proveVarLLVMFieldH2: expected field permission"
+      _ -> error "proveVarLLVMFieldH2: expected field permissions"
 
 -- If we have a field permission that contains the correct offset but doesn't
 -- start at it, then split it and recurse
@@ -7504,7 +7523,7 @@ proveVarLLVMBlocks1 x ps psubst (mb_bp:mb_bps)
 
     -- Recursively prove the remaining perms
     proveVarLLVMBlocks x ps' psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks1" x >>>= \ps_out ->
 
     -- Finally, combine the one memblock perm we chose with the rest of them
     implInsertConjM x (Perm_LLVMBlock bp') ps_out 0
@@ -7579,7 +7598,7 @@ proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
                else
                  bvSub off (llvmBlockOffset bp) in
     implSimplM Proxy (SImpl_SplitLLVMBlockEmpty x bp len1) >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks1" x >>>= \ps' ->
     implAppendConjsM x (deleteNth i ps) ps' >>>
     proveVarLLVMBlocks x (deleteNth i ps ++ ps') psubst mb_bps_in
 
@@ -7627,7 +7646,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp [nuMP| PExpr_EmptyShape |] mb_bps
     -- Do the recursive call without the empty shape and remember what
     -- permissions it proved
     proveVarLLVMBlocks x ps psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
 
     -- Substitute into the required block perm and prove it with
     -- SImpl_IntroLLVMBlockEmpty
@@ -7652,7 +7671,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp [nuMP| PExpr_EmptyShape |] mb_bps =
   proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>
 
   -- Extract out the block perm we proved and coerce it to the empty shape
-  getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+  getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
   let (Perm_LLVMBlock bp : ps_out') = ps_out in
   implSplitSwapConjsM x ps_out 1 >>>
   implSimplM Proxy (SImpl_CoerceLLVMBlockEmpty x bp) >>>
@@ -7687,7 +7706,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
 
   -- Move the correctly-sized perm + the empty shape one to the top of the
   -- stack and sequence them, and then eliminate the empty shape at the end
-  getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+  getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
   let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps'') = ps'
       len2 = llvmBlockLen bp2
       bp_out = bp1 { llvmBlockLen = bvAdd (llvmBlockLen bp1) len2 } in
@@ -7721,7 +7740,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Extract out the block perm we proved
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
     let (_ : ps_out') = ps_out in
     implSplitSwapConjsM x ps_out 1 >>>
 
@@ -7766,7 +7785,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Extract out the block perm we proved
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
     let (Perm_LLVMBlock bp : ps_out') = ps_out in
     implSplitSwapConjsM x ps_out 1 >>>
 
@@ -7825,7 +7844,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>
 
     -- Extract out the block perm we proved
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
     let (Perm_LLVMBlock bp : ps_out') = ps_out in
     implSplitSwapConjsM x ps_out 1 >>>
 
@@ -7868,7 +7887,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
 
     -- Move the pointer permission we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implExtractSwapConjM x ps' 0 >>>
 
     -- Use the SImpl_IntroLLVMBlockPtr rule to prove the required memblock perm
@@ -7897,15 +7916,16 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Recursively prove the remaining block permissions
     proveVarLLVMBlocks x ps psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
 
     -- Prove the corresponding field permission
     proveVarImplInt x (mbValPerm_LLVMField mb_fp) >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp) ->
-
-    -- Finally, convert the field perm to a block and move it into position
-    implSimplM Proxy (SImpl_IntroLLVMBlockField x fp) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock $ llvmFieldPermToBlock fp) ps' 0
+    getTopDistPerm x >>>= \case
+      (ValPerm_LLVMField fp) ->
+        -- Finally, convert the field perm to a block and move it into position
+        implSimplM Proxy (SImpl_IntroLLVMBlockField x fp) >>>
+        implSwapInsertConjM x (Perm_LLVMBlock $ llvmFieldPermToBlock fp) ps' 0
+      _ -> error "proveVarLLVMBlocks2: expected field permission"
 
 
 -- If proving an array shape, prove the remaining blocks and then prove the
@@ -7916,18 +7936,18 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_ArrayShape _ _ _ |] <- mb_sh =
     -- Recursively prove the remaining block permissions
     proveVarLLVMBlocks x ps psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
 
     -- Prove the corresponding array permission
     proveVarImplInt x (mbMapCl $(mkClosed [| ValPerm_LLVMArray . fromJust .
                                              llvmBlockPermToArray |]) mb_bp) >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMArray ap) ->
-
-    -- Finally, convert the array perm to a block and move it into position
-    implSimplM Proxy (SImpl_IntroLLVMBlockArray x ap) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock $ fromJust $
-                           llvmArrayPermToBlock ap) ps' 0
-
+    getTopDistPerm x >>>= \case
+      ValPerm_LLVMArray ap ->
+        -- Finally, convert the array perm to a block and move it into position
+        implSimplM Proxy (SImpl_IntroLLVMBlockArray x ap) >>>
+        implSwapInsertConjM x (Perm_LLVMBlock $ fromJust $
+                               llvmArrayPermToBlock ap) ps' 0
+      _ -> error "proveVarLLVMBlocks2: expected array permission"
 
 -- If proving a sequence shape with an unneeded empty shape, i.e., of the form
 -- sh1;emptysh where the length of sh1 equals the entire length of the required
@@ -7948,7 +7968,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Extract the sh1 permission from the top of the stack and sequence an
     -- empty shape onto the end of it
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implExtractSwapConjM x ps' 0 >>>
     let Perm_LLVMBlock bp = head ps'
         sh1 = llvmBlockShape bp in
@@ -7971,8 +7991,10 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     let mb_bps12 =
           mbMapCl
           $(mkClosed [| \bp ->
-                       let PExpr_SeqShape sh1 sh2 = llvmBlockShape bp in
-                       let Just len1 = llvmShapeLength sh1 in
+                       let (sh1,sh2) = case llvmBlockShape bp of
+                             PExpr_SeqShape sh1_ sh2_ -> (sh1_,sh2_)
+                             _ -> error "proveVarLLVMBlocks2: expected seq shape" in
+                       let len1 = fromJust (llvmShapeLength sh1) in
                        [bp { llvmBlockLen = len1, llvmBlockShape = sh1 },
                         bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) len1,
                              llvmBlockLen = bvSub (llvmBlockLen bp) len1,
@@ -7981,8 +8003,12 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mbList mb_bps12 ++ mb_bps) >>>
 
     -- Move the block permissions we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
-    let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps'') = ps'
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
+    let (bp1,bp2,ps'') =
+          (case ps' of
+              (Perm_LLVMBlock bp1_ : Perm_LLVMBlock bp2_ : ps''_) ->
+                (bp1_,bp2_,ps''_)
+              _ -> error "proveVarLLVMBlocks2: expected 2 block permissions")
         len2 = llvmBlockLen bp2
         sh2 = llvmBlockShape bp2 in
     implSplitSwapConjsM x ps' 2 >>>
@@ -8039,7 +8065,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
                                      : mb_bps) >>>
 
     -- Move the block permission with shape mb_sh to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps'') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps'' ->
     implExtractSwapConjM x ps'' 0 >>>
 
     -- Finally, weaken the block permission to be the desired tagged union
@@ -8064,12 +8090,14 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Move the block permission we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implSplitSwapConjsM x ps' 1 >>>
 
     -- Prove the disjunction of the two memblock permissions
     partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp ->
-    let PExpr_OrShape sh1 sh2 = llvmBlockShape bp in
+    let (sh1, sh2) = case llvmBlockShape bp of
+          PExpr_OrShape sh1' sh2' -> (sh1',sh2')
+          _ -> error "proveVarLLVMBlocks2: expected or shape" in
     let introM = if is_case1 then introOrLM else introOrRM in
     introM x (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh1 })
     (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh2 }) >>>
@@ -8092,7 +8120,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>= \e ->
 
     -- Move the block permission we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implSplitSwapConjsM x ps' 1 >>>
 
     -- Prove an existential around the memblock permission we proved
@@ -8250,9 +8278,14 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocksExt2 x ps psubst mb_bps12 mb_bps >>>
 
     -- Move the two block permissions we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_ret) ->
-    let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps_ret') = ps_ret
-        len2 = llvmBlockLen bp2
+    getTopDistPerm x >>>= \p_top ->
+    (case p_top of
+        ValPerm_Conj
+          ps_ret@(Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps_ret') ->
+          return (ps_ret, bp1, bp2, ps_ret')
+        _ -> error "proveVarLLVMBlocks2: unexpected permission on top of the stack")
+    >>>= \(ps_ret, bp1, bp2, ps_ret') ->
+    let len2 = llvmBlockLen bp2
         sh2 = llvmBlockShape bp2 in
     implSplitSwapConjsM x ps_ret 2 >>>
     implSplitConjsM x (map Perm_LLVMBlock [bp1,bp2]) 1 >>>
