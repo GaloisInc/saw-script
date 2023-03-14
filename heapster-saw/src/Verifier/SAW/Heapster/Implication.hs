@@ -5137,10 +5137,12 @@ implLLVMFieldSplit x fp sz_bytes
         (Impl1_SplitLLVMWordField x (llvmFieldSetEqWord fp e) sz endianness)
         (MNil :>: Impl1Cont (const $ return ())) >>>
         getDistPerms >>>=
-        \(_ :>: VarAndPerm _ (ValPerm_Conj1 p1) :>:
-          VarAndPerm _ (ValPerm_Conj1 p2) :>:
-          VarAndPerm y p_y :>: VarAndPerm z p_z) ->
-        recombinePerm z p_z >>> recombinePerm y p_y >>> return (p1,p2)
+        \case
+          (_ :>: VarAndPerm _ (ValPerm_Conj1 p1) :>:
+           VarAndPerm _ (ValPerm_Conj1 p2) :>:
+           VarAndPerm y p_y :>: VarAndPerm z p_z) ->
+            recombinePerm z p_z >>> recombinePerm y p_y >>> return (p1,p2)
+          _ -> error "implLLVMFieldSplit: unexpected permission stack"
       Nothing ->
         implSimplM Proxy (SImpl_SplitLLVMTrueField x
                           (llvmFieldSetTrue fp fp) sz fp_m_sz) >>>
@@ -5175,8 +5177,10 @@ implLLVMFieldTruncate x fp sz'
         (Impl1_TruncateLLVMWordField x (llvmFieldSetEqWord fp e) sz' endianness)
         (MNil :>: Impl1Cont (const $ return ())) >>>
         getDistPerms >>>=
-        \(_ :>: VarAndPerm _ (ValPerm_Conj1 p) :>: VarAndPerm y p_y) ->
-        recombinePerm y p_y >>> return p
+        \case
+          (_ :>: VarAndPerm _ (ValPerm_Conj1 p) :>: VarAndPerm y p_y) ->
+            recombinePerm y p_y >>> return p
+          _ -> error "implLLVMFieldTruncate: unexpected permission stack"
       Nothing ->
         implSimplM Proxy (SImpl_TruncateLLVMTrueField x
                           (llvmFieldSetTrue fp fp) sz') >>>
@@ -5365,10 +5369,11 @@ implLLVMArrayReturnBorrow ::
                                             :> LLVMPointerType w) ()
 implLLVMArrayReturnBorrow x ap (FieldBorrow cell) =
   implLLVMArrayCellReturn x ap cell
-implLLVMArrayReturnBorrow x ap b@(RangeBorrow _) =
-  let ValPerm_Conj1 (Perm_LLVMArray ap_ret) = permForLLVMArrayBorrow ap b in
-  implLLVMArrayReturn x ap ap_ret >>>
-  pure ()
+implLLVMArrayReturnBorrow x ap b@(RangeBorrow _)
+  | ValPerm_Conj1 (Perm_LLVMArray ap_ret) <- permForLLVMArrayBorrow ap b =
+    implLLVMArrayReturn x ap ap_ret >>>
+    pure ()
+implLLVMArrayReturnBorrow _ _ _ = error "implLLVMArrayReturnBorrow"
 
 
 -- | Append to array permissions, assuming one ends where the other begins and
@@ -7672,7 +7677,10 @@ proveVarLLVMBlocks2 x ps psubst mb_bp [nuMP| PExpr_EmptyShape |] mb_bps =
 
   -- Extract out the block perm we proved and coerce it to the empty shape
   getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
-  let (Perm_LLVMBlock bp : ps_out') = ps_out in
+  let ps_out' = tail ps_out
+      bp = case head ps_out of
+        Perm_LLVMBlock bp_ -> bp_
+        _ -> error "proveVarLLVMBlocks2: expected block permission" in
   implSplitSwapConjsM x ps_out 1 >>>
   implSimplM Proxy (SImpl_CoerceLLVMBlockEmpty x bp) >>>
 
@@ -7707,7 +7715,10 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
   -- Move the correctly-sized perm + the empty shape one to the top of the
   -- stack and sequence them, and then eliminate the empty shape at the end
   getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
-  let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps'') = ps'
+  let (bp1,bp2,ps'') = case ps' of
+        (Perm_LLVMBlock bp1_ : Perm_LLVMBlock bp2_ : ps''_) ->
+          (bp1_,bp2_,ps''_)
+        _ -> error "proveVarLLVMBlocks2: expected two block permissions"
       len2 = llvmBlockLen bp2
       bp_out = bp1 { llvmBlockLen = bvAdd (llvmBlockLen bp1) len2 } in
   implSplitSwapConjsM x ps' 2 >>>
@@ -7741,7 +7752,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Extract out the block perm we proved
     getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
-    let (_ : ps_out') = ps_out in
+    let ps_out' = tail ps_out in
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Introduce the modalities
@@ -7786,7 +7797,10 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Extract out the block perm we proved
     getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
-    let (Perm_LLVMBlock bp : ps_out') = ps_out in
+    let ps_out' = tail ps_out
+        bp = case head ps_out of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> error "proveVarLLVMBlocks2: expected block permission" in
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Fold the named shape
@@ -7821,9 +7835,12 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_EqShape _ (PExpr_Var mb_z) |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Just blk <- psubstLookup psubst memb =
-    let mb_bp' = fmap (\bp ->
-                        let PExpr_EqShape len _ = llvmBlockShape bp in
-                        bp { llvmBlockShape = PExpr_EqShape len blk }) mb_bp in
+    let mb_bp' =
+          fmap (\bp ->
+                 case llvmBlockShape bp of
+                   PExpr_EqShape len _ ->
+                     bp { llvmBlockShape = PExpr_EqShape len blk }
+                   _ -> error "proveVarLLVMBlocks2: expected eq shape") mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
 
@@ -7845,7 +7862,10 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Extract out the block perm we proved
     getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
-    let (Perm_LLVMBlock bp : ps_out') = ps_out in
+    let ps_out' = tail ps_out
+        bp = case head ps_out of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> error "proveVarLLVMBlocks2: expected block perm" in
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Eliminate that block perm to have an equality shape, and set z to the
@@ -7956,21 +7976,29 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_SeqShape _ PExpr_EmptyShape |] <- mb_sh
   , mbLift $ mbMapCl $(mkClosed
                        [| \bp ->
-                         let PExpr_SeqShape sh1 _ = llvmBlockShape bp in
-                         bvEq (llvmBlockLen bp) (fromJust $
-                                                 llvmShapeLength sh1) |]) mb_bp =
+                         case llvmBlockShape bp of
+                           PExpr_SeqShape sh1 _ ->
+                             bvEq (llvmBlockLen bp) (fromJust $
+                                                     llvmShapeLength sh1)
+                           _ -> error "proveVarLLVMBlocks2: expected seq shape"
+                        |]) mb_bp =
     -- Recursively call proveVarLLVMBlocks with sh1 in place of sh1;emptysh
     let mb_bp' = mbMapCl $(mkClosed
                            [| \bp ->
-                             let PExpr_SeqShape sh1 _ = llvmBlockShape bp in
-                             bp { llvmBlockShape = sh1 } |]) mb_bp in
+                             case llvmBlockShape bp of
+                               PExpr_SeqShape sh1 _ ->
+                                 bp { llvmBlockShape = sh1 }
+                               _ -> error "proveVarLLVMBlocks2: expected seq shape"
+                            |]) mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
 
     -- Extract the sh1 permission from the top of the stack and sequence an
     -- empty shape onto the end of it
     getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implExtractSwapConjM x ps' 0 >>>
-    let Perm_LLVMBlock bp = head ps'
+    let bp = case head ps' of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> error "proveVarLLVMBlocks2: expected block permission"
         sh1 = llvmBlockShape bp in
     implSimplM Proxy (SImpl_IntroLLVMBlockSeqEmpty x bp) >>>
 
