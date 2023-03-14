@@ -15,8 +15,9 @@ let run_test name test expected =
          do { print "Test failed\n"; exit 1; }; };
 
 // The constant 0 function const0 x = 0
-const0 <- parse_core
-  "\\ (_:Vec 64 Bool) -> retS VoidEv emptyFunStack (Vec 64 Bool) (bvNat 64 0)";
+let ret0_core = "retS VoidEv emptyFunStack (Vec 64 Bool) (bvNat 64 0)";
+let const0_core = str_concat "\\ (_:Vec 64 Bool) -> " ret0_core;
+const0 <- parse_core const0_core;
 
 // The constant 1 function const1 x = 1
 const1 <- parse_core
@@ -25,14 +26,28 @@ const1 <- parse_core
 // const0 <= const0
 run_test "const0 |= const0" (mr_solver_query const0 const0) true;
 
+let paren_const0_core = str_concat "(" (str_concat const0_core ")");
+let const0_refines =
+  str_concat "refinesS_fun_eq VoidEv emptyFunStack [Vec 64 Bool] (Vec 64 Bool) "
+           (str_concat paren_const0_core (str_concat " " paren_const0_core));
+  // str_concat "refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) "
+  //            (str_concat paren_const0_core (str_concat " " paren_const0_core));
+print const0_refines;
+prove_extcore prove_refinement (parse_core const0_refines);
+
+// str_concat "\\ (x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) "
+//            (str_concat const0_appl_core (str_concat " " const0_appl_core));
+
+//prove_print ... {{ \x -> left x == right x}}
+
+/*
 // TODO: Docs
 // TODO: Generalize args to `a -> b`?
 let refines = parse_core "refinesS_eq VoidEv emptyFunStack (Vec 64 Bool)";
 let veq = parse_core "vecEq 96 (Vec 8 Bool) (bvEq 8)";
 let v = parse_core "vecEq";
 
-/*
-prove_print prove_refinement (refines const0 const0);
+prove_print prove_refinement {{ refines const0 const0 }};
 
 // The function test_fun0 from the prelude = const0
 test_fun0 <- parse_core "test_fun0";

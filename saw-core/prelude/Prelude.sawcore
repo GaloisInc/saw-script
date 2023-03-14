@@ -3065,6 +3065,16 @@ primitive refinesS : (E1:EvType) -> (E2:EvType) ->
                      (R1:sort 0) -> (R2:sort 0) -> (RR:SpecRetRel R1 R2) ->
                      SpecM E1 stack1 R1 -> SpecM E2 stack2 R2 -> Prop;
 
+refinesS_fun : (E1:EvType) -> (E2:EvType) ->
+               (stack1:FunStack) -> (stack2:FunStack) ->
+               (RPre:SpecPreRel E1 E2 stack1 stack2) ->
+               (RPost:SpecPostRel E1 E2 stack1 stack2) ->
+               (lrt1 : LetRecType) -> (lrt2 : LetRecType) ->
+               (RR: lrt1Pi lrt1 (\ (args1:LRTInput lrt1) -> 
+                    lrt1Pi lrt2 (\ (args2:LRTInput lrt2) ->
+                    SpecRetRel (LRTOuptut lrt1 args1) (LRTOutput lrt2 args2))
+               SpecM E1 stack1 R1 -> SpecM E2 stack2 R2 -> Prop;
+
 -- Homogeneous refinement of SpecM computations - i.e. refinesS with eqPreRel for
 -- the precondition, eqPostRel for the postcondition, and eqRR for the return relation
 refinesS_eq : (E:EvType) -> (stack:FunStack) -> (R:sort 0) ->
