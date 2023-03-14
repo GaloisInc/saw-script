@@ -73,6 +73,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 
 import Verifier.SAW.Heapster.CruUtil
+import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
@@ -1673,8 +1674,7 @@ getLLVMArrayTransSlice arr_trans sub_arr_tp rng_trans prop_transs =
       v_tm = llvmArrayTransTerm arr_trans
       off_tm = transTerm1 $ bvRangeTransOff rng_trans
       len'_tm = transTerm1 $ bvRangeTransLen rng_trans
-      p1_trans = head prop_transs
-      p2_trans = head (tail prop_transs)
+      (p1_trans, p2_trans, _) = expectLengthAtLeastTwo prop_transs
       BVPropTrans _ p1_tm = p1_trans
       BVPropTrans _ p2_tm = p2_trans in
   typeTransF sub_arr_tp
@@ -5201,8 +5201,9 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     let (fun_ixs, lrtss) = unzip $ gen_lrts_ixs 0 tcfgs
     let lrts = concat lrtss
     frame_tm <- completeNormOpenTerm sc $ lrtsOpenTerm lrts
+    let (cfg_and_perm, _) = expectLengthAtLeastOne cfgs_and_perms
     let frame_ident =
-          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
                                 ++ "__frame")
     frame_tp <- completeNormOpenTerm sc frameTypeOpenTerm
     scInsertDef sc mod_name frame_ident frame_tp frame_tm
@@ -5231,7 +5232,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
 
     -- Add a named definition for bodies_tm
     let bodies_ident =
-          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
                                 ++ "__bodies")
     bodies_tp <-
       completeNormOpenTerm sc $

@@ -28,7 +28,7 @@ import Lang.Crucible.CFG.Core ( Some(Some)
                               , CtxRepr
                               , CFG(..)
                               , Reg(..)
-                              
+
                               , Block(..)
                               , blockStmts
                               , StmtSeq(..)
@@ -36,6 +36,7 @@ import Lang.Crucible.CFG.Core ( Some(Some)
 
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.ParsedCtx
+import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.PermParser
 
@@ -51,7 +52,7 @@ extractHints ::
   PermEnv ->
   [L.Module] {- ^ The original source modules: used for finding constant values (i.e. spec strings) -} ->
   FunPerm ghosts args outs ret {- ^ The FunPerm corresponding to the CFG we are scanning -} ->
-  CFG LLVM blocks init ret {- ^ The Crucible CFG for which to build the block hint map -} ->  
+  CFG LLVM blocks init ret {- ^ The Crucible CFG for which to build the block hint map -} ->
   Either String (Ctx.Assignment (Constant (Maybe Hint)) blocks)
 extractHints env modules perm cfg =
   runExcept $ traverseFC extractHint (cfgBlockMap cfg)
@@ -78,20 +79,20 @@ extractHints env modules perm cfg =
 
 -- | Packs up the ghosts in a parsed hint permission spec
 data SomeHintSpec tops ctx where
-  SomeHintSpec :: 
+  SomeHintSpec ::
     CruCtx ghosts ->
-    MbValuePerms ((tops :++: CtxToRList ctx) :++: ghosts) -> 
+    MbValuePerms ((tops :++: CtxToRList ctx) :++: ghosts) ->
     SomeHintSpec tops ctx
 
 -- | Try to find a hint in a Block
 extractBlockHints ::
   forall blocks ret ctx tops.
-  PermEnv -> 
+  PermEnv ->
   Map.Map L.Symbol String {- ^ Globals map -} ->
   CruCtx tops {- ^ top context derived from current function's perm -} ->
   Block LLVM blocks ret ctx ->
   ExtractM (Maybe (SomeHintSpec tops ctx))
-extractBlockHints env globals tops block = 
+extractBlockHints env globals tops block =
   extractStmtsHint who env globals tops inputs stmts
   where
     stmts = block ^. blockStmts
@@ -103,15 +104,15 @@ extractBlockHints env globals tops block =
 extractStmtsHint ::
   forall blocks ret ctx tops.
   String ->
-  PermEnv -> 
+  PermEnv ->
   Map.Map L.Symbol String {- ^ globals -} ->
   CruCtx tops {- ^ top context derived from current function's perm -} ->
   CtxRepr ctx {- ^ block arguments -} ->
-  StmtSeq LLVM blocks ret ctx -> 
+  StmtSeq LLVM blocks ret ctx ->
   ExtractM (Maybe (SomeHintSpec tops ctx))
-extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize 
+extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize
   where
-    loop :: 
+    loop ::
       forall rest.
       Ctx.Size rest ->
       StmtSeq LLVM blocks ret (ctx Ctx.<+> rest) ->
@@ -122,41 +123,41 @@ extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize
       _ | ConsStmt _ s' rest <- s ->
           let inc_rest :: forall tp. Ctx.Size (rest Ctx.::> tp)
               inc_rest = Ctx.incSize sz_rest in
-          case s' of 
-            SetReg{} -> loop inc_rest rest 
-            ExtendAssign{} -> loop inc_rest rest 
-            CallHandle{} -> loop inc_rest rest 
+          case s' of
+            SetReg{} -> loop inc_rest rest
+            ExtendAssign{} -> loop inc_rest rest
+            CallHandle{} -> loop inc_rest rest
             Print{} -> loop sz_rest rest
-            ReadGlobal{} -> loop inc_rest rest 
-            WriteGlobal{} -> loop sz_rest rest 
-            FreshConstant {} -> loop inc_rest rest 
-            FreshFloat {} -> loop inc_rest rest 
-            FreshNat {} -> loop inc_rest rest 
-            NewRefCell {} -> loop inc_rest rest 
-            NewEmptyRefCell {} -> loop inc_rest rest 
-            ReadRefCell {} -> loop inc_rest rest 
-            WriteRefCell {} -> loop sz_rest rest 
-            DropRefCell {} -> loop sz_rest rest 
-            Assert {} -> loop sz_rest rest 
-            Assume {} -> loop sz_rest rest 
+            ReadGlobal{} -> loop inc_rest rest
+            WriteGlobal{} -> loop sz_rest rest
+            FreshConstant {} -> loop inc_rest rest
+            FreshFloat {} -> loop inc_rest rest
+            FreshNat {} -> loop inc_rest rest
+            NewRefCell {} -> loop inc_rest rest
+            NewEmptyRefCell {} -> loop inc_rest rest
+            ReadRefCell {} -> loop inc_rest rest
+            WriteRefCell {} -> loop sz_rest rest
+            DropRefCell {} -> loop sz_rest rest
+            Assert {} -> loop sz_rest rest
+            Assume {} -> loop sz_rest rest
       _ -> return Nothing
 
 -- | Try to recognize the sequence of Crucible instructions leading up to
 -- a call to heapster.require. If found, build a hint by parsing the provided
--- (global) ghost context string and spec string by looking them up 
+-- (global) ghost context string and spec string by looking them up
 -- in the global map.
 --
--- Will throw an error if the `require` is malformed (malformed spec strings 
--- or references out-of-scope values) 
-extractHintFromSequence :: 
+-- Will throw an error if the `require` is malformed (malformed spec strings
+-- or references out-of-scope values)
+extractHintFromSequence ::
   forall tops ctx rest blocks ret.
   String ->
-  PermEnv -> 
+  PermEnv ->
   Map.Map L.Symbol String {- ^ globals -} ->
   CruCtx tops {- ^ toplevel context -} ->
   CtxRepr ctx {- ^ block arguments -} ->
   Ctx.Size rest {- ^ keeps track of how deep we are into the current block -} ->
-  StmtSeq LLVM blocks ret (ctx Ctx.<+> rest) -> 
+  StmtSeq LLVM blocks ret (ctx Ctx.<+> rest) ->
   ExtractM (Maybe (SomeHintSpec tops ctx))
 extractHintFromSequence who env globals tops blockIns sz s =
   case s of
@@ -168,13 +169,13 @@ extractHintFromSequence who env globals tops blockIns sz s =
           | globalSymbolName f == heapsterRequireName
           , Just Refl <- testEquality ptr fnPtrReg
           , Just Refl <- testEquality fh fnHdlReg
-          , Just ghosts_str <- Map.lookup (fromString (globalSymbolName ghosts)) globals 
+          , Just ghosts_str <- Map.lookup (fromString (globalSymbolName ghosts)) globals
           , Just spec_str <- Map.lookup (fromString (globalSymbolName spec)) globals ->
-            -- The first two arguments are the ghost/spec strings. 
+            -- The first two arguments are the ghost/spec strings.
             -- we can't "demote" their contexts to block args since they're globals
             -- and hence loaded in this block
-            let args = tail $ tail $ toListFC Some actuals in
-            -- "demote" the context of each reg to the block input context, 
+            let (_, _, args) = expectLengthAtLeastTwo $ toListFC Some actuals in
+            -- "demote" the context of each reg to the block input context,
             -- proving that each arg is in fact defined in a previous block
             -- (and is thus valid for use in this spec)
             case sequence (toBlockArg (Ctx.size blockIns) sizeAtCall <$> args) of
@@ -195,10 +196,10 @@ extractHintFromSequence who env globals tops blockIns sz s =
     sizeAtCall :: forall a b c d. Ctx.Size (rest Ctx.::> a Ctx.::> b Ctx.::> c Ctx.::> d)
     sizeAtCall = Ctx.incSize (Ctx.incSize (Ctx.incSize (Ctx.incSize sz)))
 
--- | Assemble a Hint 
+-- | Assemble a Hint
 --
--- Will throw an error if the `require` is malformed (malformed spec strings 
--- or references out-of-scope values) 
+-- Will throw an error if the `require` is malformed (malformed spec strings
+-- or references out-of-scope values)
 requireArgsToHint ::
   String {-^ A string representing the block in which this call appears (for errors) -} ->
   PermEnv ->
@@ -211,10 +212,10 @@ requireArgsToHint ::
 requireArgsToHint who env blockIns tops args ghostString specString =
   case parseParsedCtxString who env ghostString of
     Just (Some ghost_ctx) ->
-      let full_ctx = appendParsedCtx (appendParsedCtx top_ctx ctx_rename) ghost_ctx 
+      let full_ctx = appendParsedCtx (appendParsedCtx top_ctx ctx_rename) ghost_ctx
           sub = buildHintSub blockIns args
           ctx = mkArgsParsedCtx (mkCruCtx blockIns)
-          top_ctx = mkTopParsedCtx tops 
+          top_ctx = mkTopParsedCtx tops
           ctx_rename = renameParsedCtx sub ctx
       in maybe (throwError (who ++ ": error parsing permissions"))
                (return . SomeHintSpec (parsedCtxCtx ghost_ctx))
@@ -225,7 +226,7 @@ requireArgsToHint who env blockIns tops args ghostString specString =
 -- | Apply a substitution to the names in a ParsedCtx
 renameParsedCtx :: [(String, String)] -> ParsedCtx ctx -> ParsedCtx ctx
 renameParsedCtx sub ctx = ctx { parsedCtxNames = renamed }
-  where 
+  where
     renamed = mapRAssign (\(Constant x) ->
                            Constant (substNames x)) (parsedCtxNames ctx)
     substNames x = fromMaybe x (lookup x sub)
@@ -234,7 +235,7 @@ renameParsedCtx sub ctx = ctx { parsedCtxNames = renamed }
 -- provided to a `requires` call, i.e. given
 --
 -- heapster.require(..., ..., %11, %50)
--- if %11 corresponds to block argument 1 and %50 to block argument 0, with block arg 2 
+-- if %11 corresponds to block argument 1 and %50 to block argument 0, with block arg 2
 -- unused,
 -- then return the substitution [("arg1", "arg0"), ("arg1, arg0"), ("arg2", "arg2")]
 buildHintSub ::
@@ -243,7 +244,7 @@ buildHintSub ::
   [Some (Reg block_args)] ->
   [(String, String)]
 buildHintSub blockArgs args = usedSub
-  where 
+  where
     argNames = someRegName <$> args
     unusedNames = argNamei <$> [length argNames .. (Ctx.sizeInt (Ctx.size blockArgs))]
     usedSub  = [ (a, argNamei i) | i <- [0..] | a <- argNames ++ unusedNames ]
@@ -253,7 +254,7 @@ buildHintSub blockArgs args = usedSub
 toBlockArg ::
   Ctx.Size block_args ->
   Ctx.Size rest ->
-  Some (Reg (block_args Ctx.<+> rest)) -> 
+  Some (Reg (block_args Ctx.<+> rest)) ->
   Maybe (Some (Reg block_args))
 toBlockArg argsSz _restSz reg =
   case reg of
@@ -269,7 +270,7 @@ mkBlockEntryHint ::
   CruCtx top_args ->
   CruCtx ghosts ->
   MbValuePerms ((top_args :++: CtxToRList args) :++: ghosts) ->
-  Hint 
+  Hint
 mkBlockEntryHint cfg blockId tops ghosts valPerms  =
   Hint_Block $ BlockHint h blocks blockId entryHint
   where
