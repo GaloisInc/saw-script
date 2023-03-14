@@ -173,7 +173,7 @@ extractHintFromSequence who env globals tops blockIns sz s =
             -- The first two arguments are the ghost/spec strings. 
             -- we can't "demote" their contexts to block args since they're globals
             -- and hence loaded in this block
-            let ~_:_:args = toListFC Some actuals in
+            let args = tail $ tail $ toListFC Some actuals in
             -- "demote" the context of each reg to the block input context, 
             -- proving that each arg is in fact defined in a previous block
             -- (and is thus valid for use in this spec)
