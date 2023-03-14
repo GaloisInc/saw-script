@@ -68,9 +68,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-12, windows-latest]
-        ghc: ["8.8.4", "8.10.7", "9.0.2"]
+        ghc: ["8.8.4", "8.10.7", "9.2.7"]
         run-tests: [true]
         include:
+          # We include one job from an older Ubuntu LTS release to increase our
+          # coverage of possible Linux configurations. Since we already run the
+          # tests with the newest LTS release, we won't bother testing this one.
           - os: ubuntu-20.04
             ghc: "8.10.7"
             run-tests: false
@@ -83,12 +86,6 @@ jobs:
           - os: windows-latest
             ghc: "8.8.4"
             run-tests: true
-          # Exclude 9.0 on Windows for now until
-          # https://github.com/commercialhaskell/stackage/issues/6400
-          # is resolved
-          - os: windows-latest
-            ghc: "9.0.2"
-            run-tests: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
