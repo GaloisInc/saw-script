@@ -1,6 +1,7 @@
 packages:
     saw-script.cabal
     saw-remote-api
+    crucible-mir-comp
     crux-mir-comp
     cryptol-saw-core
     rme
@@ -23,6 +24,7 @@ packages:
     deps/crucible/crucible-concurrency
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
+    deps/crucible/crucible-mir
     deps/crucible/crucible-symio
     deps/crucible/crucible-syntax
     deps/crucible/crux
