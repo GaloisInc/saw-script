@@ -68,6 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-12, windows-latest]
+        cabal: ["3.8.1.0"]
         ghc: ["8.8.4", "8.10.7", "9.2.7"]
         run-tests: [true]
         include:
@@ -76,15 +77,18 @@ jobs:
           # tests with the newest LTS release, we won't bother testing this one.
           - os: ubuntu-20.04
             ghc: "8.10.7"
+            cabal: "3.8.1.0"
             run-tests: false
         exclude:
           # Exclude 8.8 on macOS 12 due to
           # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
           - os: macos-12
             ghc: "8.8.4"
+            cabal: "3.8.1.0"
             run-tests: true
           - os: windows-latest
             ghc: "8.8.4"
+            cabal: "3.8.1.0"
             run-tests: true
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
@@ -105,6 +109,7 @@ jobs:
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
 
       - name: Post-GHC installation fixups on Windows
         shell: bash
