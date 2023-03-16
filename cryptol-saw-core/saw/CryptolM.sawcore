@@ -30,8 +30,12 @@ splitCryM m n a v =
     genCryM n a (\ (j : Nat) ->
       atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
 
-zipSameM : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
-zipSameM a b n x y = genCryM n (a*b) (\ (i : Nat) -> (atCryM n a x i, atCryM n b y i));
+zipSameCryM : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
+zipSameCryM a b n x y = genCryM n (a*b) (\ (i : Nat) -> (atCryM n a x i, atCryM n b y i));
+
+reverseCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Vec n a;
+reverseCryM n a xs = genCryM n a (\ (i : Nat) -> atCryM n a xs (subNat (subNat n 1) i));
+
 
 
 --------------------------------------------------------------------------------
@@ -453,7 +457,7 @@ seqZipSameM : (E:EvType) -> (stack:FunStack) ->
 seqZipSameM E stack a b n =
   Num_rec
     (\ (n : Num) -> mseq E stack n a -> mseq E stack n b -> mseq E stack n (a * b))
-    (\ (n : Nat) -> zipSameM a b n)
+    (\ (n : Nat) -> zipSameCryM a b n)
     (streamMap2 (SpecM E stack a) (SpecM E stack b) (SpecM E stack (a * b))
        (fmapS2 E stack a b (a * b) (\ (x:a) -> \ (y:b) -> (x,y))))
     n;
@@ -757,7 +761,7 @@ ecReverseM : (E:EvType) -> (stack:FunStack) ->
              mseq E stack n a;
 ecReverseM E stack =
   Num_rec_fin (\ (n:Num) -> (a : isort 0) -> mseq E stack n a -> mseq E stack n a)
-              (\ (n:Nat) -> ecReverse (TCNum n));
+              (\ (n:Nat) -> reverseCryM n);
 
 -- FIXME
 primitive
@@ -803,32 +807,64 @@ ecUpdateM E stack n_top a ix pix =
                                             "ecUpdateM: invalid sequence index") i)
     n_top;
 
--- FIXME
-primitive
 ecAtBackM : (E:EvType) -> (stack:FunStack) ->
-            (n : Num) -> isFinite n -> (a ix : sort 0) -> PIntegral ix ->
+            (n : Num) -> isFinite n -> (a : isort 0) ->
+            (ix : sort 0) -> PIntegral ix ->
             mseq E stack n a -> ix -> SpecM E stack a;
+ecAtBackM E stack n pf a ix pix xs =
+  ecAtM E stack n a ix pix (ecReverseM E stack n pf a xs);
 
--- FIXME
-primitive
 ecFromToM : (E:EvType) -> (stack:FunStack) ->
             (first : Num) -> isFinite first -> (last : Num) -> isFinite last ->
-            (a : isort 0) -> PLiteral a ->
+            (a : sort 0) -> PLiteral a ->
             mseq E stack (tcAdd (TCNum 1) (tcSub last first)) a;
+ecFromToM E stack =
+  Num_rec_fin
+    (\ (first:Num) -> (last:Num) -> isFinite last ->
+       (a : sort 0) -> PLiteral a ->
+       mseq E stack (tcAdd (TCNum 1) (tcSub last first)) a)
+    (\ (first:Nat) ->
+       Num_rec_fin
+         (\ (last:Num) -> (a : sort 0) -> PLiteral a ->
+            mseq E stack (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
+         (\ (last:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) ->
+            genCryM (addNat 1 (subNat last first)) a
+                    (\ (i : Nat) -> pa (addNat i first))));
 
--- FIXME
-primitive
 ecFromToLessThanM : (E:EvType) -> (stack:FunStack) ->
                     (first : Num) -> isFinite first -> (bound : Num) ->
-                    (a : isort 0) -> PLiteralLessThan a ->
+                    (a : sort 0) -> PLiteralLessThan a ->
                     mseq E stack (tcSub bound first) a;
+ecFromToLessThanM E stack first pf bound a =
+  Num_rec_fin
+    (\ (first:Num) -> PLiteralLessThan a ->
+       mseq E stack (tcSub bound first) a)
+    (\ (first:Nat) ->
+       Num_rec
+         (\ (bound:Num) -> PLiteralLessThan a ->
+            mseq E stack (tcSub bound (TCNum first)) a)
+         (\ (bound:Nat) -> \ (pa : PLiteralLessThan a) ->
+            genCryM (subNat bound first) a
+                    (\ (i : Nat) -> pa (addNat i first)))
+         (\ (pa : PLiteralLessThan a) ->
+            MkStream (SpecM E stack a)
+                     (\ (i : Nat) -> retS E stack a (pa (addNat i first))))
+         bound)
+    first pf;
 
--- FIXME
-primitive
 ecFromThenToM :
   (E:EvType) -> (stack:FunStack) ->
   (first next last : Num) -> (a : sort 0) -> (len : Num) -> isFinite len ->
   PLiteral a -> PLiteral a -> PLiteral a -> mseq E stack len a;
+ecFromThenToM E stack first next _ a =
+  Num_rec_fin
+    (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a -> mseq E stack len a)
+    (\ (len:Nat) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) -> \ (_ : PLiteral a) ->
+       genCryM len a
+               (\ (i : Nat) ->
+                  pa (subNat (addNat (getFinNat first)
+                                     (mulNat i (getFinNat next)))
+                             (mulNat i (getFinNat first)))));
 
 ecInfFromM : (E:EvType) -> (stack:FunStack) ->
              (a : sort 0) -> PIntegral a -> a -> mseq E stack TCInf a;
