@@ -44,6 +44,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.FFI.FFIType as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
@@ -69,6 +70,8 @@ import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
 import GHC.Stack
 
+import Debug.Trace
+
 --------------------------------------------------------------------------------
 -- Type Environments
 
@@ -85,11 +88,20 @@ data Env = Env
   , envRefPrims :: Map C.PrimIdent C.Expr
   , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
   , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
+  , envForeign :: Map C.Name C.FFIFunType
   }
 
 emptyEnv :: Env
 emptyEnv =
-  Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
+  Env Map.empty
+      Map.empty
+      Map.empty
+      Map.empty
+      []
+      Map.empty
+      Map.empty
+      Map.empty
+      Map.empty
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -108,6 +120,7 @@ liftEnv env =
       , envRefPrims = envRefPrims env
       , envPrims = envPrims env
       , envPrimTypes = envPrimTypes env
+      , envForeign = envForeign env
       }
 
 bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
@@ -1291,8 +1304,7 @@ importDeclGroup declOpts sc env (C.Recursive [decl]) =
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
 
-    C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+    C.DForeign {} -> error "TODO: Can FFI functions even be part of recursive DeclGroups?"
 
     C.DExpr expr ->
       do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
@@ -1339,7 +1351,7 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
      let extractDeclExpr decl =
            case C.dDefinition decl of
              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
-             C.DForeign {} ->
+             C.DForeign {} -> -- TODO: What do I do in this case?
                error "`foreign` imports may not be used in SAW specifications"
              C.DPrim ->
                 panic "importDeclGroup"
@@ -1378,8 +1390,18 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
-    C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+    C.DForeign ffiType
+     | TopLevelDeclGroup primOpts <- declOpts -> do
+        traceIO "nonrecursive ffi import"
+        let name = C.dName decl
+        rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
+        -- TODO: What else do I need to update in env?
+        return $ env {
+          envE = Map.insert name (rhs, 0) (envE env)
+        , envC = Map.insert name (C.dSignature decl) (envC env)
+        , envForeign = Map.insert (C.dName decl) ffiType (envForeign env)
+        }
+     | otherwise -> panicNonTopLevel
 
     C.DPrim
      | TopLevelDeclGroup primOpts <- declOpts -> do
@@ -1388,8 +1410,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) =
                        , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
                        }
         return env'
-     | otherwise -> do
-        panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
+     | otherwise -> panicNonTopLevel
 
     C.DExpr expr -> do
      rhs <- importExpr' sc env (C.dSignature decl) expr
@@ -1402,6 +1423,9 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) =
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'
+  where
+    panicNonTopLevel =
+      panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
 data ImportPrimitiveOptions =
   ImportPrimitiveOptions
