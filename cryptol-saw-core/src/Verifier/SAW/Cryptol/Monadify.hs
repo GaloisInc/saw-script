@@ -1393,8 +1393,9 @@ defaultMonTable =
 
     -- List comprehensions
   , mmArg "Cryptol.from" "CryptolM.fromM" True
+  , mmArg "Cryptol.mlet" "CryptolM.mletM" True
   , mmArg "Cryptol.seqZip" "CryptolM.seqZipM" True
-    -- FIXME: continue here...
+  , mmSemiPure "Cryptol.seqZipSame" "CryptolM.seqZipSameM" True
 
     -- PEq constraints
   , mmSemiPureFin 0 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True

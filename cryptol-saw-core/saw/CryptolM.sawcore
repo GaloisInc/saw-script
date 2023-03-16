@@ -12,6 +12,27 @@ genCryM = gen;
 atCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
 atCryM = at;
 
+-- Alternate versions of Prelude functions, changed to use genCryM and atCryM
+
+joinCryM : (m n : Nat) -> (a : isort 0) ->
+           Vec m (Vec n a) -> Vec (mulNat m n) a;
+joinCryM m n a v =
+  genCryM (mulNat m n) a (\ (i : Nat) ->
+    atCryM n a (at m (Vec n a) v (divNat i n)) (modNat i n));
+
+zipCryM : (a b : isort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
+zipCryM a b m n xs ys =
+  genCryM (minNat m n) (a * b) (\ (i:Nat) -> (atCryM m a xs i, atCryM n b ys i));
+
+splitCryM : (m n : Nat) -> (a : isort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+splitCryM m n a v =
+  genCryM m (Vec n a) (\ (i : Nat) ->
+    genCryM n a (\ (j : Nat) ->
+      atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
+
+zipSameM : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
+zipSameM a b n x y = genCryM n (a*b) (\ (i : Nat) -> (atCryM n a x i, atCryM n b y i));
+
 
 --------------------------------------------------------------------------------
 -- Monadic assertions
@@ -156,6 +177,13 @@ vecMapInvarM : (E:EvType) -> (stack:FunStack) ->
 vecMapInvarM E stack a b n f xs invar =
   vecMapInvarBindM E stack a b (Vec n b) n f xs invar (retS E stack (Vec n b));
 
+vecMapBindM : (E:EvType) -> (stack:FunStack) ->
+              (a : sort 0) -> (b : qsort 0) -> (c : sort 0) ->
+              (n : Nat) -> (Nat -> a -> SpecM E stack b) ->
+              Vec n a -> (Vec n b -> SpecM E stack c) ->
+              SpecM E stack c;
+vecMapBindM E stack a b c n f xs = vecMapInvarBindM E stack a b c n f xs True;
+
 vecMapM : (E:EvType) -> (stack:FunStack) ->
           (a : sort 0) -> (b : qsort 0) ->
           (n : Nat) -> (Nat -> a -> SpecM E stack b) ->
@@ -257,28 +285,126 @@ eListSelM E stack a =
           (\ (n:Nat) -> atM E stack n a)
           (streamGet (SpecM E stack a));
 
+streamJoinM : (E:EvType) -> (stack:FunStack) ->
+              (a : isort 0) -> (n : Nat) ->
+              Stream (SpecM E stack (Vec (Succ n) a)) ->
+              Stream (SpecM E stack a);
+streamJoinM E stack a n s =
+  MkStream (SpecM E stack a) (\ (i:Nat) ->
+     fmapS E stack (Vec (Succ n) a) a
+       (\ (xs:Vec (Succ n) a) -> at (Succ n) a xs (modNat i (Succ n)))
+       (streamGet (SpecM E stack (Vec (Succ n) a)) s
+                  (divNat i (Succ n))) );
+
 
 --------------------------------------------------------------------------------
 -- List comprehensions
 
--- FIXME
-primitive
 fromM : (E:EvType) -> (stack:FunStack) ->
-        (a b : sort 0) -> (m n : Num) -> mseq E stack m a ->
+        (a b : qisort 0) -> (m n : Num) -> mseq E stack m a ->
         (a -> SpecM E stack (mseq E stack n b)) ->
-        SpecM E stack (seq (tcMul m n) (a * b));
+        SpecM E stack (mseq E stack (tcMul m n) (a * b));
+fromM E stack a b m n =
+  Num_rec
+    (\ (m:Num) -> mseq E stack m a ->
+       (a -> SpecM E stack (mseq E stack n b)) ->
+       SpecM E stack (mseq E stack (tcMul m n) (a * b)))
+    (\ (m:Nat) ->
+       Num_rec
+         (\ (n:Num) -> Vec m a ->
+            (a -> SpecM E stack (mseq E stack n b)) ->
+            SpecM E stack (mseq E stack (tcMul (TCNum m) n) (a * b)))
+         -- Case 1: (TCNum m, TCNum n)
+         (\ (n:Nat) ->
+            \ (xs : Vec m a) ->
+            \ (k : a -> SpecM E stack (Vec n b)) ->
+              vecMapBindM E stack a (Vec n (a * b))
+                (Vec (mulNat m n) (a * b)) m
+                (\ (i:Nat) -> \ (x:a) -> 
+                   fmapS E stack (Vec n b) (Vec n (a * b))
+                     (map b (a * b) (\ (y : b) -> (x, y)) n) (k x))
+                xs (\ (kxs:Vec m (Vec n (a * b))) ->
+                      retS E stack (Vec (mulNat m n) (a * b))
+                        (joinCryM m n (a * b) kxs)))
+         -- Case 2: n = (TCNum m, TCInf)
+         (natCase
+            (\ (m':Nat) -> Vec m' a ->
+               (a -> SpecM E stack (Stream (SpecM E stack b))) ->
+               SpecM E stack (mseq E stack (if0Nat Num m' (TCNum 0) TCInf) (a * b)))
+            (\ (xs : Vec 0 a) ->
+             \ (k : a -> SpecM E stack (Stream (SpecM E stack b))) ->
+               retS E stack (Vec 0 (a * b)) (EmptyVec (a * b)))
+            (\ (m' : Nat) ->
+             \ (xs : Vec (Succ m') a) ->
+             \ (k : a -> SpecM E stack (Stream (SpecM E stack b))) ->
+               (\ (x:a) ->
+                  fmapS E stack (Stream (SpecM E stack b)) (Stream (SpecM E stack (a * b)))
+                    (streamMap (SpecM E stack b) (SpecM E stack (a * b))
+                       (fmapS E stack b (a * b) (\ (y:b) -> (x, y))))
+                    (k x))
+               (head m' a xs))
+            m)
+         n)
+    (Num_rec
+       (\ (n:Num) -> Stream (SpecM E stack a) ->
+          (a -> SpecM E stack (mseq E stack n b)) ->
+          SpecM E stack (mseq E stack (tcMul TCInf n) (a * b)))
+       -- Case 3: (TCInf, TCNum n)
+       (\ (n:Nat) ->
+          natCase
+            (\ (n':Nat) -> Stream (SpecM E stack a) ->
+               (a -> SpecM E stack (Vec n' b)) ->
+               SpecM E stack (mseq E stack (if0Nat Num n' (TCNum 0) TCInf) (a * b)))
+            (\ (xs : Stream (SpecM E stack a)) ->
+             \ (k : a -> SpecM E stack (Vec 0 b)) ->
+               retS E stack (Vec 0 (a * b)) (EmptyVec (a * b)))
+            (\ (n' : Nat) ->
+             \ (xs : Stream (SpecM E stack a)) ->
+             \ (k : a -> SpecM E stack (Vec (Succ n') b)) ->
+               retS E stack (Stream (SpecM E stack (a * b)))
+                 (streamJoinM E stack (a * b) n'
+                    (streamMap (SpecM E stack a)
+                       (SpecM E stack (Vec (Succ n') (a * b)))
+                       (\ (m:SpecM E stack a) ->
+                          bindS E stack a (Vec (Succ n') (a * b)) m
+                            (\ (x:a) ->
+                               fmapS E stack (Vec (Succ n') b) (Vec (Succ n') (a * b))
+                                 (map b (a * b) (\ (y:b) -> (x, y)) (Succ n'))
+                                 (k x)))
+                       xs)))
+            n)
+       -- Case 4: (TCInf, TCInf)
+       (\ (xs : Stream (SpecM E stack a)) ->
+        \ (k : a -> SpecM E stack (Stream (SpecM E stack b))) ->
+          bindS E stack a (Stream (SpecM E stack (a * b)))
+            (streamGet (SpecM E stack a) xs 0)
+            (\ (x:a) ->
+               fmapS E stack (Stream (SpecM E stack b)) (Stream (SpecM E stack (a * b)))
+                 (streamMap (SpecM E stack b) (SpecM E stack (a * b))
+                    (fmapS E stack b (a * b) (\ (y:b) -> (x, y))))
+                 (k x)))
+       n)
+    m;
 
--- FIXME
-primitive
 mletM : (E:EvType) -> (stack:FunStack) ->
-        (a b : sort 0) -> (n : Num) -> a ->
+        (a : sort 0) -> (b : isort 0) -> (n : Num) -> a ->
         (a -> SpecM E stack (mseq E stack n b)) ->
         SpecM E stack (mseq E stack n (a * b));
-
--- An alternate version of zip from Prelude to get around the default Prim
-zipCryM : (a b : isort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
-zipCryM a b m n xs ys =
-  genCryM (minNat m n) (a * b) (\ (i:Nat) -> (atCryM m a xs i, atCryM n b ys i));
+mletM E stack a b n =
+  Num_rec
+    (\ (n:Num) -> a ->
+       (a -> SpecM E stack (mseq E stack n b)) ->
+       SpecM E stack (mseq E stack n (a * b)))
+    (\ (n:Nat) -> \ (x:a) -> \ (f:a -> SpecM E stack (Vec n b)) ->
+       fmapS E stack (Vec n b) (Vec n (a * b))
+         (map b (a * b) (\ (y : b) -> (x, y)) n)
+         (f x))
+    (\ (x:a) -> \ (f:a -> SpecM E stack (Stream (SpecM E stack b))) ->
+       fmapS E stack (Stream (SpecM E stack b)) (Stream (SpecM E stack (a * b)))
+         (streamMap (SpecM E stack b) (SpecM E stack (a * b))
+            (fmapS E stack b (a * b) (\ (y:b) -> (x, y))))
+         (f x))
+    n;
 
 seqZipM : (E:EvType) -> (stack:FunStack) ->
           (a b : qisort 0) -> (m n : Num) ->
@@ -319,6 +445,18 @@ seqZipM E stack a b m n =
                xs ys))
        n)
     m;
+
+seqZipSameM : (E:EvType) -> (stack:FunStack) ->
+              (a b : isort 0) -> (n : Num) ->
+              mseq E stack n a -> mseq E stack n b ->
+              mseq E stack n (a * b);
+seqZipSameM E stack a b n =
+  Num_rec
+    (\ (n : Num) -> mseq E stack n a -> mseq E stack n b -> mseq E stack n (a * b))
+    (\ (n : Nat) -> zipSameM a b n)
+    (streamMap2 (SpecM E stack a) (SpecM E stack b) (SpecM E stack (a * b))
+       (fmapS2 E stack a b (a * b) (\ (x:a) -> \ (y:b) -> (x,y))))
+    n;
 
 
 --------------------------------------------------------------------------------
@@ -553,13 +691,6 @@ ecDropM E stack =
          -- The case (TCNum m, infinity)
          (\ (a:isort 0) -> streamDrop (SpecM E stack a) m));
 
--- An alternate version of join from Prelude to get around the default Prim
-joinCryM : (m n : Nat) -> (a : isort 0) ->
-           Vec m (Vec n a) -> Vec (mulNat m n) a;
-joinCryM m n a v =
-  genCryM (mulNat m n) a (\ (i : Nat) ->
-    atCryM n a (at m (Vec n a) v (divNat i n)) (modNat i n));
-
 ecJoinM : (E:EvType) -> (stack:FunStack) -> 
           (m n : Num) -> isFinite n -> (a : isort 0) ->
           mseq E stack m (mseq E stack n a) -> mseq E stack (tcMul m n) a;
@@ -584,20 +715,9 @@ ecJoinM E stack =
                mseq E stack (if0Nat Num n' (TCNum 0) TCInf) a)
             (\ (s:Stream (SpecM E stack (Vec 0 a))) -> EmptyVec a)
             (\ (n':Nat) -> \ (s:Stream (SpecM E stack (Vec (Succ n') a))) ->
-               MkStream (SpecM E stack a) (\ (i:Nat) ->
-                  fmapS E stack (Vec (Succ n') a) a
-                    (\ (v:Vec (Succ n') a) -> at (Succ n') a v (modNat i (Succ n')))
-                    (streamGet (SpecM E stack (Vec (Succ n') a)) s
-                               (divNat i (Succ n'))) ))
+               streamJoinM E stack a n' s)
             n));
        -- No case for (TCInf, TCInf), shouldn't happen
-
--- An alternate version of split from Prelude to get around the default Prim
-splitCryM : (m n : Nat) -> (a : isort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
-splitCryM m n a v =
-  genCryM m (Vec n a) (\ (i : Nat) ->
-    genCryM n a (\ (j : Nat) ->
-      atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
 
 ecSplitM : (E:EvType) -> (stack:FunStack) ->
            (m n : Num) -> isFinite n -> (a : qisort 0) ->
