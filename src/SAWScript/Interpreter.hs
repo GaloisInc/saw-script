@@ -20,6 +20,8 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.MGU
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
   ( interpretStmt
@@ -390,10 +392,10 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain = 
+interpretFile file runMain =
   bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
-    interp = 
+    interp =
       do  opts <- getOptions
           io $ setCurrentDirectory (takeDirectory file)
           stmts <- io $ SAWScript.Import.loadFile opts file

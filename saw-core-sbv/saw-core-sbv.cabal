@@ -20,7 +20,7 @@ library
     lens,
     mtl,
     saw-core,
-    sbv >= 8.10 && < 8.16,
+    sbv >= 8.10 && < 9.1,
     text,
     transformers,
     vector

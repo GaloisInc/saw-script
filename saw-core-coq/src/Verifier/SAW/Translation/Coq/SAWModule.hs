@@ -96,7 +96,20 @@ translateDataType (DataType {..}) =
         liftTermTranslationMonad $ do
         ps <- TermTranslation.translateParams dtParams
         ixs <- TermTranslation.translateParams dtIndices
-        return (ps, map (\(Coq.Binder s (Just t)) -> Coq.PiBinder (Just s) t) ixs)
+        -- Translating the indices of a data type should never yield
+        -- Inhabited constraints, so the result of calling
+        -- `translateParams dtIndices` above should only return Binders and not
+        -- any ImplicitBinders. Moreover, `translateParams` always returns
+        -- Binders where the second field is `Just t`, where `t` is the type.
+        let errorBecause msg = error $ "translateDataType.translateNamed: " ++ msg
+        let bs = map (\case Coq.Binder s (Just t) ->
+                              Coq.PiBinder (Just s) t
+                            Coq.Binder _ Nothing ->
+                              errorBecause "encountered a Binder without a Type"
+                            Coq.ImplicitBinder{} ->
+                              errorBecause "encountered an implicit binder")
+                     ixs
+        return (ps, bs)
       let inductiveSort = TermTranslation.translateSort dtSort
       inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
       return $ Coq.InductiveDecl $ Coq.Inductive

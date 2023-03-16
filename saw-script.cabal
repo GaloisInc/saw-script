@@ -22,8 +22,8 @@ custom-setup
 library
   default-language: Haskell2010
   build-depends:
-      base >= 4
-    , aeson >= 1.4.2 && < 2.0
+      base >= 4.9
+    , aeson >= 2.0 && < 2.1
     , aig
     , array
     , binary
@@ -80,7 +80,7 @@ library
     , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
-    , sbv >= 8.10 && < 8.16
+    , sbv >= 8.10 && < 9.1
     , split
     , temporary
     , template-haskell
