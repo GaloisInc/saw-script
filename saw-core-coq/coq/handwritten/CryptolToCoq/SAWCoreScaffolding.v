@@ -118,6 +118,17 @@ Global Instance Inhabited_unit : Inhabited unit :=
 Global Instance Inhabited_bool : Inhabited bool :=
   MkInhabited bool false.
 
+Program Instance QuantType_Bool : QuantType Bool :=
+ { quantEnc := QEnc_nat;
+   quantEnum := fun n => match n with
+                         | 0 => false
+                         | S _ => true
+                         end;
+   quantEnumInv := fun b => if b then 1 else 0 }.
+Next Obligation.
+ destruct a; reflexivity.
+Defined.
+
 (* SAW uses an alternate form of eq_rect where the motive function P also
 depends on the equality proof itself *)
 Definition Eq__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl) y (e:x=y) :
