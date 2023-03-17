@@ -589,10 +589,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
 escapeIdent :: String -> String
 escapeIdent str
-  | all okChar strR = strR
-  | otherwise       = "Op_" ++ zEncodeString str
+  | all okChar str = str
+  | otherwise      = "Op_" ++ zEncodeString str
  where
-   strR = map (\c -> if c `elem` ("#" :: String) then '_' else c) str
    okChar x = isAlphaNum x || x `elem` ("_'" :: String)
 
 zipSnippet :: String
