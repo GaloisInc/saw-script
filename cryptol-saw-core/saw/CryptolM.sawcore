@@ -36,6 +36,11 @@ zipSameCryM a b n x y = genCryM n (a*b) (\ (i : Nat) -> (atCryM n a x i, atCryM 
 reverseCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Vec n a;
 reverseCryM n a xs = genCryM n a (\ (i : Nat) -> atCryM n a xs (subNat (subNat n 1) i));
 
+transposeCryM : (m n : Nat) -> (a : isort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
+transposeCryM m n a xss =
+  genCryM n (Vec m a) (\ (j : Nat) ->
+    genCryM m a (\ (i : Nat) -> atCryM n a (atCryM m (Vec n a) xss i) j));
+
 
 
 --------------------------------------------------------------------------------
@@ -763,11 +768,45 @@ ecReverseM E stack =
   Num_rec_fin (\ (n:Num) -> (a : isort 0) -> mseq E stack n a -> mseq E stack n a)
               (\ (n:Nat) -> reverseCryM n);
 
--- FIXME
-primitive
 ecTransposeM : (E:EvType) -> (stack:FunStack) ->
-               (m n : Num) -> (a : sort 0) -> mseq E stack m (mseq E stack n a) ->
+               (m n : Num) -> (a : qisort 0) -> mseq E stack m (mseq E stack n a) ->
                mseq E stack n (mseq E stack m a);
+ecTransposeM E stack m n a =
+  Num_rec
+    (\ (m : Num) -> mseq E stack m (mseq E stack n a) ->
+       mseq E stack n (mseq E stack m a))
+    (\ (m : Nat) ->
+      Num_rec
+        (\ (n : Num) -> Vec m (mseq E stack n a) ->
+           mseq E stack n (Vec m a))
+        (\ (n : Nat) -> transposeCryM m n a)
+        (\ (xss : Vec m (Stream (SpecM E stack a))) ->
+          MkStream (SpecM E stack (Vec m a)) (\ (i : Nat) ->
+            vecMapM E stack (Stream (SpecM E stack a)) a m
+              (\ (j:Nat) -> \ (xs:Stream (SpecM E stack a)) ->
+                 streamGet (SpecM E stack a) xs i)
+              xss))
+        n
+    )
+    ( Num_rec
+        (\ (n : Num) -> Stream (SpecM E stack (mseq E stack n a)) ->
+           mseq E stack n (Stream (SpecM E stack a)))
+        (\ (n : Nat) -> \ (xss : Stream (SpecM E stack (Vec n a))) ->
+          genCryM n (Stream (SpecM E stack a)) (\ (i : Nat) ->
+            MkStream (SpecM E stack a) (\ (j : Nat) ->
+              fmapS E stack (Vec n a) a
+                (\ (xs:Vec n a) -> atCryM n a xs i)
+                (streamGet (SpecM E stack (Vec n a)) xss j))))
+        (\ (xss : Stream (SpecM E stack (Stream (SpecM E stack a)))) ->
+          MkStream (SpecM E stack (Stream (SpecM E stack a))) (\ (i : Nat) ->
+            retS E stack (Stream (SpecM E stack a))
+              (MkStream (SpecM E stack a) (\ (j : Nat) ->
+                 bindS E stack (Stream (SpecM E stack a)) a
+                   (streamGet (SpecM E stack (Stream (SpecM E stack a))) xss j)
+                   (\ (xs:Stream (SpecM E stack a)) -> streamGet (SpecM E stack a) xs i)))))
+        n
+    )
+    m;
 
 ecAtM : (E:EvType) -> (stack:FunStack) ->
         (n : Num) -> (a : sort 0) -> (ix : sort 0) -> PIntegral ix ->
