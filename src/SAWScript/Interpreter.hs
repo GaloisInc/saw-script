@@ -1918,6 +1918,11 @@ primitives = Map.fromList
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
+  , prim "cvc5"                "ProofScript ()"
+    (pureVal proveCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal." ]
+
   , prim "z3"                  "ProofScript ()"
     (pureVal proveZ3)
     Current
@@ -1947,6 +1952,13 @@ primitives = Map.fromList
     , "given list of names as uninterpreted."
     ]
 
+  , prim "unint_cvc5"            "[String] -> ProofScript ()"
+    (pureVal proveUnintCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "unint_yices"           "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
@@ -1963,6 +1975,11 @@ primitives = Map.fromList
     (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
+
+  , prim "sbv_cvc5"            "ProofScript ()"
+    (pureVal proveCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal." ]
 
   , prim "sbv_z3"              "ProofScript ()"
     (pureVal proveZ3)
@@ -1990,6 +2007,13 @@ primitives = Map.fromList
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
+  , prim "sbv_unint_cvc5"        "[String] -> ProofScript ()"
+    (pureVal proveUnintCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
 
@@ -2116,6 +2140,13 @@ primitives = Map.fromList
     , "given list of names as uninterpreted."
     ]
 
+  , prim "w4_unint_cvc5"         "[String] -> ProofScript ()"
+    (pureVal w4_unint_cvc5)
+    Current
+    [ "Prove the current goal using What4 (CVC5 backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "w4_abc_aiger"        "ProofScript ()"
     (pureVal w4_abc_aiger)
     Current
@@ -2158,6 +2189,13 @@ primitives = Map.fromList
     (pureVal offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_cvc5"  "[String] -> String -> ProofScript ()"
+    (pureVal offline_w4_unint_cvc5)
+    Current
+    [ "Write the current goal to the given file using What4 (CVC5 backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 

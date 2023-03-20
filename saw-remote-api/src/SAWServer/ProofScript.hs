@@ -57,6 +57,7 @@ data Prover
   | SBV_ABC_SMTLib
   | SBV_Boolector [String]
   | SBV_CVC4 [String]
+  | SBV_CVC5 [String]
   | SBV_MathSAT [String]
   | SBV_Yices [String]
   | SBV_Z3 [String]
@@ -64,6 +65,7 @@ data Prover
   | W4_ABC_Verilog
   | W4_Boolector [String]
   | W4_CVC4 [String]
+  | W4_CVC5 [String]
   | W4_Yices [String]
   | W4_Z3 [String]
 
@@ -87,11 +89,13 @@ instance FromJSON Prover where
         "abc"            -> pure W4_ABC_SMTLib
         "boolector"      -> SBV_Boolector <$> unints
         "cvc4"           -> SBV_CVC4  <$> unints
+        "cvc5"           -> SBV_CVC5  <$> unints
         "mathsat"        -> SBV_MathSAT <$> unints
         "rme"            -> pure RME
         "sbv-abc"        -> pure SBV_ABC_SMTLib
         "sbv-boolector"  -> SBV_Boolector <$> unints
         "sbv-cvc4"       -> SBV_CVC4  <$> unints
+        "sbv-cvc5"       -> SBV_CVC5  <$> unints
         "sbv-mathsat"    -> SBV_MathSAT <$> unints
         "sbv-yices"      -> SBV_Yices <$> unints
         "sbv-z3"         -> SBV_Z3    <$> unints
@@ -99,6 +103,7 @@ instance FromJSON Prover where
         "w4-abc-verilog" -> pure W4_ABC_Verilog
         "w4-boolector"   -> W4_Boolector <$> unints
         "w4-cvc4"        -> W4_CVC4   <$> unints
+        "w4-cvc5"        -> W4_CVC5   <$> unints
         "w4-yices"       -> W4_Yices  <$> unints
         "w4-z3"          -> W4_Z3     <$> unints
         "yices"          -> SBV_Yices <$> unints
@@ -273,6 +278,7 @@ interpretProofScript (ProofScript ts) = go ts
             SBV_ABC_SMTLib        -> return $ SB.proveABC_SBV
             SBV_Boolector unints  -> return $ SB.proveUnintBoolector unints
             SBV_CVC4 unints       -> return $ SB.proveUnintCVC4 unints
+            SBV_CVC5 unints       -> return $ SB.proveUnintCVC5 unints
             SBV_MathSAT unints    -> return $ SB.proveUnintMathSAT unints
             SBV_Yices unints      -> return $ SB.proveUnintYices unints
             SBV_Z3 unints         -> return $ SB.proveUnintZ3 unints
@@ -280,6 +286,7 @@ interpretProofScript (ProofScript ts) = go ts
             W4_ABC_Verilog        -> return $ SB.w4_abc_verilog
             W4_Boolector unints   -> return $ SB.w4_unint_boolector unints
             W4_CVC4 unints        -> return $ SB.w4_unint_cvc4 unints
+            W4_CVC5 unints        -> return $ SB.w4_unint_cvc5 unints
             W4_Yices unints       -> return $ SB.w4_unint_yices unints
             W4_Z3 unints          -> return $ SB.w4_unint_z3 unints
         go [Trivial]                  = return $ SB.trivial
