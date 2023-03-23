@@ -55,7 +55,7 @@ module Verifier.SAW.Term.Functor
   , alistAllFields
     -- * Sorts
   , Sort, mkSort, propSort, sortOf, maxSort
-  , SortFlags(..), noFlags, cbnFlags, sortFlagsToList, sortFlagsFromList
+  , SortFlagsF(..), SortFlags, noFlags, sortFlagsFromList
     -- * Sets of free variables
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
@@ -63,11 +63,12 @@ module Verifier.SAW.Term.Functor
   , looseVars, smallestFreeVar
   ) where
 
+import Control.Applicative (liftA2)
 import Data.Bits
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
-import qualified Data.Foldable as Foldable (and, foldl')
+import qualified Data.Foldable as Foldable (and, foldl', toList)
 import Data.Hashable
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -137,9 +138,12 @@ maxSort ss = maximum ss
 -- ignored, but are used in the Coq export process to indicate where various
 -- typeclass instances are necessary in function definitions. In the concrete
 -- syntax "isort", "qsort", etc. is used to indicate cases where these flags
--- are set. Note in particular that this flag does not affect typechecking,
+-- are set. Note in particular that these flags do not affect typechecking,
 -- so missing or overeager "isort"/"qsort" annotations will only be detected
 -- via the Coq export.
+--
+-- Note that this is the functor version of the type that is actually used
+-- in 'FlatTermF', 'SortFlags', which has 'Bool' values for its flags.
 --
 -- * If 'flagInhabited' is 'True', an implicit @Inhabited@ typeclass argument
 --   will be added during Coq translation. In the concrete syntax, an "i" is
@@ -147,35 +151,32 @@ maxSort ss = maximum ss
 -- * If 'flagQuantType' is 'True', an implicit @QuantType@ typeclass argument
 --   will be added during Coq translation. In the concrete syntax, an "q" is
 --   prepended to the sort (e.g. "qsort", "qisort").
-data SortFlags = SortFlags { flagInhabited :: Bool
-                           , flagQuantType :: Bool }
-    deriving (Eq, Ord, Generic, TH.Lift)
+data SortFlagsF a = SortFlags { flagInhabited :: a
+                              , flagQuantType :: a }
+    deriving (Functor, Foldable, Eq, Ord, Generic, TH.Lift)
+
+instance Applicative SortFlagsF where
+  pure a = SortFlags a a
+  (SortFlags f1 f2) <*> (SortFlags a1 a2) = SortFlags (f1 a1) (f2 a2)
+
+-- | 'SortFlagsF' with 'Bool' values for its flags
+type SortFlags = SortFlagsF Bool
 
 instance Hashable SortFlags -- automatically derived
 
 instance Show SortFlags where
-  showsPrec _ (SortFlags i q) =
-    showString $ (if q then "q" else "") ++
-                 (if i then "i" else "")
+  showsPrec _ = showString . concat . reverse . Foldable.toList .
+                liftA2 (\s b -> if b then s else "") flagPrefixes
+    where flagPrefixes = SortFlags "i" "q"
 
 -- | The 'SortFlags' object with no flags set
 noFlags :: SortFlags
-noFlags = SortFlags False False
-
--- | Combine two 'SortFlags' by setting each flag in the result if and only if
--- it flag is set in both inputs
-cbnFlags :: SortFlags -> SortFlags -> SortFlags
-cbnFlags (SortFlags i1 q1) (SortFlags i2 q2) =
-  SortFlags (i1 && i2) (q1 && q2)
-
--- | Convert a 'SortFlags' to a list of 'Bool's, indicating which flags are set
-sortFlagsToList :: SortFlags -> [Bool]
-sortFlagsToList (SortFlags i q) = [i, q]
+noFlags = pure False
 
 -- | Build a 'SortFlags' from a list of 'Bool's indicating which flags are set
 sortFlagsFromList :: [Bool] -> SortFlags
-sortFlagsFromList h = SortFlags (isTrue h 0) (isTrue h 1)
-  where isTrue xs i = i < length xs && xs !! i
+sortFlagsFromList bs = fmap (\i -> i < length bs && bs !! i) flagIndices
+  where flagIndices = SortFlags 0 1
 
 
 -- Flat Terms ------------------------------------------------------------------
@@ -352,7 +353,7 @@ zipWithFlatTermF f = go
     go (RecordProj e1 fld1) (RecordProj e2 fld2)
       | fld1 == fld2 = Just $ RecordProj (f e1 e2) fld1
 
-    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (cbnFlags hx hy))
+    go (Sort sx hx) (Sort sy hy) | sx == sy = Just (Sort sx (liftA2 (&&) hx hy))
          -- /\ NB, it's not entirely clear how the flags should be propagated
     go (NatLit i) (NatLit j) | i == j = Just (NatLit i)
     go (StringLit s) (StringLit t) | s == t = Just (StringLit s)
