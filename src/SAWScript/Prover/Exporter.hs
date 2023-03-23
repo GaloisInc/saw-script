@@ -478,6 +478,14 @@ writeCoqProp name notations skips path t =
      tm <- io (propToTerm sc t)
      writeCoqTerm name notations skips path tm
 
+-- | Write out a representation of a Cryptol module in Gallina syntax for Coq,
+-- using the monadified version of the given module iff the first argument is
+-- 'True'. The first argument is the file containing the module to export. The
+-- second argument is the name of the file to output into, use an empty string
+-- to output to standard output. The third argument is a list of pairs of
+-- notation substitutions: the operator on the left will be replaced with the
+-- identifier on the right, as we do not support notations on the Coq side.
+-- The fourth argument is a list of identifiers to skip translating.
 writeCoqCryptolModule ::
   Bool ->
   FilePath ->
