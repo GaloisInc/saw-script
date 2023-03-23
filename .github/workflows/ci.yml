@@ -573,9 +573,6 @@ jobs:
           docker-compose pull
           grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
 
-      - uses: jpribyl/action-docker-layer-caching@v0.1.1
-        continue-on-error: true
-
       - shell: bash
         name: "make s2n"
         working-directory: s2nTests
@@ -605,9 +602,6 @@ jobs:
         with:
           name: "${{ runner.os }}-bins"
           path: ./exercises/bin
-
-      - uses: jpribyl/action-docker-layer-caching@v0.1.1
-        continue-on-error: true
 
       - shell: bash
         name: "make exercises container"
