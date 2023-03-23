@@ -456,11 +456,17 @@ freshenAndBindName n =
 mkLet :: (Coq.Ident, Coq.Term) -> Coq.Term -> Coq.Term
 mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
 
+-- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
+-- return a list of explicit 'Binder's, for use representing the bound
+-- variables in 'Lambda's, 'Let's, etc.
 translateParams ::
   TermTranslationMonad m =>
   [(LocalName, Term)] -> m [Coq.Binder]
 translateParams bs = concat <$> mapM translateParam bs
 
+-- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
+-- 'Binder', for use representing a bound variable in a 'Lambda',
+-- 'Let', etc.
 translateParam ::
   TermTranslationMonad m =>
   (LocalName, Term) -> m [Coq.Binder]
@@ -469,12 +475,20 @@ translateParam (n, ty) =
     return $ Coq.Binder n' (Just ty') :
              map (\(nh,nhty) -> Coq.ImplicitBinder nh (Just nhty)) nhs
 
+-- | Given a list of 'LocalName's and their corresponding types (as 'Term's)
+-- representing argument types and a 'Term' representing the return type,
+-- return the resulting 'Pi', with additional implicit arguments added after
+-- each instance of @isort@, @qsort@, etc.
 translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalTranslationState $ do
   bindersT <- concat <$> mapM translatePiBinder binders
   bodyT <- translateTermLet body
   return $ Coq.Pi bindersT bodyT
 
+-- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
+-- 'PiBinder' followed by zero or more implicit 'PiBinder's representing
+-- additonal implicit typeclass arguments, added if the given type is @isort@,
+-- @qsort@, etc.
 translatePiBinder ::
   TermTranslationMonad m => (LocalName, Term) -> m [Coq.PiBinder]
 translatePiBinder (n, ty) =
@@ -486,6 +500,10 @@ translatePiBinder (n, ty) =
       return $ Coq.PiBinder (Just n') ty' :
                map (\(nh,nhty) -> Coq.PiImplicitBinder (Just nh) nhty) nhs
 
+-- | Given a 'LocalName' and its type (as a 'Term'), return the translation of
+-- the 'LocalName' as an 'Ident', the translation of the type as a 'Type',
+-- and zero or more additional 'Ident's and 'Type's representing additonal
+-- implicit typeclass arguments, added if the given type is @isort@, etc.
 translateBinder ::
   TermTranslationMonad m =>
   LocalName ->
@@ -504,6 +522,11 @@ translateBinder n ty@(asPiList -> (args, asSortWithFlags -> mb_sort)) =
                return [(nh,nhty)]
      return (n',ty',concat nhs)
 
+-- | Given a typeclass (as a 'Term'), a list of 'LocalName's and their
+-- corresponding types (as 'Term's), and a type-level function with argument
+-- types given by the prior list, return a 'Pi' of the given arguments, inside
+-- of which is an 'App' of the typeclass to the fully-applied type-level
+-- function
 translateImplicitHyp ::
   TermTranslationMonad m =>
   Coq.Term -> [(LocalName, Term)] -> Coq.Term -> m Coq.Term
