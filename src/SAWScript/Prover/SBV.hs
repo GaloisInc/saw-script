@@ -2,7 +2,7 @@ module SAWScript.Prover.SBV
   ( proveUnintSBV
   , proveUnintSBVIO
   , SBV.SMTConfig
-  , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
+  , SBV.z3, SBV.cvc4, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector
   , prepNegatedSBV
   ) where
 
