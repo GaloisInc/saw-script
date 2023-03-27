@@ -33,7 +33,7 @@ module Verifier.SAW.UntypedAST
   , mkTupleSelector
   , FieldName
   , Sort, mkSort, propSort, sortOf
-  , SortFlagsF(..), SortFlags, noFlags, sortFlagsFromList
+  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
   , badTerm
   , module Verifier.SAW.Position
   , moduleName
@@ -57,7 +57,7 @@ import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, propSort, sortOf
-  , SortFlagsF(..), SortFlags, noFlags, sortFlagsFromList
+  , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
   , FieldName, DefQualifier
   , LocalName
   )

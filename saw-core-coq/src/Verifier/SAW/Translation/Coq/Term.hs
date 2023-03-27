@@ -34,7 +34,6 @@ import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
 import           Control.Monad.Reader                          hiding (fail, fix)
 import           Control.Monad.State                           hiding (fail, fix, state)
-import           Data.Foldable                                 as Foldable (toList)
 import           Data.Char                                     (isDigit)
 import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
@@ -512,7 +511,7 @@ translateBinder ::
 translateBinder n ty@(asPiList -> (args, asSortWithFlags -> mb_sort)) =
   do ty' <- translateTerm ty
      n' <- freshenAndBindName n
-     let flagValues = Foldable.toList $ maybe noFlags snd mb_sort
+     let flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
          flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
                            ("QT", "QuantType")]
      nhs <- forM (zip flagValues flagLocalNames) $ \(fi,(prefix,tc)) ->

@@ -70,7 +70,7 @@ module Verifier.SAW.TypedAST
  , scPrettyTermInCtx
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf, maxSort
- , SortFlagsF(..), SortFlags, noFlags, sortFlagsFromList
+ , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
  , Ident(..), identName, mkIdent
  , NameInfo(..), toShortName, toAbsoluteName
  , parseIdent

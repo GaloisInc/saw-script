@@ -18,7 +18,6 @@ module Verifier.SAW.ExternalFormat (
   ) where
 
 import Control.Monad.State.Strict as State
-import Data.Foldable as F
 #if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
 #endif
@@ -185,8 +184,8 @@ scWriteExternal t0 =
             RecordValue elems   -> pure $ unwords ["Record", show elems]
             RecordProj e prj    -> pure $ unwords ["RecordProj", show e, Text.unpack prj]
             Sort s h
-              | s == propSort -> pure $ unwords ("Prop" : map show (F.toList h))
-              | otherwise     -> pure $ unwords ("Sort" : drop 5 (show s) : map show (F.toList h))
+              | s == propSort -> pure $ unwords ("Prop" : map show (sortFlagsToList h))
+              | otherwise     -> pure $ unwords ("Sort" : drop 5 (show s) : map show (sortFlagsToList h))
                                                         -- /\ Ugly hack to drop "sort "
             NatLit n            -> pure $ unwords ["Nat", show n]
             ArrayValue e v      -> pure $ unwords ("Array" : show e :
