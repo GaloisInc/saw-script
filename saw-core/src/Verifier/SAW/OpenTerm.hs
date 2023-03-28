@@ -131,7 +131,7 @@ flatOpenTerm ftf = OpenTerm $
 
 -- | Build an 'OpenTerm' for a sort
 sortOpenTerm :: Sort -> OpenTerm
-sortOpenTerm s = flatOpenTerm (Sort s False)
+sortOpenTerm s = flatOpenTerm (Sort s noFlags)
 
 -- | Build an 'OpenTerm' for a natural number literal
 natOpenTerm :: Natural -> OpenTerm

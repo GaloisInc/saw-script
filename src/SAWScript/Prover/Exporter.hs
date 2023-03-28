@@ -70,6 +70,8 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule,
                                 ImportPrimitiveOptions(..), mkCryEnv)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import Verifier.SAW.Cryptol.PreludeM (cryptolMModule, scLoadCryptolMModule)
+import Verifier.SAW.Cryptol.Monadify (defaultMonEnv, monadifyCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Module (emptyModule, moduleDecls)
@@ -476,13 +478,22 @@ writeCoqProp name notations skips path t =
      tm <- io (propToTerm sc t)
      writeCoqTerm name notations skips path tm
 
+-- | Write out a representation of a Cryptol module in Gallina syntax for Coq,
+-- using the monadified version of the given module iff the first argument is
+-- 'True'. The first argument is the file containing the module to export. The
+-- second argument is the name of the file to output into, use an empty string
+-- to output to standard output. The third argument is a list of pairs of
+-- notation substitutions: the operator on the left will be replaced with the
+-- identifier on the right, as we do not support notations on the Coq side.
+-- The fourth argument is a list of identifiers to skip translating.
 writeCoqCryptolModule ::
+  Bool ->
   FilePath ->
   FilePath ->
   [(String, String)] ->
   [String] ->
   TopLevel ()
-writeCoqCryptolModule inputFile outputFile notations skips = io $ do
+writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -491,6 +502,8 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
   (cm, _) <- loadCryptolModule sc primOpts env inputFile
+  cry_env <- mkCryEnv env
+  cm' <- if mon then fst <$> monadifyCryptolModule sc cry_env defaultMonEnv cm else return cm
   let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
@@ -499,8 +512,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let nm = takeBaseName inputFile
-  cry_env <- mkCryEnv env
-  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
+  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm'
   case res of
     Left e -> putStrLn $ show e
     Right cmDoc ->
@@ -527,24 +539,32 @@ writeCoqSAWCorePrelude outputFile notations skips = do
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
 
 writeCoqCryptolPrimitivesForSAWCore ::
-  FilePath ->
+  FilePath -> FilePath ->
   [(String, String)] ->
   [String] ->
   IO ()
-writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
+writeCoqCryptolPrimitivesForSAWCore outputFile outputFileM notations skips = do
   sc <- mkSharedContext
   () <- scLoadPreludeModule sc
   () <- scLoadCryptolModule sc
+  () <- scLoadCryptolMModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  m_mon <- scFindModule sc (Un.moduleName cryptolMModule)
   let configuration =
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
+  let configuration_mon =
+        withImportCryptolPrimitivesForSAWCore configuration
   let doc = Coq.translateSAWModule configuration m
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration
                                       , doc
                                       ])
+  let doc_mon = Coq.translateSAWModule configuration_mon m_mon
+  writeFile outputFileM (show . vcat $ [ Coq.preamble configuration_mon
+                                       , doc_mon
+                                       ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
