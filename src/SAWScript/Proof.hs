@@ -1694,6 +1694,10 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
              ]
            return (mempty, ProvedTheorem mempty)
 
+      MrSolverEvidence ->
+        -- TODO Fill this in when we have evidence for MrSolver
+        return (mempty, ProvedTheorem mempty)
+
       CutEvidence p ehyp egl ->
         do d1 <- check nenv ehyp (addHypothesis p sqt)
            d2 <- check nenv egl  (addNewFocusedConcl p sqt)

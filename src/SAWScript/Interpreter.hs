@@ -846,6 +846,11 @@ primitives = Map.fromList
     Current
     [ "Concatenate two strings to yield a third." ]
 
+  , prim "str_concats"          "[String] -> String"
+    (pureVal (concat :: [String] -> String))
+    Current
+    [ "Concatenate a list of strings together to yield a string." ]
+
   , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
     (\_ _ -> toplevelCallCC)
     Experimental

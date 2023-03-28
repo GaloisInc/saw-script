@@ -26,19 +26,10 @@ const1 <- parse_core
 // const0 <= const0
 run_test "const0 |= const0" (mr_solver_query const0 const0) true;
 
-let paren_const0_core = str_concat "(" (str_concat const0_core ")");
 let const0_refines =
-  str_concat "refinesS_fun_eq VoidEv emptyFunStack [Vec 64 Bool] (Vec 64 Bool) "
-           (str_concat paren_const0_core (str_concat " " paren_const0_core));
-  // str_concat "refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) "
-  //            (str_concat paren_const0_core (str_concat " " paren_const0_core));
-print const0_refines;
+  str_concats ["(x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) ",
+               "((", const0_core, ") x) ", "((", const0_core, ") x)"];
 prove_extcore prove_refinement (parse_core const0_refines);
-
-// str_concat "\\ (x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) "
-//            (str_concat const0_appl_core (str_concat " " const0_appl_core));
-
-//prove_print ... {{ \x -> left x == right x}}
 
 /*
 // TODO: Docs
