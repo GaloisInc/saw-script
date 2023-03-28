@@ -2150,17 +2150,19 @@ ensureMonadicTerm sc t = monadifyTypedTerm sc t
 mrSolver :: (SharedContext -> Prover.MREnv -> Maybe Integer -> [(LocalName, Term)] -> Term -> Term -> IO a) ->
             Maybe SawDoc -> SharedContext -> [(LocalName, Term)] -> TypedTerm -> TypedTerm ->
             TopLevel (NominalDiffTime, a)
-mrSolver f printStr sc top_args t1 t2 =
+mrSolver f printStr sc top_args tt1 tt2 =
   do env <- rwMRSolverEnv <$> get
-     m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
-     m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
+     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
+     m2 <- ttTerm <$> ensureMonadicTerm sc tt2
+     m1' <- io $ collapseEta <$> betaNormalize sc m1
+     m2' <- io $ collapseEta <$> betaNormalize sc m2
      case printStr of
        Nothing -> return ()
        Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
-         "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
-                               " |= " <> ppTmHead m2
+         "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
+                               " |= " <> ppTmHead m2'
      time1 <- liftIO getCurrentTime
-     res <- io $ f sc env Nothing top_args m1 m2
+     res <- io $ f sc env Nothing top_args m1' m2'
      time2 <- liftIO getCurrentTime
      return (diffUTCTime time2 time1, res)
   where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
@@ -2174,8 +2176,12 @@ mrSolver f printStr sc top_args t1 t2 =
         -- "..." if it is given any arguments, or just "..." if there is no
         -- top-level call
         ppTmHead :: Term -> SawDoc
-        ppTmHead (asApplyAll -> (asLambdaList -> (_, asApplyAll -> (t, args)), _)) =
+        ppTmHead (asLambdaList -> (_,
+                  asApplyAll -> (t@(
+                  Prover.asProjAll -> (
+                  Monadify.asTypedGlobalDef -> Just _, _)), args))) =
           ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
+        ppTmHead _ = "..."
 
 -- | Run Mr Solver to prove that the first term refines the second, adding
 -- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument

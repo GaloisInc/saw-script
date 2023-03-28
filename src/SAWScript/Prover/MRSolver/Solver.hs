@@ -141,11 +141,9 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 
-import SAWScript.Proof
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
 import SAWScript.Prover.MRSolver.SMT
-import SAWScript.Prover.SolverStats
 
 
 ----------------------------------------------------------------------
@@ -1281,11 +1279,11 @@ askMRSolver ::
   Term -> Term -> IO (Either MRFailure MRSolverResult)
 askMRSolver sc env timeout args t1 t2 =
   runMRM sc timeout env $
-  withUVarsLift (mrVarCtxFromOuterToInner args) (t1, t2) $ \args (t1', t2') ->
-    do tp1 <- liftIO $ scTypeOf sc t1' >>= scWhnf sc
-       tp2 <- liftIO $ scTypeOf sc t2' >>= scWhnf sc
+  withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
+    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
+       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
-       mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1' tp2 t2'
+       mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
 -- | Return the 'FunAssump' to add to the 'MREnv' that would be generated if
 -- 'askMRSolver' succeeded on the given terms.
@@ -1297,7 +1295,7 @@ assumeMRSolver ::
   Term -> Term -> IO (Either MRFailure MRSolverResult)
 assumeMRSolver sc env timeout args t1 t2 =
   runMRM sc timeout env $
-  withUVarsLift (mrVarCtxFromOuterToInner args) (t1, t2) $ \args (t1', t2') ->
-    do tp1 <- liftIO $ scTypeOf sc t1' >>= scWhnf sc
-       tp2 <- liftIO $ scTypeOf sc t2' >>= scWhnf sc
-       mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tp1 t1' tp2 t2'
+  withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
+    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
+       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
+       mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tp1 t1 tp2 t2
