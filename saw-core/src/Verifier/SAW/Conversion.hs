@@ -361,13 +361,13 @@ instance Monad TermBuilder where
   m >>= h = TermBuilder $ \mg mk -> do
     r <- runTermBuilder m mg mk
     runTermBuilder (h r) mg mk
-  return v = TermBuilder $ \_ _ -> return v
+  return = pure
 
 instance Functor TermBuilder where
     fmap = liftM
 
 instance Applicative TermBuilder where
-    pure = return
+    pure v = TermBuilder $ \_ _ -> pure v
     (<*>) = ap
 
 mkTermF :: TermF Term -> TermBuilder Term

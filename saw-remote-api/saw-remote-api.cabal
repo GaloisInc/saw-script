@@ -34,8 +34,8 @@ common errors
     -Werror=overlapping-patterns
 
 common deps
-  build-depends: base >=4.11.1.0 && <4.16,
-                 aeson >= 1.4.2 && < 2.0,
+  build-depends: base >=4.11.1.0 && <4.17,
+                 aeson >= 1.4.2 && < 2.1,
                  aig,
                  argo,
                  base64-bytestring,

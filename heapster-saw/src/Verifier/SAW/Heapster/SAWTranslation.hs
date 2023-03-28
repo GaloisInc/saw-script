@@ -73,9 +73,11 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 
 import Verifier.SAW.Heapster.CruUtil
+import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.NamedMb
 
 import GHC.Stack
 
@@ -129,11 +131,15 @@ instance Applicative TypeTrans where
 
 -- | Build a 'TypeTrans' represented by 0 SAW types
 mkTypeTrans0 :: tr -> TypeTrans tr
-mkTypeTrans0 tr = TypeTrans [] (\[] -> tr)
+mkTypeTrans0 tr = TypeTrans [] $ \case
+  [] -> tr
+  _ -> error "mkTypeTrans0: incorrect number of terms"
 
 -- | Build a 'TypeTrans' represented by 1 SAW type
 mkTypeTrans1 :: OpenTerm -> (OpenTerm -> tr) -> TypeTrans tr
-mkTypeTrans1 tp f = TypeTrans [tp] (\[t] -> f t)
+mkTypeTrans1 tp f = TypeTrans [tp] $ \case
+  [t] -> f t
+  _ -> error "mkTypeTrans1: incorrect number of terms"
 
 -- | Build a 'TypeTrans' for an 'OpenTerm' of a given type
 openTermTypeTrans :: OpenTerm -> TypeTrans OpenTerm
@@ -185,8 +191,11 @@ tupleTypeTrans :: TypeTrans tr -> TypeTrans tr
 tupleTypeTrans ttrans =
   let tps = typeTransTypes ttrans in
   TypeTrans [tupleOfTypes tps]
-  (\[t] -> typeTransF ttrans $ map (\i -> projTupleOfTypes tps i t) $
-           take (length $ typeTransTypes ttrans) [0..])
+  (\case
+      [t] ->
+        typeTransF ttrans $ map (\i -> projTupleOfTypes tps i t) $
+        take (length $ typeTransTypes ttrans) [0..]
+      _ -> error "tupleTypeTrans: incorrect number of terms")
 
 -- | Convert a 'TypeTrans' over 0 or more types to one over 1 type of the form
 -- @#(tp1, #(tp2, ... #(tpn, #()) ...))@. This is "strict" in the sense that
@@ -194,8 +203,11 @@ tupleTypeTrans ttrans =
 strictTupleTypeTrans :: TypeTrans tr -> TypeTrans tr
 strictTupleTypeTrans ttrans =
   TypeTrans [tupleTypeOpenTerm $ typeTransTypes ttrans]
-  (\[t] -> typeTransF ttrans $ map (\i -> projTupleOpenTerm i t) $
-           take (length $ typeTransTypes ttrans) [0..])
+  (\case
+      [t] ->
+        typeTransF ttrans $ map (\i -> projTupleOpenTerm i t) $
+        take (length $ typeTransTypes ttrans) [0..]
+      _ -> error "strictTupleTypeTrans: incorrect number of terms")
 
 -- | Build a type translation for a list of translations
 listTypeTrans :: [TypeTrans tr] -> TypeTrans [tr]
@@ -1662,7 +1674,7 @@ getLLVMArrayTransSlice arr_trans sub_arr_tp rng_trans prop_transs =
       v_tm = llvmArrayTransTerm arr_trans
       off_tm = transTerm1 $ bvRangeTransOff rng_trans
       len'_tm = transTerm1 $ bvRangeTransLen rng_trans
-      p1_trans:p2_trans:_ = prop_transs
+      (p1_trans, p2_trans, _) = expectLengthAtLeastTwo prop_transs
       BVPropTrans _ p1_tm = p1_trans
       BVPropTrans _ p2_tm = p2_trans in
   typeTransF sub_arr_tp
@@ -1892,8 +1904,10 @@ instance TransInfo info =>
       -- To translate P<args>@off as an atomic permission, we translate it as a
       -- normal permission and map the resulting PermTrans to an AtomicPermTrans
       do ptrans <- translate $ mbMap2 (ValPerm_Named $ mbLift npn) args off
-         return $ fmap (\(PTrans_Term _ t) ->
-                         APTrans_NamedConj (mbLift npn) args off t) ptrans
+         return $ fmap (\case
+                           (PTrans_Term _ t) ->
+                             APTrans_NamedConj (mbLift npn) args off t
+                           _ -> error "translateSimplImpl: Perm_NamedConj") ptrans
     [nuMP| Perm_LLVMFrame fp |] ->
       return $ mkTypeTrans0 $ APTrans_LLVMFrame fp
     [nuMP| Perm_LOwned ls tps_in tps_out ps_in ps_out |] ->
@@ -2656,9 +2670,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   [nuMP| SImpl_IntroStructField _ _ memb _ |] ->
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
-         (\(pctx :>: PTrans_Conj [APTrans_Struct pctx_str] :>: ptrans) ->
-           pctx :>: typeTransF tptrans (transTerms $
-                                        RL.set (mbLift memb) ptrans pctx_str))
+         (\case
+             (pctx :>: PTrans_Conj [APTrans_Struct pctx_str] :>: ptrans) ->
+               pctx :>: typeTransF tptrans (transTerms $
+                                            RL.set (mbLift memb) ptrans pctx_str)
+             _ -> error "translateSimplImpl: SImpl_IntroStructField")
          m
 
   [nuMP| SImpl_ConstFunPerm _ _ _ ident |] ->
@@ -2844,8 +2860,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do (w_term, len1_tm, elem_tp, _) <- translateLLVMArrayPerm mb_ap1
        (_, len2_tm, _, _) <- translateLLVMArrayPerm mb_ap2
        tp_trans <- translateSimplImplOutHead mb_simpl
-       len3_tm <- translate1 $ fmap (\(ValPerm_LLVMArray ap) ->
-                                      llvmArrayLen ap) $
+       len3_tm <-
+         translate1 $
+         fmap (\case
+                  (ValPerm_LLVMArray ap) -> llvmArrayLen ap
+                  _ -> error "translateSimplImpl: SImpl_LLVMArrayAppend") $
          fmap distPermsHeadPerm $ mbSimplImplOut mb_simpl
        (_ :>: ptrans1 :>: ptrans2) <- itiPermStack <$> ask
        arr_out_comp_tm  <-
@@ -3108,7 +3127,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let prxs2 = mbRAssignProxies ps2
        let prxs_in = RL.append prxs1 prxs2 :>: Proxy
        pctx <- itiPermStack <$> ask
-       let (pctx_ps, pctx12 :>: ptrans_l) = RL.split ps0 prxs_in pctx
+       (pctx_ps, pctx12 :>: ptrans_l) <- pure $ RL.split ps0 prxs_in pctx
        let (pctx1, pctx2) = RL.split prxs1 prxs2 pctx12
 
        -- Also split out the input variables and replace them with the ps_out vars
@@ -3294,7 +3313,6 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m
 
     | otherwise -> fail "translateSimplImpl: SImpl_IntroLLVMBlockNamed, unknown named shape"
-
   -- Elim for a recursive named shape applies the unfold function to the
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
@@ -3657,7 +3675,8 @@ translatePermImpl1 :: ImplTranslateF r ext blocks tops rets =>
 translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) of
   -- A failure translates to a call to the catch handler, which is the most recent
   -- Impl1_Catch, if one exists, or the SAW errorM function otherwise
-  ([nuMP| Impl1_Fail str |], _) -> pitmFail $ mbLift str
+  ([nuMP| Impl1_Fail err |], _) ->
+    tell ([mbLift (fmap ppError err)],HasFailures) >> mzero
 
   ([nuMP| Impl1_Catch |],
    [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
@@ -3782,10 +3801,13 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
                                                        PExpr_Var y) x
        inExtTransM etrans_y $
          withPermStackM (:>: Member_Base)
-         (\(pctx :>: PTrans_Conj [APTrans_Struct pctx_str]) ->
-           pctx :>: PTrans_Conj [APTrans_Struct $
-                                 RL.set (mbLift memb) (PTrans_Eq mb_y) pctx_str]
-           :>: RL.get (mbLift memb) pctx_str)
+         (\case
+             (pctx :>: PTrans_Conj [APTrans_Struct pctx_str]) ->
+               pctx :>: PTrans_Conj [APTrans_Struct $
+                                     RL.set (mbLift memb) (PTrans_Eq mb_y) pctx_str]
+               :>: RL.get (mbLift memb) pctx_str
+             _ ->
+               error "translatePermImpl1: Impl1_ElimStructField")
          m
 
   ([nuMP| Impl1_ElimLLVMFieldContents _ mb_fld |], _) ->
@@ -4497,8 +4519,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
             withPermStackM
               (const $ RL.members ectx)
               (const $ typeTransF perms_trans $ transTerms stack)
-              (translate $ typedEntryBody entry)
-
+              (translate $ _mbBinding $ typedEntryBody entry)
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
@@ -4719,11 +4740,12 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
   [nuMP| TypedLLVMLoadHandle _ tp _ |] ->
     inExtTransM ETrans_Fun $
     withPermStackM ((:>: Member_Base) . RL.tail)
-    (\(pctx :>: PTrans_Conj [APTrans_LLVMFunPtr tp' ptrans]) ->
-      case testEquality (mbLift tp) tp' of
-        Just Refl -> pctx :>: ptrans
+    (\case
+        (pctx :>: PTrans_Conj [APTrans_LLVMFunPtr tp' ptrans])
+          | Just Refl <- testEquality (mbLift tp) tp' ->
+            pctx :>: ptrans
         _ -> error ("translateLLVMStmt: TypedLLVMLoadHandle: "
-                    ++ "unexpected function permission type"))
+                    ++ "unexpected permission stack"))
     m
 
   [nuMP| TypedLLVMResolveGlobal gsym (p :: ValuePerm (LLVMPointerType w))|] ->
@@ -4812,7 +4834,7 @@ instance PermCheckExtC ext exprExt =>
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
-      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) mb_seq)
+      translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) (_mbBinding <$> mb_seq))
     [nuMP| TypedTermStmt _ term_stmt |] -> translate term_stmt
 
 instance PermCheckExtC ext exprExt =>
@@ -4983,7 +5005,7 @@ translateEntryBody stack mapTrans entry =
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
   do retType <- translateEntryRetType entry
      impTransM (RL.members pctx) pctx mapTrans stack retType $
-       translate $ typedEntryBody entry
+       translate $ _mbBinding $ typedEntryBody entry
 
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
@@ -5087,7 +5109,7 @@ data SomeCFGAndPerm ext where
 -- | An existentially quantified tuple of a 'TypedCFG', its 'GlobalSymbol', and
 -- a 'String' name we want to translate it to
 data SomeTypedCFG ext where
-  SomeTypedCFG :: GlobalSymbol -> String ->
+  SomeTypedCFG :: PermCheckExtC ext exprExt => GlobalSymbol -> String ->
                   TypedCFG ext blocks ghosts inits gouts ret ->
                   SomeTypedCFG ext
 
@@ -5151,7 +5173,7 @@ frameTypeOpenTerm = dataTypeOpenTerm "Prelude.List1" [dataTypeOpenTerm
 tcTranslateAddCFGs ::
   HasPtrWidth w => SharedContext -> ModuleName -> PermEnv -> ChecksFlag ->
   EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
-  IO PermEnv
+  IO (PermEnv, [SomeTypedCFG LLVM])
 tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
   withKnownNat ?ptrWidth $
   do
@@ -5179,8 +5201,9 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     let (fun_ixs, lrtss) = unzip $ gen_lrts_ixs 0 tcfgs
     let lrts = concat lrtss
     frame_tm <- completeNormOpenTerm sc $ lrtsOpenTerm lrts
+    let (cfg_and_perm, _) = expectLengthAtLeastOne cfgs_and_perms
     let frame_ident =
-          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
                                 ++ "__frame")
     frame_tp <- completeNormOpenTerm sc frameTypeOpenTerm
     scInsertDef sc mod_name frame_ident frame_tp frame_tm
@@ -5209,7 +5232,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
 
     -- Add a named definition for bodies_tm
     let bodies_ident =
-          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
                                 ++ "__bodies")
     bodies_tp <-
       completeNormOpenTerm sc $
@@ -5235,7 +5258,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
            let perm = mkPtrFunPerm $ tpcfgFunPerm cfg
            return $ PermEnvGlobalEntry sym perm (Right [globalOpenTerm ident]))
       tcfgs fun_ixs
-    return $ permEnvAddGlobalSyms env new_entries
+    return (permEnvAddGlobalSyms env new_entries, tcfgs)
 
 
 ----------------------------------------------------------------------

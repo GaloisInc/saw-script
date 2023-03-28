@@ -131,7 +131,10 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
                       scGlobalDef sc (mkIdent preludeName (Text.pack name))
              args <- mapM (parseSBV sc nodes) sbvs
              let inSizes = map fst args
-                 (TFun inTyp outTyp) = typ
+             (inTyp, outTyp) <-
+               case typ of
+                 TFun inTyp outTyp -> pure (inTyp, outTyp)
+                 _ -> fail "parseSBVExpr: expected function type"
              unless (sum (typSizes inTyp) == sum (map fromIntegral inSizes)) $ do
                printOutLn opts Error ("ERROR parseSBVPgm: input size mismatch in " ++ name)
                printOutFn opts Error (show inTyp)
@@ -333,7 +336,10 @@ combineOutputs sc ty xs0 =
 
 parseSBVPgm :: Options -> SharedContext -> UnintMap -> SBV.SBVPgm -> IO Term
 parseSBVPgm opts sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warnings, _uninterps)) =
-    do let (TFun inTyp outTyp) = parseIRType irtype
+    do (inTyp, outTyp) <-
+         case parseIRType irtype of
+           TFun inTyp outTyp -> pure (inTyp, outTyp)
+           _ -> fail "parseSBVPgm: expected function type"
        let cmds = reverse revcmds
        let (assigns, inputs, outputs) = partitionSBVCommands cmds
        let inSizes = [ size | SBVInput size _ <- inputs ]

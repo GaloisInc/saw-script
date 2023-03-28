@@ -90,6 +90,11 @@
   allows verification certain kinds of simple loops by using a
   user-provided loop invariant.
 
+* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
+  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
+  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
+  earlier.)
+
 # Version 0.9
 
 ## New Features

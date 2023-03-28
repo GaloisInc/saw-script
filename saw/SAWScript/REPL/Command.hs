@@ -8,6 +8,8 @@ Stability   : provisional
 {-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+-- TODO RGS: Do better (or at least comment why we do this)
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 
 module SAWScript.REPL.Command (
     -- * Commands

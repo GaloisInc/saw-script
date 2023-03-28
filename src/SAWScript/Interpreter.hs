@@ -20,6 +20,8 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.MGU
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
   ( interpretStmt
@@ -390,10 +392,10 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain = 
+interpretFile file runMain =
   bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
-    interp = 
+    interp =
       do  opts <- getOptions
           io $ setCurrentDirectory (takeDirectory file)
           stmts <- io $ SAWScript.Import.loadFile opts file
@@ -1932,6 +1934,11 @@ primitives = Map.fromList
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
+  , prim "cvc5"                "ProofScript ()"
+    (pureVal proveCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal." ]
+
   , prim "z3"                  "ProofScript ()"
     (pureVal proveZ3)
     Current
@@ -1961,6 +1968,13 @@ primitives = Map.fromList
     , "given list of names as uninterpreted."
     ]
 
+  , prim "unint_cvc5"            "[String] -> ProofScript ()"
+    (pureVal proveUnintCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "unint_yices"           "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
@@ -1977,6 +1991,11 @@ primitives = Map.fromList
     (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
+
+  , prim "sbv_cvc5"            "ProofScript ()"
+    (pureVal proveCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal." ]
 
   , prim "sbv_z3"              "ProofScript ()"
     (pureVal proveZ3)
@@ -2004,6 +2023,13 @@ primitives = Map.fromList
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
+  , prim "sbv_unint_cvc5"        "[String] -> ProofScript ()"
+    (pureVal proveUnintCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
 
@@ -2130,6 +2156,13 @@ primitives = Map.fromList
     , "given list of names as uninterpreted."
     ]
 
+  , prim "w4_unint_cvc5"         "[String] -> ProofScript ()"
+    (pureVal w4_unint_cvc5)
+    Current
+    [ "Prove the current goal using What4 (CVC5 backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "w4_abc_aiger"        "ProofScript ()"
     (pureVal w4_abc_aiger)
     Current
@@ -2172,6 +2205,13 @@ primitives = Map.fromList
     (pureVal offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_cvc5"  "[String] -> String -> ProofScript ()"
+    (pureVal offline_w4_unint_cvc5)
+    Current
+    [ "Write the current goal to the given file using What4 (CVC5 backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
@@ -2760,7 +2800,21 @@ primitives = Map.fromList
     , "`llvm_points_to`). The Term is the tuple consisting of the"
     , "output parameters of the LLVM function: the return parameter, then"
     , "the parameters passed by reference (in the order given by"
-    , "`llvm_points_to`). For more flexibility, see `llvm_verify`."
+    , "`llvm_points_to`)."
+    , ""
+    , "When invoking `llvm_compositional_extract mod fn_name term_name ovs"
+    , "check_path_sat spec strat`, the arguments represent the following:"
+    , "  1. `mod`: The LLVM module containing the function to extract."
+    , "  2. `fn_name`: The name of the function to extract."
+    , "  3. `term_name`: The name of the `Term` to generate."
+    , "  4. `ovs`: A list of overrides to use in the proof that the extracted"
+    , "     function satisifies `spec`."
+    , "  5. `check_path_sat`: Whether to perform path satisfiability checks."
+    , "  6. `spec`: SAW specification for the extracted function."
+    , "  7. `strat`: Proof strategy to use when verifying that the extracted"
+    , "     function satisfies `spec`."
+    , ""
+    , "For more flexibility, see `llvm_verify`."
     ]
   , prim "crucible_llvm_compositional_extract"
     "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
@@ -4174,6 +4228,13 @@ primitives = Map.fromList
     (bicVal heapster_parse_test)
     Experimental
     [ "Parse and print back a set of Heapster permissions for a function"
+    ]
+
+  , prim "heapster_dump_ide_info"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_dump_ide_info)
+    Experimental
+    [ "Dump environment info to a JSON file for IDE integration."
     ]
 
     ---------------------------------------------------------------------

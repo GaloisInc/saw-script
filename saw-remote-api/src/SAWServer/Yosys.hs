@@ -110,7 +110,10 @@ yosysVerify params = do
     [] -> do
       fileReader <- Argo.getFileReader
       YosysImport imp <- getYosysImport $ yosysVerifyImport params
-      let Just modTerm = Map.lookup (yosysVerifyModule params) imp
+      let modu = yosysVerifyModule params
+      modTerm <- case Map.lookup modu imp of
+        Just modTerm -> pure modTerm
+        Nothing -> error $ "Module " ++ show modu ++ " not found"
       lemmas <- mapM getYosysTheorem $ yosysVerifyLemmas params
       proofScript <- interpretProofScript $ yosysVerifyScript params
       cexp <- getCryptolExpr $ yosysVerifySpec params
