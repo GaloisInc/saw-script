@@ -3788,7 +3788,8 @@ primitives = Map.fromList
   , prim "prove_refinement" "ProofScript ()"
     (scVal proveRefinement)
     Experimental
-    [ "TODO: Docs" ]
+    [ "Use MRSolver to prove a current goal of the form:"
+    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
 
     ---------------------------------------------------------------------
 

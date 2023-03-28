@@ -2183,6 +2183,40 @@ mrSolver f printStr sc top_args tt1 tt2 =
           ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
         ppTmHead _ = "..."
 
+-- | Invokes MRSolver to attempt to solve a focused goal of the form
+-- @(a1:A1) -> ... -> (an:A1) -> refinesS_eq ...@, printing an error message
+-- and exiting if this cannot be done. This function will not modify the
+-- 'Prover.MREnv'.
+proveRefinement :: SharedContext -> ProofScript ()
+proveRefinement sc = execTactic $ Tactic $ \goal -> lift $ do
+  dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "prove_refinement: focus required"
+    HypFocus _ _ -> fail "prove_refinement: cannot apply prove_refinement in a hypothesis"
+    ConclFocus (asPiList . unProp -> (args, asApplyAll ->
+                                      (asGlobalDef -> Just "Prelude.refinesS_eq",
+                                       [ev, stack, rtp, t1, t2]))) _ ->
+      do tp <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev, stack, rtp]
+         let tt1 = TypedTerm (TypedTermOther tp) t1
+         let tt2 = TypedTerm (TypedTermOther tp) t2
+         (diff, res) <- mrSolver Prover.askMRSolver (Just "prove_refinement") sc args tt1 tt2
+         case res of
+           Left err | dlvl == 0 ->
+             io (putStrLn $ Prover.showMRFailure err) >>
+             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+             io (Exit.exitWith $ Exit.ExitFailure 1)
+           Left err ->
+             -- we ignore the MRFailure context here since it will have already
+             -- been printed by the debug trace
+             io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+             io (Exit.exitWith $ Exit.ExitFailure 1)
+           Right _ ->
+             printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+             let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal)) in
+             return ((), stats, [], leafEvidence MrSolverEvidence)
+    _ -> error "prove_refinement tactic not applied to a refinesS_eq goal"
+
 -- | Run Mr Solver to prove that the first term refines the second, adding
 -- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
 -- is true and this can be done, or printing an error message and exiting if it
@@ -2214,39 +2248,6 @@ mrSolverProve addToEnv sc t1 t2 =
            Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
        _ ->
          printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
-
--- | ...
--- TODO: Maybe move somewhere else in this file?
-proveRefinement :: SharedContext -> ProofScript ()
-proveRefinement sc = execTactic $ Tactic $ \goal -> lift $ do
-  dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-  case sequentState (goalSequent goal) of
-    Unfocused -> fail "tactic exact: focus required"
-    HypFocus _ _ -> fail "tactic exact: cannot apply exact in a hypothesis"
-    ConclFocus (asPiList . unProp -> (args, asApplyAll ->
-                                      (asGlobalDef -> Just "Prelude.refinesS_eq",
-                                       [ev, stack, rtp, t1, t2]))) _ ->
-      do tp <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev, stack, rtp]
-         let tt1 = TypedTerm (TypedTermOther tp) t1
-         let tt2 = TypedTerm (TypedTermOther tp) t2
-         (diff, res) <- mrSolver Prover.askMRSolver (Just "prove_refinement") sc args tt1 tt2
-         case res of
-           Left err | dlvl == 0 ->
-             io (putStrLn $ Prover.showMRFailure err) >>
-             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-             io (Exit.exitWith $ Exit.ExitFailure 1)
-           Left err ->
-             -- we ignore the MRFailure context here since it will have already
-             -- been printed by the debug trace
-             io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-             io (Exit.exitWith $ Exit.ExitFailure 1)
-           Right _ ->
-             printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
-             let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal)) in
-             return ((), stats, [], leafEvidence MrSolverEvidence)
-    _ -> error "prove_refinement tactic not applied to a refinesS_eq goal"
-
 
 -- | Run Mr Solver to prove that the first term refines the second, returning
 -- true iff this can be done. This function will not modify the 'Prover.MREnv'.

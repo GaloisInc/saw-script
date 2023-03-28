@@ -172,11 +172,6 @@ eq_inv_map a b a1 a2 eq_a f1 f2 eq_f =
            (eq_cong a a2 a1 (sym a a1 a2 eq_a) b f2));
 
 
-data EqDep (t : sort 1) (P : t -> sort 0) (x : t) (p : P x) : (y : t) -> P y -> Prop where {
-    ReflDep : EqDep t P x p x p;
-  }
-
-
 -- Basic axiom about the behavior of "fix"
 axiom fix_unfold :
   (a : sort 1) ->
@@ -2964,17 +2959,20 @@ FunStackE E stack = Build_EvType (FunStackE_type E stack) (FunStackE_enc E stack
 primitive SpecM : (E:EvType) -> FunStack -> sort 0 -> sort 0;
 
 
+-- The type of the preconditions needed for refinesS
 SpecPreRel : (E1:EvType) -> (E2:EvType) ->
              (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
 SpecPreRel E1 E2 stack1 stack2 =
   FunStackE_type E1 stack1 -> FunStackE_type E2 stack2 -> Prop;
 
+-- The type of the postconditions needed for refinesS
 SpecPostRel : (E1:EvType) -> (E2:EvType) ->
               (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
 SpecPostRel E1 E2 stack1 stack2 =
   (e1:FunStackE_type E1 stack1) -> (e2:FunStackE_type E2 stack2) ->
   FunStackE_enc E1 stack1 e1 -> FunStackE_enc E2 stack2 e2 -> Prop;
 
+-- The type of the return relations needed for refinesS
 SpecRetRel : (R1:sort 0) -> (R1:sort 0) -> sort 0;
 SpecRetRel R1 R2 = R1 -> R2 -> Prop;
 
