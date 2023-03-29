@@ -465,6 +465,15 @@ combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 0x01000193) `xor` h2
 
 instance Eq Term where
+  -- Note: we take some minor liberties with the contract of 'hashWithSalt' in
+  -- this implementation of 'Eq'. The contract states that if two values are
+  -- equal according to '==', then they must have the same hash. For terms
+  -- constructed by/within SAW, this will hold, because SAW's handling of index
+  -- generation and assignment ensures that equality of indices implies equality
+  -- of terms and term hashes (see 'Verifier.SAW.SharedTerm.getTerm'). However,
+  -- if terms are constructed outside this standard procedure or in a way that
+  -- does not respect index uniqueness rules, 'hashWithSalt''s contract could be
+  -- violated.
   (==) = alphaEquiv
 
 alphaEquiv :: Term -> Term -> Bool
@@ -474,8 +483,8 @@ alphaEquiv = term
     term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
     term (Unshared tf1) (STApp{stAppTermF = tf2}) = termf tf1 tf2
     term (STApp{stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
-    term (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
-         (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) = (i1 == i2 && h1 == h2) || termf tf1 tf2
+    term (STApp{stAppIndex = i1, stAppTermF = tf1})
+         (STApp{stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
 
     termf :: TermF Term -> TermF Term -> Bool
     termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
