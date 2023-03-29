@@ -17,7 +17,7 @@ import SAWScript.Token
 import SAWScript.Position
 import SAWScript.Utils
 
-import Numeric
+import Numeric (readInt)
 import Data.List
 
 }

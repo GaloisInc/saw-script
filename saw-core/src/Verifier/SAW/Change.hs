@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -25,10 +24,8 @@ module Verifier.SAW.Change
   , flatten
   ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
-import Control.Monad (liftM, liftM2)
+import Control.Applicative (liftA2)
+import Control.Monad (liftM)
 import Control.Monad.Trans
 
 ----------------------------------------------------------------------
@@ -84,7 +81,7 @@ instance Applicative Change where
   Modified f <*> Modified x = Modified (f x)
 
 instance Monad Change where
-  return x = Original x
+  return = pure
   Original x >>= k = k x
   Modified x >>= k = taint (k x)
 
@@ -108,15 +105,15 @@ commitChange (Modified x) = x
 
 newtype ChangeT m a = ChangeT { runChangeT :: m (Change a) }
 
-instance Monad m => Functor (ChangeT m) where
-  fmap f (ChangeT m) = ChangeT (liftM (fmap f) m)
+instance Functor m => Functor (ChangeT m) where
+  fmap f (ChangeT m) = ChangeT (fmap (fmap f) m)
 
-instance Monad m => Applicative (ChangeT m) where
-  pure x = ChangeT (return (Original x))
-  ChangeT m1 <*> ChangeT m2 = ChangeT (liftM2 (<*>) m1 m2)
+instance Applicative m => Applicative (ChangeT m) where
+  pure x = ChangeT (pure (Original x))
+  ChangeT m1 <*> ChangeT m2 = ChangeT (liftA2 (<*>) m1 m2)
 
 instance Monad m => Monad (ChangeT m) where
-  return x = ChangeT (return (Original x))
+  return = pure
   ChangeT m >>= k = ChangeT (m >>= f)
     where f (Original x) = runChangeT (k x)
           f (Modified x) = runChangeT (k x) >>= (return . taint)

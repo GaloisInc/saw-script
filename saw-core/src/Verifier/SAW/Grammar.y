@@ -73,6 +73,8 @@ import Verifier.SAW.Lexer
   'module'    { PosPair _ (TKey "module") }
   'sort'      { PosPair _ (TKey "sort") }
   'isort'     { PosPair _ (TKey "isort") }
+  'qsort'     { PosPair _ (TKey "qsort") }
+  'qisort'    { PosPair _ (TKey "qisort") }
   'Prop'      { PosPair _ (TKey "Prop") }
   'where'     { PosPair _ (TKey "where") }
   'axiom'     { PosPair _ (TKey "axiom") }
@@ -182,9 +184,8 @@ AtomTerm
   | string                       { StringLit (pos $1) (Text.pack (tokString (val $1))) }
   | Ident                        { Name $1 }
   | IdentRec                     { Recursor Nothing $1 }
-  | 'Prop'                       { Sort (pos $1) propSort False }
-  | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) False }
-  | 'isort' nat                  { Sort (pos $1) (mkSort (tokNat (val $2))) True }
+  | 'Prop'                       { Sort (pos $1) propSort noFlags }
+  | Sort nat                     { Sort (pos $1) (mkSort (tokNat (val $2))) (val $1) }
   | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
   | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
@@ -200,6 +201,12 @@ Ident : ident { fmap (Text.pack . tokIdent) $1 }
 
 IdentRec :: { PosPair Text }
 IdentRec : identrec { fmap (Text.pack . tokRecursor) $1 }
+
+Sort :: { PosPair SortFlags }
+Sort : 'sort'   { fmap (const $ SortFlags False False) $1 }
+     | 'isort'  { fmap (const $ SortFlags True  False) $1 }
+     | 'qsort'  { fmap (const $ SortFlags False True ) $1 }
+     | 'qisort' { fmap (const $ SortFlags True  True ) $1 }
 
 FieldValue :: { (PosPair FieldName, Term) }
 FieldValue : Ident '=' Term { ($1, $3) }

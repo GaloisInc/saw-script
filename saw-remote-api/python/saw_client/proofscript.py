@@ -45,6 +45,10 @@ class CVC4(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-cvc4", unints)
 
+class CVC5(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("w4-cvc5", unints)
+
 class Yices(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-yices", unints)
@@ -56,6 +60,10 @@ class Z3(UnintProver):
 class CVC4_SBV(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("sbv-cvc4", unints)
+
+class CVC5_SBV(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("sbv-cvc5", unints)
 
 class Yices_SBV(UnintProver):
   def __init__(self, unints : List[str]) -> None:
@@ -120,6 +128,9 @@ boolector = UseProver(Boolector())
 
 def cvc4(unints : List[str]) -> ProofTactic:
   return UseProver(CVC4(unints))
+
+def cvc5(unints : List[str]) -> ProofTactic:
+  return UseProver(CVC5(unints))
 
 def yices(unints : List[str]) -> ProofTactic:
   return UseProver(Yices(unints))

@@ -475,13 +475,18 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
         archEvalFns = Macaw.x86_64MacawEvalFn sfs Macaw.defaultMacawArchStmtExtensionOverride
         lookupSyscall = Macaw.unsupportedSyscalls "saw-script"
         noExtraValidityPred _ _ _ _ = return Nothing
+        mmConf = Macaw.MemModelConfig
+                   { Macaw.globalMemMap = mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase
+                   , Macaw.lookupFunctionHandle = funcLookup
+                   , Macaw.lookupSyscallHandle = lookupSyscall
+                   , Macaw.mkGlobalPointerValidityAssertion = noExtraValidityPred
+                   , Macaw.resolvePointer = pure
+                   , Macaw.concreteImmutableGlobalRead = \_ _ -> pure Nothing
+                   , Macaw.lazilyPopulateGlobalMem = \_ _ -> pure
+                   }
         defaultMacawExtensions_x86_64 =
           Macaw.macawExtensions
-          archEvalFns mvar
-          (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
-          funcLookup
-          lookupSyscall
-          noExtraValidityPred
+          archEvalFns mvar mmConf
         sawMacawExtensions = defaultMacawExtensions_x86_64
           { C.extensionExec = \s0 st -> case s0 of
               Macaw.PtrLt w x y -> doPtrCmp W4.bvUlt st mvar w x y

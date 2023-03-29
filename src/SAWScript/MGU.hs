@@ -11,6 +11,8 @@ Stability   : provisional
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns]
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.MGU
        ( checkDecl
@@ -682,3 +684,27 @@ runTIWithEnv env tenv pos m = (a, subst rw, errors rw)
   (a,rw) = runState m' emptyRW
 
 -- }}}
+
+{-
+Note [-Wincomplete-uni-patterns and irrefutable patterns]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Various parts of SAW use irrefutable patterns in functions that assume that
+their arguments have particular shapes. For example, inferDecl in this module
+matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
+invariant that the list will have exactly one element. This lets inferDecl be
+slightly lazier when evaluated.
+
+Unfortunately, this use of irrefutable patterns is at odds with the
+-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
+produce a warning for any irrefutable pattern that does not cover all possible
+data constructors. While we could rewrite functions like `inferDecl` to
+explicitly provide a fall-through case, that would change its strictness
+properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
+in each part of SAW that uses irrefutable patterns.
+
+Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
+irrefutable patterns at all. GHC issue #14800
+(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
+If that issue is fixed in the future, we may want to reconsider whether we want
+to disable -Wincomplete-uni-patterns.
+-}
