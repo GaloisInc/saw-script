@@ -78,7 +78,7 @@ replBody mbBatch begin =
 
   getInputLines prompt ls =
     do mb <- fmap (filter (/= '\r')) <$> getInputLine prompt
-       let newPrompt = map (\_ -> ' ') prompt
+       newPrompt <- MTL.lift getContinuationPrompt
        case mb of
           Nothing -> return Nothing
           Just l | not (null l) && last l == '\\' ->
