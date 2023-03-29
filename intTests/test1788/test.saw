@@ -1,0 +1,13 @@
+// This test case ensures that ABC can prove that a C implementation of the
+// `mult` function is equivalent to a direct Cryptol implementation of the
+// same function.
+
+let
+{{
+cryptol_mult : [32] -> [32]
+cryptol_mult x = x * 0x85EBCA77
+}};
+
+m <- llvm_load_module "test.bc";
+llvm_mult <- llvm_extract m "mult";
+prove abc {{ \x -> llvm_mult x == cryptol_mult x }};

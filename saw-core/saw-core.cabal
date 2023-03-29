@@ -24,7 +24,7 @@ library
     happy >= 1.9.6
 
   build-depends:
-    base == 4.*,
+    base >= 4.8,
     array,
     bytestring,
     containers,

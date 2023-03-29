@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -250,8 +251,11 @@ matching unif = match
         Var       -> nets
         App t1 t2 -> foldr (match t2) nets (rands t1 comb [])
 
+{- Invariant: Each list entry must be a Leaf. -}
 extract_leaves :: [Net a] -> [a]
-extract_leaves = concatMap (\(Leaf xs) -> xs)
+extract_leaves = concatMap $ \case
+  Leaf xs -> xs
+  Net{}   -> error "extract_leaves: Unexpected Net node"
 
 {-return items whose key could match t, WHICH MUST BE BETA-ETA NORMAL-}
 match_term :: Pattern t => Net a -> t -> [a]

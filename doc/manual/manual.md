@@ -1131,7 +1131,7 @@ sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
 
-In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
+In addition to these, the `boolector`, `cvc4`, `cvc5`, `mathsat`, and `yices`
 provers are available. The internal decision procedure `rme`, short for
 Reed-Muller Expansion, is an automated prover that works particularly
 well on the Galois field operations that show up, for example, in AES.
@@ -1199,6 +1199,8 @@ named subterms should be represented as uninterpreted functions.
 
 * `unint_cvc4 : [String] -> ProofScript ()`
 
+* `unint_cvc5 : [String] -> ProofScript ()`
+
 * `unint_yices : [String] -> ProofScript ()`
 
 * `unint_z3 : [String] -> ProofScript ()`
@@ -1218,6 +1220,8 @@ library to represent and solve SMT queries:
 
 * `sbv_unint_cvc4 : [String] -> ProofScript ()`
 
+* `sbv_unint_cvc5 : [String] -> ProofScript ()`
+
 * `sbv_unint_yices : [String] -> ProofScript ()`
 
 * `sbv_unint_z3 : [String] -> ProofScript ()`
@@ -1225,6 +1229,8 @@ library to represent and solve SMT queries:
 The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
 
 * `w4_unint_cvc4 : [String] -> ProofScript ()`
+
+* `w4_unint_cvc5 : [String] -> ProofScript ()`
 
 * `w4_unint_yices : [String] -> ProofScript ()`
 

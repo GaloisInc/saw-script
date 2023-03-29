@@ -42,11 +42,15 @@ data Term
 -- | Type synonym useful for indicating when a term is used as a type.
 type Type = Term
 
+-- | An 'Ident' with an optional 'Type', which may be explicit or implicit.
+-- For use representing the bound variables in 'Lambda's, 'Let's, etc.
 data Binder
   = Binder Ident (Maybe Type)
   | ImplicitBinder Ident (Maybe Type)
     deriving (Show)
 
+-- | An 'Type' with an optional 'Ident', which may be explicit or implicit.
+-- For use representing arguments in 'Pi' types.
 data PiBinder
   = PiBinder (Maybe Ident) Type
   | PiImplicitBinder (Maybe Ident) Type

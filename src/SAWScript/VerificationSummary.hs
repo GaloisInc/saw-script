@@ -18,10 +18,10 @@ module SAWScript.VerificationSummary
 import Control.Lens ((^.))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Text (Text)
 import Data.String
 import Prettyprinter
 import Data.Aeson (encode, (.=), Value(..), object, toJSON)
+import Data.Aeson.Key (Key)
 import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Parameterized.Nonce
 
@@ -111,7 +111,7 @@ thmToJSON thm = object ([
          Just ploc -> [("ploc" .= plocToJSON ploc)]
   )
 
-theoremStatus :: TheoremSummary -> [(Text,Value)]
+theoremStatus :: TheoremSummary -> [(Key,Value)]
 theoremStatus summary = case summary of
       ProvedTheorem stats ->
         [ ("status"  .= ("verified" :: String))
