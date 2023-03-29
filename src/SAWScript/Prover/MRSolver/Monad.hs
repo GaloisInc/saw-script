@@ -639,14 +639,8 @@ withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) (\[v] -> m v)
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
 withUVarLift :: TermLike tm => LocalName -> Type -> tm ->
                 (Term -> tm -> MRM a) -> MRM a
-withUVarLift nm tp t m = withUVarsLift (singletonMRVarCtx nm tp) t (\[v] -> m v)
-
--- | Run a MR Solver computation in a context extended with a list of universal
--- variables, passing 'Term's for those variables to the supplied computation
--- and passing it the lifting (in the sense of 'incVars') of an MR Solver term
-withUVarsLift :: TermLike tm => MRVarCtx -> tm -> ([Term] -> tm -> MRM a) -> MRM a
-withUVarsLift ctx t m =
-  withUVars ctx (\vars -> liftTermLike 0 (mrVarCtxLength ctx) t >>= m vars)
+withUVarLift nm tp t m =
+  withUVar nm tp (\x -> liftTermLike 0 1 t >>= m x)
 
 -- | Run a MR Solver computation in a context extended with a list of universal
 -- variables, passing 'Term's for those variables to the supplied computation.
