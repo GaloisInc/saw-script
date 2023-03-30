@@ -3785,8 +3785,8 @@ primitives = Map.fromList
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
 
-  , prim "prove_refinement" "ProofScript ()"
-    (scVal proveRefinement)
+  , prim "mrsolver" "ProofScript ()"
+    (scVal mrSolverTactic)
     Experimental
     [ "Use MRSolver to prove a current goal of the form:"
     , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]

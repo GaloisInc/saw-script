@@ -2187,19 +2187,19 @@ mrSolver f printStr sc top_args tt1 tt2 =
 -- @(a1:A1) -> ... -> (an:A1) -> refinesS_eq ...@, printing an error message
 -- and exiting if this cannot be done. This function will not modify the
 -- 'Prover.MREnv'.
-proveRefinement :: SharedContext -> ProofScript ()
-proveRefinement sc = execTactic $ Tactic $ \goal -> lift $ do
+mrSolverTactic :: SharedContext -> ProofScript ()
+mrSolverTactic sc = execTactic $ Tactic $ \goal -> lift $ do
   dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
   case sequentState (goalSequent goal) of
-    Unfocused -> fail "prove_refinement: focus required"
-    HypFocus _ _ -> fail "prove_refinement: cannot apply prove_refinement in a hypothesis"
+    Unfocused -> fail "mrsolver: focus required"
+    HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
     ConclFocus (asPiList . unProp -> (args, asApplyAll ->
                                       (asGlobalDef -> Just "Prelude.refinesS_eq",
                                        [ev, stack, rtp, t1, t2]))) _ ->
       do tp <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev, stack, rtp]
          let tt1 = TypedTerm (TypedTermOther tp) t1
          let tt2 = TypedTerm (TypedTermOther tp) t2
-         (diff, res) <- mrSolver Prover.askMRSolver (Just "prove_refinement") sc args tt1 tt2
+         (diff, res) <- mrSolver Prover.askMRSolver (Just "mrsolver") sc args tt1 tt2
          case res of
            Left err | dlvl == 0 ->
              io (putStrLn $ Prover.showMRFailure err) >>
@@ -2215,7 +2215,7 @@ proveRefinement sc = execTactic $ Tactic $ \goal -> lift $ do
              printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
              let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal)) in
              return ((), stats, [], leafEvidence MrSolverEvidence)
-    _ -> error "prove_refinement tactic not applied to a refinesS_eq goal"
+    _ -> error "mrsolver tactic not applied to a refinesS_eq goal"
 
 -- | Run Mr Solver to prove that the first term refines the second, adding
 -- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
