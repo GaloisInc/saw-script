@@ -2928,7 +2928,8 @@ emptyFunStack = Nil1 (List1 LetRecType);
 pushFunStack : List1 LetRecType -> FunStack -> FunStack;
 pushFunStack frame stack = Cons1 (List1 LetRecType) frame stack;
 
--- The type of FunStackE
+-- The type of FunStackE E stack: either an error (represented as a String),
+-- an E, or a FrameCall from stack
 FunStackE_type : (E:EvType) -> FunStack -> sort 0;
 FunStackE_type E stack =
   List1#rec
@@ -2939,7 +2940,9 @@ FunStackE_type E stack =
      Either (FrameCall frame) E')
   stack;
 
--- The encoding of FunStackE
+-- The encoding of FunStackE E stack: Void if the event is an error, the
+-- encoding of E if the event is an E, or the return type of the FrameCall
+-- if the event is a FrameCall
 FunStackE_enc : (E:EvType) -> (stack:FunStack) -> FunStackE_type E stack -> sort 0;
 FunStackE_enc E stack =
   List1#rec
@@ -2954,7 +2957,9 @@ FunStackE_enc E stack =
        (FrameCallRet frame) rec e)
   stack;
 
--- The event type corresponding to a FunStack
+-- The event type corresponding to a FunStack: either an error (represented as
+-- a String and encoded as Void), an E, or a FrameCall from stack (encoded as
+-- the return type of the FrameCall)
 FunStackE : (E:EvType) -> FunStack -> EvType;
 FunStackE E stack = Build_EvType (FunStackE_type E stack) (FunStackE_enc E stack);
 
@@ -2963,29 +2968,36 @@ FunStackE E stack = Build_EvType (FunStackE_type E stack) (FunStackE_enc E stack
 primitive SpecM : (E:EvType) -> FunStack -> sort 0 -> sort 0;
 
 
--- The type of the preconditions needed for refinesS
+-- SpecPreRel E1 E2 stack1 stack2 is a relation on FunStackE E1 stack1 and
+-- FunStackE E2 stack2. This is the type of the postcondition needed for
+-- refinesS.
 SpecPreRel : (E1:EvType) -> (E2:EvType) ->
              (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
 SpecPreRel E1 E2 stack1 stack2 =
   FunStackE_type E1 stack1 -> FunStackE_type E2 stack2 -> Prop;
 
--- The type of the postconditions needed for refinesS
+-- SpecPreRel E1 E2 stack1 stack2 is a relation on the encodings of e1 and e2,
+-- for all e1 of type FunStackE E1 stack1 and e2 of type FunStackE E2 stack2.
+-- This is the type of the postcondition needed for refinesS.
 SpecPostRel : (E1:EvType) -> (E2:EvType) ->
               (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
 SpecPostRel E1 E2 stack1 stack2 =
   (e1:FunStackE_type E1 stack1) -> (e2:FunStackE_type E2 stack2) ->
   FunStackE_enc E1 stack1 e1 -> FunStackE_enc E2 stack2 e2 -> Prop;
 
--- The type of the return relations needed for refinesS
+-- SpecRetRel R1 R2 is a relation on R1 and R2. This is the type of the return
+-- relation needed for refinesS.
 SpecRetRel : (R1:sort 0) -> (R1:sort 0) -> sort 0;
 SpecRetRel R1 R2 = R1 -> R2 -> Prop;
 
--- The precondition requiring events on both sides to be equal
+-- The precondition requiring that errors, events, and FrameCalls match up and
+-- are equal on both sides
 eqPreRel : (E:EvType) -> (stack:FunStack) -> SpecPreRel E E stack stack;
 eqPreRel E stack e1 e2 =
   Eq (FunStackE_type E stack) e1 e2;
 
--- The postcondition requiring return values on both sides to be equal
+-- The postcondition stating that errors, event encodings, and return values
+-- of FrameCalls match up and are equal on both sides
 eqPostRel : (E:EvType) -> (stack:FunStack) -> SpecPostRel E E stack stack;
 eqPostRel E stack e1 e2 a1 a2 =
   EqDep (FunStackE_type E stack) (FunStackE_enc E stack) e1 a1 e2 a2;
