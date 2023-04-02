@@ -2972,7 +2972,7 @@ instance (NuMatching a, Substable PermVarSubst a Identity) =>
     [nuMP| EqProofCons eqp' eq_step |] ->
       EqProofCons <$> genSubst s eqp' <*> genSubst s eq_step
 
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (SimplImpl ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
     [nuMP| SImpl_Drop x p |] ->
@@ -3251,7 +3251,7 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_ElimAnyToPtr x fp |] ->
       SImpl_ElimAnyToPtr <$> genSubst s x <*> genSubst s fp
 
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (PermImpl1 ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
     [nuMP| Impl1_Fail err |] -> Impl1_Fail <$> genSubst s err
@@ -3291,8 +3291,7 @@ instance SubstVar PermVarSubst m =>
       Impl1_TryProveBVProp <$> genSubst s x <*> genSubst s prop <*>
                                return (mbLift prop_str)
 
--- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
-instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
+instance (NuMatchingAny1 r, m ~ Identity,
           Substable1 PermVarSubst r m) =>
          Substable PermVarSubst (PermImpl r ps) m where
   genSubst s mb_impl = case mbMatch mb_impl of
@@ -3300,8 +3299,7 @@ instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
     [nuMP| PermImpl_Step impl1 mb_impls |] ->
       PermImpl_Step <$> genSubst s impl1 <*> genSubst s mb_impls
 
--- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
-instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
+instance (NuMatchingAny1 r, m ~ Identity,
           Substable1 PermVarSubst r m) =>
          Substable PermVarSubst (MbPermImpls r bs_pss) m where
   genSubst s mb_impls = case mbMatch mb_impls of
@@ -3317,8 +3315,7 @@ instance SubstVar s m => Substable s (OrListDisj ps a disj) m where
 instance SubstVar s m => Substable1 s (OrListDisj ps a) m where
   genSubst1 = genSubst
 
--- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (LocalPermImpl ps_in ps_out) m where
   genSubst s (mbMatch -> [nuMP| LocalPermImpl impl |]) =
     LocalPermImpl <$> genSubst s impl

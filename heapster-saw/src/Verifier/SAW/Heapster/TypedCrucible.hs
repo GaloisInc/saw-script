@@ -809,7 +809,7 @@ instance SubstVar PermVarSubst m =>
     [nuMP| TypedRegsCons rs r |] ->
       TypedRegsCons <$> genSubst s rs <*> genSubst s r
 
-instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
+instance (NuMatchingAny1 r, m ~ Identity,
           Substable1 PermVarSubst r m) =>
          Substable PermVarSubst (AnnotPermImpl r ps) m where
   genSubst s (mbMatch -> [nuMP| AnnotPermImpl err impl |]) =
@@ -1003,7 +1003,7 @@ instance SubstVar PermVarSubst m =>
          Substable1 PermVarSubst (TypedJumpTarget blocks tops) m where
   genSubst1 = genSubst
 
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (TypedTermStmt blocks tops rets ps_in) m where
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| TypedJump impl_tgt |] -> TypedJump <$> genSubst s impl_tgt
@@ -1015,7 +1015,7 @@ instance SubstVar PermVarSubst m =>
     [nuMP| TypedErrorStmt str r |] ->
       TypedErrorStmt (mbLift str) <$> genSubst s r
 
-instance (PermCheckExtC ext exprExt, SubstVar PermVarSubst m) =>
+instance (PermCheckExtC ext exprExt, m ~ Identity) =>
          Substable PermVarSubst (TypedStmtSeq ext blocks tops rets ps_in) m where
   genSubst s mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] ->
@@ -1027,7 +1027,7 @@ instance (PermCheckExtC ext exprExt, SubstVar PermVarSubst m) =>
       TypedTermStmt (mbLift loc) <$> genSubst s term_stmt
 
 
-instance (PermCheckExtC ext exprExt, SubstVar PermVarSubst m) =>
+instance (PermCheckExtC ext exprExt, m ~ Identity) =>
          Substable1 PermVarSubst (TypedStmtSeq ext blocks tops rets) m where
   genSubst1 = genSubst
 
