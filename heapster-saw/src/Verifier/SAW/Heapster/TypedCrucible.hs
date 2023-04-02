@@ -2009,7 +2009,7 @@ explore ::
       CruCtx args ->
       CruCtx ghosts ->
       MbValuePerms ((tops :++: args) :++: ghosts) ->
-      
+
     (RAssign ExprVar tops -> RAssign ExprVar args -> RAssign ExprVar ghosts ->
       DistPerms ((tops :++: args) :++: ghosts) ->
       PermCheckM ext cblocks blocks tops ret r1 ps r2 ((tops :++: args)
@@ -2029,7 +2029,7 @@ explore names entryID topCtx argCtx ghostCtx mb_perms_in m =
       (tops_ns, args_ns) = RL.split Proxy args_prxs tops_args
       st :: PermCheckState ext blocks tops ret ((tops :++: args) :++: ghosts)
       st = emptyPermCheckState (distPermSet perms_in) tops_ns entryID local_names in
-  
+
   setVarTypes tops_ns topCtx >>>
   modify (\s->s{ stPPInfo = ppInfoApplyAllocation tops_ns topDbgs (stPPInfo st)}) >>>
   modify (\s->s{ stPPInfo = ppInfoApplyAllocation args_ns argDbgs (stPPInfo st)}) >>>
@@ -2225,8 +2225,8 @@ getAtomicLLVMPerms r =
     Right ps -> pure ps
     Left e ->
       permGetPPInfo >>>= \ppinfo ->
-        stmtFailM $ AtomicPermError 
-                      (permPretty ppinfo r) 
+        stmtFailM $ AtomicPermError
+                      (permPretty ppinfo r)
                       (permPretty ppinfo (ValPerm_Eq $ PExpr_LLVMWord e))
 
 
@@ -2344,7 +2344,7 @@ allocateDebugNames base (ds :>: Constant dbg) (CruCtxCons ts tp) ppi =
         (Just b,_) -> b ++ "_" ++ typeBaseName tp
         (Nothing,Nothing) -> typeBaseName tp
 
-        
+
 allocateDebugNamesM ::
   Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
   RAssign (Constant (Maybe String)) tps ->
@@ -3184,7 +3184,7 @@ tcEmitLLVMSetExpr ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
       emitLLVMStmt knownRepr name loc (ConstructLLVMWord toff_reg) >>>= \x ->
       stmtRecombinePerms >>>
       pure (addCtxName ctx x)
-    _ -> 
+    _ ->
       permGetPPInfo >>>= \ppinfo ->
         stmtFailM $ NonZeroPointerBlockError (permPretty ppinfo tblk_reg)
 
@@ -3503,8 +3503,8 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
         stmtFailM $ AllocaError (AllocaNonConstantError $ permPretty ppinfo sz_treg)
     (Just fp, p, _) ->
       permGetPPInfo >>>= \ppinfo ->
-        stmtFailM $ AllocaError $ AllocaFramePermError 
-                                    (permPretty ppinfo fp) 
+        stmtFailM $ AllocaError $ AllocaFramePermError
+                                    (permPretty ppinfo fp)
                                     (permPretty ppinfo p)
     (Nothing, _, _) ->
       stmtFailM $ AllocaError AllocaFramePtrError
@@ -3745,7 +3745,7 @@ tcEmitLLVMStmt _arch ctx loc (LLVM_PtrEq _ (r1 :: Reg ctx (LLVMPointerType wptr)
     -- fail, because there is no way to compare pointers in the translation
     _ ->
       permGetPPInfo >>>= \ppinfo ->
-        stmtFailM $ PointerComparisonError 
+        stmtFailM $ PointerComparisonError
                       (permPretty ppinfo x1)
                       (permPretty ppinfo x2)
 
@@ -4462,13 +4462,13 @@ instance ErrorPretty StmtError where
     pretty "Could not cast" <+> docx <+>
     pretty "from" <+> pretty (show tp1) <+>
     pretty "to" <+> pretty (show tp2)
-  ppError FailedAssertionError = 
+  ppError FailedAssertionError =
     "Failed assertion"
   ppError (NonZeroPointerBlockError tblk_reg) = renderDoc $
     pretty "LLVM_PointerExpr: Non-zero pointer block: " <> tblk_reg
-  ppError (UndefinedBehaviorError doc) = 
+  ppError (UndefinedBehaviorError doc) =
     renderDoc doc
-  ppError X86ExprError = 
+  ppError X86ExprError =
     "X86Expr not supported"
   ppError (AllocaError (AllocaNonConstantError sz_treg)) = renderDoc $
     pretty "LLVM_Alloca: non-constant size for" <+>
