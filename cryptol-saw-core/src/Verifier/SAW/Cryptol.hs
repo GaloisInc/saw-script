@@ -31,6 +31,7 @@ module Verifier.SAW.Cryptol
   , importTopLevelDeclGroups
   , importDeclGroups
   , importType
+  , importKind
   , importSchema
 
   , defaultPrimitiveOptions

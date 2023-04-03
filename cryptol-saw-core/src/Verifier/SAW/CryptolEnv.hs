@@ -471,7 +471,7 @@ importModule sc env src as vis imps = do
   (mtop, modEnv') <-
     liftModuleM modEnv $
     case src of
-      Left path -> snd <$> MB.loadModuleByPath True path
+      Left path -> MB.loadModuleByPath True path
       Right mn -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
   m <- case mtop of
          T.TCTopModule m -> pure m
