@@ -19,7 +19,7 @@ import Data.Maybe (fromMaybe)
 import Cryptol.Eval (EvalOpts(..))
 import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv)
+import Cryptol.ModuleSystem.Env (ModuleEnv, ModContextParams(..))
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
 import Cryptol.Parser.AST ( Expr, PName )
@@ -74,7 +74,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
           let ifDecls = getAllIfaceDecls env
           let range = fromMaybe emptyRange (getLoc re)
           prims <- getPrimMap
-          tcEnv <- genInferInput range prims Map.empty ifDecls
+          tcEnv <- genInferInput range prims NoParams ifDecls
           let tcEnv' = tcEnv { inpVars = Map.union (eExtraTypes cenv) (inpVars tcEnv)
                              , inpTSyns = Map.union (eExtraTSyns cenv) (inpTSyns tcEnv)
                              }
