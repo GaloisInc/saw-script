@@ -553,6 +553,17 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("FrameTuple",           mapsToExpl specMModule "FrameTuple")
   , ("callS",                mapsToExpl specMModule "CallS")
   , ("multiFixS",            mapsToExpl specMModule "MultiFixS")
+  , ("FunStackE_type",       mapsToExpl specMModule "FunStackE")
+  , ("FunStackE_enc",        replace (Coq.Lambda [Coq.Binder "E" (Just (Coq.Var "SpecM.EvType"))]
+                                       (Coq.App (Coq.ExplVar "SpecM.FunStackE_encodes")
+                                         [Coq.App (Coq.Var "SpecM.evTypeType") [Coq.Var "E"],
+                                          Coq.App (Coq.Var "SpecM.evRetType") [Coq.Var "E"]])))
+  , ("SpecPreRel",           mapsToExpl specMModule "SpecPreRel")
+  , ("SpecPostRel",          mapsToExpl specMModule "SpecPostRel")
+  , ("eqPreRel",             mapsToExpl specMModule "eqPreRel")
+  , ("eqPostRel",            mapsToExpl specMModule "eqPostRel")
+  , ("refinesS",             mapsToExpl specMModule "spec_refines")
+  , ("refinesS_eq",          mapsToExpl specMModule "spec_refines_eq")
   ]
 
   -- Dependent pairs
@@ -566,25 +577,25 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Lists
   ++
-  [ ("List", replace (Coq.ExplVar "Datatypes.list"))
-  , ("Nil", replace (Coq.ExplVar "Datatypes.nil"))
-  , ("Cons", replace (Coq.ExplVar "Datatypes.cons"))
-  , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
+  [ ("List", mapsToExpl datatypesModule "list")
+  , ("Nil", mapsToExpl datatypesModule "nil")
+  , ("Cons", mapsToExpl datatypesModule "cons")
+  , ("List__rec", mapsToExpl datatypesModule "list_rect")
   ]
 
   -- Lists at sort 1
   ++
-  [ ("List1", replace (Coq.ExplVar "Datatypes.list"))
-  , ("Nil1", replace (Coq.ExplVar "Datatypes.nil"))
-  , ("Cons1", replace (Coq.ExplVar "Datatypes.cons"))
+  [ ("List1", mapsToExpl datatypesModule "list")
+  , ("Nil1", mapsToExpl datatypesModule "nil")
+  , ("Cons1", mapsToExpl datatypesModule "cons")
   ]
 
   -- Lists at sort 2
   ++
-  [ ("List2", replace (Coq.ExplVar "Datatypes.list"))
-  , ("Nil2", replace (Coq.ExplVar "Datatypes.nil"))
-  , ("Cons2", replace (Coq.ExplVar "Datatypes.cons"))
-  , ("List2__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
+  [ ("List2", mapsToExpl datatypesModule "list")
+  , ("Nil2", mapsToExpl datatypesModule "nil")
+  , ("Cons2", mapsToExpl datatypesModule "cons")
+  , ("List2__rec", mapsToExpl datatypesModule "list_rect")
   ]
 
 escapeIdent :: String -> String

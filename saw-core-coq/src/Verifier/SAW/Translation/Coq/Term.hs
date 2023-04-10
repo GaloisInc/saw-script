@@ -309,7 +309,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     Recursor (CompiledRecursor d parameters motive _motiveTy eliminators elimOrder) ->
       do maybe_d_trans <- translateIdentToIdent (primName d)
          rect_var <- case maybe_d_trans of
-           Just i -> return $ Coq.Var (show i ++ "_rect")
+           Just i -> return $ Coq.ExplVar (show i ++ "_rect")
            Nothing ->
              errorTermM ("Recursor for " ++ show d ++
                          " cannot be translated because the datatype " ++
