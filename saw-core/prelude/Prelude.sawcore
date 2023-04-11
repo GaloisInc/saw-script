@@ -1192,6 +1192,11 @@ vecEq : (n : Nat) -> (a : isort 0) -> (a -> a -> Bool)
 vecEq n a eqFn x y =
   foldr Bool Bool n and True (zipWith a a Bool eqFn n x y);
 
+-- | Reflexivity axiom for 'vecEq'.
+axiom vecEq_refl : (n : Nat) -> (a : isort 0) -> (eqFn : a -> a -> Bool) ->
+                   ((x : a) -> Eq Bool (eqFn x x) True) -> (x : Vec n a) ->
+                   Eq Bool (vecEq n a eqFn x x) True;
+
 -- | Take a prefix of a vector.
 take : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
 take a m n v = gen m a (\ (i : Nat) -> at (addNat m n) a v i);
