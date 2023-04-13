@@ -128,11 +128,11 @@ instance Functor (PolyContT r m) where
   fmap f m = m >>= return . f
 
 instance Applicative (PolyContT r m) where
-  pure = return
+  pure x = PolyContT $ \k -> k x
   (<*>) = ap
 
 instance Monad (PolyContT r m) where
-  return x = PolyContT $ \k -> k x
+  return = pure
   (PolyContT m) >>= f =
     PolyContT $ \k -> m $ \a -> runPolyContT (f a) k
 
@@ -480,7 +480,7 @@ widenExprs (CruCtxCons tps tp) (es1 :>: e1) (es2 :>: e2) =
 
 
 -- | Widen two bitvector offsets by trying to widen them additively
--- ('widenBVsAddy'), or if that is not possible, by widening them 
+-- ('widenBVsAddy'), or if that is not possible, by widening them
 -- multiplicatively ('widenBVsMulty')
 widenOffsets :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
                 PermOffset (LLVMPointerType w) ->

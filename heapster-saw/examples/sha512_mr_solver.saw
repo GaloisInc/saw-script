@@ -12,20 +12,6 @@ processBlocks <- parse_core_mod "SHA512" "processBlocks";
 // mr_solver_test round_00_15 round_00_15;
 
 import "sha512.cry";
-// FIXME: Why aren't we monadifying these automatically when they're used?
-monadify_term {{ K }};
-monadify_term {{ SIGMA_0 }};
-monadify_term {{ SIGMA_1 }};
-monadify_term {{ sigma_0 }};
-monadify_term {{ sigma_1 }};
-monadify_term {{ Ch }};
-monadify_term {{ Maj }};
-monadify_term {{ round_00_15_spec }};
-monadify_term {{ round_16_80_spec }};
-monadify_term {{ processBlock_loop_spec }};
-monadify_term {{ processBlock_spec }};
-monadify_term {{ processBlocks_loop_spec }};
-monadify_term {{ processBlocks_spec }};
 
 mr_solver_prove round_00_15 {{ round_00_15_spec }};
 mr_solver_prove round_16_80 {{ round_16_80_spec }};

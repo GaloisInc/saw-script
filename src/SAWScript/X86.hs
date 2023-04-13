@@ -106,6 +106,7 @@ import Data.Macaw.Symbolic( ArchRegStruct
                           , GlobalMap
                           , MacawSimulatorState(..)
                           , macawExtensions
+                          , MemModelConfig(..)
                           , unsupportedSyscalls
                           , defaultMacawArchStmtExtensionOverride
                           )
@@ -491,13 +492,22 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        let noExtraValidityPred _ _ _ _ = return Nothing
        let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride
        let lookupSyscall = unsupportedSyscalls "saw-script"
+       let mmConf = MemModelConfig
+                      { globalMemMap = globs
+                      , lookupFunctionHandle = callHandler overs sym
+                      , lookupSyscallHandle = lookupSyscall
+                      , mkGlobalPointerValidityAssertion = noExtraValidityPred
+                      , resolvePointer = pure
+                      , concreteImmutableGlobalRead = \_ _ -> pure Nothing
+                      , lazilyPopulateGlobalMem = \_ _ -> pure
+                      }
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
            ctx = SimContext { _ctxBackend = backend opts
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions archEvalFns mvar globs (callHandler overs sym) lookupSyscall noExtraValidityPred
+                              , extensionImpl = macawExtensions archEvalFns mvar mmConf
                               , _functionBindings = FnBindings $
                                 insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState

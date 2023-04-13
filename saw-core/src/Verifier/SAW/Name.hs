@@ -174,7 +174,7 @@ data NameInfo
   | -- | This name was imported from some other programming language/scope
     ImportedName
       URI      -- ^ An absolutely-qualified name, which is required to be unique
-      [Text]   -- ^ A collection of aliases for this name.  Sorter or "less-qualified"
+      [Text]   -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
                --   aliases should be nearer the front of the list
 
  deriving (Eq,Ord,Show)
@@ -249,13 +249,13 @@ data PrimName e =
   deriving (Show, Functor, Foldable, Traversable)
 
 instance Eq (PrimName e) where
-  x == y = primVarIndex x == primVarIndex y
+  x == y = primName x == primName y
 
 instance Ord (PrimName e) where
-  compare x y = compare (primVarIndex x) (primVarIndex y)
+  compare x y = compare (primName x) (primName y)
 
 instance Hashable (PrimName e) where
-  hashWithSalt x pn = hashWithSalt x (primVarIndex pn)
+  hashWithSalt x pn = hashWithSalt x (primName pn)
 
 primNameToExtCns :: PrimName e -> ExtCns e
 primNameToExtCns (PrimName varIdx nm tp) = EC varIdx (ModuleIdentifier nm) tp

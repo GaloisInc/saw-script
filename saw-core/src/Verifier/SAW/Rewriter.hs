@@ -245,7 +245,7 @@ scMatch sc pat term =
     -- saves the names associated with those bound variables.
     match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
              MaybeT IO MatchState
-    match _ _ (STApp i fv _) (STApp j _ _) s
+    match _ _ (STApp i _ fv _) (STApp j _ _ _) s
       | fv == emptyBitSet && i == j = return s
     match depth env x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
@@ -260,7 +260,11 @@ scMatch sc pat term =
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
                    do v <- scFreshGlobal sc nm ty
-                      let Just ec = R.asExtCns v
+                      -- asExtCns should always return Just here because
+                      -- scFreshGlobal always returns an ExtCns.
+                      ec <- case R.asExtCns v of
+                              Just ec -> pure ec
+                              Nothing -> error "scMatch.match: impossible"
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
              let fixVars t [] = return (t, [])
@@ -975,10 +979,13 @@ doHoistIfs sc ss hoistCache itePat = go
        top :: Term -> TermF Term -> IO (HoistIfs s)
        top t tf
           | Just inst <- first_order_match itePat t = do
-               let Just branch_tp   = Map.lookup 0 inst
-               let Just cond        = Map.lookup 1 inst
-               let Just then_branch = Map.lookup 2 inst
-               let Just else_branch = Map.lookup 3 inst
+               -- All of these Map lookups should be safe due to the term
+               -- structure of an if-then-else expression.
+               let err = error "doHoistIfs.top: impossible"
+               let branch_tp   = Map.findWithDefault err 0 inst
+               let cond        = Map.findWithDefault err 1 inst
+               let then_branch = Map.findWithDefault err 2 inst
+               let else_branch = Map.findWithDefault err 3 inst
 
                (then_branch',conds1) <- go then_branch
                (else_branch',conds2) <- go else_branch

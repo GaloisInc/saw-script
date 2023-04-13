@@ -1107,7 +1107,9 @@ setupGlobals opts gs fs s
        let alignment = noAlignment -- default to byte-aligned (FIXME, see #338)
        (p,mem) <- doMalloc bak GlobalAlloc Immutable "Globals" (stateMem s) sz alignment
 
-       let Just base = asNat (fst (llvmPointerView p))
+       base <- case asNat (fst (llvmPointerView p)) of
+         Just base -> pure base
+         Nothing   -> error "[setupGlobals] Expected concrete block number from doMalloc"
 
        mem1 <- foldM (writeGlob p) mem gs
        let gMap = mkGlobalMap (Map.singleton 0 p)
@@ -1194,7 +1196,9 @@ debugPPReg ::
   (ToCrucibleType mt ~ LLVMPointerType w) =>
   X86Reg mt -> State -> IO ()
 debugPPReg r s =
-  do let Just (RV v) = lookupX86Reg r (stateRegs s)
+  do RV v <- case lookupX86Reg r (stateRegs s) of
+       Just rv -> pure rv
+       Nothing -> error $ "[debugPPReg] Could not find register: " ++ show r
      putStrLn (show r ++ " = " ++ show (ppPtr v))
 
 _debugDumpGoals :: Opts -> IO ()
@@ -1282,9 +1286,16 @@ overrideMode spec opts s =
      -- of the stack, as it shold be, so we don't know the correct value.
      -- It looks like things work, if keep the orignal value instead.
 
-     let Just ip0 = lookupX86Reg X86_IP (stateRegs s)
-     let Just finalRegs = updateX86Reg X86_IP (const ip0) (stateRegs sf)
+     ip0 <- case lookupX86Reg X86_IP (stateRegs s) of
+       Just ip0 -> pure ip0
+       Nothing  -> noIPError
+     finalRegs <- case updateX86Reg X86_IP (const ip0) (stateRegs sf) of
+       Just finalRegs -> pure finalRegs
+       Nothing        -> noIPError
      return sf { stateRegs = finalRegs }
+  where
+    noIPError :: a
+    noIPError = error "[overrideMode] Could not find instruction pointer"
 
 
 
