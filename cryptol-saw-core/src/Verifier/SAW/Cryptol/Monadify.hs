@@ -90,6 +90,8 @@ import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.TypedTerm
+import Verifier.SAW.Cryptol (Env)
 -- import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
@@ -135,7 +137,7 @@ typedSubsTermType :: TypedSubsTerm -> TypedSubsTerm
 typedSubsTermType tst =
   TypedSubsTerm { tpSubsIndex = Nothing, tpSubsFreeVars = tpSubsFreeVars tst,
                   tpSubsTermF = tpSubsTypeF tst,
-                  tpSubsTypeF = FTermF (Sort (tpSubsSort tst) False),
+                  tpSubsTypeF = FTermF (Sort (tpSubsSort tst) noFlags),
                   tpSubsSort = sortOf (tpSubsSort tst) }
 
 -- | Count the number of right-nested pi-abstractions of a 'TypedSubsTerm'
@@ -1228,6 +1230,25 @@ eitherMacro = MonMacro 3 $ \_ args ->
                             (MTyArrow (MTyArrow mtp_b mtp_c)
                              (MTyArrow (mkMonType0 tp_eith) mtp_c))) eith_app
 
+-- | The macro for uncurry, which converts the application @uncurry a b c@
+-- to @uncurry a b (CompM c)@
+uncurryMacro :: MonMacro
+uncurryMacro = MonMacro 3 $ \_ args ->
+  usingSpecMParams $
+  do let (tp_a, tp_b, tp_c) =
+           case args of
+             [t1, t2, t3] -> (t1, t2, t3)
+             _ -> error "uncurryMacro: wrong number of arguments!"
+     mtp_a <- monadifyTypeM tp_a
+     mtp_b <- monadifyTypeM tp_b
+     mtp_c <- monadifyTypeM tp_c
+     let unc_app = applyGlobalOpenTerm "Prelude.uncurry" [toArgType mtp_a,
+                                                          toArgType mtp_b,
+                                                          toCompType mtp_c]
+     let tp_tup = pairTypeOpenTerm (toArgType mtp_a) (toArgType mtp_b)
+     return $ fromCompTerm (MTyArrow (MTyArrow mtp_a (MTyArrow mtp_b mtp_c))
+                            (MTyArrow (mkMonType0 tp_tup) mtp_c)) unc_app
+
 -- | The macro for invariantHint, which converts @invariantHint a cond m@
 -- to @invariantHint (CompM a) cond m@ and which contains any binds in the body
 -- to the body
@@ -1266,30 +1287,40 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
        [specMEvType params, specMStack params,
         toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
--- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
--- to a global of semi-pure type that takes an additional argument of type
--- @isFinite n@. The 'Bool' flag indicates whether the current 'SpecMParams'
--- should be passed as the first two arguments to @to@.
-fin1Macro :: Ident -> Ident -> Bool -> MonMacro
-fin1Macro from to params_p =
-  MonMacro 1 $ \glob args -> usingSpecMParams $
-  do if globalDefName glob == ModuleIdentifier from && length args == 1 then
+-- | @finMacro b i j from to params_p@ makes a 'MonMacro' that maps a named
+-- global @from@ whose @i@th through @(i+j-1)@th arguments are @Num@s, to a
+-- named global @to@, which is of semi-pure type if and only if @b@ is 'True',
+-- that takes an additional argument of type @isFinite n@ after each of the
+-- aforementioned @Num@ arguments. The @params_p@ flag indicates whether the
+-- current 'SpecMParams' should be passed as the first two arguments to @to@.
+finMacro :: Bool -> Int -> Int -> Ident -> Ident -> Bool -> MonMacro
+finMacro isSemiPure i j from to params_p =
+  MonMacro (i+j) $ \glob args -> usingSpecMParams $
+  do if globalDefName glob == ModuleIdentifier from && length args == i+j then
        return ()
        else error ("Monadification macro for " ++ show from ++
                    " applied incorrectly")
-     -- Monadify the first arg, n, and build a proof it is finite
-     n_mtp <- monadifyTypeM (head args)
-     let n = toArgType n_mtp
-     fin_pf <- assertIsFinite n_mtp
-     -- Apply the type of @glob@ to n, and apply @to@ to n and fin_pf
+     let (init_args, fin_args) = splitAt i args
+     -- Monadify the first @i@ args
+     init_args_mtps <- mapM monadifyTypeM init_args
+     let init_args_m = map toArgType init_args_mtps
+     -- Monadify the @i@th through @(i+j-1)@th args and build proofs that they are finite
+     fin_args_mtps <- mapM monadifyTypeM fin_args
+     let fin_args_m = map toArgType fin_args_mtps
+     fin_pfs <- mapM assertIsFinite fin_args_mtps
+     -- Apply the type of @glob@ to the monadified arguments and apply @to@ to the
+     -- monadified arguments along with the proofs that the latter arguments are finite
      let glob_tp = monadifyType [] $ globalDefType glob
-     let glob_tp_app = applyMonType glob_tp $ Left n_mtp
+     let glob_tp_app = foldl applyMonType glob_tp (map Left (init_args_mtps ++ fin_args_mtps))
      let to_app =
            applyOpenTermMulti (globalOpenTerm to)
            ((if params_p then (paramsToTerms ?specMParams ++) else id)
-            [n, toArgTerm fin_pf])
-     -- Finally, return @to n fin_pf@ as a MonTerm of monadified type @to_tp n@
-     return $ ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
+            init_args_m ++ concatMap (\(n,pf) -> [n, toArgTerm pf]) (zip fin_args_m fin_pfs))
+     -- Finally, return the result as semi-pure dependent on @isSemiPure@
+     return $ if isSemiPure
+              then ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
+              else ArgMonTerm $ (if params_p then id else liftCompStack)
+                              $ fromArgTerm glob_tp_app to_app
 
 -- | The macro for fix
 --
@@ -1318,10 +1349,11 @@ mmSemiPure from_id to_id params_p =
   (ModuleIdentifier from_id, semiPureGlobalMacro from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to a semi-pure named function
--- whose first argument is a @Num@ that requires an @isFinite@ proof
-mmSemiPureFin1 :: Ident -> Ident -> Bool -> MacroMapping
-mmSemiPureFin1 from_id to_id params_p =
-  (ModuleIdentifier from_id, fin1Macro from_id to_id params_p)
+-- whose @i@th through @(i+j-1)@th arguments are @Num@s that require
+-- @isFinite@ proofs
+mmSemiPureFin :: Int -> Int -> Ident -> Ident -> Bool -> MacroMapping
+mmSemiPureFin i j from_id to_id params_p =
+  (ModuleIdentifier from_id, finMacro True i j from_id to_id params_p)
 
 -- | Build a 'MacroMapping' for an identifier to itself as a semi-pure function
 mmSelf :: Ident -> MacroMapping
@@ -1335,6 +1367,14 @@ mmArg :: Ident -> Ident -> Bool -> MacroMapping
 mmArg from_id to_id params_p =
   (ModuleIdentifier from_id,
    argGlobalMacro (ModuleIdentifier from_id) to_id params_p)
+
+-- | Build a 'MacroMapping' for an identifier to a function of argument type,
+-- whose @i@th through @(i+j-1)@th arguments are @Num@s that require
+-- @isFinite@ proofs, where the 'Bool' flag indicates whether the current
+-- 'SpecMArgs' should be passed as additional arguments to the "to" identifier
+mmArgFin :: Int -> Int -> Ident -> Ident -> Bool -> MacroMapping
+mmArgFin i j from_id to_id params_p =
+  (ModuleIdentifier from_id, finMacro False i j from_id to_id params_p)
 
 -- | Build a 'MacroMapping' from an identifier and a custom 'MonMacro'
 mmCustom :: Ident -> MonMacro -> MacroMapping
@@ -1355,6 +1395,7 @@ defaultMonTable =
   , mmCustom "Prelude.ite" iteMacro
   , mmCustom "Prelude.fix" fixMacro
   , mmCustom "Prelude.either" eitherMacro
+  , mmCustom "Prelude.uncurry" uncurryMacro
   , mmCustom "Prelude.invariantHint" invariantHintMacro
   , mmCustom "Prelude.asserting" (assertingOrAssumingMacro True)
   , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
@@ -1366,36 +1407,38 @@ defaultMonTable =
 
     -- List comprehensions
   , mmArg "Cryptol.from" "CryptolM.fromM" True
-    -- FIXME: continue here...
+  , mmArg "Cryptol.mlet" "CryptolM.mletM" True
+  , mmArg "Cryptol.seqZip" "CryptolM.seqZipM" True
+  , mmSemiPure "Cryptol.seqZipSame" "CryptolM.seqZipSameM" True
 
     -- PEq constraints
-  , mmSemiPureFin1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
-  , mmSemiPureFin1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
+  , mmSemiPureFin 0 1 "Cryptol.PEqSeq" "CryptolM.PEqMSeq" True
+  , mmSemiPureFin 0 1 "Cryptol.PEqSeqBool" "CryptolM.PEqMSeqBool" True
 
     -- PCmp constraints
-  , mmSemiPureFin1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
-  , mmSemiPureFin1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
+  , mmSemiPureFin 0 1 "Cryptol.PCmpSeq" "CryptolM.PCmpMSeq" True
+  , mmSemiPureFin 0 1 "Cryptol.PCmpSeqBool" "CryptolM.PCmpMSeqBool" True
 
     -- PSignedCmp constraints
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
-  , mmSemiPureFin1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
+  , mmSemiPureFin 0 1 "Cryptol.PSignedCmpSeq" "CryptolM.PSignedCmpMSeq" True
+  , mmSemiPureFin 0 1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPureFin1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
+  , mmSemiPureFin 0 1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
 
     -- PLogic constraints
   , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True
-  , mmSemiPureFin1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
+  , mmSemiPureFin 0 1 "Cryptol.PLogicSeqBool" "CryptolM.PLogicMSeqBool" True
 
     -- PRing constraints
   , mmSemiPure "Cryptol.PRingSeq" "CryptolM.PRingMSeq" True
-  , mmSemiPureFin1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
+  , mmSemiPureFin 0 1 "Cryptol.PRingSeqBool" "CryptolM.PRingMSeqBool" True
 
     -- PIntegral constraints
-  , mmSemiPureFin1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
+  , mmSemiPureFin 0 1 "Cryptol.PIntegeralSeqBool" "CryptolM.PIntegeralMSeqBool" True
 
     -- PLiteral constraints
-  , mmSemiPureFin1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
+  , mmSemiPureFin 0 1 "Cryptol.PLiteralSeqBool" "CryptolM.PLiteralSeqBoolM" True
 
     -- The Cryptol Literal primitives
   , mmSelf "Cryptol.ecNumber"
@@ -1420,21 +1463,22 @@ defaultMonTable =
   , mmSemiPure "Cryptol.ecShiftL" "CryptolM.ecShiftLM" True
   , mmSemiPure "Cryptol.ecShiftR" "CryptolM.ecShiftRM" True
   , mmSemiPure "Cryptol.ecSShiftR" "CryptolM.ecSShiftRM" True
-  , mmSemiPureFin1 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
-  , mmSemiPureFin1 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
-  , mmSemiPureFin1 "Cryptol.ecCat" "CryptolM.ecCatM" True
-  , mmSemiPure "Cryptol.ecTake" "CryptolM.ecTakeM" True
-  , mmSemiPureFin1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
-  , mmSemiPure "Cryptol.ecJoin" "CryptolM.ecJoinM" True
-  , mmSemiPure "Cryptol.ecSplit" "CryptolM.ecSplitM" True
-  , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecRotL" "CryptolM.ecRotLM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecRotR" "CryptolM.ecRotRM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecCat" "CryptolM.ecCatM" True
+  , mmArg "Cryptol.ecTake" "CryptolM.ecTakeM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecDrop" "CryptolM.ecDropM" True
+  , mmSemiPureFin 1 1 "Cryptol.ecJoin" "CryptolM.ecJoinM" True
+  , mmSemiPureFin 1 1 "Cryptol.ecSplit" "CryptolM.ecSplitM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecReverse" "CryptolM.ecReverseM" True
   , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM" True
   , mmArg "Cryptol.ecAt" "CryptolM.ecAtM" True
   , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM" True
-  -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
-  -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
-  , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
-  -- , mmSemiPureNthFin 5 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM"
+  , mmArgFin 0 1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM" True
+  , mmSemiPureFin 0 2 "Cryptol.ecFromTo" "CryptolM.ecFromToM" True
+  , mmSemiPureFin 0 1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM" True
+  , mmSemiPureFin 4 1 "Cryptol.ecFromThenTo" "CryptolM.ecFromThenToM" True
   , mmSemiPure "Cryptol.ecInfFrom" "CryptolM.ecInfFromM" True
   , mmSemiPure "Cryptol.ecInfFromThen" "CryptolM.ecInfFromThenM" True
   , mmArg "Cryptol.ecError" "CryptolM.ecErrorM" True
@@ -1483,28 +1527,59 @@ monadifyName :: NameInfo -> IO NameInfo
 monadifyName (ModuleIdentifier ident) =
   return $ ModuleIdentifier $ mkIdent (identModule ident) $
   T.append (identBaseName ident) (T.pack "M")
-monadifyName (ImportedName uri _) =
+monadifyName (ImportedName uri aliases) =
   do frag <- URI.mkFragment (T.pack "M")
-     return $ ImportedName (uri { URI.uriFragment = Just frag }) []
+     let aliases' = concatMap (\a -> [a, T.append a (T.pack "#M")]) aliases
+     return $ ImportedName (uri { URI.uriFragment = Just frag }) aliases'
 
--- | Monadify a 'Term' of the specified type with an optional body, bind the
--- result to a fresh SAW core constant generated from the supplied name, and
--- then convert that constant back to a 'MonTerm'
-monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
-                     NameInfo -> Maybe Term -> Term -> IO MonTerm
-monadifyNamedTerm sc env nmi maybe_trm tp =
+-- | The implementation of 'monadifyNamedTerm' in the @StateT MonadifyEnv IO@ monad
+monadifyNamedTermH :: SharedContext -> NameInfo -> Maybe Term -> Term ->
+                      StateT MonadifyEnv IO MonTerm
+monadifyNamedTermH sc nmi maybe_trm tp =
   trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
-  let ?specMParams = monEnvParams env in
+  get >>= \env -> let ?specMParams = monEnvParams env in
   do let mtp = monadifyType [] tp
-     nmi' <- monadifyName nmi
-     comp_tp <- completeOpenTerm sc $ toCompType mtp
+     nmi' <- lift $ monadifyName nmi
+     comp_tp <- lift $ completeOpenTerm sc $ toCompType mtp
      const_trm <-
        case maybe_trm of
          Just trm ->
-           do trm' <- monadifyCompleteTerm sc env trm tp
-              scConstant' sc nmi' trm' comp_tp
-         Nothing -> scOpaqueConstant sc nmi' tp
+          --  trace ("" ++ ppTermInMonCtx env trm ++ "\n\n") $
+           do trm' <- monadifyTermInEnvH sc trm tp
+              lift $ scConstant' sc nmi' trm' comp_tp
+         Nothing -> lift $ scOpaqueConstant sc nmi' comp_tp
      return $ fromCompTerm mtp $ closedOpenTerm const_trm
+
+-- | Monadify a 'Term' of the specified type with an optional body, bind the
+-- result to a fresh SAW core constant generated from the supplied name, and
+-- then convert that constant back to a 'MonTerm'. Like 'monadifyTermInEnv',
+-- this function also monadifies all constants the body contains, and adds
+-- the monadifications of those constants to the monadification environment.
+monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
+                     NameInfo -> Maybe Term -> Term ->
+                     IO (MonTerm, MonadifyEnv)
+monadifyNamedTerm sc env nmi maybe_trm tp =
+  flip runStateT env $ monadifyNamedTermH sc nmi maybe_trm tp
+
+-- | The implementation of 'monadifyTermInEnv' in the @StateT MonadifyEnv IO@ monad
+monadifyTermInEnvH :: SharedContext -> Term -> Term ->
+                      StateT MonadifyEnv IO Term
+monadifyTermInEnvH sc top_trm top_tp =
+  do lift $ ensureCryptolMLoaded sc
+     let const_infos =
+           map snd $ Map.toAscList $ getConstantSet top_trm
+     forM_ const_infos $ \(nmi,tp,maybe_body) ->
+       get >>= \env ->
+       if isPreludeName nmi ||
+          Map.member nmi (monEnvMonTable env) then return () else
+         do mtrm <- monadifyNamedTermH sc nmi maybe_body tp
+            modify $ monEnvAdd nmi (monMacro0 mtrm)
+     env <- get
+     lift $ monadifyCompleteTerm sc env top_trm top_tp
+  where preludeModules = mkModuleName <$> [["Prelude"], ["Cryptol"]]
+        isPreludeName = \case
+          ModuleIdentifier ident -> identModule ident `elem` preludeModules
+          _ -> False
 
 -- | Monadify a term with the specified type along with all constants it
 -- contains, adding the monadifications of those constants to the monadification
@@ -1512,14 +1587,23 @@ monadifyNamedTerm sc env nmi maybe_trm tp =
 monadifyTermInEnv :: SharedContext -> MonadifyEnv ->
                      Term -> Term -> IO (Term, MonadifyEnv)
 monadifyTermInEnv sc top_env top_trm top_tp =
-  flip runStateT top_env $
-  do lift $ ensureCryptolMLoaded sc
-     let const_infos =
-           map snd $ Map.toAscList $ getConstantSet top_trm
-     forM_ const_infos $ \(nmi,tp,maybe_body) ->
-       get >>= \env ->
-       if Map.member nmi (monEnvMonTable env) then return () else
-         do mtrm <- lift $ monadifyNamedTerm sc env nmi maybe_body tp
-            modify $ monEnvAdd nmi (monMacro0 mtrm)
-     env <- get
-     lift $ monadifyCompleteTerm sc env top_trm top_tp
+  flip runStateT top_env $ monadifyTermInEnvH sc top_trm top_tp
+
+-- | The implementation of 'monadifyCryptolModule' in the @StateT MonadifyEnv IO@ monad
+monadifyCryptolModuleH :: SharedContext -> Env -> CryptolModule ->
+                          StateT MonadifyEnv IO CryptolModule
+monadifyCryptolModuleH sc cry_env (CryptolModule tysyns top_tts) =
+  fmap (CryptolModule tysyns) $ flip mapM top_tts $ \top_tt ->
+    do let top_tm = ttTerm top_tt
+       top_tp <- lift $ ttTypeAsTerm sc cry_env top_tt
+       tm <- monadifyTermInEnvH sc top_tm top_tp
+       tm' <- lift $ mkTypedTerm sc tm
+       return tm'
+
+-- | Monadify each term in the given 'CryptolModule' along with all constants each
+-- contains, returning a new module which each term monadified, and adding the
+-- monadifications of all encountered constants to the monadification environment
+monadifyCryptolModule :: SharedContext -> Env -> MonadifyEnv ->
+                         CryptolModule -> IO (CryptolModule, MonadifyEnv)
+monadifyCryptolModule sc cry_env top_env cry_mod =
+  flip runStateT top_env $ monadifyCryptolModuleH sc cry_env cry_mod

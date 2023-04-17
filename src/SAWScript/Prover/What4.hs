@@ -111,7 +111,8 @@ proveExportWhat4_sym solver un hashConsing outFilePath t =
      -- Assume unsat
      return (Nothing, stats)
 
-proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
+proveWhat4_z3, proveWhat4_boolector,
+  proveWhat4_cvc4, proveWhat4_cvc5,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
   proveWhat4_abc ::
   Set VarIndex  {- ^ Uninterpreted functions -} ->
@@ -122,6 +123,7 @@ proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
 proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
+proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter
 proveWhat4_dreal     = proveWhat4_sym drealAdapter
 proveWhat4_stp       = proveWhat4_sym stpAdapter
 proveWhat4_yices     = proveWhat4_sym yicesAdapter
@@ -141,7 +143,8 @@ proveWhat4_z3_using tactic un hashConsing t =
           _ <- setOpt z3TacticSetting $ Text.pack tactic
           return ()
 
-proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
+proveExportWhat4_z3, proveExportWhat4_boolector,
+  proveExportWhat4_cvc4, proveExportWhat4_cvc5,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
@@ -152,6 +155,7 @@ proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
 proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter
 proveExportWhat4_cvc4      = proveExportWhat4_sym cvc4Adapter
+proveExportWhat4_cvc5      = proveExportWhat4_sym cvc5Adapter
 proveExportWhat4_dreal     = proveExportWhat4_sym drealAdapter
 proveExportWhat4_stp       = proveExportWhat4_sym stpAdapter
 proveExportWhat4_yices     = proveExportWhat4_sym yicesAdapter

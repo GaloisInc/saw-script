@@ -194,7 +194,7 @@ instance Functor REPL where
 
 instance Monad REPL where
   {-# INLINE return #-}
-  return x = REPL (\_ -> return x)
+  return = pure
 
   {-# INLINE (>>=) #-}
   m >>= f = REPL $ \ref -> do
@@ -211,7 +211,7 @@ instance Fail.MonadFail REPL where
 
 instance Applicative REPL where
   {-# INLINE pure #-}
-  pure = return
+  pure x = REPL (\_ -> pure x)
   {-# INLINE (<*>) #-}
   (<*>) = ap
 

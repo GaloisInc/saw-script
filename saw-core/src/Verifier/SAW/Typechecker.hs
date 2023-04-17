@@ -400,7 +400,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- type of d as (p1:param1) -> ... -> (i1:ix1) -> ... -> Type s
   (dt_ixs, dtSort) <-
     case Un.asPiList dt_tp of
-      (ixs, Un.Sort _ s False) -> return (ixs, s) -- NB, don't allow `isort`
+      (ixs, Un.Sort _ s h) | h == noFlags ->
+        return (ixs, s) -- NB, don't allow `isort`, etc.
       _ -> err "Wrong form for type of datatype"
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs
   let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed

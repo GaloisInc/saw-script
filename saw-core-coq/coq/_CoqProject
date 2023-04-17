@@ -1,8 +1,9 @@
 -Q generated/CryptolToCoq   CryptolToCoq
 -Q handwritten/CryptolToCoq CryptolToCoq
 
-generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
 generated/CryptolToCoq/SAWCorePrelude.v
+generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
+generated/CryptolToCoq/CryptolMPrimitivesForSAWCore.v
 
 handwritten/CryptolToCoq/CompM.v
 handwritten/CryptolToCoq/CompMExtra.v

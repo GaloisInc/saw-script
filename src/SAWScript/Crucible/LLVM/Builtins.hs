@@ -945,7 +945,10 @@ verifyPrestate opts cc mspec globals =
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     let Just mem = Crucible.lookupGlobal lvar globals
+     mem <-
+       case Crucible.lookupGlobal lvar globals of
+         Nothing  -> fail "internal error: LLVM Memory global not found"
+         Just mem -> pure mem
 
      -- Allocate LLVM memory for each 'llvm_alloc'
      (env, mem') <- runStateT

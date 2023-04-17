@@ -104,6 +104,7 @@ module Verifier.SAW.SharedTerm
   , scApplyCtor
   , scSort
   , scISort
+  , scSortWithFlags
     -- *** Variables and constants
   , scLocalVar
   , scConstant
@@ -288,10 +289,11 @@ import Data.List (inits, find)
 import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
+import Data.Hashable (Hashable(hash))
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
 import Data.Map (Map)
@@ -342,7 +344,7 @@ data TermFMap a
   }
 
 emptyTFM :: TermFMap a
-emptyTFM = TermFMap IntMap.empty HMap.empty
+emptyTFM = TermFMap mempty mempty
 
 lookupTFM :: TermF Term -> TermFMap a -> Maybe a
 lookupTFM tf tfm =
@@ -633,18 +635,19 @@ emptyAppCache = emptyTFM
 
 -- | Return term for application using existing term in cache if it is available.
 getTerm :: AppCacheRef -> TermF Term -> IO Term
-getTerm r a =
-  modifyMVar r $ \s -> do
-    case lookupTFM a s of
-      Just t -> return (s, t)
+getTerm cache termF =
+  modifyMVar cache $ \s -> do
+    case lookupTFM termF s of
+      Just term -> return (s, term)
       Nothing -> do
         i <- getUniqueInt
-        let t = STApp { stAppIndex = i
-                      , stAppFreeVars = freesTermF (fmap looseVars a)
-                      , stAppTermF = a
-                      }
-        let s' = insertTFM a t s
-        seq s' $ return (s', t)
+        let term = STApp { stAppIndex = i
+                         , stAppHash = hash termF
+                         , stAppFreeVars = freesTermF (fmap looseVars termF)
+                         , stAppTermF = termF
+                         }
+            s' = insertTFM termF term s
+        seq s' $ return (s', term)
 
 
 --------------------------------------------------------------------------------
@@ -1360,11 +1363,15 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
-scSort sc s = scFlatTermF sc (Sort s False)
+scSort sc s = scFlatTermF sc (Sort s noFlags)
+
+-- | Create a term from a 'Sort', and set the given advisory flags
+scSortWithFlags :: SharedContext -> Sort -> SortFlags -> IO Term
+scSortWithFlags sc s h = scFlatTermF sc (Sort s h)
 
 -- | Create a term from a 'Sort', and set the advisory "inhabited" flag
 scISort :: SharedContext -> Sort -> IO Term
-scISort sc s = scFlatTermF sc (Sort s True)
+scISort sc s = scSortWithFlags sc s $ noFlags { flagInhabited = True }
 
 -- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term
