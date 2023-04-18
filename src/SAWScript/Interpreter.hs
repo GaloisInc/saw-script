@@ -848,6 +848,11 @@ primitives = Map.fromList
     Current
     [ "Concatenate two strings to yield a third." ]
 
+  , prim "str_concats"          "[String] -> String"
+    (pureVal (concat :: [String] -> String))
+    Current
+    [ "Concatenate a list of strings together to yield a string." ]
+
   , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
     (\_ _ -> toplevelCallCC)
     Experimental
@@ -3849,6 +3854,12 @@ primitives = Map.fromList
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
+
+  , prim "mrsolver" "ProofScript ()"
+    (scVal mrSolverTactic)
+    Experimental
+    [ "Use MRSolver to prove a current goal of the form:"
+    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
 
     ---------------------------------------------------------------------
 
