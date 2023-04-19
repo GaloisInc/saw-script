@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 module SAWServer.InteractiveRewriting where
 
+import Control.Lens (over)
 import Control.Exception (Exception)
 
 import Data.Aeson
@@ -81,6 +82,36 @@ instance Doc.DescribedMethod ReadExtcoreParams OK where
       )
     , ( "path"
       , Doc.Paragraph [Doc.Text "The path to the SAWCore external file to read."]
+      )
+    ]
+  resultFieldDescription = []
+
+copyTermDescr :: Doc.Block
+copyTermDescr =
+  Doc.Paragraph [Doc.Text "Copy a term."]
+
+copyTerm :: CopyTermParams -> Argo.Command SAWState OK
+copyTerm (CopyTermParams from to) = do
+  val <- getServerVal from
+  Argo.modifyState $
+    over sawEnv $ \(SAWEnv env) -> SAWEnv (Map.insert to val env)
+  ok
+
+data CopyTermParams = CopyTermParams ServerName ServerName
+
+instance FromJSON CopyTermParams where
+  parseJSON = withObject "parameters for copying a term" $ \o ->
+    CopyTermParams
+    <$> o .: "from"
+    <*> o .: "to"
+
+instance Doc.DescribedMethod CopyTermParams OK where
+  parameterFieldDescription =
+    [ ( "from"
+      , Doc.Paragraph [Doc.Text "The name of the source term."]
+      )
+    , ( "to"
+      , Doc.Paragraph [Doc.Text "The destination name."]
       )
     ]
   resultFieldDescription = []

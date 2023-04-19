@@ -273,6 +273,10 @@ class SAWConnection:
         self.most_recent_result = ReadExtcore(self, nm, path, timeout)
         return self.most_recent_result
 
+    def copy_term(self, from_: str, to: str, timeout: Optional[float] = None) -> Command:
+        self.most_recent_result = CopyTerm(self, from_, to, timeout)
+        return self.most_recent_result
+
     def simplify_term(self, nm: str, rewrites: List[str], simpset: str, timeout: Optional[float] = None) -> Command:
         self.most_recent_result = SimplifyTerm(self, nm, rewrites, simpset, timeout)
         return self.most_recent_result

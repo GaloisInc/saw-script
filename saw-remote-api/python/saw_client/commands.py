@@ -266,6 +266,21 @@ class ReadExtcore(SAWCommand):
     def process_result(self, _res : Any) -> Any:
         return None
 
+class CopyTerm(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 from_ : str,
+                 to : str,
+                 timeout : Optional[float]) -> None:
+        super(CopyTerm, self).__init__(
+            'SAW/copy term',
+            {'from': from_, 'to': to},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
 class SimplifyTerm(SAWCommand):
     def __init__(self, connection : argo.HasProtocolState,
                  name : str,

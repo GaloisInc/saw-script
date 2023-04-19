@@ -682,6 +682,10 @@ def read_extcore(nm: str, path: str) -> None:
     __get_designated_connection().read_extcore(nm, path).result()
     return None
 
+def copy_term(from_: str, to: str) -> None:
+    __get_designated_connection().copy_term(from_, to).result()
+    return None
+
 def simplify_term(nm: str, rewrites: List[str], simpset: str) -> None:
     __get_designated_connection().simplify_term(nm, rewrites, simpset).result()
     return None

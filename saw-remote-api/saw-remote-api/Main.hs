@@ -153,6 +153,10 @@ sawMethods =
     readExtcoreDescr
     readExtcore
   , Argo.command
+    "SAW/copy term"
+    copyTermDescr
+    copyTerm
+  , Argo.command
     "SAW/simplify term"
     simplifyTermDescr
     simplifyTerm
