@@ -2210,11 +2210,25 @@ mrSolverTactic sc = execTactic $ Tactic $ \goal -> lift $ do
     Unfocused -> fail "mrsolver: focus required"
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
     ConclFocus (asPiList . unProp -> (args, asApplyAll ->
+                                      (asGlobalDef -> Just "Prelude.refinesS",
+                                       [ev1, ev2, stack1, stack2,
+                                        asApplyAll -> (asGlobalDef -> Just "Prelude.eqPreRel", _),
+                                        asApplyAll -> (asGlobalDef -> Just "Prelude.eqPostRel", _),
+                                        rtp1, rtp2,
+                                        asApplyAll -> (asGlobalDef -> Just "Prelude.eqRR", _),
+                                        t1, t2]))) _ ->
+      on_refinesS dlvl goal args ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2
+    ConclFocus (asPiList . unProp -> (args, asApplyAll ->
                                       (asGlobalDef -> Just "Prelude.refinesS_eq",
                                        [ev, stack, rtp, t1, t2]))) _ ->
-      do tp <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev, stack, rtp]
-         let tt1 = TypedTerm (TypedTermOther tp) t1
-         let tt2 = TypedTerm (TypedTermOther tp) t2
+      on_refinesS dlvl goal args ev ev stack stack rtp rtp t1 t2
+    _ -> error "[MRSolver] cannot apply mrsolver tactic to a refinesS goal with non-trivial RPre/RPost/RR"
+  where
+    on_refinesS dlvl goal args ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2 =
+      do tp1 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev1, stack1, rtp1]
+         tp2 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev2, stack2, rtp2]
+         let tt1 = TypedTerm (TypedTermOther tp1) t1
+         let tt2 = TypedTerm (TypedTermOther tp2) t2
          (diff, res) <- mrSolver Prover.askMRSolver (Just "mrsolver") sc args tt1 tt2
          case res of
            Left err | dlvl == 0 ->
@@ -2231,7 +2245,6 @@ mrSolverTactic sc = execTactic $ Tactic $ \goal -> lift $ do
              printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
              let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal)) in
              return ((), stats, [], leafEvidence MrSolverEvidence)
-    _ -> error "mrsolver tactic not applied to a refinesS_eq goal"
 
 -- | Run Mr Solver to prove that the first term refines the second, adding
 -- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
@@ -2317,6 +2330,36 @@ mrSolverSetDebug :: Int -> TopLevel ()
 mrSolverSetDebug dlvl =
   modify (\rw -> rw { rwMRSolverEnv =
                         Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
+
+-- | Given a list of names and types representing variables over which to
+-- quantify as as well as two terms containing those variables, which may be
+-- terms or functions in the SpecM monad, construct the SAWCore term which is
+-- the refinement (@Prelude.refinesS@) of the given terms, with the given
+-- variables generalized with a Pi type.
+refinesTerm :: [(Text, C.Schema)] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
+refinesTerm args tt1 tt2 =
+  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+     sc <- getSharedContext
+     env <- rwMRSolverEnv <$> get
+     args' <- io $ mapM (mapM (argType sc)) args
+     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
+     m2 <- ttTerm <$> ensureMonadicTerm sc tt2
+     res <- io $ Prover.refinementTerm sc env Nothing args' m1 m2
+     case res of
+       Left err | dlvl == 0 ->
+         io (putStrLn $ Prover.showMRFailure err) >>
+         printOutLnTop Info (printf "[MRSolver] Failed to build refinement term") >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+         printOutLnTop Info (printf "[MRSolver] Failed to build refinement term") >>
+         io (Exit.exitWith $ Exit.ExitFailure 1)
+       Right t ->
+         io (mkTypedTerm sc t)
+  where argType sc (C.Forall [] [] a) = Cryptol.importType sc Cryptol.emptyEnv a
+        argType _ _ = fail "refinesTerm: given a non-monomorphic type"
 
 setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
 setMonadification sc cry_str saw_str poly_p =

@@ -3861,6 +3861,15 @@ primitives = Map.fromList
     [ "Use MRSolver to prove a current goal of the form:"
     , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
 
+  , prim "refines" "[(String, Type)] -> Term -> Term -> Term"
+    (funVal3 refinesTerm)
+    Experimental
+    [ "Given a list of names and types representing variables over which"
+    , " to quantify as as well as two terms containing those variables,"
+    , " which may be terms or functions in the SpecM monad, construct the"
+    , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
+    , " given terms, with the given variables generalized with a Pi type." ]
+
     ---------------------------------------------------------------------
 
   , prim "monadify_term" "Term -> TopLevel Term"
@@ -4314,6 +4323,11 @@ primitives = Map.fromList
                -> Options -> BuiltinContext -> Value
     funVal2 f _ _ = VLambda $ \a -> return $ VLambda $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
+
+    funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
+               -> Options -> BuiltinContext -> Value
+    funVal3 f _ _ = VLambda $ \a -> return $ VLambda $ \b -> return $ VLambda $ \c ->
+      fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
 
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Options -> BuiltinContext -> Value
