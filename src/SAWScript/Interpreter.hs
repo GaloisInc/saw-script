@@ -3861,12 +3861,12 @@ primitives = Map.fromList
     [ "Use MRSolver to prove a current goal of the form:"
     , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
 
-  , prim "refines" "[(String, Type)] -> Term -> Term -> Term"
+  , prim "refines" "[Term] -> Term -> Term -> Term"
     (funVal3 refinesTerm)
     Experimental
-    [ "Given a list of names and types representing variables over which"
-    , " to quantify as as well as two terms containing those variables,"
-    , " which may be terms or functions in the SpecM monad, construct the"
+    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
+    , " as as well as two terms containing those variables, which may be"
+    , " either terms or functions in the SpecM monad, construct the"
     , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
     , " given terms, with the given variables generalized with a Pi type." ]
 

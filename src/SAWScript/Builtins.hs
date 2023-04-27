@@ -2336,15 +2336,16 @@ mrSolverSetDebug dlvl =
 -- terms or functions in the SpecM monad, construct the SAWCore term which is
 -- the refinement (@Prelude.refinesS@) of the given terms, with the given
 -- variables generalized with a Pi type.
-refinesTerm :: [(Text, C.Schema)] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
-refinesTerm args tt1 tt2 =
+refinesTerm :: [TypedTerm] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
+refinesTerm vars tt1 tt2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
      sc <- getSharedContext
      env <- rwMRSolverEnv <$> get
-     args' <- io $ mapM (mapM (argType sc)) args
-     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
-     m2 <- ttTerm <$> ensureMonadicTerm sc tt2
-     res <- io $ Prover.refinementTerm sc env Nothing args' m1 m2
+     tt1' <- lambdas vars tt1
+     tt2' <- lambdas vars tt2
+     m1 <- ttTerm <$> ensureMonadicTerm sc tt1'
+     m2 <- ttTerm <$> ensureMonadicTerm sc tt2'
+     res <- io $ Prover.refinementTerm sc env Nothing [] m1 m2
      case res of
        Left err | dlvl == 0 ->
          io (putStrLn $ Prover.showMRFailure err) >>
@@ -2358,8 +2359,6 @@ refinesTerm args tt1 tt2 =
          io (Exit.exitWith $ Exit.ExitFailure 1)
        Right t ->
          io (mkTypedTerm sc t)
-  where argType sc (C.Forall [] [] a) = Cryptol.importType sc Cryptol.emptyEnv a
-        argType _ _ = fail "refinesTerm: given a non-monomorphic type"
 
 setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
 setMonadification sc cry_str saw_str poly_p =

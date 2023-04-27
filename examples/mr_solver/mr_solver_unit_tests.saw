@@ -35,6 +35,12 @@ let const0_refines =
                "((", const0_core, ") x) ", "((", const0_core, ") x)"];
 run_test "refines [] const0 const0" (is_convertible (parse_core const0_refines)
                                                     (refines [] const0 const0)) true;
+// (testing that "refines [x] ..." gives the same expression as "refines [] ...")
+x <- fresh_symbolic "x" {| [64] |};
+run_test "refines [x] (const0 x) (const0 x)"
+         (is_convertible (refines [] const0 const0)
+                         (refines [x] (term_apply const0 [x])
+                                      (term_apply const0 [x]))) true;
 
 // The function test_fun0 <= const0
 test_fun0 <- parse_core_mod "test_funs" "test_fun0";
