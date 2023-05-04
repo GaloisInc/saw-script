@@ -2159,14 +2159,21 @@ ensureMonadicTerm sc t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
--- | A wrapper for either 'Prover.askMRSolver' or 'Prover.assumeMRSolver' from
--- @MRSolver.hs@: if the first argument is @Just str@, prints out @str@
+-- | A wrapper for either 'Prover.askMRSolver' or 'Prover.refinementTerm' from
+-- @MRSolver.hs@: if the second argument is @Just str@, prints out @str@
 -- followed by an abridged version of the refinement being asked, then calls
--- the given function, returning how long it took to execute
-mrSolver :: (SharedContext -> Prover.MREnv -> Maybe Integer -> [(LocalName, Term)] -> Term -> Term -> IO a) ->
-            Maybe SawDoc -> SharedContext -> [(LocalName, Term)] -> TypedTerm -> TypedTerm ->
-            TopLevel (NominalDiffTime, a)
-mrSolver f printStr sc top_args tt1 tt2 =
+-- the given function. On failure, a string of how long the function took to
+-- run is passed to the third argument and the result is used as the message
+-- for 'fail'. On success, if the fourth argument is @Just strf@, a string of
+-- how long the function took to run is passed to @strf@ and the result is
+-- printed, then regardless, the last argument is called on the result.
+mrSolverH :: SharedContext ->
+             Maybe SawDoc -> (String -> String) -> Maybe (String -> String) ->
+             (SharedContext -> Prover.MREnv -> Maybe Integer -> SV.SAWRefnset ->
+              [(LocalName, Term)] -> Term -> Term -> IO (Either Prover.MRFailure a)) ->
+             SV.SAWRefnset -> [(LocalName, Term)] -> TypedTerm -> TypedTerm ->
+             (a -> TopLevel b) -> TopLevel b
+mrSolverH sc printStr errStrf succStr f rs top_args tt1 tt2 cont =
   do env <- rwMRSolverEnv <$> get
      m1 <- ttTerm <$> ensureMonadicTerm sc tt1
      m2 <- ttTerm <$> ensureMonadicTerm sc tt2
@@ -2178,9 +2185,20 @@ mrSolver f printStr sc top_args tt1 tt2 =
          "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
                                " |= " <> ppTmHead m2'
      time1 <- liftIO getCurrentTime
-     res <- io $ f sc env Nothing top_args m1' m2'
+     res <- io $ f sc env Nothing rs top_args m1' m2'
      time2 <- liftIO getCurrentTime
-     return (diffUTCTime time2 time1, res)
+     let diff = show $ diffUTCTime time2 time1
+     case res of
+       Left err | Prover.mreDebugLevel env == 0 ->
+         fail (Prover.showMRFailure err ++ "\n[MRSolver] " ++ errStrf diff)
+       Left err ->
+         -- we ignore the MRFailure context here since it will have already
+         -- been printed by the debug trace
+         fail (Prover.showMRFailureNoCtx err ++ "\n[MRSolver] " ++ errStrf diff)
+       Right a | Just sf <- succStr ->
+         printOutLnTop Info (sf diff) >> cont a
+       Right a ->
+         cont a
   where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
         collapseEta :: Term -> Term
         collapseEta (asLambdaList -> (lamVars,
@@ -2200,130 +2218,37 @@ mrSolver f printStr sc top_args tt1 tt2 =
         ppTmHead _ = "..."
 
 -- | Invokes MRSolver to attempt to solve a focused goal of the form
--- @(a1:A1) -> ... -> (an:A1) -> refinesS_eq ...@, printing an error message
--- and exiting if this cannot be done. This function will not modify the
--- 'Prover.MREnv'.
-mrSolverTactic :: SharedContext -> ProofScript ()
-mrSolverTactic sc = execTactic $ Tactic $ \goal -> lift $ do
-  dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+-- @(a1:A1) -> ... -> (an:An) -> refinesS_eq ...@, assuming the refinements
+-- in the given 'Refnset', and printing an error message and exiting if
+-- this cannot be done
+mrSolver :: SV.SAWRefnset -> ProofScript ()
+mrSolver rs = execTactic $ Tactic $ \goal -> lift $
+  getSharedContext >>= \sc ->
   case sequentState (goalSequent goal) of
     Unfocused -> fail "mrsolver: focus required"
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
-    ConclFocus (asPiList . unProp -> (args, asApplyAll ->
-                                      (asGlobalDef -> Just "Prelude.refinesS",
-                                       [ev1, ev2, stack1, stack2,
-                                        asApplyAll -> (asGlobalDef -> Just "Prelude.eqPreRel", _),
-                                        asApplyAll -> (asGlobalDef -> Just "Prelude.eqPostRel", _),
-                                        rtp1, rtp2,
-                                        asApplyAll -> (asGlobalDef -> Just "Prelude.eqRR", _),
-                                        t1, t2]))) _ ->
-      on_refinesS dlvl goal args ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2
-    ConclFocus (asPiList . unProp -> (args, asApplyAll ->
-                                      (asGlobalDef -> Just "Prelude.refinesS_eq",
-                                       [ev, stack, rtp, t1, t2]))) _ ->
-      on_refinesS dlvl goal args ev ev stack stack rtp rtp t1 t2
-    _ -> error "[MRSolver] cannot apply mrsolver tactic to a refinesS goal with non-trivial RPre/RPost/RR"
-  where
-    on_refinesS dlvl goal args ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2 =
+    ConclFocus (Prover.asRefinesS . unProp -> Just (args, ev1, ev2, stack1, stack2,
+                                                    rtp1, rtp2, t1, t2)) _ ->
       do tp1 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev1, stack1, rtp1]
          tp2 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev2, stack2, rtp2]
          let tt1 = TypedTerm (TypedTermOther tp1) t1
          let tt2 = TypedTerm (TypedTermOther tp2) t2
-         (diff, res) <- mrSolver Prover.askMRSolver (Just "mrsolver") sc args tt1 tt2
-         case res of
-           Left err | dlvl == 0 ->
-             io (putStrLn $ Prover.showMRFailure err) >>
-             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-             io (Exit.exitWith $ Exit.ExitFailure 1)
-           Left err ->
-             -- we ignore the MRFailure context here since it will have already
-             -- been printed by the debug trace
-             io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-             io (Exit.exitWith $ Exit.ExitFailure 1)
-           Right _ ->
-             printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
-             let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal)) in
-             return ((), stats, [], leafEvidence MrSolverEvidence)
+         mrSolverH sc
+           (Just $ "Tactic call") (printf "Failure in %s") (Just $ printf "Success in %s")
+           Prover.askMRSolver rs args tt1 tt2
+           (\(stats, mre) -> return ((), stats, [], leafEvidence $ MrSolverEvidence mre))
+    _ -> error "mrsolver: cannot apply mrsolver to a non-refinement goal"
 
--- | Run Mr Solver to prove that the first term refines the second, adding
--- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
--- is true and this can be done, or printing an error message and exiting if it
--- cannot.
-mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-mrSolverProve addToEnv sc t1 t2 =
-  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     let printStr = if addToEnv then "Proving" else "Testing"
-     (diff, res) <- mrSolver Prover.askMRSolver (Just printStr) sc [] t1 t2
-     case res of
-       Left err | dlvl == 0 ->
-         io (putStrLn $ Prover.showMRFailure err) >>
-         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-         io (Exit.exitWith $ Exit.ExitFailure 1)
-       Left err ->
-         -- we ignore the MRFailure context here since it will have already
-         -- been printed by the debug trace
-         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-         io (Exit.exitWith $ Exit.ExitFailure 1)
-       Right (Just (fnm, fassump)) | addToEnv ->
-         let assump_str = case Prover.fassumpRHS fassump of
-                            Prover.OpaqueFunAssump _ _ -> "an opaque"
-                            Prover.RewriteFunAssump _ -> "a rewrite" in
-         printOutLnTop Info (
-           printf "[MRSolver] Success in %s, added as %s assumption"
-                  (show diff) (assump_str :: String)) >>
-         modify (\rw -> rw { rwMRSolverEnv =
-           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
-       _ ->
-         printOutLnTop Info $ printf "[MRSolver] Success in %s" (show diff)
+-- | Add a proved refinement theorem to a given refinement set
+addrefn :: Theorem -> SV.SAWRefnset -> TopLevel SV.SAWRefnset
+addrefn thm rs =
+  case Prover.asFunAssump (Just (thmNonce thm)) (unProp $ thmProp thm) of
+    Nothing -> fail "addrefn: theorem is not a refinement"
+    Just fassump -> pure (Prover.addFunAssump fassump rs)
 
--- | Run Mr Solver to prove that the first term refines the second, returning
--- true iff this can be done. This function will not modify the 'Prover.MREnv'.
-mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
-mrSolverQuery sc t1 t2 =
-  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     (diff, res) <- mrSolver Prover.askMRSolver (Just "Querying") sc [] t1 t2
-     case res of
-       Left _ | dlvl == 0 ->
-         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-         return False
-       Left err ->
-         -- we ignore the MRFailure context here since it will have already
-         -- been printed by the debug trace
-         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-         printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
-         return False
-       Right _ ->
-         printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
-         return True
-
--- | Generate the 'Prover.FunAssump' which corresponds to the given refinement
--- and add it to the 'Prover.MREnv'
-mrSolverAssume :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-mrSolverAssume sc t1 t2 =
-  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     (_, res) <- mrSolver Prover.assumeMRSolver (Just "Assuming") sc [] t1 t2
-     case res of
-       Left err | dlvl == 0 ->
-         io (putStrLn $ Prover.showMRFailure err) >>
-         printOutLnTop Info (printf "[MRSolver] Failure") >>
-         io (Exit.exitWith $ Exit.ExitFailure 1)
-       Left err ->
-         -- we ignore the MRFailure context here since it will have already
-         -- been printed by the debug trace
-         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-         printOutLnTop Info (printf "[MRSolver] Failure") >>
-         io (Exit.exitWith $ Exit.ExitFailure 1)
-       Right (Just (fnm, fassump)) ->
-         printOutLnTop Info (
-           printf "[MRSolver] Success, added as an opaque assumption") >>
-         modify (\rw -> rw { rwMRSolverEnv =
-           Prover.mrEnvAddFunAssump fnm fassump (rwMRSolverEnv rw) })
-       _ ->
-         printOutLnTop Info $ printf $
-           "[MRSolver] Failure, given refinement cannot be interpreted as" ++
-                     " an assumption"
+-- | Add proved refinement theorems to a given refinement set
+addrefns :: [Theorem] -> SV.SAWRefnset -> TopLevel SV.SAWRefnset
+addrefns thms ss = foldM (flip addrefn) ss thms
 
 -- | Set the debug level of the 'Prover.MREnv'
 mrSolverSetDebug :: Int -> TopLevel ()
@@ -2338,27 +2263,13 @@ mrSolverSetDebug dlvl =
 -- variables generalized with a Pi type.
 refinesTerm :: [TypedTerm] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 refinesTerm vars tt1 tt2 =
-  do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     sc <- getSharedContext
-     env <- rwMRSolverEnv <$> get
+  do sc <- getSharedContext
      tt1' <- lambdas vars tt1
      tt2' <- lambdas vars tt2
-     m1 <- ttTerm <$> ensureMonadicTerm sc tt1'
-     m2 <- ttTerm <$> ensureMonadicTerm sc tt2'
-     res <- io $ Prover.refinementTerm sc env Nothing [] m1 m2
-     case res of
-       Left err | dlvl == 0 ->
-         io (putStrLn $ Prover.showMRFailure err) >>
-         printOutLnTop Info (printf "[MRSolver] Failed to build refinement term") >>
-         io (Exit.exitWith $ Exit.ExitFailure 1)
-       Left err ->
-         -- we ignore the MRFailure context here since it will have already
-         -- been printed by the debug trace
-         io (putStrLn $ Prover.showMRFailureNoCtx err) >>
-         printOutLnTop Info (printf "[MRSolver] Failed to build refinement term") >>
-         io (Exit.exitWith $ Exit.ExitFailure 1)
-       Right t ->
-         io (mkTypedTerm sc t)
+     mrSolverH sc
+       Nothing (printf "[MRSolver] Failed to build refinement term (%s)") Nothing
+       Prover.refinementTerm Prover.emptyRefnset [] tt1' tt2'
+       (io . mkTypedTerm sc)
 
 setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
 setMonadification sc cry_str saw_str poly_p =

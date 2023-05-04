@@ -164,6 +164,7 @@ library
     SAWScript.Prover.MRSolver.Monad
     SAWScript.Prover.MRSolver.SMT
     SAWScript.Prover.MRSolver.Solver
+    SAWScript.Prover.MRSolver.Evidence
     SAWScript.Prover.MRSolver.Term
     SAWScript.Prover.RME
     SAWScript.Prover.ABC

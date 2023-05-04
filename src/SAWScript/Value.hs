@@ -77,7 +77,8 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.MRSolver.Term as MRSolver
+import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
+import SAWScript.Prover.MRSolver.Evidence as MRSolver
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWScript.Yosys.IR
@@ -138,6 +139,7 @@ data Value
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
   | VSimpset SAWSimpset
+  | VRefnset SAWRefnset
   | VTheorem Theorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
@@ -171,6 +173,7 @@ data Value
   | VYosysTheorem YosysTheorem
 
 type SAWSimpset = Simpset TheoremNonce
+type SAWRefnset = MRSolver.Refnset TheoremNonce
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -300,6 +303,23 @@ showSimpset opts ss =
     ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
+-- | Pretty-print a 'Refnset' to a 'String'
+showRefnset :: PPOpts -> MRSolver.Refnset a -> String
+showRefnset opts ss =
+  unlines ("Refinements" : "=============" : map (show . ppFunAssump)
+                                                 (MRSolver.listFunAssumps ss))
+  where
+    ppFunAssump (MRSolver.FunAssump ctx f args rhs _) =
+      PP.pretty '*' PP.<+>
+      (PP.nest 2 $ PP.fillSep
+       [ ppTermAppInCtx ctx (funNameTerm f) args
+       , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
+    ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
+      ppTermAppInCtx ctx (funNameTerm f) args
+    ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
+      SAWCorePP.ppTermInCtx opts' (map fst $ mrVarCtxInnerToOuter ctx) rhs 
+    opts' = sawPPOpts opts
+
 showsPrecValue :: PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
@@ -323,6 +343,7 @@ showsPrecValue opts nenv p v =
     VBind {} -> showString "<<monadic>>"
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
+    VRefnset ss -> showString (showRefnset opts ss)
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
@@ -1144,6 +1165,13 @@ instance IsValue SAWSimpset where
 instance FromValue SAWSimpset where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
+
+instance IsValue SAWRefnset where
+    toValue rs = VRefnset rs
+
+instance FromValue SAWRefnset where
+    fromValue (VRefnset rs) = rs
+    fromValue _ = error "fromValue Refnset"
 
 instance IsValue Theorem where
     toValue t = VTheorem t

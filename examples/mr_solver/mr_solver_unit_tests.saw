@@ -26,8 +26,6 @@ let const1_core = "\\ (_:Vec 64 Bool) -> retS VoidEv emptyFunStack (Vec 64 Bool)
 const1 <- parse_core const1_core;
 
 // const0 <= const0
-run_test "const0 |= const0" (mr_solver_query const0 const0) true;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] const0 const0);
 // (testing that "refines [] const0 const0" is actually "const0 <= const0")
 let const0_refines =
@@ -44,8 +42,6 @@ run_test "refines [x] (const0 x) (const0 x)"
 
 // The function test_fun0 <= const0
 test_fun0 <- parse_core_mod "test_funs" "test_fun0";
-run_test "const0 |= test_fun0" (mr_solver_query const0 test_fun0) true;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] const0 test_fun0);
 // (testing that "refines [] const0 test_fun0" is actually "const0 <= test_fun0")
 let const0_test_fun0_refines =
@@ -55,9 +51,7 @@ run_test "refines [] const0 test_fun0" (is_convertible (parse_core_mod "test_fun
                                                        (refines [] const0 test_fun0)) true;
 
 // not const0 <= const1
-run_test "const0 |= const1" (mr_solver_query const0 const1) false;
-// (using mrsolver tactic - fails as expected)
-// prove_extcore mrsolver (refines [] const0 const1);
+fails (prove_extcore mrsolver (refines [] const0 const1));
 // (testing that "refines [] const0 const1" is actually "const0 <= const1")
 let const0_const1_refines =
   str_concats ["(x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) ",
@@ -67,18 +61,14 @@ run_test "refines [] const0 const1" (is_convertible (parse_core const0_const1_re
 
 // The function test_fun1 = const1
 test_fun1 <- parse_core_mod "test_funs" "test_fun1";
-run_test "const1 |= test_fun1" (mr_solver_query const1 test_fun1) true;
-run_test "const0 |= test_fun1" (mr_solver_query const0 test_fun1) false;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] const1 test_fun1);
+fails (prove_extcore mrsolver (refines [] const0 test_fun1));
 // (testing that "refines [] const1 test_fun1" is actually "const1 <= test_fun1")
 let const1_test_fun1_refines =
   str_concats ["(x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) ",
                "((", const1_core, ") x) ", "(test_fun1 x)"];
 run_test "refines [] const1 test_fun1" (is_convertible (parse_core_mod "test_funs" const1_test_fun1_refines)
                                                        (refines [] const1 test_fun1)) true;
-// (using mrsolver tactic - fails as expected)
-// prove_extcore mrsolver (refines [] const0 test_fun1);
 // (testing that "refines [] const0 test_fun1" is actually "const0 <= test_fun1")
 let const0_test_fun1_refines =
   str_concats ["(x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) ",
@@ -95,8 +85,6 @@ let ifxEq0_core = "\\ (x:Vec 64 Bool) -> \
 ifxEq0 <- parse_core ifxEq0_core;
 
 // ifxEq0 <= const0
-run_test "ifxEq0 |= const0" (mr_solver_query ifxEq0 const0) true;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] ifxEq0 const0);
 // (testing that "refines [] ifxEq0 const0" is actually "ifxEq0 <= const0")
 let ifxEq0_const0_refines =
@@ -107,9 +95,7 @@ run_test "refines [] ifxEq0 const0" (is_convertible (parse_core ifxEq0_const0_re
 
 
 // not ifxEq0 <= const1
-run_test "ifxEq0 |= const1" (mr_solver_query ifxEq0 const1) false;
-// (using mrsolver tactic - fails as expected)
-// prove_extcore mrsolver (refines [] ifxEq0 const1);
+fails (prove_extcore mrsolver (refines [] ifxEq0 const1));
 // (testing that "refines [] ifxEq0 const1" is actually "ifxEq0 <= const1")
 let ifxEq0_const1_refines =
   str_concats ["(x:Vec 64 Bool) -> refinesS_eq VoidEv emptyFunStack (Vec 64 Bool) ",
@@ -123,8 +109,6 @@ let noErrors1_core =
 noErrors1 <- parse_core noErrors1_core;
 
 // const0 <= noErrors
-run_test "noErrors1 |= noErrors1" (mr_solver_query noErrors1 noErrors1) true;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] noErrors1 noErrors1);
 // (testing that "refines [] noErrors1 noErrors1" is actually "noErrors1 <= noErrors1")
 let noErrors1_refines =
@@ -134,8 +118,6 @@ run_test "refines [] noErrors1 noErrors1" (is_convertible (parse_core noErrors1_
                                                           (refines [] noErrors1 noErrors1)) true;
 
 // const1 <= noErrors
-run_test "const1 |= noErrors1" (mr_solver_query const1 noErrors1) true;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] const1 noErrors1);
 // (testing that "refines [] const1 noErrors1" is actually "const1 <= noErrors1")
 let const1_noErrors1_refines =
@@ -169,8 +151,6 @@ let loop1_core =
 loop1 <- parse_core loop1_core;
 
 // loop1 <= noErrorsRec1
-run_test "loop1 |= noErrorsRec1" (mr_solver_query loop1 noErrorsRec1) true;
-// (using mrsolver tactic)
 prove_extcore mrsolver (refines [] loop1 noErrorsRec1);
 // (testing that "refines [] loop1 noErrorsRec1" is actually "loop1 <= noErrorsRec1")
 let loop1_noErrorsRec1_refines =

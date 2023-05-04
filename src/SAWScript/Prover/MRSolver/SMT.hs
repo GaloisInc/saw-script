@@ -350,7 +350,7 @@ smtNorm sc t =
   normalizeSharedTerm sc modmap (smtNormPrims sc) Map.empty Set.empty t
 
 -- | Normalize a 'Term' using some Mr Solver specific primitives
-mrNormTerm :: Term -> MRM Term
+mrNormTerm :: Term -> MRM t Term
 mrNormTerm t =
   debugPrint 2 "Normalizing term:" >>
   debugPrettyInCtx 2 t >>
@@ -358,7 +358,7 @@ mrNormTerm t =
 
 -- | Normalize an open term by wrapping it in lambdas, normalizing, and then
 -- removing those lambdas
-mrNormOpenTerm :: Term -> MRM Term
+mrNormOpenTerm :: Term -> MRM t Term
 mrNormOpenTerm body =
   do length_ctx <- mrVarCtxLength <$> mrUVars
      fun_term <- lambdaUVarsM body
@@ -380,7 +380,7 @@ mrNormOpenTerm body =
 -- uvars or 'MRVar's.
 --
 -- FIXME: use the timeout!
-mrProvableRaw :: Term -> MRM Bool
+mrProvableRaw :: Term -> MRM t Bool
 mrProvableRaw prop_term =
   do sc <- mrSC
      prop <- liftSC1 termToProp prop_term
@@ -401,18 +401,19 @@ mrProvableRaw prop_term =
        Left msg ->
          debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
            >> return False
-       Right (Just cex, _) ->
+       Right (Just cex, stats) ->
          debugPrint 2 "SMT solver response: not provable" >>
          debugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
            "\n - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
            " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
-         return False
-       Right (Nothing, _) ->
-         debugPrint 2 "SMT solver response: provable" >> return True
+         recordUsedSolver stats prop_term >> return False
+       Right (Nothing, stats) ->
+         debugPrint 2 "SMT solver response: provable" >>
+         recordUsedSolver stats prop_term >> return True
 
 -- | Test if a Boolean term over the current uvars is provable given the current
 -- assumptions
-mrProvable :: Term -> MRM Bool
+mrProvable :: Term -> MRM t Bool
 mrProvable (asBool -> Just b) = return b
 mrProvable bool_tm =
   do mrUVars >>= mrDebugPPPrefix 3 "mrProvable uvars:"
@@ -422,7 +423,7 @@ mrProvable bool_tm =
      mrNormTerm prop_inst >>= mrProvableRaw
   where -- | Given a UVar name and type, generate a 'Term' to be passed to
         -- SMT, with special cases for BVVec and pair types
-        instUVar :: LocalName -> Term -> MRM Term
+        instUVar :: LocalName -> Term -> MRM t Term
         instUVar nm tp = mrDebugPPPrefix 3 "instUVar" (nm, tp) >>
                          liftSC1 scWhnf tp >>= \case
           (asNonBVVecVectorType -> Just (m, a)) ->
@@ -532,13 +533,13 @@ nonTrivialConv (ConvComp cs) = not (null cs)
 -- | Return 'True' iff the given 'InjConversion's are convertible, i.e. if
 -- the two injective conversions are the compositions of the same constructors,
 -- and the arguments to those constructors are convertible via 'mrConvertible'
-mrConvsConvertible :: InjConversion -> InjConversion -> MRM Bool
+mrConvsConvertible :: InjConversion -> InjConversion -> MRM t Bool
 mrConvsConvertible (ConvComp cs1) (ConvComp cs2) =
   if length cs1 /= length cs2 then return False
   else and <$> zipWithM mrSingleConvsConvertible cs1 cs2
 
 -- | Used in the definition of 'mrConvsConvertible'
-mrSingleConvsConvertible :: SingleInjConversion -> SingleInjConversion -> MRM Bool
+mrSingleConvsConvertible :: SingleInjConversion -> SingleInjConversion -> MRM t Bool
 mrSingleConvsConvertible SingleNatToNum SingleNatToNum = return True
 mrSingleConvsConvertible (SingleBVToNat n1) (SingleBVToNat n2) = return $ n1 == n2
 mrSingleConvsConvertible (SingleBVVecToVec n1 len1 a1 m1)
@@ -559,9 +560,9 @@ mrSingleConvsConvertible _ _ = return False
 -- @c1 <> c2 <> ... <> cn@ are applied from right to left as in function
 -- composition (i.e. @mrApplyConv (c1 <> c2 <> ... <> cn) t@ is equivalent to
 -- @mrApplyConv c1 (mrApplyConv c2 (... mrApplyConv cn t ...))@)
-mrApplyConv :: InjConversion -> Term -> MRM Term
+mrApplyConv :: InjConversion -> Term -> MRM t Term
 mrApplyConv (ConvComp cs) = flip (foldrM go) cs
-  where go :: SingleInjConversion -> Term -> MRM Term
+  where go :: SingleInjConversion -> Term -> MRM t Term
         go SingleNatToNum t = liftSC2 scCtorApp "Cryptol.TCNum" [t]
         go (SingleBVToNat n) t = liftSC2 scBvToNat n t
         go (SingleBVVecToVec n len a m) t = mrGenFromBVVec n len a t "mrApplyConv" m
@@ -572,9 +573,9 @@ mrApplyConv (ConvComp cs) = flip (foldrM go) cs
 
 -- | Try to apply the inverse of the given the conversion to the given term,
 -- raising an error if this is not possible - see also 'mrApplyConv'
-mrApplyInvConv :: InjConversion -> Term -> MRM Term
+mrApplyInvConv :: InjConversion -> Term -> MRM t Term
 mrApplyInvConv (ConvComp cs) = flip (foldlM go) cs
-  where go :: Term -> SingleInjConversion -> MRM Term
+  where go :: Term -> SingleInjConversion -> MRM t Term
         go t SingleNatToNum = case asNum t of
           Just (Left t') -> return t'
           _ -> error "mrApplyInvConv: Num term does not normalize to TCNum constructor"
@@ -628,7 +629,7 @@ mrConvOfTerm _ = NoConv
 -- types @tp1@ and @tp2@ are convertible, but the latter indicates that no
 -- 'InjConversion' could be found.
 findInjConvs :: Term -> Maybe Term -> Term -> Maybe Term ->
-                MRM (Maybe (Term, InjConversion, InjConversion))
+                MRM t (Maybe (Term, InjConversion, InjConversion))
 -- always add 'NatToNum' conversions
 findInjConvs (asDataType -> Just (primName -> "Cryptol.Num", _)) t1 tp2 t2 =
   do tp1' <- liftSC0 scNatType
@@ -722,13 +723,13 @@ findInjConvs tp1 _ tp2 _ =
 
 -- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
 -- 'scEq' except that it works on open terms.
-mrEq :: Term -> Term -> MRM Term
+mrEq :: Term -> Term -> MRM t Term
 mrEq t1 t2 = mrTypeOf t1 >>= \tp -> mrEq' tp t1 t2
 
 -- | Build a Boolean 'Term' stating that the second and third 'Term' arguments
 -- are equal, where the first 'Term' gives their type (which we assume is the
 -- same for both). This is like 'scEq' except that it works on open terms.
-mrEq' :: Term -> Term -> Term -> MRM Term
+mrEq' :: Term -> Term -> Term -> MRM t Term
 -- FIXME: For this Nat case, the definition of 'equalNat' in @Prims.hs@ means
 -- that if both sides do not have immediately clear bit-widths (e.g. either
 -- side is is an application of @mulNat@) this will 'error'...
@@ -750,7 +751,7 @@ data TermInCtx = TermInCtx [(LocalName,Term)] Term
 
 -- | Lift a binary operation on 'Term's to one on 'TermInCtx's
 liftTermInCtx2 :: (SharedContext -> Term -> Term -> IO Term) ->
-                   TermInCtx -> TermInCtx -> MRM TermInCtx
+                   TermInCtx -> TermInCtx -> MRM t TermInCtx
 liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
   do
     -- Insert the variables in ctx2 into the context of t1 starting at index 0,
@@ -767,9 +768,9 @@ liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
 extTermInCtx :: [(LocalName,Term)] -> TermInCtx -> TermInCtx
 extTermInCtx ctx (TermInCtx ctx' t) = TermInCtx (ctx++ctx') t
 
--- | Run an 'MRM' computation in the context of a 'TermInCtx', passing in the
+-- | Run an 'MRM t' computation in the context of a 'TermInCtx', passing in the
 -- 'Term'
-withTermInCtx :: TermInCtx -> (Term -> MRM a) -> MRM a
+withTermInCtx :: TermInCtx -> (Term -> MRM t a) -> MRM t a
 withTermInCtx (TermInCtx [] tm) f = f tm
 withTermInCtx (TermInCtx ((nm,tp):ctx) tm) f =
   withUVar nm (Type tp) $ const $ withTermInCtx (TermInCtx ctx tm) f
@@ -777,8 +778,8 @@ withTermInCtx (TermInCtx ((nm,tp):ctx) tm) f =
 -- | A "simple" strategy for proving equality between two terms, which we assume
 -- are of the same type, which builds an equality proposition by applying the
 -- supplied function to both sides and passes this proposition to an SMT solver.
-mrProveEqSimple :: (Term -> Term -> MRM Term) -> Term -> Term ->
-                   MRM TermInCtx
+mrProveEqSimple :: (Term -> Term -> MRM t Term) -> Term -> Term ->
+                   MRM t TermInCtx
 -- NOTE: The use of mrSubstEVars instead of mrSubstEVarsStrict means that we
 -- allow evars in the terms we send to the SMT solver, but we treat them as
 -- uvars.
@@ -789,18 +790,18 @@ mrProveEqSimple eqf t1 t2 =
 
 -- | Prove that two terms are equal, instantiating evars if necessary,
 -- returning true on success - the same as @mrProveRel False@
-mrProveEq :: Term -> Term -> MRM Bool
+mrProveEq :: Term -> Term -> MRM t Bool
 mrProveEq = mrProveRel False
 
 -- | Prove that two terms are equal, instantiating evars if necessary, or
 -- throwing an error if this is not possible - the same as
 -- @mrAssertProveRel False@
-mrAssertProveEq :: Term -> Term -> MRM ()
+mrAssertProveEq :: Term -> Term -> MRM t ()
 mrAssertProveEq = mrAssertProveRel False
 
 -- | Prove that two terms are related, heterogeneously iff the first argument
 -- is true, instantiating evars if necessary, returning true on success
-mrProveRel :: Bool -> Term -> Term -> MRM Bool
+mrProveRel :: Bool -> Term -> Term -> MRM t Bool
 mrProveRel het t1 t2 =
   do let nm = if het then "mrProveRel" else "mrProveEq"
      mrDebugPPPrefixSep 2 nm t1 (if het then "~=" else "==") t2
@@ -819,7 +820,7 @@ mrProveRel het t1 t2 =
 -- | Prove that two terms are related, heterogeneously iff the first argument,
 -- is true, instantiating evars if necessary, or throwing an error if this is
 -- not possible
-mrAssertProveRel :: Bool -> Term -> Term -> MRM ()
+mrAssertProveRel :: Bool -> Term -> Term -> MRM t ()
 mrAssertProveRel het t1 t2 =
   do success <- mrProveRel het t1 t2
      if success then return () else
@@ -829,7 +830,7 @@ mrAssertProveRel het t1 t2 =
 -- expressing that the fourth and fifth arguments are related, heterogeneously
 -- iff the first argument is true, whose types are given by the second and
 -- third arguments, respectively
-mrProveRelH :: Bool -> Term -> Term -> Term -> Term -> MRM TermInCtx
+mrProveRelH :: Bool -> Term -> Term -> Term -> Term -> MRM t TermInCtx
 mrProveRelH het tp1 tp2 t1 t2 =
   do varmap <- mrVars
      tp1' <- liftSC1 scWhnf tp1
@@ -839,7 +840,7 @@ mrProveRelH het tp1 tp2 t1 t2 =
 -- | The body of 'mrProveRelH'
 -- NOTE: Don't call this function recursively, call 'mrProveRelH'
 mrProveRelH' :: Map MRVar MRVarInfo -> Bool ->
-                Term -> Term -> Term -> Term -> MRM TermInCtx
+                Term -> Term -> Term -> Term -> MRM t TermInCtx
 
 -- If t1 is an instantiated evar, substitute and recurse
 mrProveRelH' var_map het tp1 tp2 (asEVarApp var_map -> Just (_, args, Just f)) t2 =

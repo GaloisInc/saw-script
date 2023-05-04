@@ -9,12 +9,14 @@ Portability : non-portable (language extensions)
 -}
 
 module SAWScript.Prover.MRSolver
-  (askMRSolver, assumeMRSolver, MRSolverResult, refinementTerm, 
+  (askMRSolver, refinementTerm, 
    MRFailure(..), showMRFailure, showMRFailureNoCtx,
-   FunAssump(..), FunAssumpRHS(..),
-   MREnv(..), emptyMREnv, mrEnvAddFunAssump, mrEnvSetDebugLevel,
+   FunAssump(..), FunAssumpRHS(..), asRefinesS, asFunAssump,
+   Refnset, emptyRefnset, addFunAssump,
+   MREnv(..), emptyMREnv, mrEnvSetDebugLevel,
    asProjAll, isSpecFunType) where
 
 import SAWScript.Prover.MRSolver.Term
+import SAWScript.Prover.MRSolver.Evidence
 import SAWScript.Prover.MRSolver.Monad
 import SAWScript.Prover.MRSolver.Solver

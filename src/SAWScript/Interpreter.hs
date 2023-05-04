@@ -70,7 +70,7 @@ import SAWScript.Value
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
-import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
@@ -3814,41 +3814,7 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve True))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this can"
-    , " be done, this refinement will be used in future calls to"
-    , " Mr. Solver, and if it cannot, the script will exit. See also:"
-    , " mr_solver_test, mr_solver_query." ]
-
-  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve False))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this cannot"
-    , " be done, the script will exit. See also: mr_solver_prove,"
-    , " mr_solver_query - unlike the former, this refinement will not"
-    , " be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverQuery)
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another, returning"
-    , " true iff this can be done. See also: mr_solver_prove,"
-    , " mr_solver_test - unlike the former, this refinement will not"
-    , " be considered in future calls to Mr. Solver, and unlike both,"
-    , " this command will never fail." ]
-
-  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverAssume)
-    Experimental
-    [ "Add the refinement of the two given expressions as an assumption"
-    , " which will be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
@@ -3856,10 +3822,32 @@ primitives = Map.fromList
     , " 3 = all debug output" ]
 
   , prim "mrsolver" "ProofScript ()"
-    (scVal mrSolverTactic)
+    (pureVal (mrSolver emptyRefnset))
     Experimental
-    [ "Use MRSolver to prove a current goal of the form:"
-    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
+
+  , prim "empty_rs"            "Refnset"
+    (pureVal (emptyRefnset :: SAWRefnset))
+    Current
+    [ "The empty refinement set, containing no refinements." ]
+
+  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
+    (funVal2 addrefn)
+    Current
+    [ "Add a proved refinement theorem to a given refinement set." ]
+
+  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
+    (funVal2 addrefns)
+    Current
+    [ "Add proved refinement theorems to a given refinement set." ]
+
+  , prim "mrsolver_with" "Renfset -> ProofScript ()"
+    (pureVal mrSolver)
+    Experimental
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
+    , " the given set of refinements taken as assumptions" ]
 
   , prim "refines" "[Term] -> Term -> Term -> Term"
     (funVal3 refinesTerm)

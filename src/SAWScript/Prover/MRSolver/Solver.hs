@@ -140,8 +140,10 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
+import SAWScript.Prover.SolverStats
 
 import SAWScript.Prover.MRSolver.Term
+import SAWScript.Prover.MRSolver.Evidence
 import SAWScript.Prover.MRSolver.Monad
 import SAWScript.Prover.MRSolver.SMT
 
@@ -193,7 +195,7 @@ asCallS _ = Nothing
 -- of our variable monadic operations (including, e.g., if-then-else and the
 -- either and maybe eliminators). But the implementation here should give the
 -- correct result for any code we are actually going to see...
-mrReplaceCallsWithTerms :: [Term] -> Term -> MRM Term
+mrReplaceCallsWithTerms :: [Term] -> Term -> MRM t Term
 mrReplaceCallsWithTerms top_tms top_t =
   flip runReaderT top_tms $
   flip memoFixTermFun top_t $ \recurse t -> case t of
@@ -219,7 +221,7 @@ mrReplaceCallsWithTerms top_tms top_t =
 
 -- | Bind fresh function variables for a @multiFixS@ with the given list of
 -- @LetRecType@s and tuple of definitions for the function bodies
-mrFreshCallVars :: Term -> Term -> Term -> Term -> MRM [MRVar]
+mrFreshCallVars :: Term -> Term -> Term -> Term -> MRM t [MRVar]
 mrFreshCallVars ev stack frame defs_tm =
   do
     -- First, make fresh function constants for all the recursive functions,
@@ -251,13 +253,13 @@ mrFreshCallVars ev stack frame defs_tm =
 
 
 -- | Normalize a 'Term' of monadic type to monadic normal form
-normCompTerm :: Term -> MRM NormComp
+normCompTerm :: Term -> MRM t NormComp
 normCompTerm = normComp . CompTerm
 
 -- | Normalize a computation to monadic normal form, assuming any 'Term's it
 -- contains have already been normalized with respect to beta and projections
 -- (but constants need not be unfolded)
-normComp :: Comp -> MRM NormComp
+normComp :: Comp -> MRM t NormComp
 normComp (CompReturn t) = return $ RetS t
 normComp (CompBind m f) =
   do norm <- normComp m
@@ -461,7 +463,7 @@ normComp (CompTerm t) =
 -- term @x@ if the body is of the form @Eq Bool x True@ or @Eq Bool True x@,
 -- or a 'Term' @x@ and a 'DataTypeAssump' @c@ if the body is of the form
 -- @Eq _ x (c ...)@ or @Eq _ (c ...) x@
-normCompAssertAssumeBody :: Term -> MRM (Either Term (Term, DataTypeAssump))
+normCompAssertAssumeBody :: Term -> MRM t (Either Term (Term, DataTypeAssump))
 normCompAssertAssumeBody (asEq -> Just (_, x1, asBool -> Just True)) =
   return $ Left x1
 normCompAssertAssumeBody (asEq -> Just (_, asBool -> Just True, x2)) =
@@ -479,7 +481,7 @@ normCompAssertAssumeBody prop =
 
 
 -- | Bind a computation in whnf with a function, and normalize
-normBind :: NormComp -> CompFun -> MRM NormComp
+normBind :: NormComp -> CompFun -> MRM t NormComp
 normBind (RetS t) k = applyNormCompFun k t
 normBind (ErrorS msg) _ = return (ErrorS msg)
 normBind (Ite cond comp1 comp2) k =
@@ -520,19 +522,19 @@ normBind (FunBind f args k1) k2
   | otherwise -} = return $ FunBind f args (compFunComp k1 k2)
 
 -- | Bind a 'Term' for a computation with a function and normalize
-normBindTerm :: Term -> CompFun -> MRM NormComp
+normBindTerm :: Term -> CompFun -> MRM t NormComp
 normBindTerm t f = normCompTerm t >>= \m -> normBind m f
 
 {-
 -- | Get the return type of a 'CompFun'
-compFunReturnType :: CompFun -> MRM Term
+compFunReturnType :: CompFun -> MRM t Term
 compFunReturnType (CompFunTerm _ t) = mrTypeOf t
 compFunReturnType (CompFunComp _ g) = compFunReturnType g
 compFunReturnType (CompFunReturn (Type t)) = return t
 -}
 
 -- | Apply a computation function to a term argument to get a computation
-applyCompFun :: CompFun -> Term -> MRM Comp
+applyCompFun :: CompFun -> Term -> MRM t Comp
 applyCompFun (CompFunComp f g) t =
   -- (f >=> g) t == f t >>= g
   do comp <- applyCompFun f t
@@ -542,7 +544,7 @@ applyCompFun (CompFunReturn _ _) t =
 applyCompFun (CompFunTerm _ f) t = CompTerm <$> mrApplyAll f [t]
 
 -- | Convert a 'CompFun' into a 'Term'
-compFunToTerm :: CompFun -> MRM Term
+compFunToTerm :: CompFun -> MRM t Term
 compFunToTerm (CompFunTerm _ t) = return t
 compFunToTerm (CompFunComp f g) =
   do f' <- compFunToTerm f
@@ -566,7 +568,7 @@ compFunToTerm (CompFunReturn params (Type a)) =
 
 {-
 -- | Convert a 'Comp' into a 'Term'
-compToTerm :: Comp -> MRM Term
+compToTerm :: Comp -> MRM t Term
 compToTerm (CompTerm t) = return t
 compToTerm (CompReturn t) =
    do tp <- mrTypeOf t
@@ -582,8 +584,16 @@ compToTerm (CompBind m f) =
 -}
 
 -- | Apply a 'CompFun' to a term and normalize the resulting computation
-applyNormCompFun :: CompFun -> Term -> MRM NormComp
+applyNormCompFun :: CompFun -> Term -> MRM t NormComp
 applyNormCompFun f arg = applyCompFun f arg >>= normComp
+
+
+-- | Convert a 'FunAssumpRHS' to a 'NormComp'
+mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM t NormComp
+mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
+  FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
+mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = normCompTerm rhs
+
 
 -- | Match a term as a static list of eliminators for an Eithers type
 matchEitherElims :: Term -> Maybe [EitherElim]
@@ -596,7 +606,7 @@ matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
 matchEitherElims _ = Nothing
 
 -- | Construct the type @Eithers tps@ eliminated by a list of 'EitherElim's
-elimsEithersType :: [EitherElim] -> MRM Type
+elimsEithersType :: [EitherElim] -> MRM t Type
 elimsEithersType elims =
   Type <$>
   (do f <- mrGlobalTerm "Prelude.Eithers"
@@ -613,7 +623,7 @@ elimsEithersType elims =
 -- | Lookup the definition of a function or throw a 'CannotLookupFunDef' if this is
 -- not allowed, either because it is a global function we are treating as opaque
 -- or because it is a locally-bound function variable
-mrLookupFunDef :: FunName -> MRM Term
+mrLookupFunDef :: FunName -> MRM t Term
 mrLookupFunDef f@(GlobalName _) = throwMRFailure (CannotLookupFunDef f)
 mrLookupFunDef f@(LocalName var) =
   mrVarInfo var >>= \case
@@ -622,7 +632,7 @@ mrLookupFunDef f@(LocalName var) =
   Nothing -> error "mrLookupFunDef: unknown variable!"
 
 -- | Unfold a call to function @f@ in term @f args >>= g@
-mrUnfoldFunBind :: FunName -> [Term] -> Mark -> CompFun -> MRM Comp
+mrUnfoldFunBind :: FunName -> [Term] -> Mark -> CompFun -> MRM t Comp
 mrUnfoldFunBind f _ mark _ | inMark f mark = throwMRFailure (RecursiveUnfold f)
 mrUnfoldFunBind f args mark g =
   do f_def <- mrLookupFunDef f
@@ -644,7 +654,7 @@ handling the recursive ones
 ----------------------------------------------------------------------
 
 -- | Prove the invariant of a coinductive hypothesis
-proveCoIndHypInvariant :: CoIndHyp -> MRM ()
+proveCoIndHypInvariant :: CoIndHyp -> MRM t ()
 proveCoIndHypInvariant hyp =
   do (invar1, invar2) <- applyCoIndHypInvariants hyp
      invar <- liftSC2 scAnd invar1 invar2
@@ -668,7 +678,7 @@ proveCoIndHypInvariant hyp =
 -- assumptions are thrown away. If while running the refinement computation a
 -- 'CoIndHypMismatchWidened' error is reached with the given names, the state is
 -- restored and the computation is re-run with the widened hypothesis.
-mrRefinesCoInd :: FunName -> [Term] -> FunName -> [Term] -> MRM ()
+mrRefinesCoInd :: FunName -> [Term] -> FunName -> [Term] -> MRM t ()
 mrRefinesCoInd f1 args1 f2 args2 =
   do ctx <- mrUVars
      preF1 <- mrGetInvariant f1
@@ -679,7 +689,7 @@ mrRefinesCoInd f1 args1 f2 args2 =
 
 -- | Prove the refinement represented by a 'CoIndHyp' coinductively. This is the
 -- main loop implementing 'mrRefinesCoInd'. See that function for documentation.
-proveCoIndHyp :: CoIndHyp -> MRM ()
+proveCoIndHyp :: CoIndHyp -> MRM t ()
 proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
   do let f1 = coIndHypLHSFun hyp
          f2 = coIndHypRHSFun hyp
@@ -695,7 +705,7 @@ proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
        MRExnWiden nm1' nm2' new_vars
          | f1 == nm1' && f2 == nm2' ->
            -- NOTE: the state automatically gets reset here because we defined
-           -- MRM with ExceptT at a lower level than StateT
+           -- MRM t with ExceptT at a lower level than StateT
            do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
               hyp' <- generalizeCoIndHyp hyp new_vars
               proveCoIndHyp hyp'
@@ -703,7 +713,7 @@ proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
 
 -- | Test that a coinductive hypothesis for the given function names matches the
 -- given arguments, otherwise throw an exception saying that widening is needed
-matchCoIndHyp :: CoIndHyp -> [Term] -> [Term] -> MRM ()
+matchCoIndHyp :: CoIndHyp -> [Term] -> [Term] -> MRM t ()
 matchCoIndHyp hyp args1 args2 =
   do mrDebugPPPrefix 1 "matchCoIndHyp" hyp
      (args1', args2') <- instantiateCoIndHyp hyp
@@ -717,7 +727,7 @@ matchCoIndHyp hyp args1 args2 =
      proveCoIndHypInvariant hyp
 
 -- | Generalize some of the arguments of a coinductive hypothesis
-generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM CoIndHyp
+generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM t CoIndHyp
 generalizeCoIndHyp hyp [] = return hyp
 generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   withOnlyUVars (coIndHypCtx hyp) $ do
@@ -777,7 +787,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- and @c_0 <> c1@.
   let cbnConvs :: (Term, InjConversion, [(a, InjConversion)]) ->
                   (a, (Term, InjConversion, InjConversion)) ->
-                  MRM (Term, InjConversion, [(a, InjConversion)])
+                  MRM t (Term, InjConversion, [(a, InjConversion)])
       cbnConvs (tp, c_0, cs) (arg_spec_i, (tp_i, _, c2_i)) =
         findInjConvs tp Nothing tp_i Nothing >>= \case
           Just (tp', c1, c2) ->
@@ -802,7 +812,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
 
 -- | An object that can be converted to a normalized computation
 class ToNormComp a where
-  toNormComp :: a -> MRM NormComp
+  toNormComp :: a -> MRM t NormComp
 
 instance ToNormComp NormComp where
   toNormComp = return
@@ -813,7 +823,7 @@ instance ToNormComp Term where
 
 -- | Prove that the left-hand computation refines the right-hand one. See the
 -- rules described at the beginning of this module.
-mrRefines :: (ToNormComp a, ToNormComp b) => a -> b -> MRM ()
+mrRefines :: (ToNormComp a, ToNormComp b) => a -> b -> MRM t ()
 mrRefines t1 t2 =
   do m1 <- toNormComp t1
      m2 <- toNormComp t2
@@ -823,7 +833,7 @@ mrRefines t1 t2 =
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
 -- | The main implementation of 'mrRefines'
-mrRefines' :: NormComp -> NormComp -> MRM ()
+mrRefines' :: NormComp -> NormComp -> MRM t ()
 
 mrRefines' (RetS e1) (RetS e2) = mrAssertProveRel True e1 e2
 mrRefines' (ErrorS _) (ErrorS _) = return ()
@@ -1025,7 +1035,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
 
   -- If we have an opaque FunAssump that f1 args1' refines f2 args2', then
   -- prove that args1 = args1', args2 = args2', and then that k1 refines k2
-  (_, Just (FunAssump ctx args1' (OpaqueFunAssump f2' args2'))) | f2 == f2' ->
+  (_, Just fa@(FunAssump ctx _ args1' (OpaqueFunAssump f2' args2') _)) | f2 == f2' ->
     do debugPretty 2 $ flip runPPInCtxM ctx $
          prettyAppList [return "mrRefines using opaque FunAssump:",
                         prettyInCtx ctx, return ".",
@@ -1036,19 +1046,20 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
        (args1'', args2'') <- substTermLike 0 evars (args1', args2')
        zipWithM_ mrAssertProveEq args1'' args1
        zipWithM_ mrAssertProveEq args2'' args2
-       mrRefinesFun tp1 k1 tp2 k2
+       recordUsedFunAssump fa >> mrRefinesFun tp1 k1 tp2 k2
 
   -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
   -- unfolds and is not recursive in itself, unfold f2 and recurse
-  (_, Just (FunAssump _ _ (OpaqueFunAssump _ _)))
+  (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
     | Just (f2_body, False) <- maybe_f2_body ->
-    normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
+    normBindTerm f2_body k2 >>= \m2' ->
+    recordUsedFunAssump fa >> mrRefines m1 m2'
 
   -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
   -- f1 args1' refines some f args where f /= f2 and f2 does not match the
   -- case above, treat either case like we have a rewrite FunAssump and prove
   -- that args1 = args1' and then that f args refines m2
-  (_, Just (FunAssump ctx args1' rhs)) ->
+  (_, Just fa@(FunAssump ctx _ args1' rhs _)) ->
     do debugPretty 2 $ flip runPPInCtxM ctx $
          prettyAppList [return "mrRefines rewriting by FunAssump:",
                         prettyInCtx ctx, return ".",
@@ -1064,7 +1075,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
        m1' <- normBind rhs'' k1
-       mrRefines m1' m2
+       recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
   _ | Just (f1_body, False) <- maybe_f1_body ->
@@ -1098,13 +1109,13 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
   -- args1 = args' and then that rhs refines m2
-  Just (FunAssump ctx args1' rhs) ->
+  Just fa@(FunAssump ctx _ args1' rhs _) ->
     do rhs' <- mrFunAssumpRHSAsNormComp rhs
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
        m1' <- normBind rhs'' k1
-       mrRefines m1' m2
+       recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1
   Nothing ->
@@ -1145,7 +1156,7 @@ mrRefines' m1 m2 = mrRefines'' m1 m2
 -- | The cases of 'mrRefines' which must occur after the ones in 'mrRefines''.
 -- For example, the rules that introduce existential variables need to go last,
 -- so that they can quantify over as many universals as possible
-mrRefines'' :: NormComp -> NormComp -> MRM ()
+mrRefines'' :: NormComp -> NormComp -> MRM t ()
 
 mrRefines'' m1 (AssertBoolBind cond2 k2) =
   do m2 <- liftSC0 scUnitValue >>= applyCompFun k2
@@ -1181,7 +1192,7 @@ mrRefines'' (ForallBind tp f1) m2 =
 mrRefines'' m1 m2 = throwMRFailure (CompsDoNotRefine m1 m2)
 
 -- | Prove that one function refines another for all inputs
-mrRefinesFun :: Term -> CompFun -> Term -> CompFun -> MRM ()
+mrRefinesFun :: Term -> CompFun -> Term -> CompFun -> MRM t ()
 mrRefinesFun tp1 f1 tp2 f2 =
   do mrDebugPPPrefixSep 1 "mrRefinesFun on types:" tp1 "," tp2
      f1' <- compFunToTerm f1 >>= liftSC1 scWhnf
@@ -1203,8 +1214,8 @@ mrRefinesFun tp1 f1 tp2 f2 =
 -- wrapper functions determined by how the types are heterogeneously related),
 -- and call the continuation on the resulting terms. The second argument is
 -- an accumulator of variables to introduce, innermost first.
-mrRefinesFunH :: (Term -> Term -> MRM a) -> [Term] ->
-                 Term -> Term -> Term -> Term -> MRM a
+mrRefinesFunH :: (Term -> Term -> MRM t a) -> [Term] ->
+                 Term -> Term -> Term -> Term -> MRM t a
 
 -- Introduce equalities on either side as assumptions
 mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asEq -> Just (asBoolType -> Just (), b1, b2)), _)) t1 piTp2 t2 =
@@ -1284,70 +1295,31 @@ mrRefinesFunH k _ _ t1 _ t2 = k t1 t2
 -- * External Entrypoints
 ----------------------------------------------------------------------
 
--- | The result of a successful call to Mr. Solver: either a 'FunAssump' to
--- (optionally) add to the 'MREnv', or 'Nothing' if the left-hand-side was not
--- a function name
-type MRSolverResult = Maybe (FunName, FunAssump)
-
--- | The continuation passed to 'mrRefinesFunH' in 'askMRSolver' and
--- 'assumeMRSolver': normalizes both resulting terms using 'normCompTerm',
--- calls the given monadic function, then returns a 'FunAssump', if possible
-askMRSolverH :: (NormComp -> NormComp -> MRM ()) ->
-                Term -> Term -> MRM MRSolverResult
+-- | The continuation passed to 'mrRefinesFunH' in 'askMRSolver' - normalizes
+-- both resulting terms using 'normCompTerm' then calls the given monadic
+-- function
+askMRSolverH :: (NormComp -> NormComp -> MRM t a) -> Term -> Term -> MRM t a
 askMRSolverH f t1 t2 =
   do mrUVars >>= mrDebugPPPrefix 1 "askMRSolverH uvars:"
      m1 <- normCompTerm t1
      m2 <- normCompTerm t2
      f m1 m2
-     case (m1, m2) of
-       -- If t1 and t2 are both named functions, our result is the opaque
-       -- FunAssump that forall xs. f1 xs |= f2 xs'
-       (FunBind f1 args1 (CompFunReturn _ _),
-        FunBind f2 args2 (CompFunReturn _ _)) ->
-         mrUVars >>= \uvar_ctx ->
-         return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
-                                        fassumpArgs = args1,
-                                        fassumpRHS = OpaqueFunAssump f2 args2 })
-       -- If just t1 is a named function, our result is the rewrite FunAssump
-       -- that forall xs. f1 xs |= m2
-       (FunBind f1 args1 (CompFunReturn _ _), _) ->
-         mrUVars >>= \uvar_ctx ->
-         return $ Just (f1, FunAssump { fassumpCtx = uvar_ctx,
-                                        fassumpArgs = args1,
-                                        fassumpRHS = RewriteFunAssump m2 })
-       _ -> return Nothing
 
--- | Test two monadic, recursive terms for refinement. On success, if the
--- left-hand term is a named function, returning a 'FunAssump' to add to the
--- 'MREnv'.
+-- | Test two monadic, recursive terms for refinement
 askMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
   [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
-  Term -> Term -> IO (Either MRFailure MRSolverResult)
-askMRSolver sc env timeout args t1 t2 =
-  runMRM sc timeout env $
+  Term -> Term -> IO (Either MRFailure (SolverStats, MREvidence t))
+askMRSolver sc env timeout rs args t1 t2 =
+  execMRM sc timeout env rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
        mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
-
--- | Return the 'FunAssump' to add to the 'MREnv' that would be generated if
--- 'askMRSolver' succeeded on the given terms.
-assumeMRSolver ::
-  SharedContext ->
-  MREnv {- ^ The Mr Solver environment -} ->
-  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
-  Term -> Term -> IO (Either MRFailure MRSolverResult)
-assumeMRSolver sc env timeout args t1 t2 =
-  runMRM sc timeout env $
-  withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
-    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
-       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
-       mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tp1 t1 tp2 t2
 
 -- | Return the 'Term' which is the refinement (@Prelude.refinesS@) of fully
 -- applied versions of the given 'Term's, after quantifying over all the given
@@ -1358,11 +1330,12 @@ refinementTerm ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
   [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> IO (Either MRFailure Term)
-refinementTerm sc env timeout args t1 t2 =
-  runMRM sc timeout env $
+refinementTerm sc env timeout rs args t1 t2 =
+  evalMRM sc timeout env rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
-       mrRefinesFunH mrRefinementGoal [] tp1 t1 tp2 t2
+       mrRefinesFunH (mrRefinementTerm True) [] tp1 t1 tp2 t2

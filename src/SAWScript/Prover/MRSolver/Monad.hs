@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -48,8 +49,10 @@ import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
+import SAWScript.Prover.SolverStats
 
 import SAWScript.Prover.MRSolver.Term
+import SAWScript.Prover.MRSolver.Evidence
 
 
 ----------------------------------------------------------------------
@@ -264,7 +267,7 @@ coIndHypSetArg hyp@(CoIndHyp {..}) (Right i) x =
 
 -- | Add a variable to the context of a coinductive hypothesis, returning the
 -- updated coinductive hypothesis and a 'Term' which is the new variable
-coIndHypWithVar :: CoIndHyp -> LocalName -> Type -> MRM (CoIndHyp, Term)
+coIndHypWithVar :: CoIndHyp -> LocalName -> Type -> MRM t (CoIndHyp, Term)
 coIndHypWithVar (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) nm tp =
   do var <- liftSC1 scLocalVar 0
      let ctx' = mrVarCtxAppend (singletonMRVarCtx nm tp) ctx
@@ -294,15 +297,17 @@ instance PrettyInCtx CoIndHyp where
 type DataTypeAssumps = HashMap Term DataTypeAssump
 
 -- | Parameters and locals for MR. Solver
-data MRInfo = MRInfo {
+data MRInfo t = MRInfo {
   -- | Global shared context for building terms, etc.
   mriSC :: SharedContext,
   -- | SMT timeout for SMT calls made by Mr. Solver
   mriSMTTimeout :: Maybe Integer,
-  -- | The current context of universal variables
-  mriUVars :: MRVarCtx,
   -- | The top-level Mr Solver environment
   mriEnv :: MREnv,
+  -- | The set of function refinements to assume
+  mriRefnset :: Refnset t,
+  -- | The current context of universal variables
+  mriUVars :: MRVarCtx,
   -- | The current set of co-inductive hypotheses
   mriCoIndHyps :: CoIndHyps,
   -- | The current assumptions, which are conjoined into a single Boolean term;
@@ -313,7 +318,12 @@ data MRInfo = MRInfo {
 }
 
 -- | State maintained by MR. Solver
-data MRState = MRState {
+data MRState t = MRState {
+  -- | Cumulative stats on all solver runs made so far
+  mrsSolverStats :: SolverStats,
+  -- | The evidence object, which includes information about which
+  -- 'FunAssump's in 'mriRefnset' have been used so far
+  mrsEvidence :: MREvidence t,
   -- | The existential and letrec-bound variables
   mrsVars :: MRVarMap
 }
@@ -327,89 +337,111 @@ data MRExn = MRExnFailure MRFailure
 -- | Mr. Monad, the monad used by MR. Solver, which has 'MRInfo' as as a
 -- shared environment, 'MRState' as state, and 'MRFailure' as an exception
 -- type, all over an 'IO' monad
-newtype MRM a = MRM { unMRM :: ReaderT MRInfo (StateT MRState
-                                              (ExceptT MRExn IO)) a }
-              deriving newtype (Functor, Applicative, Monad, MonadIO,
-                                MonadReader MRInfo, MonadState MRState,
-                                                    MonadError MRExn)
+newtype MRM t a = MRM { unMRM :: ReaderT (MRInfo t) (StateT (MRState t)
+                                                    (ExceptT MRExn IO)) a }
+                deriving newtype (Functor, Applicative, Monad, MonadIO,
+                                  MonadReader (MRInfo t), MonadState (MRState t),
+                                                          MonadError MRExn)
 
-instance MonadTerm MRM where
+instance MonadTerm (MRM t) where
   mkTermF = liftSC1 scTermF
   liftTerm = liftSC3 incVars
   whnfTerm = liftSC1 scWhnf
   substTerm = liftSC3 instantiateVarList
 
 -- | Get the current value of 'mriSC'
-mrSC :: MRM SharedContext
+mrSC :: MRM t SharedContext
 mrSC = mriSC <$> ask
 
 -- | Get the current value of 'mriSMTTimeout'
-mrSMTTimeout :: MRM (Maybe Integer)
+mrSMTTimeout :: MRM t (Maybe Integer)
 mrSMTTimeout = mriSMTTimeout <$> ask
 
 -- | Get the current value of 'mriUVars'
-mrUVars :: MRM MRVarCtx
+mrUVars :: MRM t MRVarCtx
 mrUVars = mriUVars <$> ask
 
 -- | Get the current function assumptions
-mrFunAssumps :: MRM FunAssumps
-mrFunAssumps = mreFunAssumps <$> mriEnv <$> ask
+mrRefnset :: MRM t (Refnset t)
+mrRefnset = mriRefnset <$> ask
 
 -- | Get the current value of 'mriCoIndHyps'
-mrCoIndHyps :: MRM CoIndHyps
+mrCoIndHyps :: MRM t CoIndHyps
 mrCoIndHyps = mriCoIndHyps <$> ask
 
 -- | Get the current value of 'mriAssumptions'
-mrAssumptions :: MRM Term
+mrAssumptions :: MRM t Term
 mrAssumptions = mriAssumptions <$> ask
 
 -- | Get the current value of 'mriDataTypeAssumps'
-mrDataTypeAssumps :: MRM DataTypeAssumps
+mrDataTypeAssumps :: MRM t DataTypeAssumps
 mrDataTypeAssumps = mriDataTypeAssumps <$> ask
 
 -- | Get the current debug level
-mrDebugLevel :: MRM Int
+mrDebugLevel :: MRM t Int
 mrDebugLevel = mreDebugLevel <$> mriEnv <$> ask
 
 -- | Get the current value of 'mriEnv'
-mrEnv :: MRM MREnv
+mrEnv :: MRM t MREnv
 mrEnv = mriEnv <$> ask
 
+-- | Get the current value of 'mrsSolverStats'
+mrSolverStats :: MRM t SolverStats
+mrSolverStats = mrsSolverStats <$> get
+
+-- | Get the current value of 'mrsEvidence'
+mrEvidence :: MRM t (MREvidence t)
+mrEvidence = mrsEvidence <$> get
+
 -- | Get the current value of 'mrsVars'
-mrVars :: MRM MRVarMap
+mrVars :: MRM t MRVarMap
 mrVars = mrsVars <$> get
 
--- | Run an 'MRM' computation and return a result or an error
-runMRM :: SharedContext -> Maybe Integer -> MREnv ->
-          MRM a -> IO (Either MRFailure a)
-runMRM sc timeout env m =
+-- | Run an 'MRM' computation and return a result or an error, including the
+-- final state of 'mrsSolverStats' and 'mrsEvidence'
+runMRM :: SharedContext -> Maybe Integer -> MREnv -> Refnset t ->
+          MRM t a -> IO (Either MRFailure (a, (SolverStats, MREvidence t)))
+runMRM sc timeout env rs m =
   do true_tm <- scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
-                              mriEnv = env,
+                              mriEnv = env, mriRefnset = rs,
                               mriUVars = emptyMRVarCtx,
                               mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm,
                               mriDataTypeAssumps = HashMap.empty }
-     let init_st = MRState { mrsVars = Map.empty }
-     res <- runExceptT $ flip evalStateT init_st $
+     let init_st = MRState { mrsSolverStats = mempty, mrsEvidence = mempty,
+                             mrsVars = Map.empty }
+     res <- runExceptT $ flip runStateT init_st $
        flip runReaderT init_info $ unMRM m
      case res of
-       Right a -> return $ Right a
+       Right (a, st) -> return $ Right (a, (mrsSolverStats st, mrsEvidence st))
        Left (MRExnFailure failure) -> return $ Left failure
        Left exn -> fail ("runMRM: unexpected internal exception: " ++ show exn)
 
+-- | Run an 'MRM' computation and return a result or an error, discarding the
+-- final state
+evalMRM :: SharedContext -> Maybe Integer -> MREnv -> Refnset t ->
+           MRM t a -> IO (Either MRFailure a)
+evalMRM sc timeout env rs = fmap (fmap fst) . runMRM sc timeout env rs
+
+-- | Run an 'MRM' computation and return a final state or an error, discarding
+-- the result
+execMRM :: SharedContext -> Maybe Integer -> MREnv -> Refnset t ->
+           MRM t a -> IO (Either MRFailure (SolverStats, MREvidence t))
+execMRM sc timeout env rs = fmap (fmap snd) . runMRM sc timeout env rs
+
 -- | Throw an 'MRFailure'
-throwMRFailure :: MRFailure -> MRM a
+throwMRFailure :: MRFailure -> MRM t a
 throwMRFailure = throwError . MRExnFailure
 
 -- | Apply a function to any failure thrown by an 'MRM' computation
-mapMRFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
+mapMRFailure :: (MRFailure -> MRFailure) -> MRM t a -> MRM t a
 mapMRFailure f m = catchError m $ \case
   MRExnFailure failure -> throwError $ MRExnFailure $ f failure
   e -> throwError e
 
 -- | Catch any 'MRFailure' raised by a computation
-catchFailure :: MRM a -> (MRFailure -> MRM a) -> MRM a
+catchFailure :: MRM t a -> (MRFailure -> MRM t a) -> MRM t a
 catchFailure m f =
   m `catchError` \case
   MRExnFailure failure -> f failure
@@ -417,14 +449,14 @@ catchFailure m f =
 
 -- | Try two different 'MRM' computations, combining their failures if needed.
 -- Note that the 'MRState' will reset if the first computation fails.
-mrOr :: MRM a -> MRM a -> MRM a
+mrOr :: MRM t a -> MRM t a -> MRM t a
 mrOr m1 m2 =
   catchFailure m1 $ \err1 ->
   catchFailure m2 $ \err2 ->
   throwMRFailure $ MRFailureDisj err1 err2
 
 -- | Run an 'MRM' computation in an extended failure context
-withFailureCtx :: FailCtx -> MRM a -> MRM a
+withFailureCtx :: FailCtx -> MRM t a -> MRM t a
 withFailureCtx ctx = mapMRFailure (MRFailureCtx ctx)
 
 {-
@@ -437,29 +469,29 @@ catchErrorEither m = catchError (Right <$> m) (return . Left)
 -- typeclass like LiftTCM
 
 -- | Lift a nullary SharedTerm computation into 'MRM'
-liftSC0 :: (SharedContext -> IO a) -> MRM a
+liftSC0 :: (SharedContext -> IO a) -> MRM t a
 liftSC0 f = mrSC >>= \sc -> liftIO (f sc)
 
 -- | Lift a unary SharedTerm computation into 'MRM'
-liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
+liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM t b
 liftSC1 f a = mrSC >>= \sc -> liftIO (f sc a)
 
 -- | Lift a binary SharedTerm computation into 'MRM'
-liftSC2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> MRM c
+liftSC2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> MRM t c
 liftSC2 f a b = mrSC >>= \sc -> liftIO (f sc a b)
 
 -- | Lift a ternary SharedTerm computation into 'MRM'
-liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM d
+liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM t d
 liftSC3 f a b c = mrSC >>= \sc -> liftIO (f sc a b c)
 
 -- | Lift a quaternary SharedTerm computation into 'MRM'
 liftSC4 :: (SharedContext -> a -> b -> c -> d -> IO e) -> a -> b -> c -> d ->
-           MRM e
+           MRM t e
 liftSC4 f a b c d = mrSC >>= \sc -> liftIO (f sc a b c d)
 
 -- | Lift a quinary SharedTerm computation into 'MRM'
 liftSC5 :: (SharedContext -> a -> b -> c -> d -> e -> IO f) ->
-           a -> b -> c -> d -> e -> MRM f
+           a -> b -> c -> d -> e -> MRM t f
 liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 
 
@@ -468,25 +500,25 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 ----------------------------------------------------------------------
 
 -- | Create a term representing the type @IsFinite n@
-mrIsFinite :: Term -> MRM Term
+mrIsFinite :: Term -> MRM t Term
 mrIsFinite n = liftSC2 scGlobalApply "CryptolM.isFinite" [n]
 
 -- | Create a term representing an application of @Prelude.error@
-mrErrorTerm :: Term -> T.Text -> MRM Term
+mrErrorTerm :: Term -> T.Text -> MRM t Term
 mrErrorTerm a str =
   do err_str <- liftSC1 scString str
      liftSC2 scGlobalApply "Prelude.error" [a, err_str]
 
 -- | Create a term representing an application of @Prelude.genBVVecFromVec@,
 -- where the default value argument is @Prelude.error@ of the given 'T.Text'
-mrGenBVVecFromVec :: Term -> Term -> Term -> T.Text -> Term -> Term -> MRM Term
+mrGenBVVecFromVec :: Term -> Term -> Term -> T.Text -> Term -> Term -> MRM t Term
 mrGenBVVecFromVec m a v def_err_str n len =
   do err_tm <- mrErrorTerm a def_err_str
      liftSC2 scGlobalApply "Prelude.genBVVecFromVec" [m, a, v, err_tm, n, len]
 
 -- | Create a term representing an application of @Prelude.genFromBVVec@,
 -- where the default value argument is @Prelude.error@ of the given 'T.Text'
-mrGenFromBVVec :: Term -> Term -> Term -> Term -> T.Text -> Term -> MRM Term
+mrGenFromBVVec :: Term -> Term -> Term -> Term -> T.Text -> Term -> MRM t Term
 mrGenFromBVVec n len a v def_err_str m =
   do err_tm <- mrErrorTerm a def_err_str
      liftSC2 scGlobalApply "Prelude.genFromBVVec" [n, len, a, v, err_tm, m]
@@ -497,7 +529,7 @@ mrGenFromBVVec n len a v def_err_str m =
 ----------------------------------------------------------------------
 
 -- | Apply a 'TermProj' to perform a projection on a 'Term'
-doTermProj :: Term -> TermProj -> MRM Term
+doTermProj :: Term -> TermProj -> MRM t Term
 doTermProj (asPairValue -> Just (t, _)) TermProjLeft = return t
 doTermProj (asPairValue -> Just (_, t)) TermProjRight = return t
 doTermProj (asRecordValue -> Just t_map) (TermProjRecord fld)
@@ -508,7 +540,7 @@ doTermProj t (TermProjRecord fld) = liftSC2 scRecordSelect t fld
 
 -- | Apply a 'TermProj' to a type to get the output type of the projection,
 -- assuming that the type is already normalized
-doTypeProj :: Term -> TermProj -> MRM Term
+doTypeProj :: Term -> TermProj -> MRM t Term
 doTypeProj (asPairType -> Just (tp1, _)) TermProjLeft = return tp1
 doTypeProj (asPairType -> Just (_, tp2)) TermProjRight = return tp2
 doTypeProj (asRecordType -> Just tp_map) (TermProjRecord fld)
@@ -520,7 +552,7 @@ doTypeProj _ _ =
   error "doTypeProj"
 
 -- | Get and normalize the type of a 'FunName'
-funNameType :: FunName -> MRM Term
+funNameType :: FunName -> MRM t Term
 funNameType (CallSName var) = liftSC1 scWhnf $ mrVarType var
 funNameType (EVarFunName var) = liftSC1 scWhnf $ mrVarType var
 funNameType (GlobalName gd projs) =
@@ -528,28 +560,28 @@ funNameType (GlobalName gd projs) =
   foldM doTypeProj gd_tp projs
 
 -- | Apply a 'Term' to a list of arguments and beta-reduce in Mr. Monad
-mrApplyAll :: Term -> [Term] -> MRM Term
+mrApplyAll :: Term -> [Term] -> MRM t Term
 mrApplyAll f args = liftSC2 scApplyAllBeta f args
 
 -- | Apply a 'Term' to a single argument and beta-reduce in Mr. Monad
-mrApply :: Term -> Term -> MRM Term
+mrApply :: Term -> Term -> MRM t Term
 mrApply f arg = mrApplyAll f [arg]
 
 -- | Return the unit type as a 'Type'
-mrUnitType :: MRM Type
+mrUnitType :: MRM t Type
 mrUnitType = Type <$> liftSC0 scUnitType
 
 -- | Build a constructor application in Mr. Monad
-mrCtorApp :: Ident -> [Term] -> MRM Term
+mrCtorApp :: Ident -> [Term] -> MRM t Term
 mrCtorApp = liftSC2 scCtorApp
 
 -- | Build a 'Term' for a global in Mr. Monad
-mrGlobalTerm :: Ident -> MRM Term
+mrGlobalTerm :: Ident -> MRM t Term
 mrGlobalTerm = liftSC1 scGlobalDef
 
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
-mrBvToNat :: Term -> Term -> MRM Term
+mrBvToNat :: Term -> Term -> MRM t Term
 mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
                                    mapM asBool -> Just bits)) =
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
@@ -558,30 +590,30 @@ mrBvToNat n len = liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
 -- the order as seen "from the outside"
-mrUVarsOuterToInner :: MRM [(LocalName,Term)]
+mrUVarsOuterToInner :: MRM t [(LocalName,Term)]
 mrUVarsOuterToInner = mrVarCtxOuterToInner <$> mrUVars
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the most recently bound uvar first, i.e., in
 -- the order as seen "from the inside"
-mrUVarsInnerToOuter :: MRM [(LocalName,Term)]
+mrUVarsInnerToOuter :: MRM t [(LocalName,Term)]
 mrUVarsInnerToOuter = mrVarCtxInnerToOuter <$> mrUVars
 
 -- | Get the type of a 'Term' in the current uvar context
-mrTypeOf :: Term -> MRM Term
+mrTypeOf :: Term -> MRM t Term
 mrTypeOf t =
   -- NOTE: scTypeOf' wants the type context in the most recently bound var first
   -- mrDebugPPPrefix 3 "mrTypeOf:" t >>
   mrUVarsInnerToOuter >>= \ctx -> liftSC2 scTypeOf' (map snd ctx) t
 
 -- | Check if two 'Term's are convertible in the 'MRM' monad
-mrConvertible :: Term -> Term -> MRM Bool
+mrConvertible :: Term -> Term -> MRM t Bool
 mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 
 -- | Take a 'FunName' @f@ for a monadic function of type @vars -> SpecM a@ and
 -- compute the type @SpecM [args/vars]a@ of @f@ applied to @args@. Return the
 -- type @[args/vars]a@ that @SpecM@ is applied to, along with its parameters.
-mrFunOutType :: FunName -> [Term] -> MRM (SpecMParams Term, Term)
+mrFunOutType :: FunName -> [Term] -> MRM t (SpecMParams Term, Term)
 mrFunOutType fname args =
   mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
     (asSpecM -> Just (params, tp)) -> (params,) <$> liftSC1 scWhnf tp
@@ -611,7 +643,7 @@ uniquifyNames (nm:nms) nms_other =
 -- | Build a lambda term with the lifting (in the sense of 'incVars') of an
 -- MR Solver term
 mrLambdaLift :: TermLike tm => [(LocalName,Term)] -> tm ->
-                ([Term] -> tm -> MRM Term) -> MRM Term
+                ([Term] -> tm -> MRM t Term) -> MRM t Term
 mrLambdaLift [] t f = f [] t
 mrLambdaLift ctx t f =
   do -- uniquifyNames doesn't care about the order of the names in its second,
@@ -629,7 +661,7 @@ mrLambdaLift ctx t f =
 
 -- | Call 'mrLambdaLift' with exactly one 'Term' argument.
 mrLambdaLift1 :: TermLike tm => (LocalName,Term) -> tm ->
-                 (Term -> tm -> MRM Term) -> MRM Term
+                 (Term -> tm -> MRM t Term) -> MRM t Term
 mrLambdaLift1 ctx t f =
   mrLambdaLift [ctx] t $ \vars t' ->
     case vars of
@@ -638,7 +670,7 @@ mrLambdaLift1 ctx t f =
 
 -- | Call 'mrLambdaLift' with exactly two 'Term' arguments.
 mrLambdaLift2 :: TermLike tm => (LocalName,Term) -> (LocalName,Term) -> tm ->
-                 (Term -> Term -> tm -> MRM Term) -> MRM Term
+                 (Term -> Term -> tm -> MRM t Term) -> MRM t Term
 mrLambdaLift2 ctx1 ctx2 t f =
   mrLambdaLift [ctx1, ctx2] t $ \vars t' ->
     case vars of
@@ -648,7 +680,7 @@ mrLambdaLift2 ctx1 ctx2 t f =
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
 -- assumptions made in the sub-computation will be lost when it completes.
-withUVar :: LocalName -> Type -> (Term -> MRM a) -> MRM a
+withUVar :: LocalName -> Type -> (Term -> MRM t a) -> MRM t a
 withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) $ \case
   [v] -> m v
   _   -> error "withUVar: impossible"
@@ -656,13 +688,13 @@ withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) $ \case
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
 withUVarLift :: TermLike tm => LocalName -> Type -> tm ->
-                (Term -> tm -> MRM a) -> MRM a
+                (Term -> tm -> MRM t a) -> MRM t a
 withUVarLift nm tp t m =
   withUVar nm tp (\x -> liftTermLike 0 1 t >>= m x)
 
 -- | Run a MR Solver computation in a context extended with a list of universal
 -- variables, passing 'Term's for those variables to the supplied computation.
-withUVars :: MRVarCtx -> ([Term] -> MRM a) -> MRM a
+withUVars :: MRVarCtx -> ([Term] -> MRM t a) -> MRM t a
 withUVars (mrVarCtxLength -> 0) f = f []
 withUVars ctx f =
   do -- for uniquifyNames, we want to consider the oldest names first, thus we
@@ -687,7 +719,7 @@ withUVars ctx f =
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
 
 -- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
-withNoUVars :: MRM a -> MRM a
+withNoUVars :: MRM t a -> MRM t a
 withNoUVars m =
   do true_tm <- liftSC1 scBool True
      local (\info -> info { mriUVars = emptyMRVarCtx, mriAssumptions = true_tm,
@@ -695,35 +727,35 @@ withNoUVars m =
 
 -- | Run a MR Solver in a context of only the specified UVars, no others -
 -- note that this also clears all assumptions
-withOnlyUVars :: MRVarCtx -> MRM a -> MRM a
+withOnlyUVars :: MRVarCtx -> MRM t a -> MRM t a
 withOnlyUVars vars m = withNoUVars $ withUVars vars $ const m
 
 -- | Build 'Term's for all the uvars currently in scope, ordered from least to
 -- most recently bound
-getAllUVarTerms :: MRM [Term]
+getAllUVarTerms :: MRM t [Term]
 getAllUVarTerms =
   (mrVarCtxLength <$> mrUVars) >>= \len ->
   mapM (liftSC1 scLocalVar) [len-1, len-2 .. 0]
 
 -- | Lambda-abstract all the current uvars out of a 'Term', with the least
 -- recently bound variable being abstracted first
-lambdaUVarsM :: Term -> MRM Term
+lambdaUVarsM :: Term -> MRM t Term
 lambdaUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scLambdaList ctx t
 
 -- | Pi-abstract all the current uvars out of a 'Term', with the least recently
 -- bound variable being abstracted first
-piUVarsM :: Term -> MRM Term
+piUVarsM :: Term -> MRM t Term
 piUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scPiList ctx t
 
 -- | Instantiate all uvars in a term using the supplied function
-instantiateUVarsM :: TermLike a => (LocalName -> Term -> MRM Term) -> a -> MRM a
+instantiateUVarsM :: forall a t. TermLike a => (LocalName -> Term -> MRM t Term) -> a -> MRM t a
 instantiateUVarsM f a =
   do ctx <- mrUVarsOuterToInner
      -- Remember: the uvar context is outermost to innermost, so we bind
      -- variables from left to right, substituting earlier ones into the types
      -- of later ones, but all substitutions are in reverse order, since
      -- substTerm and friends like innermost bindings first
-     let helper :: [Term] -> [(LocalName,Term)] -> MRM [Term]
+     let helper :: [Term] -> [(LocalName,Term)] -> MRM t [Term]
          helper tms [] = return tms
          helper tms ((nm,tp):vars) =
            do tp' <- substTerm 0 tms tp
@@ -733,7 +765,7 @@ instantiateUVarsM f a =
      substTermLike 0 ecs a
 
 -- | Convert an 'MRVar' to a 'Term', applying it to all the uvars in scope
-mrVarTerm :: MRVar -> MRM Term
+mrVarTerm :: MRVar -> MRM t Term
 mrVarTerm (MRVar ec) =
   do var_tm <- liftSC1 scExtCns ec
      vars <- getAllUVarTerms
@@ -743,15 +775,15 @@ mrVarTerm (MRVar ec) =
 -- should be of @Prop@ sort, by creating an 'ExtCns' axiom. This is sound as
 -- long as we only use the resulting term in computation branches where we know
 -- the proposition holds.
-mrDummyProof :: Term -> MRM Term
+mrDummyProof :: Term -> MRM t Term
 mrDummyProof tp = mrFreshVar "pf" tp >>= mrVarTerm
 
 -- | Get the 'VarInfo' associated with a 'MRVar'
-mrVarInfo :: MRVar -> MRM (Maybe MRVarInfo)
+mrVarInfo :: MRVar -> MRM t (Maybe MRVarInfo)
 mrVarInfo var = Map.lookup var <$> mrVars
 
 -- | Convert an 'ExtCns' to a 'FunName'
-extCnsToFunName :: ExtCns Term -> MRM FunName
+extCnsToFunName :: ExtCns Term -> MRM t FunName
 extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
   Just (EVarInfo _) -> return $ EVarFunName var
   Just (CallVarInfo _) -> return $ CallSName var
@@ -761,19 +793,19 @@ extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
   _ -> error "extCnsToFunName: unreachable"
 
 -- | Get the 'FunName' of a global definition
-mrGlobalDef :: Ident -> MRM FunName
+mrGlobalDef :: Ident -> MRM t FunName
 mrGlobalDef ident = asTypedGlobalDef <$> liftSC1 scGlobalDef ident >>= \case
   Just glob -> return $ GlobalName glob []
   _ -> error $ "mrGlobalDef: could not get GlobalDef of: " ++ show ident
 
 -- | Get the body of a global definition, raising an 'error' if none is found
-mrGlobalDefBody :: Ident -> MRM Term
+mrGlobalDefBody :: Ident -> MRM t Term
 mrGlobalDefBody ident = asConstant <$> liftSC1 scGlobalDef ident >>= \case
   Just (_, Just body) -> return body
   _ -> error $ "mrGlobalDefBody: global has no definition: " ++ show ident
 
 -- | Get the body of a function @f@ if it has one
-mrFunNameBody :: FunName -> MRM (Maybe Term)
+mrFunNameBody :: FunName -> MRM t (Maybe Term)
 mrFunNameBody (CallSName var) =
   mrVarInfo var >>= \case
   Just (CallVarInfo body) -> return $ Just body
@@ -785,7 +817,7 @@ mrFunNameBody (GlobalName _ _) = return Nothing
 mrFunNameBody (EVarFunName _) = return Nothing
 
 -- | Get the body of a function @f@ applied to some arguments, if possible
-mrFunBody :: FunName -> [Term] -> MRM (Maybe Term)
+mrFunBody :: FunName -> [Term] -> MRM t (Maybe Term)
 mrFunBody f args = mrFunNameBody f >>= \case
   Just body -> Just <$> mrApplyAll body args
   Nothing -> return Nothing
@@ -793,7 +825,7 @@ mrFunBody f args = mrFunNameBody f >>= \case
 -- | Get the body of a function @f@ applied to some arguments, as per
 -- 'mrFunBody', and also return whether its body recursively calls itself, as
 -- per 'mrCallsFun'
-mrFunBodyRecInfo :: FunName -> [Term] -> MRM (Maybe (Term, Bool))
+mrFunBodyRecInfo :: FunName -> [Term] -> MRM t (Maybe (Term, Bool))
 mrFunBodyRecInfo f args =
   mrFunBody f args >>= \case
   Just f_body -> Just <$> (f_body,) <$> mrCallsFun f f_body
@@ -801,7 +833,7 @@ mrFunBodyRecInfo f args =
 
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
 -- to a given function @f@ again
-mrCallsFun :: FunName -> Term -> MRM Bool
+mrCallsFun :: FunName -> Term -> MRM t Bool
 mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
   (asExtCns -> Just ec) ->
     do g <- extCnsToFunName ec
@@ -822,7 +854,7 @@ mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
 -- equality representing the proposition that the 'DataTypeAssump' holds.
 -- For example, @mrDataTypeAssumpTerm x (IsLeft y)@ for @x : Either a b@
 -- would return @Eq (Either a b) x (Left a b y)@.
-mrDataTypeAssumpTerm :: Term -> DataTypeAssump -> MRM Term
+mrDataTypeAssumpTerm :: Term -> DataTypeAssump -> MRM t Term
 mrDataTypeAssumpTerm x dt =
   do tp <- mrTypeOf x
      y <- case dt of
@@ -841,23 +873,25 @@ mrDataTypeAssumpTerm x dt =
 -- | Return the 'Term' which is the refinement (@Prelude.refinesS@) of the
 -- given 'Term's, after quantifying over all current 'mrUVars' with Pi types
 -- and adding calls to @assertS@ on the right hand side for any current
--- 'mrAssumps' and/or 'mrDataTypeAssump's
-mrRefinementGoal :: Term -> Term -> MRM Term
-mrRefinementGoal t1 t2 =
+-- 'mrAssumps' and/or 'mrDataTypeAssump's if the given 'Bool' is 'True'
+mrRefinementTerm :: Bool ->  Term -> Term -> MRM t Term
+mrRefinementTerm includeAssumps t1 t2 =
   do (SpecMParams ev1 stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
      (SpecMParams ev2 stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
      assumps <- mrAssumptions
      assumpsAssert <- liftSC2 scGlobalApply "Prelude.assertBoolS"
                               [ev2, stack2, assumps]
-     t2' <- case asBool assumps of
-              Just True -> return t2
-              _ -> bindConst ev2 stack2 tp2 assumpsAssert t2
+     t2' <- if includeAssumps && asBool assumps /= Just True
+            then bindConst ev2 stack2 tp2 assumpsAssert t2
+            else return t2
      dtAssumps <- HashMap.toList <$> mrDataTypeAssumps
      dtAssumpAsserts <- forM dtAssumps $ \(nm, assump) ->
        do assump_tm <- mrDataTypeAssumpTerm nm assump
           liftSC2 scGlobalApply "Prelude.assertS"
                   [ev2, stack2, assump_tm]
-     t2'' <- foldrM (bindConst ev2 stack2 tp2) t2' dtAssumpAsserts
+     t2'' <- if includeAssumps
+             then foldrM (bindConst ev2 stack2 tp2) t2' dtAssumpAsserts
+             else return t2'
      coIndHyps <- mrCoIndHyps
      (rpre, rpost, rr) <-
        if Map.null coIndHyps
@@ -883,16 +917,16 @@ mrRefinementGoal t1 t2 =
 
 -- | Make a fresh 'MRVar' of a given type, which must be closed, i.e., have no
 -- free uvars
-mrFreshVarCl :: LocalName -> Term -> MRM MRVar
+mrFreshVarCl :: LocalName -> Term -> MRM t MRVar
 mrFreshVarCl nm tp = MRVar <$> liftSC2 scFreshEC nm tp
 
 -- | Make a fresh 'MRVar' of type @(u1:tp1) -> ... (un:tpn) -> tp@, where the
 -- @ui@ are all the current uvars
-mrFreshVar :: LocalName -> Term -> MRM MRVar
+mrFreshVar :: LocalName -> Term -> MRM t MRVar
 mrFreshVar nm tp = piUVarsM tp >>= mrFreshVarCl nm
 
 -- | Set the info associated with an 'MRVar', assuming it has not been set
-mrSetVarInfo :: MRVar -> MRVarInfo -> MRM ()
+mrSetVarInfo :: MRVar -> MRVarInfo -> MRM t ()
 mrSetVarInfo var info =
   debugPretty 3 ("mrSetVarInfo" <+> ppInEmptyCtx var <+> "=" <+> ppInEmptyCtx info) >>
   (modify $ \st ->
@@ -904,7 +938,7 @@ mrSetVarInfo var info =
 
 -- | Make a fresh existential variable of the given type, abstracting out all
 -- the current uvars and returning the new evar applied to all current uvars
-mrFreshEVar :: LocalName -> Type -> MRM Term
+mrFreshEVar :: LocalName -> Type -> MRM t Term
 mrFreshEVar nm (Type tp) =
   do var <- mrFreshVar nm tp
      mrSetVarInfo var (EVarInfo Nothing)
@@ -912,21 +946,21 @@ mrFreshEVar nm (Type tp) =
 
 -- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
 -- Return the new evars all applied to the current uvars.
-mrFreshEVars :: MRVarCtx -> MRM [Term]
+mrFreshEVars :: MRVarCtx -> MRM t [Term]
 mrFreshEVars = helper [] . mrVarCtxOuterToInner where
   -- Return fresh evars for the suffix of a context of variable names and types,
   -- where the supplied Terms are evars that have already been generated for the
   -- earlier part of the context, and so must be substituted into the remaining
   -- types in the context. Since we want to make fresh evars for the oldest
   -- variables first, the second argument must be in outer-to-inner order.
-  helper :: [Term] -> [(LocalName,Term)] -> MRM [Term]
+  helper :: [Term] -> [(LocalName,Term)] -> MRM t [Term]
   helper evars [] = return evars
   helper evars ((nm,tp):ctx) =
     do evar <- substTerm 0 evars tp >>= mrFreshEVar nm . Type
        helper (evar:evars) ctx
 
 -- | Set the value of an evar to a closed term
-mrSetEVarClosed :: MRVar -> Term -> MRM ()
+mrSetEVarClosed :: MRVar -> Term -> MRM t ()
 mrSetEVarClosed var val =
   do val_tp <- mrTypeOf val
      -- NOTE: need to instantiate any evars in the type of var, to ensure the
@@ -957,7 +991,7 @@ mrSetEVarClosed var val =
 -- expression @e@ by trying to set @X@ to @\ x1 ... xn -> e@. This only works if
 -- each free uvar @xi@ in @e@ is one of the arguments @ej@ to @X@ (though it
 -- need not be the case that @i=j@). Return whether this succeeded.
-mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM Bool
+mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM t Bool
 mrTrySetAppliedEVar evar args t =
   -- Get the complete list of argument variables of the type of evar
   let (evar_vars, _) = asPiList (mrVarType evar) in
@@ -998,7 +1032,7 @@ mrTrySetAppliedEVar evar args t =
 
 
 -- | Replace all evars in a 'Term' with their instantiations when they have one
-mrSubstEVars :: Term -> MRM Term
+mrSubstEVars :: Term -> MRM t Term
 mrSubstEVars = memoFixTermFun $ \recurse t ->
   do var_map <- mrVars
      case t of
@@ -1010,7 +1044,7 @@ mrSubstEVars = memoFixTermFun $ \recurse t ->
 
 -- | Replace all evars in a 'Term' with their instantiations, returning
 -- 'Nothing' if we hit an uninstantiated evar
-mrSubstEVarsStrict :: Term -> MRM (Maybe Term)
+mrSubstEVarsStrict :: Term -> MRM t (Maybe Term)
 mrSubstEVarsStrict top_t =
   runMaybeT $ flip memoFixTermFun top_t $ \recurse t ->
   do var_map <- lift mrVars
@@ -1025,15 +1059,15 @@ mrSubstEVarsStrict top_t =
        _ -> traverseSubterms recurse t
 
 -- | Makes 'mrSubstEVarsStrict' be marked as used
-_mrSubstEVarsStrict :: Term -> MRM (Maybe Term)
+_mrSubstEVarsStrict :: Term -> MRM t (Maybe Term)
 _mrSubstEVarsStrict = mrSubstEVarsStrict
 
 -- | Get the 'CoIndHyp' for a pair of 'FunName's, if there is one
-mrGetCoIndHyp :: FunName -> FunName -> MRM (Maybe CoIndHyp)
+mrGetCoIndHyp :: FunName -> FunName -> MRM t (Maybe CoIndHyp)
 mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 
 -- | Run a compuation under an additional co-inductive assumption
-withCoIndHyp :: CoIndHyp -> MRM a -> MRM a
+withCoIndHyp :: CoIndHyp -> MRM t a -> MRM t a
 withCoIndHyp hyp m =
   do debugPretty 2 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
      hyps' <- Map.insert (coIndHypLHSFun hyp,
@@ -1042,7 +1076,7 @@ withCoIndHyp hyp m =
 
 -- | Generate fresh evars for the context of a 'CoIndHyp' and
 -- substitute them into its arguments and right-hand side
-instantiateCoIndHyp :: CoIndHyp -> MRM ([Term], [Term])
+instantiateCoIndHyp :: CoIndHyp -> MRM t ([Term], [Term])
 instantiateCoIndHyp (CoIndHyp {..}) =
   do evars <- mrFreshEVars coIndHypCtx
      lhs <- substTermLike 0 evars coIndHypLHS
@@ -1052,9 +1086,9 @@ instantiateCoIndHyp (CoIndHyp {..}) =
 -- | Apply the invariants of a 'CoIndHyp' to their respective arguments,
 -- yielding @Bool@ conditions, using the constant @True@ value when an
 -- invariant is absent
-applyCoIndHypInvariants :: CoIndHyp -> MRM (Term, Term)
+applyCoIndHypInvariants :: CoIndHyp -> MRM t (Term, Term)
 applyCoIndHypInvariants hyp =
-  let apply_invariant :: Maybe Term -> [Term] -> MRM Term
+  let apply_invariant :: Maybe Term -> [Term] -> MRM t Term
       apply_invariant (Just (asLambdaList -> (vars, phi))) args
         | length vars == length args
           -- NOTE: applying to a list of arguments == substituting the reverse
@@ -1069,23 +1103,21 @@ applyCoIndHypInvariants hyp =
      return (invar1, invar2)
 
 -- | Look up the 'FunAssump' for a 'FunName', if there is one
-mrGetFunAssump :: FunName -> MRM (Maybe FunAssump)
-mrGetFunAssump nm = Map.lookup nm <$> mrFunAssumps
+mrGetFunAssump :: FunName -> MRM t (Maybe (FunAssump t))
+mrGetFunAssump nm = lookupFunAssump nm <$> mrRefnset
 
 -- | Run a computation under the additional assumption that a named function
 -- applied to a list of arguments refines a given right-hand side, all of which
 -- are 'Term's that can have the current uvars free
-withFunAssump :: FunName -> [Term] -> NormComp -> MRM a -> MRM a
+withFunAssump :: FunName -> [Term] -> Term -> MRM t a -> MRM t a
 withFunAssump fname args rhs m =
   do k <- mkCompFunReturn <$> mrFunOutType fname args
      mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k) "|=" rhs
      ctx <- mrUVars
-     assumps <- mrFunAssumps
-     let assump = FunAssump ctx args (RewriteFunAssump rhs)
-     let assumps' = Map.insert fname assump assumps
-     local (\info ->
-             let env' = (mriEnv info) { mreFunAssumps = assumps' } in
-             info { mriEnv = env' }) m
+     rs <- mrRefnset
+     let assump = FunAssump ctx fname args (RewriteFunAssump rhs) Nothing
+     let rs' = addFunAssump assump rs
+     local (\info -> info { mriRefnset = rs' }) m
 
 -- | Get the invariant hint associated with a function name, by unfolding the
 -- name and checking if its body has the form
@@ -1095,14 +1127,14 @@ withFunAssump fname args rhs m =
 -- If so, return @\ x1 ... xn -> phi@ as a term with the @xi@ variables free.
 -- Otherwise, return 'Nothing'. Note that this function will also look past
 -- any initial @bindM ... (assertFiniteM ...)@ applications.
-mrGetInvariant :: FunName -> MRM (Maybe Term)
+mrGetInvariant :: FunName -> MRM t (Maybe Term)
 mrGetInvariant nm =
   mrFunNameBody nm >>= \case
     Just body -> mrGetInvariantBody body
     _ -> return Nothing
 
 -- | The main loop of 'mrGetInvariant', which operates on a function body
-mrGetInvariantBody :: Term -> MRM (Maybe Term)
+mrGetInvariantBody :: Term -> MRM t (Maybe Term)
 mrGetInvariantBody tm = case asApplyAll tm of
   -- go inside any top-level lambdas
   (asLambda -> Just (nm, tp, body), []) ->
@@ -1129,7 +1161,7 @@ mrGetInvariantBody tm = case asApplyAll tm of
 
 -- | Add an assumption of type @Bool@ to the current path condition while
 -- executing a sub-computation
-withAssumption :: Term -> MRM a -> MRM a
+withAssumption :: Term -> MRM t a -> MRM t a
 withAssumption phi m =
   do mrDebugPPPrefix 1 "withAssumption" phi
      assumps <- mrAssumptions
@@ -1137,28 +1169,34 @@ withAssumption phi m =
      local (\info -> info { mriAssumptions = assumps' }) m
 
 -- | Remove any existing assumptions and replace them with a Boolean term
-withOnlyAssumption :: Term -> MRM a -> MRM a
+withOnlyAssumption :: Term -> MRM t a -> MRM t a
 withOnlyAssumption phi m =
   do mrDebugPPPrefix 1 "withOnlyAssumption" phi
      local (\info -> info { mriAssumptions = phi }) m
 
 -- | Add a 'DataTypeAssump' to the current context while executing a
 -- sub-computations
-withDataTypeAssump :: Term -> DataTypeAssump -> MRM a -> MRM a
+withDataTypeAssump :: Term -> DataTypeAssump -> MRM t a -> MRM t a
 withDataTypeAssump x assump m =
   do mrDebugPPPrefixSep 1 "withDataTypeAssump" x "==" assump
      dataTypeAssumps' <- HashMap.insert x assump <$> mrDataTypeAssumps
      local (\info -> info { mriDataTypeAssumps = dataTypeAssumps' }) m
 
 -- | Get the 'DataTypeAssump' associated to the given term, if one exists
-mrGetDataTypeAssump :: Term -> MRM (Maybe DataTypeAssump)
+mrGetDataTypeAssump :: Term -> MRM t (Maybe DataTypeAssump)
 mrGetDataTypeAssump x = HashMap.lookup x <$> mrDataTypeAssumps
 
--- | Convert a 'FunAssumpRHS' to a 'NormComp'
-mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM NormComp
-mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
-  FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
-mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = return rhs
+-- | Record a use of an SMT solver (for tracking 'SolverStats' and 'MRSolverEvidence')
+recordUsedSolver :: SolverStats -> Term -> MRM t ()
+recordUsedSolver stats prop =
+  modify $ \st -> st { mrsSolverStats = stats <> mrsSolverStats st,
+                       mrsEvidence = MREUsedSolver stats prop : mrsEvidence st }
+
+-- | Record a use of a 'FunAssump' (for 'MRSolverEvidence')
+recordUsedFunAssump :: FunAssump t -> MRM t ()
+recordUsedFunAssump (fassumpAnnotation -> Just t) =
+  modify $ \st -> st { mrsEvidence = MREUsedFunAssump t : mrsEvidence st }
+recordUsedFunAssump _ = return ()
 
 
 ----------------------------------------------------------------------
@@ -1166,27 +1204,27 @@ mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = return rhs
 ----------------------------------------------------------------------
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
-debugPrint :: Int -> String -> MRM ()
+debugPrint :: Int -> String -> MRM t ()
 debugPrint i str =
   mrDebugLevel >>= \lvl ->
   if lvl >= i then liftIO (hPutStrLn stderr str) else return ()
 
 -- | Print a document if the debug level is at least the supplied 'Int'
-debugPretty :: Int -> SawDoc -> MRM ()
+debugPretty :: Int -> SawDoc -> MRM t ()
 debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
 
 -- | Pretty-print an object in the current context if the current debug level is
 -- at least the supplied 'Int'
-debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM ()
+debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM t ()
 debugPrettyInCtx i a = mrUVars >>= \ctx -> debugPrint i (showInCtx ctx a)
 
 -- | Pretty-print an object relative to the current context
-mrPPInCtx :: PrettyInCtx a => a -> MRM SawDoc
+mrPPInCtx :: PrettyInCtx a => a -> MRM t SawDoc
 mrPPInCtx a = runPPInCtxM (prettyInCtx a) <$> mrUVars
 
 -- | Pretty-print the result of 'ppWithPrefix' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
-mrDebugPPPrefix :: PrettyInCtx a => Int -> String -> a -> MRM ()
+mrDebugPPPrefix :: PrettyInCtx a => Int -> String -> a -> MRM t ()
 mrDebugPPPrefix i pre a =
   mrUVars >>= \ctx ->
   debugPretty i $
@@ -1195,7 +1233,7 @@ mrDebugPPPrefix i pre a =
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
 -- context to 'stderr' if the debug level is at least the 'Int' provided
 mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
-                      Int -> String -> a -> String -> b -> MRM ()
+                      Int -> String -> a -> String -> b -> MRM t ()
 mrDebugPPPrefixSep i pre a1 sp a2 =
   mrUVars >>= \ctx ->
   debugPretty i $
