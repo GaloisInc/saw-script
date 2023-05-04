@@ -24,15 +24,14 @@ monadic combinators for operating on terms.
 
 module SAWScript.Prover.MRSolver.Monad where
 
-import Data.Maybe (fromJust)
 import Data.List (find, findIndex, foldl')
-import Data.Foldable (foldrM)
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
+import GHC.Generics
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -76,7 +75,6 @@ data MRFailure
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
   | MalformedLetRecTypes Term
-  | MalformedDataTypeAssump Term
   | MalformedDefs Term
   | MalformedComp Term
   | NotCompFunType Term
@@ -156,9 +154,6 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Recursive unfolding of function inside its own body:" nm
   prettyInCtx (MalformedLetRecTypes t) =
     ppWithPrefix "Not a ground LetRecTypes list:" t
-  prettyInCtx (MalformedDataTypeAssump t) =
-    ppWithPrefix ("assertS/assumeS expects a Bool, Either, or TCNum equality"
-                  ++ " with a constructor on one side, got:") t
   prettyInCtx (MalformedDefs t) =
     ppWithPrefix "Cannot handle multiFixS recursive definitions term:" t
   prettyInCtx (MalformedComp t) =
@@ -292,6 +287,18 @@ instance PrettyInCtx CoIndHyp where
                    prettyTermApp (funNameTerm f1) args1,
                    return "|=",
                    prettyTermApp (funNameTerm f2) args2]
+
+-- | An assumption that something is equal to one of the constructors of a
+-- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'
+data DataTypeAssump
+  = IsLeft Term | IsRight Term | IsNum Term | IsInf
+  deriving (Generic, Show, TermLike)
+
+instance PrettyInCtx DataTypeAssump where
+  prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _"
+  prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
+  prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
+  prettyInCtx IsInf = return "TCInf"
 
 -- | A map from 'Term's to 'DataTypeAssump's over that term
 type DataTypeAssumps = HashMap Term DataTypeAssump
@@ -849,66 +856,6 @@ mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
       Nothing -> return False
   (unwrapTermF -> tf) ->
     foldM (\b t' -> if b then return b else recurse t') False tf
-
--- | Given a 'DataTypeAssump' and a 'Term' to which it applies, return the
--- equality representing the proposition that the 'DataTypeAssump' holds.
--- For example, @mrDataTypeAssumpTerm x (IsLeft y)@ for @x : Either a b@
--- would return @Eq (Either a b) x (Left a b y)@.
-mrDataTypeAssumpTerm :: Term -> DataTypeAssump -> MRM t Term
-mrDataTypeAssumpTerm x dt =
-  do tp <- mrTypeOf x
-     y <- case dt of
-            IsLeft y
-              | Just (primName -> "Prelude.Either", [a, b]) <- asDataType tp ->
-                liftSC2 scCtorApp "Prelude.Left" [a, b, y]
-              | otherwise -> error $ "IsLeft expected Either, got: " ++ show tp
-            IsRight y
-              | Just (primName -> "Prelude.Either", [a, b]) <- asDataType tp ->
-                liftSC2 scCtorApp "Prelude.Right" [a, b, y]
-              | otherwise -> error $ "IsRight expected Either, got: " ++ show tp
-            IsNum y -> liftSC2 scCtorApp "Prelude.TCNum" [y]
-            IsInf -> liftSC2 scCtorApp "Prelude.TCInf" []
-     liftSC2 scGlobalApply "Prelude.Eq" [tp, x, y]
-
--- | Return the 'Term' which is the refinement (@Prelude.refinesS@) of the
--- given 'Term's, after quantifying over all current 'mrUVars' with Pi types
--- and adding calls to @assertS@ on the right hand side for any current
--- 'mrAssumps' and/or 'mrDataTypeAssump's if the given 'Bool' is 'True'
-mrRefinementTerm :: Bool ->  Term -> Term -> MRM t Term
-mrRefinementTerm includeAssumps t1 t2 =
-  do (SpecMParams ev1 stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
-     (SpecMParams ev2 stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
-     assumps <- mrAssumptions
-     assumpsAssert <- liftSC2 scGlobalApply "Prelude.assertBoolS"
-                              [ev2, stack2, assumps]
-     t2' <- if includeAssumps && asBool assumps /= Just True
-            then bindConst ev2 stack2 tp2 assumpsAssert t2
-            else return t2
-     dtAssumps <- HashMap.toList <$> mrDataTypeAssumps
-     dtAssumpAsserts <- forM dtAssumps $ \(nm, assump) ->
-       do assump_tm <- mrDataTypeAssumpTerm nm assump
-          liftSC2 scGlobalApply "Prelude.assertS"
-                  [ev2, stack2, assump_tm]
-     t2'' <- if includeAssumps
-             then foldrM (bindConst ev2 stack2 tp2) t2' dtAssumpAsserts
-             else return t2'
-     coIndHyps <- mrCoIndHyps
-     (rpre, rpost, rr) <-
-       if Map.null coIndHyps
-       then (,,) <$> liftSC2 scGlobalApply "Prelude.eqPreRel" [ev2, stack2]
-                 <*> liftSC2 scGlobalApply "Prelude.eqPostRel" [ev2, stack2]
-                 <*> liftSC2 scGlobalApply "Prelude.eqRR" [tp2]
-       else error "FIXME: Handle CoIndHyps in mrRefinementGoal"
-     ref_tm <- liftSC2 scGlobalApply "Prelude.refinesS"
-                       [ev1, ev2, stack1, stack2, rpre, rpost,
-                        tp1, tp2, rr, t1, t2'']
-     uvars <- mrUVarsOuterToInner
-     liftSC2 scPiList uvars ref_tm
-  where bindConst ev stack tp x y = 
-          do unit <- liftSC0 scUnitType
-             const_y <- liftSC3 incVars 0 1 y >>= liftSC3 scLambda "_" unit
-             liftSC2 scGlobalApply "Prelude.bindS"
-                     [ev, stack, unit, tp, x, const_y]
 
 
 ----------------------------------------------------------------------

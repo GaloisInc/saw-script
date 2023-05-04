@@ -306,16 +306,6 @@ normComp (CompTerm t) =
       do unit_tp <- mrUnitType
          return $ AssumeBoolBind cond (CompFunReturn
                                        (SpecMParams ev stack) unit_tp)
-    (isGlobalDef "Prelude.assertS" -> Just (), [ev, stack, prop]) ->
-      do unit_tp <- mrUnitType
-         assert <- either AssertBoolBind (uncurry AssertDataTypeBind)
-                     <$> normCompAssertAssumeBody prop
-         return $ assert (CompFunReturn (SpecMParams ev stack) unit_tp)
-    (isGlobalDef "Prelude.assumeS" -> Just (), [ev, stack, prop]) ->
-      do unit_tp <- mrUnitType
-         assume <- either AssumeBoolBind (uncurry AssumeDataTypeBind)
-                     <$> normCompAssertAssumeBody prop
-         return $ assume (CompFunReturn (SpecMParams ev stack) unit_tp)
     (isGlobalDef "Prelude.existsS" -> Just (), [ev, stack, tp]) ->
       do unit_tp <- mrUnitType
          return $ ExistsBind (Type tp) (CompFunReturn
@@ -459,26 +449,6 @@ normComp (CompTerm t) =
 
     _ -> throwMRFailure (MalformedComp t)
 
--- | Given the body of an @assertS@ or @assumeS@, return either the boolean
--- term @x@ if the body is of the form @Eq Bool x True@ or @Eq Bool True x@,
--- or a 'Term' @x@ and a 'DataTypeAssump' @c@ if the body is of the form
--- @Eq _ x (c ...)@ or @Eq _ (c ...) x@
-normCompAssertAssumeBody :: Term -> MRM t (Either Term (Term, DataTypeAssump))
-normCompAssertAssumeBody (asEq -> Just (_, x1, asBool -> Just True)) =
-  return $ Left x1
-normCompAssertAssumeBody (asEq -> Just (_, asBool -> Just True, x2)) =
-  return $ Left x2
-normCompAssertAssumeBody (asEq -> Just (_, x1, asEither -> Just e2)) =
-  return $ Right (x1, either IsLeft IsRight e2)
-normCompAssertAssumeBody (asEq -> Just (_, asEither -> Just e1, x2)) =
-  return $ Right (x2, either IsLeft IsRight e1)
-normCompAssertAssumeBody (asEq -> Just (_, x1, asNum -> Just e2)) =
-  return $ Right (x1, either IsNum (const IsInf) e2)
-normCompAssertAssumeBody (asEq -> Just (_, asNum -> Just e1, x2)) =
-  return $ Right (x2, either IsNum (const IsInf) e1)
-normCompAssertAssumeBody prop =
-  throwMRFailure (MalformedDataTypeAssump prop)
-
 
 -- | Bind a computation in whnf with a function, and normalize
 normBind :: NormComp -> CompFun -> MRM t NormComp
@@ -496,10 +466,6 @@ normBind (AssertBoolBind cond f) k =
   return $ AssertBoolBind cond (compFunComp f k)
 normBind (AssumeBoolBind cond f) k =
   return $ AssumeBoolBind cond (compFunComp f k)
-normBind (AssertDataTypeBind x assump f) k =
-  return $ AssertDataTypeBind x assump (compFunComp f k)
-normBind (AssumeDataTypeBind x assump f) k =
-  return $ AssumeDataTypeBind x assump (compFunComp f k)
 normBind (ExistsBind tp f) k = return $ ExistsBind tp (compFunComp f k)
 normBind (ForallBind tp f) k = return $ ForallBind tp (compFunComp f k)
 normBind (FunBind f args k1) k2
@@ -969,13 +935,6 @@ mrRefines' (AssertBoolBind cond1 k1) m2 =
   do m1 <- liftSC0 scUnitValue >>= applyCompFun k1
      withAssumption cond1 $ mrRefines m1 m2
 
-mrRefines' m1 (AssumeDataTypeBind x2 assump2 k2) =
-  do m2 <- liftSC0 scUnitValue >>= applyCompFun k2
-     withDataTypeAssump x2 assump2 $ mrRefines m1 m2
-mrRefines' (AssertDataTypeBind x1 assump1 k1) m2 =
-  do m1 <- liftSC0 scUnitValue >>= applyCompFun k1
-     withDataTypeAssump x1 assump1 $ mrRefines m1 m2
-
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
   withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
@@ -1169,14 +1128,6 @@ mrRefines'' (AssumeBoolBind cond1 k1) m2 =
      if cond1_pv then mrRefines m1 m2
        else throwMRFailure (AssumptionNotProvable cond1)
 
--- FIXME: Do something smarter here?
-mrRefines'' _ (AssertDataTypeBind t2 assump2 _) =
-  do cond2 <- mrDataTypeAssumpTerm t2 assump2
-     throwMRFailure (AssertionNotProvable cond2)
-mrRefines'' (AssumeDataTypeBind t1 assump1 _) _ =
-  do cond1 <- mrDataTypeAssumpTerm t1 assump1
-     throwMRFailure (AssertionNotProvable cond1)
-
 mrRefines'' m1 (ExistsBind tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
      evar <- mrFreshEVar nm tp
@@ -1321,6 +1272,22 @@ askMRSolver sc env timeout rs args t1 t2 =
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
        mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
+-- | The continuation passed to 'mrRefinesFunH' in 'refinementTerm' - returns
+-- the 'Term' which is the refinement (@Prelude.refinesS@) of the given
+-- 'Term's, after quantifying over all current 'mrUVars' with Pi types
+refinementTermH :: Term -> Term -> MRM t Term
+refinementTermH t1 t2 =
+  do (SpecMParams ev1 stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
+     (SpecMParams ev2 stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
+     rpre <- liftSC2 scGlobalApply "Prelude.eqPreRel" [ev2, stack2]
+     rpost <- liftSC2 scGlobalApply "Prelude.eqPostRel" [ev2, stack2]
+     rr <- liftSC2 scGlobalApply "Prelude.eqRR" [tp2]
+     ref_tm <- liftSC2 scGlobalApply "Prelude.refinesS"
+                       [ev1, ev2, stack1, stack2, rpre, rpost,
+                        tp1, tp2, rr, t1, t2]
+     uvars <- mrUVarsOuterToInner
+     liftSC2 scPiList uvars ref_tm
+
 -- | Return the 'Term' which is the refinement (@Prelude.refinesS@) of fully
 -- applied versions of the given 'Term's, after quantifying over all the given
 -- arguments as well as any additional arguments needed to fully apply the given
@@ -1338,4 +1305,4 @@ refinementTerm sc env timeout rs args t1 t2 =
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
-       mrRefinesFunH (mrRefinementTerm True) [] tp1 t1 tp2 t2
+       mrRefinesFunH refinementTermH [] tp1 t1 tp2 t2

@@ -171,12 +171,6 @@ mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 specMParamsArgs :: SpecMParams Term -> [Term]
 specMParamsArgs (SpecMParams ev stack) = [ev, stack]
 
--- | An assumption that something is equal to one of the constructors of a
--- datatype, e.g. equal to @Left@ of some 'Term' or @Right@ of some 'Term'
-data DataTypeAssump
-  = IsLeft Term | IsRight Term | IsNum Term | IsInf
-  deriving (Generic, Show, TermLike)
-
 -- | A Haskell representation of a @SpecM@ in "monadic normal form"
 data NormComp
   = RetS Term -- ^ A term @retS _ _ a x@
@@ -187,8 +181,6 @@ data NormComp
   | OrS Comp Comp -- ^ an @orS@ computation
   | AssertBoolBind Term CompFun -- ^ the bind of an @assertBoolS@ computation
   | AssumeBoolBind Term CompFun -- ^ the bind of an @assumeBoolS@ computation
-  | AssertDataTypeBind Term DataTypeAssump CompFun -- ^ the bind of a datatype @assertS@ computation
-  | AssumeDataTypeBind Term DataTypeAssump CompFun -- ^ the bind of a datatype @assumeS@ computation
   | ExistsBind Type CompFun -- ^ the bind of an @existsS@ computation
   | ForallBind Type CompFun -- ^ the bind of a @forallS@ computation
   | FunBind FunName [Term] CompFun
@@ -529,15 +521,6 @@ instance PrettyInCtx FunName where
     foldM (\pp proj -> (pp <>) <$> prettyInCtx proj) (ppName $
                                                       globalDefName g) projs
 
-instance PrettyInCtx DataTypeAssump where
-  prettyInCtx (IsLeft  x) =
-    prettyAppList [return "Left _ _", parens <$> prettyInCtx x]
-  prettyInCtx (IsRight x) =
-    prettyAppList [return "Right _ _", parens <$> prettyInCtx x]
-  prettyInCtx (IsNum   x) =
-    prettyAppList [return "TCNum", parens <$> prettyInCtx x]
-  prettyInCtx IsInf = return "TCInf"
-
 instance PrettyInCtx Comp where
   prettyInCtx (CompTerm t) = prettyInCtx t
   prettyInCtx (CompBind c f) =
@@ -581,18 +564,6 @@ instance PrettyInCtx NormComp where
     prettyAppList [return "assumeBoolS", return "_", return "_",
                    parens <$> prettyInCtx cond, return ">>=",
                    parens <$> prettyInCtx k]
-  prettyInCtx (AssertDataTypeBind x y k) =
-    prettyAppList [return "assertS", return "_", return "_",
-                   parens <$> prettyAppList [return "Eq", return "_",
-                                             parens <$> prettyInCtx x,
-                                             parens <$> prettyInCtx y],
-                   return ">>=", parens <$> prettyInCtx k]
-  prettyInCtx (AssumeDataTypeBind x y k) =
-    prettyAppList [return "assumeS", return "_", return "_",
-                   parens <$> prettyAppList [return "Eq", return "_",
-                                             parens <$> prettyInCtx x,
-                                             parens <$> prettyInCtx y],
-                   return ">>=", parens <$> prettyInCtx k]
   prettyInCtx (ExistsBind tp k) =
     prettyAppList [return "existsS", return "_", return "_", prettyInCtx tp,
                    return ">>=", parens <$> prettyInCtx k]
