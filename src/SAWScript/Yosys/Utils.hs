@@ -20,12 +20,15 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (Exception, throw)
 import Control.Monad.Catch (MonadThrow)
 
+import Data.Bifunctor (bimap)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Graph as Graph
+
+import Text.Encoding.Z (zEncodeString)
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
@@ -259,3 +262,39 @@ eqBvRecords sc cty a b = do
       , "\nhas no fields"
       ]
     (e:es) -> foldM (\x y -> liftIO $ SC.scAnd sc x y) e es
+
+-- | Encode the given string such that is a valid Cryptol identifier. 
+-- Since Yosys cell names often look like "\42", this makes it much easier to manipulate state records,
+-- which are keyed by cell name.
+cellIdentifier :: Text -> Text
+cellIdentifier = Text.pack . zEncodeString . Text.unpack
+
+-- | Build a SAWCore type corresponding to the Cryptol record type with the given field types
+fieldsToType ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text (SC.Term, C.Type) ->
+  m SC.Term
+fieldsToType sc = cryptolRecordType sc . fmap fst
+
+-- | Build a Cryptol record type with the given field types
+fieldsToCryptolType ::
+  MonadIO m =>
+  Map Text (SC.Term, C.Type) ->
+  m C.Type
+fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
+
+-- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
+-- the term, and each bit of that pattern with the corresponding bit of the term.
+deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
+deriveTermsByIndices sc rep t = do
+  boolty <- liftIO $ SC.scBoolType sc
+  telems <- forM [0..length rep] $ \index -> do
+    tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
+    idx <- liftIO . SC.scNat sc $ fromIntegral index
+    bit <- liftIO $ SC.scAt sc tlen boolty t idx
+    liftIO $ SC.scSingle sc boolty bit
+  pure . Map.fromList $ mconcat
+    [ [(rep, t)]
+    , zip ((:[]) <$> rep) telems
+    ]

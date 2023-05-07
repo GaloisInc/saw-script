@@ -186,6 +186,7 @@ library
     SAWScript.Yosys.State
     SAWScript.Yosys.Theorem
     SAWScript.Yosys.TransitionSystem
+    SAWScript.Yosys.CompositionalTranslation
     SAWScript.Yosys.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count

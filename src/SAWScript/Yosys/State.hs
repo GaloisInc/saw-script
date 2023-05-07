@@ -23,7 +23,6 @@ import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
-import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -31,8 +30,6 @@ import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import Numeric.Natural (Natural)
-
-import Text.Encoding.Z (zEncodeString)
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
@@ -47,12 +44,6 @@ import SAWScript.Panic (panic)
 import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Netgraph
-
--- | Encode the given string such that is a valid Cryptol identifier. 
--- Since Yosys cell names often look like "\42", this makes it much easier to manipulate state records,
--- which are keyed by cell name.
-cellIdentifier :: Text -> Text
-cellIdentifier = Text.pack . zEncodeString . Text.unpack
 
 -- | Find all of the flip-flop cells in a network graph.
 findDffs ::
@@ -76,21 +67,6 @@ data YosysSequential = YosysSequential
   , _yosysSequentialStateWidths :: Map Text Natural -- ^ A mapping from each state field to a width.
   }
 makeLenses ''YosysSequential
-
--- | Build a SAWCore type corresponding to the Cryptol record type with the given field types
-fieldsToType ::
-  MonadIO m =>
-  SC.SharedContext ->
-  Map Text (SC.Term, C.Type) ->
-  m SC.Term
-fieldsToType sc = cryptolRecordType sc . fmap fst
-
--- | Build a Cryptol record type with the given field types
-fieldsToCryptolType ::
-  MonadIO m =>
-  Map Text (SC.Term, C.Type) ->
-  m C.Type
-fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
 
 -- | Add a record-typed field named __states__ to the given mapping of field names to types.
 insertStateField ::

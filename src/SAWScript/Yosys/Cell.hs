@@ -122,7 +122,24 @@ primCellToTerm ::
   Cell [b] {- ^ Cell type -} ->
   Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
   m (Maybe SC.Term)
-primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^. cellType of
+primCellToTerm sc c args = do
+  mm <- primCellToMap sc c args
+  mt <- traverse (cryptolRecord sc) mm
+  traverse (validateTerm sc typeCheckMsg) mt
+  where
+    typeCheckMsg :: Text
+    typeCheckMsg = mconcat
+      [ "translating a cell with type \"", c ^. cellType, "\""
+      ]
+
+primCellToMap ::
+  forall m b.
+  MonadIO m =>
+  SC.SharedContext ->
+  Cell [b] {- ^ Cell type -} ->
+  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
+  m (Maybe (Map Text SC.Term))
+primCellToMap sc c args = case c ^. cellType of
   "$not" -> bvUnaryOp . liftUnary sc $ SC.scBvNot sc
   "$pos" -> do
     res <- input "A"
@@ -284,10 +301,6 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
   _ -> pure Nothing
   where
     nm = c ^. cellType
-    typeCheckMsg :: Text
-    typeCheckMsg = mconcat
-      [ "translating a cell with type \"", nm, "\""
-      ]
 
     textBinNat :: Text -> Natural
     textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
@@ -310,31 +323,31 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
       Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
 
-    output :: CellTerm -> m (Maybe SC.Term)
+    output :: CellTerm -> m (Maybe (Map Text SC.Term))
     output (CellTerm ct cw _) = do
       let res = CellTerm ct cw (connSigned "Y")
       eres <- extTrunc sc (connWidthNat "Y") =<< flipEndianness sc res
       CellTerm t _ _ <- flipEndianness sc eres
-      fmap Just . cryptolRecord sc $ Map.fromList
+      pure . Just $ Map.fromList
         [ ("Y", t)
         ]
 
-    outputBit :: SC.Term -> m (Maybe SC.Term)
+    outputBit :: SC.Term -> m (Maybe (Map Text SC.Term))
     outputBit res = do
       bool <- liftIO $ SC.scBoolType sc
       vres <- liftIO $ SC.scSingle sc bool res
-      fmap Just . cryptolRecord sc $ Map.fromList
+      pure . Just $ Map.fromList
         [ ("Y", vres)
         ]
 
     -- convert input to big endian
-    bvUnaryOp :: (CellTerm -> m CellTerm) -> m (Maybe SC.Term)
+    bvUnaryOp :: (CellTerm -> m CellTerm) -> m (Maybe (Map Text SC.Term))
     bvUnaryOp f = do
       t <- flipEndianness sc =<< input "A"
       res <- f t
       output =<< flipEndianness sc res
     -- convert inputs to big endian and extend inputs to output width
-    bvBinaryOp :: (CellTerm -> CellTerm -> m CellTerm) -> m (Maybe SC.Term)
+    bvBinaryOp :: (CellTerm -> CellTerm -> m CellTerm) -> m (Maybe (Map Text SC.Term))
     bvBinaryOp f = do
       let w = connWidthNat "Y"
       ta <- extTrunc sc w =<< flipEndianness sc =<< input "A"
@@ -342,13 +355,13 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       res <- f ta tb
       output =<< flipEndianness sc res
     -- convert inputs to big endian and extend inputs to max input width, output is a single bit
-    bvBinaryCmp :: (CellTerm -> CellTerm -> m SC.Term) -> m (Maybe SC.Term)
+    bvBinaryCmp :: (CellTerm -> CellTerm -> m SC.Term) -> m (Maybe (Map Text SC.Term))
     bvBinaryCmp f = do
       ta <- flipEndianness sc =<< input "A"
       tb <- flipEndianness sc =<< input "B"
       res <- uncurry f =<< extMax sc ta tb
       outputBit res
-    bvReduce :: Bool -> SC.Term -> m (Maybe SC.Term)
+    bvReduce :: Bool -> SC.Term -> m (Maybe (Map Text SC.Term))
     bvReduce boolIdentity boolFun = do
       CellTerm t _ _ <- input "A"
       w <- connWidth "A"

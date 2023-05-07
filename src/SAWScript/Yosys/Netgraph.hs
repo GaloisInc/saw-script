@@ -156,21 +156,6 @@ data ConvertedModule = ConvertedModule
   }
 makeLenses ''ConvertedModule
 
--- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
--- the term, and each bit of that pattern with the corresponding bit of the term.
-deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
-deriveTermsByIndices sc rep t = do
-  boolty <- liftIO $ SC.scBoolType sc
-  telems <- forM [0..length rep] $ \index -> do
-    tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
-    idx <- liftIO . SC.scNat sc $ fromIntegral index
-    bit <- liftIO $ SC.scAt sc tlen boolty t idx
-    liftIO $ SC.scSingle sc boolty bit
-  pure . Map.fromList $ mconcat
-    [ [(rep, t)]
-    , zip ((:[]) <$> rep) telems
-    ]
-
 lookupPatternTerm ::
   (MonadIO m, Ord b, Show b) =>
   SC.SharedContext ->
