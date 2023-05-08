@@ -42,13 +42,17 @@ import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
+import System.Directory (doesDirectoryExist, listDirectory, createDirectory)
+import System.FilePath ((</>))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
 import Control.Monad.State (StateT(..), gets)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
-import Data.List ( intersperse )
+import Data.List ( intersperse, sortOn )
+import qualified Data.HashMap.Strict as HM
+import Data.HashMap.Strict (HashMap)
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -94,6 +98,7 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
 import qualified Verifier.SAW.Term.Pretty as SAWCorePP
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Functor (ModuleName)
+import Verifier.SAW.ExternalFormat
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -517,6 +522,7 @@ data TopLevelRW =
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
   , rwTheoremDB :: TheoremDB
+  , rwPropCache :: Maybe (FilePath, HashMap Term ())
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
@@ -748,6 +754,63 @@ addJVMTrans trans = do
   rw <- getTopLevelRW
   let jvmt = rwJVMTrans rw
   putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
+
+-- | Generalize over the all external constants in a given term by
+-- wrapping the term with foralls and replacing the external constant
+-- occurrences with the appropriate local variables.
+-- FIXME: Move to SharedTerm.hs
+scGeneralizeAllExts :: SharedContext -> Term -> IO Term
+scGeneralizeAllExts sc tm =
+  let allexts = sortOn (toShortName . ecName) $ getAllExts tm
+   in scGeneralizeExts sc allexts tm
+
+-- | Lookup a 'Prop' in the 'PropCache'
+lookupInPropCache :: Prop -> TopLevel (Maybe ())
+lookupInPropCache p = 
+  rwPropCache <$> get >>= \case
+    Just (_, cache) -> do sc <- getSharedContext
+                          rw <- getTopLevelRW
+                          gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
+                          let opts = sawPPOpts $ rwPPOpts rw
+                          gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
+                          printOutLnTop Info $ "Using cached result for: " ++ gen_tm_str
+                          return $ HM.lookup gen_tm cache
+    _ -> return Nothing
+
+-- | Add a 'Prop' to the 'PropCache'
+insertInPropCache :: Prop -> TopLevel ()
+insertInPropCache p =
+  do sc <- getSharedContext
+     rw <- getTopLevelRW
+     gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
+     let opts = sawPPOpts $ rwPPOpts rw
+     gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
+     printOutLnTop Info $ "Adding cached result: " ++ gen_tm_str
+     putTopLevelRW (rw { rwPropCache = fmap (HM.insert gen_tm ()) <$> rwPropCache rw })
+
+-- | Load a 'PropCache' from a file
+loadPropCache :: FilePath -> TopLevel ()
+loadPropCache path =
+  io (doesDirectoryExist path) >>= \case
+    True  -> do sc <- getSharedContext
+                files <- io $ listDirectory path
+                tms <- mapM (\f -> io $ readFile f >>= scReadExternal sc) files
+                let cache = HM.fromList $ map (,()) tms
+                rw <- getTopLevelRW
+                putTopLevelRW (rw { rwPropCache = Just (path, cache) })
+    False -> do rw <- getTopLevelRW
+                putTopLevelRW (rw { rwPropCache = Just (path, HM.empty) })
+
+-- | Save the current 'PropCache' to a file
+savePropCache :: TopLevel ()
+savePropCache =
+  rwPropCache <$> getTopLevelRW >>= \case
+    Just (path, cache) -> do
+      io $ createDirectory path
+      mapM_ (\((tm,_),i) -> io $ writeFile (path </> ("t" ++ show i))
+                                           (scWriteExternal tm))
+            (zip (HM.toList cache) ([0..] :: [Integer]))
+    Nothing -> return ()
 
 maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m

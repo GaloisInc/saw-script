@@ -958,7 +958,20 @@ applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f g = do
-  (mb, stats) <- f (goalSequent g)
+  sc <- getSharedContext
+  g_prop <- io . Ex.try $ sequentToProp sc (goalSequent g)
+  (mb, stats) <- case g_prop of
+    -- If we can convert our goal into a prop, we can use caching
+    Right prop -> SV.lookupInPropCache prop >>= \case
+      Just () -> -- Use a cached result!
+                 return (Nothing, mempty)
+      _ -> f (goalSequent g) >>= \case
+        (Nothing, stats) -> -- Cache an unsat result!
+                            SV.insertInPropCache prop >>
+                            return (Nothing, stats)
+        (mb, stats) -> return (mb, stats)
+    -- Otherwise we just call the solver
+    Left (_ :: Ex.SomeException) -> f (goalSequent g)
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
@@ -2400,6 +2413,13 @@ approxmc t = do
 
 set_path_sat_solver :: String -> TopLevel ()
 set_path_sat_solver nm =
+  case map toLower nm of
+    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
+    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
+    _ -> fail $ "Unknown path sat solver: " ++ show nm
+
+set_proof_cache :: String -> TopLevel ()
+set_proof_cache nm =
   case map toLower nm of
     "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
     "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })

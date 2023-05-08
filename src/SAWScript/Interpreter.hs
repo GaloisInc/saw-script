@@ -402,6 +402,7 @@ interpretFile file runMain =
           mapM_ stmtWithPrint stmts
           when runMain interpretMain
           writeVerificationSummary
+          savePropCache
 
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
@@ -488,6 +489,7 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
                    , rwTheoremDB = thmDB
+                   , rwPropCache = Nothing
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
@@ -1055,6 +1057,13 @@ primitives = Map.fromList
     Experimental
     [ "Set the path satisfiablity solver to use.  Accepted values"
     , "currently are 'z3' and 'yices'."
+    ]
+
+  , prim "set_solver_cache_path" "String -> TopLevel ()"
+    (pureVal loadPropCache)
+    Experimental
+    [ "Enable solver result caching and set the path the cache should be"
+    , " loaded from and saved to."
     ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"

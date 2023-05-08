@@ -233,6 +233,7 @@ initialState readFileFn =
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
                 , rwTheoremDB = db
+                , rwPropCache = Nothing
                 , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
