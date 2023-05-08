@@ -42,6 +42,7 @@ data Options = Options
   , printOutFn       :: Verbosity -> String -> IO ()
   , summaryFile      :: Maybe FilePath
   , summaryFormat    :: SummaryFormat
+  , solverCache      :: Maybe FilePath
   } deriving (Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
@@ -79,6 +80,7 @@ defaultOptions
     , useColor = True
     , summaryFile = Nothing
     , summaryFormat = Pretty
+    , solverCache = Nothing
     }
 
 printOutWith :: Verbosity -> Verbosity -> String -> IO ()
@@ -172,6 +174,11 @@ options =
      )
      "either 'json' or 'pretty'")
     "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
+  , Option [] ["cache"]
+    (ReqArg
+     (\path opts -> return opts { solverCache = Just path })
+     "path")
+    "Enable solver result caching and set the path the cache should be loaded from and saved to"
   ]
 
 -- Try to read verbosity as either a string or number and default to 'Debug'.

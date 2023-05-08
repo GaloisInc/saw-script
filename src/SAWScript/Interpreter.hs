@@ -477,6 +477,8 @@ buildTopLevelEnv proxy opts =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
+       cache <- maybe (return Nothing) (loadPropCacheH sc) (solverCache opts)
+
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
                    , rwTypes      = primTypeEnv primsAvail
@@ -489,7 +491,7 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
                    , rwTheoremDB = thmDB
-                   , rwPropCache = Nothing
+                   , rwPropCache = cache
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False

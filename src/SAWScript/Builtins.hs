@@ -38,6 +38,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.List (isPrefixOf, isInfixOf, sortOn)
 import qualified Data.HashMap.Strict as HM
+import Data.HashMap.Strict (HashMap)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
@@ -964,7 +965,7 @@ scGeneralizeAllExts sc tm =
   let allexts = sortOn (toShortName . ecName) $ getAllExts tm
    in scGeneralizeExts sc allexts tm
 
--- | Lookup a 'Prop' in the 'PropCache'
+-- | Lookup a 'Prop' in the solver result cache
 -- FIXME: Move somewhere else?
 lookupInPropCache :: Prop -> TopLevel (Maybe ())
 lookupInPropCache p = 
@@ -978,7 +979,7 @@ lookupInPropCache p =
       return $ HM.lookup gen_tm cache
     _ -> return Nothing
 
--- | Add a 'Prop' to the 'PropCache'
+-- | Add a 'Prop' to the solver result cache
 -- FIXME: Move somewhere else?
 insertInPropCache :: Prop -> TopLevel ()
 insertInPropCache p =
@@ -992,19 +993,26 @@ insertInPropCache p =
       modify (\rw -> rw { rwPropCache = Just (path, HM.insert gen_tm () cache) })
     Nothing -> return ()
 
--- | Load a 'PropCache' from a file
+-- | Load a solver result cache from a file
 -- FIXME: Move somewhere else?
 loadPropCache :: FilePath -> TopLevel ()
 loadPropCache path =
-  io (doesDirectoryExist path) >>= \case
-    True -> do sc <- getSharedContext
-               files <- io $ listDirectory path
-               tms <- mapM (\f -> io $ readFile (path </> f) >>= scReadExternal sc) files
-               let cache = HM.fromList $ map (,()) tms
-               modify (\rw -> rw { rwPropCache = Just (path, cache) })
-    False -> modify (\rw -> rw { rwPropCache = Just (path, HM.empty) })
+  do sc <- getSharedContext
+     cache <- io $ loadPropCacheH sc path
+     modify (\rw -> rw { rwPropCache = cache })
 
--- | Save the current 'PropCache' to a file
+-- | Construct a solver result cache from a file
+-- FIXME: Move somewhere else?
+loadPropCacheH :: SharedContext -> FilePath -> IO (Maybe (FilePath, HashMap Term ()))
+loadPropCacheH sc path =
+  doesDirectoryExist path >>= \case
+    True -> do files <- listDirectory path
+               tms <- mapM (\f -> readFile (path </> f) >>= scReadExternal sc) files
+               let cache = HM.fromList $ map (,()) tms
+               return $ Just (path, cache)
+    False -> return $ Just (path, HM.empty)
+
+-- | Save the current solver result cache to a file
 -- FIXME: Move somewhere else?
 savePropCache :: TopLevel ()
 savePropCache =
