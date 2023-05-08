@@ -18,7 +18,7 @@ thm_round_00_15 <-
 
 thm_round_16_80 <-
   prove_extcore
-    mrsolver_with (addrefns [thm_round_00_15] empty_rs))
+    (mrsolver_with (addrefns [thm_round_00_15] empty_rs))
     (refines [] round_16_80 {{ round_16_80_spec }});
 
 thm_processBlock <-

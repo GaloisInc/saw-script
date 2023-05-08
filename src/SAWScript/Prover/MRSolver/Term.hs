@@ -313,23 +313,29 @@ asLambdaName _ = Nothing
 traverseSubterms :: MonadTerm m => (Term -> m Term) -> Term -> m Term
 traverseSubterms f (unwrapTermF -> tf) = traverse f tf >>= mkTermF
 
+-- | Like 'memoFixTermFun', but threads through an accumulating argument
+memoFixTermFunAccum :: MonadIO m =>
+                       ((b -> Term -> m a) -> b -> Term -> m a) ->
+                       b -> Term -> m a
+memoFixTermFunAccum f acc_top term_top =
+  do table_ref <- liftIO $ newIORef IntMap.empty
+     let go acc t@(STApp { stAppIndex = ix }) =
+           liftIO (readIORef table_ref) >>= \table ->
+           case IntMap.lookup ix table of
+             Just ret -> return ret
+             Nothing ->
+               do ret <- f go acc t
+                  liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)
+                  return ret
+         go acc t = f go acc t
+     go acc_top term_top
+
 -- | Build a recursive memoized function for tranforming 'Term's. Take in a
 -- function @f@ that intuitively performs one step of the transformation and
 -- allow it to recursively call the memoized function being defined by passing
 -- it as the first argument to @f@.
 memoFixTermFun :: MonadIO m => ((Term -> m a) -> Term -> m a) -> Term -> m a
-memoFixTermFun f term_top =
-  do table_ref <- liftIO $ newIORef IntMap.empty
-     let go t@(STApp { stAppIndex = ix }) =
-           liftIO (readIORef table_ref) >>= \table ->
-           case IntMap.lookup ix table of
-             Just ret -> return ret
-             Nothing ->
-               do ret <- f go t
-                  liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)
-                  return ret
-         go t = f go t
-     go term_top
+memoFixTermFun f = memoFixTermFunAccum (f .) ()
 
 
 ----------------------------------------------------------------------

@@ -39,6 +39,8 @@ import qualified Data.Map as Map
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 
+import qualified Data.Set as Set
+
 import Prettyprinter
 
 import Verifier.SAW.Term.Functor
@@ -841,21 +843,16 @@ mrFunBodyRecInfo f args =
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
 -- to a given function @f@ again
 mrCallsFun :: FunName -> Term -> MRM t Bool
-mrCallsFun f = memoFixTermFun $ \recurse t -> case t of
-  (asExtCns -> Just ec) ->
-    do g <- extCnsToFunName ec
-       maybe_body <- mrFunNameBody g
-       case maybe_body of
-         _ | f == g -> return True
-         Just body -> recurse body
-         Nothing -> return False
-  (asTypedGlobalProj -> Just (gdef, projs)) ->
-    case globalDefBody gdef of
-      _ | f == GlobalName gdef projs -> return True
-      Just body -> recurse body
-      Nothing -> return False
+mrCallsFun f = flip memoFixTermFunAccum Set.empty $ \recurse seen t ->
+  let onFunName g = mrFunNameBody g >>= \case
+        _ | f == g -> return True
+        Just body | Set.notMember g seen -> recurse (Set.insert g seen) body
+        _ -> return False
+  in case t of
+  (asExtCns -> Just ec) -> extCnsToFunName ec >>= onFunName
+  (asGlobalFunName -> Just g) -> onFunName g
   (unwrapTermF -> tf) ->
-    foldM (\b t' -> if b then return b else recurse t') False tf
+    foldM (\b t' -> if b then return b else recurse seen t') False tf
 
 
 ----------------------------------------------------------------------
