@@ -36,7 +36,8 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.IORef
-import Data.List (isPrefixOf, isInfixOf)
+import Data.List (isPrefixOf, isInfixOf, sortOn)
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
@@ -954,6 +955,67 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
+-- | Generalize over the all external constants in a given term by
+-- wrapping the term with foralls and replacing the external constant
+-- occurrences with the appropriate local variables.
+-- FIXME: Move to SharedTerm.hs
+scGeneralizeAllExts :: SharedContext -> Term -> IO Term
+scGeneralizeAllExts sc tm =
+  let allexts = sortOn (toShortName . ecName) $ getAllExts tm
+   in scGeneralizeExts sc allexts tm
+
+-- | Lookup a 'Prop' in the 'PropCache'
+-- FIXME: Move somewhere else?
+lookupInPropCache :: Prop -> TopLevel (Maybe ())
+lookupInPropCache p = 
+  rwPropCache <$> get >>= \case
+    Just (_, cache) -> do
+      sc <- getSharedContext
+      opts <- getTopLevelPPOpts
+      gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
+      gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
+      printOutLnTop Info $ "Using cached result for: " ++ gen_tm_str
+      return $ HM.lookup gen_tm cache
+    _ -> return Nothing
+
+-- | Add a 'Prop' to the 'PropCache'
+-- FIXME: Move somewhere else?
+insertInPropCache :: Prop -> TopLevel ()
+insertInPropCache p =
+  rwPropCache <$> get >>= \case
+    Just (path, cache) -> do
+      sc <- getSharedContext
+      opts <- getTopLevelPPOpts
+      gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
+      gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
+      printOutLnTop Info $ "Adding cached result: " ++ gen_tm_str
+      modify (\rw -> rw { rwPropCache = Just (path, HM.insert gen_tm () cache) })
+    Nothing -> return ()
+
+-- | Load a 'PropCache' from a file
+-- FIXME: Move somewhere else?
+loadPropCache :: FilePath -> TopLevel ()
+loadPropCache path =
+  io (doesDirectoryExist path) >>= \case
+    True -> do sc <- getSharedContext
+               files <- io $ listDirectory path
+               tms <- mapM (\f -> io $ readFile (path </> f) >>= scReadExternal sc) files
+               let cache = HM.fromList $ map (,()) tms
+               modify (\rw -> rw { rwPropCache = Just (path, cache) })
+    False -> modify (\rw -> rw { rwPropCache = Just (path, HM.empty) })
+
+-- | Save the current 'PropCache' to a file
+-- FIXME: Move somewhere else?
+savePropCache :: TopLevel ()
+savePropCache =
+  rwPropCache <$> getTopLevelRW >>= \case
+    Just (path, cache) -> do
+      io $ doesDirectoryExist path >>= flip unless (createDirectory path)
+      mapM_ (\((tm,_),i) -> io $ writeFile (path </> ("t" ++ show i))
+                                           (scWriteExternal tm))
+            (zip (HM.toList cache) ([0..] :: [Integer]))
+    Nothing -> return ()
+
 applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
@@ -962,12 +1024,12 @@ applyProverToGoal f g = do
   g_prop <- io . Ex.try $ sequentToProp sc (goalSequent g)
   (mb, stats) <- case g_prop of
     -- If we can convert our goal into a prop, we can use caching
-    Right prop -> SV.lookupInPropCache prop >>= \case
+    Right prop -> lookupInPropCache prop >>= \case
       Just () -> -- Use a cached result!
                  return (Nothing, mempty)
       _ -> f (goalSequent g) >>= \case
         (Nothing, stats) -> -- Cache an unsat result!
-                            SV.insertInPropCache prop >>
+                            insertInPropCache prop >>
                             return (Nothing, stats)
         (mb, stats) -> return (mb, stats)
     -- Otherwise we just call the solver
