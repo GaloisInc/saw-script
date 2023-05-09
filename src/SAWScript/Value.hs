@@ -518,7 +518,7 @@ data TopLevelRW =
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
   , rwTheoremDB :: TheoremDB
-  , rwPropCache :: Maybe (FilePath, HashMap Term ())
+  , rwPropCache :: Maybe (FilePath, HashMap Term SolverStats)
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext

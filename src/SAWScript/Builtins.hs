@@ -40,7 +40,7 @@ import Data.List (isPrefixOf, isInfixOf, sortOn)
 import qualified Data.HashMap.Strict as HM
 import Data.HashMap.Strict (HashMap)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -967,7 +967,7 @@ scGeneralizeAllExts sc tm =
 
 -- | Lookup a 'Prop' in the solver result cache
 -- FIXME: Move somewhere else?
-lookupInPropCache :: Prop -> TopLevel (Maybe ())
+lookupInPropCache :: Prop -> TopLevel (Maybe SolverStats)
 lookupInPropCache p = 
   rwPropCache <$> get >>= \case
     Just (_, cache) -> do
@@ -975,14 +975,17 @@ lookupInPropCache p =
       opts <- getTopLevelPPOpts
       gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
       gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
-      printOutLnTop Info $ "Using cached result for: " ++ gen_tm_str
-      return $ HM.lookup gen_tm cache
+      case HM.lookup gen_tm cache of
+        Just ret -> do printOutLnTop Info $ "Using cached result for: " ++ gen_tm_str
+                       return $ Just ret
+        _ -> do -- printOutLnTop Info $ "Cache miss on: " ++ show gen_tm_str
+                return Nothing
     _ -> return Nothing
 
 -- | Add a 'Prop' to the solver result cache
 -- FIXME: Move somewhere else?
-insertInPropCache :: Prop -> TopLevel ()
-insertInPropCache p =
+insertInPropCache :: Prop -> SolverStats -> TopLevel ()
+insertInPropCache p stats =
   rwPropCache <$> get >>= \case
     Just (path, cache) -> do
       sc <- getSharedContext
@@ -990,7 +993,7 @@ insertInPropCache p =
       gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
       gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
       printOutLnTop Info $ "Adding cached result: " ++ gen_tm_str
-      modify (\rw -> rw { rwPropCache = Just (path, HM.insert gen_tm () cache) })
+      modify (\rw -> rw { rwPropCache = Just (path, HM.insert gen_tm stats cache) })
     Nothing -> return ()
 
 -- | Load a solver result cache from a file
@@ -1003,25 +1006,41 @@ loadPropCache path =
 
 -- | Construct a solver result cache from a file
 -- FIXME: Move somewhere else?
-loadPropCacheH :: SharedContext -> FilePath -> IO (Maybe (FilePath, HashMap Term ()))
+loadPropCacheH :: SharedContext -> FilePath ->
+                  IO (Maybe (FilePath, HashMap Term SolverStats))
 loadPropCacheH sc path =
   doesDirectoryExist path >>= \case
-    True -> do files <- listDirectory path
-               tms <- mapM (\f -> readFile (path </> f) >>= scReadExternal sc) files
-               let cache = HM.fromList $ map (,()) tms
-               return $ Just (path, cache)
+    True -> do index <- lines <$> readFile (path </> "index")
+               files <- listDirectory path
+               cache <- catMaybes <$> mapM (processFile index) files
+               return $ Just (path, HM.fromList cache)
     False -> return $ Just (path, HM.empty)
+  where processFile :: [String] -> FilePath -> IO (Maybe (Term, SolverStats))
+        processFile index f = case readMaybe (drop 1 f) of
+          Just i | i < length index -> do
+            str <- readFile (path </> f)
+            tm <- scReadExternal sc str
+            let (s0, s1) = break (== ' ') (index !! i)
+            case (,) <$> readMaybe s0 <*> readMaybe (drop 1 s1) of
+              Just (sz, ss) ->
+                return $ Just (length ss `seq` tm,
+                               SolverStats (Set.fromList ss) sz)
+              _ -> return Nothing
+          _ -> return Nothing
 
 -- | Save the current solver result cache to a file
 -- FIXME: Move somewhere else?
 savePropCache :: TopLevel ()
 savePropCache =
   rwPropCache <$> getTopLevelRW >>= \case
-    Just (path, cache) -> do
-      io $ doesDirectoryExist path >>= flip unless (createDirectory path)
-      mapM_ (\((tm,_),i) -> io $ writeFile (path </> ("t" ++ show i))
-                                           (scWriteExternal tm))
-            (zip (HM.toList cache) ([0..] :: [Integer]))
+    Just (path, cache) -> io $ do
+      doesDirectoryExist path >>= flip unless (createDirectory path)
+      index <- mapM (\((tm,stats),i) -> writeFile (path </> ("t" ++ show i))
+                                                  (scWriteExternal tm) >>
+                                        return (show (solverStatsGoalSize stats) ++ " " ++
+                                                show (Set.toList $ solverStatsSolvers stats)))
+                    (zip (HM.toList cache) ([0..] :: [Integer]))
+      writeFile (path </> "index") (unlines index)
     Nothing -> return ()
 
 applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
@@ -1033,11 +1052,11 @@ applyProverToGoal f g = do
   (mb, stats) <- case g_prop of
     -- If we can convert our goal into a prop, we can use caching
     Right prop -> lookupInPropCache prop >>= \case
-      Just () -> -- Use a cached result!
-                 return (Nothing, mempty)
+      Just stats -> -- Use a cached result!
+                    return (Nothing, stats)
       _ -> f (goalSequent g) >>= \case
         (Nothing, stats) -> -- Cache an unsat result!
-                            insertInPropCache prop >>
+                            insertInPropCache prop stats >>
                             return (Nothing, stats)
         (mb, stats) -> return (mb, stats)
     -- Otherwise we just call the solver
