@@ -104,6 +104,7 @@ import SAWScript.Value
   , ProofScript(..), showsProofResult, toValue
   )
 import Verifier.SAW (SharedContext)
+import SAWScript.Builtins (savePropCache)
 
 deriving instance Typeable AIG.Proxy
 
@@ -362,7 +363,8 @@ shouldContinue :: REPL Bool
 shouldContinue = readRef eContinue
 
 stop :: REPL ()
-stop = modifyRef eContinue (const False)
+stop = liftTopLevel savePropCache >>
+       modifyRef eContinue (const False)
 
 unlessBatch :: REPL () -> REPL ()
 unlessBatch body =
