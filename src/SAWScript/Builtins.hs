@@ -975,7 +975,7 @@ lookupInPropCache p =
       opts <- getTopLevelPPOpts
       gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
       gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
-      case HM.lookup gen_tm cache of
+      case HM.lookup (scWriteExternal gen_tm) cache of
         Just ret -> do printOutLnTop Info $ "Using cached result for: " ++ gen_tm_str
                        return $ Just ret
         _ -> do -- printOutLnTop Info $ "Cache miss on: " ++ show gen_tm_str
@@ -993,37 +993,34 @@ insertInPropCache p stats =
       gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
       gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
       printOutLnTop Info $ "Adding cached result: " ++ gen_tm_str
-      modify (\rw -> rw { rwPropCache = Just (path, HM.insert gen_tm stats cache) })
+      modify (\rw -> rw { rwPropCache = Just (path, HM.insert (scWriteExternal gen_tm) stats cache) })
     Nothing -> return ()
 
 -- | Load a solver result cache from a file
 -- FIXME: Move somewhere else?
 loadPropCache :: FilePath -> TopLevel ()
 loadPropCache path =
-  do sc <- getSharedContext
-     cache <- io $ loadPropCacheH sc path
+  do cache <- io $ loadPropCacheH path
      modify (\rw -> rw { rwPropCache = cache })
 
 -- | Construct a solver result cache from a file
 -- FIXME: Move somewhere else?
-loadPropCacheH :: SharedContext -> FilePath ->
-                  IO (Maybe (FilePath, HashMap Term SolverStats))
-loadPropCacheH sc path =
+loadPropCacheH :: FilePath -> IO (Maybe (FilePath, HashMap String SolverStats))
+loadPropCacheH path =
   doesDirectoryExist path >>= \case
     True -> do index <- lines <$> readFile (path </> "index")
                files <- listDirectory path
                cache <- catMaybes <$> mapM (processFile index) files
                return $ Just (path, HM.fromList cache)
     False -> return $ Just (path, HM.empty)
-  where processFile :: [String] -> FilePath -> IO (Maybe (Term, SolverStats))
+  where processFile :: [String] -> FilePath -> IO (Maybe (String, SolverStats))
         processFile index f = case readMaybe (drop 1 f) of
           Just i | i < length index -> do
             str <- readFile (path </> f)
-            tm <- scReadExternal sc str
             let (s0, s1) = break (== ' ') (index !! i)
             case (,) <$> readMaybe s0 <*> readMaybe (drop 1 s1) of
               Just (sz, ss) ->
-                return $ Just (length ss `seq` tm,
+                return $ Just (length ss `seq` str,
                                SolverStats (Set.fromList ss) sz)
               _ -> return Nothing
           _ -> return Nothing
@@ -1035,10 +1032,10 @@ savePropCache =
   rwPropCache <$> getTopLevelRW >>= \case
     Just (path, cache) -> io $ do
       doesDirectoryExist path >>= flip unless (createDirectory path)
-      index <- mapM (\((tm,stats),i) -> writeFile (path </> ("t" ++ show i))
-                                                  (scWriteExternal tm) >>
-                                        return (show (solverStatsGoalSize stats) ++ " " ++
-                                                show (Set.toList $ solverStatsSolvers stats)))
+      index <- mapM (\((str,stats),i) ->
+                      writeFile (path </> ("t" ++ show i)) str >>
+                      return (show (solverStatsGoalSize stats) ++ " " ++
+                              show (Set.toList $ solverStatsSolvers stats)))
                     (zip (HM.toList cache) ([0..] :: [Integer]))
       writeFile (path </> "index") (unlines index)
     Nothing -> return ()

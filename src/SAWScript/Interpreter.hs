@@ -477,7 +477,7 @@ buildTopLevelEnv proxy opts =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
-       cache <- maybe (return Nothing) (loadPropCacheH sc) (solverCache opts)
+       cache <- maybe (return Nothing) loadPropCacheH (solverCache opts)
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
