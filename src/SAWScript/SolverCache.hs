@@ -108,8 +108,8 @@ loadSolverCacheH path =
                return $ Just $ SolverCache path (HM.fromList cache) Nothing
     False -> return $ Just $ SolverCache path HM.empty Nothing
   where processFile :: FilePath -> IO (Maybe (SolverCacheKey, SolverCacheValue))
-        processFile f = case solverCacheKeyFromHex (drop 1 f) of
-          Just k | f !! 0 == 'x' && BS.length k == 32 ->
+        processFile f = case solverCacheKeyFromHex f of
+          Just k | BS.length k == 32 ->
             fmap (\(sz,ss) -> (k, (Nothing, SolverStats ss sz))) <$>
             readMaybe <$> readFile (path </> f)
           _ -> return Nothing
@@ -120,8 +120,10 @@ saveSolverCache :: Bool -> TopLevel ()
 saveSolverCache trackUnsaved =
   rwSolverCache <$> getTopLevelRW >>= \case
     Just cache -> do
-      io $ doesDirectoryExist (solverCachePath cache) >>= flip unless (createDirectory (solverCachePath cache))
-      mapM_ (\(k,v) -> io $ writeFile (solverCachePath cache </> ("x" ++ solverCacheKeyToHex k)) (showValue v))
+      ex <- io $ doesDirectoryExist (solverCachePath cache)
+      unless ex $ io $ createDirectory (solverCachePath cache)
+      mapM_ (\(k,v) -> io $ writeFile (solverCachePath cache </> solverCacheKeyToHex k)
+                                      (showValue v))
             (maybe (HM.toList $ solverCacheMap cache)
                    (map (\k -> (k, (solverCacheMap cache) HM.! k)) . HS.toList)
                    (solverCacheUnsaved cache))
