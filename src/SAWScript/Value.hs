@@ -49,13 +49,10 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
 import Data.List ( intersperse )
-import Data.HashMap.Strict ( HashMap )
-import Data.HashSet ( HashSet )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
-import Data.ByteString (ByteString)
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
@@ -81,6 +78,7 @@ import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term as MRSolver
+import SAWScript.SolverCache
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWScript.Yosys.IR
@@ -507,16 +505,6 @@ data TopLevelRO =
   , roLocalEnv      :: LocalEnv
   }
 
-type SolverCacheKey = ByteString
-type SolverCacheValue = (Maybe CEX, SolverStats)
-
-data SolverCache =
-  SolverCache
-  { solverCachePath :: FilePath
-  , solverCacheMap :: HashMap SolverCacheKey SolverCacheValue
-  , solverCacheUnsaved :: Maybe (HashSet SolverCacheKey)
-  }
-
 data TopLevelRW =
   TopLevelRW
   { rwValues  :: Map SS.LName Value
@@ -745,6 +733,18 @@ recordProof :: IsValue v => v -> TopLevel ()
 recordProof v =
   do rw <- getTopLevelRW
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
+
+-- | Perform a (possibly) stateful operation on the 'SolverCache' returning a
+-- value of type @a@, or @mempty@ if there is no 'SolverCache'
+onSolverCache :: Monoid a => SolverCacheOp a -> TopLevel a
+onSolverCache f =
+  do opts <- getOptions
+     rw <- getTopLevelRW
+     case rwSolverCache rw of
+       Just cache -> do (ret, cache') <- io $ f opts cache
+                        putTopLevelRW rw { rwSolverCache = Just cache' }
+                        return ret
+       Nothing -> return mempty
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel CJ.JVMContext

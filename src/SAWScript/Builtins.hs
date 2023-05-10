@@ -955,17 +955,34 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
+-- | Load a solver result cache from a file and set it as the current
+-- 'SolverCache', or if no such file exists, set the current 'SolverCache' to
+-- an empty 'SolverCache' with its path set to the given value
+setSolverCachePath :: FilePath -> TopLevel ()
+setSolverCachePath path = do
+  opts <- getOptions
+  cache <- io $ loadSolverCache opts path
+  modify (\rw -> rw { rwSolverCache = Just cache })
+
+-- | Given a continuation which calls a prover, call the continuation on the
+-- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
+-- is a 'SolverCache', do not call the continuation if the goal has an already
+-- cached result, and otherwise save the result of the call to the cache.
 applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f g = do
-  mb_cache_key <- propToSolverCacheKey (goalSequent g)
+  sc <- getSharedContext
+  mb_cache_key <- io $ propToSolverCacheKey sc (goalSequent g)
   (mb, stats) <- case mb_cache_key of
-    Just k -> lookupInSolverCache k >>= \case
-      Just res -> return res
-      _ -> do res <- f (goalSequent g)
-              insertInSolverCache k res
-              return res
+    -- If we have a solver result cache and a valid key...
+    Just k -> SV.onSolverCache (lookupInSolverCache k) >>= \case
+      Just v -> -- use a cached result if we have one,
+                return v
+      _ -> -- or cache the result of the call otherwise.
+           f (goalSequent g) >>= \v ->
+           SV.onSolverCache (insertInSolverCache k v) >>
+           return v
     _ -> f (goalSequent g)
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))

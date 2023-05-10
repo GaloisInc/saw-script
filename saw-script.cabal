@@ -49,6 +49,7 @@ library
     , filepath
     , flexdis86
     , free
+    , hashable
     , haskeline
     , heapster-saw
     , hex-text
