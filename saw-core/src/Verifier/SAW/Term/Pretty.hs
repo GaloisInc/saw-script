@@ -23,6 +23,7 @@ module Verifier.SAW.Term.Pretty
   , SawStyle(..)
   , PPOpts(..)
   , defaultPPOpts
+  , MemoStyle(..)
   , depthPPOpts
   , ppNat
   , ppTerm
@@ -56,7 +57,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Map as Map
 import qualified Data.Vector as V
-import Numeric (showIntAtBase)
+import Numeric (showIntAtBase, showHex)
 import Prettyprinter
 import Prettyprinter.Render.Terminal
 import Text.URI
@@ -68,6 +69,7 @@ import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Recognizer
+import Data.Hashable (hash)
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -106,12 +108,40 @@ data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
                      , ppMaxDepth :: Maybe Int
-                     , ppMinSharing :: Int }
+                     , ppMinSharing :: Int
+                     , ppMemoStyle :: MemoStyle }
+
+-- | How should you display memoization variables?
+--
+-- Note: actual text stylization is the province of 'ppMemoVar', this just
+-- describes the semantic information 'ppMemoVar' should be prepared to display.
+data MemoStyle
+  = Incremental
+  -- ^ 'Incremental' says to display a term's memoization variable with the
+  -- value of a counter that increments after a term is memoized. The first
+  -- memoized term will be displayed with '1', the second with '2', etc.
+  | Hash Int
+  -- ^ 'Hash i' says to display a term's memoization variable with the first 'i'
+  -- digits of the term's hash.
+  | HashIncremental Int
+  -- ^ 'HashIncremental i' says to display a term's memoization variable with
+  -- _both_ the first 'i' digits of the term's hash _and_ the value of the
+  -- counter described in 'Incremental'.
+
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
-                         ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
+defaultPPOpts =
+  PPOpts
+    { ppBase = 10
+    , ppColor = False
+    , ppShowLocalNames = True
+    , ppMaxDepth = Nothing
+    , ppMinSharing = 2
+    , ppMemoStyle = Incremental }
+    -- If 'ppMemoStyle' changes its default, be sure to update the help text in
+    -- the interpreter functions that control the memoization style to reflect
+    -- this change to users.
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -205,9 +235,18 @@ consVarNaming (VarNaming names) name =
 -- * Pretty-printing monad
 --------------------------------------------------------------------------------
 
--- | Memoization variables, which are like deBruijn index variables but for
--- terms that we are memoizing during printing
-type MemoVar = Int
+-- | Memoization variables contain several pieces of information pertaining to
+-- the term they bind. What is displayed when they're printed is governed by the
+-- 'ppMemoStyle' field of 'PPOpts', in tandem with 'ppMemoVar'.
+data MemoVar =
+  MemoVar
+    {
+      -- | A unique value - like a deBruijn index, but evinced only during
+      -- printing when a term is to be memoized.
+      memoFresh :: Int,
+      -- | A likely-unique value - the hash of the term this 'MemoVar'
+      -- represents.
+      memoHash :: Int }
 
 -- | The local state used by pretty-printing computations
 data PPState =
@@ -221,8 +260,8 @@ data PPState =
     ppNaming :: VarNaming,
     -- | The top-level naming environment
     ppNamingEnv :: SAWNamingEnv,
-    -- | The next "memoization variable" to generate
-    ppNextMemoVar :: MemoVar,
+    -- | A source of freshness for memoization variables
+    ppMemoFresh :: Int,
     -- | Memoization table for the global, closed terms, mapping term indices to
     -- "memoization variables" that are in scope
     ppGlobalMemoTable :: IntMap MemoVar,
@@ -235,8 +274,9 @@ emptyPPState :: PPOpts -> SAWNamingEnv -> PPState
 emptyPPState opts ne =
   PPState { ppOpts = opts, ppDepth = 0, ppNaming = emptyVarNaming,
             ppNamingEnv = ne,
-            ppNextMemoVar = 1, ppGlobalMemoTable = IntMap.empty,
-            ppLocalMemoTable = IntMap.empty }
+            ppMemoFresh = 1,
+            ppGlobalMemoTable = mempty,
+            ppLocalMemoTable = mempty }
 
 -- | The pretty-printing monad
 newtype PPM a = PPM (Reader PPState a)
@@ -286,25 +326,23 @@ withBoundVarM basename m =
   do st <- ask
      let (var, naming) = consVarNaming (ppNaming st) basename
      ret <- local (\_ -> st { ppNaming = naming,
-                              ppLocalMemoTable = IntMap.empty }) m
+                              ppLocalMemoTable = mempty }) m
      return (var, ret)
 
 -- | Run a computation in the context of a fresh "memoization variable" that is
 -- bound to the given term index, passing the new memoization variable to the
 -- computation. If the flag is true, use the global table, otherwise use the
 -- local table.
-withMemoVar :: Bool -> TermIndex -> (MemoVar -> PPM a) -> PPM a
-withMemoVar global_p idx f =
-  do memo_var <- ppNextMemoVar <$> ask
-     local (\s -> add_to_table global_p memo_var s) (f memo_var)
-       where
-         add_to_table True v st =
-           st { ppNextMemoVar = v + 1,
-                ppGlobalMemoTable = IntMap.insert idx v (ppGlobalMemoTable st) }
-         add_to_table False v st =
-           st { ppNextMemoVar = v + 1,
-                ppLocalMemoTable = IntMap.insert idx v (ppLocalMemoTable st) }
-
+withMemoVar :: Bool -> TermIndex -> Int -> (MemoVar -> PPM a) -> PPM a
+withMemoVar global_p termIdx termHash f =
+  do fresh <- asks ppMemoFresh
+     let memoVar = MemoVar { memoFresh = fresh, memoHash = termHash }
+     local (refresh . bind memoVar) (f memoVar)
+  where
+    refresh st@PPState{..} = st { ppMemoFresh = ppMemoFresh + 1 }
+    bind memoVar st@PPState{..}
+      | global_p = st { ppGlobalMemoTable = IntMap.insert termIdx memoVar ppGlobalMemoTable }
+      | otherwise = st { ppLocalMemoTable = IntMap.insert termIdx memoVar ppLocalMemoTable }
 
 --------------------------------------------------------------------------------
 -- * The Pretty-Printing of Specific Constructs
@@ -331,8 +369,14 @@ ppNat (PPOpts{..}) i
     digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 -- | Pretty-print a memoization variable
-ppMemoVar :: MemoVar -> SawDoc
-ppMemoVar mv = "x@" <> pretty mv
+ppMemoVar :: MemoVar -> PPM SawDoc
+ppMemoVar MemoVar{..} = asks (ppMemoStyle . ppOpts) >>= \case
+  Incremental -> pure ("x@" <> pretty memoFresh)
+  Hash prefixLen -> pure ("x@" <> pretty (take prefixLen hashStr))
+  HashIncremental prefixLen -> pure ("x" <> pretty memoFresh <> "@" <> pretty (take prefixLen hashStr))
+  where
+    nonNegativeHash = toInteger memoHash - toInteger (minBound :: Int)
+    hashStr = showHex nonNegativeHash ""
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
@@ -345,15 +389,21 @@ ppAppList _ f [] = f
 ppAppList p f args = ppParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 
 -- | Pretty-print "let x1 = t1 ... xn = tn in body"
-ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> SawDoc
+ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> PPM SawDoc
 ppLetBlock defs body =
-  vcat
-  [ "let" <+> lbrace <+> align (vcat (map ppEqn defs))
-  , indent 4 rbrace
-  , " in" <+> body
-  ]
+  do
+    lets <- align . vcat <$> mapM ppEqn defs
+    pure $
+      vcat
+        [ "let" <+> lbrace <+> lets
+        , indent 4 rbrace
+        , " in" <+> body
+        ]
   where
-    ppEqn (var,d) = ppMemoVar var <+> pretty '=' <+> d
+    ppEqn (var,d) =
+      do
+        mv <- ppMemoVar var
+        pure $ mv <+> pretty '=' <+> d
 
 
 -- | Pretty-print pairs as "(x, y)"
@@ -544,7 +594,7 @@ ppTerm' prec = atNextDepthM "..." . ppTerm'' where
   ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
        case maybe_memo_var of
-         Just memo_var -> return $ ppMemoVar memo_var
+         Just memo_var -> ppMemoVar memo_var
          Nothing -> ppTermF prec tf
 
 
@@ -561,14 +611,14 @@ type OccurrenceMap = IntMap (Term, Int)
 -- side of an application are excluded. (FIXME: why?) The boolean flag indicates
 -- whether to descend under lambdas and other binders.
 scTermCount :: Bool -> Term -> OccurrenceMap
-scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty
+scTermCount doBinders t = execState (scTermCountAux doBinders [t]) mempty
 
 -- | Returns map that associates each term index appearing in the list of terms to the
 -- number of occurrences in the shared term. Subterms that are on the left-hand
 -- side of an application are excluded. (FIXME: why?) The boolean flag indicates
 -- whether to descend under lambdas and other binders.
 scTermCountMany :: Bool -> [Term] -> OccurrenceMap
-scTermCountMany doBinders ts = execState (scTermCountAux doBinders ts)  IntMap.empty
+scTermCountMany doBinders ts = execState (scTermCountAux doBinders ts) mempty
 
 scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
 scTermCountAux doBinders = go
@@ -656,16 +706,16 @@ ppLets _ [] [] baseDoc = baseDoc
 
 -- When we have run out of (idx,term) pairs, pretty-print a let binding for
 -- all the accumulated bindings around the term
-ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
+ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) =<< baseDoc
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
-ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
-  do isBound <- isJust <$> memoLookupM idx
+ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
+  do isBound <- isJust <$> memoLookupM termIdx
      if isBound then ppLets global_p idxs bindings baseDoc else
-       do doc_rhs <- ppTerm' PrecTerm t_rhs
-          withMemoVar global_p idx $ \memo_var ->
-            ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
+       do termDoc <- ppTerm' PrecTerm term
+          withMemoVar global_p termIdx (hash term) $ \memoVar ->
+            ppLets global_p idxs ((memoVar, termDoc):bindings) baseDoc
 
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
