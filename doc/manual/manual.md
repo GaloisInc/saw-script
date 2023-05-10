@@ -1715,7 +1715,19 @@ Note that:
   the `.linked-mir.json` file that appears after `linking X mir files into`, as
   that is the JSON file that must be loaded with SAW.
 * `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
-  standard library.
+  standard libraries.
+
+  SAW binary distributions include these MIR JSON files, so if you are using a
+  SAW binary distribution, it suffices to define
+  `SAW_RUST_LIBRARY_PATH=<saw-directory>/lib/rlibs`. If you are building SAW
+  from source, you must also build the MIR JSON files for the Rust standard
+  libraries from source. To do so, run the following commands:
+
+  ```
+  $ cd deps/crucible/crux-mir
+  $ ./translate_libs.sh
+  $ export SAW_RUST_LIBRARY_PATH=$(pwd)/rlibs
+  ```
 
 `mir-json` also supports compiling individual `.rs` files through `mir-json`'s
 `saw-rustc` command. As the name suggests, it accepts all of the flags that

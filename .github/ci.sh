@@ -93,6 +93,7 @@ bundle_files() {
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 
+  $IS_WIN || cp -r deps/crucible/crux-mir/rlibs dist/lib
   (cd deps/cryptol-specs && git archive --prefix=cryptol-specs/ --format=tar HEAD) | (cd dist/deps && tar x)
   cp doc/extcore.md dist/doc
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
