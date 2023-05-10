@@ -955,15 +955,6 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
--- | Load a solver result cache from a file and set it as the current
--- 'SolverCache', or if no such file exists, set the current 'SolverCache' to
--- an empty 'SolverCache' with its path set to the given value
-setSolverCachePath :: FilePath -> TopLevel ()
-setSolverCachePath path = do
-  opts <- getOptions
-  cache <- io $ loadSolverCache opts path
-  modify (\rw -> rw { rwSolverCache = Just cache })
-
 -- | Given a continuation which calls a prover, call the continuation on the
 -- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
 -- is a 'SolverCache', do not call the continuation if the goal has an already

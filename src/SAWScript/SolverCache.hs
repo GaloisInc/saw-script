@@ -8,14 +8,14 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.SolverCache where
 
-import Control.Monad (unless, when)
+import Control.Monad (forM_)
 import Control.Exception (try, SomeException)
 import Data.List (sortOn)
-import Data.Maybe (catMaybes)
-import System.Directory (doesDirectoryExist, listDirectory, createDirectory)
+import System.Directory (makeAbsolute, doesFileExist, createDirectoryIfMissing)
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
 
@@ -24,9 +24,6 @@ import Data.Bits (shiftL, (.|.))
 
 import qualified Data.HashMap.Strict as HM
 import Data.HashMap.Strict (HashMap)
-
-import qualified Data.HashSet as HS
-import Data.HashSet (HashSet)
 
 import qualified Data.Text as T
 import Data.Text.Encoding
@@ -99,25 +96,13 @@ type SolverCacheValue = (Maybe CEX, SolverStats)
 -- new additions to the cache should be saved
 data SolverCache =
   SolverCache
-  { solverCachePath :: FilePath
-  , solverCacheMap :: HashMap SolverCacheKey SolverCacheValue
-  , solverCacheUnsaved :: Maybe (HashSet SolverCacheKey)
+  { solverCacheMap :: HashMap SolverCacheKey SolverCacheValue
+  , solverCachePath :: Maybe FilePath
   }
 
--- | Load a solver result cache from a file, or if no such file exists,
--- construct an empty 'SolverCache' with its path set to the given value
-loadSolverCache :: Options -> FilePath -> IO SolverCache
-loadSolverCache opts path = do
-  ex <- doesDirectoryExist path
-  mbs <- if ex then listDirectory path >>= mapM processFile
-               else return []
-  when ex $ printOutLn opts Info ("Loaded solver result cache with " ++ show (length mbs) ++ " entries")
-  return $ SolverCache path (HM.fromList $ catMaybes mbs) Nothing
-  where processFile :: FilePath -> IO (Maybe (SolverCacheKey, SolverCacheValue))
-        processFile f = case solverCacheKeyFromHex f of
-          Just k -> fmap (\(sz,ss) -> (k, (Nothing, SolverStats ss sz))) <$>
-                    readMaybe <$> readFile (path </> f)
-          _ -> return Nothing
+-- | An empty 'SolverCache' with no associated 'FilePath'
+emptySolverCache :: SolverCache
+emptySolverCache = SolverCache HM.empty Nothing
 
 -- | A stateful operation on a 'SolverCache', returning a value of the given type
 type SolverCacheOp a = Options -> SolverCache -> IO (a, SolverCache)
@@ -125,29 +110,44 @@ type SolverCacheOp a = Options -> SolverCache -> IO (a, SolverCache)
 -- | Lookup a 'SolverCacheKey' in the solver result cache
 lookupInSolverCache :: SolverCacheKey -> SolverCacheOp (Maybe SolverCacheValue)
 lookupInSolverCache k opts cache =
-  case HM.lookup k (solverCacheMap cache) of
-    Just v -> printOutLn opts Info ("Using cached result (" ++ solverCacheKeyToHex k ++ ")" ++ show (solverCacheKeyInt k)) >>
-              return (Just v, cache)
+  case (HM.lookup k (solverCacheMap cache), solverCachePath cache) of
+    (Just v, _) -> do
+      printOutLn opts Info ("Using cached result from memory (" ++ solverCacheKeyToHex k ++ ")")
+      return (Just v, cache)
+    (_, Just path) -> do
+      ex <- doesFileExist (path </> solverCacheKeyToHex k)
+      if not ex then return (Nothing, cache)
+      else readMaybe <$> readFile (path </> solverCacheKeyToHex k) >>= \case
+        Just (sz, ss) -> do
+          let v = (Nothing, SolverStats ss sz)
+          printOutLn opts Info ("Using cached result from disk (" ++ solverCacheKeyToHex k ++ ")")
+          return (Just v, cache { solverCacheMap = HM.insert k v (solverCacheMap cache) })
+        Nothing -> return (Nothing, cache)
     _ -> return (Nothing, cache)
 
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
-insertInSolverCache k v@(Nothing, _) opts cache =
-  printOutLn opts Info ("Adding cached result (" ++ solverCacheKeyToHex k ++ ")" ++ show (solverCacheKeyInt k)) >>
-  return ((), cache { solverCacheMap = HM.insert k v (solverCacheMap cache)
-                    , solverCacheUnsaved = HS.insert k <$> solverCacheUnsaved cache })
+insertInSolverCache k v@(Nothing, SolverStats ss sz) opts cache = do
+  printOutLn opts Info ("Caching result (" ++ solverCacheKeyToHex k ++ ")")
+  case solverCachePath cache of
+    Just path -> createDirectoryIfMissing False path >>
+                 writeFile (path </> solverCacheKeyToHex k) (show (sz, ss))
+    _ -> return ()
+  return ((), cache { solverCacheMap = HM.insert k v (solverCacheMap cache) })
 insertInSolverCache _ _ _ cache = return ((), cache)
 
--- | Save the current solver result cache to a file, tracking unsaved results
--- from now on iff the given flag is 'True'
-saveSolverCache :: Bool -> SolverCacheOp ()
-saveSolverCache trackUnsaved _ cache = do
-  ex <- doesDirectoryExist (solverCachePath cache)
-  unless ex $ createDirectory (solverCachePath cache)
-  mapM_ (\(k,v) -> writeFile (solverCachePath cache </> solverCacheKeyToHex k)
-                             (showValue v))
-        (maybe (HM.toList $ solverCacheMap cache)
-               (map (\k -> (k, (solverCacheMap cache) HM.! k)) . HS.toList)
-               (solverCacheUnsaved cache))
-  return ((), cache { solverCacheUnsaved = if trackUnsaved then Just HS.empty else Nothing })
-  where showValue (_, SolverStats ss sz) = show (sz, ss)
+-- | Set the 'FilePath' of the solver result cache, erroring if it is already
+-- set, and save all results cached so far
+setSolverCachePath :: FilePath -> SolverCacheOp ()
+setSolverCachePath path opts cache =
+  makeAbsolute path >>= \pathAbs ->
+  case solverCachePath cache of
+    Just path' -> fail $ "Solver cache already has a set path: " ++ path'
+    _ | HM.null (solverCacheMap cache) -> return ((), cache { solverCachePath = Just pathAbs })
+    _ -> let to_save = HM.toList $ solverCacheMap cache in
+         createDirectoryIfMissing False pathAbs >>
+         let (s0, s1) = (show (length to_save), if length to_save > 1 then "s" else "") in
+         printOutLn opts Info ("Saving " ++ s0 ++ " cached result" ++ s1 ++ " to disk") >>
+         forM_ to_save (\(k,(_, SolverStats ss sz)) ->
+           writeFile (pathAbs </> solverCacheKeyToHex k) (show (sz, ss))) >>
+         return ((), cache { solverCachePath = Just pathAbs })

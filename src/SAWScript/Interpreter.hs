@@ -41,6 +41,7 @@ import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
+import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -478,7 +479,8 @@ buildTopLevelEnv proxy opts =
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        cache <- maybe (return Nothing)
-                      (fmap Just . loadSolverCache opts)
+                      (\p -> Just . snd <$>
+                             setSolverCachePath p opts emptySolverCache)
                       (solverCache opts)
 
        let rw0 = TopLevelRW
@@ -533,8 +535,7 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
               Nothing -> ro'
               Just m  -> ro'{ roProofSubshell = m }
   file' <- canonicalizePath file
-  _ <- runTopLevel (interpretFile file' True >>
-                    onSolverCache (saveSolverCache False)) ro'' rw
+  _ <- runTopLevel (interpretFile file' True) ro'' rw
             `X.catch` (handleException opts)
   return ()
 
@@ -643,6 +644,17 @@ disable_lax_loads_and_stores :: TopLevel ()
 disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
+
+enable_solver_cache :: TopLevel ()
+enable_solver_cache = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSolverCache = Just emptySolverCache }
+
+set_solver_cache_path :: FilePath -> TopLevel ()
+set_solver_cache_path path = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSolverCache = Just $ fromMaybe emptySolverCache (rwSolverCache rw) }
+  onSolverCache (setSolverCachePath path)
 
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
@@ -1064,11 +1076,21 @@ primitives = Map.fromList
     , "currently are 'z3' and 'yices'."
     ]
 
-  , prim "set_solver_cache_path" "String -> TopLevel ()"
-    (pureVal setSolverCachePath)
+  , prim "enable_solver_cache" "TopLevel ()"
+    (pureVal enable_solver_cache)
     Experimental
-    [ "Enable solver result caching and set the path the cache should be"
-    , " loaded from and saved to."
+    [ "Enable solver result caching. Unless set_solver_cache_path is"
+    , " later called, the cache will not persist between sessions."
+    ]
+
+  , prim "set_solver_cache_path" "String -> TopLevel ()"
+    (pureVal set_solver_cache_path)
+    Experimental
+    [ "Enable solver result caching if it is not already enabled, set a"
+    , " path to use for loading and saving cached results, and save to"
+    , " that path any results cached so far from the current session."
+    , " If there is already a path set for solver caching, this will"
+    , " error."
     ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
