@@ -32,6 +32,7 @@ library
     , bv-sized >= 1.0 && < 1.1
     , containers
     , constraints >= 0.6
+    , cryptohash-sha256
     , cryptol
     , cryptol-saw-core
     , crucible >= 0.4
@@ -50,6 +51,7 @@ library
     , free
     , haskeline
     , heapster-saw
+    , hex-text
     , hobbits >= 1.3.1
     , galois-dwarf >= 0.2.2
     , IfElse
@@ -125,6 +127,7 @@ library
     SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
+    SAWScript.SolverCache
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU

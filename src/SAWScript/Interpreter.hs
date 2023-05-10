@@ -67,6 +67,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.SolverCache
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
@@ -402,7 +403,6 @@ interpretFile file runMain =
           mapM_ stmtWithPrint stmts
           when runMain interpretMain
           writeVerificationSummary
-          savePropCache
 
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
@@ -477,7 +477,7 @@ buildTopLevelEnv proxy opts =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
-       cache <- maybe (return Nothing) loadPropCacheH (solverCache opts)
+       cache <- maybe (return Nothing) loadSolverCacheH (solverCache opts)
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
@@ -491,7 +491,7 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
                    , rwTheoremDB = thmDB
-                   , rwPropCache = cache
+                   , rwSolverCache = cache
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
@@ -531,7 +531,7 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
               Nothing -> ro'
               Just m  -> ro'{ roProofSubshell = m }
   file' <- canonicalizePath file
-  _ <- runTopLevel (interpretFile file' True) ro'' rw
+  _ <- runTopLevel (interpretFile file' True >> saveSolverCache False) ro'' rw
             `X.catch` (handleException opts)
   return ()
 
@@ -1062,7 +1062,7 @@ primitives = Map.fromList
     ]
 
   , prim "set_solver_cache_path" "String -> TopLevel ()"
-    (pureVal loadPropCache)
+    (pureVal loadSolverCache)
     Experimental
     [ "Enable solver result caching and set the path the cache should be"
     , " loaded from and saved to."

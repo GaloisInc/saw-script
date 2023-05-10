@@ -49,11 +49,13 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
 import Data.List ( intersperse )
-import Data.HashMap.Strict (HashMap)
+import Data.HashMap.Strict ( HashMap )
+import Data.HashSet ( HashSet )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
+import Data.ByteString (ByteString)
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
@@ -505,6 +507,16 @@ data TopLevelRO =
   , roLocalEnv      :: LocalEnv
   }
 
+type SolverCacheKey = ByteString
+type SolverCacheValue = (Maybe CEX, SolverStats)
+
+data SolverCache =
+  SolverCache
+  { solverCachePath :: FilePath
+  , solverCacheMap :: HashMap SolverCacheKey SolverCacheValue
+  , solverCacheUnsaved :: Maybe (HashSet SolverCacheKey)
+  }
+
 data TopLevelRW =
   TopLevelRW
   { rwValues  :: Map SS.LName Value
@@ -518,7 +530,7 @@ data TopLevelRW =
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
   , rwTheoremDB :: TheoremDB
-  , rwPropCache :: Maybe (FilePath, HashMap String SolverStats)
+  , rwSolverCache :: Maybe SolverCache
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext

@@ -60,6 +60,7 @@ import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
 import SAWScript.TopLevel (TopLevelRW(..))
+import SAWScript.SolverCache (saveSolverCache)
 
 
 -- Commands --------------------------------------------------------------------
@@ -144,7 +145,8 @@ genHelp cs = map cmdHelp cs
 runCommand :: Command -> REPL ()
 runCommand c = case c of
 
-  Command cmd -> exceptionProtect cmd
+  Command cmd -> do exceptionProtect cmd
+                    void $ liftTopLevel (saveSolverCache True)
 
   Unknown cmd -> io (putStrLn ("Unknown command: " ++ cmd))
 

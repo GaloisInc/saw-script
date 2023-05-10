@@ -36,11 +36,9 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.IORef
-import Data.List (isPrefixOf, isInfixOf, sortOn)
-import qualified Data.HashMap.Strict as HM
-import Data.HashMap.Strict (HashMap)
+import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -127,6 +125,7 @@ import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
+import SAWScript.SolverCache
 
 import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Prover.Util(checkBooleanSchema)
@@ -956,108 +955,18 @@ proveUnintSBV conf unints =
      unintSet <- SV.scriptTopLevel (resolveNames unints)
      wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
--- | Generalize over the all external constants in a given term by
--- wrapping the term with foralls and replacing the external constant
--- occurrences with the appropriate local variables.
--- FIXME: Move to SharedTerm.hs
-scGeneralizeAllExts :: SharedContext -> Term -> IO Term
-scGeneralizeAllExts sc tm =
-  let allexts = sortOn (toShortName . ecName) $ getAllExts tm
-   in scGeneralizeExts sc allexts tm
-
--- | Lookup a 'Prop' in the solver result cache
--- FIXME: Move somewhere else?
-lookupInPropCache :: Prop -> TopLevel (Maybe SolverStats)
-lookupInPropCache p = 
-  rwPropCache <$> get >>= \case
-    Just (_, cache) -> do
-      sc <- getSharedContext
-      opts <- getTopLevelPPOpts
-      gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
-      gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
-      case HM.lookup (scWriteExternal gen_tm) cache of
-        Just ret -> do printOutLnTop Info $ "Using cached result for: " ++ gen_tm_str
-                       return $ Just ret
-        _ -> do -- printOutLnTop Info $ "Cache miss on: " ++ show gen_tm_str
-                return Nothing
-    _ -> return Nothing
-
--- | Add a 'Prop' to the solver result cache
--- FIXME: Move somewhere else?
-insertInPropCache :: Prop -> SolverStats -> TopLevel ()
-insertInPropCache p stats =
-  rwPropCache <$> get >>= \case
-    Just (path, cache) -> do
-      sc <- getSharedContext
-      opts <- getTopLevelPPOpts
-      gen_tm <- io $ scGeneralizeAllExts sc (unProp p)
-      gen_tm_str <- liftIO $ scShowTerm sc opts gen_tm
-      printOutLnTop Info $ "Adding cached result: " ++ gen_tm_str
-      modify (\rw -> rw { rwPropCache = Just (path, HM.insert (scWriteExternal gen_tm) stats cache) })
-    Nothing -> return ()
-
--- | Load a solver result cache from a file
--- FIXME: Move somewhere else?
-loadPropCache :: FilePath -> TopLevel ()
-loadPropCache path =
-  do cache <- io $ loadPropCacheH path
-     modify (\rw -> rw { rwPropCache = cache })
-
--- | Construct a solver result cache from a file
--- FIXME: Move somewhere else?
-loadPropCacheH :: FilePath -> IO (Maybe (FilePath, HashMap String SolverStats))
-loadPropCacheH path =
-  doesDirectoryExist path >>= \case
-    True -> do index <- lines <$> readFile (path </> "index")
-               files <- listDirectory path
-               cache <- catMaybes <$> mapM (processFile index) files
-               return $ Just (path, HM.fromList cache)
-    False -> return $ Just (path, HM.empty)
-  where processFile :: [String] -> FilePath -> IO (Maybe (String, SolverStats))
-        processFile index f = case readMaybe (drop 1 f) of
-          Just i | i < length index -> do
-            str <- readFile (path </> f)
-            let (s0, s1) = break (== ' ') (index !! i)
-            case (,) <$> readMaybe s0 <*> readMaybe (drop 1 s1) of
-              Just (sz, ss) ->
-                return $ Just (length ss `seq` str,
-                               SolverStats (Set.fromList ss) sz)
-              _ -> return Nothing
-          _ -> return Nothing
-
--- | Save the current solver result cache to a file
--- FIXME: Move somewhere else?
-savePropCache :: TopLevel ()
-savePropCache =
-  rwPropCache <$> getTopLevelRW >>= \case
-    Just (path, cache) -> io $ do
-      doesDirectoryExist path >>= flip unless (createDirectory path)
-      index <- mapM (\((str,stats),i) ->
-                      writeFile (path </> ("t" ++ show i)) str >>
-                      return (show (solverStatsGoalSize stats) ++ " " ++
-                              show (Set.toList $ solverStatsSolvers stats)))
-                    (zip (HM.toList cache) ([0..] :: [Integer]))
-      writeFile (path </> "index") (unlines index)
-    Nothing -> return ()
-
 applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f g = do
-  sc <- getSharedContext
-  g_prop <- io . Ex.try $ sequentToProp sc (goalSequent g)
-  (mb, stats) <- case g_prop of
-    -- If we can convert our goal into a prop, we can use caching
-    Right prop -> lookupInPropCache prop >>= \case
-      Just stats -> -- Use a cached result!
-                    return (Nothing, stats)
-      _ -> f (goalSequent g) >>= \case
-        (Nothing, stats) -> -- Cache an unsat result!
-                            insertInPropCache prop stats >>
-                            return (Nothing, stats)
-        (mb, stats) -> return (mb, stats)
-    -- Otherwise we just call the solver
-    Left (_ :: Ex.SomeException) -> f (goalSequent g)
+  mb_cache_key <- propToSolverCacheKey (goalSequent g)
+  (mb, stats) <- case mb_cache_key of
+    Just k -> lookupInSolverCache k >>= \case
+      Just res -> return res
+      _ -> do res <- f (goalSequent g)
+              insertInSolverCache k res
+              return res
+    _ -> f (goalSequent g)
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
