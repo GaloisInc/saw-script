@@ -95,6 +95,10 @@
   on Windows at this time due to a downstream issue with CVC5 1.0.4 and
   earlier.)
 
+* Add experimental support for verifying Rust programs. For more information,
+  see the `mir_*` commands documented in the
+  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
 # Version 0.9
 
 ## New Features

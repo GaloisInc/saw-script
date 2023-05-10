@@ -5,7 +5,8 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The
+Cryptol, LLVM (and therefore C), and JVM (and therefore Java). SAW also has
+experimental, incomplete support for MIR (and therefore Rust). The
 models take the form of typed functional programs, so in a sense SAW can
 be considered a translator from imperative programs to their functional
 equivalents. Various external proof tools, including a variety of SAT
@@ -176,7 +177,7 @@ Cryptol, Haskell and ML. In particular, functions are applied by
 writing them next to their arguments rather than by using parentheses
 and commas. Rather than writing `f(x, y)`, write `f x y`.
 
-Comments are written as in C and Java (among many other languages). All
+Comments are written as in C, Java, and Rust (among many other languages). All
 text from `//` until the end of a line is ignored. Additionally, all
 text between `/*` and `*/` is ignored, regardless of whether the line
 ends.
@@ -1568,6 +1569,8 @@ analyze JVM and LLVM programs.
 
 The first step in analyzing any code is to load it into the system.
 
+## Loading LLVM
+
 To load LLVM code, simply provide the location of a valid bitcode file
 to the `llvm_load_module` function.
 
@@ -1582,6 +1585,8 @@ metadata has changed somewhat throughout that version range, so is the
 most likely case of incompleteness. We aim to support every version
 after 3.5, however, so report any parsing failures as [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
+
+## Loading Java
 
 Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, three flags
@@ -1623,12 +1628,28 @@ unresolved issues in verifying code involving classes such as `String`. For
 more information on these issues, refer to
 [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
+## Loading MIR
+
+To load a piece of Rust code, first compile it to a MIR JSON file, as described
+in [this section](#compiling-mir), and then provide the location of the JSON
+file to the `mir_load_module` function:
+
+* `mir_load_module : String -> TopLevel MIRModule`
+
+SAW currently supports Rust code that can be built with a [March 22, 2020 Rust
+nightly](https://static.rust-lang.org/dist/2020-03-22/).  If you encounter a
+Rust feature that SAW does not support, please report it [on
+GitHub](https://github.com/GaloisInc/saw-script/issues).
+
 ## Notes on Compiling Code for SAW
 
-SAW will generally be able to load arbitrary LLVM bitcode and JVM
-bytecode files, but several guidelines can help make verification
-easier or more likely to succeed. For generating LLVM with `clang`, it
-can be helpful to:
+SAW will generally be able to load arbitrary LLVM bitcode, JVM bytecode, and
+MIR JSON files, but several guidelines can help make verification easier or
+more likely to succeed.
+
+### Compiling LLVM
+
+For generating LLVM with `clang`, it can be helpful to:
 
 * Turn on debugging symbols with `-g` so that SAW can find source
   locations of functions, names of variables, etc.
@@ -1659,11 +1680,54 @@ behavior, and SAW currently does not have built in support for these
 functions (though you could manually create overrides for them in a
 verification script).
 
+[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+
+### Compiling Java
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
 
-[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+### Compiling MIR
+
+In order to verify Rust code, SAW analyzes Rust's MIR (mid-level intermediate
+representation) language. In particular, SAW analyzes a particular form of MIR
+that the [`mir-json`](https://github.com/GaloisInc/mir-json) tool produces. You
+will need to intall `mir-json` and run it on Rust code in order to produce MIR
+JSON files that SAW can load (see [this section](#loading-mir)).
+
+For `cargo`-based projects, `mir-json` provides a `cargo` subcommand called
+`cargo saw-build` that builds a JSON file suitable for use with SAW. `cargo
+saw-build` integrates directly with `cargo`, so you can pass flags to it like
+any other `cargo` subcommand. For example:
+
+```
+$ export SAW_RUST_LIBRARY_PATH=<...>
+$ cargo saw-build <other cargo flags>
+<snip>
+linking 11 mir files into <...>/example-364cf2df365c7055.linked-mir.json
+<snip>
+```
+
+Note that:
+
+* The full output of `cargo saw-build` here is omitted. The important part is
+  the `.linked-mir.json` file that appears after `linking X mir files into`, as
+  that is the JSON file that must be loaded with SAW.
+* `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
+  standard library.
+
+`mir-json` also supports compiling individual `.rs` files through `mir-json`'s
+`saw-rustc` command. As the name suggests, it accepts all of the flags that
+`rustc` accepts. For example:
+
+```
+$ export SAW_RUST_LIBRARY_PATH=<...>
+$ saw-rustc example.rs <other rustc flags>
+<snip>
+linking 11 mir files into <...>/example.linked-mir.json
+<snip>
+```
 
 ## Notes on C++ Analysis
 

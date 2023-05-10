@@ -113,6 +113,8 @@ import qualified Lang.Crucible.JVM as CJ
 import           Lang.Crucible.Utils.StateContT
 import           Lang.Crucible.LLVM.ArraySizeProfile
 
+import           Mir.Generator
+
 import           What4.ProgramLoc (ProgramLoc(..))
 
 import Verifier.SAW.Heapster.Permissions
@@ -158,6 +160,7 @@ data Value
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
+  | VMIRModule RustModule
   | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
@@ -338,6 +341,7 @@ showsPrecValue opts nenv p v =
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
+    VMIRModule m -> shows (PP.pretty (m^.rmCS^.collection))
     VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
@@ -669,7 +673,7 @@ withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
 withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
 
 withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
-withLocalEnvProof env (ProofScript m) = 
+withLocalEnvProof env (ProofScript m) =
   ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
 
 getLocalEnv :: TopLevel LocalEnv
@@ -1196,6 +1200,13 @@ instance IsValue (CMSLLVM.LLVMModule arch) where
 instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue CMSLLVM.LLVMModule"
+
+instance IsValue RustModule where
+    toValue m = VMIRModule m
+
+instance FromValue RustModule where
+    fromValue (VMIRModule m) = m
+    fromValue _ = error "fromValue RustModule"
 
 instance IsValue HeapsterEnv where
     toValue m = VHeapsterEnv m

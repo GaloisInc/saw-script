@@ -37,6 +37,7 @@ library
     , crucible >= 0.4
     , crucible-jvm
     , crucible-llvm >= 0.2
+    , crucible-mir
     , deepseq
     , either
     , elf-edit
@@ -154,6 +155,8 @@ library
     SAWScript.Crucible.JVM.MethodSpecIR
     SAWScript.Crucible.JVM.Override
     SAWScript.Crucible.JVM.ResolveSetupValue
+
+    SAWScript.Crucible.MIR.Builtins
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
