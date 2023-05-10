@@ -648,13 +648,12 @@ disable_lax_loads_and_stores = do
 enable_solver_cache :: TopLevel ()
 enable_solver_cache = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwSolverCache = Just emptySolverCache }
+  let cache = fromMaybe emptySolverCache (rwSolverCache rw)
+  putTopLevelRW rw { rwSolverCache = Just cache }
 
 set_solver_cache_path :: FilePath -> TopLevel ()
-set_solver_cache_path path = do
-  rw <- getTopLevelRW
-  putTopLevelRW rw { rwSolverCache = Just $ fromMaybe emptySolverCache (rwSolverCache rw) }
-  onSolverCache (setSolverCachePath path)
+set_solver_cache_path path =
+  enable_solver_cache >> onSolverCache (setSolverCachePath path)
 
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
@@ -1092,6 +1091,13 @@ primitives = Map.fromList
     , " If there is already a path set for solver caching, this will"
     , " error."
     ]
+  
+  , prim "print_solver_cache_stats" "TopLevel ()"
+    (pureVal (onSolverCache printSolverCacheStats))
+    Experimental
+    [ "Print out statistics about how the solver cache was used, namely"
+    , " how many results are cached and how many cache hits have"
+    , " occurred - both in memory and on disk" ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)

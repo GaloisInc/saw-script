@@ -15,7 +15,8 @@ module SAWScript.SolverCache where
 import Control.Monad (forM_)
 import Control.Exception (try, SomeException)
 import Data.List (sortOn)
-import System.Directory (makeAbsolute, doesFileExist, createDirectoryIfMissing)
+import Data.Tuple.Extra (first, second)
+import System.Directory
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
 
@@ -98,11 +99,12 @@ data SolverCache =
   SolverCache
   { solverCacheMap :: HashMap SolverCacheKey SolverCacheValue
   , solverCachePath :: Maybe FilePath
+  , solverCacheHits :: (Integer, Integer)
   }
 
 -- | An empty 'SolverCache' with no associated 'FilePath'
 emptySolverCache :: SolverCache
-emptySolverCache = SolverCache HM.empty Nothing
+emptySolverCache = SolverCache HM.empty Nothing (0,0)
 
 -- | A stateful operation on a 'SolverCache', returning a value of the given type
 type SolverCacheOp a = Options -> SolverCache -> IO (a, SolverCache)
@@ -113,7 +115,7 @@ lookupInSolverCache k opts cache =
   case (HM.lookup k (solverCacheMap cache), solverCachePath cache) of
     (Just v, _) -> do
       printOutLn opts Info ("Using cached result from memory (" ++ solverCacheKeyToHex k ++ ")")
-      return (Just v, cache)
+      return (Just v, cache { solverCacheHits = first (+1) (solverCacheHits cache) })
     (_, Just path) -> do
       ex <- doesFileExist (path </> solverCacheKeyToHex k)
       if not ex then return (Nothing, cache)
@@ -121,7 +123,8 @@ lookupInSolverCache k opts cache =
         Just (sz, ss) -> do
           let v = (Nothing, SolverStats ss sz)
           printOutLn opts Info ("Using cached result from disk (" ++ solverCacheKeyToHex k ++ ")")
-          return (Just v, cache { solverCacheMap = HM.insert k v (solverCacheMap cache) })
+          return (Just v, cache { solverCacheMap = HM.insert k v (solverCacheMap cache)
+                                , solverCacheHits = second (+1) (solverCacheHits cache) })
         Nothing -> return (Nothing, cache)
     _ -> return (Nothing, cache)
 
@@ -151,3 +154,29 @@ setSolverCachePath path opts cache =
          forM_ to_save (\(k,(_, SolverStats ss sz)) ->
            writeFile (pathAbs </> solverCacheKeyToHex k) (show (sz, ss))) >>
          return ((), cache { solverCachePath = Just pathAbs })
+
+-- | Print out statistics about how the solver cache was used
+printSolverCacheStats :: SolverCacheOp ()
+printSolverCacheStats opts cache = do
+  let memSize = HM.size $ solverCacheMap cache
+  let (memHits, diskHits) = solverCacheHits cache
+  printOutLn opts Info ("== Solver result cache statistics ==")
+  case solverCachePath cache of
+    Just path -> do
+      diskSize <- length <$> listDirectory path
+      printOutLn opts Info ("- " ++ show diskSize ++ " results cached on disk "
+                                 ++ "(" ++ path ++ ")")
+      printOutLn opts Info ("- " ++ show memSize ++ " results cached in memory "
+                                 ++ "(" ++ show (100*memSize `div` diskSize)
+                                 ++ "% of total cache)")
+      let totalHits = max 1 (memHits+diskHits)
+      printOutLn opts Info ("- " ++ show diskHits ++ " cache hits from disk "
+                                 ++ "(" ++ show (100*diskHits `div` totalHits)
+                                 ++ "% of total hits)")
+      printOutLn opts Info ("- " ++ show memHits ++ " cache hits from memory "
+                                 ++ "(" ++ show (100*memHits `div` totalHits)
+                                 ++ "% of total hits)")
+    Nothing -> do
+      printOutLn opts Info ("- " ++ show memSize ++ " results cached in memory")
+      printOutLn opts Info ("- " ++ show memHits ++ " cache hits")
+  return ((), cache)
