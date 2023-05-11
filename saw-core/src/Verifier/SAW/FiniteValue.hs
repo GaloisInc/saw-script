@@ -19,10 +19,8 @@ import Control.Monad (mzero)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.State as S
-import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
 import Prettyprinter hiding (Doc)
@@ -99,23 +97,16 @@ toFiniteType FOTInt{}      = Nothing
 toFiniteType FOTIntMod{}   = Nothing
 toFiniteType FOTArray{}    = Nothing
 
-instance Show FiniteValue where
-  showsPrec p fv = showsPrec p (toFirstOrderValue fv)
+showFiniteValues :: [FiniteValue] -> String
+showFiniteValues = showFirstOrderValues . map toFirstOrderValue
 
-instance Show FirstOrderValue where
-  showsPrec _ fv =
-    case fv of
-      FOVBit b    -> shows b
-      FOVInt i    -> shows i
-      FOVIntMod _ i -> shows i
-      FOVWord _ x -> shows x
-      FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
-      FOVArray{}  -> shows $ firstOrderTypeOf fv
-      FOVTuple vs -> showString "(" . commaSep (map shows vs) . showString ")"
-      FOVRec vm   -> showString "{" . commaSep (map showField (Map.assocs vm)) . showString "}"
-    where
-      commaSep ss = foldr (.) id (intersperse (showString ",") ss)
-      showField (field, v) = showString (Text.unpack field) . showString " = " . shows v
+showFirstOrderValues :: [FirstOrderValue] -> String
+showFirstOrderValues = renderSawDoc defaultPPOpts . list .
+                       map (ppFirstOrderValue defaultPPOpts)
+
+showFirstOrderValue :: FirstOrderValue -> String
+showFirstOrderValue = renderSawDoc defaultPPOpts .
+                      ppFirstOrderValue defaultPPOpts
 
 ppFiniteValue :: PPOpts -> FiniteValue -> SawDoc
 ppFiniteValue opts fv = ppFirstOrderValue opts (toFirstOrderValue fv)

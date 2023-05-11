@@ -215,7 +215,6 @@ data SatResult
   = Unsat SolverStats
   | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
   | SatUnknown
-    deriving (Show)
 
 isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
@@ -259,12 +258,8 @@ showBrackets s = showString "[" . s . showString "]"
 showBraces :: ShowS -> ShowS
 showBraces s = showString "{" . s . showString "}"
 
-showsProofResult :: PPOpts -> ProofResult -> ShowS
-showsProofResult opts r =
-  case r of
-    ValidProof _ _ -> showString "Valid"
-    InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
-    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
+showsCEX :: PPOpts -> CEX -> ShowS
+showsCEX opts ts = showString "[" . showMulti "" ts
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
@@ -274,20 +269,19 @@ showsProofResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
+showsProofResult :: PPOpts -> ProofResult -> ShowS
+showsProofResult opts r =
+  case r of
+    ValidProof _ _ -> showString "Valid"
+    InvalidProof _ ts _ -> showString "Invalid: " . showsCEX opts ts
+    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining"
 
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
     Unsat _ -> showString "Unsat"
-    Sat _ ts -> showString "Sat: [" . showMulti "" ts
+    Sat _ ts -> showString "Sat: " . showsCEX opts ts
     SatUnknown  -> showString "Unknown"
-  where
-    opts' = sawPPOpts opts
-    showVal t = shows (ppFirstOrderValue opts' t)
-    showEC ec = showString (unpack (toShortName (ecName ec)))
-    showEqn (x, t) = showEC x . showString " = " . showVal t
-    showMulti _ [] = showString "]"
-    showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
 showSimpset :: PPOpts -> Simpset a -> String
 showSimpset opts ss =

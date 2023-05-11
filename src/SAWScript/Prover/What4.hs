@@ -236,4 +236,6 @@ printValue _ _ (Nothing, _) = return ()
 printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), orig) = do
   gv <- groundEval f @ty bv
   putStr $ orig ++ "=?"
-  print (groundToFOV ty gv)
+  case (groundToFOV ty gv) of
+    Left err  -> putStrLn $ "Left " ++ show err
+    Right fov -> putStrLn $ "Right " ++ showFirstOrderValue fov

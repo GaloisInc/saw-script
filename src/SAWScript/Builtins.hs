@@ -1491,11 +1491,9 @@ quickCheckPrintPrim opts sc numTests tt =
      testGen <- prepareSATQuery sc satq
      runManyTests testGen numTests >>= \case
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
-        Just cex ->
-          do let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
-             printOutLn opts OnlyCounterExamples $
-               "----------Counterexample----------\n" ++
-               showList cex' ""
+        Just cex -> printOutLn opts OnlyCounterExamples $
+                    "----------Counterexample----------\n" ++
+                    SV.showsCEX SV.defaultPPOpts cex ""
 
 cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
