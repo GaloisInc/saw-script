@@ -690,10 +690,11 @@ ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
   do isBound <- isJust <$> memoLookupM idx
      if isBound then ppLets global_p idxs bindings baseDoc else
        do doc_rhs <- ppTerm' PrecTerm t_rhs
-          withMemoVar global_p idx $ \case
-            Just memo_var -> ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
-            Nothing -> ppLets global_p idxs bindings baseDoc
-
+          withMemoVar global_p idx $ \memoVarM ->
+            let bindings' = case memoVarM of 
+                  Just memoVar -> (memoVar, doc_rhs):bindings
+                  Nothing -> bindings
+            in  ppLets global_p idxs bindings' baseDoc
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
 -- returning both the result of pretty-printing and the fresh name actually used
