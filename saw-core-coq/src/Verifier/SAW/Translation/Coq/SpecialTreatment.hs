@@ -494,38 +494,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("test_fun6",            skip)
   ]
 
-  -- The computation monad
-  ++
-  [ ("CompM",                replace (Coq.Var "CompM"))
-  , ("returnM",              replace (Coq.App (Coq.ExplVar "returnM")
-                                       [Coq.Var "CompM", Coq.Var "_"]))
-  , ("bindM",                replace (Coq.App (Coq.ExplVar "bindM")
-                                       [Coq.Var "CompM", Coq.Var "_"]))
-  , ("errorM",               replace (Coq.App (Coq.ExplVar "errorM")
-                                       [Coq.Var "CompM", Coq.Var "_"]))
-  , ("catchM",               skip)
-  , ("existsM",              mapsToExpl compMModule "existsM")
-  , ("forallM",              mapsToExpl compMModule "forallM")
-  , ("orM",                  mapsToExpl compMModule "orM")
-  , ("assertingM",           mapsToExpl compMModule "assertingM")
-  , ("assumingM",            mapsToExpl compMModule "assumingM")
-  , ("asserting",            skip)
-  , ("assuming",             skip)
-  , ("fixM",                 replace (Coq.App (Coq.ExplVar "fixM")
-                                       [Coq.Var "CompM", Coq.Var "_"]))
-  , ("LetRecType",           mapsTo specMModule "LetRecType")
-  , ("LRT_Ret",              mapsTo specMModule "LRT_Ret")
-  , ("LRT_Fun",              mapsTo specMModule "LRT_Fun")
-  , ("lrtToType",            mapsTo compMModule "lrtToType")
-  , ("LetRecTypes",          mapsTo compMModule "LetRecTypes")
-  , ("LRT_Cons",             mapsTo compMModule "LRT_Cons")
-  , ("LRT_Nil",              mapsTo compMModule "LRT_Nil")
-  , ("lrtPi",                mapsTo compMModule "lrtPi")
-  , ("lrtTupleType",         mapsTo compMModule "lrtTupleType")
-  , ("multiFixM",            mapsToExpl compMModule "multiFixM")
-  , ("letRecM",              mapsToExpl compMModule "letRecM")
-  ]
-
   -- The specification monad
   ++
   [ ("EvType",               mapsTo specMModule "EvType")
