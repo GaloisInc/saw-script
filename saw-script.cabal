@@ -193,47 +193,47 @@ library
     alex:alex >= 3.1.3,
     happy:happy >= 1.9.4
 
-executable saw
-  default-language: Haskell2010
-  hs-source-dirs: saw
+-- executable saw
+--   default-language: Haskell2010
+--   hs-source-dirs: saw
 
-  main-is: Main.hs
+--   main-is: Main.hs
 
-  other-modules:
-    Paths_saw_script
-    GitRev
-    SAWScript.REPL
-    SAWScript.REPL.Command
-    SAWScript.REPL.Haskeline
-    SAWScript.REPL.Logo
-    SAWScript.REPL.Monad
-    SAWScript.REPL.Trie
-    SAWScript.Version
+--   other-modules:
+--     Paths_saw_script
+--     GitRev
+--     SAWScript.REPL
+--     SAWScript.REPL.Command
+--     SAWScript.REPL.Haskeline
+--     SAWScript.REPL.Logo
+--     SAWScript.REPL.Monad
+--     SAWScript.REPL.Trie
+--     SAWScript.Version
 
-  autogen-modules:
-    Paths_saw_script
-    GitRev
+--   autogen-modules:
+--     Paths_saw_script
+--     GitRev
 
-  build-depends:
-      base >= 4
-    , ansi-terminal
-    , containers
-    , cryptol
-    , directory
-    , either
-    , exceptions
-    , filepath
-    , haskeline
-    , mtl
-    , QuickCheck
-    , transformers
-    , saw-script
-    , saw-core
-    , heapster-saw
-    , cryptol-saw-core
-    , aig
+--   build-depends:
+--       base >= 4
+--     , ansi-terminal
+--     , containers
+--     , cryptol
+--     , directory
+--     , either
+--     , exceptions
+--     , filepath
+--     , haskeline
+--     , mtl
+--     , QuickCheck
+--     , transformers
+--     , saw-script
+--     , saw-core
+--     , heapster-saw
+--     , cryptol-saw-core
+--     , aig
 
-  GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
+--   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
 test-suite integration_tests
   type: exitcode-stdio-1.0
@@ -253,4 +253,4 @@ test-suite integration_tests
                , tasty-hunit
                , tasty-expected-failure
 
-  build-tool-depends: saw-script:saw
+  build-tool-depends: exe:saw

@@ -1,0 +1,90 @@
+Cabal-version: 2.4
+Name:          saw
+Version:       0.9.0.99
+Author:        Galois Inc.
+Maintainer:    atomb@galois.com
+Build-type:    Custom
+License:       BSD-3-Clause
+License-file:  LICENSE
+
+
+custom-setup
+  setup-depends:
+      Cabal >= 1.24
+    , base
+    , directory
+    , filepath
+    , process
+
+library
+  default-language: Haskell2010
+  hs-source-dirs: src
+
+  exposed-modules:
+    SAWScript.REPL
+    SAWScript.REPL.Command
+    SAWScript.REPL.Haskeline
+    SAWScript.REPL.Logo
+    SAWScript.REPL.Monad
+    SAWScript.REPL.Trie
+    SAWScript.Version
+  
+  -- other-modules:
+  --   GitRev
+  -- autogen-modules:
+  --   GitRev
+  
+  build-depends:
+      base >= 4
+    , ansi-terminal
+    , containers
+    , cryptol
+    , directory
+    , either
+    , exceptions
+    , filepath
+    , haskeline
+    , mtl
+    , QuickCheck
+    , transformers
+    , saw-script
+    , saw-core
+    , heapster-saw
+    , cryptol-saw-core
+    , aig
+  
+  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
+
+
+executable saw
+  default-language: Haskell2010
+  hs-source-dirs: app
+
+  main-is: Main.hs
+
+  -- other-modules:
+  --   Paths_saw_script
+  -- autogen-modules:
+  --   Paths_saw_script
+
+  build-depends:
+      base >= 4
+    , saw
+    , ansi-terminal
+    , containers
+    , cryptol
+    , directory
+    , either
+    , exceptions
+    , filepath
+    , haskeline
+    , mtl
+    , QuickCheck
+    , transformers
+    , saw-script
+    , saw-core
+    , heapster-saw
+    , cryptol-saw-core
+    , aig
+
+  GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
