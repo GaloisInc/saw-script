@@ -386,15 +386,21 @@ data TermF e
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 -- See the commentary on 'Hashable Term' for a note on uniqueness.
-instance Hashable e => Hashable (TermF e) -- automatically derived.
--- NB: we may someday wish to customize this instance, for a couple reasons.
+instance Hashable e => Hashable (TermF e) where
+  hashWithSalt salt (FTermF ftf) = salt `hashWithSalt` ftf
+  hashWithSalt salt (App _ t u) = salt `hashWithSalt` t `hashWithSalt` u
+  hashWithSalt salt (Lambda _ t u) = salt `hashWithSalt` t `hashWithSalt` u
+  hashWithSalt salt (Pi _ t u) = salt `hashWithSalt` t `hashWithSalt` u
+  hashWithSalt salt (LocalVar i) = salt `hashWithSalt` i
+  hashWithSalt salt (Constant ec _) = salt `hashWithSalt` ec
+-- NB: we may someday wish to improve this instance, for a couple reasons.
 --
 -- 1. Hash 'Constant's based on their definition, if it exists, rather than
--- always using both their type and definition (as the automatically derived
--- instance does). Their type, represented as an 'ExtCns', contains unavoidable
+-- always using their type. Represented as an 'ExtCns', it contains unavoidable
 -- freshness derived from a global counter (via 'scFreshGlobalVar' as
 -- initialized in 'Verifier.SAW.SharedTerm.mkSharedContext'), but their
 -- definition does not necessarily contain the same freshness.
+-- (Q: If we did this, would we also have to update 'alphaEquiv'?)
 --
 -- 2. Improve the default, XOR-based hashing scheme to improve collision
 -- resistance. A polynomial-based approach may be fruitful. For a constructor
@@ -455,14 +461,9 @@ instance Hashable Term where
   -- hashes introduces less randomness/freshness, it maintains plenty, and
   -- provides benefits as described above. No code should ever rely on total
   -- uniqueness of hashes, and terms are no exception.
-  hashWithSalt salt STApp{ stAppHash = h } = salt `combine` 0x00000000 `hashWithSalt` h
-  hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
-
-
--- | Combine two given hash values.  'combine' has zero as a left
--- identity. (FNV hash, copied from Data.Hashable 1.2.1.0.)
-combine :: Int -> Int -> Int
-combine h1 h2 = (h1 * 0x01000193) `xor` h2
+  hash STApp{ stAppHash = h } = h
+  hash (Unshared t) = hash t
+  hashWithSalt salt = hashWithSalt salt . hash
 
 instance Eq Term where
   -- Note: we take some minor liberties with the contract of 'hashWithSalt' in
@@ -483,8 +484,9 @@ alphaEquiv = term
     term (Unshared tf1) (Unshared tf2) = termf tf1 tf2
     term (Unshared tf1) (STApp{stAppTermF = tf2}) = termf tf1 tf2
     term (STApp{stAppTermF = tf1}) (Unshared tf2) = termf tf1 tf2
-    term (STApp{stAppIndex = i1, stAppTermF = tf1})
-         (STApp{stAppIndex = i2, stAppTermF = tf2}) = i1 == i2 || termf tf1 tf2
+    term (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
+         (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =
+         i1 == i2 || (h1 == h2 && termf tf1 tf2)
 
     termf :: TermF Term -> TermF Term -> Bool
     termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
