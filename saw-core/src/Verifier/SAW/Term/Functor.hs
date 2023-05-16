@@ -385,10 +385,11 @@ data TermF e
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
--- See the commentary on 'Hashable Term' for a note on uniqueness.
+-- See the commentary on 'Hashable Term' for an explanation of this instance
+-- and a note on uniqueness.
 instance Hashable e => Hashable (TermF e) where
   hashWithSalt salt (FTermF ftf) = salt `hashWithSalt` ftf
-  hashWithSalt salt (App _ t u) = salt `hashWithSalt` t `hashWithSalt` u
+  hashWithSalt salt (App t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Lambda _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Pi _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (LocalVar i) = salt `hashWithSalt` i
@@ -452,8 +453,21 @@ data Term
   deriving (Show, Typeable)
 
 instance Hashable Term where
-  -- Why have 'Hashable' depend on the not-necessarily-unique hash instead of
-  -- the necessarily-unique index? Per #1830 (PR) and #1831 (issue), we want to
+  -- This instance is written to match 'alphaEquiv', since the contract of the
+  -- 'hashWithSalt' states that if two elements are equal ('alphaEquiv' in
+  -- the case of 'Term's) then their hashes must also be equal. In particular,
+  -- this means:
+  -- 1. We cannot differentiate between the the 'STApp' and 'Unshared'
+  --    constructors of 'Term' (i.e. @STApp { stAppTermF = t }@ and @Unshared t@
+  --    must have the same hash)
+  -- 2. The the 'LocalName' arguments to the 'Lambda' and 'Pi' constructors of
+  --    'TermF' must be ignored
+  -- 3. The argument to the 'Constant' constructor of 'TermF' which represents
+  --    its definition must be ignored
+  --
+  -- The first point above is one reason for why the hash of a 'STApp' depends
+  -- on its not-necessarily-unique 'stAppHash' instead of its necessarily-unique
+  -- 'stAppIndex'. Another is that per #1830 (PR) and #1831 (issue), we want to
   -- be able to derive a reference to terms based solely on their shape. Indices
   -- have nothing to do with a term's shape - they're assigned sequentially when
   -- building terms, according to the (arbitrary) order in which a term is
@@ -461,22 +475,30 @@ instance Hashable Term where
   -- hashes introduces less randomness/freshness, it maintains plenty, and
   -- provides benefits as described above. No code should ever rely on total
   -- uniqueness of hashes, and terms are no exception.
-  hash STApp{ stAppHash = h } = h
-  hash (Unshared t) = hash t
-  hashWithSalt salt = hashWithSalt salt . hash
-
-instance Eq Term where
-  -- Note: we take some minor liberties with the contract of 'hashWithSalt' in
-  -- this implementation of 'Eq'. The contract states that if two values are
-  -- equal according to '==', then they must have the same hash. For terms
+  --
+  -- Note: Nevertheless, we do take some minor liberties with the contract of
+  -- 'hashWithSalt'. The contract states that if two values are equal according
+  -- to '(==)' (i.e. 'alphaEquiv'), then they must have the same hash. For terms
   -- constructed by/within SAW, this will hold, because SAW's handling of index
   -- generation and assignment ensures that equality of indices implies equality
   -- of terms and term hashes (see 'Verifier.SAW.SharedTerm.getTerm'). However,
   -- if terms are constructed outside this standard procedure or in a way that
   -- does not respect index uniqueness rules, 'hashWithSalt''s contract could be
   -- violated.
+  hash STApp{ stAppHash = h } = h
+  hash (Unshared t) = hash t
+  hashWithSalt salt = hashWithSalt salt . hash
+
+instance Eq Term where
   (==) = alphaEquiv
 
+-- | Return 'True' iff the given terms are equal modulo alpha equivalence (i.e.
+-- 'LocalNames' in 'Lambda' and 'Pi' expressions) and sharing (i.e. 'STApp' vs.
+-- 'Unshared' expressions).
+--
+-- NOTE: If you change this function, you must also update the 'Hashable'
+-- instances for 'Term'/'TermF'/'FlatTermF' to make sure the contract for
+-- 'hashWithSalt' still holds - see the commentary on 'Hashable Term'.
 alphaEquiv :: Term -> Term -> Bool
 alphaEquiv = term
   where
@@ -487,6 +509,14 @@ alphaEquiv = term
     term (STApp{stAppIndex = i1, stAppHash = h1, stAppTermF = tf1})
          (STApp{stAppIndex = i2, stAppHash = h2, stAppTermF = tf2}) =
          i1 == i2 || (h1 == h2 && termf tf1 tf2)
+         -- The hash check (^) is merely an optimization that enables us to
+         -- quickly return 'False' in most cases. Since we're assuming the
+         -- contract of 'hashWithSalt' holds, then we know @termf tf1 tf2@
+         -- implies @h1 == h2@. Thus we could safely remove @h1 == h2@ without
+         -- changing the behavior of this function, but keeping it in enables
+         -- us to utilize the fact that we save 'STApp' hashes to get away
+         -- with not traversing the 'stAppTermF' fields in most cases of
+         -- inequality.
 
     termf :: TermF Term -> TermF Term -> Bool
     termf (FTermF ftf1) (FTermF ftf2) = ftermf ftf1 ftf2
