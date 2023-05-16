@@ -56,7 +56,7 @@ data FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
-  deriving (Eq, Show)
+  deriving (Eq, Read, Show)
 
 -- | Values inhabiting those first-order types.
 data FirstOrderValue
@@ -68,7 +68,7 @@ data FirstOrderValue
   | FOVArray FirstOrderType FirstOrderType
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
-  deriving Eq
+  deriving (Eq, Read, Show)
 
 toFirstOrderType :: FiniteType -> FirstOrderType
 toFirstOrderType ft =

@@ -48,6 +48,7 @@ module SAWScript.Proof
   , traverseSequentWithFocus
   , checkSequent
   , sequentConstantSet
+  , sequentAllExtSet
   , booleansToSequent
   , unfocusSequent
   , focusOnConcl
@@ -609,6 +610,12 @@ focusOnHyp i sqt =
 
 sequentConstantSet :: Sequent -> Map VarIndex (NameInfo, Term, Maybe Term)
 sequentConstantSet sqt = foldr (\p m -> Map.union (getConstantSet (unProp p)) m) mempty (hs++gs)
+  where
+    RawSequent hs gs = sequentToRawSequent sqt
+
+-- | Return the 'Set' of all 'ExtCns' in the given 'Sequent'
+sequentAllExtSet :: Sequent -> Set (ExtCns Term)
+sequentAllExtSet sqt = foldMap getAllExtSet (map unProp (hs ++ gs))
   where
     RawSequent hs gs = sequentToRawSequent sqt
 

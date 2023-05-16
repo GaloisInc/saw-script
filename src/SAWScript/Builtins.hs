@@ -908,7 +908,7 @@ goal_num_ite n s1 s2 =
 proveABC :: ProofScript ()
 proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  wrapProver (Prover.proveABC proxy)
+  wrapProver (Prover.proveABC proxy) Set.empty
 
 satExternal :: Bool -> String -> [String] -> ProofScript ()
 satExternal doCNF execName args =
@@ -933,7 +933,7 @@ writeSAIGComputedPrim = Prover.writeSAIG
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
-proveRME = wrapProver Prover.proveRME
+proveRME = wrapProver Prover.proveRME Set.empty
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -953,50 +953,51 @@ proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
      unintSet <- SV.scriptTopLevel (resolveNames unints)
-     wrapProver (Prover.proveUnintSBV conf unintSet timeout)
+     wrapProver (Prover.proveUnintSBV conf timeout) unintSet
 
 -- | Given a continuation which calls a prover, call the continuation on the
 -- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
 -- is a 'SolverCache', do not call the continuation if the goal has an already
 -- cached result, and otherwise save the result of the call to the cache.
-applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
+applyProverToGoal :: (SATQuery -> TopLevel (Maybe CEX, String))
+                     -> Set VarIndex
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal f g = do
+applyProverToGoal f unintSet g = do
   sc <- getSharedContext
-  mb_cache_key <- io $ propToSolverCacheKey sc (goalSequent g)
-  (mb, stats) <- case mb_cache_key of
-    -- If we have a solver result cache and a valid key...
-    Just k -> SV.onSolverCache (lookupInSolverCache k) >>= \case
-      Just v -> -- use a cached result if we have one,
-                return v
-      _ -> -- or cache the result of the call otherwise.
-           f (goalSequent g) >>= \v ->
-           SV.onSolverCache (insertInSolverCache k v) >>
-           return v
-    _ -> f (goalSequent g)
+  satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
+  k <- io $ satQueryToSolverCacheKey sc satq
+  (mb, solver_name) <- SV.onSolverCache (lookupInSolverCache k) >>= \case
+    -- Use a cached result if one exists (and it's valid w.r.t our query)
+    Just v -> return $ fromSolverCacheValue satq v
+    -- Otherwise try to cache the result of the call
+    _ -> f satq >>= \res ->
+         case toSolverCacheValue satq res of
+           Just v  -> SV.onSolverCache (insertInSolverCache k v) >>
+                      return res
+           Nothing -> return res
+  let stats = solverStats solver_name (sequentSharedSize (goalSequent g))
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  (Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
+  (SATQuery -> TopLevel (Maybe CEX, String)) ->
+  Set VarIndex ->
   ProofScript ()
-wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
+wrapProver f unintSet = execTactic $ tacticSolve $ applyProverToGoal f unintSet
 
 wrapW4Prover ::
-  ( Set VarIndex -> Bool ->
-    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
+  ( Bool -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
   [String] ->
   ProofScript ()
 wrapW4Prover f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
-  wrapProver $ f unintSet hashConsing
+  wrapProver (f hashConsing) unintSet
 
 wrapW4ProveExporter ::
-  ( Set VarIndex -> Bool -> FilePath ->
-    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
+  ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
   [String] ->
   String ->
   String ->
@@ -1006,7 +1007,7 @@ wrapW4ProveExporter f unints path ext = do
   unintSet <- SV.scriptTopLevel $ resolveNames unints
   execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-    applyProverToGoal (f unintSet hashConsing file) g
+    applyProverToGoal (f hashConsing file) unintSet g
 
 --------------------------------------------------
 proveABC_SBV :: ProofScript ()

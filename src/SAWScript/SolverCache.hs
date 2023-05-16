@@ -12,17 +12,16 @@ Stability   : provisional
 
 module SAWScript.SolverCache where
 
-import Control.Monad (forM_)
-import Control.Exception (try, SomeException)
-import Data.List (sortOn)
-import Data.Tuple.Extra (first, second)
 import System.Directory
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
 
+import Data.Tuple.Extra (first, second, firstM)
+import Data.List (elemIndex)
 import Data.Hashable
 import Data.Bits (shiftL, (.|.))
 
+import qualified Data.Map as Map
 import qualified Data.HashMap.Strict as HM
 import Data.HashMap.Strict (HashMap)
 
@@ -34,25 +33,13 @@ import qualified Data.ByteString as BS
 
 import qualified Crypto.Hash.SHA256 as SHA256
 
+import Verifier.SAW.FiniteValue
+import Verifier.SAW.SATQuery
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
 
 import SAWScript.Options
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
-
-
--- Helper Functions ------------------------------------------------------------
-
--- | Generalize over the all external constants in a given term by
--- wrapping the term with foralls and replacing the external constant
--- occurrences with the appropriate local variables.
--- FIXME: Move to SharedTerm.hs
-scGeneralizeAllExts :: SharedContext -> Term -> IO Term
-scGeneralizeAllExts sc tm =
-  let allexts = sortOn (toShortName . ecName) $ getAllExts tm
-   in scGeneralizeExts sc allexts tm
 
 
 -- Solver Cache Keys -----------------------------------------------------------
@@ -78,20 +65,59 @@ solverCacheKeyToHex (SolverCacheKey bs) = T.unpack $ encodeHex bs
 solverCacheKeyFromHex :: String -> Maybe SolverCacheKey
 solverCacheKeyFromHex x = fmap SolverCacheKey $ decodeHex $ T.pack x
 
--- | Hash the 'String' representation ('scWriteExternal') of a 'Sequent' using
--- SHA256 to get a 'SolverCacheKey'
-propToSolverCacheKey :: SharedContext -> Sequent -> IO (Maybe SolverCacheKey)
-propToSolverCacheKey sc sq = do
-  try (sequentToProp sc sq) >>= \case
-    Right p -> Just . SolverCacheKey . SHA256.hash .
-               encodeUtf8 . T.pack . scWriteExternal <$>
-               scGeneralizeAllExts sc (unProp p)
-    Left (_ :: SomeException) -> return Nothing
+-- | Hash using SHA256 a 'String' representation of a 'SATQuery' to get a
+-- 'SolverCacheKey'
+satQueryToSolverCacheKey :: SharedContext -> SATQuery -> IO SolverCacheKey
+satQueryToSolverCacheKey sc satq = do
+  body <- satQueryAsPropTerm sc satq
+  let ecs = Map.keys (satVariables satq) ++
+            filter (\ec -> ecVarIndex ec `elem` satUninterp satq)
+                   (getAllExts body)
+  tm <- scGeneralizeExts sc ecs body
+  let str_to_hash = show (Map.size (satVariables satq)) ++ " " ++
+                    show (length (satUninterp satq)) ++ "\n" ++
+                    scWriteExternal tm
+  return $ SolverCacheKey $ SHA256.hash $ encodeUtf8 $ T.pack $ str_to_hash
+
+
+-- Solver Cache Values ---------------------------------------------------------
+
+-- | The value type for 'SolverCache': a pair of the 'String' representing the
+-- solver used and an optional list of counterexamples, represented as pairs
+-- of indexes into the list of 'satVariables'
+type SolverCacheValue = (String, Maybe [(Int, FirstOrderValue)])
+
+-- | Convert the result of a solver call on the given 'SATQuery' to a
+-- 'SolverCacheValue'
+toSolverCacheValue :: SATQuery -> (Maybe CEX, String) -> Maybe SolverCacheValue
+toSolverCacheValue satq (cexs, solver_name) =
+  (solver_name,) <$> mapM (mapM (firstM (`elemIndex` ecs))) cexs
+  where ecs = Map.keys $ satVariables satq
+
+-- | Convert a 'SolverCacheValue' to something which has the same form as the
+-- result of a solver call on the given 'SATQuery'
+fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, String)
+fromSolverCacheValue satq (solver_name, cexs) =
+  (fmap (fmap (first (ecs !!))) cexs ,solver_name)
+  where ecs = Map.keys $ satVariables satq
+
+-- | Given a path to a cache and a 'SolverCacheKey', return a
+-- 'SolverCacheValue' if the given key has been cached, or 'Nothing' otherwise
+readCacheEntryFromDisk :: FilePath -> SolverCacheKey -> IO (Maybe SolverCacheValue)
+readCacheEntryFromDisk path k = do
+  ex <- doesFileExist (path </> solverCacheKeyToHex k)
+  if not ex then return Nothing
+  else readMaybe <$> readFile (path </> solverCacheKeyToHex k)
+
+-- | Given a path to a cache and a 'SolverCacheKey'/'SolverCacheValue' pair,
+-- add an approriate entry to the cache on disk
+writeCacheEntryToDisk :: FilePath -> (SolverCacheKey, SolverCacheValue) -> IO ()
+writeCacheEntryToDisk path (k, v) = 
+  createDirectoryIfMissing False path >>
+  writeFile (path </> solverCacheKeyToHex k) (show v)
 
 
 -- The Solver Cache ------------------------------------------------------------
-
-type SolverCacheValue = (Maybe CEX, SolverStats)
 
 -- | A set of cached solver results as well as a 'FilePath' indicating where
 -- new additions to the cache should be saved
@@ -116,28 +142,22 @@ lookupInSolverCache k opts cache =
     (Just v, _) -> do
       printOutLn opts Info ("Using cached result from memory (" ++ solverCacheKeyToHex k ++ ")")
       return (Just v, cache { solverCacheHits = first (+1) (solverCacheHits cache) })
-    (_, Just path) -> do
-      ex <- doesFileExist (path </> solverCacheKeyToHex k)
-      if not ex then return (Nothing, cache)
-      else readMaybe <$> readFile (path </> solverCacheKeyToHex k) >>= \case
-        Just (sz, ss) -> do
-          let v = (Nothing, SolverStats ss sz)
+    (_, Just path) -> readCacheEntryFromDisk path k >>= \case
+      Just v -> do
           printOutLn opts Info ("Using cached result from disk (" ++ solverCacheKeyToHex k ++ ")")
           return (Just v, cache { solverCacheMap = HM.insert k v (solverCacheMap cache)
                                 , solverCacheHits = second (+1) (solverCacheHits cache) })
-        Nothing -> return (Nothing, cache)
+      Nothing -> return (Nothing, cache)
     _ -> return (Nothing, cache)
 
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
-insertInSolverCache k v@(Nothing, SolverStats ss sz) opts cache = do
+insertInSolverCache k v opts cache = do
   printOutLn opts Info ("Caching result (" ++ solverCacheKeyToHex k ++ ")")
   case solverCachePath cache of
-    Just path -> createDirectoryIfMissing False path >>
-                 writeFile (path </> solverCacheKeyToHex k) (show (sz, ss))
+    Just path -> writeCacheEntryToDisk path (k, v)
     _ -> return ()
   return ((), cache { solverCacheMap = HM.insert k v (solverCacheMap cache) })
-insertInSolverCache _ _ _ cache = return ((), cache)
 
 -- | Set the 'FilePath' of the solver result cache, erroring if it is already
 -- set, and save all results cached so far
@@ -148,11 +168,9 @@ setSolverCachePath path opts cache =
     Just path' -> fail $ "Solver cache already has a set path: " ++ path'
     _ | HM.null (solverCacheMap cache) -> return ((), cache { solverCachePath = Just pathAbs })
     _ -> let to_save = HM.toList $ solverCacheMap cache in
-         createDirectoryIfMissing False pathAbs >>
          let (s0, s1) = (show (length to_save), if length to_save > 1 then "s" else "") in
          printOutLn opts Info ("Saving " ++ s0 ++ " cached result" ++ s1 ++ " to disk") >>
-         forM_ to_save (\(k,(_, SolverStats ss sz)) ->
-           writeFile (pathAbs </> solverCacheKeyToHex k) (show (sz, ss))) >>
+         mapM_ (writeCacheEntryToDisk path) to_save >>
          return ((), cache { solverCachePath = Just pathAbs })
 
 -- | Print out statistics about how the solver cache was used
