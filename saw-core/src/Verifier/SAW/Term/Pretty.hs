@@ -311,9 +311,11 @@ withMemoVar global_p idx f =
       -- "pretend" we memoized by calling `updateMemoVar`, so that non-inlined
       -- memoization identifiers are kept constant between two
       -- otherwise-identical terms with differing inline strategies.
-      (skip:_) | skip == memoVar -> local (updateMemoVar . addIdxSkip . removeMemoSkip) (f Nothing)
-      _ | idx `Set.member` idxSkips -> f Nothing
-      _ -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
+      (skip:skips) 
+        | skip == memoVar -> local (updateMemoVar . addIdxSkip . setMemoSkips skips) (f Nothing)
+      _ 
+        | idx `Set.member` idxSkips -> f Nothing
+        | otherwise -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
   where
     bind = if global_p then bindGlobal else bindLocal
 
@@ -323,8 +325,8 @@ withMemoVar global_p idx f =
     bindLocal memoVar PPState{ .. } =
       PPState { ppLocalMemoTable = IntMap.insert idx memoVar ppLocalMemoTable, .. }
 
-    removeMemoSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
-      PPState { ppOpts = PPOpts { ppNoInlineMemo = tail ppNoInlineMemo, .. }, .. }
+    setMemoSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineMemo = memoSkips, ..}, ..}
 
     addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
       PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert idx ppNoInlineIdx, .. }, .. }
