@@ -2178,20 +2178,22 @@ ensureMonadicTerm sc t = monadifyTypedTerm sc t
 -- @MRSolver.hs@: if the first argument is @Just str@, prints out @str@
 -- followed by an abridged version of the refinement being asked, then calls
 -- the given function, returning how long it took to execute
-mrSolver :: (SharedContext -> Prover.MREnv -> Maybe Integer -> Term -> Term -> IO a) ->
-            Maybe SawDoc -> SharedContext -> TypedTerm -> TypedTerm ->
+mrSolver :: (SharedContext -> Prover.MREnv -> Maybe Integer -> [(LocalName, Term)] -> Term -> Term -> IO a) ->
+            Maybe SawDoc -> SharedContext -> [(LocalName, Term)] -> TypedTerm -> TypedTerm ->
             TopLevel (NominalDiffTime, a)
-mrSolver f printStr sc t1 t2 =
+mrSolver f printStr sc top_args tt1 tt2 =
   do env <- rwMRSolverEnv <$> get
-     m1 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t1
-     m2 <- collapseEta <$> ttTerm <$> ensureMonadicTerm sc t2
+     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
+     m2 <- ttTerm <$> ensureMonadicTerm sc tt2
+     m1' <- io $ collapseEta <$> betaNormalize sc m1
+     m2' <- io $ collapseEta <$> betaNormalize sc m2
      case printStr of
        Nothing -> return ()
        Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
-         "[MRSolver] " <> str <> ": " <> ppTmHead m1 <>
-                               " |= " <> ppTmHead m2
+         "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
+                               " |= " <> ppTmHead m2'
      time1 <- liftIO getCurrentTime
-     res <- io $ f sc env Nothing m1 m2
+     res <- io $ f sc env Nothing top_args m1' m2'
      time2 <- liftIO getCurrentTime
      return (diffUTCTime time2 time1, res)
   where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
@@ -2212,6 +2214,40 @@ mrSolver f printStr sc t1 t2 =
           ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
         ppTmHead _ = "..."
 
+-- | Invokes MRSolver to attempt to solve a focused goal of the form
+-- @(a1:A1) -> ... -> (an:A1) -> refinesS_eq ...@, printing an error message
+-- and exiting if this cannot be done. This function will not modify the
+-- 'Prover.MREnv'.
+mrSolverTactic :: SharedContext -> ProofScript ()
+mrSolverTactic sc = execTactic $ Tactic $ \goal -> lift $ do
+  dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
+  case sequentState (goalSequent goal) of
+    Unfocused -> fail "mrsolver: focus required"
+    HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
+    ConclFocus (asPiList . unProp -> (args, asApplyAll ->
+                                      (asGlobalDef -> Just "Prelude.refinesS_eq",
+                                       [ev, stack, rtp, t1, t2]))) _ ->
+      do tp <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev, stack, rtp]
+         let tt1 = TypedTerm (TypedTermOther tp) t1
+         let tt2 = TypedTerm (TypedTermOther tp) t2
+         (diff, res) <- mrSolver Prover.askMRSolver (Just "mrsolver") sc args tt1 tt2
+         case res of
+           Left err | dlvl == 0 ->
+             io (putStrLn $ Prover.showMRFailure err) >>
+             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+             io (Exit.exitWith $ Exit.ExitFailure 1)
+           Left err ->
+             -- we ignore the MRFailure context here since it will have already
+             -- been printed by the debug trace
+             io (putStrLn $ Prover.showMRFailureNoCtx err) >>
+             printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
+             io (Exit.exitWith $ Exit.ExitFailure 1)
+           Right _ ->
+             printOutLnTop Info (printf "[MRSolver] Success in %s" (show diff)) >>
+             let stats = solverStats "MRSOLVER ADMITTED" (sequentSharedSize (goalSequent goal)) in
+             return ((), stats, [], leafEvidence MrSolverEvidence)
+    _ -> error "mrsolver tactic not applied to a refinesS_eq goal"
+
 -- | Run Mr Solver to prove that the first term refines the second, adding
 -- any relevant 'Prover.FunAssump's to the 'Prover.MREnv' if the first argument
 -- is true and this can be done, or printing an error message and exiting if it
@@ -2220,7 +2256,7 @@ mrSolverProve :: Bool -> SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
 mrSolverProve addToEnv sc t1 t2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
      let printStr = if addToEnv then "Proving" else "Testing"
-     (diff, res) <- mrSolver Prover.askMRSolver (Just printStr) sc t1 t2
+     (diff, res) <- mrSolver Prover.askMRSolver (Just printStr) sc [] t1 t2
      case res of
        Left err | dlvl == 0 ->
          io (putStrLn $ Prover.showMRFailure err) >>
@@ -2249,7 +2285,7 @@ mrSolverProve addToEnv sc t1 t2 =
 mrSolverQuery :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel Bool
 mrSolverQuery sc t1 t2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     (diff, res) <- mrSolver Prover.askMRSolver (Just "Querying") sc t1 t2
+     (diff, res) <- mrSolver Prover.askMRSolver (Just "Querying") sc [] t1 t2
      case res of
        Left _ | dlvl == 0 ->
          printOutLnTop Info (printf "[MRSolver] Failure in %s" (show diff)) >>
@@ -2269,7 +2305,7 @@ mrSolverQuery sc t1 t2 =
 mrSolverAssume :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
 mrSolverAssume sc t1 t2 =
   do dlvl <- Prover.mreDebugLevel <$> rwMRSolverEnv <$> get
-     (_, res) <- mrSolver Prover.assumeMRSolver (Just "Assuming") sc t1 t2
+     (_, res) <- mrSolver Prover.assumeMRSolver (Just "Assuming") sc [] t1 t2
      case res of
        Left err | dlvl == 0 ->
          io (putStrLn $ Prover.showMRFailure err) >>

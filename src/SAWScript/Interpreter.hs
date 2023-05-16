@@ -93,6 +93,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
@@ -847,6 +848,11 @@ primitives = Map.fromList
     (pureVal ((++) :: String -> String -> String))
     Current
     [ "Concatenate two strings to yield a third." ]
+
+  , prim "str_concats"          "[String] -> String"
+    (pureVal (concat :: [String] -> String))
+    Current
+    [ "Concatenate a list of strings together to yield a string." ]
 
   , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
     (\_ _ -> toplevelCallCC)
@@ -3754,6 +3760,14 @@ primitives = Map.fromList
     [ "Construct a `JVMValue` from a `Term`." ]
 
     ---------------------------------------------------------------------
+    -- Crucible/MIR commands
+
+  , prim "mir_load_module" "String -> TopLevel MIRModule"
+    (pureVal mir_load_module)
+    Experimental
+    [ "Load a MIR JSON file and return a handle to it." ]
+
+    ---------------------------------------------------------------------
 
   , prim "yosys_import"  "String -> TopLevel Term"
     (pureVal yosys_import)
@@ -3860,6 +3874,12 @@ primitives = Map.fromList
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
+
+  , prim "mrsolver" "ProofScript ()"
+    (scVal mrSolverTactic)
+    Experimental
+    [ "Use MRSolver to prove a current goal of the form:"
+    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
 
     ---------------------------------------------------------------------
 

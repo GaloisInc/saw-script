@@ -1044,8 +1044,11 @@ enforceDisjointAllocGlobal ::
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocGlobal sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz pMd _pfresh _p_sym_init, p)
-  (LLVMAllocGlobal qloc (L.Symbol qname), q) =
+  (LLVMAllocSpec _pmut _pty _palign psz pMd pfresh _p_sym_init, p)
+  (LLVMAllocGlobal qloc (L.Symbol qname), q)
+  | pfresh =
+    pure () -- Fresh pointers need not be disjoint
+  | otherwise =
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
      c <- liftIO $ W4.notPred sym =<< W4.natEq sym pblk qblk

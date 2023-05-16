@@ -365,6 +365,10 @@ zipWithFlatTermF f = go
 
 -- Term Functor ----------------------------------------------------------------
 
+-- | A \"knot-tying\" structure for representing terms and term-like things.
+-- Often, this appears in context as the type \"'TermF' 'Term'\", in which case
+-- it represents a full 'Term' AST. The \"F\" stands for 'Functor', or
+-- occasionally for \"Former\".
 data TermF e
     = FTermF !(FlatTermF e)
       -- ^ The atomic, or builtin, term constructs
@@ -381,24 +385,77 @@ data TermF e
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
+-- See the commentary on 'Hashable Term' for a note on uniqueness.
 instance Hashable e => Hashable (TermF e) -- automatically derived.
+-- NB: we may someday wish to customize this instance, for a couple reasons.
+--
+-- 1. Hash 'Constant's based on their definition, if it exists, rather than
+-- always using both their type and definition (as the automatically derived
+-- instance does). Their type, represented as an 'ExtCns', contains unavoidable
+-- freshness derived from a global counter (via 'scFreshGlobalVar' as
+-- initialized in 'Verifier.SAW.SharedTerm.mkSharedContext'), but their
+-- definition does not necessarily contain the same freshness.
+--
+-- 2. Improve the default, XOR-based hashing scheme to improve collision
+-- resistance. A polynomial-based approach may be fruitful. For a constructor
+-- with fields numbered 1..n, evaluate a polynomial along the lines of:
+-- coeff(0) * salt ^ 0 + coeff(1) + salt ^ 1 + ... + coeff(n) * salt ^ n
+-- where
+-- coeff(0) = salt `hashWithSalt` <custom per-constructor salt>
+-- coeff(i) = salt `hashWithSalt` <field i>
 
 
 -- Term Datatype ---------------------------------------------------------------
 
 type TermIndex = Int -- Word64
 
+-- | For more information on the semantics of 'Term's, see the
+-- [manual](https://saw.galois.com/manual.html). 'Term' and 'TermF' are split
+-- into two structures to facilitate mutual structural recursion (sometimes
+-- referred to as the ["knot-tying"](https://wiki.haskell.org/Tying_the_Knot)
+-- pattern, sometimes referred to in terms of ["recursion
+-- schemes"](https://blog.sumtypeofway.com/posts/introduction-to-recursion-schemes.html))
+-- and term object reuse via hash-consing.
 data Term
   = STApp
+    -- ^ This constructor \"wraps\" a 'TermF' 'Term', assigning it a
+    -- guaranteed-unique integer identifier and caching its likely-unique hash.
+    -- Most 'Term's are constructed via 'STApp'. When a fresh 'TermF' is evinced
+    -- in the course of a SAW invocation and needs to be lifted into a 'Term',
+    -- we can see if we've already created a 'Term' wrapper for an identical
+    -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
+    -- construction exists in 'Verifier.SAW.SharedTerm', in particular in the
+    -- 'Verifier.SAW.SharedTerm.scTermF' field of the
+    -- t'Verifier.SAW.SharedTerm.SharedContext' object.
      { stAppIndex    :: {-# UNPACK #-} !TermIndex
-     , stAppFreeVars :: !BitSet -- Free variables
+       -- ^ The UID associated with a 'Term'. It is guaranteed unique across a
+       -- universe of properly-constructed 'Term's within a single SAW
+       -- invocation.
+     , stAppHash     :: {-# UNPACK #-} !Int
+       -- ^ The hash, according to 'hash', of the 'stAppTermF' field associated
+       -- with this 'Term'. This should be as unique as a hash can be, but is
+       -- not guaranteed unique as 'stAppIndex' is.
+     , stAppFreeVars :: !BitSet
+       -- ^ The free variables associated with the 'stAppTermF' field.
      , stAppTermF    :: !(TermF Term)
+       -- ^ The underlying 'TermF' that this 'Term' wraps. This field "ties the
+       -- knot" of the 'Term'/'TermF' recursion scheme.
      }
   | Unshared !(TermF Term)
+    -- ^ Used for constructing 'Term's that don't need to be shared/reused.
   deriving (Show, Typeable)
 
 instance Hashable Term where
-  hashWithSalt salt STApp{ stAppIndex = i } = salt `combine` 0x00000000 `hashWithSalt` hash i
+  -- Why have 'Hashable' depend on the not-necessarily-unique hash instead of
+  -- the necessarily-unique index? Per #1830 (PR) and #1831 (issue), we want to
+  -- be able to derive a reference to terms based solely on their shape. Indices
+  -- have nothing to do with a term's shape - they're assigned sequentially when
+  -- building terms, according to the (arbitrary) order in which a term is
+  -- built. As for uniqueness, though hashing a term based on its subterms'
+  -- hashes introduces less randomness/freshness, it maintains plenty, and
+  -- provides benefits as described above. No code should ever rely on total
+  -- uniqueness of hashes, and terms are no exception.
+  hashWithSalt salt STApp{ stAppHash = h } = salt `combine` 0x00000000 `hashWithSalt` h
   hashWithSalt salt (Unshared t) = salt `combine` 0x55555555 `hashWithSalt` hash t
 
 
@@ -408,6 +465,15 @@ combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 0x01000193) `xor` h2
 
 instance Eq Term where
+  -- Note: we take some minor liberties with the contract of 'hashWithSalt' in
+  -- this implementation of 'Eq'. The contract states that if two values are
+  -- equal according to '==', then they must have the same hash. For terms
+  -- constructed by/within SAW, this will hold, because SAW's handling of index
+  -- generation and assignment ensures that equality of indices implies equality
+  -- of terms and term hashes (see 'Verifier.SAW.SharedTerm.getTerm'). However,
+  -- if terms are constructed outside this standard procedure or in a way that
+  -- does not respect index uniqueness rules, 'hashWithSalt''s contract could be
+  -- violated.
   (==) = alphaEquiv
 
 alphaEquiv :: Term -> Term -> Bool

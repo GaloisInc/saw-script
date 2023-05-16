@@ -6,7 +6,8 @@ This repository contains the code for SAWScript, the scripting
 language that forms the primary user interface to the Software
 Analysis Workbench (SAW). It provides the ability to reason about
 formal models describing the denotation of programs written in
-languages such as C, Java, and Cryptol.
+languages such as C, Java, and Cryptol. It also provides experimental,
+incomplete support for the Rust language.
 
 ## Documentation
 

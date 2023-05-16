@@ -1275,12 +1275,14 @@ askMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> IO (Either MRFailure MRSolverResult)
-askMRSolver sc env timeout t1 t2 =
-  do tp1 <- scTypeOf sc t1 >>= scWhnf sc
-     tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     runMRM sc timeout env $
-       mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2 >>
+askMRSolver sc env timeout args t1 t2 =
+  runMRM sc timeout env $
+  withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
+    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
+       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
+       mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
        mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
 -- | Return the 'FunAssump' to add to the 'MREnv' that would be generated if
@@ -1289,9 +1291,11 @@ assumeMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> IO (Either MRFailure MRSolverResult)
-assumeMRSolver sc env timeout t1 t2 =
-  do tp1 <- scTypeOf sc t1 >>= scWhnf sc
-     tp2 <- scTypeOf sc t2 >>= scWhnf sc
-     runMRM sc timeout env $
+assumeMRSolver sc env timeout args t1 t2 =
+  runMRM sc timeout env $
+  withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
+    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
+       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
        mrRefinesFunH (askMRSolverH (\_ _ -> return ())) [] tp1 t1 tp2 t2

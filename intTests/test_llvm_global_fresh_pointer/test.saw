@@ -1,0 +1,30 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+// test the fact that glb and x_ptr are allowed to alias each other.
+let foo_spec = do {
+  llvm_alloc_global "glb";
+  x_ptr <- llvm_fresh_pointer (llvm_int 32);
+
+  llvm_execute_func [x_ptr];
+};
+  
+foo_ov <- llvm_verify m "foo"
+  []
+  false
+  foo_spec
+  (do {
+    print_goal;
+    w4_unint_z3 [];
+  });
+
+llvm_verify m "bar"
+  [foo_ov]
+  false
+  foo_spec
+  (do {
+    print_goal;
+    w4_unint_z3 [];
+  });
+

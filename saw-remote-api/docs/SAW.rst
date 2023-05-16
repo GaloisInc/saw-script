@@ -419,6 +419,32 @@ No return fields
 
 
 
+SAW/MIR/load module (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Load the specified MIR module.
+
+Parameter fields
+++++++++++++++++
+
+
+``name``
+  The name to refer to the loaded module by later.
+  
+  
+
+``module name``
+  The file containing the MIR JSON file to load.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
 SAW/Yosys/import (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
