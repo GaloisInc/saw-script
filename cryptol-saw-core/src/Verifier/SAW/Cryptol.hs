@@ -1874,14 +1874,14 @@ genNewtypeConstructors sc newtypes env0 =
     genConstr :: Env -> Newtype -> IO Env
     genConstr env nt = do
       constr <- importExpr sc env (newtypeConstr nt)
-      let env' = env { envE = Map.insert (ntName nt) (constr, 0) (envE env)
-                     , envC = Map.insert (ntName nt) (newtypeSchema nt) (envC env)
+      let env' = env { envE = Map.insert (ntConName nt) (constr, 0) (envE env)
+                     , envC = Map.insert (ntConName nt) (newtypeSchema nt) (envC env)
                      }
       return env'
     newtypeConstr :: Newtype -> C.Expr
     newtypeConstr nt = foldr tFn fn (C.ntParams nt)
       where
-        paramName = C.asLocal C.NSValue (ntName nt)
+        paramName = C.asLocal C.NSValue (ntConName nt)
 
         recTy = C.TRec $ ntFields nt
         fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
