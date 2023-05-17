@@ -76,8 +76,11 @@ satQueryToSolverCacheKey sc satq = do
   tm <- scGeneralizeExts sc ecs body
   let str_to_hash = show (Map.size (satVariables satq)) ++ " " ++
                     show (length (satUninterp satq)) ++ "\n" ++
-                    scWriteExternal tm
+                    anonLocalNames (scWriteExternal tm)
   return $ SolverCacheKey $ SHA256.hash $ encodeUtf8 $ T.pack $ str_to_hash
+  where anonLocalNames = unlines . map (unwords . go . words) . lines
+        go (x:y:_:xs) | y `elem` ["Pi", "Lam"] = x:y:"_":xs
+        go xs = xs
 
 
 -- Solver Cache Values ---------------------------------------------------------
