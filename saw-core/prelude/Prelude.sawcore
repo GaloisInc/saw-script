@@ -2351,6 +2351,12 @@ data List1 (a:sort 1) : sort 1 where {
   Cons1 : a -> List1 a -> List1 a;
 }
 
+-- The length of a List1
+length1 : (a:sort 1) -> List1 a -> Nat;
+length1 a l =
+  List1#rec a (\ (_:List1 a) -> Nat) 0
+            (\ (_:a) (_:List1 a) (rec:Nat) -> Succ rec) l;
+
 -- An event type is a type of events plus a mapping from events to their return
 -- types
 data EvType : sort 1 where {
@@ -2393,6 +2399,10 @@ data LetRecType : sort 1 where {
 LRT_Type : sort 0 -> LetRecType;
 LRT_Type a = LRT_BinOp (\ (_:sort 0) (_:sort 0) -> a) LRT_Unit LRT_Unit;
 
+-- A trivially inhabied "default" LetRecType, representing void -> void
+default_lrt : LetRecType;
+default_lrt = LRT_FunDep Void (\ (_:Void) -> LRT_Ret (LRT_Type Void));
+
 -- A function stack is a list of LetRecTypes, which intuitively
 -- represents a stack of bindings of mutually recursive functions
 FunStack : sort 1;
@@ -2402,9 +2412,9 @@ FunStack = List1 LetRecType;
 emptyFunStack : FunStack;
 emptyFunStack = Nil1 LetRecType;
 
--- A trivially inhabied "default" LetRecType, representing void -> void
-default_lrt : LetRecType;
-default_lrt = LRT_FunDep Void (\ (_:Void) -> LRT_Ret (LRT_Type Void));
+-- Get the length of a FunStack
+stackLen : FunStack -> Nat;
+stackLen = length1 LetRecType;
 
 -- Get the nth element of a FunStack, or void -> void if n is too big
 nthLRT : List1 LetRecType -> Nat -> LetRecType;
@@ -2744,88 +2754,47 @@ orS E stack a m1 m2 =
   bindS E stack Bool a (existsS E stack Bool)
         (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
 
--- Return the type represented by a LetRecType
-LRTType : (E:EvType) -> FunStack -> LetRecType -> sort 0;
-LRTType E stack lrt =
-  lrt1Pi lrt (\ (args:LRTInput lrt) -> SpecM E stack (LRTOutput lrt args));
+-- A StackCall to a function in stk1 with args relative to stk2; the idea is
+-- that it is being "mapped" from stk1 to stk2
+data MappedCall (stk1 stk2 : FunStack) : sort 0 where {
+  MappedCallOfArgs : (n:Nat) -> LRTInput stk2 (nthLRT stk1 n) ->
+                     MappedCall stk1 stk2;
+}
 
--- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
--- is the result of calling LRTType on the ith LetRecType in a list
-FrameTuple : (E:EvType) -> FunStack -> List1 LetRecType -> sort 0;
-FrameTuple E stack lrts =
-  List1#rec
-  LetRecType
-  (\ (_:List1 LetRecType) -> sort 0)
-  #()
-  (\ (lrt:LetRecType) (_:List1 LetRecType) (rest:sort 0) ->
-     (LRTType E stack lrt) * rest)
-  lrts;
+-- The return type for a MappedCall recursive call
+MappedCallRet : (stk1 stk2 : FunStack) -> MappedCall stk1 stk2 -> sort 0;
+MappedCallRet stk1 stk2 call =
+  MappedCall#rec
+    stk1 stk2
+    (\ (_:MappedCall stk1 stk2) -> sort 0)
+    (\ (n:Nat) (args : LRTInput stk2 (nthLRT stk1 n)) ->
+       LRTOutput stk2 (nthLRT stk1 n) args)
+    call;
 
--- A recursive call to a function in the top frame of a function stack
+-- Create a MappedCall in a way where we take in one argument at a time
+mkMappedCall : (stk1 stk2 : FunStack) -> (n:Nat) ->
+               lrtPi stk2 (nthLRT stk1 n)
+                     (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> MappedCall stk1 stk2);
+mkMappedCall stk1 stk2 n =
+  lrtLambda stk2 (nthLRT stk1 n)
+    (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> MappedCall stk1 stk2)
+    (\ (args:LRTInput stk2 (nthLRT stk1 n)) -> MappedCallOfArgs stk1 stk2 n args);
+
+-- A stack inclusion is a mapping from the indices of one stack to those of
+-- another that preserves LetRecTypes
+stackIncl : (stk1 stk2 : FunStack) -> sort 0;
+stackIncl stk1 stk2 =
+  Sigma (Nat -> Nat) (\ (f : Nat -> Nat) ->
+                        (n : Nat) -> (IsLtNat n (stackLen stk1)) ->
+                        Eq LetRecType (nthLRT stk1 n) (nthLRT stk2 (f n)) *
+                        IsLtNat (f n) (stackLen stk1));
+
+-- Make a recursive call using a MappedCall
 primitive callS :
-  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
-  (call : StackCall frame) ->
-  SpecM E (pushFunStack frame stack) (StackCallRet frame call);
+  (E:EvType) -> (stk1 stk2 : FunStack) -> (incl : stackIncl stk1 stk2) ->
+  (call : MappedCall stk1 stk2) -> SpecM E stk2 (MappedCallRet stk1 stk2 call);
 
--- Bind a collection of recursive functions whose types are given by a frame of
--- LetRecTypes and whose bodies are given by an FrameTuple, and call the nth one
-primitive multiFixS :
-  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
-  FrameTuple E (pushFunStack frame stack) frame ->
-  (call : StackCall frame) ->
-  SpecM E stack (StackCallRet frame call);
-
--- Build a frame with a single function
-singletonFrame : LetRecType -> List1 LetRecType;
-singletonFrame lrt = Cons1 LetRecType lrt (Nil1 LetRecType);
-
--- Build a frame with a single function of a single input type
-fixSFrame : (a:sort 0) -> (b:a -> sort 0) -> List1 LetRecType;
-fixSFrame a b = singletonFrame (LRT_Fun a (\ (x:a) -> LRT_Ret (b x)));
-
--- Build a stack with a single fixS frame
-fixSStack : (a:sort 0) -> (b:a -> sort 0) -> FunStack;
-fixSStack a b = pushFunStack (fixSFrame a b) emptyFunStack;
-
--- Helper type for fixS
-fixSFun : (E:EvType) -> (stack:FunStack) ->
-          (a:sort 0) -> (b:a -> sort 0) -> sort 0;
-fixSFun E stack a b =
-  (x:a) -> SpecM E (pushFunStack (fixSFrame a b) stack) (b x);
-
--- Bind a single recursive function with a single input and pass it the given
--- input argument
-fixS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> (b:a -> sort 0) ->
-       (fixSFun E stack a b -> fixSFun E stack a b) ->
-       (x:a) -> SpecM E stack (b x);
-fixS E stack a b body_f x_top =
-  multiFixS
-    E stack (fixSFrame a b)
-    (body_f (\ (x:a) ->
-               callS E stack (fixSFrame a b)
-                     (mkStackCall (fixSFrame a b) 0 x)), ())
-    (mkStackCall (fixSFrame a b) 0 x_top);
-
--- Build a multi-argument fixed-point of type A1 -> ... -> An -> SpecM B
-multiArgFixS : (E:EvType) -> (stack:FunStack) -> (lrt:LetRecType) ->
-               (LRTType E (pushFunStack (singletonFrame lrt) stack) lrt ->
-                LRTType E (pushFunStack (singletonFrame lrt) stack) lrt) ->
-               LRTType E stack lrt;
-multiArgFixS E stack lrt body_f =
-  lrtLambda
-    lrt (\ (args:LRTInput lrt) -> SpecM E stack (LRTOutput lrt args))
-    (\ (top_args:LRTInput lrt) ->
-       multiFixS
-         E stack (singletonFrame lrt)
-         (body_f
-            (lrtLambda
-               lrt (\ (args:LRTInput lrt) ->
-                      SpecM E (pushFunStack (singletonFrame lrt) stack)
-                            (LRTOutput lrt args))
-               (\ (args:LRTInput lrt) ->
-                  callS E stack (singletonFrame lrt)
-                        (StackCallOfArgs (singletonFrame lrt) 0 args))), ())
-         (StackCallOfArgs (singletonFrame lrt) 0 top_args));
+-- FIXME HERE NOW: SpecDef and defineSpec
 
 -- Apply a pure function to the result of a computation
 fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->
