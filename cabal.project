@@ -12,6 +12,7 @@ packages:
     saw-core-what4
     saw-core-coq
     saw
+    saw-lsp
     heapster-saw
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
