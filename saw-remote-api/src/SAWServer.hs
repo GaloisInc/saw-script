@@ -27,6 +27,7 @@ import qualified Crypto.Hash as Hash
 --import qualified Crypto.Hash.Conduit as Hash
 import System.Directory (getCurrentDirectory)
 import System.IO.Silently (silence)
+import Data.IORef
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
@@ -205,6 +206,7 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
+     cache <- newIORef Nothing
      db <- newTheoremDB
      let ro = TopLevelRO
                 { roJavaCodebase = jcb
@@ -218,6 +220,7 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
+                , roSolverCache = cache
                 , roStackTrace = []
                 , roSubshell = fail "SAW server does not support subshells."
                 , roProofSubshell = fail "SAW server does not support subshells."
@@ -233,7 +236,6 @@ initialState readFileFn =
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
                 , rwTheoremDB = db
-                , rwSolverCache = Nothing
                 , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty

@@ -481,6 +481,7 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
+  , roSolverCache   :: IORef (Maybe SolverCache)
   , roStackTrace    :: [String]
     -- ^ SAWScript-internal backtrace for use
     --   when displaying exceptions and such
@@ -512,7 +513,6 @@ data TopLevelRW =
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
   , rwTheoremDB :: TheoremDB
-  , rwSolverCache :: Maybe SolverCache
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
@@ -683,6 +683,9 @@ getSharedContext = TopLevel_ (rwSharedContext <$> get)
 getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase = TopLevel_ (asks roJavaCodebase)
 
+getSolverCache :: TopLevel (IORef (Maybe SolverCache))
+getSolverCache = TopLevel_ (asks roSolverCache)
+
 getTheoremDB :: TopLevel TheoremDB
 getTheoremDB = TopLevel_ (rwTheoremDB <$> get)
 
@@ -733,10 +736,10 @@ recordProof v =
 onSolverCache :: Monoid a => SolverCacheOp a -> TopLevel a
 onSolverCache f =
   do opts <- getOptions
-     rw <- getTopLevelRW
-     case rwSolverCache rw of
+     ref <- getSolverCache
+     io (readIORef ref) >>= \case
        Just cache -> do (ret, cache') <- io $ f opts cache
-                        putTopLevelRW rw { rwSolverCache = Just cache' }
+                        io $ atomicWriteIORef ref (Just cache')
                         return ret
        Nothing -> return mempty
 

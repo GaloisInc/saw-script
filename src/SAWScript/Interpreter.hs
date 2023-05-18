@@ -41,6 +41,7 @@ import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
+import Data.IORef
 import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -454,6 +455,8 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
+       cache <- mapM (\p -> snd <$> setSolverCachePath p opts emptySolverCache)
+                     (solverCache opts) >>= newIORef
        thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
@@ -464,6 +467,7 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
+                   , roSolverCache = cache
                    , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
                    , roProofSubshell = fail "Proof subshells not supported"
@@ -478,11 +482,6 @@ buildTopLevelEnv proxy opts =
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
-       cache <- maybe (return Nothing)
-                      (\p -> Just . snd <$>
-                             setSolverCachePath p opts emptySolverCache)
-                      (solverCache opts)
-
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
                    , rwTypes      = primTypeEnv primsAvail
@@ -495,7 +494,6 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
                    , rwTheoremDB = thmDB
-                   , rwSolverCache = cache
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
@@ -647,9 +645,8 @@ disable_lax_loads_and_stores = do
 
 enable_solver_cache :: TopLevel ()
 enable_solver_cache = do
-  rw <- getTopLevelRW
-  let cache = fromMaybe emptySolverCache (rwSolverCache rw)
-  putTopLevelRW rw { rwSolverCache = Just cache }
+  ref <- getSolverCache
+  io $ atomicModifyIORef ref $ (,()) . Just . fromMaybe emptySolverCache
 
 set_solver_cache_path :: FilePath -> TopLevel ()
 set_solver_cache_path path =
