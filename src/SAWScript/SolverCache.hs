@@ -4,6 +4,34 @@ Description : Caching SMT solver results for SAWScript
 License     : BSD3
 Maintainer  : m-yac
 Stability   : provisional
+
+This file defines an interface for caching SMT/SAT solver results in memory and
+on disk. The interface, as used in 'applyProverToGoal', works as follows:
+
+1. An 'SMTQuery' is converted into a string using 'scWriteExternal' and
+   then hashed using SHA256 ('satQueryToSolverCacheKey').
+2. The 'SolverCache' contains a map from these hashes to previously obtained
+   results ('solverCacheMap'). If the hash corresponding to the 'SATQuery' can
+   be found in the map, then the corresponding result is used.
+3. Otherwise, if the 'SolverCache' was given a path to a directory
+   ('solverCachePath') and a file whose name is the hash can be found in that
+   directory, the file's contents are 'read' and used as the result.
+4. Otherwise, the 'SATQuery' is dispatched to the requested backend and a
+   result is obtained. Then:
+   - This result is added to the 'SolverCache' map using the hash of the
+     'SATQuery' as the key.
+   - If the 'SolverCache' was given a path to a directory ('solverCachePath'),
+     then a file whose name is the hash and whose contents are 'show' of the
+     result is added to the directory.
+
+A interesting detail is how results are represented. For all of the backends
+which use 'applyProverToGoal', the type of a result is:
+@Maybe [(ExtCns Term, FirstOrderValue)]@, where 'Nothing' represents a result
+of "unsat," and 'Just' represents a result of "sat" along with a list of
+counterexamples. Since 'ExtCns' contains execution-specific 'VarIndex'es, we
+don't want to save these results directly. Instead, we represent each 'ExtCns'
+as its index in the 'satVariables' field of 'SATQuery' (which is where they
+were obtained by the backends in the first place).
 -}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,6 +42,7 @@ module SAWScript.SolverCache where
 
 import System.Directory
 import System.FilePath ((</>))
+import Control.Exception
 import Text.Read (readMaybe)
 
 import Data.Tuple.Extra (first, second, firstM)
@@ -44,7 +73,8 @@ import SAWScript.Proof
 
 -- Solver Cache Keys -----------------------------------------------------------
 
--- | The key type for 'SolverCache': SHA256 hashes
+-- | The key type for 'SolverCache': SHA256 hashes of 'SATQuery's - see
+-- 'satQueryToSolverCacheKey'
 newtype SolverCacheKey = SolverCacheKey ByteString deriving Eq
 
 -- | Truncate a 'SolverCacheKey' (i.e. a SHA256 hash) to an 'Int', used to give
@@ -66,7 +96,16 @@ solverCacheKeyFromHex :: String -> Maybe SolverCacheKey
 solverCacheKeyFromHex x = fmap SolverCacheKey $ decodeHex $ T.pack x
 
 -- | Hash using SHA256 a 'String' representation of a 'SATQuery' to get a
--- 'SolverCacheKey'
+-- 'SolverCacheKey'. In particular the 'String' representation used is the
+-- number of 'satVariables', followed by the number of 'satUninterp's, followed
+-- by the 'scWriteExternal' representation of the 'satQueryAsPropTerm'.
+-- However, for this last step, we do two additional things:
+-- 1. Before calling 'scWriteExternal', we generalize ('scGeneralizeExts') over
+--    all 'satVariables' and 'satUninterp's. This ensures the hash does not
+--    depend on any execution-specific 'VarIndex'es.
+-- 2. After calling 'scWriteExternal', all 'LocalName's in 'Pi' and 'Lam'
+--    constructors are removed. This ensures that two terms which are alpha
+--    equivalent are given the same hash.
 satQueryToSolverCacheKey :: SharedContext -> SATQuery -> IO SolverCacheKey
 satQueryToSolverCacheKey sc satq = do
   body <- satQueryAsPropTerm sc satq
@@ -105,19 +144,27 @@ fromSolverCacheValue satq (solver_name, cexs) =
   where ecs = Map.keys $ satVariables satq
 
 -- | Given a path to a cache and a 'SolverCacheKey', return a
--- 'SolverCacheValue' if the given key has been cached, or 'Nothing' otherwise
+-- 'SolverCacheValue' if the given key has been cached, or 'Nothing' otherwise.
+-- Note that if we encounter an 'IOException', we simply return 'Nothing',
+-- meaning we fall back to calling the solver backend. The idea is that solver
+-- result caching is an optional step, so if we fail during a read from the disk
+-- we don't want execution to stop, we just want to not use caching.
 readCacheEntryFromDisk :: FilePath -> SolverCacheKey -> IO (Maybe SolverCacheValue)
-readCacheEntryFromDisk path k = do
-  ex <- doesFileExist (path </> solverCacheKeyToHex k)
-  if not ex then return Nothing
-  else readMaybe <$> readFile (path </> solverCacheKeyToHex k)
+readCacheEntryFromDisk path k =
+  catch (readMaybe <$> readFile (path </> solverCacheKeyToHex k))
+        (\(_ :: IOException) -> return Nothing)
 
 -- | Given a path to a cache and a 'SolverCacheKey'/'SolverCacheValue' pair,
--- add an approriate entry to the cache on disk
+-- add an approriate entry to the cache on disk. Note that if we encounter an
+-- 'IOException, we simply do nothing, meaning we do not cache this result. The
+-- idea is that solver result caching is an optional step, so if we fail during
+-- a write to the disk we don't want execution to stop, we just want to not use
+-- caching.
 writeCacheEntryToDisk :: FilePath -> (SolverCacheKey, SolverCacheValue) -> IO ()
-writeCacheEntryToDisk path (k, v) = 
-  createDirectoryIfMissing False path >>
-  writeFile (path </> solverCacheKeyToHex k) (show v)
+writeCacheEntryToDisk path (k, v) =
+  catch (createDirectoryIfMissing False path >>
+         writeFile (path </> solverCacheKeyToHex k) (show v))
+        (\(_ :: IOException) -> return ())
 
 
 -- The Solver Cache ------------------------------------------------------------
@@ -126,7 +173,7 @@ writeCacheEntryToDisk path (k, v) =
 -- new additions to the cache should be saved
 data SolverCache =
   SolverCache
-  { solverCacheMap :: HashMap SolverCacheKey SolverCacheValue
+  { solverCacheMap  :: HashMap SolverCacheKey SolverCacheValue
   , solverCachePath :: Maybe FilePath
   , solverCacheHits :: (Integer, Integer)
   }
