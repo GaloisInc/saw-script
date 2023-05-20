@@ -2637,60 +2637,6 @@ FunStackERet E stack eith_top =
 -- The monad for specifications of computations (FIXME: document this!)
 primitive SpecM : (E:EvType) -> FunStack -> sort 0 -> sort 0;
 
--- SpecPreRel E1 E2 stack1 stack2 is a relation on FunStackE E1 stack1 and
--- FunStackE E2 stack2. This is the type of the postcondition needed for
--- refinesS.
-SpecPreRel : (E1:EvType) -> (E2:EvType) ->
-             (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
-SpecPreRel E1 E2 stack1 stack2 =
-  FunStackE E1 stack1 -> FunStackE E2 stack2 -> Prop;
-
--- SpecPreRel E1 E2 stack1 stack2 is a relation on the encodings of e1 and e2,
--- for all e1 of type FunStackE E1 stack1 and e2 of type FunStackE E2 stack2.
--- This is the type of the postcondition needed for refinesS.
-SpecPostRel : (E1:EvType) -> (E2:EvType) ->
-              (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
-SpecPostRel E1 E2 stack1 stack2 =
-  (e1:FunStackE E1 stack1) -> (e2:FunStackE E2 stack2) ->
-  FunStackERet E1 stack1 e1 -> FunStackERet E2 stack2 e2 -> Prop;
-
--- SpecRetRel R1 R2 is a relation on R1 and R2. This is the type of the return
--- relation needed for refinesS.
-SpecRetRel : (R1:sort 0) -> (R1:sort 0) -> sort 0;
-SpecRetRel R1 R2 = R1 -> R2 -> Prop;
-
--- The precondition requiring that errors, events, and StackCalls match up and
--- are equal on both sides
-eqPreRel : (E:EvType) -> (stack:FunStack) -> SpecPreRel E E stack stack;
-eqPreRel E stack e1 e2 =
-  Eq (FunStackE E stack) e1 e2;
-
--- The postcondition stating that errors, event encodings, and return values
--- of StackCalls match up and are equal on both sides
-eqPostRel : (E:EvType) -> (stack:FunStack) -> SpecPostRel E E stack stack;
-eqPostRel E stack e1 e2 a1 a2 =
-  EqDep (FunStackE E stack) (FunStackERet E stack) e1 a1 e2 a2;
-
--- The return relation requiring the returned values on both sides to be equal
-eqRR : (R:sort 0) -> SpecRetRel R R;
-eqRR R r1 r2 = Eq R r1 r2;
-
--- Refinement of SpecM computations
-primitive refinesS : (E1:EvType) -> (E2:EvType) ->
-                     (stack1:FunStack) -> (stack2:FunStack) ->
-                     (RPre:SpecPreRel E1 E2 stack1 stack2) ->
-                     (RPost:SpecPostRel E1 E2 stack1 stack2) ->
-                     (R1:sort 0) -> (R2:sort 0) -> (RR:SpecRetRel R1 R2) ->
-                     SpecM E1 stack1 R1 -> SpecM E2 stack2 R2 -> Prop;
-
--- Homogeneous refinement of SpecM computations - i.e. refinesS with eqPreRel for
--- the precondition, eqPostRel for the postcondition, and eqRR for the return relation
-refinesS_eq : (E:EvType) -> (stack:FunStack) -> (R:sort 0) ->
-              SpecM E stack R -> SpecM E stack R -> Prop;
-refinesS_eq E stack R =
-  refinesS E E stack stack (eqPreRel E stack) (eqPostRel E stack) R R (eqRR R);
-
-
 -- Return for SpecM
 primitive retS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> a ->
                  SpecM E stack a;
@@ -2754,31 +2700,33 @@ orS E stack a m1 m2 =
   bindS E stack Bool a (existsS E stack Bool)
         (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
 
--- A StackCall to a function in stk1 with args relative to stk2; the idea is
--- that it is being "mapped" from stk1 to stk2
-data MappedCall (stk1 stk2 : FunStack) : sort 0 where {
-  MappedCallOfArgs : (n:Nat) -> LRTInput stk2 (nthLRT stk1 n) ->
-                     MappedCall stk1 stk2;
+
+-- A StackCall in a polymorphic context (in the sense of PolySpecFun, below),
+-- where the call is into a function in stk1 but where stk1 has been extended to
+-- some arbitrary stk2
+data PolyStackCall (stk1 stk2 : FunStack) : sort 0 where {
+  PolyStackCallOfArgs : (n:Nat) -> LRTInput stk2 (nthLRT stk1 n) ->
+                     PolyStackCall stk1 stk2;
 }
 
--- The return type for a MappedCall recursive call
-MappedCallRet : (stk1 stk2 : FunStack) -> MappedCall stk1 stk2 -> sort 0;
-MappedCallRet stk1 stk2 call =
-  MappedCall#rec
+-- The return type for a PolyStackCall recursive call
+PolyStackCallRet : (stk1 stk2 : FunStack) -> PolyStackCall stk1 stk2 -> sort 0;
+PolyStackCallRet stk1 stk2 call =
+  PolyStackCall#rec
     stk1 stk2
-    (\ (_:MappedCall stk1 stk2) -> sort 0)
+    (\ (_:PolyStackCall stk1 stk2) -> sort 0)
     (\ (n:Nat) (args : LRTInput stk2 (nthLRT stk1 n)) ->
        LRTOutput stk2 (nthLRT stk1 n) args)
     call;
 
--- Create a MappedCall in a way where we take in one argument at a time
-mkMappedCall : (stk1 stk2 : FunStack) -> (n:Nat) ->
+-- Create a PolyStackCall in a way where we take in one argument at a time
+mkPolyStackCall : (stk1 stk2 : FunStack) -> (n:Nat) ->
                lrtPi stk2 (nthLRT stk1 n)
-                     (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> MappedCall stk1 stk2);
-mkMappedCall stk1 stk2 n =
+                     (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> PolyStackCall stk1 stk2);
+mkPolyStackCall stk1 stk2 n =
   lrtLambda stk2 (nthLRT stk1 n)
-    (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> MappedCall stk1 stk2)
-    (\ (args:LRTInput stk2 (nthLRT stk1 n)) -> MappedCallOfArgs stk1 stk2 n args);
+    (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> PolyStackCall stk1 stk2)
+    (\ (args:LRTInput stk2 (nthLRT stk1 n)) -> PolyStackCallOfArgs stk1 stk2 n args);
 
 -- A stack inclusion is a mapping from the indices of one stack to those of
 -- another that preserves LetRecTypes
@@ -2789,12 +2737,57 @@ stackIncl stk1 stk2 =
                         Eq LetRecType (nthLRT stk1 n) (nthLRT stk2 (f n)) *
                         IsLtNat (f n) (stackLen stk1));
 
--- Make a recursive call using a MappedCall
+-- Make a recursive call using a PolyStackCall
 primitive callS :
   (E:EvType) -> (stk1 stk2 : FunStack) -> (incl : stackIncl stk1 stk2) ->
-  (call : MappedCall stk1 stk2) -> SpecM E stk2 (MappedCallRet stk1 stk2 call);
+  (call : PolyStackCall stk1 stk2) -> SpecM E stk2 (PolyStackCallRet stk1 stk2 call);
 
--- FIXME HERE NOW: SpecDef and defineSpec
+
+--
+-- Spec definitions
+--
+
+-- A monadic function whose type is described by the encoding lrt
+SpecFun : EvType -> FunStack -> LetRecType -> sort 0;
+SpecFun E stk lrt =
+  lrtPi stk lrt (\ (args:LRTInput stk lrt) ->
+                   SpecM E stk (LRTOutput stk lrt args));
+
+-- A monadic function that is polymorphic in its function stack
+PolySpecFun : EvType -> FunStack -> LetRecType -> sort 1;
+PolySpecFun E stk lrt =
+  (stk':FunStack) -> stackIncl stk stk' -> SpecFun E stk' lrt;
+
+-- A right-nested tuple of a list of function definitions for all the
+-- LetRecTypes in the defs list, that can make calls into the calls list
+StackTuple : EvType -> FunStack -> FunStack -> sort 0;
+StackTuple E calls defs =
+  List1#rec
+    LetRecType (\ (_:FunStack) -> sort 0)
+    #()
+    (\ (lrt:LetRecType) (_:FunStack) (rec:sort 0) -> SpecFun E calls lrt * rec)
+    defs;
+
+-- A StackTuple that is polymorphic in its function stack, which defines
+-- functions for all the defs that can call all the calls
+PolyStackTuple : EvType -> FunStack -> FunStack -> sort 1;
+PolyStackTuple E calls defs =
+  (calls':FunStack) -> stackIncl calls calls' -> StackTuple E calls' defs;
+
+-- A "spec definition" represents a definition of a SpecM monadic function via
+-- (co)recursion over a tuple of recursive function bodies
+data SpecDef (E : EvType) : sort 1 where {
+  MkSpecDef : (stk : FunStack) -> PolyStackTuple E stk stk ->
+              (lrt : LetRecType) -> PolySpecFun E stk lrt ->
+              SpecDef E;
+}
+
+-- FIXME HERE NOW: defineSpec
+
+
+--
+-- Helper operations on SpecM
+--
 
 -- Apply a pure function to the result of a computation
 fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->
@@ -2945,6 +2938,64 @@ appendCastBVVecS E stack n len1 len2 len3 a v1 v2 =
                           (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
                  (appendBVVec n len1 len2 a v1 v2)))
     (bvEqWithProof n (bvAdd n len1 len2) len3);
+
+
+--
+-- Defining refinement on SpecM computations
+--
+
+-- SpecPreRel E1 E2 stack1 stack2 is a relation on FunStackE E1 stack1 and
+-- FunStackE E2 stack2. This is the type of the postcondition needed for
+-- refinesS.
+SpecPreRel : (E1:EvType) -> (E2:EvType) ->
+             (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
+SpecPreRel E1 E2 stack1 stack2 =
+  FunStackE E1 stack1 -> FunStackE E2 stack2 -> Prop;
+
+-- SpecPreRel E1 E2 stack1 stack2 is a relation on the encodings of e1 and e2,
+-- for all e1 of type FunStackE E1 stack1 and e2 of type FunStackE E2 stack2.
+-- This is the type of the postcondition needed for refinesS.
+SpecPostRel : (E1:EvType) -> (E2:EvType) ->
+              (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
+SpecPostRel E1 E2 stack1 stack2 =
+  (e1:FunStackE E1 stack1) -> (e2:FunStackE E2 stack2) ->
+  FunStackERet E1 stack1 e1 -> FunStackERet E2 stack2 e2 -> Prop;
+
+-- SpecRetRel R1 R2 is a relation on R1 and R2. This is the type of the return
+-- relation needed for refinesS.
+SpecRetRel : (R1:sort 0) -> (R1:sort 0) -> sort 0;
+SpecRetRel R1 R2 = R1 -> R2 -> Prop;
+
+-- The precondition requiring that errors, events, and StackCalls match up and
+-- are equal on both sides
+eqPreRel : (E:EvType) -> (stack:FunStack) -> SpecPreRel E E stack stack;
+eqPreRel E stack e1 e2 =
+  Eq (FunStackE E stack) e1 e2;
+
+-- The postcondition stating that errors, event encodings, and return values
+-- of StackCalls match up and are equal on both sides
+eqPostRel : (E:EvType) -> (stack:FunStack) -> SpecPostRel E E stack stack;
+eqPostRel E stack e1 e2 a1 a2 =
+  EqDep (FunStackE E stack) (FunStackERet E stack) e1 a1 e2 a2;
+
+-- The return relation requiring the returned values on both sides to be equal
+eqRR : (R:sort 0) -> SpecRetRel R R;
+eqRR R r1 r2 = Eq R r1 r2;
+
+-- Refinement of SpecM computations
+primitive refinesS : (E1:EvType) -> (E2:EvType) ->
+                     (stack1:FunStack) -> (stack2:FunStack) ->
+                     (RPre:SpecPreRel E1 E2 stack1 stack2) ->
+                     (RPost:SpecPostRel E1 E2 stack1 stack2) ->
+                     (R1:sort 0) -> (R2:sort 0) -> (RR:SpecRetRel R1 R2) ->
+                     SpecM E1 stack1 R1 -> SpecM E2 stack2 R2 -> Prop;
+
+-- Homogeneous refinement of SpecM computations - i.e. refinesS with eqPreRel for
+-- the precondition, eqPostRel for the postcondition, and eqRR for the return relation
+refinesS_eq : (E:EvType) -> (stack:FunStack) -> (R:sort 0) ->
+              SpecM E stack R -> SpecM E stack R -> Prop;
+refinesS_eq E stack R =
+  refinesS E E stack stack (eqPreRel E stack) (eqPostRel E stack) R R (eqRR R);
 
 
 --------------------------------------------------------------------------------
