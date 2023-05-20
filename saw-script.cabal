@@ -129,6 +129,7 @@ library
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SolverCache
+    SAWScript.SolverVersions
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
@@ -188,6 +189,11 @@ library
     SAWScript.Yosys.Theorem
     SAWScript.Yosys.TransitionSystem
     SAWScript.Yosys.Utils
+
+  other-modules:
+    GitRev
+  autogen-modules:
+    GitRev
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
