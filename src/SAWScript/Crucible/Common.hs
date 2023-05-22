@@ -38,6 +38,7 @@ import           Lang.Crucible.Backend
 import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
 import qualified Data.Parameterized.Nonce as Nonce
 import           What4.Protocol.Online (OnlineSolver(..))
+import qualified What4.Solver.CVC5 as CVC5
 import qualified What4.Solver.Z3 as Z3
 import qualified What4.Solver.Yices as Yices
 import qualified What4.Protocol.SMTLib2 as SMT2
@@ -89,7 +90,9 @@ newSAWCoreBackend pss sym = newSAWCoreBackendWithTimeout pss sym 0
 newSAWCoreBackendWithTimeout :: PathSatSolver -> Sym -> Integer -> IO SomeOnlineBackend
 newSAWCoreBackendWithTimeout PathSat_Yices sym timeout =
   do bak <- newOnlineBackend sym Yices.yicesDefaultFeatures
+     W4.extendConfig Z3.z3Options (W4.getConfiguration sym)
      W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)
+     W4.extendConfig CVC5.cvc5Options (W4.getConfiguration sym)
      yicesTimeoutSetting <- W4.getOptionSetting Yices.yicesGoalTimeout (W4.getConfiguration sym)
      _ <- W4.setOpt yicesTimeoutSetting timeout
      return (SomeOnlineBackend (bak :: Backend Yices.Connection))
@@ -97,6 +100,8 @@ newSAWCoreBackendWithTimeout PathSat_Yices sym timeout =
 newSAWCoreBackendWithTimeout PathSat_Z3 sym timeout =
   do bak <- newOnlineBackend sym (SMT2.defaultFeatures Z3.Z3)
      W4.extendConfig Z3.z3Options (W4.getConfiguration sym)
+     W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)
+     W4.extendConfig CVC5.cvc5Options (W4.getConfiguration sym)
      z3TimeoutSetting <- W4.getOptionSetting Z3.z3Timeout (W4.getConfiguration sym)
      _ <- W4.setOpt z3TimeoutSetting timeout
      return (SomeOnlineBackend (bak :: Backend (SMT2.Writer Z3.Z3)))

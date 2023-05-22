@@ -33,7 +33,7 @@ module SAWScript.Crucible.LLVM.X86
 
 import Control.Lens.TH (makeLenses)
 
-import System.IO (stdout)
+import System.IO
 import Control.Exception (throw)
 import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
 import Control.Monad.State
@@ -59,6 +59,7 @@ import Data.Maybe
 import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some
+import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
@@ -535,12 +536,12 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
          else
            pure []
 
-      simpleLoopFixpointFeature <-
+      (simpleLoopFixpointFeature, maybe_ref) <-
         case fixpointSelect of
-          NoFixpoint -> return []
+          NoFixpoint -> return ([], Nothing)
           SimpleFixpoint func ->
-            do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
-               return [f]
+            do (f, ref) <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
+               return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
                  case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
@@ -552,7 +553,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                    do let printFn = printOutLn opts Info
                       f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
                                                                    sc sawst mdMap loopcfg mvar func)
-                      return [f]
+                      return ([f], Nothing)
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
@@ -581,12 +582,18 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                          ]
         C.TimeoutResult{} -> fail "Execution timed out"
 
+      invSubst <- case maybe_ref of
+        Just fixpoint_state_ref -> do
+          Crucible.LLVM.Fixpoint.AfterFixpoint _ uninterp_inv_fn <- liftIO $ readIORef fixpoint_state_ref
+          C.runCHC bak [uninterp_inv_fn]
+        Nothing -> return MapF.empty
+
       liftIO $ printOutLn opts Info
         "Examining specification to determine postconditions"
       liftIO $ void $ runX86Sim finalState $
         assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
-      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
+      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap invSubst
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -610,7 +617,7 @@ setupSimpleLoopFixpointFeature ::
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm ->
-  IO (C.ExecutionFeature p sym ext rtp)
+  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.Fixpoint.FixpointState sym blocks))
 
 setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
   Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
@@ -667,7 +674,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        induction_step_condition <- scEq sc loop_body func_body
        result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
 
-       return (result_substitution, result_condition)
+       return (result_substitution, Just result_condition)
 
 
 -- | This procedure sets up the simple loop fixpoint feature.
@@ -1335,9 +1342,10 @@ checkGoals ::
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
   TopLevel (SolverStats, [MS.VCStats])
-checkGoals bak opts nm sc tactic mdMap = do
-  gs <- liftIO $ getPoststateObligations sc bak mdMap
+checkGoals bak opts nm sc tactic mdMap invSubst = do
+  gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs

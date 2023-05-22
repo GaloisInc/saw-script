@@ -130,6 +130,8 @@ import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
+import           Data.Parameterized.Map (MapF)
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
@@ -149,6 +151,7 @@ import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 
 -- crucible
+import qualified Lang.Crucible.Analysis.Fixpoint.Components as Crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
@@ -168,6 +171,7 @@ import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import           Lang.Crucible.LLVM.QQ( llvmOvr )
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
@@ -432,7 +436,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
             io $ scAbstractExts shared_context input_parameters
             =<< scTuple shared_context output_values
           when ([] /= getAllExts extracted_func) $
-            fail "Non-functional simulation summary."
+            fail $ "Non-functional simulation summary: " ++ show (length (getAllExts extracted_func)) ++ "\n" ++ show (getAllExts extracted_func)
 
           let nmi = llvmNameInfo func_name
 
@@ -645,14 +649,15 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      printOutLnTop Info $
        unwords ["Simulating", (methodSpec ^. csName) , "..."]
      top_loc <- toW4Loc "llvm_verify" <$> getPosition
-     (ret, globals3) <-
-       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
+     (ret, globals3, invSubst) <-
+       verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
 
      -- collect the proof obligations
      (asserts, post_override_state) <-
        verifyPoststate cc
        methodSpec env globals3 ret
        mdMap
+       invSubst
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
@@ -755,6 +760,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
        verifyPoststate cc
        methodSpec env globals3 ret
        mdMap
+       MapF.empty
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
@@ -1430,14 +1436,22 @@ verifySimulate ::
   Bool ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IORef MetadataMap ->
-  IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
-  withCfgAndBlockId opts cc mspec $ \cfg entryId ->
-  ccWithBackend cc $ \bak ->
-  do let sym = cc^.ccSym
+  TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap = do
+  sc <- getSharedContext
+  io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
+     let sym = cc^.ccSym
      let argTys = Crucible.blockInputs $
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
      let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
+
+     let as_scc = \case
+          Crucible.SCC scc -> Just (Crucible.wtoHead scc, Crucible.wtoComps scc)
+          Crucible.Vertex{} -> Nothing
+     let loops = mapMaybe as_scc $ Crucible.cfgWeakTopologicalOrdering cfg
+     let foo = length loops
+     let bar = any (\(_wtoHead, wtoComps) -> (not . null) $ mapMaybe as_scc wtoComps) loops
+     printOutLn opts Info $ "loops: function=`" ++ mspec ^. csName ++ "`" ++ ", loops=" ++ show foo ++ ", nested=" ++ show bar
 
      args' <- prepareArgs sym argTys (map snd args)
      let simCtx = cc^.ccLLVMSimContext
@@ -1466,10 +1480,17 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList breakpoints))
        (neGroupOn (view csName) invLemmas)
 
+     (simpleLoopFixpointFeature, fixpoint_state_ref) <-
+       Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) $
+         Just $ simpleLoopFixpointFunction sc sym $ mspec ^. csName
+    --  (simpleLoopFixpointFeature, fixpoint_state_ref) <-
+    --    Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) Nothing
+
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
 
      let execFeatures =
+           [simpleLoopFixpointFeature] ++
            invariantExecFeatures ++
            map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
            additionalFeatures
@@ -1502,7 +1523,10 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                             (Crucible.regType  retval)
                             (Crucible.regValue retval)
                      return (Just (ret_mt, v))
-            return (retval', globals1)
+
+            Crucible.AfterFixpoint _ uninterp_inv_fn <- readIORef fixpoint_state_ref
+            invSubst <- Crucible.runCHC bak [uninterp_inv_fn]
+            return (retval', globals1, invSubst)
 
        Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 
@@ -1511,6 +1535,75 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
             fail $ unlines [ "Symbolic execution failed."
                            , show resultDoc
                            ]
+
+
+simpleLoopFixpointFunction ::
+  (sym ~ Sym, MonadIO m) =>
+  SharedContext ->
+  sym ->
+  String ->
+  MapF (W4.SymExpr sym) (Crucible.FixpointEntry sym) ->
+  W4.Pred sym ->
+  m (MapF (W4.SymExpr sym) (W4.SymExpr sym), Maybe (W4.Pred sym))
+simpleLoopFixpointFunction sc sym nm fixpoint_substitution condition = liftIO $ do
+  sawst <- Common.sawCoreState sym
+
+  let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+
+  let body_exprs = map (mapSome Crucible.bodyValue) (MapF.elems fixpoint_substitution)
+  let uninterpreted_constants = foldMap
+        (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
+        (Some condition : body_exprs)
+  let filtered_uninterpreted_constants = Set.toList $ Set.filter
+        (\(Some variable) ->
+          not (isPrefixOf "cindex_var" $ show $ W4.printSymExpr variable)
+          && not (isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+          && not (isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
+          && not (isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+          && not (isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable)
+          && not (isPrefixOf "cnoSatisfyingWrite" $ show $ W4.printSymExpr variable))
+        uninterpreted_constants
+  body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+  implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+
+  explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+    toSC sym sawst variable
+
+  implicit_parameter_types <- mapM (scTypeOf sc) implicit_parameters
+  implicit_parameters_tuple_type <- scTupleType sc implicit_parameter_types
+  explicit_parameter_types <- mapM (scTypeOf sc) explicit_parameters
+  explicit_parameters_tuple_type <- scTupleType sc explicit_parameter_types
+
+  func_type <- scFunAll sc (implicit_parameter_types ++ explicit_parameter_types) explicit_parameters_tuple_type
+
+  func_cons <- scFreshGlobal sc "f" func_type
+
+  loop_condition_tm <- toSC sym sawst condition
+  step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+    toSC sym sawst $ Crucible.bodyValue fixpoint_entry
+  tail_applied_func <- scApplyAll sc func_cons $ implicit_parameters ++ step_arguments
+  explicit_parameters_tuple <- scTuple sc explicit_parameters
+  loop_body <- scIte sc explicit_parameters_tuple_type loop_condition_tm tail_applied_func explicit_parameters_tuple
+
+  f <- scAbstractExts sc
+    (getAllExts func_cons ++ toList (Set.difference (getAllExtSet loop_body) (getAllExtSet func_cons)))
+    loop_body
+  fix_tm <- scGlobalApply sc "Prelude.fix" [func_type, f]
+  let nmi = llvmNameInfo $ nm ++ "_loop"
+  func <- scConstant' sc nmi fix_tm func_type
+
+  arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+    toSC sym sawst $ Crucible.headerValue fixpoint_entry
+  applied_func <- scApplyAll sc func $ implicit_parameters ++ arguments
+  applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
+    scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+  result_substitution <- MapF.fromList <$> zipWithM
+    (\(MapF.Pair variable _) applied_func_selector ->
+      MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+    fixpoint_substitution_as_list
+    applied_func_selectors
+
+  return (result_substitution, Nothing)
 
 
 refineSimulate ::
@@ -1626,9 +1719,10 @@ verifyPoststate ::
   Crucible.SymGlobalState Sym {- ^ global variables -} ->
   Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value -} ->
   IORef MetadataMap {- ^ metadata map -} ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
   TopLevel ([(String, MS.ConditionMetadata, Term)], OverrideState (LLVM arch))
     {- ^ generated labels and verification conditions -}
-verifyPoststate cc mspec env0 globals ret mdMap =
+verifyPoststate cc mspec env0 globals ret mdMap invSubst =
   ccWithBackend cc $ \bak ->
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
      sc <- getSharedContext
@@ -1669,7 +1763,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
           modifyIORef mdMap (Map.insert ann md)
           Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
-     sc_obligations <- io $ getPoststateObligations sc bak mdMap
+     sc_obligations <- io $ getPoststateObligations sc bak mdMap invSubst
      return (sc_obligations, st)
 
   where
@@ -1694,8 +1788,9 @@ getPoststateObligations ::
   SharedContext ->
   bak ->
   IORef MetadataMap ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
   IO [(String, MS.ConditionMetadata, Term)]
-getPoststateObligations sc bak mdMap =
+getPoststateObligations sc bak mdMap invSubst =
   do obligations <- maybe [] Crucible.goalsToList <$> Crucible.getProofObligations bak
      Crucible.clearProofObligations bak
 
@@ -1707,8 +1802,8 @@ getPoststateObligations sc bak mdMap =
 
     verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
       do st <- Common.sawCoreState sym
-         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
-         conclTerm <- toSC sym st concl
+         hypTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst =<< Crucible.assumptionsPred sym hyps
+         conclTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst concl
          obligation <- scImplies sc hypTerm conclTerm
          let defaultMd = MS.ConditionMetadata
                          { MS.conditionLoc = loc

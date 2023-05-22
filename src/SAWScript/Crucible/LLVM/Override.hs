@@ -2209,6 +2209,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
             SetupTerm tm
               | Crucible.storageTypeSize storTy > 16
               , smt_array_memory_model_enabled -> do
+                putStrLn $ "smt_array_memory_model_enabled: " ++ show (Crucible.storageTypeSize storTy)
                 arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
                 st <- sawCoreState sym
                 arr <- bindSAWTerm
