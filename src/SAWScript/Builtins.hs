@@ -970,12 +970,12 @@ applyProverToGoal backend f unintSet g = do
   bkvs <- io $ getSolverBackendVersions backend
   satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
   k    <- io $ mkSolverCacheKey sc bkvs satq
-  (mb, solver_name) <- SV.onSolverCache (lookupInSolverCache k) >>= \case
+  (mb, solver_name) <- SV.askSolverCache (lookupInSolverCache k) >>= \case
     -- Use a cached result if one exists (and it's valid w.r.t our query)
     Just v -> return $ fromSolverCacheValue satq v
     -- Otherwise try to cache the result of the call
     _ -> f satq >>= \res ->
-         case toSolverCacheValue satq res of
+         case toSolverCacheValue bkvs satq res of
            Just v  -> SV.onSolverCache (insertInSolverCache k v) >>
                       return res
            Nothing -> return res

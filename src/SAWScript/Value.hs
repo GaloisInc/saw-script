@@ -731,17 +731,28 @@ recordProof v =
   do rw <- getTopLevelRW
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
--- | Perform a (possibly) stateful operation on the 'SolverCache' returning a
--- value of type @a@, or @mempty@ if there is no 'SolverCache'
-onSolverCache :: Monoid a => SolverCacheOp a -> TopLevel a
+-- | Perform a possibly stateful operation on the 'SolverCache', returning a
+-- value of type @Maybe a@, or 'Nothing' if there is no 'SolverCache'
+askSolverCache :: SolverCacheOp (Maybe a) -> TopLevel (Maybe a)
+askSolverCache f =
+  do opts <- getOptions
+     ref <- getSolverCache
+     io $ readIORef ref >>= \case
+       Just cache -> do (ret, cache') <- f opts cache
+                        atomicWriteIORef ref (Just cache')
+                        return ret
+       Nothing -> return Nothing
+
+-- | Perform a stateful operation on the 'SolverCache', or do nothing if
+-- there is no 'SolverCache'
+onSolverCache :: SolverCacheOp () -> TopLevel()
 onSolverCache f =
   do opts <- getOptions
      ref <- getSolverCache
-     io (readIORef ref) >>= \case
-       Just cache -> do (ret, cache') <- io $ f opts cache
-                        io $ atomicWriteIORef ref (Just cache')
-                        return ret
-       Nothing -> return mempty
+     io $ readIORef ref >>= \case
+       Just cache -> do ((), cache') <- f opts cache
+                        atomicWriteIORef ref (Just cache')
+       Nothing -> return ()
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel CJ.JVMContext

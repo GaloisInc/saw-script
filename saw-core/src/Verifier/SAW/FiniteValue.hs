@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 {- |
 Module      : Verifier.SAW.FiniteValue
@@ -22,6 +23,8 @@ import qualified Control.Monad.State as S
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Numeric.Natural (Natural)
+import GHC.Generics (Generic)
+import Codec.Serialise
 
 import Prettyprinter hiding (Doc)
 
@@ -56,7 +59,9 @@ data FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
-  deriving (Eq, Read, Show)
+  deriving (Eq, Generic, Read, Show)
+
+instance Serialise FirstOrderType -- automatically derived
 
 -- | Values inhabiting those first-order types.
 data FirstOrderValue
@@ -68,7 +73,9 @@ data FirstOrderValue
   | FOVArray FirstOrderType FirstOrderType
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
-  deriving (Eq, Read, Show)
+  deriving (Eq, Generic, Read, Show)
+
+instance Serialise FirstOrderValue -- automatically derived
 
 toFirstOrderType :: FiniteType -> FirstOrderType
 toFirstOrderType ft =
