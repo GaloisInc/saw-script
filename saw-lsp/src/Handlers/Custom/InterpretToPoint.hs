@@ -5,11 +5,12 @@
 
 module Handlers.Custom.InterpretToPoint where
 
+import Control.Applicative ((<|>))
 import Control.Lens ((^.))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Bifunctor (first)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (fromJust, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error (internalError)
@@ -28,10 +29,13 @@ import Language.LSP.Types.Lens qualified as LSP
 import Language.LSP.VFS (VirtualFile, virtualFileText)
 import Monad
 import SAW (InterpretParams (..), Position (..))
-import SAWScript.AST (Expr (..), Stmt (..), prettyWholeModule)
+import SAWScript.AST (Expr (..), Located (..), Pattern (..), Stmt (..), prettyWholeModule)
+import SAWScript.Interpreter (interpretStmt)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
 import SAWScript.Position (Pos (..), getPos)
+import SAWScript.Value (TopLevel)
+import SAWT (flushOutput, liftTopLevel, runSAWStmt, emptySAWEnv)
 
 handleInterpretToPoint :: Handlers ServerM
 handleInterpretToPoint = requestHandler (SCustomMethod "$/interpretToPoint") doInterp
@@ -49,7 +53,11 @@ doInterp request responder =
     fileStmts <- liftEither (first (internalError . Text.pack) (parseFile fileText))
     let Position l c = posn interpParams
         mark = Position (l + 1) (c + 1)
-    case truncateAfterPoint mark fileStmts of
+        var v = Var (Located v "" Unknown)
+        printGoal = StmtBind Unknown (PWild Nothing) Nothing (var "print_goal")
+        admit = StmtBind Unknown (PWild Nothing) Nothing (Application (var "admit") (String "TODO"))
+        fileStmts' = truncateAfterPointWith [printGoal, admit] mark fileStmts
+    case fileStmts' of
       [] ->
         let msg = Text.pack $ "would truncate all " <> show (length fileStmts) <> " statements"
          in sendNotification SWindowShowMessage (ShowMessageParams MtError msg)
@@ -60,6 +68,11 @@ doInterp request responder =
               msg = Text.pack $ "would truncate " <> orig <> " statements to " <> new <> " statements"
           debug' (show (prettyWholeModule stmts))
           sendNotification SWindowShowMessage (ShowMessageParams MtError msg)
+    liftSAW emptySAWEnv
+    liftSAW (mapM_ runSAWStmt fileStmts')
+    ss <- liftSAW flushOutput
+    let goal = last ss
+    debug' goal
   where
     ps = request ^. LSP.params
 
@@ -75,31 +88,31 @@ parseFile text =
     let lexed = lexSAW "TODO" (Text.unpack text)
     first show (parseModule lexed)
 
-truncateAfterPoint :: Position -> [Stmt] -> [Stmt]
-truncateAfterPoint mark = mapMaybe (truncateStmt mark)
+truncateAfterPointWith :: [Stmt] -> Position -> [Stmt] -> [Stmt]
+truncateAfterPointWith additions mark = mapMaybe (truncateStmtWith additions mark)
 
-truncateStmt :: Position -> Stmt -> Maybe Stmt
-truncateStmt mark stmt
+truncateStmtWith :: [Stmt] -> Position -> Stmt -> Maybe Stmt
+truncateStmtWith additions mark stmt
   | pos `endsBefore` mark = Just stmt
   | pos `startsAfter` mark = Nothing
   | otherwise =
       case stmt of
-        StmtBind posn pat ty e -> StmtBind posn pat ty <$> truncateLExpr mark e
+        StmtBind posn pat ty e -> StmtBind posn pat ty <$> truncateLExprWith additions mark e
         _ -> undefined
   where
     pos = getPos stmt
 
-truncateLExpr :: Position -> Expr -> Maybe Expr
-truncateLExpr mark expr =
+truncateLExprWith :: [Stmt] -> Position -> Expr -> Maybe Expr
+truncateLExprWith additions mark expr =
   case expr of
     LExpr pos e
       | pos `endsBefore` mark -> Just expr
       | pos `startsAfter` mark -> Nothing
-      | otherwise -> LExpr pos <$> truncateOverlappingExpr mark e
+      | otherwise -> LExpr pos <$> truncateOverlappingExprWith additions mark e
     _ -> Nothing
 
-truncateOverlappingExpr :: Position -> Expr -> Maybe Expr
-truncateOverlappingExpr mark expr =
+truncateOverlappingExprWith :: [Stmt] -> Position -> Expr -> Maybe Expr
+truncateOverlappingExprWith additions mark expr =
   case expr of
     Bool _ -> Just expr
     String _ -> Just expr
@@ -107,7 +120,13 @@ truncateOverlappingExpr mark expr =
     Code _ -> Just expr
     CType _ -> Just expr
     Array es -> Just (Array (mapMaybe goExpr es)) -- TODO
-    Block ss -> Just (Block (mapMaybe goStmt ss))
+    Block ss -> Just $
+      Block $
+        case length (mapMaybe goStmt ss) of
+          0 -> additions
+          n
+            | n == length ss -> ss
+            | otherwise -> ss <> additions
     Tuple es -> Just expr -- TODO
     Record binds -> Just expr
     Index a i -> Just expr
@@ -119,10 +138,10 @@ truncateOverlappingExpr mark expr =
     Let d e -> Just expr
     TSig e ty -> Just expr
     IfThenElse c t f -> Just expr
-    LExpr p e -> truncateLExpr mark expr
+    LExpr p e -> truncateLExprWith additions mark expr
   where
-    goExpr = truncateOverlappingExpr mark
-    goStmt = truncateStmt mark
+    goExpr = truncateOverlappingExprWith additions mark
+    goStmt = truncateStmtWith additions mark
 
 startsAfter :: Pos -> Position -> Bool
 startsAfter reference Position {..} =
