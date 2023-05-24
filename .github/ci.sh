@@ -75,14 +75,6 @@ build() {
 }
 
 install_system_deps() {
-  (curl -o lmdb.tar.bz2 -sL https://git.openldap.org/openldap/openldap/-/archive/LMDB_0.9.30/openldap-LMDB_0.9.30.tar.bz2 && tar --strip-components=1 -xf lmdb.tar.bz2 && rm lmdb.tar.bz2)
-  cd $(pwd)/libraries/liblmdb
-  chmod +x ./*
-  if [[ "$RUNNER_OS" == "macOS" ]]; then
-    make SOEXT=.dylib && make install SOEXT=.dylib
-  else
-    make && make install
-  fi
   (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-bin.zip" && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
   cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT

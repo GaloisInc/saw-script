@@ -119,6 +119,31 @@ jobs:
           cabal user-config update -a "extra-include-dirs: \"\""
           cabal user-config update -a "extra-lib-dirs: \"\""
 
+      # Adapted from: https://github.com/input-output-hk/haskell-lmdb/
+      - name: "Linux: Install lmdb (apt-get)"
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install liblmdb-dev
+          sudo apt-get -y autoremove
+      - name: "MacOS: Install lmdb (brew)"
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config lmdb
+          cp ./.github/workflows/lmdb.pc /usr/local/lib/pkgconfig
+      - name: "Windows: Install lmdb via pacman (msys2)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ghcup run -- pacman --noconfirm -S `
+            mingw-w64-x86_64-pkg-config `
+            mingw-w64-x86_64-lmdb
+      - name: "Windows: Update PATH after lmdb install"
+        if: runner.os == 'Windows'
+        run: |
+          $env:PATH=("C:\msys64\mingw64\bin;{0}" -f $env:PATH)
+          echo "PATH=$env:PATH" >> $env:GITHUB_ENV
+
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
