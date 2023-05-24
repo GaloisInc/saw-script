@@ -12,15 +12,15 @@ import System.Exit
 main = defaultMainWithHooks myHooks
   where myHooks = simpleUserHooks { buildHook = myBuild }
 
+onfailure :: a -> SomeException -> IO a
+onfailure on_fail _e = return on_fail
+
 withExe dir exe_str on_no_exe on_fail m = do
   mb <- findExecutable exe_str
 
-  let onfailure :: SomeException -> IO String
-      onfailure _e = return on_fail
-
   case mb of
     Just exe -> withCurrentDirectory dir (m exe)
-                `catch` onfailure
+                `catch` onfailure on_fail
     Nothing -> return on_no_exe
 
 myBuild pd lbi uh flags = do
@@ -30,30 +30,30 @@ myBuild pd lbi uh flags = do
   desc <- withExe "." "git" "<VCS-less build>" "<non-dev-build>" $ \git ->
     init <$> readProcess git ["describe", "--always", "--dirty"] ""
 
-  aig_desc <- withExe "deps/aig" "git" "unknown" "unknown" $ \git -> do
-    init <$> readProcess git ["describe", "--always", "--dirty"] ""
+  aig_desc <- withExe "deps/aig" "git" Nothing Nothing $ \git -> do
+    Just . init <$> readProcess git ["describe", "--always", "--dirty"] ""
                   
-  w4_desc <- withExe "deps/what4" "git" "unknown" "unknown" $ \git -> do
-    init <$> readProcess git ["describe", "--always", "--dirty"] ""
+  w4_desc <- withExe "deps/what4" "git" Nothing Nothing $ \git -> do
+    Just . init <$> readProcess git ["describe", "--always", "--dirty"] ""
 
-  sbv_ver <- withExe "." "cabal" "unknown" "unknown" $ \cabal -> do
+  sbv_ver <- withExe "." "cabal" Nothing Nothing $ \cabal -> do
     ex <- doesFileExist "cabal.project.freeze"
     unless ex $ callProcess cabal ["freeze"]
     wss <- fmap words <$> lines <$> readFile "cabal.project.freeze"
     unless ex $ removeFile "cabal.project.freeze"
     case find (\ws -> (ws !! 0) == "any.sbv") wss of
-      Just ws -> return $ init $ drop 2 $ ws !! 1
-      Nothing -> return "unknown"
+      Just ws -> return . Just . init . drop 2 $ ws !! 1
+      Nothing -> return Nothing
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
     , "hash :: String"
     , "hash = " ++ show desc
-    , "aigHash :: String"
+    , "aigHash :: Maybe String"
     , "aigHash = " ++ show aig_desc
-    , "w4Hash :: String"
+    , "w4Hash :: Maybe String"
     , "w4Hash = " ++ show w4_desc
-    , "sbvVer :: String"
+    , "sbvVer :: Maybe String"
     , "sbvVer = " ++ show sbv_ver
     ]
 

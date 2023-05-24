@@ -909,7 +909,7 @@ goal_num_ite n s1 s2 =
 proveABC :: ProofScript ()
 proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  wrapProver AIG (Prover.proveABC proxy) Set.empty
+  wrapProver [AIG] (Prover.proveABC proxy) Set.empty
 
 satExternal :: Bool -> String -> [String] -> ProofScript ()
 satExternal doCNF execName args =
@@ -934,7 +934,7 @@ writeSAIGComputedPrim = Prover.writeSAIG
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
-proveRME = wrapProver RME Prover.proveRME Set.empty
+proveRME = wrapProver [RME] Prover.proveRME Set.empty
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -954,20 +954,21 @@ proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
      unintSet <- SV.scriptTopLevel (resolveNames unints)
-     wrapProver (SBV conf) (Prover.proveUnintSBV conf timeout) unintSet
+     wrapProver [SBV, Solver $ SBV.name $ SBV.solver conf]
+                (Prover.proveUnintSBV conf timeout) unintSet
 
 -- | Given a continuation which calls a prover, call the continuation on the
 -- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
 -- is a 'SolverCache', do not call the continuation if the goal has an already
 -- cached result, and otherwise save the result of the call to the cache.
-applyProverToGoal :: SolverBackend
+applyProverToGoal :: [SolverBackend]
                      -> (SATQuery -> TopLevel (Maybe CEX, String))
                      -> Set VarIndex
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal backend f unintSet g = do
+applyProverToGoal backends f unintSet g = do
   sc <- getSharedContext
-  bkvs <- io $ getSolverBackendVersions backend
+  bkvs <- io $ getSolverBackendVersions backends
   satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
   k    <- io $ mkSolverCacheKey sc bkvs satq
   (mb, solver_name) <- SV.askSolverCache (lookupInSolverCache k) >>= \case
@@ -985,21 +986,21 @@ applyProverToGoal backend f unintSet g = do
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  SolverBackend ->
+  [SolverBackend] ->
   (SATQuery -> TopLevel (Maybe CEX, String)) ->
   Set VarIndex ->
   ProofScript ()
 wrapProver backend f = execTactic . tacticSolve . applyProverToGoal backend f
 
 wrapW4Prover ::
-  W4BackendExtra -> SBV.Solver ->
+  W4Backend -> Solver ->
   ( Bool -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
   [String] ->
   ProofScript ()
 wrapW4Prover x s f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
-  wrapProver (W4 x s) (f hashConsing) unintSet
+  wrapProver (w4Backends x s) (f hashConsing) unintSet
 
 wrapW4ProveExporter ::
   ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, String) ) ->

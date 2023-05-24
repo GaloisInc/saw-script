@@ -70,6 +70,7 @@ import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
 import SAWScript.SolverCache
+import SAWScript.SolverVersions
 import SAWScript.Proof (newTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
@@ -652,6 +653,11 @@ set_solver_cache_path :: FilePath -> TopLevel ()
 set_solver_cache_path path =
   enable_solver_cache >> onSolverCache (setSolverCachePath path)
 
+clean_solver_cache :: TopLevel ()
+clean_solver_cache = do
+  vs <- io $ getSolverBackendVersions baseBackends
+  onSolverCache (cleanSolverCache vs)
+
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
   rw <- getTopLevelRW
@@ -1089,6 +1095,14 @@ primitives = Map.fromList
     , " error."
     ]
   
+  , prim "clean_solver_cache" "TopLevel ()"
+    (pureVal clean_solver_cache)
+    Experimental
+    [ "Remove all entries in the solver result cache which were created"
+    , " using solver backend version(s) which do not match the version(s)"
+    , " in the current environment."
+    ]
+
   , prim "print_solver_cache_stats" "TopLevel ()"
     (pureVal (onSolverCache printSolverCacheStats))
     Experimental
