@@ -6,7 +6,7 @@ module SAWT where
 import Control.Monad.Catch (MonadCatch, MonadThrow)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
-import Control.Monad.Reader (MonadReader (..), ReaderT (..), void)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks, void)
 import Control.Monad.State (MonadState (..))
 import Control.Monad.Trans (MonadTrans (..))
 import Data.AIG.CompactGraph qualified as AIG
@@ -14,15 +14,17 @@ import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import SAWScript.AST qualified as SAW
 import SAWScript.Interpreter qualified as SAW
 import SAWScript.Lexer (lexSAW)
+import SAWScript.Options (Options (..), Verbosity (..), printOutVia)
 import SAWScript.Options qualified as SAW
-import SAWScript.Parser (parseStmtSemi)
+import SAWScript.Parser (parseStmt, parseStmtSemi)
 import SAWScript.Proof qualified as SAW
 import SAWScript.Value qualified as SAW
 
 data SAWEnv = SAWEnv
   { seTopLevelRO :: SAW.TopLevelRO,
     seTopLevelRW :: SAW.TopLevelRW,
-    seProofState :: Maybe SAW.ProofState
+    seProofState :: Maybe SAW.ProofState,
+    seOutput :: IORef [String]
   }
 
 newtype SAWT m a = SAWT {unSAWT :: ReaderT (IORef SAWEnv) m a}
@@ -52,8 +54,24 @@ runSAWTDefault action =
 defaultSAWEnv :: MonadIO m => m SAWEnv
 defaultSAWEnv =
   do
-    (ctx, ro, rw) <- liftIO $ SAW.buildTopLevelEnv (SAW.AIGProxy AIG.compactProxy) SAW.defaultOptions
-    pure (SAWEnv {seTopLevelRO = ro, seTopLevelRW = rw, seProofState = Nothing})
+    seOutput <- liftIO $ newIORef mempty
+    let options = SAW.defaultOptions {printOutFn = printOutVia (captureOutput seOutput) False Info}
+    (ctx, ro, rw) <- liftIO $ SAW.buildTopLevelEnv (SAW.AIGProxy AIG.compactProxy) options
+    pure (SAWEnv {seTopLevelRO = ro, seTopLevelRW = rw, seProofState = Nothing, seOutput = seOutput})
+
+emptySAWEnv :: MonadIO m => SAWT m ()
+emptySAWEnv = SAWT $ ReaderT $ \ref -> liftIO defaultSAWEnv >>= liftIO . writeIORef ref
+
+captureOutput :: IORef [String] -> String -> IO ()
+captureOutput ref s = modifyIORef ref (s :)
+
+flushOutput :: MonadIO m => SAWT m [String]
+flushOutput =
+  do
+    ref <- asks seOutput
+    ss <- liftIO $ readIORef ref
+    liftIO $ writeIORef ref mempty
+    pure ss
 
 instance MonadIO m => MonadReader SAWEnv (SAWT m) where
   ask =
@@ -106,7 +124,7 @@ getLastResult =
     undefined
 
 runSAWStmt :: MonadIO m => SAW.Stmt -> SAWT m ()
-runSAWStmt stmt = void (liftTopLevel (SAW.interpretStmt True stmt))
+runSAWStmt stmt = void (liftTopLevel (SAW.interpretStmt False stmt))
 
 runSAWText :: MonadIO m => String -> SAWT m ()
 runSAWText str =
@@ -115,3 +133,16 @@ runSAWText str =
     case parseStmtSemi tokens of
       Left err -> liftIO (print err)
       Right stmt -> runSAWStmt stmt
+
+sample :: IO [String]
+sample = runSAWTDefault sawAction
+  where
+    sawAction =
+      do
+        runSAWStmt stmt
+        flushOutput
+    stmtText = "3"
+    stmt =
+      case parseStmt (lexSAW "" stmtText) of
+        Left err -> error (show err)
+        Right s -> s
