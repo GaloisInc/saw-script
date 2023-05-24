@@ -130,7 +130,6 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install pkg-config lmdb
-          cp ./.github/workflows/lmdb.pc /usr/local/lib/pkgconfig
       - name: "Windows: Install lmdb via pacman (msys2)"
         if: runner.os == 'Windows'
         shell: pwsh
@@ -142,6 +141,8 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           $env:PATH=("C:\msys64\mingw64\bin;{0}" -f $env:PATH)
+          $env:PATH=("C:\msys64\mingw64\lib;{0}" -f $env:PATH)
+          $env:PATH=("C:\msys64\mingw64\include;{0}" -f $env:PATH)
           echo "PATH=$env:PATH" >> $env:GITHUB_ENV
 
       - shell: bash
