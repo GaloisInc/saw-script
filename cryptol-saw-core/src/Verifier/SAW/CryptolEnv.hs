@@ -690,16 +690,19 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
-  mapM_ (print . pp) (map suppressDefaulting ws)
+  mapM_ (print . pp) (concatMap suppressDefaulting ws)
   case res of
     Right (a, me) -> return (a, me)
     Left err      -> fail $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
   where
-    suppressDefaulting :: MM.ModuleWarning -> MM.ModuleWarning
+    suppressDefaulting :: MM.ModuleWarning -> [MM.ModuleWarning]
     suppressDefaulting w =
       case w of
-        MM.TypeCheckWarnings nm xs -> MM.TypeCheckWarnings nm (filter (notDefaulting . snd) xs)
-        MM.RenamerWarnings xs -> MM.RenamerWarnings xs
+        MM.RenamerWarnings xs -> [MM.RenamerWarnings xs]
+        MM.TypeCheckWarnings nm xs ->
+          case filter (notDefaulting . snd) xs of
+            [] -> []
+            xs' -> [MM.TypeCheckWarnings nm xs']
 
     notDefaulting :: TE.Warning -> Bool
     notDefaulting (TE.DefaultingTo {}) = False
