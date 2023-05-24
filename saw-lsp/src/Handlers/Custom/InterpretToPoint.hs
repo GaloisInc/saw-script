@@ -21,10 +21,11 @@ import Language.LSP.Types
     NormalizedUri,
     RequestMessage,
     ResponseError,
-    SMethod (SCustomMethod, SWindowShowMessage),
+    SMethod (SCustomMethod, SWindowShowMessage, SWindowShowDocument),
     ShowMessageParams (ShowMessageParams),
-    toNormalizedUri,
+    toNormalizedUri, filePathToUri, ShowDocumentParams (ShowDocumentParams), ShowDocumentResult (ShowDocumentResult),
   )
+import Language.LSP.Types qualified as LSP
 import Language.LSP.Types.Lens qualified as LSP
 import Language.LSP.VFS (VirtualFile, virtualFileText)
 import Monad
@@ -36,6 +37,8 @@ import SAWScript.Parser (parseModule)
 import SAWScript.Position (Pos (..), getPos)
 import SAWScript.Value (TopLevel)
 import SAWT (flushOutput, liftTopLevel, runSAWStmt, emptySAWEnv)
+import System.IO.Temp (writeSystemTempFile)
+import Control.Monad.Cont (MonadIO(liftIO))
 
 handleInterpretToPoint :: Handlers ServerM
 handleInterpretToPoint = requestHandler (SCustomMethod "$/interpretToPoint") doInterp
@@ -73,6 +76,16 @@ doInterp request responder =
     ss <- liftSAW flushOutput
     let goal = last ss
     debug' goal
+    goalFile <- liftIO $ writeSystemTempFile "lsp" goal
+    let goalUri = filePathToUri goalFile
+        externalApplication = Just False
+        takeFocus = Just False
+        highlight = Nothing -- Just (LSP.Range (LSP.Position 0 5) (LSP.Position 1 3))
+        showDocParams = ShowDocumentParams goalUri externalApplication takeFocus highlight
+    _ <- sendRequest SWindowShowDocument showDocParams \case
+      Left err -> debug' (show err)
+      Right (ShowDocumentResult r) -> if r then pure () else debug "client failed"
+    pure ()
   where
     ps = request ^. LSP.params
 
