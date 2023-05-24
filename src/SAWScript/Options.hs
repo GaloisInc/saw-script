@@ -11,6 +11,7 @@ Stability   : provisional
 
 module SAWScript.Options where
 
+import Control.Monad (when)
 import Data.Char (toLower)
 import Data.List (partition)
 import Data.Time
@@ -70,7 +71,7 @@ defaultOptions
     , javaBinDirs = []
     , verbLevel = Info
     , printShowPos = False
-    , printOutFn = printOutWith Info
+    , printOutFn = printOutWithVerbosity Info
     , simVerbose = 1
     , detectVacuity = False
     , extraChecks = False
@@ -82,15 +83,17 @@ defaultOptions
     , summaryFormat = Pretty
     }
 
-printOutWith :: Verbosity -> Verbosity -> String -> IO ()
-printOutWith setting level msg
-  | LSP <- setting = message
+printOutWithVerbosity :: Verbosity -> Verbosity -> String -> IO ()
+printOutWithVerbosity = printOutVia putStr True
+
+printOutVia :: (String -> IO ()) -> Bool -> Verbosity -> Verbosity -> String -> IO ()
+printOutVia output showTime setting level msg
   | setting >= level = time >> message
   | otherwise = pure ()
 
   where
-    time = getCurrentTime >>= putStr . formatTime defaultTimeLocale "[%T.%3q] "
-    message = putStr msg
+    time = when showTime $ getCurrentTime >>= output . formatTime defaultTimeLocale "[%T.%3q] "
+    message = output msg
 
 printOutLn :: Options -> Verbosity -> String -> IO ()
 printOutLn o v s = printOutFn o v (s ++ "\n")
@@ -127,10 +130,10 @@ options =
     (NoArg
      (\opts -> return opts { runInteractively = True }))
     "Run interactively (with a REPL)"
-  , Option "l" ["lsp"]
-    (NoArg
-     (\opts -> return opts { verbLevel = LSP, printOutFn = printOutWith LSP }))
-    "Terminate prompt responses with \\NUL"
+  -- , Option "l" ["lsp"]
+  --   (NoArg
+  --    (\opts -> return opts { verbLevel = LSP, printOutFn = printOutWithVerbosity LSP }))
+  --   "Terminate prompt responses with \\NUL"
   , Option "j" ["jars"]
     (ReqArg
      (\p opts -> return opts { jarList = jarList opts ++ splitSearchPath p })
@@ -157,7 +160,7 @@ options =
     (ReqArg
       (\v opts -> let verb = readVerbosity v -- TODO: now that we're in IO we can do something if a bogus verbosity is given
                  in return opts { verbLevel = verb
-                         , printOutFn = printOutWith verb } )
+                         , printOutFn = printOutWithVerbosity verb } )
      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
     )
     "Set verbosity level"
