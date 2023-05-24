@@ -4,9 +4,9 @@ import Data.List (find)
 import Distribution.Simple
 import Distribution.Simple.BuildPaths (autogenPackageModulesDir)
 import Distribution.PackageDescription (emptyHookedBuildInfo, allBuildInfo)
-import System.Directory (createDirectoryIfMissing, findExecutable, withCurrentDirectory)
+import System.Directory
 import System.FilePath ((</>))
-import System.Process (readProcess)
+import System.Process (readProcess, callProcess)
 import System.Exit
 
 main = defaultMainWithHooks myHooks
@@ -37,8 +37,10 @@ myBuild pd lbi uh flags = do
     init <$> readProcess git ["describe", "--always", "--dirty"] ""
 
   sbv_ver <- withExe "." "cabal" "unknown" "unknown" $ \cabal -> do
-    ls <- lines <$> readProcess cabal ["freeze"] ""
-    wss <- fmap words <$> lines <$> readFile (ls !! 1)
+    ex <- doesFileExist "cabal.project.freeze"
+    unless ex $ callProcess cabal ["freeze"]
+    wss <- fmap words <$> lines <$> readFile "cabal.project.freeze"
+    unless ex $ removeFile "cabal.project.freeze"
     case find (\ws -> (ws !! 0) == "any.sbv") wss of
       Just ws -> return $ init $ drop 2 $ ws !! 1
       Nothing -> return "unknown"

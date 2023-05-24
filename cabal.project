@@ -43,6 +43,9 @@ packages:
     deps/cryptol/cryptol-remote-api
     deps/language-rust
 
+allow-newer:
+    lmdb-simple:bytestring
+
 source-repository-package
     type: git
     location: https://github.com/eddywestbrook/hobbits.git
