@@ -8,8 +8,8 @@ module Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticToken
 
 -- import Monad (Config, debug)
 
-import Monad (ServerM, ServerState (ssWorkerChannel), debug, liftEither, liftMaybe)
-import Worker as Worker
+import Monad (ServerM, ServerEnv (serverWorkerChannel), debug, liftEither, liftMaybe)
+import Worker
 import Control.Concurrent.STM
 import Control.Lens ((^.))
 import Control.Monad.Catch (Exception, MonadThrow, throwM)

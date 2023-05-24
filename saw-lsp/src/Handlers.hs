@@ -17,11 +17,11 @@ import Handlers.TextDocument.DidSave (handleTextDocumentDidSave)
 import Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull)
 import Language.LSP.Server
 import Language.LSP.Types
-import Monad (ServerM, ServerState (ssReactorChannel), runServerM)
+import Monad (ServerEnv (serverReactorChannel), ServerM, runServerM)
 import Reactor (ReactorInput (..))
 
 handlers :: Handlers ServerM
-handlers = mapHandlers dispatchRequest dispatchNotification hs
+handlers = hs -- mapHandlers dispatchRequest dispatchNotification hs
   where
     hs =
       mconcat
@@ -33,22 +33,30 @@ handlers = mapHandlers dispatchRequest dispatchNotification hs
           handleTextDocumentSemanticTokensFull
         ]
 
-    dispatchRequest ::
-      forall (a :: Method 'FromClient 'Request).
-      Handler ServerM a ->
-      Handler ServerM a
-    dispatchRequest handler = \msg request ->
-      do
-        sst <- ask
-        let chan = ssReactorChannel sst
-        liftIO $ atomically $ writeTChan chan (ReactorAction (runServerM sst (handler msg request)))
+-- dispatchRequest ::
+--   forall (a :: Method 'FromClient 'Request).
+--   Handler ServerM a ->
+--   Handler ServerM a
+-- dispatchRequest handler = \msg request ->
+--   do
+--     sEnv <- ask
+--     let chan = serverReactorChannel sEnv
+--     liftIO $
+--       atomically $
+--         writeTChan chan $
+--           ReactorAction $
+--             runServerM (handler msg request) sEnv
 
-    dispatchNotification ::
-      forall (a :: Method 'FromClient 'Notification).
-      Handler ServerM a ->
-      Handler ServerM a
-    dispatchNotification handler = \notif ->
-      do
-        sst <- ask
-        let chan = ssReactorChannel sst
-        liftIO $ atomically $ writeTChan chan (ReactorAction (runServerM sst (handler notif)))
+-- dispatchNotification ::
+--   forall (a :: Method 'FromClient 'Notification).
+--   Handler ServerM a ->
+--   Handler ServerM a
+-- dispatchNotification handler = \notif ->
+--   do
+--     sEnv <- ask
+--     let chan = serverReactorChannel sEnv
+--     liftIO $
+--       atomically $
+--         writeTChan chan $
+--           ReactorAction $
+--             runServerM (handler notif) sEnv

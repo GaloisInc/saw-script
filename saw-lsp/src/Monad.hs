@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -6,23 +5,23 @@
 module Monad where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.STM
-import Control.Monad.Catch (Exception, MonadThrow (throwM))
+import Control.Concurrent.STM (TChan, atomically, newTChan, readTChan)
+import Control.Monad (forever, void)
+import Control.Monad.Catch (Exception, MonadCatch, MonadThrow (throwM))
+import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
-import Control.Monad.Reader
-import Control.Monad.State.Class (MonadState (..))
-import Data.Aeson
+import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
+import Control.Monad.Trans (MonadTrans (..))
+import Data.Aeson (FromJSON)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import GHC.Generics (Generic)
 import Language.LSP.Server
-import Language.LSP.Types (MessageType (..), ResponseError, SMethod (SWindowShowMessage), ShowMessageParams (..))
-import REPL (Process, saw)
+import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
 import Reactor (ReactorInput, reactor)
-import SAWScript.Value qualified as SAW
+import SAWT
+import System.IO (hPutStrLn, stderr)
 import Text.Printf (printf)
-import TopLevel (TopLevelT, runTopLevelT)
-import Worker (WorkerInput, worker)
+import Worker (WorkerInput)
 
 newtype Config = Config ()
   deriving (FromJSON)
@@ -30,16 +29,17 @@ newtype Config = Config ()
 emptyConfig :: Config
 emptyConfig = Config ()
 
-data ServerState = ServerState
-  { ssConfig :: !(LanguageContextEnv Config),
-    ssWorkerChannel :: !(TChan WorkerInput),
-    ssReactorChannel :: !(TChan ReactorInput),
-    ssSaw :: !Process,
-    ssLogFile :: !FilePath
+-------------------------------------------------------------------------------
+
+data ServerEnv = ServerEnv
+  { serverConfig :: !(LanguageContextEnv Config),
+    serverWorkerChannel :: !(TChan WorkerInput),
+    serverReactorChannel :: !(TChan ReactorInput),
+    serverLogFile :: !FilePath
   }
 
-serverState :: LanguageContextEnv Config -> IO ServerState
-serverState env =
+newServerEnv :: LanguageContextEnv Config -> IO ServerEnv
+newServerEnv env =
   do
     rChannel <- atomically newTChan
     wChannel <- atomically newTChan
@@ -47,39 +47,43 @@ serverState env =
     void $ forkIO (reactor rChannel)
     -- void $ forkIO (worker wChannel)
 
-    sawProc <- saw
-
     pure
-      ServerState
-        { ssConfig = env,
-          ssWorkerChannel = wChannel,
-          ssReactorChannel = rChannel,
-          ssSaw = sawProc,
-          ssLogFile = defaultLogFile
+      ServerEnv
+        { serverConfig = env,
+          serverWorkerChannel = wChannel,
+          serverReactorChannel = rChannel,
+          serverLogFile = defaultLogFile
         }
 
+-------------------------------------------------------------------------------
+
 newtype ServerM a = ServerM
-  { getServerM :: ReaderT ServerState (LspM Config) a
+  { getServerM :: ReaderT ServerEnv (SAWT (LspM Config)) a
   }
   deriving
     ( Applicative,
       Functor,
       Monad,
-      MonadReader ServerState,
+      MonadReader ServerEnv,
       MonadIO,
       MonadThrow,
-      MonadUnliftIO,
-      MonadLsp Config
+      MonadCatch,
+      MonadUnliftIO
     )
 
-instance MonadState Config ServerM where
-  get = getConfig
-  put = setConfig
+instance MonadLsp Config ServerM where
+  getLspEnv = asks serverConfig
 
-runServerM :: ServerState -> ServerM a -> IO a
-runServerM sst (ServerM a) = runLspT (ssConfig sst) (runReaderT a sst)
+runServerM :: ServerM a -> ServerEnv -> SAWEnv -> IO a
+runServerM (ServerM r) serverEnv sawEnv =
+  do
+    let sawAction = runReaderT r serverEnv
+        lspAction = runSAWT sawAction sawEnv
+    runLspT (serverConfig serverEnv) lspAction
 
--- liftEither :: (MonadThrow m, Exception e) => Either e a -> m a
+saw :: SAWT (LspM Config) a -> ServerM a
+saw action = ServerM (lift action)
+
 liftEither :: Either ResponseError a -> ServerM a
 liftEither e =
   case e of
@@ -89,7 +93,6 @@ liftEither e =
         throwM l
     Right r -> pure r
 
--- liftMaybe :: (MonadThrow m, Exception e) => e -> Maybe a -> m a
 liftMaybe :: ResponseError -> Maybe a -> ServerM a
 liftMaybe e m =
   case m of
@@ -99,10 +102,12 @@ liftMaybe e m =
         throwM e
     Just a -> pure a
 
-defaultLogFile :: FilePath
-defaultLogFile = "/Users/sam/Desktop/projects/do1/saw-lsp/log.txt"
+-------------------------------------------------------------------------------
 
 instance Exception ResponseError
+
+defaultLogFile :: FilePath
+defaultLogFile = "/Users/sam/projects/do1/saw-script/saw-lsp/log.txt"
 
 debug :: Text -> ServerM ()
 debug = debug' . Text.unpack
@@ -110,7 +115,7 @@ debug = debug' . Text.unpack
 debug' :: String -> ServerM ()
 debug' s =
   do
-    lf <- asks ssLogFile
-    liftIO $ appendFile lf msg
+    logFile <- asks serverLogFile
+    liftIO $ appendFile logFile msg
   where
     msg = printf "[debug] %s\n" s

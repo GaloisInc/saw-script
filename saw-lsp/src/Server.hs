@@ -11,10 +11,12 @@ import Handlers (handlers)
 import Language.LSP.Server
 import Language.LSP.Types
 import Monad
+import SAWT (SAWEnv, defaultSAWEnv)
 import System.IO (hPrint, hPutStrLn, stderr)
+import Control.Concurrent (threadDelay)
 
 run :: IO Int
-run = runServer server `catch` handler
+run = runServer server -- `catch` handler
   where
     handler :: SomeException -> IO Int
     handler exn =
@@ -44,17 +46,20 @@ onConfigurationChange' _old v =
 doInitialize' ::
   LanguageContextEnv Config ->
   RequestMessage 'Initialize ->
-  IO (Either ResponseError ServerState)
+  IO (Either ResponseError (ServerEnv, SAWEnv))
 doInitialize' env initMsg =
   do
-    sst <- serverState env
-    pure (Right sst)
+    serverEnv <- newServerEnv env
+    sawEnv <- defaultSAWEnv
+    -- let sawEnv = undefined
+    -- threadDelay 10000000 -- microseconds
+    pure (Right (serverEnv, sawEnv))
 
-interpretHandler' :: ServerState -> (ServerM <~> IO)
-interpretHandler' sState = Iso serverToIO ioToServer
+interpretHandler' :: (ServerEnv, SAWEnv) -> (ServerM <~> IO)
+interpretHandler' (serverEnv, sawEnv) = Iso serverToIO ioToServer
   where
     serverToIO :: ServerM a -> IO a
-    serverToIO = runServerM sState
+    serverToIO action = runServerM action serverEnv sawEnv
 
     ioToServer :: IO a -> ServerM a
     ioToServer = liftIO
