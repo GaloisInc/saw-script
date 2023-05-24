@@ -71,7 +71,6 @@ import Verifier.SAW.TypedAST (FieldName, toShortName, identBaseName)
 import Verifier.SAW.FiniteValue
             (FirstOrderType(..), FirstOrderValue(..)
             , fovVec, firstOrderTypeOf, asFirstOrderType
-            , showFirstOrderValues
             )
 
 import Verifier.SAW.Utils (panic)
@@ -769,8 +768,7 @@ getLabels ls d args
   | length args == length xs = Just (zip args xs)
   | otherwise = error $ unwords
                 [ "SBV SAT results do not match expected arguments "
-                , show (map (toShortName . ecName) args)
-                , showFirstOrderValues xs]
+                , show (map (toShortName . ecName) args), show xs]
 
   where
   xs = fmap getLabel ls

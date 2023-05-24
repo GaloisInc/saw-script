@@ -1501,9 +1501,11 @@ quickCheckPrintPrim opts sc numTests tt =
      testGen <- prepareSATQuery sc satq
      runManyTests testGen numTests >>= \case
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
-        Just cex -> printOutLn opts OnlyCounterExamples $
-                    "----------Counterexample----------\n" ++
-                    SV.showsCEX SV.defaultPPOpts cex ""
+        Just cex ->
+          do let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
+             printOutLn opts OnlyCounterExamples $
+               "----------Counterexample----------\n" ++
+               showList cex' ""
 
 cryptolSimpset :: TopLevel SV.SAWSimpset
 cryptolSimpset =
@@ -2424,13 +2426,6 @@ approxmc t = do
 
 set_path_sat_solver :: String -> TopLevel ()
 set_path_sat_solver nm =
-  case map toLower nm of
-    "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
-    "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })
-    _ -> fail $ "Unknown path sat solver: " ++ show nm
-
-set_proof_cache :: String -> TopLevel ()
-set_proof_cache nm =
   case map toLower nm of
     "z3"    -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Z3 })
     "yices" -> modify (\rw -> rw{ rwPathSatSolver = PathSat_Yices })

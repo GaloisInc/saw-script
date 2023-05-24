@@ -33,4 +33,4 @@ proveRME satq = getSharedContext >>= \sc -> liftIO $
             | length shapes == length vs -> do
               let model = zip (map fst shapes) (map toFirstOrderValue vs)
               return (Just model, "RME")
-            | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show shapes, showFiniteValues vs]
+            | otherwise -> fail $ unwords ["RME SAT results do not match expected arguments", show shapes, show vs]

@@ -76,7 +76,7 @@ getModel argNames shapes satRes =
 
           | otherwise ->
               fail $ unwords [ "ABC SAT results do not match expected arguments"
-                             , show argNames, showFiniteValues vs]
+                             , show argNames, show vs]
 
     AIG.SatUnknown -> fail "Unknown result from ABC"
 
@@ -191,7 +191,7 @@ abcSatExternal proxy sc doCNF execName args g = liftIO $
              Right vs
                | length ecs == length vs -> do
                  return (Just (zip ecs (map toFirstOrderValue vs)), stats)
-               | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, showFiniteValues vs]
+               | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
          (["s UNSATISFIABLE"], []) ->
            return (Nothing, stats)
          _ -> fail $ "Unexpected result from SAT solver:\n" ++ out
