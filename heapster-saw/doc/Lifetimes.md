@@ -108,7 +108,7 @@ permissions `P` on, and then end the lifetime `l`, giving back permissions
 the value pointed to by `x`. This yields a contradiction.
 
 
-## Ending Lifetimes
+## Ensuring Validity When Ending Lifetimes
 
 To solve this problem, Heapster requires that whenever a process ends a lifetime
 it must prove that the permissions that are given back by the lifetime are still
@@ -131,19 +131,21 @@ x:ptr((W,0) |-> P) * l:lowned(x1:P1,...)
 x:[l]ptr((W,0) |-> P) * l:lowned(x:ptr((W,0) |-> P),x1:P1,...) * 
 ```
 
-Rather than adding an `AFTER(l)` modality, this rule moves the original input
-permissions into the output permission set of the `lowned` permission for `l`.
-
+Rather than adding an `AFTER(l)` to express the permission that is returned
+after `l` is finished, this rule adds that permission to the `lowned` permission
+for `l`. This "bundles" all of the permissions that are returned when `l` is
+finished into one place, rather than having them be separate permissions.
 
 To end lifetime `l`, Heapster then requires that the current process prove that
 all the permissions in the `lowned` permission are still valid. To do this, it
 is sufficient to hold a temporary read version of each permission relative to
-the lifetime being ended. More formally, we recursively define the permission
-transformer
+the lifetime being ended. This is intuitively the least permission that ensures
+that the required pointer structure is still valid. More formally, we
+recursively define the permission transformer
 
 ```
 [l](R) (ptr((rw,off) |-> P)) = [l]ptr((R,off) |-> [l](R)P)
-[l](R) (non-pointer P) = P
+[l](R) (P) = P (if P is not a pointer permission)
 ```
 
 that changes all pointer permission to be temporary read permissions relative to
@@ -154,9 +156,6 @@ lifetime `l`. The rule for ending a lifetime is then:
 |-
 Ps
 ```
-
-Intuitively, the permission `[l](R)P` is the least permission that ensures the
-pointer structure of `P` is still valid.
 
 
 
