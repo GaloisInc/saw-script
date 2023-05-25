@@ -15,8 +15,7 @@ import Handlers.TextDocument.DidChange (handleTextDocumentDidChange)
 import Handlers.TextDocument.DidOpen (handleTextDocumentDidOpen)
 import Handlers.TextDocument.DidSave (handleTextDocumentDidSave)
 import Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull)
-import Language.LSP.Server
-import Language.LSP.Types
+import Language.LSP.Server (Handlers)
 import Monad (ServerEnv (serverReactorChannel), ServerM, runServerM)
 import Reactor (ReactorInput (..))
 

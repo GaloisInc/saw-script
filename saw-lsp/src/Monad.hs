@@ -81,8 +81,8 @@ runServerM (ServerM r) serverEnv sawEnv =
         lspAction = runSAWT sawAction sawEnv
     runLspT (serverConfig serverEnv) lspAction
 
-saw :: SAWT (LspM Config) a -> ServerM a
-saw action = ServerM (lift action)
+liftSAW :: SAWT (LspM Config) a -> ServerM a
+liftSAW action = ServerM (lift action)
 
 liftEither :: Either ResponseError a -> ServerM a
 liftEither e =
