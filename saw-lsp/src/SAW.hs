@@ -51,93 +51,71 @@ the checkpoints available to them
 - But ideally, I guess this would be opaque
 -}
 
-interpretToPoint :: Process -> Text -> Position -> IO Text
-interpretToPoint process script posn =
-  do
-    withSystemTempFile "saw-script" \file handle ->
-      do
-        Text.hPutStrLn handle script'
-        hFlush handle
-        result <- include process file
-        case dropWhile (/= Text.unpack sentinel) result of
-          [] -> error $ "no sentinel: " <> unlines result
-          (_ : result') -> pure (Text.pack (unlines result'))
-  where
-    script' = interruptScript script posn
+-- interpretToPoint :: Process -> Text -> Position -> IO Text
+-- interpretToPoint process script posn =
+--   do
+--     withSystemTempFile "saw-script" \file handle ->
+--       do
+--         Text.hPutStrLn handle script'
+--         hFlush handle
+--         result <- include process file
+--         case dropWhile (/= Text.unpack sentinel) result of
+--           [] -> error $ "no sentinel: " <> unlines result
+--           (_ : result') -> pure (Text.pack (unlines result'))
+--   where
+--     script' = interruptScript script posn
 
-interpretToPoint' :: FilePath -> Position -> IO Text
-interpretToPoint' fp posn =
-  do
-    sawProc <- saw
-    script <- Text.readFile fp
-    result <- interpretToPoint sawProc script posn
-    terminate sawProc
-    pure result
+-- interpretToPoint' :: FilePath -> Position -> IO Text
+-- interpretToPoint' fp posn =
+--   do
+--     sawProc <- saw
+--     script <- Text.readFile fp
+--     result <- interpretToPoint sawProc script posn
+--     terminate sawProc
+--     pure result
 
-interruptScript :: Text -> Position -> Text
-interruptScript sawScript posn = before <> injection <> after
-  where
-    injection =
-      Text.intercalate
-        " "
-        [ printSentinel,
-          printGoal,
-          bindCheckpoint freshvar,
-          proofSubshell
-        ]
-    (before, after) = sawScript `splitAtPosn` posn
-    freshvar = Text.pack (printf "checkpoint_%x" (hash before))
+-- interruptScript :: Text -> Position -> Text
+-- interruptScript sawScript posn = before <> injection <> after
+--   where
+--     injection =
+--       Text.intercalate
+--         " "
+--         [ printSentinel,
+--           printGoal,
+--           bindCheckpoint freshvar,
+--           proofSubshell
+--         ]
+--     (before, after) = sawScript `splitAtPosn` posn
+--     freshvar = Text.pack (printf "checkpoint_%x" (hash before))
 
-splitAtPosn :: Text -> Position -> (Text, Text)
-splitAtPosn t Position {..} = (before, after)
-  where
-    before = Text.intercalate "\n" (linesBefore <> [charsBefore])
-    after = Text.intercalate "\n" (charsAfter : linesAfter)
-    (linesBefore, linesAfter') = splitAt line t'
-    (lineToSplit, linesAfter) =
-      case linesAfter' of
-        [] -> error "no split"
-        (l : ls) -> (l, ls)
-    (charsBefore, charsAfter) = Text.splitAt character lineToSplit
-    t' = Text.lines t
+-- splitAtPosn :: Text -> Position -> (Text, Text)
+-- splitAtPosn t Position {..} = (before, after)
+--   where
+--     before = Text.intercalate "\n" (linesBefore <> [charsBefore])
+--     after = Text.intercalate "\n" (charsAfter : linesAfter)
+--     (linesBefore, linesAfter') = splitAt line t'
+--     (lineToSplit, linesAfter) =
+--       case linesAfter' of
+--         [] -> error "no split"
+--         (l : ls) -> (l, ls)
+--     (charsBefore, charsAfter) = Text.splitAt character lineToSplit
+--     t' = Text.lines t
 
--- TODO
-hash :: Text -> Int
-hash t = 0xdeadbeef
+-- -- TODO
+-- hash :: Text -> Int
+-- hash t = 0xdeadbeef
 
-printSentinel :: Text
-printSentinel = "let _ = run (print \"" <> sentinel <> "\");"
+-- printSentinel :: Text
+-- printSentinel = "let _ = run (print \"" <> sentinel <> "\");"
 
-sentinel :: Text
-sentinel = "~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*"
+-- sentinel :: Text
+-- sentinel = "~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*"
 
-printGoal :: Text
-printGoal = "print_goal;"
+-- printGoal :: Text
+-- printGoal = "print_goal;"
 
-bindCheckpoint :: Text -> Text
-bindCheckpoint freshvar = freshvar <> " <- proof_checkpoint;"
+-- bindCheckpoint :: Text -> Text
+-- bindCheckpoint freshvar = freshvar <> " <- proof_checkpoint;"
 
-proofSubshell :: Text
-proofSubshell = "proof_subshell ();"
-
-data InterpretParams = InterpretParams
-  { posn :: Position,
-    offset :: Int,
-    uri :: Uri
-  }
-  deriving (Show)
-
--- Include absolute offset?
-data Position = Position
-  { line :: Int,
-    character :: Int
-  }
-  deriving (Show)
-
-instance FromJSON InterpretParams where
-  parseJSON = withObject "InterpretParams" \v ->
-    InterpretParams <$> v .: "posn" <*> v .: "offset" <*> v .: "uri"
-
-instance FromJSON Position where
-  parseJSON = withObject "Position" \v ->
-    Position <$> v .: "line" <*> v .: "character"
+-- proofSubshell :: Text
+-- proofSubshell = "proof_subshell ();"

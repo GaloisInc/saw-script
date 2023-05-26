@@ -5,40 +5,62 @@
 
 module Handlers.Custom.InterpretToPoint where
 
-import Control.Applicative ((<|>))
 import Control.Lens ((^.))
+import Control.Monad.Cont (MonadIO (liftIO))
+import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Types (parseEither)
+import Data.Aeson.Types qualified as Aeson
 import Data.Bifunctor (first)
-import Data.Maybe (fromJust, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error (internalError)
 import Language.LSP.Server
 import Language.LSP.Types
-  ( MessageType (MtError),
-    Method (CustomMethod),
+  ( MessageType (..),
+    Method (..),
     NormalizedUri,
     RequestMessage,
     ResponseError,
-    SMethod (SCustomMethod, SWindowShowMessage, SWindowShowDocument),
+    SMethod (..),
+    ShowDocumentParams (ShowDocumentParams),
+    ShowDocumentResult (ShowDocumentResult),
     ShowMessageParams (ShowMessageParams),
-    toNormalizedUri, filePathToUri, ShowDocumentParams (ShowDocumentParams), ShowDocumentResult (ShowDocumentResult),
+    Uri,
+    filePathToUri,
+    toNormalizedUri,
   )
-import Language.LSP.Types qualified as LSP
 import Language.LSP.Types.Lens qualified as LSP
 import Language.LSP.VFS (VirtualFile, virtualFileText)
 import Monad
-import SAW (InterpretParams (..), Position (..))
 import SAWScript.AST (Expr (..), Located (..), Pattern (..), Stmt (..), prettyWholeModule)
-import SAWScript.Interpreter (interpretStmt)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
 import SAWScript.Position (Pos (..), getPos)
-import SAWScript.Value (TopLevel)
-import SAWT (flushOutput, liftTopLevel, runSAWStmt, emptySAWEnv)
+import SAWT (emptySAWEnv, flushOutput, runSAWStmt)
 import System.IO.Temp (writeSystemTempFile)
-import Control.Monad.Cont (MonadIO(liftIO))
+
+data InterpretParams = InterpretParams
+  { posn :: Position,
+    offset :: Int,
+    uri :: Uri
+  }
+  deriving (Show)
+
+instance Aeson.FromJSON InterpretParams where
+  parseJSON = Aeson.withObject "InterpretParams" \v ->
+    InterpretParams <$> v .: "posn" <*> v .: "offset" <*> v .: "uri"
+
+-- Include absolute offset?
+data Position = Position
+  { line :: Int,
+    character :: Int
+  }
+  deriving (Show)
+
+instance Aeson.FromJSON Position where
+  parseJSON = Aeson.withObject "Position" \v ->
+    Position <$> v .: "line" <*> v .: "character"
 
 handleInterpretToPoint :: Handlers ServerM
 handleInterpretToPoint = requestHandler (SCustomMethod "$/interpretToPoint") doInterp
@@ -63,19 +85,18 @@ doInterp request responder =
     case fileStmts' of
       [] ->
         let msg = Text.pack $ "would truncate all " <> show (length fileStmts) <> " statements"
-         in sendNotification SWindowShowMessage (ShowMessageParams MtError msg)
+         in sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
       stmts ->
         do
           let orig = show (length fileStmts)
               new = show (length stmts)
               msg = Text.pack $ "would truncate " <> orig <> " statements to " <> new <> " statements"
           debug' (show (prettyWholeModule stmts))
-          sendNotification SWindowShowMessage (ShowMessageParams MtError msg)
+          sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
     liftSAW emptySAWEnv
     liftSAW (mapM_ runSAWStmt fileStmts')
     ss <- liftSAW flushOutput
-    let goal = last ss
-    debug' goal
+    let goal = ss !! 1
     goalFile <- liftIO $ writeSystemTempFile "lsp" goal
     let goalUri = filePathToUri goalFile
         externalApplication = Just False
@@ -85,6 +106,9 @@ doInterp request responder =
     _ <- sendRequest SWindowShowDocument showDocParams \case
       Left err -> debug' (show err)
       Right (ShowDocumentResult r) -> if r then pure () else debug "client failed"
+    _ <- sendRequest (SCustomMethod "$/displayGoal") (Aeson.toJSON showDocParams) \case
+      Left err -> debug "error"
+      Right _ -> debug "success"
     pure ()
   where
     ps = request ^. LSP.params
@@ -133,13 +157,7 @@ truncateOverlappingExprWith additions mark expr =
     Code _ -> Just expr
     CType _ -> Just expr
     Array es -> Just (Array (mapMaybe goExpr es)) -- TODO
-    Block ss -> Just $
-      Block $
-        case length (mapMaybe goStmt ss) of
-          0 -> additions
-          n
-            | n == length ss -> ss
-            | otherwise -> ss <> additions
+    Block ss -> Just (Block (mapMaybe goStmt ss <> additions))
     Tuple es -> Just expr -- TODO
     Record binds -> Just expr
     Index a i -> Just expr
@@ -177,7 +195,7 @@ endsBefore pos Position {..} =
     _ -> False
 
 fromParams :: Aeson.Value -> Either ResponseError InterpretParams
-fromParams v = first (internalError . Text.pack) (parseEither Aeson.parseJSON v)
+fromParams v = first (internalError . Text.pack) (Aeson.parseEither Aeson.parseJSON v)
 
 {-
 mkShowDocumentParams ::
