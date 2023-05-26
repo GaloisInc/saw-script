@@ -125,8 +125,8 @@ READ(l)(P) = P (if P is not a pointer permission)
 ```
 
 that recursively turns all pointer permissions into read permissions in lifetime
-`l`, then `READ(l)(P)` is a much weaker permission (in terms of being easier to
-satisfy) than `P` but that still ensures `P` is valid.
+`l`, then `READ(l)(P)` is a much weaker permission (in terms of being logically
+weaker, i.e., easier to satisfy) than `P` but that still ensures `P` is valid.
 
 More formally, Heapster combines all of the permissions returned when a lifetime
 is ended, along with all the permissions required to prove that those returned
@@ -165,7 +165,7 @@ Our temporal splitting rule now looks like this:
 ```
 x:P * l:lowned(Ps_in -o Ps_out)
 |-
-x:LIFETIME(l)(P) * l:lowned(x:READ(l)(x:READ(l)(P),Ps_in -o x:P,Ps_out)
+x:LIFETIME(l)(P) * l:lowned(x:READ(l)(P),Ps_in -o x:P,Ps_out)
 ```
 
 where `LIFETIME(l)(P)` recursively sets the lifetime of all pointer permissions
