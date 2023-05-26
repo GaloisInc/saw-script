@@ -83,7 +83,7 @@ process must _own_ the lifetime `l`, meaning it must own the sole, unique
 permission that permits the holder to control when `l` finishes. Otherwise, some
 other concurrent process could presumably end `l` out from under the current
 process and make the permission invalid. Lifetime ownership can be represented
-with the _simple lifetime ownership permission_:
+with the _lifetime ownership permission_:
 
 ```
 l:lowned ()
@@ -108,73 +108,94 @@ permissions `P` on, and then end the lifetime `l`, giving back permissions
 the value pointed to by `x`. This yields a contradiction.
 
 
-## Ensuring Validity When Ending Lifetimes
+## Proving Validity When Ending Lifetimes
 
 To solve this problem, Heapster requires that whenever a process ends a lifetime
 it must prove that the permissions that are given back by the lifetime are still
-valid. In order to formalize this in the Heapster type system, Heapster puts all
-of the "after" permissions inside the lifetime ownership permission. The
-simple version of the lifetime ownership permission looks like this:
+valid. In order to prove a pointer permission `x:ptr((W,0) |-> P)` is still
+valid, the current process needs to prove that, just before `l` ends, `x` points
+to a value on which permission `P` is still valid. This is precisely captured by
+the permission `x:[l]ptr((R,0) |-> Q)`, where `Q` is recursively a permission
+that ensures `P` is still valid. More generally, if we define the permission
+transformer
 
 ```
-l:lowned (x1:P1,...,xn:Pn)
+READ(l)(ptr((rw,off) |-> P)) = [l]ptr((R,off) |-> READ(l)(P))
+READ(l)(P) = P (if P is not a pointer permission)
 ```
 
-The additional structure indicates that, when the current process ends `l` , it
-will recover permissions `x1:P1,...,xn:Pn`. These are the permissions that were
-"saved for later" in the lifetime `l`. Our temporal splitting rule now looks
-like this:
+that recursively turns all pointer permissions into read permissions in lifetime
+`l`, then `READ(l)(P)` is a much weaker permission (in terms of being easier to
+satisfy) than `P` but that still ensures `P` is valid.
+
+More formally, Heapster combines all of the permissions returned when a lifetime
+is ended, along with all the permissions required to prove that those returned
+permissions are still valid, into the lifetime ownership permission introduced
+above. The general form of the lifetime ownership permission in Heapster is as
+follows:
 
 ```
-x:ptr((W,0) |-> P) * l:lowned(x1:P1,...)
+l:lowned[ls](Ps_in -o Ps_out)
+```
+
+The `ls` argument is a list of the sub-lifetimes of `l`, meaning those lifetimes
+whose temporal duration is contained inside `l`. These are discussed below. The
+permission set `Ps_out` lists all the permissions that are returned after `l` is
+finished. The permission set `Ps_in` lists all the permissions needed to prove
+that the permissions `Ps_out` are still valid. The rule to end a lifetime is
+
+```
+Ps_in * l:lowned(Ps_in -o Ps_out)
 |-
-x:[l]ptr((W,0) |-> P) * l:lowned(x:ptr((W,0) |-> P),x1:P1,...) * 
+Ps_out * l:lfinished
 ```
 
-Rather than adding an `AFTER(l)` to express the permission that is returned
-after `l` is finished, this rule adds that permission to the `lowned` permission
-for `l`. This "bundles" all of the permissions that are returned when `l` is
-finished into one place, rather than having them be separate permissions.
+This states that the current process must hold permissions `Ps_in` to prove that
+the permissions held in the lifetime `l` are still valid. After the lifetime is
+finished it gets back `Ps_out` along with a permission `l:lfinished` stating
+that `l` is in the finished state. Note that this looks very much like an
+implication elimination rule, where permission `l:lowned(Ps_in -o Ps_out)` is
+"applied" to "input" permissions `Ps_in` to yield "output" permissions `Ps_out`.
+The functional specification extracted from an `lowned` permission is in fact a
+function; this is discussed below.
 
-To end lifetime `l`, Heapster then requires that the current process prove that
-all the permissions in the `lowned` permission are still valid. To do this, it
-is sufficient to hold a temporary read version of each permission relative to
-the lifetime being ended. This is intuitively the least permission that ensures
-that the required pointer structure is still valid. More formally, we
-recursively define the permission transformer
 
-```
-[l](R) (ptr((rw,off) |-> P)) = [l]ptr((R,off) |-> [l](R)P)
-[l](R) (P) = P (if P is not a pointer permission)
-```
-
-that changes all pointer permission to be temporary read permissions relative to
-lifetime `l`. The rule for ending a lifetime is then:
+Our temporal splitting rule now looks like this:
 
 ```
-[l](R)Ps * l:lowned(Ps)
+x:P * l:lowned(Ps_in -o Ps_out)
 |-
-Ps
+x:LIFETIME(l)(P) * l:lowned(x:READ(l)(x:READ(l)(P),Ps_in -o x:P,Ps_out)
 ```
 
+where `LIFETIME(l)(P)` recursively sets the lifetime of all pointer permissions
+in `P` to `l`, in a manner similar to the definition of `READ(l)`. This rule
+allows a permission `P` to be temporally split into the portion `LIFETIME(l)(P)`
+that is valid while `l` is active and a copy of `P` inside the lifetime
+ownership permission for `l` that can only be used after `l` is finished. It
+also states that a process can now only end `l` if it can prove that `P` is
+still valid by proving the read-only version of `P` relative to `l`.
 
 
-(FIXME: the remainder is an outline)
+## Lifetimes Containing Lifetimes
 
-More general lifetime ownership permission has the form
+- If we already have a permission in a lifetime, we might want to temporally split that
+    permission again; this results in nested lifetimes
 
-```
-l:lowned[ls] (x1:P1,... -o y1:Q1,...)
-```
+- Nested lifetimes are captured in the `lowned` permissions
 
-* The `ls` are the lifetimes subsumed by `l`, meaning that they are guaranteed
-to end before `l` does
+- The permission `l:[l2]lcurrent` states that `l` is current whenever `l2` is,
+  meaning that `l2` is contained as a nestred lifetime inside `l`
 
-* The left-hand side `x1:P1,...` are the permissions that must be "given back"
-  in order to prove that the right-hand side permisisons are still valid;
-  Intuitively, these correspond to the outstanding borrows that are "checked
-  out" from the lifetime `l` and must be "returned" before `l` ends
+- Prove `lcurrent` permimssions by reflexivity, transitivity, and `lowned` permissions
 
-* The right-hand side `y1:Q1,...` are the permissions that are given back to the
-  process when it ends `l`
+- Cannot end a lifetime until all of its nested lifetimes are finished;
+  implication rule removes a nested lifetime from an `lowned` permission when
+  the nested lifetime is `lfinished`
+
+
+## Lifetime Implication Rules
+
+
+## Example: Typing an Accessor Function
 
