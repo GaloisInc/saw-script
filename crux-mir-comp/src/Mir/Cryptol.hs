@@ -8,6 +8,7 @@
 {-# Language RankNTypes #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language TypeApplications #-}
+{-# Language TypeOperators #-}
 {-# Language ViewPatterns #-}
 
 module Mir.Cryptol
