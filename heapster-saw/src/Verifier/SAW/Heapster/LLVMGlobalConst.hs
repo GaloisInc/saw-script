@@ -178,7 +178,7 @@ translateLLVMType _ tp =
 -- | Helper function for 'translateLLVMValue' applied to a constant expression
 translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
                           LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr : ixs)) =
+translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr) ixs) =
   translateLLVMValue w tp ptr >>= \ptr_trans ->
   translateLLVMGEP w tp ptr_trans ixs
 translateLLVMConstExpr w (L.ConstConv L.BitCast
