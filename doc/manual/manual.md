@@ -1580,7 +1580,7 @@ The resulting `LLVMModule` can be passed into the various functions
 described below to perform analysis of specific LLVM functions.
 
 The LLVM bitcode parser should generally work with LLVM versions between
-3.5 and 14.0, though it may be incomplete for some versions. Debug
+3.5 and 16.0, though it may be incomplete for some versions. Debug
 metadata has changed somewhat throughout that version range, so is the
 most likely case of incompleteness. We aim to support every version
 after 3.5, however, so report any parsing failures as [on
