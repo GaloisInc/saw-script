@@ -1241,9 +1241,15 @@ diffMemTypes x0 y0 =
     (Crucible.IntType x, Crucible.IntType y) | x == y -> []
     (Crucible.FloatType, Crucible.FloatType) -> []
     (Crucible.DoubleType, Crucible.DoubleType) -> []
-    (Crucible.PtrType{}, Crucible.PtrType{}) -> []
-    (Crucible.IntType w, Crucible.PtrType{}) | w == wptr -> []
-    (Crucible.PtrType{}, Crucible.IntType w) | w == wptr -> []
+    (_, _)
+      | Crucible.isPointerMemType x0 && Crucible.isPointerMemType y0 ->
+          []
+    (Crucible.IntType w, _)
+      | Crucible.isPointerMemType y0 && w == wptr ->
+          []
+    (_, Crucible.IntType w)
+      | Crucible.isPointerMemType x0 && w == wptr ->
+          []
     (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
       | xn == yn ->
         [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
@@ -1314,7 +1320,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                               (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                               zs ]
 
-    (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupElem () v i) ->
+    (Crucible.LLVMValInt blk off, _, SetupElem () v i) | Crucible.isPointerMemType expectedTy ->
       do let tyenv = MS.csAllocations cs
              nameEnv = MS.csTypeNames cs
          delta <- exceptToFail $ resolveSetupElemOffset cc tyenv nameEnv v i
@@ -1322,7 +1328,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
            =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
          matchArg opts sc cc cs prepost md (Crucible.LLVMValInt blk off') expectedTy v
 
-    (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupField () v n) ->
+    (Crucible.LLVMValInt blk off, _, SetupField () v n) | Crucible.isPointerMemType expectedTy ->
       do let tyenv = MS.csAllocations cs
              nameEnv = MS.csTypeNames cs
          fld <- exceptToFail $

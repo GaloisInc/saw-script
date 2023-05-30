@@ -182,9 +182,10 @@ translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr) ixs) =
   translateLLVMValue w tp ptr >>= \ptr_trans ->
   translateLLVMGEP w tp ptr_trans ixs
 translateLLVMConstExpr w (L.ConstConv L.BitCast
-                          (L.Typed tp@(L.PtrTo _) v) (L.PtrTo _)) =
-  -- A bitcast from one LLVM pointer type to another is a no-op for us
-  translateLLVMValue w tp v
+                          (L.Typed fromTp v) toTp)
+  | L.isPointer fromTp && L.isPointer toTp
+  = -- A bitcast from one LLVM pointer type to another is a no-op for us
+    translateLLVMValue w fromTp v
 translateLLVMConstExpr _ ce =
   traceAndZeroM ("translateLLVMConstExpr does not yet handle:\n"
                  ++ ppLLVMConstExpr ce)

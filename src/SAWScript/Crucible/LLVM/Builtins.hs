@@ -2124,15 +2124,24 @@ cryptolTypeOfActual dl mt =
       do cty <- cryptolTypeOfActual dl ty
          return $ Cryptol.tSeq (Cryptol.tNum n) cty
     Crucible.PtrType _ ->
-      return $ Cryptol.tWord (Cryptol.tNum (Crucible.ptrBitwidth dl))
+      return cryptolPtrType
+    Crucible.PtrOpaqueType ->
+      return cryptolPtrType
     Crucible.StructType si ->
       do let memtypes = V.toList (Crucible.siFieldTypes si)
          ctys <- traverse (cryptolTypeOfActual dl) memtypes
          case ctys of
            [cty] -> return cty
            _ -> return $ Cryptol.tTuple ctys
-    _ ->
+    Crucible.X86_FP80Type ->
       Nothing
+    Crucible.VecType{} ->
+      Nothing
+    Crucible.MetadataType ->
+      Nothing
+  where
+    cryptolPtrType :: Cryptol.Type
+    cryptolPtrType = Cryptol.tWord (Cryptol.tNum (Crucible.ptrBitwidth dl))
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
