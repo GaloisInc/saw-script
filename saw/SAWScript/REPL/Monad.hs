@@ -381,7 +381,14 @@ getVars  = do
   let decls = getAllIfaceDecls me
   let vars1 = M.ifDecls decls
   extras <- getExtraTypes
-  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl q s [] False Nothing Nothing) extras
+  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl { M.ifDeclName = q
+                                                  , M.ifDeclSig = s
+                                                  , M.ifDeclIsPrim = False
+                                                  , M.ifDeclPragmas = []
+                                                  , M.ifDeclInfix = False
+                                                  , M.ifDeclFixity = Nothing
+                                                  , M.ifDeclDoc = Nothing
+                                                  }) extras
   return (Map.union vars1 vars2)
 
 getTSyns :: REPL (Map.Map T.Name T.TySyn)
