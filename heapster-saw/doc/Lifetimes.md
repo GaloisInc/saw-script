@@ -7,18 +7,29 @@ of time and "temporariness" of permissions. The primary motivation for lifetimes
 in Heapster is to capture the pattern of a unique write permission being
 temporarily demoted to a shared read permission. Heapster lifetimes are also
 useful for modeling Rust lifetimes, which can be used to define temporary write
-permissions as well as temporary read permissions.
+permissions as well as temporary read permissions. See [here](Permissions.md)
+for a reference on Heapster's permission language and [here](Rules.md) for a
+high-level overview of Heapster's notion of permission implication.
 
+There are two difficulties that arise in trying to represent a unique write
+permission being temporarily demoted to a shared read permission in Heapster.
+First, the approach must be non-lexical, meaning it does not rely on regular
+code structure. This is the case because Heapster is a type system for LLVM,
+which does not have this sort of structure. Stated differently, the Heapster
+type-checker doesn't know a priori when the write becomes a shared read or when
+the code is done with that and it is time to switch back.
 
-Difficulties:
-* Non-lexical, meaning it does not rely on regular code structure, since this
-  needs to work at the LLVM level, which does not have this structure; stated
-  differently, the type-checker doesn't know a priori when the write becomes a
-  shared read or when the code is done with that and it is time to switch back
-* Since shared read permissions are copyable, there is no way to ensure that you
-  have gotten back all the shared read permissions when you want to go back to
-  unique write, so you need some way to invalidate all those shared read
-  permissions
+The second difficulty in representing this pattern in Heapster is ensuring that
+no process can use a shared read permission after it is time to recover the
+original unique write permission. Since shared read permissions are copyable,
+any number of copies of the temporary shared read permissions can be made, and
+there is no way to ensure that you have gotten back all the shared read
+permissions when you want to go back to unique write. One approach to this
+problem is fractional permissions (FIXME: citation), but that requires tracking
+an abstract notion of permission fractions through the implications, which can
+actually be onerous in type-checking a large program. Instead, what is needed is
+a way to invalidate all the temporary shared read permissions when it is time to
+recover the unique write.
 
 
 
@@ -185,7 +196,7 @@ still valid by proving the read-only version of `P` relative to `l`.
 - Nested lifetimes are captured in the `lowned` permissions
 
 - The permission `l:[l2]lcurrent` states that `l` is current whenever `l2` is,
-  meaning that `l2` is contained as a nestred lifetime inside `l`
+  meaning that `l2` is contained as a nested lifetime inside `l`
 
 - Prove `lcurrent` permimssions by reflexivity, transitivity, and `lowned` permissions
 
