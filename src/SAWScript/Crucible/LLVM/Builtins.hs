@@ -2238,7 +2238,11 @@ constructExpandedSetupValue cc sc loc t =
     Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"
     -- See https://github.com/GaloisInc/saw-script/issues/1879 for why it is
     -- tricky to support opaque pointers here.
-    Crucible.PtrOpaqueType  -> failUnsupportedType "PtrOpaque"
+    Crucible.PtrOpaqueType  ->
+      panic "SAWScript.Crucible.LLVM.Builtins.constructExpandedSetupValue"
+            [ "llvm_fresh_expanded_val does not support opaque pointers"
+            , "Please report this at: https://github.com/GaloisInc/saw-script/issues/1879"
+            ]
   where failUnsupportedType tyName = throwCrucibleSetup loc $ unwords
           ["llvm_fresh_expanded_var: " ++ tyName ++ " not supported"]
 
