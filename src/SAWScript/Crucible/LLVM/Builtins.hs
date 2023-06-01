@@ -2236,6 +2236,9 @@ constructExpandedSetupValue cc sc loc t =
     Crucible.MetadataType   -> failUnsupportedType "Metadata"
     Crucible.VecType{}      -> failUnsupportedType "Vec"
     Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"
+    -- See https://github.com/GaloisInc/saw-script/issues/1879 for why it is
+    -- tricky to support opaque pointers here.
+    Crucible.PtrOpaqueType  -> failUnsupportedType "PtrOpaque"
   where failUnsupportedType tyName = throwCrucibleSetup loc $ unwords
           ["llvm_fresh_expanded_var: " ++ tyName ++ " not supported"]
 
