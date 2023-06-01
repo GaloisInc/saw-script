@@ -39,6 +39,8 @@ import qualified Data.Set as Set
 import qualified Text.LLVM as LLVM
 import qualified Text.LLVM.DebugUtils as LLVM
 
+import SAWScript.Panic (panic)
+
 --------------------------------------------------------------------------------
 -- ** Skeletons
 
@@ -101,10 +103,11 @@ parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 True "default
 -- It is unclear how to combine opaque pointers with type skeletons due to the
 -- lack of a pointee type. For now, we simply fail if we encounter one
 -- (see #1877).
-parseType LLVM.PtrOpaque = fail $ unlines
-  [ "Skeleton generation does not support opaque pointers."
-  , "You should report this issue at: https://github.com/GaloisInc/saw-script/issues/1877"
-  ]
+parseType LLVM.PtrOpaque =
+  panic "SAWScript.Crucible.LLVM.Skeleton.parseType"
+        [ "Skeleton generation does not support opaque pointers"
+        , "Please report this at: https://github.com/GaloisInc/saw-script/issues/1877"
+        ]
 parseType (LLVM.Array i t) = pure $ TypeSkeleton t True
   [ SizeGuess (fromIntegral i) True $ "default guess of size " <> Text.pack (show i)
   ]
