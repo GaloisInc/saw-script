@@ -126,18 +126,9 @@ it must prove that the permissions that are given back by the lifetime are still
 valid. In order to prove a pointer permission `x:ptr((W,0) |-> P)` is still
 valid, the current process needs to prove that, just before `l` ends, `x` points
 to a value on which permission `P` is still valid. This is precisely captured by
-the permission `x:[l]ptr((R,0) |-> Q)`, where `Q` is recursively a permission
-that ensures `P` is still valid. More generally, if we define the permission
-transformer
-
-```
-READ(l)(ptr((rw,off) |-> P)) = [l]ptr((R,off) |-> READ(l)(P))
-READ(l)(P) = P (if P is not a pointer permission)
-```
-
-that recursively turns all pointer permissions into read permissions in lifetime
-`l`, then `READ(l)(P)` is a much weaker permission (in terms of being logically
-weaker, i.e., easier to satisfy) than `P` but that still ensures `P` is valid.
+the permission `x:[l]ptr((R,0) |-> Q)`, the temporary read-only version of the
+original permission, where `Q` is recursively a permission that ensures `P` is
+still valid.
 
 More formally, Heapster combines all of the permissions returned when a lifetime
 is ended, along with all the permissions required to prove that those returned
@@ -165,28 +156,57 @@ Ps_out * l:lfinished
 This states that the current process must hold permissions `Ps_in` to prove that
 the permissions held in the lifetime `l` are still valid. After the lifetime is
 finished it gets back `Ps_out` along with a permission `l:lfinished` stating
-that `l` is in the finished state. Note that this looks very much like an
-implication elimination rule, where permission `l:lowned(Ps_in -o Ps_out)` is
-"applied" to "input" permissions `Ps_in` to yield "output" permissions `Ps_out`.
-The functional specification extracted from an `lowned` permission is in fact a
-function; this is discussed below.
+that `l` is in the finished state.
 
-
-Our temporal splitting rule now looks like this:
+In order to define the permission needed to prove that a temporally split
+permission is still valid when a lifetime end, Heapster defines a _lifetime
+functor_ as a function from a lifetime `l` and 0 or more read-write modalities
+`rw1,...,rwn` using the following syntax:
 
 ```
-x:P * l:lowned(Ps_in -o Ps_out)
+F (l,rw1,...,r2n) ::=
+P (without l or any rwi free)
+|
+[l]ptr((rwi,off) |-> F(l,rw1,...,r2n))
+(where off contains none of l or the rwi)
+|
+... (similar cases for memblock and array permissions)
+```
+
+Intuitively, a lifetime functor `F` is a way of specififying some possibly
+nested pointer permissions whose lifetimes are all given by the same `l` and
+whose read-write modalities are given by the arguments `rw1,...,rwn`. Heapster
+also defines the lifetime `always` that is guaranteed to always be current, in
+order to express pointer permissions not in a lifetime. In order to prove a
+permission `F(always,rw1,...,rwn)` is still valid when lifetime `l` for an
+arbitrary lifetime functor `F`, it is sufficient to prove the read-only version
+`F(l,R,...,R)` that is relative to lifetime `l`.
+
+Our temporal splitting rule now looks like this, where we use `rws` as a
+meta-variable for a list of read-write modalities:
+
+```
+x:F(always,rws) * l:lowned(Ps_in -o Ps_out)
 |-
-x:LIFETIME(l)(P) * l:lowned(x:READ(l)(P),Ps_in -o x:P,Ps_out)
+x:F(always,rws) * l:lowned(x:F(l,R,...,R),Ps_in -o x:F(always,rws),Ps_out)
 ```
 
-where `LIFETIME(l)(P)` recursively sets the lifetime of all pointer permissions
-in `P` to `l`, in a manner similar to the definition of `READ(l)`. This rule
-allows a permission `P` to be temporally split into the portion `LIFETIME(l)(P)`
-that is valid while `l` is active and a copy of `P` inside the lifetime
-ownership permission for `l` that can only be used after `l` is finished. It
-also states that a process can now only end `l` if it can prove that `P` is
-still valid by proving the read-only version of `P` relative to `l`.
+This rule allows a permission `P=F(always,rws)` to be temporally split into the
+portion `F(l,rws)` that is valid while `l` is active and a copy of `P` inside
+the lifetime ownership permission for `l` that can only be used after `l` is
+finished. It also states that a process can now only end `l` if it can prove
+that `P` is still valid by proving the read-only version `F(l,R,...,R)` of `P`
+relative to `l`.
+
+The rule for ending a lifetime looks very much like an implication elimination
+rule, where permission `l:lowned(Ps_in -o Ps_out)` is "applied" to "input"
+permissions `Ps_in` to yield "output" permissions `Ps_out`. In fact, in the
+specification extraction process that Heapster performs to generate a functional
+specification of an imperative program, the lifetime ownership permission
+`l:lowned(Ps_in -o Ps_out)` is translated to the type of monadic functions from
+the translation of `Ps_in` to the translation of `Ps_out`.
+
+FIXME: explain the functional translation and how it is like a lens
 
 
 ## Lifetimes Containing Lifetimes
@@ -259,7 +279,11 @@ Note that the `lowned` permission remains the same between the left- and
 right-hand sides, with the only difference being the addition of the `lcurrent`
 permission on the right.
 
-- Introduce the `always` lifetime
+- Mention that `always:[l]lcurrent` is always true, but isn't actually
+  represented as a permission in Heapster because Heapster requires the lhs to
+  be a variable
+
+- Use `lcurrent` in the load and store rules
 
 - Use `lcurrent` permissions in the new temporal splitting rule, as well as the
   lifetime weakening rule
