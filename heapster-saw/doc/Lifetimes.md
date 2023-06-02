@@ -146,14 +146,15 @@ above. The general form of the lifetime ownership permission in Heapster is as
 follows:
 
 ```
-l:lowned[ls](Ps_in -o Ps_out)
+l:lowned[l1,...,ln](Ps_in -o Ps_out)
 ```
 
-The `ls` argument is a list of the sub-lifetimes of `l`, meaning those lifetimes
-whose temporal duration is contained inside `l`. These are discussed below. The
-permission set `Ps_out` lists all the permissions that are returned after `l` is
-finished. The permission set `Ps_in` lists all the permissions needed to prove
-that the permissions `Ps_out` are still valid. The rule to end a lifetime is
+The lifteimes `l1,...,ln` are a list of the sub-lifetimes of `l`, meaning those
+lifetimes whose temporal duration is contained inside `l`. These are discussed
+below. When this list is empty, the brackets are omitted. The permission set
+`Ps_out` lists all the permissions that are returned after `l` is finished. The
+permission set `Ps_in` lists all the permissions needed to prove that the
+permissions `Ps_out` are still valid. The rule to end a lifetime is
 
 ```
 Ps_in * l:lowned(Ps_in -o Ps_out)
@@ -190,22 +191,78 @@ still valid by proving the read-only version of `P` relative to `l`.
 
 ## Lifetimes Containing Lifetimes
 
-- If we already have a permission in a lifetime, we might want to temporally split that
-    permission again; this results in nested lifetimes
+As a natural extension of this system, what if the permission we are trying to
+split temporally is already inside a lifetime? That is, what if we have a
+temporary permission relative to lifetime `l1` and we need to temporally split
+it into portions before and after some lifetime `l2`? This pattern is very
+common in modeling Rust code, as is discussed in the [Rust translation
+document](RustTrans.md). Intuitively, this only makes sense if `l2` is a
+_sub-lifetime_ of `l1`, meaning that `l2` is guaranteed to end before `l1`.
+Otherwise, there is no portion of the temporary `l1` permission after `l2` has
+ended. (At a technical level, temporally splitting a permission already in a
+lifetime with respect to anther lifetime is possible without sub-lifetimes, but
+the logic gets more complicated in a way that is not useful in practice.)
 
-- Nested lifetimes are captured in the `lowned` permissions
+To represent the notion of sub-lifetimes, the lifetime ownership permission
 
-- The permission `l:[l2]lcurrent` states that `l` is current whenever `l2` is,
-  meaning that `l2` is contained as a nested lifetime inside `l`
+```
+l:lowned[l1,...,ln](Ps_in -o Ps_out)
+```
 
-- Prove `lcurrent` permimssions by reflexivity, transitivity, and `lowned` permissions
+includes a list `l1,...,ln` of the sub-lifetimes of `l`. The logical requirement
+for sub-lifetimes is that no lifetime can end until all of its sub-lifetimes
+have ended. To capture this requirement in the logic, the rule for ending
+lifetimes requires that the sub-lifetime list is empty for the lifetime being
+ended. (Note that the rule for ending lifetimes displayed above already has this
+requirement.) Any lifetime can be _subsumed_ inside another, marking it as a
+sub-lifetime, using this rule:
 
-- Cannot end a lifetime until all of its nested lifetimes are finished;
-  implication rule removes a nested lifetime from an `lowned` permission when
-  the nested lifetime is `lfinished`
+```
+l1:lowned[ls] (ps_in -o ps_out)
+|-
+l1:lowned[l2,ls] (ps_in -o ps_out)
+```
 
+To remove a sub-lifetime from an `lowned` permission, the sub-lifetime must be
+finished. This is captured with the following rule:
 
-## Lifetime Implication Rules
+```
+l1:lowned[ls1,l2,ls2] (ps_in -o ps_out) * l2:lfinished
+|-
+l1:lowned[ls1,ls2] (ps_in -o ps_out)
+```
+
+To represent the fact that a lifetime `l2` is a sub-lifetime of `l1`, Heapster
+includes the permission `l1:[l2]lcurrent`. Technically, this states that `l1` is
+current whenever `l2` is. Heapster includes rules for reflexivity of this permission:
+
+```
+|- l:[l]lcurrent
+```
+
+along with transitivity:
+
+```
+l1:[l2]lcurrent * l2:[l3]lcurrent |- l1:[l3]lcurrent
+```
+
+It also includes the following rule for proving this permission from a
+sub-lifetime list in an `lowned` permission:
+
+```
+l1:lowned[ls1,l2,ls2] (ps_in -o ps_out)
+|-
+l1:[l2]lcurrent * l1:lowned[ls1,l2,ls2] (ps_in -o ps_out)
+```
+
+Note that the `lowned` permission remains the same between the left- and
+right-hand sides, with the only difference being the addition of the `lcurrent`
+permission on the right.
+
+- Introduce the `always` lifetime
+
+- Use `lcurrent` permissions in the new temporal splitting rule, as well as the
+  lifetime weakening rule
 
 
 ## Example: Typing an Accessor Function
