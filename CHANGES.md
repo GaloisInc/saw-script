@@ -99,6 +99,8 @@
   see the `mir_*` commands documented in the
   [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
 
+* Support LLVM versions up to 16.
+
 # Version 0.9
 
 ## New Features

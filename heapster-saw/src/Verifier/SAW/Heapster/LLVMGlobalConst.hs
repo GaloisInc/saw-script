@@ -178,34 +178,44 @@ translateLLVMType _ tp =
 -- | Helper function for 'translateLLVMValue' applied to a constant expression
 translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
                           LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr : ixs)) =
+translateLLVMConstExpr w (L.ConstGEP _ _ _ (L.Typed tp ptr) ixs) =
   translateLLVMValue w tp ptr >>= \ptr_trans ->
   translateLLVMGEP w tp ptr_trans ixs
 translateLLVMConstExpr w (L.ConstConv L.BitCast
-                          (L.Typed tp@(L.PtrTo _) v) (L.PtrTo _)) =
-  -- A bitcast from one LLVM pointer type to another is a no-op for us
-  translateLLVMValue w tp v
+                          (L.Typed fromTp v) toTp)
+  | L.isPointer fromTp && L.isPointer toTp
+  = -- A bitcast from one LLVM pointer type to another is a no-op for us
+    translateLLVMValue w fromTp v
 translateLLVMConstExpr _ ce =
   traceAndZeroM ("translateLLVMConstExpr does not yet handle:\n"
                  ++ ppLLVMConstExpr ce)
 
--- | Helper function for 'translateLLVMValue' applied to a @getelemptr@
--- expression
+-- | Helper function for 'translateLLVMValue' applied to a constant
+-- @getelementptr@ expression.
+--
+-- For now, we only support uses of @getelementptr@ where all indices are zero,
+-- as this will return the pointer argument without needing to compute an offset
+-- into the pointer. Of course, this does mean that any @getelementptr@
+-- expressions involving non-zero indices aren't supported (see #1875 for a
+-- contrived example of this). Thankfully, this function is only used to
+-- translate LLVM globals, and using @getelementptr@ to initialize globals is
+-- quite rare in practice. As such, we choose to live with this limitation until
+-- someone complains about it.
 translateLLVMGEP :: (1 <= w, KnownNat w) => NatRepr w -> L.Type ->
                     (PermExpr (LLVMShapeType w), OpenTerm) ->
                     [L.Typed L.Value] ->
                     LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
-translateLLVMGEP _ _ vtrans [] = return vtrans
-translateLLVMGEP w (L.Array _ tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
-  translateLLVMGEP w tp vtrans ixs
-translateLLVMGEP w (L.PtrTo tp) vtrans (L.Typed _ (L.ValInteger 0) : ixs) =
-  translateLLVMGEP w tp vtrans ixs
-translateLLVMGEP w (L.PackedStruct [tp]) vtrans (L.Typed
-                                                 _ (L.ValInteger 0) : ixs) =
-  translateLLVMGEP w tp vtrans ixs
-translateLLVMGEP _ tp _ ixs =
-  traceAndZeroM ("translateLLVMGEP cannot handle arguments:\n" ++
-                 "  " ++ intercalate "," (show tp : map show ixs))
+translateLLVMGEP _ tp vtrans ixs
+  | all (isZeroIdx . L.typedValue) ixs
+  = return vtrans
+  | otherwise
+  = traceAndZeroM ("translateLLVMGEP cannot handle arguments:\n" ++
+                   "  " ++ intercalate "," (show tp : map show ixs))
+  where
+    -- Check if an index is equal to 0.
+    isZeroIdx :: L.Value -> Bool
+    isZeroIdx (L.ValInteger 0) = True
+    isZeroIdx _                = False
 
 -- | Build an LLVM value for a @zeroinitializer@ field of the supplied type
 llvmZeroInitValue :: L.Type -> LLVMTransM (L.Value)
