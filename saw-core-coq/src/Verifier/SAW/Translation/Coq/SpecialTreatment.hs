@@ -197,12 +197,8 @@ stringModule =
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
--- | The @CompM@ module
-compMModule :: ModuleName
-compMModule = mkModuleName ["CompM"]
-
-specMModule :: ModuleName
-specMModule = mkModuleName ["SpecM"]
+entreeSpecsModule :: ModuleName
+entreeSpecsModule = mkModuleName ["EnTree.EnTreeSpecs"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
@@ -496,42 +492,42 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- The specification monad
   ++
-  [ ("EvType",               mapsTo specMModule "EvType")
-  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
-  , ("evTypeType",           mapsTo specMModule "evTypeType")
-  , ("evRetType",            mapsTo specMModule "evRetType")
-  , ("SpecM",                mapsToExpl specMModule "SpecM")
-  , ("retS",                 mapsToExpl specMModule "RetS")
-  , ("bindS",                mapsToExpl specMModule "BindS")
-  , ("errorS",               mapsToExpl specMModule "ErrorS")
-  , ("liftStackS",           mapsToExpl specMModule "liftStackS")
+  [ ("EvType",               mapsTo entreeSpecsModule "EvType")
+  , ("Build_EvType",         mapsTo entreeSpecsModule "Build_EvType")
+  , ("evTypeType",           mapsTo entreeSpecsModule "evTypeType")
+  , ("evRetType",            mapsTo entreeSpecsModule "evRetType")
+  , ("SpecM",                mapsToExpl entreeSpecsModule "SpecM")
+  , ("retS",                 mapsToExpl entreeSpecsModule "RetS")
+  , ("bindS",                mapsToExpl entreeSpecsModule "BindS")
+  , ("errorS",               mapsToExpl entreeSpecsModule "ErrorS")
+  , ("liftStackS",           mapsToExpl entreeSpecsModule "liftStackS")
   , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 3)
   , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 3)
-  , ("FunStack",             mapsTo specMModule "FunStack")
-  , ("LRTInput",             mapsToExpl specMModule "LRTInput")
-  , ("LRTOutput",            mapsToExpl specMModule "LRTOutput")
-  , ("lrt1Pi",               mapsToExpl specMModule "lrtPi")
-  , ("lrtLambda",            mapsToExpl specMModule "lrtLambda")
-  , ("nthLRT",               mapsToExpl specMModule "nthLRT")
-  , ("FrameCall",            mapsToExpl specMModule "FrameCall")
-  , ("FrameCallOfArgs",      mapsToExpl specMModule "FrameCallOfArgs")
-  , ("mkFrameCall",          mapsToExpl specMModule "mkFrameCall")
-  , ("FrameCallRet",         mapsToExpl specMModule "FrameCallRet")
-  , ("LRTType",              mapsToExpl specMModule "LRTType")
-  , ("FrameTuple",           mapsToExpl specMModule "FrameTuple")
-  , ("callS",                mapsToExpl specMModule "CallS")
-  , ("multiFixS",            mapsToExpl specMModule "MultiFixS")
-  , ("FunStackE_type",       mapsToExpl specMModule "FunStackE")
+  , ("FunStack",             mapsTo entreeSpecsModule "FunStack")
+  , ("LRTInput",             mapsToExpl entreeSpecsModule "LRTInput")
+  , ("LRTOutput",            mapsToExpl entreeSpecsModule "LRTOutput")
+  , ("lrt1Pi",               mapsToExpl entreeSpecsModule "lrtPi")
+  , ("lrtLambda",            mapsToExpl entreeSpecsModule "lrtLambda")
+  , ("nthLRT",               mapsToExpl entreeSpecsModule "nthLRT")
+  , ("FrameCall",            mapsToExpl entreeSpecsModule "FrameCall")
+  , ("FrameCallOfArgs",      mapsToExpl entreeSpecsModule "FrameCallOfArgs")
+  , ("mkFrameCall",          mapsToExpl entreeSpecsModule "mkFrameCall")
+  , ("FrameCallRet",         mapsToExpl entreeSpecsModule "FrameCallRet")
+  , ("LRTType",              mapsToExpl entreeSpecsModule "LRTType")
+  , ("FrameTuple",           mapsToExpl entreeSpecsModule "FrameTuple")
+  , ("callS",                mapsToExpl entreeSpecsModule "CallS")
+  , ("multiFixS",            mapsToExpl entreeSpecsModule "MultiFixS")
+  , ("FunStackE_type",       mapsToExpl entreeSpecsModule "FunStackE")
   , ("FunStackE_enc",        replace (Coq.Lambda [Coq.Binder "E" (Just (Coq.Var "SpecM.EvType"))]
                                        (Coq.App (Coq.ExplVar "SpecM.FunStackE_encodes")
                                          [Coq.App (Coq.Var "SpecM.evTypeType") [Coq.Var "E"],
                                           Coq.App (Coq.Var "SpecM.evRetType") [Coq.Var "E"]])))
-  , ("SpecPreRel",           mapsToExpl specMModule "SpecPreRel")
-  , ("SpecPostRel",          mapsToExpl specMModule "SpecPostRel")
-  , ("eqPreRel",             mapsToExpl specMModule "eqPreRel")
-  , ("eqPostRel",            mapsToExpl specMModule "eqPostRel")
-  , ("refinesS",             mapsToExpl specMModule "spec_refines")
-  , ("refinesS_eq",          mapsToExpl specMModule "spec_refines_eq")
+  , ("SpecPreRel",           mapsToExpl entreeSpecsModule "SpecPreRel")
+  , ("SpecPostRel",          mapsToExpl entreeSpecsModule "SpecPostRel")
+  , ("eqPreRel",             mapsToExpl entreeSpecsModule "eqPreRel")
+  , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel")
+  , ("refinesS",             mapsToExpl entreeSpecsModule "spec_refines")
+  , ("refinesS_eq",          mapsToExpl entreeSpecsModule "spec_refines_eq")
   ]
 
   -- Dependent pairs
