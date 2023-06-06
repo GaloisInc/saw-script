@@ -2360,7 +2360,8 @@ length1 a l =
 -- Append two List1s
 app1 : (a:sort 1) -> List1 a -> List1 a -> List1 a;
 app1 a l1 l2 =
-  List1#
+  List1#rec a (\ (_:List1 a) -> List1 a) l2
+              (\ (x:a) (_:List1 a) (rec:List1 a) -> Cons1 a x rec) l1;
 
 -- An event type is a type of events plus a mapping from events to their return
 -- types
@@ -2758,16 +2759,18 @@ compStackIncl stk1 stk2 stk3 incl12 incl23 =
     (\ (n:Nat) (lt_pf:IsLtNat n (stackLen stk1)) ->
        (trans LetRecType (nthLRT stk1 n)
               (nthLRT stk2 (applyStackIncl stk1 stk2 incl12 n))
-              (nthLRT stk2 (applyStackIncl stk2 stk3 incl23
+              (nthLRT stk3 (applyStackIncl stk2 stk3 incl23
                                            (applyStackIncl stk1 stk2 incl12 n)))
               (stackInclProof stk1 stk2 incl12 n lt_pf).1
               (stackInclProof stk2 stk3 incl23
                  (applyStackIncl stk1 stk2 incl12 n)
-                 (stackInclProof stk1 stk2 incl12 n lt_pf).(2)).1)
+                 (stackInclProof stk1 stk2 incl12 n lt_pf).(2)).1
        ,
-       (stackInclProof stk2 stk3 incl23
+        (stackInclProof stk2 stk3 incl23
           (applyStackIncl stk1 stk2 incl12 n)
-          (stackInclProof stk1 stk2 incl12 n lt_pf).(2)).(2));
+          (stackInclProof stk1 stk2 incl12 n lt_pf).(2)).(2)));
+
+-- FIXME HERE NOW: weakenLeftStackIncl and weakenRightStackIncl
 
 
 --
