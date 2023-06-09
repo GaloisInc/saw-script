@@ -103,11 +103,8 @@ doInterp request responder =
         takeFocus = Just False
         highlight = Nothing -- Just (LSP.Range (LSP.Position 0 5) (LSP.Position 1 3))
         showDocParams = ShowDocumentParams goalUri externalApplication takeFocus highlight
-    _ <- sendRequest SWindowShowDocument showDocParams \case
-      Left err -> debug' (show err)
-      Right (ShowDocumentResult r) -> if r then pure () else debug "client failed"
     _ <- sendRequest (SCustomMethod "$/displayGoal") (Aeson.toJSON showDocParams) \case
-      Left err -> debug "error"
+      Left err -> debug' (show err)
       Right _ -> debug "success"
     pure ()
   where
