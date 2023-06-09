@@ -4,6 +4,7 @@
 {-# Language DataKinds #-}
 {-# Language GADTs #-}
 {-# Language OverloadedStrings #-}
+{-# Language TypeOperators #-}
 
 module Mir.Compositional
 where

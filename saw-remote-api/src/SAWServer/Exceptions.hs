@@ -14,6 +14,7 @@ module SAWServer.Exceptions (
   , notAYosysTheorem
   , notAYosysImport
   , notAYosysSequential
+  , notAMIRModule
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -190,6 +191,17 @@ notAYosysSequential name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not a Yosys sequential module")
+    (Just $ object ["name" .= name])
+
+notAMIRModule ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a MIR module -}->
+  JSONRPCException
+notAMIRModule name =
+  makeJSONRPCException 10140
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a MIR module")
     (Just $ object ["name" .= name])
 
 cantLoadLLVMModule :: String -> JSONRPCException

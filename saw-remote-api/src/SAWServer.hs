@@ -38,6 +38,7 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as JSS
+import Mir.Generator (RustModule)
 --import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
@@ -78,7 +79,8 @@ import SAWServer.Exceptions
       notAJVMClass,
       notAJVMMethodSpecIR,
       notAYosysImport,
-      notAYosysTheorem, notAYosysSequential
+      notAYosysTheorem, notAYosysSequential,
+      notAMIRModule
     )
 
 type SAWCont = (SAWEnv, SAWTask)
@@ -317,12 +319,13 @@ data ServerVal
   | VJVMCrucibleSetup (Pair CrucibleSetupTypeRepr JVMSetupM)
   | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
+  | VMIRModule RustModule
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VGhostVar CMS.GhostGlobal
   | VYosysImport YosysImport
   | VYosysTheorem YosysTheorem
-  | VYosysSequential YosysSequential 
+  | VYosysSequential YosysSequential
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -333,6 +336,7 @@ instance Show ServerVal where
   show (VJVMCrucibleSetup _) = "VJVMCrucibleSetup"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
+  show (VMIRModule _) = "VMIRModule"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
@@ -391,6 +395,9 @@ instance KnownCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
 instance IsServerVal (Some CMS.LLVMModule) where
   toServerVal = VLLVMModule
 
+instance IsServerVal RustModule where
+  toServerVal = VMIRModule
+
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
   do Argo.debugLog $ "Saving " <> (T.pack (show name))
@@ -437,6 +444,13 @@ getLLVMModule n =
      case v of
        VLLVMModule m -> return m
        _other -> Argo.raise (notAnLLVMModule n)
+
+getMIRModule :: ServerName -> Argo.Command SAWState RustModule
+getMIRModule n =
+  do v <- getServerVal n
+     case v of
+       VMIRModule m -> return m
+       _other -> Argo.raise (notAMIRModule n)
 
 getLLVMSetup :: ServerName -> Argo.Command SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =

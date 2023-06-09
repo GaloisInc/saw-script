@@ -36,7 +36,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.IORef
-import Data.List (isPrefixOf, isInfixOf)
+import Data.List (isPrefixOf, isInfixOf, sort)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
@@ -462,6 +462,21 @@ print_goal =
      nenv <- io (scGetNamingEnv sc)
      let output = prettySequent opts nenv (goalSequent goal)
      printOutLnTop Info (unlines [goalSummary goal, output])
+
+-- | Print the current goal that a proof script is attempting to prove, without
+-- generating @let@ bindings for the provided indices. For example,
+-- @print_goal_inline [1,9,3]@ will print the goal without inlining the
+-- variables that would otherwise be abstracted as @x\@1@, @x\@9@, and @x\@3@.
+print_goal_inline :: [Int] -> ProofScript ()
+print_goal_inline noInline =
+  execTactic $ tacticId $ \goal ->
+    do
+      opts <- getTopLevelPPOpts
+      let opts' = opts { ppNoInlineMemo = sort noInline } 
+      sc <- getSharedContext
+      nenv <- io (scGetNamingEnv sc)
+      let output = prettySequent opts' nenv (goalSequent goal)
+      printOutLnTop Info (unlines [goalSummary goal, output])
 
 print_goal_summary :: ProofScript ()
 print_goal_summary =
