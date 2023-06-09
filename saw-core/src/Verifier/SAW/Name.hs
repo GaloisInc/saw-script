@@ -24,7 +24,7 @@ module Verifier.SAW.Name
   , moduleNameText
   , moduleNamePieces
    -- * Identifiers
-  , Ident(identModule, identBaseName), identName, mkIdent
+  , Ident(identModule, identBaseName), identName, mkIdent, mkSafeIdent
   , parseIdent
   , isIdent
   , identText
@@ -51,6 +51,7 @@ module Verifier.SAW.Name
   , bestAlias
   ) where
 
+import           Numeric (showHex)
 import           Control.Exception (assert)
 import           Data.Char
 import           Data.Hashable
@@ -133,6 +134,23 @@ instance Read Ident where
 
 mkIdent :: ModuleName -> Text -> Ident
 mkIdent m s = Ident m s
+
+-- | Make a "coq-safe" identifier from a string that might contain
+-- non-identifier characters, where we use the SAW core notion of identifier
+-- characters as letters, digits, underscore and primes. Any disallowed
+-- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
+-- for that character. Additionally, a SAW core identifier is not allowed to
+-- start with a prime, so a leading underscore is added in such a case.
+mkSafeIdent :: ModuleName -> String -> Ident
+mkSafeIdent _ [] = fromString "_"
+mkSafeIdent mnm nm =
+  let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in
+  mkIdent mnm $ Text.pack $
+  (if nm!!0 == '\'' then ('_' :) else id) $
+  concatMap
+  (\c -> if is_safe_char c then [c] else
+           "__x" ++ showHex (ord c) "")
+  nm
 
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
