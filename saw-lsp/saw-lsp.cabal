@@ -51,7 +51,6 @@ library
         Reactor
         REPL
         Sample
-        SAW
         SAWT
         Server
         TopLevel
