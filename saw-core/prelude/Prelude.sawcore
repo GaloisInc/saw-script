@@ -2343,9 +2343,9 @@ foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> Unfo
 
 
 --------------------------------------------------------------------------------
--- ITree Specification monad
-
 -- Lists at sort 1
+
+-- The type List1 itself
 data List1 (a:sort 1) : sort 1 where {
   Nil1 : List1 a;
   Cons1 : a -> List1 a -> List1 a;
@@ -2362,6 +2362,25 @@ app1 : (a:sort 1) -> List1 a -> List1 a -> List1 a;
 app1 a l1 l2 =
   List1#rec a (\ (_:List1 a) -> List1 a) l2
               (\ (x:a) (_:List1 a) (rec:List1 a) -> Cons1 a x rec) l1;
+
+-- Concatenate a List1 of List1s
+concat1 : (a:sort 1) -> List1 (List1 a) -> List1 a;
+concat1 a ls =
+  List1#rec (List1 a) (\ (_:List1 (List1 a)) -> List1 a)
+            (Nil1 a)
+            (\ (xs:List1 a) (_:List1 (List1 a)) (rec:List1 a) -> app1 a xs rec)
+            ls;
+
+-- Map a function across a List1
+map1 : (a b:sort 1) -> (f : a -> b) -> List1 a -> List1 b;
+map1 a b f l =
+  List1#rec
+    a (\ (_:List1 a) -> List1 b) (Nil1 b)
+    (\ (x:a) (_:List1 a) (rec:List1 b) -> Cons1 b (f x) rec) l;
+
+
+--------------------------------------------------------------------------------
+-- ITree Specification monad
 
 -- An event type is a type of events plus a mapping from events to their return
 -- types
@@ -2770,7 +2789,41 @@ compStackIncl stk1 stk2 stk3 incl12 incl23 =
           (applyStackIncl stk1 stk2 incl12 n)
           (stackInclProof stk1 stk2 incl12 n lt_pf).(2)).(2)));
 
--- FIXME HERE NOW: weakenLeftStackIncl and weakenRightStackIncl
+-- The function portion of weakenLeftStackIncl
+weakenLeftStackInclFun : FunStack -> Nat -> Nat;
+weakenLeftStackInclFun stk1 n = addNat (length1 LetRecType stk1) n;
+
+-- Proof that weakenLeftStackIncl is a stack inclusion; note that this is
+-- provable in SAW core, and in fact the Coq development has the proof, but it's
+-- just big and not really necessary to prove in SAW core, so we just assume it
+axiom
+weakenLeftStackInclProof : (stk1 stk2 : FunStack) ->
+                           isStackIncl stk2 (app1 LetRecType stk1 stk2)
+                                       (weakenLeftStackInclFun stk1);
+
+-- The inclusion from any stack into the append of another stack on the left
+weakenLeftStackIncl : (stk1 stk2 : FunStack) ->
+                      stackIncl stk2 (app1 LetRecType stk1 stk2);
+weakenLeftStackIncl stk1 stk2 =
+  mkStackIncl stk2 (app1 LetRecType stk1 stk2)
+    (weakenLeftStackInclFun stk1)
+    (weakenLeftStackInclProof stk1 stk2);
+
+-- Proof that weakenRightStackIncl is a stack inclusion; note that this is
+-- provable in SAW core, and in fact the Coq development has the proof, but it's
+-- just big and not really necessary to prove in SAW core, so we just assume it
+axiom
+weakenRightStackInclProof : (stk1 stk2 : FunStack) ->
+                            isStackIncl stk1 (app1 LetRecType stk1 stk2)
+                                             (\ (n:Nat) -> n);
+
+-- The inclusion from any stack into the append of another stack on the right
+weakenRightStackIncl : (stk1 stk2 : FunStack) ->
+                       stackIncl stk1 (app1 LetRecType stk1 stk2);
+weakenRightStackIncl stk1 stk2 =
+  mkStackIncl stk1 (app1 LetRecType stk1 stk2)
+    (\ (n:Nat) -> n)
+    (weakenRightStackInclProof stk1 stk2);
 
 
 --
@@ -2835,11 +2888,47 @@ StackTuple E calls defs =
     (\ (lrt:LetRecType) (_:FunStack) (rec:sort 0) -> SpecFun E calls lrt * rec)
     defs;
 
+-- Append two StackTuples
+appStackTuple : (E:EvType) -> (calls defs1 defs2 : FunStack) ->
+                StackTuple E calls defs1 -> StackTuple E calls defs2 ->
+                StackTuple E calls (app1 LetRecType defs1 defs2);
+appStackTuple E calls defs1_top defs2 =
+  List1#rec
+    LetRecType
+    (\ (defs1:FunStack) -> StackTuple E calls defs1 ->
+                           StackTuple E calls defs2 ->
+                           StackTuple E calls (app1 LetRecType defs1 defs2))
+    (\ (_:#()) (tup2:StackTuple E calls defs2) -> tup2)
+    (\ (lrt:LetRecType) (defs1:FunStack)
+       (rec:StackTuple E calls defs1 -> StackTuple E calls defs2 ->
+            StackTuple E calls (app1 LetRecType defs1 defs2))
+       (tup1:StackTuple E calls (Cons1 LetRecType lrt defs1))
+       (tup2:StackTuple E calls defs2) ->
+       (tup1.(1), rec tup1.(2) tup2))
+    defs1_top;
+
 -- A StackTuple that is polymorphic in its function stack, which defines
 -- functions for all the defs that can call all the calls
 PolyStackTuple : EvType -> FunStack -> FunStack -> sort 1;
 PolyStackTuple E calls defs =
   (calls':FunStack) -> stackIncl calls calls' -> StackTuple E calls' defs;
+
+-- Append two PolyStackTuples
+appPolyStackTuple : (E:EvType) -> (calls defs1 defs2 : FunStack) ->
+                    PolyStackTuple E calls defs1 ->
+                    PolyStackTuple E calls defs2 ->
+                    PolyStackTuple E calls (app1 LetRecType defs1 defs2);
+appPolyStackTuple E calls defs1 defs2 ptup1 ptup2 =
+  \ (calls':FunStack) (incl:stackIncl calls calls') ->
+    appStackTuple E calls' defs1 defs2 (ptup1 calls' incl) (ptup2 calls' incl);
+
+-- Apply a stackIncl to a PolySpecFun
+inclPolyStackTuple : (E:EvType) -> (calls1 calls2 defs : FunStack) ->
+                     stackIncl calls1 calls2 -> PolyStackTuple E calls1 defs ->
+                     PolyStackTuple E calls2 defs;
+inclPolyStackTuple E calls1 calls2 defs incl ptup =
+  \ (calls' : FunStack) (incl' : stackIncl calls2 calls') ->
+    ptup calls' (compStackIncl calls1 calls2 calls' incl incl');
 
 -- A "spec definition" represents a definition of a SpecM monadic function via
 -- (co)recursion over a tuple of recursive function bodies
@@ -2849,7 +2938,84 @@ data SpecDef (E : EvType) : sort 1 where {
               SpecDef E;
 }
 
--- FIXME HERE NOW: defineSpec
+-- Get the stack of a SpecDef
+defStack : (E : EvType) -> SpecDef E -> FunStack;
+defStack E d =
+  SpecDef#rec
+    E (\ (_:SpecDef E) -> FunStack)
+    (\ (stk:FunStack) (_:PolyStackTuple E stk stk)
+       (lrt:LetRecType) (_:PolySpecFun E stk lrt) -> stk)
+    d;
+
+-- Get the function definitions of a SpecDef
+defFuns : (E : EvType) -> (d:SpecDef E) ->
+          PolyStackTuple E (defStack E d) (defStack E d);
+defFuns E d =
+  SpecDef#rec
+    E (\ (d:SpecDef E) -> PolyStackTuple E (defStack E d) (defStack E d))
+    (\ (stk:FunStack) (funs:PolyStackTuple E stk stk)
+       (lrt:LetRecType) (_:PolySpecFun E stk lrt) -> funs)
+    d;
+
+-- Get the LetRecType of a SpecDef
+defLRT : (E : EvType) -> SpecDef E -> LetRecType;
+defLRT E d =
+  SpecDef#rec
+    E (\ (_:SpecDef E) -> LetRecType)
+    (\ (stk:FunStack) (_:PolyStackTuple E stk stk)
+       (lrt:LetRecType) (_:PolySpecFun E stk lrt) -> lrt)
+    d;
+
+-- Get the body of a SpecDef
+defBody : (E : EvType) -> (d:SpecDef E) ->
+          PolySpecFun E (defStack E d) (defLRT E d);
+defBody E d =
+  SpecDef#rec
+    E (\ (d:SpecDef E) -> PolySpecFun E (defStack E d) (defLRT E d))
+    (\ (stk:FunStack) (_:PolyStackTuple E stk stk)
+       (lrt:LetRecType) (body:PolySpecFun E stk lrt) -> body)
+    d;
+
+-- Build the concatenated FunStack for a list of imported spec defs
+impsStack : (E:EvType) -> List1 (SpecDef E) -> FunStack;
+impsStack E imps =
+  concat1 LetRecType (map1 (SpecDef E) FunStack (defStack E) imps);
+
+-- The combined function stack for defineSpec
+defineSpecStack : (E:EvType) -> FunStack -> List1 (SpecDef E) -> FunStack;
+defineSpecStack E stk imps = app1 LetRecType stk (impsStack E imps);
+
+-- Build the list of recursive functions for a list of imported spec defs
+impsFuns : (E:EvType) -> (imps : List1 (SpecDef E)) ->
+           PolyStackTuple E (impsStack E imps) (impsStack E imps);
+impsFuns E imps_top =
+  List1#rec (SpecDef E)
+    (\ (imps : List1 (SpecDef E)) ->
+       PolyStackTuple E (impsStack E imps) (impsStack E imps))
+    (\ (calls' : FunStack) (_ : stackIncl emptyFunStack calls') -> ())
+    (\ (d:SpecDef E) (imps:List1 (SpecDef E))
+       (rec:PolyStackTuple E (impsStack E imps) (impsStack E imps)) ->
+       appPolyStackTuple
+         E (impsStack E (Cons1 (SpecDef E) d imps))
+         (defStack E d) (impsStack E imps)
+         (inclPolyStackTuple
+            E (defStack E d) (impsStack E (Cons1 (SpecDef E) d imps))
+            (defStack E d)
+            (weakenRightStackIncl (defStack E d) (impsStack E imps))
+            (defFuns E d))
+         (inclPolyStackTuple
+            E (impsStack E imps) (impsStack E (Cons1 (SpecDef E) d imps))
+            (impsStack E imps)
+            (weakenLeftStackIncl (defStack E d) (impsStack E imps))
+            rec))
+    imps_top;
+
+-- FIXME HERE: define defineSpec
+primitive defineSpec :
+  (E:EvType) -> (stk:FunStack) -> (lrt:LetRecType) -> (imps:List1 (SpecDef E)) ->
+  PolyStackTuple E (defineSpecStack E stk imps) stk ->
+  PolySpecFun E (defineSpecStack E stk imps) lrt ->
+  SpecDef E;
 
 
 --
