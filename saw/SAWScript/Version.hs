@@ -14,12 +14,9 @@ module SAWScript.Version (
   , shortVersionText
   ) where
 
--- import Paths_saw_script (version)
--- import GitRev (hash)
--- import Data.Version (showVersion)
-
-hash :: String
-hash = "<nice try>"
+import Paths_saw_script (version)
+import GitRev (hash)
+import Data.Version (showVersion)
 
 hashText :: String
 hashText = " (" ++ hash ++ ")"
@@ -28,4 +25,4 @@ versionText :: String
 versionText = "version " ++ shortVersionText
 
 shortVersionText :: String
-shortVersionText = {- showVersion version ++  -}hashText
+shortVersionText = showVersion version ++ hashText
