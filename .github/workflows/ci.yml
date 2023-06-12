@@ -68,8 +68,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-12, windows-latest]
-        cabal: ["3.10.1.1"]
-        ghc: ["8.10.7", "9.2.7", "9.4.4"]
+        cabal: ["3.10.1.0"]
+        # ghc: ["8.10.7", "9.2.7", "9.4.4"]
+        ghc: ["9.2.7", "9.4.4"]
         run-tests: [true]
         include:
           # We include one job from an older Ubuntu LTS release to increase our
