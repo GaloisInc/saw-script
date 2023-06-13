@@ -94,7 +94,7 @@ jobs:
           .github/ci.sh output name $NAME
           echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64" >> $GITHUB_ENV
 
-      - uses: haskell/actions/setup@v1
+      - uses: haskell/actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
