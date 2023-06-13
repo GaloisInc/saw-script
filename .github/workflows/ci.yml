@@ -68,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-12, windows-latest]
-        cabal: ["3.10.1.1"]
+        cabal: ["3.10"]
         ghc: ["8.10.7", "9.2.7", "9.4.4"]
         run-tests: [true]
         include:
@@ -77,7 +77,7 @@ jobs:
           # tests with the newest LTS release, we won't bother testing this one.
           - os: ubuntu-20.04
             ghc: "8.10.7"
-            cabal: "3.10.1.1"
+            cabal: "3.10"
             run-tests: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
