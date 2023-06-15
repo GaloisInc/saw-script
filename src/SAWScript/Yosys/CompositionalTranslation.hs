@@ -11,11 +11,10 @@
 module SAWScript.Yosys.CompositionalTranslation where
 
 import Control.Lens.TH (makeLenses)
-import Control.Lens ((^.), view)
-import Control.Monad (forM, (>=>))
+import Control.Lens ((^.))
+import Control.Monad (forM, (>=>), void)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Reader.Class (MonadReader(..))
-import Control.Exception (Exception, throw)
+import Control.Exception (throw)
 
 import Data.Bifunctor (bimap)
 import qualified Data.Maybe as Maybe
@@ -24,9 +23,8 @@ import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import Text.Encoding.Z (zEncodeString)
-
 import qualified Verifier.SAW.SharedTerm as SC
+import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 
@@ -51,6 +49,8 @@ makeLenses ''CellStateInfo
 data TranslatedModule = TranslatedModule
   { _translatedModuleStateInfo :: Maybe CellStateInfo -- information about the state type for this module
   , _translatedModuleTerm :: SC.Term -- the lambda term for the output record (including state) in terms of the inputs (including state)
+  , _translatedModuleType :: SC.Term
+  , _translatedModuleCryptolType :: C.Type
   }
 makeLenses ''TranslatedModule
 
@@ -90,6 +90,18 @@ lookupStateFor ::
 lookupStateFor sc states inpst cnm = do
   let fieldnm = cellIdentifier cnm
   cryptolRecordSelect sc (Map.mapKeys cellIdentifier states) inpst fieldnm
+
+-- | Add a record-typed field named __states__ to the given mapping of field names to types.
+insertStateField ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text (SC.Term, C.Type) {- ^ The field types of "__states__" -} ->
+  Map Text (SC.Term, C.Type) {- ^ The mapping to update -} ->
+  m (Map Text (SC.Term, C.Type))
+insertStateField sc stateFields fields = do
+  stateRecordType <- fieldsToType sc stateFields
+  stateRecordCryptolType <- fieldsToCryptolType stateFields
+  pure $ Map.insert "__state__" (stateRecordType, stateRecordCryptolType) fields
 
 moduleInputPorts :: Module -> Map Text [Bitrep]
 moduleInputPorts m =
@@ -135,8 +147,15 @@ buildPatternMap ::
   Module -> -- the module being translated
   m (PatternMap m)
 buildPatternMap sc mods states inp m = do
+  let inputPorts = moduleInputPorts m
+  let inputFields = if Map.null states then void inputPorts else Map.insert "__state__" () $ void inputPorts
+
+  inpTerms <- forM (Map.assocs inputPorts) $ \(nm, pat) -> do
+    t <- liftIO $ cryptolRecordSelect sc inputFields inp nm
+    fmap (const . pure) <$> deriveTermsByIndices sc pat t
+
   -- grab the __state__ field from the module inputs
-  inpst <- cryptolRecordSelect sc (Map.insert "__state__" () $ () <$ moduleInputPorts m) inp "__state__"
+  minpst <- if Map.null states then pure Nothing else Just <$> cryptolRecordSelect sc inputFields inp "__state__"
   -- for each cell, construct a term for each output pattern, parameterized by a lookup function for other patterns
   ms <- forM (Map.toList $ m ^. moduleCells) $ \(cnm, c) -> do
     let inpPatterns = case c ^. cellType of
@@ -154,12 +173,24 @@ buildPatternMap sc mods states inp m = do
     -- build a function from the cell's inputs to the cell's outputs
     inpsToOuts <- case Map.lookup (c ^. cellType) mods of
       Just subm -> pure $ \inps -> do
-        subinpst <- lookupStateFor sc states inpst cnm
-        domainRec <- cryptolRecord sc $ Map.insert "__state__" subinpst inps
+        domainFields <- case minpst of
+          Nothing -> pure inps
+          Just inpst -> do
+            subinpst <- lookupStateFor sc states inpst cnm
+            pure $ Map.insert "__state__" subinpst inps
+        let codomainFields = if Map.null states then void outPatterns else Map.insert "__state__" () $ void outPatterns
+        domainRec <- cryptolRecord sc domainFields
         codomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) domainRec
         fmap (Just . Map.fromList) . forM (Map.toList outPatterns) $ \(onm, _opat) -> do
-          (onm,) <$> cryptolRecordSelect sc (Map.insert "__state__" () $ () <$ outPatterns) codomainRec onm
-      Nothing -> pure $ primCellToMap sc c
+          (onm,) <$> cryptolRecordSelect sc codomainFields codomainRec onm
+      Nothing -> case c ^. cellType of
+        "$dff"
+          | Just inpst <- minpst -> pure $ \_ -> do
+              cst <- lookupStateFor sc states inpst cnm
+              pure . Just $ Map.fromList
+                [ ("Q", cst)
+                ]
+        _ -> pure $ primCellToMap sc c
     let
       -- given a pattern lookup function build a map from output patterns to terms
       f :: (YosysBitvecConsumer -> Pattern -> m SC.Term) -> m (Map Pattern SC.Term)
@@ -178,88 +209,133 @@ buildPatternMap sc mods states inp m = do
         Nothing -> panic "buildPatternMap" ["Missing expected output pattern for cell"]
         Just t -> pure t
   -- all of the pattern term functions for all of the cells in the module
-  pure $ Map.unions ms
-
-buildTranslationContext ::
-  MonadIO m =>
-  SC.SharedContext ->
-  Map ModuleName TranslatedModule -> -- previously translated modules
-  SC.Term -> -- record term mapping (zenc-ed) cell names to cell states
-  Module -> -- the module we're translating
-  m (TranslationContext m)
-buildTranslationContext sc mods inpst m = do 
-  let _translationContextModules = mods
-  _translationContextStateTypes <- buildTranslationContextStateTypes sc mods m
-  _translationContextPatternMap <- buildPatternMap sc mods _translationContextStateTypes inpst m
-  pure TranslationContext{..}
-
--- new approach:
---  iterate over entire module, find all dffs and stateful submodules
---  build state type for module. create parameter term for that type.
---  instantiate map from state patterns to lookups in state parameter term
---  we would like to build the term "top-down" from the outputs.
---  however, this is somewhat tricky, since it isn't immediately apparent where different bits in patterns come from.
---  instead we build an intermediate data structure: a mapping from patterns to functions that construct the corresponding term by recursively calling the translator
---  i.e., `pmap = Map Pattern ((Pattern -> IO Term) -> IO Term)`
---  the function Pattern -> IO Term is then `translate p = lookup p pmap >>= \f -> f translate`
+  zeroTerm <- liftIO $ SC.scBvConst sc 1 0
+  oneTerm <- liftIO $ SC.scBvConst sc 1 1
+  oneBitType <- liftIO $ SC.scBitvector sc 1
+  xMsg <- liftIO $ SC.scString sc "Attempted to read X bit"
+  xTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+  zMsg <- liftIO $ SC.scString sc "Attempted to read Z bit"
+  zTerm <- liftIO $ SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
+  pure . Map.unions $ mconcat
+    [ ms
+    , inpTerms
+    , [ Map.fromList
+        [ ( [BitrepZero], const $ pure zeroTerm)
+        , ( [BitrepOne], const $ pure oneTerm )
+        , ( [BitrepX], const $ pure xTerm )
+        , ( [BitrepZ], const $ pure zTerm )
+        ]
+      ]
+    ]
 
 translatePattern ::
   MonadIO m =>
+  SC.SharedContext ->
   TranslationContext m ->
   YosysBitvecConsumer ->
   Pattern ->
   m SC.Term
-translatePattern ctx c p = do
+translatePattern sc ctx c p = do
   let pmap = ctx ^. translationContextPatternMap
   case Map.lookup p pmap of
-    Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show p) c
-    Just f -> f $ translatePattern ctx
+    Just f -> f $ translatePattern sc ctx
+    Nothing -> do
+      one <- liftIO $ SC.scNat sc 1
+      boolty <- liftIO $ SC.scBoolType sc
+      many <- liftIO . SC.scNat sc . fromIntegral $ length p
+      onety <- liftIO $ SC.scBitvector sc 1
+      bits <- forM p $ \b -> do
+        case Map.lookup [b] pmap of
+          Just t -> t $ translatePattern sc ctx
+          Nothing -> throw $ YosysErrorNoSuchOutputBitvec (Text.pack $ show b) c
+      vecBits <- liftIO $ SC.scVector sc onety bits
+      liftIO $ SC.scJoin sc many one boolty vecBits
 
 translateModule ::
   MonadIO m =>
   SC.SharedContext ->
-  TranslationContext m ->
+  Map ModuleName TranslatedModule ->
   Module ->
   m TranslatedModule
-translateModule sc ctx m = do
-  let states = ctx ^. translationContextStateTypes
+translateModule sc mods m = do
+  states <- buildTranslationContextStateTypes sc mods m
+  let stateFields = Map.fromList $ bimap cellIdentifier (\cs -> (cs ^. cellStateInfoType, cs ^. cellStateInfoCryptolType)) <$> Map.toList states
 
   -- description of the state fields of the module
   _translatedModuleStateInfo <- if Map.null states
     then pure Nothing
     else do
-    let fields = Map.fromList $ bimap cellIdentifier (\cs -> (cs ^. cellStateInfoType, cs ^. cellStateInfoCryptolType)) <$> Map.toList states
-    ty <- fieldsToType sc fields
-    cty <- fieldsToCryptolType fields 
+    ty <- fieldsToType sc stateFields
+    cty <- fieldsToCryptolType stateFields
     pure $ Just CellStateInfo
       { _cellStateInfoType = ty
       , _cellStateInfoCryptolType = cty
-      , _cellStateInfoFields = Just fields
+      , _cellStateInfoFields = Just stateFields
       }
 
-  inpst <- _
+  let inputPorts = moduleInputPorts m
+  inputFields <- forM inputPorts $ \inp -> do
+    ty <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
+    let cty = C.tWord . C.tNum $ length inp
+    pure (ty, cty)
+  domainFields <- if Map.null states
+    then pure inputFields
+    else insertStateField sc stateFields inputFields
+  domainRecordType <- fieldsToType sc domainFields
+  domainRecordCryptolType <- fieldsToCryptolType domainFields
+  domainRecordEC <- liftIO $ SC.scFreshEC sc "input" domainRecordType
+  domainRecord <- liftIO $ SC.scExtCns sc domainRecordEC
+
+  minpst <- if Map.null states then pure Nothing else Just <$> cryptolRecordSelect sc domainFields domainRecord "__state__"
+  pmap <- buildPatternMap sc mods states domainRecord m
+  let ctx = TranslationContext
+        { _translationContextModules = mods
+        , _translationContextStateTypes = states
+        , _translationContextPatternMap = pmap
+        }
+
   -- for each stateful cell, build a term representing the new state for that cell
-  outst <- fmap Map.fromList . forM (Map.toList states) $ \(cnm, _cs) -> do
+  outstMap <- fmap Map.fromList . forM (Map.toList states) $ \(cnm, _cs) -> do
     case Map.lookup cnm (m ^. moduleCells) of
       Nothing -> panic "translateModule" ["Previously observed cell does not exist"]
       Just c -> case c ^. cellType of
         "$dff" -- if the cell is a $dff, the new state is just whatever is connected to the input
           | Just pat <- Map.lookup "D" (c ^. cellConnections) ->
-              (cnm,) <$> translatePattern ctx (YosysBitvecConsumerCell cnm "D") pat
+              (cnm,) <$> translatePattern sc ctx (YosysBitvecConsumerCell cnm "D") pat
         _
           | Just subm <- Map.lookup (c ^. cellType) (ctx ^. translationContextModules) -> do
               -- otherwise, the cell is a stateful submodule: the new state is obtained from the submodules's update function applied to the inputs and old state
-              inps <- _
-              let outPatterns = _
-              subinpst <- lookupStateFor sc states inpst cnm
-              domainRec <- cryptolRecord sc $ Map.insert "__state__" subinpst inps
-              codomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) domainRec
-              (cnm,) <$> cryptolRecordSelect sc (Map.insert "__state__" () $ () <$ outPatterns) codomainRec "__state__"
+              let inpPatterns = cellInputConnections c
+              inps <- fmap Map.fromList . forM (Map.toList inpPatterns) $ \(inm, pat) ->
+                (inm,) <$> translatePattern sc ctx (YosysBitvecConsumerCell cnm inm) pat
+              let outPatterns = cellOutputConnections c
+              sdomainFields <- case minpst of
+                Nothing -> pure inps
+                Just inpst -> do
+                  subinpst <- lookupStateFor sc states inpst cnm
+                  pure $ Map.insert "__state__" subinpst inps
+              let scodomainFields = if Map.null states then void outPatterns else Map.insert "__state__" () $ void outPatterns
+              sdomainRec <- cryptolRecord sc sdomainFields
+              scodomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) sdomainRec
+              (cellIdentifier cnm,) <$> cryptolRecordSelect sc scodomainFields scodomainRec "__state__"
         _ -> panic "translateModule" ["Malformed stateful cell type"]
+  outst <- cryptolRecord sc outstMap
           
   -- for each module output, collect a term for the output
-  outputs <- _
+  let outputPorts = moduleOutputPorts m
+  outs <- fmap Map.fromList . forM (Map.toList outputPorts) $ \(onm, pat) ->
+    (onm,) <$> translatePattern sc ctx (YosysBitvecConsumerOutputPort onm) pat
+  codomainRecord <- cryptolRecord sc $ if Map.null states then outs else Map.insert "__state__" outst outs
+  outputFields <- forM outputPorts $ \inp -> do
+    ty <- liftIO . SC.scBitvector sc . fromIntegral $ length inp
+    let cty = C.tWord . C.tNum $ length inp
+    pure (ty, cty)
+  codomainFields <- if Map.null states then pure outputFields else insertStateField sc stateFields outputFields
+  codomainRecordType <- fieldsToType sc codomainFields
+  codomainRecordCryptolType <- fieldsToCryptolType codomainFields
 
-  _translatedModuleTerm <- _
+  _translatedModuleTerm <- liftIO $ SC.scAbstractExts sc [domainRecordEC] codomainRecord
+  _translatedModuleType <- liftIO $ SC.scFun sc domainRecordType codomainRecordType
+  let _translatedModuleCryptolType = C.tFun domainRecordCryptolType codomainRecordCryptolType
 
   pure TranslatedModule{..}
