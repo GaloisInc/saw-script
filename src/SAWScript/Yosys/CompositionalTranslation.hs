@@ -173,12 +173,14 @@ buildPatternMap sc mods states inp m = do
     -- build a function from the cell's inputs to the cell's outputs
     inpsToOuts <- case Map.lookup (c ^. cellType) mods of
       Just subm -> pure $ \inps -> do
-        domainFields <- case minpst of
-          Nothing -> pure inps
-          Just inpst -> do
+        (domainFields, codomainFields) <- case (subm ^. translatedModuleStateInfo, minpst) of
+          (Just _, Just inpst) -> do
             subinpst <- lookupStateFor sc states inpst cnm
-            pure $ Map.insert "__state__" subinpst inps
-        let codomainFields = if Map.null states then void outPatterns else Map.insert "__state__" () $ void outPatterns
+            pure
+              ( Map.insert "__state__" subinpst inps
+              , Map.insert "__state__" () $ void outPatterns
+              )
+          _ -> pure (inps, void outPatterns)
         domainRec <- cryptolRecord sc domainFields
         codomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) domainRec
         fmap (Just . Map.fromList) . forM (Map.toList outPatterns) $ \(onm, _opat) -> do
