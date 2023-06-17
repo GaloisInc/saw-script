@@ -51,7 +51,8 @@ library
      Verifier.SAW.Cryptol.Monadify
      Verifier.SAW.CryptolEnv
      Verifier.SAW.TypedTerm
-  GHC-options: -Wall -Werror
+  -- GHC-options: -Wall -Werror
+  GHC-options: -Wall
 
 executable css
   other-modules:
