@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 {- |
 Module      : Verifier.SAW.FiniteValue

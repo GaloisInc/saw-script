@@ -27,7 +27,6 @@ import qualified Crypto.Hash as Hash
 --import qualified Crypto.Hash.Conduit as Hash
 import System.Directory (getCurrentDirectory)
 import System.IO.Silently (silence)
-import Data.IORef
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
@@ -63,6 +62,7 @@ import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.SolverCache (emptySolverCache)
 
 import qualified Argo
 --import qualified CryptolServer (validateServerState, ServerState(..))
@@ -206,7 +206,7 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
-     cache <- newIORef Nothing
+     cache <- emptySolverCache
      db <- newTheoremDB
      let ro = TopLevelRO
                 { roJavaCodebase = jcb
@@ -220,7 +220,6 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
-                , roSolverCache = cache
                 , roStackTrace = []
                 , roSubshell = fail "SAW server does not support subshells."
                 , roProofSubshell = fail "SAW server does not support subshells."
@@ -236,6 +235,7 @@ initialState readFileFn =
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
                 , rwTheoremDB = db
+                , rwSolverCache = Just cache
                 , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty

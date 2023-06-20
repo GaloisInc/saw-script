@@ -80,7 +80,6 @@ import GHC.Generics (Generic)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Tuple.Extra (first, firstM, both)
 import Data.List (isPrefixOf, elemIndex, intercalate)
-import Data.Hashable (Hashable(..))
 import Data.Bits (shiftL, (.|.))
 import Data.Maybe (fromMaybe)
 import Data.Functor ((<&>))
@@ -260,16 +259,6 @@ data SolverCacheKey =
 
 instance Eq SolverCacheKey where
   (SolverCacheKey _ _ bs1) == (SolverCacheKey _ _ bs2) = bs1 == bs2
-
--- | Truncate a 'SolverCacheKey' (i.e. a SHA256 hash) to an 'Int', used to give
--- the type a fast 'Hashable' instance
-solverCacheKeyInt :: SolverCacheKey -> Int
-solverCacheKeyInt (SolverCacheKey _ _ bs) =
-  BS.foldl' (\a b -> a `shiftL` 8 .|. fromIntegral b) 0 (BS.take 8 bs)
-
-instance Hashable SolverCacheKey where
-  hash = solverCacheKeyInt
-  hashWithSalt s = hashWithSalt s . solverCacheKeyInt
 
 instance Show SolverCacheKey where
   show (SolverCacheKey vs opts bs) = encodeHex (BS.take 8 bs) ++
