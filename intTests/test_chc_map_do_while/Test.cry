@@ -1,0 +1,9 @@
+module Test where
+
+import Array
+
+type ByteArray = Array [64] [8]
+
+f : [64] -> ByteArray -> ByteArray
+f = undefined
+
