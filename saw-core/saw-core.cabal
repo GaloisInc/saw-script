@@ -44,7 +44,6 @@ library
     prettyprinter-ansi-terminal >= 1.1.2,
     random,
     rme,
-    serialise,
     template-haskell,
     text,
     th-lift-instances,

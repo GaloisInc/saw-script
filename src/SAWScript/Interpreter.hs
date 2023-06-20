@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
@@ -39,10 +40,8 @@ import Data.Traversable hiding ( mapM )
 #endif
 import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>), when)
+import Control.Monad (unless, (>=>), when, forM)
 import Control.Monad.IO.Class (liftIO)
-import Data.IORef
-import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -456,8 +455,10 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
-       cache <- mapM (\p -> snd <$> setSolverCachePath p opts emptySolverCache)
-                     (solverCache opts) >>= newIORef
+       mb_cache <- forM (solverCache opts) $ \p -> do
+        cache <- emptySolverCache
+        setSolverCachePath p opts cache
+        return cache
        thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
@@ -468,7 +469,6 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roSolverCache = cache
                    , roStackTrace = []
                    , roSubshell = fail "Subshells not supported"
                    , roProofSubshell = fail "Proof subshells not supported"
@@ -494,6 +494,7 @@ buildTopLevelEnv proxy opts =
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
+                   , rwSolverCache = mb_cache
                    , rwTheoremDB = thmDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
@@ -646,16 +647,22 @@ disable_lax_loads_and_stores = do
 
 enable_solver_cache :: TopLevel ()
 enable_solver_cache = do
-  ref <- getSolverCache
-  io $ atomicModifyIORef ref $ (,()) . Just . fromMaybe emptySolverCache
+  rw <- getTopLevelRW
+  getSolverCache >>= \case
+    Just _ -> return ()
+    Nothing -> do emptyCache <- io $ emptySolverCache
+                  putTopLevelRW rw { rwSolverCache = Just emptyCache }
 
 set_solver_cache_path :: FilePath -> TopLevel ()
 set_solver_cache_path path =
   enable_solver_cache >> onSolverCache (setSolverCachePath path)
 
+print_solver_cache :: String -> TopLevel ()
+print_solver_cache = onSolverCache . printSolverCacheByHex
+
 clean_solver_cache :: TopLevel ()
 clean_solver_cache = do
-  vs <- io $ getSolverBackendVersions baseBackends
+  vs <- io $ getSolverBackendVersions allBackends
   onSolverCache (cleanSolverCache vs)
 
 enable_debug_intrinsics :: TopLevel ()
@@ -1091,8 +1098,6 @@ primitives = Map.fromList
     [ "Enable solver result caching if it is not already enabled, set a"
     , " path to use for loading and saving cached results, and save to"
     , " that path any results cached so far from the current session."
-    , " If there is already a path set for solver caching, this will"
-    , " error."
     ]
   
   , prim "clean_solver_cache" "TopLevel ()"
@@ -1103,12 +1108,21 @@ primitives = Map.fromList
     , " in the current environment."
     ]
 
+  , prim "print_solver_cache" "String -> TopLevel ()"
+    (pureVal print_solver_cache)
+    Experimental
+    [ "Print all entries in the solver result cache whose SHA256 hash"
+    , " keys start with the given string. Thus, given an empty string,"
+    , " all entries in the cache will be printed."
+    ]
+
   , prim "print_solver_cache_stats" "TopLevel ()"
     (pureVal (onSolverCache printSolverCacheStats))
     Experimental
     [ "Print out statistics about how the solver cache was used, namely"
-    , " how many results are cached and how many cache hits have"
-    , " occurred - both in memory and on disk" ]
+    , " how many entries are in the cache, how many insertions into the"
+    , " cache have been made so far this session, and how many times"
+    , " cached results have been used so far this session." ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)

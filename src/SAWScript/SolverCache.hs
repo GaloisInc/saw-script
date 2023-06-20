@@ -39,6 +39,8 @@ were obtained by the backends in the first place).
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
@@ -47,16 +49,15 @@ were obtained by the backends in the first place).
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module SAWScript.SolverCache
-  ( Solver(..)
-  , SolverBackend(..)
-  , W4Backend(..)
-  , w4Backends
-  , baseBackends
-  , SolverBackendVersion(..)
+  ( SolverBackend(..)
+  , allBackends
+  , sbvBackends
+  , SolverBackendOption(..)
+  , optionBackends
+  , SolverBackendVersions
   , SolverCacheKey(..)
-  , solverCacheKeyToHex
   , mkSolverCacheKey
-  , SolverCacheValue
+  , SolverCacheValue(..)
   , toSolverCacheValue
   , fromSolverCacheValue
   , SolverCache(..)
@@ -65,135 +66,185 @@ module SAWScript.SolverCache
   , lookupInSolverCache
   , insertInSolverCache
   , setSolverCachePath
+  , printSolverCacheByHex
   , cleanSolverCache
   , printSolverCacheStats
   ) where
 
-import System.Directory
-import Control.Exception
-import GHC.Generics (Generic)
+import System.Directory (createDirectoryIfMissing, makeAbsolute)
+import Control.Exception (try, SomeException)
+import Control.Monad (when, forM_)
+import System.Timeout (timeout)
 
-import Control.Monad (forM_)
-import Data.Tuple.Extra (first, firstM)
+import GHC.Generics (Generic)
+import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
+import Data.Tuple.Extra (first, firstM, both)
 import Data.List (isPrefixOf, elemIndex, intercalate)
 import Data.Hashable (Hashable(..))
 import Data.Bits (shiftL, (.|.))
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe)
 import Data.Functor ((<&>))
 
-import qualified Data.Set as Set
-import Data.Set (Set)
-
-import qualified Data.Map as Map
-import qualified Data.HashMap.Strict as HM
-import Data.HashMap.Strict (HashMap)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Text.Hex
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 
 import qualified Crypto.Hash.SHA256 as SHA256
 
-import qualified Database.LMDB.Simple as LMDB
-import qualified Database.LMDB.Simple.Extra as LMDB
-import Codec.Serialise
+import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..)
+                  , (.:), (.:?), (.=) )
+import qualified Data.Aeson as JSON
 
-import Data.SBV.Dynamic (Solver(..))
+import qualified Data.SBV.Dynamic as SBV
 
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.SharedTerm
 
+import SAWScript.SolverCache.LMDBOptDatabase (encodeHex, LMDBOptDatabase)
+import qualified SAWScript.SolverCache.LMDBOptDatabase as LMDBOpt
+
 import SAWScript.Options
 import SAWScript.Proof
 
 
+-- Orphan Instances and Helper Functions ---------------------------------------
+
+deriving instance Generic FirstOrderType
+deriving instance Generic FirstOrderValue
+
+-- | ...
+firstOrderJSONOptions :: JSON.Options
+firstOrderJSONOptions =
+  JSON.defaultOptions { JSON.sumEncoding = JSON.TwoElemArray
+                      , JSON.constructorTagModifier = dropFO }
+  where dropFO ('F':'O':tv:cs) | tv `elem` ['T', 'V'] = cs
+        dropFO cs = cs
+
+instance FromJSON FirstOrderType where
+  parseJSON = JSON.genericParseJSON firstOrderJSONOptions
+instance FromJSON FirstOrderValue where
+  parseJSON = JSON.genericParseJSON firstOrderJSONOptions
+
+instance ToJSON FirstOrderType where
+  toJSON = JSON.genericToJSON firstOrderJSONOptions
+  toEncoding = JSON.genericToEncoding firstOrderJSONOptions
+instance ToJSON FirstOrderValue where
+  toJSON = JSON.genericToJSON firstOrderJSONOptions
+  toEncoding = JSON.genericToEncoding firstOrderJSONOptions
+
+-- | ...
+tryWithTimeout :: Int -> IO a -> IO (Either String a)
+tryWithTimeout t_ms m = try (timeout (t_ms * 1000) m) <&> \case
+  Right (Just a) -> Right a
+  Right Nothing  -> Left $ "Operation timed out (" ++ show t_ms ++ "ms)"
+  Left (exn :: SomeException) -> Left $ show exn
+
+
 -- Solver Backends -------------------------------------------------------------
-
-deriving instance Eq Solver
-deriving instance Ord Solver
-deriving instance Read Solver
-
--- | A datatype representing one of the ways the what4 backend can be used in
--- SAW - i.e. directly ('W4_Base'), with a tactic ('W4_Tactic'), by converting
--- to SMTLib2 then calling ABC ('W4_SMTLib2'), by converting to Verilog then
--- calling ABC ('W4_Verilog'), or by converting to AIGER then calling ABC
--- ('W4_AIGER')
-data W4Backend = W4_Base
-               | W4_Tactic String
-               | W4_SMTLib2
-               | W4_Verilog
-               | W4_AIGER
-               deriving (Eq, Ord, Read, Show)
 
 -- | A datatype representing one of the solver backends available in SAW. Note
 -- that for 'SBV' and 'W4', multiple backends will be used (e.g. 'SBV' with
 -- @Solver Z3@ or @W4 W4_AIGER@ with 'AIG' and @Solver ABC@), though not all
 -- comtinations of backends are valid (e.g. @W4 W4_SMTLib2@ with anything but
 -- @Solver Z3@)
-data SolverBackend = Solver Solver
-                   | W4 W4Backend
+data SolverBackend = What4
                    | SBV
                    | AIG
                    | RME
-                   deriving (Eq, Ord, Read, Show)
+                   -- External solvers (copied from SBV.Solver)
+                   | ABC
+                   | Boolector
+                   | Bitwuzla
+                   | CVC4
+                   | CVC5
+                   | DReal
+                   | MathSAT
+                   | Yices
+                   | Z3
+                   deriving (Eq, Ord, Enum, Bounded, Show, Generic)
 
-instance Serialise SolverBackend where
-  encode (Solver s) = encode (1 :: Int, show s)
-  encode (W4 w)     = encode (2 :: Int, show w)
-  encode backend    = encode (0 :: Int, show backend)
-  decode = decode <&> \case (1 :: Int, s) -> Solver (read s)
-                            (2 :: Int, s) -> W4 (read s)
-                            (_ :: Int, s) -> read s
+instance FromJSON SolverBackend where
+  parseJSON = JSON.genericParseJSON JSON.defaultOptions
+instance ToJSON SolverBackend where
+  toJSON = JSON.genericToJSON JSON.defaultOptions
+  toEncoding = JSON.genericToEncoding JSON.defaultOptions
+instance FromJSONKey SolverBackend where
+  fromJSONKey = JSON.genericFromJSONKey JSON.defaultJSONKeyOptions
+instance ToJSONKey SolverBackend where
+  toJSONKey = JSON.genericToJSONKey JSON.defaultJSONKeyOptions
 
--- | Given a 'W4Backend' and a 'Solver', return the list of 'SolverBackend's
--- used. In particular, this includes 'AIG' for 'W4_AIGER'.
-w4Backends :: W4Backend -> Solver -> [SolverBackend]
-w4Backends w s | W4_AIGER <- w = [W4 w, AIG, Solver s]
-               | otherwise     = [W4 w, Solver s]
+-- | ...
+allBackends :: [SolverBackend]
+allBackends = [minBound..]
 
--- | Convert a 'SolverBackend' into its base form, namely replace any 'W4'
--- backend with @W4 W4_Base@.
-baseBackend :: SolverBackend -> SolverBackend
-baseBackend (W4 _) = W4 W4_Base
-baseBackend backend = backend
+-- | ...
+sbvBackends :: SBV.SMTConfig -> [SolverBackend]
+sbvBackends conf = [SBV, cvtSolver $ SBV.name $ SBV.solver conf]
+  where cvtSolver SBV.ABC       = ABC
+        cvtSolver SBV.Boolector = Boolector
+        cvtSolver SBV.Bitwuzla  = Bitwuzla
+        cvtSolver SBV.CVC4      = CVC4
+        cvtSolver SBV.CVC5      = CVC5
+        cvtSolver SBV.DReal     = DReal
+        cvtSolver SBV.MathSAT   = MathSAT
+        cvtSolver SBV.Yices     = Yices
+        cvtSolver SBV.Z3        = Z3
 
--- | The finite list of all base 'SolverBackend's (as per 'baseBackend')
-baseBackends :: [SolverBackend]
-baseBackends = (Solver <$> enumFrom minBound) ++
-               [W4 W4_Base, SBV, AIG, RME]
+-- | A datatype representing one of the ways the what4 backend can be used in
+-- SAW - i.e. directly ('W4_Base'), with a tactic ('W4_Tactic'), by converting
+-- to SMTLib2 then calling ABC ('W4_SMTLib2'), by converting to Verilog then
+-- calling ABC ('W4_Verilog'), or by converting to AIGER then calling ABC
+-- ('W4_AIGER')
+data SolverBackendOption = W4_Tactic String
+                         | W4_SMTLib2
+                         | W4_Verilog
+                         | W4_AIGER
+                         deriving (Eq, Ord, Show, Generic)
 
--- | A 'SolverBackend' and its version 'String', if one could be obtained
-data SolverBackendVersion =
-  SolverBackendVersion 
-  { solverBackend :: SolverBackend 
-  , solverVersion :: Maybe String
-  } deriving (Eq, Ord, Generic)
+instance FromJSON SolverBackendOption where
+  parseJSON = JSON.genericParseJSON JSON.defaultOptions
+instance ToJSON SolverBackendOption where
+  toJSON = JSON.genericToJSON JSON.defaultOptions
+  toEncoding = JSON.genericToEncoding JSON.defaultOptions
 
-instance Serialise SolverBackendVersion -- automatically derived
+-- | ...
+optionBackends :: SolverBackendOption -> [SolverBackend]
+optionBackends W4_AIGER = [AIG]
+optionBackends _ = []
 
-instance Show SolverBackendVersion where
-  show (SolverBackendVersion backend mb_v) = case backend of
-    Solver s | show s `isPrefixOf` v_str -> v_str
-             | otherwise                 -> show s ++ " " ++ v_str
-    W4 W4_Base       -> unwords ["what4", v_str]
-    W4 (W4_Tactic t) -> unwords ["what4", v_str, "using", t]
-    W4 W4_SMTLib2    -> unwords ["what4", v_str, "to", "SMTLib2"]
-    W4 W4_Verilog    -> unwords ["what4", v_str, "to", "Verilog"]
-    W4 W4_AIGER      -> unwords ["what4", v_str, "to", "AIGER"]
-    SBV              -> unwords ["SBV", v_str]
-    AIG              -> unwords ["AIG", v_str]
-    RME              -> unwords ["RME", v_str]
-    where v_str = fromMaybe "[unknown version]" mb_v
+-- | ...
+-- A 'SolverBackend' and its version 'String', if one could be obtained
+type SolverBackendVersions = Map SolverBackend (Maybe String)
 
--- | Convert the 'SolverBackend' of a 'SolverBackendVersion' into its base
--- form using 'baseBackend'
-baseBackendVersion :: SolverBackendVersion -> SolverBackendVersion
-baseBackendVersion (SolverBackendVersion backend v) =
-  SolverBackendVersion (baseBackend backend) v
+-- | ...
+showSolverBackendVersion :: SolverBackend -> Maybe String -> [String] -> String
+showSolverBackendVersion backend (Just v_str) opt_words =
+  if show backend `isPrefixOf` v_str
+  then unwords $                v_str : opt_words
+  else unwords $ show backend : v_str : opt_words
+showSolverBackendVersion backend Nothing opt_words =
+  showSolverBackendVersion backend (Just "[unknown version]") opt_words
+
+-- | ...
+showBackendVersionsWithOptions :: String -> SolverBackendVersions ->
+                                  [SolverBackendOption] -> String
+showBackendVersionsWithOptions sep vs opts =
+  let entries = M.unionWith (<>) (M.map (\v -> (v, [])) vs)
+                                 (M.fromList $ optEntry <$> opts)
+   in intercalate sep $ showEntry <$> M.toList entries
+  where optEntry (W4_Tactic t) = (What4, (Nothing, ["using", t]))
+        optEntry W4_SMTLib2    = (What4, (Nothing, ["to", "SMTLib2"]))
+        optEntry W4_Verilog    = (What4, (Nothing, ["to", "Verilog"]))
+        optEntry W4_AIGER      = (What4, (Nothing, ["to", "AIGER"]))
+        showEntry (backend, (mb_v_str, opt_words)) =
+          showSolverBackendVersion backend mb_v_str opt_words
 
 
 -- Solver Cache Keys -----------------------------------------------------------
@@ -202,21 +253,18 @@ baseBackendVersion (SolverBackendVersion backend v) =
 -- a 'Set' of 'SolverBackendVersion's - see 'mkSolverCacheKey'
 data SolverCacheKey =
   SolverCacheKey 
-  { solverCacheKeyVersions :: Set SolverBackendVersion
+  { solverCacheKeyVersions :: SolverBackendVersions
+  , solverCacheKeyOptions  :: [SolverBackendOption]
   , solverCacheKeyHash     :: ByteString
   }
 
 instance Eq SolverCacheKey where
-  (SolverCacheKey _ bs1) == (SolverCacheKey _ bs2) = bs1 == bs2
-
-instance Serialise SolverCacheKey where
-  encode (SolverCacheKey _ bs) = encode bs
-  decode = SolverCacheKey Set.empty <$> decode
+  (SolverCacheKey _ _ bs1) == (SolverCacheKey _ _ bs2) = bs1 == bs2
 
 -- | Truncate a 'SolverCacheKey' (i.e. a SHA256 hash) to an 'Int', used to give
 -- the type a fast 'Hashable' instance
 solverCacheKeyInt :: SolverCacheKey -> Int
-solverCacheKeyInt (SolverCacheKey _ bs) =
+solverCacheKeyInt (SolverCacheKey _ _ bs) =
   BS.foldl' (\a b -> a `shiftL` 8 .|. fromIntegral b) 0 (BS.take 8 bs)
 
 instance Hashable SolverCacheKey where
@@ -224,14 +272,9 @@ instance Hashable SolverCacheKey where
   hashWithSalt s = hashWithSalt s . solverCacheKeyInt
 
 instance Show SolverCacheKey where
-  show (SolverCacheKey vs bs) = T.unpack (encodeHex (BS.take 8 bs)) ++
-                                if Set.null vs then ""
-                                else " (" ++ intercalate ", " vstrs ++ ")"
-    where vstrs = show <$> Set.elems vs
-
--- | Convert a 'SolverCacheKey' to a hexadecimal 'String'
-solverCacheKeyToHex :: SolverCacheKey -> String
-solverCacheKeyToHex (SolverCacheKey _ bs) = T.unpack $ encodeHex bs
+  show (SolverCacheKey vs opts bs) = encodeHex (BS.take 8 bs) ++
+    if M.null vs && null opts then ""
+    else " (" ++ showBackendVersionsWithOptions ", " vs opts ++ ")"
 
 -- | Hash using SHA256 a 'String' representation of a 'SATQuery' and a 'Set' of
 -- 'SolverBackendVersion's to get a 'SolverCacheKey'. In particular, this
@@ -245,19 +288,19 @@ solverCacheKeyToHex (SolverCacheKey _ bs) = T.unpack $ encodeHex bs
 -- 2. After calling 'scWriteExternal', all 'LocalName's in 'Pi' and 'Lam'
 --    constructors are removed. This ensures that two terms which are alpha
 --    equivalent are given the same hash.
-mkSolverCacheKey :: SharedContext -> Set SolverBackendVersion -> SATQuery ->
-                    IO SolverCacheKey
-mkSolverCacheKey sc vs satq = do
+mkSolverCacheKey :: SharedContext -> SolverBackendVersions ->
+                    [SolverBackendOption] -> SATQuery -> IO SolverCacheKey
+mkSolverCacheKey sc vs opts satq = do
   body <- satQueryAsPropTerm sc satq
-  let ecs = Map.keys (satVariables satq) ++
+  let ecs = M.keys (satVariables satq) ++
             filter (\ec -> ecVarIndex ec `elem` satUninterp satq)
                    (getAllExts body)
   tm <- scGeneralizeExts sc ecs body
-  let str_prefix = map show (Set.elems vs) ++
-                   [ "satVariables " ++ show (Map.size (satVariables satq))
-                   , "satUninterp "  ++ show (length   (satUninterp  satq)) ]
+  let str_prefix = [ showBackendVersionsWithOptions "\n" vs opts
+                   , "satVariables " ++ show (M.size (satVariables satq))
+                   , "satUninterp "  ++ show (length (satUninterp  satq)) ]
       str_to_hash = unlines str_prefix ++ anonLocalNames (scWriteExternal tm)
-  return $ SolverCacheKey vs $ SHA256.hash $ encodeUtf8 $ T.pack $ str_to_hash
+  return $ SolverCacheKey vs opts $ SHA256.hash $ encodeUtf8 $ T.pack $ str_to_hash
   where anonLocalNames = unlines . map (unwords . go . words) . lines
         go (x:y:_:xs) | y `elem` ["Pi", "Lam"] = x:y:"_":xs
         go xs = xs
@@ -271,114 +314,43 @@ mkSolverCacheKey sc vs satq = do
 -- 'satVariables' of an associated 'SATQuery'
 data SolverCacheValue =
   SolverCacheValue
-  { solverCacheValueVersions   :: Set SolverBackendVersion
+  { solverCacheValueVersions   :: SolverBackendVersions
+  , solverCacheValueOptions    :: [SolverBackendOption]
   , solverCacheValueSolverName :: String
   , solverCacheValueCEXs       :: Maybe [(Int, FirstOrderValue)]
-  } deriving (Eq, Generic)
+  } deriving Eq
 
-instance Serialise SolverCacheValue -- automatically derived
+instance FromJSON SolverCacheValue where
+  parseJSON = JSON.withObject "SolverCacheValue" $ \v -> do
+    vs      <- v .:  "vs"
+    opts    <- v .:? "opts"
+    nm      <- v .:  "nm"
+    mb_cexs <- v .:? "cexs"
+    return $ SolverCacheValue vs (fromMaybe [] opts) nm mb_cexs
 
-instance Semigroup SolverCacheValue where
-  (SolverCacheValue vs1 nm1 cs1) <> (SolverCacheValue vs2 nm2 cs2) =
-    SolverCacheValue (vs1 <> vs2) (nm1 <> nm2) (cs1 <> cs2)
-
-instance Monoid SolverCacheValue where
-  mempty = SolverCacheValue mempty mempty mempty
+instance ToJSON SolverCacheValue where
+  toJSON (SolverCacheValue vs opts nm mb_cexs) = JSON.object $
+    ["vs" .= vs] ++ (if null opts then [] else ["opts" .= opts]) ++
+    ["nm" .= nm] ++ maybe [] (\cexs -> ["cexs" .= cexs]) mb_cexs
+  toEncoding (SolverCacheValue vs opts nm mb_cexs) = JSON.pairs $
+    "vs" .= vs <> (if null opts then mempty else "opts" .= opts) <>
+    "nm" .= nm <> maybe mempty (\cexs -> "cexs" .= cexs) mb_cexs
 
 -- | Convert the result of a solver call on the given 'SATQuery' to a
 -- 'SolverCacheValue'
-toSolverCacheValue :: Set SolverBackendVersion -> SATQuery ->
-                      (Maybe CEX, String) -> Maybe SolverCacheValue
-toSolverCacheValue vs satq (cexs, solver_name) =
-  fmap (SolverCacheValue vs solver_name)
+toSolverCacheValue :: SolverBackendVersions -> [SolverBackendOption] ->
+                      SATQuery -> (Maybe CEX, String) -> Maybe SolverCacheValue
+toSolverCacheValue vs opts satq (cexs, solver_name) =
+  fmap (SolverCacheValue vs opts solver_name)
        (mapM (mapM (firstM (`elemIndex` ecs))) cexs)
-  where ecs = Map.keys $ satVariables satq
+  where ecs = M.keys $ satVariables satq
 
 -- | Convert a 'SolverCacheValue' to something which has the same form as the
 -- result of a solver call on the given 'SATQuery'
 fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, String)
-fromSolverCacheValue satq (SolverCacheValue _ solver_name cexs) =
+fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs) =
   (fmap (fmap (first (ecs !!))) cexs, solver_name)
-  where ecs = Map.keys $ satVariables satq
-
-
--- The Database Behind the Solver Cache ----------------------------------------
-
--- | The database behind the 'SolverCache' - either a 'HashMap' or a
--- 'LMDB.Database' from 'SolverCacheKey's to 'SolverCacheValue's. We refer to
--- the former as "in memory" and the latter as "on disk". For the latter, we
--- also save the 'FilePath' of the LMDB database as well as the
--- 'LMDB.Environment'.
-data SolverCacheDB
-  = SolverCacheMem (HashMap SolverCacheKey SolverCacheValue)
-  | SolverCacheDisk FilePath (LMDB.Environment LMDB.ReadWrite)
-                             (LMDB.Database SolverCacheKey SolverCacheValue)
-
--- | An empty 'SolverCacheDB' in memory
-emptyDB :: SolverCacheDB
-emptyDB = SolverCacheMem HM.empty
-
--- | Get the 'FilePath' of the 'SolverCacheDB's on-disk database, if it exists
-getDBPath :: SolverCacheDB -> Maybe FilePath
-getDBPath (SolverCacheMem _ ) = Nothing
-getDBPath (SolverCacheDisk path _ _) = Just path
-
--- | If the 'SolverCacheDB' does not currently have an associated on-disk
--- database, create one at the associated 'FilePath' and copy all entries in
--- memory on to disk
-setPathDB :: FilePath -> SolverCacheDB -> IO SolverCacheDB
-setPathDB path (SolverCacheMem hm) = do
-  createDirectoryIfMissing False path
-  let limits = LMDB.defaultLimits { LMDB.mapSize = 2 ^ (32 :: Int) }
-  env <- LMDB.openReadWriteEnvironment path limits
-  LMDB.readWriteTransaction env $ do
-    db <- LMDB.getDatabase Nothing
-    forM_ (HM.toList hm) $ \(k,v) -> LMDB.put db k (Just v)
-    return $ SolverCacheDisk path env db
-setPathDB _ (SolverCacheDisk path _ _) =
-  fail $ "Solver cache already has a set path: " ++ path
-
--- | A general function for querying a 'SolverCacheDB'
-askDB :: (HashMap SolverCacheKey SolverCacheValue -> a) ->
-         (LMDB.Database SolverCacheKey SolverCacheValue ->
-          LMDB.Transaction LMDB.ReadOnly a) ->
-         a -> SolverCacheDB -> IO a
-askDB f _ _ (SolverCacheMem hm) = return $ f hm
-askDB _ g dflt (SolverCacheDisk _ env db) =
-  catch (LMDB.readOnlyTransaction env $ g db)
-        (\(_ :: IOException) -> return dflt)
-
--- | Get the size of a 'SolverCacheDB'
-sizeDB :: SolverCacheDB -> IO Int
-sizeDB = askDB (HM.size) (LMDB.size) 0
-
--- | Check whether a 'SolverCacheKey' is in a 'SolverCacheDB'
-lookupInDB :: SolverCacheKey -> SolverCacheDB -> IO (Maybe SolverCacheValue)
-lookupInDB k = askDB (HM.lookup k) (LMDB.lookup k) Nothing
-
--- | A general function for modifying a 'SolverCacheDB'
-onDB :: (HashMap SolverCacheKey SolverCacheValue ->
-         HashMap SolverCacheKey SolverCacheValue) ->
-        (LMDB.Database SolverCacheKey SolverCacheValue ->
-         LMDB.Transaction LMDB.ReadWrite ()) ->
-        SolverCacheDB -> IO SolverCacheDB
-onDB f _ (SolverCacheMem hm) = return $ SolverCacheMem $ f hm
-onDB _ g c@(SolverCacheDisk _ env db) =
-  catch (LMDB.transaction env $ g db >>= \r -> return $ r `seq` c)
-        (\(_ :: IOException) -> return c)
-
--- | Insert a 'SolverCacheValue' at the given 'SolverCacheKey' into a
--- 'SolverCacheDB'
-insertInDB :: SolverCacheKey -> SolverCacheValue -> SolverCacheDB ->
-              IO SolverCacheDB
-insertInDB k v = onDB (HM.insert k v) (LMDB.insert k v)
-
--- | Filter the entries in a 'SolverCacheDB'
-filterDB :: (SolverCacheValue -> Bool) -> SolverCacheDB ->
-            IO SolverCacheDB
-filterDB f = onDB (HM.filter f) $ \db -> do
-  kvs <- LMDB.toList db
-  forM_ kvs $ \(k,v) -> if f v then return False else LMDB.delete k db
+  where ecs = M.keys $ satVariables satq
 
 
 -- The Solver Cache ------------------------------------------------------------
@@ -387,80 +359,118 @@ filterDB f = onDB (HM.filter f) $ \db -> do
 -- many cache hits and how many new entry creations have occurred
 data SolverCache =
   SolverCache
-  { solverCacheDB      :: SolverCacheDB
-  , solverCacheHits    :: Integer
-  , solverCacheCreated :: Integer
+  { solverCacheDB      :: LMDBOptDatabase SolverCacheValue
+  , solverCacheStats   :: IORef (Map SolverCacheStat Integer)
+  , solverCacheTimeout :: Int
   }
 
+-- | ...
+data SolverCacheStat = Lookups | FailedLookups | Inserts | FailedInserts
+                     deriving (Eq, Ord, Bounded, Enum)
+
 -- | An empty 'SolverCache' with no associated 'FilePath'
-emptySolverCache :: SolverCache
-emptySolverCache = SolverCache emptyDB 0 0
+emptySolverCache :: IO SolverCache
+emptySolverCache = do
+  db <- LMDBOpt.new
+  stats <- newIORef $ M.fromList ((,0) <$> [minBound..])
+  return $ SolverCache db stats 1000
 
 -- | A stateful operation on a 'SolverCache', returning a value of the given type
-type SolverCacheOp a = Options -> SolverCache -> IO (a, SolverCache)
+type SolverCacheOp a = Options -> SolverCache -> IO a
 
 -- | Lookup a 'SolverCacheKey' in the solver result cache
 lookupInSolverCache :: SolverCacheKey -> SolverCacheOp (Maybe SolverCacheValue)
-lookupInSolverCache k opts cache =
-  lookupInDB k (solverCacheDB cache) >>= \case
-    Just v -> do
+lookupInSolverCache k opts SolverCache{..} =
+  tryWithTimeout solverCacheTimeout
+                 (LMDBOpt.lookup (solverCacheKeyHash k)
+                                 solverCacheDB) >>= \case
+    Right (Just v) -> do
       printOutLn opts Info ("Using cached result: " ++ show k)
-      return (Just v, cache { solverCacheHits = solverCacheHits cache + 1 })
-    Nothing -> return (Nothing, cache)
+      modifyIORef solverCacheStats $ M.adjust (+1) Lookups
+      return (Just v)
+    Left err -> do
+      printOutLn opts Warn ("Solver cache lookup failed:\n" ++ err)
+      modifyIORef solverCacheStats $ M.adjust (+1) FailedLookups
+      return Nothing
+    Right Nothing -> do
+      return Nothing
 
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
-insertInSolverCache k v opts cache = do
-  printOutLn opts Info ("Caching result: " ++ show k)
-  db' <- insertInDB k v (solverCacheDB cache)
-  return ((), cache { solverCacheDB = db'
-                    , solverCacheCreated = solverCacheCreated cache + 1 })
+insertInSolverCache k v opts SolverCache{..} =
+  printOutLn opts Info ("Caching result: " ++ show k) >>
+  tryWithTimeout solverCacheTimeout
+                 (LMDBOpt.insert (solverCacheKeyHash k) v
+                                 solverCacheDB) >>= \case
+    Right () -> do
+      modifyIORef solverCacheStats $ M.adjust (+1) Inserts
+    Left err -> do
+      printOutLn opts Warn ("Solver cache insert failed:\n" ++ err)
+      modifyIORef solverCacheStats $ M.adjust (+1) FailedInserts
 
 -- | Set the 'FilePath' of the solver result cache, erroring if it is already
 -- set, and save all results cached so far
 setSolverCachePath :: FilePath -> SolverCacheOp ()
-setSolverCachePath path opts cache = do
+setSolverCachePath path opts SolverCache{..} = do
   pathAbs <- makeAbsolute path
-  sz <- sizeDB (solverCacheDB cache)
-  let (s0, s1) = (show sz, if sz == 1 then "" else "s")
-  db' <- setPathDB pathAbs (solverCacheDB cache)
-  if sz == 0 then return ()
-  else printOutLn opts Info ("Saved " ++ s0 ++ " cached result" ++ s1 ++ " to disk")
-  return ((), cache { solverCacheDB = db' })
+  createDirectoryIfMissing True pathAbs
+  eith_sz <- tryWithTimeout solverCacheTimeout
+                            (LMDBOpt.size solverCacheDB)
+  eith_db <- tryWithTimeout solverCacheTimeout
+                            (LMDBOpt.setPath pathAbs 4096 solverCacheDB)
+  case (,) <$> eith_sz <*> eith_db of
+    Left err -> fail $ "Could not set solver cache path:\n" ++ err
+    Right (sz, ()) | sz == 0 -> return ()
+    Right (sz, ()) -> do
+      let (s0, s1) = (show sz, if sz == 1 then "" else "s")
+      printOutLn opts Info ("Saved " ++ s0 ++ " cached result" ++ s1 ++ " to disk")
+
+-- | ...
+printSolverCacheByHex :: String -> SolverCacheOp ()
+printSolverCacheByHex hex_prefix opts SolverCache{..} = do
+  kvs <- LMDBOpt.filterByHexPrefix hex_prefix solverCacheDB
+  when (length kvs == 0) $ printOutLn opts Info "No keys found"
+  forM_ kvs $ \(k_hash, SolverCacheValue vs bk_opts nm mb_cexs) -> do
+    let vs_str = showBackendVersionsWithOptions ", " vs bk_opts
+        res_str = maybe "unsat" (("sat " ++) . show) mb_cexs
+    printOutLn opts Info $ "SHA: " ++ encodeHex k_hash
+    printOutLn opts Info $ "- Result: " ++ res_str
+    printOutLn opts Info $ "- Solver: " ++ show nm
+    printOutLn opts Info $ "- Versions: " ++ vs_str ++ "\n"
 
 -- | Remove all entries in the solver result cache which have version(s) that
 -- do not match the current version(s).
-cleanSolverCache :: Set SolverBackendVersion -> SolverCacheOp ()
-cleanSolverCache current_base_vs opts cache = do
-  sz0 <- sizeDB (solverCacheDB cache)
-  db' <- filterDB (f . solverCacheValueVersions) (solverCacheDB cache)
-  sz1 <- sizeDB (solverCacheDB cache)
-  let s = if (sz0 - sz1) == 1 then "" else "s"
-  printOutLn opts Info ("Removed " ++ show (sz0 - sz1) ++
-                        " cached result" ++ s ++ " with mismatched version" ++ s)
-  return ((), cache { solverCacheDB = db' })
-  where f vs = Set.isSubsetOf (Set.filter (\v -> solverBackend v `Set.member` currently_known_backends)
-                                          (Set.map baseBackendVersion vs))
-                              current_base_vs
-        currently_known_backends = Set.map solverBackend (Set.filter (isJust . solverVersion)
-                                                                     current_base_vs)
+cleanSolverCache :: SolverBackendVersions -> SolverCacheOp ()
+cleanSolverCache curr_base_vs opts SolverCache{..} = do
+  let curr_base_vs_obj = M.fromList [("vs", curr_base_vs)]
+  fs0 <- LMDBOpt.cleanByJSONObjValues curr_base_vs_obj solverCacheDB
+  let fs1 = concatMap (fmap (both (M.! ("vs" :: String))) . snd) fs0
+      fs2 = M.unions $ fmap (uncurry $ M.intersectionWith (,)) fs1
+      s0 = if length fs0 == 1 then "" else "s"
+      s1 = if M.size fs2 == 0 then "" else ":"
+  printOutLn opts Info $
+    "Removed " ++ show (length fs0) ++
+    " cached result" ++ s0 ++ " with mismatched version" ++ s0 ++ s1
+  forM_ (M.toList fs2) $ \(backend, (v1, v2)) ->
+    printOutLn opts Info $
+      "- " ++ showSolverBackendVersion backend v1 [] ++
+      " (Current: " ++ showSolverBackendVersion backend v2 [] ++ ")"
 
 -- | Print out statistics about how the solver cache was used
 printSolverCacheStats :: SolverCacheOp ()
-printSolverCacheStats opts cache = do
+printSolverCacheStats opts SolverCache{..} = do
   printOutLn opts Info ("== Solver result cache statistics ==")
-  sz <- sizeDB (solverCacheDB cache)
-  let sz_s = if sz == 1 then "" else "s"
-  case getDBPath (solverCacheDB cache) of
-    Nothing ->
-      printOutLn opts Info ("- " ++ show sz ++ " result" ++ sz_s ++ " cached in memory")
-    Just path -> do
-      printOutLn opts Info ("- " ++ show sz ++ " result" ++ sz_s ++ " cached on disk "
-                                            ++ "(" ++ path ++ ")")
-      let created = solverCacheCreated cache
-          created_s = if created == 1 then "y" else "ies"
-      printOutLn opts Info ("- " ++ show created ++ " cache entr" ++ created_s ++ " created this run")
-  let hits = solverCacheHits cache
-      (hits_s1, hits_s2) = if hits == 1 then (" a"," was") else ("s","s were")
-  printOutLn opts Info ("- " ++ show hits ++ " time" ++ hits_s1 ++ " cached result" ++ hits_s2 ++ " used this run")
-  return ((), cache)
+  sz <- LMDBOpt.size solverCacheDB
+  loc <- fromMaybe "memory" <$> LMDBOpt.getPath solverCacheDB
+  printOutLn opts Info ("- " ++ show sz ++ " result" ++ pl sz
+                             ++ " cached in " ++ loc)
+  stats <- readIORef solverCacheStats
+  let (ls, ls_f) = (stats M.! Lookups, stats M.! FailedLookups)
+      (is, is_f) = (stats M.! Inserts, stats M.! FailedInserts)
+  printOutLn opts Info $ "- " ++ show is ++ " insertion" ++ pl is
+                              ++ " into the cache so far this run ("
+                              ++ show is_f ++ " failed attempt" ++ pl is_f ++ ")"
+  printOutLn opts Info $ "- " ++ show ls ++ " usage" ++ pl ls
+                              ++ " of cached results so far this run ("
+                              ++ show ls_f ++ " failed attempt" ++ pl ls_f ++ ")"
+  where pl i = if i == 1 then "" else "s"

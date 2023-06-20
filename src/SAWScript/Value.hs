@@ -49,6 +49,7 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
 import Data.List ( intersperse )
+import Data.List.Extra ( dropEnd )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -486,7 +487,6 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roSolverCache   :: IORef (Maybe SolverCache)
   , roStackTrace    :: [String]
     -- ^ SAWScript-internal backtrace for use
     --   when displaying exceptions and such
@@ -517,6 +517,7 @@ data TopLevelRW =
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
+  , rwSolverCache   :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
@@ -599,7 +600,7 @@ io f = (TopLevel_ (liftIO f))
     handleIO e
       | IOError.isUserError e =
           do pos <- getPosition
-             rethrow (SS.TopLevelException pos (init . drop 12 $ show e))
+             rethrow (SS.TopLevelException pos (dropEnd 1 . drop 12 $ show e))
       | otherwise = rethrow e
 
     handleX86Unsupported (X86Unsupported s) =
@@ -688,8 +689,8 @@ getSharedContext = TopLevel_ (rwSharedContext <$> get)
 getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase = TopLevel_ (asks roJavaCodebase)
 
-getSolverCache :: TopLevel (IORef (Maybe SolverCache))
-getSolverCache = TopLevel_ (asks roSolverCache)
+getSolverCache :: TopLevel (Maybe SolverCache)
+getSolverCache = TopLevel_ (rwSolverCache <$> get)
 
 getTheoremDB :: TopLevel TheoremDB
 getTheoremDB = TopLevel_ (rwTheoremDB <$> get)
@@ -741,22 +742,17 @@ recordProof v =
 askSolverCache :: SolverCacheOp (Maybe a) -> TopLevel (Maybe a)
 askSolverCache f =
   do opts <- getOptions
-     ref <- getSolverCache
-     io $ readIORef ref >>= \case
-       Just cache -> do (ret, cache') <- f opts cache
-                        atomicWriteIORef ref (Just cache')
-                        return ret
+     getSolverCache >>= \case
+       Just cache -> io $ f opts cache
        Nothing -> return Nothing
 
 -- | Perform a stateful operation on the 'SolverCache', or do nothing if
 -- there is no 'SolverCache'
-onSolverCache :: SolverCacheOp () -> TopLevel()
+onSolverCache :: SolverCacheOp () -> TopLevel ()
 onSolverCache f =
   do opts <- getOptions
-     ref <- getSolverCache
-     io $ readIORef ref >>= \case
-       Just cache -> do ((), cache') <- f opts cache
-                        atomicWriteIORef ref (Just cache')
+     getSolverCache >>= \case
+       Just cache -> io $ f opts cache
        Nothing -> return ()
 
 -- | Access the current state of Java Class translation

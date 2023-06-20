@@ -51,10 +51,10 @@ myBuild pd lbi uh flags = do
     , "hash = " ++ show desc
     , "aigHash :: Maybe String"
     , "aigHash = " ++ show aig_desc
-    , "w4Hash :: Maybe String"
-    , "w4Hash = " ++ show w4_desc
-    , "sbvVer :: Maybe String"
-    , "sbvVer = " ++ show sbv_ver
+    , "what4Hash :: Maybe String"
+    , "what4Hash = " ++ show w4_desc
+    , "sbvVersion :: Maybe String"
+    , "sbvVersion = " ++ show sbv_ver
     ]
 
   unless (null $ allBuildInfo pd) $

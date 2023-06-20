@@ -909,7 +909,7 @@ goal_num_ite n s1 s2 =
 proveABC :: ProofScript ()
 proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  wrapProver [AIG] (Prover.proveABC proxy) Set.empty
+  wrapProver [AIG] [] (Prover.proveABC proxy) Set.empty
 
 satExternal :: Bool -> String -> [String] -> ProofScript ()
 satExternal doCNF execName args =
@@ -934,7 +934,7 @@ writeSAIGComputedPrim = Prover.writeSAIG
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
-proveRME = wrapProver [RME] Prover.proveRME Set.empty
+proveRME = wrapProver [RME] [] Prover.proveRME Set.empty
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -954,29 +954,30 @@ proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
      unintSet <- SV.scriptTopLevel (resolveNames unints)
-     wrapProver [SBV, Solver $ SBV.name $ SBV.solver conf]
+     wrapProver (sbvBackends conf) []
                 (Prover.proveUnintSBV conf timeout) unintSet
 
 -- | Given a continuation which calls a prover, call the continuation on the
 -- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
 -- is a 'SolverCache', do not call the continuation if the goal has an already
 -- cached result, and otherwise save the result of the call to the cache.
-applyProverToGoal :: [SolverBackend]
+applyProverToGoal :: [SolverBackend] -> [SolverBackendOption]
                      -> (SATQuery -> TopLevel (Maybe CEX, String))
                      -> Set VarIndex
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal backends f unintSet g = do
+applyProverToGoal backends opts f unintSet g = do
   sc <- getSharedContext
-  bkvs <- io $ getSolverBackendVersions backends
+  let opt_backends = concatMap optionBackends opts
+  vs   <- io $ getSolverBackendVersions (backends ++ opt_backends)
   satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
-  k    <- io $ mkSolverCacheKey sc bkvs satq
+  k    <- io $ mkSolverCacheKey sc vs opts satq
   (mb, solver_name) <- SV.askSolverCache (lookupInSolverCache k) >>= \case
     -- Use a cached result if one exists (and it's valid w.r.t our query)
     Just v -> return $ fromSolverCacheValue satq v
     -- Otherwise try to cache the result of the call
     _ -> f satq >>= \res ->
-         case toSolverCacheValue bkvs satq res of
+         case toSolverCacheValue vs opts satq res of
            Just v  -> SV.onSolverCache (insertInSolverCache k v) >>
                       return res
            Nothing -> return res
@@ -986,21 +987,22 @@ applyProverToGoal backends f unintSet g = do
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  [SolverBackend] ->
+  [SolverBackend] -> [SolverBackendOption] ->
   (SATQuery -> TopLevel (Maybe CEX, String)) ->
   Set VarIndex ->
   ProofScript ()
-wrapProver backend f = execTactic . tacticSolve . applyProverToGoal backend f
+wrapProver backends opts f =
+  execTactic . tacticSolve . applyProverToGoal backends opts f
 
 wrapW4Prover ::
-  W4Backend -> Solver ->
+  SolverBackend -> [SolverBackendOption] ->
   ( Bool -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
   [String] ->
   ProofScript ()
-wrapW4Prover x s f unints = do
+wrapW4Prover backend opts f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
-  wrapProver (w4Backends x s) (f hashConsing) unintSet
+  wrapProver [What4, backend] opts (f hashConsing) unintSet
 
 wrapW4ProveExporter ::
   ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
@@ -1062,40 +1064,40 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 --------------------------------------------------
 w4_abc_smtlib2 :: ProofScript ()
-w4_abc_smtlib2 = wrapW4Prover W4_SMTLib2 ABC Prover.proveWhat4_abc []
+w4_abc_smtlib2 = wrapW4Prover ABC [W4_SMTLib2] Prover.proveWhat4_abc []
 
 w4_boolector :: ProofScript ()
-w4_boolector = wrapW4Prover W4_Base Boolector Prover.proveWhat4_boolector []
+w4_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript ()
-w4_z3 = wrapW4Prover W4_Base Z3 Prover.proveWhat4_z3 []
+w4_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3 []
 
 w4_cvc4 :: ProofScript ()
-w4_cvc4 = wrapW4Prover W4_Base CVC4 Prover.proveWhat4_cvc4 []
+w4_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4 []
 
 w4_cvc5 :: ProofScript ()
-w4_cvc5 = wrapW4Prover W4_Base CVC5 Prover.proveWhat4_cvc5 []
+w4_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5 []
 
 w4_yices :: ProofScript ()
-w4_yices = wrapW4Prover W4_Base Yices Prover.proveWhat4_yices []
+w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
 
 w4_unint_boolector :: [String] -> ProofScript ()
-w4_unint_boolector = wrapW4Prover W4_Base Boolector Prover.proveWhat4_boolector
+w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
 
 w4_unint_z3 :: [String] -> ProofScript ()
-w4_unint_z3 = wrapW4Prover W4_Base Z3 Prover.proveWhat4_z3
+w4_unint_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3
 
 w4_unint_z3_using :: String -> [String] -> ProofScript ()
-w4_unint_z3_using tactic = wrapW4Prover (W4_Tactic tactic) Z3 (Prover.proveWhat4_z3_using tactic)
+w4_unint_z3_using tactic = wrapW4Prover Z3 [W4_Tactic tactic] (Prover.proveWhat4_z3_using tactic)
 
 w4_unint_cvc4 :: [String] -> ProofScript ()
-w4_unint_cvc4 = wrapW4Prover W4_Base CVC4 Prover.proveWhat4_cvc4
+w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4
 
 w4_unint_cvc5 :: [String] -> ProofScript ()
-w4_unint_cvc5 = wrapW4Prover W4_Base CVC5 Prover.proveWhat4_cvc5
+w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5
 
 w4_unint_yices :: [String] -> ProofScript ()
-w4_unint_yices = wrapW4Prover W4_Base Yices Prover.proveWhat4_yices
+w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices
 
 offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
 offline_w4_unint_z3 unints path =
@@ -1178,10 +1180,10 @@ offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
 
 w4_abc_aiger :: ProofScript ()
-w4_abc_aiger = wrapW4Prover W4_AIGER ABC Prover.w4AbcAIGER []
+w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []
 
 w4_abc_verilog :: ProofScript ()
-w4_abc_verilog = wrapW4Prover W4_Verilog ABC Prover.w4AbcVerilog []
+w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (setProofTimeout to)

@@ -47,8 +47,7 @@ To build SAWScript and related utilities from source:
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
     platforms. On Fedora, it is part of the `ncurses-compat-libs` package.
-    You will also need the C headers for `zlib` as well as the C library
-    and header files for `lmdb`.
+    You will also need the C headers for `zlib`.
 
   * Ensure that you have the programs `javac` and `z3` on your
     `PATH`. Z3 binaries are available at

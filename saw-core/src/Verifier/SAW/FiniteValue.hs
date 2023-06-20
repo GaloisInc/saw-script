@@ -25,8 +25,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Numeric.Natural (Natural)
-import GHC.Generics (Generic)
-import Codec.Serialise
 
 import Prettyprinter hiding (Doc)
 
@@ -61,9 +59,7 @@ data FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
-  deriving (Eq, Show, Generic)
-
-instance Serialise FirstOrderType -- automatically derived
+  deriving (Eq, Show)
 
 -- | Values inhabiting those first-order types.
 data FirstOrderValue
@@ -75,9 +71,7 @@ data FirstOrderValue
   | FOVArray FirstOrderType FirstOrderType
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
-  deriving (Eq, Generic)
-
-instance Serialise FirstOrderValue -- automatically derived
+  deriving Eq
 
 toFirstOrderType :: FiniteType -> FirstOrderType
 toFirstOrderType ft =
