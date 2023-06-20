@@ -50,6 +50,7 @@ import Data.Set ( Set )
 import qualified Data.Text as Text
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
+import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -455,10 +456,12 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
-       mb_cache <- forM (solverCache opts) $ \p -> do
-        cache <- emptySolverCache
-        setSolverCachePath p opts cache
-        return cache
+       mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
+        Just p | length p > 0 -> do
+          cache <- emptySolverCache
+          setSolverCachePath p opts cache
+          return $ Just cache
+        _ -> return Nothing
        thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO

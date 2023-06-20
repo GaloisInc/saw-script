@@ -12,17 +12,6 @@ import System.Exit
 main = defaultMainWithHooks myHooks
   where myHooks = simpleUserHooks { buildHook = myBuild }
 
-onfailure :: a -> SomeException -> IO a
-onfailure on_fail _e = return on_fail
-
-withExe dir exe_str on_no_exe on_fail m = do
-  mb <- findExecutable exe_str
-
-  case mb of
-    Just exe -> withCurrentDirectory dir (m exe)
-                `catch` onfailure on_fail
-    Nothing -> return on_no_exe
-
 myBuild pd lbi uh flags = do
   let dir = autogenPackageModulesDir lbi
   createDirectoryIfMissing True dir
@@ -60,3 +49,13 @@ myBuild pd lbi uh flags = do
   unless (null $ allBuildInfo pd) $
     (buildHook simpleUserHooks) pd lbi uh flags
 
+withExe :: FilePath -> String -> a -> a -> (FilePath -> IO a) -> IO a
+withExe dir exe_str on_no_exe on_fail m = do
+  mb <- findExecutable exe_str
+  case mb of
+    Just exe -> withCurrentDirectory dir (m exe)
+                `catch` onfailure on_fail
+    Nothing -> return on_no_exe
+
+onfailure :: a -> SomeException -> IO a
+onfailure on_fail _e = return on_fail

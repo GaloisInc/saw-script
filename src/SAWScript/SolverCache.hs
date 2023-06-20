@@ -80,7 +80,6 @@ import GHC.Generics (Generic)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Tuple.Extra (first, firstM, both)
 import Data.List (isPrefixOf, elemIndex, intercalate)
-import Data.Bits (shiftL, (.|.))
 import Data.Maybe (fromMaybe)
 import Data.Functor ((<&>))
 
