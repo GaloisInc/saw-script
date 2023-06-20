@@ -40,7 +40,7 @@ import Data.Traversable hiding ( mapM )
 #endif
 import Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import Control.Monad (unless, (>=>), when, forM)
+import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map

@@ -12,20 +12,13 @@ on disk. The interface, as used in 'applyProverToGoal', works as follows:
    along with any relevant 'SolverBackendVersion's (obtained using
    'getSolverBackendVersions' from @SAWScript.SolverVersions@), is then hashed
    using SHA256 ('mkSolverCacheKey').
-2. The 'SolverCache' contains a map from these hashes to previously obtained
-   results ('solverCacheMap'). If the hash corresponding to the 'SATQuery' and
-   'SolverBackendVersion's can be found in the map, then the corresponding
-   result is used.
-3. Otherwise, if the 'SolverCache' was given a path to a directory
-   ('solverCachePath') and a file whose name is the hash can be found in that
-   directory, the file's contents are 'read' and used as the result.
-4. Otherwise, the 'SATQuery' is dispatched to the requested backend and a
-   result is obtained. Then:
-   - This result is added to the 'SolverCache' map using the hash of the
-     'SATQuery' and 'SolverBackendVersion's as the key.
-   - If the 'SolverCache' was given a path to a directory ('solverCachePath'),
-     then a file whose name is the hash and whose contents are 'show' of the
-     result is added to the directory.
+2. The 'SolverCache' contains an 'LMDBOptDatabase' mapping these hashes to
+   previously obtained results ('solverCacheDB'). If the hash corresponding to
+   the 'SATQuery' and 'SolverBackendVersion's can be found in the database
+   ('lookupInSolverCache'), then the corresponding result is used.
+3. Otherwise, the 'SATQuery' is dispatched to the requested backend and a
+   result is obtained. This result is then added to the database using the
+   aforementioned hash as the key ('insertInSolverCache').
 
 A interesting detail is how results are represented. For all of the backends
 which use 'applyProverToGoal', the type of a result is:
@@ -117,7 +110,9 @@ import SAWScript.Proof
 deriving instance Generic FirstOrderType
 deriving instance Generic FirstOrderValue
 
--- | ...
+-- | The options for JSON-serializing 'FirstOrderType's and 'FirstOrderValue's:
+-- remove the @FOV@/@FOT@ prefixes and encode the different constructors as
+-- two-element arrays.
 firstOrderJSONOptions :: JSON.Options
 firstOrderJSONOptions =
   JSON.defaultOptions { JSON.sumEncoding = JSON.TwoElemArray
@@ -137,7 +132,8 @@ instance ToJSON FirstOrderValue where
   toJSON = JSON.genericToJSON firstOrderJSONOptions
   toEncoding = JSON.genericToEncoding firstOrderJSONOptions
 
--- | ...
+-- | Run the given IO action, but if the given 'timeout' (in ms) is reached
+-- or the action encounters any 'SomeException', 'Left' is returned
 tryWithTimeout :: Int -> IO a -> IO (Either String a)
 tryWithTimeout t_ms m = try (timeout (t_ms * 1000) m) <&> \case
   Right (Just a) -> Right a
@@ -149,9 +145,7 @@ tryWithTimeout t_ms m = try (timeout (t_ms * 1000) m) <&> \case
 
 -- | A datatype representing one of the solver backends available in SAW. Note
 -- that for 'SBV' and 'W4', multiple backends will be used (e.g. 'SBV' with
--- @Solver Z3@ or @W4 W4_AIGER@ with 'AIG' and @Solver ABC@), though not all
--- comtinations of backends are valid (e.g. @W4 W4_SMTLib2@ with anything but
--- @Solver Z3@)
+-- 'Z3' or 'W4' with 'AIG' and 'ABC').
 data SolverBackend = What4
                    | SBV
                    | AIG
@@ -178,11 +172,11 @@ instance FromJSONKey SolverBackend where
 instance ToJSONKey SolverBackend where
   toJSONKey = JSON.genericToJSONKey JSON.defaultJSONKeyOptions
 
--- | ...
+-- | The list of all available 'SolverBackend's
 allBackends :: [SolverBackend]
 allBackends = [minBound..]
 
--- | ...
+-- | Given an 'SBV.SMTConfig', return the list of corresponding 'SolverBackend's
 sbvBackends :: SBV.SMTConfig -> [SolverBackend]
 sbvBackends conf = [SBV, cvtSolver $ SBV.name $ SBV.solver conf]
   where cvtSolver SBV.ABC       = ABC
@@ -195,11 +189,13 @@ sbvBackends conf = [SBV, cvtSolver $ SBV.name $ SBV.solver conf]
         cvtSolver SBV.Yices     = Yices
         cvtSolver SBV.Z3        = Z3
 
--- | A datatype representing one of the ways the what4 backend can be used in
--- SAW - i.e. directly ('W4_Base'), with a tactic ('W4_Tactic'), by converting
--- to SMTLib2 then calling ABC ('W4_SMTLib2'), by converting to Verilog then
--- calling ABC ('W4_Verilog'), or by converting to AIGER then calling ABC
--- ('W4_AIGER')
+-- | A datatype representing an option to one of the 'SolverBackend's.
+-- Currently, there are only the following options for using 'What4': with a
+-- tactic ('W4_Tactic'), by converting to SMTLib2 then calling ABC
+-- ('W4_SMTLib2'), by converting to Verilog then calling ABC ('W4_Verilog'),
+-- or by converting to AIGER then calling ABC ('W4_AIGER'). Note that certain
+-- options may imply that additional 'SolverBackend's were used - see
+-- 'optionBackends'.
 data SolverBackendOption = W4_Tactic String
                          | W4_SMTLib2
                          | W4_Verilog
@@ -212,16 +208,17 @@ instance ToJSON SolverBackendOption where
   toJSON = JSON.genericToJSON JSON.defaultOptions
   toEncoding = JSON.genericToEncoding JSON.defaultOptions
 
--- | ...
+-- | Given a 'SolverBackendOption', return the list of additional
+-- 'SolverBackend's that are used
 optionBackends :: SolverBackendOption -> [SolverBackend]
 optionBackends W4_AIGER = [AIG]
 optionBackends _ = []
 
--- | ...
--- A 'SolverBackend' and its version 'String', if one could be obtained
+-- | A map from 'SolverBackend's to their version 'String's, if one could be
+-- obtained
 type SolverBackendVersions = Map SolverBackend (Maybe String)
 
--- | ...
+-- | Pretty-print a 'SolverBackend' with its version 'String'
 showSolverBackendVersion :: SolverBackend -> Maybe String -> [String] -> String
 showSolverBackendVersion backend (Just v_str) opt_words =
   if show backend `isPrefixOf` v_str
@@ -230,7 +227,8 @@ showSolverBackendVersion backend (Just v_str) opt_words =
 showSolverBackendVersion backend Nothing opt_words =
   showSolverBackendVersion backend (Just "[unknown version]") opt_words
 
--- | ...
+-- | Pretty-print a set of 'SolverBackendVersions' and 'SolverBackendOption's
+-- with the given 'String' separator
 showBackendVersionsWithOptions :: String -> SolverBackendVersions ->
                                   [SolverBackendOption] -> String
 showBackendVersionsWithOptions sep vs opts =
@@ -352,7 +350,7 @@ data SolverCache =
   , solverCacheTimeout :: Int
   }
 
--- | ...
+-- | A statistic to track in 'solverCacheStats'
 data SolverCacheStat = Lookups | FailedLookups | Inserts | FailedInserts
                      deriving (Eq, Ord, Bounded, Enum)
 
@@ -363,7 +361,7 @@ emptySolverCache = do
   stats <- newIORef $ M.fromList ((,0) <$> [minBound..])
   return $ SolverCache db stats 1000
 
--- | A stateful operation on a 'SolverCache', returning a value of the given type
+-- | An operation on a 'SolverCache', returning a value of the given type
 type SolverCacheOp a = Options -> SolverCache -> IO a
 
 -- | Lookup a 'SolverCacheKey' in the solver result cache
@@ -396,8 +394,8 @@ insertInSolverCache k v opts SolverCache{..} =
       printOutLn opts Warn ("Solver cache insert failed:\n" ++ err)
       modifyIORef solverCacheStats $ M.adjust (+1) FailedInserts
 
--- | Set the 'FilePath' of the solver result cache, erroring if it is already
--- set, and save all results cached so far
+-- | Set the 'FilePath' of the solver result cache and save all results cached
+-- so far
 setSolverCachePath :: FilePath -> SolverCacheOp ()
 setSolverCachePath path opts SolverCache{..} = do
   pathAbs <- makeAbsolute path
@@ -413,7 +411,8 @@ setSolverCachePath path opts SolverCache{..} = do
       let (s0, s1) = (show sz, if sz == 1 then "" else "s")
       printOutLn opts Info ("Saved " ++ s0 ++ " cached result" ++ s1 ++ " to disk")
 
--- | ...
+-- | Print all entries in the solver result cache whose SHA256 hash keys start
+-- with the given string
 printSolverCacheByHex :: String -> SolverCacheOp ()
 printSolverCacheByHex hex_prefix opts SolverCache{..} = do
   kvs <- LMDBOpt.filterByHexPrefix hex_prefix solverCacheDB
@@ -427,7 +426,7 @@ printSolverCacheByHex hex_prefix opts SolverCache{..} = do
     printOutLn opts Info $ "- Versions: " ++ vs_str ++ "\n"
 
 -- | Remove all entries in the solver result cache which have version(s) that
--- do not match the current version(s).
+-- do not match the current version(s)
 cleanSolverCache :: SolverBackendVersions -> SolverCacheOp ()
 cleanSolverCache curr_base_vs opts SolverCache{..} = do
   let curr_base_vs_obj = M.fromList [("vs", curr_base_vs)]
