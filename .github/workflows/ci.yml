@@ -432,6 +432,10 @@ jobs:
           java-package: jdk
           architecture: x64
 
+      - shell: bash
+        if: "matrix.suite == 'integration_tests'"
+        run: pip install lmdb
+
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
