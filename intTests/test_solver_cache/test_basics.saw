@@ -1,4 +1,4 @@
-// Test for solver result caching
+// Testing the basic features of solver result caching
 
 enable_experimental;
 enable_solver_cache;

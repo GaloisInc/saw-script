@@ -1,0 +1,12 @@
+// Testing setting a path for the solver cache - the first run
+
+enable_experimental;
+set_solver_cache_path "test.cache";
+
+// The solver cache starts out empty
+test_solver_cache_stats [0, 0, 0, 0, 0];
+
+// After running test_path_ops, we should have as many insertions as we have
+// entries in the cache, as well as a couple usages
+include "test_path_ops.saw";
+test_solver_cache_stats [6, 2, 0, 6, 0];
