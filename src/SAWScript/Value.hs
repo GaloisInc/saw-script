@@ -737,23 +737,17 @@ recordProof v =
   do rw <- getTopLevelRW
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
--- | Perform a possibly stateful operation on the 'SolverCache', returning a
--- value of type @Maybe a@, or 'Nothing' if there is no 'SolverCache'
-askSolverCache :: SolverCacheOp (Maybe a) -> TopLevel (Maybe a)
-askSolverCache f =
+-- | Perform an operation on the 'SolverCache', returning a default value or
+-- failing (depending on the first element of the 'SolverCacheOp') if there
+-- is no enabled 'SolverCache'
+onSolverCache :: SolverCacheOp a -> TopLevel a
+onSolverCache (mb_default, f) =
   do opts <- getOptions
      getSolverCache >>= \case
        Just cache -> io $ f opts cache
-       Nothing -> return Nothing
-
--- | Perform a stateful operation on the 'SolverCache', or do nothing if
--- there is no 'SolverCache'
-onSolverCache :: SolverCacheOp () -> TopLevel ()
-onSolverCache f =
-  do opts <- getOptions
-     getSolverCache >>= \case
-       Just cache -> io $ f opts cache
-       Nothing -> return ()
+       Nothing -> case mb_default of
+        Just a -> return a
+        Nothing -> fail "Solver result cache not enabled!"
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel CJ.JVMContext

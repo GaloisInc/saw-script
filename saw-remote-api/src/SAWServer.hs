@@ -211,7 +211,7 @@ initialState readFileFn =
      mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
       Just p | length p > 0 -> do
         cache <- emptySolverCache
-        setSolverCachePath p opts cache
+        snd (setSolverCachePath p) opts cache
         return $ Just cache
       _ -> return Nothing
      db <- newTheoremDB

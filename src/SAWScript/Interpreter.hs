@@ -459,7 +459,7 @@ buildTopLevelEnv proxy opts =
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
         Just p | length p > 0 -> do
           cache <- emptySolverCache
-          setSolverCachePath p opts cache
+          snd (setSolverCachePath p) opts cache
           return $ Just cache
         _ -> return Nothing
        thmDB <- newTheoremDB
@@ -659,9 +659,6 @@ enable_solver_cache = do
 set_solver_cache_path :: FilePath -> TopLevel ()
 set_solver_cache_path path =
   enable_solver_cache >> onSolverCache (setSolverCachePath path)
-
-print_solver_cache :: String -> TopLevel ()
-print_solver_cache = onSolverCache . printSolverCacheByHex
 
 clean_solver_cache :: TopLevel ()
 clean_solver_cache = do
@@ -1112,7 +1109,7 @@ primitives = Map.fromList
     ]
 
   , prim "print_solver_cache" "String -> TopLevel ()"
-    (pureVal print_solver_cache)
+    (pureVal (onSolverCache . printSolverCacheByHex))
     Experimental
     [ "Print all entries in the solver result cache whose SHA256 hash"
     , " keys start with the given string. Thus, given an empty string,"
@@ -1126,6 +1123,13 @@ primitives = Map.fromList
     , " how many entries are in the cache, how many insertions into the"
     , " cache have been made so far this session, and how many times"
     , " cached results have been used so far this session." ]
+
+  , prim "test_solver_cache_stats" "[Int] -> TopLevel ()"
+    (pureVal (onSolverCache . testSolverCacheStats))
+    Experimental
+    [ "Check whether the values of the statistics printed out by"
+    , " print_solver_cache_stats are equal to those given, failing if"
+    , " this does not hold. Used for testing." ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)

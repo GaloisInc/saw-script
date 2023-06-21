@@ -62,6 +62,7 @@ module SAWScript.SolverCache
   , printSolverCacheByHex
   , cleanSolverCache
   , printSolverCacheStats
+  , testSolverCacheStats
   ) where
 
 import System.Directory (createDirectoryIfMissing, makeAbsolute)
@@ -361,12 +362,13 @@ emptySolverCache = do
   stats <- newIORef $ M.fromList ((,0) <$> [minBound..])
   return $ SolverCache db stats 1000
 
--- | An operation on a 'SolverCache', returning a value of the given type
-type SolverCacheOp a = Options -> SolverCache -> IO a
+-- | An operation on a 'SolverCache', returning a value of the given type or
+-- returning an optional default value in the case of no enabled 'SolverCache'
+type SolverCacheOp a = (Maybe a, Options -> SolverCache -> IO a)
 
 -- | Lookup a 'SolverCacheKey' in the solver result cache
 lookupInSolverCache :: SolverCacheKey -> SolverCacheOp (Maybe SolverCacheValue)
-lookupInSolverCache k opts SolverCache{..} =
+lookupInSolverCache k = (Just Nothing,) $ \opts SolverCache{..} ->
   tryWithTimeout solverCacheTimeout
                  (LMDBOpt.lookup (solverCacheKeyHash k)
                                  solverCacheDB) >>= \case
@@ -383,7 +385,7 @@ lookupInSolverCache k opts SolverCache{..} =
 
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
-insertInSolverCache k v opts SolverCache{..} =
+insertInSolverCache k v = (Just (),) $ \opts SolverCache{..} ->
   printOutLn opts Info ("Caching result: " ++ show k) >>
   tryWithTimeout solverCacheTimeout
                  (LMDBOpt.insert (solverCacheKeyHash k) v
@@ -397,7 +399,7 @@ insertInSolverCache k v opts SolverCache{..} =
 -- | Set the 'FilePath' of the solver result cache and save all results cached
 -- so far
 setSolverCachePath :: FilePath -> SolverCacheOp ()
-setSolverCachePath path opts SolverCache{..} = do
+setSolverCachePath path = (Nothing,) $ \opts SolverCache{..} -> do
   pathAbs <- makeAbsolute path
   createDirectoryIfMissing True pathAbs
   eith_sz <- tryWithTimeout solverCacheTimeout
@@ -414,7 +416,7 @@ setSolverCachePath path opts SolverCache{..} = do
 -- | Print all entries in the solver result cache whose SHA256 hash keys start
 -- with the given string
 printSolverCacheByHex :: String -> SolverCacheOp ()
-printSolverCacheByHex hex_prefix opts SolverCache{..} = do
+printSolverCacheByHex hex_prefix = (Nothing,) $ \opts SolverCache{..} -> do
   kvs <- LMDBOpt.filterByHexPrefix hex_prefix solverCacheDB
   when (length kvs == 0) $ printOutLn opts Info "No keys found"
   forM_ kvs $ \(k_hash, SolverCacheValue vs bk_opts nm mb_cexs) -> do
@@ -428,7 +430,7 @@ printSolverCacheByHex hex_prefix opts SolverCache{..} = do
 -- | Remove all entries in the solver result cache which have version(s) that
 -- do not match the current version(s)
 cleanSolverCache :: SolverBackendVersions -> SolverCacheOp ()
-cleanSolverCache curr_base_vs opts SolverCache{..} = do
+cleanSolverCache curr_base_vs = (Nothing,) $ \opts SolverCache{..} -> do
   let curr_base_vs_obj = M.fromList [("vs", curr_base_vs)]
   fs0 <- LMDBOpt.cleanByJSONObjValues curr_base_vs_obj solverCacheDB
   let fs1 = concatMap (fmap (both (M.! ("vs" :: String))) . snd) fs0
@@ -445,7 +447,7 @@ cleanSolverCache curr_base_vs opts SolverCache{..} = do
 
 -- | Print out statistics about how the solver cache was used
 printSolverCacheStats :: SolverCacheOp ()
-printSolverCacheStats opts SolverCache{..} = do
+printSolverCacheStats = (Nothing,) $ \opts SolverCache{..} -> do
   printOutLn opts Info ("== Solver result cache statistics ==")
   sz <- LMDBOpt.size solverCacheDB
   loc <- fromMaybe "memory" <$> LMDBOpt.getPath solverCacheDB
@@ -461,3 +463,21 @@ printSolverCacheStats opts SolverCache{..} = do
                               ++ " of cached results so far this run ("
                               ++ show ls_f ++ " failed attempt" ++ pl ls_f ++ ")"
   where pl i = if i == 1 then "" else "s"
+
+-- | Check whether the values of the statistics printed out by
+-- 'printSolverCacheStats' are equal to those given, failing if this does not
+-- hold
+testSolverCacheStats :: [Integer] -> SolverCacheOp ()
+testSolverCacheStats ex = (Nothing,) $ \opts SolverCache{..} -> do
+  sz <- fromIntegral <$> LMDBOpt.size solverCacheDB
+  test sz 0 "Size of"
+  stats <- readIORef solverCacheStats
+  test (stats M.! Lookups) 1 "Number of usages of"
+  test (stats M.! FailedLookups) 2 "Number of failed usages of"
+  test (stats M.! Inserts) 3 "Number of insertions into"
+  test (stats M.! FailedInserts) 4 "Number of failed insertions into"
+  printOutLn opts Info $ "Solver cache stats matched expected (" ++
+                         intercalate ", " (show <$> ex) ++ ")"
+  where test v i str = when (length ex > i && v /= ex !! i) $ fail $
+          str ++ " solver cache (" ++ show v ++ ") did not match expected" ++
+                              " (" ++ show (ex !! i) ++ ")"
