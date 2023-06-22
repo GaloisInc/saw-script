@@ -1,3 +1,4 @@
+set -e
 
 # Testing the basic features of the solver cache
 $SAW test_basics.saw
