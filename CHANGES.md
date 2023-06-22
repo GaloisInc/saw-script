@@ -1,4 +1,4 @@
-# Nightly
+# Version 1.0
 
 * New commands `enable_what4_eval` and `disable_what4_eval` to enable or
   disable What4 translation for SAWCore expressions during Crucible symbolic

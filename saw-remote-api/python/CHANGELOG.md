@@ -1,7 +1,9 @@
 # Revision history for saw-client
 
-## 0.9.1 -- YYYY-MM-DD
+## 1.0.0 -- YYYY-MM-DD
 
+* The v1.0.0 release is made in tandem with the SAW 1.0 release. See the
+  SAW 1.0 release notes for relevant SAW changes.
 * Add a `set_option` command to `saw_client` that allows enabling and disabling
   global SAW options. For example, SAWScript's `enable_lax_pointer_ordering` is
   equivalent to `set_option(LaxPointerOrdering(), True)` in `saw-client.

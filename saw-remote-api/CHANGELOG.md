@@ -1,7 +1,9 @@
 # Revision history for saw-remote-api
 
-## 0.9.1 -- YYYY-MM-DD
+## 1.0.0 -- YYYY-MM-DD
 
+* The v1.0.0 release is made in tandem with the SAW 1.0 release. See the
+  SAW 1.0 release notes for relevant SAW changes.
 * `SAW/set option`'s `"option"` parameter is now allowed to be `"What4 eval"`,
   which controls whether to enable or disable What4 translation for SAWCore
   expressions during Crucible symbolic execution.
