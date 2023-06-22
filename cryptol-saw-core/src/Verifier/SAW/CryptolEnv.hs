@@ -72,6 +72,7 @@ import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
+import qualified Cryptol.TypeCheck.Interface as TIface
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 --import qualified Cryptol.TypeCheck.PP as TP
 
@@ -90,12 +91,13 @@ import qualified Cryptol.Utils.Ident as C
 import Cryptol.Utils.PP hiding ((</>))
 import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
                            , packIdent, interactiveName, identText
-                           , packModName, textToModName, modNameChunks
+                           , textToModName
                            , prelPrim)
 import Cryptol.Utils.Logger (quietLogger)
 
 --import SAWScript.REPL.Monad (REPLException(..))
 import Verifier.SAW.TypedTerm
+import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWScript.Utils (Pos(..))
 -- import SAWScript.AST (Located(getVal, locatedPos), Import(..))
 
@@ -156,14 +158,16 @@ lookupIn nm mp =
 -- ones in the module specified by the qualifier.
 nameMatcher :: String -> T.Name -> Bool
 nameMatcher xs =
-    case modNameChunks (textToModName (pack xs)) of
+    case C.modNameChunksText (textToModName (pack xs)) of
       []  -> const False
-      [x] -> (packIdent x ==) . MN.nameIdent
-      cs -> let m = MN.Declared (C.TopModule (packModName (map pack (init cs)))) MN.UserName
-                i = packIdent (last cs)
-             in \n -> MN.nameIdent n == i && MN.nameInfo n == m
-
-
+      [x] -> (x ==) . C.identText . MN.nameIdent
+      cs  -> \n ->
+                case MN.nameInfo n of
+                  MN.LocalName {} -> False
+                  MN.GlobalName _ og ->
+                    let (top,ns) = C.modPathSplit (C.ogModule og)
+                    in last cs == identText (C.ogName og) &&
+                       init cs == C.modNameChunksText top ++ map identText ns
 
 -- Initialize ------------------------------------------------------------------
 
@@ -198,13 +202,14 @@ initCryptolEnv sc = do
          return ()
 
   -- Load Cryptol reference implementations
-  ((_,refMod), modEnv) <-
+  ((_,refTop), modEnv) <-
     liftModuleM modEnv2 $
       MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
+  let refMod = T.tcTopEntityToModule refTop
 
   -- Set up reference implementation redirections
   let refDecls = T.mDecls refMod
-  let nms = fst <$> Map.toList (M.ifDecls (M.ifPublic (M.genIface refMod)))
+  let nms = Set.toList (MI.ifsPublic (TIface.genIfaceNames refMod))
   let refPrims = Map.fromList
                   [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
                   | nm <- nms ]
@@ -214,9 +219,9 @@ initCryptolEnv sc = do
   termEnv <- genTermEnv sc modEnv cryEnv0
 
   return CryptolEnv
-    { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing)
-                    , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing)
-                    , (OnlyPublic, P.Import arrayName Nothing Nothing)
+    { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing Nothing)
+                    , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing Nothing)
+                    , (OnlyPublic, P.Import arrayName Nothing Nothing Nothing)
                     ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
@@ -260,15 +265,16 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
     nameEnv = mconcat $ fromMaybe [] $ traverse loadImport (eImports env)
     loadImport (vis, i) = do
       lm <- ME.lookupModule (T.iModule i) (eModuleEnv env)
-      let ifc = ME.lmInterface lm
-          syms = case vis of
-                   OnlyPublic       -> MI.ifPublic ifc
-                   PublicAndPrivate -> MI.ifPublic ifc `mappend` M.ifPrivate ifc
-      return $ MN.interpImportIface i syms
+      let ifc = MI.ifNames (ME.lmInterface lm)
+          syms = MN.namingEnvFromNames $
+                 case vis of
+                   OnlyPublic       -> MI.ifsPublic ifc
+                   PublicAndPrivate -> MI.ifsDefines ifc
+      return $ MN.interpImportEnv i syms
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me = mconcat (map (both . ME.lmInterface) (ME.getLoadedModules (ME.meLoadedModules me)))
-  where both ifc = M.ifPublic ifc `mappend` M.ifPrivate ifc
+  where both = MI.ifDefines
 
 -- Typecheck -------------------------------------------------------------------
 
@@ -297,9 +303,10 @@ mkCryEnv env =
      (types, _) <-
        liftModuleM modEnv $
        do prims <- MB.getPrimMap
-          infInp <- MB.genInferInput P.emptyRange prims MI.noIfaceParams ifaceDecls
+          -- noIfaceParams because we don't support translating functors yet
+          infInp <- MB.genInferInput P.emptyRange prims NoParams ifaceDecls
           let newtypeCons = Map.fromList
-                              [ (T.ntName nt, T.newtypeConType nt)
+                              [ (T.ntConName nt, T.newtypeConType nt)
                               | nt <- Map.elems (TM.inpNewtypes infInp)
                               ]
           pure (newtypeCons `Map.union` TM.inpVars infInp)
@@ -331,7 +338,7 @@ translateDeclGroups sc env dgs =
      let decls = concatMap T.groupDecls dgs
      let names = map T.dName decls
      let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
-     let addName name = MR.shadowing (MN.singletonE (P.mkUnqual (MN.nameIdent name)) name)
+     let addName name = MR.shadowing (MN.singletonNS C.NSValue (P.mkUnqual (MN.nameIdent name)) name)
      return env
            { eExtraNames = foldr addName (eExtraNames env) names
            , eExtraTypes = Map.union (eExtraTypes env) newTypes
@@ -374,34 +381,60 @@ loadCryptolModule ::
   FilePath ->
   IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc primOpts env path = do
+
   let modEnv = eModuleEnv env
-  (m, modEnv') <- liftModuleM modEnv (snd <$> MB.loadModuleByPath True path)
+  (mtop, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath True path)
+  m <- case mtop of
+         T.TCTopModule mo -> pure mo
+         T.TCTopSignature {} ->
+            fail $ "Expected a module, but " ++ show path ++ " is an interface."
   checkNotParameterized m
 
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
     prims <- MB.getPrimMap
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims MI.noIfaceParams ifaceDecls
+    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims NoParams ifaceDecls
 
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
-  let oldModNames = map ME.lmName $ ME.lmLoadedModules $ ME.meLoadedModules modEnv
-  let isNew m' = T.mName m' `notElem` oldModNames
-  let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv''
+  let oldModNames = map ME.lmName
+                  $ ME.lmLoadedModules
+                  $ ME.meLoadedModules modEnv
+
+  let isNew m'    = T.mName m' `notElem` oldModNames
+  let newModules  = filter isNew
+                  $ map ME.lmModule
+                  $ ME.lmLoadedModules
+                  $ ME.meLoadedModules modEnv''
+
   let newDeclGroups = concatMap T.mDecls newModules
-  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
-  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
-               C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
-  newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+  let newNewtypes   = Map.difference (ME.loadedNewtypes modEnv')
+                                     (ME.loadedNewtypes modEnv)
+
+  newTermEnv <-
+    do cEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv
+       newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
+       traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   let names = MEx.exported C.NSValue (T.mExports m) -- :: Set T.Name
-  let tm' = Map.filterWithKey (\k _ -> Set.member k names) $
-            Map.intersectionWith (\t x -> TypedTerm (TypedTermSchema t) x) types newTermEnv
+
+  let tm'   = Map.filterWithKey (\k _ -> Set.member k names) $
+              Map.intersectionWith
+                (\t x -> TypedTerm (TypedTermSchema t) x)
+                types
+                newTermEnv
+
   let env' = env { eModuleEnv = modEnv''
                  , eTermEnv = newTermEnv
                  }
-  let sm' = Map.filterWithKey (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m))) (T.mTySyns m)
+
+  let sm' = Map.filterWithKey
+              (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
+              (T.mTySyns m)
+
   return (CryptolModule sm' tm', env')
+
+
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
@@ -417,8 +450,8 @@ bindCryptolModule (modName, CryptolModule sm tm) env =
     f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
     f _ = Nothing
 
-    addName name = MN.shadowing (MN.singletonE (P.mkQual modName (MN.nameIdent name)) name)
-    addTSyn name = MN.shadowing (MN.singletonT (P.mkQual modName (MN.nameIdent name)) name)
+    addName name = MN.shadowing (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
+    addTSyn name = MN.shadowing (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
 
 lookupCryptolModule :: CryptolModule -> String -> IO TypedTerm
 lookupCryptolModule (CryptolModule _ tm) name =
@@ -439,27 +472,43 @@ importModule ::
   IO CryptolEnv
 importModule sc env src as vis imps = do
   let modEnv = eModuleEnv env
-  (m, modEnv') <-
+  (mtop, modEnv') <-
     liftModuleM modEnv $
     case src of
-      Left path -> snd <$> MB.loadModuleByPath True path
+      Left path -> MB.loadModuleByPath True path
       Right mn -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
+  m <- case mtop of
+         T.TCTopModule m -> pure m
+         T.TCTopSignature {} ->
+            fail "Expected a moodule but found an interface."
   checkNotParameterized m
 
   -- Regenerate SharedTerm environment.
   oldCryEnv <- mkCryEnv env
-  let oldModNames = map ME.lmName $ ME.lmLoadedModules $ ME.meLoadedModules modEnv
-  let isNew m' = T.mName m' `notElem` oldModNames
-  let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv'
+  let oldModNames   = map ME.lmName
+                    $ ME.lmLoadedModules
+                    $ ME.meLoadedModules modEnv
+  let isNew m'      = T.mName m' `notElem` oldModNames
+  let newModules    = filter isNew
+                    $ map ME.lmModule
+                    $ ME.lmLoadedModules
+                    $ ME.meLoadedModules modEnv'
   let newDeclGroups = concatMap T.mDecls newModules
-  let newNewtypes = Map.difference (ME.loadedNewtypes modEnv') (ME.loadedNewtypes modEnv)
-  newCryEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv >>= \cEnv ->
-               C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cEnv newDeclGroups
-  newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+  let newNewtypes   = Map.difference (ME.loadedNewtypes modEnv')
+                                     (ME.loadedNewtypes modEnv)
 
-  return env { eImports = (vis, P.Import (T.mName m) as imps) : eImports env
-             , eModuleEnv = modEnv'
-             , eTermEnv = newTermEnv }
+  newTermEnv <-
+    do cEnv      <- C.genNewtypeConstructors sc newNewtypes oldCryEnv
+       newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions
+                                                            cEnv newDeclGroups
+       traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+
+  return
+    env { eImports   = (vis, P.Import (T.mName m) as imps Nothing)
+                     : eImports env
+        , eModuleEnv = modEnv'
+        , eTermEnv   = newTermEnv
+        }
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
@@ -473,7 +522,7 @@ bindIdent ident env = (name, env')
 
 bindTypedTerm :: (Ident, TypedTerm) -> CryptolEnv -> CryptolEnv
 bindTypedTerm (ident, TypedTerm (TypedTermSchema schema) trm) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonE pname name) (eExtraNames env)
+  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSValue pname name) (eExtraNames env)
        , eExtraTypes = Map.insert name schema (eExtraTypes env)
        , eTermEnv    = Map.insert name trm (eTermEnv env)
        }
@@ -487,7 +536,7 @@ bindTypedTerm _ env = env
 
 bindType :: (Ident, T.Schema) -> CryptolEnv -> CryptolEnv
 bindType (ident, T.Forall [] [] ty) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonT pname name) (eExtraNames env)
+  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNames env)
        , eExtraTSyns = Map.insert name tysyn (eExtraTSyns env)
        }
   where
@@ -498,7 +547,7 @@ bindType _ env = env -- only monomorphic types may be bound
 
 bindInteger :: (Ident, Integer) -> CryptolEnv -> CryptolEnv
 bindInteger (ident, n) env =
-  env' { eExtraNames = MR.shadowing (MN.singletonT pname name) (eExtraNames env)
+  env' { eExtraNames = MR.shadowing (MN.singletonNS C.NSType pname name) (eExtraNames env)
        , eExtraTSyns = Map.insert name tysyn (eExtraTSyns env)
        }
   where
@@ -550,6 +599,7 @@ parseTypedTerm sc env input = do
 
     -- Resolve names
     let nameEnv = getNamingEnv env
+
     re <- MM.interactive (MB.rename interactiveName nameEnv (MR.rename npe))
 
     -- Infer types
@@ -557,7 +607,7 @@ parseTypedTerm sc env input = do
     let range = fromMaybe P.emptyRange (P.getLoc re)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims MI.noIfaceParams ifDecls
+    tcEnv <- MB.genInferInput range prims NoParams ifDecls
     let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
@@ -594,26 +644,29 @@ parseDecls sc env input = do
 
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
-                           , P.mInstance = Nothing
-                           , P.mDecls = rdecls
+                           , P.mDef  = P.NormalModule rdecls
                            }
 
     -- Infer types
     let range = fromMaybe P.emptyRange (P.getLoc rdecls)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims MI.noIfaceParams ifaceDecls
+    tcEnv <- MB.genInferInput range prims NoParams ifaceDecls
     let tcEnv' = tcEnv { TM.inpVars = Map.union (eExtraTypes env) (TM.inpVars tcEnv)
                        , TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv)
                        }
 
-    out <- MM.io (TM.runInferM tcEnv' (TI.inferModule rmodule))
+    out <- MM.io (TM.runInferM tcEnv' (TI.inferTopModule rmodule))
     tmodule <- MM.interactive (runInferOutput out)
-    return tmodule
+    m <- case tmodule of
+           T.TCTopModule m -> pure m
+           T.TCTopSignature {} ->
+              fail "Expected a module, but found an interface."
+    return m
 
   -- Add new type synonyms and their name bindings to the environment
   let syns' = Map.union (eExtraTSyns env) (T.mTySyns tmodule)
-  let addName name = MR.shadowing (MN.singletonT (P.mkUnqual (MN.nameIdent name)) name)
+  let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) name)
   let names' = foldr addName (eExtraNames env) (Map.keys (T.mTySyns tmodule))
   let env' = env { eModuleEnv = modEnv', eExtraNames = names', eExtraTSyns = syns' }
 
@@ -640,7 +693,7 @@ parseSchema env input = do
     let range = fromMaybe P.emptyRange (P.getLoc rschema)
     prims <- MB.getPrimMap
     -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims MI.noIfaceParams ifDecls
+    tcEnv <- MB.genInferInput range prims NoParams ifDecls
     let tcEnv' = tcEnv { TM.inpTSyns = Map.union (eExtraTSyns env) (TM.inpTSyns tcEnv) }
     let infer =
           case rschema of
