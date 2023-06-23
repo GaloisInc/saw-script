@@ -1,5 +1,7 @@
 # Version 1.0
 
+## New Features
+
 * New commands `enable_what4_eval` and `disable_what4_eval` to enable or
   disable What4 translation for SAWCore expressions during Crucible symbolic
   execution.
@@ -72,6 +74,21 @@
   and executing the remaining context of a proof in such an
   interactive session.
 
+* A new experimental `llvm_verify_x86_with_invariant` command that
+  allows verification certain kinds of simple loops by using a
+  user-provided loop invariant.
+
+* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
+  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
+  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
+  earlier.)
+
+* Add experimental support for verifying Rust programs. For more information,
+  see the `mir_*` commands documented in the
+  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
+## Changes
+
 * A significant overhaul of the SAW proof and tactics system.  Under
   the hood, tactics now manipulate _sequents_ instead of just
   propositions. This allows more the user to specify more precise goal
@@ -86,20 +103,9 @@
 * The experimental and rarely-used `goal_assume` tactic has been
   removed. The use case it was targeting is better solved via sequents.
 
-* A new experimental `llvm_verify_x86_with_invariant` command that
-  allows verification certain kinds of simple loops by using a
-  user-provided loop invariant.
-
-* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
-  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
-  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
-  earlier.)
-
-* Add experimental support for verifying Rust programs. For more information,
-  see the `mir_*` commands documented in the
-  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
-
 * Support LLVM versions up to 16.
+
+## Bug fixes
 
 # Version 0.9
 
