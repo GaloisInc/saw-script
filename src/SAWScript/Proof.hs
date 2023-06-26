@@ -63,7 +63,7 @@ module SAWScript.Proof
   , cofinSetMember
 
   , TheoremDB
-  , newTheoremDB
+  , emptyTheoremDB
   , reachableTheorems
 
   , Theorem
@@ -904,8 +904,8 @@ data TheoremDB =
   { theoremMap :: Map.Map TheoremNonce Theorem
   }
 
-newTheoremDB :: TheoremDB
-newTheoremDB = TheoremDB mempty
+emptyTheoremDB :: TheoremDB
+emptyTheoremDB = TheoremDB mempty
 
 recordTheorem :: TheoremDB -> Theorem -> TheoremDB
 recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))

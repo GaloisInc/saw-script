@@ -67,7 +67,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import SAWScript.Prover.MRSolver (emptyMREnv)
@@ -453,7 +453,6 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
-       let thmDB = newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roJavaCodebase = jcb
@@ -488,7 +487,7 @@ buildTopLevelEnv proxy opts =
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
-                   , rwTheoremDB = thmDB
+                   , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
