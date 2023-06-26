@@ -453,7 +453,7 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
-       thmDB <- newTheoremDB
+       let thmDB = newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roJavaCodebase = jcb

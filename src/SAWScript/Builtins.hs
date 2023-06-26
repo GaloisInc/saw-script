@@ -2037,7 +2037,7 @@ core_axiom input =
      t <- parseCore input
      p <- io (termToProp sc t)
      db <- SV.getTheoremDB
-     thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     (thm, _db') <- io (admitTheorem db "core_axiom" p pos "core_axiom")
      SV.returnProof thm
 
 core_thm :: String -> TopLevel Theorem
@@ -2046,7 +2046,7 @@ core_thm input =
      sc <- getSharedContext
      pos <- SV.getPosition
      db <- SV.getTheoremDB
-     thm <- io (proofByTerm sc db t pos "core_thm")
+     (thm, _db') <- io (proofByTerm sc db t pos "core_thm")
      SV.returnProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
@@ -2054,7 +2054,7 @@ specialize_theorem thm ts =
   do sc <- getSharedContext
      db <- SV.getTheoremDB
      pos <- SV.getPosition
-     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     (thm', _db') <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
      SV.returnProof thm'
 
 get_opt :: Int -> TopLevel String

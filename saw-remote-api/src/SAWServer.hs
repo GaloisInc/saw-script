@@ -207,7 +207,7 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
-     db <- newTheoremDB
+     let db = newTheoremDB
      let ro = TopLevelRO
                 { roJavaCodebase = jcb
                 , roOptions = opts
