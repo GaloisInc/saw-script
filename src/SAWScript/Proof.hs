@@ -914,10 +914,8 @@ recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (the
 --   that are transitively used in the proofs of those theorems.
 --   This function will panic if any of the roots or reachable theorems
 --   are not found in the database.
-reachableTheorems :: TheoremDB -> Set TheoremNonce -> IO (Map TheoremNonce Theorem)
-reachableTheorems db roots =
-  do let m = theoremMap db
-     pure $! Set.foldl' (loop m) mempty roots
+reachableTheorems :: TheoremDB -> Set TheoremNonce -> Map TheoremNonce Theorem
+reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots
 
  where
    loop m visited curr
