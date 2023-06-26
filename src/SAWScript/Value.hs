@@ -695,7 +695,7 @@ getTheoremDB :: TopLevel TheoremDB
 getTheoremDB = gets rwTheoremDB
 
 putTheoremDB :: TheoremDB -> TopLevel ()
-putTheoremDB db = modifyTopLevelRW (\tl -> tl { rwTheoremDB = db})
+putTheoremDB db = modifyTopLevelRW (\tl -> tl { rwTheoremDB = db })
 
 getOptions :: TopLevel Options
 getOptions = TopLevel_ (asks roOptions)
