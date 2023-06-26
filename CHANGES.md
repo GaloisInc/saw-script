@@ -1,4 +1,4 @@
-# Version 1.0
+# Version 1.0 -- 2023-06-26
 
 ## New Features
 * SAW now implements Heapster, which allows extracting functional specifications

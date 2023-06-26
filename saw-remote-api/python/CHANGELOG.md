@@ -1,6 +1,6 @@
 # Revision history for saw-client
 
-## 1.0.0 -- YYYY-MM-DD
+## 1.0.0 -- 2023-06-26
 
 * The v1.0.0 release is made in tandem with the SAW 1.0 release. See the
   SAW 1.0 release notes for relevant SAW changes.
