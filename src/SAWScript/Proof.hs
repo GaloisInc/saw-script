@@ -907,8 +907,8 @@ data TheoremDB =
 newTheoremDB :: TheoremDB
 newTheoremDB = TheoremDB mempty
 
-recordTheorem :: TheoremDB -> Theorem -> IO TheoremDB
-recordTheorem db thm@Theorem{ _thmNonce = n } = pure (TheoremDB (Map.insert n thm (theoremMap db)))
+recordTheorem :: TheoremDB -> Theorem -> TheoremDB
+recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))
 
 -- | Given a set of root values, find all the theorems in this database
 --   that are transitively used in the proofs of those theorems.
@@ -1163,7 +1163,7 @@ proofByTerm sc db prf loc rsn =
           , _thmElapsedTime = 0
           , _thmSummary = ProvedTheorem mempty
           }
-     db' <- recordTheorem db thm
+     let db' = recordTheorem db thm
      pure (thm, db')
 
 -- | Construct a theorem directly from a proposition and evidence
@@ -1196,7 +1196,7 @@ constructTheorem sc db p e loc ploc rsn elapsed =
           , _thmElapsedTime = elapsed
           , _thmSummary  = sy
           }
-     db' <- recordTheorem db thm
+     let db' = recordTheorem db thm
      pure (thm, db')
 
 
@@ -1248,7 +1248,7 @@ admitTheorem db msg p loc rsn =
           , _thmElapsedTime = 0
           , _thmSummary     = AdmittedTheorem msg
           }
-     db' <- recordTheorem db thm
+     let db' = recordTheorem db thm
      pure (thm, db')
 
 -- | Construct a theorem that an external solver has proved.
@@ -1262,7 +1262,8 @@ solverTheorem ::
   IO TheoremDB
 solverTheorem db p stats loc rsn elapsed =
   do n  <- freshNonce globalNonceGenerator
-     recordTheorem db
+     pure $
+      recordTheorem db
        Theorem
        { _thmProp      = p
        , _thmStats     = stats
@@ -1811,7 +1812,7 @@ finishProof sc db conclProp
                    , _thmElapsedTime = diffUTCTime end start
                    , _thmSummary = sy
                    }
-         db' <- if recordThm then recordTheorem db theorem else pure db
+         let db' = if recordThm then recordTheorem db theorem else db
          pure (ValidProof stats theorem, db')
     _ : _ ->
          pure (UnfinishedProof ps, db)
