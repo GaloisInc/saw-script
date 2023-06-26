@@ -1257,23 +1257,24 @@ solverTheorem ::
   Pos ->
   Text ->
   NominalDiffTime ->
-  IO TheoremDB
+  IO (Theorem, TheoremDB)
 solverTheorem db p stats loc rsn elapsed =
   do n  <- freshNonce globalNonceGenerator
-     pure $
-      recordTheorem db
-       Theorem
-       { _thmProp      = p
-       , _thmStats     = stats
-       , _thmEvidence  = SolverEvidence stats (propToSequent p)
-       , _thmLocation  = loc
-       , _thmReason    = rsn
-       , _thmProgramLoc = Nothing
-       , _thmNonce     = n
-       , _thmDepends   = mempty
-       , _thmElapsedTime = elapsed
-       , _thmSummary = ProvedTheorem stats
-       }
+     let thm =
+          Theorem
+          { _thmProp      = p
+          , _thmStats     = stats
+          , _thmEvidence  = SolverEvidence stats (propToSequent p)
+          , _thmLocation  = loc
+          , _thmReason    = rsn
+          , _thmProgramLoc = Nothing
+          , _thmNonce     = n
+          , _thmDepends   = mempty
+          , _thmElapsedTime = elapsed
+          , _thmSummary = ProvedTheorem stats
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
 -- some metadata.
