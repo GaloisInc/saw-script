@@ -40,6 +40,7 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as JSS
+import Mir.Intrinsics (MIR)
 import Mir.Generator (RustModule)
 --import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
@@ -83,7 +84,7 @@ import SAWServer.Exceptions
       notAJVMMethodSpecIR,
       notAYosysImport,
       notAYosysTheorem, notAYosysSequential,
-      notAMIRModule
+      notAMIRModule, notAMIRMethodSpecIR
     )
 
 type SAWCont = (SAWEnv, SAWTask)
@@ -94,11 +95,13 @@ data SAWTask
   = ProofScriptTask
   | LLVMCrucibleSetup ServerName
   | JVMSetup ServerName
+  | MIRSetup ServerName
 
 instance Show SAWTask where
   show ProofScriptTask = "ProofScript"
   show (LLVMCrucibleSetup n) = "(LLVMCrucibleSetup" ++ show n ++ ")"
   show (JVMSetup n) = "(JVMSetup" ++ show n ++ ")"
+  show (MIRSetup n) = "(MIRSetup" ++ show n ++ ")"
 
 
 data CrucibleSetupVal ty e
@@ -328,6 +331,7 @@ data ServerVal
   | VMIRModule RustModule
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
+  | VMIRMethodSpecIR (CMS.ProvedSpec MIR)
   | VGhostVar CMS.GhostGlobal
   | VYosysImport YosysImport
   | VYosysTheorem YosysTheorem
@@ -345,6 +349,7 @@ instance Show ServerVal where
   show (VMIRModule _) = "VMIRModule"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
+  show (VMIRMethodSpecIR _) = "VMIRMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
   show (VYosysImport _) = "VYosysImport"
   show (VYosysTheorem _) = "VYosysTheorem"
@@ -370,6 +375,9 @@ instance IsServerVal (CMS.ProvedSpec CJ.JVM) where
 
 instance IsServerVal (CMS.SomeLLVM CMS.ProvedSpec) where
   toServerVal = VLLVMMethodSpecIR
+
+instance IsServerVal (CMS.ProvedSpec MIR) where
+  toServerVal = VMIRMethodSpecIR
 
 instance IsServerVal JSS.Class where
   toServerVal = VJVMClass
@@ -450,6 +458,13 @@ getLLVMModule n =
      case v of
        VLLVMModule m -> return m
        _other -> Argo.raise (notAnLLVMModule n)
+
+getMIRMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.ProvedSpec MIR)
+getMIRMethodSpecIR n =
+  do v <- getServerVal n
+     case v of
+       VMIRMethodSpecIR ir -> return ir
+       _other -> Argo.raise (notAMIRMethodSpecIR n)
 
 getMIRModule :: ServerName -> Argo.Command SAWState RustModule
 getMIRModule n =

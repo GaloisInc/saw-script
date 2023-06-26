@@ -69,6 +69,7 @@ import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 import SAWScript.Panic
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
 
 
 data JVMVal
@@ -272,21 +273,6 @@ resolveBitvectorTerm sym w tm =
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
        Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
-
-resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
-resolveBoolTerm sym tm =
-  do st <- sawCoreState sym
-     let sc = saw_ctx st
-     mx <- case getAllExts tm of
-             -- concretely evaluate if it is a closed term
-             [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Concrete.toBool v))
-             _ -> return Nothing
-     case mx of
-       Just x  -> return (W4.backendPred sym x)
-       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =

@@ -12,6 +12,7 @@ import uuid
 
 from .llvm_type import *
 from .jvm_type import *
+from .mir_type import *
 
 JSON = Union[None, bool, int, float, str, Dict, Tuple, List]
 
@@ -89,7 +90,7 @@ class CryptolTerm(SetupVal):
 class FreshVar(NamedSetupVal):
     __name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType'], suggested_name : Optional[str] = None) -> None:
+    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType', 'MIRType'], suggested_name : Optional[str] = None) -> None:
         self.__name = suggested_name
         self.spec = spec
         self.type = type
@@ -119,7 +120,7 @@ class FreshVar(NamedSetupVal):
 class Allocated(NamedSetupVal):
     name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : Union['LLVMType','JVMType'], *,
+    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType', 'MIRType'], *,
                  mutable : bool = True, alignment : Optional[int] = None) -> None:
         self.name = None
         self.spec = spec
@@ -247,7 +248,7 @@ class PointsTo:
     """The workhorse for ``points_to``.
     """
     def __init__(self, pointer : SetupVal, target : SetupVal, *,
-                 check_target_type : Union[PointerType, 'LLVMType', 'JVMType', None] = PointerType(),
+                 check_target_type : Union[PointerType, 'LLVMType', 'JVMType', 'MIRType', None] = PointerType(),
                  condition : Optional[Condition] = None) -> None:
         self.pointer = pointer
         self.target = target
@@ -398,7 +399,7 @@ class Contract:
         self.__used_names.add(new_name)
         return new_name
 
-    def fresh_var(self, type : Union['LLVMType','JVMType'], suggested_name : Optional[str] = None) -> FreshVar:
+    def fresh_var(self, type : Union['LLVMType','JVMType', 'MIRType'], suggested_name : Optional[str] = None) -> FreshVar:
         """Declares a fresh variable of type ``type`` (with name ``suggested_name`` if provided and available)."""
         fresh_name = self.get_fresh_name('x' if suggested_name is None else self.get_fresh_name(suggested_name))
         v = FreshVar(self, type, fresh_name)
@@ -410,7 +411,7 @@ class Contract:
             raise Exception("wrong state")
         return v
 
-    def alloc(self, type : Union['LLVMType', 'JVMType'], *, read_only : bool = False,
+    def alloc(self, type : Union['LLVMType', 'JVMType', 'MIRType'], *, read_only : bool = False,
                                         alignment : Optional[int] = None,
                                         points_to : Optional[SetupVal] = None) -> SetupVal:
         """Allocates a pointer of type ``type``.
@@ -439,7 +440,7 @@ class Contract:
         return a
 
     def points_to(self, pointer : SetupVal, target : SetupVal, *,
-                  check_target_type : Union[PointerType, 'LLVMType', 'JVMType', None] = PointerType(),
+                  check_target_type : Union[PointerType, 'LLVMType', 'JVMType', 'MIRType', None] = PointerType(),
                   condition : Optional[Condition] = None) -> None:
         """Declare that the memory location indicated by the ``pointer``
         contains the ``target``.
@@ -469,7 +470,7 @@ class Contract:
         contains the ``target``.
 
         Currently, this function only supports LLVM verification. Attempting to
-        use this function for JVM verification will result in an error.
+        use this function for JVM or MIR verification will result in an error.
         """
         pt = PointsToBitfield(pointer, field_name, target)
         if self.__state == 'pre':
@@ -651,7 +652,7 @@ def cry_f(s : str) -> CryptolTerm:
        ``cry_f('{ {"x": 5, "y": 4} }')`` equals ``cry('{x = 5, y = 4}')``
        but ``f'{ {"x": 5, "y": 4} }'`` equals ``'{"x": 5, "y": 4}'``. Only
        the former is valid Cryptol syntax for a record.
-       
+
        Note that any conversion or format specifier will always result in the
        argument being rendered as a Cryptol string literal with the conversion
        and/or formating applied. For example, `cry('f {5}')` is equal to

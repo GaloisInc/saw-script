@@ -52,6 +52,8 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import SAWScript.Crucible.MIR.MethodSpecIR
+import SAWScript.Crucible.MIR.TypeShape
 
 import Mir.DefId
 import Mir.Generator (CollectionState, collection)
@@ -61,7 +63,6 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
-import Mir.Compositional.MethodSpec
 import Mir.Compositional.Override (MethodSpec(..))
 
 
@@ -686,7 +687,7 @@ regToSetup bak p eval shp rv = go shp rv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv = go shp rv
-    go (RefShape refTy ty' tpr) ref = do
+    go (RefShape refTy ty' _ tpr) ref = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
         optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =

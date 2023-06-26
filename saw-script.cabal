@@ -143,6 +143,7 @@ library
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
+    SAWScript.Crucible.Common.ResolveSetupValue
     SAWScript.Crucible.Common.Setup.Builtins
     SAWScript.Crucible.Common.Setup.Type
 
@@ -163,6 +164,10 @@ library
     SAWScript.Crucible.JVM.ResolveSetupValue
 
     SAWScript.Crucible.MIR.Builtins
+    SAWScript.Crucible.MIR.MethodSpecIR
+    SAWScript.Crucible.MIR.Override
+    SAWScript.Crucible.MIR.ResolveSetupValue
+    SAWScript.Crucible.MIR.TypeShape
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite

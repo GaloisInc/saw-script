@@ -1737,9 +1737,9 @@ file to the `mir_load_module` function:
 
 * `mir_load_module : String -> TopLevel MIRModule`
 
-SAW currently supports Rust code that can be built with a [March 22, 2020 Rust
-nightly](https://static.rust-lang.org/dist/2020-03-22/).  If you encounter a
-Rust feature that SAW does not support, please report it [on
+SAW currently supports Rust code that can be built with a [January 23, 2023
+Rust nightly](https://static.rust-lang.org/dist/2023-01-23/).  If you encounter
+a Rust feature that SAW does not support, please report it [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
 
 ## Notes on Compiling Code for SAW
@@ -1913,7 +1913,7 @@ allocated during execution is allowed).
 
 The direct extraction process just discussed automatically introduces
 symbolic variables and then abstracts over them, yielding a SAWScript
-`Term` that reflects the semantics of the original Java or LLVM code.
+`Term` that reflects the semantics of the original Java, LLVM, or MIR code.
 For simple functions, this is often the most convenient interface. For
 more complex code, however, it can be necessary (or more natural) to
 specifically introduce fresh variables and indicate what portions of the
@@ -2040,7 +2040,7 @@ The built-in functions described so far work by extracting models of
 code that can then be used for a variety of purposes, including proofs
 about the properties of the code.
 
-When the goal is to prove equivalence between some LLVM or Java code and
+When the goal is to prove equivalence between some LLVM, Java, or MIR code and
 a specification, however, a more declarative approach is sometimes
 convenient. The following sections describe an approach that combines
 model extraction and verification with respect to a specification. A
@@ -2072,8 +2072,7 @@ gives the proof script to use for verification. The result is a proved
 specification that can be used to simplify verification of functions
 that call this one.
 
-A similar command for JVM programs is available if `enable_experimental`
-has been run.
+Similar commands are available for JVM programs:
 
 ~~~~
 jvm_verify :
@@ -2086,8 +2085,81 @@ jvm_verify :
   TopLevel JVMMethodSpec
 ~~~~
 
-Now we describe how to construct a value of type `LLVMSetup ()` (or
-`JVMSetup ()`).
+And for MIR programs:
+
+~~~~
+mir_verify :
+  MIRModule ->
+  String ->
+  [MIRSpec] ->
+  Bool ->
+  MIRSetup () ->
+  ProofScript () ->
+  TopLevel MIRSpec
+~~~~
+
+### Running a MIR-based verification
+
+`mir_verify` requires `enable_experimental` in order to be used.  Moreover,
+some parts of `mir_verify` are not currently implemented, so it is possible
+that using `mir_verify` on some programs will fail. Features that are not yet
+implemented include the following:
+
+* MIR specifications involving memory allocations (i.e., neither the
+  `mir_alloc` nor the `mir_points_to` commands are functional)
+* MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
+  `mir_verify` must always be the empty list at present)
+* The ability to construct MIR `struct` or `enum` values in specifications
+* The ability to specify the layout of slice values
+
+The `String` supplied as an argument to `mir_verify` is expected to be a
+function _identifier_. An identifier is expected adhere to one of the following
+conventions:
+
+* `<crate name>/<disambiguator>::<function path>`
+* `<crate name>::<function path>`
+
+Where:
+
+* `<crate name>` is the name of the crate in which the function is defined. (If
+  you produced your MIR JSON file by compiling a single `.rs` file with
+  `saw-rustc`, then the crate name is the same as the name of the file, but
+  without the `.rs` file extension.)
+* `<disambiguator>` is a hash of the crate and its dependencies. In extreme
+  cases, it is possible for two different crates to have identical crate names,
+  in which case the disambiguator must be used to distinguish between the two
+  crates. In the common case, however, most crate names will correspond to
+  exactly one disambiguator, and you are allowed to leave out the
+  `/<disambiguator>` part of the `String` in this case. If you supply an
+  identifier with an ambiguous crate name and omit the disambiguator, then SAW
+  will raise an error.
+* `<function path>` is the path to the function within the crate. Sometimes,
+  this is as simple as the function name itself. In other cases, a function
+  path may involve multiple _segments_, depending on the module hierarchy for
+  the program being verified. For instance, a `read` function located in
+  `core/src/ptr/mod.rs` will have the identifier:
+
+  ```
+  core::ptr::read
+  ```
+
+  Where `core` is the crate name and `ptr::read` is the function path, which
+  has two segments `ptr` and `read`. There are also some special forms of
+  segments that appear for functions defined in certain language constructs.
+  For instance, if a function is defined in an `impl` block, then it will have
+  `{impl}` as one of its segments, e.g.,
+
+  ```
+  core::ptr::const_ptr::{impl}::offset
+  ```
+
+  If you are in doubt about what the full identifier for a given function is,
+  consult the MIR JSON file for your program.
+
+-----
+
+Now we describe how to construct a value of type `LLVMSetup ()`, `JVMSetup ()`,
+or `MIRSetup ()`.
 
 ## Structure of a Specification
 
@@ -2099,32 +2171,32 @@ A specifications for Crucible consists of three logical components:
 
 * A specification of the expected final value of the program state.
 
-These three portions of the specification are written in sequence within
-a `do` block of `LLVMSetup` (or `JVMSetup`) type. The command
-`llvm_execute_func` (or `jvm_execute_func`) separates the
-specification of the initial state from the specification of the final
-state, and specifies the arguments to the function in terms of the
-initial state. Most of the commands available for state description will
-work either before or after `llvm_execute_func`, though with
-slightly different meaning, as described below.
+These three portions of the specification are written in sequence within a `do`
+block of type `{LLVM,JVM,MIR}Setup`. The command `{llvm,jvm,mir}_execute_func`
+separates the specification of the initial state from the specification of the
+final state, and specifies the arguments to the function in terms of the
+initial state. Most of the commands available for state description will work
+either before or after `{llvm,jvm,mir}_execute_func`, though with slightly
+different meaning, as described below.
 
 ## Creating Fresh Variables
 
-In any case where you want to prove a property of a function for an
-entire class of inputs (perhaps all inputs) rather than concrete values,
-the initial values of at least some elements of the program state must
-contain fresh variables. These are created in a specification with the
-`llvm_fresh_var` and `jvm_fresh_var` commands rather than
-`fresh_symbolic`.
+In any case where you want to prove a property of a function for an entire
+class of inputs (perhaps all inputs) rather than concrete values, the initial
+values of at least some elements of the program state must contain fresh
+variables. These are created in a specification with the
+`{llvm,jvm,mir}_fresh_var` commands rather than `fresh_symbolic`.
 
 * `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
 
 * `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
+* `mir_fresh_var : String -> MIRType -> MIRSetup Term`
+
 The first parameter to both functions is a name, used only for
 presentation. It's possible (though not recommended) to create multiple
 variables with the same name, but SAW will distinguish between them
-internally. The second parameter is the LLVM (or Java) type of the
+internally. The second parameter is the LLVM, Java, or MIR type of the
 variable. The resulting `Term` can be used in various subsequent
 commands.
 
@@ -2150,6 +2222,31 @@ Java types are built up using the following functions:
 * `java_double : JavaType`
 * `java_class : String -> JavaType`
 * `java_array : Int -> JavaType -> JavaType`
+
+MIR types are built up using the following functions:
+
+* `mir_array : Int -> MIRType -> MIRType`
+* `mir_bool : MIRType`
+* `mir_char : MIRType`
+* `mir_i8 : MIRType`
+* `mir_i6 : MIRType`
+* `mir_i32 : MIRType`
+* `mir_i64 : MIRType`
+* `mir_i128 : MIRType`
+* `mir_isize : MIRType`
+* `mir_f32 : MIRType`
+* `mir_f64 : MIRType`
+* `mir_ref : MIRType -> MIRType`
+* `mir_ref_mut : MIRType -> MIRType`
+* `mir_slice : MIRType -> MIRType`
+* `mir_str : MIRType`
+* `mir_tuple : [MIRType] -> MIRType`
+* `mir_u8 : MIRType`
+* `mir_u6 : MIRType`
+* `mir_u32 : MIRType`
+* `mir_u64 : MIRType`
+* `mir_u128 : MIRType`
+* `mir_usize : MIRType`
 
 Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
@@ -2189,27 +2286,31 @@ values that can occur during symbolic execution, which includes both
 `Term` values, pointers, and composite types consisting of either of
 these (both structures and arrays).
 
-The `llvm_term` and `jvm_term` functions create a `SetupValue` or
-`JVMValue` from a `Term`:
+The `llvm_term`, `jvm_term`, and `mir_term` functions create a `SetupValue`,
+`JVMValue`, or `MIRValue`, respectively, from a `Term`:
 
 * `llvm_term : Term -> SetupValue`
 * `jvm_term : Term -> JVMValue`
+* `mir_term : Term -> MIRValue`
 
 ## Executing
 
-Once the initial state has been configured, the `llvm_execute_func`
+Once the initial state has been configured, the `{llvm,jvm,mir}_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
 * `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
+* `jvm_execute_func : [JVMValue] -> JVMSetup ()`
+* `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
-verified use the `llvm_return` or `jvm_return` command.
+verified use the `{llvm,jvm,mir}_return` command.
 
 * `llvm_return : SetupValue -> LLVMSetup ()`
 * `jvm_return : JVMValue -> JVMSetup ()`
+* `mir_return : MIRValue -> MIRSetup ()`
 
 ## A First Simple Example
 
@@ -2252,11 +2353,11 @@ of properties we have already proved about its callees rather than
 analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
-The `llvm_verify` and `jvm_verify` functions return values of
-type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
-values are opaque objects that internally contain both the information
-provided in the associated `JVMSetup` or `LLVMSetup` blocks and
-the results of the verification process.
+The `llvm_verify`, `jvm_verify`, and `mir_verify` functions return values of
+type `CrucibleMethodSpec`, `JVMMethodSpec`, and `MIRMethodSpec`, respectively.
+These values are opaque objects that internally contain both the information
+provided in the associated `LLVMSetup`, `JVMSetup`, or `MIRSetup` blocks,
+respectively, and the results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
 argument of the `..._verify` functions. For any function or method
@@ -2265,7 +2366,7 @@ calls to the associated target. Instead, it will perform the following
 steps:
 
 * Check that all `llvm_points_to` and `llvm_precond` statements
-  (or the corresponding JVM statements) in the specification are
+  (or the corresponding JVM or MIR statements) in the specification are
   satisfied.
 
 * Update the simulator state and optionally construct a return value as
@@ -2325,6 +2426,14 @@ array of the given concrete size, with elements of the given type.
 
 * `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
 of the given class name.
+
+The experimental MIR implementation also has a `mir_alloc` function, which
+behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
+but there is also a `mir_alloc_mut` function for creating a mutable reference:
+
+* `mir_alloc : MIRType -> MIRSetup SetupValue`
+
+* `mir_alloc_mut : MIRType -> MIRSetup SetupValue`
 
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
@@ -2650,6 +2759,9 @@ values in scope at the time.
 * `jvm_precond : Term -> JVMSetup ()`
 * `jvm_postcond : Term -> JVMSetup ()`
 * `jvm_assert : Term -> JVMSetup ()`
+* `mir_precond : Term -> MIRSetup ()`
+* `mir_postcond : Term -> MIRSetup ()`
+* `mir_assert : Term -> MIRSetup ()`
 
 These commands take `Term` arguments, and therefore cannot describe
 the values of pointers. The "assert" variants will work in either pre-
@@ -3512,7 +3624,7 @@ N.B: The following commands must first be enabled using `enable_experimental`.
       s : out std_logic
     );
   end half;
-  
+
   entity full is
     port (
       a : in std_logic;

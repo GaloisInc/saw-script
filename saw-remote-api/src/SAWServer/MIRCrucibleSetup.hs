@@ -1,27 +1,171 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 -- | Support for interfacing with MIR-related commands in SAW.
 module SAWServer.MIRCrucibleSetup
   ( mirLoadModule
   , mirLoadModuleDescr
+  , compileMIRContract
   ) where
 
+import Control.Exception (throw)
 import Control.Lens ( view )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Data.Aeson ( FromJSON(..), withObject, (.:) )
+import Data.ByteString (ByteString)
+import Data.Map (Map)
+import qualified Data.Map as Map
 
-import SAWScript.Crucible.MIR.Builtins ( mir_load_module )
+import Mir.Intrinsics (MIR)
+
+import qualified Cryptol.Parser.AST as P
+import Cryptol.Utils.Ident (mkIdent)
+import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import SAWScript.Crucible.MIR.Builtins
+    ( mir_alloc,
+      mir_alloc_mut,
+      mir_fresh_var,
+      mir_execute_func,
+      mir_load_module,
+      mir_postcond,
+      mir_precond,
+      mir_return )
+import SAWScript.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
+import qualified Verifier.SAW.CryptolEnv as CEnv
+import Verifier.SAW.CryptolEnv (CryptolEnv)
+import Verifier.SAW.TypedTerm (TypedTerm)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer as Server
+import SAWServer
     ( ServerName(..),
       SAWState,
+      CrucibleSetupVal(..),
       sawTask,
       setServerVal )
+import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
+import SAWServer.Data.Contract
+    ( PointsTo,
+      PointsToBitfield,
+      Allocated(Allocated),
+      ContractVar(ContractVar),
+      Contract(preVars, preConds, preAllocated, prePointsTos, prePointsToBitfields,
+               argumentVals, postVars, postConds, postAllocated, postPointsTos, postPointsToBitfields,
+               returnVal) )
+import SAWServer.Data.MIRType (JSONMIRType, mirType)
 import SAWServer.Exceptions ( notAtTopLevel )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
 import SAWServer.TrackFile ( trackFile )
+
+newtype ServerSetupVal = Val (SetupValue MIR)
+
+compileMIRContract ::
+  (FilePath -> IO ByteString) ->
+  BuiltinContext ->
+  CryptolEnv ->
+  Contract JSONMIRType (P.Expr P.PName) ->
+  MIRSetupM ()
+compileMIRContract fileReader bic cenv0 c =
+  do allocsPre <- mapM setupAlloc (preAllocated c)
+     (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
+     mapM_ (\p -> getTypedTerm cenvPre p >>= mir_precond) (preConds c)
+     mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
+     mapM_ setupPointsToBitfields (prePointsToBitfields c)
+     --mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
+     traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= mir_execute_func
+     allocsPost <- mapM setupAlloc (postAllocated c)
+     (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
+     mapM_ (\p -> getTypedTerm cenvPost p >>= mir_postcond) (postConds c)
+     mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
+     mapM_ setupPointsToBitfields (postPointsToBitfields c)
+     --mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
+     case returnVal c of
+       Just v -> getSetupVal (envPost, cenvPost) v >>= mir_return
+       Nothing -> return ()
+  where
+    setupFresh :: ContractVar JSONMIRType -> MIRSetupM (ServerName, TypedTerm)
+    setupFresh (ContractVar n dn ty) =
+      do t <- mir_fresh_var dn (mirType ty)
+         return (n, t)
+    setupState allocs (env, cenv) vars =
+      do freshTerms <- mapM setupFresh vars
+         let cenv' = foldr (\(ServerName n, t) -> CEnv.bindTypedTerm (mkIdent n, t)) cenv freshTerms
+         let env' = Map.union env $ Map.fromList $
+                   [ (n, Val (MS.SetupTerm t)) | (n, t) <- freshTerms ] ++
+                   [ (n, Val v) | (n, v) <- allocs ]
+         return (env', cenv')
+
+    setupAlloc :: Allocated JSONMIRType -> MIRSetupM (ServerName, MS.SetupValue MIR)
+    setupAlloc (Allocated _ _ _ (Just _)) =
+      MIRSetupM $ fail "Alignment not supported in the MIR API."
+    setupAlloc (Allocated n ty mut Nothing)
+      | mut       = (n,) <$> mir_alloc_mut ty'
+      | otherwise = (n,) <$> mir_alloc     ty'
+      where
+        ty' = mirType ty
+
+    setupPointsTo ::
+      (Map ServerName ServerSetupVal, CryptolEnv) ->
+      PointsTo JSONMIRType (P.Expr P.PName) ->
+      MIRSetupM ()
+    setupPointsTo _env _pt =
+      MIRSetupM $ fail "Points-to not currently implemented in the MIR API."
+
+    setupPointsToBitfields :: PointsToBitfield JSONMIRType (P.Expr P.PName) -> MIRSetupM ()
+    setupPointsToBitfields _ =
+      MIRSetupM $ fail "Points-to-bitfield not supported in the MIR API."
+
+    --setupGhostValue _ _ _ = fail "Ghost values not supported yet in the MIR API."
+
+    resolve :: Map ServerName a -> ServerName -> MIRSetupM a
+    resolve env name =
+      MIRSetupM $
+      case Map.lookup name env of
+        Just v -> return v
+        Nothing -> fail $ unlines
+                   [ "Server value " ++ show name ++ " not found - impossible!" -- rule out elsewhere
+                   , show (Map.keys env)
+                   ]
+
+    getTypedTerm ::
+      CryptolEnv ->
+      P.Expr P.PName ->
+      MIRSetupM TypedTerm
+    getTypedTerm cenv expr = MIRSetupM $
+      do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
+         case res of
+           Right (t, _) -> return t
+           Left err -> throw $ CryptolModuleException err warnings
+
+    getSetupVal ::
+      (Map ServerName ServerSetupVal, CryptolEnv) ->
+      CrucibleSetupVal JSONMIRType (P.Expr P.PName) ->
+      MIRSetupM (MS.SetupValue MIR)
+    getSetupVal (env, _) (NamedValue n) =
+      resolve env n >>= \case Val x -> return x
+    getSetupVal (_, cenv) (CryptolExpr expr) =
+      MS.SetupTerm <$> getTypedTerm cenv expr
+    getSetupVal _ NullValue =
+      MIRSetupM $ fail "Null setup values unsupported in the MIR API."
+    getSetupVal env (ArrayValue elts) =
+      do elts' <- mapM (getSetupVal env) elts
+         MIRSetupM $ return $ MS.SetupArray () elts'
+    getSetupVal _ (TupleValue _) =
+      MIRSetupM $ fail "Tuple setup values unsupported in the MIR API."
+    getSetupVal _ (FieldLValue _ _) =
+      MIRSetupM $ fail "Field l-values unsupported in the MIR API."
+    getSetupVal _ (CastLValue _ _) =
+      MIRSetupM $ fail "Cast l-values unsupported in the MIR API."
+    getSetupVal _ (UnionLValue _ _) =
+      MIRSetupM $ fail "Union l-values unsupported in the MIR API."
+    getSetupVal _ (ElementLValue _ _) =
+      MIRSetupM $ fail "Element l-values unsupported in the MIR API."
+    getSetupVal _ (GlobalInitializer _) =
+      MIRSetupM $ fail "Global initializers unsupported in the MIR API."
+    getSetupVal _ (GlobalLValue _) =
+      MIRSetupM $ fail "Global l-values unsupported in the MIR API."
 
 data MIRLoadModuleParams
   = MIRLoadModuleParams ServerName FilePath
@@ -29,13 +173,13 @@ data MIRLoadModuleParams
 instance FromJSON MIRLoadModuleParams where
   parseJSON =
     withObject "params for \"SAW/MIR/load module\"" $ \o ->
-    MIRLoadModuleParams <$> o .: "name" <*> o .: "module name"
+    MIRLoadModuleParams <$> o .: "name" <*> o .: "JSON file"
 
 instance Doc.DescribedMethod MIRLoadModuleParams OK where
   parameterFieldDescription =
     [ ("name",
         Doc.Paragraph [Doc.Text "The name to refer to the loaded module by later."])
-    , ("module name",
+    , ("JSON file",
        Doc.Paragraph [Doc.Text "The file containing the MIR JSON file to load."])
     ]
   resultFieldDescription = []
