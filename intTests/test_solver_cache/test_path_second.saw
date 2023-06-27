@@ -3,6 +3,9 @@
 enable_experimental;
 set_solver_cache_path "test.cache";
 
+print_solver_cache_stats;
+print_solver_cache "";
+
 // The cache still has entries from the last run
 test_solver_cache_stats [6, 0, 0, 0, 0];
 

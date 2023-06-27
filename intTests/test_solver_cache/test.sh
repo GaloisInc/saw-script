@@ -9,6 +9,8 @@ ls
 python3 ../../src/SAWScript/SolverCache/lmdb_opt_database.py shell << END
 db = LMDBOptDatabase()
 db.setPath('test.cache')
+db._impl
+db._impl.begin().stat()
 pHexJSONPairs(db.items(), True)
 END
 $SAW test_path_second.saw
