@@ -86,7 +86,8 @@ encodeHex = concatMap (printf "%02x") . BS.unpack
 decodeHex :: String -> Either String ByteString
 decodeHex s = BS.pack <$> go s
   where go (c0:c1:cs) | [(b,[])] <- readHex [c0,c1] = (b:) <$> go cs
-        go _ = Left $ "Hex decoding failure on:\n" ++ s
+        go [] = return []
+        go _ = Left $ "Hex decoding failure on: " ++ s
 
 -- | Encode an element of a 'ToJSON' type as a hex string
 encodeJSONHex :: ToJSON a => a -> String
