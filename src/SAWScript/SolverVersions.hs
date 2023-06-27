@@ -5,6 +5,7 @@ License     : BSD3
 Maintainer  : m-yac
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -42,7 +43,7 @@ getSolverVersion s =
 getSolverBackendVersion :: SolverBackend -> IO (Maybe String)
 getSolverBackendVersion backend = case backend of
   What4     -> return what4Hash
-  SBV       -> return sbvVersion
+  SBV       -> return (Just VERSION_sbv)
   AIG       -> return aigHash
   RME       -> return (Just hash)
   -- We use individual cases for the remaining constructors to ensure that if

@@ -16,46 +16,33 @@ myBuild pd lbi uh flags = do
   let dir = autogenPackageModulesDir lbi
   createDirectoryIfMissing True dir
 
-  desc <- withExe "." "git" "<VCS-less build>" "<non-dev-build>" $ \git ->
-    init <$> readProcess git ["describe", "--always", "--dirty"] ""
+  hasGit <- findExecutable "git"
 
-  aig_desc <- withExe "deps/aig" "git" Nothing Nothing $ \git -> do
-    Just . init <$> readProcess git ["describe", "--always", "--dirty"] ""
-                  
-  w4_desc <- withExe "deps/what4" "git" Nothing Nothing $ \git -> do
-    Just . init <$> readProcess git ["describe", "--always", "--dirty"] ""
+  let gitfailure :: a -> SomeException -> IO a
+      gitfailure a _e = return a
 
-  sbv_ver <- withExe "." "cabal" Nothing Nothing $ \cabal -> do
-    ex <- doesFileExist "cabal.project.freeze"
-    unless ex $ callProcess cabal ["freeze"]
-    wss <- fmap words <$> lines <$> readFile "cabal.project.freeze"
-    unless ex $ removeFile "cabal.project.freeze"
-    case find (\ws -> (ws !! 0) == "any.sbv") wss of
-      Just ws -> return . Just . init . drop 2 $ ws !! 1
-      Nothing -> return Nothing
+  let gitdescribe dir m on_no_exe on_fail = case hasGit of
+        Just exe -> withCurrentDirectory dir (m <$>
+                      readProcess "git" ["describe", "--always", "--dirty"] "")
+                    `catch` gitfailure on_fail
+        Nothing -> return on_no_exe
+
+  desc     <- gitdescribe "." init "<VCS-less build>" "<non-dev-build>"
+  aig_desc <- gitdescribe "deps/aig" (Just . init) Nothing Nothing
+  w4_desc  <- gitdescribe "deps/what4" (Just . init) Nothing Nothing
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
+    , "-- | String describing the HEAD of saw-script at compile-time"
     , "hash :: String"
     , "hash = " ++ show desc
+    , "-- | String describing the HEAD of the deps/aig submodule at compile-time"
     , "aigHash :: Maybe String"
     , "aigHash = " ++ show aig_desc
+    , "-- | String describing the HEAD of the deps/what4 submodule at compile-time"
     , "what4Hash :: Maybe String"
     , "what4Hash = " ++ show w4_desc
-    , "sbvVersion :: Maybe String"
-    , "sbvVersion = " ++ show sbv_ver
     ]
 
   unless (null $ allBuildInfo pd) $
     (buildHook simpleUserHooks) pd lbi uh flags
-
-withExe :: FilePath -> String -> a -> a -> (FilePath -> IO a) -> IO a
-withExe dir exe_str on_no_exe on_fail m = do
-  mb <- findExecutable exe_str
-  case mb of
-    Just exe -> withCurrentDirectory dir (m exe)
-                `catch` onfailure on_fail
-    Nothing -> return on_no_exe
-
-onfailure :: a -> SomeException -> IO a
-onfailure on_fail _e = return on_fail
