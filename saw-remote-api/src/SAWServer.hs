@@ -209,7 +209,7 @@ initialState readFileFn =
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
      mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
-      Just p | length p > 0 -> do
+      Just p | not (null p) -> do
         cache <- emptySolverCache
         snd (setSolverCachePath p) opts cache
         return $ Just cache

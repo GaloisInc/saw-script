@@ -246,7 +246,7 @@ showBackendVersionsWithOptions sep vs opts =
 
 -- Solver Cache Keys -----------------------------------------------------------
 
--- | The key type for 'SolverCache'. Each is a SHA256 hashes of 'SATQuery' and
+-- | The key type for 'SolverCache'. Each is a SHA256 hash of a 'SATQuery' and
 -- a 'Set' of 'SolverBackendVersion's - see 'mkSolverCacheKey'
 data SolverCacheKey =
   SolverCacheKey 
@@ -328,16 +328,21 @@ instance ToJSON SolverCacheValue where
 toSolverCacheValue :: SolverBackendVersions -> [SolverBackendOption] ->
                       SATQuery -> (Maybe CEX, String) -> Maybe SolverCacheValue
 toSolverCacheValue vs opts satq (cexs, solver_name) =
-  fmap (SolverCacheValue vs opts solver_name)
-       (mapM (mapM (firstM (`elemIndex` ecs))) cexs)
+  SolverCacheValue vs opts solver_name <$> firstsMaybeM (`elemIndex` ecs) cexs
   where ecs = M.keys $ satVariables satq
+        firstsMaybeM :: Monad m => (a -> m b) ->
+                        Maybe [(a, c)] -> m (Maybe [(b, c)])
+        firstsMaybeM = mapM . mapM . firstM
 
 -- | Convert a 'SolverCacheValue' to something which has the same form as the
 -- result of a solver call on the given 'SATQuery'
 fromSolverCacheValue :: SATQuery -> SolverCacheValue -> (Maybe CEX, String)
 fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs) =
-  (fmap (fmap (first (ecs !!))) cexs, solver_name)
+  (firstsMaybe (ecs !!) cexs, solver_name)
   where ecs = M.keys $ satVariables satq
+        firstsMaybe :: (a -> b) -> Maybe [(a, c)] -> Maybe [(b, c)]
+        firstsMaybe = fmap . fmap . first
+       
 
 
 -- The Solver Cache ------------------------------------------------------------

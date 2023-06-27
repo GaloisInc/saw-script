@@ -457,7 +457,7 @@ buildTopLevelEnv proxy opts =
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
-        Just p | length p > 0 -> do
+        Just p | not (null p) -> do
           cache <- emptySolverCache
           snd (setSolverCachePath p) opts cache
           return $ Just cache
