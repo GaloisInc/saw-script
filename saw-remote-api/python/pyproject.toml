@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "saw-client"
-version = "0.9.1"
+version = "1.0.0"
 readme = "README.md"
 description = "SAW client for the SAW 0.9 RPC server"
 authors = ["Galois, Inc. <saw@galois.com>"]
@@ -14,7 +14,7 @@ include = [
 python = "^3.8"
 requests = "^2.25.1"
 BitVector = "^3.4.9"
-cryptol = { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
+cryptol = "3.0.0" # { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
 argo-client = "0.0.11"
 
 [tool.poetry.dev-dependencies]

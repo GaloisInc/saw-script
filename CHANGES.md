@@ -1,4 +1,10 @@
-# Nightly
+# Version 1.0 -- 2023-06-26
+
+## New Features
+* SAW now implements Heapster, which allows extracting functional specifications
+  of memory-safe C programs to Coq. There is now a family of experimental
+  `heapster_*` commands that support this. For more information, refer to the
+  [Heapster README](heapster-saw/README.md).
 
 * New commands `enable_what4_eval` and `disable_what4_eval` to enable or
   disable What4 translation for SAWCore expressions during Crucible symbolic
@@ -72,6 +78,21 @@
   and executing the remaining context of a proof in such an
   interactive session.
 
+* A new experimental `llvm_verify_x86_with_invariant` command that
+  allows verification certain kinds of simple loops by using a
+  user-provided loop invariant.
+
+* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
+  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
+  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
+  earlier.)
+
+* Add experimental support for verifying Rust programs. For more information,
+  see the `mir_*` commands documented in the
+  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
+## Changes
+
 * A significant overhaul of the SAW proof and tactics system.  Under
   the hood, tactics now manipulate _sequents_ instead of just
   propositions. This allows more the user to specify more precise goal
@@ -86,20 +107,41 @@
 * The experimental and rarely-used `goal_assume` tactic has been
   removed. The use case it was targeting is better solved via sequents.
 
-* A new experimental `llvm_verify_x86_with_invariant` command that
-  allows verification certain kinds of simple loops by using a
-  user-provided loop invariant.
-
-* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
-  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
-  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
-  earlier.)
-
-* Add experimental support for verifying Rust programs. For more information,
-  see the `mir_*` commands documented in the
-  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
-
 * Support LLVM versions up to 16.
+
+## Bug fixes
+
+* Overall, closed issues #288, #300, #372, #415, #695, #705, #718, #722, #736,
+  #737, #738, #739, #740, #1037, #1155, #1259, #1316, #1358, #1409, #1412,
+  #1460, #1461, #1462, #1472, #1493, #1494, #1502, #1507, #1520, #1533, #1537,
+  #1558, #1561, #1562, #1565, #1566, #1567, #1579, #1584, #1588, #1591, #1601,
+  #1618, #1619, #1632, #1635, #1644, #1647, #1662, #1668, #1669, #1678, #1680,
+  #1684, #1691, #1702, #1703, #1726, #1741, #1742, #1744, #1748, #1767, #1768,
+  #1780, #1784, #1785, #1794, #1801, #1813, #1822, #1824, #1828, #1834, #1839,
+  #1847, #1852, #1854, #1856, #1857, #1864, #1870, and #1875.
+
+* Overall, merged pull requests #378, #630, #651, #710, #712, #725, #753, #795,
+  #802, #857, #859, #984, #1000, #1002, #1095, #1110, #1117, #1150, #1172,
+  #1194, #1273, #1297, #1313, #1359, #1374, #1385, #1386, #1422, #1452, #1467,
+  #1469, #1470, #1473, #1474, #1475, #1477, #1478, #1480, #1481, #1482, #1483,
+  #1484, #1485, #1486, #1487, #1488, #1489, #1490, #1491, #1495, #1496, #1497,
+  #1501, #1503, #1504, #1505, #1506, #1509, #1510, #1511, #1512, #1513, #1514,
+  #1515, #1518, #1519, #1521, #1523, #1524, #1525, #1527, #1528, #1529, #1530,
+  #1531, #1534, #1535, #1536, #1538, #1539, #1543, #1544, #1545, #1546, #1547,
+  #1549, #1550, #1552, #1553, #1554, #1555, #1557, #1559, #1564, #1568, #1574,
+  #1576, #1582, #1583, #1587, #1589, #1590, #1592, #1593, #1594, #1596, #1597,
+  #1598, #1599, #1600, #1602, #1604, #1605, #1609, #1610, #1614, #1615, #1617,
+  #1622, #1624, #1625, #1626, #1627, #1628, #1629, #1630, #1631, #1633, #1634,
+  #1636, #1637, #1645, #1648, #1649, #1650, #1651, #1652, #1654, #1655, #1656,
+  #1657, #1658, #1659, #1660, #1661, #1666, #1667, #1670, #1671, #1672, #1673,
+  #1675, #1679, #1682, #1686, #1687, #1688, #1689, #1690, #1692, #1693, #1694,
+  #1695, #1696, #1697, #1698, #1700, #1705, #1708, #1710, #1711, #1712, #1713,
+  #1717, #1718, #1722, #1724, #1725, #1727, #1736, #1738, #1739, #1743, #1746,
+  #1749, #1750, #1752, #1755, #1756, #1757, #1769, #1770, #1771, #1773, #1774,
+  #1775, #1776, #1777, #1778, #1786, #1790, #1792, #1795, #1796, #1797, #1798,
+  #1802, #1804, #1806, #1809, #1811, #1815, #1817, #1821, #1829, #1830, #1832,
+  #1833, #1835, #1838, #1840, #1841, #1844, #1846, #1849, #1850, #1853, #1855,
+  #1858, #1860, #1861, #1862, #1863, #1866, #1871, #1872, #1874, and #1878.
 
 # Version 0.9
 
