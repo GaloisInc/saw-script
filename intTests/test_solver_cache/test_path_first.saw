@@ -10,6 +10,3 @@ test_solver_cache_stats [0, 0, 0, 0, 0];
 // entries in the cache, as well as a couple usages
 include "test_path_ops.saw";
 test_solver_cache_stats [6, 2, 0, 6, 0];
-
-print_solver_cache_stats;
-print_solver_cache "";

@@ -3,16 +3,11 @@ set -e
 # Testing the basic features of the solver cache
 $SAW test_basics.saw
 
+# Make sure Python lmdb bindings are installed
+pip install lmdb
+
 # Testing setting a path for the solver cache
 $SAW test_path_first.saw
-ls
-python3 ../../src/SAWScript/SolverCache/lmdb_opt_database.py shell << END
-db = LMDBOptDatabase()
-db.setPath('test.cache')
-db._impl
-db._impl.begin().stat()
-pHexJSONPairs(db.items(), True)
-END
 $SAW test_path_second.saw
 
 # Testing setting the solver cache path through an envionment variable
