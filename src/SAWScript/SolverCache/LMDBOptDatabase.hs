@@ -47,14 +47,16 @@ import System.IO
 import Control.Concurrent (forkIO, ThreadId)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Monad ((>=>), forever)
+import Data.Char (isHexDigit)
+import Text.Printf (printf)
+import Text.Read (readEither)
+import Numeric (readHex)
 
 import Language.Haskell.TH (runIO)
 import Language.Haskell.TH.Syntax (qAddDependentFile, liftString)
 
-import qualified Data.Text as T
-import qualified Text.Hex as Hex
-
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 
 import Data.Aeson (FromJSON, ToJSON)
@@ -74,17 +76,17 @@ lmdb_opt_database__py = $(do
 -- | Remove all characters except hex digits (i.e. `[0-9a-fA-F]`) from the
 -- given string
 sanitizeHex :: String -> String
-sanitizeHex = filter (`elem` "0123456789abcdefABCDEF")
+sanitizeHex = filter isHexDigit
 
 -- | Encode a 'ByteString' as a hex string
 encodeHex :: ByteString -> String
-encodeHex bs = T.unpack $ Hex.encodeHex bs
+encodeHex = concatMap (printf "%02x") . BS.unpack
 
 -- | Decode a hex string as a 'ByteString'
 decodeHex :: String -> Either String ByteString
-decodeHex s = case Hex.decodeHex $ T.pack s of
-  Just bs -> Right bs
-  Nothing -> Left $ "Hex decoding failure on:\n" ++ s
+decodeHex s = BS.pack <$> go s
+  where go (c0:c1:cs) | [(b,[])] <- readHex [c0,c1] = (b:) <$> go cs
+        go _ = Left $ "Hex decoding failure on:\n" ++ s
 
 -- | Encode an element of a 'ToJSON' type as a hex string
 encodeJSONHex :: ToJSON a => a -> String
@@ -116,11 +118,6 @@ decodeMaybe _ ls = Left $ "Expected at most one line, got: " ++ show (unlines ls
 decodeSingle :: (String -> Either String a) -> [String] -> Either String a
 decodeSingle f [l] = f l
 decodeSingle _ ls = Left $ "Expected one line, got: " ++ show (unlines ls)
-
--- | Given an empty list, return the given element
-decodeEmpty :: a -> [String] -> Either String a
-decodeEmpty b [] = Right b
-decodeEmpty _ ls = Left $ "Expected nothing, got: " ++ show (unlines ls)
 
 
 -- Helper functions for IO -----------------------------------------------------
@@ -229,17 +226,18 @@ dbExec decodeFn inp_str LMDBOptDatabase{..} = do
 -- | Create a new, empty, 'LMDBOptDatabase'. This will fail if the @python3@
 -- executable cannot be found.
 new :: IO (LMDBOptDatabase a)
-new = dbOpen >>= \db -> flip (dbExec (decodeEmpty db)) db
-  "db = LMDBOptDatabase()"
+new = do db <- dbOpen
+         () <- dbExec (decodeSingle readEither) "db = LMDBOptDatabase(); ()" db
+         return db
 
 -- | Open an LMDB database at the given 'FilePath' with the given maximum size
 -- (in MiB), add all current entries in the database to the LMDB database, then
 -- set the current implementation of this database to be the LMDB database. This
 -- will fail if the Python LMDB bindings cannot be loaded.
 setPath :: FilePath -> Int -> LMDBOptDatabase a -> IO ()
-setPath path map_size = dbExec (decodeEmpty ()) $
+setPath path map_size = dbExec (decodeSingle readEither) $
   "db.setPath(jsonHex('" ++ encodeJSONHex path ++ "'), " ++
-             "jsonHex('" ++ encodeJSONHex map_size ++ "'))"
+             "jsonHex('" ++ encodeJSONHex map_size ++ "')); ()"
 
 -- | Return the location of the directory in which this database is stored, if
 -- this database is implemented as an LMDB database
@@ -260,13 +258,13 @@ lookup k = dbExec (decodeMaybe decodeJSONHex) $
 
 -- | Insert a 'ByteString' key / JSON-serializable value entry into the database
 insert :: ToJSON a => ByteString -> a -> LMDBOptDatabase a -> IO ()
-insert k v = dbExec (decodeEmpty ()) $
-  "db[hex('" ++ encodeHex k ++ "')] = hex('" ++ encodeJSONHex v ++ "')"
+insert k v = dbExec (decodeSingle readEither) $
+  "db[hex('" ++ encodeHex k ++ "')] = hex('" ++ encodeJSONHex v ++ "'); ()"
 
 -- | Delete the entry associated to the given 'ByteString' key in the database
 delete :: ByteString -> LMDBOptDatabase a -> IO ()
-delete k = dbExec (decodeEmpty ()) $
-  "del db[hex('" ++ encodeHex k ++ "')]"
+delete k = dbExec (decodeSingle readEither) $
+  "del db[hex('" ++ encodeHex k ++ "')]; ()"
 
 -- | Return the list of all entries in the database
 toList :: FromJSON a => LMDBOptDatabase a -> IO [(ByteString, a)]
