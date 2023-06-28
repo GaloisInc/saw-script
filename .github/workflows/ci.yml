@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12, windows-latest]
+        os: [ubuntu-22.04, macos-12, windows-2019]
         cabal: ["3.10.1.0"]
         ghc: ["8.10.7", "9.2.7", "9.4.4"]
         run-tests: [true]
@@ -372,7 +372,7 @@ jobs:
             os: macos-12
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
-            os: windows-latest
+            os: windows-2019
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
@@ -380,7 +380,7 @@ jobs:
             os: macos-12
             continue-on-error: false
           - suite: integration_tests
-            os: windows-latest
+            os: windows-2019
             continue-on-error: false
     steps:
       - uses: actions/checkout@v2
