@@ -74,7 +74,7 @@ import GHC.Generics (Generic)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Tuple.Extra (first, firstM, both)
 import Data.List (isPrefixOf, elemIndex, intercalate)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Functor ((<&>))
 
 import Data.Map.Strict (Map)
@@ -144,20 +144,25 @@ tryWithTimeout t_ms m = try (timeout (t_ms * 1000) m) <&> \case
 
 -- Solver Backends -------------------------------------------------------------
 
--- | A datatype representing one of the solver backends available in SAW. Note
--- that for 'SBV' and 'W4', multiple backends will be used (e.g. 'SBV' with
+-- | A datatype including all solver backends currently supported by SAW. This
+-- type is most often used in a list (@[SolverBackend]@), since at least one
+-- other backend is always used along with 'What4' or 'SBV' (e.g. 'SBV' with
 -- 'Z3' or 'W4' with 'AIG' and 'ABC').
+-- NOTE: This definition includes all backends supported by SBV, even though not
+-- all of them are currently supported by SAW (namely, 'Bitwuzla' and 'DReal').
+-- This is to ensure the system for keeping track of solver backend versions
+-- is not silently broken if support for these backends is ever added to SAW.
 data SolverBackend = What4
                    | SBV
                    | AIG
                    | RME
-                   -- External solvers (copied from SBV.Solver)
+                   -- External solvers supported by SBV (copied from SBV.Solver)
                    | ABC
                    | Boolector
-                   | Bitwuzla
+                   | Bitwuzla -- NOTE: Not currently supported by SAW
                    | CVC4
                    | CVC5
-                   | DReal
+                   | DReal -- NOTE: Not currently supported by SAW
                    | MathSAT
                    | Yices
                    | Z3
@@ -347,8 +352,11 @@ fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs) =
 
 -- The Solver Cache ------------------------------------------------------------
 
--- | A 'SolverCacheDB' of cached solver results as well as counters for how
--- many cache hits and how many new entry creations have occurred
+-- | A 'SolverCacheDB' of cached solver results, a timeout in milliseconds to
+-- use for all lookups and insertions into the DB, as well as counters for how
+-- many lookups, failed lookups, insertions, and failed insertions have been
+-- made (see 'SolverCacheStat'). The latter are represented as an 'IORef' to
+-- make sure failures are counted correctly.
 data SolverCache =
   SolverCache
   { solverCacheDB      :: LMDBOptDatabase SolverCacheValue
@@ -378,7 +386,7 @@ lookupInSolverCache k = (Just Nothing,) $ \opts SolverCache{..} ->
                  (LMDBOpt.lookup (solverCacheKeyHash k)
                                  solverCacheDB) >>= \case
     Right (Just v) -> do
-      printOutLn opts Info ("Using cached result: " ++ show k)
+      printOutLn opts Debug ("Using cached result: " ++ show k)
       modifyIORef solverCacheStats $ M.adjust (+1) Lookups
       return (Just v)
     Left err -> do
@@ -391,7 +399,7 @@ lookupInSolverCache k = (Just Nothing,) $ \opts SolverCache{..} ->
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
 insertInSolverCache k v = (Just (),) $ \opts SolverCache{..} ->
-  printOutLn opts Info ("Caching result: " ++ show k) >>
+  printOutLn opts Debug ("Caching result: " ++ show k) >>
   tryWithTimeout solverCacheTimeout
                  (LMDBOpt.insert (solverCacheKeyHash k) v
                                  solverCacheDB) >>= \case
@@ -472,17 +480,21 @@ printSolverCacheStats = (Nothing,) $ \opts SolverCache{..} -> do
 -- | Check whether the values of the statistics printed out by
 -- 'printSolverCacheStats' are equal to those given, failing if this does not
 -- hold
-testSolverCacheStats :: [Integer] -> SolverCacheOp ()
-testSolverCacheStats ex = (Nothing,) $ \opts SolverCache{..} -> do
-  sz <- fromIntegral <$> LMDBOpt.size solverCacheDB
-  test sz 0 "Size of"
+testSolverCacheStats :: Integer -> Bool -> Integer -> Integer -> Integer ->
+                        Integer -> SolverCacheOp ()
+testSolverCacheStats sz p ls ls_f is is_f = (Nothing,) $ \opts SolverCache{..} -> do
+  sz_actual <- fromIntegral <$> LMDBOpt.size solverCacheDB
+  test sz sz_actual "Size of solver cache"
+  p_actual <- isJust <$> LMDBOpt.getPath solverCacheDB
+  test p p_actual "Whether solver cache saved to disk"
   stats <- readIORef solverCacheStats
-  test (stats M.! Lookups) 1 "Number of usages of"
-  test (stats M.! FailedLookups) 2 "Number of failed usages of"
-  test (stats M.! Inserts) 3 "Number of insertions into"
-  test (stats M.! FailedInserts) 4 "Number of failed insertions into"
-  printOutLn opts Info $ "Solver cache stats matched expected (" ++
-                         intercalate ", " (show <$> ex) ++ ")"
-  where test v i str = when (length ex > i && v /= ex !! i) $ fail $
-          str ++ " solver cache (" ++ show v ++ ") did not match expected" ++
-                              " (" ++ show (ex !! i) ++ ")"
+  test ls (stats M.! Lookups) "Number of usages of solver cache"
+  test ls_f (stats M.! FailedLookups) "Number of failed usages of solver cache"
+  test is (stats M.! Inserts) "Number of insertions into solver cache"
+  test is_f (stats M.! FailedInserts) "Number of failed insertions into solver cache"
+  printOutLn opts Info $ "Solver cache stats matched expected (" ++ show sz ++
+                         (if p then " true " else " false ") ++ show ls ++ " " ++
+                         show ls_f ++ " " ++ show is ++ " " ++ show is_f ++ ")"
+  where test v v_actual str = when (v /= v_actual) $ fail $
+          str ++ " (" ++ show v_actual ++ ")"
+              ++ " did not match expected (" ++ show v ++ ")"

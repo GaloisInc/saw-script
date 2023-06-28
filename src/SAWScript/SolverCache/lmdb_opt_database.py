@@ -161,33 +161,31 @@ def pHex(v):
   """Print the given value as a hex string, if it is a ``bytes`` object"""
   if isinstance(v, bytes): print(v.hex())
 
-def pJSONHex(obj, pretty = False):
+def pJSONHex(obj):
   """Serialize the given object as JSON to get a ``bytes`` object then print
      the result as a hex string"""
   print(bytes(json.dumps(obj), 'utf-8').hex())
 
-def pHexPair(v1, v2, pretty = False):
+def pHexPair(v1, v2):
   """Print the given pair of values as a hex strings, if both are ``bytes``
-     objects. For the second element, if ``pretty`` is ``True``, deserialise it
-     as JSON and print that instead."""
+     objects."""
   if isinstance(v1, bytes) and isinstance(v2, bytes):
-    print(v1.hex(), json.loads(v2) if pretty else v2.hex())
+    print(v1.hex(), v2.hex())
 
-def pHexJSONPair(v1, obj2, pretty = False):
-  """Print the given pair of values as a hex strings, if the first element is a
-     ``bytes`` object. For the second element, if ``pretty`` is ``True``, print
-     it directly, otherwise serialize it as JSON to get a ``bytes`` object and
-     use that to print its hex string."""
+def pHexJSONPair(v1, obj2):
+  """Print the given pair of values as a hex strings, if the first element is
+     a ``bytes`` object. For the second element, serialize it as JSON to get a
+     ``bytes`` object and use that to print its hex string."""
   if isinstance(v1, bytes):
-    print(v1.hex(), obj2 if pretty else bytes(json.dumps(obj2), 'utf-8').hex())
+    print(v1.hex(), bytes(json.dumps(obj2), 'utf-8').hex())
 
-def pHexPairs(vprs, pretty = False):
+def pHexPairs(vprs):
   """Print each pair in a given iterable using ``pHexPair``"""
-  for v1, v2 in vprs: pHexPair(v1, v2, pretty)
+  for v1, v2 in vprs: pHexPair(v1, v2)
 
-def pHexJSONPairs(vobjprs, pretty = False):
+def pHexJSONPairs(vobjprs):
   """Print each pair in a given iterable using ``pHexJSONPair``"""
-  for v1, obj2 in vobjprs: pHexJSONPair(v1, obj2, pretty)
+  for v1, obj2 in vobjprs: pHexJSONPair(v1, obj2)
 
 # ------------------------------------------------------------------------------
 # Interactive Shell Interface

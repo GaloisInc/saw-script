@@ -4,7 +4,7 @@ enable_experimental;
 
 // The same as test_path_second.saw
 
-test_solver_cache_stats [6, 0, 0, 0, 0];
+test_solver_cache_stats 6 true 0 0 0 0;
 
 include "test_path_ops.saw";
-test_solver_cache_stats [6, 8, 0, 0, 0];
+test_solver_cache_stats 6 true 8 0 0 0;
