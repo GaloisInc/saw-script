@@ -371,6 +371,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
                        { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
+                       , C.LLVM.noSatisfyingWriteFreshConstant = False
                        }
       let ?recordLLVMAnnotation = \_ _ _ -> return ()
       sc <- getSharedContext

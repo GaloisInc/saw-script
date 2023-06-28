@@ -1741,6 +1741,7 @@ setupLLVMCrucibleContext pathSat lm action =
           let ?memOpts = Crucible.defaultMemOptions
                           { Crucible.laxPointerOrdering = laxPointerOrdering
                           , Crucible.laxLoadsAndStores = laxLoadsAndStores
+                          , Crucible.noSatisfyingWriteFreshConstant = False
                           }
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
           let ?recordLLVMAnnotation = \_ _ _ -> return ()
