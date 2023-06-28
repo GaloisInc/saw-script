@@ -108,6 +108,13 @@ SAW also uses several environment variables for configuration:
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
+`SAW_SOLVER_CACHE_PATH`
+
+  ~ Specify a path at which to keep a cache of solver results obtained during
+  calls to certain tactics. Note that if this environment variable is set,
+  Python 3 and the Python LMDB bindings will need to be installed. See the
+  section **Caching Solver Results** for more detail about this feature.
+
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
 
@@ -1242,6 +1249,91 @@ situations where one library may outpeform the other, however, due to
 differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
+
+## Caching Solver Results
+
+SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.
+
+This caching is available for all tactics which call out to automated provers
+at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+`rme`, and the family of `unint` tactics described in the previous section.
+
+When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the `abc` tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.
+
+The simplest way to enable solver caching is to set the environment variable
+`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+`saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created `saw` or `saw-remote-api`
+processes.
+
+There are also a number of SAW commands for solver caching, all of which
+require `enable_experimental`.
+
+* `set_solver_cache_path` has the same effect as if `SAW_SOLVER_CACHE_PATH`
+  was set to the given path for the remainder of the current session.
+
+* `enable_solver_cache` will enable solver caching, but not set a path at
+  which to save the cache. Thus, unless `SAW_SOLVER_CACHE_PATH` was set or
+  `set_solver_cache_path` is called, all cached results will be discarded at
+  the end of the session. This can be useful for testing, or if the user
+  does not wish to use LMDB.
+
+* `clean_solver_cache` will remove all entries in the solver result cache
+  which were created using solver backend versions which do not match the
+  versions in the current environment. This can be run after an update to
+  clear out any old, unusable entries from the solver cache.
+
+There are also the commands `print_solver_cache` and
+`print_solver_cache_stats`, which print out information about the entries
+in the cache and usage statistics about the cache, respectively.
+
+Below is an example of using solver caching with `saw -v Debug`. Only the
+relevant output is shown, the rest abbreviated with "...".
+
+~~~~
+sawscript> enable_experimental
+sawscript> enable_solver_cache
+sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
+Caching result: c6e8f2e6ea38dd97 (SBV 9.2, Z3 version 4.8.7 - 64 bit)
+...
+sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
+Using cached result: c6e8f2e6ea38dd97 (SBV 9.2, Z3 version 4.8.7 - 64 bit)
+...
+sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
+                       {{ \(x:[8]) -> x+x == x*2 }}
+Caching result: 975f9aac6d54cd54 (What4 v1.3-29-g6c462cd using qfnia, Z3 version 4.8.7 - 64 bit)
+...
+sawscript> print_solver_cache "c6e8f2e6ea38dd97"
+SHA: c6e8f2e6ea38dd978e39e3a8a2a1f64d48e5a51412ad688e6e8d1d52285648ab
+- Result: unsat
+- Solver: "SBV->Z3"
+- Versions: SBV 9.2, Z3 version 4.8.7 - 64 bit
+
+sawscript> print_solver_cache "975f9aac6d54cd54"
+SHA: 975f9aac6d54cd54206e5938860fa43f89268a4545f0b01966291f034085c305
+- Result: unsat
+- Solver: "W4 ->z3"
+- Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 version 4.8.7 - 64 bit
+~~~~
+
+Note that to use any of the features described above, Python 3 must be
+installed. If a path is set for the solver cache (i.e. through
+`SAW_SOLVER_CACHE_PATH` or `enable_solver_cache`), then the Python
+[`lmdb`](https://lmdb.readthedocs.io/en/release/) library must also be
+installed.
 
 ## Other External Provers
 
