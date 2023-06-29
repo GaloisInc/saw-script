@@ -1,3 +1,17 @@
+{- |
+Module      : SAWScript.Yosys.CompositionalTranslation
+Description : Translating Yosys modules into SAWCore terms
+License     : BSD3
+Maintainer  : sbreese
+Stability   : experimental
+
+This module implements a function 'translateModule' that, given a Yosys 'Module'
+and a mapping from other module names to 'TranslatedModule's, produces a 'TranslatedModule'.
+Lenses 'translatedModuleTerm', 'translatedModuleType', and 'translatedModuleCryptolType'
+can be used to extract information from a 'TranslatedModule' (e.g. to build a 'TypedTerm').
+The translation works for both combinational and sequential circuits.
+-}
+
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# Language TemplateHaskell #-}
 {-# Language ConstraintKinds #-}
