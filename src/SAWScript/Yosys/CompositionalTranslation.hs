@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# Language TemplateHaskell #-}
 {-# Language ConstraintKinds #-}
 {-# Language FlexibleContexts #-}
@@ -8,7 +9,12 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language ViewPatterns #-}
 
-module SAWScript.Yosys.CompositionalTranslation where
+module SAWScript.Yosys.CompositionalTranslation
+  ( TranslatedModule
+  , translatedModuleTerm
+  , translatedModuleType, translatedModuleCryptolType
+  , translateModule
+  ) where
 
 import Control.Lens.TH (makeLenses)
 import Control.Lens ((^.))
@@ -95,7 +101,7 @@ lookupStateFor sc states inpst cnm = do
 insertStateField ::
   MonadIO m =>
   SC.SharedContext ->
-  Map Text (SC.Term, C.Type) {- ^ The field types of "__states__" -} ->
+  Map Text (SC.Term, C.Type) {- ^ The field types of \"__states__\" -} ->
   Map Text (SC.Term, C.Type) {- ^ The mapping to update -} ->
   m (Map Text (SC.Term, C.Type))
 insertStateField sc stateFields fields = do

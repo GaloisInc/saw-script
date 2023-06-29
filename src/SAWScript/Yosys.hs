@@ -30,11 +30,12 @@ module SAWScript.Yosys
 
 import Control.Lens.TH (makeLenses)
 
-import Control.Lens (view, (^.))
+import Control.Lens (view, (^.), (.~))
 import Control.Exception (throw)
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 
+import Data.Function ((&))
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -60,7 +61,6 @@ import qualified SAWScript.Crucible.Common as Common
 
 import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
-import SAWScript.Yosys.Netgraph
 import SAWScript.Yosys.State
 import SAWScript.Yosys.Theorem
 import SAWScript.Yosys.TransitionSystem
@@ -114,7 +114,7 @@ convertYosysIR sc ir = do
               }
         let ni = SC.ImportedName uri [nm]
         tc <- liftIO $ SC.scConstant' sc ni (tm ^. Comp.translatedModuleTerm) (tm ^. Comp.translatedModuleType)
-        let tm' = tm { Comp._translatedModuleTerm = tc }
+        let tm' = tm & Comp.translatedModuleTerm .~ tc
         pure $ Map.insert nm tm' env
     )
     Map.empty

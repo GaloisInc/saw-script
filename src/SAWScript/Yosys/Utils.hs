@@ -284,12 +284,12 @@ fieldsToCryptolType ::
   m C.Type
 fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
 
--- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
+-- | Given a bit pattern ([b]) and a term, construct a map associating that output pattern with
 -- the term, and each bit of that pattern with the corresponding bit of the term.
 deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
 deriveTermsByIndices sc rep t = do
   boolty <- liftIO $ SC.scBoolType sc
-  telems <- forM [0..length rep] $ \index -> do
+  telems <- forM [0..length rep - 1] $ \index -> do
     tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
     idx <- liftIO . SC.scNat sc $ fromIntegral index
     bit <- liftIO $ SC.scAt sc tlen boolty t idx

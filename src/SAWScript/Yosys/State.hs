@@ -26,7 +26,6 @@ import Control.Exception (throw)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
 import Numeric.Natural (Natural)
@@ -36,8 +35,6 @@ import qualified Verifier.SAW.TypedTerm as SC
 import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
-import qualified Cryptol.Utils.Ident as C
-import qualified Cryptol.Utils.RecordMap as C
 
 import SAWScript.Panic (panic)
 
