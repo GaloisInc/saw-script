@@ -18,10 +18,13 @@ module SAWScript.Yosys.IR where
 
 import Control.Lens.TH (makeLenses)
 
+import Control.Lens ((^.))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
+import qualified Data.Maybe as Maybe
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -133,3 +136,41 @@ loadYosysIR :: MonadIO m => FilePath -> m YosysIR
 loadYosysIR p = liftIO $ Aeson.eitherDecodeFileStrict p >>= \case
   Left err -> throw . YosysError $ Text.pack err
   Right ir -> pure ir
+
+-- | Return the patterns for all of the input ports of a module
+moduleInputPorts :: Module -> Map Text [Bitrep]
+moduleInputPorts m =
+  Map.fromList
+  . Maybe.mapMaybe
+  ( \(nm, ip) ->
+      if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout
+      then Just (nm, ip ^. portBits)
+      else Nothing
+  )
+  . Map.assocs
+  $ m ^. modulePorts
+
+-- | Return the patterns for all of the output ports of a module
+moduleOutputPorts :: Module -> Map Text [Bitrep]
+moduleOutputPorts m =
+  Map.fromList
+  . Maybe.mapMaybe
+  ( \(nm, ip) ->
+      if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout
+      then Just (nm, ip ^. portBits)
+      else Nothing
+  )
+  . Map.assocs
+  $ m ^. modulePorts
+
+-- | Return the patterns for all of the input connections of a cell
+cellInputConnections :: Cell [b] -> Map Text [b]
+cellInputConnections c = Map.intersection (c ^. cellConnections) inp
+  where
+    inp = Map.filter (\d -> d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections
+
+-- | Return the patterns for all of the output connections of a cell
+cellOutputConnections :: Ord b => Cell [b] -> Map Text [b]
+cellOutputConnections c = Map.intersection (c ^. cellConnections) out
+  where
+    out = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
