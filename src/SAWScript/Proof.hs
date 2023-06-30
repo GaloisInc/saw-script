@@ -63,7 +63,7 @@ module SAWScript.Proof
   , cofinSetMember
 
   , TheoremDB
-  , newTheoremDB
+  , emptyTheoremDB
   , reachableTheorems
 
   , Theorem
@@ -131,7 +131,6 @@ module SAWScript.Proof
 
 import qualified Control.Monad.Fail as F
 import           Control.Monad.Except
-import           Data.IORef
 import qualified Data.Foldable as Fold
 import           Data.List
 import           Data.Maybe (fromMaybe)
@@ -902,25 +901,21 @@ data Theorem =
 data TheoremDB =
   TheoremDB
   -- TODO, maybe this should be a summary or something simpler?
-  { theoremMap :: IORef (Map.Map TheoremNonce Theorem)
+  { theoremMap :: Map.Map TheoremNonce Theorem
   }
 
-newTheoremDB :: IO TheoremDB
-newTheoremDB = TheoremDB <$> newIORef mempty
+emptyTheoremDB :: TheoremDB
+emptyTheoremDB = TheoremDB mempty
 
-recordTheorem :: TheoremDB -> Theorem -> IO Theorem
-recordTheorem db thm@Theorem{ _thmNonce = n } =
-  do modifyIORef (theoremMap db) (Map.insert n thm)
-     return thm
+recordTheorem :: TheoremDB -> Theorem -> TheoremDB
+recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))
 
 -- | Given a set of root values, find all the theorems in this database
 --   that are transitively used in the proofs of those theorems.
 --   This function will panic if any of the roots or reachable theorems
 --   are not found in the database.
-reachableTheorems :: TheoremDB -> Set TheoremNonce -> IO (Map TheoremNonce Theorem)
-reachableTheorems db roots =
-  do m <- readIORef (theoremMap db)
-     pure $! Set.foldl' (loop m) mempty roots
+reachableTheorems :: TheoremDB -> Set TheoremNonce -> Map TheoremNonce Theorem
+reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots
 
  where
    loop m visited curr
@@ -945,7 +940,7 @@ reachableTheorems db roots =
 validateTheorem :: SharedContext -> TheoremDB -> Theorem -> IO ()
 
 validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
-   do hyps <- Map.keysSet <$> readIORef (theoremMap db)
+   do let hyps = Map.keysSet (theoremMap db)
       (deps,_) <- checkEvidence sc e p
       unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep hyps)
              (fail $ unlines ["Theorem failed to declare its dependencies correctly"
@@ -1148,24 +1143,26 @@ structuralEvidence _sqt (StructuralEvidence sqt' e) = StructuralEvidence sqt' e
 structuralEvidence sqt e = StructuralEvidence sqt e
 
 -- | Construct a theorem directly via a proof term.
-proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO Theorem
+proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO (Theorem, TheoremDB)
 proofByTerm sc db prf loc rsn =
   do ty <- scTypeOf sc prf
      p  <- termToProp sc ty
      n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp      = p
-       , _thmStats     = mempty
-       , _thmEvidence  = ProofTerm prf
-       , _thmLocation  = loc
-       , _thmProgramLoc = Nothing
-       , _thmReason    = rsn
-       , _thmNonce     = n
-       , _thmDepends   = mempty
-       , _thmElapsedTime = 0
-       , _thmSummary = ProvedTheorem mempty
-       }
+     let thm =
+          Theorem
+          { _thmProp      = p
+          , _thmStats     = mempty
+          , _thmEvidence  = ProofTerm prf
+          , _thmLocation  = loc
+          , _thmProgramLoc = Nothing
+          , _thmReason    = rsn
+          , _thmNonce     = n
+          , _thmDepends   = mempty
+          , _thmElapsedTime = 0
+          , _thmSummary = ProvedTheorem mempty
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | Construct a theorem directly from a proposition and evidence
 --   for that proposition.  The evidence will be validated to
@@ -1180,31 +1177,33 @@ constructTheorem ::
   Maybe ProgramLoc ->
   Text ->
   NominalDiffTime ->
-  IO Theorem
+  IO (Theorem, TheoremDB)
 constructTheorem sc db p e loc ploc rsn elapsed =
   do (deps,sy) <- checkEvidence sc e p
      n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp  = p
-       , _thmStats = mempty
-       , _thmEvidence = e
-       , _thmLocation = loc
-       , _thmProgramLoc = ploc
-       , _thmReason   = rsn
-       , _thmNonce    = n
-       , _thmDepends  = deps
-       , _thmElapsedTime = elapsed
-       , _thmSummary  = sy
-       }
+     let thm =
+          Theorem
+          { _thmProp  = p
+          , _thmStats = mempty
+          , _thmEvidence = e
+          , _thmLocation = loc
+          , _thmProgramLoc = ploc
+          , _thmReason   = rsn
+          , _thmNonce    = n
+          , _thmDepends  = deps
+          , _thmElapsedTime = elapsed
+          , _thmSummary  = sy
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 
 -- | Given a theorem with quantified variables, build a new theorem that
 --   specializes the leading quantifiers with the given terms.
 --   This will fail if the given terms to not match the quantifier structure
 --   of the given theorem.
-specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO Theorem
-specializeTheorem _sc _db _loc _rsn thm [] = return thm
+specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO (Theorem, TheoremDB)
+specializeTheorem _sc db _loc _rsn thm [] = return (thm, db)
 specializeTheorem sc db loc rsn thm ts =
   do res <- specializeProp sc (_thmProp thm) ts
      case res of
@@ -1231,22 +1230,24 @@ admitTheorem ::
   Prop ->
   Pos ->
   Text ->
-  IO Theorem
+  IO (Theorem, TheoremDB)
 admitTheorem db msg p loc rsn =
   do n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp        = p
-       , _thmStats       = solverStats "ADMITTED" (propSize p)
-       , _thmEvidence    = Admitted msg loc (propToSequent p)
-       , _thmLocation    = loc
-       , _thmProgramLoc  = Nothing
-       , _thmReason      = rsn
-       , _thmNonce       = n
-       , _thmDepends     = mempty
-       , _thmElapsedTime = 0
-       , _thmSummary     = AdmittedTheorem msg
-       }
+     let thm =
+          Theorem
+          { _thmProp        = p
+          , _thmStats       = solverStats "ADMITTED" (propSize p)
+          , _thmEvidence    = Admitted msg loc (propToSequent p)
+          , _thmLocation    = loc
+          , _thmProgramLoc  = Nothing
+          , _thmReason      = rsn
+          , _thmNonce       = n
+          , _thmDepends     = mempty
+          , _thmElapsedTime = 0
+          , _thmSummary     = AdmittedTheorem msg
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | Construct a theorem that an external solver has proved.
 solverTheorem ::
@@ -1256,22 +1257,24 @@ solverTheorem ::
   Pos ->
   Text ->
   NominalDiffTime ->
-  IO Theorem
+  IO (Theorem, TheoremDB)
 solverTheorem db p stats loc rsn elapsed =
   do n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp      = p
-       , _thmStats     = stats
-       , _thmEvidence  = SolverEvidence stats (propToSequent p)
-       , _thmLocation  = loc
-       , _thmReason    = rsn
-       , _thmProgramLoc = Nothing
-       , _thmNonce     = n
-       , _thmDepends   = mempty
-       , _thmElapsedTime = elapsed
-       , _thmSummary = ProvedTheorem stats
-       }
+     let thm =
+          Theorem
+          { _thmProp      = p
+          , _thmStats     = stats
+          , _thmEvidence  = SolverEvidence stats (propToSequent p)
+          , _thmLocation  = loc
+          , _thmReason    = rsn
+          , _thmProgramLoc = Nothing
+          , _thmNonce     = n
+          , _thmDepends   = mempty
+          , _thmElapsedTime = elapsed
+          , _thmSummary = ProvedTheorem stats
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
 -- some metadata.
@@ -1782,7 +1785,7 @@ finishProof ::
   ProofState ->
   Bool {- ^ should we record the theorem in the database? -} ->
   Bool {- ^ do we need to normalize the sequent to match the final goal ? -} ->
-  IO ProofResult
+  IO (ProofResult, TheoremDB)
 finishProof sc db conclProp
     ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start)
     recordThm useSequentGoals =
@@ -1795,7 +1798,7 @@ finishProof sc db conclProp
          (deps,sy) <- checkEvidence sc e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
-         thm <- (if recordThm then recordTheorem db else return)
+         let theorem =
                    Theorem
                    { _thmProp = conclProp
                    , _thmStats = stats
@@ -1808,9 +1811,10 @@ finishProof sc db conclProp
                    , _thmElapsedTime = diffUTCTime end start
                    , _thmSummary = sy
                    }
-         pure (ValidProof stats thm)
+         let db' = if recordThm then recordTheorem db theorem else db
+         pure (ValidProof stats theorem, db')
     _ : _ ->
-         pure (UnfinishedProof ps)
+         pure (UnfinishedProof ps, db)
 
 -- | A type describing counterexamples.
 type CEX = [(ExtCns Term, FirstOrderValue)]
