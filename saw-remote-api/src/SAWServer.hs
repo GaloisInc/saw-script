@@ -54,7 +54,7 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModu
 import SAWScript.Options (Options(..), processEnv, defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import SAWScript.Yosys.State (YosysSequential)
 import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
@@ -207,7 +207,6 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
-     db <- newTheoremDB
      let ro = TopLevelRO
                 { roJavaCodebase = jcb
                 , roOptions = opts
@@ -234,7 +233,7 @@ initialState readFileFn =
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
-                , rwTheoremDB = db
+                , rwTheoremDB = emptyTheoremDB
                 , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty

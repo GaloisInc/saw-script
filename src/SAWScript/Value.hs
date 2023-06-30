@@ -44,7 +44,7 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (StateT(..), gets)
+import Control.Monad.State (StateT(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
@@ -692,7 +692,10 @@ getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase = TopLevel_ (asks roJavaCodebase)
 
 getTheoremDB :: TopLevel TheoremDB
-getTheoremDB = TopLevel_ (rwTheoremDB <$> get)
+getTheoremDB = gets rwTheoremDB
+
+putTheoremDB :: TheoremDB -> TopLevel ()
+putTheoremDB db = modifyTopLevelRW (\tl -> tl { rwTheoremDB = db })
 
 getOptions :: TopLevel Options
 getOptions = TopLevel_ (asks roOptions)
@@ -727,6 +730,9 @@ getTopLevelRW = get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = put rw
+
+modifyTopLevelRW :: (TopLevelRW -> TopLevelRW) -> TopLevel ()
+modifyTopLevelRW = modify
 
 returnProof :: IsValue v => v -> TopLevel v
 returnProof v = recordProof v >> return v
@@ -876,8 +882,11 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
        Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
-            db <- rwTheoremDB <$> getTopLevelRW
-            io (finishProof sc db concl pstate recordThm useSequentGoals)
+            db <- getTheoremDB
+            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals)
+            putTheoremDB db'
+            pure thmResult
+
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
