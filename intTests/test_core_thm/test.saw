@@ -1,0 +1,30 @@
+// Test the `core_thm` command by proving `bvEqToSelf` using the `vecEq_refl`
+// axiom
+
+let {{
+  bvEqToSelf : [64][256] -> Bit
+  bvEqToSelf x = x == x
+}};
+
+// Specialize `vecEq_refl` axiom and parse as a `Theorem`
+let vecEq_refl_thm =
+  core_thm "vecEq_refl 64 (Vec 256 Bool) (bvEq 256) (bvEq_refl 256)";
+
+prove_print (do {
+  // Expand definitions to get to underlying equality
+  unfolding ["bvEqToSelf"];
+
+  // Simplify goal to be in terms of `vecEq`. Both `basic_ss` and `cryptol_ss`
+  // are needed for this.
+  simplify basic_ss;
+  simplify (cryptol_ss());
+
+  // Expand `vecEq` so `vecEq_refl_256_thm` matches and simplify
+  unfolding ["vecEq"];
+  simplify (addsimp vecEq_refl_thm empty_ss);
+
+  // Goal is now basically just `True`.
+  trivial;
+  })
+  {{ bvEqToSelf }};
+
