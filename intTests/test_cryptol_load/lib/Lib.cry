@@ -1,0 +1,4 @@
+module Lib where
+
+g : [32] -> [32]
+g x = 0

@@ -1,0 +1,29 @@
+/* TO TEST:
+ * cryptol_extract
+ * cryptol_prims
+ * boolector
+ * cvc5
+ * cryptol_load
+ * cryptol_add_path
+ * sbv_z3
+ * sbv_unint_z3
+ */
+
+prims <- cryptol_prims ();
+slt <- cryptol_extract prims "slt";
+fails (cryptol_extract prims "no_such_symbol");
+
+prove_print boolector
+            {{ \(x : [32]) (y : [32]) -> (slt x y) == (prims::slt x y) }};
+
+prove_print cvc5
+            {{ \(x : [32]) (y : [32]) -> (slt x y) == (x <$ y) }};
+
+fails (cryptol_load "module.cry");
+cryptol_add_path "lib";
+m <- cryptol_load "module.cry";
+
+prove_print sbv_z3 {{ \x -> m::f x == 1 }};
+fails (prove_print (sbv_unint_z3 ["g"]) {{ \x -> m::f x == 1 }});
+
+// TODO: Add tests for other backend solvers here?
