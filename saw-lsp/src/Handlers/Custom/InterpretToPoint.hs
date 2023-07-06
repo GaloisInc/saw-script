@@ -37,7 +37,7 @@ import SAWScript.AST (Expr (..), Located (..), Pattern (..), Stmt (..), prettyWh
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
 import SAWScript.Position (Pos (..), getPos)
-import SAWT (emptySAWEnv, flushOutput, runSAWStmt)
+import SAWT (drainSAWEnv, flushOutput, runStmt, runStmtCheckpoint)
 import System.IO.Temp (writeSystemTempFile)
 
 data InterpretParams = InterpretParams
@@ -71,9 +71,9 @@ doInterp ::
   ServerM ()
 doInterp request responder =
   do
-    debug "doInterp"
+    -- debug "doInterp"
     interpParams <- liftEither (fromParams ps)
-    debug' (show interpParams)
+    -- debug' (show interpParams)
     fileText <- virtualFileText <$> resolveUri (toNormalizedUri (uri interpParams))
     fileStmts <- liftEither (first (internalError . Text.pack) (parseFile fileText))
     let Position l c = posn interpParams
@@ -93,8 +93,10 @@ doInterp request responder =
               msg = Text.pack $ "would truncate " <> orig <> " statements to " <> new <> " statements"
           debug' (show (prettyWholeModule stmts))
           sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
-    liftSAW emptySAWEnv
-    liftSAW (mapM_ runSAWStmt fileStmts')
+    liftSAW drainSAWEnv
+    hits <- mapM (liftSAW . runStmtCheckpoint) fileStmts'
+    debug' (show hits)
+    -- liftSAW (mapM_ runStmt fileStmts')
     ss <- liftSAW flushOutput
     let goal = ss !! 1
     goalFile <- liftIO $ writeSystemTempFile "lsp" goal

@@ -2,18 +2,19 @@
 
 module Server where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, catch)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson qualified as Aeson
+import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Handlers (handlers)
 import Language.LSP.Server
 import Language.LSP.Types
 import Monad
-import SAWT (SAWEnv, defaultSAWEnv)
+import SAWT (SAWState, newSAWState)
 import System.IO (hPrint, hPutStrLn, stderr)
-import Control.Concurrent (threadDelay)
 
 run :: IO Int
 run = runServer server -- `catch` handler
@@ -46,20 +47,18 @@ onConfigurationChange' _old v =
 doInitialize' ::
   LanguageContextEnv Config ->
   RequestMessage 'Initialize ->
-  IO (Either ResponseError (ServerEnv, SAWEnv))
+  IO (Either ResponseError (ServerEnv, IORef SAWState))
 doInitialize' env initMsg =
   do
     serverEnv <- newServerEnv env
-    sawEnv <- defaultSAWEnv
-    -- let sawEnv = undefined
-    -- threadDelay 10000000 -- microseconds
-    pure (Right (serverEnv, sawEnv))
+    sawStateRef <- newSAWState >>= newIORef
+    pure (Right (serverEnv, sawStateRef))
 
-interpretHandler' :: (ServerEnv, SAWEnv) -> (ServerM <~> IO)
-interpretHandler' (serverEnv, sawEnv) = Iso serverToIO ioToServer
+interpretHandler' :: (ServerEnv, IORef SAWState) -> (ServerM <~> IO)
+interpretHandler' (serverEnv, sawStateRef) = Iso serverToIO ioToServer
   where
     serverToIO :: ServerM a -> IO a
-    serverToIO action = runServerM action serverEnv sawEnv
+    serverToIO action = runServerM' action serverEnv sawStateRef
 
     ioToServer :: IO a -> ServerM a
     ioToServer = liftIO

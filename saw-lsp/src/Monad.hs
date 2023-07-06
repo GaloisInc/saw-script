@@ -13,6 +13,7 @@ import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Control.Monad.Trans (MonadTrans (..))
 import Data.Aeson (FromJSON)
+import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
@@ -74,11 +75,18 @@ newtype ServerM a = ServerM
 instance MonadLsp Config ServerM where
   getLspEnv = asks serverConfig
 
-runServerM :: ServerM a -> ServerEnv -> SAWEnv -> IO a
-runServerM (ServerM r) serverEnv sawEnv =
+runServerM :: ServerM a -> ServerEnv -> SAWState -> IO a
+runServerM (ServerM r) serverEnv sawState =
   do
     let sawAction = runReaderT r serverEnv
-        lspAction = runSAWT sawAction sawEnv
+        lspAction = runSAWT sawAction sawState
+    runLspT (serverConfig serverEnv) lspAction
+
+runServerM' :: ServerM a -> ServerEnv -> IORef SAWState -> IO a
+runServerM' (ServerM r) serverEnv sawStateRef =
+  do
+    let sawAction = runReaderT r serverEnv
+        lspAction = runSAWT' sawAction sawStateRef
     runLspT (serverConfig serverEnv) lspAction
 
 liftSAW :: SAWT (LspM Config) a -> ServerM a
