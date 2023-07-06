@@ -7,7 +7,7 @@ fn f(ptr: *mut u8) {
     unsafe { ptr::swap(ptr.sub(1), ptr) };
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     let mut x = <[u8; 2]>::symbolic("x");
@@ -47,7 +47,7 @@ fn f_spec() -> MethodSpec {
 //   - PointsTos: ptr0 -> [y0, y1]
 //   - Postconditions: y1 > 0
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

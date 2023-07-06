@@ -8,7 +8,7 @@ static ATOMIC: AtomicUsize = AtomicUsize::new(123);
 fn f() {
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     f();
@@ -27,7 +27,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

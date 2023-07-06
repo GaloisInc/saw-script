@@ -7,7 +7,7 @@ cryptol! {
     fn add_byte(x: u8, y: u8) -> u8 = "addByte";
 }
 
-#[crux_test]
+#[crux::test]
 fn test() {
     let x = u8::symbolic("x");
     let y = u8::symbolic("y");

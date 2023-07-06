@@ -62,6 +62,7 @@ import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import Mir.Compositional.Convert
+import Mir.Compositional.DefId (hasInstPrefix)
 
 
 cryptolOverrides ::
@@ -74,7 +75,7 @@ cryptolOverrides ::
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
 cryptolOverrides _symOnline cs name cfg
 
-  | (normDefId "crucible::cryptol::load" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
   , Empty
       :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
       :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
@@ -90,7 +91,7 @@ cryptolOverrides _symOnline cs name cfg
         RegMap (Empty :> RegEntry _tpr modulePathStr :> RegEntry _tpr' nameStr) <- getOverrideArgs
         cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
-  | (normDefId "crucible::cryptol::override_" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "cryptol", "override_"] explodedName
   , Empty
       :> UnitRepr
       :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
@@ -114,7 +115,7 @@ cryptolOverrides _symOnline cs name cfg
           :> RegEntry _tpr' nameStr) <- getOverrideArgs
         cryptolOverride (cs ^. collection) mh modulePathStr nameStr
 
-  | (normDefId "crucible::cryptol::munge" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "cryptol", "munge"] explodedName
   , Empty :> tpr <- cfgArgTypes cfg
   , tpr' <- cfgReturnType cfg
   , Just Refl <- testEquality tpr tpr'
@@ -131,7 +132,8 @@ cryptolOverrides _symOnline cs name cfg
         liftIO $ munge sym shp rv
 
   | otherwise = Nothing
-
+  where
+    explodedName = textIdKey name
 
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
@@ -333,6 +335,8 @@ munge sym shp rv = do
                 AnyValue tpr <$> goFields flds rvs
             | otherwise = error $  "munge: StructShape AnyValue with NYI TypeRepr " ++ show tpr
         go (TransparentShape _ shp) rv = go shp rv
+        go (FnPtrShape _ _ _) _ =
+            error "Function pointers not currently supported in overrides"
         -- TODO: RefShape
         go shp _ = error $ "munge: " ++ show (shapeType shp) ++ " NYI"
 
