@@ -27,6 +27,7 @@ import qualified Prettyprinter.Render.String as PP
 
 import qualified What4.ProgramLoc as W4
 import qualified What4.FunctionName as W4
+import Data.Hashable (Hashable)
 
 -- Pos ------------------------------------------------------------------------
 
@@ -37,6 +38,8 @@ data Pos = Range !FilePath -- file
          | PosInternal String
          | PosREPL
   deriving (Data, Generic, Eq)
+
+instance Hashable Pos
 
 renderDoc :: PP.Doc ann -> String
 renderDoc doc = PP.renderString (PP.layoutPretty opts doc)

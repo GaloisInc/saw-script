@@ -49,6 +49,7 @@ library
     , filepath
     , flexdis86
     , free
+    , hashable ^>=1.4.2.0
     , haskeline
     , heapster-saw
     , hobbits >= 1.3.1

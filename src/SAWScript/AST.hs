@@ -13,6 +13,7 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module SAWScript.AST
        ( Name
@@ -54,6 +55,8 @@ import           Prettyprinter (Pretty)
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
+import Data.Hashable (Hashable)
+import GHC.Generics (Generic)
 
 -- Names {{{
 
@@ -65,12 +68,14 @@ type Bind a = (Name,a)
 
 -- Expr Level {{{
 
-data Located a = Located { getVal :: a, getOrig :: Name, locatedPos :: Pos } deriving (Functor, Foldable, Traversable)
+data Located a = Located { getVal :: a, getOrig :: Name, locatedPos :: Pos } deriving (Functor, Foldable, Generic, Traversable)
 instance Show (Located a) where
   show (Located _ v p) = show v ++ " (" ++ show p ++ ")"
 
 instance Positioned (Located a) where
   getPos = locatedPos
+
+instance Hashable a => Hashable (Located a)
 
 type LName = Located Name
 
@@ -88,7 +93,9 @@ data Import = Import
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
   , iPos       :: Pos
-  } deriving (Eq, Show)
+  } deriving (Eq, Generic, Show)
+
+instance Hashable Import
 
 instance Positioned Import where
   getPos = iPos
@@ -119,7 +126,9 @@ data Expr
   | IfThenElse Expr Expr Expr
   -- Source locations
   | LExpr Pos Expr
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable Expr
 
 instance Positioned Expr where
   getPos (Code c) = getPos c
@@ -133,7 +142,9 @@ data Pattern
   | PVar LName (Maybe Type)
   | PTuple [Pattern]
   | LPattern Pos Pattern
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable Pattern
 
 instance Positioned Pattern where
   getPos (LPattern pos _) = pos
@@ -145,7 +156,7 @@ data Stmt
   | StmtCode     Pos (Located String)
   | StmtImport   Pos Import
   | StmtTypedef  Pos (Located String) Type
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
 
 instance Positioned Stmt where
   getPos (StmtBind pos _ _ _)  = pos
@@ -154,10 +165,14 @@ instance Positioned Stmt where
   getPos (StmtImport pos _)    = pos
   getPos (StmtTypedef pos _ _) = pos
 
+instance Hashable Stmt
+
 data DeclGroup
   = Recursive [Decl]
   | NonRecursive Decl
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable DeclGroup
 
 instance Positioned DeclGroup where
   getPos (Recursive ds) = maxSpan ds
@@ -165,7 +180,9 @@ instance Positioned DeclGroup where
 
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable Decl
 
 instance Positioned Decl where
   getPos = dPos
@@ -181,7 +198,9 @@ data Context
   | ProofScript
   | TopLevel
   | CrucibleSetup
-  deriving (Eq,Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable Context
 
 data Type
   = TyCon TyCon [Type]
@@ -190,7 +209,9 @@ data Type
   | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
   | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
   | LType Pos Type
-  deriving (Eq,Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable Type
 
 instance Positioned Type where
   getPos (LType pos _) = pos
@@ -213,10 +234,14 @@ data TyCon
   | JVMSpecCon
   | LLVMSpecCon
   | ContextCon Context
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable TyCon
 
 data Schema = Forall [Name] Type
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+
+instance Hashable Schema
 
 -- }}}
 
