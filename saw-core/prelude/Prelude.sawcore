@@ -2381,13 +2381,11 @@ map1 a b f l =
 -- Return the nth element of a List1, or a default value if n is too big
 nth_default1 : (a:sort 1) -> a -> List1 a -> Nat -> a;
 nth_default1 a d l =
-  List1#rec
-  LetRecType
-  (\ (lrts:List1 LetRecType) -> Nat -> LetRecType)
-  (\ (_:Nat) -> d)
-  (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
-     Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
-  lrts;
+  List1#rec a (\ (_:List1 a) -> Nat -> a)
+    (\ (_:Nat) -> d)
+    (\ (x:a) (_:List1 a) (rec:Nat -> a) (n:Nat) ->
+       Nat_cases a x (\ (m:Nat) (_:a) -> rec m) n)
+    l;
 
 
 --------------------------------------------------------------------------------
@@ -2423,12 +2421,12 @@ axiom pair_ValidLRTFunctor2 : ValidLRTFunctor2 (\ (A B:sort 0) -> A * B);
 
 -- The Vec type constructor is a valid LRT functor
 axiom Vec_ValidLRTFunctor2 :
-  (n:nat) -> ValidLRTFunctor2 (\ (A _:sort 0) -> Vec n A);
+  (n:Nat) -> ValidLRTFunctor2 (\ (A _:sort 0) -> Vec n A);
 
 -- An inductive encoding of monadic function types and their arguments
 data LetRecType : sort 1 where {
   -- A nullary monadic function, that returns a value of the encoded type
-  LRT_Ret : LetRecType -> LetRecType;
+  LRT_SpecM : LetRecType -> LetRecType;
   -- A dependent monadic function type
   LRT_FunDep : (a:sort 0) -> (a -> LetRecType) -> LetRecType;
   -- A non-dependent monadic function type, which can take in closures
@@ -2444,7 +2442,7 @@ data LetRecType : sort 1 where {
 
 -- A trivially inhabied "default" LetRecType, representing void -> void
 default_lrt : LetRecType;
-default_lrt = LRT_FunDep Void (\ (_:Void) -> LRT_Ret (LRT_Type Void));
+default_lrt = LRT_FunDep Void (\ (_:Void) -> LRT_SpecM (LRT_Type Void));
 
 -- A function stack is a list of LetRecTypes, which intuitively
 -- represents a stack of bindings of mutually recursive functions
@@ -2461,7 +2459,7 @@ stackLen = length1 LetRecType;
 
 -- Get the nth element of a FunStack, or void -> void if n is too big
 nthLRT : List1 LetRecType -> Nat -> LetRecType;
-nthLRT lrts = nth_default1 default_lrt lrts;
+nthLRT lrts = nth_default1 LetRecType default_lrt lrts;
 
 -- A monadic function closure, whose type is described be a LetRecType; this is
 -- defined in the translation to Coq, and is only axiomatized here
@@ -2505,7 +2503,7 @@ applyLRTClosNRet stk =
          (\ (_:LetRecType) -> sort 0)
          (\ (R:LetRecType) (_:sort 0) -> Void -> Void)
          (\ (A:sort 0) (B:A -> LetRecType) (rec:A -> sort 0) ->
-            (a:A) -> rec (B a))
+            (a:A) -> rec a)
          (\ (A:LetRecType) (_:sort 0) (B:LetRecType) (recB:sort 0) ->
             LRTArg stk A -> recB)
          (\ (A:sort 0) -> Void -> Void)
@@ -2566,7 +2564,7 @@ LRTInput stack lrt =
   lrt;
 
 -- Build the output type (R a1 ... an) of the application of a LetRecType
--- (LRT_Fun A1 (\ a1 -> ... (LRT_Fun An (\ an -> LRT_Ret R a1 ... an))))
+-- (LRT_Fun A1 (\ a1 -> ... (LRT_Fun An (\ an -> LRT_SpecM R a1 ... an))))
 -- function to the arguments a1 ... an in an LRTInput
 LRTOutput : (stack:FunStack) -> (lrt:LetRecType) -> LRTInput stack lrt -> sort 0;
 LRTOutput stack lrt =
@@ -2592,9 +2590,9 @@ LRTOutput stack lrt =
      elimVoid (sort 0) v)
   lrt;
 
--- Build the function type (a1:A1) -> ... -> (an:An) -> B from the LetRecType
--- (LRT_Fun A1 (\ a1 -> ...)). A LetRecType that is not a monadic function type
--- turns into a function from v:void -> F v
+-- Build the function type (a1:A1) -> ... -> (an:An) -> B represented by a
+-- LetRecType. A LetRecType that is not a monadic function type turns into a
+-- function from v:void -> F v
 lrtPi : (stack:FunStack) -> (lrt:LetRecType) ->
         (LRTInput stack lrt -> sort 0) -> sort 0;
 lrtPi stack lrt_top =
@@ -2604,13 +2602,13 @@ lrtPi stack lrt_top =
      (rec:#() -> sort 0) -> rec ())
   (\ (A:sort 0) (B: A -> LetRecType)
      (rec: (x:A) -> (LRTInput stack (B x) -> sort 0) -> sort 0)
-     (rec : LRTInput stack (LRT_FunDep A B) -> sort 0) ->
+     (outF : LRTInput stack (LRT_FunDep A B) -> sort 0) ->
      (x:A) -> rec x (\ (args : LRTInput stack (B x)) ->
-                       rec (exists A (\ (y:A) -> LRTInput stack (B y)) x args)))
+                       outF (exists A (\ (y:A) -> LRTInput stack (B y)) x args)))
   (\ (A:LetRecType) (_:(LRTInput stack A -> sort 0) -> sort 0)
      (B:LetRecType) (rec:(LRTInput stack B -> sort 0) -> sort 0)
-     (rec : LRTInput stack (LRT_Fun A B) -> sort 0) ->
-     (x:LRTArg stack A) -> rec (\ (args : LRTInput stack B) -> rec (x, args)))
+     (outF : LRTInput stack (LRT_FunClos A B) -> sort 0) ->
+     (x:LRTArg stack A) -> rec (\ (args : LRTInput stack B) -> outF (x, args)))
   (\ (A:sort 0) (rec : Void -> sort 0) -> (v:Void) -> rec v)
   (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
      (A:LetRecType) (_:(LRTInput stack A -> sort 0) -> sort 0)
@@ -2724,7 +2722,7 @@ orS E stack a m1 m2 =
         (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
 
 -- Call a monadic function closure of monadic type
-primitive CallS : (E:vType) -> (stk:FunStack) -> (R:LetRecType) ->
+primitive CallS : (E:EvType) -> (stk:FunStack) -> (R:LetRecType) ->
                   LRTClos stk (LRT_SpecM R) -> SpecM E stk (LRTArg stk R);
 
 
@@ -2998,7 +2996,7 @@ primitive SpecDef : EvType -> LetRecType -> sort 1;
 
 -- A "spec import" is a spec definition that is imported into another spec
 -- definition, represented as a SpecDef with existential LetRecType
-data SpecImp (E: EvType) : sort 1 {
+data SpecImp (E: EvType) : sort 1 where {
   Build_SpecImp : (lrt : LetRecType) -> SpecDef E lrt -> SpecImp E;
 }
 
@@ -3006,7 +3004,7 @@ data SpecImp (E: EvType) : sort 1 {
 SpecImpType : (E:EvType) -> SpecImp E -> LetRecType;
 SpecImpType E imp =
   SpecImp#rec E (\ (_:SpecImp E) -> LetRecType)
-    (\ (lrt:LetRecType) (_:Specef E lrt) -> lrt) imp;
+    (\ (lrt:LetRecType) (_:SpecDef E lrt) -> lrt) imp;
 
 -- The FunStack used by defineSpec; also defined only in Coq, not in SAW
 primitive defineSpecStack :
@@ -3017,7 +3015,7 @@ primitive defineSpec :
   (E:EvType) -> (stk:FunStack) -> (lrt:LetRecType) -> (imps:List1 (SpecImp E)) ->
   PolyStackTuple E (defineSpecStack E stk imps) stk ->
   PolySpecFun E (defineSpecStack E stk imps) lrt ->
-  SpecDef E;
+  SpecDef E lrt;
 
 -- Build a closure that calls the nth corecursive function out of those that are
 -- defined locally in a SpecDef
@@ -3029,14 +3027,18 @@ primitive mkLocalLRTClos :
 -- The "default", trivial spec definition
 defaultSpecDef : (E:EvType) -> SpecDef E default_lrt;
 defaultSpecDef E =
-  defineSpec E emptyFunStack default_lrt (Nil1 (SpecImp E)) ()
-    (\ (stk': FunStack) (incl: stackIncl (defineSpecStack E stk imps) stk')
+  defineSpec E emptyFunStack default_lrt (Nil1 (SpecImp E))
+    (\ (stk': FunStack)
+       (incl: stackIncl (defineSpecStack E emptyFunStack (Nil1 (SpecImp E))) stk') ->
+       ())
+    (\ (stk': FunStack)
+       (incl: stackIncl (defineSpecStack E emptyFunStack (Nil1 (SpecImp E))) stk')
        (v:Void) -> elimVoid (SpecM E stk' Void) v);
 
 -- Get the nth spec import from a list
 nthImport : (E:EvType) -> List1 (SpecImp E) -> Nat -> SpecImp E;
 nthImport E =
-  nth_default1 (SpecImp E) (Build_SpecImp default_lrt (defaultSpecDef E));
+  nth_default1 (SpecImp E) (Build_SpecImp E default_lrt (defaultSpecDef E));
 
 -- Call the body of the nth import from a spec import list
 primitive callNthImportS :
