@@ -2451,7 +2451,7 @@ verification](#compositional-verification).
 To understand the issues surrounding global variables, consider the following C
 code:
 
-<!-- This should (partially) match intTests/test0036_globals/test.c -->
+<!-- This matches intTests/test0036_globals/test-signed.c -->
 ~~~
 int x = 0;
 
@@ -2468,7 +2468,7 @@ int g(int z) {
 
 One might initially write the following specifications for `f` and `g`:
 
-<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+<!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
@@ -2499,7 +2499,7 @@ To deal with this, we can use the following function:
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
-<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+<!-- This matches intTests/test0036_globals/test-signed.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
