@@ -16,7 +16,28 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Cryptol where
+module Verifier.SAW.Cryptol
+  ( scCryptolType
+  , Env(..)
+  , emptyEnv
+
+  , isErasedProp
+  , proveProp
+
+
+  , ImportPrimitiveOptions(..)
+  , importName
+  , importExpr
+  , importTopLevelDeclGroups
+  , importDeclGroups
+  , importType
+  , importKind
+  , importSchema
+
+  , defaultPrimitiveOptions
+  , genNewtypeConstructors
+  , exportValueWithSchema
+  ) where
 
 import Control.Monad (foldM, join, unless)
 import Control.Exception (catch, SomeException)
@@ -46,12 +67,13 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
-  (asPrim, asParamName, nameUnique, nameIdent, nameInfo, NameInfo(..))
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
-  , ModPath(..), modPathSplit
+  , ModPath(..), modPathSplit, ogModule, Namespace(NSValue)
+  , modNameChunksText
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (Newtype(..))
@@ -933,11 +955,14 @@ importExpr sc env expr =
              let t = fastTypeOf (envC env) e
              case C.tNoUser t of
                C.TRec fm ->
-                 do i <- the (elemIndex x (map fst (C.canonicalFields fm)))
+                 do i <- the
+                      ("Expected filed " ++ show x ++ " in normal RecordSel")
+                      (elemIndex x (map fst (C.canonicalFields fm)))
                     scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
                C.TNewtype nt _args ->
                  do let fs = C.ntFields nt
-                    i <- the (elemIndex x (map fst (C.canonicalFields fs)))
+                    i <- the ("Expected field " ++ show x ++ " in Newtype Record Sel")
+                          (elemIndex x (map fst (C.canonicalFields fs)))
                     scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
                _ -> panic "importExpr" ["invalid record selector", pretty x, pretty t]
         C.ListSel i _maybeLen ->
@@ -973,7 +998,8 @@ importExpr sc env expr =
              case C.tIsRec t1 of
                Nothing -> panic "importExpr" ["ESet/RecordSel: not a record type"]
                Just tm ->
-                 do i <- the (elemIndex x (map fst (C.canonicalFields tm)))
+                 do i <- the ("Expected a field " ++ show x ++ " RecordSel")
+                      (elemIndex x (map fst (C.canonicalFields tm)))
                     ts' <- traverse (importType sc env . snd) (C.canonicalFields tm)
                     let t2' = ts' !! i
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
@@ -1054,8 +1080,8 @@ importExpr sc env expr =
       error "Using contsraint guards is not yet supported by SAW."
 
   where
-    the :: Maybe a -> IO a
-    the = maybe (panic "importExpr" ["internal type error"]) return
+    the :: String -> Maybe a -> IO a
+    the what = maybe (panic "importExpr" ["internal type error", what]) return
 
 
 -- | Convert a Cryptol expression with the given type schema to a
@@ -1070,19 +1096,19 @@ importExpr' sc env schema expr =
       error "Using contsraint guards is not yet supported by SAW."
 
     C.ETuple es ->
-      do ty <- the (C.isMono schema)
-         ts <- the (C.tIsTuple ty)
+      do ty <- the "Expected a mono type in ETuple" (C.isMono schema)
+         ts <- the "Expected a tuple type in ETuple" (C.tIsTuple ty)
          es' <- sequence (zipWith go ts es)
          scTuple sc es'
 
     C.ERec fm ->
-      do ty <- the (C.isMono schema)
-         tm <- the (C.tIsRec ty)
+      do ty <- the "Expected a mono type in ERec" (C.isMono schema)
+         tm <- the "Expected a record type in ERec" (C.tIsRec ty)
          es' <- sequence (zipWith go (map snd (C.canonicalFields tm)) (map snd (C.canonicalFields fm)))
          scTuple sc es'
 
     C.EIf e1 e2 e3 ->
-      do ty <- the (C.isMono schema)
+      do ty  <- the "Expected a mono type in EIf" (C.isMono schema)
          ty' <- importType sc env ty
          e1' <- importExpr sc env e1
          e2' <- importExpr' sc env schema e2
@@ -1102,8 +1128,8 @@ importExpr' sc env schema expr =
          scLambda sc (tparamToLocalName tp) k e'
 
     C.EAbs x _ e ->
-      do ty <- the (C.isMono schema)
-         (a, b) <- the (C.tIsFun ty)
+      do ty <- the "expected a mono schema in EAbs" (C.isMono schema)
+         (a, b) <- the "expected a function type in EAbs" (C.tIsFun ty)
          a' <- importType sc env a
          env' <- bindName sc x (C.tMono a) env
          e' <- importExpr' sc env' (C.tMono b) e
@@ -1113,7 +1139,13 @@ importExpr' sc env schema expr =
       do (prop, schema') <-
            case schema of
              C.Forall [] (p : ps) ty -> return (p, C.Forall [] ps ty)
-             C.Forall _ _ _ -> panic "importExpr" ["internal type error"]
+             C.Forall as ps _ ->
+                panic "importExpr"
+                  ["internal type error"
+                  , "expected a schema with no variables and a predicate"
+                  , "found: " ++ (if null as then "" else " variables")
+                              ++ (if null ps then " no predicate" else "")
+                  ]
          if isErasedProp prop
            then importExpr' sc env schema' e
            else do p' <- importType sc env prop
@@ -1141,13 +1173,13 @@ importExpr' sc env schema expr =
     go :: C.Type -> C.Expr -> IO Term
     go t = importExpr' sc env (C.tMono t)
 
-    the :: Maybe a -> IO a
-    the = maybe (panic "importExpr" ["internal type error"]) return
+    the :: String -> Maybe a -> IO a
+    the what = maybe (panic "importExpr" ["internal type error",what]) return
 
     fallback :: IO Term
     fallback =
       do let t1 = fastTypeOf (envC env) expr
-         t2 <- the (C.isMono schema)
+         t2 <- the "falback: schema is not mono" (C.isMono schema)
          expr' <- importExpr sc env expr
          coerceTerm sc env t1 t2 expr'
 
@@ -1258,26 +1290,25 @@ isCryptolInteractiveName (ImportedName uri _)
 isCryptolInteractiveName _ = Nothing
 
 
-
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
-    C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
-    C.Declared modNm _
-      | modNm == C.TopModule C.interactiveName ->
+    C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ show cnm)
+    C.GlobalName _ns og
+      | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               aliases = [shortNm]
               uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
            in pure (ImportedName uri aliases)
 
       | otherwise ->
-          let (topMod, nested) = C.modPathSplit modNm
-              modNmTxt = C.modNameToText topMod
-              modNms   = (Text.splitOn "::" modNmTxt) ++ map C.identText nested
-              shortNm  = C.identText (C.nameIdent cnm)
-              longNm   = Text.intercalate "::" ([modNmTxt] ++ map C.identText nested ++ [shortNm])
-              aliases  = [shortNm, longNm]
-              uri      = cryptolURI (modNms ++ [shortNm]) Nothing
+          let (topMod, nested) = C.modPathSplit (C.ogModule og)
+              topChunks = C.modNameChunksText topMod
+              modNms    = topChunks ++ map C.identText nested
+              shortNm   = C.identText (C.nameIdent cnm)
+              longNm    = Text.intercalate "::" (modNms ++ [shortNm])
+              aliases   = [shortNm, longNm]
+              uri       = cryptolURI (modNms ++ [shortNm]) Nothing
            in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
@@ -1843,14 +1874,15 @@ genNewtypeConstructors sc newtypes env0 =
     genConstr :: Env -> Newtype -> IO Env
     genConstr env nt = do
       constr <- importExpr sc env (newtypeConstr nt)
-      let env' = env { envE = Map.insert (ntName nt) (constr, 0) (envE env)
-                     , envC = Map.insert (ntName nt) (newtypeSchema nt) (envC env)
+      let env' = env { envE = Map.insert (ntConName nt) (constr, 0) (envE env)
+                     , envC = Map.insert (ntConName nt) (newtypeSchema nt) (envC env)
                      }
       return env'
     newtypeConstr :: Newtype -> C.Expr
     newtypeConstr nt = foldr tFn fn (C.ntParams nt)
       where
-        paramName = C.asParamName (ntName nt)
+        paramName = C.asLocal C.NSValue (ntConName nt)
+
         recTy = C.TRec $ ntFields nt
         fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
         tFn tp body =

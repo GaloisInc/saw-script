@@ -2037,7 +2037,8 @@ core_axiom input =
      t <- parseCore input
      p <- io (termToProp sc t)
      db <- SV.getTheoremDB
-     thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     (thm, db') <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     SV.putTheoremDB db'
      SV.returnProof thm
 
 core_thm :: String -> TopLevel Theorem
@@ -2046,7 +2047,8 @@ core_thm input =
      sc <- getSharedContext
      pos <- SV.getPosition
      db <- SV.getTheoremDB
-     thm <- io (proofByTerm sc db t pos "core_thm")
+     (thm, db') <- io (proofByTerm sc db t pos "core_thm")
+     SV.putTheoremDB db'
      SV.returnProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
@@ -2054,7 +2056,8 @@ specialize_theorem thm ts =
   do sc <- getSharedContext
      db <- SV.getTheoremDB
      pos <- SV.getPosition
-     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     (thm', db') <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.putTheoremDB db'
      SV.returnProof thm'
 
 get_opt :: Int -> TopLevel String
@@ -2427,7 +2430,7 @@ summarize_verification =
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
-     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     let summary = computeVerificationSummary db jspecs lspecs thms
      opts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
@@ -2439,7 +2442,7 @@ summarize_verification_json fpath =
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
-     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     let summary = computeVerificationSummary db jspecs lspecs thms
      io (writeFile fpath (jsonVerificationSummary summary))
 
 writeVerificationSummary :: TopLevel ()
@@ -2450,7 +2453,7 @@ writeVerificationSummary = do
     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
         thms    = [ t | SV.VTheorem t <- values ]
-    summary <- io (computeVerificationSummary db jspecs lspecs thms)
+        summary = computeVerificationSummary db jspecs lspecs thms
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     nenv <- io . scGetNamingEnv =<< getSharedContext
