@@ -2378,6 +2378,17 @@ map1 a b f l =
     a (\ (_:List1 a) -> List1 b) (Nil1 b)
     (\ (x:a) (_:List1 a) (rec:List1 b) -> Cons1 b (f x) rec) l;
 
+-- Return the nth element of a List1, or a default value if n is too big
+nth_default1 : (a:sort 1) -> a -> List1 a -> Nat -> a;
+nth_default1 a d l =
+  List1#rec
+  LetRecType
+  (\ (lrts:List1 LetRecType) -> Nat -> LetRecType)
+  (\ (_:Nat) -> d)
+  (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
+     Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
+  lrts;
+
 
 --------------------------------------------------------------------------------
 -- ITree Specification monad
@@ -2403,26 +2414,33 @@ evRetType e =
 VoidEv : EvType;
 VoidEv = Build_EvType Void (elimVoid (sort 0));
 
+-- Proof that a type-level function is a valid functor for use in a LetRecType;
+-- this is defined in the translation to Coq, and is only axiomatized here
+primitive ValidLRTFunctor2 : (sort 0 -> sort 0 -> sort 0) -> sort 0;
+
+-- The pair functor is a valid binary LRT functor
+axiom pair_ValidLRTFunctor2 : ValidLRTFunctor2 (\ (A B:sort 0) -> A * B);
+
+-- The Vec type constructor is a valid LRT functor
+axiom Vec_ValidLRTFunctor2 :
+  (n:nat) -> ValidLRTFunctor2 (\ (A _:sort 0) -> Vec n A);
+
 -- An inductive encoding of monadic function types and their arguments
 data LetRecType : sort 1 where {
   -- A nullary monadic function, that returns a value of the encoded type
   LRT_Ret : LetRecType -> LetRecType;
   -- A dependent monadic function type
   LRT_FunDep : (a:sort 0) -> (a -> LetRecType) -> LetRecType;
-  -- A non-dependent monadic function type
-  LRT_Fun : LetRecType -> LetRecType -> LetRecType;
+  -- A non-dependent monadic function type, which can take in closures
+  LRT_FunClos : LetRecType -> LetRecType -> LetRecType;
   -- The unit type
-  LRT_Unit : LetRecType;
+  LRT_Type : sort 0 -> LetRecType;
   -- An application of a binary type function
-  LRT_BinOp : (sort 0 -> sort 0 -> sort 0) ->
+  LRT_BinOp : (F: sort 0 -> sort 0 -> sort 0) -> ValidLRTFunctor2 F ->
               LetRecType -> LetRecType -> LetRecType;
   -- A dependent pair type
   LRT_Sigma : (a:sort 0) -> (a -> LetRecType) -> LetRecType;
 }
-
--- Helper definition to build a LetRecType that decodes to a specific type
-LRT_Type : sort 0 -> LetRecType;
-LRT_Type a = LRT_BinOp (\ (_:sort 0) (_:sort 0) -> a) LRT_Unit LRT_Unit;
 
 -- A trivially inhabied "default" LetRecType, representing void -> void
 default_lrt : LetRecType;
@@ -2443,54 +2461,90 @@ stackLen = length1 LetRecType;
 
 -- Get the nth element of a FunStack, or void -> void if n is too big
 nthLRT : List1 LetRecType -> Nat -> LetRecType;
-nthLRT lrts =
-  List1#rec
-  LetRecType
-  (\ (lrts:List1 LetRecType) -> Nat -> LetRecType)
-  (\ (_:Nat) -> default_lrt)
-  (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
-     Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
-  lrts;
+nthLRT lrts = nth_default1 default_lrt lrts;
 
--- A partial application of a function of LetRecType lrt_in to some of its
--- FunDep arguments, resulting in LetRecType lrt_out
-LRTDepApp : LetRecType -> LetRecType -> sort 0;
-LRTDepApp lrt_in lrt_out =
-  LetRecType#rec
-  (\ (_:LetRecType) -> sort 0)
-  (\ (_:LetRecType) (_:sort 0) -> Eq LetRecType lrt_in lrt_out)
-  (\ (A:sort 0) (B:A -> LetRecType) (rec:A -> sort 0) ->
-     Either (Eq LetRecType lrt_in lrt_out) (Sigma A rec))
-  (\ (_:LetRecType) (_:sort 0) (_:LetRecType) (_:sort 0) ->
-     Eq LetRecType lrt_in lrt_out)
-  (Eq LetRecType lrt_in lrt_out)
-  (\ (_:sort 0 -> sort 0 -> sort 0) (_:LetRecType) (_:sort 0)
-     (_:LetRecType) (_:sort 0) ->
-     Eq LetRecType lrt_in lrt_out)
-  (\ (a:sort 0) (_:a -> LetRecType) (_:a -> sort 0) ->
-     Eq LetRecType lrt_in lrt_out)
-  lrt_in;
+-- A monadic function closure, whose type is described be a LetRecType; this is
+-- defined in the translation to Coq, and is only axiomatized here
+primitive LRTClos : FunStack -> LetRecType -> sort 0;
 
 -- An argument to a recursive function call, which is a decoding of a LetRecType
--- to its corresponding SAW core type, except that functions are just natural
--- numbers that choose functions in the current function stack
+-- to its corresponding SAW core type
 LRTArg : FunStack -> LetRecType -> sort 0;
 LRTArg stack argTp =
   LetRecType#rec
   (\ (_:LetRecType) -> sort 0)
-  (\ (R:LetRecType) (_:sort 0) ->
-     Sigma Nat (\ (n:Nat) -> LRTDepApp (nthLRT stack n) (LRT_Ret R)))
+  (\ (R:LetRecType) (_:sort 0) -> LRTClos stack (LRT_SpecM R))
   (\ (A:sort 0) (B:A -> LetRecType) (_:A -> sort 0) ->
-     Sigma Nat (\ (n:Nat) -> LRTDepApp (nthLRT stack n) (LRT_FunDep A B)))
+     LRTClos stack (LRT_FunDep A B))
   (\ (A:LetRecType) (_:sort 0) (B:LetRecType) (_:sort 0) ->
-     Sigma Nat (\ (n:Nat) -> LRTDepApp (nthLRT stack n) (LRT_Fun A B)))
-  #()
-  (\ (F:sort 0 -> sort 0 -> sort 0) (_:LetRecType) (A:sort 0)
-     (_:LetRecType) (B:sort 0) ->
-     F A B)
-  (\ (A:sort 0) (_:A -> LetRecType) (rec:A -> sort 0) ->
-     Sigma A rec)
+     LRTClos stack (LRT_FunClos A B))
+  (\ (A:sort 0) -> A)
+  (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
+     (_:LetRecType) (recA:sort 0) (_:LetRecType) (recB:sort 0) -> F recA recB)
+  (\ (A:sort 0) (_:A -> LetRecType) (rec:A -> sort 0) -> Sigma A rec)
   argTp;
+
+-- Apply a monadic function closure with a dependent function type
+primitive applyLRTClosDep :
+  (stk:FunStack) -> (A:sort 0) -> (B:A -> LetRecType) ->
+  LRTClos stk (LRT_FunDep A B) -> (a:A) -> LRTClos stk (B a);
+
+-- Apply a monadic function closure with a non-dependent function type
+primitive applyLRTClosClos :
+  (stk:FunStack) -> (A B:LetRecType) ->
+  LRTClos stk (LRT_FunClos A B) -> (a:LRTArg stk A) -> LRTClos stk B;
+
+-- The return type of applyLRTClosN, which applies an LRTClos to N arguments
+applyLRTClosNRet : (stk:FunStack) -> Nat -> LetRecType -> sort 0;
+applyLRTClosNRet stk =
+  Nat__rec
+    (\ (_:Nat) -> LetRecType -> sort 0)
+    (LRTClos stk)
+    (\ (_:Nat) (rec:LetRecType -> sort 0) (lrt:LetRecType) ->
+       LetRecType#rec
+         (\ (_:LetRecType) -> sort 0)
+         (\ (R:LetRecType) (_:sort 0) -> Void -> Void)
+         (\ (A:sort 0) (B:A -> LetRecType) (rec:A -> sort 0) ->
+            (a:A) -> rec (B a))
+         (\ (A:LetRecType) (_:sort 0) (B:LetRecType) (recB:sort 0) ->
+            LRTArg stk A -> recB)
+         (\ (A:sort 0) -> Void -> Void)
+         (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
+            (_:LetRecType) (_:sort 0) (_:LetRecType) (_:sort 0) ->
+            Void -> Void)
+         (\ (A:sort 0) (_:A -> LetRecType) (_:A -> sort 0) -> Void -> Void)
+         lrt);
+
+-- Apply an LRTClos to N arguments
+{-
+applyLRTClosN : (stk:FunStack) -> (n:Nat) -> (lrt:LetRecType) ->
+                LRTClos stk lrt -> applyLRTClosNRet stk n lrt;
+applyLRTClosN stk =
+  Nat__rec
+    (\ (n:Nat) -> (lrt:LetRecType) -> LRTClos stk lrt -> applyLRTClosNRet stk n lrt)
+    (\ (lrt:LetRecType) (clos:LRTClos stk lrt) -> clos)
+    (\ (n':Nat)
+       (rec:(lrt:LetRecType) -> LRTClos stk lrt -> applyLRTClosNRet stk n' lrt)
+       (lrt:LetRecType) ->
+       LetRecType#rec
+         (\ (lrt:LetRecType) -> LRTClos stk lrt -> applyLRTClosNRet stk n' lrt)
+         (\ (R:LetRecType)
+            (_:LRTClos stk (LRT_SpecM R) -> applyLRTClosNRet stk n' (LRT_SpecM R))
+            (_:LRTClos stk (LRT_SpecM R)) (v:Void) -> v)
+         (\ (A:sort 0) (B:A -> LetRecType) (rec:A -> sort 0) ->
+            FIXME HERE
+
+            (a:A) -> rec (B a))
+         (\ (A:LetRecType) (_:sort 0) (B:LetRecType) (recB:sort 0) ->
+            LRTArg stk A -> recB)
+         (\ (A:sort 0) -> Void -> Void)
+         (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
+            (_:LetRecType) (_:sort 0) (_:LetRecType) (_:sort 0) ->
+            Void -> Void)
+         (\ (A:sort 0) (_:A -> LetRecType) (_:A -> sort 0) -> Void -> Void)
+         lrt);
+-}
+
 
 -- Build the dependent type { a1:A1 & { a2:A2 & ... { an:An & unit } ... }} of
 -- inputs to the LetRecType (LRT_Fun A1 (\ a1 -> ...)). Return the Void type for
@@ -2504,12 +2558,11 @@ LRTInput stack lrt =
      Sigma A (\ (a:A) -> rec a))
   (\ (A:LetRecType) (_:sort 0) (B:LetRecType) (rec:sort 0) ->
      LRTArg stack A * rec)
-  Void
-  (\ (_:sort 0 -> sort 0 -> sort 0) (_:LetRecType) (_:sort 0)
-     (_:LetRecType) (_:sort 0) ->
+  (\ (A:sort 0) -> Void)
+  (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
+     (_:LetRecType) (_:sort 0) (_:LetRecType) (_:sort 0) ->
      Void)
-  (\ (A:sort 0) (_:A -> LetRecType) (_:A -> sort 0) ->
-     Void)
+  (\ (A:sort 0) (_:A -> LetRecType) (_:A -> sort 0) -> Void)
   lrt;
 
 -- Build the output type (R a1 ... an) of the application of a LetRecType
@@ -2529,8 +2582,8 @@ LRTOutput stack lrt =
      (B:LetRecType) (rec:LRTInput stack B -> sort 0)
      (args:LRTArg stack A * LRTInput stack B) ->
      rec (args.(2)))
-  (\ (v:Void) -> elimVoid (sort 0) v)
-  (\ (_:sort 0 -> sort 0 -> sort 0)
+  (\ (A:sort 0) (v:Void) -> elimVoid (sort 0) v)
+  (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
      (A:LetRecType) (_:LRTInput stack A -> sort 0)
      (B:LetRecType) (_:LRTInput stack B -> sort 0) (v:Void) ->
      elimVoid (sort 0) v)
@@ -2548,81 +2601,26 @@ lrtPi stack lrt_top =
   LetRecType#rec
   (\ (lrt:LetRecType) -> (LRTInput stack lrt -> sort 0) -> sort 0)
   (\ (R:LetRecType) (_:(LRTInput stack R -> sort 0) -> sort 0)
-     (F:#() -> sort 0) -> F ())
+     (rec:#() -> sort 0) -> rec ())
   (\ (A:sort 0) (B: A -> LetRecType)
      (rec: (x:A) -> (LRTInput stack (B x) -> sort 0) -> sort 0)
-     (F : LRTInput stack (LRT_FunDep A B) -> sort 0) ->
+     (rec : LRTInput stack (LRT_FunDep A B) -> sort 0) ->
      (x:A) -> rec x (\ (args : LRTInput stack (B x)) ->
-                       F (exists A (\ (y:A) -> LRTInput stack (B y)) x args)))
+                       rec (exists A (\ (y:A) -> LRTInput stack (B y)) x args)))
   (\ (A:LetRecType) (_:(LRTInput stack A -> sort 0) -> sort 0)
      (B:LetRecType) (rec:(LRTInput stack B -> sort 0) -> sort 0)
-     (F : LRTInput stack (LRT_Fun A B) -> sort 0) ->
-     (x:LRTArg stack A) -> rec (\ (args : LRTInput stack B) -> F (x, args)))
-  (\ (F : Void -> sort 0) -> (v:Void) -> F v)
-  (\ (_:sort 0 -> sort 0 -> sort 0)
+     (rec : LRTInput stack (LRT_Fun A B) -> sort 0) ->
+     (x:LRTArg stack A) -> rec (\ (args : LRTInput stack B) -> rec (x, args)))
+  (\ (A:sort 0) (rec : Void -> sort 0) -> (v:Void) -> rec v)
+  (\ (F:sort 0 -> sort 0 -> sort 0) (_:ValidLRTFunctor2 F)
      (A:LetRecType) (_:(LRTInput stack A -> sort 0) -> sort 0)
      (B:LetRecType) (_:(LRTInput stack B -> sort 0) -> sort 0)
-     (F : Void -> sort 0) -> (v:Void) -> F v)
+     (rec : Void -> sort 0) -> (v:Void) -> rec v)
   (\ (A:sort 0) (B:A -> LetRecType)
      (_:(a:A) -> (LRTInput stack (B a) -> sort 0) -> sort 0)
-     (F : Void -> sort 0) -> (v:Void) -> F v)
+     (rec : Void -> sort 0) -> (v:Void) -> rec v)
   lrt_top;
 
--- Build an lrtPi function from a unary function on an LRTInput
-lrtLambda : (stack:FunStack) -> (lrt:LetRecType) ->
-            (F: LRTInput stack lrt -> sort 0) ->
-            ((args: LRTInput stack lrt) -> F args) -> lrtPi stack lrt F;
-lrtLambda stack lrt_top =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> (F: LRTInput stack lrt -> sort 0) ->
-                         ((args: LRTInput stack lrt) -> F args) ->
-                         lrtPi stack lrt F)
-  (\ (R:LetRecType) (_: (F: LRTInput stack R -> sort 0) ->
-                        ((args: LRTInput stack R) -> F args) ->
-                        lrtPi stack R F)
-     (F: #() -> sort 0) (f : (args:#()) -> F args) -> f ())
-  (\ (A:sort 0) (B: A -> LetRecType)
-     (rec: (a:A) -> (F: LRTInput stack (B a) -> sort 0) ->
-                    ((args: LRTInput stack (B a)) -> F args) ->
-                    lrtPi stack (B a) F)
-     (F: LRTInput stack (LRT_FunDep A B) -> sort 0)
-     (f : (args: LRTInput stack (LRT_FunDep A B)) -> F args)
-     (a:A) ->
-     rec a (\ (args:LRTInput stack (B a)) ->
-              F (exists A (\ (y:A) -> LRTInput stack (B y)) a args))
-           (\ (args:LRTInput stack (B a)) ->
-              f (exists A (\ (y:A) -> LRTInput stack (B y)) a args)))
-  (\ (A:LetRecType)
-     (_:(F: LRTInput stack A -> sort 0) ->
-        ((args: LRTInput stack A) -> F args) ->
-        lrtPi stack A F)
-     (B:LetRecType)
-     (rec:(F: LRTInput stack B -> sort 0) ->
-          ((args: LRTInput stack B) -> F args) ->
-          lrtPi stack B F)
-     (F : LRTInput stack (LRT_Fun A B) -> sort 0)
-     (f : (args: LRTInput stack (LRT_Fun A B)) -> F args)
-     (a:LRTArg stack A) ->
-     rec (\ (args:LRTInput stack B) -> F (a, args))
-         (\ (args:LRTInput stack B) -> f (a, args)))
-  (\ (F : Void -> sort 0) (f: (v:Void) -> F v) (v:Void) ->
-     elimVoid (F v) v)
-  (\ (_:sort 0 -> sort 0 -> sort 0)
-     (A:LetRecType)
-     (_:(F:LRTInput stack A -> sort 0) -> ((args:LRTInput stack A) -> F args) ->
-        lrtPi stack A F)
-     (B:LetRecType)
-     (_:(F:LRTInput stack B -> sort 0) -> ((args:LRTInput stack B) -> F args) ->
-        lrtPi stack B F)
-     (F : Void -> sort 0) (f: (v:Void) -> F v) (v:Void) ->
-     elimVoid (F v) v)
-  (\ (A:sort 0) (B:A -> LetRecType)
-     (_:(a:A) -> (F:LRTInput stack (B a) -> sort 0) ->
-        ((args:LRTInput stack (B a)) -> F args) ->
-        lrtPi stack (B a) F)
-     (F : Void -> sort 0) (f: (v:Void) -> F v) (v:Void) ->
-     elimVoid (F v) v)
-  lrt_top;
 
 -- A recursive call to one of the functions in a FunStack
 data StackCall (stack : FunStack) : sort 0 where {
@@ -2725,11 +2723,24 @@ orS E stack a m1 m2 =
   bindS E stack Bool a (existsS E stack Bool)
         (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
 
+-- Call a monadic function closure of monadic type
+primitive CallS : (E:vType) -> (stk:FunStack) -> (R:LetRecType) ->
+                  LRTClos stk (LRT_SpecM R) -> SpecM E stk (LRTArg stk R);
+
 
 --
 -- The category of stack inclusions
 --
 
+-- A stack inclusion is a mapping from the indices of one stack to those of
+-- another that preserves LetRecTypes; however, SAW doesn't need to know
+-- anything about how these are defined nor how they are built -- they are
+-- defined and their properties are verified in Coq -- so we just axiomatize
+-- them here as a primitive
+primitive stackIncl : FunStack -> FunStack -> sort 0;
+
+-- FIXME: keeping the SAW core definition of stackIncls in case we need them...
+{-
 -- A proof that a function is a stack inclusion, i.e., is a mapping from the
 -- indices of one stack to those of another that preserves LetRecTypes
 isStackIncl : (stk1 stk2 : FunStack) -> (Nat -> Nat) -> sort 0;
@@ -2824,43 +2835,7 @@ weakenRightStackIncl stk1 stk2 =
   mkStackIncl stk1 (app1 LetRecType stk1 stk2)
     (\ (n:Nat) -> n)
     (weakenRightStackInclProof stk1 stk2);
-
-
---
--- Recursive calls in SpecM
---
-
--- A StackCall in a polymorphic context (in the sense of PolySpecFun, below),
--- where the call is into a function in stk1 but where stk1 has been extended to
--- some arbitrary stk2
-data PolyStackCall (stk1 stk2 : FunStack) : sort 0 where {
-  PolyStackCallOfArgs : (n:Nat) -> LRTInput stk2 (nthLRT stk1 n) ->
-                     PolyStackCall stk1 stk2;
-}
-
--- The return type for a PolyStackCall recursive call
-PolyStackCallRet : (stk1 stk2 : FunStack) -> PolyStackCall stk1 stk2 -> sort 0;
-PolyStackCallRet stk1 stk2 call =
-  PolyStackCall#rec
-    stk1 stk2
-    (\ (_:PolyStackCall stk1 stk2) -> sort 0)
-    (\ (n:Nat) (args : LRTInput stk2 (nthLRT stk1 n)) ->
-       LRTOutput stk2 (nthLRT stk1 n) args)
-    call;
-
--- Create a PolyStackCall in a way where we take in one argument at a time
-mkPolyStackCall : (stk1 stk2 : FunStack) -> (n:Nat) ->
-               lrtPi stk2 (nthLRT stk1 n)
-                     (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> PolyStackCall stk1 stk2);
-mkPolyStackCall stk1 stk2 n =
-  lrtLambda stk2 (nthLRT stk1 n)
-    (\ (_:LRTInput stk2 (nthLRT stk1 n)) -> PolyStackCall stk1 stk2)
-    (\ (args:LRTInput stk2 (nthLRT stk1 n)) -> PolyStackCallOfArgs stk1 stk2 n args);
-
--- Make a recursive call using a PolyStackCall
-primitive callS :
-  (E:EvType) -> (stk1 stk2 : FunStack) -> (incl : stackIncl stk1 stk2) ->
-  (call : PolyStackCall stk1 stk2) -> SpecM E stk2 (PolyStackCallRet stk1 stk2 call);
+-}
 
 
 --
@@ -2888,6 +2863,14 @@ StackTuple E calls defs =
     (\ (lrt:LetRecType) (_:FunStack) (rec:sort 0) -> SpecFun E calls lrt * rec)
     defs;
 
+-- A StackTuple that is polymorphic in its function stack, which defines
+-- functions for all the defs that can call all the calls
+PolyStackTuple : EvType -> FunStack -> FunStack -> sort 1;
+PolyStackTuple E calls defs =
+  (calls':FunStack) -> stackIncl calls calls' -> StackTuple E calls' defs;
+
+-- FIXME: keeping the SAW core definitions for SpecDefs in case we need them...
+{-
 -- Append two StackTuples
 appStackTuple : (E:EvType) -> (calls defs1 defs2 : FunStack) ->
                 StackTuple E calls defs1 -> StackTuple E calls defs2 ->
@@ -2906,12 +2889,6 @@ appStackTuple E calls defs1_top defs2 =
        (tup2:StackTuple E calls defs2) ->
        (tup1.(1), rec tup1.(2) tup2))
     defs1_top;
-
--- A StackTuple that is polymorphic in its function stack, which defines
--- functions for all the defs that can call all the calls
-PolyStackTuple : EvType -> FunStack -> FunStack -> sort 1;
-PolyStackTuple E calls defs =
-  (calls':FunStack) -> stackIncl calls calls' -> StackTuple E calls' defs;
 
 -- Append two PolyStackTuples
 appPolyStackTuple : (E:EvType) -> (calls defs1 defs2 : FunStack) ->
@@ -3010,12 +2987,62 @@ impsFuns E imps_top =
             rec))
     imps_top;
 
+-}
+
+-- A "spec definition" represents a definition of a SpecM monadic function via
+-- corecursion over a tuple of recursive function bodies. However, SAW doesn't
+-- need to know anything about how these are defined nor how they are built --
+-- they are defined and their properties are verified in Coq -- so we just
+-- axiomatize them here as a primitive
+primitive SpecDef : EvType -> LetRecType -> sort 1;
+
+-- A "spec import" is a spec definition that is imported into another spec
+-- definition, represented as a SpecDef with existential LetRecType
+data SpecImp (E: EvType) : sort 1 {
+  Build_SpecImp : (lrt : LetRecType) -> SpecDef E lrt -> SpecImp E;
+}
+
+-- Get the LetRecType of a spec import
+SpecImpType : (E:EvType) -> SpecImp E -> LetRecType;
+SpecImpType E imp =
+  SpecImp#rec E (\ (_:SpecImp E) -> LetRecType)
+    (\ (lrt:LetRecType) (_:Specef E lrt) -> lrt) imp;
+
+-- The FunStack used by defineSpec; also defined only in Coq, not in SAW
+primitive defineSpecStack :
+  (E:EvType) -> FunStack -> List1 (SpecImp E) -> FunStack;
+
 -- FIXME HERE: define defineSpec
 primitive defineSpec :
-  (E:EvType) -> (stk:FunStack) -> (lrt:LetRecType) -> (imps:List1 (SpecDef E)) ->
+  (E:EvType) -> (stk:FunStack) -> (lrt:LetRecType) -> (imps:List1 (SpecImp E)) ->
   PolyStackTuple E (defineSpecStack E stk imps) stk ->
   PolySpecFun E (defineSpecStack E stk imps) lrt ->
   SpecDef E;
+
+-- Build a closure that calls the nth corecursive function out of those that are
+-- defined locally in a SpecDef
+primitive mkLocalLRTClos :
+  (E:EvType) -> (stk: FunStack) -> (imps: List1 (SpecImp E)) ->
+  (stk': FunStack) -> (incl: stackIncl (defineSpecStack E stk imps) stk') ->
+  (n: Nat) -> LRTClos stk' (nthLRT stk n);
+
+-- The "default", trivial spec definition
+defaultSpecDef : (E:EvType) -> SpecDef E default_lrt;
+defaultSpecDef E =
+  defineSpec E emptyFunStack default_lrt (Nil1 (SpecImp E)) ()
+    (\ (stk': FunStack) (incl: stackIncl (defineSpecStack E stk imps) stk')
+       (v:Void) -> elimVoid (SpecM E stk' Void) v);
+
+-- Get the nth spec import from a list
+nthImport : (E:EvType) -> List1 (SpecImp E) -> Nat -> SpecImp E;
+nthImport E =
+  nth_default1 (SpecImp E) (Build_SpecImp default_lrt (defaultSpecDef E));
+
+-- Call the body of the nth import from a spec import list
+primitive callNthImportS :
+  (E:EvType) -> (stk:FunStack) -> (imps:List1 (SpecImp E)) ->
+  (stk':FunStack) -> stackIncl (defineSpecStack E stk imps) stk' ->
+  (n:Nat) -> SpecFun E stk' (SpecImpType E (nthImport E imps n));
 
 
 --
