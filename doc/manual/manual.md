@@ -2524,7 +2524,8 @@ the beginning of verification. This specification is now safe for
 compositional verification: SAW won't use the specification `f_spec`
 unless it can determine that `x` still has its initial value at the
 point of a call to `f`. This specification also constrains `y` to prevent
-integer overflow resulting from the `x + y` expression in `f`.
+signed integer overflow resulting from the `x + y` expression in `f`,
+which is undefined behavior in C.
 
 ## Preconditions and Postconditions
 
