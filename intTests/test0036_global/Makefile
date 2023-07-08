@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -g -emit-llvm -frecord-command-line
-OUTPUT_FILES = test-O1.bc test-O2.bc test-O1.ll test-O2.ll
+OUTPUT_FILES = test-O1.bc test-O2.bc test-O1.ll test-O2.ll test-signed.bc
 
 all: $(OUTPUT_FILES)
 
@@ -12,6 +12,8 @@ test-O2.bc : test.c
 	$(CC) $(CFLAGS) -O2 -c $< -o $@
 test-O2.ll : test.c
 	$(CC) $(CFLAGS) -O2 -S $< -o $@
+test-signed.bc : test.c
+	$(CC) $(CFLAGS) -O0 -c $< -o $@
 
 .PHONY: clean
 clean:

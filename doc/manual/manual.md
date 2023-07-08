@@ -2451,7 +2451,7 @@ verification](#compositional-verification).
 To understand the issues surrounding global variables, consider the following C
 code:
 
-<!-- This should (partially) match intTests/test0036_globals/test.c -->
+<!-- This matches intTests/test0036_globals/test-signed.c -->
 ~~~
 int x = 0;
 
@@ -2468,7 +2468,7 @@ int g(int z) {
 
 One might initially write the following specifications for `f` and `g`:
 
-<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+<!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
@@ -2499,12 +2499,13 @@ To deal with this, we can use the following function:
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
-<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+<!-- This matches intTests/test0036_globals/test-signed.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
 
 let init_global name = do {
+  llvm_alloc_global name;
   llvm_points_to (llvm_global name)
                  (llvm_global_initializer name);
 };
@@ -2512,6 +2513,7 @@ let init_global name = do {
 f_spec <- llvm_verify m "f" [] true (do {
     y <- llvm_fresh_var "y" (llvm_int 32);
     init_global "x";
+    llvm_precond {{ y < 2^^31 - 1 }};
     llvm_execute_func [llvm_term y];
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
@@ -2521,7 +2523,9 @@ which initializes `x` to whatever it is initialized to in the C code at
 the beginning of verification. This specification is now safe for
 compositional verification: SAW won't use the specification `f_spec`
 unless it can determine that `x` still has its initial value at the
-point of a call to `f`.
+point of a call to `f`. This specification also constrains `y` to prevent
+signed integer overflow resulting from the `x + y` expression in `f`,
+which is undefined behavior in C.
 
 ## Preconditions and Postconditions
 
