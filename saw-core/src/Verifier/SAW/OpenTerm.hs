@@ -40,19 +40,24 @@ module Verifier.SAW.OpenTerm (
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
-  lambdaOpenTermAuxM, piOpenTermAuxM
+  lambdaOpenTermAuxM, piOpenTermAuxM,
+  -- * Building SpecM computations
+  SpecTerm(), SpecFunTerm(), defineSpecOpenTerm,
+  mkBaseClosSpec, mkFreshClosSpec, applySpecTerm, applySpecTermMulti
   ) where
 
 import qualified Data.Vector as V
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
+import Control.Monad.Reader
 import Data.Text (Text)
 import Numeric.Natural
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
@@ -428,12 +433,15 @@ newtype OpenTermM a = OpenTermM { unOpenTermM :: TCM a }
 instance MonadIO OpenTermM where
   liftIO = OpenTermM . liftIO
 
+-- | "Run" an 'OpenTermM' computation to produce an 'OpenTerm'
+runOpenTermM :: OpenTermM OpenTerm -> OpenTerm
+runOpenTermM (OpenTermM m) =
+  OpenTerm $ join $ fmap unOpenTerm m
+
 -- | "Complete" an 'OpenTerm' build in 'OpenTermM' to a closed term, or 'fail'
 -- on a type-checking error
 completeOpenTermM :: SharedContext -> OpenTermM OpenTerm -> IO Term
-completeOpenTermM sc (OpenTermM termM) =
-  either (fail . show) return =<<
-  runTCM (typedVal <$> join (fmap unOpenTerm termM)) sc Nothing []
+completeOpenTermM sc m = completeOpenTerm sc (runOpenTermM m)
 
 -- | "De-duplicate" an open term, so that duplicating the returned 'OpenTerm'
 -- does not lead to duplicated WHNF work
@@ -492,6 +500,213 @@ piOpenTermAuxM ::
 piOpenTermAuxM x tp body_f =
   do (tp', body, a) <- bindOpenTermAuxM x tp body_f
      return (OpenTerm (typeInferComplete $ Pi x tp' body), a)
+
+
+--------------------------------------------------------------------------------
+-- Building SpecM computations
+
+-- FIXME HERE NOW: improve all the docs below
+
+-- | When creating a SAW core term of type @PolySpecFun@ or @PolyStackTuple@,
+-- the body or bodies are relative to: the "base" @FunStack@ that gives the
+-- types of all the corecursive functions defined in the current @SpecDef@; an
+-- extension stack that specifies the @FunStack@ of any future @SpecDef@ that
+-- this object will be used in; and a stack inclusion between the two. These are
+-- captured by the 'SpecTermInfo' type.
+--
+-- FIXME: this needs to be all top-level info needed from the SpecDef (local
+-- stack plus import list)
+data SpecTermInfo =
+  SpecTermInfo { specInfoEvType :: OpenTerm,
+                 specInfoLocalsStack :: OpenTerm,
+                 specInfoImps :: OpenTerm,
+                 specInfoExtStack :: OpenTerm,
+                 specInfoIncl :: OpenTerm }
+
+-- | An 'OpenTerm' that depends on a 'SpecTermInfo'. These are used for the
+-- bodies of terms of type @PolySpecFun@ or @PolyStackTuple@.
+type SpecInfoTerm = Reader SpecTermInfo OpenTerm
+
+applySpecInfoTerm :: SpecInfoTerm -> SpecInfoTerm -> SpecInfoTerm
+applySpecInfoTerm f arg = applyOpenTerm <$> f <*> arg
+
+-- | Apply a term to all of the 'SpecTermInfo' terms in order
+applySpecInfoOp :: Ident -> SpecInfoTerm
+applySpecInfoOp f =
+  do SpecTermInfo { specInfoEvType = ev, specInfoLocalsStack = local_stk,
+                    specInfoImps = imps, specInfoExtStack = stk',
+                    specInfoIncl = incl } <- ask
+     return $ applyGlobalOpenTerm f [ev, local_stk, imps, stk', incl]
+
+-- | In order to create a recursive function in a @SpecDef@, we need its
+-- @LetRecType@ and its definition as a @PolySpecFun E stk lrt@. The difficulty
+-- is that the function stack @stk@ is only known after we have fully processed
+-- all the recursive function definitions in the entire @SpecDef@, so we make
+-- the body depend on the @stk@ value; that is, 'specRecFunBody' should take in
+-- @stk@ and return a SAW core term of type @PolySpecFun E stk lrt@, where @lrt@
+-- is the value of 'specRecFunLRT'.
+data SpecRecFun = SpecRecFun { specRecFunLRT :: OpenTerm,
+                               specRecFunBody :: Maybe SpecInfoTerm }
+
+tempSpecRecFun :: OpenTerm -> SpecRecFun
+tempSpecRecFun lrt = SpecRecFun { specRecFunLRT = lrt,
+                                  specRecFunBody = Nothing }
+
+-- | The state that is built up when building a 'SpecTerm' that is needed to
+-- make the top-level @defineSpec@ call; all the lists are accumulated in
+-- reverse order, so that the final index of elements already in the lists don't
+-- change as we add new elements
+data SpecTermState =
+  SpecTermState { specStEvType :: OpenTerm,
+                  specStNumBaseRecs :: Natural,
+                  specStExtraRecsRev :: [SpecRecFun],
+                  specStImportsRev :: [OpenTerm] }
+
+specStExtraRecs :: SpecTermState -> [SpecRecFun]
+specStExtraRecs st = reverse $ specStExtraRecsRev st
+
+specStImports :: SpecTermState -> [OpenTerm]
+specStImports st = reverse (specStImportsRev st)
+
+specStInsTempClos :: OpenTerm -> SpecTermState -> (Natural, SpecTermState)
+specStInsTempClos lrt st =
+  (specStNumBaseRecs st + fromIntegral (length $ specStExtraRecsRev st),
+   st { specStExtraRecsRev = tempSpecRecFun lrt : specStExtraRecsRev st })
+
+modifyNth :: Int -> (a -> a) -> [a] -> [a]
+modifyNth i _ xs | i >= length xs || i < 0 = error "modifyNthNat"
+modifyNth i f xs = take i xs ++ (f (xs!!i)) : drop (i+1) xs
+
+-- | Modify the nth element from the end of a list
+modifyNthRev :: Int -> (a -> a) -> [a] -> [a]
+modifyNthRev i f xs = modifyNth (length xs - i) f xs
+
+specStSetClosBody :: Natural -> SpecInfoTerm -> SpecTermState -> SpecTermState
+specStSetClosBody clos_ix body st =
+  st { specStExtraRecsRev =
+         modifyNthRev (fromIntegral clos_ix)
+         (\case (SpecRecFun lrt Nothing) -> SpecRecFun lrt (Just body)
+                _ -> panic "specStSetClosBody" ["Closure body already set"])
+         (specStExtraRecsRev st) }
+
+initSpecTermState :: OpenTerm -> Natural -> SpecTermState
+initSpecTermState ev n =
+  SpecTermState { specStEvType = ev, specStNumBaseRecs = n,
+                  specStExtraRecsRev = [], specStImportsRev = [] }
+
+-- | High-level idea: while building a @SpecM@ computation, you have to keep
+-- track of the imported SpecDefs and the co-recursive functions that are
+-- created by defunctionalization, and this is tracked in this monad
+type SpecTermM = StateT SpecTermState OpenTermM
+
+runSpecTermM :: OpenTerm -> Natural -> SpecTermM a -> OpenTermM a
+runSpecTermM ev n m = evalStateT m $ initSpecTermState ev n
+
+-- | A 'SpecTerm' is a term representation used to build @SpecM@ computations to
+-- be used in spec definitions, i.e., terms of type @SpecDef E@ for some given
+-- @E@. Any monadic functions or calls to functions that have been previously
+-- defined are lifted to the top level using the 'SpecTermM' monad. The
+-- resulting terms will always be inside a @PolySpecFun@ or @PolyStackTuple@,
+-- and so are in the context of the information provided by a 'SpecInfoTerm',
+-- thus the use of the 'SpecInfoTerm' type.
+newtype SpecTerm = SpecTerm { unSpecTerm :: SpecTermM SpecInfoTerm }
+
+applySpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
+applySpecTerm (SpecTerm f) (SpecTerm arg) =
+  SpecTerm (applySpecInfoTerm <$> f <*> arg)
+
+applySpecTermMulti :: SpecTerm -> [SpecTerm] -> SpecTerm
+applySpecTermMulti = foldl applySpecTerm
+
+-- | A 'SpecFunTerm' is a term representation of a monadic function, that is
+-- basically the same as 'SpecTerm', except we keep it separate to indicate
+-- where lambdas are allowed, as lambdas are only allowed in certain contexts
+newtype SpecFunTerm = SpecFunTerm { unSpecFunTerm :: SpecTermM SpecInfoTerm }
+
+funStackTypeOpenTerm :: OpenTerm
+funStackTypeOpenTerm = globalOpenTerm "Prelude.FunStack"
+
+letRecTypeOpenTerm :: OpenTerm
+letRecTypeOpenTerm = dataTypeOpenTerm "Prelude.LetRecType" []
+
+specImpOpenTerm :: OpenTerm -> OpenTerm
+specImpOpenTerm ev = dataTypeOpenTerm "Prelude.SpecImp" [ev]
+
+defineSpecStackOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
+defineSpecStackOpenTerm ev local_stk imps =
+  applyGlobalOpenTerm "Prelude.defineSpecStack" [ev, local_stk, imps]
+
+mkPolySpecLambda :: OpenTerm -> OpenTerm -> OpenTerm -> SpecInfoTerm -> OpenTerm
+mkPolySpecLambda ev local_stk imps t =
+  let stk = defineSpecStackOpenTerm ev local_stk imps in
+  lambdaOpenTerm "stk'" funStackTypeOpenTerm $ \stk' ->
+  lambdaOpenTerm "incl" (applyGlobalOpenTerm
+                         "Prelude.stackIncl" [stk, stk']) $ \incl ->
+  runReader t $ SpecTermInfo { specInfoEvType = ev,
+                               specInfoLocalsStack = local_stk,
+                               specInfoImps = imps,
+                               specInfoExtStack = stk',
+                               specInfoIncl = incl }
+
+mkSpecRecFunM :: OpenTerm -> SpecFunTerm -> SpecTermM SpecRecFun
+mkSpecRecFunM lrt (SpecFunTerm m) = SpecRecFun lrt <$> Just <$> m
+
+specRecFunsStack :: [SpecRecFun] -> OpenTerm
+specRecFunsStack recFuns =
+  list1OpenTerm letRecTypeOpenTerm $ map specRecFunLRT recFuns
+
+specRecFunsTuple :: [SpecRecFun] -> SpecInfoTerm
+specRecFunsTuple recFuns =
+  tupleOpenTerm <$> forM recFuns
+  (\rf -> case specRecFunBody rf of
+      Just body -> body
+      Nothing -> panic "specRecFunsTuple" ["Recursive function body not defined"])
+
+-- | Build a spec definition, i.e., a term of type @SpecDef E@, given: an event
+-- type @E@; a list of corecursive functions that can be called in that spec
+-- definition, given as pairs of a @LetRecType@ and a 'SpecFunTerm' of that
+-- type; and a @LetRecType@ plus a body for the entire definition.
+defineSpecOpenTerm :: OpenTerm -> [(OpenTerm,SpecFunTerm)] ->
+                      OpenTerm -> SpecTerm -> OpenTerm
+defineSpecOpenTerm ev base_recs_in lrt body_in =
+  runOpenTermM $ runSpecTermM ev (fromIntegral $ length base_recs_in) $
+  do base_recs <-
+       forM base_recs_in $ \(fun_lrt,fun_tm) -> mkSpecRecFunM fun_lrt fun_tm
+     body <- unSpecTerm body_in
+     final_st <- get
+     let all_recs = base_recs ++ specStExtraRecs final_st
+     let local_stk = specRecFunsStack all_recs
+     let imps = list1OpenTerm (specImpOpenTerm ev) (specStImports final_st)
+     return $ applyGlobalOpenTerm "Prelude.defineSpec"
+       [ev, local_stk, lrt, imps,
+        mkPolySpecLambda ev local_stk imps (specRecFunsTuple all_recs),
+        mkPolySpecLambda ev local_stk imps body]
+
+-- | Internal-only helper function
+mkClosSpecInfoTerm :: Natural -> SpecInfoTerm
+mkClosSpecInfoTerm n =
+  applySpecInfoTerm (applySpecInfoOp "Prelude.mkLocalLRTClos")
+  (return $ natOpenTerm n)
+
+-- | Build a closure that calls one of the "base" recursive functions in the
+-- current spec definition
+mkBaseClosSpec :: Natural -> SpecTerm
+mkBaseClosSpec clos_ix = SpecTerm $
+  do st <- get
+     if clos_ix < specStNumBaseRecs st then return () else
+       panic "mkBaseClosSpec" ["Closure index out of bounds"]
+     return $ mkClosSpecInfoTerm clos_ix
+
+-- | Build a closure that calls a new corecursive function with the given
+-- @LetRecType@ and body, that can call itself using the term passed to it
+mkFreshClosSpec :: OpenTerm -> (SpecTerm -> SpecFunTerm) -> SpecTerm
+mkFreshClosSpec lrt body_f = SpecTerm $
+  do (clos_ix, st) <- specStInsTempClos lrt <$> get
+     put st
+     body <- unSpecFunTerm $ body_f (SpecTerm $ return $
+                                     mkClosSpecInfoTerm clos_ix)
+     modify $ specStSetClosBody clos_ix body
+     return $ mkClosSpecInfoTerm clos_ix
 
 
 --------------------------------------------------------------------------------
