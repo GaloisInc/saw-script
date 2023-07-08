@@ -79,9 +79,9 @@ type TCState = Map TermIndex Term
 -- * Memoizes the most general type inferred for each expression; AND
 --
 -- * Can throw 'TCError's
-type TCM a =
+type TCM =
   ReaderT (SharedContext, Maybe ModuleName, [(LocalName, Term)])
-  (StateT TCState (ExceptT TCError IO)) a
+  (StateT TCState (ExceptT TCError IO))
 
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
