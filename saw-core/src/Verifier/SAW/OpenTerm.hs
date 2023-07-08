@@ -42,8 +42,10 @@ module Verifier.SAW.OpenTerm (
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM,
   -- * Building SpecM computations
-  SpecTerm(), SpecFunTerm(), defineSpecOpenTerm,
-  mkBaseClosSpec, mkFreshClosSpec, applySpecTerm, applySpecTermMulti
+  SpecTerm(), SpecFunTerm(), defineSpecOpenTerm, lambdaSpecFun, baseSpecFun,
+  applySpecTerm, applySpecTermMulti, lambdaSpec, openTermSpecTerm,
+  mkBaseClosSpec, mkFreshClosSpec, callClosSpec, callDefSpec,
+  returnSpec, bindSpec, errorSpec
   ) where
 
 import qualified Data.Vector as V
@@ -512,31 +514,39 @@ piOpenTermAuxM x tp body_f =
 -- types of all the corecursive functions defined in the current @SpecDef@; an
 -- extension stack that specifies the @FunStack@ of any future @SpecDef@ that
 -- this object will be used in; and a stack inclusion between the two. These are
--- captured by the 'SpecTermInfo' type.
+-- captured by the 'SpecInfo' type.
 --
 -- FIXME: this needs to be all top-level info needed from the SpecDef (local
 -- stack plus import list)
-data SpecTermInfo =
-  SpecTermInfo { specInfoEvType :: OpenTerm,
-                 specInfoLocalsStack :: OpenTerm,
-                 specInfoImps :: OpenTerm,
-                 specInfoExtStack :: OpenTerm,
-                 specInfoIncl :: OpenTerm }
+data SpecInfo =
+  SpecInfo { specInfoEvType :: OpenTerm,
+             specInfoLocalsStack :: OpenTerm,
+             specInfoImps :: OpenTerm,
+             specInfoExtStack :: OpenTerm,
+             specInfoIncl :: OpenTerm }
 
--- | An 'OpenTerm' that depends on a 'SpecTermInfo'. These are used for the
--- bodies of terms of type @PolySpecFun@ or @PolyStackTuple@.
-type SpecInfoTerm = Reader SpecTermInfo OpenTerm
+-- | An 'OpenTerm' that depends on a 'SpecInfo'. These are used for the bodies
+-- of terms of type @PolySpecFun@ or @PolyStackTuple@.
+type SpecInfoTerm = Reader SpecInfo OpenTerm
 
 applySpecInfoTerm :: SpecInfoTerm -> SpecInfoTerm -> SpecInfoTerm
 applySpecInfoTerm f arg = applyOpenTerm <$> f <*> arg
 
--- | Apply a term to all of the 'SpecTermInfo' terms in order
-applySpecInfoOp :: Ident -> SpecInfoTerm
-applySpecInfoOp f =
-  do SpecTermInfo { specInfoEvType = ev, specInfoLocalsStack = local_stk,
-                    specInfoImps = imps, specInfoExtStack = stk',
-                    specInfoIncl = incl } <- ask
-     return $ applyGlobalOpenTerm f [ev, local_stk, imps, stk', incl]
+-- | Apply an operator to the event type, locals stack, imports, extended
+-- function stack, and tsack inclusion in the current 'SpecInfo'
+applyStackInclOp :: Ident -> SpecInfoTerm
+applyStackInclOp f =
+  do info <- ask
+     return $ applyGlobalOpenTerm f
+       [specInfoEvType info, specInfoLocalsStack info, specInfoImps info,
+        specInfoExtStack info, specInfoIncl info]
+
+-- | Apply an operator to the current event type and extended function stack
+applyExtStackOp :: Ident -> SpecInfoTerm
+applyExtStackOp f =
+  do info <- ask
+     return $ applyGlobalOpenTerm f
+       [specInfoEvType info, specInfoExtStack info]
 
 -- | In order to create a recursive function in a @SpecDef@, we need its
 -- @LetRecType@ and its definition as a @PolySpecFun E stk lrt@. The difficulty
@@ -589,6 +599,11 @@ specStSetClosBody clos_ix body st =
                 _ -> panic "specStSetClosBody" ["Closure body already set"])
          (specStExtraRecsRev st) }
 
+specStInsImport :: OpenTerm -> SpecTermState -> (Natural, SpecTermState)
+specStInsImport def st =
+  (fromIntegral (length $ specStImportsRev st),
+   st { specStImportsRev = def : specStImportsRev st })
+
 initSpecTermState :: OpenTerm -> Natural -> SpecTermState
 initSpecTermState ev n =
   SpecTermState { specStEvType = ev, specStNumBaseRecs = n,
@@ -597,10 +612,10 @@ initSpecTermState ev n =
 -- | High-level idea: while building a @SpecM@ computation, you have to keep
 -- track of the imported SpecDefs and the co-recursive functions that are
 -- created by defunctionalization, and this is tracked in this monad
-type SpecTermM = StateT SpecTermState OpenTermM
+type SpecTermM = StateT SpecTermState TCM
 
 runSpecTermM :: OpenTerm -> Natural -> SpecTermM a -> OpenTermM a
-runSpecTermM ev n m = evalStateT m $ initSpecTermState ev n
+runSpecTermM ev n m = OpenTermM $ evalStateT m $ initSpecTermState ev n
 
 -- | A 'SpecTerm' is a term representation used to build @SpecM@ computations to
 -- be used in spec definitions, i.e., terms of type @SpecDef E@ for some given
@@ -618,10 +633,54 @@ applySpecTerm (SpecTerm f) (SpecTerm arg) =
 applySpecTermMulti :: SpecTerm -> [SpecTerm] -> SpecTerm
 applySpecTermMulti = foldl applySpecTerm
 
+specInfoTermTerm :: SpecInfoTerm -> SpecTerm
+specInfoTermTerm t = SpecTerm $ return t
+
+openTermSpecTerm :: OpenTerm -> SpecTerm
+openTermSpecTerm t = SpecTerm $ return $ return t
+
 -- | A 'SpecFunTerm' is a term representation of a monadic function, that is
 -- basically the same as 'SpecTerm', except we keep it separate to indicate
 -- where lambdas are allowed, as lambdas are only allowed in certain contexts
 newtype SpecFunTerm = SpecFunTerm { unSpecFunTerm :: SpecTermM SpecInfoTerm }
+
+-- | Build a lambda abstraction as a 'SpecFunTerm'
+lambdaSpecFun :: LocalName -> OpenTerm -> (OpenTerm -> SpecFunTerm) ->
+                 SpecFunTerm
+lambdaSpecFun x (OpenTerm tpM) body_f = SpecFunTerm $
+  do
+    -- First we compute the type of the variable by running its underlying TCM
+    -- computation and normalizing it; normalization is required here because
+    -- the typeInferComplete instance for TermF TypedTerm, which we use below,
+    -- assumes that the variable type is normalized
+    TypedTerm tp tp_tp <- lift tpM
+    tp_whnf <- lift $ typeCheckWHNF tp
+    let tp' = TypedTerm tp_whnf tp_tp
+
+    -- Next, we apply body_f to the top-most variable in a context extended with
+    -- x, run it with the current state, and update to the new state it returns
+    st <- get
+    (body_infot, st') <-
+      lift $ withVar x tp_whnf (openTermTopVar >>= \y ->
+                                 runStateT (unSpecFunTerm $ body_f y) st)
+    put st'
+
+    -- Finally, we map the OpenTerm inside body_infot so its computation also
+    -- runs in the extended context with x, and then map its return value to
+    -- lambda-abstract x after the body is computed
+    return $ flip fmap body_infot $ \(OpenTerm bodyM) ->
+      OpenTerm $ do body <- withVar x tp_whnf bodyM
+                    typeInferComplete $ Lambda x tp' body
+
+-- | Build a 'SpecFunTerm' function with no more arguments from a 'SpecTerm'
+baseSpecFun :: SpecTerm -> SpecFunTerm
+baseSpecFun (SpecTerm m) = SpecFunTerm m
+
+-- | Build a lambda abstraction as a 'SpecTerm'
+lambdaSpec :: LocalName -> OpenTerm -> (OpenTerm -> SpecTerm) -> SpecTerm
+lambdaSpec x tp body_f =
+  SpecTerm $ unSpecFunTerm $
+  lambdaSpecFun x tp (SpecFunTerm . unSpecTerm . body_f)
 
 funStackTypeOpenTerm :: OpenTerm
 funStackTypeOpenTerm = globalOpenTerm "Prelude.FunStack"
@@ -642,11 +701,11 @@ mkPolySpecLambda ev local_stk imps t =
   lambdaOpenTerm "stk'" funStackTypeOpenTerm $ \stk' ->
   lambdaOpenTerm "incl" (applyGlobalOpenTerm
                          "Prelude.stackIncl" [stk, stk']) $ \incl ->
-  runReader t $ SpecTermInfo { specInfoEvType = ev,
-                               specInfoLocalsStack = local_stk,
-                               specInfoImps = imps,
-                               specInfoExtStack = stk',
-                               specInfoIncl = incl }
+  runReader t $ SpecInfo { specInfoEvType = ev,
+                           specInfoLocalsStack = local_stk,
+                           specInfoImps = imps,
+                           specInfoExtStack = stk',
+                           specInfoIncl = incl }
 
 mkSpecRecFunM :: OpenTerm -> SpecFunTerm -> SpecTermM SpecRecFun
 mkSpecRecFunM lrt (SpecFunTerm m) = SpecRecFun lrt <$> Just <$> m
@@ -685,7 +744,7 @@ defineSpecOpenTerm ev base_recs_in lrt body_in =
 -- | Internal-only helper function
 mkClosSpecInfoTerm :: Natural -> SpecInfoTerm
 mkClosSpecInfoTerm n =
-  applySpecInfoTerm (applySpecInfoOp "Prelude.mkLocalLRTClos")
+  applySpecInfoTerm (applyStackInclOp "Prelude.mkLocalLRTClos")
   (return $ natOpenTerm n)
 
 -- | Build a closure that calls one of the "base" recursive functions in the
@@ -707,6 +766,45 @@ mkFreshClosSpec lrt body_f = SpecTerm $
                                      mkClosSpecInfoTerm clos_ix)
      modify $ specStSetClosBody clos_ix body
      return $ mkClosSpecInfoTerm clos_ix
+
+-- | Build a @SpecM@ computation that calls a closure with the given return
+-- type specified as a @LetRecType@
+callClosSpec :: OpenTerm -> SpecTerm -> SpecTerm
+callClosSpec tp clos =
+  applySpecTermMulti (monadicSpecOp "Prelude.CallS")
+  [openTermSpecTerm tp, clos]
+
+-- | Call another spec definition inside a spec definition, by importing it
+callDefSpec :: OpenTerm -> SpecTerm
+callDefSpec def = SpecTerm $
+  do (imp_ix, st) <- specStInsImport def <$> get
+     put st
+     return $
+       applySpecInfoTerm (applyStackInclOp "Prelude.callNthImportS")
+       (return $ natOpenTerm imp_ix)
+
+-- | Build a 'SpecTerm' for a monadic operation that takes the current event
+-- type and extended function stack
+monadicSpecOp :: Ident -> SpecTerm
+monadicSpecOp f = specInfoTermTerm $ applyExtStackOp f
+
+-- | Build a @SpecM@ computation that returns a value of a given type
+returnSpec :: OpenTerm -> SpecTerm -> SpecTerm
+returnSpec tp val =
+  applySpecTermMulti (monadicSpecOp "Prelude.retS") [openTermSpecTerm tp, val]
+
+-- | Build a @SpecM@ computation that does a monadic bind
+bindSpec :: OpenTerm -> OpenTerm -> SpecTerm ->
+            LocalName -> (OpenTerm -> SpecTerm) -> SpecTerm
+bindSpec tp1 tp2 m x f =
+  applySpecTermMulti (monadicSpecOp "Prelude.bindS")
+  [openTermSpecTerm tp1, openTermSpecTerm tp2, m, lambdaSpec x tp1 f]
+
+-- | Build a @SpecM@ error computation at the given type with the given message
+errorSpec :: OpenTerm -> Text -> SpecTerm
+errorSpec tp msg =
+  applySpecTermMulti (monadicSpecOp "Prelude.errorS")
+  [openTermSpecTerm tp, openTermSpecTerm (stringLitOpenTerm msg)]
 
 
 --------------------------------------------------------------------------------
