@@ -42,8 +42,8 @@ module Verifier.SAW.OpenTerm (
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM,
   -- * Building SpecM computations
-  SpecTerm(), SpecFunTerm(), defineSpecOpenTerm, lambdaSpecFun, baseSpecFun,
-  applySpecTerm, applySpecTermMulti, lambdaSpec, openTermSpecTerm,
+  SpecTerm(), defineSpecOpenTerm, lambdaSpecTerm,
+  applySpecTerm, applySpecTermMulti, openTermSpecTerm,
   mkBaseClosSpec, mkFreshClosSpec, callClosSpec, callDefSpec,
   returnSpec, bindSpec, errorSpec
   ) where
@@ -548,6 +548,27 @@ applyExtStackOp f =
      return $ applyGlobalOpenTerm f
        [specInfoEvType info, specInfoExtStack info]
 
+lambdaSpecInfoTerm :: LocalName -> SpecInfoTerm -> SpecInfoTerm -> SpecInfoTerm
+lambdaSpecInfoTerm x tpM bodyM =
+  do tpOT <- tpM
+     bodyOT <- bodyM
+     return $ OpenTerm $ do
+      -- First we compute the type of the variable by running its underlying TCM
+      -- computation and normalizing it; normalization is required here because
+      -- the typeInferComplete instance for TermF TypedTerm, which we use below,
+      -- assumes that the variable type is normalized
+       TypedTerm tp tp_tp <- unOpenTerm tpOT
+       tp_whnf <- typeCheckWHNF tp
+       let tp' = TypedTerm tp_whnf tp_tp
+
+       -- Next, we run the body TCM computation to get its TypedTerm, making
+       -- sure to run that computation in an extended typing context with x
+       body <- withVar x tp_whnf $ unOpenTerm bodyOT
+
+       -- Finally, build and return the required lambda-abstraction
+       typeInferComplete $ Lambda x tp' body
+
+
 -- | In order to create a recursive function in a @SpecDef@, we need its
 -- @LetRecType@ and its definition as a @PolySpecFun E stk lrt@. The difficulty
 -- is that the function stack @stk@ is only known after we have fully processed
@@ -569,6 +590,7 @@ tempSpecRecFun lrt = SpecRecFun { specRecFunLRT = lrt,
 data SpecTermState =
   SpecTermState { specStEvType :: OpenTerm,
                   specStNumBaseRecs :: Natural,
+                  specStCtxLen :: Int,
                   specStExtraRecsRev :: [SpecRecFun],
                   specStImportsRev :: [OpenTerm] }
 
@@ -577,6 +599,12 @@ specStExtraRecs st = reverse $ specStExtraRecsRev st
 
 specStImports :: SpecTermState -> [OpenTerm]
 specStImports st = reverse (specStImportsRev st)
+
+specStIncCtx :: SpecTermState -> SpecTermState
+specStIncCtx st = st { specStCtxLen = specStCtxLen st + 1 }
+
+specStDecCtx :: SpecTermState -> SpecTermState
+specStDecCtx st = st { specStCtxLen = specStCtxLen st - 1 }
 
 specStInsTempClos :: OpenTerm -> SpecTermState -> (Natural, SpecTermState)
 specStInsTempClos lrt st =
@@ -604,18 +632,21 @@ specStInsImport def st =
   (fromIntegral (length $ specStImportsRev st),
    st { specStImportsRev = def : specStImportsRev st })
 
-initSpecTermState :: OpenTerm -> Natural -> SpecTermState
-initSpecTermState ev n =
+initSpecTermState :: OpenTerm -> Natural -> Int -> SpecTermState
+initSpecTermState ev n ctx_len =
   SpecTermState { specStEvType = ev, specStNumBaseRecs = n,
+                  specStCtxLen = ctx_len,
                   specStExtraRecsRev = [], specStImportsRev = [] }
 
 -- | High-level idea: while building a @SpecM@ computation, you have to keep
 -- track of the imported SpecDefs and the co-recursive functions that are
 -- created by defunctionalization, and this is tracked in this monad
-type SpecTermM = StateT SpecTermState TCM
+type SpecTermM = State SpecTermState
 
-runSpecTermM :: OpenTerm -> Natural -> SpecTermM a -> OpenTermM a
-runSpecTermM ev n m = OpenTermM $ evalStateT m $ initSpecTermState ev n
+runSpecTermM :: OpenTerm -> Natural -> SpecTermM OpenTerm -> OpenTerm
+runSpecTermM ev n m = OpenTerm $
+  do ctx_len <- length <$> askCtx
+     unOpenTerm $ evalState m $ initSpecTermState ev n ctx_len
 
 -- | A 'SpecTerm' is a term representation used to build @SpecM@ computations to
 -- be used in spec definitions, i.e., terms of type @SpecDef E@ for some given
@@ -639,48 +670,31 @@ specInfoTermTerm t = SpecTerm $ return t
 openTermSpecTerm :: OpenTerm -> SpecTerm
 openTermSpecTerm t = SpecTerm $ return $ return t
 
--- | A 'SpecFunTerm' is a term representation of a monadic function, that is
--- basically the same as 'SpecTerm', except we keep it separate to indicate
--- where lambdas are allowed, as lambdas are only allowed in certain contexts
-newtype SpecFunTerm = SpecFunTerm { unSpecFunTerm :: SpecTermM SpecInfoTerm }
+topVarSpecTerm :: SpecTermM SpecTerm
+topVarSpecTerm =
+  do outer_ctx_len <- specStCtxLen <$> get
+     return $ SpecTerm $ do
+       inner_ctx_len <- specStCtxLen <$> get
+       return $ return $ OpenTerm $
+         do inner_ctx <- askCtx
+            if length inner_ctx == inner_ctx_len then return () else
+              panic "topVarSpecTerm" ["Variable context of unexpected length"]
+            typeInferComplete (LocalVar (inner_ctx_len
+                                         - outer_ctx_len) :: TermF Term)
 
--- | Build a lambda abstraction as a 'SpecFunTerm'
-lambdaSpecFun :: LocalName -> OpenTerm -> (OpenTerm -> SpecFunTerm) ->
-                 SpecFunTerm
-lambdaSpecFun x (OpenTerm tpM) body_f = SpecFunTerm $
-  do
-    -- First we compute the type of the variable by running its underlying TCM
-    -- computation and normalizing it; normalization is required here because
-    -- the typeInferComplete instance for TermF TypedTerm, which we use below,
-    -- assumes that the variable type is normalized
-    TypedTerm tp tp_tp <- lift tpM
-    tp_whnf <- lift $ typeCheckWHNF tp
-    let tp' = TypedTerm tp_whnf tp_tp
-
-    -- Next, we apply body_f to the top-most variable in a context extended with
-    -- x, run it with the current state, and update to the new state it returns
-    st <- get
-    (body_infot, st') <-
-      lift $ withVar x tp_whnf (openTermTopVar >>= \y ->
-                                 runStateT (unSpecFunTerm $ body_f y) st)
-    put st'
-
-    -- Finally, we map the OpenTerm inside body_infot so its computation also
-    -- runs in the extended context with x, and then map its return value to
-    -- lambda-abstract x after the body is computed
-    return $ flip fmap body_infot $ \(OpenTerm bodyM) ->
-      OpenTerm $ do body <- withVar x tp_whnf bodyM
-                    typeInferComplete $ Lambda x tp' body
-
--- | Build a 'SpecFunTerm' function with no more arguments from a 'SpecTerm'
-baseSpecFun :: SpecTerm -> SpecFunTerm
-baseSpecFun (SpecTerm m) = SpecFunTerm m
+withVarSpecTermM :: SpecTermM a -> SpecTermM a
+withVarSpecTermM m =
+  do modify specStIncCtx
+     a <- m
+     modify specStDecCtx
+     return a
 
 -- | Build a lambda abstraction as a 'SpecTerm'
-lambdaSpec :: LocalName -> OpenTerm -> (OpenTerm -> SpecTerm) -> SpecTerm
-lambdaSpec x tp body_f =
-  SpecTerm $ unSpecFunTerm $
-  lambdaSpecFun x tp (SpecFunTerm . unSpecTerm . body_f)
+lambdaSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
+lambdaSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
+  do tp <- tpM
+     body <- withVarSpecTermM (topVarSpecTerm >>= (unSpecTerm . body_f))
+     return $ lambdaSpecInfoTerm x tp body
 
 funStackTypeOpenTerm :: OpenTerm
 funStackTypeOpenTerm = globalOpenTerm "Prelude.FunStack"
@@ -707,8 +721,8 @@ mkPolySpecLambda ev local_stk imps t =
                            specInfoExtStack = stk',
                            specInfoIncl = incl }
 
-mkSpecRecFunM :: OpenTerm -> SpecFunTerm -> SpecTermM SpecRecFun
-mkSpecRecFunM lrt (SpecFunTerm m) = SpecRecFun lrt <$> Just <$> m
+mkSpecRecFunM :: OpenTerm -> SpecTerm -> SpecTermM SpecRecFun
+mkSpecRecFunM lrt (SpecTerm m) = SpecRecFun lrt <$> Just <$> m
 
 specRecFunsStack :: [SpecRecFun] -> OpenTerm
 specRecFunsStack recFuns =
@@ -723,12 +737,12 @@ specRecFunsTuple recFuns =
 
 -- | Build a spec definition, i.e., a term of type @SpecDef E@, given: an event
 -- type @E@; a list of corecursive functions that can be called in that spec
--- definition, given as pairs of a @LetRecType@ and a 'SpecFunTerm' of that
--- type; and a @LetRecType@ plus a body for the entire definition.
-defineSpecOpenTerm :: OpenTerm -> [(OpenTerm,SpecFunTerm)] ->
+-- definition, given as pairs of a @LetRecType@ and a 'SpecTerm' of that type;
+-- and a @LetRecType@ plus a body for the entire definition.
+defineSpecOpenTerm :: OpenTerm -> [(OpenTerm,SpecTerm)] ->
                       OpenTerm -> SpecTerm -> OpenTerm
 defineSpecOpenTerm ev base_recs_in lrt body_in =
-  runOpenTermM $ runSpecTermM ev (fromIntegral $ length base_recs_in) $
+  runSpecTermM ev (fromIntegral $ length base_recs_in) $
   do base_recs <-
        forM base_recs_in $ \(fun_lrt,fun_tm) -> mkSpecRecFunM fun_lrt fun_tm
      body <- unSpecTerm body_in
@@ -758,12 +772,12 @@ mkBaseClosSpec clos_ix = SpecTerm $
 
 -- | Build a closure that calls a new corecursive function with the given
 -- @LetRecType@ and body, that can call itself using the term passed to it
-mkFreshClosSpec :: OpenTerm -> (SpecTerm -> SpecFunTerm) -> SpecTerm
+mkFreshClosSpec :: OpenTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
 mkFreshClosSpec lrt body_f = SpecTerm $
   do (clos_ix, st) <- specStInsTempClos lrt <$> get
      put st
-     body <- unSpecFunTerm $ body_f (SpecTerm $ return $
-                                     mkClosSpecInfoTerm clos_ix)
+     body <- unSpecTerm $ body_f (SpecTerm $ return $
+                                  mkClosSpecInfoTerm clos_ix)
      modify $ specStSetClosBody clos_ix body
      return $ mkClosSpecInfoTerm clos_ix
 
@@ -789,22 +803,22 @@ monadicSpecOp :: Ident -> SpecTerm
 monadicSpecOp f = specInfoTermTerm $ applyExtStackOp f
 
 -- | Build a @SpecM@ computation that returns a value of a given type
-returnSpec :: OpenTerm -> SpecTerm -> SpecTerm
+returnSpec :: SpecTerm -> SpecTerm -> SpecTerm
 returnSpec tp val =
-  applySpecTermMulti (monadicSpecOp "Prelude.retS") [openTermSpecTerm tp, val]
+  applySpecTermMulti (monadicSpecOp "Prelude.retS") [tp, val]
 
 -- | Build a @SpecM@ computation that does a monadic bind
-bindSpec :: OpenTerm -> OpenTerm -> SpecTerm ->
-            LocalName -> (OpenTerm -> SpecTerm) -> SpecTerm
+bindSpec :: SpecTerm -> SpecTerm -> SpecTerm ->
+            LocalName -> (SpecTerm -> SpecTerm) -> SpecTerm
 bindSpec tp1 tp2 m x f =
   applySpecTermMulti (monadicSpecOp "Prelude.bindS")
-  [openTermSpecTerm tp1, openTermSpecTerm tp2, m, lambdaSpec x tp1 f]
+  [tp1, tp2, m, lambdaSpecTerm x tp1 f]
 
 -- | Build a @SpecM@ error computation at the given type with the given message
-errorSpec :: OpenTerm -> Text -> SpecTerm
+errorSpec :: SpecTerm -> Text -> SpecTerm
 errorSpec tp msg =
   applySpecTermMulti (monadicSpecOp "Prelude.errorS")
-  [openTermSpecTerm tp, openTermSpecTerm (stringLitOpenTerm msg)]
+  [tp, openTermSpecTerm (stringLitOpenTerm msg)]
 
 
 --------------------------------------------------------------------------------
