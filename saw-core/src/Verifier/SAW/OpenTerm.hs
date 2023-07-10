@@ -14,7 +14,38 @@ Portability : non-portable (language extensions)
 
 This module defines an interface to building SAW core terms in an incrementally
 type-checked way, meaning that type-checking is performed as the terms are
-built.
+built. The interface provides a convenient DSL for building terms in a pure way,
+where sub-terms can be freely composed and combined into super-terms without
+monadic sequencing or 'IO' computations; the 'IO' computation is only run at the
+top level when all the term-building is complete. Users of this interface can
+also build binding constructs like lambda- and pi-abstractions without worrying
+about deBruijn indices, lifting, and free variables. Instead, a key feature of
+this interface is that it uses higher-order abstract syntax for lambda- and
+pi-abstractions, meaning that the bodies of these term constructs are specified
+as Haskell functions that take in terms for the bound variables. The library
+takes care of all the deBruijn indices under the hood.
+
+To use the 'OpenTerm' API, the caller builds up 'OpenTerm's using a variety of
+combinators that mirror the SAW core 'Term' structure. As some useful examples
+of 'OpenTerm' operations, 'applyOpenTerm' applies one 'OpenTerm' to another,
+'globalOpenTerm' builds an 'OpenTerm' for a global identifier, and
+'lambdaOpenTerm' builds a lambda-abstraction. For instance, the SAW core term
+
+> \ (f : Bool -> Bool) (x : Bool) -> f x
+
+can be built with the 'OpenTerm' expression
+
+> let bool = globalOpenTerm "Prelude.Bool" in
+> lambdaOpenTerm "f" (arrowOpenTerm bool bool) $ \f ->
+> lambdaOpenTerm "x" (globalOpenTerm "Prelude.Bool") $ \x ->
+> applyOpenTerm f x
+
+Existing SAW core 'Term's can be used in 'OpenTerm' by applying 'closedOpenTerm'
+if the 'Term' is closed (meaning it has no free variables) or 'openOpenTerm' if
+it does, where the latter requires the context of free variables to be
+specified. At the top level, 'completeOpenTerm' then "completes" an 'OpenTerm'
+by running its underlying 'IO' computation to build and type-check the resulting
+SAW core 'Term'.
 -}
 
 module Verifier.SAW.OpenTerm (
@@ -42,7 +73,7 @@ module Verifier.SAW.OpenTerm (
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM,
   -- * Building SpecM computations
-  SpecTerm(), defineSpecOpenTerm, lambdaSpecTerm,
+  SpecTerm(), defineSpecOpenTerm, lambdaSpecTerm, piSpecTerm,
   applySpecTerm, applySpecTermMulti, openTermSpecTerm,
   mkBaseClosSpec, mkFreshClosSpec, callClosSpec, callDefSpec,
   returnSpec, bindSpec, errorSpec
@@ -507,17 +538,13 @@ piOpenTermAuxM x tp body_f =
 --------------------------------------------------------------------------------
 -- Building SpecM computations
 
--- FIXME HERE NOW: improve all the docs below
-
 -- | When creating a SAW core term of type @PolySpecFun@ or @PolyStackTuple@,
--- the body or bodies are relative to: the "base" @FunStack@ that gives the
--- types of all the corecursive functions defined in the current @SpecDef@; an
--- extension stack that specifies the @FunStack@ of any future @SpecDef@ that
--- this object will be used in; and a stack inclusion between the two. These are
--- captured by the 'SpecInfo' type.
---
--- FIXME: this needs to be all top-level info needed from the SpecDef (local
--- stack plus import list)
+-- the body or bodies are relative to: the current event type (or @EvType@); the
+-- @FunStack@ of @LetRecType@s of the locally-defined corecursive functions; the
+-- list of imported spec definitions; an extended stack that specifies the
+-- @FunStack@ of any future @SpecDef@ that this object will be used in; and a
+-- stack inclusion between the @FunStack@ defined by the local stack plus
+-- imports and the extended stack. These are captured by the 'SpecInfo' type.
 data SpecInfo =
   SpecInfo { specInfoEvType :: OpenTerm,
              specInfoLocalsStack :: OpenTerm,
@@ -529,6 +556,7 @@ data SpecInfo =
 -- of terms of type @PolySpecFun@ or @PolyStackTuple@.
 type SpecInfoTerm = Reader SpecInfo OpenTerm
 
+-- | Apply a 'SpecInfoTerm' to another
 applySpecInfoTerm :: SpecInfoTerm -> SpecInfoTerm -> SpecInfoTerm
 applySpecInfoTerm f arg = applyOpenTerm <$> f <*> arg
 
@@ -548,8 +576,10 @@ applyExtStackOp f =
      return $ applyGlobalOpenTerm f
        [specInfoEvType info, specInfoExtStack info]
 
-lambdaSpecInfoTerm :: LocalName -> SpecInfoTerm -> SpecInfoTerm -> SpecInfoTerm
-lambdaSpecInfoTerm x tpM bodyM =
+-- | FIXME: docs
+bindSpecInfoTerm :: (LocalName -> TypedTerm -> TypedTerm -> TermF TypedTerm) ->
+                    LocalName -> SpecInfoTerm -> SpecInfoTerm -> SpecInfoTerm
+bindSpecInfoTerm f x tpM bodyM =
   do tpOT <- tpM
      bodyOT <- bodyM
      return $ OpenTerm $ do
@@ -566,7 +596,7 @@ lambdaSpecInfoTerm x tpM bodyM =
        body <- withVar x tp_whnf $ unOpenTerm bodyOT
 
        -- Finally, build and return the required lambda-abstraction
-       typeInferComplete $ Lambda x tp' body
+       typeInferComplete $ f x tp' body
 
 
 -- | In order to create a recursive function in a @SpecDef@, we need its
@@ -594,15 +624,21 @@ data SpecTermState =
                   specStExtraRecsRev :: [SpecRecFun],
                   specStImportsRev :: [OpenTerm] }
 
+-- | Return the local corecursive functions in a 'SpecTermState' in the correct
+-- order, by reversing the reversed 'specStExtraRecsRev' list
 specStExtraRecs :: SpecTermState -> [SpecRecFun]
 specStExtraRecs st = reverse $ specStExtraRecsRev st
 
+-- | Return the spec imports in a 'SpecTermState' in the correct order, by
+-- reversing the reversed 'specStImportsRev' list
 specStImports :: SpecTermState -> [OpenTerm]
 specStImports st = reverse (specStImportsRev st)
 
+-- | Increment the context length of a 'SpecTermState'
 specStIncCtx :: SpecTermState -> SpecTermState
 specStIncCtx st = st { specStCtxLen = specStCtxLen st + 1 }
 
+-- | Decrement the context length of a 'SpecTermState'
 specStDecCtx :: SpecTermState -> SpecTermState
 specStDecCtx st = st { specStCtxLen = specStCtxLen st - 1 }
 
@@ -611,21 +647,25 @@ specStInsTempClos lrt st =
   (specStNumBaseRecs st + fromIntegral (length $ specStExtraRecsRev st),
    st { specStExtraRecsRev = tempSpecRecFun lrt : specStExtraRecsRev st })
 
-modifyNth :: Int -> (a -> a) -> [a] -> [a]
-modifyNth i _ xs | i >= length xs || i < 0 = error "modifyNthNat"
-modifyNth i f xs = take i xs ++ (f (xs!!i)) : drop (i+1) xs
+setNthClosBody :: Int -> SpecInfoTerm -> [SpecRecFun] -> [SpecRecFun]
+setNthClosBody i _ recFuns
+  | i >= length recFuns || i < 0 =
+    panic "setNthClosBody" ["Index out of range"]
+setNthClosBody i body recFuns =
+  let new_recFun = case recFuns!!i of
+        SpecRecFun lrt Nothing -> SpecRecFun lrt (Just body)
+        SpecRecFun _ (Just _) ->
+          panic "setNthClosBody" ["Closure body already set"] in
+  take i recFuns ++ new_recFun : drop (i+1) recFuns
 
--- | Modify the nth element from the end of a list
-modifyNthRev :: Int -> (a -> a) -> [a] -> [a]
-modifyNthRev i f xs = modifyNth (length xs - i) f xs
+setNthClosBodyRev :: Int -> SpecInfoTerm -> [SpecRecFun] -> [SpecRecFun]
+setNthClosBodyRev i body recFuns =
+  setNthClosBody (length recFuns - i) body recFuns
 
 specStSetClosBody :: Natural -> SpecInfoTerm -> SpecTermState -> SpecTermState
 specStSetClosBody clos_ix body st =
   st { specStExtraRecsRev =
-         modifyNthRev (fromIntegral clos_ix)
-         (\case (SpecRecFun lrt Nothing) -> SpecRecFun lrt (Just body)
-                _ -> panic "specStSetClosBody" ["Closure body already set"])
-         (specStExtraRecsRev st) }
+         setNthClosBodyRev (fromIntegral clos_ix) body (specStExtraRecsRev st) }
 
 specStInsImport :: OpenTerm -> SpecTermState -> (Natural, SpecTermState)
 specStInsImport def st =
@@ -694,7 +734,14 @@ lambdaSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
 lambdaSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
   do tp <- tpM
      body <- withVarSpecTermM (topVarSpecTerm >>= (unSpecTerm . body_f))
-     return $ lambdaSpecInfoTerm x tp body
+     return $ bindSpecInfoTerm Lambda x tp body
+
+-- | Build a pi abstraction as a 'SpecTerm'
+piSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
+piSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
+  do tp <- tpM
+     body <- withVarSpecTermM (topVarSpecTerm >>= (unSpecTerm . body_f))
+     return $ bindSpecInfoTerm Pi x tp body
 
 funStackTypeOpenTerm :: OpenTerm
 funStackTypeOpenTerm = globalOpenTerm "Prelude.FunStack"
