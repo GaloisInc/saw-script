@@ -85,7 +85,7 @@ jobs:
           - os: ubuntu-22.04
             ghc: "9.4.4"
             cabal: "3.10.1.0"
-            run-tests: false # TODO: I think we'll need to enable this, but for now I'm just trying to get the thing building
+            run-tests: true # TODO: I think we'll need to enable this, but for now I'm just trying to get the thing building
             hpc: true
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
@@ -121,6 +121,8 @@ jobs:
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
 
+      # TODO: Does this need updating for the HPC build? Or is it handled by
+      # the cabal.GHC-*.config line (which may include HPC config info)?
       - uses: actions/cache/restore@v3
         name: Restore cabal store cache
         with:
@@ -193,7 +195,7 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
-      - if: matrix.ghc == '8.10.7'
+      - if: matrix.ghc == '8.10.7' && matrix.hpc = 'false'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -201,7 +203,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7'
+      - if: matrix.ghc == '8.10.7' && matrix.hpc = 'false'
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
@@ -209,11 +211,17 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7' && matrix.run-tests
+      - if: matrix.ghc == '8.10.7' && matrix.run-tests && matrix.hpc = 'false'
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
+
+      - if: matrix.run-tests && matrix.hpc == 'true'
+        uses: actions/upload-artifact@v2
+        with:
+          path: dist/bin
+          name: ${{ runner.os }}-with-hpc-bins
 
       - uses: actions/cache/save@v3
         name: Save cabal store cache
