@@ -79,14 +79,14 @@ jobs:
           - os: ubuntu-20.04
             ghc: "8.10.7"
             cabal: "3.10.1.0"
-            hpc: false
             run-tests: false
+            hpc: false
           # Include one job with HPC enabled
           - os: ubuntu-22.04
             ghc: "9.4.4"
             cabal: "3.10.1.0"
-            hpc: true
             run-tests: false # TODO: I think we'll need to enable this, but for now I'm just trying to get the thing building
+            hpc: true
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
