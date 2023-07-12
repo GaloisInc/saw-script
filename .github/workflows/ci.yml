@@ -79,6 +79,7 @@ jobs:
           - os: ubuntu-20.04
             ghc: "8.10.7"
             cabal: "3.10.1.0"
+            hpc: false
             run-tests: false
           # Include one job with HPC enabled
           - os: ubuntu-22.04
