@@ -71,6 +71,7 @@ jobs:
         cabal: ["3.10.1.0"]
         ghc: ["8.10.7", "9.2.7", "9.4.4"]
         run-tests: [true]
+        hpc: [false]
         include:
           # We include one job from an older Ubuntu LTS release to increase our
           # coverage of possible Linux configurations. Since we already run the
@@ -79,6 +80,12 @@ jobs:
             ghc: "8.10.7"
             cabal: "3.10.1.0"
             run-tests: false
+          # Include one job with HPC enabled
+          - os: ubuntu-22.04
+            ghc: "9.4.4"
+            cabal: "3.10.1.0"
+            hpc: true
+            run-tests: false # TODO: I think we'll need to enable this, but for now I'm just trying to get the thing building
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -133,7 +140,7 @@ jobs:
           rm -f saw/SAWScript/Version.hs.bak
 
       - shell: bash
-        run: .github/ci.sh build
+        run: .github/ci.sh build ${{ matrix.hpc }}
 
       - shell: bash
         env:
@@ -392,6 +399,9 @@ jobs:
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
 
+      # TODO: I think I want a conditional here that downloads the coverage
+      # build iff runner.os is the apropriate ubuntu version and matrix.suite
+      # is 'integration_tests'
       - uses: actions/download-artifact@v2
         with:
           name: "${{ runner.os }}-bins"

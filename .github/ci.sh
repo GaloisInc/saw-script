@@ -52,6 +52,7 @@ setup_dist_bins() {
 }
 
 build() {
+  local enable_hpc=$1
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
@@ -63,6 +64,9 @@ build() {
     pkgs=(saw crux-mir-comp saw-remote-api)
   fi
   tee -a cabal.project.local > /dev/null < cabal.project.ci
+  if [[ "$enable_hpc" == "true" ]]; then
+    tee -a cabal.project.local > /dev/null < cabal.project.ci-hpc
+  fi
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
       echo "Working around a dylib issue on macos by removing the cache and trying again"
