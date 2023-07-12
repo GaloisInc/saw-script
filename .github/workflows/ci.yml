@@ -140,7 +140,10 @@ jobs:
           rm -f saw/SAWScript/Version.hs.bak
 
       - shell: bash
-        run: .github/ci.sh build ${{ matrix.hpc }}
+        run: .github/ci.sh build
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
+
 
       - shell: bash
         env:
