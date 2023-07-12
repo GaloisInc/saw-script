@@ -29,6 +29,9 @@ import Text.Printf (printf)
 
 type Checkpoints = HashMap (Stack SAW.Stmt) SAW.TopLevelCheckpoint
 
+-- | A broader notion of state than SAW admits, this structure includes
+-- information that allows for tracking an evaluation context and for creating
+-- and restoring checkpoints associated with those contexts.
 data SAWState = SAWState
   { ssSAWEnv :: SAWEnv,
     ssCurrentContext :: Stack SAW.Stmt,
@@ -54,6 +57,7 @@ newSAWStateWithCheckpoints checkpoints =
           ssOutput = ssOutput
         }
 
+-- | Packages the environments that a `TopLevel` action reads/writes.
 data SAWEnv = SAWEnv
   { seTopLevelRO :: SAW.TopLevelRO,
     seTopLevelRW :: SAW.TopLevelRW
@@ -72,12 +76,15 @@ newSAWEnv outputRef =
     captureOutput :: String -> IO ()
     captureOutput s = modifyIORef outputRef (s :)
 
+-- | Replace the existing `SAWState` with an empty state.
 nukeSAWEnv :: MonadIO m => SAWT m ()
 nukeSAWEnv = SAWT $ ReaderT $ \ref ->
   do
     emptyState <- newSAWState
     liftIO (writeIORef ref emptyState)
 
+-- | Replace the existing `SAWState` with an empty state, but maintain the
+-- existing cache of checkpoints.
 drainSAWEnv :: MonadIO m => SAWT m ()
 drainSAWEnv = SAWT $ ReaderT $ \ref ->
   do
@@ -85,6 +92,7 @@ drainSAWEnv = SAWT $ ReaderT $ \ref ->
     mostlyEmptyState <- newSAWStateWithCheckpoints ssCheckpoints
     liftIO (writeIORef ref mostlyEmptyState)
 
+-- | A monad transformer to include `SAW` functionality in a transformer stack.
 newtype SAWT m a = SAWT {unSAWT :: ReaderT (IORef SAWState) m a}
   deriving
     ( Applicative,
@@ -97,21 +105,21 @@ newtype SAWT m a = SAWT {unSAWT :: ReaderT (IORef SAWState) m a}
       MonadCatch
     )
 
-instance MonadIO m => MonadReader SAWState (SAWT m) where
-  ask =
-    SAWT $
-      ReaderT $
-        \ref -> liftIO (readIORef ref)
-  local update (SAWT rdr) =
-    SAWT $
-      ReaderT $
-        \ref ->
-          do
-            original <- liftIO (readIORef ref)
-            liftIO (modifyIORef ref update)
-            res <- runReaderT rdr ref
-            liftIO (writeIORef ref original)
-            pure res
+-- instance MonadIO m => MonadReader SAWState (SAWT m) where
+--   ask =
+--     SAWT $
+--       ReaderT $
+--         \ref -> liftIO (readIORef ref)
+--   local update (SAWT rdr) =
+--     SAWT $
+--       ReaderT $
+--         \ref ->
+--           do
+--             original <- liftIO (readIORef ref)
+--             liftIO (modifyIORef ref update)
+--             res <- runReaderT rdr ref
+--             liftIO (writeIORef ref original)
+--             pure res
 
 instance MonadIO m => MonadState SAWState (SAWT m) where
   get =
@@ -167,7 +175,7 @@ makeCheckpoint =
 flushOutput :: MonadIO m => SAWT m [String]
 flushOutput =
   do
-    outputRef <- asks ssOutput
+    outputRef <- gets ssOutput
     output <- liftIO (readIORef outputRef)
     liftIO (writeIORef outputRef mempty)
     pure output
