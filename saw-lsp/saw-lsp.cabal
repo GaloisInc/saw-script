@@ -54,6 +54,7 @@ library
         Sample
         SAWT
         Server
+        Stack
         TopLevel
         Worker
 

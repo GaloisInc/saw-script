@@ -24,8 +24,8 @@ import SAWScript.Options qualified as SAW
 import SAWScript.Parser (parseStmt, parseStmtSemi)
 import SAWScript.Proof qualified as SAW
 import SAWScript.Value qualified as SAW
+import Stack
 import System.IO
-import Text.Printf (printf)
 
 type Checkpoints = HashMap (Stack SAW.Stmt) SAW.TopLevelCheckpoint
 
@@ -209,40 +209,6 @@ runStmtWith checkpointAfter stmt =
 
 -------------------------------------------------------------------------------
 
-data Stack a = Stack {stackElems :: [a], stackHash :: Int}
-  deriving (Eq)
-
-instance Show a => Show (Stack a) where
-  show Stack {..} =
-    printf "Stack {stackElems = %s, stackHash = %x}" (show stackElems) stackHash
-
-instance Eq a => Hashable (Stack a) where
-  hashWithSalt salt Stack {..} = salt `hashWithSalt` stackHash
-  hash Stack {..} = stackHash
-
-push :: Hashable a => a -> Stack a -> Stack a
-push x Stack {..} =
-  Stack
-    { stackElems = x : stackElems,
-      stackHash = stackHash `xor` hash x
-    }
-
-pop :: Hashable a => Stack a -> Maybe (a, Stack a)
-pop Stack {..} =
-  case stackElems of
-    [] -> Nothing
-    (x : xs) -> Just (x, Stack {stackElems = xs, stackHash = stackHash `xor` hash x})
-
-emptyStack :: Stack a
-emptyStack = Stack {stackElems = mempty, stackHash = 0xdeadbeef}
-
-fromList :: Hashable a => [a] -> Stack a
-fromList = foldr push emptyStack
-
--------------------------------------------------------------------------------
-
-undo :: MonadIO m => SAWT m ()
-undo = undefined
 
 -- | Execute a `TopLevel` action to produce a `Value`
 --
