@@ -389,21 +389,34 @@ jobs:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-22.04]
         continue-on-error: [false]
+        hpc: [false]
         include:
           - suite: integration_tests
             os: macos-12
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+            hpc: false
           - suite: integration_tests
             os: windows-2019
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
+            hpc: false
+          - suite: integration_tests
+            os: ubuntu-22.04
+            continue-on-error: false
+            hpc: true
         exclude:
           - suite: integration_tests
             os: macos-12
             continue-on-error: false
+            hpc: false
           - suite: integration_tests
             os: windows-2019
             continue-on-error: false
+            hpc: false
+          - suite: integration_tests
+            os: ubuntu-22.04
+            continue-on-error: false
+            hpc: true
     steps:
       - uses: actions/checkout@v2
         with:
@@ -418,8 +431,15 @@ jobs:
       # build iff runner.os is the apropriate ubuntu version and matrix.suite
       # is 'integration_tests'
       - uses: actions/download-artifact@v2
+        if: matrix.hpc == false
         with:
           name: "${{ runner.os }}-bins"
+          path: dist/bin
+
+      - uses: actions/download-artifact@v2
+        if: matrix.hpc == true
+        with:
+          name: "${{ runner.os }}-with-hpc-bins"
           path: dist/bin
 
       - shell: bash
