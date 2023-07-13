@@ -127,7 +127,7 @@ jobs:
       # modification.
       - uses: actions/cache/restore@v3
         name: Restore cabal store cache
-        if: runner.os != 'Windows' && matrix.ghc != '9.2.7' # TODO: Remove
+        #if: runner.os != 'Windows' || matrix.ghc != '9.2.7' # TODO: Remove
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
@@ -198,7 +198,7 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
-      - if: matrix.ghc == '8.10.7' && matrix.hpc == 'false'
+      - if: matrix.ghc == '8.10.7' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -206,7 +206,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7' && matrix.hpc == 'false'
+      - if: matrix.ghc == '8.10.7' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
@@ -214,13 +214,13 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7' && matrix.run-tests && matrix.hpc == 'false'
+      - if: matrix.ghc == '8.10.7' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
-      - if: matrix.run-tests && matrix.hpc == 'true'
+      - if: matrix.run-tests && matrix.hpc == true
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
