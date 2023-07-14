@@ -157,7 +157,7 @@ files_since() {
 compute_coverage() {
   # Combine .tix files
   local SUM_TIX="all.tix"
-  hpc sum --output=$SUM_TIX --union --exclude=Main --exclude=GitRev (find . -name "*.tix")
+  hpc sum --output=$SUM_TIX --union --exclude=Main --exclude=GitRev $(find . -name "*.tix")
   # Generate report
   local HPC_ROOT=$(find dist-newstyle -name "hpc")
   # TODO: Remove debug echos"
