@@ -473,6 +473,10 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
+      - shell: bash
+        if: matrix.hpc == true
+        run: .github/ci.sh compute_coverage
+
   build-push-image:
     runs-on: ubuntu-22.04
     needs: [config]
