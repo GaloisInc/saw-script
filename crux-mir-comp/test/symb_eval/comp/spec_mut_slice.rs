@@ -6,7 +6,7 @@ fn f(x: &mut [u8]) {
     x.swap(0, 1);
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     let mut x = <[u8; 2]>::symbolic("x");
@@ -33,7 +33,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

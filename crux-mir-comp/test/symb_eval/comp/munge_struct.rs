@@ -12,7 +12,7 @@ fn reflect(p: Point) -> Point {
     Point{x: p.y, y: p.x}
 }
 
-#[crux_test]
+#[crux::test]
 fn munge_struct_equiv_test() {
     let (x, y) = <(u32, u32)>::symbolic("p");
     let p2 = reflect(munge(Point{x, y}));
