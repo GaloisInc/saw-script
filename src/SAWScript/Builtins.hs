@@ -56,6 +56,8 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import qualified What4.Expr.Fuzz as W4
+
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
@@ -77,6 +79,7 @@ import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as ReturnTrip
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
@@ -701,8 +704,31 @@ goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     sqt' <- traverseSequentWithFocus (io . evalProp sc unintSet) (goalSequent goal)
+     sqt' <- traverseSequentWithFocus (io . evalProp sc Nothing False unintSet) (goalSequent goal)
      return (sqt', EvalEvidence unintSet)
+
+goal_fuzz_simplify :: [String] -> ProofScript ()
+goal_fuzz_simplify = goal_fuzz_simplify' W4.defaultFuzzOptions
+
+goal_fuzz_simplify_with_options :: Int -> Integer -> Int -> Bool -> [String] -> ProofScript ()
+goal_fuzz_simplify_with_options seed bound rounds fails = goal_fuzz_simplify' $
+  W4.FuzzOptions
+    { W4.fuzzSeed = seed
+    , W4.fuzzBound = bound
+    , W4.fuzzRounds = rounds
+    , W4.fuzzAdapter = W4.fuzzAdapter W4.defaultFuzzOptions
+    , W4.fuzzVariableAbstraction = W4.fuzzVariableAbstraction W4.defaultFuzzOptions
+    , W4.fuzzFail = fails
+    }
+
+goal_fuzz_simplify' :: W4.FuzzOptions ReturnTrip.SAWCoreState -> [String] -> ProofScript ()
+goal_fuzz_simplify' fuzz_opts unints =
+  execTactic $ tacticChange $ \goal ->
+  do sc <- getSharedContext
+     hash_consing <- gets SV.rwWhat4HashConsing
+     unint_set <- resolveNames unints
+     sqt' <- traverseSequentWithFocus (io . evalProp sc (Just fuzz_opts) hash_consing unint_set) (goalSequent goal)
+     return (sqt', FuzzSimplifyEvidence  sqt')
 
 extract_uninterp ::
   [String] {- ^ uninterpred identifiers -} ->

@@ -1733,6 +1733,20 @@ primitives = Map.fromList
     [ "Evaluate the proof goal to a first-order combination of primitives."
     , "Leave the given names as uninterpreted." ]
 
+  , prim "goal_fuzz_simplify" "[String] -> ProofScript ()"
+    (pureVal goal_fuzz_simplify)
+    Current
+    [ "Evaluate the proof goal to a first-order combination of primitives."
+    , "Leave the given names as uninterpreted."
+    ]
+
+  , prim "goal_fuzz_simplify_with_options" "Int -> Int -> Int -> Bool -> [String] -> ProofScript ()"
+    (pureVal goal_fuzz_simplify_with_options)
+    Current
+    [ "Evaluate the proof goal to a first-order combination of primitives."
+    , "Leave the given names as uninterpreted."
+    ]
+
   , prim "beta_reduce_goal"    "ProofScript ()"
     (pureVal beta_reduce_goal)
     Current

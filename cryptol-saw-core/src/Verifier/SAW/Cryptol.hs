@@ -424,12 +424,14 @@ proveProp sc env prop =
         -- instance Logic [n]
         (C.pIsLogic -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
+                -- putStrLn $ "Cryptol.PLogicSeqBool" ++ show [ppTerm defaultPPOpts n']
                 scGlobalApply sc "Cryptol.PLogicSeqBool" [n']
         -- instance (Logic a) => Logic [n]a
         (C.pIsLogic -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
                 pa <- proveProp sc env (C.pLogic a)
+                -- putStrLn $ "Cryptol.PLogicSeq" ++ show [ppTerm defaultPPOpts n', ppTerm defaultPPOpts a', ppTerm defaultPPOpts pa]
                 scGlobalApply sc "Cryptol.PLogicSeq" [n', a', pa]
         -- instance (Logic b) => Logic (a -> b)
         (C.pIsLogic -> Just (C.tIsFun -> Just (a, b)))
@@ -926,7 +928,8 @@ primeECPrims =
 -- type that is equivalent (i.e. convertible) with the one returned by
 -- @'importSchema' sc env ('fastTypeOf' ('envC' env) expr)@.
 importExpr :: SharedContext -> Env -> C.Expr -> IO Term
-importExpr sc env expr =
+importExpr sc env expr = do
+  -- putStrLn $ "importExpr: " ++ show (pretty expr)
   case expr of
     C.EList es t ->
       do t' <- importType sc env t
@@ -1066,6 +1069,7 @@ importExpr sc env expr =
           | otherwise ->
             do e' <- importExpr sc env e
                prf <- proveProp sc env p
+               -- putStrLn $ "C.EProofApp: " ++ show (pretty e)
                scApply sc e' prf
         s -> panic "importExpr" ["EProofApp: invalid type: " ++ show (e, s)]
 
@@ -1180,6 +1184,7 @@ importExpr' sc env schema expr =
     fallback =
       do let t1 = fastTypeOf (envC env) expr
          t2 <- the "falback: schema is not mono" (C.isMono schema)
+         -- putStrLn $ "importExpr'::fallback " ++ show (pretty expr)
          expr' <- importExpr sc env expr
          coerceTerm sc env t1 t2 expr'
 
@@ -1423,6 +1428,7 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) =
         panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
+     -- putStrLn $ "importDeclGroup (C.NonRecursive decl): " ++ pretty decl
      rhs <- importExpr' sc env (C.dSignature decl) expr
      rhs' <- case declOpts of
                TopLevelDeclGroup _ ->

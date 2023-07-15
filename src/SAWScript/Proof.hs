@@ -8,6 +8,7 @@ Stability   : provisional
 
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -164,6 +165,10 @@ import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
 import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
 
 import What4.ProgramLoc (ProgramLoc)
+import qualified What4.Config as W4
+import qualified What4.Expr.Builder as W4
+import qualified What4.Expr.Fuzz as W4
+import qualified What4.Interface as W4
 
 import SAWScript.Position
 import SAWScript.Prover.SolverStats
@@ -455,8 +460,8 @@ unbindAndFreshenProp sc (Prop p0) = loop [] [] p0
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
 --   perform a variety of simplifications and rewrites.
-evalProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
-evalProp sc unints p =
+evalProp :: SharedContext -> Maybe (W4.FuzzOptions W4Sim.SAWCoreState) -> Bool -> Set VarIndex -> Prop -> IO Prop
+evalProp sc maybe_fuzz_options hash_consing unints p =
   do (ecs, body) <- unbindAndFreshenProp sc p
      body' <-
        case asEqTrue body of
@@ -465,8 +470,13 @@ evalProp sc unints p =
 
      sym <- Common.newSAWCoreExprBuilder sc
      st <- Common.sawCoreState sym
+     cacheTermsSetting <- W4.getOptionSetting W4.cacheTerms $ W4.getConfiguration sym
+     _ <- W4.setOpt cacheTermsSetting hash_consing
      (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints body'
-     t1 <- W4Sim.toSC sym st p'
+     p'' <- case maybe_fuzz_options of
+       Just fuzz_options -> fst <$> W4.simplifyExprWithOptions fuzz_options sym p'
+       Nothing -> return p'
+     t1 <- W4Sim.toSC sym st p''
      t2 <- scEqTrue sc t1
      -- turn the free variables we generated back into pi-bound variables
      t3 <- scGeneralizeExts sc ecs t2
@@ -1047,6 +1057,8 @@ data Evidence
     --   uninterpreted (i.e., will not be unfolded).  Then, the provided
     --   evidence is use to check the modified sequent.
   | EvalEvidence !(Set VarIndex) !Evidence
+
+  | FuzzSimplifyEvidence !Sequent !Evidence
 
     -- | This type of evidence is used to modify a focused part of the sequent.
     --   The modified sequent should be equivalent up to conversion.
@@ -1658,7 +1670,16 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            check nenv e' sqt'
 
       EvalEvidence vars e' ->
-        do sqt' <- traverseSequentWithFocus (evalProp sc vars) sqt
+        do sqt' <- traverseSequentWithFocus (evalProp sc Nothing False vars) sqt
+           check nenv e' sqt'
+
+      FuzzSimplifyEvidence sqt' e' ->
+        -- do ok <- sequentSubsumes sc sqt' sqt
+        --    unless ok $ fail $ unlines
+        --      [ "Fuzz simplified sequent does not subsume goal"
+        --      , prettySequent defaultPPOpts nenv sqt
+        --      , prettySequent defaultPPOpts nenv sqt'
+        --      ]
            check nenv e' sqt'
 
       ConversionEvidence sqt' e' ->
