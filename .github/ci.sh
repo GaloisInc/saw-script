@@ -77,8 +77,10 @@ build() {
   fi
 }
 
-collect_hpc_mix_files() {
-  cp -r $(find dist-newstyle -name "hpc") hpc
+collect_hpc_files() {
+  local MIX_FILES=$(find dist-newstyle -name "*.mix")
+  local GENERATED_HS_FILES=$(find dist-newstyle/build -name "*.hs")
+  tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES}
 }
 
 install_system_deps() {
@@ -164,7 +166,7 @@ compute_coverage() {
   local SUM_TIX="all.tix"
   hpc sum --output=$SUM_TIX --union --exclude=Main --exclude=GitRev $(find . -name "*.tix")
   # Generate report
-  local HPC_ROOT="hpc"
+  local HPC_ROOT=$(find dist-newstyle -name "hpc")
   # TODO: Remove debug echos"
   echo "HPC_ROOT: ${HPC_ROOT}"
   local HPC_ARGS=""
