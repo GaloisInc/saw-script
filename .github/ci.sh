@@ -158,6 +158,7 @@ files_since() {
   echo "$files"
 }
 
+# TODO: Pull this into a separate file to make it easier to run locally
 compute_coverage() {
   # Combine .tix files
   local SUM_TIX="all.tix"
@@ -173,6 +174,7 @@ compute_coverage() {
   done
   echo "HPC_ARGS: ${HPC_ARGS}"
   hpc report ${HPC_ARGS} ${SUM_TIX}
+  hpc markup --destdir=hpc_html ${HPC_ARGS} ${SUM_TIX}
   # TODO: Generate HTML
 }
 

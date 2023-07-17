@@ -423,10 +423,10 @@ jobs:
             os: windows-2019
             continue-on-error: false
             hpc: false
-          - suite: integration_tests
+          - suite: integration_tests # TODO: Verify this doesn't run
             os: ubuntu-22.04
             continue-on-error: false
-            hpc: true
+            hpc: false
     steps:
       - uses: actions/checkout@v2
         with:
