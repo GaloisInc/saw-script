@@ -77,6 +77,10 @@ build() {
   fi
 }
 
+collect_hpc_mix_files() {
+  cp -r $(find dist-newstyle -name "hpc") hpc
+}
+
 install_system_deps() {
   (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-bin.zip" && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
@@ -159,7 +163,7 @@ compute_coverage() {
   local SUM_TIX="all.tix"
   hpc sum --output=$SUM_TIX --union --exclude=Main --exclude=GitRev $(find . -name "*.tix")
   # Generate report
-  local HPC_ROOT=$(find dist-newstyle -name "hpc")
+  local HPC_ROOT="hpc"
   # TODO: Remove debug echos"
   echo "HPC_ROOT: ${HPC_ROOT}"
   local HPC_ARGS=""

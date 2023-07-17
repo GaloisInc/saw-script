@@ -226,6 +226,16 @@ jobs:
           path: dist/bin
           name: ${{ runner.os }}-with-hpc-bins
 
+      - if: matrix.run-tests && matrix.hpc == true
+        shell: bash
+        run: .github/ci.sh collect_hpc_mix_files
+
+      - if: matrix.run-tests && matrix.hpc == true
+        uses: actions/upload-artifact@v2
+        with:
+          path: hpc
+          name: ${{ runner.os }}-hpc
+
       - uses: actions/cache/save@v3
         name: Save cabal store cache
         if: always()
@@ -441,6 +451,12 @@ jobs:
         with:
           name: "${{ runner.os }}-with-hpc-bins"
           path: dist/bin
+
+      - uses: actions/download-artifact@v2
+        if: matrix.hpc == true
+        with:
+          name: "${{ runner.os }}-hpc"
+          path: hpc
 
       - shell: bash
         if: "runner.os != 'Windows'"
