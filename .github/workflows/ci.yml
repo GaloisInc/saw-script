@@ -492,8 +492,8 @@ jobs:
         if: matrix.hpc == true
         run: |
           ls -lh
-          ls -lh ${{ runner.os }}-hpc.tar.gz
-          tar xvf ${{ runner.os }}-hpc.tar.gz
+          ls -lh hpc.tar.gz
+          tar xvf hpc.tar.gz
           .github/ci.sh compute_coverage
 
   build-push-image:
