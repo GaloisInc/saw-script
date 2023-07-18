@@ -1040,6 +1040,25 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
                                            (globalOpenTerm term_ident)
         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
 
+heapster_translate_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                String -> TopLevel ()
+heapster_translate_rust_type _bic _opts henv perms_string =
+  do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
+                              (lookupModContainingSym henv nm)
+     sc <- getSharedContext
+     let w = llvmModuleArchReprWidth lm
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     (Some cargs, Some ret) <- lookupFunctionType lm nm
+     let args = mkCruCtx cargs
+     withKnownNat w $ withLeqProof leq_proof $ do
+        SomeFunPerm fun_perm <-
+          parseFunPermStringMaybeRust "permissions" w env args ret perms_string
+        liftIO $ -- Lookup a how to print to io & and, looking into permissions.hs
+          -- for permPrettyString and pass an empty ppInfo to print 'fun_perm'
+
 -- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
 -- associated with the supplied Heapster environment, and return its identifier
 insPrimitive :: HeapsterEnv -> String -> Term -> TopLevel Ident

@@ -4253,6 +4253,13 @@ primitives = Map.fromList
     [ "Tell Heapster whether to perform its translation-time checks of the "
     , "well-formedness of type-checking proofs" ]
 
+  , prim "heapster_trans_rust_type"
+    "String -> TopLevel ()"
+    (bicVal heapster_translate_rust_type)
+    Experimental
+    [ "Parse and print back a set of Heapster permissions for a function"
+    ]
+
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
