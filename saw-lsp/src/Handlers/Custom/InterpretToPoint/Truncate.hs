@@ -23,12 +23,13 @@ instance Aeson.FromJSON Position where
 -- containing a list of statements, insert a call to `print_goal` and a call to
 -- `admit`, and truncate the rest of the statements in the block, as well as the
 -- rest of the statements provided.
-truncateScript :: Position -> [Stmt] -> [Stmt]
-truncateScript (Position l c) stmts =
+truncateScript :: Position -> String -> [Stmt] -> [Stmt]
+truncateScript (Position l c) note stmts =
   let mark = Position (l + 1) (c + 1)
       mkVar v = Var (Located v "" Unknown)
-      printGoal = StmtBind Unknown (PWild Nothing) Nothing (mkVar "print_goal")
-      admit = StmtBind Unknown (PWild Nothing) Nothing (Application (mkVar "admit") (String "TODO"))
+      mkBind = StmtBind Unknown (PWild Nothing) Nothing
+      printGoal = mkBind (mkVar "print_goal")
+      admit = mkBind (Application (mkVar "admit") (String note))
    in truncateScriptWith [printGoal, admit] mark stmts
 
 -- | At the given `Position`, which we assume to be within an expression

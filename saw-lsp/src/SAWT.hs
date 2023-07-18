@@ -1,40 +1,130 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWT where
 
-import Control.Monad (when)
-import Control.Monad.Catch (MonadCatch, MonadThrow)
+import Control.Monad.Catch (MonadCatch, MonadThrow, SomeException, try)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
-import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks, void)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), void)
 import Control.Monad.State (MonadState (..), gets, modify)
 import Control.Monad.Trans (MonadTrans (..))
 import Data.AIG.CompactGraph qualified as AIG
-import Data.Bits
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as HMap
-import Data.Hashable
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import SAWScript.AST qualified as SAW
 import SAWScript.Interpreter qualified as SAW
-import SAWScript.Lexer (lexSAW)
 import SAWScript.Options (Options (..), Verbosity (..), printOutVia)
 import SAWScript.Options qualified as SAW
-import SAWScript.Parser (parseStmt, parseStmtSemi)
-import SAWScript.Proof qualified as SAW
 import SAWScript.Value qualified as SAW
 import Stack
-import System.IO
 
-type Checkpoints = HashMap (Stack SAW.Stmt) SAW.TopLevelCheckpoint
+-------------------------------------------------------------------------------
+-- Monad/interfaces
+
+-- | A monad transformer to include `SAW` functionality in a transformer stack.
+newtype SAWT m a = SAWT {unSAWT :: ReaderT (IORef SAWState) m a}
+  deriving
+    ( Applicative,
+      Functor,
+      Monad,
+      MonadIO,
+      MonadUnliftIO,
+      MonadTrans,
+      MonadThrow,
+      MonadCatch
+    )
+
+instance MonadIO m => MonadReader SAWState (SAWT m) where
+  ask =
+    SAWT $
+      ReaderT $
+        \ref -> liftIO (readIORef ref)
+  local update (SAWT rdr) =
+    SAWT $
+      ReaderT $
+        \ref ->
+          do
+            original <- liftIO (readIORef ref)
+            liftIO (modifyIORef ref update)
+            res <- runReaderT rdr ref
+            liftIO (writeIORef ref original)
+            pure res
+
+instance MonadIO m => MonadState SAWState (SAWT m) where
+  get =
+    SAWT $
+      ReaderT $
+        \ref -> liftIO (readIORef ref)
+  put sawEnv =
+    SAWT $
+      ReaderT $
+        \ref -> liftIO (writeIORef ref sawEnv)
+
+-------------------------------------------------------------------------------
+-- Running
+
+-- | Run a SAW action with the given environment
+runSAWT :: MonadIO m => SAWT m a -> SAWState -> m a
+runSAWT (SAWT rdr) sState =
+  do
+    sawStateRef <- liftIO (newIORef sState)
+    runReaderT rdr sawStateRef
+
+-- | Run a SAW action with the given environment reference
+runSAWT' :: MonadIO m => SAWT m a -> IORef SAWState -> m a
+runSAWT' (SAWT rdr) = runReaderT rdr
+
+-- | Run a SAW action with a default environment (at the moment, the environment
+-- specified by `defaultSAWEnv`)
+runSAWTDefault :: MonadIO m => SAWT m a -> m a
+runSAWTDefault action =
+  do
+    sState <- newSAWState
+    runSAWT action sState
+
+-------------------------------------------------------------------------------
+-- Accessing/modifying
+
+getRO :: MonadIO m => SAWT m SAW.TopLevelRO
+getRO = gets (seTopLevelRO . ssSAWEnv)
+
+getRW :: MonadIO m => SAWT m SAW.TopLevelRW
+getRW = gets (seTopLevelRW . ssSAWEnv)
+
+getContext :: MonadIO m => SAWT m Context
+getContext = gets ssContext
+
+setContext :: MonadIO m => Context -> SAWT m ()
+setContext ctx = modify (\SAWState {..} -> SAWState {ssContext = ctx, ..})
+
+getCheckpoints :: MonadIO m => SAWT m Checkpoints
+getCheckpoints = gets ssCheckpoints
+
+setCheckpoints :: MonadIO m => Checkpoints -> SAWT m ()
+setCheckpoints checks = modify (\SAWState {..} -> SAWState {ssCheckpoints = checks, ..})
+
+-- | Empty the buffer containing SAW's printed output since inception or since
+-- the last call to `flushOutput`
+flushOutput :: MonadIO m => SAWT m [String]
+flushOutput =
+  do
+    outputRef <- gets ssOutput
+    output <- liftIO (readIORef outputRef)
+    liftIO (writeIORef outputRef mempty)
+    pure output
+
+-------------------------------------------------------------------------------
+-- Our state/environment
 
 -- | A broader notion of state than SAW admits, this structure includes
 -- information that allows for tracking an evaluation context and for creating
 -- and restoring checkpoints associated with those contexts.
 data SAWState = SAWState
   { ssSAWEnv :: SAWEnv,
-    ssCurrentContext :: Stack SAW.Stmt,
+    ssContext :: Context,
     ssCheckpoints :: Checkpoints,
     ssOutput :: IORef [String] -- where does this belong? I need it to initialize `printOutVia`, which is currently populated in `newSAWEnv`
   }
@@ -52,10 +142,13 @@ newSAWStateWithCheckpoints checkpoints =
     pure
       SAWState
         { ssSAWEnv = env,
-          ssCurrentContext = emptyStack,
+          ssContext = emptyStack,
           ssCheckpoints = checkpoints,
           ssOutput = ssOutput
         }
+
+-------------------------------------------------------------------------------
+-- SAW's state/environment
 
 -- | Packages the environments that a `TopLevel` action reads/writes.
 data SAWEnv = SAWEnv
@@ -85,135 +178,111 @@ nukeSAWEnv = SAWT $ ReaderT $ \ref ->
 
 -- | Replace the existing `SAWState` with an empty state, but maintain the
 -- existing cache of checkpoints.
-drainSAWEnv :: MonadIO m => SAWT m ()
-drainSAWEnv = SAWT $ ReaderT $ \ref ->
+resetSAWEnv :: MonadIO m => SAWT m ()
+resetSAWEnv = SAWT $ ReaderT $ \ref ->
   do
     SAWState {..} <- liftIO (readIORef ref)
     mostlyEmptyState <- newSAWStateWithCheckpoints ssCheckpoints
     liftIO (writeIORef ref mostlyEmptyState)
 
--- | A monad transformer to include `SAW` functionality in a transformer stack.
-newtype SAWT m a = SAWT {unSAWT :: ReaderT (IORef SAWState) m a}
-  deriving
-    ( Applicative,
-      Functor,
-      Monad,
-      MonadIO,
-      MonadUnliftIO,
-      MonadTrans,
-      MonadThrow,
-      MonadCatch
-    )
+-------------------------------------------------------------------------------
+-- Context
 
--- instance MonadIO m => MonadReader SAWState (SAWT m) where
---   ask =
---     SAWT $
---       ReaderT $
---         \ref -> liftIO (readIORef ref)
---   local update (SAWT rdr) =
---     SAWT $
---       ReaderT $
---         \ref ->
---           do
---             original <- liftIO (readIORef ref)
---             liftIO (modifyIORef ref update)
---             res <- runReaderT rdr ref
---             liftIO (writeIORef ref original)
---             pure res
+type Context = Stack SAW.Stmt
 
-instance MonadIO m => MonadState SAWState (SAWT m) where
-  get =
-    SAWT $
-      ReaderT $
-        \ref -> liftIO (readIORef ref)
-  put sawEnv =
-    SAWT $
-      ReaderT $
-        \ref -> liftIO (writeIORef ref sawEnv)
+mkContext :: [SAW.Stmt] -> Context
+mkContext = Stack.fromList
 
--- | Run a SAW action with the given environment
-runSAWT :: MonadIO m => SAWT m a -> SAWState -> m a
-runSAWT (SAWT rdr) sState =
-  do
-    sawStateRef <- liftIO (newIORef sState)
-    runReaderT rdr sawStateRef
+emptyContext :: Context
+emptyContext = emptyStack
 
--- | Run a SAW action with the given environment reference
-runSAWT' :: MonadIO m => SAWT m a -> IORef SAWState -> m a
-runSAWT' (SAWT rdr) = runReaderT rdr
+addStmtToContext :: SAW.Stmt -> Context -> Context
+addStmtToContext = push
 
--- | Run a SAW action with a default environment (at the moment, the environment
--- specified by `defaultSAWEnv`)
-runSAWTDefault :: MonadIO m => SAWT m a -> m a
-runSAWTDefault action =
-  do
-    sState <- newSAWState
-    runSAWT action sState
+-------------------------------------------------------------------------------
+-- Checkpoint(s)
 
-getRO :: MonadIO m => SAWT m SAW.TopLevelRO
-getRO = gets (seTopLevelRO . ssSAWEnv)
+data Checkpoint = Checkpoint
+  { ckEnv :: SAW.TopLevelCheckpoint,
+    ckVal :: SAW.Value,
+    ckOutput :: Maybe String
+  }
 
-getRW :: MonadIO m => SAWT m SAW.TopLevelRW
-getRW = gets (seTopLevelRW . ssSAWEnv)
+type Checkpoints = HashMap Context Checkpoint
 
-makeCheckpoint :: MonadIO m => SAWT m ()
-makeCheckpoint =
+addCheckpoint :: Context -> Checkpoint -> Checkpoints -> Checkpoints
+addCheckpoint = HMap.insert
+
+findCheckpoint :: Checkpoints -> Context -> Maybe Checkpoint
+findCheckpoint = flip HMap.lookup
+
+makeCheckpoint :: MonadIO m => SAW.Value -> Maybe String -> SAWT m Checkpoint
+makeCheckpoint ckVal ckOutput =
   do
     rw <- getRW
-    checkpoint <- liftIO (SAW.makeCheckpoint rw)
-    modify (\SAWState {..} -> SAWState {ssCheckpoints = HMap.insert ssCurrentContext checkpoint ssCheckpoints, ..})
-    size <- gets (\SAWState {..} -> length ssCheckpoints)
-    liftIO $
-      hPutStrLn stderr $
-        unlines
-          [ "made checkpoint",
-            "currently holding " <> show size <> " checkpoints"
-          ]
+    ckEnv <- liftIO (SAW.makeCheckpoint rw)
+    pure Checkpoint {..}
 
--- | Empty the buffer containing SAW's printed output since inception or since
--- the last call to `flushOutput`
-flushOutput :: MonadIO m => SAWT m [String]
-flushOutput =
+-- | Remember a checkpoint with the current context
+rememberCheckpoint :: MonadIO m => Checkpoint -> SAWT m ()
+rememberCheckpoint checkpoint =
   do
-    outputRef <- gets ssOutput
-    output <- liftIO (readIORef outputRef)
-    liftIO (writeIORef outputRef mempty)
-    pure output
+    checks <- getCheckpoints
+    ctx <- getContext
+    setCheckpoints (addCheckpoint ctx checkpoint checks)
+
+restoreCheckpoint :: MonadIO m => Checkpoint -> SAWT m ()
+restoreCheckpoint Checkpoint {..} = void (liftTopLevel (SAW.restoreCheckpoint ckEnv))
 
 -------------------------------------------------------------------------------
 
--- | Interpret a SAW statement in a SAWT context. Cache a checkpoint that allows
--- returning to the resultant environment. Returns whether or not the resultant
--- environment came from a cached checkpoint (i.e., was executing the statement
--- a cache hit).
-runStmtCheckpoint :: MonadIO m => SAW.Stmt -> SAWT m Bool
-runStmtCheckpoint = runStmtWith True
-
--- | Interpret a SAW statement in a SAWT context. Returns whether or not the
--- resultant environment came from a cached checkpoint (i.e., was executing the
--- statement a cache hit).
-runStmt :: MonadIO m => SAW.Stmt -> SAWT m Bool
-runStmt = runStmtWith False
-
-runStmtWith :: MonadIO m => Bool -> SAW.Stmt -> SAWT m Bool
-runStmtWith checkpointAfter stmt =
-  do
-    modify (\SAWState {..} -> SAWState {ssCurrentContext = push stmt ssCurrentContext, ..})
-    (context, checkpoints) <- gets (\SAWState {..} -> (ssCurrentContext, ssCheckpoints))
-    liftIO (hPrint stderr (hash context))
-    hit <- case checkpoints HMap.!? context of
-      Just checkpoint -> liftTopLevel (SAW.restoreCheckpoint checkpoint) >> pure True
-      Nothing -> liftTopLevel (SAW.interpretStmt False stmt) >> pure False
-    when checkpointAfter makeCheckpoint
-    pure hit
+-- runSAWScript :: MonadIO m => NonEmpty SAW.Stmt -> SAWT m (SAW.Value, Maybe String)
+-- runSAWScript stmts =
+--   do
+--     drainSAWEnv
+--     let ctx = Stack.fromList stmts
+--     ckM <- local (\SAWState {..} -> SAWState {ssContext = ctx, ..}) lookupSAWCheckpoint
+--     case ckM of
+--       Nothing ->
+--         let (prefix, final) = (NE.init stmts, NE.last stmts)
+--          in mapM_ runSAWStmt prefix >> runSAWStmt final
+--       Just ck@Checkpoint {..} -> restoreSAWCheckpoint ck >> pure (ckVal, ckOutput)
 
 -------------------------------------------------------------------------------
 
+-- -- | Interpret a SAW statement in a SAWT context. Cache a checkpoint that allows
+-- -- returning to the resultant environment. Returns whether or not the resultant
+-- -- environment came from a cached checkpoint (i.e., was executing the statement
+-- -- a cache hit).
+-- runStmtCheckpoint :: MonadIO m => SAW.Stmt -> SAWT m Bool
+-- runStmtCheckpoint = runStmtWith True
+
+-- -- | Interpret a SAW statement in a SAWT context. Returns whether or not the
+-- -- resultant environment came from a cached checkpoint (i.e., was executing the
+-- -- statement a cache hit).
+-- runStmt :: MonadIO m => SAW.Stmt -> SAWT m Bool
+-- runStmt = runStmtWith False
+
+-- runStmtWith :: MonadIO m => Bool -> SAW.Stmt -> SAWT m Bool
+-- runStmtWith checkpointAfter stmt =
+--   do
+--     modify (\SAWState {..} -> SAWState {ssContext = push stmt ssContext, ..})
+--     (context, checkpoints) <- gets (\SAWState {..} -> (ssContext, ssCheckpoints))
+--     liftIO (hPrint stderr (hash context))
+--     hit <- case checkpoints HMap.!? context of
+--       Just checkpoint -> liftTopLevel (SAW.restoreCheckpoint checkpoint) >> pure True
+--       Nothing -> liftTopLevel (SAW.interpretStmt False stmt) >> pure False
+--     when checkpointAfter makeCheckpoint
+--     pure hit
+
+-- runStmt' :: MonadIO m => Bool -> Bool -> SAW.Stmt -> SAWT m Bool
+-- runStmt' tryRestore makeCheckpoint stmt =
+--   do
+
+-------------------------------------------------------------------------------
+-- TopLevel
 
 -- | Execute a `TopLevel` action to produce a `Value`
---
--- TODO: we should probably promote this result into `Either` by catching
--- whatever exceptions may get thrown
 liftTopLevel :: (MonadIO m, SAW.IsValue a) => SAW.TopLevel a -> SAWT m SAW.Value
 liftTopLevel action =
   do
@@ -223,6 +292,19 @@ liftTopLevel action =
     put state'
     pure value
 
+tryLiftTopLevel :: (MonadIO m, SAW.IsValue a) => SAW.TopLevel a -> SAWT m (Either String SAW.Value)
+tryLiftTopLevel action =
+  do
+    SAWState {ssSAWEnv = SAWEnv {..}, ..} <- get
+    result <- liftIO (try (SAW.runTopLevel action seTopLevelRO seTopLevelRW))
+    case result of
+      Left (e :: SomeException) -> pure (Left (show e))
+      Right (value, newRW) ->
+        do
+          let state' = SAWState {ssSAWEnv = SAWEnv {seTopLevelRW = newRW, ..}, ..}
+          put state'
+          pure (Right value)
+
 -- withTopLevel :: (MonadIO m, SAW.IsValue a) => SAW.TopLevel a -> (SAWState -> m b) -> SAWT m b
 -- withTopLevel action onResult =
 --   do
@@ -231,24 +313,3 @@ liftTopLevel action =
 --     let state' = SAWState {ssSAWEnv = SAWEnv {seTopLevelRW = newRW, ..}, ..}
 --     put state'
 --     lift (onResult state')
-
-runSAWText :: MonadIO m => String -> SAWT m ()
-runSAWText str =
-  do
-    let tokens = lexSAW "<lsp>" str
-    case parseStmtSemi tokens of
-      Left err -> liftIO (print err)
-      Right stmt -> void (runStmt stmt)
-
-sample :: IO [String]
-sample = runSAWTDefault sawAction
-  where
-    sawAction =
-      do
-        runStmt stmt
-        flushOutput
-    stmtText = "3"
-    stmt =
-      case parseStmt (lexSAW "" stmtText) of
-        Left err -> error (show err)
-        Right s -> s

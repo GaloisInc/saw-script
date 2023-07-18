@@ -11,8 +11,12 @@ import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as Aeson
 import Data.Bifunctor (first)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.List.NonEmpty qualified as NE
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.UUID.V4 qualified as UUID
 import Error (internalError)
 import Handlers.Custom.InterpretToPoint.Truncate
 import Language.LSP.Server
@@ -35,8 +39,10 @@ import Monad
 import SAWScript.AST (Stmt (..), prettyWholeModule)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
-import SAWT (drainSAWEnv, flushOutput, runStmt, runStmtCheckpoint)
+import SAWT
+import SAWT.Interpret (interpretCacheSAWScript, interpretSAWStmt)
 import System.IO.Temp (writeSystemTempFile)
+import Text.Printf (printf)
 
 data InterpretParams = InterpretParams
   { posn :: Position,
@@ -58,29 +64,21 @@ doInterp ::
   ServerM ()
 doInterp request responder =
   do
-    -- debug "doInterp"
+    debug "doInterp"
     interpParams <- liftEither (fromParams ps)
-    -- debug' (show interpParams)
     fileText <- virtualFileText <$> resolveUri (toNormalizedUri (uri interpParams))
     fileStmts <- liftEither (first (internalError . Text.pack) (parseFile fileText))
-    let fileStmts' = truncateScript (posn interpParams) fileStmts
-    case fileStmts' of
-      [] ->
-        let msg = Text.pack $ "would truncate all " <> show (length fileStmts) <> " statements"
-         in sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
-      stmts ->
-        do
-          let orig = show (length fileStmts)
-              new = show (length stmts)
-              msg = Text.pack $ "would truncate " <> orig <> " statements to " <> new <> " statements"
-          debug' (show (prettyWholeModule stmts))
-          sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
-    liftSAW drainSAWEnv
-    hits <- mapM (liftSAW . runStmtCheckpoint) fileStmts'
-    debug' (show hits)
-    -- liftSAW (mapM_ runStmt fileStmts')
-    ss <- liftSAW flushOutput
-    let goal = ss !! 1
+    uuid <- liftIO UUID.nextRandom
+    let truncatedStmts = truncateScript (posn interpParams) (show uuid) fileStmts
+    inform $ printf "Truncating %i statements to %i statements" (length fileStmts) (length truncatedStmts)
+    nonEmptyTruncatedStmts <-
+      liftMaybe
+        (internalError "cannot interpret empty script")
+        (case truncatedStmts of [] -> Nothing; (s : ss) -> Just (s :| ss))
+    debug' $ show $ prettyWholeModule $ NE.toList nonEmptyTruncatedStmts
+    (matchedPrefix, _val, outM) <- liftSAW (interpretCacheSAWScript nonEmptyTruncatedStmts)
+    inform $ printf "Reusing prior execution of %i statements" matchedPrefix
+    let goal = fromMaybe "<no goal>" outM
     goalFile <- liftIO $ writeSystemTempFile "lsp" goal
     let goalUri = filePathToUri goalFile
         externalApplication = Just False
@@ -93,6 +91,7 @@ doInterp request responder =
     pure ()
   where
     ps = request ^. LSP.params
+    inform msg = sendNotification SWindowShowMessage (ShowMessageParams MtInfo (Text.pack msg))
 
 resolveUri :: NormalizedUri -> ServerM VirtualFile
 resolveUri uri =
