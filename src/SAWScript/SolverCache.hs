@@ -73,7 +73,7 @@ import System.Timeout (timeout)
 import GHC.Generics (Generic)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
 import Data.Tuple.Extra (first, firstM, both)
-import Data.List (isPrefixOf, elemIndex, intercalate)
+import Data.List (elemIndex, intercalate)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Functor ((<&>))
 
@@ -227,9 +227,7 @@ type SolverBackendVersions = Map SolverBackend (Maybe String)
 -- | Pretty-print a 'SolverBackend' with its version 'String'
 showSolverBackendVersion :: SolverBackend -> Maybe String -> [String] -> String
 showSolverBackendVersion backend (Just v_str) opt_words =
-  if show backend `isPrefixOf` v_str
-  then unwords $                v_str : opt_words
-  else unwords $ show backend : v_str : opt_words
+  unwords $ show backend : v_str : opt_words
 showSolverBackendVersion backend Nothing opt_words =
   showSolverBackendVersion backend (Just "[unknown version]") opt_words
 

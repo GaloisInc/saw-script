@@ -12,7 +12,7 @@ Stability   : provisional
 
 module SAWScript.SolverVersions where
 
-import Control.Exception
+import Control.Exception (SomeException, try)
 import System.Process (readProcessWithExitCode)
 import System.Exit (ExitCode(..))
 
@@ -29,15 +29,24 @@ import GitRev
 getSolverVersion :: SBV.Solver -> IO (Maybe String)
 getSolverVersion s =
   let s' = SBV.solver $ SBV.defaultSolverConfig s
-      args = case SBV.name s' of
-               -- n.b. abc will return a non-zero exit code if asked
-               -- for command usage.
-               SBV.ABC -> ["s", "-q", "version;quit"]
-               _ -> ["--version"]
+      (args, pref) = case SBV.name s' of
+        -- n.b. abc will return a non-zero exit code if asked for command usage.
+        SBV.ABC       -> (["s", "-q", "version;quit"], "UC Berkeley, ABC ")
+        SBV.Boolector -> (["--version"]              , "")
+        SBV.Bitwuzla  -> (["--version"]              , "")
+        SBV.CVC4      -> (["--version"]              , "This is CVC4 version ")
+        SBV.CVC5      -> (["--version"]              , "This is CVC5 version ")
+        SBV.DReal     -> (["--version"]              , "dReal v")
+        SBV.MathSAT   -> (["-version"]               , "MathSAT5 version ")
+        SBV.Yices     -> (["--version"]              , "Yices ")
+        SBV.Z3        -> (["--version"]              , "Z3 version ")
   in try (readProcessWithExitCode (SBV.executable s') args "") >>= \case
-    Right (ExitSuccess,o,_) | [l] <- lines o -> return $ Just l
+    Right (ExitSuccess,o,_) | (l:_) <- lines o ->
+      return $ Just $ dropPrefix pref l
     Right _                   -> return Nothing
     Left (_ :: SomeException) -> return Nothing
+  where dropPrefix (x:xs) (y:ys) | x == y = dropPrefix xs ys
+        dropPrefix _ ys = ys
 
 -- | Get the 'SolverBackendVersion' of a 'SolverBackend'
 getSolverBackendVersion :: SolverBackend -> IO (Maybe String)
