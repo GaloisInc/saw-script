@@ -13,13 +13,16 @@ import Control.Monad.Trans (MonadTrans (..))
 import Data.AIG.CompactGraph qualified as AIG
 import Data.HashMap.Strict (HashMap)
 import Data.HashMap.Strict qualified as HMap
-import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef', atomicWriteIORef, newIORef, readIORef)
 import SAWScript.AST qualified as SAW
 import SAWScript.Interpreter qualified as SAW
 import SAWScript.Options (Options (..), Verbosity (..), printOutVia)
 import SAWScript.Options qualified as SAW
 import SAWScript.Value qualified as SAW
 import Stack
+
+atomicModifyIORef :: IORef t -> (t -> t) -> IO ()
+atomicModifyIORef ref f = atomicModifyIORef' ref (\x -> (f x, ()))
 
 -------------------------------------------------------------------------------
 -- Monad/interfaces
@@ -48,9 +51,9 @@ instance MonadIO m => MonadReader SAWState (SAWT m) where
         \ref ->
           do
             original <- liftIO (readIORef ref)
-            liftIO (modifyIORef ref update)
+            liftIO (atomicModifyIORef ref update)
             res <- runReaderT rdr ref
-            liftIO (writeIORef ref original)
+            liftIO (atomicWriteIORef ref original)
             pure res
 
 instance MonadIO m => MonadState SAWState (SAWT m) where
@@ -61,7 +64,7 @@ instance MonadIO m => MonadState SAWState (SAWT m) where
   put sawEnv =
     SAWT $
       ReaderT $
-        \ref -> liftIO (writeIORef ref sawEnv)
+        \ref -> liftIO (atomicWriteIORef ref sawEnv)
 
 -------------------------------------------------------------------------------
 -- Running
@@ -113,7 +116,7 @@ flushOutput =
   do
     outputRef <- gets ssOutput
     output <- liftIO (readIORef outputRef)
-    liftIO (writeIORef outputRef mempty)
+    liftIO (atomicWriteIORef outputRef mempty)
     pure output
 
 -------------------------------------------------------------------------------
@@ -167,14 +170,14 @@ newSAWEnv outputRef =
     pure (SAWEnv {seTopLevelRO = ro, seTopLevelRW = rw})
   where
     captureOutput :: String -> IO ()
-    captureOutput s = modifyIORef outputRef (s :)
+    captureOutput s = atomicModifyIORef outputRef (s :)
 
 -- | Replace the existing `SAWState` with an empty state.
 nukeSAWEnv :: MonadIO m => SAWT m ()
 nukeSAWEnv = SAWT $ ReaderT $ \ref ->
   do
     emptyState <- newSAWState
-    liftIO (writeIORef ref emptyState)
+    liftIO (atomicWriteIORef ref emptyState)
 
 -- | Replace the existing `SAWState` with an empty state, but maintain the
 -- existing cache of checkpoints.
@@ -183,7 +186,7 @@ resetSAWEnv = SAWT $ ReaderT $ \ref ->
   do
     SAWState {..} <- liftIO (readIORef ref)
     mostlyEmptyState <- newSAWStateWithCheckpoints ssCheckpoints
-    liftIO (writeIORef ref mostlyEmptyState)
+    liftIO (atomicWriteIORef ref mostlyEmptyState)
 
 -------------------------------------------------------------------------------
 -- Context
