@@ -160,26 +160,6 @@ files_since() {
   echo "$files"
 }
 
-# TODO: Pull this into a separate file to make it easier to run locally
-compute_coverage() {
-  # Combine .tix files
-  local SUM_TIX="all.tix"
-  hpc sum --output=$SUM_TIX --union --exclude=Main --exclude=GitRev $(find . -name "*.tix")
-  # Generate report
-  local HPC_ROOT=$(find dist-newstyle -name "hpc")
-  # TODO: Remove debug echos"
-  echo "HPC_ROOT: ${HPC_ROOT}"
-  local HPC_ARGS=""
-  for dir in ${HPC_ROOT}/vanilla/mix/*; do
-    echo "dir: ${dir}"
-    local HPC_ARGS="${HPC_ARGS} --hpcdir=${dir}"
-  done
-  echo "HPC_ARGS: ${HPC_ARGS}"
-  hpc report ${HPC_ARGS} ${SUM_TIX}
-  hpc markup --destdir=hpc_html ${HPC_ARGS} ${SUM_TIX}
-  # TODO: Generate HTML
-}
-
 COMMAND="$1"
 shift
 
