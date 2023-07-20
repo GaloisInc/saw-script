@@ -65,18 +65,24 @@ module Verifier.SAW.OpenTerm (
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
-  applyPiOpenTerm, piArgOpenTerm,
-  lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
+  applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
+  piOpenTerm, piOpenTermMulti,
   arrowOpenTerm, letOpenTerm, sawLetOpenTerm, list1OpenTerm,
-  -- * Monadic operations for building terms with binders
+  -- * Monadic operations for building terms including 'IO' actions
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM,
   -- * Building SpecM computations
-  SpecTerm(), defineSpecOpenTerm, lambdaSpecTerm, piSpecTerm,
+  SpecTerm(), defineSpecOpenTerm,
+  lambdaPureSpecTerm, lambdaPureSpecTermMulti, lambdaSpecTerm,
+  lambdaSpecTermMulti, piSpecTerm,
   applySpecTerm, applySpecTermMulti, openTermSpecTerm,
-  mkBaseClosSpec, mkFreshClosSpec, callClosSpec, callDefSpec,
-  returnSpec, bindSpec, errorSpec
+  globalSpecTerm, applyGlobalSpecTerm,
+  mkBaseClosSpec, mkFreshClosSpec, callClosSpec, applyClosSpecTerm,
+  callDefSpec, returnSpec, bindSpec, errorSpec,
+  flatSpecTerm, unitSpecTerm, pairSpecTerm, pairTypeSpecTerm,
+  pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm, dataTypeSpecTerm,
+  sawLetSpecTerm
   ) where
 
 import qualified Data.Vector as V
@@ -399,7 +405,8 @@ openTermTopVar =
 
 -- | Build an open term inside a binder of a variable with the given name and
 -- type, where the binder is represented as a Haskell function on 'OpenTerm's
-bindOpenTerm :: LocalName -> TypedTerm -> (OpenTerm -> OpenTerm) -> TCM TypedTerm
+bindOpenTerm :: LocalName -> TypedTerm -> (OpenTerm -> OpenTerm) ->
+                TCM TypedTerm
 bindOpenTerm x tp body_f =
   do tp_whnf <- typeCheckWHNF $ typedVal tp
      withVar x tp_whnf (openTermTopVar >>= (unOpenTerm . body_f))
@@ -456,6 +463,7 @@ list1OpenTerm tp xs =
   foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
   (ctorOpenTerm "Prelude.Nil1" [tp])
   xs
+
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this
@@ -575,6 +583,10 @@ applyExtStackOp f =
   do info <- ask
      return $ applyGlobalOpenTerm f
        [specInfoEvType info, specInfoExtStack info]
+
+-- | Build the 'SpecInfoTerm' for the extended function stack
+extStackSpecInfoTerm :: SpecInfoTerm
+extStackSpecInfoTerm = ask >>= (return . specInfoExtStack)
 
 -- | FIXME: docs
 bindSpecInfoTerm :: (LocalName -> TypedTerm -> TypedTerm -> TermF TypedTerm) ->
@@ -707,21 +719,40 @@ applySpecTermMulti = foldl applySpecTerm
 specInfoTermTerm :: SpecInfoTerm -> SpecTerm
 specInfoTermTerm t = SpecTerm $ return t
 
+-- | Convert an 'OpenTerm' to a 'SpecTerm'
 openTermSpecTerm :: OpenTerm -> SpecTerm
-openTermSpecTerm t = SpecTerm $ return $ return t
+openTermSpecTerm t =
+  SpecTerm $
+  do ctx_len <- specStCtxLen <$> get
+     return $ return $
+       OpenTerm $
+       do ctx <- askCtx
+          if length ctx == ctx_len then unOpenTerm t else
+            panic "openTermSpecTerm" ["Typing context not of expected length"]
 
-topVarSpecTerm :: SpecTermM SpecTerm
+natSpecTerm :: Natural -> SpecTerm
+natSpecTerm n = openTermSpecTerm $ natOpenTerm n
+
+globalSpecTerm :: Ident -> SpecTerm
+globalSpecTerm ident = openTermSpecTerm $ globalOpenTerm ident
+
+applyGlobalSpecTerm :: Ident -> [SpecTerm] -> SpecTerm
+applyGlobalSpecTerm f args = applySpecTermMulti (globalSpecTerm f) args
+
+-- | Build the 'SpecTerm' for the extended function stack
+extStackSpecTerm :: SpecTerm
+extStackSpecTerm = specInfoTermTerm extStackSpecInfoTerm
+
+-- | Build an 'OpenTerm' for the top variable in a 'SpecTermM' computation
+topVarSpecTerm :: SpecTermM OpenTerm
 topVarSpecTerm =
   do outer_ctx_len <- specStCtxLen <$> get
-     return $ SpecTerm $ do
-       inner_ctx_len <- specStCtxLen <$> get
-       return $ return $ OpenTerm $
-         do inner_ctx <- askCtx
-            if length inner_ctx == inner_ctx_len then return () else
-              panic "topVarSpecTerm" ["Variable context of unexpected length"]
+     return $ OpenTerm $
+         do inner_ctx_len <- length <$> askCtx
             typeInferComplete (LocalVar (inner_ctx_len
                                          - outer_ctx_len) :: TermF Term)
 
+-- | Run a 'SpecTermM' computation in a context with an extra bound variable
 withVarSpecTermM :: SpecTermM a -> SpecTermM a
 withVarSpecTermM m =
   do modify specStIncCtx
@@ -729,12 +760,32 @@ withVarSpecTermM m =
      modify specStDecCtx
      return a
 
--- | Build a lambda abstraction as a 'SpecTerm'
-lambdaSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
-lambdaSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
+-- | Build a lambda abstraction as a 'SpecTerm' from a function that takes in a
+-- pure 'OpenTerm'
+lambdaPureSpecTerm :: LocalName -> SpecTerm -> (OpenTerm -> SpecTerm) -> SpecTerm
+lambdaPureSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
   do tp <- tpM
      body <- withVarSpecTermM (topVarSpecTerm >>= (unSpecTerm . body_f))
      return $ bindSpecInfoTerm Lambda x tp body
+
+-- | Build a nested sequence of pure lambda abstractions as a 'SpecTerm'
+lambdaPureSpecTermMulti :: [(LocalName, SpecTerm)] ->
+                           ([OpenTerm] -> SpecTerm) -> SpecTerm
+lambdaPureSpecTermMulti xs_tps body_f =
+  foldr (\(x,tp) rest_f xs ->
+          lambdaPureSpecTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
+
+-- | Build a lambda abstraction as a 'SpecTerm'
+lambdaSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
+lambdaSpecTerm x tp body_f =
+  lambdaPureSpecTerm x tp (body_f . openTermSpecTerm)
+
+-- | Build a nested sequence of lambda abstractions as a 'SpecTerm'
+lambdaSpecTermMulti :: [(LocalName, SpecTerm)] ->
+                       ([SpecTerm] -> SpecTerm) -> SpecTerm
+lambdSpecTermMulti xs_tps body_f =
+  foldr (\(x,tp) rest_f xs ->
+          lambdaSpecTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
 
 -- | Build a pi abstraction as a 'SpecTerm'
 piSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
@@ -828,6 +879,12 @@ mkFreshClosSpec lrt body_f = SpecTerm $
      modify $ specStSetClosBody clos_ix body
      return $ mkClosSpecInfoTerm clos_ix
 
+-- | Apply a closure of a given @LetRecType@ to a list of arguments
+applyClosSpecTerm :: OpenTerm -> SpecTerm -> [SpecTerm] -> SpecTerm
+applyClosSpecTerm lrt clos args =
+  applyGlobalSpecTerm "Prelude.applyLRTClosN"
+  (extStackSpecTerm : natSpecTerm (length args) : args)
+
 -- | Build a @SpecM@ computation that calls a closure with the given return
 -- type specified as a @LetRecType@
 callClosSpec :: OpenTerm -> SpecTerm -> SpecTerm
@@ -866,6 +923,68 @@ errorSpec :: SpecTerm -> Text -> SpecTerm
 errorSpec tp msg =
   applySpecTermMulti (monadicSpecOp "Prelude.errorS")
   [tp, openTermSpecTerm (stringLitOpenTerm msg)]
+
+-- | Build a 'SpecInfoTerm' from a 'FlatTermF'
+flatSpecInfoTerm :: FlatTermF SpecInfoTerm -> SpecInfoTerm
+flatSpecInfoTerm ftf = fmap flatOpenTerm $ sequence ftf
+
+-- | Build a 'SpecTerm' from a 'FlatTermF'
+flatSpecTerm :: FlatTermF SpecTerm -> SpecTerm
+flatSpecTerm ftf =
+  SpecTerm $ fmap flatSpecInfoTerm $ sequence (fmap unSpecTerm ftf)
+
+-- | Build a 'SpecTerm' for a pair
+unitSpecTerm :: SpecTerm
+unitSpecTerm = flatSpecTerm UnitValue
+
+-- | Build a 'SpecTerm' for a pair
+pairSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
+pairSpecTerm t1 t2 = flatSpecTerm $ PairValue t1 t2
+
+-- | Build a 'SpecTerm' for a pair type
+pairTypeSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
+pairTypeSpecTerm t1 t2 = flatSpecTerm $ PairType t1 t2
+
+-- | Build a 'SpecTerm' for the left projection of a pair
+pairLeftSpecTerm :: SpecTerm -> SpecTerm
+pairLeftSpecTerm t = flatSpecTerm $ PairLeft t
+
+-- | Build a 'SpecTerm' for the right projection of a pair
+pairRightSpecTerm :: SpecTerm -> SpecTerm
+pairRightSpecTerm t = flatSpecTerm $ PairRight t
+
+-- | Build a 'SpecInfoTerm' for a constructor applied to its arguments
+ctorSpecInfoTerm :: Ident -> [SpecInfoTerm] -> SpecInfoTerm
+ctorSpecInfoTerm c args = fmap (ctorOpenTerm c) (sequence args)
+
+-- | Build a 'SpecTerm' for a constructor applied to its arguments
+ctorSpecTerm :: Ident -> [SpecTerm] -> SpecTerm
+ctorSpecTerm c args =
+  SpecTerm $ fmap (ctorSpecInfoTerm c) $ sequence $ map unSpecTerm args
+
+-- | Build a 'SpecInfoTerm' for a datatype applied to its arguments
+dataTypeSpecInfoTerm :: Ident -> [SpecInfoTerm] -> SpecInfoTerm
+dataTypeSpecInfoTerm d args = fmap (dataTypeOpenTerm d) (sequence args)
+
+-- | Build a 'SpecTerm' for a datatype applied to its arguments
+dataTypeSpecTerm :: Ident -> [SpecTerm] -> SpecTerm
+dataTypeSpecTerm d args =
+  SpecTerm $ fmap (dataTypeSpecInfoTerm c) $ sequence $ map unSpecTerm args
+
+-- | Build a let expression as an 'SpecTerm'. This is equivalent to
+-- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
+letSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> (SpecTerm -> SpecTerm) ->
+               SpecTerm
+letSpecTerm x tp rhs body_f = applySpecTerm (lambdaSpecTerm x tp body_f) rhs
+
+-- | Build a let expression as an 'SpecTerm'. This is equivalent to
+-- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
+sawLetSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> SpecTerm ->
+                  (SpecTerm -> SpecTerm) -> SpecTerm
+sawLetSpecTerm x tp tp_ret rhs body_f =
+  applySpecTermMulti (globalSpecTerm "Prelude.sawLet")
+  [tp, tp_ret, rhs, lambdaSpecTerm x tp body_f]
+
 
 
 --------------------------------------------------------------------------------

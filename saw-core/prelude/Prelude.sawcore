@@ -2419,6 +2419,9 @@ primitive ValidLRTFunctor2 : (sort 0 -> sort 0 -> sort 0) -> sort 0;
 -- The pair functor is a valid binary LRT functor
 axiom pair_ValidLRTFunctor2 : ValidLRTFunctor2 (\ (A B:sort 0) -> A * B);
 
+-- The either functor is a valid binary LRT functor
+axiom either_ValidLRTFunctor2 : ValidLRTFunctor2 (\ (A B:sort 0) -> Either A B);
+
 -- The Vec type constructor is a valid LRT functor
 axiom Vec_ValidLRTFunctor2 :
   (n:Nat) -> ValidLRTFunctor2 (\ (A _:sort 0) -> Vec n A);
@@ -2443,6 +2446,29 @@ data LetRecType : sort 1 where {
 -- A trivially inhabied "default" LetRecType, representing void -> void
 default_lrt : LetRecType;
 default_lrt = LRT_FunDep Void (\ (_:Void) -> LRT_SpecM (LRT_Type Void));
+
+-- The LetRecType for the unit type
+LRT_Unit : LetRecType;
+LRT_Unit = LRT_Type #();
+
+-- The LetRecType for a pair
+LRT_Pair : LetRecType -> LetRecType -> LetRecType;
+LRT_Pair lrt_l lrt_r =
+  LRT_BinOp (\ (A B:sort 0) -> A * B) pair_ValidLRTFunctor2 lrt_l lrt_r;
+
+-- The LetRecType for the Either type
+LRT_Either : LetRecType -> LetRecType -> LetRecType;
+LRT_Either lrt_l lrt_r =
+  LRT_BinOp (\ (A B:sort 0) -> Either A B) either_ValidLRTFunctor2 lrt_l lrt_r;
+
+-- The LetRecType for the Vec type
+LRT_Vec : Nat -> LetRecType -> LetRecType;
+LRT_Vec n lrt =
+  LRT_BinOp (\ (A _:sort 0) -> Vec n A) (Vec_ValidLRTFunctor2 n) lrt LRT_Unit;
+
+-- The LetRecType for the BVVec type
+LRT_BVVec : (n:Nat) -> Vec n Bool -> LetRecType -> LetRecType;
+LRT_BVVec n len lrt = LRT_Vec (bvToNat n len) lrt;
 
 -- A function stack is a list of LetRecTypes, which intuitively
 -- represents a stack of bindings of mutually recursive functions
