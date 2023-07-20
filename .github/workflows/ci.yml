@@ -490,7 +490,7 @@ jobs:
           ls -lh
           ls -lh hpc.tar.gz
           tar xvf hpc.tar.gz
-          ./compute_coverage.sh
+          ./compute-coverage.sh
 
   build-push-image:
     runs-on: ubuntu-22.04

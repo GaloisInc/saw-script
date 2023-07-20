@@ -16,5 +16,5 @@ for dir in ${HPC_ROOT}/vanilla/mix/*; do
   HPC_ARGS="${HPC_ARGS} --hpcdir=${dir}"
 done
 hpc report ${HPC_ARGS} ${SUM_TIX}
-hpc markup --destdir=hpc_html ${HPC_ARGS} ${SUM_TIX}
+hpc markup --destdir=hpc-html ${HPC_ARGS} ${SUM_TIX}
 
