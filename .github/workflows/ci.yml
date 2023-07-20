@@ -85,7 +85,7 @@ jobs:
           - os: ubuntu-22.04
             ghc: "9.4.4"
             cabal: "3.10.1.0"
-            run-tests: true # TODO: I think we'll need to enable this, but for now I'm just trying to get the thing building
+            run-tests: true
             hpc: true
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
@@ -127,7 +127,6 @@ jobs:
       # modification.
       - uses: actions/cache/restore@v3
         name: Restore cabal store cache
-        #if: runner.os != 'Windows' || matrix.ghc != '9.2.7' # TODO: Remove
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
@@ -423,7 +422,7 @@ jobs:
             os: windows-2019
             continue-on-error: false
             hpc: false
-          - suite: integration_tests # TODO: Verify this doesn't run
+          - suite: integration_tests
             os: ubuntu-22.04
             continue-on-error: false
             hpc: false
@@ -437,9 +436,6 @@ jobs:
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
 
-      # TODO: I think I want a conditional here that downloads the coverage
-      # build iff runner.os is the apropriate ubuntu version and matrix.suite
-      # is 'integration_tests'
       - uses: actions/download-artifact@v2
         if: matrix.hpc == false
         with:
