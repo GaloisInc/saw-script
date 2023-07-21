@@ -77,10 +77,10 @@ module Verifier.SAW.OpenTerm (
   lambdaPureSpecTerm, lambdaPureSpecTermMulti, lambdaSpecTerm,
   lambdaSpecTermMulti, piSpecTerm,
   applySpecTerm, applySpecTermMulti, openTermSpecTerm,
-  globalSpecTerm, applyGlobalSpecTerm,
-  mkBaseClosSpec, mkFreshClosSpec, callClosSpec, applyClosSpecTerm,
-  callDefSpec, returnSpec, bindSpec, errorSpec,
-  flatSpecTerm, unitSpecTerm, pairSpecTerm, pairTypeSpecTerm,
+  globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm
+  mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
+  callDefSpecTerm, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
+  errorSpecTerm, flatSpecTerm, unitSpecTerm, pairSpecTerm, pairTypeSpecTerm,
   pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm, dataTypeSpecTerm,
   sawLetSpecTerm
   ) where
@@ -794,6 +794,13 @@ piSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
      body <- withVarSpecTermM (topVarSpecTerm >>= (unSpecTerm . body_f))
      return $ bindSpecInfoTerm Pi x tp body
 
+-- | Convert a term @lrt@ of type @LetRecType@ to the type it represents by
+-- forming the term @LRTArg stk lrt@
+lrtToTypeSpecTerm :: OpenTerm -> SpecTerm
+lrtToTypeSpecTerm lrt =
+  applyGlobalSpecTerm "Prelude.LRTArg"
+  [specInfoTermTerm (specInfoExtStack <$> ask), lrt]
+
 funStackTypeOpenTerm :: OpenTerm
 funStackTypeOpenTerm = globalOpenTerm "Prelude.FunStack"
 
@@ -861,8 +868,8 @@ mkClosSpecInfoTerm n =
 
 -- | Build a closure that calls one of the "base" recursive functions in the
 -- current spec definition
-mkBaseClosSpec :: Natural -> SpecTerm
-mkBaseClosSpec clos_ix = SpecTerm $
+mkBaseClosSpecTerm :: Natural -> SpecTerm
+mkBaseClosSpecTerm clos_ix = SpecTerm $
   do st <- get
      if clos_ix < specStNumBaseRecs st then return () else
        panic "mkBaseClosSpec" ["Closure index out of bounds"]
@@ -870,8 +877,8 @@ mkBaseClosSpec clos_ix = SpecTerm $
 
 -- | Build a closure that calls a new corecursive function with the given
 -- @LetRecType@ and body, that can call itself using the term passed to it
-mkFreshClosSpec :: OpenTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
-mkFreshClosSpec lrt body_f = SpecTerm $
+mkFreshClosSpecTerm :: OpenTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
+mkFreshClosSpecTerm lrt body_f = SpecTerm $
   do (clos_ix, st) <- specStInsTempClos lrt <$> get
      put st
      body <- unSpecTerm $ body_f (SpecTerm $ return $
@@ -887,14 +894,14 @@ applyClosSpecTerm lrt clos args =
 
 -- | Build a @SpecM@ computation that calls a closure with the given return
 -- type specified as a @LetRecType@
-callClosSpec :: OpenTerm -> SpecTerm -> SpecTerm
-callClosSpec tp clos =
+callClosSpecTerm :: OpenTerm -> SpecTerm -> SpecTerm
+callClosSpecTerm tp clos =
   applySpecTermMulti (monadicSpecOp "Prelude.CallS")
   [openTermSpecTerm tp, clos]
 
 -- | Call another spec definition inside a spec definition, by importing it
-callDefSpec :: OpenTerm -> SpecTerm
-callDefSpec def = SpecTerm $
+callDefSpecTerm :: OpenTerm -> SpecTerm
+callDefSpecTerm def = SpecTerm $
   do (imp_ix, st) <- specStInsImport def <$> get
      put st
      return $
@@ -906,21 +913,25 @@ callDefSpec def = SpecTerm $
 monadicSpecOp :: Ident -> SpecTerm
 monadicSpecOp f = specInfoTermTerm $ applyExtStackOp f
 
+-- | Build the type @SpecM ev stk tp@ from the type @tp@
+specMTypeSpecTerm :: SpecTerm -> SpecTerm
+specMTypeSpecTerm = applySpecTerm (monadicSpecOp "Prelude.SpecM")
+
 -- | Build a @SpecM@ computation that returns a value of a given type
-returnSpec :: SpecTerm -> SpecTerm -> SpecTerm
-returnSpec tp val =
+returnSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
+returnSpecTerm tp val =
   applySpecTermMulti (monadicSpecOp "Prelude.retS") [tp, val]
 
 -- | Build a @SpecM@ computation that does a monadic bind
-bindSpec :: SpecTerm -> SpecTerm -> SpecTerm ->
-            LocalName -> (SpecTerm -> SpecTerm) -> SpecTerm
-bindSpec tp1 tp2 m x f =
+bindSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm ->
+                LocalName -> (SpecTerm -> SpecTerm) -> SpecTerm
+bindSpecTerm tp1 tp2 m x f =
   applySpecTermMulti (monadicSpecOp "Prelude.bindS")
   [tp1, tp2, m, lambdaSpecTerm x tp1 f]
 
 -- | Build a @SpecM@ error computation at the given type with the given message
-errorSpec :: SpecTerm -> Text -> SpecTerm
-errorSpec tp msg =
+errorSpecTerm :: SpecTerm -> Text -> SpecTerm
+errorSpecTerm tp msg =
   applySpecTermMulti (monadicSpecOp "Prelude.errorS")
   [tp, openTermSpecTerm (stringLitOpenTerm msg)]
 
