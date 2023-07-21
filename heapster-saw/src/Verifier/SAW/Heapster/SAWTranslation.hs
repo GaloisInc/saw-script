@@ -125,6 +125,10 @@ typeDescLRT (TypeDescLRT lrt _) = lrt
 typeDescTypeLRT :: TypeDesc -> (OpenTerm,SpecTerm)
 typeDescTypeLRT d = (typeDescType d, typeDescLRT d)
 
+-- | Build an impure 'TypeDesc' from a term of type @LetRecType@
+typeDescFromLRT :: OpenTerm -> TypeDesc
+typeDescFromLRT lrt = TypeDescLRT lrt (lrtToTypeSpecTerm lrt)
+
 -- | If all the type descriptions in a list are pure, return their pure types as
 -- a list; otherwise, convert them all to impure LRT types
 typeDescsPureOrLRT :: [TypeDesc] -> Either [OpenTerm] [(OpenTerm,SpecTerm)]
@@ -158,6 +162,10 @@ bvVecTypeDesc w_term len_term (TypeDescImpure lrt elem_tpx) =
   (applyGlobalOpenTerm "Prelude.LRT_BVVec" [w_term, len_term, lrt])
   (applyGlobalOpenTerm "Prelude.BVVec" [w_term, len_term, elem_tp])
 
+-- | The 'TypeDesc' for the unit type
+typeDescUnit :: TypeDesc
+typeDescUnit = TypeDescPure unitTypeOpenTerm
+
 -- | Build a type description for the pair of two type descriptions
 typeDescPair :: TypeDesc -> TypeDesc -> TypeDesc
 typeDescPair =
@@ -171,9 +179,23 @@ typeDescEither =
   "Prelude.LRT_Either"
   (\tp1 tp2 -> dataTypeSpecTerm "Prelude.Either" [tp1,tp2])
 
--- | Build a type description for a @Sigma@ type as an impure 'TypeDesc'
-typeDescSigma :: String -> OpenTerm -> (OpenTerm -> TypeDesc) -> TypeDesc
-typeDescSigma x tp_l tp_r_f =
+-- | Build a type description for a @Sigma@ type from a pure type for the first
+-- projection and a function to a type description for the second projection.
+-- The Boolean flag indicates whether this function is expected to return a pure
+-- type, in which case the returned dependent pair type is pure, or not, in
+-- which case it isn't. It is an error if the Boolean flag is 'True' but the
+-- function returns an impure type description.
+typeDescSigma :: String -> OpenTerm -> Bool -> (OpenTerm -> TypeDesc) ->
+                 TypeDesc
+typeDescSigma x tp_l True tp_r_f =
+  do tp_f_trm <- lambdaOpenTerm x tp_l $ \tr -> tp_f tr >>= \case
+       TypeDescPure tp_r -> tp_r
+       TypeDescLRT _ _ ->
+         panic "typeDescSigma"
+         ["Expected a pure type description but got an impure one"]
+     return $ TypeDescPure $
+       dataTypeOpenTerm "Prelude.Sigma" [typeTransTupleType ttrans, tp_f_trm]
+typeDescSigma x tp_l False tp_r_f =
   TypeDescLRT
   (ctorOpenTerm "Prelude.LRT_Sigma"
    [tp_l, lambdaOpenTerm x tp_l (typeDescLRT . tp_r_f)])
@@ -424,6 +446,11 @@ type ExprTransCtx = RAssign ExprTrans
 -- | A 'TypeTrans' that is relative to an expression context
 type RelTypeTrans ectx tp = ExprTransCtx ectx -> TypeTrans tp
 
+-- | Destruct an 'ExprTrans' of shape type to a type description
+unETransShape :: ExprTrans (LLVMShapeType w) -> TypeDesc
+unETransShape (ETrans_Shape d) = d
+unETransShape (ETrans_Term _) =
+  panic "unETransShape" ["Incorrect translation of a shape expression"]
 
 -- | Describes a Haskell type that represents the translation of a term-like
 -- construct that corresponds to 0 or more SAW terms
@@ -482,6 +509,8 @@ instance IsPureTrans (ExprTrans tp) where
   transPureTerms ETrans_Fun = []
   transPureTerms ETrans_Unit = []
   transPureTerms ETrans_AnyVector = []
+  transPureTerms (ETrans_Shape d) = [typeDescLRT d]
+  transPureTerms (ETrans_Perm d) = [typeDescLRT d]
   transPureTerms (ETrans_Term t) = [t]
 
 instance IsTermTrans (ExprTrans tp) where
@@ -498,6 +527,22 @@ instance IsTermTrans (ExprTransCtx ctx) where
 exprCtxToTerms :: ExprTransCtx tps -> [SpecTerm]
 exprCtxToTerms = concat . RL.mapToList transTerms
 
+-- | Map an 'ExprTrans' to the SAW core terms it contains, similarly to
+-- 'transPureTerms', except that all type descriptions are mapped to pure types,
+-- not terms of type @LetRecType@. Return 'Nothing' if this is not possible.
+exprTransPureTypeTerms :: ExprTrans tp -> Maybe [OpenTerm]
+exprTransPureTypeTerms (ETrans_Shape (TypeDescPure tp)) = Just [tp]
+exprTransPureTypeTerms (ETrans_Shape (TypeDescLRT _ _)) = Nothing
+exprTransPureTypeTerms (ETrans_Perm (TypeDescPure tp)) = Just [tp]
+exprTransPureTypeTerms (ETrans_Perm (TypeDescLRT _ _)) = Nothing
+exprTransPureTypeTerms etrans = transPureTerms etrans
+
+-- | Map an 'ExprTransCtx' to the SAW core terms it contains, similarly to
+-- 'transPureTerms', except that all type descriptions are mapped to pure types,
+-- not terms of type @LetRecType@. Return 'Nothing' if this is not possible.
+exprTransPureTypeTerms :: ExprTransCtx tps -> Maybe [OpenTerm]
+exprTransPureTypeTerms =
+  fmap concat . sequence . RL.mapToList exprTransPureTypeTerms
 
 -- | Class for valid translation info types, which must contain at least a
 -- context of expression translations
@@ -807,17 +852,9 @@ sigmaTypeTransM :: String -> PureTypeTrans trL -> Bool ->
                    TransM info ctx TypeDesc
 sigmaTypeTransM _ ttrans@(typeTransTypes -> []) _ tp_f =
   typeTransTupleType <$> tp_f (typeTransF ttrans [])
-sigmaTypeTransM x ttrans True tp_f =
-  do tp_f_trm <- lambdaTupleTransM x ttrans $ \tr -> tp_f tr >>= \case
-       TypeDescPure tp_r -> tp_r
-       TypeDescLRT _ _ ->
-         panic "sigmaTypeTransM"
-         ["Expected a pure type description but got an impure one"]
-     return $ TypeDescPure $
-       dataTypeOpenTerm "Prelude.Sigma" [typeTransTupleType ttrans, tp_f_trm]
-sigmaTypeTransM x ttrans False tp_f =
+sigmaTypeTransM x ttrans pure_p tp_f =
   do info <- ask
-     return $ typeDescSigma x (typeTransTupleType ttrans) $ \e_tup ->
+     return $ typeDescSigma x (typeTransTupleType ttrans) pure_p $ \e_tup ->
        tupleOfTypeDescs $ typeTransDescs $
        runTransM (tp_f $ typeTransF (tupleTypeTrans ttrans) [e_tup]) info
 
@@ -913,73 +950,23 @@ sigmaElimPermTransM x tp_l p_cbn tp_ret_m f sigma = case mbMatch p_cbn of
   _ -> sigmaElimTransM x tp_l (flip inExtTransM $ translate p_cbn)
                        tp_ret_m f sigma
 
-NOWNOW:
-- change uses of TypeTrans to include the purity flag
-- NOTE: PermExprs translate to pure terms / OpenTerms
-- eitherTypeTrans and sigmaTypeTrans should build TypeDescs
-- compReturnTypeM should return a TypeDesc
-- need a variant of piTransM that builds TypeDescs
-
-
--- | Apply an 'OpenTerm' to the current event type @E@ and to a
--- list of other arguments
-applyEventOpM :: TransInfo info => OpenTerm -> [OpenTerm] ->
-                 TransM info ctx OpenTerm
-applyEventOpM f args =
-  do evType <- identOpenTerm <$> permEnvSpecMEventType <$> infoEnv <$> ask
-     return $ applyOpenTermMulti f (evType : args)
-
--- | Apply a named operator to the current event type @E@ and to a list of other
--- arguments
-applyNamedEventOpM :: TransInfo info => Ident -> [OpenTerm] ->
-                      TransM info ctx OpenTerm
-applyNamedEventOpM f args =
-  applyEventOpM (globalOpenTerm f) args
-
--- | Generate the type @SpecM E evRetType stack A@ using the current event type
--- and the supplied @stack@ and type @A@
-specMTypeTransM :: TransInfo info => OpenTerm -> OpenTerm ->
-                   TransM info ctx OpenTerm
-specMTypeTransM stack tp = applyNamedEventOpM "Prelude.SpecM" [stack,tp]
-
--- | Generate the type @SpecM E evRetType emptyFunStack A@ using the current
--- event type and the supplied type @A@
-emptyStackSpecMTypeTransM :: TransInfo info => OpenTerm ->
-                             TransM info ctx OpenTerm
-emptyStackSpecMTypeTransM tp =
-  specMTypeTransM (globalOpenTerm "Prelude.emptyFunStack") tp
-
--- | Lambda-abstract a function stack variable of type @FunStack@
-lambdaFunStackM :: (OpenTerm -> TransM info ctx OpenTerm) ->
-                   TransM info ctx OpenTerm
-lambdaFunStackM f =
-  lambdaOpenTermTransM "stk" (globalOpenTerm "Prelude.FunStack") f
-
--- | Pi-abstract a function stack variable of type @FunStack@
-piFunStackM :: (OpenTerm -> TransM info ctx OpenTerm) ->
-               TransM info ctx OpenTerm
-piFunStackM f =
-  piOpenTermTransM "stk" (globalOpenTerm "Prelude.FunStack") f
-
--- | Apply @pushFunStack@ to push a frame onto a @FunStack@
-pushFunStackOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
-pushFunStackOpenTerm frame stack =
-  applyGlobalOpenTerm "Prelude.pushFunStack" [frame, stack]
 
 -- | The class for translating to SAW
 class Translate info ctx a tr | ctx a -> tr where
   translate :: Mb ctx a -> TransM info ctx tr
 
--- | Translate to SAW and then convert to a single SAW term using
--- 'transTupleTerm'
-translateToTuple :: (IsTermTrans tr, Translate info ctx a tr) =>
-                    Mb ctx a -> TransM info ctx OpenTerm
-translateToTuple a = transTupleTerm <$> translate a
+-- | Translate to SAW and then convert to a single pure SAW term, raising an
+-- error if the result has 0 or more than 1 terms
+translate1Pure :: (IsPureTrans tr, Translate info ctx a tr, HasCallStack) =>
+                  Mb ctx a -> TransM info ctx OpenTerm
+translate1Pure a = translate a >>= \tr -> case transPureTerms tr of
+  [t] -> return t
+  ts -> panic "translate1" ["expected 1 term, found " ++ show (length ts)]
 
 -- | Translate to SAW and then convert to a single SAW term, raising an error if
 -- the result has 0 or more than 1 terms
 translate1 :: (IsTermTrans tr, Translate info ctx a tr, HasCallStack) =>
-              Mb ctx a -> TransM info ctx OpenTerm
+              Mb ctx a -> TransM info ctx SpecTerm
 translate1 a = translate a >>= \tr -> case transTerms tr of
   [t] -> return t
   ts -> error ("translate1: expected 1 term, found " ++ show (length ts)
@@ -1055,13 +1042,13 @@ instance TransInfo info => Translate info ctx (NatRepr n) OpenTerm where
   translate mb_n = return $ natOpenTerm $ mbLift $ fmap natValue mb_n
 
 -- | Return a pure type translation that uses a single term of the given type
-returnType1 :: OpenTerm -> TransM info ctx (TypeTrans 'True (ExprTrans a))
+returnType1 :: OpenTerm -> TransM info ctx (PureTypeTrans (ExprTrans a))
 returnType1 tp = return $ mkPureTypeTrans1 tp ETrans_Term
 
 
 -- FIXME: explain this translation
 instance TransInfo info =>
-         Translate info ctx (TypeRepr a) (TypeTrans 'True (ExprTrans a)) where
+         Translate info ctx (TypeRepr a) (PureTypeTrans (ExprTrans a)) where
   translate mb_tp = case mbMatch mb_tp of
     [nuMP| AnyRepr |] ->
       return $ error "Translate: Any"
@@ -1101,11 +1088,11 @@ instance TransInfo info =>
 
     -- Permissions and LLVM shapes translate to types
     [nuMP| ValuePermRepr _ |] ->
-      return $ mkPureTypeTrans1 (dataTypeOpenTerm
-                                 "Prelude.LetRecType" []) ETrans_Perm
+      return $ mkPureTypeTrans1 (dataTypeOpenTerm "Prelude.LetRecType" [])
+      (ETrans_Perm . typeDescFromLRT)
     [nuMP| LLVMShapeRepr _ |] ->
-      return $ mkPureTypeTrans1 (dataTypeOpenTerm
-                                 "Prelude.LetRecType" []) ETrans_Shape
+      return $ mkPureTypeTrans1 (dataTypeOpenTerm "Prelude.LetRecType" [])
+      (ETrans_Shape . typeDescFromLRT)
 
     -- We can't handle any other special-purpose types
     [nuMP| IntrinsicRepr _ _ |] ->
@@ -1257,8 +1244,6 @@ instance TransInfo info =>
     [nuMP| ns :>: n |] ->
       (:>:) <$> translate ns <*> translate n
 
-NOWNOW: update the translation of shapes and perms to use ETrans_Shape and ETrans_Perm
-
 instance TransInfo info =>
          Translate info ctx (PermExpr a) (ExprTrans a) where
   translate mb_tr = case mbMatch mb_tr of
@@ -1294,58 +1279,65 @@ instance TransInfo info =>
     [nuMP| PExpr_PermListCons _ _ p l |] ->
       ETrans_Term <$> (pairTypeOpenTerm <$>
                        (typeTransTupleType <$> translate p) <*>
-                       (translate1 l))
+                       (translate1Pure l))
     [nuMP| PExpr_RWModality _ |] -> return ETrans_RWModality
 
     -- LLVM shapes are translated to types
-    [nuMP| PExpr_EmptyShape |] -> return $ ETrans_Term unitTypeOpenTerm
+    [nuMP| PExpr_EmptyShape |] -> return $ ETrans_Shape typeDescUnit
     [nuMP| PExpr_NamedShape _ _ nmsh args |] ->
       case mbMatch $ fmap namedShapeBody nmsh of
         [nuMP| DefinedShapeBody _ |] ->
           translate (mbMap2 unfoldNamedShape nmsh args)
         [nuMP| OpaqueShapeBody _ trans_id |] ->
-          ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
-          transTerms <$> translate args
+          exprTransPureTypeTerms <$> translate args >>= \case
+          Just args_trans ->
+            ETrans_Shape $ applyOpenTermMulti (globalOpenTerm $
+                                               mbLift trans_id) args_trans
+          Nothing ->
+            panic "translate"
+            ["Heapster cannot yet handle opaque shapes over impure types"]
         [nuMP| RecShapeBody _ trans_id _ |] ->
-          ETrans_Term <$> applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) <$>
-          transTerms <$> translate args
-    [nuMP| PExpr_EqShape _ _ |] -> return $ ETrans_Term unitTypeOpenTerm
+          exprTransPureTypeTerms <$> translate args >>= \case
+          Just args_trans ->
+            ETrans_Shape $ applyOpenTermMulti (globalOpenTerm $
+                                               mbLift trans_id) args_trans
+          Nothing ->
+            panic "translate"
+            ["Heapster cannot yet handle recursive shapes over impure types"]
+    [nuMP| PExpr_EqShape _ _ |] -> return $ ETrans_Shape typeDescUnit
     [nuMP| PExpr_PtrShape _ _ sh |] -> translate sh
     [nuMP| PExpr_FieldShape fsh |] ->
-      ETrans_Term <$> tupleOfTypes <$> translate fsh
+      ETrans_Shape <$> tupleOfTypeDescs <$> translate fsh
     [nuMP| PExpr_ArrayShape mb_len _ mb_sh |] ->
       do let w = natVal4 mb_len
          let w_term = natOpenTerm w
-         len_term <- translate1 mb_len
-         elem_tp <- translate1 mb_sh
-         return $ ETrans_Term $
-           applyOpenTermMulti (globalOpenTerm "Prelude.BVVec")
-           [w_term, len_term, elem_tp]
+         len_term <- translate1Pure mb_len
+         elem_d <- translateShape mb_sh
+         return $ ETrans_Shape $ bvVecTypeDesc w_term len_term elem_d
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
-      ETrans_Term <$> (pairTypeOpenTerm <$> translate1 sh1 <*> translate1 sh2)
+      ETrans_Shape <$> (typeDescPair <$> translateShape sh1
+                       <*> translateShape sh2)
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
-      ETrans_Term <$>
-      ((\t1 t2 -> dataTypeOpenTerm "Prelude.Either" [t1,t2])
-       <$> translate1 sh1 <*> translate1 sh2)
+      ETrans_Shape <$> (typeDescEither
+                        <$> translate1Pure sh1 <*> translate1Pure sh2)
     [nuMP| PExpr_ExShape mb_sh |] ->
-      error "FIXME HERE NOWNOW"
-      {-
       do tp_trans <- translate $ fmap bindingType mb_sh
-         tp_f_trm <- lambdaTupleTransM "x_exsh" tp_trans $ \e ->
-           transTupleTerm <$> inExtTransM e (translate $ mbCombine RL.typeCtxProxies mb_sh)
-         return $ ETrans_Term (dataTypeOpenTerm "Prelude.Sigma"
-                               [typeTransTupleType tp_trans, tp_f_trm]) -}
+         ETrans_Shape <$>
+           sigmaTypeTransM "x_exsh" tp_trans
+           (isPureShape $ mbCombine RL.typeCtxProxies mb_sh) $ \e ->
+           inExtTransM e (translateShape $ mbCombine RL.typeCtxProxies mb_sh)
     [nuMP| PExpr_FalseShape |] ->
-      return $ ETrans_Term $ globalOpenTerm "Prelude.FalseProp"
+      return $ ETrans_Shape $ TypeTransPure $ globalOpenTerm "Prelude.FalseProp"
 
     [nuMP| PExpr_ValPerm p |] ->
-      ETrans_Term <$> typeTransTupleType <$> translate p
+      ETrans_Perm <$> tupleOfTypeDescs <$> typeTransDescs <$> translate p
 
 -- LLVM field shapes translate to the types that the permission they contain
 -- translates to
 instance TransInfo info =>
-         Translate info ctx (LLVMFieldShape w) [OpenTerm] where
-  translate (mbMatch -> [nuMP| LLVMFieldShape p |]) = typeTransTypes <$> translate p
+         Translate info ctx (LLVMFieldShape w) [TypeDesc] where
+  translate (mbMatch -> [nuMP| LLVMFieldShape p |]) =
+    typeTransDescs <$> translate p
 
 instance TransInfo info =>
          Translate info ctx (PermExprs as) (ExprTransCtx as) where
@@ -1356,11 +1348,24 @@ instance TransInfo info =>
 
 instance TransInfo info => Translate info ctx (BVFactor w) OpenTerm where
   translate mb_f = case mbMatch mb_f of
-    [nuMP| BVFactor (BV.BV 1) x |] -> translate1 (fmap PExpr_Var x)
+    [nuMP| BVFactor (BV.BV 1) x |] -> translate1Pure (fmap PExpr_Var x)
     [nuMP| BVFactor i x |] ->
       let w = natRepr4 x in
       bvMulOpenTerm (natValue w) (bvBVOpenTerm w $ mbLift i) <$>
-      translate1 (fmap PExpr_Var x)
+      translate1Pure (fmap PExpr_Var x)
+
+translateShape :: (TransInfo info, HasCallStack) =>
+                  Mb ctx (PermExpr (LLVMShapeType w)) ->
+                  TransM info ctx TypeDesc
+translateShape mb_e = unETransShape <$> translate mb_e
+
+NOWNOW:
+- change uses of TypeTrans to include the purity flag
+- NOTE: PermExprs translate to pure terms / OpenTerms
+- compReturnTypeM should return a TypeDesc
+- need a variant of piTransM that builds TypeDescs
+- update the translation of shapes and perms to use ETrans_Shape and ETrans_Perm
+- ISSUE: transPureTerms of ETrans_Shape and ETrans_Perm return an LRT, not a type, so recursive and opaque names need to as well
 
 
 ----------------------------------------------------------------------
@@ -2167,8 +2172,7 @@ mkBVPropTrans prop tp =
   mkImpTypeTrans1 (TypeDescPure tp) $ BVPropTrans prop
 
 instance (1 <= w, KnownNat w, TransInfo info) =>
-         Translate info ctx (BVProp w) (TypeTrans 'False
-                                        (BVPropTrans ctx w)) where
+         Translate info ctx (BVProp w) (ImpTypeTrans (BVPropTrans ctx w)) where
   translate prop = case mbMatch prop of
     [nuMP| BVProp_Eq e1 e2 |] ->
       do let w = natVal4 e1
@@ -2229,8 +2233,7 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
 
 -- [| p :: ValuePerm |] = type of the impl translation of reg with perms p
 instance TransInfo info =>
-         Translate info ctx (ValuePerm a) (TypeTrans 'False
-                                           (PermTrans ctx a)) where
+         Translate info ctx (ValuePerm a) (ImpTypeTrans (PermTrans ctx a)) where
   translate p = case mbMatch p of
     [nuMP| ValPerm_Eq e |] -> return $ mkImpTypeTrans0 $ PTrans_Eq e
     [nuMP| ValPerm_Or p1 p2 |] ->
@@ -4276,7 +4279,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
     do let mb_e = case mbLLVMFieldContents mb_fp of
              [nuP| ValPerm_Eq (PExpr_LLVMWord e) |] -> e
              _ -> error "translatePermImpl1: Impl1_SplitLLVMWordField"
-       e_tm <- translate1 mb_e
+       e_tm <- translate1Pure mb_e
        sz1_tm <- translate mb_sz1
        sz2_tm <- translateClosed $ mbLLVMFieldSize mb_fp
        let sz2m1_tm =
@@ -4306,7 +4309,7 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
     do let mb_e = case mbLLVMFieldContents mb_fp of
              [nuP| ValPerm_Eq (PExpr_LLVMWord e) |] -> e
              _ -> error "translatePermImpl1: Impl1_TruncateLLVMWordField"
-       e_tm <- translate1 mb_e
+       e_tm <- translate1Pure mb_e
        sz1_tm <- translate mb_sz1
        sz2_tm <- translateClosed $ mbLLVMFieldSize mb_fp
        let sz2m1_tm =
@@ -4334,8 +4337,8 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
     do let mb_e1 = case mbLLVMFieldContents mb_fp1 of
              [nuP| ValPerm_Eq (PExpr_LLVMWord e1) |] -> e1
              _ -> error "translatePermImpl1: Impl1_ConcatLLVMWordFields"
-       e1_tm <- translate1 mb_e1
-       e2_tm <- translate1 mb_e2
+       e1_tm <- translate1Pure mb_e1
+       e2_tm <- translate1Pure mb_e2
        sz1_tm <- translateClosed $ mbLLVMFieldSize mb_fp1
        sz2_tm <- translateClosed $ mbExprBVTypeWidth mb_e2
        let endianness = mbLift mb_endianness
