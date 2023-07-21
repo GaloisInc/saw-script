@@ -77,12 +77,12 @@ module Verifier.SAW.OpenTerm (
   lambdaPureSpecTerm, lambdaPureSpecTermMulti, lambdaSpecTerm,
   lambdaSpecTermMulti, piSpecTerm,
   applySpecTerm, applySpecTermMulti, openTermSpecTerm,
-  globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm
+  globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
   callDefSpecTerm, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
   errorSpecTerm, flatSpecTerm, unitSpecTerm, pairSpecTerm, pairTypeSpecTerm,
   pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm, dataTypeSpecTerm,
-  sawLetSpecTerm
+  letSpecTerm, sawLetSpecTerm
   ) where
 
 import qualified Data.Vector as V
@@ -783,7 +783,7 @@ lambdaSpecTerm x tp body_f =
 -- | Build a nested sequence of lambda abstractions as a 'SpecTerm'
 lambdaSpecTermMulti :: [(LocalName, SpecTerm)] ->
                        ([SpecTerm] -> SpecTerm) -> SpecTerm
-lambdSpecTermMulti xs_tps body_f =
+lambdaSpecTermMulti xs_tps body_f =
   foldr (\(x,tp) rest_f xs ->
           lambdaSpecTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
 
@@ -791,7 +791,8 @@ lambdSpecTermMulti xs_tps body_f =
 piSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
 piSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
   do tp <- tpM
-     body <- withVarSpecTermM (topVarSpecTerm >>= (unSpecTerm . body_f))
+     body <- withVarSpecTermM (fmap openTermSpecTerm topVarSpecTerm >>=
+                               (unSpecTerm . body_f))
      return $ bindSpecInfoTerm Pi x tp body
 
 -- | Convert a term @lrt@ of type @LetRecType@ to the type it represents by
@@ -799,7 +800,7 @@ piSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
 lrtToTypeSpecTerm :: OpenTerm -> SpecTerm
 lrtToTypeSpecTerm lrt =
   applyGlobalSpecTerm "Prelude.LRTArg"
-  [specInfoTermTerm (specInfoExtStack <$> ask), lrt]
+  [specInfoTermTerm (specInfoExtStack <$> ask), openTermSpecTerm lrt]
 
 funStackTypeOpenTerm :: OpenTerm
 funStackTypeOpenTerm = globalOpenTerm "Prelude.FunStack"
@@ -890,7 +891,8 @@ mkFreshClosSpecTerm lrt body_f = SpecTerm $
 applyClosSpecTerm :: OpenTerm -> SpecTerm -> [SpecTerm] -> SpecTerm
 applyClosSpecTerm lrt clos args =
   applyGlobalSpecTerm "Prelude.applyLRTClosN"
-  (extStackSpecTerm : natSpecTerm (length args) : args)
+  (extStackSpecTerm : natSpecTerm (fromIntegral $ length args)
+   : openTermSpecTerm lrt : clos : args)
 
 -- | Build a @SpecM@ computation that calls a closure with the given return
 -- type specified as a @LetRecType@
@@ -980,7 +982,7 @@ dataTypeSpecInfoTerm d args = fmap (dataTypeOpenTerm d) (sequence args)
 -- | Build a 'SpecTerm' for a datatype applied to its arguments
 dataTypeSpecTerm :: Ident -> [SpecTerm] -> SpecTerm
 dataTypeSpecTerm d args =
-  SpecTerm $ fmap (dataTypeSpecInfoTerm c) $ sequence $ map unSpecTerm args
+  SpecTerm $ fmap (dataTypeSpecInfoTerm d) $ sequence $ map unSpecTerm args
 
 -- | Build a let expression as an 'SpecTerm'. This is equivalent to
 -- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
