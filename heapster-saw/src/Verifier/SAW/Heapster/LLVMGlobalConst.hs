@@ -29,6 +29,7 @@ import Lang.Crucible.Types
 import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 
+import Verifier.SAW.Name (mkSafeIdent)
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 import Verifier.SAW.SharedTerm
