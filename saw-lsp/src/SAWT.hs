@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -202,6 +203,12 @@ emptyContext = emptyStack
 addStmtToContext :: SAW.Stmt -> Context -> Context
 addStmtToContext = push
 
+updateContext :: MonadIO m => SAW.Stmt -> SAWT m ()
+updateContext stmt =
+  do
+    ctx <- getContext
+    setContext (push stmt ctx)
+
 -------------------------------------------------------------------------------
 -- Checkpoint(s)
 
@@ -213,14 +220,17 @@ data Checkpoint = Checkpoint
 
 type Checkpoints = HashMap Context Checkpoint
 
-addCheckpoint :: Context -> Checkpoint -> Checkpoints -> Checkpoints
-addCheckpoint = HMap.insert
+-- addCheckpoint :: Context -> Checkpoint -> Checkpoints -> Checkpoints
+-- addCheckpoint = HMap.insert
 
 findCheckpoint :: Checkpoints -> Context -> Maybe Checkpoint
 findCheckpoint = flip HMap.lookup
 
-makeCheckpoint :: MonadIO m => SAW.Value -> Maybe String -> SAWT m Checkpoint
-makeCheckpoint ckVal ckOutput =
+findCheckpointM :: MonadIO m => SAWT m (Maybe Checkpoint)
+findCheckpointM = HMap.lookup <$> getContext <*> getCheckpoints
+
+createCheckpoint :: MonadIO m => SAW.Value -> Maybe String -> SAWT m Checkpoint
+createCheckpoint ckVal ckOutput =
   do
     rw <- getRW
     ckEnv <- liftIO (SAW.makeCheckpoint rw)
@@ -232,7 +242,10 @@ rememberCheckpoint checkpoint =
   do
     checks <- getCheckpoints
     ctx <- getContext
-    setCheckpoints (addCheckpoint ctx checkpoint checks)
+    setCheckpoints (HMap.insert ctx checkpoint checks)
+
+addCheckpoint :: MonadIO m => SAW.Value -> Maybe String -> SAWT m ()
+addCheckpoint val outM = createCheckpoint val outM >>= rememberCheckpoint
 
 restoreCheckpoint :: MonadIO m => Checkpoint -> SAWT m ()
 restoreCheckpoint Checkpoint {..} = void (liftTopLevel (SAW.restoreCheckpoint ckEnv))

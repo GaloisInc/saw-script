@@ -40,7 +40,7 @@ import SAWScript.AST (Stmt (..), prettyWholeModule)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
 import SAWT
-import SAWT.Interpret (interpretCacheSAWScript, interpretSAWStmt)
+import SAWT.Interpret (interpretSAWScript, interpretSAWStmt)
 import System.IO.Temp (writeSystemTempFile)
 import Text.Printf (printf)
 
@@ -76,7 +76,7 @@ doInterp request responder =
         (internalError "cannot interpret empty script")
         (case truncatedStmts of [] -> Nothing; (s : ss) -> Just (s :| ss))
     debug' $ show $ prettyWholeModule $ NE.toList nonEmptyTruncatedStmts
-    (matchedPrefix, _val, outM) <- liftSAW (interpretCacheSAWScript nonEmptyTruncatedStmts)
+    (matchedPrefix, _val, outM) <- liftSAW (interpretSAWScript True nonEmptyTruncatedStmts)
     inform $ printf "Reusing prior execution of %i statements" matchedPrefix
     let goal = fromMaybe "<no goal>" outM
     goalFile <- liftIO $ writeSystemTempFile "lsp" goal
