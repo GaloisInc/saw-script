@@ -540,8 +540,8 @@ exprTransPureTypeTerms etrans = transPureTerms etrans
 -- | Map an 'ExprTransCtx' to the SAW core terms it contains, similarly to
 -- 'transPureTerms', except that all type descriptions are mapped to pure types,
 -- not terms of type @LetRecType@. Return 'Nothing' if this is not possible.
-exprTransPureTypeTerms :: ExprTransCtx tps -> Maybe [OpenTerm]
-exprTransPureTypeTerms =
+exprCtxPureTypeTerms :: ExprTransCtx tps -> Maybe [OpenTerm]
+exprCtxPureTypeTerms =
   fmap concat . sequence . RL.mapToList exprTransPureTypeTerms
 
 -- | Class for valid translation info types, which must contain at least a
