@@ -1359,14 +1359,6 @@ translateShape :: (TransInfo info, HasCallStack) =>
                   TransM info ctx TypeDesc
 translateShape mb_e = unETransShape <$> translate mb_e
 
-NOWNOW:
-- change uses of TypeTrans to include the purity flag
-- NOTE: PermExprs translate to pure terms / OpenTerms
-- compReturnTypeM should return a TypeDesc
-- need a variant of piTransM that builds TypeDescs
-- update the translation of shapes and perms to use ETrans_Shape and ETrans_Perm
-- ISSUE: transPureTerms of ETrans_Shape and ETrans_Perm return an LRT, not a type, so recursive and opaque names need to as well
-
 
 ----------------------------------------------------------------------
 -- * Translating Permissions to Types
@@ -1538,7 +1530,7 @@ data LLVMArrayPermTrans ctx w = LLVMArrayPermTrans {
   llvmArrayTransHeadCell ::
       TypeTrans 'False (AtomicPermTrans ctx (LLVMPointerType w)),
   -- llvmArrayTransBorrows :: [LLVMArrayBorrowTrans ctx w],
-  llvmArrayTransTerm :: OpenTerm
+  llvmArrayTransTerm :: SpecTerm
   }
 
 -- | Get the SAW type of the cells of the translation of an array permission
@@ -1555,24 +1547,29 @@ data LLVMArrayBorrowTrans ctx w =
     llvmArrayBorrowTransProps :: [BVPropTrans ctx w] }
 -}
 
+
 newtype PermTransInfo ps ctx =
   PermTransInfo { ptransInfoECtx :: ExprTransCtx ctx,
                   ptransInfoPCtx :: PermTransCtx ctx ps,
-                  ptransInfoVars :: RAssign (Member ctx) ps,
                   ptransInfoRetType :: SpecTerm }
 
-ptInfoSetPerms :: PermTransCtx ctx ps' -> RAssign (Member ctx) ps' ->
-                  PermTransInfo ps ctx -> PermTransInfo ps' ctx
-ptInfoSetPerms ps' vars' (PermTransInfo {..}) =
-  PermTransInfo { ptransInfoPCtx = ps', ptransInfoVars = vars', ..}
+ptInfoSetPerms :: PermTransCtx ctx ps' -> PermTransInfo ps ctx ->
+                  PermTransInfo ps' ctx
+ptInfoSetPerms ps' (PermTransInfo {..}) =
+  PermTransInfo { ptransInfoPCtx = ps', ..}
 
 ptInfoSplit :: RAssign any ps2 -> PermTransInfo (ps1 :++: ps2) ctx ->
                (PermTransInfo ps1 ctx, PermTransInfo ps2 ctx)
 ptInfoSplit = error "FIXME HERE NOWNOW"
 
+ptInfoAppendPerms :: PermTransInfo ps1 ctx -> PermTransCtx ctx ps2 ->
+                     PermTransInfo (ps1 :++: ps2) ctx
+ptInfoAppendPerms (PermTransInfo {..}) pctx2 =
+  PermTransInfo { ptransInfoPCtx = RL.append ptransInfoPCtx pctx2, .. }
+
 ptInfoAppend :: PermTransInfo ps1 ctx -> PermTransInfo ps2 ctx ->
                 PermTransInfo (ps1 :++: ps2) ctx
-ptInfoAppend = error "FIXME HERE NOWNOW"
+ptInfoAppend info1 info2 = ptInfoAppendPerms info1 (ptransInfoPCtx info2)
 
 type PermTransM ps ctx = TransM (PermTransInfo ps)
 
@@ -1580,80 +1577,64 @@ newtype LOwnedTransTerm ctx ps_extra ps_in ps_out =
   LOwnedTransTerm {
   unLOwnedTransTerm ::
       forall ctx'. ExprTransCtx ctx' ->
-      PermTransM ps_out (ctx :++: ctx') SpecTerm ->
-      PermTransM (ps_extra :++: ps_in) (ctx :++: ctx') SpecTerm }
+      PermTransM ps_in (ctx :++: ctx') (PermTransCtx (ctx :++: ctx') ps_out) }
 
 lownedTransTermTerm :: TypeTrans (ExprTransCtx ctx) ->
-                       RelTypeTrans ctx (PermTransCtx ctx ps_extra) ->
-                       RAssign (Member ctx) ps_extra ->
                        RelTypeTrans ctx (PermTransCtx ctx ps_in) ->
-                       RAssign (Member ctx) ps_in ->
                        RelTypeTrans ctx (PermTransCtx ctx ps_out) ->
-                       LOwnedTransTerm ctx ps_extra ps_in ps_out -> SpecTerm
-lownedTransTermTerm ectx ps_extraF vars_extra ps_inF vars_in ps_outF f =
+                       LOwnedTransTerm ctx ps_in ps_out -> SpecTerm
+lownedTransTermTerm ectx ps_inF ps_outF t =
   lambdaTrans "e" ectx $ \exprs ->
-  lambdaTrans "p" (ps_extraF exprs) $ \ps_extra ->
   lambdaTrans "p" (ps_inF exprs) $ \ps_in ->
   flip runTransM (PermTransInfo
-                  { ptransInfoECtx = exprs,
-                    ptransInfoPCtx = RL.append ps_extra ps_in,
-                    ptransInfoVars = RL.append vars_extra vars_in,
+                  { ptransInfoECtx = exprs, ptransInfoPCtx = ps_in,
                     ptransInfoRetType = typeTransTupleType (ps_outF exprs) }) $
-  unLOwnedTransTerm f MNil $
-  do PermTransInfo {..} <- ask
-     return $ returnSpecTerm ptransInfoRetType $ transTupleTerm ptransInfoPCtx
+  (transTupleTerm <$> unLOwnedTransTerm t MNil)
 
-extLOwnedTransTerm' :: prx1 ctx -> ExprTrans tp ->
-                       LOwnedTransTerm ctx ps_extra ps_in ps_out ->
-                       LOwnedTransTerm (ctx :> tp) ps_extra ps_in ps_out
+extLOwnedTransTerm' :: Proxy ctx -> ExprTrans tp ->
+                       LOwnedTransTerm ctx ps_in ps_out ->
+                       LOwnedTransTerm (ctx :> tp) ps_in ps_out
 extLOwnedTransTerm' ctx tp (LOwnedTransTerm f) =
   LOwnedTransTerm $ \ ctx' -> case appendRNilConsEq ctx tp ctx' of
     Refl -> f (RL.append (MNil :>: tp) ctx')
 
 extLOwnedTransTerm :: ExprTrans tp ->
-                      LOwnedTransTerm ctx ps_extra ps_in ps_out ->
-                      LOwnedTransTerm (ctx :> tp) ps_extra ps_in ps_out
+                      LOwnedTransTerm ctx ps_in ps_out ->
+                      LOwnedTransTerm (ctx :> tp) ps_in ps_out
 extLOwnedTransTerm = extLOwnedTransTerm' Proxy
 
-emptyLOwnedTransTerm :: LOwnedTransTerm ctx RNil RNil RNil
-emptyLOwnedTransTerm = LOwnedTransTerm $ \_ m -> m
+emptyLOwnedTransTerm :: LOwnedTransTerm ctx RNil RNil
+emptyLOwnedTransTerm = LOwnedTransTerm $ \_ -> return MNil
 
 elimSimplLOwnedTransTerm :: (forall ctx'. ExprTransCtx ctx' ->
                              TypeTrans (PermTransCtx (ctx :++: ctx') ps)) ->
-                            LOwnedTransTerm ctx RNil ps ps
+                            LOwnedTransTerm ctx ps ps
 elimSimplLOwnedTransTerm ps =
-  LOwnedTransTerm $ \ctx' m ->
-  local (\info -> info { ptransInfoPCtx =
-                           typeTransF (ps ctx') (transTerms $
-                                                 ptransInfoPCtx info) })
-  m
+  LOwnedTransTerm $ \ctx' -> ptransInfoPCtx <$> ask
 
 weakenLOwnedTransTerm ::
   (forall ctx'. ExprTransCtx ctx' ->
    TypeTrans (PermTrans (ctx :++: ctx') tp)) ->
-  LOwnedTransTerm ctx ps_extra ps_in ps_out ->
-  LOwnedTransTerm ctx ps_extra (ps_in :> tp) (ps_out :> tp)
-weakenLOwnedTransTerm tp f =
-  LOwnedTransTerm $ \ectx' k ->
+  LOwnedTransTerm ctx ps_in ps_out ->
+  LOwnedTransTerm ctx (ps_in :> tp) (ps_out :> tp)
+weakenLOwnedTransTerm tp t =
+  LOwnedTransTerm $ \ectx' ->
   do (info_ps, info_tp) <- ptInfoSplit (MNil :>: Proxy) <$> ask
-     withInfoM (const info_ps) $
-       unLOwnedTransTerm f ectx' $
-       withInfoM (flip ptInfoAppend info_tp) k
+     pctx <- withInfoM (const info_ps) (unLOwnedTransTerm t ectx')
+     return (RL.append pctx $ ptransInfoPCtx info_tp)
 
 bindLOwnedTransTerm ::
   RAssign any ps_extra2 -> RAssign any ps_in ->
-  LOwnedTransTerm ctx ps_extra1 ps_in ps_int ->
-  LOwnedTransTerm ctx ps_extra2 ps_int ps_out ->
-  LOwnedTransTerm ctx (ps_extra1 :++: ps_extra2) ps_in ps_out
-bindLOwnedTransTerm prx_extra2 prx_in f1 f2 =
-  LOwnedTransTerm $ \ectx' k ->
+  LOwnedTransTerm ctx (ps_extra1 :++: ps_in) ps_mid ->
+  LOwnedTransTerm ctx (ps_extra2 :++: ps_mid) ps_out ->
+  LOwnedTransTerm ctx ((ps_extra1 :++: ps_extra2) :++: ps_in) ps_out
+bindLOwnedTransTerm prx_extra2 prx_in t1 t2 =
+  LOwnedTransTerm $ \ectx' ->
   do (info_extra, info_in) <- ptInfoSplit prx_in <$> ask
      let (info_extra1, info_extra2) = ptInfoSplit prx_extra2 <$> ask
-     withInfoM (const $ ptInfoAppend info_extra1 info_in) $
-       unLOwnedTransTerm f1 ectx' $
-       withInfoM (ptInfoAppend info_extra2) $
-       unLOwnedTransTerm f2 ectx' k
-
+     pctx_mid <-
+       withInfoM (const $ ptInfoAppend info_extra1 info_in) (unLOwnedTransTerm t1)
+     withInfoM (const $ ptInfoAppendPerms info_extra2 pctx_mid) (unLOwnedTransTerm t2)
 
 
 -- | The translation of the vacuously true permission
@@ -1785,6 +1766,7 @@ instance IsTermTrans (LLVMArrayBorrowTrans ctx w) where
   transTerms (LLVMArrayBorrowTrans _ prop_transs) = transTerms prop_transs
 -}
 
+
 -- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
 -- "invisible" ones whose permissions are translated to 'Nothing'
 permCtxToTerms :: PermTransCtx ctx tps -> [OpenTerm]
@@ -1857,48 +1839,53 @@ extsMb ctx = mbCombine proxies . fmap (nus proxies . const)
 
 -- | Generic function to extend the context of the translation of a permission
 class ExtPermTrans f where
-  extPermTrans :: f ctx a -> f (ctx :> tp) a
+  extPermTrans :: ExprTrans tp -> f ctx a -> f (ctx :> tp) a
 
 instance ExtPermTrans PermTrans where
-  extPermTrans (PTrans_Eq e) = PTrans_Eq $ extMb e
-  extPermTrans (PTrans_Conj aps) =
-    PTrans_Conj (map extPermTrans aps)
-  extPermTrans (PTrans_Defined n args a ptrans) =
-    PTrans_Defined n (extMb args) (extMb a) (extPermTrans ptrans)
-  extPermTrans (PTrans_Term p t) = PTrans_Term (extMb p) t
+  extPermTrans _ (PTrans_Eq e) = PTrans_Eq $ extMb e
+  extPermTrans e (PTrans_Conj aps) =
+    PTrans_Conj (map (extPermTrans e) aps)
+  extPermTrans e (PTrans_Defined n args a ptrans) =
+    PTrans_Defined n (extMb args) (extMb a) (extPermTrans e ptrans)
+  extPermTrans _ (PTrans_Term p t) = PTrans_Term (extMb p) t
 
 instance ExtPermTrans AtomicPermTrans where
-  extPermTrans (APTrans_LLVMField fld ptrans) =
-    APTrans_LLVMField (extMb fld) (extPermTrans ptrans)
-  extPermTrans (APTrans_LLVMArray arr_trans) =
-    APTrans_LLVMArray $ extPermTrans arr_trans
-  extPermTrans (APTrans_LLVMBlock mb_bp t) = APTrans_LLVMBlock (extMb mb_bp) t
-  extPermTrans (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
-  extPermTrans (APTrans_LLVMFunPtr tp ptrans) =
-    APTrans_LLVMFunPtr tp (extPermTrans ptrans)
-  extPermTrans APTrans_IsLLVMPtr = APTrans_IsLLVMPtr
-  extPermTrans (APTrans_LLVMBlockShape mb_sh t) =
+  extPermTrans e (APTrans_LLVMField fld ptrans) =
+    APTrans_LLVMField (extMb fld) (extPermTrans e ptrans)
+  extPermTrans e (APTrans_LLVMArray arr_trans) =
+    APTrans_LLVMArray $ extPermTrans e arr_trans
+  extPermTrans _ (APTrans_LLVMBlock mb_bp t) = APTrans_LLVMBlock (extMb mb_bp) t
+  extPermTrans _  (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
+  extPermTrans e (APTrans_LLVMFunPtr tp ptrans) =
+    APTrans_LLVMFunPtr tp (extPermTrans e ptrans)
+  extPermTrans _ APTrans_IsLLVMPtr = APTrans_IsLLVMPtr
+  extPermTrans _ (APTrans_LLVMBlockShape mb_sh t) =
     APTrans_LLVMBlockShape (extMb mb_sh) t
-  extPermTrans (APTrans_NamedConj npn args off t) =
+  extPermTrans _ (APTrans_NamedConj npn args off t) =
     APTrans_NamedConj npn (extMb args) (extMb off) t
-  extPermTrans (APTrans_DefinedNamedConj npn args off ptrans) =
-    APTrans_DefinedNamedConj npn (extMb args) (extMb off) (extPermTrans ptrans)
-  extPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
-  extPermTrans (APTrans_LOwned ls tps_in tps_out ps_in ps_out t) =
-    APTrans_LOwned (extMb ls) tps_in tps_out (extMb ps_in) (extMb ps_out) t
-  extPermTrans (APTrans_LOwnedSimple tps lops) =
+  extPermTrans e (APTrans_DefinedNamedConj npn args off ptrans) =
+    APTrans_DefinedNamedConj npn (extMb args) (extMb off) (extPermTrans e ptrans)
+  extPermTrans _ (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
+  extPermTrans e (APTrans_LOwned ls tps_in tps_out ps_in ps_out ectx
+                  ps_extra vars_extra ptrans_in ptrans_out ptrans_extra t) =
+    APTrans_LOwned (extMb ls) tps_in tps_out (extMb ps_in) (extMb ps_out)
+    (ectx :>: e) (extPermTransCtx ps_extra) (RL.map Member_Step vars_extra)
+    (extRelTypeTrans ptrans_in) (extRelTypeTrans ptrans_out)
+    (extRelTypeTrans ptrans_extra) (extLOwnedTransTerm e t)
+  extPermTrans _ (APTrans_LOwnedSimple tps lops) =
     APTrans_LOwnedSimple tps (extMb lops)
-  extPermTrans (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
-  extPermTrans APTrans_LFinished = APTrans_LFinished
-  extPermTrans (APTrans_Struct ps) = APTrans_Struct $ RL.map extPermTrans ps
-  extPermTrans (APTrans_Fun fp trans) = APTrans_Fun (extMb fp) trans
-  extPermTrans (APTrans_BVProp prop_trans) =
-    APTrans_BVProp $ extPermTrans prop_trans
-  extPermTrans APTrans_Any = APTrans_Any
+  extPermTrans _ (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
+  extPermTrans _ APTrans_LFinished = APTrans_LFinished
+  extPermTrans e (APTrans_Struct ps) =
+    APTrans_Struct $ RL.map (extPermTrans e) ps
+  extPermTrans _ (APTrans_Fun fp trans) = APTrans_Fun (extMb fp) trans
+  extPermTrans e (APTrans_BVProp prop_trans) =
+    APTrans_BVProp $ extPermTrans e prop_trans
+  extPermTrans _ APTrans_Any = APTrans_Any
 
 instance ExtPermTrans LLVMArrayPermTrans where
-  extPermTrans (LLVMArrayPermTrans ap len sh {- bs -} t) =
-    LLVMArrayPermTrans (extMb ap) len (fmap extPermTrans sh)
+  extPermTrans e (LLVMArrayPermTrans ap len sh {- bs -} t) =
+    LLVMArrayPermTrans (extMb ap) len (fmap (extPermTrans e) sh)
     {- (map extPermTrans bs) -} t
 
 {-
@@ -1908,14 +1895,15 @@ instance ExtPermTrans LLVMArrayBorrowTrans where
 -}
 
 instance ExtPermTrans BVPropTrans where
-  extPermTrans (BVPropTrans prop t) = BVPropTrans (extMb prop) t
+  extPermTrans _ (BVPropTrans prop t) = BVPropTrans (extMb prop) t
 
 instance ExtPermTrans BVRangeTrans where
-  extPermTrans (BVRangeTrans rng t1 t2) = BVRangeTrans (extMb rng) t1 t2
+  extPermTrans _ (BVRangeTrans rng t1 t2) = BVRangeTrans (extMb rng) t1 t2
 
 -- | Extend the context of a permission translation context
-extPermTransCtx :: PermTransCtx ctx ps -> PermTransCtx (ctx :> tp) ps
-extPermTransCtx = RL.map extPermTrans
+extPermTransCtx :: ExprTrans tp -> PermTransCtx ctx ps ->
+                   PermTransCtx (ctx :> tp) ps
+extPermTransCtx e = RL.map (extPermTrans e)
 
 -- | Add another permission translation to a permission translation context
 consPermTransCtx :: PermTransCtx ctx ps -> PermTrans ctx a ->
@@ -2098,6 +2086,7 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
       (globalOpenTerm "Prelude.updSliceBVVec")
       [natOpenTerm w, len_tm, elem_tp, arr_tm, off_tm, len'_tm, sub_arr_tm] }
 
+{-
 -- | Weaken a monadic function of type @(T1*...*Tn) -> SpecM(U1*...*Um)@ to one
 -- of type @(V*T1*...*Tn) -> SpecM(V*U1*...*Um)@, @n@-ary tuple types are built
 -- using 'tupleOfTypes'
@@ -2164,6 +2153,7 @@ weakenLifetimeFun tp_trans ps_in_trans ps_out_trans f =
   weakenMonadicFun (transTerms
                     tp_trans) (transTerms
                                ps_in_trans) (transTerms ps_out_trans) f
+-}
 
 -- | Make a type translation of a 'BVProp' from it and its pure type
 mkBVPropTrans :: Mb ctx (BVProp w) -> OpenTerm ->
@@ -2378,7 +2368,7 @@ translateLLVMArrayBorrow mb_ap mb_b =
 -}
 
 instance TransInfo info =>
-         Translate info ctx (ValuePerms ps) (TypeTrans 'False
+         Translate info ctx (ValuePerms ps) (ImpTypeTrans
                                              (PermTransCtx ctx ps)) where
   translate mb_ps = case mbMatch mb_ps of
     [nuMP| ValPerms_Nil |] -> return $ mkImpTypeTrans0 MNil
@@ -2392,12 +2382,12 @@ instance TransInfo info =>
   translate = translate . mbDistPermsToValuePerms
 
 instance TransInfo info =>
-         Translate info ctx (TypedDistPerms ps) (TypeTrans
+         Translate info ctx (TypedDistPerms ps) (ImpTypeTrans
                                                  (PermTransCtx ctx ps)) where
   translate = translate . mbDistPermsToValuePerms . fmap unTypeDistPerms
 
 instance TransInfo info =>
-         Translate info ctx (ExprPerms ps) (TypeTrans
+         Translate info ctx (ExprPerms ps) (ImpTypeTrans
                                             (PermTransCtx ctx ps)) where
   translate mb_eps
     | Just mb_ps <- mbExprPermsToValuePerms mb_eps = translate mb_ps
@@ -2410,7 +2400,7 @@ emptyStackOpenTerm = globalOpenTerm "Prelude.emptyFunStack"
 
 -- Translate a FunPerm to a pi-abstraction (FIXME HERE NOW: document translation)
 instance TransInfo info =>
-         Translate info ctx (FunPerm ghosts args gouts ret) OpenTerm where
+         Translate info ctx (FunPerm ghosts args gouts ret) SpecTerm where
   translate (mbMatch ->
              [nuMP| FunPerm ghosts args gouts ret perms_in perms_out |]) =
     let tops = appendCruCtx (mbLift ghosts) (mbLift args)
@@ -2427,15 +2417,15 @@ instance TransInfo info =>
 
 -- | Lambda-abstraction over a permission
 lambdaPermTrans :: TransInfo info => String -> Mb ctx (ValuePerm a) ->
-                   (PermTrans ctx a -> TransM info ctx OpenTerm) ->
-                   TransM info ctx OpenTerm
+                   (PermTrans ctx a -> TransM info ctx SpecTerm) ->
+                   TransM info ctx SpecTerm
 lambdaPermTrans str p f =
   translate p >>= \tptrans -> lambdaTransM str tptrans f
 
 -- | Lambda-abstraction over a sequence of permissions
 lambdaPermCtx :: TransInfo info => Mb ctx (ValuePerms ps) ->
-                 (PermTransCtx ctx ps -> TransM info ctx OpenTerm) ->
-                 TransM info ctx OpenTerm
+                 (PermTransCtx ctx ps -> TransM info ctx SpecTerm) ->
+                 TransM info ctx SpecTerm
 lambdaPermCtx ps f =
   translate ps >>= \tptrans -> lambdaTransM "p" tptrans f
 
@@ -2472,7 +2462,7 @@ translateRetType rets ret_perms =
 -- | Build the return type for the function resulting from an entrypoint
 translateEntryRetType :: TransInfo info =>
                          TypedEntry phase ext blocks tops rets args ghosts ->
-                         TransM info ((tops :++: args) :++: ghosts) OpenTerm
+                         TransM info ((tops :++: args) :++: ghosts) TypeDesc
 translateEntryRetType (TypedEntry {..}
                        :: TypedEntry phase ext blocks tops rets args ghosts) =
   let mb_perms_out =
@@ -2482,6 +2472,16 @@ translateEntryRetType (TypedEntry {..}
         mbSeparate @_ @tops (cruCtxProxies typedEntryRets) typedEntryPermsOut in
   translateRetType typedEntryRets mb_perms_out
 
+
+{-
+NOWNOW:
+- change uses of TypeTrans to include the purity flag
+- NOTE: PermExprs translate to pure terms / OpenTerms
+- compReturnTypeM should return a TypeDesc
+- need a variant of piTransM that builds TypeDescs
+- update the translation of shapes and perms to use ETrans_Shape and ETrans_Perm
+- IDEA: change LOwnedTransTerm to have a single PermTransM that returns a
+  PermTransCtx; also remove the vars input from PermTransInfo
 
 ----------------------------------------------------------------------
 -- * The Implication Translation Monad
@@ -2603,8 +2603,8 @@ instance TransInfo (ImpTransInfo ext blocks tops rets ps) where
   extTransInfo etrans (ImpTransInfo {..}) =
     ImpTransInfo
     { itiExprCtx = itiExprCtx :>: etrans
-    , itiPermCtx = consPermTransCtx (extPermTransCtx itiPermCtx) PTrans_True
-    , itiPermStack = extPermTransCtx itiPermStack
+    , itiPermCtx = consPermTransCtx (extPermTransCtx etrans itiPermCtx) PTrans_True
+    , itiPermStack = extPermTransCtx etrans itiPermStack
     , itiPermStackVars = RL.map Member_Step itiPermStackVars
     , .. }
 
@@ -3441,8 +3441,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          inExtTransM ETrans_LLVM $
          translateCurryLocalPermImpl "Error mapping array cell permissions:"
          (mbCombine RL.typeCtxProxies impl) MNil MNil
-         (fmap ((MNil :>:) . extPermTrans) cell_in_trans) (MNil :>: Member_Base)
-         (fmap ((MNil :>:) . extPermTrans) cell_out_trans)
+         (fmap ((MNil :>:) . extPermTrans ETrans_LLVM) cell_in_trans)
+         (MNil :>: Member_Base)
+         (fmap ((MNil :>:) . extPermTrans ETrans_LLVM) cell_out_trans)
        -- Build the computation that maps impl_tm over the input array using the
        -- mapBVVecM monadic combinator
        ptrans_arr <- getTopPermM
@@ -4990,7 +4991,7 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
        etrans <- tpTransM $ translate e
        let ptrans = exprOutPerm e
        inExtTransSAWLetBindM tp_trans tp_ret etrans $
-         withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
+         withPermStackM (:>: Member_Base) (:>: extPermTrans etrans ptrans) m
 
   [nuMP| TypedSetRegPermExpr _ e |] ->
     do etrans <- tpTransM $ translate e
@@ -5183,7 +5184,8 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
              let ptrans = PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
                                        PTrans_Conj [APTrans_Fun
                                                     fun_perm (Left i)]] in
-             withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
+             withPermStackM (:>: Member_Base)
+             (:>: extPermTrans ETrans_LLVM ptrans) m
          Just (_, Left _) ->
            error ("translateLLVMStmt: TypedLLVMResolveGlobal: "
                   ++ " unexpected recursive call translation for symbol "
@@ -5703,3 +5705,4 @@ translateCompletePureFun sc env ctx args ret =
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
   piExprCtx ctx $ arrowLRTPermCtx args $
   typeTransTupleType <$> translate ret
+-}
