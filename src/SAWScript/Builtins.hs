@@ -976,8 +976,7 @@ applyProverToGoal backends opts f unintSet g = do
     -- Use a cached result if one exists (and it's valid w.r.t our query)
     Just v -> return $ fromSolverCacheValue satq v
     -- Otherwise try to cache the result of the call
-    _ -> f satq >>= \res ->
-         case toSolverCacheValue vs opts satq res of
+    _ -> f satq >>= \res -> io (toSolverCacheValue vs opts satq res) >>= \case
            Just v  -> SV.onSolverCache (insertInSolverCache k v) >>
                       return res
            Nothing -> return res

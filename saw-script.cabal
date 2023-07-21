@@ -31,6 +31,7 @@ library
     , bimap
     , bytestring
     , bv-sized >= 1.0 && < 1.1
+    , cborg-json
     , containers
     , constraints >= 0.6
     , cryptohash-sha256 >= 0.11.102.1
@@ -60,6 +61,7 @@ library
     , lens
     , llvm-pretty >= 0.8
     , llvm-pretty-bc-parser >= 0.1.3.1
+    , lmdb-simple
     , macaw-base
     , macaw-x86
     , macaw-symbolic
@@ -83,6 +85,7 @@ library
     , saw-core-sbv
     , saw-core-what4
     , sbv >= 9.1 && < 9.3
+    , serialise
     , split
     , temporary
     , template-haskell

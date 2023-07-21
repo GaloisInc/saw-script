@@ -457,11 +457,8 @@ buildTopLevelEnv proxy opts =
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
-        Just p | not (null p) -> do
-          cache <- emptySolverCache
-          snd (setSolverCachePath p) opts cache
-          return $ Just cache
-        _ -> return Nothing
+         Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+         _ -> return Nothing
        thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
@@ -648,27 +645,23 @@ disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
 
-enable_solver_cache :: TopLevel ()
-enable_solver_cache = do
-  rw <- getTopLevelRW
-  getSolverCache >>= \case
-    Just _ -> return ()
-    Nothing -> do emptyCache <- io $ emptySolverCache
-                  putTopLevelRW rw { rwSolverCache = Just emptyCache }
-
 set_solver_cache_path :: FilePath -> TopLevel ()
-set_solver_cache_path path =
-  enable_solver_cache >> onSolverCache (setSolverCachePath path)
+set_solver_cache_path path = do
+  rw <- getTopLevelRW
+  case rwSolverCache rw of
+    Just _ -> onSolverCache (setSolverCachePath path)
+    Nothing -> do cache <- io $ openSolverCache path
+                  putTopLevelRW rw { rwSolverCache = Just cache }
 
 clean_solver_cache :: TopLevel ()
 clean_solver_cache = do
   vs <- io $ getSolverBackendVersions allBackends
   onSolverCache (cleanSolverCache vs)
 
-test_solver_cache_stats :: Integer -> Bool -> Integer -> Integer -> Integer ->
+test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
                            Integer -> TopLevel ()
-test_solver_cache_stats sz p ls ls_f is is_f =
-  onSolverCache (testSolverCacheStats sz p ls ls_f is is_f)
+test_solver_cache_stats sz ls ls_f is is_f =
+  onSolverCache (testSolverCacheStats sz ls ls_f is is_f)
 
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
@@ -1090,17 +1083,9 @@ primitives = Map.fromList
     , "currently are 'z3' and 'yices'."
     ]
 
-  , prim "enable_solver_cache" "TopLevel ()"
-    (pureVal enable_solver_cache)
-    Experimental
-    [ "Enable solver result caching, if it is not already enabled. Unless"
-    , "set_solver_cache_path is later called, the cache will not persist"
-    , "between sessions. Requires Python 3 to be installed."
-    ]
-
   , prim "set_solver_cache_path" "String -> TopLevel ()"
     (pureVal set_solver_cache_path)
-    Experimental
+    Current
     [ "Enable solver result caching if it is not already enabled, open an"
     , "LMDB database at the given path, save to that database all results in"
     , "the current cache, then use that database as the cache going forward."
@@ -1109,7 +1094,7 @@ primitives = Map.fromList
   
   , prim "clean_solver_cache" "TopLevel ()"
     (pureVal clean_solver_cache)
-    Experimental
+    Current
     [ "Remove all entries in the solver result cache which were created"
     , "using solver backend versions which do not match the versions"
     , "in the current environment."
@@ -1117,7 +1102,7 @@ primitives = Map.fromList
 
   , prim "print_solver_cache" "String -> TopLevel ()"
     (pureVal (onSolverCache . printSolverCacheByHex))
-    Experimental
+    Current
     [ "Print all entries in the solver result cache whose SHA256 hash"
     , "keys start with the given string. Providing an empty string results"
     , "in all entries in the cache being printed."
@@ -1125,7 +1110,7 @@ primitives = Map.fromList
 
   , prim "print_solver_cache_stats" "TopLevel ()"
     (pureVal (onSolverCache printSolverCacheStats))
-    Experimental
+    Current
     [ "Print out statistics about how the solver cache has been used, namely"
     , "how many entries are in the cache, whether the cache is being stored"
     , "in memory or on disk, how many insertions into the cache have been made"
@@ -1134,9 +1119,9 @@ primitives = Map.fromList
     , "session, and with how many failed attempted usages have occurred so far"
     , "this session." ]
 
-  , prim "test_solver_cache_stats" "Int -> Bool -> Int -> Int -> Int -> Int -> TopLevel ()"
+  , prim "test_solver_cache_stats" "Int -> Int -> Int -> Int -> Int -> TopLevel ()"
     (pureVal test_solver_cache_stats)
-    Experimental
+    Current
     [ "Test whether the values of the statistics printed out by"
     , "print_solver_cache_stats are equal to those given, failing if"
     , "this does not hold. Specifically, the arguments represent how many"

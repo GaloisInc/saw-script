@@ -517,7 +517,7 @@ data TopLevelRW =
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
-  , rwSolverCache   :: Maybe SolverCache
+  , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
@@ -689,9 +689,6 @@ getSharedContext = TopLevel_ (rwSharedContext <$> get)
 getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase = TopLevel_ (asks roJavaCodebase)
 
-getSolverCache :: TopLevel (Maybe SolverCache)
-getSolverCache = TopLevel_ (rwSolverCache <$> get)
-
 getTheoremDB :: TopLevel TheoremDB
 getTheoremDB = TopLevel_ (rwTheoremDB <$> get)
 
@@ -743,8 +740,11 @@ recordProof v =
 onSolverCache :: SolverCacheOp a -> TopLevel a
 onSolverCache (mb_default, f) =
   do opts <- getOptions
-     getSolverCache >>= \case
-       Just cache -> io $ f opts cache
+     rw <- getTopLevelRW
+     case rwSolverCache rw of
+       Just cache -> do (a, cache') <- io $ f opts cache
+                        putTopLevelRW rw { rwSolverCache = Just cache' }
+                        return a
        Nothing -> case mb_default of
         Just a -> return a
         Nothing -> fail "Solver result cache not enabled!"

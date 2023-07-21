@@ -64,7 +64,7 @@ import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
-import SAWScript.SolverCache (emptySolverCache, setSolverCachePath)
+import SAWScript.SolverCache (lazyOpenSolverCache)
 
 import qualified Argo
 --import qualified CryptolServer (validateServerState, ServerState(..))
@@ -209,11 +209,8 @@ initialState readFileFn =
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
      mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
-      Just p | not (null p) -> do
-        cache <- emptySolverCache
-        snd (setSolverCachePath p) opts cache
-        return $ Just cache
-      _ -> return Nothing
+       Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+       _ -> return Nothing
      db <- newTheoremDB
      let ro = TopLevelRO
                 { roJavaCodebase = jcb

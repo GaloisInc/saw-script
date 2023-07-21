@@ -35,7 +35,7 @@ getSolverVersion s =
         SBV.Boolector -> (["--version"]              , "")
         SBV.Bitwuzla  -> (["--version"]              , "")
         SBV.CVC4      -> (["--version"]              , "This is CVC4 version ")
-        SBV.CVC5      -> (["--version"]              , "This is CVC5 version ")
+        SBV.CVC5      -> (["--version"]              , "This is cvc5 version ")
         SBV.DReal     -> (["--version"]              , "dReal v")
         SBV.MathSAT   -> (["-version"]               , "MathSAT5 version ")
         SBV.Yices     -> (["--version"]              , "Yices ")

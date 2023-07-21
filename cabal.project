@@ -32,6 +32,8 @@ packages:
     deps/parameterized-utils
     deps/flexdis86
     deps/flexdis86/binary-symbols
+    deps/lmdb/lmdb
+    deps/lmdb/lmdb-simple
     deps/macaw/base
     deps/macaw/symbolic
     deps/macaw/x86
