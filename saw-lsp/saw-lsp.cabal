@@ -109,5 +109,22 @@ test-suite saw-lsp-test
 
     type: exitcode-stdio-1.0
     hs-source-dirs: test
-    main-is: MyLibTest.hs
+    main-is: Main.hs
 
+    other-modules:
+        Test.FList
+        Test.Stack
+        Test.SAWT.Interpret
+
+    build-depends:
+        saw-lsp,
+        saw-script,
+        hashable ^>=1.4.2.0,
+        QuickCheck ^>=2.14.2,
+        tasty ^>=1.4.3,
+        tasty-hunit ^>=0.10.0.3,
+        tasty-quickcheck ^>=0.10.2
+
+    ghc-options:
+        -threaded
+        -- +RTS -N1 -RTS
