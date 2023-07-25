@@ -230,9 +230,12 @@ data SolverBackendOption = W4_Tactic String
 
 instance FromJSON SolverBackendOption where
   parseJSON = JSON.genericParseJSON JSON.defaultOptions
+                { JSON.sumEncoding = JSON.TwoElemArray }
 instance ToJSON SolverBackendOption where
   toJSON = JSON.genericToJSON JSON.defaultOptions
+             { JSON.sumEncoding = JSON.TwoElemArray }
   toEncoding = JSON.genericToEncoding JSON.defaultOptions
+                { JSON.sumEncoding = JSON.TwoElemArray }
 
 -- | Given a 'SolverBackendOption', return the list of additional
 -- 'SolverBackend's that are used

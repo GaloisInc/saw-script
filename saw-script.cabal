@@ -10,7 +10,6 @@ License-file:  LICENSE
 extra-source-files:
     src/SAWScript/Parser.y
     src/SAWScript/Lexer.x
-    src/SAWScript/SolverCache/lmdb_opt_database.py
 
 custom-setup
   setup-depends:
@@ -131,7 +130,6 @@ library
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SolverCache
-    SAWScript.SolverCache.LMDBOptDatabase
     SAWScript.SolverVersions
     SAWScript.Token
     SAWScript.TopLevel

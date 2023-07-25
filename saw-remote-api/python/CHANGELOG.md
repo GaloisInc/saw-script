@@ -1,5 +1,10 @@
 # Revision history for saw-client
 
+## 1.0.1 -- YYYY-MM-DD
+
+* Add `solver_cache.py` implementing an interface for interacting with SAW
+  solver cache databases.
+
 ## 0.9.1 -- YYYY-MM-DD
 
 * Add a `set_option` command to `saw_client` that allows enabling and disabling
