@@ -1113,22 +1113,24 @@ primitives = Map.fromList
   , prim "print_solver_cache_stats" "TopLevel ()"
     (pureVal (onSolverCache printSolverCacheStats))
     Current
-    [ "Print out statistics about how the solver cache has been used, namely"
-    , "how many entries are in the cache, how many insertions into the cache have"
-    , "been made so far this session, how many failed insertion attempts have"
-    , "been made so far this session, how times cached results have been used so"
-    , "far this session, and with how many failed attempted usages have occurred so"
-    , "far this session." ]
+    [ "Print out statistics about how the solver cache has been used, namely:"
+    , "1. How many entries are in the cache (and where the cache is stored)"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session." ]
 
   , prim "test_solver_cache_stats" "Int -> Int -> Int -> Int -> Int -> TopLevel ()"
     (pureVal test_solver_cache_stats)
     Current
     [ "Test whether the values of the statistics printed out by"
-    , "print_solver_cache_stats are equal to those given, failing if"
-    , "this does not hold. Specifically, the arguments represent how many"
-    , "entries are in the cache, how many insertions into the cache have been made,"
-    , "how many failed insertion attempts have been made, how times cached results"
-    , "have been used, and how many failed attempted usages have occurred." ]
+    , "print_solver_cache_stats are equal to those given, failing if this does not"
+    , "hold. Specifically, the arguments represent:"
+    , "1. How many entries are in the cache"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session" ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
