@@ -574,8 +574,8 @@ cleanSolverCache curr_base_vs = (Nothing,) $ \opts cache -> do
                             then Just (base_ver, v_ver) else Nothing)
         known_curr_base_vs vs
       flt k v (ks, mvs) = let mvs' = mismatched_vs (solverCacheValueVersions v)
-                           in if M.null mvs then (ks, mvs)
-                                            else (k:ks, M.union mvs mvs')
+                           in if M.null mvs' then (ks, mvs)
+                                             else (k:ks, M.union mvs mvs')
   (env, db, cache') <- forceSolverCacheOpened cache
   (ks, mvs) <- LMDB.readOnlyTransaction env $ LMDB.foldrWithKey flt ([], M.empty) db
   forM_ ks $ \k -> LMDB.transaction env $ LMDB.delete k db
