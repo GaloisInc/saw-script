@@ -7,6 +7,7 @@ SAW_SOLVER_CACHE_PATH="test_solver_cache.cache" $SAW test_basics.saw
 $SAW test_path_and_reuse.saw
 
 # Testing cleaning the solver cache
+pip install cbor2 python-dateutil lmdb
 python3 -i ../../saw-remote-api/python/saw_client/solver_cache.py << END
 cache = SolverCache("test_solver_cache.cache")
 for k,v in cache.items():
