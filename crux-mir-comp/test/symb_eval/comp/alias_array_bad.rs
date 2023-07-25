@@ -8,7 +8,7 @@ fn f(x: &Cell<u8>, y: &[Cell<u8>; 2]) {
     x.swap(&y[0]);
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     let x = Cell::new(u8::symbolic("x"));
@@ -36,7 +36,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

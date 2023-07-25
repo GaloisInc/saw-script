@@ -14,16 +14,16 @@ USER saw
 WORKDIR /home/saw
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
-COPY cabal.GHC-8.8.4.config cabal.project.freeze
+COPY cabal.GHC-8.10.7.config cabal.project.freeze
 ENV PATH=/home/saw/ghcup-download/bin:/home/saw/.ghcup/bin:$PATH
 RUN mkdir -p /home/saw/ghcup-download/bin && \
-    curl -L https://downloads.haskell.org/~ghcup/0.1.17.7/x86_64-linux-ghcup-0.1.17.7 -o /home/saw/ghcup-download/bin/ghcup && \
+    curl -L https://downloads.haskell.org/~ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 -o /home/saw/ghcup-download/bin/ghcup && \
     chmod +x /home/saw/ghcup-download/bin/ghcup
 RUN mkdir -p /home/saw/.ghcup && \
     ghcup --version && \
-    ghcup install cabal 3.6.2.0 && \
-    ghcup install ghc 8.8.4 && \
-    ghcup set ghc 8.8.4
+    ghcup install cabal 3.8.1.0 && \
+    ghcup install ghc 8.10.7 && \
+    ghcup set ghc 8.10.7
 RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal v2-exec which saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api

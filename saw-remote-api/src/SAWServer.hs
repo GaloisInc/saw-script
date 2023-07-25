@@ -40,6 +40,7 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as JSS
+import Mir.Generator (RustModule)
 --import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
@@ -55,7 +56,7 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModu
 import SAWScript.Options (Options(..), processEnv, defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import SAWScript.Yosys.State (YosysSequential)
 import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
@@ -81,7 +82,8 @@ import SAWServer.Exceptions
       notAJVMClass,
       notAJVMMethodSpecIR,
       notAYosysImport,
-      notAYosysTheorem, notAYosysSequential
+      notAYosysTheorem, notAYosysSequential,
+      notAMIRModule
     )
 
 type SAWCont = (SAWEnv, SAWTask)
@@ -211,7 +213,6 @@ initialState readFileFn =
      mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
        Just path | not (null path) -> Just <$> lazyOpenSolverCache path
        _ -> return Nothing
-     db <- newTheoremDB
      let ro = TopLevelRO
                 { roJavaCodebase = jcb
                 , roOptions = opts
@@ -238,8 +239,8 @@ initialState readFileFn =
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
-                , rwTheoremDB = db
                 , rwSolverCache = mb_cache
+                , rwTheoremDB = emptyTheoremDB
                 , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
@@ -324,12 +325,13 @@ data ServerVal
   | VJVMCrucibleSetup (Pair CrucibleSetupTypeRepr JVMSetupM)
   | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
+  | VMIRModule RustModule
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VGhostVar CMS.GhostGlobal
   | VYosysImport YosysImport
   | VYosysTheorem YosysTheorem
-  | VYosysSequential YosysSequential 
+  | VYosysSequential YosysSequential
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -340,6 +342,7 @@ instance Show ServerVal where
   show (VJVMCrucibleSetup _) = "VJVMCrucibleSetup"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
+  show (VMIRModule _) = "VMIRModule"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
@@ -398,6 +401,9 @@ instance KnownCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
 instance IsServerVal (Some CMS.LLVMModule) where
   toServerVal = VLLVMModule
 
+instance IsServerVal RustModule where
+  toServerVal = VMIRModule
+
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
   do Argo.debugLog $ "Saving " <> (T.pack (show name))
@@ -444,6 +450,13 @@ getLLVMModule n =
      case v of
        VLLVMModule m -> return m
        _other -> Argo.raise (notAnLLVMModule n)
+
+getMIRModule :: ServerName -> Argo.Command SAWState RustModule
+getMIRModule n =
+  do v <- getServerVal n
+     case v of
+       VMIRModule m -> return m
+       _other -> Argo.raise (notAMIRModule n)
 
 getLLVMSetup :: ServerName -> Argo.Command SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =

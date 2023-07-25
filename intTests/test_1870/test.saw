@@ -1,0 +1,5 @@
+import "A.cry";
+
+// Make sure that `newtypes` work.
+// Specifically, that `A` is in scope.
+print {{ A { x = 2 } }};

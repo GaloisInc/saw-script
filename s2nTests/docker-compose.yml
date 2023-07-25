@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: ${PWD:-.}/../saw/Dockerfile
-    entrypoint: ["cp", "/usr/local/bin/saw", "/usr/local/bin/abc", "/saw-bin"]
+    entrypoint: ["cp", "/usr/local/bin/saw", "/usr/local/bin/abc", "/usr/local/bin/yices", "/usr/local/bin/z3-4.8.8", "/saw-bin"]
     user: root
     volumes:
       - ${PWD:-}/bin:/saw-bin:rw

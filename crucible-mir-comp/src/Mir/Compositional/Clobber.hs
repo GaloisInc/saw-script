@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Mir.Compositional.Clobber
 where
@@ -58,6 +59,8 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv = go shp rv
+    go (FnPtrShape _ _ _) _rv =
+        error "Function pointers not currently supported in overrides"
     go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
@@ -104,6 +107,8 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
     go (RefShape _ _ _tpr) rv = return rv
+    go (FnPtrShape _ _ _) _rv =
+        error "Function pointers not currently supported in overrides"
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
@@ -132,6 +137,8 @@ freshSymbolic sym loc nameStr shp = go shp
         return expr
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)
+    go (FnPtrShape _ _ _) =
+        error "Function pointers not currently supported in overrides"
     go shp = error $ "freshSymbolic: " ++ show (shapeType shp) ++ " NYI"
 
 

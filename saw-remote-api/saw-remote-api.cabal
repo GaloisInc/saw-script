@@ -4,7 +4,7 @@ cabal-version:       2.4
 -- http://haskell.org/cabal/users-guide/
 
 name:                saw-remote-api
-version:             0.9.1
+version:             1.0.0
 -- synopsis:
 -- description:
 -- bug-reports:
@@ -34,8 +34,8 @@ common errors
     -Werror=overlapping-patterns
 
 common deps
-  build-depends: base >=4.11.1.0 && <4.17,
-                 aeson >= 1.4.2 && < 2.1,
+  build-depends: base >=4.11.1.0 && <4.18,
+                 aeson >= 1.4.2 && < 2.2,
                  aig,
                  argo,
                  base64-bytestring,
@@ -45,6 +45,7 @@ common deps
                  cryptol-saw-core,
                  crucible,
                  crucible-jvm,
+                 crucible-mir,
                  cryptonite,
                  cryptonite-conduit,
                  directory,
@@ -59,7 +60,7 @@ common deps
                  silently,
                  text,
                  unordered-containers,
-                 vector >= 0.12 && < 0.13,
+                 vector >= 0.12 && < 0.14,
                  cryptol-remote-api
   default-language: Haskell2010
 
@@ -81,6 +82,7 @@ library
                    SAWServer.JVMVerify,
                    SAWServer.LLVMCrucibleSetup,
                    SAWServer.LLVMVerify,
+                   SAWServer.MIRCrucibleSetup,
                    SAWServer.NoParams,
                    SAWServer.OK,
                    SAWServer.ProofScript,

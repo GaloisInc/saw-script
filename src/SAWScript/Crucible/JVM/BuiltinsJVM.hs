@@ -7,7 +7,7 @@ Stability   : provisional
 
 
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NoMonoLocalBinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE PackageImports #-}
@@ -176,7 +176,8 @@ jvm_extract c mname = do
               gp <- getGlobalPair opts pr
               let regval = gp^.Crucible.gpValue
               let regty = Crucible.regType regval
-              let failure = fail $ unwords ["Unexpected return type:", show regty]
+              let failure :: forall a. IO a
+                  failure = fail $ unwords ["Unexpected return type:", show regty]
               t <- Crucible.asSymExpr regval (toSC sym st) failure
               cty <-
                 case Crucible.asBaseType regty of

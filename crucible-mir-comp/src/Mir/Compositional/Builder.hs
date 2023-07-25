@@ -7,6 +7,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Mir.Compositional.Builder
 where
@@ -713,6 +714,8 @@ regToSetup bak p eval shp rv = go shp rv
         alloc <- refToAlloc bak p mutbl ty' tpr startRef len
         let offsetSv idx sv = if idx == 0 then sv else MS.SetupElem () sv idx
         return $ offsetSv idx $ MS.SetupVar alloc
+    go (FnPtrShape _ _ _) _ =
+        error "Function pointers not currently supported in overrides"
 
     goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
         BuilderT sym t (OverrideSim p sym MIR rtp args ret) [MS.SetupValue MIR]

@@ -473,8 +473,8 @@ typeOfSetupValue cc env nameEnv val =
 
     SetupCast () v ltp ->
       do memTy <- typeOfSetupValue cc env nameEnv v
-         case memTy of
-           Crucible.PtrType _symTy ->
+         if Crucible.isPointerMemType memTy
+           then
              case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
                Left err -> throwError $ unlines
                              [ "typeOfSetupValue: invalid type " ++ show ltp
@@ -483,10 +483,11 @@ typeOfSetupValue cc env nameEnv val =
                              ]
                Right mt -> pure mt
 
-           _ -> throwError $ unwords $
-                  [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
-                  , "actual type of value: " ++ show memTy
-                  ]
+           else
+             throwError $ unwords $
+               [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
+               , "actual type of value: " ++ show memTy
+               ]
 
     SetupElem () v i -> do
       do memTy <- typeOfSetupValue cc env nameEnv v

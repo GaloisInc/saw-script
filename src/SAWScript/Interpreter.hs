@@ -71,7 +71,7 @@ import SAWScript.Utils
 import SAWScript.Value
 import SAWScript.SolverCache
 import SAWScript.SolverVersions
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import SAWScript.Prover.MRSolver (emptyMREnv)
@@ -97,6 +97,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
@@ -459,7 +460,6 @@ buildTopLevelEnv proxy opts =
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
          Just path | not (null path) -> Just <$> lazyOpenSolverCache path
          _ -> return Nothing
-       thmDB <- newTheoremDB
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roJavaCodebase = jcb
@@ -495,7 +495,7 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
                    , rwSolverCache = mb_cache
-                   , rwTheoremDB = thmDB
+                   , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
@@ -1920,6 +1920,17 @@ primitives = Map.fromList
     (pureVal print_goal)
     Current
     [ "Print the current goal that a proof script is attempting to prove." ]
+  , prim "print_goal_inline"   "[Int] -> ProofScript ()"
+    (pureVal print_goal_inline)
+    Current
+    [ "Print the current goal that a proof script is attempting to prove,"
+    , "without generating `let` bindings for the provided indices. For"
+    , "example, `print_goal_inline [1,9,3]` will print the goal without"
+    , "inlining the variables that would otherwise be abstracted as `x@1`,"
+    , " `x@9`, and `x@3`. These indices are assigned deterministically with"
+    , "regard to a particular goal, but are not persistent across goals. As"
+    , "such, this should be used primarily when debugging a proof."
+    ]
   , prim "write_goal" "String -> ProofScript ()"
     (pureVal write_goal)
     Current
@@ -3819,6 +3830,14 @@ primitives = Map.fromList
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
     Current
     [ "Construct a `JVMValue` from a `Term`." ]
+
+    ---------------------------------------------------------------------
+    -- Crucible/MIR commands
+
+  , prim "mir_load_module" "String -> TopLevel MIRModule"
+    (pureVal mir_load_module)
+    Experimental
+    [ "Load a MIR JSON file and return a handle to it." ]
 
     ---------------------------------------------------------------------
 

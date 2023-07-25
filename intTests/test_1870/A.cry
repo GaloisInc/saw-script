@@ -1,0 +1,4 @@
+module A where
+
+newtype A = { x : [8] }
+
