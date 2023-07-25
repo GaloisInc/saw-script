@@ -111,9 +111,9 @@ SAW also uses several environment variables for configuration:
 `SAW_SOLVER_CACHE_PATH`
 
   ~ Specify a path at which to keep a cache of solver results obtained during
-  calls to certain tactics. Note that if this environment variable is set,
-  Python 3 and the Python LMDB bindings will need to be installed. See the
-  section **Caching Solver Results** for more detail about this feature.
+  calls to certain tactics. A cache is not created at this path until it is
+  needed. See the section **Caching Solver Results** for more detail about this
+  feature.
 
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
@@ -1277,63 +1277,72 @@ The simplest way to enable solver caching is to set the environment variable
 database at the given path containing the solver result cache. Setting this
 environment variable globally therefore creates a global, concurrency-safe
 solver result cache used by all newly created `saw` or `saw-remote-api`
-processes.
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.
 
-There are also a number of SAW commands for solver caching, all of which
-require `enable_experimental`.
+There are also a number of SAW commands related to solver caching.
 
-* `set_solver_cache_path` has the same effect as if `SAW_SOLVER_CACHE_PATH`
-  was set to the given path for the remainder of the current session.
-
-* `enable_solver_cache` will enable solver caching, but not set a path at
-  which to save the cache. Thus, unless `SAW_SOLVER_CACHE_PATH` was set or
-  `set_solver_cache_path` is called, all cached results will be discarded at
-  the end of the session. This can be useful for testing, or if the user
-  does not wish to use LMDB.
+* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+  remainder of the current session, but opens an LMDB database at the specified
+  path immediately. If a cache is already in use in the current session
+  (i.e. through a prior call to `set_solver_cache_path` or through
+  `SAW_SOLVER_CACHE_PATH` being set and the cache being used at least once)
+  then all entries in the cache already in use will be copied to the new cache
+  being opened.
 
 * `clean_solver_cache` will remove all entries in the solver result cache
   which were created using solver backend versions which do not match the
   versions in the current environment. This can be run after an update to
   clear out any old, unusable entries from the solver cache.
 
-There are also the commands `print_solver_cache` and
-`print_solver_cache_stats`, which print out information about the entries
-in the cache and usage statistics about the cache, respectively.
+* `print_solver_cache` prints to the console all entries in the cache whose
+  SHA256 hashe keys start with the given hex string. Providing an empty string
+  results in all entries in the cache being printed.
+
+* `print_solver_cache_stats` prints to the console statistics including the
+  size of the solver cache, where on disk it is stored, and some counts of how
+  often it has been used during the current session.
+
+For performing more complicated database operations on the set of cached
+results, the file `solver_cache.py` is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.
 
 Below is an example of using solver caching with `saw -v Debug`. Only the
 relevant output is shown, the rest abbreviated with "...".
 
 ~~~~
-sawscript> enable_experimental
-sawscript> enable_solver_cache
+sawscript> set_solver_cache_path "example.cache"
 sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
-Caching result: c6e8f2e6ea38dd97 (SBV 9.2, Z3 version 4.8.7 - 64 bit)
+[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
 ...
 sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
-Using cached result: c6e8f2e6ea38dd97 (SBV 9.2, Z3 version 4.8.7 - 64 bit)
+[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
 ...
 sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
-                       {{ \(x:[8]) -> x+x == x*2 }}
-Caching result: 975f9aac6d54cd54 (What4 v1.3-29-g6c462cd using qfnia, Z3 version 4.8.7 - 64 bit)
+                                  {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)
 ...
-sawscript> print_solver_cache "c6e8f2e6ea38dd97"
-SHA: c6e8f2e6ea38dd978e39e3a8a2a1f64d48e5a51412ad688e6e8d1d52285648ab
-- Result: unsat
-- Solver: "SBV->Z3"
-- Versions: SBV 9.2, Z3 version 4.8.7 - 64 bit
+sawscript> print_solver_cache "d1f5a76e7a0b7c01"
+[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb
+[22:13:13.250] - Result: unsat
+[22:13:13.250] - Solver: "SBV->Z3"
+[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit
+[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC
 
-sawscript> print_solver_cache "975f9aac6d54cd54"
-SHA: 975f9aac6d54cd54206e5938860fa43f89268a4545f0b01966291f034085c305
-- Result: unsat
-- Solver: "W4 ->z3"
-- Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 version 4.8.7 - 64 bit
+sawscript> print_solver_cache "4ee451f8429c2dfe"
+[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752
+[22:13:16.727] - Result: unsat
+[22:13:16.727] - Solver: "W4 ->z3"
+[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit
+[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC
+
+sawscript> print_solver_cache_stats
+[22:13:20.585] == Solver result cache statistics ==
+[22:13:20.585] - 2 results cached in example.cache
+[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
+[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
 ~~~~
-
-Note that to use any of the features described above, Python 3 must be
-installed. If a path is set for the solver cache (i.e. through
-`SAW_SOLVER_CACHE_PATH` or `enable_solver_cache`), then the Python
-[`lmdb`](https://lmdb.readthedocs.io/en/release/) library must also be
-installed.
 
 ## Other External Provers
 

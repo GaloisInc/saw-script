@@ -1086,10 +1086,12 @@ primitives = Map.fromList
   , prim "set_solver_cache_path" "String -> TopLevel ()"
     (pureVal set_solver_cache_path)
     Current
-    [ "Enable solver result caching if it is not already enabled, open an"
-    , "LMDB database at the given path, save to that database all results in"
-    , "the current cache, then use that database as the cache going forward."
-    , "Requires Python 3 and the Python lmdb library to be installed."
+    [ "Create a solver result cache at the given path, add to that cache all results"
+    , "in the currently used solver result cache, if there is one, then use the newly"
+    , "created cache as the solver result cache going forward. Note that if the"
+    , "SAW_SOLVER_CACHE_PATH environment variable was set at startup but solver"
+    , "caching has yet to actually be used, then the value of the environment"
+    , "variable is ignored."
     ]
   
   , prim "clean_solver_cache" "TopLevel ()"
@@ -1104,20 +1106,19 @@ primitives = Map.fromList
     (pureVal (onSolverCache . printSolverCacheByHex))
     Current
     [ "Print all entries in the solver result cache whose SHA256 hash"
-    , "keys start with the given string. Providing an empty string results"
-    , "in all entries in the cache being printed."
+    , "keys start with the given hex string. Providing an empty string"
+    , "results in all entries in the cache being printed."
     ]
 
   , prim "print_solver_cache_stats" "TopLevel ()"
     (pureVal (onSolverCache printSolverCacheStats))
     Current
     [ "Print out statistics about how the solver cache has been used, namely"
-    , "how many entries are in the cache, whether the cache is being stored"
-    , "in memory or on disk, how many insertions into the cache have been made"
-    , "so far this session, how many failed insertion attempts have been made"
-    , "so far this session, how times cached results have been used so far this"
-    , "session, and with how many failed attempted usages have occurred so far"
-    , "this session." ]
+    , "how many entries are in the cache, how many insertions into the cache have"
+    , "been made so far this session, how many failed insertion attempts have"
+    , "been made so far this session, how times cached results have been used so"
+    , "far this session, and with how many failed attempted usages have occurred so"
+    , "far this session." ]
 
   , prim "test_solver_cache_stats" "Int -> Int -> Int -> Int -> Int -> TopLevel ()"
     (pureVal test_solver_cache_stats)
@@ -1125,10 +1126,9 @@ primitives = Map.fromList
     [ "Test whether the values of the statistics printed out by"
     , "print_solver_cache_stats are equal to those given, failing if"
     , "this does not hold. Specifically, the arguments represent how many"
-    , "entries are in the cache, whether the cache is being stored on disk,"
-    , "how many insertions into the cache have been made, how many failed"
-    , "insertion attempts have been made, how times cached results have"
-    , "been used, and how many failed attempted usages have occurred." ]
+    , "entries are in the cache, how many insertions into the cache have been made,"
+    , "how many failed insertion attempts have been made, how times cached results"
+    , "have been used, and how many failed attempted usages have occurred." ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)

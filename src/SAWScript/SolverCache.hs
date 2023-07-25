@@ -5,18 +5,25 @@ License     : BSD3
 Maintainer  : m-yac
 Stability   : provisional
 
-This file defines an interface for caching SMT/SAT solver results in memory and
-on disk. The interface, as used in 'applyProverToGoal', works as follows:
+This file defines an interface for caching SMT/SAT solver results using an LMDB
+database. The interface, as used in 'applyProverToGoal', works as follows:
 
 1. An 'SMTQuery' is converted into a string using 'scWriteExternal', and
    along with any relevant 'SolverBackendVersion's (obtained using
    'getSolverBackendVersions' from @SAWScript.SolverVersions@), is then hashed
    using SHA256 ('mkSolverCacheKey').
-2. The 'SolverCache' contains an 'LMDBOptDatabase' mapping these hashes to
-   previously obtained results ('solverCacheDB'). If the hash corresponding to
-   the 'SATQuery' and 'SolverBackendVersion's can be found in the database
-   ('lookupInSolverCache'), then the corresponding result is used.
-3. Otherwise, the 'SATQuery' is dispatched to the requested backend and a
+2. The core of the 'SolverCache' is an LMDB database mapping these hashes to
+   previously obtained results ('solverCacheEnv', 'solverCacheDB'). If this is
+   the first time solver caching is being used and the `SAW_SOLVER_CACHE_PATH`
+   environment variable was set at startup, then open an LMDB database at the
+   specified path and use this database for all subsequent uses of the solver
+   cache. Note that this only occurs if there have been no prior calls to the
+   `set_solver_cache_path` command, which immediately opens an LMDB database at
+   specified path when called.
+3. If the hash corresponding to the 'SATQuery' and 'SolverBackendVersion's
+   can be found in the database ('lookupInSolverCache'), then the corresponding
+   result is used.
+4. Otherwise, the 'SATQuery' is dispatched to the requested backend and a
    result is obtained. This result is then added to the database using the
    aforementioned hash as the key ('insertInSolverCache').
 
@@ -272,8 +279,9 @@ showBackendVersionsWithOptions sep vs opts =
 
 -- Solver Cache Keys -----------------------------------------------------------
 
--- | The key type for 'SolverCache'. Each is a SHA256 hash of a 'SATQuery' and
--- a 'Set' of 'SolverBackendVersion's - see 'mkSolverCacheKey'
+-- | The key type for 'SolverCache'. Each is a SHA256 hash of a 'SATQuery' (see
+-- 'mkSolverCacheKey') along with optional solver version information used only
+-- for pretty-printing.
 data SolverCacheKey =
   SolverCacheKey 
   { solverCacheKeyVersions :: SolverBackendVersions
@@ -289,7 +297,7 @@ instance Show SolverCacheKey where
     if M.null vs && null opts then ""
     else " (" ++ showBackendVersionsWithOptions ", " vs opts ++ ")"
 
--- | ...
+-- | Make a 'SolverCacheKey' with no version information 
 solverCacheKeyFromHash :: ByteString -> SolverCacheKey
 solverCacheKeyFromHash = SolverCacheKey M.empty []
 
@@ -329,10 +337,10 @@ mkSolverCacheKey sc vs opts satq = do
 
 -- Solver Cache Values ---------------------------------------------------------
 
--- | The value type for 'SolverCache': a 'Set' of 'SolverBackendVersion's, a
--- 'String' representing the solver used, and an optional list of
--- counterexamples, represented as pairs of indexes into the list of
--- 'satVariables' of an associated 'SATQuery'
+-- | The value type for 'SolverCache': solver version information, the timestamp
+-- of when the entry was last used, a 'String' representing the solver used, and
+-- an optional list of counterexamples, represented as pairs of indexes into the
+-- list of 'satVariables' of an associated 'SATQuery'
 data SolverCacheValue =
   SolverCacheValue
   { solverCacheValueVersions   :: SolverBackendVersions
@@ -359,6 +367,9 @@ instance ToJSON SolverCacheValue where
     "vs" .= vs <> (if null opts then mempty else "opts" .= opts) <>
     "nm" .= nm <> maybe mempty (\cexs -> "cexs" .= cexs) mb_cexs <> "t" .= t
 
+-- NOTE: We go through JSON because the `aeson` library gives us much nicer and
+-- more customizable encodings than the `serialise` library, and because there
+-- is a bijection between JSON and CBOR so we can freely pass between the two
 instance Serialise SolverCacheValue where
   encode = encodeValue . toJSON
   decode = do
@@ -393,11 +404,13 @@ fromSolverCacheValue satq (SolverCacheValue _ _ solver_name cexs _) =
 
 -- The Solver Cache ------------------------------------------------------------
 
--- | A 'SolverCacheDB' of cached solver results, a timeout in milliseconds to
--- use for all lookups and insertions into the DB, as well as counters for how
--- many lookups, failed lookups, insertions, and failed insertions have been
--- made (see 'SolverCacheStat'). The latter are represented as an 'IORef' to
--- make sure failures are counted correctly.
+-- | A 'SolverCache' consists of a 'FilePath' to an LMDB database (which may or
+-- may not exist yet), an optional LMDB database at that path (represented as an
+-- 'LMDB.Environment' and 'LMDB.Database' once it is created), counters for how
+-- many lookups, failed lookups, insertions, and failed insertions have been made
+-- (see 'SolverCacheStat'), a map size for the LMDB database, and a timeout to
+-- use for database lookups and inserts. Note that the counters are stored in an
+-- 'IORef' to make sure failures are counted correctly.
 data SolverCache =
   SolverCache
   { solverCachePath    :: FilePath
@@ -412,7 +425,9 @@ data SolverCache =
 data SolverCacheStat = Lookups | FailedLookups | Inserts | FailedInserts
                      deriving (Eq, Ord, Bounded, Enum)
 
--- | ...
+-- | Create a 'SolverCache' with the given 'FilePath', but do not yet open an
+-- LMDB database at that path (i.e. `solverCacheEnv` and `solverCacheDB` are
+-- both set to 'Nothing')
 lazyOpenSolverCache :: FilePath -> IO SolverCache
 lazyOpenSolverCache path = do
   stats <- newIORef $ M.fromList ((,0) <$> [minBound..])
@@ -423,13 +438,17 @@ lazyOpenSolverCache path = do
                        solverCacheMapSize = 4 {- GiB -} * 1073741824,
                        solverCacheTimeout = 1 {- sec -} * 1000000 }
 
--- | ...
+-- | Create a 'SolverCache' with the given 'FilePath' and open an LMDB database
+-- at that path (i.e. `solverCacheEnv` and `solverCacheDB` are both 'Just')
 openSolverCache :: FilePath -> IO SolverCache
 openSolverCache path = do
   (_, _, cache') <- forceSolverCacheOpened =<< lazyOpenSolverCache path
   return cache'
 
--- | ...
+-- | Ensure that the given 'SolverCache' has opened an LMDB database at its set
+-- 'FilePath' - returning either the newly created or previously created
+-- 'LMDB.Environment' and 'LMDB.Database', as well as an 'SolverCache'
+-- containing both of them
 forceSolverCacheOpened :: SolverCache ->
                           IO (LMDB.Environment LMDB.ReadWrite,
                               LMDB.Database SolverCacheKey SolverCacheValue,
@@ -445,7 +464,11 @@ forceSolverCacheOpened cache@SolverCache{..} = do
   let cache' = cache { solverCacheEnv = Just env, solverCacheDB = Just db }
   return (env, db, cache')
 
--- | ...
+-- | Try to call 'forceSolverCacheOpened' then try to perform the given
+-- 'LMDB.Transaction' on the LMDB database associated to the given
+-- 'SolverCache', returning 'Left' if an error or timeout occurred at any point
+-- and 'Right' otherwise, as well as the updated 'SolverCache' returned by
+-- 'forceSolverCacheOpened'
 tryTransaction :: (LMDB.Mode tmode, LMDB.SubMode LMDB.ReadWrite tmode) =>
                   SolverCache ->
                   (LMDB.Database SolverCacheKey SolverCacheValue ->
@@ -460,7 +483,8 @@ tryTransaction cache@SolverCache{..} t =
       return (Left $ "Failed to open LMDB database: " ++ err, cache)
 
 -- | An operation on a 'SolverCache', returning a value of the given type or
--- returning an optional default value in the case of no enabled 'SolverCache'
+-- an optional default value in the case of no enabled 'SolverCache', as well as
+-- an updated 'SolverCache'
 type SolverCacheOp a = (Maybe a, Options -> SolverCache -> IO (a, SolverCache))
 
 -- | Lookup a 'SolverCacheKey' in the solver result cache
