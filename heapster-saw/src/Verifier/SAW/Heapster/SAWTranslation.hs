@@ -1194,8 +1194,8 @@ instance TransInfo info =>
       liftA2 (:>:) <$> translate ctx <*> translate tp
 
 -- | Translate all types in a Crucible context and lambda-abstract over them
-lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
-                 TransM info RNil OpenTerm
+lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx SpecTerm ->
+                 TransM info RNil SpecTerm
 lambdaExprCtx ctx m =
   translateClosed ctx >>= \tptrans ->
   lambdaTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
@@ -1330,7 +1330,8 @@ instance TransInfo info =>
     [nuMP| PExpr_PermListNil |] -> return $ ETrans_Term unitTypeOpenTerm
     [nuMP| PExpr_PermListCons _ _ p l |] ->
       ETrans_Term <$> (pairTypeOpenTerm <$>
-                       (typeTransTupleType <$> translate p) <*>
+                       (typeDescLRT <$> tupleOfTypeDescs <$>
+                        typeTransDescs <$> translate p) <*>
                        (translate1Pure l))
     [nuMP| PExpr_RWModality _ |] -> return ETrans_RWModality
 
@@ -1341,9 +1342,9 @@ instance TransInfo info =>
         [nuMP| DefinedShapeBody _ |] ->
           translate (mbMap2 unfoldNamedShape nmsh args)
         [nuMP| OpaqueShapeBody _ trans_id |] ->
-          exprTransPureTypeTerms <$> translate args >>= \case
+          exprCtxPureTypeTerms <$> translate args >>= \case
           Just args_trans ->
-            ETrans_Shape $ TypeDescPure $
+            return $ ETrans_Shape $ TypeDescPure $
             applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) args_trans
           Nothing ->
             panic "translate"
@@ -1351,7 +1352,7 @@ instance TransInfo info =>
         [nuMP| RecShapeBody _ trans_id _ |] ->
           exprTransPureTypeTerms <$> translate args >>= \case
           Just args_trans ->
-            ETrans_Shape $ TypeDescPure $
+            return $ ETrans_Shape $ TypeDescPure $
             applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) args_trans
           Nothing ->
             panic "translate"
@@ -1371,13 +1372,13 @@ instance TransInfo info =>
                        <*> translateShape sh2)
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
       ETrans_Shape <$> (typeDescEither
-                        <$> translate1Pure sh1 <*> translate1Pure sh2)
+                        <$> translateShape sh1 <*> translateShape sh2)
     [nuMP| PExpr_ExShape mb_sh |] ->
       do tp_trans <- translate $ fmap bindingType mb_sh
          ETrans_Shape <$>
-           sigmaTypeTransM "x_exsh" tp_trans
-           (hasPureTrans $ mbCombine RL.typeCtxProxies mb_sh) $ \e ->
-           inExtTransM e (translateShape $ mbCombine RL.typeCtxProxies mb_sh)
+           (sigmaTypeTransM "x_exsh" tp_trans
+            (hasPureTrans $ mbCombine RL.typeCtxProxies mb_sh) $ \e ->
+             inExtTransM e (translateShape $ mbCombine RL.typeCtxProxies mb_sh))
     [nuMP| PExpr_FalseShape |] ->
       return $ ETrans_Shape $ TypeDescPure $ globalOpenTerm "Prelude.FalseProp"
 
