@@ -76,13 +76,13 @@ module Verifier.SAW.OpenTerm (
   SpecTerm(), defineSpecOpenTerm,
   lambdaPureSpecTerm, lambdaPureSpecTermMulti, lambdaSpecTerm,
   lambdaSpecTermMulti, piSpecTerm,
-  applySpecTerm, applySpecTermMulti, openTermSpecTerm,
-  globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm,
+  applySpecTerm, applySpecTermMulti, openTermSpecTerm, specTermType,
+  failSpecTerm, globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
   callDefSpecTerm, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
-  errorSpecTerm, flatSpecTerm, unitSpecTerm, pairSpecTerm, pairTypeSpecTerm,
-  pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm, dataTypeSpecTerm,
-  letSpecTerm, sawLetSpecTerm
+  errorSpecTerm, flatSpecTerm, natSpecTerm, unitSpecTerm, pairSpecTerm,
+  pairTypeSpecTerm, pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm,
+  dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm
   ) where
 
 import qualified Data.Vector as V
@@ -730,6 +730,16 @@ openTermSpecTerm t =
           if length ctx == ctx_len then unOpenTerm t else
             panic "openTermSpecTerm" ["Typing context not of expected length"]
 
+-- | Return the type of a 'SpecTerm' as a 'SpecTerm'
+specTermType :: SpecTerm -> SpecTerm
+specTermType (SpecTerm m) =
+  SpecTerm $ flip fmap m $ \info_tm -> fmap openTermType info_tm
+
+-- | Build a 'SpecTerm' that 'fail's in the underlying monad when completed
+failSpecTerm :: String -> SpecTerm
+failSpecTerm = openTermSpecTerm . failOpenTerm
+
+-- | Build a 'SpecTerm' for a natural number literal
 natSpecTerm :: Natural -> SpecTerm
 natSpecTerm n = openTermSpecTerm $ natOpenTerm n
 
