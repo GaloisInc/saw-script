@@ -748,14 +748,14 @@ recordProof v =
 -- failing (depending on the first element of the 'SolverCacheOp') if there
 -- is no enabled 'SolverCache'
 onSolverCache :: SolverCacheOp a -> TopLevel a
-onSolverCache (mb_default, f) =
+onSolverCache cacheOp =
   do opts <- getOptions
      rw <- getTopLevelRW
      case rwSolverCache rw of
-       Just cache -> do (a, cache') <- io $ f opts cache
+       Just cache -> do (a, cache') <- io $ solverCacheOp cacheOp opts cache
                         putTopLevelRW rw { rwSolverCache = Just cache' }
                         return a
-       Nothing -> case mb_default of
+       Nothing -> case solverCacheOpDefault cacheOp of
         Just a -> return a
         Nothing -> fail "Solver result cache not enabled!"
 

@@ -64,6 +64,8 @@ module SAWScript.SolverCache
   , lazyOpenSolverCache
   , openSolverCache
   , SolverCacheOp
+  , solverCacheOp
+  , solverCacheOpDefault
   , lookupInSolverCache
   , insertInSolverCache
   , setSolverCachePath
@@ -482,14 +484,26 @@ tryTransaction cache@SolverCache{..} t =
     Left err ->
       return (Left $ "Failed to open LMDB database: " ++ err, cache)
 
--- | An operation on a 'SolverCache', returning a value of the given type or
--- an optional default value in the case of no enabled 'SolverCache', as well as
--- an updated 'SolverCache'
-type SolverCacheOp a = (Maybe a, Options -> SolverCache -> IO (a, SolverCache))
+-- | An operation on a 'SolverCache', returning a value of the given type as
+-- well as an updated 'SolverCache' ('solverCacheOp'). Additionally, in the case
+-- of no enabled solver cache, the operation could either fail or return a
+-- default value ('solverCacheOpDefault').
+data SolverCacheOp a = SCOpOrFail (Options -> SolverCache -> IO (a, SolverCache))
+                     | SCOpOrDefault a (Options -> SolverCache -> IO (a, SolverCache))
+
+-- | Get the operation associated to a 'SolverCacheOp'
+solverCacheOp :: SolverCacheOp a -> Options -> SolverCache -> IO (a, SolverCache)
+solverCacheOp (SCOpOrFail f) = f
+solverCacheOp (SCOpOrDefault _ f) = f
+
+-- | Get the default value associated to a 'SolverCacheOp', if any
+solverCacheOpDefault :: SolverCacheOp a -> Maybe a
+solverCacheOpDefault (SCOpOrFail _) = Nothing
+solverCacheOpDefault (SCOpOrDefault a _) = Just a
 
 -- | Lookup a 'SolverCacheKey' in the solver result cache
 lookupInSolverCache :: SolverCacheKey -> SolverCacheOp (Maybe SolverCacheValue)
-lookupInSolverCache k = (Just Nothing,) $ \opts cache@SolverCache{..} ->
+lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} ->
   getCurrentTime >>= \now ->
   let upd _ v = Just v { solverCacheValueLastUsed = now } in
   tryTransaction cache (LMDB.updateLookupWithKey upd k) >>= \case
@@ -506,7 +520,7 @@ lookupInSolverCache k = (Just Nothing,) $ \opts cache@SolverCache{..} ->
 
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
-insertInSolverCache k v = (Just (),) $ \opts cache@SolverCache{..} ->
+insertInSolverCache k v = SCOpOrDefault () $ \opts cache@SolverCache{..} ->
   printOutLn opts Debug ("Caching result: " ++ show k) >>
   tryTransaction cache (LMDB.insert k v) >>= \case
     (Right (), cache') -> do
@@ -520,7 +534,7 @@ insertInSolverCache k v = (Just (),) $ \opts cache@SolverCache{..} ->
 -- | Set the 'FilePath' of the solver result cache and save all results cached
 -- so far
 setSolverCachePath :: FilePath -> SolverCacheOp ()
-setSolverCachePath path = (Nothing,) $ \opts cache@SolverCache{..} ->
+setSolverCachePath path = SCOpOrFail $ \opts cache@SolverCache{..} ->
   if path == solverCachePath
   then do
     (_, _, cache') <- forceSolverCacheOpened cache
@@ -542,7 +556,7 @@ setSolverCachePath path = (Nothing,) $ \opts cache@SolverCache{..} ->
 -- | Print all entries in the solver result cache whose SHA256 hash keys start
 -- with the given string
 printSolverCacheByHex :: String -> SolverCacheOp ()
-printSolverCacheByHex hex_pref = (Nothing,) $ \opts cache -> do
+printSolverCacheByHex hex_pref = SCOpOrFail $ \opts cache -> do
   (env, db, cache') <- forceSolverCacheOpened cache
   let flt k v kvs = if hex_pref `isPrefixOf` encodeHex (solverCacheKeyHash k)
                     then (k,v):kvs else kvs
@@ -567,7 +581,7 @@ printSolverCacheByHex hex_pref = (Nothing,) $ \opts cache -> do
 -- | Remove all entries in the solver result cache which have version(s) that
 -- do not match the current version(s) or are marked as stale
 cleanSolverCache :: SolverBackendVersions -> SolverCacheOp ()
-cleanSolverCache curr_base_vs = (Nothing,) $ \opts cache -> do
+cleanSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
   let known_curr_base_vs = M.filter isJust curr_base_vs
       mismatched_vs vs = M.mapMaybe id $ M.intersectionWith
         (\base_ver v_ver -> if base_ver /= v_ver
@@ -592,7 +606,7 @@ cleanSolverCache curr_base_vs = (Nothing,) $ \opts cache -> do
 
 -- | Print out statistics about how the solver cache was used
 printSolverCacheStats :: SolverCacheOp ()
-printSolverCacheStats = (Nothing,) $ \opts cache@SolverCache{..} -> do
+printSolverCacheStats = SCOpOrFail $ \opts cache@SolverCache{..} -> do
   (env, db, cache') <- forceSolverCacheOpened cache
   printOutLn opts Info ("== Solver result cache statistics ==")
   sz <- LMDB.readOnlyTransaction env $ LMDB.size db
@@ -615,7 +629,7 @@ printSolverCacheStats = (Nothing,) $ \opts cache@SolverCache{..} -> do
 -- hold
 testSolverCacheStats :: Integer -> Integer -> Integer -> Integer -> Integer ->
                         SolverCacheOp ()
-testSolverCacheStats sz ls ls_f is is_f = (Nothing,) $ \opts cache@SolverCache{..} -> do
+testSolverCacheStats sz ls ls_f is is_f = SCOpOrFail $ \opts cache@SolverCache{..} -> do
   (env, db, cache') <- forceSolverCacheOpened cache
   sz_actual <- fromIntegral <$> LMDB.readOnlyTransaction env (LMDB.size db)
   test sz sz_actual "Size of solver cache"
