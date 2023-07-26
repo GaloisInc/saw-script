@@ -380,6 +380,10 @@ tupleTypeTrans (TypeTransImpure tps f) =
         take (length $ typeTransTypes ttrans) [0..]
       _ -> panic "tupleTypeTrans" ["incorrect number of terms"])
 
+-- | Form the 'TypeDesc' of the tuple of all the SAW core types in a 'TypeTrans'
+typeTransTupleDesc :: TypeTrans b tr -> TypeDesc
+typeTransTupleDesc = tupleOfTypeDescs . typeTransDescs
+
 {-
 -- | Convert a 'TypeTrans' over 0 or more types to one over 1 type of the form
 -- @#(tp1, #(tp2, ... #(tpn, #()) ...))@. This is "strict" in the sense that
@@ -830,8 +834,7 @@ bitvectorTransM m =
 -- and right types
 eitherTypeTrans :: ImpTypeTrans trL -> ImpTypeTrans trR -> TypeDesc
 eitherTypeTrans tp_l tp_r =
-  typeDescEither (tupleOfTypeDescs $ typeTransDescs tp_l) (tupleOfTypeDescs $
-                                                           typeTransDescs tp_r)
+  typeDescEither (typeTransTupleDesc tp_l) (typeTransTupleDesc tp_r)
 
 -- | Apply the @Left@ constructor of the @Either@ type in SAW to the
 -- 'transTupleTerm' of the input
@@ -889,14 +892,13 @@ eithersElimTransM tps tp_ret fs eith =
 -- or not, in which case it isn't. It is an error if the Boolean flag is 'True'
 -- but the monadic function returns an impure type description.
 sigmaTypeTransM :: String -> PureTypeTrans trL -> Bool ->
-                   (trL -> TransM info ctx (ImpTypeTrans trR)) ->
+                   (trL -> TransM info ctx TypeDesc) ->
                    TransM info ctx TypeDesc
 sigmaTypeTransM _ ttrans@(typeTransTypes -> []) _ tp_f =
   typeTransTupleType <$> tp_f (typeTransF ttrans [])
 sigmaTypeTransM x ttrans pure_p tp_f =
   do info <- ask
      return $ typeDescSigma x (typeTransTupleType ttrans) pure_p $ \e_tup ->
-       tupleOfTypeDescs $ typeTransDescs $
        runTransM (tp_f $ typeTransF (tupleTypeTrans ttrans) [e_tup]) info
 
 -- | Like `sigmaTypeTransM`, but translates `exists x.eq(y)` into just `x`
@@ -1330,8 +1332,7 @@ instance TransInfo info =>
     [nuMP| PExpr_PermListNil |] -> return $ ETrans_Term unitTypeOpenTerm
     [nuMP| PExpr_PermListCons _ _ p l |] ->
       ETrans_Term <$> (pairTypeOpenTerm <$>
-                       (typeDescLRT <$> tupleOfTypeDescs <$>
-                        typeTransDescs <$> translate p) <*>
+                       (typeDescLRT <$> typeTransTupleDesc <$> translate p) <*>
                        (translate1Pure l))
     [nuMP| PExpr_RWModality _ |] -> return ETrans_RWModality
 
@@ -1350,7 +1351,7 @@ instance TransInfo info =>
             panic "translate"
             ["Heapster cannot yet handle opaque shapes over impure types"]
         [nuMP| RecShapeBody _ trans_id _ |] ->
-          exprTransPureTypeTerms <$> translate args >>= \case
+          exprCtxPureTypeTerms <$> translate args >>= \case
           Just args_trans ->
             return $ ETrans_Shape $ TypeDescPure $
             applyOpenTermMulti (globalOpenTerm $ mbLift trans_id) args_trans
@@ -1383,7 +1384,7 @@ instance TransInfo info =>
       return $ ETrans_Shape $ TypeDescPure $ globalOpenTerm "Prelude.FalseProp"
 
     [nuMP| PExpr_ValPerm p |] ->
-      ETrans_Perm <$> tupleOfTypeDescs <$> typeTransDescs <$> translate p
+      ETrans_Perm <$> typeTransTupleDesc <$> translate p
 
 -- LLVM field shapes translate to the types that the permission they contain
 -- translates to
@@ -2451,8 +2452,7 @@ translateLLVMArrayPerm mb_ap =
      {-
      bs_trans <-
        listTypeTrans <$> mapM (translateLLVMArrayBorrow ap) (mbList bs) -}
-     let arr_tp = bvVecTypeDesc w_term len_term $
-           tupleOfTypeDescs $ typeTransDescs sh_trans
+     let arr_tp = bvVecTypeDesc w_term len_term $ typeTransTupleDesc sh_trans
      return (w_term, len_term, elem_tp,
              mkImpTypeTrans1 arr_tp
              ({- flip $ -} LLVMArrayPermTrans mb_ap len_term sh_trans
@@ -2613,7 +2613,8 @@ translateRetType :: TransInfo info => CruCtx rets ->
 translateRetType rets ret_perms =
   do tptrans <- translateClosed rets
      sigmaTypeTransM "ret" tptrans (hasPureTrans ret_perms)
-       (flip inExtMultiTransM (translate ret_perms))
+       (\ectx -> inExtMultiTransM ectx (typeTransTupleDesc <$>
+                                        translate ret_perms))
 
 -- | Build the return type for the function resulting from an entrypoint
 translateEntryRetType :: TransInfo info =>
@@ -5171,7 +5172,8 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
        let (pctx_ghosts_args, _) =
              RL.split (RL.append ectx_gexprs ectx_args) ectx_gexprs pctx_in
        fret_tp <- sigmaTypeTransM "ret" rets_trans (hasPureTrans perms_out)
-                    (flip inExtMultiTransM (translate perms_out))
+                    (\ectx -> inExtMultiTransM ectx (typeTransTupleDesc <$>
+                                                     translate perms_out))
        let all_args =
              exprCtxToTerms ectx_gexprs ++ exprCtxToTerms ectx_args ++
              permCtxToTerms pctx_ghosts_args
