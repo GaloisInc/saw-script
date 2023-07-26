@@ -46,8 +46,6 @@ were obtained by the backends in the first place).
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 module SAWScript.SolverCache
   ( SolverBackend(..)
   , allBackends
@@ -121,32 +119,7 @@ import SAWScript.Options
 import SAWScript.Proof
 
 
--- Orphan Instances and Helper Functions ---------------------------------------
-
-deriving instance Generic FirstOrderType
-deriving instance Generic FirstOrderValue
-
--- | The options for JSON-serializing 'FirstOrderType's and 'FirstOrderValue's:
--- remove the @FOV@/@FOT@ prefixes and encode the different constructors as
--- two-element arrays.
-firstOrderJSONOptions :: JSON.Options
-firstOrderJSONOptions =
-  JSON.defaultOptions { JSON.sumEncoding = JSON.TwoElemArray
-                      , JSON.constructorTagModifier = dropFO }
-  where dropFO ('F':'O':tv:cs) | tv `elem` ['T', 'V'] = cs
-        dropFO cs = cs
-
-instance FromJSON FirstOrderType where
-  parseJSON = JSON.genericParseJSON firstOrderJSONOptions
-instance FromJSON FirstOrderValue where
-  parseJSON = JSON.genericParseJSON firstOrderJSONOptions
-
-instance ToJSON FirstOrderType where
-  toJSON = JSON.genericToJSON firstOrderJSONOptions
-  toEncoding = JSON.genericToEncoding firstOrderJSONOptions
-instance ToJSON FirstOrderValue where
-  toJSON = JSON.genericToJSON firstOrderJSONOptions
-  toEncoding = JSON.genericToEncoding firstOrderJSONOptions
+-- Helper Functions ------------------------------------------------------------
 
 -- | Run the given IO action, but if the given 'timeout' (in microseconds) is
 -- reached or the action encounters any 'SomeException', 'Left' is returned
