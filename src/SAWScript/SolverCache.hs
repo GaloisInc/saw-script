@@ -576,7 +576,6 @@ printSolverCacheByHex hex_pref = SCOpOrFail $ \opts cache -> do
     printOutLn opts Info $ "- Versions: " ++ vs_str
     printOutLn opts Info $ "- Last used: " ++ show t ++ "\n"
   return ((), cache')
-  where 
 
 -- | Remove all entries in the solver result cache which have version(s) that
 -- do not match the current version(s) or are marked as stale

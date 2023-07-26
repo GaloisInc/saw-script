@@ -1297,7 +1297,7 @@ There are also a number of SAW commands related to solver caching.
   clear out any old, unusable entries from the solver cache.
 
 * `print_solver_cache` prints to the console all entries in the cache whose
-  SHA256 hashe keys start with the given hex string. Providing an empty string
+  SHA256 hash keys start with the given hex string. Providing an empty string
   results in all entries in the cache being printed.
 
 * `print_solver_cache_stats` prints to the console statistics including the

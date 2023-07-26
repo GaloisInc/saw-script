@@ -1,11 +1,10 @@
-import cbor2
+import cbor2 # type: ignore
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import dateutil.parser
-import lmdb
+import lmdb # type: ignore
 import os
-import pytz
 from typing import Dict, List, Optional, Tuple, Union
 from typing_extensions import Literal
 
@@ -65,7 +64,7 @@ def solver_cache_entry_encoder(encoder, entry):
   if entry.counterexamples is not None: obj['cexs'] = entry.counterexamples
   obj['nm'] = entry.solver_name
   if len(entry.solver_options) > 0: obj['opts'] = entry.solver_options
-  obj['t'] = entry.timestamp.astimezone(pytz.utc).isoformat('T').replace('+00:00', 'Z')
+  obj['t'] = entry.timestamp.astimezone(timezone.utc).isoformat('T').replace('+00:00', 'Z')
   obj['vs'] = entry.solver_versions
   return encoder.encode(obj)
 
@@ -74,7 +73,7 @@ class SolverCache(MutableMapping):
      as a `MutableMapping` from a 256-bit `bytes` keys to `SolverCacheEntry`
      values, with LMDB as the backend."""
 
-  def __init__(self, path : str = None):
+  def __init__(self, path : Optional[str] = None):
     """Immediately open a solver cache at the given path, or if no path is
        given, at the path specified by the current value of the
        `SAW_SOLVER_CACHE_PATH` environment variable. If neither the former is

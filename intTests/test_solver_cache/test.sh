@@ -6,14 +6,20 @@ SAW_SOLVER_CACHE_PATH="test_solver_cache.cache" $SAW test_basics.saw
 # Testing the `set_solver_cache_path` command as well as re-using a cache file
 $SAW test_path_and_reuse.saw
 
-# Testing cleaning the solver cache
-pip install cbor2 python-dateutil lmdb
-python3 -i ../../saw-remote-api/python/saw_client/solver_cache.py << END
-cache = SolverCache("test_solver_cache.cache")
-for k,v in cache.items():
-  if 'SBV' in v.solver_versions:
-    v.solver_versions['SBV'] = '[OLD VERSION]'
-    cache[k] = v
+# Testing the `clean_solver_cache` command by manually altering the version
+# string of all SBV entries in the database, then running `clean_solver_cache`
+pip install cbor2 lmdb
+python3 -m lmdb -e test_solver_cache.cache shell << END
+import cbor2
+with ENV.begin(write=True) as txn:
+  for k_enc, v_enc in txn.cursor():
+    k, v = cbor2.loads(k_enc), cbor2.loads(v_enc)
+    if 'vs' in v and 'SBV' in v['vs']:
+      v['vs']['SBV'] = '[OLD VERSION]'
+      txn.put(k_enc, cbor2.dumps(v))
+      print(f'Altered {k.hex()} {v}')
+    else:
+      print(f'Keeping {k.hex()} {v}')
 
 END
 $SAW test_clean.saw
