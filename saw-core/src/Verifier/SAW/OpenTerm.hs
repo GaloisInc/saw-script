@@ -82,7 +82,7 @@ module Verifier.SAW.OpenTerm (
   callDefSpecTerm, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
   errorSpecTerm, flatSpecTerm, natSpecTerm, unitSpecTerm, pairSpecTerm,
   pairTypeSpecTerm, pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm,
-  dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm
+  dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm, sawLetPureSpecTerm
   ) where
 
 import qualified Data.Vector as V
@@ -1000,13 +1000,21 @@ letSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> (SpecTerm -> SpecTerm) ->
                SpecTerm
 letSpecTerm x tp rhs body_f = applySpecTerm (lambdaSpecTerm x tp body_f) rhs
 
--- | Build a let expression as an 'SpecTerm'. This is equivalent to
--- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
+-- | Build a let expression as a 'SpecTerm' using the @sawLet@ combinator. This
+-- is equivalent to the term @sawLet tp tp_ret rhs (\ (x : tp) -> body_f)@
 sawLetSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> SpecTerm ->
                   (SpecTerm -> SpecTerm) -> SpecTerm
 sawLetSpecTerm x tp tp_ret rhs body_f =
   applySpecTermMulti (globalSpecTerm "Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaSpecTerm x tp body_f]
+
+-- | Build a let expression as an 'SpecTerm'. This is equivalent to
+-- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
+sawLetPureSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> SpecTerm ->
+                      (OpenTerm -> SpecTerm) -> SpecTerm
+sawLetPureSpecTerm x tp tp_ret rhs body_f =
+  applySpecTermMulti (globalSpecTerm "Prelude.sawLet")
+  [tp, tp_ret, rhs, lambdaPureSpecTerm x tp body_f]
 
 
 
