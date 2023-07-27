@@ -46,3 +46,6 @@
 [submodule "deps/language-sally"]
 	path = deps/language-sally
 	url = https://github.com/GaloisInc/language-sally
+[submodule "deps/lmdb"]
+	path = deps/lmdb
+	url = https://github.com/GaloisInc/lmdb.git
