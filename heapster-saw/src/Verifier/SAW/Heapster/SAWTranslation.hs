@@ -809,7 +809,7 @@ sawLetTransM :: String -> SpecTerm -> SpecTerm -> TransM info ctx SpecTerm ->
 sawLetTransM x tp tp_ret rhs_m body_m =
   do r <- ask
      return $
-       sawLetOpenTerm (pack x) tp tp_ret (runTransM rhs_m r)
+       sawLetSpecTerm (pack x) tp tp_ret (runTransM rhs_m r)
                       (\x' -> runTransM (body_m x') r)
 
 -- | Build 0 or more sawLet-bindings in a translation monad, using the same
@@ -823,6 +823,17 @@ sawLetTransMultiM x (tp:tps) ret_tp (rhs:rhss) f =
   sawLetTransMultiM x tps ret_tp rhss (\var_tms -> f (var_tm:var_tms))
 sawLetTransMultiM _ _ _ _ _ =
   error "sawLetTransMultiM: numbers of types and right-hand sides disagree"
+
+-- | Build a sawLet-binding in a translation monad that binds a 'SpecTerm' with
+-- a pure type to an 'OpenTerm' variable
+sawLetPureTransM :: String -> SpecTerm -> SpecTerm -> SpecTerm ->
+                    (OpenTerm -> TransM info ctx SpecTerm) ->
+                    TransM info ctx SpecTerm
+sawLetPureTransM x tp tp_ret rhs body_m =
+  do r <- ask
+     return $
+       sawLetPureSpecTerm (pack x) tp tp_ret rhs
+       (\x' -> runTransM (body_m x') r)
 
 -- | Build a bitvector type in a translation monad
 bitvectorTransM :: TransM info ctx OpenTerm -> TransM info ctx OpenTerm
@@ -925,7 +936,8 @@ sigmaTransM x tp_l tp_r lhs rhs_m =
   do tp_r_trm <- lambdaTupleTransM x tp_l ((typeTransTupleType <$>) . tp_r)
      rhs <- transTupleTerm <$> rhs_m
      return (ctorSpecTerm "Prelude.exists"
-             [typeTransTupleType tp_l, tp_r_trm, transTupleTerm lhs, rhs])
+             [optnTermSpecTerm (typeTransTupleType tp_l), tp_r_trm,
+              transTupleTerm lhs, rhs])
 
 -- | Like `sigmaTransM`, but translates `exists x.eq(y)` into just `x`
 sigmaPermTransM :: TransInfo info => String -> PureTypeTrans (ExprTrans a) ->
@@ -933,7 +945,7 @@ sigmaPermTransM :: TransInfo info => String -> PureTypeTrans (ExprTrans a) ->
                    TransM info ctx (PermTrans ctx b) ->
                    TransM info ctx SpecTerm
 sigmaPermTransM x ttrans mb_p etrans rhs_m = case mbMatch mb_p of
-  [nuMP| ValPerm_Eq _ |] -> return $ openTermSpecTerm $ transTupleTerm etrans
+  [nuMP| ValPerm_Eq _ |] -> return $ transTupleTerm etrans
   _ -> sigmaTransM x ttrans (flip inExtTransM $ translate mb_p) etrans rhs_m
 
 -- | Eliminate a dependent pair of the type returned by 'sigmaTypeTransM'
@@ -945,23 +957,35 @@ sigmaElimTransM :: (IsTermTrans trL, IsTermTrans trR) =>
                    SpecTerm ->
                    TransM info ctx SpecTerm
 sigmaElimTransM _ tp_l@(typeTransTypes -> []) tp_r _ f sigma =
-  do let proj1 = typeTransF tp_l []
-     proj2 <- flip (typeTransF . tupleTypeTrans) [sigma] <$> tp_r proj1
-     f proj1 proj2
-sigmaElimTransM x tp_l tp_r _tp_ret_m f sigma =
-  do let tp_l_trm = typeTransTupleType tp_l
+  do let proj_l = typeTransF tp_l []
+     proj_r <- flip (typeTransF . tupleTypeTrans) [sigma] <$> tp_r proj_l
+     f proj_l proj_r
+sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
+  do let tp_l_trm = openTermSpecTerm $ typeTransTupleType tp_l
      tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
                                             typeTransTupleType <$> tp_r tr)
      let proj_l_trm =
-           applyOpenTermMulti (globalOpenTerm "Prelude.Sigma_proj1")
-           [tp_l_trm, tp_r_trm, sigma]
-     let proj_l = typeTransF (tupleTypeTrans tp_l) [proj_l_trm]
-     tp_r_app <- tp_r proj_l
-     let proj_r_trm =
-           applyOpenTermMulti (globalOpenTerm "Prelude.Sigma_proj2")
-           [tp_l_trm, tp_r_trm, sigma]
-     let proj_r = typeTransF (tupleTypeTrans tp_r_app) [proj_r_trm]
-     f proj_l proj_r
+           applyGlobalSpecTerm "Prelude.Sigma_proj1" [tp_l_trm, tp_r_trm, sigma]
+     tp_ret <- typeTransTupleType <$> tp_ret_m
+     sawLetPureTransM x tp_l_trm tp_ret proj_l_trm $ \proj_l_pure ->
+       do let proj_l = typeTransF (tupleTypeTrans tp_l) [proj_l_pure]
+          tp_r_app <- tp_r proj_l
+          let proj_r_trm =
+                applyGlobalSpecTerm "Prelude.Sigma_proj2" [tp_l_trm,
+                                                           tp_r_trm, sigma]
+          let proj_r = typeTransF (tupleTypeTrans tp_r_app) [proj_r_trm]
+          f proj_l proj_r
+
+{-
+  do let proj1 = typeTransF tp_l []
+     tp_r_trans <- tp_r_transF proj1
+     let tp_r = typeTransTupleType tp_r_trans
+     tp_ret <- typeTransTupleType <$> tp_ret_m
+     -- Let-bind sigma so we can access it as an open term
+     sawLetPureTransM x tp_r tp_ret sigma $ \sigma_e ->
+       f proj1 (typeTransF tp_r [])
+-}
+
 
 {- NOTE: the following is the version that inserts a Sigma__rec
 sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
