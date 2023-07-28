@@ -80,9 +80,9 @@ module Verifier.SAW.OpenTerm (
   failSpecTerm, globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
   callDefSpecTerm, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
-  errorSpecTerm, flatSpecTerm, natSpecTerm, unitSpecTerm, pairSpecTerm,
-  pairTypeSpecTerm, pairLeftSpecTerm, pairRightSpecTerm, ctorSpecTerm,
-  dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm, sawLetPureSpecTerm
+  errorSpecTerm, flatSpecTerm, natSpecTerm, unitSpecTerm, unitTypeSpecTerm,
+  pairSpecTerm, pairTypeSpecTerm, pairLeftSpecTerm, pairRightSpecTerm,
+  ctorSpecTerm, dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm, sawLetPureSpecTerm
   ) where
 
 import qualified Data.Vector as V
@@ -956,9 +956,13 @@ flatSpecTerm :: FlatTermF SpecTerm -> SpecTerm
 flatSpecTerm ftf =
   SpecTerm $ fmap flatSpecInfoTerm $ sequence (fmap unSpecTerm ftf)
 
--- | Build a 'SpecTerm' for a pair
+-- | Build a 'SpecTerm' for the unit object
 unitSpecTerm :: SpecTerm
 unitSpecTerm = flatSpecTerm UnitValue
+
+-- | Build a 'SpecTerm' for the unit type
+unitTypeSpecTerm :: SpecTerm
+unitTypeSpecTerm = flatSpecTerm UnitType
 
 -- | Build a 'SpecTerm' for a pair
 pairSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
