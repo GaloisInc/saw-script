@@ -163,7 +163,7 @@ bvVecTypeDesc :: OpenTerm -> OpenTerm -> TypeDesc -> TypeDesc
 bvVecTypeDesc w_term len_term (TypeDescPure elem_tp) =
   TypeDescPure (applyGlobalOpenTerm "Prelude.BVVec"
                 [w_term, len_term, elem_tp])
-bvVecTypeDesc w_term len_term (TypeDescLRT lrt elem_tpx) =
+bvVecTypeDesc w_term len_term (TypeDescLRT lrt elem_tp) =
   TypeDescLRT
   (applyGlobalOpenTerm "Prelude.LRT_BVVec" [w_term, len_term, lrt])
   (applyGlobalOpenTerm "Prelude.BVVec" [w_term, len_term, elem_tp])
@@ -191,22 +191,24 @@ typeDescEither =
 -- type, in which case the returned dependent pair type is pure, or not, in
 -- which case it isn't. It is an error if the Boolean flag is 'True' but the
 -- function returns an impure type description.
-typeDescSigma :: String -> OpenTerm -> Bool -> (OpenTerm -> TypeDesc) ->
+typeDescSigma :: LocalName -> OpenTerm -> Bool -> (OpenTerm -> TypeDesc) ->
                  TypeDesc
 typeDescSigma x tp_l True tp_r_f =
-  do tp_f_trm <- lambdaOpenTerm x tp_l $ \tr -> tp_f tr >>= \case
-       TypeDescPure tp_r -> tp_r
-       TypeDescLRT _ _ ->
-         panic "typeDescSigma"
-         ["Expected a pure type description but got an impure one"]
-     return $ TypeDescPure $
-       dataTypeOpenTerm "Prelude.Sigma" [typeTransTupleType ttrans, tp_f_trm]
+  let tp_f_trm =
+        lambdaOpenTerm x tp_l $ \tr ->
+        case tp_r_f tr of
+          TypeDescPure tp_r -> tp_r
+          TypeDescLRT _ _ ->
+            panic "typeDescSigma"
+            ["Expected a pure type description but got an impure one"] in
+  TypeDescPure $ dataTypeOpenTerm "Prelude.Sigma" [tp_l, tp_f_trm]
 typeDescSigma x tp_l False tp_r_f =
   TypeDescLRT
   (ctorOpenTerm "Prelude.LRT_Sigma"
    [tp_l, lambdaOpenTerm x tp_l (typeDescLRT . tp_r_f)])
   (dataTypeSpecTerm "Prelude.Sigma"
-   [openTermSpecTerm tp_l, lambdaSpecTerm x tp_l (typeDescType . tp_r_f)])
+   [openTermSpecTerm tp_l,
+    lambdaPureSpecTerm x (openTermSpecTerm tp_l) (typeDescType . tp_r_f)])
 
 -- | Build the tuple type @T1 * (T2 * ... * (Tn-1 * Tn))@ of @n@ types, with the
 -- special case that 0 types maps to the unit type @#()@ (and 1 type just maps
@@ -219,10 +221,11 @@ tupleOfTypes (tp:tps) = pairTypeOpenTerm tp $ tupleOfTypes tps
 
 -- | Like 'tupleOfTypes' but applied to type descriptions
 tupleOfTypeDescs :: [TypeDesc] -> TypeDesc
-tupleOfTypeDescs [] = unitTypeOpenTerm
+tupleOfTypeDescs [] = TypeDescPure unitTypeOpenTerm
 tupleOfTypeDescs [tp] = tp
 tupleOfTypeDescs (TypeDescPure tp_l : ds)
-  | TypeDescPure tp_r <- tupleOfTypeDescs ds = pairTypeOpenTerm tp_l tp_r
+  | TypeDescPure tp_r <- tupleOfTypeDescs ds
+  = TypeDescPure $ pairTypeOpenTerm tp_l tp_r
 tupleOfTypeDescs (d : ds) =
   let d_r = tupleOfTypeDescs ds in
   TypeDescLRT
@@ -249,7 +252,7 @@ projTupleOfTypes (_:tps) i tup =
   projTupleOfTypes tps (i-1) $ pairRightOpenTerm tup
 
 -- | Impure version of 'projTupleOfTypes'
-projTupleOfTypesI :: [SpecTerm] -> Integer -> SpecTerm -> SpecTerm
+projTupleOfTypesI :: [TypeDesc] -> Integer -> SpecTerm -> SpecTerm
 projTupleOfTypesI [] _ _ =
   panic "projTupleOfTypesI" ["projection of empty tuple!"]
 projTupleOfTypesI [_] 0 tup = tup
@@ -334,7 +337,7 @@ mkImpTypeTrans0 tr = TypeTransImpure [] $ \case
 
 -- | Build a 'TypeTrans' represented by a "pure" (see 'TypeDesc') SAW type
 mkPureTypeTrans1 :: OpenTerm -> (OpenTerm -> tr) -> TypeTrans 'True tr
-mkPureTypeTrans1 tp f = TypeTransPure [TypeDescPure tp] $ \case
+mkPureTypeTrans1 tp f = TypeTransPure [tp] $ \case
   [t] -> f t
   _ -> panic "mkPureTypeTrans1" ["incorrect number of terms"]
 
@@ -350,7 +353,7 @@ typeTransType1 :: HasCallStack => TypeTrans p tr -> PurityTerm p
 typeTransType1 (TypeTransPure [] _) = unitTypeOpenTerm
 typeTransType1 (TypeTransImpure [] _) = unitTypeSpecTerm
 typeTransType1 (TypeTransPure [tp] _) = tp
-typeTransType1 (TypeTransImpure [tp] _) = tp
+typeTransType1 (TypeTransImpure [tp] _) = typeDescType tp
 typeTransType1 _ =
   panic "typeTransType1" ["More than one type when at most one expected"]
 
@@ -369,15 +372,13 @@ tupleTypeTrans (TypeTransPure tps f) =
   TypeTransPure [tupleOfTypes tps]
   (\case
       [t] ->
-        f $ map (\i -> projTupleOfTypes tps i t) $
-        take (length $ typeTransTypes ttrans) [0..]
+        f $ map (\i -> projTupleOfTypes tps i t) $ take (length tps) [0..]
       _ -> panic "tupleTypeTrans" ["incorrect number of terms"])
 tupleTypeTrans (TypeTransImpure tps f) =
-  TypeTransLRT [tupleOfTypeDescs tps]
+  TypeTransImpure [tupleOfTypeDescs tps]
   (\case
       [t] ->
-        f $ map (\i -> projTupleOfTypesI tps i t) $
-        take (length $ typeTransTypes ttrans) [0..]
+        f $ map (\i -> projTupleOfTypesI tps i t) $ take (length tps) [0..]
       _ -> panic "tupleTypeTrans" ["incorrect number of terms"])
 
 -- | Form the 'TypeDesc' of the tuple of all the SAW core types in a 'TypeTrans'
@@ -501,7 +502,7 @@ transTerm1 :: HasCallStack => IsTermTrans tr => tr -> SpecTerm
 transTerm1 (transTerms -> []) = unitSpecTerm
 transTerm1 (transTerms -> [t]) = t
 transTerm1 tr = panic "transTerm1" ["Expected at most one term, but found "
-                                    ++ length (transTerms tr)]
+                                    ++ show (length $ transTerms tr)]
 
 instance IsTermTrans tr => IsTermTrans [tr] where
   transTerms = concatMap transTerms
@@ -570,7 +571,7 @@ exprTransType (ETrans_Term t) = mkPureTypeTrans1 (openTermType t) ETrans_Term
 -- all the terms it contains
 exprCtxType :: ExprTransCtx ctx -> PureTypeTrans (ExprTransCtx ctx)
 exprCtxType MNil = mkPureTypeTrans0 MNil
-exprCtxType (ectx :>: e) = (:>) <$> exprCtxType ectx <*> exprTransType e
+exprCtxType (ectx :>: e) = (:>:) <$> exprCtxType ectx <*> exprTransType e
 
 -- | Map an 'ExprTrans' to the SAW core terms it contains, similarly to
 -- 'transPureTerms', except that all type descriptions are mapped to pure types,
@@ -580,7 +581,7 @@ exprTransPureTypeTerms (ETrans_Shape (TypeDescPure tp)) = Just [tp]
 exprTransPureTypeTerms (ETrans_Shape (TypeDescLRT _ _)) = Nothing
 exprTransPureTypeTerms (ETrans_Perm (TypeDescPure tp)) = Just [tp]
 exprTransPureTypeTerms (ETrans_Perm (TypeDescLRT _ _)) = Nothing
-exprTransPureTypeTerms etrans = transPureTerms etrans
+exprTransPureTypeTerms etrans = Just $ transPureTerms etrans
 
 -- | Map an 'ExprTransCtx' to the SAW core terms it contains, similarly to
 -- 'transPureTerms', except that all type descriptions are mapped to pure types,
@@ -630,6 +631,29 @@ inExtMultiTransM :: TransInfo info => ExprTransCtx ctx2 ->
 inExtMultiTransM MNil m = m
 inExtMultiTransM (ctx :>: etrans) m =
   inExtMultiTransM ctx $ inExtTransM etrans m
+
+-- | Build a @sawLet@-binding in a translation monad that binds a pure variable;
+-- the type must be pure as well, even though it is a 'SpecTerm'
+sawLetTransM :: String -> SpecTerm -> SpecTerm -> SpecTerm ->
+                (OpenTerm -> TransM info ctx SpecTerm) ->
+                TransM info ctx SpecTerm
+sawLetTransM x tp tp_ret rhs body_m =
+  do r <- ask
+     return $
+       sawLetPureSpecTerm (pack x) tp tp_ret rhs $ \x' ->
+       runTransM (body_m x') r
+
+-- | Build 0 or more sawLet-bindings in a translation monad, using the same
+-- variable name
+sawLetTransMultiM :: String -> [SpecTerm] -> SpecTerm -> [SpecTerm] ->
+                  ([OpenTerm] -> TransM info ctx SpecTerm) ->
+                  TransM info ctx SpecTerm
+sawLetTransMultiM _ [] _ [] f = f []
+sawLetTransMultiM x (tp:tps) ret_tp (rhs:rhss) f =
+  sawLetTransM x tp ret_tp rhs $ \var_tm ->
+  sawLetTransMultiM x tps ret_tp rhss (\var_tms -> f (var_tm:var_tms))
+sawLetTransMultiM _ _ _ _ _ =
+  error "sawLetTransMultiM: numbers of types and right-hand sides disagree"
 
 -- | Run a translation computation in an extended context, where we sawLet-bind any
 -- term in the supplied expression translation
@@ -717,7 +741,8 @@ lambdaTrans x (TypeTransPure tps tr_f) body_f =
   (body_f . tr_f)
 lambdaTrans x (TypeTransImpure tps tr_f) body_f =
   lambdaSpecTermMulti
-  (zipWith (\i tp -> (pack (x ++ show (i :: Integer)), tp)) [0..] tps)
+  (zipWith (\i tp -> (pack (x ++ show (i :: Integer)),
+                      typeDescType tp)) [0..] tps)
   (body_f . tr_f)
 
 -- | Build a nested lambda-abstraction
@@ -768,9 +793,10 @@ piLRTTransM x tps body_f =
 arrowLRTTransM :: String -> TypeTrans 'False tr ->
                   TransM info ctx OpenTerm -> TransM info ctx OpenTerm
 arrowLRTTransM x tps body_top =
-  foldr (\(i,d) body ->
-          ctorOpenTerm "Prelude.LRT_FunClos" [typeDescLRT d, body])
-  body_top (zip [0..] $ typeTransDescs tps) []
+  foldr (\(i,d) body_m ->
+          body_m >>= \body ->
+          return $ ctorOpenTerm "Prelude.LRT_FunClos" [typeDescLRT d, body])
+  body_top (zip [0..] $ typeTransDescs tps)
 
 -- FIXME: should only need to build pi-abstractions as LetRecTypes... right?
 {-
@@ -802,43 +828,10 @@ letTransM x tp rhs_m body_m =
      return $
        letSpecTerm (pack x) tp (runTransM rhs_m r) (\x' -> runTransM (body_m x') r)
 
--- | Build a sawLet-binding in a translation monad
-sawLetTransM :: String -> SpecTerm -> SpecTerm -> TransM info ctx SpecTerm ->
-                (SpecTerm -> TransM info ctx SpecTerm) ->
-                TransM info ctx SpecTerm
-sawLetTransM x tp tp_ret rhs_m body_m =
-  do r <- ask
-     return $
-       sawLetSpecTerm (pack x) tp tp_ret (runTransM rhs_m r)
-                      (\x' -> runTransM (body_m x') r)
-
--- | Build 0 or more sawLet-bindings in a translation monad, using the same
--- variable name
-sawLetTransMultiM :: String -> [SpecTerm] -> SpecTerm -> [SpecTerm] ->
-                  ([SpecTerm] -> TransM info ctx SpecTerm) ->
-                  TransM info ctx SpecTerm
-sawLetTransMultiM _ [] _ [] f = f []
-sawLetTransMultiM x (tp:tps) ret_tp (rhs:rhss) f =
-  sawLetTransM x tp ret_tp (return rhs) $ \var_tm ->
-  sawLetTransMultiM x tps ret_tp rhss (\var_tms -> f (var_tm:var_tms))
-sawLetTransMultiM _ _ _ _ _ =
-  error "sawLetTransMultiM: numbers of types and right-hand sides disagree"
-
--- | Build a sawLet-binding in a translation monad that binds a 'SpecTerm' with
--- a pure type to an 'OpenTerm' variable
-sawLetPureTransM :: String -> SpecTerm -> SpecTerm -> SpecTerm ->
-                    (OpenTerm -> TransM info ctx SpecTerm) ->
-                    TransM info ctx SpecTerm
-sawLetPureTransM x tp tp_ret rhs body_m =
-  do r <- ask
-     return $
-       sawLetPureSpecTerm (pack x) tp tp_ret rhs
-       (\x' -> runTransM (body_m x') r)
-
 -- | Build a bitvector type in a translation monad
 bitvectorTransM :: TransM info ctx OpenTerm -> TransM info ctx OpenTerm
 bitvectorTransM m =
-  applyPureMultiTransM (return $ globalOpenTerm "Prelude.Vec")
+  applyMultiPureTransM (return $ globalOpenTerm "Prelude.Vec")
   [m, return $ globalOpenTerm "Prelude.Bool"]
 
 -- | Build an @Either@ type in SAW from the 'typeTransTupleType's of the left
@@ -902,25 +895,26 @@ eithersElimTransM tps tp_ret fs eith =
 -- return a pure type, in which case the returned dependent pair type is pure,
 -- or not, in which case it isn't. It is an error if the Boolean flag is 'True'
 -- but the monadic function returns an impure type description.
-sigmaTypeTransM :: String -> PureTypeTrans trL -> Bool ->
+sigmaTypeTransM :: LocalName -> PureTypeTrans trL -> Bool ->
                    (trL -> TransM info ctx TypeDesc) ->
                    TransM info ctx TypeDesc
 sigmaTypeTransM _ ttrans@(typeTransTypes -> []) _ tp_f =
-  typeTransTupleType <$> tp_f (typeTransF ttrans [])
+  tp_f (typeTransF ttrans [])
 sigmaTypeTransM x ttrans pure_p tp_f =
   do info <- ask
      return $ typeDescSigma x (typeTransTupleType ttrans) pure_p $ \e_tup ->
        runTransM (tp_f $ typeTransF (tupleTypeTrans ttrans) [e_tup]) info
 
 -- | Like `sigmaTypeTransM`, but translates `exists x.eq(y)` into just `x`
-sigmaTypePermTransM :: TransInfo info => String ->
+sigmaTypePermTransM :: TransInfo info => LocalName ->
                        PureTypeTrans (ExprTrans trL) ->
                        Mb (ctx :> trL) (ValuePerm trR) ->
                        TransM info ctx TypeDesc
 sigmaTypePermTransM x ttrans mb_p = case mbMatch mb_p of
   [nuMP| ValPerm_Eq _ |] -> return $ TypeDescPure $ typeTransTupleType ttrans
-  _ -> sigmaTypeTransM x ttrans (hasPureTrans mb_p) (flip inExtTransM $
-                                                     translate mb_p)
+  _ ->
+    sigmaTypeTransM x ttrans (hasPureTrans mb_p) $ \etrans ->
+    inExtTransM etrans (typeTransTupleDesc <$> translate mb_p)
 
 -- | Build a dependent pair of the type returned by 'sigmaTypeTransM'. Note that
 -- the 'TypeTrans' returned by the type-level function will in general be in a
@@ -936,7 +930,7 @@ sigmaTransM x tp_l tp_r lhs rhs_m =
   do tp_r_trm <- lambdaTupleTransM x tp_l ((typeTransTupleType <$>) . tp_r)
      rhs <- transTupleTerm <$> rhs_m
      return (ctorSpecTerm "Prelude.exists"
-             [optnTermSpecTerm (typeTransTupleType tp_l), tp_r_trm,
+             [openTermSpecTerm (typeTransTupleType tp_l), tp_r_trm,
               transTupleTerm lhs, rhs])
 
 -- | Like `sigmaTransM`, but translates `exists x.eq(y)` into just `x`
@@ -967,7 +961,7 @@ sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
      let proj_l_trm =
            applyGlobalSpecTerm "Prelude.Sigma_proj1" [tp_l_trm, tp_r_trm, sigma]
      tp_ret <- typeTransTupleType <$> tp_ret_m
-     sawLetPureTransM x tp_l_trm tp_ret proj_l_trm $ \proj_l_pure ->
+     sawLetTransM x tp_l_trm tp_ret proj_l_trm $ \proj_l_pure ->
        do let proj_l = typeTransF (tupleTypeTrans tp_l) [proj_l_pure]
           tp_r_app <- tp_r proj_l
           let proj_r_trm =
@@ -976,31 +970,6 @@ sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
           let proj_r = typeTransF (tupleTypeTrans tp_r_app) [proj_r_trm]
           f proj_l proj_r
 
-{-
-  do let proj1 = typeTransF tp_l []
-     tp_r_trans <- tp_r_transF proj1
-     let tp_r = typeTransTupleType tp_r_trans
-     tp_ret <- typeTransTupleType <$> tp_ret_m
-     -- Let-bind sigma so we can access it as an open term
-     sawLetPureTransM x tp_r tp_ret sigma $ \sigma_e ->
-       f proj1 (typeTransF tp_r [])
--}
-
-
-{- NOTE: the following is the version that inserts a Sigma__rec
-sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
-  do tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
-                                            typeTransTupleType <$> tp_r tr)
-     sigma_tp <- sigmaTypeTransM x tp_l tp_r
-     tp_ret <- lambdaTransM x (mkTypeTrans1 sigma_tp id)
-       (const (typeTransTupleType <$> tp_ret_m))
-     f_trm <-
-       lambdaTupleTransM (x ++ "_proj1") tp_l $ \x_l ->
-       tp_r x_l >>= \tp_r_app ->
-       lambdaTupleTransM (x ++ "_proj2") tp_r_app (f x_l)
-     return (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
-             [ typeTransTupleType tp_l, tp_r_trm, tp_ret, f_trm, sigma ])
--}
 
 -- | Like `sigmaElimTransM`, but translates `exists x.eq(y)` into just `x`
 sigmaElimPermTransM :: (TransInfo info) =>
@@ -1011,10 +980,16 @@ sigmaElimPermTransM :: (TransInfo info) =>
                                          TransM info ctx SpecTerm) ->
                        SpecTerm ->
                        TransM info ctx SpecTerm
-sigmaElimPermTransM x tp_l p_cbn tp_ret_m f sigma = case mbMatch p_cbn of
-  [nuMP| ValPerm_Eq e |] -> f (typeTransF (tupleTypeTrans tp_l) [sigma])
-                              (PTrans_Eq e)
-  _ -> sigmaElimTransM x tp_l (flip inExtTransM $ translate p_cbn)
+sigmaElimPermTransM x tp_l mb_p tp_ret_m f sigma = case mbMatch mb_p of
+  [nuMP| ValPerm_Eq e |] ->
+    do let tp_l_trm = openTermSpecTerm $ typeTransTupleType tp_l
+       tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
+                                              typeTransTupleType <$>
+                                              inExtTransM tr (translate mb_p))
+       tp_ret <- typeTransTupleType <$> tp_ret_m
+       sawLetTransM x tp_l_trm tp_ret sigma $ \sigma_pure ->
+         f (typeTransF (tupleTypeTrans tp_l) [sigma_pure]) (PTrans_Eq e)
+  _ -> sigmaElimTransM x tp_l (flip inExtTransM $ translate mb_p)
                        tp_ret_m f sigma
 
 
