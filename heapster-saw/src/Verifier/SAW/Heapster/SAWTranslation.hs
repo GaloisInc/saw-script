@@ -127,9 +127,9 @@ typeDescLRT :: TypeDesc -> OpenTerm
 typeDescLRT (TypeDescPure tp) = ctorOpenTerm "Prelude.LRT_Type" [tp]
 typeDescLRT (TypeDescLRT lrt _) = lrt
 
--- | Return the pair of the type and @LetRecType@ of a 'TypeDesc'
+-- | Return the pair of the @LetRecType@ of a 'TypeDesc' and the type it encodes
 typeDescTypeLRT :: TypeDesc -> (OpenTerm,SpecTerm)
-typeDescTypeLRT d = (typeDescType d, typeDescLRT d)
+typeDescTypeLRT d = (typeDescLRT d, typeDescType d)
 
 -- | Build an impure 'TypeDesc' from a term of type @LetRecType@
 typeDescFromLRT :: OpenTerm -> TypeDesc
@@ -142,7 +142,9 @@ typeDescsPureOrLRT =
   foldr (\d descs -> case d of
             TypeDescPure tp | Left tps <- descs -> Left (tp:tps)
             _ | Right lrt_tps <- descs -> Right (typeDescTypeLRT d : lrt_tps)
-            _ -> Right $ map typeDescTypeLRT (d:descs)) (Left [])
+            _ | Left tps <- descs ->
+                Right (typeDescTypeLRT d :
+                       map (typeDescTypeLRT . TypeDescPure) tps)) (Left [])
 
 -- | Apply a binary type-forming operation to two type descriptions, using the
 -- 'OpenTerm' function if the type descriptions are both pure and otherwise
@@ -166,7 +168,8 @@ bvVecTypeDesc w_term len_term (TypeDescPure elem_tp) =
 bvVecTypeDesc w_term len_term (TypeDescLRT lrt elem_tp) =
   TypeDescLRT
   (applyGlobalOpenTerm "Prelude.LRT_BVVec" [w_term, len_term, lrt])
-  (applyGlobalOpenTerm "Prelude.BVVec" [w_term, len_term, elem_tp])
+  (applyGlobalSpecTerm "Prelude.BVVec" [openTermSpecTerm w_term,
+                                        openTermSpecTerm len_term, elem_tp])
 
 -- | The 'TypeDesc' for the unit type
 typeDescUnit :: TypeDesc
@@ -1448,6 +1451,9 @@ instance HasPureTrans (PermExprs as) where
     [nuMP| MNil |] -> True
     [nuMP| es :>: e' |] -> hasPureTrans es && hasPureTrans e'
 
+instance HasPureTrans (LLVMFieldShape w) where
+  hasPureTrans (mbMatch -> [nuMP| LLVMFieldShape p |]) = hasPureTrans p
+
 
 ----------------------------------------------------------------------
 -- * Translating Permissions to Types
@@ -2341,19 +2347,17 @@ instance TransInfo info =>
          case lookupNamedPerm env (mbLift npn) of
            Just (NamedPerm_Opaque op) ->
              exprCtxPureTypeTerms <$> translate args >>= \case
-             Just args_trans ->
+             Just args_exprs ->
                return $ mkPermTypeTrans1 p $ TypeDescPure $
-               applyGlobalOpenTerm (opaquePermTrans op) (transPureTerms
-                                                         args_trans)
+               applyGlobalOpenTerm (opaquePermTrans op) args_exprs
              Nothing ->
                panic "translate"
                ["Heapster cannot yet handle opaque permissions over impure types"]
            Just (NamedPerm_Rec rp) ->
              exprCtxPureTypeTerms <$> translate args >>= \case
-             Just args_trans ->
+             Just args_exprs ->
                return $ mkPermTypeTrans1 p $ TypeDescPure $
-               applyOpenTermMulti (globalOpenTerm $
-                                   recPermTransType rp) (transPureTerms args_trans)
+               applyOpenTermMulti (globalOpenTerm $ recPermTransType rp) args_exprs
              Nothing ->
                panic "translate"
                ["Heapster cannot yet handle recursive permissions over impure types"]
@@ -2549,6 +2553,9 @@ instance HasPureTrans (ValuePerms as) where
     [nuMP| MNil |] -> True
     [nuMP| ps :>: p' |] -> hasPureTrans ps && hasPureTrans p'
 
+instance HasPureTrans (LLVMFieldPerm w sz) where
+  hasPureTrans (mbMatch -> [nuMP| LLVMFieldPerm { llvmFieldContents = p } |]) =
+    hasPureTrans p
 
 emptyStackOpenTerm :: OpenTerm
 emptyStackOpenTerm = globalOpenTerm "Prelude.emptyFunStack"
