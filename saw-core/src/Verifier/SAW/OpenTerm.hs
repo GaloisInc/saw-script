@@ -79,8 +79,9 @@ module Verifier.SAW.OpenTerm (
   applySpecTerm, applySpecTermMulti, openTermSpecTerm, specTermType,
   failSpecTerm, globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
-  callDefSpecTerm, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
+  callDefSpecTerm, monadicSpecOp, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
   errorSpecTerm, flatSpecTerm, natSpecTerm, unitSpecTerm, unitTypeSpecTerm,
+  stringLitSpecTerm,
   pairSpecTerm, pairTypeSpecTerm, pairLeftSpecTerm, pairRightSpecTerm,
   ctorSpecTerm, dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm, sawLetPureSpecTerm
   ) where
@@ -936,10 +937,9 @@ returnSpecTerm tp val =
 
 -- | Build a @SpecM@ computation that does a monadic bind
 bindSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm ->
-                LocalName -> (SpecTerm -> SpecTerm) -> SpecTerm
-bindSpecTerm tp1 tp2 m x f =
-  applySpecTermMulti (monadicSpecOp "Prelude.bindS")
-  [tp1, tp2, m, lambdaSpecTerm x tp1 f]
+                SpecTerm -> SpecTerm
+bindSpecTerm tp1 tp2 m f =
+  applySpecTermMulti (monadicSpecOp "Prelude.bindS") [tp1, tp2, m, f]
 
 -- | Build a @SpecM@ error computation at the given type with the given message
 errorSpecTerm :: SpecTerm -> Text -> SpecTerm
@@ -963,6 +963,10 @@ unitSpecTerm = flatSpecTerm UnitValue
 -- | Build a 'SpecTerm' for the unit type
 unitTypeSpecTerm :: SpecTerm
 unitTypeSpecTerm = flatSpecTerm UnitType
+
+-- | Build a SAW core string literal
+stringLitSpecTerm :: Text -> SpecTerm
+stringLitSpecTerm = flatSpecTerm . StringLit
 
 -- | Build a 'SpecTerm' for a pair
 pairSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
