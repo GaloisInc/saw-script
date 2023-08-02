@@ -39,6 +39,10 @@ Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
            (n:Num) -> p n;
 Num_rec p f1 f2 n = Num#rec p f1 f2 n;
 
+-- Check whether a 'Num' is finite
+tcFin : (n:Num) -> Bool;
+tcFin n = Num#rec (\ (n:Num) -> Bool) (\ (n:Nat) -> True) False n;
+
 -- Helper function: take a Num that we expect to be finite, and extract its Nat,
 -- raising an error if that Num is not finite
 getFinNat : (n:Num) -> Nat;
@@ -182,6 +186,33 @@ tcLenFromThenTo_Nat x y z =
 tcLenFromThenTo : Num -> Num -> Num -> Num;
 tcLenFromThenTo = ternaryNumFun tcLenFromThenTo_Nat TCInf;
 
+-- Build a binary predicate on Nums by lifting a binary predicate on Nats (the
+-- first argument) and using additional cases for: when the first argument is a
+-- Nat and the second is infinite; when the second is a Nat and the first is
+-- infinite; and when both are infinite
+binaryNumPred : (Nat -> Nat -> Bool) ->
+                (Nat -> Bool) ->
+                (Nat -> Bool) ->
+                Bool ->
+                Num -> Num -> Bool;
+binaryNumPred f1 f2 f3 f4 num1 num2 =
+  Num#rec (\ (num1':Num) -> Bool)
+          (\ (n1:Nat) ->
+             Num#rec (\ (num2':Num) -> Bool)
+                     (\ (n2:Nat) -> f1 n1 n2)
+                     (f2 n1)
+                     num2)
+          (Num#rec (\ (num2':Num) -> Bool) f3 f4 num2)
+          num1;
+
+-- Check two 'Num's for equality.
+tcEqual : Num -> Num -> Bool;
+tcEqual =
+  binaryNumPred equalNat (\ (x:Nat) -> False) (\ (y:Nat) -> False) True;
+
+-- Check that the first 'Num' is strictly less than the second 'Num'.
+tcLt : Num -> Num -> Bool;
+tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) False;
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences

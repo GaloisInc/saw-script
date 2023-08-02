@@ -1,0 +1,12 @@
+import "Test.cry";
+
+// Test exhaustive constraint guards
+prove_print z3 {{ \(x : [32])  -> guard x == 0 }};
+prove_print z3 {{ \(x : [34])  -> guard x == 1 }};
+prove_print z3 {{ \(x : [16])  -> guard x == 2 }};
+prove_print z3 {{ \(x : [8])   -> guard x == 3}};
+prove_print z3 {{ \(x : [9])   -> guard x == 3}};
+
+// Test non-exhaustive constraint guards
+prove_print z3 {{ \(x : [32]) -> incomplete x }};
+fails (prove_print z3 {{ \(x : [64]) -> incomplete x }});

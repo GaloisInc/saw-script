@@ -1,0 +1,14 @@
+module Test where
+
+// Exhaustive constraint guards with some overlapping branches
+guard : {w} [w] -> Integer
+guard x
+  | (w == 32) => 0
+  | (w >= 32) => 1
+  | (w != 8, w != 9) => 2
+  | () => 3
+
+// Non-exhaustive constraint guard
+incomplete : {w} [w] -> Bool
+incomplete x
+  | (w == 32) => True
