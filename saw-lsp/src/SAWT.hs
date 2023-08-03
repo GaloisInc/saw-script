@@ -92,6 +92,9 @@ runSAWTDefault action =
 -------------------------------------------------------------------------------
 -- Accessing/modifying
 
+getRef :: MonadIO m => SAWT m (IORef SAWState)
+getRef = SAWT (ReaderT pure)
+
 getRO :: MonadIO m => SAWT m SAW.TopLevelRO
 getRO = gets (seTopLevelRO . ssSAWEnv)
 

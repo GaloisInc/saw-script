@@ -6,8 +6,8 @@
 
 module Handlers where
 
-import Control.Concurrent.STM
-import Control.Monad.IO.Class
+import Control.Concurrent.STM (atomically, writeTChan)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ask)
 import Handlers.Custom.InterpretToPoint (handleInterpretToPoint)
 import Handlers.Initialized (handleInitialized)
@@ -15,12 +15,14 @@ import Handlers.TextDocument.DidChange (handleTextDocumentDidChange)
 import Handlers.TextDocument.DidOpen (handleTextDocumentDidOpen)
 import Handlers.TextDocument.DidSave (handleTextDocumentDidSave)
 import Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull)
-import Language.LSP.Server (Handlers)
-import Monad (ServerEnv (serverReactorChannel), ServerM, runServerM)
+import Language.LSP.Server (Handler, Handlers, mapHandlers)
+import Language.LSP.Types (From (..), Method, MethodType (..))
+import Monad (ServerEnv (serverReactorChannel), ServerM, liftSAW, runServerM')
 import Reactor (ReactorInput (..))
+import SAWT (getRef)
 
 handlers :: Handlers ServerM
-handlers = hs -- mapHandlers dispatchRequest dispatchNotification hs
+handlers = mapHandlers dispatchRequest dispatchNotification hs
   where
     hs =
       mconcat
@@ -32,30 +34,32 @@ handlers = hs -- mapHandlers dispatchRequest dispatchNotification hs
           handleTextDocumentSemanticTokensFull
         ]
 
--- dispatchRequest ::
---   forall (a :: Method 'FromClient 'Request).
---   Handler ServerM a ->
---   Handler ServerM a
--- dispatchRequest handler = \msg request ->
---   do
---     sEnv <- ask
---     let chan = serverReactorChannel sEnv
---     liftIO $
---       atomically $
---         writeTChan chan $
---           ReactorAction $
---             runServerM (handler msg request) sEnv
+dispatchRequest ::
+  forall (a :: Method 'FromClient 'Request).
+  Handler ServerM a ->
+  Handler ServerM a
+dispatchRequest handler = \msg request ->
+  do
+    serverEnv <- ask
+    sawStateRef <- liftSAW getRef
+    let rChannel = serverReactorChannel serverEnv
+    liftIO $
+      atomically $
+        writeTChan rChannel $
+          ReactorAction $
+            runServerM' (handler msg request) serverEnv sawStateRef
 
--- dispatchNotification ::
---   forall (a :: Method 'FromClient 'Notification).
---   Handler ServerM a ->
---   Handler ServerM a
--- dispatchNotification handler = \notif ->
---   do
---     sEnv <- ask
---     let chan = serverReactorChannel sEnv
---     liftIO $
---       atomically $
---         writeTChan chan $
---           ReactorAction $
---             runServerM (handler notif) sEnv
+dispatchNotification ::
+  forall (a :: Method 'FromClient 'Notification).
+  Handler ServerM a ->
+  Handler ServerM a
+dispatchNotification handler = \notif ->
+  do
+    serverEnv <- ask
+    sawStateRef <- liftSAW getRef
+    let rChannel = serverReactorChannel serverEnv
+    liftIO $
+      atomically $
+        writeTChan rChannel $
+          ReactorAction $
+            runServerM' (handler notif) serverEnv sawStateRef
