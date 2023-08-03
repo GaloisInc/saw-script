@@ -1,13 +1,12 @@
 module SAWT.Interpret where
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import Data.Bool (bool)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.List.NonEmpty qualified as NE
 import FList (FList (prefix), after, fingers)
-import GHC.IO.Handle (hFlush)
-import SAWScript.AST (Stmt, prettyWholeModule)
+import SAWScript.AST (Stmt)
 import SAWScript.Interpreter qualified as SAW
 import SAWScript.Value qualified as SAW
 import SAWT
@@ -25,7 +24,6 @@ import SAWT
     tryLiftTopLevel,
     updateContext,
   )
-import System.IO (hPutStrLn, stderr)
 
 -------------------------------------------------------------------------------
 -- Interpretation of statement blocks
@@ -57,12 +55,9 @@ interpretSAWScript cacheAggressively (stmt :| stmts) =
     case mostEfficientSplit checks (stmt : stmts) of
       Nothing ->
         do
-          liftIO (hPutStrLn stderr "no workable split found" >> hFlush stderr)
           interp (stmt :| stmts)
       Just (ck@Checkpoint {..}, rest) ->
         do
-          let m = show (prettyWholeModule rest)
-          liftIO (hPutStrLn stderr ("suffix:\n" <> m) >> hFlush stderr)
           restoreCheckpoint ck
           let reused = length (stmt :| stmts) - length rest
           case rest of
