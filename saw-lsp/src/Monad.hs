@@ -5,8 +5,8 @@
 module Monad where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.STM (TChan, atomically, newTChan, readTChan)
-import Control.Monad (forever, void)
+import Control.Concurrent.STM (TChan, atomically, newTChan)
+import Control.Monad (void)
 import Control.Monad.Catch (Exception, MonadCatch, MonadThrow (throwM))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
@@ -20,7 +20,6 @@ import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
 import Reactor (ReactorInput, reactor)
 import SAWT
-import System.IO (hPutStrLn, stderr)
 import Text.Printf (printf)
 import Worker (WorkerInput)
 
@@ -124,6 +123,16 @@ debug' :: String -> ServerM ()
 debug' s =
   do
     logFile <- asks serverLogFile
-    liftIO $ appendFile logFile msg
-  where
-    msg = printf "[debug] %s\n" s
+    liftIO $ appendFile logFile $ printf "[debug] %s\n" s
+
+inform :: Text -> ServerM ()
+inform msg = sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
+
+inform' :: String -> ServerM ()
+inform' = inform . Text.pack
+
+warn :: Text -> ServerM ()
+warn msg = sendNotification SWindowShowMessage (ShowMessageParams MtWarning msg)
+
+warn' :: String -> ServerM ()
+warn' = warn . Text.pack
