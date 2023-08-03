@@ -2,7 +2,7 @@
 name = "saw-client"
 version = "1.0.0"
 readme = "README.md"
-description = "SAW client for the SAW 0.9 RPC server"
+description = "SAW client for the SAW RPC server"
 authors = ["Galois, Inc. <saw@galois.com>"]
 license = "BSD License"
 include = [
@@ -16,6 +16,9 @@ requests = "^2.25.1"
 BitVector = "^3.4.9"
 cryptol = "3.0.0" # { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
 argo-client = "0.0.11"
+lmdb = "^1.4.1"
+cbor2 = "^5.4.6"
+python-dateutil = "^2.8.2"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.991"

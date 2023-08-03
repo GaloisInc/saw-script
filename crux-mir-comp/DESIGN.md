@@ -19,7 +19,7 @@ fn f(x: (u8, u8)) -> (u8, u8) {
     (x.1, x.0)
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     let x = <(u8, u8)>::symbolic("x");
     crucible_assume!(x.0 > 0);
@@ -45,7 +45,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

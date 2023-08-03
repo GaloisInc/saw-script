@@ -125,6 +125,8 @@ import SAWScript.Crucible.Common (PathSatSolver(..))
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
+import SAWScript.SolverCache
+import SAWScript.SolverVersions
 
 import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Prover.Util(checkBooleanSchema)
@@ -922,7 +924,7 @@ goal_num_ite n s1 s2 =
 proveABC :: ProofScript ()
 proveABC = do
   SV.AIGProxy proxy <- SV.scriptTopLevel SV.getProxy
-  wrapProver (Prover.proveABC proxy)
+  wrapProver [AIG] [] (Prover.proveABC proxy) Set.empty
 
 satExternal :: Bool -> String -> [String] -> ProofScript ()
 satExternal doCNF execName args =
@@ -947,7 +949,7 @@ writeSAIGComputedPrim = Prover.writeSAIG
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript ()
-proveRME = wrapProver Prover.proveRME
+proveRME = wrapProver [RME] [] Prover.proveRME Set.empty
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -967,35 +969,57 @@ proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript ()
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
      unintSet <- SV.scriptTopLevel (resolveNames unints)
-     wrapProver (Prover.proveUnintSBV conf unintSet timeout)
+     wrapProver (sbvBackends conf) []
+                (Prover.proveUnintSBV conf timeout) unintSet
 
-applyProverToGoal :: (Sequent -> TopLevel (Maybe CEX, SolverStats))
+-- | Given a continuation which calls a prover, call the continuation on the
+-- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
+-- is a 'SolverCache', do not call the continuation if the goal has an already
+-- cached result, and otherwise save the result of the call to the cache.
+applyProverToGoal :: [SolverBackend] -> [SolverBackendOption]
+                     -> (SATQuery -> TopLevel (Maybe CEX, String))
+                     -> Set VarIndex
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal f g = do
-  (mb, stats) <- f (goalSequent g)
+applyProverToGoal backends opts f unintSet g = do
+  sc <- getSharedContext
+  let opt_backends = concatMap optionBackends opts
+  vs   <- io $ getSolverBackendVersions (backends ++ opt_backends)
+  satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
+  k    <- io $ mkSolverCacheKey sc vs opts satq
+  (mb, solver_name) <- SV.onSolverCache (lookupInSolverCache k) >>= \case
+    -- Use a cached result if one exists (and it's valid w.r.t our query)
+    Just v -> return $ fromSolverCacheValue satq v
+    -- Otherwise try to cache the result of the call
+    _ -> f satq >>= \res -> io (toSolverCacheValue vs opts satq res) >>= \case
+           Just v  -> SV.onSolverCache (insertInSolverCache k v) >>
+                      return res
+           Nothing -> return res
+  let stats = solverStats solver_name (sequentSharedSize (goalSequent g))
   case mb of
     Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
-  (Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
+  [SolverBackend] -> [SolverBackendOption] ->
+  (SATQuery -> TopLevel (Maybe CEX, String)) ->
+  Set VarIndex ->
   ProofScript ()
-wrapProver f = execTactic $ tacticSolve $ applyProverToGoal f
+wrapProver backends opts f =
+  execTactic . tacticSolve . applyProverToGoal backends opts f
 
 wrapW4Prover ::
-  ( Set VarIndex -> Bool ->
-    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
+  SolverBackend -> [SolverBackendOption] ->
+  ( Bool -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
   [String] ->
   ProofScript ()
-wrapW4Prover f unints = do
+wrapW4Prover backend opts f unints = do
   hashConsing <- SV.scriptTopLevel $ gets SV.rwWhat4HashConsing
   unintSet <- SV.scriptTopLevel $ resolveNames unints
-  wrapProver $ f unintSet hashConsing
+  wrapProver [What4, backend] opts (f hashConsing) unintSet
 
 wrapW4ProveExporter ::
-  ( Set VarIndex -> Bool -> FilePath ->
-    Sequent -> TopLevel (Maybe CEX, SolverStats)) ->
+  ( Bool -> FilePath -> SATQuery -> TopLevel (Maybe CEX, String) ) ->
   [String] ->
   String ->
   String ->
@@ -1005,7 +1029,11 @@ wrapW4ProveExporter f unints path ext = do
   unintSet <- SV.scriptTopLevel $ resolveNames unints
   execTactic $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-    applyProverToGoal (f unintSet hashConsing file) g
+    sc <- getSharedContext
+    satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
+    (_, solver_name) <- f hashConsing file satq
+    let stats = solverStats solver_name (sequentSharedSize (goalSequent g))
+    return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
 
 --------------------------------------------------
 proveABC_SBV :: ProofScript ()
@@ -1050,40 +1078,40 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 --------------------------------------------------
 w4_abc_smtlib2 :: ProofScript ()
-w4_abc_smtlib2 = wrapW4Prover Prover.proveWhat4_abc []
+w4_abc_smtlib2 = wrapW4Prover ABC [W4_SMTLib2] Prover.proveWhat4_abc []
 
 w4_boolector :: ProofScript ()
-w4_boolector = wrapW4Prover Prover.proveWhat4_boolector []
+w4_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript ()
-w4_z3 = wrapW4Prover Prover.proveWhat4_z3 []
+w4_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3 []
 
 w4_cvc4 :: ProofScript ()
-w4_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4 []
+w4_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4 []
 
 w4_cvc5 :: ProofScript ()
-w4_cvc5 = wrapW4Prover Prover.proveWhat4_cvc5 []
+w4_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5 []
 
 w4_yices :: ProofScript ()
-w4_yices = wrapW4Prover Prover.proveWhat4_yices []
+w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
 
 w4_unint_boolector :: [String] -> ProofScript ()
-w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
+w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
 
 w4_unint_z3 :: [String] -> ProofScript ()
-w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
+w4_unint_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3
 
 w4_unint_z3_using :: String -> [String] -> ProofScript ()
-w4_unint_z3_using tactic = wrapW4Prover (Prover.proveWhat4_z3_using tactic)
+w4_unint_z3_using tactic = wrapW4Prover Z3 [W4_Tactic tactic] (Prover.proveWhat4_z3_using tactic)
 
 w4_unint_cvc4 :: [String] -> ProofScript ()
-w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
+w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4
 
 w4_unint_cvc5 :: [String] -> ProofScript ()
-w4_unint_cvc5 = wrapW4Prover Prover.proveWhat4_cvc5
+w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5
 
 w4_unint_yices :: [String] -> ProofScript ()
-w4_unint_yices = wrapW4Prover Prover.proveWhat4_yices
+w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices
 
 offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
 offline_w4_unint_z3 unints path =
@@ -1166,10 +1194,10 @@ offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
 
 w4_abc_aiger :: ProofScript ()
-w4_abc_aiger = wrapW4Prover Prover.w4AbcAIGER []
+w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []
 
 w4_abc_verilog :: ProofScript ()
-w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
+w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (setProofTimeout to)
@@ -2037,7 +2065,8 @@ core_axiom input =
      t <- parseCore input
      p <- io (termToProp sc t)
      db <- SV.getTheoremDB
-     thm <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     (thm, db') <- io (admitTheorem db "core_axiom" p pos "core_axiom")
+     SV.putTheoremDB db'
      SV.returnProof thm
 
 core_thm :: String -> TopLevel Theorem
@@ -2046,7 +2075,8 @@ core_thm input =
      sc <- getSharedContext
      pos <- SV.getPosition
      db <- SV.getTheoremDB
-     thm <- io (proofByTerm sc db t pos "core_thm")
+     (thm, db') <- io (proofByTerm sc db t pos "core_thm")
+     SV.putTheoremDB db'
      SV.returnProof thm
 
 specialize_theorem :: Theorem -> [TypedTerm] -> TopLevel Theorem
@@ -2054,7 +2084,8 @@ specialize_theorem thm ts =
   do sc <- getSharedContext
      db <- SV.getTheoremDB
      pos <- SV.getPosition
-     thm' <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     (thm', db') <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     SV.putTheoremDB db'
      SV.returnProof thm'
 
 get_opt :: Int -> TopLevel String
@@ -2427,7 +2458,7 @@ summarize_verification =
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
-     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     let summary = computeVerificationSummary db jspecs lspecs thms
      opts <- fmap (SV.sawPPOpts . rwPPOpts) getTopLevelRW
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
@@ -2439,7 +2470,7 @@ summarize_verification_json fpath =
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
-     summary <- io (computeVerificationSummary db jspecs lspecs thms)
+     let summary = computeVerificationSummary db jspecs lspecs thms
      io (writeFile fpath (jsonVerificationSummary summary))
 
 writeVerificationSummary :: TopLevel ()
@@ -2450,7 +2481,7 @@ writeVerificationSummary = do
     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
         thms    = [ t | SV.VTheorem t <- values ]
-    summary <- io (computeVerificationSummary db jspecs lspecs thms)
+        summary = computeVerificationSummary db jspecs lspecs thms
     opts <- roOptions <$> getTopLevelRO
     dir <- roInitWorkDir <$> getTopLevelRO
     nenv <- io . scGetNamingEnv =<< getSharedContext

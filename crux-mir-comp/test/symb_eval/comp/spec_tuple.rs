@@ -6,7 +6,7 @@ fn f(x: (u8, u8)) -> (u8, u8) {
     (x.1, x.0)
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     let x = <(u8, u8)>::symbolic("x");
@@ -43,7 +43,7 @@ fn f_spec() -> MethodSpec {
 //   - PointsTos: none
 //   - Postconditions: y1 > 0
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

@@ -109,6 +109,13 @@ SAW also uses several environment variables for configuration:
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
+`SAW_SOLVER_CACHE_PATH`
+
+  ~ Specify a path at which to keep a cache of solver results obtained during
+  calls to certain tactics. A cache is not created at this path until it is
+  needed. See the section **Caching Solver Results** for more detail about this
+  feature.
+
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
 
@@ -1243,6 +1250,100 @@ situations where one library may outpeform the other, however, due to
 differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
+
+## Caching Solver Results
+
+SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.
+
+This caching is available for all tactics which call out to automated provers
+at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+`rme`, and the family of `unint` tactics described in the previous section.
+
+When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the `abc` tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.
+
+The simplest way to enable solver caching is to set the environment variable
+`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+`saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created `saw` or `saw-remote-api`
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.
+
+There are also a number of SAW commands related to solver caching.
+
+* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+  remainder of the current session, but opens an LMDB database at the specified
+  path immediately. If a cache is already in use in the current session
+  (i.e. through a prior call to `set_solver_cache_path` or through
+  `SAW_SOLVER_CACHE_PATH` being set and the cache being used at least once)
+  then all entries in the cache already in use will be copied to the new cache
+  being opened.
+
+* `clean_solver_cache` will remove all entries in the solver result cache
+  which were created using solver backend versions which do not match the
+  versions in the current environment. This can be run after an update to
+  clear out any old, unusable entries from the solver cache.
+
+* `print_solver_cache` prints to the console all entries in the cache whose
+  SHA256 hash keys start with the given hex string. Providing an empty string
+  results in all entries in the cache being printed.
+
+* `print_solver_cache_stats` prints to the console statistics including the
+  size of the solver cache, where on disk it is stored, and some counts of how
+  often it has been used during the current session.
+
+For performing more complicated database operations on the set of cached
+results, the file `solver_cache.py` is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.
+
+Below is an example of using solver caching with `saw -v Debug`. Only the
+relevant output is shown, the rest abbreviated with "...".
+
+~~~~
+sawscript> set_solver_cache_path "example.cache"
+sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
+[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
+                                  {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)
+...
+sawscript> print_solver_cache "d1f5a76e7a0b7c01"
+[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb
+[22:13:13.250] - Result: unsat
+[22:13:13.250] - Solver: "SBV->Z3"
+[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit
+[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC
+
+sawscript> print_solver_cache "4ee451f8429c2dfe"
+[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752
+[22:13:16.727] - Result: unsat
+[22:13:16.727] - Solver: "W4 ->z3"
+[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit
+[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC
+
+sawscript> print_solver_cache_stats
+[22:13:20.585] == Solver result cache statistics ==
+[22:13:20.585] - 2 results cached in example.cache
+[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
+[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
+~~~~
 
 ## Other External Provers
 
@@ -2451,7 +2552,7 @@ verification](#compositional-verification).
 To understand the issues surrounding global variables, consider the following C
 code:
 
-<!-- This should (partially) match intTests/test0036_globals/test.c -->
+<!-- This matches intTests/test0036_globals/test-signed.c -->
 ~~~
 int x = 0;
 
@@ -2468,7 +2569,7 @@ int g(int z) {
 
 One might initially write the following specifications for `f` and `g`:
 
-<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+<!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
@@ -2499,12 +2600,13 @@ To deal with this, we can use the following function:
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
-<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+<!-- This matches intTests/test0036_globals/test-signed.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
 
 let init_global name = do {
+  llvm_alloc_global name;
   llvm_points_to (llvm_global name)
                  (llvm_global_initializer name);
 };
@@ -2512,6 +2614,7 @@ let init_global name = do {
 f_spec <- llvm_verify m "f" [] true (do {
     y <- llvm_fresh_var "y" (llvm_int 32);
     init_global "x";
+    llvm_precond {{ y < 2^^31 - 1 }};
     llvm_execute_func [llvm_term y];
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
@@ -2521,7 +2624,9 @@ which initializes `x` to whatever it is initialized to in the C code at
 the beginning of verification. This specification is now safe for
 compositional verification: SAW won't use the specification `f_spec`
 unless it can determine that `x` still has its initial value at the
-point of a call to `f`.
+point of a call to `f`. This specification also constrains `y` to prevent
+signed integer overflow resulting from the `x + y` expression in `f`,
+which is undefined behavior in C.
 
 ## Preconditions and Postconditions
 
