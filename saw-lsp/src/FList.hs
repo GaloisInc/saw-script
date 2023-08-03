@@ -15,7 +15,8 @@ fromList :: Hashable a => [a] -> FList a
 fromList xs = FList {prefix = emptyStack, suffix = Stack.fromList xs}
 
 fromLists :: Hashable a => [a] -> [a] -> FList a
-fromLists pre post = FList {prefix = Stack.fromList (reverse pre), suffix = Stack.fromList post}
+fromLists pre post =
+  FList {prefix = Stack.fromList (Prelude.reverse pre), suffix = Stack.fromList post}
 
 toLists :: FList a -> ([a], [a])
 toLists = liftA2 (,) before after
@@ -39,10 +40,13 @@ backward FList {..} =
     Just (x, xs) -> Just (FList {prefix = xs, suffix = push x suffix})
 
 before :: FList a -> [a]
-before FList {..} = reverse (Stack.toList prefix)
+before FList {..} = Prelude.reverse (Stack.toList prefix)
 
 after :: FList a -> [a]
 after FList {..} = Stack.toList suffix
+
+reverse :: FList a -> FList a
+reverse FList {..} = FList {prefix = suffix, suffix = prefix}
 
 -- | All possible positions of the finger
 fingers :: Hashable a => [a] -> [FList a]
