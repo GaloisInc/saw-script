@@ -1,4 +1,4 @@
-module Stack (Stack, emptyStack, push, pop, fromList, toList) where
+module Util.Stack (Stack, emptyStack, push, pop, fromList, toList) where
 
 import Data.Bits (xor)
 import Data.Hashable (Hashable (..))

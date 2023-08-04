@@ -1,4 +1,4 @@
-module Worker (worker, WorkerInput (..)) where
+module Server.Worker (worker, WorkerInput (..)) where
 
 import Control.Concurrent.STM
 import Control.Monad (forever)

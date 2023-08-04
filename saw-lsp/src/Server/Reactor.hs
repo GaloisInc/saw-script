@@ -1,4 +1,4 @@
-module Reactor (reactor, ReactorInput (..)) where
+module Server.Reactor (reactor, ReactorInput (..)) where
 
 import Control.Concurrent.STM
 import Control.Monad (forever)

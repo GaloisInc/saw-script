@@ -20,7 +20,7 @@ import SAWScript.Interpreter qualified as SAW
 import SAWScript.Options (Options (..), Verbosity (..), printOutVia)
 import SAWScript.Options qualified as SAW
 import SAWScript.Value qualified as SAW
-import Stack
+import Util.Stack as Stack
 
 atomicModifyIORef :: IORef t -> (t -> t) -> IO ()
 atomicModifyIORef ref f = atomicModifyIORef' ref (\x -> (f x, ()))

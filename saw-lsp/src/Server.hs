@@ -12,8 +12,8 @@ import Data.Text qualified as Text
 import Handlers (handlers)
 import Language.LSP.Server
 import Language.LSP.Types
-import Monad
 import SAWT (SAWState, newSAWState)
+import Server.Monad
 import System.IO (hPrint, hPutStrLn, stderr)
 
 run :: IO Int

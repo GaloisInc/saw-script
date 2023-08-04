@@ -1,10 +1,10 @@
 module Handlers.TextDocument.DidOpen where
 
-import Monad
 import Control.Lens ((^.))
 import Language.LSP.Server (Handlers, notificationHandler)
 import Language.LSP.Types (Method (TextDocumentDidOpen), NotificationMessage, SMethod (STextDocumentDidOpen))
 import Language.LSP.Types.Lens qualified as LSP
+import Server.Monad
 
 handleTextDocumentDidOpen :: Handlers ServerM
 handleTextDocumentDidOpen = notificationHandler STextDocumentDidOpen doOpen

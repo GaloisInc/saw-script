@@ -6,10 +6,6 @@
 
 module Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull, mkResponse) where
 
--- import Monad (Config, debug)
-
-import Monad (ServerM, ServerEnv (serverWorkerChannel), debug, liftEither, liftMaybe)
-import Worker
 import Control.Concurrent.STM
 import Control.Lens ((^.))
 import Control.Monad.Catch (Exception, MonadThrow, throwM)
@@ -26,6 +22,8 @@ import Language.LSP.VFS (virtualFileText)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Position as SAW (Pos (..))
 import SAWScript.Token as SAW (Token (..))
+import Server.Monad (ServerM, ServerEnv (serverWorkerChannel), debug, liftEither, liftMaybe)
+import Server.Worker
 
 handleTextDocumentSemanticTokensFull :: Handlers ServerM
 handleTextDocumentSemanticTokensFull = requestHandler STextDocumentSemanticTokensFull doSemanticTokens

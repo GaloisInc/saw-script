@@ -17,9 +17,9 @@ import Handlers.TextDocument.DidSave (handleTextDocumentDidSave)
 import Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull)
 import Language.LSP.Server (Handler, Handlers, mapHandlers)
 import Language.LSP.Types (From (..), Method, MethodType (..))
-import Monad (ServerEnv (serverReactorChannel), ServerM, liftSAW, runServerM')
-import Reactor (ReactorInput (..))
 import SAWT (getRef)
+import Server.Monad (ServerEnv (serverReactorChannel), ServerM, liftSAW, runServerM')
+import Server.Reactor (ReactorInput (..))
 
 handlers :: Handlers ServerM
 handlers = mapHandlers dispatchRequest dispatchNotification hs

@@ -5,7 +5,6 @@ import Data.Bool (bool)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.List.NonEmpty qualified as NE
-import FList (FList (prefix), after, fingers)
 import SAWScript.AST (Stmt)
 import SAWScript.Interpreter qualified as SAW
 import SAWScript.Value qualified as SAW
@@ -24,6 +23,7 @@ import SAWT
     tryLiftTopLevel,
     updateContext,
   )
+import Util.FList (FList (prefix), after, fingers)
 
 -------------------------------------------------------------------------------
 -- Interpretation of statement blocks

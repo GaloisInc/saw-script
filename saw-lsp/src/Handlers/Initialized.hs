@@ -2,7 +2,7 @@ module Handlers.Initialized where
 
 import Language.LSP.Server (Handlers, notificationHandler)
 import Language.LSP.Types (Method (..), NotificationMessage, SMethod (..))
-import Monad (ServerM, debug)
+import Server.Monad (ServerM, debug)
 
 handleInitialized :: Handlers ServerM
 handleInitialized = notificationHandler SInitialized doInitialized

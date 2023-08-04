@@ -16,7 +16,6 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID.V4 qualified as UUID
-import Error (internalError)
 import Handlers.Custom.InterpretToPoint.Truncate
 import Language.LSP.Server
 import Language.LSP.Types
@@ -32,11 +31,12 @@ import Language.LSP.Types
   )
 import Language.LSP.Types.Lens qualified as LSP
 import Language.LSP.VFS (virtualFileText)
-import Monad
 import SAWScript.AST (Stmt (..))
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
 import SAWT.Interpret (interpretSAWScript)
+import Server.Error (internalError)
+import Server.Monad
 import System.IO.Temp (writeSystemTempFile)
 import Text.Printf (printf)
 

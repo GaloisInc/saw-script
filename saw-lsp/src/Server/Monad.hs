@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Monad where
+module Server.Monad where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (TChan, atomically, newTChan)
@@ -18,10 +18,10 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
-import Reactor (ReactorInput, reactor)
 import SAWT
+import Server.Reactor (ReactorInput, reactor)
+import Server.Worker (WorkerInput)
 import Text.Printf (printf)
-import Worker (WorkerInput)
 
 newtype Config = Config ()
   deriving (FromJSON)

@@ -47,16 +47,19 @@ library
         Handlers.TextDocument.DidSave
         Handlers.TextDocument.SemanticTokensFull
 
-        Error
-        FList
-        Monad
-        Reactor
-        Sample
         SAWT
         SAWT.Interpret
+
         Server
-        Stack
-        Worker
+        Server.Error
+        Server.Monad
+        Server.Reactor
+        Server.Worker
+
+        Util.FList
+        Util.Stack
+
+        Sample
 
     build-depends:
         saw-script,
@@ -110,9 +113,9 @@ test-suite saw-lsp-test
     main-is: Main.hs
 
     other-modules:
-        Test.FList
-        Test.Stack
         Test.SAWT.Interpret
+        Test.Util.FList
+        Test.Util.Stack
 
     build-depends:
         saw-lsp,

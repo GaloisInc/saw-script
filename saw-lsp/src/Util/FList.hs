@@ -1,9 +1,9 @@
-module FList where
+module Util.FList where
 
 import Control.Applicative (Applicative (liftA2))
 import Data.Hashable (Hashable)
-import Stack (Stack, emptyStack, pop, push)
-import Stack qualified
+import Util.Stack (Stack, emptyStack, pop, push)
+import Util.Stack qualified as Stack
 
 data FList a = FList
   { prefix :: Stack a,

@@ -1,16 +1,16 @@
 {-# LANGUAGE TypeApplications #-}
 
-module Test.FList (tests) where
+module Test.Util.FList (tests) where
 
 import Data.Hashable (Hashable)
-import FList
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (Gen, testProperty)
+import Util.FList
 
 tests :: TestTree
 tests =
   testGroup
-    "Test.FList"
+    "Test.Util.FList"
     [ testProperty "to-from involution" (toFrom @Int),
       testProperty "forward works" (testForward @Int),
       testProperty "backward works" (testBackward @Int),

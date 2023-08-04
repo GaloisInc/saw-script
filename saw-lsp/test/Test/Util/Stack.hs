@@ -4,14 +4,14 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Test.Stack where
+module Test.Util.Stack where
 
 import Control.Monad (replicateM)
 import Data.Hashable (Hashable (hash))
-import Stack
 import Test.QuickCheck (Arbitrary (..), Gen, chooseInt)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
+import Util.Stack as Stack
 
 instance (Hashable a, Arbitrary a) => Arbitrary (Stack a) where
   -- \| Generate a nonempty stack
@@ -24,7 +24,7 @@ instance (Hashable a, Arbitrary a) => Arbitrary (Stack a) where
 tests :: TestTree
 tests =
   testGroup
-    "Test.Stack"
+    "Test.Util.Stack"
     [ testProperty "pushing then popping ints" (pushPop @Int),
       testProperty "pushing then popping chars" (pushPop @Char),
       testProperty "pushing then popping strings" (pushPop @String),
