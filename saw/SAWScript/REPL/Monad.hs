@@ -40,7 +40,6 @@ module SAWScript.REPL.Monad (
   , getTypeNames
   , getPropertyNames
   , getPrompt
-  , getContinuationPrompt
   , shouldContinue
   , unlessBatch
   , setREPLTitle
@@ -96,7 +95,7 @@ import qualified Data.AIG.CompactGraph as AIG
 
 import SAWScript.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
-import SAWScript.Options (Options, isLSPMode)
+import SAWScript.Options (Options)
 import SAWScript.Proof (ProofState, ProofResult(..), psGoals)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
                             makeCheckpoint, restoreCheckpoint)
@@ -351,26 +350,13 @@ modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
 getPrompt :: REPL String
 getPrompt =
   do batch <- REPL (return . eIsBatch)
-     lsp <- isLSPMode . roOptions <$> getTopLevelRO
-     let promptify = return . if lsp then (const "\EOT") else (<>"> ")
      if batch then return ""
      else
        getProofStateRef >>= \case
-         Nothing -> promptify "sawscript"
+         Nothing -> return "sawscript> "
          Just psr ->
            do ps <- io (readIORef psr)
-              promptify ("proof ("++show (length (psGoals ps))++")")
-
--- | Construct a prompt for multiline input
-getContinuationPrompt :: REPL String
-getContinuationPrompt =
-  do 
-    prompt <- getPrompt
-    lsp <- isLSPMode . roOptions <$> getTopLevelRO
-    if lsp
-      then pure prompt
-      else pure (map (const ' ') prompt)
-
+              return ("proof ("++show (length (psGoals ps))++")> ")
 
 shouldContinue :: REPL Bool
 shouldContinue = readRef eContinue

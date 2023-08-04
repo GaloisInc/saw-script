@@ -52,7 +52,6 @@ data Verbosity
   | OnlyCounterExamples
   | Error
   | Warn
-  | LSP
   | Info
   | Debug
   | ExtraDebug
@@ -130,10 +129,6 @@ options =
     (NoArg
      (\opts -> return opts { runInteractively = True }))
     "Run interactively (with a REPL)"
-  -- , Option "l" ["lsp"]
-  --   (NoArg
-  --    (\opts -> return opts { verbLevel = LSP, printOutFn = printOutWithVerbosity LSP }))
-  --   "Terminate prompt responses with \\NUL"
   , Option "j" ["jars"]
     (ReqArg
      (\p opts -> return opts { jarList = jarList opts ++ splitSearchPath p })
@@ -205,7 +200,6 @@ readVerbosity s =
         "warning"             -> Warn
         "info"                -> Info
         "debug"               -> Debug
-        "lsp"                 -> LSP
         _                     -> Debug
 
 -- | Perform some additional post-processing on an 'Options' value based on
@@ -256,11 +250,6 @@ processEnv opts = do
                                       es = splitSearchPath p
                                       (jars, dirs) = partition (".jar" `isExtensionOf`) es
     addSawOpt _ os = os
-
-isLSPMode :: Options -> Bool
-isLSPMode opts
-  | LSP <- verbLevel opts = True
-  | otherwise = False
 
 pathDesc, pathDelim :: String
 
