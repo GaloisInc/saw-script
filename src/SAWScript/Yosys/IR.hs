@@ -171,7 +171,9 @@ instance Aeson.FromJSON CellType where
       "$sdffce"      -> throw $ YosysErrorUnsupportedFF "$sdffce"
       "$aldffe"      -> throw $ YosysErrorUnsupportedFF "$aldffe"
       "$dffsre"      -> throw $ YosysErrorUnsupportedFF "$dffsre"
-      _ -> error "TODO: If name starts with `$`, throw an unsupported type error. Otherwise, create a USER_TYPE"
+      _ | Just ('$', _) <- Text.uncons s ->
+          error "TODO: Throw an unsupported type error"
+        | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
 
 asUserType :: CellType -> Text
