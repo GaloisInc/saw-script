@@ -54,7 +54,7 @@ import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Cell
 
-type ModuleName = Text
+type ModuleName = Text -- TODO: Is this right? Is a ModuleName just a CellTypeUserType? It kinda has to be this type for the whole thing to typecheck.
 type CellName = Text
 type Pattern = [Bitrep]
 type PatternMap m = Map Pattern ((YosysBitvecConsumer -> Pattern -> m SC.Term) -> m SC.Term)
@@ -93,15 +93,17 @@ buildTranslationContextStateTypes ::
   m (Map CellName CellStateInfo)
 buildTranslationContextStateTypes sc mods m = do
   fmap (Map.mapMaybe id) . forM (m ^. moduleCells) $ \c -> do
-    case Map.lookup (c ^. cellType) mods of
-      Just tm -> pure $ tm ^. translatedModuleStateInfo
-      Nothing -> case c ^. cellType of
-        "$dff" | Just w <- length <$> Map.lookup "Q" (c ^. cellConnections) -> do
-          _cellStateInfoType <- liftIO . SC.scBitvector sc $ fromIntegral w
-          let _cellStateInfoCryptolType = C.tWord $ C.tNum w
-          let _cellStateInfoFields = Nothing
-          pure $ Just CellStateInfo{..}
-        _ -> pure Nothing
+    case c ^. cellType of
+      CellTypeUserType submoduleName ->
+        case Map.lookup submoduleName mods of
+          Just tm -> pure $ tm ^. translatedModuleStateInfo
+          Nothing -> pure Nothing -- TODO: Should this be an error? I think it would just be "nothing" in the old version
+      CellTypeDff | Just w <- length <$> Map.lookup "Q" (c ^. cellConnections) -> do
+        _cellStateInfoType <- liftIO . SC.scBitvector sc $ fromIntegral w
+        let _cellStateInfoCryptolType = C.tWord $ C.tNum w
+        let _cellStateInfoFields = Nothing
+        pure $ Just CellStateInfo{..}
+      _ -> pure Nothing
 
 -- | Fetch the actual state term for a cell name, given the term for the __state__ input and information about what stateful cells exist
 lookupStateFor ::
@@ -154,7 +156,7 @@ buildPatternMap sc mods states inp m = do
   -- for each cell, construct a term for each output pattern, parameterized by a lookup function for other patterns
   ms <- forM (Map.toList $ m ^. moduleCells) $ \(cnm, c) -> do
     let inpPatterns = case c ^. cellType of
-          "$dff" -> Map.empty -- exclude dff inputs - this breaks loops involving state
+          CellTypeDff -> Map.empty -- exclude dff inputs - this breaks loops involving state
           _ -> cellInputConnections c
     let outPatterns = cellOutputConnections c
     let derivedOutPatterns = Map.elems outPatterns <> ((:[]) <$> mconcat (Map.elems outPatterns))
@@ -166,34 +168,35 @@ buildPatternMap sc mods states inp m = do
         (inm,) <$> lookupPattern (YosysBitvecConsumerCell cnm inm) pat
 
     -- build a function from the cell's inputs to the cell's outputs
-    inpsToOuts <- case Map.lookup (c ^. cellType) mods of
-      Just subm -> pure $ \inps -> do
-        (domainFields, codomainFields) <- case (subm ^. translatedModuleStateInfo, minpst) of
-          (Just _, Just inpst) -> do
-            subinpst <- lookupStateFor sc states inpst cnm
-            pure
-              ( Map.insert "__state__" subinpst inps
-              , Map.insert "__state__" () $ void outPatterns
-              )
-          _ -> pure (inps, void outPatterns)
-        domainRec <- cryptolRecord sc domainFields
-        codomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) domainRec
-        fmap (Just . Map.fromList) . forM (Map.toList outPatterns) $ \(onm, _opat) -> do
-          (onm,) <$> cryptolRecordSelect sc codomainFields codomainRec onm
-      Nothing -> case c ^. cellType of
-        "$dff"
-          | Just inpst <- minpst -> pure $ \_ -> do
-              cst <- lookupStateFor sc states inpst cnm
-              pure . Just $ Map.fromList
-                [ ("Q", cst)
-                ]
-        _ -> pure $ primCellToMap sc c
+    inpsToOuts <- case c ^. cellType of
+      CellTypeUserType submoduleName ->
+        case Map.lookup submoduleName mods of
+          Just subm -> pure $ \inps -> do
+            (domainFields, codomainFields) <- case (subm ^. translatedModuleStateInfo, minpst) of
+              (Just _, Just inpst) -> do
+                subinpst <- lookupStateFor sc states inpst cnm
+                pure
+                  ( Map.insert "__state__" subinpst inps
+                  , Map.insert "__state__" () $ void outPatterns
+                  )
+              _ -> pure (inps, void outPatterns)
+            domainRec <- cryptolRecord sc domainFields
+            codomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) domainRec
+            fmap (Just . Map.fromList) . forM (Map.toList outPatterns) $ \(onm, _opat) -> do
+              (onm,) <$> cryptolRecordSelect sc codomainFields codomainRec onm
+          Nothing -> pure $ \_ -> pure Nothing -- TODO: Is this the right thing to do in this case? Looks like 'Nothing' is what primCellToMap would return for a CellTypeUserType, so this just skips the call. Seem reasonable?
+      CellTypeDff | Just inpst <- minpst -> pure $ \_ -> do
+        cst <- lookupStateFor sc states inpst cnm
+        pure . Just $ Map.fromList
+          [ ("Q", cst)
+          ]
+      _ -> pure $ primCellToMap sc c
 
     let
       -- given a pattern lookup function build a map from output patterns to terms
       f :: (YosysBitvecConsumer -> Pattern -> m SC.Term) -> m (Map Pattern SC.Term)
       f = getInps >=> inpsToOuts >=> \case
-        Nothing -> throw $ YosysErrorNoSuchCellType (c ^. cellType) cnm
+        Nothing -> throw $ YosysErrorNoSuchCellType (Text.pack (show (c ^. cellType))) cnm
         Just outs -> do
           ms <- forM (Map.toList outs) $ \(onm, otm) ->
             case Map.lookup onm $ c ^. cellConnections of
@@ -311,11 +314,11 @@ translateModule sc mods m = do
     case Map.lookup cnm (m ^. moduleCells) of
       Nothing -> panic "translateModule" ["Previously observed cell does not exist"]
       Just c -> case c ^. cellType of
-        "$dff" -- if the cell is a $dff, the new state is just whatever is connected to the input
+        CellTypeDff -- if the cell is a $dff, the new state is just whatever is connected to the input
           | Just pat <- Map.lookup "D" (c ^. cellConnections) ->
               (cnm,) <$> translatePattern sc ctx (YosysBitvecConsumerCell cnm "D") pat
-        _
-          | Just subm <- Map.lookup (c ^. cellType) (ctx ^. translationContextModules) -> do
+        CellTypeUserType submoduleName
+          | Just subm <- Map.lookup submoduleName (ctx ^. translationContextModules) -> do
               -- otherwise, the cell is a stateful submodule: the new state is obtained from the submodules's update function applied to the inputs and old state
               let inpPatterns = cellInputConnections c
               -- lookup the term for each input to the cell

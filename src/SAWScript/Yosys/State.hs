@@ -48,7 +48,7 @@ findDffs ::
   Map Text (Cell [Bitrep])
 findDffs ng =
   Map.fromList
-  . filter (\(_, c) -> c ^. cellType == "$dff")
+  . filter (\(_, c) -> c ^. cellType == CellTypeDff)
   . fmap (\v -> let ((nm, n), _, _) = ng ^. netgraphNodeFromVertex $ v in (cellIdentifier nm, n))
   . Graph.vertices
   $ ng ^. netgraphGraph

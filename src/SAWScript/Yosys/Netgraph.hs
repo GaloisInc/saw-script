@@ -77,7 +77,7 @@ moduleNetgraph m =
       $ m ^. modulePorts --
     cellToNodes :: (Text, Cell [Bitrep]) -> [((Text, Cell [Bitrep]), Bitrep, [Bitrep])]
     cellToNodes (nm, c)
-      | c ^. cellType == "$dff" = ((nm, c), , []) <$> outputBits
+      | c ^. cellType == CellTypeDff = ((nm, c), , []) <$> outputBits
       | otherwise = ((nm, c), , inputBits) <$> outputBits
       where
         inputBits :: [Bitrep]
@@ -164,7 +164,7 @@ netgraphToTerms sc env ng inputs
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
               -- special handling for $dff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
-              | c ^. cellType == "$dff"
+              | c ^. cellType == CellTypeDff
               , Just dffout <- Map.lookup "Q" $ c ^. cellConnections -> do
                   r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
                   ts <- deriveTermsByIndices sc dffout r
@@ -177,11 +177,14 @@ netgraphToTerms sc env ng inputs
 
                   r <- primCellToTerm sc c args >>= \case
                     Just r -> pure r
-                    Nothing -> case Map.lookup (c ^. cellType) env of
-                      Just cm -> do
-                        r <- cryptolRecord sc args
-                        liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
-                      Nothing -> throw $ YosysErrorNoSuchCellType (c ^. cellType) cnm
+                    Nothing ->
+                      let submoduleName = asUserType $ c ^. cellType in
+                      case Map.lookup submoduleName env of
+                        Just cm -> do
+                          r <- cryptolRecord sc args
+                          liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
+                        Nothing ->
+                            throw $ YosysErrorNoSuchCellType submoduleName cnm
 
                   -- once we've built a term, insert it along with each of its bits
                   ts <- forM (Map.assocs $ cellOutputConnections c) $ \(o, out) -> do

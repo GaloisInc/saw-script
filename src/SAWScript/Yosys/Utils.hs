@@ -53,7 +53,7 @@ data YosysError
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
   | YosysErrorNoSuchCellType Text Text
-  | YosysErrorUnsupportedPmux
+  | YosysErrorUnsupportedPmux -- TODO: Unused? Remove?
   | YosysErrorUnsupportedFF Text
   | YosysErrorInvalidOverrideTarget
   | YosysErrorOverrideNameNotFound Text
@@ -85,6 +85,8 @@ instance Show YosysError where
     , "It is possible that this represents an undetected cycle in the netgraph.\n"
     , reportBugText
     ]
+  -- TODO: Remove this error type and replace with YosysErrorNoSuchSubmodule and
+  -- YosysErrorUnsuportedPrimitive vv
   show (YosysErrorNoSuchCellType mnm cnm)
     | Just ('$', _) <- Text.uncons mnm
     = Text.unpack $ mconcat

@@ -83,10 +83,107 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
+data CellType
+  = CellTypeNot
+  | CellTypePos
+  | CellTypeNeg
+  | CellTypeAnd
+  | CellTypeOr
+  | CellTypeXor
+  | CellTypeXnor
+  | CellTypeReduceAnd
+  | CellTypeReduceOr
+  | CellTypeReduceXor
+  | CellTypeReduceXnor
+  | CellTypeReduceBool
+  | CellTypeShl
+  | CellTypeShr
+  | CellTypeSshl
+  | CellTypeSshr
+  | CellTypeShiftx
+  | CellTypeLt
+  | CellTypeLe
+  | CellTypeGt
+  | CellTypeGe
+  | CellTypeEq
+  | CellTypeNe
+  | CellTypeEqx
+  | CellTypeNex
+  | CellTypeAdd
+  | CellTypeSub
+  | CellTypeMul
+  | CellTypeDiv
+  | CellTypeMod
+  | CellTypeLogicNot
+  | CellTypeLogicAnd
+  | CellTypeLogicOr
+  | CellTypeMux
+  | CellTypePmux
+  | CellTypeDff
+  | CellTypeUserType Text
+  deriving (Show, Eq, Ord)
+instance Aeson.FromJSON CellType where
+  parseJSON (Aeson.String s) =
+    case s of
+      "$not"         -> pure CellTypeNot
+      "$pos"         -> pure CellTypePos
+      "$neg"         -> pure CellTypeNeg
+      "$and"         -> pure CellTypeAnd
+      "$or"          -> pure CellTypeOr
+      "$xor"         -> pure CellTypeXor
+      "$xnor"        -> pure CellTypeXnor
+      "$reduce_and"  -> pure CellTypeReduceAnd
+      "$reduce_or"   -> pure CellTypeReduceOr
+      "$reduce_xor"  -> pure CellTypeReduceXor
+      "$reduce_xnor" -> pure CellTypeReduceXnor
+      "$reduce_bool" -> pure CellTypeReduceBool
+      "$shl"         -> pure CellTypeShl
+      "$shr"         -> pure CellTypeShr
+      "$sshl"        -> pure CellTypeSshl
+      "$sshr"        -> pure CellTypeSshr
+      "$shiftx"      -> pure CellTypeShiftx
+      "$lt"          -> pure CellTypeLt
+      "$le"          -> pure CellTypeLe
+      "$gt"          -> pure CellTypeGt
+      "$ge"          -> pure CellTypeGe
+      "$eq"          -> pure CellTypeEq
+      "$ne"          -> pure CellTypeNe
+      "$eqx"         -> pure CellTypeEqx
+      "$nex"         -> pure CellTypeNex
+      "$add"         -> pure CellTypeAdd
+      "$sub"         -> pure CellTypeSub
+      "$mul"         -> pure CellTypeMul
+      "$div"         -> pure CellTypeDiv
+      "$mod"         -> pure CellTypeMod
+      "$logic_not"   -> pure CellTypeLogicNot
+      "$logic_and"   -> pure CellTypeLogicAnd
+      "$logic_or"    -> pure CellTypeLogicOr
+      "$mux"         -> pure CellTypeMux
+      "$pmux"        -> pure CellTypePmux
+      "$dff"         -> pure CellTypeDff
+      "$adff"        -> throw $ YosysErrorUnsupportedFF "$adff"
+      "$sdff"        -> throw $ YosysErrorUnsupportedFF "$sdff"
+      "$aldff"       -> throw $ YosysErrorUnsupportedFF "$aldff"
+      "$dffsr"       -> throw $ YosysErrorUnsupportedFF "$dffsr"
+      "$dffe"        -> throw $ YosysErrorUnsupportedFF "$dffe"
+      "$adffe"       -> throw $ YosysErrorUnsupportedFF "$adffe"
+      "$sdffe"       -> throw $ YosysErrorUnsupportedFF "$sdffe"
+      "$sdffce"      -> throw $ YosysErrorUnsupportedFF "$sdffce"
+      "$aldffe"      -> throw $ YosysErrorUnsupportedFF "$aldffe"
+      "$dffsre"      -> throw $ YosysErrorUnsupportedFF "$dffsre"
+      _ -> error "TODO: If name starts with `$`, throw an unsupported type error. Otherwise, create a USER_TYPE"
+  parseJSON v = fail $ "Failed to parse cell type: " <> show v
+
+asUserType :: CellType -> Text
+asUserType cellType =
+  case cellType of
+    CellTypeUserType t -> t
+    _ -> error "TODO: Expected a user type, got a primitive type"
+
 -- | A cell within an HDL module.
 data Cell bs = Cell
   { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable
-  , _cellType :: Text -- ^ The cell type
+  , _cellType :: CellType -- ^ The cell type
   , _cellParameters :: Map Text Text -- ^ Metadata parameters
   , _cellAttributes :: Aeson.Value -- currently unused
   , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
