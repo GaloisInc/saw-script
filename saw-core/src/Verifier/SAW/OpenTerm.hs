@@ -4,6 +4,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 {- |
 Module      : Verifier.SAW.OpenTerm
@@ -72,18 +74,22 @@ module Verifier.SAW.OpenTerm (
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM,
+  -- * Types that provide similar operations to 'OpenTerm'
+  OpenTermLike(..), lambdaTermLikeMulti, applyTermLikeMulti, failTermLike,
+  globalTermLike, applyGlobalTermLike,
+  natTermLike, unitTermLike, unitTypeTermLike,
+  stringLitTermLike, stringTypeTermLike, trueTermLike, falseTermLike,
+  boolTermLike, boolTypeTermLike,
+  arrayValueTermLike, bvLitTermLike, vectorTypeTermLike, bvTypeTermLike,
+  pairTermLike, pairTypeTermLike, pairLeftTermLike, pairRightTermLike,
+  tupleTermLike, tupleTypeTermLike, projTupleTermLike,
+  letTermLike, sawLetTermLike,
   -- * Building SpecM computations
-  SpecTerm(), defineSpecOpenTerm,
-  lambdaPureSpecTerm, lambdaPureSpecTermMulti, lambdaSpecTerm,
-  lambdaSpecTermMulti, piSpecTerm,
-  applySpecTerm, applySpecTermMulti, openTermSpecTerm, specTermType,
-  failSpecTerm, globalSpecTerm, applyGlobalSpecTerm, lrtToTypeSpecTerm,
+  SpecTerm(), defineSpecOpenTerm, lambdaPureSpecTerm, lambdaPureSpecTermMulti,
+  sawLetPureSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
-  callDefSpecTerm, monadicSpecOp, specMTypeSpecTerm, returnSpecTerm, bindSpecTerm,
-  errorSpecTerm, flatSpecTerm, natSpecTerm, unitSpecTerm, unitTypeSpecTerm,
-  stringLitSpecTerm,
-  pairSpecTerm, pairTypeSpecTerm, pairLeftSpecTerm, pairRightSpecTerm,
-  ctorSpecTerm, dataTypeSpecTerm, letSpecTerm, sawLetSpecTerm, sawLetPureSpecTerm
+  callDefSpecTerm, monadicSpecOp,
+  specMTypeSpecTerm, returnSpecTerm, bindSpecTerm, errorSpecTerm,
   ) where
 
 import qualified Data.Vector as V
@@ -545,6 +551,175 @@ piOpenTermAuxM x tp body_f =
 
 
 --------------------------------------------------------------------------------
+-- Types that provide similar operations to 'OpenTerm'
+
+class OpenTermLike t where
+  -- | Convert an 'OpenTerm' to a @t@
+  openTermLike :: OpenTerm -> t
+  -- | Get the type of a @t@
+  typeOfTermLike :: t -> t
+  -- | Build a @t@ from a 'FlatTermF'
+  flatTermLike :: FlatTermF t -> t
+  -- | Apply a @t@ to another @t@
+  applyTermLike :: t -> t -> t
+  -- | Build a lambda abstraction as a @t@
+  lambdaTermLike :: LocalName -> t -> (t -> t) -> t
+  -- | Build a pi abstraction as a @t@
+  piTermLike :: LocalName -> t -> (t -> t) -> t
+  -- | Build a @t@ for a constructor applied to its arguments
+  ctorTermLike :: Ident -> [t] -> t
+  -- | Build a @t@ for a datatype applied to its arguments
+  dataTypeTermLike :: Ident -> [t] -> t
+
+-- Lift an OpenTermLike instance from t to functions from some type a to t,
+-- where the OpenTermLike methods pass the same input a argument to all subterms
+instance OpenTermLike t => OpenTermLike (a -> t) where
+  openTermLike t = const $ openTermLike t
+  typeOfTermLike t = \x -> typeOfTermLike (t x)
+  flatTermLike ftf = \x -> flatTermLike (fmap ($ x) ftf)
+  applyTermLike f arg = \x -> applyTermLike (f x) (arg x)
+  lambdaTermLike nm tp bodyF =
+    \x -> lambdaTermLike nm (tp x) (\y -> bodyF (const y) x)
+  piTermLike nm tp bodyF =
+    \x -> piTermLike nm (tp x) (\y -> bodyF (const y) x)
+  ctorTermLike c args = \x -> ctorTermLike c (map ($ x) args)
+  dataTypeTermLike d args = \x -> dataTypeTermLike d (map ($ x) args)
+
+-- This is the same as the function instance above
+instance OpenTermLike t => OpenTermLike (Reader r t) where
+  openTermLike t = reader $ openTermLike t
+  typeOfTermLike t = reader $ typeOfTermLike $ runReader t
+  flatTermLike ftf = reader $ flatTermLike $ fmap runReader ftf
+  applyTermLike f arg = reader $ applyTermLike (runReader f) (runReader arg)
+  lambdaTermLike x tp body =
+    reader $ lambdaTermLike x (runReader tp) (runReader . body . reader)
+  piTermLike x tp body =
+    reader $ piTermLike x (runReader tp) (runReader . body . reader)
+  ctorTermLike c args = reader $ ctorTermLike c $ map runReader args
+  dataTypeTermLike d args = reader $ dataTypeTermLike d $ map runReader args
+
+-- | Build a nested sequence of lambda abstractions
+lambdaTermLikeMulti :: OpenTermLike t => [(LocalName, t)] -> ([t] -> t) -> t
+lambdaTermLikeMulti xs_tps body_f =
+  foldr (\(x,tp) rest_f xs ->
+          lambdaTermLike x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
+
+-- | Apply a term to 0 or more arguments
+applyTermLikeMulti :: OpenTermLike t => t -> [t] -> t
+applyTermLikeMulti = foldl applyTermLike
+
+-- | Build a term that 'fail's in the underlying monad when completed
+failTermLike :: OpenTermLike t => String -> t
+failTermLike str = openTermLike $ failOpenTerm str
+
+-- | Build a term for a global name with a definition
+globalTermLike :: OpenTermLike t => Ident -> t
+globalTermLike ident = openTermLike $ globalOpenTerm ident
+
+-- | Apply a named global to 0 or more arguments
+applyGlobalTermLike :: OpenTermLike t => Ident -> [t] -> t
+applyGlobalTermLike ident = applyTermLikeMulti (globalTermLike ident)
+
+-- | Build a term for a natural number literal
+natTermLike :: OpenTermLike t => Natural -> t
+natTermLike = flatTermLike . NatLit
+
+-- | The term for the unit value
+unitTermLike :: OpenTermLike t => t
+unitTermLike = flatTermLike UnitValue
+
+-- | The term for the unit type
+unitTypeTermLike :: OpenTermLike t => t
+unitTypeTermLike = flatTermLike UnitType
+
+-- | Build a SAW core string literal.
+stringLitTermLike :: OpenTermLike t => Text -> t
+stringLitTermLike = flatTermLike . StringLit
+
+-- | Return the SAW core type @String@ of strings.
+stringTypeTermLike :: OpenTermLike t => t
+stringTypeTermLike = globalTermLike "Prelude.String"
+
+-- | The 'True' value as a SAW core term
+trueTermLike :: OpenTermLike t => t
+trueTermLike = globalTermLike "Prelude.True"
+
+-- | The 'False' value as a SAW core term
+falseTermLike :: OpenTermLike t => t
+falseTermLike = globalTermLike "Prelude.False"
+
+-- | Convert a 'Bool' to a SAW core term
+boolTermLike :: OpenTermLike t => Bool -> t
+boolTermLike True = globalTermLike "Prelude.True"
+boolTermLike False = globalTermLike "Prelude.False"
+
+-- | The 'Bool' type as a SAW core term
+boolTypeTermLike :: OpenTermLike t => t
+boolTypeTermLike = globalTermLike "Prelude.Bool"
+
+-- | Build an term for an array literal
+arrayValueTermLike :: OpenTermLike t => t -> [t] -> t
+arrayValueTermLike tp elems =
+  flatTermLike $ ArrayValue tp $ V.fromList elems
+
+-- | Create a SAW core term for a bitvector literal
+bvLitTermLike :: OpenTermLike t => [Bool] -> t
+bvLitTermLike bits =
+  arrayValueTermLike boolTypeTermLike $ map boolTermLike bits
+
+-- | Create a SAW core term for a vector type
+vectorTypeTermLike :: OpenTermLike t => t -> t -> t
+vectorTypeTermLike n a = applyGlobalTermLike "Prelude.Vec" [n,a]
+
+-- | Create a SAW core term for the type of a bitvector
+bvTypeTermLike :: OpenTermLike t => Integral n => n -> t
+bvTypeTermLike n =
+  applyTermLikeMulti (globalTermLike "Prelude.Vec")
+  [natTermLike (fromIntegral n), boolTypeTermLike]
+
+-- | Build a term for a pair
+pairTermLike :: OpenTermLike t => t -> t -> t
+pairTermLike t1 t2 = flatTermLike $ PairValue t1 t2
+
+-- | Build a term for a pair type
+pairTypeTermLike :: OpenTermLike t => t -> t -> t
+pairTypeTermLike t1 t2 = flatTermLike $ PairType t1 t2
+
+-- | Build a term for the left projection of a pair
+pairLeftTermLike :: OpenTermLike t => t -> t
+pairLeftTermLike t = flatTermLike $ PairLeft t
+
+-- | Build a term for the right projection of a pair
+pairRightTermLike :: OpenTermLike t => t -> t
+pairRightTermLike t = flatTermLike $ PairRight t
+
+-- | Build a right-nested tuple as a term
+tupleTermLike :: OpenTermLike t => [t] -> t
+tupleTermLike = foldr pairTermLike unitTermLike
+
+-- | Build a right-nested tuple type as a term
+tupleTypeTermLike :: OpenTermLike t => [t] -> t
+tupleTypeTermLike = foldr pairTypeTermLike unitTypeTermLike
+
+-- | Project the @n@th element of a right-nested tuple type
+projTupleTermLike :: OpenTermLike t => Integer -> t -> t
+projTupleTermLike 0 t = pairLeftTermLike t
+projTupleTermLike i t = projTupleTermLike (i-1) (pairRightTermLike t)
+
+-- | Build a let expression as a term. This is equivalent to
+-- > 'applyTermLike' ('lambdaTermLike' x tp body) rhs
+letTermLike :: OpenTermLike t => LocalName -> t -> t -> (t -> t) -> t
+letTermLike x tp rhs body_f = applyTermLike (lambdaTermLike x tp body_f) rhs
+
+-- | Build a let expression as a term using the @sawLet@ combinator. This
+-- is equivalent to the term @sawLet tp tp_ret rhs (\ (x : tp) -> body_f)@
+sawLetTermLike :: OpenTermLike t => LocalName -> t -> t -> t -> (t -> t) -> t
+sawLetTermLike x tp tp_ret rhs body_f =
+  applyTermLikeMulti (globalTermLike "Prelude.sawLet")
+  [tp, tp_ret, rhs, lambdaTermLike x tp body_f]
+
+
+--------------------------------------------------------------------------------
 -- Building SpecM computations
 
 -- | When creating a SAW core term of type @PolySpecFun@ or @PolyStackTuple@,
@@ -710,6 +885,16 @@ runSpecTermM ev n m = OpenTerm $
 -- thus the use of the 'SpecInfoTerm' type.
 newtype SpecTerm = SpecTerm { unSpecTerm :: SpecTermM SpecInfoTerm }
 
+instance OpenTermLike SpecTerm where
+  openTermLike = openTermSpecTerm
+  typeOfTermLike = specTermType
+  flatTermLike = flatSpecTerm
+  applyTermLike = applySpecTerm
+  lambdaTermLike = lambdaSpecTerm
+  piTermLike = piSpecTerm
+  ctorTermLike = ctorSpecTerm
+  dataTypeTermLike = dataTypeSpecTerm
+
 applySpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
 applySpecTerm (SpecTerm f) (SpecTerm arg) =
   SpecTerm (applySpecInfoTerm <$> f <*> arg)
@@ -735,20 +920,6 @@ openTermSpecTerm t =
 specTermType :: SpecTerm -> SpecTerm
 specTermType (SpecTerm m) =
   SpecTerm $ flip fmap m $ \info_tm -> fmap openTermType info_tm
-
--- | Build a 'SpecTerm' that 'fail's in the underlying monad when completed
-failSpecTerm :: String -> SpecTerm
-failSpecTerm = openTermSpecTerm . failOpenTerm
-
--- | Build a 'SpecTerm' for a natural number literal
-natSpecTerm :: Natural -> SpecTerm
-natSpecTerm n = openTermSpecTerm $ natOpenTerm n
-
-globalSpecTerm :: Ident -> SpecTerm
-globalSpecTerm ident = openTermSpecTerm $ globalOpenTerm ident
-
-applyGlobalSpecTerm :: Ident -> [SpecTerm] -> SpecTerm
-applyGlobalSpecTerm f args = applySpecTermMulti (globalSpecTerm f) args
 
 -- | Build the 'SpecTerm' for the extended function stack
 extStackSpecTerm :: SpecTerm
@@ -791,13 +962,6 @@ lambdaSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
 lambdaSpecTerm x tp body_f =
   lambdaPureSpecTerm x tp (body_f . openTermSpecTerm)
 
--- | Build a nested sequence of lambda abstractions as a 'SpecTerm'
-lambdaSpecTermMulti :: [(LocalName, SpecTerm)] ->
-                       ([SpecTerm] -> SpecTerm) -> SpecTerm
-lambdaSpecTermMulti xs_tps body_f =
-  foldr (\(x,tp) rest_f xs ->
-          lambdaSpecTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
-
 -- | Build a pi abstraction as a 'SpecTerm'
 piSpecTerm :: LocalName -> SpecTerm -> (SpecTerm -> SpecTerm) -> SpecTerm
 piSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
@@ -810,7 +974,7 @@ piSpecTerm x (SpecTerm tpM) body_f = SpecTerm $
 -- forming the term @LRTArg stk lrt@
 lrtToTypeSpecTerm :: OpenTerm -> SpecTerm
 lrtToTypeSpecTerm lrt =
-  applyGlobalSpecTerm "Prelude.LRTArg"
+  applyGlobalTermLike "Prelude.LRTArg"
   [specInfoTermTerm (specInfoExtStack <$> ask), openTermSpecTerm lrt]
 
 funStackTypeOpenTerm :: OpenTerm
@@ -901,8 +1065,8 @@ mkFreshClosSpecTerm lrt body_f = SpecTerm $
 -- | Apply a closure of a given @LetRecType@ to a list of arguments
 applyClosSpecTerm :: OpenTerm -> SpecTerm -> [SpecTerm] -> SpecTerm
 applyClosSpecTerm lrt clos args =
-  applyGlobalSpecTerm "Prelude.applyLRTClosN"
-  (extStackSpecTerm : natSpecTerm (fromIntegral $ length args)
+  applyGlobalTermLike "Prelude.applyLRTClosN"
+  (extStackSpecTerm : natTermLike (fromIntegral $ length args)
    : openTermSpecTerm lrt : clos : args)
 
 -- | Build a @SpecM@ computation that calls a closure with the given return
@@ -956,34 +1120,6 @@ flatSpecTerm :: FlatTermF SpecTerm -> SpecTerm
 flatSpecTerm ftf =
   SpecTerm $ fmap flatSpecInfoTerm $ sequence (fmap unSpecTerm ftf)
 
--- | Build a 'SpecTerm' for the unit object
-unitSpecTerm :: SpecTerm
-unitSpecTerm = flatSpecTerm UnitValue
-
--- | Build a 'SpecTerm' for the unit type
-unitTypeSpecTerm :: SpecTerm
-unitTypeSpecTerm = flatSpecTerm UnitType
-
--- | Build a SAW core string literal
-stringLitSpecTerm :: Text -> SpecTerm
-stringLitSpecTerm = flatSpecTerm . StringLit
-
--- | Build a 'SpecTerm' for a pair
-pairSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
-pairSpecTerm t1 t2 = flatSpecTerm $ PairValue t1 t2
-
--- | Build a 'SpecTerm' for a pair type
-pairTypeSpecTerm :: SpecTerm -> SpecTerm -> SpecTerm
-pairTypeSpecTerm t1 t2 = flatSpecTerm $ PairType t1 t2
-
--- | Build a 'SpecTerm' for the left projection of a pair
-pairLeftSpecTerm :: SpecTerm -> SpecTerm
-pairLeftSpecTerm t = flatSpecTerm $ PairLeft t
-
--- | Build a 'SpecTerm' for the right projection of a pair
-pairRightSpecTerm :: SpecTerm -> SpecTerm
-pairRightSpecTerm t = flatSpecTerm $ PairRight t
-
 -- | Build a 'SpecInfoTerm' for a constructor applied to its arguments
 ctorSpecInfoTerm :: Ident -> [SpecInfoTerm] -> SpecInfoTerm
 ctorSpecInfoTerm c args = fmap (ctorOpenTerm c) (sequence args)
@@ -1004,24 +1140,10 @@ dataTypeSpecTerm d args =
 
 -- | Build a let expression as an 'SpecTerm'. This is equivalent to
 -- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
-letSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> (SpecTerm -> SpecTerm) ->
-               SpecTerm
-letSpecTerm x tp rhs body_f = applySpecTerm (lambdaSpecTerm x tp body_f) rhs
-
--- | Build a let expression as a 'SpecTerm' using the @sawLet@ combinator. This
--- is equivalent to the term @sawLet tp tp_ret rhs (\ (x : tp) -> body_f)@
-sawLetSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> SpecTerm ->
-                  (SpecTerm -> SpecTerm) -> SpecTerm
-sawLetSpecTerm x tp tp_ret rhs body_f =
-  applySpecTermMulti (globalSpecTerm "Prelude.sawLet")
-  [tp, tp_ret, rhs, lambdaSpecTerm x tp body_f]
-
--- | Build a let expression as an 'SpecTerm'. This is equivalent to
--- > 'applySpecTerm' ('lambdaSpecTerm' x tp body) rhs
 sawLetPureSpecTerm :: LocalName -> SpecTerm -> SpecTerm -> SpecTerm ->
                       (OpenTerm -> SpecTerm) -> SpecTerm
 sawLetPureSpecTerm x tp tp_ret rhs body_f =
-  applySpecTermMulti (globalSpecTerm "Prelude.sawLet")
+  applySpecTermMulti (globalTermLike "Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaPureSpecTerm x tp body_f]
 
 
