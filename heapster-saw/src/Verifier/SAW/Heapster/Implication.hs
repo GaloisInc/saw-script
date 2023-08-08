@@ -1464,7 +1464,9 @@ data PermImpl1 ps_in ps_outs where
   -- same input permissions to both branches:
   --
   -- > ps -o ps \/ ps
-  Impl1_Catch :: PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
+  --
+  -- The 'String' gives debug info about why the algorithm inserted the catch.
+  Impl1_Catch :: String -> PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
 
   -- | Push the primary permission for variable @x@ onto the stack:
   --
@@ -1483,7 +1485,11 @@ data PermImpl1 ps_in ps_outs where
   --
   -- > ps * x:(p1 \/ (p2 \/ (... \/ pn)))
   -- >   -o (ps * x:p1) \/ ... \/ (ps * x:pn)
-  Impl1_ElimOrs :: ExprVar a -> OrList ps a disjs -> PermImpl1 (ps :> a) disjs
+  --
+  -- The 'String' is contains the printed version of the @x:(p1 \/ ...)@
+  -- permission that is being eliminated, for debug info.
+  Impl1_ElimOrs :: String -> ExprVar a -> OrList ps a disjs ->
+                   PermImpl1 (ps :> a) disjs
 
   -- | Eliminate an existential on the top of the stack:
   --
@@ -1852,7 +1858,7 @@ permImplCatch pimpl1 pimpl2 =
 permImplSucceeds :: PermImpl r ps -> Int
 permImplSucceeds (PermImpl_Done _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Fail _) _) = 0
-permImplSucceeds (PermImpl_Step Impl1_Catch
+permImplSucceeds (PermImpl_Step (Impl1_Catch _)
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
   max (mbLift $ fmap permImplSucceeds mb_impl1)
   (mbLift $ fmap permImplSucceeds mb_impl2)
@@ -1860,7 +1866,7 @@ permImplSucceeds (PermImpl_Step (Impl1_Push _ _) (MbPermImpls_Cons _ _ mb_impl))
   mbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Pop _ _) (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
-permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ ) mb_impls) =
+permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ _) mb_impls) =
   mbImplsSucc mb_impls where
   mbImplsSucc :: MbPermImpls r ps_outs -> Int
   mbImplsSucc MbPermImpls_Nil = 0
@@ -2765,7 +2771,7 @@ mbOrListPermImpls
 applyImpl1 :: HasCallStack => PPInfo -> PermImpl1 ps_in ps_outs ->
               PermSet ps_in -> MbPermSets ps_outs
 applyImpl1 _ (Impl1_Fail _) _ = MbPermSets_Nil
-applyImpl1 _ Impl1_Catch ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
+applyImpl1 _ (Impl1_Catch _) ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
 applyImpl1 pp_info (Impl1_Push x p) ps =
   if ps ^. varPerm x == p then
     mbPermSets1 $ emptyMb $ pushPerm x p $ set (varPerm x) ValPerm_True ps
@@ -2789,7 +2795,7 @@ applyImpl1 pp_info (Impl1_Pop x p) ps =
       vsep [pretty "applyImpl1: Impl1_Pop: non-empty permissions for variable"
             <+> permPretty pp_info x <> pretty ":",
             permPretty pp_info (ps ^. varPerm x)]
-applyImpl1 _ (Impl1_ElimOrs x or_list) ps =
+applyImpl1 _ (Impl1_ElimOrs _ x or_list) ps =
   if ps ^. topDistPerm x == orListPerm or_list then
     orListMbPermSets ps x or_list
   else
@@ -3255,13 +3261,13 @@ instance m ~ Identity =>
          Substable PermVarSubst (PermImpl1 ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
     [nuMP| Impl1_Fail err |] -> Impl1_Fail <$> genSubst s err
-    [nuMP| Impl1_Catch |] -> return Impl1_Catch
+    [nuMP| Impl1_Catch str |] -> return $ Impl1_Catch $ mbLift str
     [nuMP| Impl1_Push x p |] ->
       Impl1_Push <$> genSubst s x <*> genSubst s p
     [nuMP| Impl1_Pop x p |] ->
       Impl1_Pop <$> genSubst s x <*> genSubst s p
-    [nuMP| Impl1_ElimOrs x or_list |] ->
-      Impl1_ElimOrs <$> genSubst s x <*> genSubst s or_list
+    [nuMP| Impl1_ElimOrs str x or_list |] ->
+      Impl1_ElimOrs (mbLift str) <$> genSubst s x <*> genSubst s or_list
     [nuMP| Impl1_ElimExists x p_body |] ->
       Impl1_ElimExists <$> genSubst s x <*> genSubst s p_body
     [nuMP| Impl1_ElimFalse x |] ->
@@ -3963,6 +3969,11 @@ implDebugM reqlvl f =
      let str = renderDoc doc
      debugTrace reqlvl dlevel str (return str)
 
+-- | Pretty-print an object using the current pretty-printing info
+implPrettyM :: NuMatchingAny1 r => PermPretty p => p ->
+               ImplM vars s r ps ps (PP.Doc ann)
+implPrettyM p = uses implStatePPInfo $ \pp_info -> permPretty pp_info p
+
 -- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
 -- is at least 'traceDebugLevel'
 implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
@@ -4000,10 +4011,10 @@ implCatchM :: NuMatchingAny1 r => PermPretty p => String -> p ->
               ImplM vars s r ps1 ps2 a -> ImplM vars s r ps1 ps2 a ->
               ImplM vars s r ps1 ps2 a
 implCatchM f p m1 m2 =
-  implTraceM (\i -> pretty ("Inserting catch in " ++ f ++ " for proving:")
-                    <> line <> permPretty i p) >>>
+  implTraceM (\i -> pretty ("Catch in " ++ f ++ " for proving:")
+                    <> line <> permPretty i p) >>>= \catch_str ->
   implApplyImpl1
-    Impl1_Catch
+    (Impl1_Catch catch_str)
     (MNil
      :>: Impl1Cont (const $
                     implTraceM (\i -> pretty ("Case 1 of catch in " ++ f
@@ -4070,8 +4081,8 @@ implElimOrsM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                 ImplM vars s r (ps :> a) (ps :> a) ()
 implElimOrsM x p@(matchOrList -> Just (Some or_list)) =
   implTraceM (\pp_info -> pretty "Eliminating or:" <+>
-                          permPretty pp_info p) >>>
-  implApplyImpl1 (Impl1_ElimOrs x or_list)
+                          permPretty pp_info (ColonPair x p)) >>>= \xp_pp ->
+  implApplyImpl1 (Impl1_ElimOrs xp_pp x or_list)
   (RL.map (\(OrListDisj _) -> Impl1Cont (const $ pure ())) or_list)
 implElimOrsM _ _ = error "implElimOrsM: malformed input permission"
 
