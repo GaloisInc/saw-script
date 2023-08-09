@@ -84,13 +84,14 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
+-- | Return 'True' iff a given cell type is a primitive type
 cellTypeIsPrimitive :: Text -> Bool
 cellTypeIsPrimitive cellType =
   case Text.uncons cellType of
     Just ('$', _) -> True
     _ -> False
 
--- TODO: Rename "String" to "Text"
+-- | Mapping from 'Text' to primitive cell types
 textToPrimitiveCellType :: Map.Map Text CellType
 textToPrimitiveCellType = Map.fromList
   [ ("$not"         , CellTypeNot)
@@ -131,11 +132,13 @@ textToPrimitiveCellType = Map.fromList
   , ("$dff"         , CellTypeDff)
   ]
 
--- TODO: Rename "String" to "Text"
+-- | Mapping from primitive cell types to textual representation
 primitiveCellTypeToText :: Map.Map CellType Text
 primitiveCellTypeToText =
   Map.fromList [(y, x) | (x, y) <- Map.toList textToPrimitiveCellType]
 
+-- | All supported cell types. All types are primitives except for
+-- 'CellTypeUserType' which represents user-defined submodules
 data CellType
   = CellTypeNot
   | CellTypePos
@@ -201,6 +204,7 @@ instance Show CellType where
       _ | Just t <- Map.lookup ct primitiveCellTypeToText -> t
         | otherwise -> panic "Show CellType" ["Unknown primitive cell type"]
 
+-- | Extract the name from a user-defined submodule 'CellType'
 asUserType :: CellType -> Text
 asUserType cellType =
   case cellType of
