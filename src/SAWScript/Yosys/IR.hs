@@ -30,6 +30,7 @@ import qualified Data.Text as Text
 
 import qualified Data.Aeson as Aeson
 
+import SAWScript.Panic (panic)
 import SAWScript.Yosys.Utils
 
 --------------------------------------------------------------------------------
@@ -83,10 +84,140 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
+-- | Return 'True' iff a given cell type is a primitive type
+cellTypeIsPrimitive :: Text -> Bool
+cellTypeIsPrimitive cellType =
+  case Text.uncons cellType of
+    Just ('$', _) -> True
+    _ -> False
+
+-- | Mapping from 'Text' to primitive cell types
+textToPrimitiveCellType :: Map.Map Text CellType
+textToPrimitiveCellType = Map.fromList
+  [ ("$not"         , CellTypeNot)
+  , ("$pos"         , CellTypePos)
+  , ("$neg"         , CellTypeNeg)
+  , ("$and"         , CellTypeAnd)
+  , ("$or"          , CellTypeOr)
+  , ("$xor"         , CellTypeXor)
+  , ("$xnor"        , CellTypeXnor)
+  , ("$reduce_and"  , CellTypeReduceAnd)
+  , ("$reduce_or"   , CellTypeReduceOr)
+  , ("$reduce_xor"  , CellTypeReduceXor)
+  , ("$reduce_xnor" , CellTypeReduceXnor)
+  , ("$reduce_bool" , CellTypeReduceBool)
+  , ("$shl"         , CellTypeShl)
+  , ("$shr"         , CellTypeShr)
+  , ("$sshl"        , CellTypeSshl)
+  , ("$sshr"        , CellTypeSshr)
+  , ("$shiftx"      , CellTypeShiftx)
+  , ("$lt"          , CellTypeLt)
+  , ("$le"          , CellTypeLe)
+  , ("$gt"          , CellTypeGt)
+  , ("$ge"          , CellTypeGe)
+  , ("$eq"          , CellTypeEq)
+  , ("$ne"          , CellTypeNe)
+  , ("$eqx"         , CellTypeEqx)
+  , ("$nex"         , CellTypeNex)
+  , ("$add"         , CellTypeAdd)
+  , ("$sub"         , CellTypeSub)
+  , ("$mul"         , CellTypeMul)
+  , ("$div"         , CellTypeDiv)
+  , ("$mod"         , CellTypeMod)
+  , ("$logic_not"   , CellTypeLogicNot)
+  , ("$logic_and"   , CellTypeLogicAnd)
+  , ("$logic_or"    , CellTypeLogicOr)
+  , ("$mux"         , CellTypeMux)
+  , ("$pmux"        , CellTypePmux)
+  , ("$dff"         , CellTypeDff)
+  ]
+
+-- | Mapping from primitive cell types to textual representation
+primitiveCellTypeToText :: Map.Map CellType Text
+primitiveCellTypeToText =
+  Map.fromList [(y, x) | (x, y) <- Map.toList textToPrimitiveCellType]
+
+-- | All supported cell types. All types are primitives except for
+-- 'CellTypeUserType' which represents user-defined submodules
+data CellType
+  = CellTypeNot
+  | CellTypePos
+  | CellTypeNeg
+  | CellTypeAnd
+  | CellTypeOr
+  | CellTypeXor
+  | CellTypeXnor
+  | CellTypeReduceAnd
+  | CellTypeReduceOr
+  | CellTypeReduceXor
+  | CellTypeReduceXnor
+  | CellTypeReduceBool
+  | CellTypeShl
+  | CellTypeShr
+  | CellTypeSshl
+  | CellTypeSshr
+  | CellTypeShiftx
+  | CellTypeLt
+  | CellTypeLe
+  | CellTypeGt
+  | CellTypeGe
+  | CellTypeEq
+  | CellTypeNe
+  | CellTypeEqx
+  | CellTypeNex
+  | CellTypeAdd
+  | CellTypeSub
+  | CellTypeMul
+  | CellTypeDiv
+  | CellTypeMod
+  | CellTypeLogicNot
+  | CellTypeLogicAnd
+  | CellTypeLogicOr
+  | CellTypeMux
+  | CellTypePmux
+  | CellTypeDff
+  | CellTypeUserType Text
+  deriving (Eq, Ord)
+instance Aeson.FromJSON CellType where
+  parseJSON (Aeson.String s) =
+    case s of
+      "$adff"        -> throw $ YosysErrorUnsupportedFF "$adff"
+      "$sdff"        -> throw $ YosysErrorUnsupportedFF "$sdff"
+      "$aldff"       -> throw $ YosysErrorUnsupportedFF "$aldff"
+      "$dffsr"       -> throw $ YosysErrorUnsupportedFF "$dffsr"
+      "$dffe"        -> throw $ YosysErrorUnsupportedFF "$dffe"
+      "$adffe"       -> throw $ YosysErrorUnsupportedFF "$adffe"
+      "$sdffe"       -> throw $ YosysErrorUnsupportedFF "$sdffe"
+      "$sdffce"      -> throw $ YosysErrorUnsupportedFF "$sdffce"
+      "$aldffe"      -> throw $ YosysErrorUnsupportedFF "$aldffe"
+      "$dffsre"      -> throw $ YosysErrorUnsupportedFF "$dffsre"
+      _ | cellTypeIsPrimitive s ->
+          case Map.lookup s textToPrimitiveCellType of
+            Just cellType -> pure cellType
+            Nothing -> throw $ YosysErrorUnsupportedPrimitive s
+        | otherwise -> pure $ CellTypeUserType s
+  parseJSON v = fail $ "Failed to parse cell type: " <> show v
+instance Show CellType where
+  show ct = Text.unpack $
+    case ct of
+      CellTypeUserType ut -> ut
+      _ | Just t <- Map.lookup ct primitiveCellTypeToText -> t
+        | otherwise -> panic "Show CellType" ["Unknown primitive cell type"]
+
+-- | Extract the name from a user-defined submodule 'CellType'
+asUserType :: CellType -> Text
+asUserType cellType =
+  case cellType of
+    CellTypeUserType t -> t
+    _ ->
+      panic "asUserType"
+            [  "Expected a user defined type, but got a primitive type: "
+            ++ show cellType ]
+
 -- | A cell within an HDL module.
 data Cell bs = Cell
   { _cellHideName :: Bool -- ^ Whether the cell's name is human-readable
-  , _cellType :: Text -- ^ The cell type
+  , _cellType :: CellType -- ^ The cell type
   , _cellParameters :: Map Text Text -- ^ Metadata parameters
   , _cellAttributes :: Aeson.Value -- currently unused
   , _cellPortDirections :: Map Text Direction -- ^ Direction for each cell connection
