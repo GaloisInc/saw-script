@@ -178,7 +178,7 @@ netgraphToTerms sc env ng inputs
                   r <- primCellToTerm sc c args >>= \case
                     Just r -> pure r
                     Nothing ->
-                      let submoduleName = asUserType "netgraphToTerms" $ c ^. cellType in
+                      let submoduleName = asUserType $ c ^. cellType in
                       case Map.lookup submoduleName env of
                         Just cm -> do
                           r <- cryptolRecord sc args

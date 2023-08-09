@@ -202,12 +202,11 @@ cellTypeToText ct =
     _ | Just t <- Map.lookup ct primitiveCellTypeToString -> t
       | otherwise -> error "TODO: Unknown cell type"
 
--- TODO: Remove debug string param
-asUserType :: String -> CellType -> Text
-asUserType from cellType =
+asUserType :: CellType -> Text
+asUserType cellType =
   case cellType of
     CellTypeUserType t -> t
-    _ -> error $ "TODO: " ++ from ++ ": Expected a user type, got a primitive type: " ++ show cellType
+    _ -> error $ "TODO: Expected a user type, got a primitive type: " ++ show cellType
 
 -- | A cell within an HDL module.
 data Cell bs = Cell
@@ -254,7 +253,6 @@ makeLenses ''YosysIR
 instance Aeson.FromJSON YosysIR where
   parseJSON = Aeson.withObject "yosys" $ \o -> do
     _yosysCreator <- o Aeson..: "creator"
-    -- TODO: This mapKeys thing is hacky. I should probably define a "fromKeys" instance (or whatever it's called).
     _yosysModules <- o Aeson..: "modules"
     pure YosysIR{..}
 

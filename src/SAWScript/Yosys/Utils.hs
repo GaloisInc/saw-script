@@ -53,7 +53,6 @@ data YosysError
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
   | YosysErrorNoSuchCellType Text Text
-  | YosysErrorUnsupportedPmux -- TODO: Unused? Remove?
   | YosysErrorUnsupportedFF Text
   | YosysErrorInvalidOverrideTarget
   | YosysErrorOverrideNameNotFound Text
@@ -103,12 +102,6 @@ instance Show YosysError where
       , "It may be helpful to use the \"flatten\" tactic within Yosys.\n"
       , consultYosysManual
       ]
-  show YosysErrorUnsupportedPmux = Text.unpack $ mconcat
-    [ "Error: The circuit contains cells with type \"$pmux\".\n"
-    , "These cells are not currently supported by SAW.\n"
-    , "It may be helpful to replace $pmux cells using the \"pmuxtree\" tactic within Yosys.\n"
-    , consultYosysManual
-    ]
   show (YosysErrorUnsupportedFF mnm) = Text.unpack $ mconcat
     [ "Error: The circuit contains cells with type \"", mnm, "\".\n"
     , "These cells are not currently supported by SAW.\n"
