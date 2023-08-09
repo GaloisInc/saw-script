@@ -30,6 +30,7 @@ import qualified Data.Text as Text
 
 import qualified Data.Aeson as Aeson
 
+import SAWScript.Panic (panic)
 import SAWScript.Yosys.Utils
 
 --------------------------------------------------------------------------------
@@ -90,8 +91,8 @@ cellTypeIsPrimitive cellType =
     _ -> False
 
 -- TODO: Rename "String" to "Text"
-stringToPrimitiveCellType :: Map.Map Text CellType
-stringToPrimitiveCellType = Map.fromList
+textToPrimitiveCellType :: Map.Map Text CellType
+textToPrimitiveCellType = Map.fromList
   [ ("$not"         , CellTypeNot)
   , ("$pos"         , CellTypePos)
   , ("$neg"         , CellTypeNeg)
@@ -131,9 +132,9 @@ stringToPrimitiveCellType = Map.fromList
   ]
 
 -- TODO: Rename "String" to "Text"
-primitiveCellTypeToString :: Map.Map CellType Text
-primitiveCellTypeToString =
-  Map.fromList [(y, x) | (x, y) <- Map.toList stringToPrimitiveCellType]
+primitiveCellTypeToText :: Map.Map CellType Text
+primitiveCellTypeToText =
+  Map.fromList [(y, x) | (x, y) <- Map.toList textToPrimitiveCellType]
 
 data CellType
   = CellTypeNot
@@ -173,7 +174,7 @@ data CellType
   | CellTypePmux
   | CellTypeDff
   | CellTypeUserType Text
-  deriving (Show, Eq, Ord)
+  deriving (Eq, Ord)
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
@@ -188,25 +189,26 @@ instance Aeson.FromJSON CellType where
       "$aldffe"      -> throw $ YosysErrorUnsupportedFF "$aldffe"
       "$dffsre"      -> throw $ YosysErrorUnsupportedFF "$dffsre"
       _ | cellTypeIsPrimitive s ->
-          case Map.lookup s stringToPrimitiveCellType of
+          case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
-            Nothing -> error "TODO: Throw an unsupported type error"
+            Nothing -> throw $ YosysErrorUnsupportedPrimitive s
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
-
--- TODO: Turn into a show instance?
-cellTypeToText :: CellType -> Text
-cellTypeToText ct =
-  case ct of
-    CellTypeUserType ut -> ut
-    _ | Just t <- Map.lookup ct primitiveCellTypeToString -> t
-      | otherwise -> error "TODO: Unknown cell type"
+instance Show CellType where
+  show ct = Text.unpack $
+    case ct of
+      CellTypeUserType ut -> ut
+      _ | Just t <- Map.lookup ct primitiveCellTypeToText -> t
+        | otherwise -> panic "Show CellType" ["Unknown primitive cell type"]
 
 asUserType :: CellType -> Text
 asUserType cellType =
   case cellType of
     CellTypeUserType t -> t
-    _ -> error $ "TODO: Expected a user type, got a primitive type: " ++ show cellType
+    _ ->
+      panic "asUserType"
+            [  "Expected a user defined type, but got a primitive type: "
+            ++ show cellType ]
 
 -- | A cell within an HDL module.
 data Cell bs = Cell
