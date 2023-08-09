@@ -52,7 +52,8 @@ data YosysError
   = YosysError Text
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
-  | YosysErrorNoSuchCellType Text Text
+  | YosysErrorUnsupportedPrimitive Text
+  | YosysErrorNoSuchSubmodule Text Text
   | YosysErrorUnsupportedFF Text
   | YosysErrorInvalidOverrideTarget
   | YosysErrorOverrideNameNotFound Text
@@ -84,23 +85,22 @@ instance Show YosysError where
     , "It is possible that this represents an undetected cycle in the netgraph.\n"
     , reportBugText
     ]
-  -- TODO: Remove this error type and replace with YosysErrorNoSuchSubmodule and
-  -- YosysErrorUnsuportedPrimitive vv
-  show (YosysErrorNoSuchCellType mnm cnm)
-    | Just ('$', _) <- Text.uncons mnm
-    = Text.unpack $ mconcat
-      [ "Error: The cell type \"", mnm
-      , "\", which is the type of the cell with name \"", cnm
-      , "\", is not a supported primitive cell type.\n"
-      , reportBugText
-      ]
-    | otherwise = Text.unpack $ mconcat
-      [ "Error: The cell type \"", mnm
-      , "\", which is the type of the cell with name \"", cnm
-      , "\", refers to a submodule of the circuit.\n"
-      , "Using such submodules during translation of sequential circuits is not currently supported by SAW.\n"
-      , "It may be helpful to use the \"flatten\" tactic within Yosys.\n"
-      , consultYosysManual
+  show (YosysErrorUnsupportedPrimitive primitive) = Text.unpack $ mconcat
+    [
+      "Error: Encountered a cell with unsupported primitive type \""
+    , primitive
+    , "\".\n"
+    , reportBugText
+    ]
+  show (YosysErrorNoSuchSubmodule submoduleName cellName) =
+    Text.unpack $ mconcat
+      [ "Error: Encountered a cell \""
+      , cellName
+      , "\" with type \""
+      , submoduleName
+      , "\", but could not find a submodule named \""
+      , submoduleName
+      , "\"."
       ]
   show (YosysErrorUnsupportedFF mnm) = Text.unpack $ mconcat
     [ "Error: The circuit contains cells with type \"", mnm, "\".\n"

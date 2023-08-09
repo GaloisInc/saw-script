@@ -196,7 +196,8 @@ buildPatternMap sc mods states inp m = do
       -- given a pattern lookup function build a map from output patterns to terms
       f :: (YosysBitvecConsumer -> Pattern -> m SC.Term) -> m (Map Pattern SC.Term)
       f = getInps >=> inpsToOuts >=> \case
-        Nothing -> throw $ YosysErrorNoSuchCellType (Text.pack (show (c ^. cellType))) cnm
+        Nothing ->
+          throw $ YosysErrorNoSuchSubmodule (asUserType (c ^. cellType)) cnm
         Just outs -> do
           ms <- forM (Map.toList outs) $ \(onm, otm) ->
             case Map.lookup onm $ c ^. cellConnections of

@@ -184,7 +184,7 @@ netgraphToTerms sc env ng inputs
                           r <- cryptolRecord sc args
                           liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
                         Nothing ->
-                            throw $ YosysErrorNoSuchCellType submoduleName cnm
+                            throw $ YosysErrorNoSuchSubmodule  submoduleName cnm
 
                   -- once we've built a term, insert it along with each of its bits
                   ts <- forM (Map.assocs $ cellOutputConnections c) $ \(o, out) -> do
