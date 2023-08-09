@@ -71,7 +71,7 @@ import qualified SAWScript.Yosys.CompositionalTranslation as Comp
 
 data Modgraph = Modgraph
   { _modgraphGraph :: Graph.Graph
-  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, Text, [Text])
+  , _modgraphNodeFromVertex :: Graph.Vertex -> (Module, CellType, [CellType])
   -- , _modgraphVertexFromKey :: Text -> Maybe Graph.Vertex
   }
 makeLenses ''Modgraph
@@ -80,10 +80,10 @@ makeLenses ''Modgraph
 yosysIRModgraph :: YosysIR -> Modgraph
 yosysIRModgraph ir =
   let
-    moduleToNode :: (Text, Module) -> (Module, Text, [Text])
+    moduleToNode :: (CellType, Module) -> (Module, CellType, [CellType])
     moduleToNode (nm, m) = (m, nm, deps)
       where
-        deps = asUserType "yosysIRModgraph" . view cellType <$> Map.elems (m ^. moduleCells)
+        deps = view cellType <$> Map.elems (m ^. moduleCells)
     nodes = moduleToNode <$> Map.assocs (ir ^. yosysModules)
     (_modgraphGraph, _modgraphNodeFromVertex, _modgraphVertexFromKey)
       = Graph.graphFromEdges nodes

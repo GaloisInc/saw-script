@@ -222,13 +222,14 @@ instance Aeson.FromJSON Module where
 -- | A collection of multiple HDL modules (possibly with dependencies on each other).
 data YosysIR = YosysIR
   { _yosysCreator :: Text
-  , _yosysModules :: Map Text Module
+  , _yosysModules :: Map CellType Module
   } deriving (Show, Eq, Ord)
 makeLenses ''YosysIR
 instance Aeson.FromJSON YosysIR where
   parseJSON = Aeson.withObject "yosys" $ \o -> do
     _yosysCreator <- o Aeson..: "creator"
-    _yosysModules <- o Aeson..: "modules"
+    -- TODO: This mapKeys thing is hacky. I should probably define a "fromKeys" instance (or whatever it's called).
+    _yosysModules <- Map.mapKeys CellTypeUserType <$> o Aeson..: "modules"
     pure YosysIR{..}
 
 -- | Read a collection of HDL modules from a file produced by Yosys' write_json command.
