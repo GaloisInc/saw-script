@@ -1439,7 +1439,8 @@ verifySimulate ::
   TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap = do
   sc <- getSharedContext
-  io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
+  rw <- getTopLevelRW
+  (res, rw') <- io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
      let sym = cc^.ccSym
      let argTys = Crucible.blockInputs $
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
@@ -1480,9 +1481,11 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList breakpoints))
        (neGroupOn (view csName) invLemmas)
 
-     (simpleLoopFixpointFeature, fixpoint_state_ref) <-
+     rw_ref <- newIORef rw
+     (simpleLoopFixpointFeature, fixpoint_state_ref) <- do
+       let ?ptrWidth = knownNat @64
        Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) $
-         Just $ simpleLoopFixpointFunction sc sym $ mspec ^. csName
+         Just $ simpleLoopFixpointFunction sc sym rw_ref $ mspec ^. csName
     --  (simpleLoopFixpointFeature, fixpoint_state_ref) <-
     --    Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) Nothing
 
@@ -1524,9 +1527,10 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                             (Crucible.regValue retval)
                      return (Just (ret_mt, v))
 
-            Crucible.AfterFixpoint _ uninterp_inv_fn <- readIORef fixpoint_state_ref
+            Some (Crucible.AfterFixpoint _ uninterp_inv_fn) <- readIORef fixpoint_state_ref
             invSubst <- Crucible.runCHC bak [uninterp_inv_fn]
-            return (retval', globals1, invSubst)
+            rw' <- readIORef rw_ref
+            return ((retval', globals1, invSubst), rw')
 
        Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 
@@ -1536,16 +1540,20 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                            , show resultDoc
                            ]
 
+  putTopLevelRW rw'
+  return res
+
 
 simpleLoopFixpointFunction ::
   (sym ~ Sym, MonadIO m) =>
   SharedContext ->
   sym ->
+  IORef TopLevelRW ->
   String ->
   MapF (W4.SymExpr sym) (Crucible.FixpointEntry sym) ->
   W4.Pred sym ->
   m (MapF (W4.SymExpr sym) (W4.SymExpr sym), Maybe (W4.Pred sym))
-simpleLoopFixpointFunction sc sym nm fixpoint_substitution condition = liftIO $ do
+simpleLoopFixpointFunction sc sym rw_ref nm fixpoint_substitution condition = liftIO $ do
   sawst <- Common.sawCoreState sym
 
   let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
@@ -1589,8 +1597,19 @@ simpleLoopFixpointFunction sc sym nm fixpoint_substitution condition = liftIO $ 
     (getAllExts func_cons ++ toList (Set.difference (getAllExtSet loop_body) (getAllExtSet func_cons)))
     loop_body
   fix_tm <- scGlobalApply sc "Prelude.fix" [func_type, f]
-  let nmi = llvmNameInfo $ nm ++ "_loop"
+  let func_name = nm ++ "_loop"
+  let nmi = llvmNameInfo func_name
   func <- scConstant' sc nmi fix_tm func_type
+
+  typed_func <- mkTypedTerm sc func
+  rw <- readIORef rw_ref
+  rw' <- extendEnv sc
+    (Located func_name func_name $ PosInternal "simpleLoopFixpointFunction")
+    Nothing
+    Nothing
+    (VTerm typed_func)
+    rw
+  writeIORef rw_ref rw'
 
   arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
     toSC sym sawst $ Crucible.headerValue fixpoint_entry

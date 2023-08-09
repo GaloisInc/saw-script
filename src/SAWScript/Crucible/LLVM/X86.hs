@@ -584,7 +584,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
       invSubst <- case maybe_ref of
         Just fixpoint_state_ref -> do
-          Crucible.LLVM.Fixpoint.AfterFixpoint _ uninterp_inv_fn <- liftIO $ readIORef fixpoint_state_ref
+          Some (Crucible.LLVM.Fixpoint.AfterFixpoint _ uninterp_inv_fn) <- liftIO $ readIORef fixpoint_state_ref
           C.runCHC bak [uninterp_inv_fn]
         Nothing -> return MapF.empty
 
@@ -617,9 +617,10 @@ setupSimpleLoopFixpointFeature ::
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm ->
-  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.Fixpoint.FixpointState sym blocks))
+  IO (C.ExecutionFeature p sym ext rtp, IORef (Some (Crucible.LLVM.Fixpoint.FixpointState sym 64 blocks)))
 
-setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
+setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
+  let ?ptrWidth = knownNat @64
   Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
 
  where
