@@ -66,8 +66,6 @@ import SAWScript.Yosys.Theorem
 import SAWScript.Yosys.TransitionSystem
 import qualified SAWScript.Yosys.CompositionalTranslation as Comp
 
-import Debug.Trace
-
 --------------------------------------------------------------------------------
 -- ** Building the module graph from Yosys IR
 
@@ -103,7 +101,6 @@ convertYosysIR sc ir = do
   foldM
     (\env v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        liftIO $ traceIO $ Text.unpack nm
         tm <- Comp.translateModule sc env m
         _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ tm ^. Comp.translatedModuleTerm
         n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
