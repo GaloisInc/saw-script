@@ -83,6 +83,58 @@ instance Aeson.FromJSON Port where
       _ -> pure False
     pure Port{..}
 
+cellTypeIsPrimitive :: Text -> Bool
+cellTypeIsPrimitive cellType =
+  case Text.uncons cellType of
+    Just ('$', _) -> True
+    _ -> False
+
+-- TODO: Rename "String" to "Text"
+stringToPrimitiveCellType :: Map.Map Text CellType
+stringToPrimitiveCellType = Map.fromList
+  [ ("$not"         , CellTypeNot)
+  , ("$pos"         , CellTypePos)
+  , ("$neg"         , CellTypeNeg)
+  , ("$and"         , CellTypeAnd)
+  , ("$or"          , CellTypeOr)
+  , ("$xor"         , CellTypeXor)
+  , ("$xnor"        , CellTypeXnor)
+  , ("$reduce_and"  , CellTypeReduceAnd)
+  , ("$reduce_or"   , CellTypeReduceOr)
+  , ("$reduce_xor"  , CellTypeReduceXor)
+  , ("$reduce_xnor" , CellTypeReduceXnor)
+  , ("$reduce_bool" , CellTypeReduceBool)
+  , ("$shl"         , CellTypeShl)
+  , ("$shr"         , CellTypeShr)
+  , ("$sshl"        , CellTypeSshl)
+  , ("$sshr"        , CellTypeSshr)
+  , ("$shiftx"      , CellTypeShiftx)
+  , ("$lt"          , CellTypeLt)
+  , ("$le"          , CellTypeLe)
+  , ("$gt"          , CellTypeGt)
+  , ("$ge"          , CellTypeGe)
+  , ("$eq"          , CellTypeEq)
+  , ("$ne"          , CellTypeNe)
+  , ("$eqx"         , CellTypeEqx)
+  , ("$nex"         , CellTypeNex)
+  , ("$add"         , CellTypeAdd)
+  , ("$sub"         , CellTypeSub)
+  , ("$mul"         , CellTypeMul)
+  , ("$div"         , CellTypeDiv)
+  , ("$mod"         , CellTypeMod)
+  , ("$logic_not"   , CellTypeLogicNot)
+  , ("$logic_and"   , CellTypeLogicAnd)
+  , ("$logic_or"    , CellTypeLogicOr)
+  , ("$mux"         , CellTypeMux)
+  , ("$pmux"        , CellTypePmux)
+  , ("$dff"         , CellTypeDff)
+  ]
+
+-- TODO: Rename "String" to "Text"
+primitiveCellTypeToString :: Map.Map CellType Text
+primitiveCellTypeToString =
+  Map.fromList [(y, x) | (x, y) <- Map.toList stringToPrimitiveCellType]
+
 data CellType
   = CellTypeNot
   | CellTypePos
@@ -125,42 +177,6 @@ data CellType
 instance Aeson.FromJSON CellType where
   parseJSON (Aeson.String s) =
     case s of
-      "$not"         -> pure CellTypeNot
-      "$pos"         -> pure CellTypePos
-      "$neg"         -> pure CellTypeNeg
-      "$and"         -> pure CellTypeAnd
-      "$or"          -> pure CellTypeOr
-      "$xor"         -> pure CellTypeXor
-      "$xnor"        -> pure CellTypeXnor
-      "$reduce_and"  -> pure CellTypeReduceAnd
-      "$reduce_or"   -> pure CellTypeReduceOr
-      "$reduce_xor"  -> pure CellTypeReduceXor
-      "$reduce_xnor" -> pure CellTypeReduceXnor
-      "$reduce_bool" -> pure CellTypeReduceBool
-      "$shl"         -> pure CellTypeShl
-      "$shr"         -> pure CellTypeShr
-      "$sshl"        -> pure CellTypeSshl
-      "$sshr"        -> pure CellTypeSshr
-      "$shiftx"      -> pure CellTypeShiftx
-      "$lt"          -> pure CellTypeLt
-      "$le"          -> pure CellTypeLe
-      "$gt"          -> pure CellTypeGt
-      "$ge"          -> pure CellTypeGe
-      "$eq"          -> pure CellTypeEq
-      "$ne"          -> pure CellTypeNe
-      "$eqx"         -> pure CellTypeEqx
-      "$nex"         -> pure CellTypeNex
-      "$add"         -> pure CellTypeAdd
-      "$sub"         -> pure CellTypeSub
-      "$mul"         -> pure CellTypeMul
-      "$div"         -> pure CellTypeDiv
-      "$mod"         -> pure CellTypeMod
-      "$logic_not"   -> pure CellTypeLogicNot
-      "$logic_and"   -> pure CellTypeLogicAnd
-      "$logic_or"    -> pure CellTypeLogicOr
-      "$mux"         -> pure CellTypeMux
-      "$pmux"        -> pure CellTypePmux
-      "$dff"         -> pure CellTypeDff
       "$adff"        -> throw $ YosysErrorUnsupportedFF "$adff"
       "$sdff"        -> throw $ YosysErrorUnsupportedFF "$sdff"
       "$aldff"       -> throw $ YosysErrorUnsupportedFF "$aldff"
@@ -171,10 +187,20 @@ instance Aeson.FromJSON CellType where
       "$sdffce"      -> throw $ YosysErrorUnsupportedFF "$sdffce"
       "$aldffe"      -> throw $ YosysErrorUnsupportedFF "$aldffe"
       "$dffsre"      -> throw $ YosysErrorUnsupportedFF "$dffsre"
-      _ | Just ('$', _) <- Text.uncons s ->
-          error "TODO: Throw an unsupported type error"
+      _ | cellTypeIsPrimitive s ->
+          case Map.lookup s stringToPrimitiveCellType of
+            Just cellType -> pure cellType
+            Nothing -> error "TODO: Throw an unsupported type error"
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
+
+-- TODO: Turn into a read instance?
+cellTypeToText :: CellType -> Text
+cellTypeToText ct =
+  case ct of
+    CellTypeUserType ut -> ut
+    _ | Just t <- Map.lookup ct primitiveCellTypeToString -> t
+      | otherwise -> error "TODO: Unknown cell type"
 
 -- TODO: Remove debug string param
 asUserType :: String -> CellType -> Text
@@ -222,14 +248,14 @@ instance Aeson.FromJSON Module where
 -- | A collection of multiple HDL modules (possibly with dependencies on each other).
 data YosysIR = YosysIR
   { _yosysCreator :: Text
-  , _yosysModules :: Map CellType Module
+  , _yosysModules :: Map Text Module
   } deriving (Show, Eq, Ord)
 makeLenses ''YosysIR
 instance Aeson.FromJSON YosysIR where
   parseJSON = Aeson.withObject "yosys" $ \o -> do
     _yosysCreator <- o Aeson..: "creator"
     -- TODO: This mapKeys thing is hacky. I should probably define a "fromKeys" instance (or whatever it's called).
-    _yosysModules <- Map.mapKeys CellTypeUserType <$> o Aeson..: "modules"
+    _yosysModules <- o Aeson..: "modules"
     pure YosysIR{..}
 
 -- | Read a collection of HDL modules from a file produced by Yosys' write_json command.

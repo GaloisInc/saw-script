@@ -148,7 +148,7 @@ lookupPatternTerm sc loc pat ts =
 netgraphToTerms ::
   (MonadIO m, Ord b, Show b) =>
   SC.SharedContext ->
-  Map CellType ConvertedModule ->
+  Map Text ConvertedModule ->
   Netgraph b ->
   Map [b] SC.Term ->
   m (Map [b] SC.Term)
@@ -177,11 +177,14 @@ netgraphToTerms sc env ng inputs
 
                   r <- primCellToTerm sc c args >>= \case
                     Just r -> pure r
-                    Nothing -> case Map.lookup (c ^. cellType) env of
-                      Just cm -> do
-                        r <- cryptolRecord sc args
-                        liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
-                      Nothing -> throw $ YosysErrorNoSuchCellType (Text.pack $ show (c ^. cellType)) cnm
+                    Nothing ->
+                      let submoduleName = asUserType "netgraphToTerms" $ c ^. cellType in
+                      case Map.lookup submoduleName env of
+                        Just cm -> do
+                          r <- cryptolRecord sc args
+                          liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
+                        Nothing ->
+                            throw $ YosysErrorNoSuchCellType submoduleName cnm
 
                   -- once we've built a term, insert it along with each of its bits
                   ts <- forM (Map.assocs $ cellOutputConnections c) $ \(o, out) -> do
@@ -195,7 +198,7 @@ netgraphToTerms sc env ng inputs
 convertModule ::
   MonadIO m =>
   SC.SharedContext ->
-  Map CellType ConvertedModule ->
+  Map Text ConvertedModule ->
   Module ->
   m ConvertedModule
 convertModule sc env m = do
