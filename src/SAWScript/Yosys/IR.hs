@@ -194,7 +194,7 @@ instance Aeson.FromJSON CellType where
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
 
--- TODO: Turn into a read instance?
+-- TODO: Turn into a show instance?
 cellTypeToText :: CellType -> Text
 cellTypeToText ct =
   case ct of

@@ -54,7 +54,7 @@ import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Cell
 
-type ModuleName = Text -- TODO: Is this right? Is a ModuleName just a CellTypeUserType? It kinda has to be this type for the whole thing to typecheck.
+type ModuleName = Text
 type CellName = Text
 type Pattern = [Bitrep]
 type PatternMap m = Map Pattern ((YosysBitvecConsumer -> Pattern -> m SC.Term) -> m SC.Term)
@@ -184,7 +184,7 @@ buildPatternMap sc mods states inp m = do
             codomainRec <- liftIO $ SC.scApply sc (subm ^. translatedModuleTerm) domainRec
             fmap (Just . Map.fromList) . forM (Map.toList outPatterns) $ \(onm, _opat) -> do
               (onm,) <$> cryptolRecordSelect sc codomainFields codomainRec onm
-          Nothing -> pure $ \_ -> pure Nothing -- TODO: Is this the right thing to do in this case? Looks like 'Nothing' is what primCellToMap would return for a CellTypeUserType, so this just skips the call. Seem reasonable?
+          Nothing -> pure $ \_ -> pure Nothing
       CellTypeDff | Just inpst <- minpst -> pure $ \_ -> do
         cst <- lookupStateFor sc states inpst cnm
         pure . Just $ Map.fromList

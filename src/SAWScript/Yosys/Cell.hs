@@ -193,9 +193,6 @@ primCellToMap sc c args = case c ^. cellType of
     w <- outputWidth
     res <- liftIO $ SC.scBvSShr sc w ta nb
     output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
-  -- TODO: What do I do about these commented out cases? I'm thinking don't add
-  -- CellTypes for them and throw an error if encountered? It seems wrong that
-  -- '$shift' has no semantics, for example.
   -- "$shift" -> _
   CellTypeShiftx -> do
     let w = max (connWidthNat "A") (connWidthNat "B")
@@ -287,8 +284,6 @@ primCellToMap sc c args = case c ^. cellType of
     resPair <- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
     res <- liftIO $ SC.scPairRight sc resPair
     output $ CellTerm res (connWidthNat "A") (connSigned "Y")
-  {- TODO: Handle these error cases on CellType creation?
-  -}
   -- "$bmux" -> _
   -- "$demux" -> _
   -- "$lut" -> _
