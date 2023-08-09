@@ -176,11 +176,12 @@ instance Aeson.FromJSON CellType where
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
 
-asUserType :: CellType -> Text
-asUserType cellType =
+-- TODO: Remove debug string param
+asUserType :: String -> CellType -> Text
+asUserType from cellType =
   case cellType of
     CellTypeUserType t -> t
-    _ -> error "TODO: Expected a user type, got a primitive type"
+    _ -> error $ "TODO: " ++ from ++ ": Expected a user type, got a primitive type: " ++ show cellType
 
 -- | A cell within an HDL module.
 data Cell bs = Cell

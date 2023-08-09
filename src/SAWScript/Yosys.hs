@@ -83,7 +83,7 @@ yosysIRModgraph ir =
     moduleToNode :: (Text, Module) -> (Module, Text, [Text])
     moduleToNode (nm, m) = (m, nm, deps)
       where
-        deps = asUserType . view cellType <$> Map.elems (m ^. moduleCells)
+        deps = asUserType "yosysIRModgraph" . view cellType <$> Map.elems (m ^. moduleCells)
     nodes = moduleToNode <$> Map.assocs (ir ^. yosysModules)
     (_modgraphGraph, _modgraphNodeFromVertex, _modgraphVertexFromKey)
       = Graph.graphFromEdges nodes
