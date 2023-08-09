@@ -103,7 +103,7 @@ convertYosysIR sc ir = do
   foldM
     (\env v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        traceIO nm
+        liftIO $ traceIO $ Text.unpack nm
         tm <- Comp.translateModule sc env m
         _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ tm ^. Comp.translatedModuleTerm
         n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
