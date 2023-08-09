@@ -97,7 +97,7 @@ buildTranslationContextStateTypes sc mods m = do
       CellTypeUserType submoduleName ->
         case Map.lookup submoduleName mods of
           Just tm -> pure $ tm ^. translatedModuleStateInfo
-          Nothing -> pure Nothing -- TODO: Should this be an error? I think it would just be "nothing" in the old version
+          Nothing -> error "TODO: Test" --pure Nothing -- TODO: Should this be an error? I think it would just be "nothing" in the old version
       CellTypeDff | Just w <- length <$> Map.lookup "Q" (c ^. cellConnections) -> do
         _cellStateInfoType <- liftIO . SC.scBitvector sc $ fromIntegral w
         let _cellStateInfoCryptolType = C.tWord $ C.tNum w
