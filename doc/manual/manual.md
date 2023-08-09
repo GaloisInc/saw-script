@@ -2155,8 +2155,16 @@ Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
 concrete size. Therefore, all analysis results are valid only under the
 assumption that any arrays have the specific size indicated, and may not
-hold for other sizes. The `llvm_int` function also takes an `Int`
-parameter indicating the variable's bit width.
+hold for other sizes.
+
+The `llvm_int` function takes an `Int` parameter indicating the variable's bit
+width. For example, the C `uint16_t` and `int16_t` types correspond to
+`llvm_int 16`. The C `bool` type is slightly trickier. A bare `bool` type
+typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
+composite type such as a pointer, array, or struct, then it corresponds to
+`llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
+down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
+bitcode by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
