@@ -492,6 +492,12 @@ jobs:
           tar xvf hpc.tar.gz
           ./compute-coverage.sh
 
+      - if: matrix.hpc == true
+        uses: actions/upload-artifact@v2
+        with:
+          path: hpc-html
+          name: coverage-html-${{ github.event.number }}
+
   build-push-image:
     runs-on: ubuntu-22.04
     needs: [config]
