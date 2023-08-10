@@ -391,6 +391,9 @@ jobs:
 
   cabal-test:
     runs-on: ${{ matrix.os }}
+    permissions:
+      pages: write
+      id-token: write
     needs: [build]
     strategy:
       fail-fast: false
@@ -497,6 +500,19 @@ jobs:
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
+
+      - shell: bash
+        if: matrix.hpc == true
+        run: .github/ci.sh collect_all_html
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: all-html
+
+      - name: Deploy to github pages
+        id: deployment
+        uses: actions/deploy-pages@v2
 
   build-push-image:
     runs-on: ubuntu-22.04

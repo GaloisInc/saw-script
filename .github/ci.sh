@@ -83,6 +83,14 @@ collect_hpc_files() {
   tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES}
 }
 
+collect_all_html() {
+  local HTML_DIR=all-html
+  mkdir ${HTML_DIR}
+  (cd ${HTML_DIR} && gh run download -p "coverage-html-*")
+  ls
+  ls ${HTML_DIR}
+}
+
 install_system_deps() {
   (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-bin.zip" && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
