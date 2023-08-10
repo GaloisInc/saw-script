@@ -3300,7 +3300,7 @@ problem with this aspect of the translation.
 
 # Analyzing Hardware Circuits using Yosys
 SAW has experimental support for analysis of hardware descriptions written in VHDL ([via GHDL](https://github.com/ghdl/ghdl-yosys-plugin)) through an intermediate representation produced by [Yosys](https://yosyshq.net/yosys/).
-This generally follows the same conventions and idioms used in the rest of SAWSCript.
+This generally follows the same conventions and idioms used in the rest of SAWScript.
 
 ## Processing VHDL With Yosys
 Given a VHDL file `test.vhd` containing an entity `test`, one can generate an intermediate representation `test.json` suitable for loading into SAW:
