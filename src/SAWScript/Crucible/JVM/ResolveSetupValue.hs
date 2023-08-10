@@ -30,6 +30,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
 
 import           Control.Lens
 import qualified Control.Monad.Catch as X
+import Control.Exception (catch)
 import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -265,9 +266,11 @@ resolveBitvectorTerm sym w tm =
      mx <- case getAllExts tm of
              -- concretely evaluate if it is a closed term
              [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Prim.unsigned (Concrete.toWord v)))
+               catch (do modmap <- scGetModuleMap sc
+                         let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                         seq v (pure (Just (Prim.unsigned (Concrete.toWord v)))))
+                 -- return Nothing if concrete evaluation results in an error
+                 (\(_ :: Prim.EvalError) -> return Nothing)
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
@@ -280,9 +283,11 @@ resolveBoolTerm sym tm =
      mx <- case getAllExts tm of
              -- concretely evaluate if it is a closed term
              [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Concrete.toBool v))
+               catch (do modmap <- scGetModuleMap sc
+                         let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                         seq v (pure (Just (Concrete.toBool v))))
+                 -- return Nothing if concrete evaluation results in an error
+                 (\(_ :: Prim.EvalError) -> return Nothing)
              _ -> return Nothing
      case mx of
        Just x  -> return (W4.backendPred sym x)
