@@ -192,6 +192,7 @@ library
     SAWScript.Yosys.State
     SAWScript.Yosys.Theorem
     SAWScript.Yosys.TransitionSystem
+    SAWScript.Yosys.CompositionalTranslation
     SAWScript.Yosys.Utils
 
   other-modules:
