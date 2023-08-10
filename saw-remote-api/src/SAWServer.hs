@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 module SAWServer
@@ -26,6 +27,7 @@ import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
 --import qualified Crypto.Hash.Conduit as Hash
 import System.Directory (getCurrentDirectory)
+import System.Environment (lookupEnv)
 import System.IO.Silently (silence)
 
 import qualified Cryptol.Parser.AST as P
@@ -63,6 +65,7 @@ import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.SolverCache (lazyOpenSolverCache)
 
 import qualified Argo
 --import qualified CryptolServer (validateServerState, ServerState(..))
@@ -207,6 +210,9 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
+     mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
+       Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+       _ -> return Nothing
      let ro = TopLevelRO
                 { roJavaCodebase = jcb
                 , roOptions = opts
@@ -233,6 +239,7 @@ initialState readFileFn =
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
+                , rwSolverCache = mb_cache
                 , rwTheoremDB = emptyTheoremDB
                 , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans

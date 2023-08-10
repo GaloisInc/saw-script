@@ -1,11 +1,11 @@
-test ptr_offset/3a1fbbbh::f_test[0]: ok
-test ptr_offset/3a1fbbbh::use_f[0]: FAILED
+test ptr_offset/<DISAMB>::f_test[0]: ok
+test ptr_offset/<DISAMB>::use_f[0]: FAILED
 
 failures:
 
----- ptr_offset/3a1fbbbh::use_f[0] counterexamples ----
+---- ptr_offset/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/ptr_offset.rs:64:5: 64:31: error: in ptr_offset/3a1fbbbh::use_f[0]
+[Crux]   ./lib/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/ptr_offset.rs:64:5: 64:30: error: in ptr_offset/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/ptr_offset.rs:64:5:
 [Crux]   	b2 < 10
 

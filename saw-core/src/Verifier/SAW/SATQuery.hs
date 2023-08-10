@@ -3,10 +3,12 @@ module Verifier.SAW.SATQuery
 , SATResult(..)
 , SATAssert(..)
 , satQueryAsTerm
+, satQueryAsPropTerm
 ) where
 
 import Data.Map (Map)
 import Data.Set (Set)
+import Data.Foldable (foldrM)
 
 import Verifier.SAW.Name
 import Verifier.SAW.FiniteValue
@@ -87,3 +89,13 @@ satQueryAsTerm sc satq =
      do x' <- scAnd sc x y
         loop x' xs
    loop _ (UniversalAssert{} : _) = univFail
+
+-- | Compute the conjunction of all the assertions
+--   in this SAT query as a single term of type Prop.
+satQueryAsPropTerm :: SharedContext -> SATQuery -> IO Term
+satQueryAsPropTerm sc satq =
+  scTupleType sc =<< mapM assertAsPropTerm (satAsserts satq)
+  where assertAsPropTerm (BoolAssert b) = scEqTrue sc b
+        assertAsPropTerm (UniversalAssert ecs hs g) =
+          scGeneralizeExts sc (map fst ecs) =<< 
+          scEqTrue sc =<< foldrM (scImplies sc) g hs

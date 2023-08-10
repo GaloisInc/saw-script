@@ -49,6 +49,7 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
 import Data.List ( intersperse )
+import Data.List.Extra ( dropEnd )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -78,6 +79,7 @@ import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term as MRSolver
+import SAWScript.SolverCache
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWScript.Yosys.IR
@@ -275,7 +277,6 @@ showsProofResult opts r =
 
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
-
 
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
@@ -520,6 +521,7 @@ data TopLevelRW =
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
+  , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
@@ -602,7 +604,7 @@ io f = (TopLevel_ (liftIO f))
     handleIO e
       | IOError.isUserError e =
           do pos <- getPosition
-             rethrow (SS.TopLevelException pos (init . drop 12 $ show e))
+             rethrow (SS.TopLevelException pos (dropEnd 1 . drop 12 $ show e))
       | otherwise = rethrow e
 
     handleX86Unsupported (X86Unsupported s) =
@@ -741,6 +743,21 @@ recordProof :: IsValue v => v -> TopLevel ()
 recordProof v =
   do rw <- getTopLevelRW
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
+
+-- | Perform an operation on the 'SolverCache', returning a default value or
+-- failing (depending on the first element of the 'SolverCacheOp') if there
+-- is no enabled 'SolverCache'
+onSolverCache :: SolverCacheOp a -> TopLevel a
+onSolverCache cacheOp =
+  do opts <- getOptions
+     rw <- getTopLevelRW
+     case rwSolverCache rw of
+       Just cache -> do (a, cache') <- io $ solverCacheOp cacheOp opts cache
+                        putTopLevelRW rw { rwSolverCache = Just cache' }
+                        return a
+       Nothing -> case solverCacheOpDefault cacheOp of
+        Just a -> return a
+        Nothing -> fail "Solver result cache not enabled!"
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel CJ.JVMContext

@@ -109,6 +109,13 @@ SAW also uses several environment variables for configuration:
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
+`SAW_SOLVER_CACHE_PATH`
+
+  ~ Specify a path at which to keep a cache of solver results obtained during
+  calls to certain tactics. A cache is not created at this path until it is
+  needed. See the section **Caching Solver Results** for more detail about this
+  feature.
+
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
 
@@ -1244,6 +1251,100 @@ differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
 
+## Caching Solver Results
+
+SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.
+
+This caching is available for all tactics which call out to automated provers
+at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+`rme`, and the family of `unint` tactics described in the previous section.
+
+When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the `abc` tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.
+
+The simplest way to enable solver caching is to set the environment variable
+`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+`saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created `saw` or `saw-remote-api`
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.
+
+There are also a number of SAW commands related to solver caching.
+
+* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+  remainder of the current session, but opens an LMDB database at the specified
+  path immediately. If a cache is already in use in the current session
+  (i.e. through a prior call to `set_solver_cache_path` or through
+  `SAW_SOLVER_CACHE_PATH` being set and the cache being used at least once)
+  then all entries in the cache already in use will be copied to the new cache
+  being opened.
+
+* `clean_solver_cache` will remove all entries in the solver result cache
+  which were created using solver backend versions which do not match the
+  versions in the current environment. This can be run after an update to
+  clear out any old, unusable entries from the solver cache.
+
+* `print_solver_cache` prints to the console all entries in the cache whose
+  SHA256 hash keys start with the given hex string. Providing an empty string
+  results in all entries in the cache being printed.
+
+* `print_solver_cache_stats` prints to the console statistics including the
+  size of the solver cache, where on disk it is stored, and some counts of how
+  often it has been used during the current session.
+
+For performing more complicated database operations on the set of cached
+results, the file `solver_cache.py` is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.
+
+Below is an example of using solver caching with `saw -v Debug`. Only the
+relevant output is shown, the rest abbreviated with "...".
+
+~~~~
+sawscript> set_solver_cache_path "example.cache"
+sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
+[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
+                                  {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)
+...
+sawscript> print_solver_cache "d1f5a76e7a0b7c01"
+[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb
+[22:13:13.250] - Result: unsat
+[22:13:13.250] - Solver: "SBV->Z3"
+[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit
+[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC
+
+sawscript> print_solver_cache "4ee451f8429c2dfe"
+[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752
+[22:13:16.727] - Result: unsat
+[22:13:16.727] - Solver: "W4 ->z3"
+[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit
+[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC
+
+sawscript> print_solver_cache_stats
+[22:13:20.585] == Solver result cache statistics ==
+[22:13:20.585] - 2 results cached in example.cache
+[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
+[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
+~~~~
+
 ## Other External Provers
 
 In addition to the built-in automated provers already discussed, SAW
@@ -2054,8 +2155,16 @@ Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
 concrete size. Therefore, all analysis results are valid only under the
 assumption that any arrays have the specific size indicated, and may not
-hold for other sizes. The `llvm_int` function also takes an `Int`
-parameter indicating the variable's bit width.
+hold for other sizes.
+
+The `llvm_int` function takes an `Int` parameter indicating the variable's bit
+width. For example, the C `uint16_t` and `int16_t` types correspond to
+`llvm_int 16`. The C `bool` type is slightly trickier. A bare `bool` type
+typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
+composite type such as a pointer, array, or struct, then it corresponds to
+`llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
+down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
+bitcode by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.

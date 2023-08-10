@@ -1,18 +1,18 @@
-test alias_bad/3a1fbbbh::f_test[0]: ok
-test alias_bad/3a1fbbbh::use_f[0]: FAILED
+test alias_bad/<DISAMB>::f_test[0]: ok
+test alias_bad/<DISAMB>::use_f[0]: FAILED
 
 failures:
 
----- alias_bad/3a1fbbbh::use_f[0] counterexamples ----
+---- alias_bad/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   test/symb_eval/comp/alias_bad.rs:45:11: 45:13: error: in alias_bad/3a1fbbbh::use_f[0]
+[Crux]   test/symb_eval/comp/alias_bad.rs:45:11: 45:13: error: in alias_bad/<DISAMB>::use_f[0]
 [Crux]   references AllocIndex 0 and AllocIndex 1 must not overlap
 [Crux] Found counterexample for verification goal
-[Crux]   ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/alias_bad.rs:46:5: 46:35: error: in alias_bad/3a1fbbbh::use_f[0]
+[Crux]   ./lib/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/alias_bad.rs:46:5: 46:34: error: in alias_bad/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/alias_bad.rs:46:5:
 [Crux]   	0 < b.get()
 [Crux] Found counterexample for verification goal
-[Crux]   ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/alias_bad.rs:47:5: 47:36: error: in alias_bad/3a1fbbbh::use_f[0]
+[Crux]   ./lib/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/alias_bad.rs:47:5: 47:35: error: in alias_bad/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/alias_bad.rs:47:5:
 [Crux]   	b.get() < 10
 
