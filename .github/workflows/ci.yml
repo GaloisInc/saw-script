@@ -506,11 +506,13 @@ jobs:
         run: .github/ci.sh collect_all_html
 
       - name: Upload pages artifact
+        if: matrix.hpc == true
         uses: actions/upload-pages-artifact@v1
         with:
           path: all-html
 
       - name: Deploy to github pages
+        if: matrix.hpc == true
         id: deployment
         uses: actions/deploy-pages@v2
 
