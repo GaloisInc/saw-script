@@ -1,0 +1,87 @@
+// This file demonstrates how to use the `heapster_trans_rust_type`
+// command to translate rust signatures to heapster.
+enable_experimental;
+
+// Integer types This is wrong... we don't need an environment. 
+env <- heapster_init_env_from_file "rust_data.sawcore" "rust_data.bc";
+
+print "Define Rust types.";
+/***
+ *** Types
+ ***/
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_define_perm env "int32" " " "llvmptr 32" "exists x:bv 32.eq(llvmword(x))";
+heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
+heapster_define_perm env "int1" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x))";
+
+heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
+heapster_define_llvmshape env "u32" 64 "" "fieldsh(32,int32<>)";
+heapster_define_llvmshape env "u8" 64 "" "fieldsh(8,int8<>)";
+
+heapster_define_llvmshape env "usize" 64 "" "fieldsh(int64<>)";
+heapster_define_llvmshape env "char" 64 "" "fieldsh(32,int32<>)";
+
+// bool type
+heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
+
+// Box type
+heapster_define_llvmshape env "Box" 64 "T:llvmshape 64" "ptrsh(T)";
+
+// Result type
+heapster_define_rust_type env "pub enum Result<X,Y> { Ok (X), Err (Y) }";
+
+// Infallable type
+heapster_define_llvmshape env "Infallible" 64 "" "falsesh";
+
+// Sum type
+heapster_define_rust_type env "pub enum Sum<X,Y> { Left (X), Right (Y) }";
+
+// The Option type
+heapster_define_rust_type env "pub enum Option<X> { None, Some (X) }";
+
+
+print "";
+print "-----------------------------------------------";
+print "Translate 'unit'";
+print "Rust: \n<> fn () -> ()";
+print "Heapster:";
+heapster_trans_rust_type env "<> fn () -> ()";
+
+print "";
+print "-----------------------------------------------";
+print "Translate 'add'";
+print "Rust: \n<> fn (x:u64, y:u64) -> u64";
+print "Heapster:";
+heapster_trans_rust_type env "<> fn (x:u64, y:u64) -> u64";
+
+
+print "";
+print "-----------------------------------------------";
+print "Translate 'Ptr add'";
+print "Rust: \n<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
+print "Heapster:";
+heapster_trans_rust_type env "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
+
+print "";
+print "-----------------------------------------------";
+print "Translate 'array length'";
+print "Rust: \n<'a> fn (x:&'a [u64]) -> u64";
+print "Heapster:";
+heapster_trans_rust_type env "<'a> fn (x:&'a [u64]) -> u64";
+
+
+print "";
+print "-----------------------------------------------";
+print "Translate 'add two array'";
+print "Rust: \n<'a, 'b, 'c> fn (l1:&'a [u64], l2:&'b [u64]) -> &'c [u64]";
+print "Heapster:";
+heapster_trans_rust_type env "<'a, 'b, 'c> fn (l1:&'a [u64], l2:&'b [u64]) -> &'c [u64]";
+
+print "";
+print "-----------------------------------------------";
+print "Translate 'add two array in place'";
+print "Rust: \n<'a, 'b> fn (l1:&'a mut[u64], l2:&'b [u64]) -> ()";
+print "Heapster:";
+heapster_trans_rust_type env "<'a, 'b> fn (l1:&'a mut[u64], l2:&'b [u64]) -> ()";
