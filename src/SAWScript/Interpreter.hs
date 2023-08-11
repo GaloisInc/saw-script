@@ -4254,7 +4254,7 @@ primitives = Map.fromList
     , "well-formedness of type-checking proofs" ]
 
   , prim "heapster_trans_rust_type"
-    "String -> TopLevel ()"
+    "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_translate_rust_type)
     Experimental
     [ "Parse and print back a set of Heapster permissions for a function"

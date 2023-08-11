@@ -1573,6 +1573,34 @@ parseFunPermFromRust env w args ret str
 parseFunPermFromRust _ _ _ _ str =
     fail ("Malformed Rust type: " ++ str)
 
+
+-- | Just like `parseFunPermFromRust`, but doesn't take `args` and `ret`.
+-- usefull to translate rust when there is no LLVM module (e.g. from command line)
+parseSome3FunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
+                        PermEnv -> prx w ->
+                        String -> m Some3FunPerm
+parseSome3FunPermFromRust env w str
+  | Just i <- findIndex (== '>') str
+  , (gen_str, fn_str) <- splitAt (i+1) str
+  , Right (Generics rust_ls1 rust_tvars wc span) <-
+      parse (inputStreamFromString gen_str)
+  , Right (BareFn _ abi rust_ls2 fn_tp _) <-
+      parse (inputStreamFromString fn_str) =
+    runLiftRustConvM (mkRustConvInfo env) $
+    rsConvertFun w abi (Generics (rust_ls1 ++ rust_ls2) rust_tvars wc span) fn_tp
+
+  | Just i <- findIndex (== '>') str
+  , (gen_str, _) <- splitAt (i+1) str
+  , Left err <- parse @(Generics Span) (inputStreamFromString gen_str) =
+    fail ("Error parsing generics: " ++ show err)
+
+  | Just i <- findIndex (== '>') str
+  , (_, fn_str) <- splitAt (i+1) str
+  , Left err <- parse @(Ty Span) (inputStreamFromString fn_str) =
+    fail ("Error parsing generics: " ++ show err)
+parseSome3FunPermFromRust _ _ str =
+    fail ("Malformed Rust type: " ++ str)
+
 -- | Parse a polymorphic Rust type declaration and convert it to a Heapster
 -- shape
 -- Note: No CruCtx / TypeRepr as arguments for now
