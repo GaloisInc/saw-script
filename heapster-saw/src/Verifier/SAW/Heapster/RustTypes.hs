@@ -1549,8 +1549,8 @@ parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         PermEnv -> prx w -> CruCtx args -> TypeRepr ret ->
                         String -> m (SomeFunPerm args ret)
 parseFunPermFromRust env w args ret str =
-  do getSome3FunPerm <- parseSome3FunPermFromRust
-     un3SomeFunPerm args ret getSome3FunPerm
+  do get3SomeFunPerm <- parseSome3FunPermFromRust env w str
+     runLiftRustConvM (mkRustConvInfo env) $ un3SomeFunPerm args ret get3SomeFunPerm
   
 
 -- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
