@@ -3936,7 +3936,7 @@ primitives = Map.fromList
     Current
     [ "Add proved refinement theorems to a given refinement set." ]
 
-  , prim "mrsolver_with" "Renfset -> ProofScript ()"
+  , prim "mrsolver_with" "Refnset -> ProofScript ()"
     (pureVal mrSolver)
     Experimental
     [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
