@@ -211,20 +211,6 @@ parseFunPermStringMaybeRust nm w env args ret str =
     Just '<' -> parseFunPermFromRust env w args ret str
     _ -> parseFunPermString nm env args ret str
 
--- -- | Just like `parseFunPermStringMaybeRust` but usese `parseSome3FunFromRust`
--- parseSome3FunPermStringMaybeRust ::
---   (1 <= w, KnownNat w, Fail.MonadFail m) =>
---   String                {- ^ object name                -} ->
---   prx w                 {- ^ pointer bit-width proxy    -} ->
---   PermEnv               {- ^ permission environment     -} ->
---   String                {- ^ input text                 -} ->
---   m Some3FunPerm
--- parseSome3FunPermStringMaybeRust nm w env str =
---   case find (\c -> c == '<' || c == '(') str of
---     Just '<' -> parseSome3FunPermFromRust env w str
---     _ -> parseFunPermString nm env args ret str
-
-
 -- | Parse a 'SomeNamedShape' from the given 'String'. This 'SomeNamedShape'
 -- must be a valid Rust @struct@ or @enum@ declaration given in Rust syntax.
 -- The @w@ argument gives the bit width of pointers in the current\
