@@ -4257,14 +4257,14 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_translate_rust_type)
     Experimental
-    [ "Parse and print back a set of Heapster permissions for a function"
+    [ "Parse a Rust function type and print the equivalent Heapser type. Ideal for learning how Rust types are translated into Heapster. "
     ]
 
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
     Experimental
-    [ "Parse a Rust function type and print the equivalent Heapser type. Ideal for learning how Rust types are translated into Heapster. "
+    [ "Parse and print back a set of Heapster permissions for a function"
     ]
 
   , prim "heapster_dump_ide_info"
