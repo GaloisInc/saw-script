@@ -898,14 +898,14 @@ instance PermPretty Some3FunPerm where
   permPrettyM (Some3FunPerm fun_perm) = permPrettyM fun_perm
 
 -- | Try to convert a 'Some3FunPerm' to a 'SomeFunPerm' at a specific type
-un3SomeFunPerm :: CruCtx args -> TypeRepr ret -> Some3FunPerm ->
-                  RustConvM (SomeFunPerm args ret)
+un3SomeFunPerm :: (Fail.MonadFail m) => CruCtx args -> TypeRepr ret -> Some3FunPerm ->
+                  m (SomeFunPerm args ret)
 un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   | Just Refl <- testEquality args (funPermArgs fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
-  rsPPInfo >>= \ppInfo ->
+  (return emptyPPInfo) >>= \ppInfo ->
   fail $ renderDoc $ vsep
   [ pretty "Unexpected LLVM type for function permission:"
   , permPretty ppInfo fun_perm
@@ -1550,7 +1550,7 @@ parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         String -> m (SomeFunPerm args ret)
 parseFunPermFromRust env w args ret str =
   do get3SomeFunPerm <- parseSome3FunPermFromRust env w str
-     runLiftRustConvM (mkRustConvInfo env) $ un3SomeFunPerm args ret get3SomeFunPerm
+     un3SomeFunPerm args ret get3SomeFunPerm
   
 
 -- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
