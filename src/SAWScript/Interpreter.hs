@@ -4257,7 +4257,8 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_translate_rust_type)
     Experimental
-    [ "Parse a Rust function type and print the equivalent Heapser type. Ideal for learning how Rust types are translated into Heapster. "
+    [ "Parse a Rust function type and print the equivalent Heapser type. "
+    , "Ideal for learning how Rust types are translated into Heapster. "
     ]
 
   , prim "heapster_parse_test"
