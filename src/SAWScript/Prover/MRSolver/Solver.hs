@@ -133,6 +133,7 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import Data.Set (Set)
 
 import Prettyprinter
 
@@ -141,6 +142,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
+import SAWScript.Proof (Sequent, SolveResult)
+import SAWScript.Value (TopLevel)
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Evidence
@@ -1261,11 +1264,12 @@ askMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) {- ^ ... -} ->
   Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
   [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
-  Term -> Term -> IO (Either MRFailure (SolverStats, MREvidence t))
-askMRSolver sc env timeout rs args t1 t2 =
-  execMRM sc timeout env rs $
+  Term -> Term -> TopLevel (Either MRFailure (SolverStats, MREvidence t))
+askMRSolver sc env timeout askSMT rs args t1 t2 =
+  execMRM sc timeout env askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
@@ -1297,11 +1301,12 @@ refinementTerm ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) {- ^ ... -} ->
   Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
   [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
-  Term -> Term -> IO (Either MRFailure Term)
-refinementTerm sc env timeout rs args t1 t2 =
-  evalMRM sc timeout env rs $
+  Term -> Term -> TopLevel (Either MRFailure Term)
+refinementTerm sc env timeout askSMT rs args t1 t2 =
+  evalMRM sc timeout env askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc

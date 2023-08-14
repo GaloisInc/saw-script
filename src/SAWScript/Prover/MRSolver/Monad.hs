@@ -30,6 +30,7 @@ import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Monad.Catch (MonadThrow, MonadCatch)
 import Control.Monad.Trans.Maybe
 import GHC.Generics
 
@@ -39,6 +40,7 @@ import qualified Data.Map as Map
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 
+import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Prettyprinter
@@ -51,6 +53,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
+import SAWScript.Proof (Sequent, SolveResult)
+import SAWScript.Value (TopLevel)
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Evidence
@@ -313,6 +317,9 @@ data MRInfo t = MRInfo {
   mriSMTTimeout :: Maybe Integer,
   -- | The top-level Mr Solver environment
   mriEnv :: MREnv,
+  -- | The function to be used as the SMT backend for Mr. Solver, taking a set
+  -- of uninterpreted variables and a proposition to prove
+  mriAskSMT :: Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult),
   -- | The set of function refinements to assume
   mriRefnset :: Refnset t,
   -- | The current context of universal variables
@@ -347,10 +354,10 @@ data MRExn = MRExnFailure MRFailure
 -- shared environment, 'MRState' as state, and 'MRFailure' as an exception
 -- type, all over an 'IO' monad
 newtype MRM t a = MRM { unMRM :: ReaderT (MRInfo t) (StateT (MRState t)
-                                                    (ExceptT MRExn IO)) a }
+                                                    (ExceptT MRExn TopLevel)) a }
                 deriving newtype (Functor, Applicative, Monad, MonadIO,
                                   MonadReader (MRInfo t), MonadState (MRState t),
-                                                          MonadError MRExn)
+                                  MonadError MRExn, MonadThrow, MonadCatch)
 
 instance MonadTerm (MRM t) where
   mkTermF = liftSC1 scTermF
@@ -386,6 +393,13 @@ mrAssumptions = mriAssumptions <$> ask
 mrDataTypeAssumps :: MRM t DataTypeAssumps
 mrDataTypeAssumps = mriDataTypeAssumps <$> ask
 
+-- | Call the SMT backend given by 'mriAskSMT' on a set of uninterpreted
+-- variables and a proposition to prove
+mrAskSMT :: Set VarIndex -> Sequent -> MRM t (SolverStats, SolveResult)
+mrAskSMT unints goal = do
+  askSMT <- mriAskSMT <$> ask
+  MRM $ lift $ lift $ lift $ askSMT unints goal
+
 -- | Get the current debug level
 mrDebugLevel :: MRM t Int
 mrDebugLevel = mreDebugLevel <$> mriEnv <$> ask
@@ -408,12 +422,15 @@ mrVars = mrsVars <$> get
 
 -- | Run an 'MRM' computation and return a result or an error, including the
 -- final state of 'mrsSolverStats' and 'mrsEvidence'
-runMRM :: SharedContext -> Maybe Integer -> MREnv -> Refnset t ->
-          MRM t a -> IO (Either MRFailure (a, (SolverStats, MREvidence t)))
-runMRM sc timeout env rs m =
-  do true_tm <- scBool sc True
+runMRM :: SharedContext -> Maybe Integer -> MREnv ->
+          (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
+          Refnset t -> MRM t a ->
+          TopLevel (Either MRFailure (a, (SolverStats, MREvidence t)))
+runMRM sc timeout env askSMT rs m =
+  do true_tm <- liftIO $ scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
-                              mriEnv = env, mriRefnset = rs,
+                              mriEnv = env, mriAskSMT = askSMT,
+                              mriRefnset = rs,
                               mriUVars = emptyMRVarCtx,
                               mriCoIndHyps = Map.empty,
                               mriAssumptions = true_tm,
@@ -429,15 +446,21 @@ runMRM sc timeout env rs m =
 
 -- | Run an 'MRM' computation and return a result or an error, discarding the
 -- final state
-evalMRM :: SharedContext -> Maybe Integer -> MREnv -> Refnset t ->
-           MRM t a -> IO (Either MRFailure a)
-evalMRM sc timeout env rs = fmap (fmap fst) . runMRM sc timeout env rs
+evalMRM :: SharedContext -> Maybe Integer -> MREnv ->
+           (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
+           Refnset t -> MRM t a ->
+           TopLevel (Either MRFailure a)
+evalMRM sc timeout env askSMT rs =
+  fmap (fmap fst) . runMRM sc timeout env askSMT rs
 
 -- | Run an 'MRM' computation and return a final state or an error, discarding
 -- the result
-execMRM :: SharedContext -> Maybe Integer -> MREnv -> Refnset t ->
-           MRM t a -> IO (Either MRFailure (SolverStats, MREvidence t))
-execMRM sc timeout env rs = fmap (fmap snd) . runMRM sc timeout env rs
+execMRM :: SharedContext -> Maybe Integer -> MREnv ->
+           (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
+           Refnset t -> MRM t a ->
+           TopLevel (Either MRFailure (SolverStats, MREvidence t))
+execMRM sc timeout env askSMT rs =
+  fmap (fmap snd) . runMRM sc timeout env askSMT rs
 
 -- | Throw an 'MRFailure'
 throwMRFailure :: MRFailure -> MRM t a

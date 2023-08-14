@@ -973,19 +973,18 @@ proveUnintSBV conf unints =
                 (Prover.proveUnintSBV conf timeout) unintSet
 
 -- | Given a continuation which calls a prover, call the continuation on the
--- 'goalSequent' of the given 'ProofGoal' and return a 'SolveResult'. If there
--- is a 'SolverCache', do not call the continuation if the goal has an already
--- cached result, and otherwise save the result of the call to the cache.
+-- given 'Sequent' and return a 'SolveResult'. If there is a 'SolverCache',
+-- do not call the continuation if the goal has an already cached result,
+-- and otherwise save the result of the call to the cache.
 applyProverToGoal :: [SolverBackend] -> [SolverBackendOption]
                      -> (SATQuery -> TopLevel (Maybe CEX, String))
-                     -> Set VarIndex
-                     -> ProofGoal
+                     -> Set VarIndex -> Sequent
                      -> TopLevel (SolverStats, SolveResult)
-applyProverToGoal backends opts f unintSet g = do
+applyProverToGoal backends opts f unintSet sqt = do
   sc <- getSharedContext
   let opt_backends = concatMap optionBackends opts
   vs   <- io $ getSolverBackendVersions (backends ++ opt_backends)
-  satq <- io $ sequentToSATQuery sc unintSet (goalSequent g)
+  satq <- io $ sequentToSATQuery sc unintSet sqt
   k    <- io $ mkSolverCacheKey sc vs opts satq
   (mb, solver_name) <- SV.onSolverCache (lookupInSolverCache k) >>= \case
     -- Use a cached result if one exists (and it's valid w.r.t our query)
@@ -995,9 +994,9 @@ applyProverToGoal backends opts f unintSet g = do
            Just v  -> SV.onSolverCache (insertInSolverCache k v) >>
                       return res
            Nothing -> return res
-  let stats = solverStats solver_name (sequentSharedSize (goalSequent g))
+  let stats = solverStats solver_name (sequentSharedSize sqt)
   case mb of
-    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalSequent g)))
+    Nothing -> return (stats, SolveSuccess (SolverEvidence stats sqt))
     Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
@@ -1005,8 +1004,8 @@ wrapProver ::
   (SATQuery -> TopLevel (Maybe CEX, String)) ->
   Set VarIndex ->
   ProofScript ()
-wrapProver backends opts f =
-  execTactic . tacticSolve . applyProverToGoal backends opts f
+wrapProver backends opts f unints =
+  execTactic $ tacticSolve $ applyProverToGoal backends opts f unints . goalSequent
 
 wrapW4Prover ::
   SolverBackend -> [SolverBackendOption] ->
@@ -2215,12 +2214,15 @@ ensureMonadicTerm sc t = monadifyTypedTerm sc t
 -- printed, then regardless, the last argument is called on the result.
 mrSolverH :: SharedContext ->
              Maybe SawDoc -> (String -> String) -> Maybe (String -> String) ->
-             (SharedContext -> Prover.MREnv -> Maybe Integer -> SV.SAWRefnset ->
-              [(LocalName, Term)] -> Term -> Term -> IO (Either Prover.MRFailure a)) ->
+             (SharedContext -> Prover.MREnv -> Maybe Integer ->
+              (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
+              SV.SAWRefnset -> [(LocalName, Term)] -> Term -> Term ->
+              TopLevel (Either Prover.MRFailure a)) ->
              SV.SAWRefnset -> [(LocalName, Term)] -> TypedTerm -> TypedTerm ->
              (a -> TopLevel b) -> TopLevel b
 mrSolverH sc printStr errStrf succStr f rs top_args tt1 tt2 cont =
   do env <- rwMRSolverEnv <$> get
+     let askSMT = applyProverToGoal [What4, Z3] [] (Prover.proveWhat4_z3 True)
      m1 <- ttTerm <$> ensureMonadicTerm sc tt1
      m2 <- ttTerm <$> ensureMonadicTerm sc tt2
      m1' <- io $ collapseEta <$> betaNormalize sc m1
@@ -2231,7 +2233,7 @@ mrSolverH sc printStr errStrf succStr f rs top_args tt1 tt2 cont =
          "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
                                " |= " <> ppTmHead m2'
      time1 <- liftIO getCurrentTime
-     res <- io $ f sc env Nothing rs top_args m1' m2'
+     res <- f sc env Nothing askSMT rs top_args m1' m2'
      time2 <- liftIO getCurrentTime
      let diff = show $ diffUTCTime time2 time1
      case res of

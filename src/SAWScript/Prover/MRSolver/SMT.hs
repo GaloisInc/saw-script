@@ -25,7 +25,7 @@ module SAWScript.Prover.MRSolver.SMT where
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Control.Monad.Except
-import qualified Control.Exception as X
+import Control.Monad.Catch (throwM, catch)
 import Control.Monad.Trans.Maybe
 import Data.Foldable (foldrM, foldlM)
 import GHC.Generics
@@ -48,10 +48,7 @@ import Verifier.SAW.Simulator.Prims
 import Verifier.SAW.Module
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.FiniteValue
-
-import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent, sequentToSATQuery)
-import What4.Solver
-import SAWScript.Prover.What4
+import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
 
 import SAWScript.Prover.MRSolver.Term
 import SAWScript.Prover.MRSolver.Monad
@@ -388,27 +385,28 @@ mrProvableRaw prop_term =
      nenv <- liftIO (scGetNamingEnv sc)
      debugPrint 2 ("Calling SMT solver with proposition: " ++
                    prettyProp defaultPPOpts nenv prop)
-     satq <- liftIO $ sequentToSATQuery sc unints (propToSequent prop)
-     sym <- liftIO $ setupWhat4_sym True
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
      -- execution
-     smt_res <- liftIO $
-       (Right <$> proveWhat4_solver z3Adapter sym sc satq (return ()))
-         `X.catch` \case
+     smt_res <-
+       (Right <$> mrAskSMT unints (propToSequent prop))
+         `catch` \case
            UserError msg -> return $ Left msg
-           e -> X.throw e
+           e -> throwM e
      case smt_res of
        Left msg ->
          debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
            >> return False
-       Right (Just cex, stats) ->
+       Right (stats, SolveUnknown) ->
+          debugPrint 2 "SMT solver response: unknown" >>
+          recordUsedSolver stats prop_term >> return False
+       Right (stats, SolveCounterexample cex) ->
          debugPrint 2 "SMT solver response: not provable" >>
          debugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
            "\n - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
            " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
-       Right (Nothing, stats) ->
+       Right (stats, SolveSuccess _) ->
          debugPrint 2 "SMT solver response: provable" >>
          recordUsedSolver stats prop_term >> return True
 
