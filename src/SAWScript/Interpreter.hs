@@ -4264,7 +4264,7 @@ primitives = Map.fromList
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
     Experimental
-    [ "Parse the Rust signature for a function and print the equivalent Heapser type. Ideal for learning how Rust types are translated into Heapster. "
+    [ "Parse a Rust function type and print the equivalent Heapser type. Ideal for learning how Rust types are translated into Heapster. "
     ]
 
   , prim "heapster_dump_ide_info"
