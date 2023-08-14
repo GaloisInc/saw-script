@@ -1548,34 +1548,12 @@ rsConvertFun _ _ _ _ = fail "rsConvertFun: unsupported Rust function type"
 parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         PermEnv -> prx w -> CruCtx args -> TypeRepr ret ->
                         String -> m (SomeFunPerm args ret)
-parseFunPermFromRust env w args ret str
-  | Just i <- findIndex (== '>') str
-  , (gen_str, fn_str) <- splitAt (i+1) str
-  , Right (Generics rust_ls1 rust_tvars wc span) <-
-      parse (inputStreamFromString gen_str)
-  , Right (BareFn _ abi rust_ls2 fn_tp _) <-
-      parse (inputStreamFromString fn_str) =
-    runLiftRustConvM (mkRustConvInfo env) $
-    do some_fun_perm <-
-         rsConvertFun w abi (Generics
-                             (rust_ls1 ++ rust_ls2) rust_tvars wc span) fn_tp
-       un3SomeFunPerm args ret some_fun_perm
+parseFunPermFromRust env w args ret str =
+  do getSome3FunPerm <- parseSome3FunPermFromRust
+     un3SomeFunPerm args ret getSome3FunPerm
+  
 
-  | Just i <- findIndex (== '>') str
-  , (gen_str, _) <- splitAt (i+1) str
-  , Left err <- parse @(Generics Span) (inputStreamFromString gen_str) =
-    fail ("Error parsing generics: " ++ show err)
-
-  | Just i <- findIndex (== '>') str
-  , (_, fn_str) <- splitAt (i+1) str
-  , Left err <- parse @(Ty Span) (inputStreamFromString fn_str) =
-    fail ("Error parsing generics: " ++ show err)
-parseFunPermFromRust _ _ _ _ str =
-    fail ("Malformed Rust type: " ++ str)
-
-
--- | Just like `parseFunPermFromRust`, but doesn't take `args` and `ret`.
--- usefull to translate rust when there is no LLVM module (e.g. from command line)
+-- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
 parseSome3FunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         PermEnv -> prx w ->
                         String -> m Some3FunPerm
