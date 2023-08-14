@@ -407,6 +407,8 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
         goRef refTy tpr ref alloc 0
     go (RefShape refTy _ tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
         goRef refTy tpr ref alloc idx
+    go (FnPtrShape _ _ _) _ _ =
+        error "Function pointers not currently supported in overrides"
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
         show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
 
@@ -528,6 +530,8 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
             Nothing -> error $ "setupToReg: type error: bad reference type for " ++ show alloc ++
                 ": got " ++ show (ptr ^. mpType) ++ " but expected " ++ show tpr
         Nothing -> error $ "setupToReg: no definition for " ++ show alloc
+    go (FnPtrShape _ _ _) _ =
+        error "Function pointers not currently supported in overrides"
     go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
         ": " ++ show (MS.ppSetupValue sv)
 

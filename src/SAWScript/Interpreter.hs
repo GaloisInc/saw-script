@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
@@ -49,6 +50,7 @@ import Data.Set ( Set )
 import qualified Data.Text as Text
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
+import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -67,7 +69,9 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.SolverCache
+import SAWScript.SolverVersions
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
 import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
@@ -93,6 +97,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
@@ -452,7 +457,9 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
-       thmDB <- newTheoremDB
+       mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
+         Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+         _ -> return Nothing
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roJavaCodebase = jcb
@@ -487,7 +494,8 @@ buildTopLevelEnv proxy opts =
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
-                   , rwTheoremDB = thmDB
+                   , rwSolverCache = mb_cache
+                   , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
@@ -636,6 +644,24 @@ disable_lax_loads_and_stores :: TopLevel ()
 disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
+
+set_solver_cache_path :: FilePath -> TopLevel ()
+set_solver_cache_path path = do
+  rw <- getTopLevelRW
+  case rwSolverCache rw of
+    Just _ -> onSolverCache (setSolverCachePath path)
+    Nothing -> do cache <- io $ openSolverCache path
+                  putTopLevelRW rw { rwSolverCache = Just cache }
+
+clean_solver_cache :: TopLevel ()
+clean_solver_cache = do
+  vs <- io $ getSolverBackendVersions allBackends
+  onSolverCache (cleanSolverCache vs)
+
+test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
+                           Integer -> TopLevel ()
+test_solver_cache_stats sz ls ls_f is is_f =
+  onSolverCache (testSolverCacheStats sz ls ls_f is is_f)
 
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
@@ -1056,6 +1082,55 @@ primitives = Map.fromList
     [ "Set the path satisfiablity solver to use.  Accepted values"
     , "currently are 'z3' and 'yices'."
     ]
+
+  , prim "set_solver_cache_path" "String -> TopLevel ()"
+    (pureVal set_solver_cache_path)
+    Current
+    [ "Create a solver result cache at the given path, add to that cache all results"
+    , "in the currently used solver result cache, if there is one, then use the newly"
+    , "created cache as the solver result cache going forward. Note that if the"
+    , "SAW_SOLVER_CACHE_PATH environment variable was set at startup but solver"
+    , "caching has yet to actually be used, then the value of the environment"
+    , "variable is ignored."
+    ]
+  
+  , prim "clean_solver_cache" "TopLevel ()"
+    (pureVal clean_solver_cache)
+    Current
+    [ "Remove all entries in the solver result cache which were created"
+    , "using solver backend versions which do not match the versions"
+    , "in the current environment."
+    ]
+
+  , prim "print_solver_cache" "String -> TopLevel ()"
+    (pureVal (onSolverCache . printSolverCacheByHex))
+    Current
+    [ "Print all entries in the solver result cache whose SHA256 hash"
+    , "keys start with the given hex string. Providing an empty string"
+    , "results in all entries in the cache being printed."
+    ]
+
+  , prim "print_solver_cache_stats" "TopLevel ()"
+    (pureVal (onSolverCache printSolverCacheStats))
+    Current
+    [ "Print out statistics about how the solver cache has been used, namely:"
+    , "1. How many entries are in the cache (and where the cache is stored)"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session." ]
+
+  , prim "test_solver_cache_stats" "Int -> Int -> Int -> Int -> Int -> TopLevel ()"
+    (pureVal test_solver_cache_stats)
+    Current
+    [ "Test whether the values of the statistics printed out by"
+    , "print_solver_cache_stats are equal to those given, failing if this does not"
+    , "hold. Specifically, the arguments represent:"
+    , "1. How many entries are in the cache"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session" ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
@@ -1847,6 +1922,17 @@ primitives = Map.fromList
     (pureVal print_goal)
     Current
     [ "Print the current goal that a proof script is attempting to prove." ]
+  , prim "print_goal_inline"   "[Int] -> ProofScript ()"
+    (pureVal print_goal_inline)
+    Current
+    [ "Print the current goal that a proof script is attempting to prove,"
+    , "without generating `let` bindings for the provided indices. For"
+    , "example, `print_goal_inline [1,9,3]` will print the goal without"
+    , "inlining the variables that would otherwise be abstracted as `x@1`,"
+    , " `x@9`, and `x@3`. These indices are assigned deterministically with"
+    , "regard to a particular goal, but are not persistent across goals. As"
+    , "such, this should be used primarily when debugging a proof."
+    ]
   , prim "write_goal" "String -> ProofScript ()"
     (pureVal write_goal)
     Current
@@ -3746,6 +3832,14 @@ primitives = Map.fromList
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
     Current
     [ "Construct a `JVMValue` from a `Term`." ]
+
+    ---------------------------------------------------------------------
+    -- Crucible/MIR commands
+
+  , prim "mir_load_module" "String -> TopLevel MIRModule"
+    (pureVal mir_load_module)
+    Experimental
+    [ "Load a MIR JSON file and return a handle to it." ]
 
     ---------------------------------------------------------------------
 

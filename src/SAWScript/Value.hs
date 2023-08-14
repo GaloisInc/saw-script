@@ -44,11 +44,12 @@ import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (StateT(..), gets)
+import Control.Monad.State (StateT(..), gets, modify)
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
 import Data.List ( intersperse )
+import Data.List.Extra ( dropEnd )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -79,6 +80,7 @@ import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
 import SAWScript.Prover.MRSolver.Evidence as MRSolver
+import SAWScript.SolverCache
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWScript.Yosys.IR
@@ -113,6 +115,8 @@ import qualified Lang.Crucible.JVM as CJ
 
 import           Lang.Crucible.Utils.StateContT
 import           Lang.Crucible.LLVM.ArraySizeProfile
+
+import           Mir.Generator
 
 import           What4.ProgramLoc (ProgramLoc(..))
 
@@ -160,6 +164,7 @@ data Value
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
+  | VMIRModule RustModule
   | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
@@ -276,7 +281,6 @@ showsProofResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
@@ -359,6 +363,7 @@ showsPrecValue opts nenv p v =
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
+    VMIRModule m -> shows (PP.pretty (m^.rmCS^.collection))
     VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
@@ -537,6 +542,7 @@ data TopLevelRW =
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
+  , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
@@ -619,7 +625,7 @@ io f = (TopLevel_ (liftIO f))
     handleIO e
       | IOError.isUserError e =
           do pos <- getPosition
-             rethrow (SS.TopLevelException pos (init . drop 12 $ show e))
+             rethrow (SS.TopLevelException pos (dropEnd 1 . drop 12 $ show e))
       | otherwise = rethrow e
 
     handleX86Unsupported (X86Unsupported s) =
@@ -690,7 +696,7 @@ withLocalEnv :: LocalEnv -> TopLevel a -> TopLevel a
 withLocalEnv env (TopLevel_ m) = TopLevel_ (local (\ro -> ro{ roLocalEnv = env }) m)
 
 withLocalEnvProof :: LocalEnv -> ProofScript a -> ProofScript a
-withLocalEnvProof env (ProofScript m) = 
+withLocalEnvProof env (ProofScript m) =
   ProofScript (underExceptT (underStateT (withLocalEnv env)) m)
 
 getLocalEnv :: TopLevel LocalEnv
@@ -709,7 +715,10 @@ getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase = TopLevel_ (asks roJavaCodebase)
 
 getTheoremDB :: TopLevel TheoremDB
-getTheoremDB = TopLevel_ (rwTheoremDB <$> get)
+getTheoremDB = gets rwTheoremDB
+
+putTheoremDB :: TheoremDB -> TopLevel ()
+putTheoremDB db = modifyTopLevelRW (\tl -> tl { rwTheoremDB = db })
 
 getOptions :: TopLevel Options
 getOptions = TopLevel_ (asks roOptions)
@@ -745,6 +754,9 @@ getTopLevelRW = get
 putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = put rw
 
+modifyTopLevelRW :: (TopLevelRW -> TopLevelRW) -> TopLevel ()
+modifyTopLevelRW = modify
+
 returnProof :: IsValue v => v -> TopLevel v
 returnProof v = recordProof v >> return v
 
@@ -752,6 +764,21 @@ recordProof :: IsValue v => v -> TopLevel ()
 recordProof v =
   do rw <- getTopLevelRW
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
+
+-- | Perform an operation on the 'SolverCache', returning a default value or
+-- failing (depending on the first element of the 'SolverCacheOp') if there
+-- is no enabled 'SolverCache'
+onSolverCache :: SolverCacheOp a -> TopLevel a
+onSolverCache cacheOp =
+  do opts <- getOptions
+     rw <- getTopLevelRW
+     case rwSolverCache rw of
+       Just cache -> do (a, cache') <- io $ solverCacheOp cacheOp opts cache
+                        putTopLevelRW rw { rwSolverCache = Just cache' }
+                        return a
+       Nothing -> case solverCacheOpDefault cacheOp of
+        Just a -> return a
+        Nothing -> fail "Solver result cache not enabled!"
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel CJ.JVMContext
@@ -893,8 +920,11 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
        Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
-            db <- rwTheoremDB <$> getTopLevelRW
-            io (finishProof sc db concl pstate recordThm useSequentGoals)
+            db <- getTheoremDB
+            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals)
+            putTheoremDB db'
+            pure thmResult
+
 
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
@@ -1224,6 +1254,13 @@ instance IsValue (CMSLLVM.LLVMModule arch) where
 instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue CMSLLVM.LLVMModule"
+
+instance IsValue RustModule where
+    toValue m = VMIRModule m
+
+instance FromValue RustModule where
+    fromValue (VMIRModule m) = m
+    fromValue _ = error "fromValue RustModule"
 
 instance IsValue HeapsterEnv where
     toValue m = VHeapsterEnv m

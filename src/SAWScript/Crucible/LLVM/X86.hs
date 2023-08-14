@@ -1158,7 +1158,7 @@ setArgs env tyenv nameEnv args
       let
         setRegSetupValue rs (reg, sval) =
           exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
-            C.LLVM.PtrType _ -> do
+            ty | C.LLVM.isPointerMemType ty -> do
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
                 =<< resolveSetupVal cc mem env tyenv nameEnv sval
               setReg reg val rs

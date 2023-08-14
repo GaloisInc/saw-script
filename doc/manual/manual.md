@@ -5,7 +5,8 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The
+Cryptol, LLVM (and therefore C), and JVM (and therefore Java). SAW also has
+experimental, incomplete support for MIR (and therefore Rust). The
 models take the form of typed functional programs, so in a sense SAW can
 be considered a translator from imperative programs to their functional
 equivalents. Various external proof tools, including a variety of SAT
@@ -108,6 +109,13 @@ SAW also uses several environment variables for configuration:
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
+`SAW_SOLVER_CACHE_PATH`
+
+  ~ Specify a path at which to keep a cache of solver results obtained during
+  calls to certain tactics. A cache is not created at this path until it is
+  needed. See the section **Caching Solver Results** for more detail about this
+  feature.
+
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
 
@@ -176,7 +184,7 @@ Cryptol, Haskell and ML. In particular, functions are applied by
 writing them next to their arguments rather than by using parentheses
 and commas. Rather than writing `f(x, y)`, write `f x y`.
 
-Comments are written as in C and Java (among many other languages). All
+Comments are written as in C, Java, and Rust (among many other languages). All
 text from `//` until the end of a line is ignored. Additionally, all
 text between `/*` and `*/` is ignored, regardless of whether the line
 ends.
@@ -1243,6 +1251,100 @@ differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
 
+## Caching Solver Results
+
+SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.
+
+This caching is available for all tactics which call out to automated provers
+at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+`rme`, and the family of `unint` tactics described in the previous section.
+
+When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the `abc` tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.
+
+The simplest way to enable solver caching is to set the environment variable
+`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+`saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created `saw` or `saw-remote-api`
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.
+
+There are also a number of SAW commands related to solver caching.
+
+* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+  remainder of the current session, but opens an LMDB database at the specified
+  path immediately. If a cache is already in use in the current session
+  (i.e. through a prior call to `set_solver_cache_path` or through
+  `SAW_SOLVER_CACHE_PATH` being set and the cache being used at least once)
+  then all entries in the cache already in use will be copied to the new cache
+  being opened.
+
+* `clean_solver_cache` will remove all entries in the solver result cache
+  which were created using solver backend versions which do not match the
+  versions in the current environment. This can be run after an update to
+  clear out any old, unusable entries from the solver cache.
+
+* `print_solver_cache` prints to the console all entries in the cache whose
+  SHA256 hash keys start with the given hex string. Providing an empty string
+  results in all entries in the cache being printed.
+
+* `print_solver_cache_stats` prints to the console statistics including the
+  size of the solver cache, where on disk it is stored, and some counts of how
+  often it has been used during the current session.
+
+For performing more complicated database operations on the set of cached
+results, the file `solver_cache.py` is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.
+
+Below is an example of using solver caching with `saw -v Debug`. Only the
+relevant output is shown, the rest abbreviated with "...".
+
+~~~~
+sawscript> set_solver_cache_path "example.cache"
+sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
+[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
+                                  {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)
+...
+sawscript> print_solver_cache "d1f5a76e7a0b7c01"
+[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb
+[22:13:13.250] - Result: unsat
+[22:13:13.250] - Solver: "SBV->Z3"
+[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit
+[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC
+
+sawscript> print_solver_cache "4ee451f8429c2dfe"
+[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752
+[22:13:16.727] - Result: unsat
+[22:13:16.727] - Solver: "W4 ->z3"
+[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit
+[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC
+
+sawscript> print_solver_cache_stats
+[22:13:20.585] == Solver result cache statistics ==
+[22:13:20.585] - 2 results cached in example.cache
+[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
+[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
+~~~~
+
 ## Other External Provers
 
 In addition to the built-in automated provers already discussed, SAW
@@ -1568,6 +1670,8 @@ analyze JVM and LLVM programs.
 
 The first step in analyzing any code is to load it into the system.
 
+## Loading LLVM
+
 To load LLVM code, simply provide the location of a valid bitcode file
 to the `llvm_load_module` function.
 
@@ -1577,11 +1681,13 @@ The resulting `LLVMModule` can be passed into the various functions
 described below to perform analysis of specific LLVM functions.
 
 The LLVM bitcode parser should generally work with LLVM versions between
-3.5 and 9.0, though it may be incomplete for some versions. Debug
+3.5 and 16.0, though it may be incomplete for some versions. Debug
 metadata has changed somewhat throughout that version range, so is the
 most likely case of incompleteness. We aim to support every version
 after 3.5, however, so report any parsing failures as [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
+
+## Loading Java
 
 Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, three flags
@@ -1623,12 +1729,28 @@ unresolved issues in verifying code involving classes such as `String`. For
 more information on these issues, refer to
 [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
+## Loading MIR
+
+To load a piece of Rust code, first compile it to a MIR JSON file, as described
+in [this section](#compiling-mir), and then provide the location of the JSON
+file to the `mir_load_module` function:
+
+* `mir_load_module : String -> TopLevel MIRModule`
+
+SAW currently supports Rust code that can be built with a [March 22, 2020 Rust
+nightly](https://static.rust-lang.org/dist/2020-03-22/).  If you encounter a
+Rust feature that SAW does not support, please report it [on
+GitHub](https://github.com/GaloisInc/saw-script/issues).
+
 ## Notes on Compiling Code for SAW
 
-SAW will generally be able to load arbitrary LLVM bitcode and JVM
-bytecode files, but several guidelines can help make verification
-easier or more likely to succeed. For generating LLVM with `clang`, it
-can be helpful to:
+SAW will generally be able to load arbitrary LLVM bitcode, JVM bytecode, and
+MIR JSON files, but several guidelines can help make verification easier or
+more likely to succeed.
+
+### Compiling LLVM
+
+For generating LLVM with `clang`, it can be helpful to:
 
 * Turn on debugging symbols with `-g` so that SAW can find source
   locations of functions, names of variables, etc.
@@ -1659,11 +1781,54 @@ behavior, and SAW currently does not have built in support for these
 functions (though you could manually create overrides for them in a
 verification script).
 
+[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+
+### Compiling Java
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
 
-[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+### Compiling MIR
+
+In order to verify Rust code, SAW analyzes Rust's MIR (mid-level intermediate
+representation) language. In particular, SAW analyzes a particular form of MIR
+that the [`mir-json`](https://github.com/GaloisInc/mir-json) tool produces. You
+will need to intall `mir-json` and run it on Rust code in order to produce MIR
+JSON files that SAW can load (see [this section](#loading-mir)).
+
+For `cargo`-based projects, `mir-json` provides a `cargo` subcommand called
+`cargo saw-build` that builds a JSON file suitable for use with SAW. `cargo
+saw-build` integrates directly with `cargo`, so you can pass flags to it like
+any other `cargo` subcommand. For example:
+
+```
+$ export SAW_RUST_LIBRARY_PATH=<...>
+$ cargo saw-build <other cargo flags>
+<snip>
+linking 11 mir files into <...>/example-364cf2df365c7055.linked-mir.json
+<snip>
+```
+
+Note that:
+
+* The full output of `cargo saw-build` here is omitted. The important part is
+  the `.linked-mir.json` file that appears after `linking X mir files into`, as
+  that is the JSON file that must be loaded with SAW.
+* `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
+  standard library.
+
+`mir-json` also supports compiling individual `.rs` files through `mir-json`'s
+`saw-rustc` command. As the name suggests, it accepts all of the flags that
+`rustc` accepts. For example:
+
+```
+$ export SAW_RUST_LIBRARY_PATH=<...>
+$ saw-rustc example.rs <other rustc flags>
+<snip>
+linking 11 mir files into <...>/example.linked-mir.json
+<snip>
+```
 
 ## Notes on C++ Analysis
 
@@ -1990,8 +2155,16 @@ Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
 concrete size. Therefore, all analysis results are valid only under the
 assumption that any arrays have the specific size indicated, and may not
-hold for other sizes. The `llvm_int` function also takes an `Int`
-parameter indicating the variable's bit width.
+hold for other sizes.
+
+The `llvm_int` function takes an `Int` parameter indicating the variable's bit
+width. For example, the C `uint16_t` and `int16_t` types correspond to
+`llvm_int 16`. The C `bool` type is slightly trickier. A bare `bool` type
+typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
+composite type such as a pointer, array, or struct, then it corresponds to
+`llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
+down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
+bitcode by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
@@ -2387,7 +2560,7 @@ verification](#compositional-verification).
 To understand the issues surrounding global variables, consider the following C
 code:
 
-<!-- This should (partially) match intTests/test0036_globals/test.c -->
+<!-- This matches intTests/test0036_globals/test-signed.c -->
 ~~~
 int x = 0;
 
@@ -2404,7 +2577,7 @@ int g(int z) {
 
 One might initially write the following specifications for `f` and `g`:
 
-<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+<!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
@@ -2435,12 +2608,13 @@ To deal with this, we can use the following function:
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
-<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+<!-- This matches intTests/test0036_globals/test-signed.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
 
 let init_global name = do {
+  llvm_alloc_global name;
   llvm_points_to (llvm_global name)
                  (llvm_global_initializer name);
 };
@@ -2448,6 +2622,7 @@ let init_global name = do {
 f_spec <- llvm_verify m "f" [] true (do {
     y <- llvm_fresh_var "y" (llvm_int 32);
     init_global "x";
+    llvm_precond {{ y < 2^^31 - 1 }};
     llvm_execute_func [llvm_term y];
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
@@ -2457,7 +2632,9 @@ which initializes `x` to whatever it is initialized to in the C code at
 the beginning of verification. This specification is now safe for
 compositional verification: SAW won't use the specification `f_spec`
 unless it can determine that `x` still has its initial value at the
-point of a call to `f`.
+point of a call to `f`. This specification also constrains `y` to prevent
+signed integer overflow resulting from the `x + y` expression in `f`,
+which is undefined behavior in C.
 
 ## Preconditions and Postconditions
 
@@ -3120,3 +3297,244 @@ problem with this aspect of the translation.
 
 [^5]: https://coq.inria.fr
 [^6]: https://github.com/mit-plv/fiat-crypto
+
+# Analyzing Hardware Circuits using Yosys
+SAW has experimental support for analysis of hardware descriptions written in VHDL ([via GHDL](https://github.com/ghdl/ghdl-yosys-plugin)) through an intermediate representation produced by [Yosys](https://yosyshq.net/yosys/).
+This generally follows the same conventions and idioms used in the rest of SAWScript.
+
+## Processing VHDL With Yosys
+Given a VHDL file `test.vhd` containing an entity `test`, one can generate an intermediate representation `test.json` suitable for loading into SAW:
+
+~~~~
+$ ghdl -a test.vhd
+$ yosys
+...
+Yosys 0.10+1 (git sha1 7a7df9a3b4, gcc 10.3.0 -fPIC -Os)
+yosys> ghdl test
+
+1. Executing GHDL.
+Importing module test.
+
+yosys> write_json test.json
+
+2. Executing JSON backend.
+~~~~
+
+It can sometimes be helpful to invoke additional Yosys passes between the `ghdl` and `write_json` commands.
+For example, at present SAW does not support the `$pmux` cell type.
+Yosys is able to convert `$pmux` cells into trees of `$mux` cells using the `pmuxtree` command.
+We expect there are many other situations where Yosys' considerable library of commands is valuable for pre-processing.
+
+## Example: Ripple-Carry Adder
+Consider three VHDL entities.
+First, a half-adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity half is
+  port (
+    a : in std_logic;
+    b : in std_logic;
+    c : out std_logic;
+    s : out std_logic
+  );
+end half;
+
+architecture halfarch of half is
+begin
+  c <= a and b;
+  s <= a xor b;
+end halfarch;
+~~~~
+
+Next, a one-bit adder built atop that half-adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity full is
+  port (
+    a : in std_logic;
+    b : in std_logic;
+    cin : in std_logic;
+    cout : out std_logic;
+    s : out std_logic
+  );
+end full;
+
+architecture fullarch of full is
+  signal half0c : std_logic;
+  signal half0s : std_logic;
+  signal half1c : std_logic;
+begin
+  half0 : entity work.half port map (a => a, b => b, c => half0c, s => half0s);
+  half1 : entity work.half port map (a => half0s, b => cin, c => half1c, s => s);
+  cout <= half0c or half1c;
+end fullarch;
+~~~~
+
+Finally, a four-bit adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity add4 is
+  port (
+    a : in std_logic_vector(0 to 3);
+    b : in std_logic_vector(0 to 3);
+    res : out std_logic_vector(0 to 3)
+  );
+end add4;
+
+architecture add4arch of add4 is
+  signal full0cout : std_logic;
+  signal full1cout : std_logic;
+  signal full2cout : std_logic;
+  signal ignore : std_logic;
+begin
+  full0 : entity work.full port map (a => a(0), b => b(0), cin => '0', cout => full0cout, s => res(0));
+  full1 : entity work.full port map (a => a(1), b => b(1), cin => full0cout, cout => full1cout, s => res(1));
+  full2 : entity work.full port map (a => a(2), b => b(2), cin => full1cout, cout => full2cout, s => res(2));
+  full3 : entity work.full port map (a => a(3), b => b(3), cin => full2cout, cout => ignore, s => res(3));
+end add4arch;
+~~~~
+
+Using GHDL and Yosys, we can convert the VHDL source above into a format that SAW can import.
+If all of the code above is in a file `adder.vhd`, we can run the following commands:
+
+~~~~
+$ ghdl -a adder.vhd
+$ yosys -p 'ghdl add4; write_json adder.json'
+~~~~
+
+The produced file `adder.json` can then be loaded into SAW with `yosys_import`:
+
+~~~~
+$ saw
+...
+sawscript> enable_experimental
+sawscript> m <- yosys_import "adder.json"
+sawscript> :type m
+Term
+sawscript> type m
+[23:57:14.492] {add4 : {a : [4], b : [4]} -> {res : [4]},
+ full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]},
+ half : {a : [1], b : [1]} -> {c : [1], s : [1]}}
+~~~~
+
+`yosys_import` returns a `Term` with a Cryptol record type, where the fields correspond to each VHDL module.
+We can access the fields of this record like we would any Cryptol record, and call the functions within like any Cryptol function.
+
+~~~~
+sawscript> type {{ m.add4 }}
+[00:00:25.255] {a : [4], b : [4]} -> {res : [4]}
+sawscript> eval_int {{ (m.add4 { a = 1, b = 2 }).res }}
+[00:02:07.329] 3
+~~~~
+
+We can also use all of SAW's infrastructure for asking solvers about `Term`s, such as the `sat` and `prove` commands.
+For example:
+
+~~~~
+sawscript> sat w4 {{ m.add4 === \_ -> { res = 5 } }}
+[00:04:41.993] Sat: [_ = (5, 0)]
+sawscript> prove z3 {{ m.add4 === \inp -> { res = inp.a + inp.b } }}
+[00:05:43.659] Valid
+sawscript> prove yices {{ m.add4 === \inp -> { res = inp.a - inp.b } }}
+[00:05:56.171] Invalid: [_ = (8, 13)]
+~~~~
+
+The full library of `ProofScript` tactics is available in this setting.
+If necessary, proof tactics like `simplify` can be used to rewrite goals before querying a solver.
+
+Special support is provided for the common case of equivalence proofs between HDL modules and other `Term`s (e.g. Cryptol functions, other HDL modules, or "extracted" imperative LLVM or JVM code).
+The command `yosys_verify` has an interface similar to `llvm_verify`: given a specification, some lemmas, and a proof tactic, it produces evidence of a proven equivalence that may be passed as a lemma to future calls of `yosys_verify`.
+For example, consider the following Cryptol specifications for one-bit and four-bit adders:
+
+~~~~cryptol
+cryfull :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+cryfull inp = { cout = [cout], s = [s] }
+  where [cout, s] = zext inp.a + zext inp.b + zext inp.cin
+
+cryadd4 : {a : [4], b : [4]} -> {res : [4]}
+cryadd4 inp = { res = inp.a + inp.b }
+~~~~
+
+We can prove equivalence between `cryfull` and the VHDL `full` module:
+
+~~~~
+sawscript> full_spec <- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;
+~~~~
+
+The result `full_spec` can then be used as an "override" when proving equivalence between `cryadd4` and the VHDL `add4` module:
+
+~~~~
+sawscript> add4_spec <- yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_spec] w4;
+~~~~
+
+The above could also be accomplished through the use of `prove_print` and term rewriting, but it is much more verbose.
+
+`yosys_verify` may also be given a list of preconditions under which the equivalence holds.
+For example, consider the following Cryptol specification for `full` that ignores the `cin` bit:
+
+~~~~cryptol
+cryfullnocarry :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+cryfullnocarry inp = { cout = [cout], s = [s] }
+  where [cout, s] = zext inp.a + zext inp.b
+~~~~
+
+This is not equivalent to `full` in general, but it is if constrained to inputs where `cin = 0`.
+We may express that precondition like so:
+
+~~~~
+sawscript> full_nocarry_spec <- yosys_verify {{ adderm.full }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -> inp.cin == 0}}] {{ cryfullnocarry }} [] w4;
+~~~~
+
+The resulting override `full_nocarry_spec` may still be used in the proof for `add4` (this is accomplished by rewriting to a conditional expression).
+
+## API Reference
+N.B: The following commands must first be enabled using `enable_experimental`.
+
+* `yosys_import : String -> TopLevel Term` produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command.
+  The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
+  Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.
+  For example, consider a Yosys JSON file derived from the following VHDL entities:
+  ~~~~vhdl
+  entity half is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      c : out std_logic;
+      s : out std_logic
+    );
+  end half;
+  
+  entity full is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      cin : in std_logic;
+      cout : out std_logic;
+      s : out std_logic
+    );
+  end full;
+  ~~~~
+  The resulting `Term` will have the type:
+  ~~~~
+  { half : {a : [1], b : [1]} -> {c : [1], s : [1]}
+  , full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+  }
+  ~~~~
+* `yosys_verify : Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem` proves equality between an HDL module and a specification.
+  The first parameter is the HDL module - given a record `m` from `yosys_import`, this will typically look something like `{{ m.foo }}`.
+  The second parameter is a list of preconditions for the equality.
+  The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module.
+  The fourth parameter is a list of "overrides", which witness the results of previous `yosys_verify` proofs.
+  These overrides can be used to simplify terms by replacing use sites of submodules with their specifications.
+
+  Note that `Term`s derived from HDL modules are "first class", and are not restricted to `yosys_verify`: they may also be used with SAW's typical `Term` infrastructure like `sat`, `prove_print`, term rewriting, etc.
+  `yosys_verify` simply provides a convenient and familiar interface, similar to `llvm_verify` or `jvm_verify`.

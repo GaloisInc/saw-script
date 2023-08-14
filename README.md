@@ -6,7 +6,8 @@ This repository contains the code for SAWScript, the scripting
 language that forms the primary user interface to the Software
 Analysis Workbench (SAW). It provides the ability to reason about
 formal models describing the denotation of programs written in
-languages such as C, Java, and Cryptol.
+languages such as C, Java, and Cryptol. It also provides experimental,
+incomplete support for the Rust language.
 
 ## Documentation
 
@@ -42,7 +43,7 @@ To build SAWScript and related utilities from source:
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
     to install them: <https://www.haskell.org/ghcup/>. We recommend
-    Cabal 3.4 or newer, and GHC 8.8, 8.10, or 9.2.
+    Cabal 3.4 or newer, and GHC 8.10, 9.2, or 9.4.
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
@@ -71,7 +72,7 @@ SAW can analyze LLVM programs (usually derived from C, but potentially
 for other languages). The only tool strictly required for this is a
 compiler that can generate LLVM bitcode, such as `clang`. However,
 having the full LLVM tool suite available can be useful. We have tested
-SAW with LLVM and `clang` versions from 3.5 to 12.0, as well as the
+SAW with LLVM and `clang` versions from 3.5 to 16.0, as well as the
 version of `clang` bundled with Apple Xcode. We welcome bug reports on
 any failure to parse bitcode from LLVM versions in that range.
 

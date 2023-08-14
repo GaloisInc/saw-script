@@ -49,7 +49,8 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW (baseSCType)
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M
-import Mir.TransTy (tyToRepr, canInitialize, isUnsized, reprTransparentFieldTy)
+import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
+                   , isUnsized, reprTransparentFieldTy )
 
 
 -- | TypeShape is used to classify MIR `Ty`s and their corresponding
@@ -75,6 +76,11 @@ data TypeShape (tp :: CrucibleType) where
     -- a TypeShape.  None of our operations need to recurse inside pointers,
     -- and also this saves us from some infinite recursion.
     RefShape :: M.Ty -> M.Ty -> TypeRepr tp -> TypeShape (MirReferenceType tp)
+    -- | Note that 'FnPtrShape' contains only 'TypeRepr's for the argument and
+    -- result types, not 'TypeShape's, as none of our operations need to recurse
+    -- inside them.
+    FnPtrShape :: M.Ty -> CtxRepr args -> TypeRepr ret
+               -> TypeShape (FunctionHandleType args ret)
 
 -- | The TypeShape of a struct field, which might have a MaybeType wrapper to
 -- allow for partial initialization.
@@ -108,6 +114,7 @@ tyToShape col ty = go ty
             Nothing -> error $ "tyToShape: bad adt: " ++ show ty
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
         M.TyRawPtr ty' mutbl -> goRef ty ty' mutbl
+        M.TyFnPtr sig -> goFnPtr ty sig
         _ -> error $ "tyToShape: " ++ show ty ++ " NYI"
 
     goPrim :: M.Ty -> Some TypeShape
@@ -139,10 +146,19 @@ tyToShape col ty = go ty
         False -> Some $ OptField shp
 
     goRef :: M.Ty -> M.Ty -> M.Mutability -> Some TypeShape
-    goRef ty (M.TySlice ty') mutbl | Some tpr <- tyToRepr col ty' = Some $
+    goRef ty ty' mutbl
+      | M.TySlice slicedTy <- ty'
+      , Some tpr <- tyToRepr col slicedTy
+      = Some $
+         TupleShape ty [refTy, usizeTy]
+             (Empty
+                :> ReqField (RefShape refTy slicedTy tpr)
+                :> ReqField (PrimShape usizeTy BaseUsizeRepr))
+      | M.TyStr <- ty'
+      = Some $
         TupleShape ty [refTy, usizeTy]
             (Empty
-                :> ReqField (RefShape refTy ty' tpr)
+                :> ReqField (RefShape refTy (M.TyUint M.B8) (BVRepr (knownNat @8)))
                 :> ReqField (PrimShape usizeTy BaseUsizeRepr))
       where
         -- We use a ref (of the same mutability as `ty`) when possible, to
@@ -154,6 +170,12 @@ tyToShape col ty = go ty
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
     goRef ty ty' _ | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' tpr
+
+    goFnPtr :: M.Ty -> M.FnSig -> Some TypeShape
+    goFnPtr ty (M.FnSig args ret _abi _spread) =
+        tyListToCtx col args $ \argsr  ->
+        tyToReprCont col ret $ \retr ->
+           Some (FnPtrShape ty argsr retr)
 
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
 -- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
@@ -177,6 +199,7 @@ shapeType shp = go shp
     go (StructShape _ _ _flds) = AnyRepr
     go (TransparentShape _ shp) = go shp
     go (RefShape _ _ tpr) = MirReferenceRepr tpr
+    go (FnPtrShape _ args ret) = FunctionHandleRepr args ret
 
 fieldShapeType :: FieldShape tp -> TypeRepr tp
 fieldShapeType (ReqField shp) = shapeType shp
@@ -190,6 +213,7 @@ shapeMirTy (ArrayShape ty _ _) = ty
 shapeMirTy (StructShape ty _ _) = ty
 shapeMirTy (TransparentShape ty _) = ty
 shapeMirTy (RefShape ty _ _) = ty
+shapeMirTy (FnPtrShape ty _ _) = ty
 
 fieldShapeMirTy :: FieldShape tp -> M.Ty
 fieldShapeMirTy (ReqField shp) = shapeMirTy shp
@@ -536,7 +560,7 @@ shapeToTerm sc shp = go shp
     go :: forall tp. TypeShape tp -> m SAW.Term
     go (UnitShape _) = liftIO $ SAW.scUnitType sc
     go (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
-    go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w) 
+    go (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
     go (TupleShape _ _ flds) = do
         tys <- toListFC getConst <$> traverseFC (\x -> Const <$> goField x) flds
         liftIO $ SAW.scTupleType sc tys

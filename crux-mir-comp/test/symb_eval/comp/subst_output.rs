@@ -22,7 +22,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

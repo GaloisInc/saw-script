@@ -49,7 +49,7 @@ import Verifier.SAW.Module
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.FiniteValue
 
-import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent)
+import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent, sequentToSATQuery)
 import What4.Solver
 import SAWScript.Prover.What4
 
@@ -388,12 +388,13 @@ mrProvableRaw prop_term =
      nenv <- liftIO (scGetNamingEnv sc)
      debugPrint 2 ("Calling SMT solver with proposition: " ++
                    prettyProp defaultPPOpts nenv prop)
+     satq <- liftIO $ sequentToSATQuery sc unints (propToSequent prop)
      sym <- liftIO $ setupWhat4_sym True
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
      -- execution
      smt_res <- liftIO $
-       (Right <$> proveWhat4_solver z3Adapter sym unints sc (propToSequent prop) (return ()))
+       (Right <$> proveWhat4_solver z3Adapter sym sc satq (return ()))
          `X.catch` \case
            UserError msg -> return $ Left msg
            e -> X.throw e

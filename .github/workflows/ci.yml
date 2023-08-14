@@ -67,9 +67,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12, windows-latest]
+        os: [ubuntu-22.04, macos-12, windows-2019]
         cabal: ["3.10.1.0"]
-        ghc: ["8.8.4", "8.10.7", "9.2.7"]
+        ghc: ["8.10.7", "9.2.7", "9.4.4"]
         run-tests: [true]
         include:
           # We include one job from an older Ubuntu LTS release to increase our
@@ -79,17 +79,6 @@ jobs:
             ghc: "8.10.7"
             cabal: "3.10.1.0"
             run-tests: false
-        exclude:
-          # Exclude 8.8 on macOS 12 due to
-          # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
-          - os: macos-12
-            ghc: "8.8.4"
-            cabal: "3.10.1.0"
-            run-tests: true
-          - os: windows-latest
-            ghc: "8.8.4"
-            cabal: "3.10.1.0"
-            run-tests: true
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -105,7 +94,7 @@ jobs:
           .github/ci.sh output name $NAME
           echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64" >> $GITHUB_ENV
 
-      - uses: haskell/actions/setup@v1
+      - uses: haskell/actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
@@ -204,7 +193,7 @@ jobs:
       - if: matrix.ghc == '8.10.7'
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
@@ -354,7 +343,7 @@ jobs:
 
       - uses: abatilo/actions-poetry@v2.0.0
         with:
-          poetry-version: 1.1.5
+          poetry-version: 1.4.2
 
       - name: ${{ matrix.name }}
         shell: bash
@@ -383,7 +372,7 @@ jobs:
             os: macos-12
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
-            os: windows-latest
+            os: windows-2019
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
@@ -391,7 +380,7 @@ jobs:
             os: macos-12
             continue-on-error: false
           - suite: integration_tests
-            os: windows-latest
+            os: windows-2019
             continue-on-error: false
     steps:
       - uses: actions/checkout@v2
@@ -518,7 +507,7 @@ jobs:
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: abatilo/actions-poetry@v2.0.0
         with:
-          poetry-version: 1.1.5
+          poetry-version: 1.4.2
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         name: Test saw-remote-api
@@ -540,7 +529,7 @@ jobs:
 
   s2n-tests:
     name: "Test s2n proofs"
-    timeout-minutes: 120
+    timeout-minutes: 150
     needs: build
     runs-on: ubuntu-22.04
     strategy:
