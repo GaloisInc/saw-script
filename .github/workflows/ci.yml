@@ -17,6 +17,7 @@ on:
 
 env:
   CACHE_VERSION: 1
+  SOLVER_CACHE_VERSION: 1
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
 
   # Solver package snapshot date - also update in the following locations:
@@ -421,12 +422,29 @@ jobs:
           java-package: jdk
           architecture: x64
 
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ matrix.ghc }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ matrix.ghc }}-
+
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
+          export SAW_SOLVER_CACHE_PATH=${{ matrix.suite }}.cache
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
+
+      - uses: actions/cache/save@v3
+        name: Save SMT solver result cache
+        if: always()
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ matrix.ghc }}-${{ github.sha }}
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ matrix.ghc }}-
 
   build-push-image:
     runs-on: ubuntu-22.04
@@ -567,12 +585,29 @@ jobs:
         working-directory: s2nTests
         run: docker-compose build s2n
 
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        with:
+          path: s2n-${{ matrix.s2n-target }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-
+
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
           chmod +x bin/*
+          export SAW_SOLVER_CACHE_PATH=s2n.cache
           make ${{ matrix.s2n-target }}
+
+      - uses: actions/cache/save@v3
+        name: Save SMT solver result cache
+        if: always()
+        with:
+          path: s2n-${{ matrix.s2n-target }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-${{ github.sha }}
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-
 
   exercises:
     name: "Test SAW exercises"
