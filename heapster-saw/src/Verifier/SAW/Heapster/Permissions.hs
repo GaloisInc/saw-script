@@ -2828,7 +2828,11 @@ exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 -- | Convert the expressions in an 'ExprPerms' in a binding to variables bound
 -- in that binding, if possible
 mbExprPermsMembers :: Mb ctx (ExprPerms ps) -> Maybe (RAssign (Member ctx) ps)
-mbExprPermsMembers = error "FIXME HERE NOWNOW"
+mbExprPermsMembers mb_ps =
+  mbMaybe (mbMapCl $(mkClosed [| exprPermsVars |]) mb_ps) >>= \mb_ns ->
+  traverseRAssign (\(Compose mb_n) -> case mbNameBoundP mb_n of
+                      Left memb -> Just memb
+                      _ -> Nothing) (mbRAssign mb_ns)
 
 -- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
 -- collect them into a list
