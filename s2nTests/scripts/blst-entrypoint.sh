@@ -13,6 +13,7 @@ cp /saw-bin/z3-4.8.8 bin/z3
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec
+export SAW_SOLVER_CACHE_PATH=/blst.cache
 
 abc -h || true
 z3 --version

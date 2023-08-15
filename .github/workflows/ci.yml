@@ -432,7 +432,7 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
-          export SAW_SOLVER_CACHE_PATH="$PWD/${{ matrix-suite }}.cache"
+          export SAW_SOLVER_CACHE_PATH="$PWD/${{ matrix.suite }}.cache"
           dist-tests/${{ matrix.suite }}
 
       - uses: actions/cache/save@v3
@@ -593,7 +593,7 @@ jobs:
         working-directory: s2nTests
         run: |
           chmod +x bin/*
-          SAW_SOLVER_CACHE_PATH="$(pwd)/s2n-${{ matrix.suite }}.cache" make ${{ matrix.s2n-target }}
+          make ${{ matrix.s2n-target }}
 
       - uses: actions/cache/save@v3
         name: Save SMT solver result cache
@@ -601,7 +601,6 @@ jobs:
         with:
           path: s2n-${{ matrix.s2n-target }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-${{ github.ref }}
-            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-
 
   exercises:
     name: "Test SAW exercises"
