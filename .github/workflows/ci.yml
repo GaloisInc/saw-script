@@ -432,7 +432,8 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
-          SAW_SOLVER_CACHE_PATH="$(pwd)/${{ matrix.suite }}.cache" dist-tests/${{ matrix.suite }}
+          export SAW_SOLVER_CACHE_PATH="$PWD/${{ matrix-suite }}.cache"
+          dist-tests/${{ matrix.suite }}
 
       - uses: actions/cache/save@v3
         name: Save SMT solver result cache
