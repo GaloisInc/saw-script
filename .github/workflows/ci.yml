@@ -430,11 +430,14 @@ jobs:
           restore-keys: |
             ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ matrix.ghc }}-
 
+      - shell: bash
+        name: Enable solver caching
+        run: echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
-          export SAW_SOLVER_CACHE_PATH="$(pwd)/${{ matrix.suite }}.cache"
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
@@ -594,11 +597,14 @@ jobs:
             ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.os }}-${{ matrix.ghc }}-
 
       - shell: bash
+        name: Enable solver caching
+        run: echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+
+      - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
           chmod +x bin/*
-          export SAW_SOLVER_CACHE_PATH="$(pwd)/s2n-${{ matrix.s2n-target }}.cache"
           make ${{ matrix.s2n-target }}
 
       - uses: actions/cache/save@v3
