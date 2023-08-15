@@ -12,7 +12,7 @@ module Verifier.SAW.Heapster.GenMonad (
   gcaptureCC, gmapRet, gabortM, gparallel, startBinding,
   startNamedBinding, gopenBinding, gopenNamedBinding,
   -- * State operations
-  gmodify,
+  gmodify, gput,
   -- * Transformations
   addReader,
   ) where
