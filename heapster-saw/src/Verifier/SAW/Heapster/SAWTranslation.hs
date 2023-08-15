@@ -25,6 +25,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# Language DeriveFunctor #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Move brackets to avoid $" #-}
 
@@ -43,9 +44,9 @@ import qualified Data.BitVector.Sized as BV
 import Data.Functor.Compose
 import Control.Applicative
 import Control.Lens hiding ((:>), Index, ix, op)
-import Control.Monad.Reader hiding (ap)
-import Control.Monad.Writer hiding (ap)
-import Control.Monad.State hiding (ap)
+import Control.Monad.Reader
+import Control.Monad.Writer
+import Control.Monad.State
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.Fail as Fail
 
@@ -1660,82 +1661,171 @@ data LLVMArrayBorrowTrans ctx w =
     llvmArrayBorrowTransProps :: [BVPropTrans ctx w] }
 -}
 
+-- | FIXME HERE NOWNOW: document all of this!
+data LOwnedInfo ps ctx =
+  LOwnedInfo { lownedInfoECtx :: ExprTransCtx ctx,
+               lownedInfoPCtx :: PermTransCtx ctx ps,
+               lownedInfoPVars :: RAssign (Member ctx) ps,
+               lownedInfoRetType :: SpecTerm }
 
-data PermTransInfo ps ctx =
-  PermTransInfo { ptransInfoECtx :: ExprTransCtx ctx,
-                  ptransInfoPCtx :: PermTransCtx ctx ps,
-                  ptransInfoRetType :: SpecTerm }
+setLOInfoCtx :: ExprTransCtx ctx' -> LOwnedInfo ps ctx -> LOwnedInfo ps ctx'
+setLOInfoCtx ectx (LOwnedInfo {..}) = LOwnedInfo { lownedInfoECtx = ectx, .. }
 
-ptInfoSetPerms :: PermTransCtx ctx ps' -> PermTransInfo ps ctx ->
-                  PermTransInfo ps' ctx
-ptInfoSetPerms ps' (PermTransInfo {..}) =
-  PermTransInfo { ptransInfoPCtx = ps', ..}
+-- | Convert an 'ImpTransInfo' to an 'LOwnedInfo'
+impInfoToLOwned :: ImpTransInfo ext blocks tops rets ps ctx -> LOwnedInfo ps ctx
+impInfoToLOwned = error "FIXME HERE NOWNOW"
 
-ptInfoSplit :: Proxy ps1 -> RAssign any ps2 ->
-               PermTransInfo (ps1 :++: ps2) ctx ->
-               (PermTransInfo ps1 ctx, PermTransInfo ps2 ctx)
-ptInfoSplit = error "FIXME HERE NOWNOW"
+-- | Convert an 'LOwnedInfo' to an 'ImpTransInfo' using an existing 'ImpTransInfo'
+lownedInfoToImp :: LOwnedInfo px ctx -> ImpTransInfo ext blocks tops rets ps' ctx' ->
+                   ImpTransInfo ext blocks tops rets ps ctx
+lownedInfoToImp = error "FIXME HERE NOWNOW"
 
-ptInfoAppendPerms :: PermTransInfo ps1 ctx -> PermTransCtx ctx ps2 ->
-                     PermTransInfo (ps1 :++: ps2) ctx
-ptInfoAppendPerms (PermTransInfo {..}) pctx2 =
-  PermTransInfo { ptransInfoPCtx = RL.append ptransInfoPCtx pctx2, .. }
+loInfoSetPerms :: PermTransCtx ctx ps' -> RAssign (Member ctx) ps' ->
+                  LOwnedInfo ps ctx -> LOwnedInfo ps' ctx
+loInfoSetPerms ps' vars' (LOwnedInfo {..}) =
+  LOwnedInfo { lownedInfoPCtx = ps', lownedInfoPVars = vars', ..}
 
-ptInfoAppend :: PermTransInfo ps1 ctx -> PermTransInfo ps2 ctx ->
-                PermTransInfo (ps1 :++: ps2) ctx
-ptInfoAppend info1 info2 = ptInfoAppendPerms info1 (ptransInfoPCtx info2)
+loInfoSplit :: Proxy ps1 -> RAssign any ps2 ->
+               LOwnedInfo (ps1 :++: ps2) ctx ->
+               (LOwnedInfo ps1 ctx, LOwnedInfo ps2 ctx)
+loInfoSplit = error "FIXME HERE NOWNOW"
 
-type PermTransM ps = TransM (PermTransInfo ps)
+loInfoAppend :: LOwnedInfo ps1 ctx -> LOwnedInfo ps2 ctx ->
+                LOwnedInfo (ps1 :++: ps2) ctx
+loInfoAppend info1 info2 =
+  LOwnedInfo { lownedInfoPCtx =
+                 RL.append (lownedInfoPCtx info1) (lownedInfoPCtx info2)
+             , lownedInfoPVars =
+                 RL.append (lownedInfoPVars info1) (lownedInfoPVars info2)
+             , .. }
 
-newtype LOwnedTransTerm ctx ps_in ps_out =
-  LOwnedTransTerm {
-  unLOwnedTransTerm ::
-      forall ctx'. ExprTransCtx ctx' ->
-      PermTransM ps_in (ctx :++: ctx') (PermTransCtx (ctx :++: ctx') ps_out) }
+-- | An extension of type context @ctx1@ to @ctx2@, which is
+-- just an 'ExprTransCtx' for the suffix @ctx3@ such that @ctx1:++:ctx3 = ctx2@
+data ExprCtxExt ctx1 ctx2 where
+  ExprCtxExt :: ExprTransCtx ctx3 -> ExprCtxExt ctx1 (ctx1 :++: ctx3)
+
+-- | The reflexive context extension, proving that any context extends itself
+reflExprCtxExt :: ExprCtxExt ctx ctx
+reflExprCtxExt = ExprCtxExt MNil
+
+-- | Transitively combine two context extensions
+transExprCtxExt :: ExprCtxExt ctx1 ctx2 -> ExprCtxExt ctx2 ctx3 ->
+                   ExprCtxExt ctx1 ctx3
+transExprCtxExt (ExprCtxExt ectx2') (ExprCtxExt ectx3') =
+  error "FIXME HERE NOWNOW"
+
+extMbExt :: ExprCtxExt ctx1 ctx2 -> Mb ctx1 a -> Mb ctx2 a
+extMbExt = error "FIXME HERE NOWNOW"
+
+-- | Un-extend the left-hand context of an expression context extension
+extExprCtxExt :: ExprTrans tp -> ExprCtxExt (ctx1 :> tp) ctx2 ->
+                 ExprCtxExt ctx1 ctx2
+extExprCtxExt etrans ((ExprCtxExt ctx3) :: ExprCtxExt (ctx1 :> tp) ctx2) =
+  case RL.appendRNilConsEq (Proxy :: Proxy ctx1) etrans ctx3 of
+    Refl -> ExprCtxExt (RL.append (MNil :>: etrans) ctx3)
+
+-- | Un-extend the left-hand context of an expression context extension
+extMultiExprCtxExt :: ExprTransCtx ctx2 -> ExprCtxExt (ctx1 :++: ctx2) ctx3 ->
+                      ExprCtxExt ctx1 ctx3
+extMultiExprCtxExt = error "FIXME HERE NOWNOW"
+
+type LOwnedTransM ps_in ps_out ctx =
+  GenStateContT (LOwnedInfo ps_out ctx) SpecTerm
+  (LOwnedInfo ps_in ctx) SpecTerm Identity
+
+runLOwnedTransM :: LOwnedTransM ps_in ps_out ctx a -> LOwnedInfo ps_in ctx ->
+                   (LOwnedInfo ps_out ctx -> a -> SpecTerm) ->
+                   SpecTerm
+runLOwnedTransM m info_in k =
+  runIdentity $ runGenStateContT m info_in $ \info_out a ->
+  return $ k info_out a
+
+-- | FIXME HERE NOWNOW: docs; explain that it's as if the input LOwnedInfo is
+-- relative to ctx_in and the output is relative to ctx_out except this ensures
+-- that those are extensions of what they are supposed to be
+{-
+newtype LOwnedTransM ps_in ps_out ctx a =
+  LOwnedTransM {
+  runLOwnedTransM ::
+      forall ctx_in. ExprCtxExt ctx ctx_in -> LOwnedInfo ps_in ctx ->
+      (forall ctx_out. ExprCtxExt ctx_in ctx_out -> LOwnedInfo ps_out ctx ->
+       a -> SpecTerm) ->
+      SpecTerm }
+
+(>>>=) :: LOwnedTransM ps_in ps' ctx a -> (a -> LOwnedTransM ps' ps_out ctx b) ->
+          LOwnedTransM ps_in ps_out ctx b
+m >>>= f = LOwnedTransM $ \cext s1 k ->
+  runLOwnedTransM m cext s1 $ \cext' s2 x ->
+  runLOwnedTransM (f x) (transExprCtxExt cext cext') s2 $ \cext'' ->
+  k (transExprCtxExt cext' cext'')
+
+(>>>) :: LOwnedTransM ps_in ps' ctx a -> LOwnedTransM ps' ps_out ctx b ->
+          LOwnedTransM ps_in ps_out ctx b
+m1 >>> m2 = m1 >>>= \_ -> m2
+
+instance Functor (LOwnedTransM ps_in ps_out ctx) where
+  fmap f m = m >>>= \x -> return (f x)
+
+instance Applicative (LOwnedTransM ps ps ctx) where
+  pure x = LOwnedTransM $ \_ s k -> k reflExprCtxExt s x
+  (<*>) = ap
+
+instance Monad (LOwnedTransM ps ps ctx) where
+  (>>=) = (>>>=)
+
+gput :: LOwnedInfo ps_out ctx -> LOwnedTransM ps_in ps_out ctx ()
+gput loInfo = LOwnedTransM $ \_ _ k -> k reflExprCtxExt loInfo ()
+
+instance ps_in ~ ps_out =>
+         MonadState (LOwnedInfo ps_in ctx) (LOwnedTransM ps_in ps_out ctx) where
+  get = LOwnedTransM $ \cext s k -> k reflExprCtxExt s s
+  put = gput
+
+gmodify :: (LOwnedInfo ps_in ctx -> LOwnedInfo ps_out ctx) ->
+           LOwnedTransM ps_in ps_out ctx ()
+gmodify f = get >>>= \loInfo -> gput (f loInfo)
+-}
+
+extLOwnedTransM :: ExprTrans tp -> LOwnedTransM ps_in ps_out ctx a ->
+                   LOwnedTransM ps_in ps_out (ctx :> tp) a
+extLOwnedTransM etrans m =
+  error "FIXME HERE NOWNOW"
+  -- LOwnedTransM $ \ctx_ext -> m (extExprCtxExt etrans ctx_ext)
+
+type LOwnedTransTerm ctx ps_in ps_out = LOwnedTransM ps_in ps_out ctx ()
 
 lownedTransTermTerm :: PureTypeTrans (ExprTransCtx ctx) ->
+                       Mb ctx (ExprPerms ps_in) ->
                        RelPermTransCtx ctx ps_in ->
                        RelPermTransCtx ctx ps_out ->
                        LOwnedTransTerm ctx ps_in ps_out -> SpecTerm
-lownedTransTermTerm ectx ps_inF ps_outF t =
+lownedTransTermTerm ectx (mbExprPermsMembers ->
+                          Just vars_in) ps_inF ps_outF t =
   lambdaTrans "e" ectx $ \exprs ->
   lambdaTrans "p" (ps_inF exprs) $ \ps_in ->
-  flip runTransM (PermTransInfo
-                  { ptransInfoECtx = exprs, ptransInfoPCtx = ps_in,
-                    ptransInfoRetType = typeTransTupleType (ps_outF exprs) }) $
-  (transTupleTerm <$> unLOwnedTransTerm t MNil)
-
-extLOwnedTransTerm' :: Proxy ctx -> ExprTrans tp ->
-                       LOwnedTransTerm ctx ps_in ps_out ->
-                       LOwnedTransTerm (ctx :> tp) ps_in ps_out
-extLOwnedTransTerm' ctx tp (LOwnedTransTerm f) =
-  LOwnedTransTerm $ \ ctx' -> case RL.appendRNilConsEq ctx tp ctx' of
-    Refl -> f (RL.append (MNil :>: tp) ctx')
+  let loInfo =
+        LOwnedInfo { lownedInfoECtx = exprs, lownedInfoPCtx = ps_in,
+                     lownedInfoPVars = vars_in,
+                     lownedInfoRetType = typeTransTupleType (ps_outF exprs) } in
+  runLOwnedTransM t loInfo $ \loInfo_out () ->
+  transTupleTerm (lownedInfoPCtx loInfo_out)
+lownedTransTermTerm _ _ _ _ _ =
+  error "FIXME HERE NOWNOW: write this error message"
 
 extLOwnedTransTerm :: ExprTrans tp ->
                       LOwnedTransTerm ctx ps_in ps_out ->
                       LOwnedTransTerm (ctx :> tp) ps_in ps_out
-extLOwnedTransTerm = extLOwnedTransTerm' Proxy
+extLOwnedTransTerm = extLOwnedTransM
 
-emptyLOwnedTransTerm :: LOwnedTransTerm ctx RNil RNil
-emptyLOwnedTransTerm = LOwnedTransTerm $ \_ -> return MNil
+idLOwnedTransTerm :: LOwnedTransTerm ctx ps ps
+idLOwnedTransTerm = return ()
 
-elimSimplLOwnedTransTerm :: (forall ctx'. ExprTransCtx ctx' ->
-                             ImpTypeTrans (PermTransCtx (ctx :++: ctx') ps)) ->
-                            LOwnedTransTerm ctx ps ps
-elimSimplLOwnedTransTerm ps =
-  LOwnedTransTerm $ \ctx' -> ptransInfoPCtx <$> ask
-
-weakenLOwnedTransTerm ::
-  (forall ctx'. ExprTransCtx ctx' ->
-   ImpTypeTrans (PermTrans (ctx :++: ctx') tp)) ->
-  LOwnedTransTerm ctx ps_in ps_out ->
-  LOwnedTransTerm ctx (ps_in :> tp) (ps_out :> tp)
-weakenLOwnedTransTerm tp t =
-  LOwnedTransTerm $ \ectx' ->
-  do (info_ps, info_tp) <- ptInfoSplit Proxy (MNil :>: Proxy) <$> ask
-     pctx <- withInfoM (const info_ps) (unLOwnedTransTerm t ectx')
-     return (RL.append pctx $ ptransInfoPCtx info_tp)
+weakenLOwnedTransTerm :: LOwnedTransTerm ctx ps_in ps_out ->
+                         LOwnedTransTerm ctx (ps_in :> tp) (ps_out :> tp)
+weakenLOwnedTransTerm t =
+  (loInfoSplit Proxy (MNil :>: Proxy) <$> get) >>>= \(info_ps_in, info_tp) ->
+  gput info_ps_in >>>
+  t >>> gmodify (flip loInfoAppend info_tp)
 
 bindLOwnedTransTerm ::
   Proxy ps_extra1 -> RAssign any ps_extra2 -> RAssign any ps_in ->
@@ -1743,12 +1833,13 @@ bindLOwnedTransTerm ::
   LOwnedTransTerm ctx (ps_extra2 :++: ps_mid) ps_out ->
   LOwnedTransTerm ctx ((ps_extra1 :++: ps_extra2) :++: ps_in) ps_out
 bindLOwnedTransTerm prx_extra1 prx_extra2 prx_in t1 t2 =
-  LOwnedTransTerm $ \ectx' ->
-  do (info_extra, info_in) <- ptInfoSplit Proxy prx_in <$> ask
-     let (info_extra1, info_extra2) = ptInfoSplit prx_extra1 prx_extra2 info_extra
-     pctx_mid <-
-       withInfoM (const $ ptInfoAppend info_extra1 info_in) (unLOwnedTransTerm t1 ectx')
-     withInfoM (const $ ptInfoAppendPerms info_extra2 pctx_mid) (unLOwnedTransTerm t2 ectx')
+  (loInfoSplit Proxy prx_in <$> get) >>>= \(info_extra, info_in) ->
+  let (info_extra1, info_extra2) =
+        loInfoSplit prx_extra1 prx_extra2 info_extra in
+  gput (loInfoAppend info_extra1 info_in) >>>
+  t1 >>>
+  gmodify (loInfoAppend info_extra2) >>>
+  t2
 
 
 -- | The translation of the vacuously true permission
@@ -1850,12 +1941,14 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_NamedConj _ _ _ t) = [t]
   transTerms (APTrans_DefinedNamedConj _ _ _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMFrame _) = []
-  transTerms (APTrans_LOwned _ _ _ _ _
+  transTerms (APTrans_LOwned _ _ _ eps_in _
               ectx ps_extra _ tps_in tps_out tps_extra lott) =
     let etps = exprCtxType ectx
         tps_extra_in = appRelPermTransCtx tps_extra tps_in
         lrt = piExprPermLRT etps tps_extra_in tps_out
-        fun_tm = lownedTransTermTerm etps tps_extra_in tps_out lott in
+        fun_tm =
+          -- lownedTransTermTerm etps eps_in tps_extra_in tps_out lott
+          error "FIXME HERE NOWNOW" in
     [applyClosSpecTerm lrt (mkFreshClosSpecTerm lrt (const fun_tm))
      (transTerms ectx ++ transTerms ps_extra)]
   transTerms (APTrans_LOwnedSimple _ _) = []
@@ -3056,10 +3149,21 @@ instance Monoid HasFailures where
   mempty = NoFailures
 
 -- | A function for translating an @r@
+-- FIXME HERE NOWNOW: remove ctx type arg
 newtype ImpRTransFun r ext blocks tops rets =
   ImpRTransFun { appImpTransFun ::
                    forall ps ctx. Mb ctx (r ps) ->
                    ImpTransM ext blocks tops rets ps ctx SpecTerm }
+
+{-
+extImpRTransFun :: ExprTransCtx ctx' ->
+                   ImpRTransFun r ext blocks tops rets ctx ->
+                   ImpRTransFun r ext blocks tops rets (ctx :++: ctx')
+extImpRTransFun ctx' f =
+  ImpRTransFun $ \cext mb_r ->
+  appImpTransFun f (extMultiExprCtxExt ctx' cext) mb_r
+-}
+
 
 -- | A monad transformer that adds an 'ImpRTransFun' translation function
 newtype ImpRTransFunT r ext blocks tops rets m a =
@@ -3073,7 +3177,8 @@ runImpRTransFunT :: ImpRTransFunT r ext blocks tops rets m a ->
 runImpRTransFunT m = runReaderT (unImpRTransFunT m)
 
 -- | Map the underlying computation type of an 'ImpRTransFunT'
-mapImpRTransFunT :: (m a -> n b) -> ImpRTransFunT r ext blocks tops rets m a ->
+mapImpRTransFunT :: (m a -> n b) ->
+                    ImpRTransFunT r ext blocks tops rets m a ->
                     ImpRTransFunT r ext blocks tops rets n b
 mapImpRTransFunT f = ImpRTransFunT . mapReaderT f . unImpRTransFunT
 
@@ -3087,6 +3192,7 @@ mapImpRTransFunT f = ImpRTransFunT . mapReaderT f . unImpRTransFunT
 type PImplTransM r ext blocks tops rets ps ctx =
   MaybeT (WriterT ([String], HasFailures)
           (ImpRTransFunT r ext blocks tops rets Identity))
+-- FIXME HERE NOWNOW: PImplTransM doesn't need ps or ctx
 
 -- | Run a 'PermImplTransM' computation
 runPermImplTransM ::
@@ -3095,6 +3201,33 @@ runPermImplTransM ::
   (Maybe a, ([String], HasFailures))
 runPermImplTransM m rTransFun =
   runIdentity $ runImpRTransFunT (runWriterT $ runMaybeT m) rTransFun
+
+{-
+extPermImplTransM :: prx ctx' ->
+                     PImplTransM r ext blocks tops rets ps (ctx :++: ctx') a ->
+                     PImplTransM r ext blocks tops rets ps ctx a
+extPermImplTransM ctx' m =
+  pimplRTransFunM >>= \rtransFun ->
+  MaybeT $ WriterT $ return $ runPermImplTransM m $ extImpRTransFun ctx' rtransFun
+-}
+
+{-
+extPermImplTransM :: ExprTransCtx ctx' ->
+                     PImplTransM r ext blocks tops rets ps (ctx :++: ctx') a ->
+                     PImplTransM r ext blocks tops rets ps ctx a
+extPermImplTransM ctx' m =
+  pimplRTransFunM >>= \rtransFun ->
+  MaybeT $ WriterT $ return $ runPermImplTransM m $ extImpRTransFun ctx' rtransFun
+
+extPermImplTransMTerm :: CruCtx ctx' ->
+                         PImplTransMTerm r ext blocks tops rets ps (ctx :++: ctx') ->
+                         PImplTransMTerm r ext blocks tops rets ps ctx
+extPermImplTransMTerm ctx' m =
+  MaybeT $ WriterT $ ImpRTransFun $ reader $ \rtransFun -> PImplTerm $ \k ->
+  TransM $ reader $ \info ->
+  let ectx' = runTransM (translateClosed ctx') info in
+  return $ runPermImplTransM m $ extImpRTransFun ectx' rtransFun
+-}
 
 -- | Look up the @r@ translation function
 pimplRTransFunM :: PImplTransM r ext blocks tops rets ps ctx
@@ -4513,7 +4646,6 @@ translatePermImplUnary (mbMatch -> [nuMP| MbPermImpls_Cons _ _ mb_impl |]) f =
   PImplTerm <$> fmap f <$> popPImplTerm <$>
   translatePermImpl (mbCombine RL.typeCtxProxies mb_impl)
 
-
 -- | Translate a 'PermImpl1' to a function on translation computations
 translatePermImpl1 :: NuMatchingAny1 r =>
                       Mb ctx (PermImpl1 ps ps_outs) ->
@@ -4579,8 +4711,8 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
   -- An existential elimination performs a pattern-match on a Sigma
   ([nuMP| Impl1_ElimExists x p |], _) ->
     translatePermImplUnary mb_impls $ \m ->
-    do () <- assertTopPermM "Impl1_ElimExists" x (fmap ValPerm_Exists p)
-       let tp = mbBindingType p
+    do let tp = mbBindingType p
+       () <- assertTopPermM "Impl1_ElimExists" x (fmap ValPerm_Exists p)
        top_ptrans <- getTopPermM
        tp_trans <- translateClosed tp
        sigmaElimPermTransM "x_elimEx" tp_trans
@@ -4951,17 +5083,23 @@ translatePermImpl mb_impl = case mbMatch mb_impl of
   [nuMP| PermImpl_Step impl1 mb_impls |] ->
     translatePermImpl1 impl1 mb_impls
 
+translatePermImplToTerm :: NuMatchingAny1 r => String ->
+                           Mb ctx (PermImpl r ps) ->
+                           ImpRTransFun r ext blocks tops rets ->
+                           ImpTransM ext blocks tops rets ps ctx SpecTerm
+translatePermImplToTerm err mb_impl k =
+  let (maybe_ptm, (errs,_)) =
+        runPermImplTransM (translatePermImpl mb_impl) k in
+  popPImplTerm (forcePImplTerm maybe_ptm) $
+  ImplFailContMsg (err ++ "\n\n"
+                   ++ concat (intersperse
+                              "\n\n--------------------\n\n" errs))
+
 instance ImplTranslateF r ext blocks tops rets =>
          Translate (ImpTransInfo ext blocks tops rets ps)
                    ctx (AnnotPermImpl r ps) SpecTerm where
-  translate (mbMatch -> [nuMP| AnnotPermImpl err impl |]) =
-    let (maybe_ptm, (errs,_)) =
-          runPermImplTransM (translatePermImpl impl) (ImpRTransFun
-                                                      translateF) in
-    popPImplTerm (forcePImplTerm maybe_ptm) $
-    ImplFailContMsg (mbLift err ++ "\n\n"
-                     ++ concat (intersperse
-                                "\n\n--------------------\n\n" errs))
+  translate (mbMatch -> [nuMP| AnnotPermImpl err mb_impl |]) =
+    translatePermImplToTerm (mbLift err) mb_impl (ImpRTransFun translateF)
 
 {-
 -- We translate a LocalImplRet to a term that returns all current permissions
@@ -5001,10 +5139,20 @@ translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
     (translateLocalPermImpl err impl)
 -}
 
-{-
-FIXME HERE NOWNOW: change LOwnedTransTerms to be continuation computations, and
-add a function to translate PermImpls to these computations for MapLifetime
--}
+-- | Translate a 'LocalPermImpl' to an 'LOwnedTransTerm'
+translateLOwnedPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
+                           ImpTransM ext blocks tops rets ps ctx
+                           (LOwnedTransTerm ctx ps_in ps_out)
+translateLOwnedPermImpl err (mbMatch -> [nuMP| LocalPermImpl mb_impl |]) =
+  ask >>= \info_top ->
+  return $ GenStateContT $ \loinfo_in k ->
+  return $ flip runTransM (lownedInfoToImp loinfo_in info_top) $
+  translatePermImplToTerm err mb_impl $ ImpRTransFun $ \r ->
+  case mbMatch r of
+    [nuMP| LocalImplRet Refl |] ->
+      ask >>= \info_out -> return $ runIdentity $
+                           k (setLOInfoCtx (itiExprCtx info_top) $
+                              impInfoToLOwned info_out) ()
 
 
 ----------------------------------------------------------------------
@@ -5689,12 +5837,6 @@ instance PermCheckExtC ext exprExt =>
 {-
 NOWNOW:
 - change uses of TypeTrans to include the purity flag
-- NOTE: PermExprs translate to pure terms / OpenTerms
-- compReturnTypeM should return a TypeDesc
-- need a variant of piTransM that builds TypeDescs
-- update the translation of shapes and perms to use ETrans_Shape and ETrans_Perm
-- IDEA: change LOwnedTransTerm to have a single PermTransM that returns a
-  PermTransCtx; also remove the vars input from PermTransInfo
 
 ----------------------------------------------------------------------
 -- * Translating CFGs
