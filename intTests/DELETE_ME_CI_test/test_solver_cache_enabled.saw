@@ -1,0 +1,4 @@
+test_solver_cache_stats 0 0 0 0 0;
+prove_print z3 {{ \(x:[64]) -> x == x }};
+test_solver_cache_stats 1 0 0 1 0;
+print_solver_cache_stats;
