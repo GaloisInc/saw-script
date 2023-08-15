@@ -2825,6 +2825,11 @@ mbDistPermsToExprPerms = mbMapCl $(mkClosed [| distPermsToExprPerms |])
 exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
 exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
+-- | Convert the expressions in an 'ExprPerms' in a binding to variables bound
+-- in that binding, if possible
+mbExprPermsMembers :: Mb ctx (ExprPerms ps) -> Maybe (RAssign (Member ctx) ps)
+mbExprPermsMembers = error "FIXME HERE NOWNOW"
+
 -- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
 -- collect them into a list
 exprPermsVarsList :: ExprPerms ps -> [SomeName CrucibleType]
