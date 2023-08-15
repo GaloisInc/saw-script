@@ -905,17 +905,17 @@ un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
-  (return emptyPPInfo) >>= \ppInfo ->
-  fail $ renderDoc $ vsep
-  [ pretty "Unexpected LLVM type for function permission:"
-  , permPretty ppInfo fun_perm
-  , pretty "Actual LLVM type of function:"
-    <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
-    <+> PP.group (permPretty ppInfo ret)
-  , pretty "Expected LLVM type of function:"
-    <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
-    <+> pretty "=>"
-    <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
+  let ppInfo = emptyPPInfo in
+    fail $ renderDoc $ vsep
+    [ pretty "Unexpected LLVM type for function permission:"
+    , permPretty ppInfo fun_perm
+    , pretty "Actual LLVM type of function:"
+      <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
+      <+> PP.group (permPretty ppInfo ret)
+    , pretty "Expected LLVM type of function:"
+      <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
+      <+> pretty "=>"
+      <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
 
 -- | This is the more general form of 'funPerm3FromArgLayout, where there can be
 -- ghost variables in the 'ArgLayout'
