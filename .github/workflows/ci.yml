@@ -434,7 +434,7 @@ jobs:
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
-          export SAW_SOLVER_CACHE_PATH=${{ matrix.suite }}.cache
+          export SAW_SOLVER_CACHE_PATH="$(pwd)/${{ matrix.suite }}.cache"
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
@@ -598,7 +598,7 @@ jobs:
         working-directory: s2nTests
         run: |
           chmod +x bin/*
-          export SAW_SOLVER_CACHE_PATH=s2n.cache
+          export SAW_SOLVER_CACHE_PATH="$(pwd)/s2n-${{ matrix.s2n-target }}.cache"
           make ${{ matrix.s2n-target }}
 
       - uses: actions/cache/save@v3
