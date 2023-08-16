@@ -353,6 +353,7 @@ importErasedProp sc env prop =
       rhs' <- importType sc env rhs
       scAnd sc lhs' rhs'
     C.TCon (C.PC C.PTrue) [] -> scBool sc True
+    C.TUser _ _ t -> importErasedProp sc env t
     _ -> if isErasedProp prop
          then error $
            concat [ "importErasedProp does not support erased props of type '"

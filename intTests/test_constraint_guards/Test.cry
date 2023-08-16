@@ -5,8 +5,8 @@ guard : {w} [w] -> Integer
 guard x
   | (w == 32) => 0
   | (w >= 32) => 1
-  | (w != 8, w != 9) => 2
-  | (w < 8) => 3
+  | (w < 8) => 2
+  | (w != 8, w != 9) => 3
   | () => 4
 
 // Non-exhaustive constraint guard
