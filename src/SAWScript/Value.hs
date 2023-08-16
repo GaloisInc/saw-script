@@ -994,7 +994,7 @@ instance FromValue a => FromValue (TopLevel a) where
       v1 <- withPosition pos (fromValue m1)
       m2 <- applyValue v2 v1
       fromValue m2
-    fromValue _ = error "fromValue TopLevel"
+    fromValue v = error $ "fromValue TopLevel:" <> show v
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue m = VProofScript (fmap toValue m)

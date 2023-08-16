@@ -48,6 +48,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_find_trait_method_symbol
        , heapster_assume_fun
        , heapster_assume_fun_rename
+       , heapster_translate_rust_type
        , heapster_assume_fun_rename_prim
        , heapster_assume_fun_multi
        , heapster_set_event_type
@@ -124,6 +125,7 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.IRTTranslation
 import Verifier.SAW.Heapster.PermParser
+import Verifier.SAW.Heapster.RustTypes (parseSome3FunPermFromRust, Some3FunPerm(..))
 import Verifier.SAW.Heapster.ParsedCtx
 import qualified Verifier.SAW.Heapster.IDESupport as HIDE
 import Verifier.SAW.Heapster.LLVMGlobalConst
@@ -1040,6 +1042,19 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
                                            (globalOpenTerm term_ident)
         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
 
+heapster_translate_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                String -> TopLevel ()
+heapster_translate_rust_type _bic _opts henv perms_string =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     let w64 = (knownNat @64::NatRepr 64)
+     leq_proof <- case decideLeq (knownNat @1) w64 of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     withKnownNat w64 $ withLeqProof leq_proof $ do
+        Some3FunPerm fun_perm <-
+          parseSome3FunPermFromRust env w64 perms_string
+        liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
+        
 -- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
 -- associated with the supplied Heapster environment, and return its identifier
 insPrimitive :: HeapsterEnv -> String -> Term -> TopLevel Ident
