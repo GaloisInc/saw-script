@@ -24,6 +24,6 @@ yices-smt2 --version
 
 SAW_SOLVER_CACHE_PATH=/blst.cache saw proof/memory_safety.saw
 echo "LOOK HERE @m-yac"
-echo "print_solver_cache_stats" | ./bin/saw
+echo "print_solver_cache_stats" | saw
 
 ./scripts/check.sh | if grep False; then exit 1; fi
