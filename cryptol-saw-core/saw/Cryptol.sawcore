@@ -40,7 +40,7 @@ Num_rec : (p: Num -> sort 1) -> ((n:Nat) -> p (TCNum n)) -> p TCInf ->
 Num_rec p f1 f2 n = Num#rec p f1 f2 n;
 
 -- Check whether a 'Num' is finite
-tcFin : (n:Num) -> Bool;
+tcFin : Num -> Bool;
 tcFin n = Num#rec (\ (n:Num) -> Bool) (\ (n:Nat) -> True) False n;
 
 -- Helper function: take a Num that we expect to be finite, and extract its Nat,
