@@ -332,9 +332,12 @@ isErasedProp prop =
     C.TCon (C.PC C.PLiteralLessThan) _ -> False
     _ -> True
 
--- | Translate an erased 'Prop' to a 'Term'
-importErasedProp :: SharedContext -> Env -> C.Prop -> IO Term
-importErasedProp sc env prop =
+-- | Translate a 'Prop' containing a numeric constraint to a 'Term' that tests
+-- if the 'Prop' holds. This function will 'panic' for 'Prop's that are not
+-- numeric constraints, such as @Integral@. In other words, this function
+-- supports the same set of 'Prop's that constraint guards do.
+importNumericConstraintAsBool :: SharedContext -> Env -> C.Prop -> IO Term
+importNumericConstraintAsBool sc env prop =
   case prop of
     C.TCon (C.PC C.PEqual) [lhs, rhs] -> eqTerm lhs rhs
     C.TCon (C.PC C.PNeq) [lhs, rhs] -> eqTerm lhs rhs >>= scNot sc
@@ -353,17 +356,12 @@ importErasedProp sc env prop =
       rhs' <- importType sc env rhs
       scAnd sc lhs' rhs'
     C.TCon (C.PC C.PTrue) [] -> scBool sc True
-    C.TUser _ _ t -> importErasedProp sc env t
-    _ -> if isErasedProp prop
-         then error $
-           concat [ "importErasedProp does not support erased props of type '"
-                  , pretty prop
-                  , "'"
-                  ]
-         else panic "importErasedProp"
-                   [ "imporErasedProp called with non-erased prop:"
-                   , pretty prop
-                   ]
+    C.TUser _ _ t -> importNumericConstraintAsBool sc env t
+    _ -> panic
+      "importNumericConstraintAsBool"
+      [ "importNumericConstraintAsBool called with non-numeric constraint:"
+      , pretty prop
+      ]
   where
     -- | Construct a term for equality of two types
     eqTerm :: C.Type -> C.Type -> IO Term
@@ -1136,7 +1134,7 @@ importExpr sc env expr =
     -- conjunction over singleton lists.
     conjoinErasedProps :: Maybe Term -> C.Prop -> IO (Maybe Term)
     conjoinErasedProps mt p = do
-      p' <- importErasedProp sc env p
+      p' <- importNumericConstraintAsBool sc env p
       case mt of
         Just t -> Just <$> scAnd sc t p'
         Nothing -> pure $ Just p'
