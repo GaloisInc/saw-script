@@ -356,12 +356,12 @@ importErasedProp sc env prop =
     _ -> if isErasedProp prop
          then error $
            concat [ "importErasedProp does not support erased props of type '"
-                  , show prop
+                  , pretty prop
                   , "'"
                   ]
          else panic "importErasedProp"
                    [ "imporErasedProp called with non-erased prop:"
-                   , show prop
+                   , pretty prop
                    ]
   where
     -- | Construct a term for equality of two types
