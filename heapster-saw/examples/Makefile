@@ -41,7 +41,7 @@ endif
 	$(SAW) $<
 
 # Lists all the Mr Solver tests, without their ".saw" suffix
-MR_SOLVER_TESTS = exp_explosion_mr_solver.saw # arrays_mr_solver linked_list_mr_solver sha512_mr_solver
+MR_SOLVER_TESTS = exp_explosion_mr_solver # arrays_mr_solver linked_list_mr_solver sha512_mr_solver
 
 .PHONY: mr-solver-tests $(MR_SOLVER_TESTS)
 mr-solver-tests: $(MR_SOLVER_TESTS)
