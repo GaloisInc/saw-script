@@ -212,7 +212,7 @@ tcEqual =
 
 -- Check that the first 'Num' is strictly less than the second 'Num'.
 tcLt : Num -> Num -> Bool;
-tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) False;
+tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
 
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
