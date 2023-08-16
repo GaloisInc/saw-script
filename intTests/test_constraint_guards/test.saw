@@ -11,3 +11,8 @@ prove_print z3 {{ \(x : [9])   -> guard x == 4}};
 // Test non-exhaustive constraint guards
 prove_print z3 {{ \(x : [32]) -> incomplete x }};
 fails (prove_print z3 {{ \(x : [64]) -> incomplete x }});
+
+// Test more dependently typed constraint guards
+prove_print z3 {{ dependent`{1} == [True] }};
+prove_print z3 {{ dependent`{3} == [False, False, False] }};
+prove_print z3 {{ dependent`{0} == [] }};

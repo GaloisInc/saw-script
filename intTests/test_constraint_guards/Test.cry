@@ -13,3 +13,9 @@ guard x
 incomplete : {w} [w] -> Bool
 incomplete x
   | (w == 32) => True
+
+// More dependently typed case
+dependent : {n} [n]
+dependent
+  | n == 1 => [True]
+  | ()     => repeat False
