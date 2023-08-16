@@ -13,7 +13,6 @@ cp /saw-bin/z3-4.8.8 bin/z3
 
 export PATH=/saw-script/aws-lc-verification/SAW/bin:$PATH
 export CRYPTOLPATH=/saw-script/aws-lc-verification/cryptol-specs
-export SAW_SOLVER_CACHE_PATH=/awslc.cache
+export SAW_SOLVER_CACHE_PATH=/saw-cache
 
 ./scripts/entrypoint_check.sh
-ls /blst.cache

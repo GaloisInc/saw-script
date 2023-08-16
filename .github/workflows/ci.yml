@@ -593,7 +593,7 @@ jobs:
       - uses: actions/cache/restore@v3
         name: Restore SMT solver result cache
         with:
-          path: s2n-${{ matrix.s2n-target }}.cache
+          path: cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
           restore-keys:
             ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}}-${{ matrix.ghc }}-${{ github.ref }}-
@@ -610,7 +610,7 @@ jobs:
         name: Save SMT solver result cache
         if: always()
         with:
-          path: s2n-${{ matrix.s2n-target }}.cache
+          path: cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
 
   exercises:
