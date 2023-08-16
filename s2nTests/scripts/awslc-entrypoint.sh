@@ -16,4 +16,4 @@ export CRYPTOLPATH=/saw-script/aws-lc-verification/cryptol-specs
 export SAW_SOLVER_CACHE_PATH=/awslc.cache
 
 ./scripts/entrypoint_check.sh
-
+ls /blst.cache

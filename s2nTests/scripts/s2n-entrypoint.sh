@@ -18,3 +18,4 @@ export CFLAGS=-Wno-error=array-parameter
 export CLANG=clang
 export LLVMLINK=llvm-link
 exec codebuild/bin/s2n_codebuild.sh
+ls /blst.cache

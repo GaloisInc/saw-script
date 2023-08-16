@@ -13,6 +13,7 @@ cp /saw-bin/z3-4.8.8 bin/z3
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec
+export SAW_SOLVER_CACHE_PATH=/blst.cache
 
 abc -h || true
 z3 --version
@@ -22,8 +23,6 @@ yices-smt2 --version
 ./scripts/build_x86.sh
 ./scripts/build_llvm.sh
 
-SAW_SOLVER_CACHE_PATH=/blst.cache saw proof/memory_safety.saw
-echo "LOOK HERE @m-yac"
-ls /blst.cache
-echo "set_solver_cache_path \"/blst.cache\"\nprint_solver_cache_stats" | saw
+saw proof/memory_safety.saw
 ./scripts/check.sh | if grep False; then exit 1; fi
+ls /blst.cache
