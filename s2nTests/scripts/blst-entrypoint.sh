@@ -24,4 +24,8 @@ yices-smt2 --version
 ./scripts/build_llvm.sh
 
 saw proof/memory_safety.saw
+
 ./scripts/check.sh | if grep False; then exit 1; fi
+
+ls /saw-cache
+echo "set_solver_cache_path \"/saw-cache\"\nprint_solver_cache_stats" | bin/saw
