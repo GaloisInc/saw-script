@@ -120,8 +120,10 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.ref }}
-          restore-keys: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.ref }}-
+            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
         shell: bash
@@ -211,7 +213,7 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.ref }}
+          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.ref }}-${{ github.sha }}
 
   mr-solver-tests:
     needs: [build]
@@ -425,8 +427,10 @@ jobs:
         if: "matrix.suite == 'integration_tests'"
         with:
           path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.ref }}
-          restore-keys: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.ref }}-
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
 
       - shell: bash
         name: Enable solver caching
@@ -445,7 +449,7 @@ jobs:
         if: "matrix.suite == 'integration_tests'"
         with:
           path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.ref }}
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.ref }}-${{ github.sha }}
 
   build-push-image:
     runs-on: ubuntu-22.04
@@ -590,8 +594,10 @@ jobs:
         name: Restore SMT solver result cache
         with:
           path: s2n-${{ matrix.s2n-target }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}
-          restore-keys: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}}-${{ matrix.ghc }}-
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys:
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}}-${{ matrix.ghc }}-${{ github.ref }}-
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}}-${{ matrix.ghc }}-
 
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
@@ -605,7 +611,7 @@ jobs:
         if: always()
         with:
           path: s2n-${{ matrix.s2n-target }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
 
   exercises:
     name: "Test SAW exercises"
