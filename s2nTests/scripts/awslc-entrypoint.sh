@@ -17,6 +17,3 @@ export SAW_SOLVER_CACHE_PATH=/saw-cache
 
 ./scripts/entrypoint_check.sh
 
-ls /saw-cache
-/bin/saw /saw-cache/print_solver_cache_stats.saw
-

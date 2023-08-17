@@ -18,6 +18,3 @@ export CLANG=clang
 export LLVMLINK=llvm-link
 export SAW_SOLVER_CACHE_PATH=/saw-cache
 exec codebuild/bin/s2n_codebuild.sh
-
-ls /saw-cache
-/bin/saw /saw-cache/print_solver_cache_stats.saw
