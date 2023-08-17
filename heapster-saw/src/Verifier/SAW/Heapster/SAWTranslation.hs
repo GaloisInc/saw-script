@@ -1061,8 +1061,8 @@ instance (Translate info ctx a tr, NuMatching a) =>
 class HasPureTrans a where
   hasPureTrans :: Mb (ctx :: RList CrucibleType) a -> Bool
 
-instance HasPureTrans a => HasPureTrans [a] where
-  hasPureTrans xs = error "FIXME HERE NOWNOW"
+instance (HasPureTrans a, NuMatching a) => HasPureTrans [a] where
+  hasPureTrans = and . map hasPureTrans . mbList
 
 
 ----------------------------------------------------------------------
@@ -1722,12 +1722,18 @@ transExprCtxExt ((ExprCtxExt ectx2')
 extMbExt :: ExprCtxExt ctx1 ctx2 -> Mb ctx1 a -> Mb ctx2 a
 extMbExt (ExprCtxExt ctx2) = extMbAny ctx2
 
+{- FIXME: keeping this in case we need it later
 -- | Un-extend the left-hand context of an expression context extension
 extExprCtxExt :: ExprTrans tp -> ExprCtxExt (ctx1 :> tp) ctx2 ->
                  ExprCtxExt ctx1 ctx2
 extExprCtxExt etrans ((ExprCtxExt ctx3) :: ExprCtxExt (ctx1 :> tp) ctx2) =
   case RL.appendRNilConsEq (Proxy :: Proxy ctx1) etrans ctx3 of
     Refl -> ExprCtxExt (RL.append (MNil :>: etrans) ctx3)
+-}
+
+extExprTransCtx :: ExprCtxExt ctx1 ctx2 -> ExprTransCtx ctx1 ->
+                   ExprTransCtx ctx2
+extExprTransCtx (ExprCtxExt ectx2) ectx1 = RL.append ectx1 ectx2
 
 -- | Extend the context of a permission translation using an 'ExprCtxExt'
 extPermTransExt :: ExprCtxExt ctx1 ctx2 -> PermTrans ctx1 a ->
@@ -1742,7 +1748,10 @@ extPermTransCtxExt cext = RL.map (extPermTransExt cext)
 
 extLOwnedInfoExt :: ExprCtxExt ctx1 ctx2 -> LOwnedInfo ps ctx1 ->
                     LOwnedInfo ps ctx2
-extLOwnedInfoExt = error "FIXME HERE NOWNOW"
+extLOwnedInfoExt cext@(ExprCtxExt ectx3) (LOwnedInfo {..}) =
+  LOwnedInfo { lownedInfoECtx = extExprTransCtx cext lownedInfoECtx,
+               lownedInfoPCtx = extPermTransCtxExt cext lownedInfoPCtx,
+               lownedInfoPVars = RL.map (weakenMemberR ectx3) lownedInfoPVars }
 
 
 -- | FIXME HERE NOWNOW: docs; explain that it's as if the input LOwnedInfo is
@@ -3218,15 +3227,18 @@ instance Semigroup HasFailures where
 instance Monoid HasFailures where
   mempty = NoFailures
 
+-- | FIXME HERE NOWNOW: docs!
 data CtxExt ctx1 ctx2 where
   CtxExt :: RAssign Proxy ctx3 -> CtxExt ctx1 (ctx1 :++: ctx3)
 
 reflCtxExt :: CtxExt ctx ctx
 reflCtxExt = CtxExt MNil
 
-extCtxExt :: RAssign Proxy ctx2 -> CtxExt (ctx1 :++: ctx2) ctx3 ->
+extCtxExt :: Proxy ctx1 -> RAssign Proxy ctx2 -> CtxExt (ctx1 :++: ctx2) ctx3 ->
              CtxExt ctx1 ctx3
-extCtxExt = error "FIXME HERE NOWNOW"
+extCtxExt ctx1 ctx2 (CtxExt ctx4)
+  | Refl <- RL.appendAssoc ctx1 ctx2 ctx4
+  = CtxExt (RL.append ctx2 ctx4)
 
 ctxExtToExprExt :: CtxExt ctx1 ctx2 -> ExprTransCtx ctx2 ->
                    ExprCtxExt ctx1 ctx2
@@ -3234,7 +3246,6 @@ ctxExtToExprExt ((CtxExt ctx3) :: CtxExt ctx1 ctx2) ectx =
   ExprCtxExt $ snd $ RL.split (Proxy :: Proxy ctx1) ctx3 ectx
 
 -- | A function for translating an @r@
--- FIXME HERE NOWNOW: remove ctx type arg
 newtype ImpRTransFun r ext blocks tops rets ctx =
   ImpRTransFun { appImpTransFun ::
                    forall ps ctx'. CtxExt ctx ctx' -> Mb ctx' (r ps) ->
@@ -3245,7 +3256,7 @@ extImpRTransFun :: RAssign Proxy ctx' ->
                    ImpRTransFun r ext blocks tops rets (ctx :++: ctx')
 extImpRTransFun ctx' f =
   ImpRTransFun $ \cext mb_r ->
-  appImpTransFun f (extCtxExt ctx' cext) mb_r
+  appImpTransFun f (extCtxExt Proxy ctx' cext) mb_r
 
 
 -- | A monad transformer that adds an 'ImpRTransFun' translation function
@@ -3272,22 +3283,21 @@ mapImpRTransFunT f = ImpRTransFunT . mapReaderT f . unImpRTransFunT
 -- indicates whether the returned 'PImplTerm' uses its failure continuation; and
 -- an 'ImpRTransFunT' to pass along a function for translating the final @r@
 -- result inside the current 'PermImpl'
-type PImplTransM r ext blocks tops rets ps ctx =
+type PImplTransM r ext blocks tops rets ctx =
   MaybeT (WriterT ([String], HasFailures)
           (ImpRTransFunT r ext blocks tops rets ctx Identity))
--- FIXME HERE NOWNOW: PImplTransM doesn't need ps
 
 -- | Run a 'PermImplTransM' computation
 runPermImplTransM ::
-  PImplTransM r ext blocks tops rets ps ctx a ->
+  PImplTransM r ext blocks tops rets ctx a ->
   ImpRTransFun r ext blocks tops rets ctx ->
   (Maybe a, ([String], HasFailures))
 runPermImplTransM m rTransFun =
   runIdentity $ runImpRTransFunT (runWriterT $ runMaybeT m) rTransFun
 
 extPermImplTransM :: RAssign Proxy ctx' ->
-                     PImplTransM r ext blocks tops rets ps (ctx :++: ctx') a ->
-                     PImplTransM r ext blocks tops rets ps ctx a
+                     PImplTransM r ext blocks tops rets (ctx :++: ctx') a ->
+                     PImplTransM r ext blocks tops rets ctx a
 extPermImplTransM ctx' m =
   pimplRTransFunM >>= \rtransFun ->
   MaybeT $ WriterT $ return $ runPermImplTransM m $ extImpRTransFun ctx' rtransFun
@@ -3311,27 +3321,27 @@ extPermImplTransMTerm ctx' m =
 -}
 
 -- | Look up the @r@ translation function
-pimplRTransFunM :: PImplTransM r ext blocks tops rets ps ctx
+pimplRTransFunM :: PImplTransM r ext blocks tops rets ctx
                    (ImpRTransFun r ext blocks tops rets ctx)
 pimplRTransFunM = lift $ lift $ ImpRTransFunT ask
 
 -- | Build an error term by recording the error message and returning 'Nothing'
-pimplFailM :: String -> PImplTransM r ext blocks tops rets ps ctx a
+pimplFailM :: String -> PImplTransM r ext blocks tops rets ctx a
 pimplFailM msg = tell ([msg],HasFailures) >> mzero
 
 -- | Catch a potential 'Nothing' return value in a 'PImplTransM' computation
-pimplCatchM :: PImplTransM r ext blocks tops rets ps ctx a ->
-               PImplTransM r ext blocks tops rets ps ctx (Maybe a)
+pimplCatchM :: PImplTransM r ext blocks tops rets ctx a ->
+               PImplTransM r ext blocks tops rets ctx (Maybe a)
 pimplCatchM m = lift $ runMaybeT m
 
 -- | Prepend a 'String' to all error messages generated in a computation
-pimplPrependMsgM :: String -> PImplTransM r ext blocks tops rets ps ctx a ->
-                    PImplTransM r ext blocks tops rets ps ctx a
+pimplPrependMsgM :: String -> PImplTransM r ext blocks tops rets ctx a ->
+                    PImplTransM r ext blocks tops rets ctx a
 pimplPrependMsgM str m =
   pass ((, (\(msgs, hasfs) -> (map (str++) msgs, hasfs))) <$> m)
 
 type PImplTransMTerm r ext blocks tops rets ps ctx =
-  PImplTransM r ext blocks tops rets ps ctx
+  PImplTransM r ext blocks tops rets ctx
   (PImplTerm ext blocks tops rets ps ctx)
 
 -- | Run the first 'PImplTransM' computation to produce a 'PImplTerm' and use
@@ -3367,206 +3377,6 @@ pimplHandleFailM m m_catch =
        (Nothing, _) ->
          -- If t definitely fails, then just use m_catch
          m_catch
-
-
-{-
-FIXME HERE NOWNOW: old stuff
--- | A failure continuation represents any catch that is around the current
--- 'PermImpl', and can either be a term to jump to / call (meaning that there is
--- a catch) or an error message (meaning there is not)
-data ImplFailCont
-     -- | A continuation that calls a term on failure
-  = ImplFailContTerm SpecTerm
-    -- | An error message to print on failure
-  | ImplFailContMsg String
-
--- | Convert an 'ImplFailCont' to an error, which should have the given type
-implFailContTerm :: SpecTerm -> ImplFailCont -> SpecTerm
-implFailContTerm _ (ImplFailContTerm t) = t
-implFailContTerm tp (ImplFailContMsg msg) = errorSpecTerm tp (pack msg)
-
--- | The type of terms use to translation permission implications, which can
--- contain calls to the current failure continuation; note that the destructor
--- "pops" the PImpl abstraction, returning a regular 'SpecTerm'
-newtype PImplTerm = PImplTerm { popPImplTerm :: ImplFailCont -> SpecTerm }
-                    deriving OpenTermLike
-
--- | Lift a 'SpecTerm' to a 'PImplTerm'
-specPImplTerm :: SpecTerm -> PImplTerm
-specPImplTerm = PImplTerm . const
-
--- | Build a 'PImplTerm' that let-binds a 'PImplTerm' using the supplied
--- variable name and type as the failure continuation for a body 'PImplTerm'
-letFailPImplTerm :: LocalName -> SpecTerm -> PImplTerm -> PImplTerm -> PImplTerm
-letFailPImplTerm x tp rhs body =
-  PImplTerm $ \k ->
-  letTermLike x tp (popPImplTerm rhs k) $ \k_tm ->
-  popPImplTerm body $ ImplFailContTerm k_tm
-
--- | The failure 'PImplTerm', which immediately calls its failure continuation;
--- this should have the supplied type
-failPImplTerm :: SpecTerm -> PImplTerm
-failPImplTerm tp = PImplTerm $ \k -> implFailContTerm tp k
-
--- | Return the failure 'PImplTerm' like 'failPImplTerm' but use an alternate
--- error message in the case that the failure continuation is an error message
-failPImplTermAlt :: SpecTerm -> String -> PImplTerm
-failPImplTermAlt tp msg = PImplTerm $ \k ->
-  implFailContTerm tp (case k of
-                          ImplFailContMsg _ -> ImplFailContMsg msg
-                          _ -> k)
-
--- | "Force" an optional 'PImplTerm' to a 'PImplTerm' by converting a 'Nothing'
--- to the 'failPImplTerm', which should have the supplied type
-forcePImplTerm :: SpecTerm -> Maybe PImplTerm -> PImplTerm
-forcePImplTerm _ (Just t) = t
-forcePImplTerm tp Nothing = failPImplTerm tp
-
-
--- | A flag to indicate whether a 'PImplTerm' calls its failure continuation
-data HasFailures = HasFailures | NoFailures deriving Eq
-
-instance Semigroup HasFailures where
-  HasFailures <> _ = HasFailures
-  _ <> HasFailures = HasFailures
-  NoFailures <> NoFailures = NoFailures
-
-instance Monoid HasFailures where
-  mempty = NoFailures
-
--- | A function for translating an @r@
-newtype ImpRTransFun r ext blocks tops rets =
-  ImpRTransFun { appImpTransCont ::
-                   forall ps ctx. Mb ctx (r ps) ->
-                   ImpTransM ext blocks tops rets ps ctx SpecTerm }
-
--- | A monad transformer that adds an 'ImpRTransFun' translation function
-newtype ImpRTransFunT r ext blocks tops rets m a =
-  ImpRTransFunT { unImpRTransFunT ::
-                    ReaderT (ImpRTransFun r ext blocks tops rets) m a }
-  deriving (Functor, Applicative, Monad, MonadTrans)
-
--- | Run an 'ImpRTransFunT' computation to get an underlying computation in @m@
-runImpRTransFunT :: ImpRTransFunT r ext blocks tops rets m a ->
-                    ImpRTransFun r ext blocks tops rets -> m a
-runImpRTransFunT m = runReaderT (unImpRTransFunT m)
-
--- | Map the underlying computation type of an 'ImpRTransFunT'
-mapImpRTransFunT :: (m a -> n b) -> ImpRTransFunT r ext blocks tops rets m a ->
-                    ImpRTransFunT r ext blocks tops rets n b
-mapImpRTransFunT f = ImpRTransFunT . mapReaderT f . unImpRTransFunT
-
--- | The computation type for translation permission implications, which
--- includes the following effects: a 'MaybeT' for representing terms that
--- translate to errors using 'Nothing'; a 'WriterT' that tracks all the error
--- messages used in translating a term along with a 'HasFailures' flag that
--- indicates whether the returned 'PImplTerm' uses its failure continuation; an
--- 'ImpRTransFunT' to pass along a function for translating the final @r@ result
--- inside the current 'PermImpl'; and an 'ImpTransM' for doing the impure
--- translation.
-type PImplTransM r ext blocks tops rets ps ctx =
-  MaybeT (WriterT ([String], HasFailures)
-          (ImpRTransFunT r ext blocks tops rets
-           (ImpTransM ext blocks tops rets ps ctx)))
-
--- | Run a 'PermImplTransM' computation
-runPermImplTransM ::
-  PImplTransM r ext blocks tops rets ps ctx a ->
-  ImpRTransFun r ext blocks tops rets ->
-  ImpTransM ext blocks tops rets ps ctx (Maybe a, ([String], HasFailures))
-runPermImplTransM m rTransFun =
-  runImpRTransFunT (runWriterT $ runMaybeT m) rTransFun
-
--- | Look up the @r@ translation function
-pimplRTransFunM :: PImplTransM r ext blocks tops rets ps ctx
-                   (ImpRTransFun r ext blocks tops rets)
-pimplRTransFunM = lift $ lift $ ImpRTransFunT ask
-
--- | Build an error term by recording the error message and returning 'Nothing'
-pimplFailM :: String -> PImplTransM r ext blocks tops rets ps ctx PImplTerm
-pimplFailM msg = tell ([msg],HasFailures) >> mzero
-
--- | Catch a potential 'Nothing' return value in a 'PImplTransM' computation
-pimplCatchM :: PImplTransM r ext blocks tops rets ps ctx a ->
-               PImplTransM r ext blocks tops rets ps ctx (Maybe a)
-pimplCatchM m = lift $ runMaybeT m
-
--- | Run the first 'PImplTransM' computation to produce a 'PImplTerm' and use
--- the second computation to generate the failure continuation of that first
--- 'PImplTerm', using optimizations to omit the first or second term when it is
--- not needed.
-pimplHandleFailM :: PImplTransM r ext blocks tops rets ps ctx PImplTerm ->
-                    PImplTransM r ext blocks tops rets ps ctx PImplTerm ->
-                    PImplTransM r ext blocks tops rets ps ctx PImplTerm
-pimplHandleFailM m m_catch =
-  do
-    -- Run the default computation m, exposing whether it returned a term or not
-    -- and whether it calls the failure continuation or not
-     (maybe_t, (fails,hasf)) <- lift $ lift $ runWriterT $ runMaybeT m
-     -- We want to retain all failure messages from m, but we are handling any
-     -- calls to the failure continuation, so we are NoFailures for now
-     tell (fails, NoFailures)
-     case (maybe_t, hasf) of
-       (Just t, NoFailures) ->
-         -- If t does not call the failure continuation, then we have no need to
-         -- use m_catch, and we just return t
-         return t
-       (Just t, HasFailures) ->
-         -- If t does potentially call the failure continuation, then let-bind
-         -- the result of m_catch as its failure continuation; note that we
-         -- preserve any MaybeT and WriterT effects of m_catch, meaning that its
-         -- failure messages and HasFailures flag are preserved, and if it
-         -- returns Nothing then so will this entire computation
-         do t_catch <- m_catch
-            ret_tp <- lift $ lift $ lift compReturnTypeM
-            return $ letFailPImplTerm "catchpoint" ret_tp t_catch t
-       (Nothing, _) ->
-         -- If t definitely fails, then just use m_catch
-         m_catch
-
-
--- | Lift an 'ImpTransM' computation to 'PImplTransM'
-pimplLift :: ImpTransM ext blocks tops rets ps_out ctx a ->
-             PImplTransM r ext blocks tops rets ps_out ctx a
-pimplLift = lift . lift . lift
-
--- | Call 'translate' in the 'PImplTransM' monad
-pimplTranslate :: (Translate (ImpTransInfo ext blocks tops rets ps) ctx a tr,
-                   HasCallStack) =>
-                  Mb ctx a -> PImplTransM r ext blocks tops rets ps ctx tr
-pimplTranslate = pimplLift . translate
-
--- | Call 'translate1' in the 'PImplTransM' monad
-pimplTranslate1 :: (Translate (ImpTransInfo ext blocks tops rets ps) ctx a tr,
-                    HasCallStack, IsTermTrans tr) =>
-                   Mb ctx a -> PImplTransM r ext blocks tops rets ps ctx SpecTerm
-pimplTranslate1 = pimplLift . translate1
-
--- | The current non-monadic return type as a 'PImplTerm'
-returnPImplTypeM :: PImplTransM r ext blocks tops rets ps_out ctx PImplTerm
-returnPImplTypeM = specPImplTerm <$> returnTypeM
-
--- | Like 'lambdaTransM' but over 'PImplTerm's
-lambdaPImplTransM :: String -> TypeTrans p tr -> (tr -> TransM info ctx PImplTerm) ->
-                     PImplTransM r ext blocks tops rets ps ctx PImplTerm
-lambdaPImplTransM x tp body_f =
-  ask >>= \info ->
-  return (PImplTerm $ \k ->
-           lambdaTrans x tp (flip popPImplTerm k . flip runTransM info . body_f))
-
--- | Like 'bindSpecMTransM' but using 'PImplTerm's in the 'PImplTransM'. Note
--- that this will always say that it uses the failure continuation, because the
--- current interface for 'PImplTerm' cannot handle a lambda whose body returns a
--- 'Maybe' result, so we always have to force the body.
-bindPImplSpecMTransM :: SpecTerm -> ImpTypeTrans tr -> String ->
-                        (tr -> PImplTransM r ext blocks tops rets ps ctx PImplTerm) ->
-                        PImplTransM r ext blocks tops rets ps ctx PImplTerm
-bindPImplSpecMTransM m m_tp str f =
-  do ret_tp <- returnTypeM
-     k_tm <- lambdaPImplTransM str m_tp f
-     return $ PImplTerm $ \fk ->
-       bindSpecTerm (typeTransType1Imp m_tp) ret_tp m (popPImplTerm k_tm fk)
--}
 
 
 -- | Translate the output permissions of a 'SimplImpl'
@@ -5184,7 +4994,6 @@ instance ImplTranslateF r ext blocks tops rets =>
     translatePermImplToTerm (mbLift err) mb_impl (ImpRTransFun $
                                                   const translateF)
 
-{-
 -- We translate a LocalImplRet to a term that returns all current permissions
 instance ImplTranslateF (LocalImplRet ps) ext blocks ps_in rets where
   translateF _ =
@@ -5197,7 +5006,6 @@ translateLocalPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
                           ImpTransM ext blocks tops rets ps_in ctx SpecTerm
 translateLocalPermImpl err (mbMatch -> [nuMP| LocalPermImpl impl |]) =
   clearVarPermsM $ translate $ fmap (AnnotPermImpl err) impl
--}
 
 -- | Translate a local implication over two sequences of permissions (already
 -- translated to types) to a monadic function with the first sequence of
@@ -5211,8 +5019,6 @@ translateCurryLocalPermImpl ::
   ImpTypeTrans (PermTransCtx ctx ps2) -> RAssign (Member ctx) ps2 ->
   ImpTypeTrans (PermTransCtx ctx ps_out) ->
   ImpTransM ext blocks tops rets ps ctx SpecTerm
-translateCurryLocalPermImpl = error "FIXME HERE NOWNOW"
-{-
 translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
   lambdaTransM "x_local" tp_trans2 $ \pctx2 ->
   local (\info -> info { itiReturnType = typeTransTupleDesc tp_trans_out }) $
@@ -5220,7 +5026,6 @@ translateCurryLocalPermImpl err impl pctx1 vars1 tp_trans2 vars2 tp_trans_out =
     (const (RL.append vars1 vars2))
     (const (RL.append pctx1 pctx2))
     (translateLocalPermImpl err impl)
--}
 
 -- | Translate a 'LocalPermImpl' to an 'LOwnedTransTerm'
 translateLOwnedPermImpl :: String -> Mb ctx (LocalPermImpl ps_in ps_out) ->
