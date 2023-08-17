@@ -3923,17 +3923,17 @@ primitives = Map.fromList
 
   , prim "empty_rs"            "Refnset"
     (pureVal (emptyRefnset :: SAWRefnset))
-    Current
+    Experimental
     [ "The empty refinement set, containing no refinements." ]
 
   , prim "addrefn"             "Theorem -> Refnset -> Refnset"
     (funVal2 addrefn)
-    Current
+    Experimental
     [ "Add a proved refinement theorem to a given refinement set." ]
 
   , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
     (funVal2 addrefns)
-    Current
+    Experimental
     [ "Add proved refinement theorems to a given refinement set." ]
 
   , prim "mrsolver_with" "Refnset -> ProofScript ()"

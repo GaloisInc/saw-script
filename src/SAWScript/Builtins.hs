@@ -2204,26 +2204,16 @@ ensureMonadicTerm sc t
       False -> monadifyTypedTerm sc t
 ensureMonadicTerm sc t = monadifyTypedTerm sc t
 
--- | A wrapper for either 'Prover.askMRSolver' or 'Prover.refinementTerm' from
--- @MRSolver.hs@: if the second argument is @Just str@, prints out @str@
--- followed by an abridged version of the refinement being asked, then calls
--- the given function. On failure, a string of how long the function took to
--- run is passed to the third argument and the result is used as the message
--- for 'fail'. On success, if the fourth argument is @Just strf@, a string of
--- how long the function took to run is passed to @strf@ and the result is
--- printed, then regardless, the last argument is called on the result.
-mrSolverH :: SharedContext ->
-             Maybe SawDoc -> (String -> String) -> Maybe (String -> String) ->
-             (SharedContext -> Prover.MREnv -> Maybe Integer ->
-              (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
-              SV.SAWRefnset -> [(LocalName, Term)] -> Term -> Term ->
-              TopLevel (Either Prover.MRFailure a)) ->
-             SV.SAWRefnset -> [(LocalName, Term)] -> TypedTerm -> TypedTerm ->
-             (a -> TopLevel b) -> TopLevel b
-mrSolverH sc printStr errStrf succStr f rs top_args tt1 tt2 cont =
-  do env <- rwMRSolverEnv <$> get
-     let askSMT = applyProverToGoal [What4, Z3] [] (Prover.proveWhat4_z3 True)
-     m1 <- ttTerm <$> ensureMonadicTerm sc tt1
+-- | Normalizes the given 'TypedTerm's for calling 'Prover.askMRSolver' or
+-- 'Prover.refinementTerm' and ensures they are of the expected form.
+-- Additionally, if the second argument is @Just str@, prints out @str@
+-- followed by an abridged version of the refinement represented by the two
+-- terms.
+mrSolverNormalizeAndPrintArgs ::
+  SharedContext -> Maybe SawDoc ->
+  TypedTerm -> TypedTerm -> TopLevel (Term, Term)
+mrSolverNormalizeAndPrintArgs sc printStr tt1 tt2 =
+  do m1 <- ttTerm <$> ensureMonadicTerm sc tt1
      m2 <- ttTerm <$> ensureMonadicTerm sc tt2
      m1' <- io $ collapseEta <$> betaNormalize sc m1
      m2' <- io $ collapseEta <$> betaNormalize sc m2
@@ -2232,21 +2222,7 @@ mrSolverH sc printStr errStrf succStr f rs top_args tt1 tt2 cont =
        Just str -> printOutLnTop Info $ renderSawDoc defaultPPOpts $
          "[MRSolver] " <> str <> ": " <> ppTmHead m1' <>
                                " |= " <> ppTmHead m2'
-     time1 <- liftIO getCurrentTime
-     res <- f sc env Nothing askSMT rs top_args m1' m2'
-     time2 <- liftIO getCurrentTime
-     let diff = show $ diffUTCTime time2 time1
-     case res of
-       Left err | Prover.mreDebugLevel env == 0 ->
-         fail (Prover.showMRFailure err ++ "\n[MRSolver] " ++ errStrf diff)
-       Left err ->
-         -- we ignore the MRFailure context here since it will have already
-         -- been printed by the debug trace
-         fail (Prover.showMRFailureNoCtx err ++ "\n[MRSolver] " ++ errStrf diff)
-       Right a | Just sf <- succStr ->
-         printOutLnTop Info (sf diff) >> cont a
-       Right a ->
-         cont a
+     return (m1', m2')
   where -- Turn a term of the form @\x1 ... xn -> f x1 ... xn@ into @f@
         collapseEta :: Term -> Term
         collapseEta (asLambdaList -> (lamVars,
@@ -2265,6 +2241,32 @@ mrSolverH sc printStr errStrf succStr f rs top_args tt1 tt2 cont =
           ppTerm defaultPPOpts t <> if length args > 0 then " ..." else ""
         ppTmHead _ = "..."
 
+-- | The calback to be used by MRSolver for making SMT queries
+mrSolverAskSMT :: Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)
+mrSolverAskSMT = applyProverToGoal [What4, Z3] [] (Prover.proveWhat4_z3 True)
+
+-- | Given the result of calling 'Prover.askMRSolver' or
+-- 'Prover.refinementTerm', fails and prints out `err` followed by the second
+-- argument if the given result is `Left err` for some `err`, or otherwise
+-- returns `a` if the result is `Right a` for some `a`. Additionally, if the
+-- third argument is @Just str@, prints out @str@ on success (i.e. 'Right').
+mrSolverGetResultOrFail ::
+  Prover.MREnv ->
+  String {- The string to print out on failure -} ->
+  Maybe String {- The string to print out on success, if any -} ->
+  Either Prover.MRFailure a {- The result, printed out on error -} ->
+  TopLevel a
+mrSolverGetResultOrFail env errStr succStr res = case res of
+  Left err | Prover.mreDebugLevel env == 0 ->
+    fail (Prover.showMRFailure err ++ "\n[MRSolver] " ++ errStr)
+  Left err ->
+    -- we ignore the MRFailure context here since it will have already
+    -- been printed by the debug trace
+    fail (Prover.showMRFailureNoCtx err ++ "\n[MRSolver] " ++ errStr)
+  Right a | Just s <- succStr ->
+    printOutLnTop Info s >> return a
+  Right a -> return a
+
 -- | Invokes MRSolver to attempt to solve a focused goal of the form
 -- @(a1:A1) -> ... -> (an:An) -> refinesS_eq ...@, assuming the refinements
 -- in the given 'Refnset', and printing an error message and exiting if
@@ -2280,11 +2282,17 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
       do tp1 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev1, stack1, rtp1]
          tp2 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev2, stack2, rtp2]
          let tt1 = TypedTerm (TypedTermOther tp1) t1
-         let tt2 = TypedTerm (TypedTermOther tp2) t2
-         mrSolverH sc
-           (Just $ "Tactic call") (printf "Failure in %s") (Just $ printf "Success in %s")
-           Prover.askMRSolver rs args tt1 tt2
-           (\(stats, mre) -> return ((), stats, [], leafEvidence $ MrSolverEvidence mre))
+             tt2 = TypedTerm (TypedTermOther tp2) t2
+         (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2
+         env <- rwMRSolverEnv <$> get
+         time1 <- liftIO getCurrentTime
+         res <- Prover.askMRSolver sc env Nothing mrSolverAskSMT rs args m1 m2
+         time2 <- liftIO getCurrentTime
+         let diff = show $ diffUTCTime time2 time1
+             errStr = printf "Failure in %s" diff
+             succStr = printf "Success in %s" diff
+         (stats, mre) <- mrSolverGetResultOrFail env errStr (Just succStr) res
+         return ((), stats, [], leafEvidence $ MrSolverEvidence mre)
     _ -> error "mrsolver: cannot apply mrsolver to a non-refinement goal"
 
 -- | Add a proved refinement theorem to a given refinement set
@@ -2314,10 +2322,16 @@ refinesTerm vars tt1 tt2 =
   do sc <- getSharedContext
      tt1' <- lambdas vars tt1
      tt2' <- lambdas vars tt2
-     mrSolverH sc
-       Nothing (printf "[MRSolver] Failed to build refinement term (%s)") Nothing
-       Prover.refinementTerm Prover.emptyRefnset [] tt1' tt2'
-       (io . mkTypedTerm sc)
+     (m1, m2) <- mrSolverNormalizeAndPrintArgs sc Nothing tt1' tt2'
+     env <- rwMRSolverEnv <$> get
+     time1 <- liftIO getCurrentTime
+     res <- Prover.refinementTerm sc env Nothing mrSolverAskSMT
+                                  Prover.emptyRefnset [] m1 m2
+     time2 <- liftIO getCurrentTime
+     let diff = show $ diffUTCTime time2 time1
+         errStr = printf "[MRSolver] Failed to build refinement term (%s)" diff
+     ttRes <- mrSolverGetResultOrFail env errStr Nothing res
+     io $ mkTypedTerm sc ttRes
 
 setMonadification :: SharedContext -> String -> String -> Bool -> TopLevel ()
 setMonadification sc cry_str saw_str poly_p =

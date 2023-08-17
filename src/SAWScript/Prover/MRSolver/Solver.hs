@@ -1264,12 +1264,13 @@ askMRSolver ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) {- ^ ... -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
+    {- ^ The callback to use for making SMT queries -} ->
   Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
   [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> TopLevel (Either MRFailure (SolverStats, MREvidence t))
 askMRSolver sc env timeout askSMT rs args t1 t2 =
-  execMRM sc timeout env askSMT rs $
+  execMRM sc env timeout askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
@@ -1278,16 +1279,19 @@ askMRSolver sc env timeout askSMT rs args t1 t2 =
 
 -- | The continuation passed to 'mrRefinesFunH' in 'refinementTerm' - returns
 -- the 'Term' which is the refinement (@Prelude.refinesS@) of the given
--- 'Term's, after quantifying over all current 'mrUVars' with Pi types
+-- 'Term's, after quantifying over all current 'mrUVars' with Pi types. Note
+-- that this assumes both terms have the same event and stack types - if they
+-- do not a saw-core typechecking error will be raised.
 refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
-  do (SpecMParams ev1 stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
-     (SpecMParams ev2 stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
+  do (SpecMParams _ev1 _stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
+     (SpecMParams  ev2  stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
      rpre <- liftSC2 scGlobalApply "Prelude.eqPreRel" [ev2, stack2]
      rpost <- liftSC2 scGlobalApply "Prelude.eqPostRel" [ev2, stack2]
      rr <- liftSC2 scGlobalApply "Prelude.eqRR" [tp2]
+     -- NB: This will throw a type error if _ev1 /= ev2 or _stack1 /= stack2
      ref_tm <- liftSC2 scGlobalApply "Prelude.refinesS"
-                       [ev1, ev2, stack1, stack2, rpre, rpost,
+                       [ev2, ev2, stack2, stack2, rpre, rpost,
                         tp1, tp2, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
      liftSC2 scPiList uvars ref_tm
@@ -1301,12 +1305,13 @@ refinementTerm ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
-  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) {- ^ ... -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
+    {- ^ The callback to use for making SMT queries -} ->
   Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
   [(LocalName, Term)] {- ^ Any universally quantified variables in scope -} ->
   Term -> Term -> TopLevel (Either MRFailure Term)
 refinementTerm sc env timeout askSMT rs args t1 t2 =
-  evalMRM sc timeout env askSMT rs $
+  evalMRM sc env timeout askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
     do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
        tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc

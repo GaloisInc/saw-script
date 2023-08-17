@@ -422,11 +422,16 @@ mrVars = mrsVars <$> get
 
 -- | Run an 'MRM' computation and return a result or an error, including the
 -- final state of 'mrsSolverStats' and 'mrsEvidence'
-runMRM :: SharedContext -> Maybe Integer -> MREnv ->
-          (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
-          Refnset t -> MRM t a ->
-          TopLevel (Either MRFailure (a, (SolverStats, MREvidence t)))
-runMRM sc timeout env askSMT rs m =
+runMRM ::
+  SharedContext ->
+  MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
+    {- ^ The callback to use for making SMT queries -} ->
+  Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
+  MRM t a {- ^ The monadic computation to run -} ->
+  TopLevel (Either MRFailure (a, (SolverStats, MREvidence t)))
+runMRM sc env timeout askSMT rs m =
   do true_tm <- liftIO $ scBool sc True
      let init_info = MRInfo { mriSC = sc, mriSMTTimeout = timeout,
                               mriEnv = env, mriAskSMT = askSMT,
@@ -446,21 +451,31 @@ runMRM sc timeout env askSMT rs m =
 
 -- | Run an 'MRM' computation and return a result or an error, discarding the
 -- final state
-evalMRM :: SharedContext -> Maybe Integer -> MREnv ->
-           (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
-           Refnset t -> MRM t a ->
-           TopLevel (Either MRFailure a)
-evalMRM sc timeout env askSMT rs =
-  fmap (fmap fst) . runMRM sc timeout env askSMT rs
+evalMRM :: 
+  SharedContext ->
+  MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
+    {- ^ The callback to use for making SMT queries -} ->
+  Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
+  MRM t a {- ^ The monadic computation to eval -} ->
+  TopLevel (Either MRFailure a)
+evalMRM sc env timeout askSMT rs =
+  fmap (fmap fst) . runMRM sc env timeout askSMT rs
 
 -- | Run an 'MRM' computation and return a final state or an error, discarding
 -- the result
-execMRM :: SharedContext -> Maybe Integer -> MREnv ->
-           (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)) ->
-           Refnset t -> MRM t a ->
-           TopLevel (Either MRFailure (SolverStats, MREvidence t))
-execMRM sc timeout env askSMT rs =
-  fmap (fmap snd) . runMRM sc timeout env askSMT rs
+execMRM :: 
+  SharedContext ->
+  MREnv {- ^ The Mr Solver environment -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
+  (Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult))
+    {- ^ The callback to use for making SMT queries -} ->
+  Refnset t {- ^ Any additional refinements to be assumed by Mr Solver -} ->
+  MRM t a {- ^ The monadic computation to exec -} ->
+  TopLevel (Either MRFailure (SolverStats, MREvidence t))
+execMRM sc env timeout askSMT rs =
+  fmap (fmap snd) . runMRM sc env timeout askSMT rs
 
 -- | Throw an 'MRFailure'
 throwMRFailure :: MRFailure -> MRM t a

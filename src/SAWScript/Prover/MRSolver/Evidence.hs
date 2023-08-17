@@ -13,6 +13,13 @@ This module defines multiple outward facing components of MRSolver, most
 notably the 'MREvidence' type which provides evidence for the truth of a
 refinement proposition proved by MRSolver, and used in @Proof.hs@. This module
 also defines the 'MREnv' type, the global MRSolver state.
+
+Note: In order to avoid circular dependencies, the 'FunAssump' type and its
+dependents in this file ('Refnset' and 'MREvidence') are given a type
+parameter `t` which in practice always be 'TheoremNonce' from `Value.hs`.
+The reason we cannot just import `Value.hs` here directly is because the
+'Refnset' type is used in `Value.hs` - specifically, in the 'VRefnset'
+constructor of the 'Value' datatype.
 -}
 
 module SAWScript.Prover.MRSolver.Evidence where
