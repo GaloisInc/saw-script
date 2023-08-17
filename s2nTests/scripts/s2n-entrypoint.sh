@@ -20,4 +20,4 @@ export SAW_SOLVER_CACHE_PATH=/saw-cache
 exec codebuild/bin/s2n_codebuild.sh
 
 ls /saw-cache
-echo "set_solver_cache_path \"/saw-cache\"\nprint_solver_cache_stats" | bin/saw
+/bin/saw /saw-cache/print_solver_cache_stats.saw
