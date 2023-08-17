@@ -11,7 +11,8 @@ Portability : non-portable (language extensions)
 module SAWScript.Prover.MRSolver
   (askMRSolver, refinementTerm, 
    MRFailure(..), showMRFailure, showMRFailureNoCtx,
-   FunAssump(..), FunAssumpRHS(..), asRefinesS, asFunAssump,
+   RefinesS(..), asRefinesS,
+   FunAssump(..), FunAssumpRHS(..), asFunAssump,
    Refnset, emptyRefnset, addFunAssump,
    MREnv(..), emptyMREnv, mrEnvSetDebugLevel,
    asProjAll, isSpecFunType) where

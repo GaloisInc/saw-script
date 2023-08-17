@@ -2246,9 +2246,9 @@ mrSolverAskSMT :: Set VarIndex -> Sequent -> TopLevel (SolverStats, SolveResult)
 mrSolverAskSMT = applyProverToGoal [What4, Z3] [] (Prover.proveWhat4_z3 True)
 
 -- | Given the result of calling 'Prover.askMRSolver' or
--- 'Prover.refinementTerm', fails and prints out `err` followed by the second
--- argument if the given result is `Left err` for some `err`, or otherwise
--- returns `a` if the result is `Right a` for some `a`. Additionally, if the
+-- 'Prover.refinementTerm', fails and prints out@`err@ followed by the second
+-- argument if the given result is @Left err@ for some @err@, or otherwise
+-- returns @a@ if the result is@`Right a@ for some @a@. Additionally, if the
 -- third argument is @Just str@, prints out @str@ on success (i.e. 'Right').
 mrSolverGetResultOrFail ::
   Prover.MREnv ->
@@ -2277,8 +2277,9 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
   case sequentState (goalSequent goal) of
     Unfocused -> fail "mrsolver: focus required"
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
-    ConclFocus (Prover.asRefinesS . unProp -> Just (args, ev1, ev2, stack1, stack2,
-                                                    rtp1, rtp2, t1, t2)) _ ->
+    ConclFocus (Prover.asRefinesS . unProp -> Just (Prover.RefinesS args ev1 ev2
+                                                      stack1 stack2 rtp1 rtp2
+                                                      t1 t2)) _ ->
       do tp1 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev1, stack1, rtp1]
          tp2 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev2, stack2, rtp2]
          let tt1 = TypedTerm (TypedTermOther tp1) t1

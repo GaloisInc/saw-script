@@ -16,9 +16,9 @@ also defines the 'MREnv' type, the global MRSolver state.
 
 Note: In order to avoid circular dependencies, the 'FunAssump' type and its
 dependents in this file ('Refnset' and 'MREvidence') are given a type
-parameter `t` which in practice always be 'TheoremNonce' from `Value.hs`.
-The reason we cannot just import `Value.hs` here directly is because the
-'Refnset' type is used in `Value.hs` - specifically, in the 'VRefnset'
+parameter @t@ which in practice always be 'TheoremNonce' from @Value.hs@.
+The reason we cannot just import @Value.hs@ here directly is because the
+'Refnset' type is used in @Value.hs@ - specifically, in the 'VRefnset'
 constructor of the 'Value' datatype.
 -}
 
@@ -46,6 +46,52 @@ import SAWScript.Prover.MRSolver.Term
 ----------------------------------------------------------------------
 -- * Function Refinement Assumptions
 ----------------------------------------------------------------------
+
+-- | A representation of a term of the form:
+-- @(a1:A1) -> ... -> (an:An) -> refinesS ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
+data RefinesS = RefinesS {
+  -- | The context of the refinement, i.e. @[(a1,A1), ..., (an,An)]@
+  -- from the term above
+  refnCtx :: [(LocalName, Term)],
+  -- | The LHS event type of the refinement, i.e. @ev1@ above
+  refnEv1 :: Term,
+  -- | The RHS event type of the refinement, i.e. @ev2@ above
+  refnEv2 :: Term,
+  -- | The LHS stack type of the refinement, i.e. @stack1@ above
+  refnStack1 :: Term,
+  -- | The RHS stack type of the refinement, i.e. @stack2@ above
+  refnStack2 :: Term,
+  -- | The LHS return type of the refinement, i.e. @rtp1@ above
+  refnRType1 :: Term,
+  -- | The RHS return type of the refinement, i.e. @rtp2@ above
+  refnRType2 :: Term,
+  -- | The LHS term of the refinement, i.e. @t1@ above
+  refnLHS :: Term,
+  -- | The RHS term of the refinement, i.e. @t2@ above
+  refnRHS :: Term
+}
+
+-- | Recognizes a term of the form:
+-- @(a1:A1) -> ... -> (an:An) -> refinesS ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
+-- and returns:
+-- @RefinesS [(a1,A1), ..., (an,An)] ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
+asRefinesS :: Recognizer Term RefinesS
+asRefinesS (asPiList -> (args, asApplyAll ->
+                         (asGlobalDef -> Just "Prelude.refinesS",
+                          [ev1, ev2, stack1, stack2,
+                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqPreRel", _),
+                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqPostRel", _),
+                           rtp1, rtp2,
+                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqRR", _),
+                           t1, t2]))) =
+  Just $ RefinesS args ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2
+asRefinesS (asPiList -> (args, asApplyAll ->
+                         (asGlobalDef -> Just "Prelude.refinesS_eq",
+                          [ev, stack, rtp, t1, t2]))) =
+  Just $ RefinesS args ev ev stack stack rtp rtp t1 t2
+asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "Prelude.refinesS", _))) =
+  error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial RPre/RPost/RR"
+asRefinesS _ = Nothing
 
 -- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
 -- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
@@ -75,41 +121,18 @@ data FunAssump t = FunAssump {
 }
 
 -- | Recognizes a term of the form:
--- @(a1:A1) -> ... -> (an:An) -> refinesS_eq ev stack rtp t1 t2@,
--- and returns a tuple:
--- @([(a1,A1), ..., (an,An)], ev, ev, stack, stack, rtp, rtp, t1, t2)@
-asRefinesS :: Recognizer Term ([(LocalName, Term)], Term, Term, Term, Term, Term, Term, Term, Term)
-asRefinesS (asPiList -> (args, asApplyAll ->
-                         (asGlobalDef -> Just "Prelude.refinesS",
-                          [ev1, ev2, stack1, stack2,
-                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqPreRel", _),
-                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqPostRel", _),
-                           rtp1, rtp2,
-                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqRR", _),
-                           t1, t2]))) =
-  Just (args, ev1, ev2, stack1, stack2, rtp1, rtp2, t1, t2)
-asRefinesS (asPiList -> (args, asApplyAll ->
-                         (asGlobalDef -> Just "Prelude.refinesS_eq",
-                          [ev, stack, rtp, t1, t2]))) =
-  Just (args, ev, ev, stack, stack, rtp, rtp, t1, t2)
-asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "Prelude.refinesS", _))) =
-  error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial RPre/RPost/RR"
-asRefinesS _ = Nothing
-
--- | Recognizes a term of the form:
 -- @(a1:A1) -> ... -> (an:An) -> refinesS_eq ev stack rtp (f b1 ... bm) t2@,
 -- and returns: @FunAssump f [a1,...,an] [b1,...,bm] rhs ann@,
 -- where @ann@ is the given argument and @rhs@ is either
 -- @OpaqueFunAssump g [c1,...,cl]@ if @t2@ is @g c1 ... cl@,
 -- or @RewriteFunAssump t2@ otherwise
 asFunAssump :: Maybe t -> Recognizer Term (FunAssump t)
-asFunAssump ann (asRefinesS -> Just (args,
-                                     asGlobalDef -> Just "Prelude.VoidEv",
-                                     asGlobalDef -> Just "Prelude.VoidEv",
-                                     asGlobalDef -> Just "Prelude.emptyFunStack",
-                                     asGlobalDef -> Just "Prelude.emptyFunStack",
-                                     _, _,
-                                         asApplyAll -> (asGlobalFunName -> Just f1, args1),
+asFunAssump ann (asRefinesS -> Just (RefinesS args
+                                     (asGlobalDef -> Just "Prelude.VoidEv")
+                                     (asGlobalDef -> Just "Prelude.VoidEv")
+                                     (asGlobalDef -> Just "Prelude.emptyFunStack")
+                                     (asGlobalDef -> Just "Prelude.emptyFunStack")
+                                     _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1))
                                      t2@(asApplyAll -> (asGlobalFunName -> mb_f2, args2)))) =
   let rhs = maybe (RewriteFunAssump t2) (\f2 -> OpaqueFunAssump f2 args2) mb_f2
    in Just $ FunAssump { fassumpCtx = mrVarCtxFromOuterToInner args,
