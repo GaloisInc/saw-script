@@ -604,9 +604,12 @@ jobs:
         working-directory: s2nTests
         run: |
           mkdir cache
-          chmod +x bin/* cache/*
+          echo "print_solver_cache_stats;" > ./cache/print_solver_cache_stats.saw
+          chmod +x bin/*
+          chmod +w cache
           make ${{ matrix.s2n-target }}
           ls cache
+          SAW_SOLVER_CACHE_PATH="./cache" ./bin/saw ./cache/print_solver_cache_stats.saw || echo "print_solver_cache_stats failed"
 
       - uses: actions/cache/save@v3
         name: Save SMT solver result cache
