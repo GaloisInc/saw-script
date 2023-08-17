@@ -93,11 +93,11 @@ suffixMembers _ MNil = MNil
 suffixMembers ctx1 (ctx2 :>: _) =
   RL.map Member_Step (suffixMembers ctx1 ctx2) :>: Member_Base
 
--- | Build a SAW core term of type @ListSort@ from a list of types
-listSortOpenTerm :: [OpenTerm] -> OpenTerm
-listSortOpenTerm =
-  foldr (\x y -> ctorOpenTerm "Prelude.LS_Cons" [x,y])
-  (ctorOpenTerm "Prelude.LS_Nil" [])
+-- | Weaken a 'Member' proof by appending another context to the context it
+-- proves membership in
+weakenMemberR :: RAssign any ctx2 -> Member ctx1 a -> Member (ctx1 :++: ctx2) a
+weakenMemberR MNil memb = memb
+weakenMemberR (ctx1 :>: _) memb = Member_Step (weakenMemberR ctx1 memb)
 
 
 ----------------------------------------------------------------------
@@ -1714,11 +1714,13 @@ reflExprCtxExt = ExprCtxExt MNil
 -- | Transitively combine two context extensions
 transExprCtxExt :: ExprCtxExt ctx1 ctx2 -> ExprCtxExt ctx2 ctx3 ->
                    ExprCtxExt ctx1 ctx3
-transExprCtxExt (ExprCtxExt ectx2') (ExprCtxExt ectx3') =
-  error "FIXME HERE NOWNOW"
+transExprCtxExt ((ExprCtxExt ectx2')
+                 :: ExprCtxExt ctx1 ctx2) (ExprCtxExt ectx3')
+  | Refl <- RL.appendAssoc (Proxy :: Proxy ctx1) ectx2' ectx3'
+  = ExprCtxExt (RL.append ectx2' ectx3')
 
 extMbExt :: ExprCtxExt ctx1 ctx2 -> Mb ctx1 a -> Mb ctx2 a
-extMbExt = error "FIXME HERE NOWNOW"
+extMbExt (ExprCtxExt ctx2) = extMbAny ctx2
 
 -- | Un-extend the left-hand context of an expression context extension
 extExprCtxExt :: ExprTrans tp -> ExprCtxExt (ctx1 :> tp) ctx2 ->
@@ -1727,14 +1729,20 @@ extExprCtxExt etrans ((ExprCtxExt ctx3) :: ExprCtxExt (ctx1 :> tp) ctx2) =
   case RL.appendRNilConsEq (Proxy :: Proxy ctx1) etrans ctx3 of
     Refl -> ExprCtxExt (RL.append (MNil :>: etrans) ctx3)
 
--- | Un-extend the left-hand context of an expression context extension
-extMultiExprCtxExt :: ExprTransCtx ctx2 -> ExprCtxExt (ctx1 :++: ctx2) ctx3 ->
-                      ExprCtxExt ctx1 ctx3
-extMultiExprCtxExt = error "FIXME HERE NOWNOW"
+-- | Extend the context of a permission translation using an 'ExprCtxExt'
+extPermTransExt :: ExprCtxExt ctx1 ctx2 -> PermTrans ctx1 a ->
+                   PermTrans ctx2 a
+extPermTransExt (ExprCtxExt ectx) ptrans = extPermTransMulti ectx ptrans
 
-extLOwnedInfo :: ExprCtxExt ctx1 ctx2 -> LOwnedInfo ps ctx1 ->
-                 LOwnedInfo ps ctx2
-extLOwnedInfo = error "FIXME HERE NOWNOW"
+-- | Extend the context of a permission translation context using an
+-- 'ExprCtxExt'
+extPermTransCtxExt :: ExprCtxExt ctx1 ctx2 -> PermTransCtx ctx1 ps ->
+                      PermTransCtx ctx2 ps
+extPermTransCtxExt cext = RL.map (extPermTransExt cext)
+
+extLOwnedInfoExt :: ExprCtxExt ctx1 ctx2 -> LOwnedInfo ps ctx1 ->
+                    LOwnedInfo ps ctx2
+extLOwnedInfoExt = error "FIXME HERE NOWNOW"
 
 
 -- | FIXME HERE NOWNOW: docs; explain that it's as if the input LOwnedInfo is
@@ -1771,7 +1779,7 @@ instance Monad (LOwnedTransM ps ps ctx) where
 
 gput :: LOwnedInfo ps_out ctx -> LOwnedTransM ps_in ps_out ctx ()
 gput loInfo =
-  LOwnedTransM $ \cext _ k -> k reflExprCtxExt (extLOwnedInfo cext loInfo) ()
+  LOwnedTransM $ \cext _ k -> k reflExprCtxExt (extLOwnedInfoExt cext loInfo) ()
 
 {-
 data ExtLOwnedInfo ps ctx where
@@ -1818,10 +1826,10 @@ lownedTransTermTerm ectx vars_in ps_inF ps_outF t =
   runLOwnedTransM t reflExprCtxExt loInfo $ \_ loInfo_out () ->
   transTupleTerm (lownedInfoPCtx loInfo_out)
 
-extLOwnedTransTerm1 :: ExprTrans tp ->
-                       LOwnedTransTerm ctx ps_in ps_out ->
-                       LOwnedTransTerm (ctx :> tp) ps_in ps_out
-extLOwnedTransTerm1 etrans = extLOwnedTransM (ExprCtxExt (MNil :>: etrans))
+extLOwnedTransTerm :: ExprTransCtx ctx2 ->
+                      LOwnedTransTerm ctx1 ps_in ps_out ->
+                      LOwnedTransTerm (ctx1 :++: ctx2) ps_in ps_out
+extLOwnedTransTerm ectx2 = extLOwnedTransM (ExprCtxExt ectx2)
 
 idLOwnedTransTerm :: LOwnedTransTerm ctx ps ps
 idLOwnedTransTerm = return ()
@@ -1833,7 +1841,7 @@ weakenLOwnedTransTerm t =
   let (info_ps_in, info_tp) = loInfoSplit Proxy (MNil :>: Proxy) info_top in
   gput info_ps_in >>>
   extLOwnedTransM cext t >>>
-  gmodify (\cext' info' -> loInfoAppend info' (extLOwnedInfo cext' info_tp))
+  gmodify (\cext' info' -> loInfoAppend info' (extLOwnedInfoExt cext' info_tp))
 
 bindLOwnedTransTerm ::
   Proxy ps_extra1 -> RAssign any ps_extra2 -> RAssign any ps_in ->
@@ -1848,7 +1856,7 @@ bindLOwnedTransTerm prx_extra1 prx_extra2 prx_in t1 t2 =
   gput (loInfoAppend info_extra1 info_in) >>>
   extLOwnedTransM cext t1 >>>
   gmodify (\cext' info_out ->
-            loInfoAppend (extLOwnedInfo cext' info_extra2) info_out) >>>
+            loInfoAppend (extLOwnedInfoExt cext' info_extra2) info_out) >>>
   extLOwnedTransM cext t2
 
 -- | The translation of an @lowned@ permission
@@ -1861,14 +1869,18 @@ data LOwnedTrans ctx ps_extra ps_in ps_out =
   (LOwnedTransTerm ctx (ps_extra :++: ps_in) ps_out)
 
 -- | Extend the context of an 'LOwnedTrans'
-extLOwnedTrans :: ExprTrans tp -> LOwnedTrans ctx ps_extra ps_in ps_out ->
-                  LOwnedTrans (ctx :> tp) ps_extra ps_in ps_out
-extLOwnedTrans e (LOwnedTrans ectx ps_extra vars_extra ptrans_in ptrans_out
-                  ptrans_extra t) =
+extLOwnedTransMulti :: ExprTransCtx ctx2 ->
+                       LOwnedTrans ctx1 ps_extra ps_in ps_out ->
+                       LOwnedTrans (ctx1 :++: ctx2) ps_extra ps_in ps_out
+extLOwnedTransMulti ectx2 (LOwnedTrans ectx1 ps_extra vars_extra ptrans_in
+                           ptrans_out ptrans_extra t) =
   LOwnedTrans
-  (ectx :>: e) (extPermTransCtx e ps_extra) (RL.map Member_Step vars_extra)
-  (extRelPermTransCtx e ptrans_in) (extRelPermTransCtx e ptrans_out)
-  (extRelPermTransCtx e ptrans_extra) (extLOwnedTransTerm1 e t)
+  (RL.append ectx1 ectx2) (extPermTransCtxMulti ectx2 ps_extra)
+  (RL.map (weakenMemberR ectx2) vars_extra)
+  (extRelPermTransCtxMulti ectx2 ptrans_in)
+  (extRelPermTransCtxMulti ectx2 ptrans_out)
+  (extRelPermTransCtxMulti ectx2 ptrans_extra)
+  (extLOwnedTransTerm ectx2 t)
 
 -- | Convert an 'LOwnedTrans' to a closure that gets added to the list of
 -- closures for the current spec definition
@@ -2091,58 +2103,68 @@ permTransPermEq ptrans mb_p =
   permTransPerm (mbToProxy mb_p) ptrans == mb_p
 
 
-extsMb :: CruCtx ctx2 -> Mb ctx a -> Mb (ctx :++: ctx2) a
-extsMb ctx = mbCombine proxies . fmap (nus proxies . const)
-  where
-    proxies = cruCtxProxies ctx
+extMbAny :: RAssign any ctx2 -> Mb ctx1 a -> Mb (ctx1 :++: ctx2) a
+extMbAny ctx2 = extMbMulti (RL.map (const Proxy) ctx2)
+
+extPermTrans :: ExtPermTrans f => ExprTrans tp -> f ctx a -> f (ctx :> tp) a
+extPermTrans e = extPermTransMulti (MNil :>: e)
 
 -- | Generic function to extend the context of the translation of a permission
 class ExtPermTrans f where
-  extPermTrans :: ExprTrans tp -> f ctx a -> f (ctx :> tp) a
+  extPermTransMulti :: ExprTransCtx ctx2 -> f ctx1 a -> f (ctx1 :++: ctx2) a
 
 instance ExtPermTrans PermTrans where
-  extPermTrans _ (PTrans_Eq e) = PTrans_Eq $ extMb e
-  extPermTrans e (PTrans_Conj aps) =
-    PTrans_Conj (map (extPermTrans e) aps)
-  extPermTrans e (PTrans_Defined n args a ptrans) =
-    PTrans_Defined n (extMb args) (extMb a) (extPermTrans e ptrans)
-  extPermTrans _ (PTrans_Term p t) = PTrans_Term (extMb p) t
+  extPermTransMulti ectx (PTrans_Eq e) =
+    PTrans_Eq $ extMbAny ectx e
+  extPermTransMulti ectx (PTrans_Conj aps) =
+    PTrans_Conj (map (extPermTransMulti ectx) aps)
+  extPermTransMulti ectx (PTrans_Defined n args a ptrans) =
+    PTrans_Defined n (extMbAny ectx args) (extMbAny ectx a)
+    (extPermTransMulti ectx ptrans)
+  extPermTransMulti ectx (PTrans_Term p t) = PTrans_Term (extMbAny ectx p) t
 
 instance ExtPermTrans AtomicPermTrans where
-  extPermTrans e (APTrans_LLVMField fld ptrans) =
-    APTrans_LLVMField (extMb fld) (extPermTrans e ptrans)
-  extPermTrans e (APTrans_LLVMArray arr_trans) =
-    APTrans_LLVMArray $ extPermTrans e arr_trans
-  extPermTrans _ (APTrans_LLVMBlock mb_bp t) = APTrans_LLVMBlock (extMb mb_bp) t
-  extPermTrans _  (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
-  extPermTrans e (APTrans_LLVMFunPtr tp ptrans) =
-    APTrans_LLVMFunPtr tp (extPermTrans e ptrans)
-  extPermTrans _ APTrans_IsLLVMPtr = APTrans_IsLLVMPtr
-  extPermTrans _ (APTrans_LLVMBlockShape mb_sh t) =
-    APTrans_LLVMBlockShape (extMb mb_sh) t
-  extPermTrans _ (APTrans_NamedConj npn args off t) =
-    APTrans_NamedConj npn (extMb args) (extMb off) t
-  extPermTrans e (APTrans_DefinedNamedConj npn args off ptrans) =
-    APTrans_DefinedNamedConj npn (extMb args) (extMb off) (extPermTrans e ptrans)
-  extPermTrans _ (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
-  extPermTrans e (APTrans_LOwned ls tps_in tps_out ps_in ps_out lotr) =
-    APTrans_LOwned (extMb ls) tps_in tps_out (extMb ps_in) (extMb ps_out)
-    (extLOwnedTrans e lotr)
-  extPermTrans _ (APTrans_LOwnedSimple tps lops) =
-    APTrans_LOwnedSimple tps (extMb lops)
-  extPermTrans _ (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
-  extPermTrans _ APTrans_LFinished = APTrans_LFinished
-  extPermTrans e (APTrans_Struct ps) =
-    APTrans_Struct $ RL.map (extPermTrans e) ps
-  extPermTrans _ (APTrans_Fun fp trans) = APTrans_Fun (extMb fp) trans
-  extPermTrans e (APTrans_BVProp prop_trans) =
-    APTrans_BVProp $ extPermTrans e prop_trans
-  extPermTrans _ APTrans_Any = APTrans_Any
+  extPermTransMulti ectx (APTrans_LLVMField fld ptrans) =
+    APTrans_LLVMField (extMbAny ectx fld) (extPermTransMulti ectx ptrans)
+  extPermTransMulti ectx (APTrans_LLVMArray arr_trans) =
+    APTrans_LLVMArray $ extPermTransMulti ectx arr_trans
+  extPermTransMulti ectx (APTrans_LLVMBlock mb_bp t) =
+    APTrans_LLVMBlock (extMbAny ectx mb_bp) t
+  extPermTransMulti ectx  (APTrans_LLVMFree e) =
+    APTrans_LLVMFree $ extMbAny ectx e
+  extPermTransMulti ectx (APTrans_LLVMFunPtr tp ptrans) =
+    APTrans_LLVMFunPtr tp (extPermTransMulti ectx ptrans)
+  extPermTransMulti _ APTrans_IsLLVMPtr = APTrans_IsLLVMPtr
+  extPermTransMulti ectx (APTrans_LLVMBlockShape mb_sh t) =
+    APTrans_LLVMBlockShape (extMbAny ectx mb_sh) t
+  extPermTransMulti ectx (APTrans_NamedConj npn args off t) =
+    APTrans_NamedConj npn (extMbAny ectx args) (extMbAny ectx off) t
+  extPermTransMulti ectx (APTrans_DefinedNamedConj npn args off ptrans) =
+    APTrans_DefinedNamedConj npn (extMbAny ectx args) (extMbAny ectx off)
+    (extPermTransMulti ectx ptrans)
+  extPermTransMulti ectx (APTrans_LLVMFrame fp) =
+    APTrans_LLVMFrame $ extMbAny ectx fp
+  extPermTransMulti ectx (APTrans_LOwned ls tps_in tps_out ps_in ps_out lotr) =
+    APTrans_LOwned (extMbAny ectx ls) tps_in tps_out
+    (extMbAny ectx ps_in) (extMbAny ectx ps_out)
+    (extLOwnedTransMulti ectx lotr)
+  extPermTransMulti ectx (APTrans_LOwnedSimple tps lops) =
+    APTrans_LOwnedSimple tps (extMbAny ectx lops)
+  extPermTransMulti ectx (APTrans_LCurrent p) =
+    APTrans_LCurrent $ extMbAny ectx p
+  extPermTransMulti _ APTrans_LFinished = APTrans_LFinished
+  extPermTransMulti ectx (APTrans_Struct ps) =
+    APTrans_Struct $ RL.map (extPermTransMulti ectx) ps
+  extPermTransMulti ectx (APTrans_Fun fp trans) =
+    APTrans_Fun (extMbAny ectx fp) trans
+  extPermTransMulti ectx (APTrans_BVProp prop_trans) =
+    APTrans_BVProp $ extPermTransMulti ectx prop_trans
+  extPermTransMulti _ APTrans_Any = APTrans_Any
 
 instance ExtPermTrans LLVMArrayPermTrans where
-  extPermTrans e (LLVMArrayPermTrans ap len sh {- bs -} t) =
-    LLVMArrayPermTrans (extMb ap) len (fmap (extPermTrans e) sh)
-    {- (map extPermTrans bs) -} t
+  extPermTransMulti ectx (LLVMArrayPermTrans ap len sh {- bs -} t) =
+    LLVMArrayPermTrans (extMbAny ectx ap) len
+    (fmap (extPermTransMulti ectx) sh) {- (map extPermTrans bs) -} t
 
 {-
 instance ExtPermTrans LLVMArrayBorrowTrans where
@@ -2151,20 +2173,30 @@ instance ExtPermTrans LLVMArrayBorrowTrans where
 -}
 
 instance ExtPermTrans BVPropTrans where
-  extPermTrans _ (BVPropTrans prop t) = BVPropTrans (extMb prop) t
+  extPermTransMulti ectx (BVPropTrans prop t) =
+    BVPropTrans (extMbAny ectx prop) t
 
 instance ExtPermTrans BVRangeTrans where
-  extPermTrans _ (BVRangeTrans rng t1 t2) = BVRangeTrans (extMb rng) t1 t2
+  extPermTransMulti ectx (BVRangeTrans rng t1 t2) =
+    BVRangeTrans (extMbAny ectx rng) t1 t2
 
 -- | Extend the context of a permission translation context
 extPermTransCtx :: ExprTrans tp -> PermTransCtx ctx ps ->
                    PermTransCtx (ctx :> tp) ps
 extPermTransCtx e = RL.map (extPermTrans e)
 
+-- | Extend the context of a permission translation context
+extPermTransCtxMulti :: ExprTransCtx ctx2 -> PermTransCtx ctx1 ps ->
+                        PermTransCtx (ctx1 :++: ctx2) ps
+extPermTransCtxMulti ectx2 = RL.map (extPermTransMulti ectx2)
+
 -- | Extend the context of a 'RelPermTransCtx'
-extRelPermTransCtx :: ExprTrans tp -> RelPermTransCtx ctx ps ->
-                      RelPermTransCtx (ctx :> tp) ps
-extRelPermTransCtx e rel_tp = fmap (extPermTransCtx e) . rel_tp . RL.tail
+extRelPermTransCtxMulti :: ExprTransCtx ctx2 -> RelPermTransCtx ctx1 ps ->
+                           RelPermTransCtx (ctx1 :++: ctx2) ps
+extRelPermTransCtxMulti ectx2 (rel_tp :: RelPermTransCtx ctx1 ps) =
+  \ectx12 ->
+  let (ectx1, _) = RL.split (Proxy :: Proxy ctx1) ectx2 ectx12 in
+  fmap (extPermTransCtxMulti ectx2) $ rel_tp ectx1
 
 
 -- | Add another permission translation to a permission translation context
