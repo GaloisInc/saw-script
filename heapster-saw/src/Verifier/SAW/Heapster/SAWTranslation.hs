@@ -780,6 +780,18 @@ lambdaTrans x (TypeTransImpure tps tr_f) body_f =
 --
 -- > \x1:tp1 -> ... -> \xn:tpn -> body
 --
+-- over the types in a pure 'TypeTrans', using the 'String' as a variable name
+-- prefix for the @xi@ variables, returning a pure term
+lambdaPureTrans :: String -> PureTypeTrans tr -> (tr -> OpenTerm) -> OpenTerm
+lambdaPureTrans x (TypeTransPure tps tr_f) body_f =
+  lambdaOpenTermMulti
+  (zipWith (\i tp -> (pack (x ++ show (i :: Integer)), tp)) [0..] tps)
+  (body_f . tr_f)
+
+-- | Build a nested lambda-abstraction
+--
+-- > \x1:tp1 -> ... -> \xn:tpn -> body
+--
 -- over the types in a 'TypeTrans' inside a translation monad, using the
 -- 'String' as a variable name prefix for the @xi@ variables
 lambdaTransM :: String -> TypeTrans p tr -> (tr -> TransM info ctx SpecTerm) ->
@@ -806,14 +818,19 @@ lambdaTupleTransM x ttrans body_f =
 -- of a pi abstraction over the types @tpi@ in a pure 'TypeTrans', passing the
 -- abstracted variables to the supplied @body@ function, which should itself
 -- return a @LetRecType@
+piLRTTrans :: String -> PureTypeTrans tr -> (tr -> OpenTerm) -> OpenTerm
+piLRTTrans x tps body_f =
+  foldr (\(i,tp) rest_f vars ->
+          let var = pack (x ++ show (i :: Integer))
+              t = lambdaOpenTerm var tp (\var -> rest_f (vars ++ [var])) in
+          ctorOpenTerm "Prelude.LRT_FunDep" [tp, t])
+  (body_f . typeTransF tps) (zip [0..] $ typeTransTypes tps) []
+
+-- | Perform 'piLRTTrans' inside a translation monad
 piLRTTransM :: String -> TypeTrans 'True tr ->
                (tr -> TransM info ctx OpenTerm) -> TransM info ctx OpenTerm
 piLRTTransM x tps body_f =
-  foldr (\(i,tp) rest_f vars ->
-          (\t -> ctorOpenTerm "Prelude.LRT_FunDep" [tp, t]) <$>
-          lambdaOpenTermTransM (x ++ show (i :: Integer)) tp
-          (\var -> rest_f (vars ++ [var])))
-  (body_f . typeTransF tps) (zip [0..] $ typeTransTypes tps) []
+  ask >>= \info -> return (piLRTTrans x tps (flip runTransM info . body_f))
 
 -- | Construct a @LetRecType@ inductive description
 --
@@ -821,13 +838,17 @@ piLRTTransM x tps body_f =
 --
 -- of monadic arrow types over the @LetRecType@ type descriptions @lrti@ in a
 -- 'TypeTrans'
-arrowLRTTransM :: String -> TypeTrans 'False tr ->
-                  TransM info ctx OpenTerm -> TransM info ctx OpenTerm
-arrowLRTTransM x tps body_top =
-  foldr (\(i,d) body_m ->
-          body_m >>= \body ->
-          return $ ctorOpenTerm "Prelude.LRT_FunClos" [typeDescLRT d, body])
+arrowLRTTrans :: String -> ImpTypeTrans tr -> OpenTerm -> OpenTerm
+arrowLRTTrans x tps body_top =
+  foldr (\(i,d) body ->
+          ctorOpenTerm "Prelude.LRT_FunClos" [typeDescLRT d, body])
   body_top (zip [0..] $ typeTransDescs tps)
+
+-- | Perform 'arrowLRTTrans' inside a translation monad
+arrowLRTTransM :: String -> ImpTypeTrans tr ->
+                  TransM info ctx OpenTerm -> TransM info ctx OpenTerm
+arrowLRTTransM x tps body =
+  ask >>= \info -> return (arrowLRTTrans x tps (runTransM body info))
 
 -- FIXME: should only need to build pi-abstractions as LetRecTypes... right?
 {-
@@ -2843,9 +2864,10 @@ arrowLRTPermCtx ps body =
 piExprPermLRT :: PureTypeTrans (ExprTransCtx ctx) ->
                  RelPermsTypeTrans ctx ps_in -> RelPermsTypeTrans ctx ps_out ->
                  OpenTerm
-piExprPermLRT ectx pctx_in_F pctx_out_F =
-  error "FIXME HERE NOWNOW"
-
+piExprPermLRT etps ptps_in_F ptps_out_F =
+  piLRTTrans "e" etps $ \ectx ->
+  arrowLRTTrans "p" (ptps_in_F ectx) $
+  typeDescLRT $ typeTransTupleDesc (ptps_out_F ectx)
 
 -- | Build the return type for a function; FIXME: documentation
 translateRetType :: TransInfo info => CruCtx rets ->
