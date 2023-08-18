@@ -625,6 +625,7 @@ exprCtxPureTypeTerms =
 class TransInfo info where
   infoCtx :: info ctx -> ExprTransCtx ctx
   infoEnv :: info ctx -> PermEnv
+  infoChecksFlag :: info ctx -> ChecksFlag
   extTransInfo :: ExprTrans tp -> info ctx -> info (ctx :> tp)
 
 -- | A "translation monad" is a 'Reader' monad with some info type that is
@@ -1099,11 +1100,18 @@ emptyTypeTransInfo = TypeTransInfo MNil
 instance TransInfo TypeTransInfo where
   infoCtx (TypeTransInfo ctx _ _) = ctx
   infoEnv (TypeTransInfo _ env _) = env
+  infoChecksFlag (TypeTransInfo _ _ cflag) = cflag
   extTransInfo etrans (TypeTransInfo ctx env checks) =
     TypeTransInfo (ctx :>: etrans) env checks
 
 -- | The translation monad specific to translating types and pure expressions
 type TypeTransM = TransM TypeTransInfo
+
+-- | Any 'TransM' can run a 'TypeTransM'
+tpTransM :: TransInfo info => TypeTransM ctx a -> TransM info ctx a
+tpTransM =
+  withInfoM $ \info ->
+  TypeTransInfo (infoCtx info) (infoEnv info) (infoChecksFlag info)
 
 -- | Run a 'TypeTransM' computation in the empty translation context
 runNilTypeTransM :: PermEnv -> ChecksFlag -> TypeTransM RNil a -> a
@@ -1240,7 +1248,7 @@ piLRTExprCtx ctx m =
   translateClosed ctx >>= \tptrans ->
   piLRTTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
--- | Like 'piExprCtx' but append the newly bound variables to the current
+-- | Like 'piLRTExprCtx' but append the newly bound variables to the current
 -- context, rather than running in the empty context
 piLRTExprCtxApp :: TransInfo info => CruCtx ctx2 ->
                    TransM info (ctx :++: ctx2) OpenTerm ->
@@ -1573,8 +1581,8 @@ data AtomicPermTrans ctx a where
   -- | @lowned@ permissions translate to a monadic function from (the
   -- translation of) the input permissions to the output permissions
   APTrans_LOwned ::
-    (Mb ctx [PermExpr LifetimeType]) -> (CruCtx ps_in) -> (CruCtx ps_out) ->
-    (Mb ctx (ExprPerms ps_in)) -> (Mb ctx (ExprPerms ps_out)) ->
+    Mb ctx [PermExpr LifetimeType] -> CruCtx ps_in -> CruCtx ps_out ->
+    Mb ctx (ExprPerms ps_in) -> Mb ctx (ExprPerms ps_out) ->
     LOwnedTrans ctx ps_extra ps_in ps_out ->
     AtomicPermTrans ctx LifetimeType
 
@@ -1735,6 +1743,11 @@ extExprTransCtx :: ExprCtxExt ctx1 ctx2 -> ExprTransCtx ctx1 ->
                    ExprTransCtx ctx2
 extExprTransCtx (ExprCtxExt ectx2) ectx1 = RL.append ectx1 ectx2
 
+unextExprTransCtx :: ExprCtxExt ctx1 ctx2 -> ExprTransCtx ctx2 ->
+                     ExprTransCtx ctx1
+unextExprTransCtx ((ExprCtxExt ectx3) :: ExprCtxExt ctx1 ctx2) ectx2 =
+  fst $ RL.split (Proxy :: Proxy ctx1) ectx3 ectx2
+
 -- | Extend the context of a permission translation using an 'ExprCtxExt'
 extPermTransExt :: ExprCtxExt ctx1 ctx2 -> PermTrans ctx1 a ->
                    PermTrans ctx2 a
@@ -1821,10 +1834,27 @@ extLOwnedTransM cext m =
 
 type LOwnedTransTerm ctx ps_in ps_out = LOwnedTransM ps_in ps_out ctx ()
 
+mkLOwnedTransTermFromTerm :: RelPermsTypeTrans ctx ps_out ->
+                             RAssign (Member ctx) ps_out -> SpecTerm ->
+                             LOwnedTransTerm ctx ps_in ps_out
+mkLOwnedTransTermFromTerm ttr_outF vars_out t =
+  gmodify $ \(ExprCtxExt ectx') loInfo ->
+  let ttr_out =
+        extRelPermsTypeTransMulti ectx' ttr_outF $ lownedInfoECtx loInfo in
+  let ps_out =
+        if length (typeTransTypes ttr_out) == 0 then
+          typeTransF ttr_out []
+        else
+          typeTransF (tupleTypeTrans ttr_out)
+          [applyTermLikeMulti t $ transTerms $ lownedInfoPCtx loInfo] in
+  LOwnedInfo { lownedInfoECtx = lownedInfoECtx loInfo,
+               lownedInfoPCtx = ps_out,
+               lownedInfoPVars = RL.map (weakenMemberR ectx') vars_out }
+
 lownedTransTermTerm :: PureTypeTrans (ExprTransCtx ctx) ->
                        RAssign (Member ctx) ps_in ->
-                       RelPermTransCtx ctx ps_in ->
-                       RelPermTransCtx ctx ps_out ->
+                       RelPermsTypeTrans ctx ps_in ->
+                       RelPermsTypeTrans ctx ps_out ->
                        LOwnedTransTerm ctx ps_in ps_out -> SpecTerm
 lownedTransTermTerm ectx vars_in ps_inF ps_outF t =
   lambdaTrans "e" ectx $ \exprs ->
@@ -1873,9 +1903,17 @@ data LOwnedTrans ctx ps_extra ps_in ps_out =
   LOwnedTrans
   (ExprTransCtx ctx)
   (PermTransCtx ctx ps_extra) (RAssign (Member ctx) ps_extra)
-  (RelPermTransCtx ctx ps_in) (RelPermTransCtx ctx ps_out)
-  (RelPermTransCtx ctx ps_extra)
+  (RelPermsTypeTrans ctx ps_in) (RelPermsTypeTrans ctx ps_out)
+  (RelPermsTypeTrans ctx ps_extra)
   (LOwnedTransTerm ctx (ps_extra :++: ps_in) ps_out)
+
+-- | Build an initial 'LOwnedTrans' with an empty @ps_extra@
+mkLOwnedTrans :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps_in ->
+                 RelPermsTypeTrans ctx ps_out -> RAssign (Member ctx) ps_out ->
+                 SpecTerm -> LOwnedTrans ctx RNil ps_in ps_out
+mkLOwnedTrans ectx ps_inF ps_outF vars_out t =
+  LOwnedTrans ectx MNil MNil ps_inF ps_outF (const $ pure MNil)
+  (mkLOwnedTransTermFromTerm ps_outF vars_out t)
 
 -- | Extend the context of an 'LOwnedTrans'
 extLOwnedTransMulti :: ExprTransCtx ctx2 ->
@@ -1886,9 +1924,9 @@ extLOwnedTransMulti ectx2 (LOwnedTrans ectx1 ps_extra vars_extra ptrans_in
   LOwnedTrans
   (RL.append ectx1 ectx2) (extPermTransCtxMulti ectx2 ps_extra)
   (RL.map (weakenMemberR ectx2) vars_extra)
-  (extRelPermTransCtxMulti ectx2 ptrans_in)
-  (extRelPermTransCtxMulti ectx2 ptrans_out)
-  (extRelPermTransCtxMulti ectx2 ptrans_extra)
+  (extRelPermsTypeTransMulti ectx2 ptrans_in)
+  (extRelPermsTypeTransMulti ectx2 ptrans_out)
+  (extRelPermsTypeTransMulti ectx2 ptrans_extra)
   (extLOwnedTransTerm ectx2 t)
 
 -- | Convert an 'LOwnedTrans' to a closure that gets added to the list of
@@ -1900,13 +1938,13 @@ lownedTransTerm (mbExprPermsMembers ->
                                 ectx ps_extra vars_extra
                                 tps_in tps_out tps_extra lott) =
   let etps = exprCtxType ectx
-      tps_extra_in = appRelPermTransCtx tps_extra tps_in
+      tps_extra_in = appRelPermsTypeTrans tps_extra tps_in
       vars_extra_in = RL.append vars_extra vars_in
       lrt = piExprPermLRT etps tps_extra_in tps_out
       fun_tm =
         lownedTransTermTerm etps vars_extra_in tps_extra_in tps_out lott in
- applyClosSpecTerm lrt (mkFreshClosSpecTerm lrt (const fun_tm))
- (transTerms ectx ++ transTerms ps_extra)
+  applyClosSpecTerm lrt (mkFreshClosSpecTerm lrt (const fun_tm))
+  (transTerms ectx ++ transTerms ps_extra)
 lownedTransTerm _ _ =
   failTermLike "FIXME HERE NOWNOW: write this error message"
 
@@ -1969,13 +2007,14 @@ unPTransLLVMArray str _ = error (str ++ ": not an LLVM array permission")
 type PermTransCtx ctx ps = RAssign (PermTrans ctx) ps
 
 -- | A 'TypeTrans' for a 'PermTransCtx' that is relative to an expr context
-type RelPermTransCtx ctx ps =
+type RelPermsTypeTrans ctx ps =
   ExprTransCtx ctx -> ImpTypeTrans (PermTransCtx ctx ps)
 
--- | Append two 'RelPermTransCtx's
-appRelPermTransCtx :: RelPermTransCtx ctx ps1 -> RelPermTransCtx ctx ps2 ->
-                      RelPermTransCtx ctx (ps1 :++: ps2)
-appRelPermTransCtx tps1 tps2 = \ectx -> RL.append <$> tps1 ectx <*> tps2 ectx
+-- | Append two 'RelPermsTypeTrans's
+appRelPermsTypeTrans :: RelPermsTypeTrans ctx ps1 ->
+                        RelPermsTypeTrans ctx ps2 ->
+                        RelPermsTypeTrans ctx (ps1 :++: ps2)
+appRelPermsTypeTrans tps1 tps2 = \ectx -> RL.append <$> tps1 ectx <*> tps2 ectx
 
 -- | Build a permission translation context with just @true@ permissions
 truePermTransCtx :: CruCtx ps -> PermTransCtx ctx ps
@@ -2199,10 +2238,10 @@ extPermTransCtxMulti :: ExprTransCtx ctx2 -> PermTransCtx ctx1 ps ->
                         PermTransCtx (ctx1 :++: ctx2) ps
 extPermTransCtxMulti ectx2 = RL.map (extPermTransMulti ectx2)
 
--- | Extend the context of a 'RelPermTransCtx'
-extRelPermTransCtxMulti :: ExprTransCtx ctx2 -> RelPermTransCtx ctx1 ps ->
-                           RelPermTransCtx (ctx1 :++: ctx2) ps
-extRelPermTransCtxMulti ectx2 (rel_tp :: RelPermTransCtx ctx1 ps) =
+-- | Extend the context of a 'RelPermsTypeTrans'
+extRelPermsTypeTransMulti :: ExprTransCtx ctx2 -> RelPermsTypeTrans ctx1 ps ->
+                             RelPermsTypeTrans (ctx1 :++: ctx2) ps
+extRelPermsTypeTransMulti ectx2 (rel_tp :: RelPermsTypeTrans ctx1 ps) =
   \ectx12 ->
   let (ectx1, _) = RL.split (Proxy :: Proxy ctx1) ectx2 ectx12 in
   fmap (extPermTransCtxMulti ectx2) $ rel_tp ectx1
@@ -2606,14 +2645,18 @@ instance TransInfo info =>
     [nuMP| Perm_LLVMFrame fp |] ->
       return $ mkImpTypeTrans0 $ APTrans_LLVMFrame fp
     [nuMP| Perm_LOwned ls tps_in tps_out ps_in ps_out |] ->
-      error "FIXME HERE NOWNOW"
-      {-
-      do tp_in <- typeTransTupleType <$> translate ps_in
-         tp_out <- typeTransTupleType <$> translate ps_out
-         specm_tp <- emptyStackSpecMTypeTransM tp_out
-         let tp = arrowOpenTerm "ps" tp_in specm_tp
-         return $ mkImpTypeTrans1 tp (APTrans_LOwned ls
-                                      (mbLift tps_in) (mbLift tps_out) ps_in ps_out) -}
+      case mbExprPermsMembers ps_out of
+        Just vars_out ->
+          do ectx <- infoCtx <$> ask
+             let etps = exprCtxType ectx
+             ttr_inF <- tpTransM $ ctxFunTypeTransM $ translate ps_in
+             ttr_outF <- tpTransM $ ctxFunTypeTransM $ translate ps_out
+             let tp = typeDescFromLRT $ piExprPermLRT etps ttr_inF ttr_outF
+             return $ mkImpTypeTrans1 tp $ \t ->
+               (APTrans_LOwned ls (mbLift tps_in) (mbLift tps_out) ps_in ps_out $
+                mkLOwnedTrans ectx ttr_inF ttr_outF vars_out t)
+        Nothing ->
+          error "FIXME HERE NOWNOW: handle this error!"
     [nuMP| Perm_LOwnedSimple tps lops |] ->
       return $ mkImpTypeTrans0 $ APTrans_LOwnedSimple (mbLift tps) lops
     [nuMP| Perm_LCurrent l |] ->
@@ -2798,7 +2841,7 @@ arrowLRTPermCtx ps body =
 -- a 'PermTransCtx' relative to the expressions using @LRT_FunClos@. The return
 -- type is described by a 'PermTransCtx' as well.
 piExprPermLRT :: PureTypeTrans (ExprTransCtx ctx) ->
-                 RelPermTransCtx ctx ps_in -> RelPermTransCtx ctx ps_out ->
+                 RelPermsTypeTrans ctx ps_in -> RelPermsTypeTrans ctx ps_out ->
                  OpenTerm
 piExprPermLRT ectx pctx_in_F pctx_out_F =
   error "FIXME HERE NOWNOW"
@@ -2915,6 +2958,7 @@ data ImpTransInfo ext blocks tops rets ps ctx =
 instance TransInfo (ImpTransInfo ext blocks tops rets ps) where
   infoCtx = itiExprCtx
   infoEnv = itiPermEnv
+  infoChecksFlag = itiChecksFlag
   extTransInfo etrans (ImpTransInfo {..}) =
     ImpTransInfo
     { itiExprCtx = itiExprCtx :>: etrans
@@ -2953,13 +2997,6 @@ emptyBlocksImpTransM :: ImpTransM () RNil RNil RNil ps ctx a ->
 emptyBlocksImpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
               ImpTransInfo { itiBlockMapTrans = emptyTypedBlockMapTrans, .. })
-
--- | Embed a type translation into an impure translation
--- FIXME: should no longer need this...
-tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks tops rets ps ctx a
-tpTransM =
-  withInfoM (\(ImpTransInfo {..}) ->
-              TypeTransInfo itiExprCtx itiPermEnv itiChecksFlag)
 
 -- | Run an implication translation computation in an "empty" environment, where
 -- there are no variables in scope and no permissions held anywhere
