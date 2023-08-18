@@ -2105,8 +2105,6 @@ some parts of `mir_verify` are not currently implemented, so it is possible
 that using `mir_verify` on some programs will fail. Features that are not yet
 implemented include the following:
 
-* MIR specifications involving memory allocations (i.e., neither the
-  `mir_alloc` nor the `mir_points_to` commands are functional)
 * MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
   `mir_verify` must always be the empty list at present)
 * The ability to construct MIR `struct` or `enum` values in specifications
@@ -2435,6 +2433,9 @@ but there is also a `mir_alloc_mut` function for creating a mutable reference:
 
 * `mir_alloc_mut : MIRType -> MIRSetup SetupValue`
 
+MIR tracks whether references are mutable or immutable at the type level, so it
+is important to use the right allocation command for a given reference type.
+
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
@@ -2459,15 +2460,19 @@ will not modify. Unlike `llvm_alloc`, regions allocated with
 
 ## Specifying Heap Values
 
-Pointers returned by `llvm_alloc` don't, initially, point to
-anything. So if you pass such a pointer directly into a function that
-tried to dereference it, symbolic execution will fail with a message
-about an invalid load. For some functions, such as those that are
-intended to initialize data structures (writing to the memory pointed
-to, but never reading from it), this sort of uninitialized memory is
-appropriate. In most cases, however, it's more useful to state that a
-pointer points to some specific (usually symbolic) value, which you can
-do with the `llvm_points_to` command.
+Pointers returned by `llvm_alloc`, `jvm_alloc_{array,object}`, or
+`mir_alloc{,_mut}` don't initially point to anything. So if you pass such a
+pointer directly into a function that tried to dereference it, symbolic
+execution will fail with a message about an invalid load. For some functions,
+such as those that are intended to initialize data structures (writing to the
+memory pointed to, but never reading from it), this sort of uninitialized
+memory is appropriate. In most cases, however, it's more useful to state that a
+pointer points to some specific (usually symbolic) value, which you can do with
+the *points-to* family of commands.
+
+### LLVM heap values
+
+LLVM verification primarily uses the `llvm_points_to` command:
 
 * `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
@@ -2489,6 +2494,49 @@ checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
 reinterpretation is intentional. As an alternative, one
 may instead use `llvm_cast_pointer` to line up the static types.
+
+### JVM heap values
+
+JVM verification has two categories of commands for specifying heap values.
+One category consists of the `jvm_*_is` commands, which allow users to directly
+specify what value a heap object points to. There are specific commands for
+each type of JVM heap object:
+
+* `jvm_array_is : JVMValue -> Term -> JVMSetup ()` declares that an array (the
+  first argument) contains a sequence of values (the second argument).
+* `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` declares that an
+  array (the first argument) has an element at the given index (the second
+  argument) containing the given value (the third argument).
+* `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()` declares that
+  an object (the first argument) has a field (the second argument) containing
+  the given value (the third argument).
+* `jvm_static_field_is : String -> JVMValue -> JVMSetup ()` declares that a
+  named static field (the first argument) contains the given value (the second
+  argument). By default, the field name is assumed to belong to the same class
+  as the method being specified. Static fields belonging to other classes can
+  be selected using the `<classname>.<fieldname>` syntax in the first argument.
+
+Another category consists of the `jvm_modifies_*` commands. Like the `jvm_*_is`
+commands, these specify that a JVM heap object points to valid memory, but
+unlike the `jvm_*_is` commands, they leave the exact value being pointed to as
+unspecified. These are useful for writing partial specifications for methods
+that modify some heap value, but without saying anything specific about the new
+value.
+
+* `jvm_modifies_array : JVMValue -> JVMSetup ()`
+* `jvm_modifies_elem : JVMValue -> Int -> JVMSetup ()`
+* `jvm_modifies_field : JVMValue -> String -> JVMSetup ()`
+* `jvm_modifies_static_field : String -> JVMSetup ()`
+
+### MIR heap values
+
+MIR verification has a single `mir_points_to` command:
+
+* `mir_points_to : SetupValue -> SetupValue -> MIRSetup ()`
+takes two `SetupValue` arguments, the first of which must be a reference,
+and states that the memory specified by that reference should contain the
+value given in the second argument (which may be any type of
+`SetupValue`).
 
 ## Working with Compound Types
 

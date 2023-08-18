@@ -15,6 +15,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_execute_func
   , mir_fresh_var
   , mir_load_module
+  , mir_points_to
   , mir_postcond
   , mir_precond
   , mir_return
@@ -51,6 +52,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
+import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Foldable as F
 import Data.Foldable (for_)
@@ -251,6 +253,61 @@ mir_postcond :: TypedTerm -> MIRSetupM ()
 mir_postcond term = MIRSetupM $ do
   loc <- SS.toW4Loc "mir_postcond" <$> lift (lift getPosition)
   Setup.crucible_postcond loc term
+
+mir_points_to ::
+  SetupValue {- ^ LHS reference -} ->
+  SetupValue {- ^ RHS value -} ->
+  MIRSetupM ()
+mir_points_to ref val =
+  MIRSetupM $
+  do cc <- getMIRCrucibleContext
+     loc <- getW4Position "mir_points_to"
+     st <- lift get
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+         nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+
+     allocIdx <-
+       case ref of
+         MS.SetupVar idx -> pure idx
+         _ -> X.throwM $ MIRPointsToNonReference ref
+
+     referentTy <- mir_points_to_check_lhs_validity ref loc
+     valTy <- typeOfSetupValue cc env nameEnv val
+     unless (checkCompatibleTys referentTy valTy) $
+       fail $ unlines
+         [ "Referent type incompatible with value in `mir_points_to` statement:"
+         , "  Referent type: " ++ show (PP.pretty referentTy)
+         , "  Value type:    " ++ show (PP.pretty valTy)
+         ]
+
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "MIR points-to"
+              , MS.conditionContext = ""
+              }
+     Setup.addPointsTo (MirPointsTo md allocIdx [val])
+
+-- | Perform a set of validity checks on the LHS reference value in a
+-- 'mir_points_to' command. In particular:
+--
+-- * Check that the LHS is in fact a valid reference type.
+--
+-- Returns the 'Mir.Ty' that the LHS points to.
+mir_points_to_check_lhs_validity ::
+  SetupValue {- ^ LHS reference -} ->
+  W4.ProgramLoc {- ^ The location in the program -} ->
+  Setup.CrucibleSetupT MIR TopLevel Mir.Ty
+mir_points_to_check_lhs_validity ref loc =
+  do cc <- getMIRCrucibleContext
+     st <- get
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+         nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     refTy <- typeOfSetupValue cc env nameEnv ref
+     case refTy of
+       Mir.TyRef referentTy _ -> pure referentTy
+       _ -> throwCrucibleSetup loc $ "lhs not a reference type: " ++ show refTy
 
 mir_verify ::
   Mir.RustModule ->
@@ -476,11 +533,34 @@ setupPrePointsTos ::
   [MirPointsTo] ->
   Crucible.SymGlobalState Sym ->
   IO (Crucible.SymGlobalState Sym)
-setupPrePointsTos _mspec _cc _env pts mem0 = foldM doPointsTo mem0 pts
+setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
   where
-    doPointsTo :: Crucible.SymGlobalState Sym -> MirPointsTo -> IO (Crucible.SymGlobalState Sym)
-    doPointsTo _mem _pt =
-      panic "setupPrePointsTo" ["not yet implemented"]
+    tyenv = MS.csAllocations mspec
+    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+
+    doPointsTo ::
+         Crucible.SymGlobalState Sym
+      -> MirPointsTo
+      -> IO (Crucible.SymGlobalState Sym)
+    doPointsTo globals (MirPointsTo _ allocIdx referents) =
+      mccWithBackend cc $ \bak -> do
+        referent <- firstPointsToReferent referents
+        MIRVal referentTy referentVal <-
+          resolveSetupVal cc env tyenv nameEnv referent
+        Some mp <- pure $ lookupAllocIndex env allocIdx
+        -- By the time we reach here, we have already checked (in mir_points_to)
+        -- that the type of the reference is compatible with the right-hand side
+        -- value, so the equality check below should never fail.
+        Refl <-
+          case W4.testEquality (mp^.mpType) (shapeType referentTy) of
+            Just r -> pure r
+            Nothing ->
+              panic "setupPrePointsTos"
+                    [ "Unexpected type mismatch between reference and referent"
+                    , "Reference type: " ++ show (mp^.mpType)
+                    , "Referent type:  " ++ show (shapeType referentTy)
+                    ]
+        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes (mp^.mpRef) referentVal
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -680,10 +760,8 @@ verifyPrestate cc mspec globals0 =
      let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
-     -- Allocate memory for each 'mir_alloc'
-     let doAlloc = panic "verifyPrestate.doAlloc" ["not yet implemented"]
      (env, globals1) <- runStateT
-       (Map.traverseWithKey (doAlloc cc) (mspec ^. MS.csPreState . MS.csAllocs))
+       (traverse (doAlloc cc) (mspec ^. MS.csPreState . MS.csAllocs))
        globals0
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
@@ -1044,6 +1122,41 @@ cryptolTypeOfActual mty =
     baseSizeType Mir.B128  = Just $ Cryptol.tWord $ Cryptol.tNum (128 :: Integer)
     baseSizeType Mir.USize = Just $ Cryptol.tWord $ Cryptol.tNum $ natValue $ knownNat @Mir.SizeBits
 
+-- | Allocate memory for each 'mir_alloc' or 'mir_alloc_mut'.
+doAlloc ::
+     MIRCrucibleContext
+  -> Some MirAllocSpec
+  -> StateT (Crucible.SymGlobalState Sym) IO (Some (MirPointer Sym))
+doAlloc cc (Some ma) =
+  mccWithBackend cc $ \bak ->
+  do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
+     let halloc = cc^.mccHandleAllocator
+     let sym = backendGetSym bak
+     let iTypes = Mir.mirIntrinsicTypes
+     Some tpr <- pure $ Mir.tyToRepr col (ma^.maMirType)
+
+     -- Create an uninitialized `MirVector_PartialVector` of length 1 and
+     -- return a pointer to its element.
+     ref <- liftIO $
+       Mir.newMirRefIO sym halloc (Mir.MirVectorRepr tpr)
+
+     globals <- get
+     globals' <- liftIO $ do
+       one <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1
+       vec <- Mir.mirVector_uninitIO bak one
+       Mir.writeMirRefIO bak globals iTypes ref vec
+     put globals'
+
+     ptr <- liftIO $ do
+       zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
+       Mir.subindexMirRefIO bak iTypes tpr ref zero
+     pure $ Some MirPointer
+       { _mpType = tpr
+       , _mpMutbl = ma^.maMutbl
+       , _mpMirType = ma^.maMirType
+       , _mpRef = ptr
+       }
+
 -- | Given a function name @fnName@, attempt to look up its corresponding
 -- 'Mir.DefId'. Currently, the following types of function names are permittd:
 --
@@ -1084,6 +1197,9 @@ findDefId crateDisambigs fnName = do
     fnNameStr = Text.unpack fnName
     edid = Text.splitOn "::" fnName
 
+getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
+getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
+
 -- | Look up the control-flow graph (CFG) for a 'Mir.DefId', failing if a CFG
 -- cannot be found.
 lookupDefIdCFG ::
@@ -1123,6 +1239,7 @@ setupCrucibleContext rm =
 
 data MIRSetupError
   = MIRFreshVarInvalidType Mir.Ty
+  | MIRPointsToNonReference SetupValue
   | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
@@ -1137,6 +1254,11 @@ instance Show MIRSetupError where
     case err of
       MIRFreshVarInvalidType jty ->
         "mir_fresh_var: Invalid type: " ++ show jty
+      MIRPointsToNonReference ptr ->
+        unlines
+        [ "mir_points_to: Left-hand side is not a valid reference"
+        , show (MS.ppSetupValue ptr)
+        ]
       MIRArgTypeMismatch i expected found ->
         unlines
         [ "mir_execute_func: Argument type mismatch"
