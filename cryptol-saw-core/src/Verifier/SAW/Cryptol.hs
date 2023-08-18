@@ -332,6 +332,44 @@ isErasedProp prop =
     C.TCon (C.PC C.PLiteralLessThan) _ -> False
     _ -> True
 
+-- | Translate a 'Prop' containing a numeric constraint to a 'Term' that tests
+-- if the 'Prop' holds. This function will 'panic' for 'Prop's that are not
+-- numeric constraints, such as @Integral@. In other words, this function
+-- supports the same set of 'Prop's that constraint guards do.
+importNumericConstraintAsBool :: SharedContext -> Env -> C.Prop -> IO Term
+importNumericConstraintAsBool sc env prop =
+  case prop of
+    C.TCon (C.PC C.PEqual) [lhs, rhs] -> eqTerm lhs rhs
+    C.TCon (C.PC C.PNeq) [lhs, rhs] -> eqTerm lhs rhs >>= scNot sc
+    C.TCon (C.PC C.PGeq) [lhs, rhs] -> do
+      -- Convert 'lhs >= rhs' into '(rhs < lhs) \/ (rhs == lhs)'
+      lhs' <- importType sc env lhs
+      rhs' <- importType sc env rhs
+      lt <- scGlobalApply sc "Cryptol.tcLt" [rhs', lhs']
+      eq <- scGlobalApply sc "Cryptol.tcEqual" [rhs', lhs']
+      scOr sc lt eq
+    C.TCon (C.PC C.PFin) [x] -> do
+      x' <- importType sc env x
+      scGlobalApply sc "Cryptol.tcFin" [x']
+    C.TCon (C.PC C.PAnd) [lhs, rhs] -> do
+      lhs' <- importType sc env lhs
+      rhs' <- importType sc env rhs
+      scAnd sc lhs' rhs'
+    C.TCon (C.PC C.PTrue) [] -> scBool sc True
+    C.TUser _ _ t -> importNumericConstraintAsBool sc env t
+    _ -> panic
+      "importNumericConstraintAsBool"
+      [ "importNumericConstraintAsBool called with non-numeric constraint:"
+      , pretty prop
+      ]
+  where
+    -- | Construct a term for equality of two types
+    eqTerm :: C.Type -> C.Type -> IO Term
+    eqTerm lhs rhs = do
+      lhs' <- importType sc env lhs
+      rhs' <- importType sc env rhs
+      scGlobalApply sc "Cryptol.tcEqual" [lhs', rhs']
+
 importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
 importPropsType sc env [] ty = importType sc env ty
 importPropsType sc env (prop : props) ty
@@ -1076,12 +1114,42 @@ importExpr sc env expr =
     C.ELocated _ e ->
       importExpr sc env e
 
-    C.EPropGuards {} ->
-      error "Using contsraint guards is not yet supported by SAW."
+    C.EPropGuards arms typ -> do
+      -- Convert prop guards to nested if-then-elses
+      typ' <- importType sc env typ
+      errMsg <- scString sc "No constraints satisfied in constraint guard"
+      err <- scGlobalApply sc "Prelude.error" [typ', errMsg]
+      -- NOTE: Must use a right fold to maintain order of prop guards in
+      -- generated if-then-else
+      Fold.foldrM (propGuardToIte typ') err arms
 
   where
     the :: String -> Maybe a -> IO a
     the what = maybe (panic "importExpr" ["internal type error", what]) return
+
+    -- | Translate an erased 'Prop' to a term and return the conjunction of the
+    -- translated term and 'mt' if 'mt' is 'Just'. Otherwise, return the
+    -- translated 'Prop'.  This function is intended to be used in a fold,
+    -- taking a 'Maybe' in the first argument to avoid creating an unnecessary
+    -- conjunction over singleton lists.
+    conjoinErasedProps :: Maybe Term -> C.Prop -> IO (Maybe Term)
+    conjoinErasedProps mt p = do
+      p' <- importNumericConstraintAsBool sc env p
+      case mt of
+        Just t -> Just <$> scAnd sc t p'
+        Nothing -> pure $ Just p'
+
+    -- | A helper function to be used in a fold converting a prop guard to an
+    -- if-then-else. In order, the arguments of the function are:
+    -- 1. The type of the prop guard
+    -- 2. An arm of the prop guard
+    -- 3. A term representing the else branch of the if-then-else
+    propGuardToIte :: Term -> ([C.Prop], C.Expr) -> Term -> IO Term
+    propGuardToIte typ (props, body) falseBranch = do
+      mCondition <- Fold.foldlM conjoinErasedProps Nothing props
+      condition <- maybe (scBool sc True) pure mCondition
+      trueBranch <- importExpr sc env body
+      scGlobalApply sc "Prelude.ite" [typ, condition, trueBranch, falseBranch]
 
 
 -- | Convert a Cryptol expression with the given type schema to a
@@ -1089,12 +1157,13 @@ importExpr sc env expr =
 -- sc env schema expr@ must yield a type that is equivalent (i.e.
 -- convertible) with the one returned by @'importSchema' sc env
 -- schema@.
+--
+-- Essentially, this function should be used when the expression's type is known
+-- (such as with a type annotation), and 'importExpr' should be used when the
+-- type must be inferred.
 importExpr' :: SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
 importExpr' sc env schema expr =
   case expr of
-    C.EPropGuards {} ->
-      error "Using contsraint guards is not yet supported by SAW."
-
     C.ETuple es ->
       do ty <- the "Expected a mono type in ETuple" (C.isMono schema)
          ts <- the "Expected a tuple type in ETuple" (C.tIsTuple ty)
@@ -1168,6 +1237,7 @@ importExpr' sc env schema expr =
     C.EApp      {} -> fallback
     C.ETApp     {} -> fallback
     C.EProofApp {} -> fallback
+    C.EPropGuards {} -> fallback
 
   where
     go :: C.Type -> C.Expr -> IO Term
