@@ -86,7 +86,7 @@ module Verifier.SAW.OpenTerm (
   letTermLike, sawLetTermLike,
   -- * Building SpecM computations
   SpecTerm(), defineSpecOpenTerm, lambdaPureSpecTerm, lambdaPureSpecTermMulti,
-  sawLetPureSpecTerm, lrtToTypeSpecTerm,
+  lrtClosTypeSpecTerm, sawLetPureSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
   callDefSpecTerm, monadicSpecOp,
   specMTypeSpecTerm, returnSpecTerm, bindSpecTerm, errorSpecTerm,
@@ -1035,6 +1035,12 @@ defineSpecOpenTerm ev base_recs_in lrt body_in =
        [ev, local_stk, lrt, imps,
         mkPolySpecLambda ev local_stk imps (specRecFunsTuple all_recs),
         mkPolySpecLambda ev local_stk imps body]
+
+-- | Build the type @LRTClos stk lrt@ from @lrt@ in the current stack
+lrtClosTypeSpecTerm :: OpenTerm -> SpecTerm
+lrtClosTypeSpecTerm lrt =
+  applyGlobalTermLike "Prelude.LRTClos" [extStackSpecTerm,
+                                         openTermSpecTerm lrt]
 
 -- | Internal-only helper function
 mkClosSpecInfoTerm :: Natural -> SpecInfoTerm
