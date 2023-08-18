@@ -593,7 +593,7 @@ jobs:
       - uses: actions/cache/restore@v3
         name: Restore SMT solver result cache
         with:
-          path: cache
+          path: s2nTests/cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
           restore-keys:
             ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}}-${{ matrix.ghc }}-${{ github.ref }}-
@@ -604,18 +604,15 @@ jobs:
         working-directory: s2nTests
         run: |
           mkdir cache
-          echo "print_solver_cache_stats;" > ./cache/print_solver_cache_stats.saw
           chmod +x bin/*
           chmod +w cache
           make ${{ matrix.s2n-target }}
-          ls cache
-          SAW_SOLVER_CACHE_PATH="./cache" ./bin/saw ./cache/print_solver_cache_stats.saw || echo "print_solver_cache_stats failed"
 
       - uses: actions/cache/save@v3
         name: Save SMT solver result cache
         if: always()
         with:
-          path: cache
+          path: s2nTests/cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
 
   exercises:
