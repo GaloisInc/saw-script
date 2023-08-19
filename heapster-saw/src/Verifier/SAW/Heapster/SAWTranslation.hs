@@ -4134,34 +4134,31 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ _ mb_l2 |] ->
     flip (withPermStackOrErrM id) m $ \case
-    (ps :>: PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t) ->
-      return $ (ps :>:) $
+    (pctx :>: PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t) ->
+      return $ (pctx :>:) $
       PTrans_LOwned (mbMap2 (:) mb_l2 mb_ls) tps_in tps_out mb_ps_in mb_ps_out t
     _ -> Left "FIXME HERE NOWNOW: write this error"
 
   [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ _ _ |] ->
-    error "FIXME HERE NOWNOW" {-
-    do pctx_out_trans <- translateSimplImplOut mb_simpl
+    do ttr_lcur <- translateSimplImplOutTailHead mb_simpl
        withPermStackM
          (\(ns :>: l1) -> ns :>: l1 :>: l1)
          (\(pctx :>: ptrans_l) ->
-           -- Note: lcurrent perms do not contain any terms and the term for the
-           -- lowned permission does not change, so the only terms in both the
-           -- input and the output are in ptrans_l
-           RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
-         m -}
+           pctx :>: typeTransF ttr_lcur [] :>: ptrans_l)
+         m
 
-  [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ _ _ |] ->
-    error "FIXME HERE NOWNOW" {-
-    do pctx_out_trans <- translateSimplImplOut mb_simpl
-       withPermStackM
-         (\(ns :>: l1 :>: _) -> ns :>: l1)
-         (\(pctx :>: ptrans_l :>: _) ->
-           -- Note: lcurrent perms do not contain any terms and the term for the
-           -- lowned permission does not change, so the only terms in both the
-           -- input and the output are in ptrans_l
-           RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
-         m -}
+  [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ _ mb_l2 |] ->
+    withPermStackOrErrM
+    (\(ns :>: l :>: l2) -> ns :>: l)
+    (\case
+        (pctx :>:
+         PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t :>: _) ->
+          let mb_ls' = mbMap2 (\l2 ls ->
+                                delete (PExpr_Var l2) ls) mb_l2 mb_ls in
+          return $
+          (pctx :>: PTrans_LOwned mb_ls' tps_in tps_out mb_ps_in mb_ps_out t)
+        _ -> Left "FIXME HERE NOWNOW: write this error")
+    m
 
   [nuMP| SImpl_WeakenLifetime _ _ _ _ _ |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
