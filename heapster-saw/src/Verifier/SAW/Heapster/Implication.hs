@@ -971,7 +971,7 @@ data SimplImpl ps_in ps_out where
   -- current lifetime and part that is saved in the lifetime for later:
   --
   -- > x:F<l,rws> * l:[l2]lcurrent * l2:lowned[ls] (ps_in -o ps_out)
-  -- >   -o x:F<l2,rws> * l2:lowned[ls](x:F<l2,Rs>, ps_in -o x:F<l,rws>, ps_out)
+  -- >   -o x:F<l2,rws> * l2:lowned[ls](ps_in, x:F<l2,Rs> -o ps_out, x:F<l,rws>)
   --
   -- Note that this rule also supports @l=always@, in which case the
   -- @l:[l2]lcurrent@ permission is replaced by @l2:true@ (as a hack, because it
@@ -2483,14 +2483,10 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls tps_in tps_out ps_in ps_out) =
   distPerms2 x (ltFuncApply f args $ PExpr_Var l2)
   l2 (ValPerm_LOwned sub_ls
-      (appendCruCtx (singletonCruCtx $ exprType x) tps_in)
-      (appendCruCtx (singletonCruCtx $ exprType x) tps_out)
-      (RL.append (MNil :>:
-                  ExprAndPerm (PExpr_Var x)
-                  (ltFuncMinApply f (PExpr_Var l2))) ps_in)
-      (RL.append (MNil :>:
-                  ExprAndPerm (PExpr_Var x)
-                  (ltFuncApply f args l)) ps_out))
+      (CruCtxCons tps_in $ exprType x)
+      (CruCtxCons tps_out $ exprType x)
+      (ps_in :>: ExprAndPerm (PExpr_Var x) (ltFuncMinApply f (PExpr_Var l2)))
+      (ps_out :>: ExprAndPerm (PExpr_Var x) (ltFuncApply f args l)))
 simplImplOut (SImpl_SubsumeLifetime l ls tps_in tps_out ps_in ps_out l2) =
   distPerms1 l (ValPerm_LOwned (l2:ls) tps_in tps_out ps_in ps_out)
 simplImplOut (SImpl_ContainedLifetimeCurrent l ls tps_in tps_out ps_in ps_out l2) =

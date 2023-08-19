@@ -1894,14 +1894,19 @@ extLOwnedTransTerm ectx2 = extLOwnedTransM (ExprCtxExt ectx2)
 idLOwnedTransTerm :: LOwnedTransTerm ctx ps ps
 idLOwnedTransTerm = return ()
 
-weakenLOwnedTransTerm :: LOwnedTransTerm ctx ps_in ps_out ->
+weakenLOwnedTransTerm :: ImpTypeTrans (PermTrans ctx tp) ->
+                         LOwnedTransTerm ctx ps_in ps_out ->
                          LOwnedTransTerm ctx (ps_in :> tp) (ps_out :> tp)
-weakenLOwnedTransTerm t =
+weakenLOwnedTransTerm ttr_out t =
   ggetting $ \cext info_top ->
   let (info_ps_in, info_tp) = loInfoSplit Proxy (MNil :>: Proxy) info_top in
   gput info_ps_in >>>
   extLOwnedTransM cext t >>>
-  gmodify (\cext' info' -> loInfoAppend info' (extLOwnedInfoExt cext' info_tp))
+  gmodify (\cext' info' ->
+            loInfoAppend info' $ extLOwnedInfoExt cext' $
+            info_tp { lownedInfoPCtx =
+                        (MNil :>:) $ extPermTransExt cext $ typeTransF ttr_out $
+                        transTerms $ lownedInfoPCtx info_tp })
 
 bindLOwnedTransTerm ::
   Proxy ps_extra1 -> RAssign any ps_extra2 -> RAssign any ps_in ->
@@ -1921,12 +1926,14 @@ bindLOwnedTransTerm prx_extra1 prx_extra2 prx_in t1 t2 =
 
 -- | The translation of an @lowned@ permission
 data LOwnedTrans ctx ps_extra ps_in ps_out =
-  LOwnedTrans
-  (ExprTransCtx ctx)
-  (PermTransCtx ctx ps_extra) (RAssign (Member ctx) ps_extra)
-  (RelPermsTypeTrans ctx ps_in) (RelPermsTypeTrans ctx ps_out)
-  (RelPermsTypeTrans ctx ps_extra)
-  (LOwnedTransTerm ctx (ps_extra :++: ps_in) ps_out)
+  LOwnedTrans {
+  lotrECtx :: ExprTransCtx ctx,
+  lotrPsExtra :: PermTransCtx ctx ps_extra,
+  lotrVarsExtra :: RAssign (Member ctx) ps_extra,
+  lotrRelTransIn :: RelPermsTypeTrans ctx ps_in,
+  lotrRelTransOut :: RelPermsTypeTrans ctx ps_out,
+  lotrRelTransExtra :: RelPermsTypeTrans ctx ps_extra,
+  lotrTerm :: LOwnedTransTerm ctx (ps_extra :++: ps_in) ps_out }
 
 -- | Build an initial 'LOwnedTrans' with an empty @ps_extra@
 mkLOwnedTrans :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps_in ->
@@ -1950,6 +1957,16 @@ extLOwnedTransMulti ectx2 (LOwnedTrans ectx1 ps_extra vars_extra ptrans_in
   (extRelPermsTypeTransMulti ectx2 ptrans_extra)
   (extLOwnedTransTerm ectx2 t)
 
+weakenLOwnedTrans ::
+  Rel1PermTypeTrans ctx tp ->
+  Rel1PermTypeTrans ctx tp ->
+  LOwnedTrans ctx ps_extra ps_in ps_out ->
+  LOwnedTrans ctx ps_extra (ps_in :> tp) (ps_out :> tp)
+weakenLOwnedTrans tp_in tp_out (LOwnedTrans {..}) =
+  LOwnedTrans { lotrRelTransIn = app1RelPermsTypeTrans lotrRelTransIn tp_in,
+                lotrRelTransOut = app1RelPermsTypeTrans lotrRelTransOut tp_out,
+                lotrTerm = weakenLOwnedTransTerm (tp_out lotrECtx) lotrTerm, .. }
+
 -- | Convert an 'LOwnedTrans' to a closure that gets added to the list of
 -- closures for the current spec definition
 lownedTransTerm :: Mb ctx (ExprPerms ps_in) ->
@@ -1970,10 +1987,19 @@ lownedTransTerm _ _ =
   failTermLike "FIXME HERE NOWNOW: write this error message"
 
 
-
 -- | The translation of the vacuously true permission
 pattern PTrans_True :: PermTrans ctx a
 pattern PTrans_True = PTrans_Conj []
+
+-- | A single @lowned@ permission translation
+pattern PTrans_LOwned ::
+  () => (a ~ LifetimeType) =>
+  Mb ctx [PermExpr LifetimeType] -> CruCtx ps_in -> CruCtx ps_out ->
+  Mb ctx (ExprPerms ps_in) -> Mb ctx (ExprPerms ps_out) ->
+  LOwnedTrans ctx ps_extra ps_in ps_out ->
+  PermTrans ctx a
+pattern PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t =
+  PTrans_Conj [APTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t]
 
 -- | Build a type translation for a disjunctive, existential, or named
 -- permission that uses the 'PTrans_Term' constructor
@@ -2027,6 +2053,10 @@ unPTransLLVMArray str _ = error (str ++ ": not an LLVM array permission")
 -- | A context mapping bound names to their perm translations
 type PermTransCtx ctx ps = RAssign (PermTrans ctx) ps
 
+-- | A 'TypeTrans' for a 'PermTrans' that is relative to an expr context
+type Rel1PermTypeTrans ctx a =
+  ExprTransCtx ctx -> ImpTypeTrans (PermTrans ctx a)
+
 -- | A 'TypeTrans' for a 'PermTransCtx' that is relative to an expr context
 type RelPermsTypeTrans ctx ps =
   ExprTransCtx ctx -> ImpTypeTrans (PermTransCtx ctx ps)
@@ -2036,6 +2066,12 @@ appRelPermsTypeTrans :: RelPermsTypeTrans ctx ps1 ->
                         RelPermsTypeTrans ctx ps2 ->
                         RelPermsTypeTrans ctx (ps1 :++: ps2)
 appRelPermsTypeTrans tps1 tps2 = \ectx -> RL.append <$> tps1 ectx <*> tps2 ectx
+
+app1RelPermsTypeTrans :: RelPermsTypeTrans ctx ps ->
+                         Rel1PermTypeTrans ctx tp ->
+                         RelPermsTypeTrans ctx (ps :> tp)
+app1RelPermsTypeTrans tps1 tps2 = \ectx -> (:>:) <$> tps1 ectx <*> tps2 ectx
+
 
 -- | Build a permission translation context with just @true@ permissions
 truePermTransCtx :: CruCtx ps -> PermTransCtx ctx ps
@@ -3052,6 +3088,22 @@ withPermStackM f_vars f_p =
   info { itiPermStack = f_p (itiPermStack info),
          itiPermStackVars = f_vars (itiPermStackVars info) }
 
+-- | Apply a transformation to the (translation of the) current perm stack that
+-- could fail, in which case build an error term with the given string
+withPermStackOrErrM :: (RAssign (Member ctx) ps_in -> RAssign (Member ctx) ps_out) ->
+                       (PermTransCtx ctx ps_in ->
+                        Either String (PermTransCtx ctx ps_out)) ->
+                       ImpTransM ext blocks tops rets ps_out ctx SpecTerm ->
+                       ImpTransM ext blocks tops rets ps_in ctx SpecTerm
+withPermStackOrErrM f_vars f_p m =
+  ask >>= \info ->
+  case f_p (itiPermStack info) of
+    Left err -> mkErrorComp err
+    Right ps' ->
+      withInfoM (\info ->
+                  info { itiPermStack = ps',
+                         itiPermStackVars = f_vars (itiPermStackVars info) }) m
+
 -- | Get the current permission stack as a 'DistPerms' in context
 getPermStackDistPerms :: ImpTransM ext blocks tops rets ps ctx
                          (Mb ctx (DistPerms ps))
@@ -4053,35 +4105,43 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       pctx :>: PTrans_Conj [APTrans_IsLLVMPtr] :>: ptrans)
     m
 
-  [nuMP| SImpl_SplitLifetime _ f args l _ _ _ _ ps_in ps_out |] ->
-    error "FIXME HERE NOWNOW" {-
-    do pctx_out_trans <- translateSimplImplOut mb_simpl
-       ps_in_trans <- translate ps_in
-       ps_out_trans <- translate ps_out
-       -- FIXME: write a fun to translate-and-apply a lifetimefunctor
-       x_tp_trans <- translate (mbMap3 ltFuncApply f args l)
-       ptrans_l <- getTopPermM
-       f_tm <-
-         weakenLifetimeFun x_tp_trans ps_in_trans ps_out_trans $
-         transTerm1 ptrans_l
-       withPermStackM
+  [nuMP| SImpl_SplitLifetime mb_x f args l l2 _ _ _ _ _ |] ->
+    -- FIXME HERE: get rid of the mbMaps!
+    do let l2_e = fmap PExpr_Var l2
+       let f_l_args = mbMap3 ltFuncApply f args l
+       let f_l2_min = mbMap2 ltFuncMinApply f l2_e
+       let x_tp = mbVarType mb_x
+       f_l2_args_trans <- translateSimplImplOutTailHead mb_simpl
+       f_l_args_trans <- tpTransM $ ctxFunTypeTransM $ translate f_l_args
+       f_l2_min_trans <- tpTransM $ ctxFunTypeTransM $ translate f_l2_min
+       withPermStackOrErrM
          (\(ns :>: x :>: _ :>: l2) -> ns :>: x :>: l2)
-         (\(pctx :>: ptrans_x :>: _ :>: _) ->
-           -- The permission for x does not change type, just its lifetime; the
-           -- permission for l has the (tupled) type of x added as a new input and
-           -- output with tupleSpecMFunBoth
-           RL.append pctx $
-           typeTransF pctx_out_trans (transTerms ptrans_x ++ [f_tm]))
-         m -}
+         (\case
+             (pctx :>: ptrans_x :>: _ :>:
+              PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t)
+               ->
+               return $
+               (pctx :>: typeTransF f_l2_args_trans (transTerms ptrans_x) :>:
+                PTrans_LOwned mb_ls (CruCtxCons tps_in x_tp)
+                (CruCtxCons tps_out x_tp)
+                (mbMap3 (\ps x p -> ps :>: ExprAndPerm (PExpr_Var x) p)
+                 mb_ps_in mb_x f_l2_min)
+                (mbMap3 (\ps x p -> ps :>: ExprAndPerm (PExpr_Var x) p)
+                 mb_ps_out mb_x f_l_args)
+                (weakenLOwnedTrans f_l2_min_trans f_l_args_trans t))
+             _ -> Left "FIXME HERE NOWNOW: write this error")
+         m
 
   [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ _ _ |] ->
+    error "FIXME HERE NOWNOW" {-
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans_l) ->
            RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
-         m
+         m -}
 
   [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ _ _ |] ->
+    error "FIXME HERE NOWNOW" {-
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM
          (\(ns :>: l1) -> ns :>: l1 :>: l1)
@@ -4090,9 +4150,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            -- lowned permission does not change, so the only terms in both the
            -- input and the output are in ptrans_l
            RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
-         m
+         m -}
 
   [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ _ _ |] ->
+    error "FIXME HERE NOWNOW" {-
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM
          (\(ns :>: l1 :>: _) -> ns :>: l1)
@@ -4101,7 +4162,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            -- lowned permission does not change, so the only terms in both the
            -- input and the output are in ptrans_l
            RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
-         m
+         m -}
 
   [nuMP| SImpl_WeakenLifetime _ _ _ _ _ |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
