@@ -4132,13 +4132,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
              _ -> Left "FIXME HERE NOWNOW: write this error")
          m
 
-  [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ _ _ |] ->
-    error "FIXME HERE NOWNOW" {-
-    do pctx_out_trans <- translateSimplImplOut mb_simpl
-       withPermStackM id
-         (\(pctx :>: ptrans_l) ->
-           RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
-         m -}
+  [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ _ mb_l2 |] ->
+    flip (withPermStackOrErrM id) m $ \case
+    (ps :>: PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t) ->
+      return $ (ps :>:) $
+      PTrans_LOwned (mbMap2 (:) mb_l2 mb_ls) tps_in tps_out mb_ps_in mb_ps_out t
+    _ -> Left "FIXME HERE NOWNOW: write this error"
 
   [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ _ _ |] ->
     error "FIXME HERE NOWNOW" {-
