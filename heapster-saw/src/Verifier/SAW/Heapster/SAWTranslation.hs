@@ -3121,22 +3121,6 @@ withPermStackM f_vars f_p =
   info { itiPermStack = f_p (itiPermStack info),
          itiPermStackVars = f_vars (itiPermStackVars info) }
 
--- | Apply a transformation to the (translation of the) current perm stack that
--- could fail, in which case build an error term with the given string
-withPermStackOrErrM :: (RAssign (Member ctx) ps_in -> RAssign (Member ctx) ps_out) ->
-                       (PermTransCtx ctx ps_in ->
-                        Either String (PermTransCtx ctx ps_out)) ->
-                       ImpTransM ext blocks tops rets ps_out ctx SpecTerm ->
-                       ImpTransM ext blocks tops rets ps_in ctx SpecTerm
-withPermStackOrErrM f_vars f_p m =
-  ask >>= \info ->
-  case f_p (itiPermStack info) of
-    Left err -> mkErrorComp err
-    Right ps' ->
-      withInfoM (\info ->
-                  info { itiPermStack = ps',
-                         itiPermStackVars = f_vars (itiPermStackVars info) }) m
-
 -- | Get the current permission stack as a 'DistPerms' in context
 getPermStackDistPerms :: ImpTransM ext blocks tops rets ps ctx
                          (Mb ctx (DistPerms ps))
@@ -4147,30 +4131,33 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        f_l2_args_trans <- translateSimplImplOutTailHead mb_simpl
        f_l_args_trans <- tpTransM $ ctxFunTypeTransM $ translate f_l_args
        f_l2_min_trans <- tpTransM $ ctxFunTypeTransM $ translate f_l2_min
-       withPermStackOrErrM
+       withPermStackM
          (\(ns :>: x :>: _ :>: l2) -> ns :>: x :>: l2)
          (\case
              (pctx :>: ptrans_x :>: _ :>:
               PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t)
                ->
-               return $
-               (pctx :>: typeTransF f_l2_args_trans (transTerms ptrans_x) :>:
-                PTrans_LOwned mb_ls (CruCtxCons tps_in x_tp)
-                (CruCtxCons tps_out x_tp)
-                (mbMap3 (\ps x p -> ps :>: ExprAndPerm (PExpr_Var x) p)
-                 mb_ps_in mb_x f_l2_min)
-                (mbMap3 (\ps x p -> ps :>: ExprAndPerm (PExpr_Var x) p)
-                 mb_ps_out mb_x f_l_args)
-                (weakenLOwnedTrans f_l2_min_trans f_l_args_trans t))
-             _ -> Left "FIXME HERE NOWNOW: write this error")
+               pctx :>: typeTransF f_l2_args_trans (transTerms ptrans_x) :>:
+               PTrans_LOwned mb_ls (CruCtxCons tps_in x_tp)
+               (CruCtxCons tps_out x_tp)
+               (mbMap3 (\ps x p -> ps :>: ExprAndPerm (PExpr_Var x) p)
+                mb_ps_in mb_x f_l2_min)
+               (mbMap3 (\ps x p -> ps :>: ExprAndPerm (PExpr_Var x) p)
+                mb_ps_out mb_x f_l_args)
+               (weakenLOwnedTrans f_l2_min_trans f_l_args_trans t)
+             _ ->
+               panic "translateSimplImpl"
+               ["In SImpl_SplitLifetime rule: expected an lowned permission"])
          m
 
   [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ _ mb_l2 |] ->
-    flip (withPermStackOrErrM id) m $ \case
+    flip (withPermStackM id) m $ \case
     (pctx :>: PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t) ->
-      return $ (pctx :>:) $
+      pctx :>:
       PTrans_LOwned (mbMap2 (:) mb_l2 mb_ls) tps_in tps_out mb_ps_in mb_ps_out t
-    _ -> Left "FIXME HERE NOWNOW: write this error"
+    _ ->
+      panic "translateSimplImpl"
+      ["In SImpl_SubsumeLifetime rule: expected an lowned permission"]
 
   [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ _ _ |] ->
     do ttr_lcur <- translateSimplImplOutTailHead mb_simpl
@@ -4181,16 +4168,17 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ _ mb_l2 |] ->
-    withPermStackOrErrM
+    withPermStackM
     (\(ns :>: l :>: l2) -> ns :>: l)
     (\case
         (pctx :>:
          PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t :>: _) ->
           let mb_ls' = mbMap2 (\l2 ls ->
                                 delete (PExpr_Var l2) ls) mb_l2 mb_ls in
-          return $
-          (pctx :>: PTrans_LOwned mb_ls' tps_in tps_out mb_ps_in mb_ps_out t)
-        _ -> Left "FIXME HERE NOWNOW: write this error")
+          pctx :>: PTrans_LOwned mb_ls' tps_in tps_out mb_ps_in mb_ps_out t
+        _ ->
+          panic "translateSimplImpl"
+          ["In SImpl_RemoveContainedLifetime rule: expected an lowned permission"])
     m
 
   [nuMP| SImpl_WeakenLifetime _ _ _ _ _ |] ->
@@ -4323,7 +4311,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                (mkLOwnedTransId ectx ttr_inF ttr_outF vars))
              m
       _ ->
-          error "FIXME HERE NOWNOW: handle this error!"
+        mkErrorComp "FIXME HERE NOWNOW: write this error!"
 
   [nuMP| SImpl_LCurrentRefl l |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
