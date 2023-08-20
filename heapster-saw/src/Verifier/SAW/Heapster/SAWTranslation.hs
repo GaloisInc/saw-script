@@ -1855,11 +1855,16 @@ extLOwnedTransM cext m =
 
 type LOwnedTransTerm ctx ps_in ps_out = LOwnedTransM ps_in ps_out ctx ()
 
-mkLOwnedTransTermFromTerm :: RelPermsTypeTrans ctx ps_out ->
+mkLOwnedTransTermFromTerm :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps_in ->
+                             RelPermsTypeTrans ctx ps_out ->
                              RAssign (Member ctx) ps_out -> SpecTerm ->
                              LOwnedTransTerm ctx ps_in ps_out
-mkLOwnedTransTermFromTerm ttr_outF vars_out t =
+mkLOwnedTransTermFromTerm ectx ttr_inF ttr_outF vars_out t =
+  LOwnedTransM $ \cext loInfo k -> error "FIXME HERE NOWNOW" {-
+
   gmodify $ \(ExprCtxExt ectx') loInfo ->
+  let etps = exprCtxType ectx
+      lrt = piExprPermLRT etps tps_extra_in tps_out
   let ttr_out =
         extRelPermsTypeTransMulti ectx' ttr_outF $ lownedInfoECtx loInfo in
   let ps_out =
@@ -1870,7 +1875,7 @@ mkLOwnedTransTermFromTerm ttr_outF vars_out t =
           [applyTermLikeMulti t $ transTerms $ lownedInfoPCtx loInfo] in
   LOwnedInfo { lownedInfoECtx = lownedInfoECtx loInfo,
                lownedInfoPCtx = ps_out,
-               lownedInfoPVars = RL.map (weakenMemberR ectx') vars_out }
+               lownedInfoPVars = RL.map (weakenMemberR ectx') vars_out } -}
 
 lownedTransTermTerm :: PureTypeTrans (ExprTransCtx ctx) ->
                        RAssign (Member ctx) ps_in ->
@@ -1891,8 +1896,22 @@ extLOwnedTransTerm :: ExprTransCtx ctx2 ->
                       LOwnedTransTerm (ctx1 :++: ctx2) ps_in ps_out
 extLOwnedTransTerm ectx2 = extLOwnedTransM (ExprCtxExt ectx2)
 
-idLOwnedTransTerm :: LOwnedTransTerm ctx ps ps
-idLOwnedTransTerm = return ()
+-- | Build an 'LOwnedTransTerm' that acts as the identity function on the SAW
+-- core terms in the permissions, using the supplied permission translation for
+-- the output permissions, which must have the same SAW core terms as the input
+-- permissions (or the identity translation would be ill-typed)
+idLOwnedTransTerm :: RelPermsTypeTrans ctx ps_out ->
+                     RAssign (Member ctx) ps_out ->
+                     LOwnedTransTerm ctx ps_in ps_out
+idLOwnedTransTerm ttr_outF vars_out =
+  gmodify $ \(ExprCtxExt ectx') loInfo ->
+  let ectx = lownedInfoECtx loInfo
+      ttr_out =
+        extRelPermsTypeTransMulti ectx' ttr_outF $ lownedInfoECtx loInfo
+      vars_out' = RL.map (weakenMemberR ectx') vars_out in
+  loInfo { lownedInfoPVars = vars_out',
+           lownedInfoPCtx =
+             typeTransF ttr_out (transTerms (lownedInfoPCtx loInfo)) }
 
 weakenLOwnedTransTerm :: ImpTypeTrans (PermTrans ctx tp) ->
                          LOwnedTransTerm ctx ps_in ps_out ->
@@ -1941,7 +1960,17 @@ mkLOwnedTrans :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps_in ->
                  SpecTerm -> LOwnedTrans ctx RNil ps_in ps_out
 mkLOwnedTrans ectx ps_inF ps_outF vars_out t =
   LOwnedTrans ectx MNil MNil ps_inF ps_outF (const $ pure MNil)
-  (mkLOwnedTransTermFromTerm ps_outF vars_out t)
+  (mkLOwnedTransTermFromTerm ectx (preNilRelPermsTypeTrans ps_inF)
+   ps_outF vars_out t)
+
+-- | Build an initial 'LOwnedTrans' with an empty @ps_extra@ and an identity
+-- function on SAW core terms
+mkLOwnedTransId :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps ->
+                   RelPermsTypeTrans ctx ps -> RAssign (Member ctx) ps ->
+                   LOwnedTrans ctx RNil ps ps
+mkLOwnedTransId ectx ps_inF ps_outF vars_out =
+  LOwnedTrans ectx MNil MNil ps_inF ps_outF (const $ pure MNil)
+  (idLOwnedTransTerm ps_outF vars_out)
 
 -- | Extend the context of an 'LOwnedTrans'
 extLOwnedTransMulti :: ExprTransCtx ctx2 ->
@@ -2072,6 +2101,10 @@ app1RelPermsTypeTrans :: RelPermsTypeTrans ctx ps ->
                          RelPermsTypeTrans ctx (ps :> tp)
 app1RelPermsTypeTrans tps1 tps2 = \ectx -> (:>:) <$> tps1 ectx <*> tps2 ectx
 
+-- | Prepend an 'RNil' list of permissions to a 'RelPermsTypeTrans'
+preNilRelPermsTypeTrans :: RelPermsTypeTrans ctx ps ->
+                           RelPermsTypeTrans ctx (RNil :++: ps)
+preNilRelPermsTypeTrans = appRelPermsTypeTrans (const $ pure MNil)
 
 -- | Build a permission translation context with just @true@ permissions
 truePermTransCtx :: CruCtx ps -> PermTransCtx ctx ps
@@ -4267,8 +4300,6 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m) -}
 
   [nuMP| SImpl_IntroLOwnedSimple _ _ _ |] ->
-    error "FIXME HERE NOWNOW"
-    {-
     do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
        ttrans <- translateSimplImplOut mb_simpl
        withPermStackM id
@@ -4276,19 +4307,23 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            let (pctx0, pctx_ps :>: _) = RL.split ps0 prx_ps_l pctx in
            RL.append pctx0 $ typeTransF ttrans (transTerms pctx_ps))
          m
-     -}
 
-  [nuMP| SImpl_ElimLOwnedSimple _ _ mb_lops |] ->
-    error "FIXME HERE NOWNOW"
-    {-
-    do ttrans <- translateSimplImplOutHead mb_simpl
-       lops_tp <- typeTransTupleType <$> translate mb_lops
-       f_tm <-
-         lambdaSpecTermTransM "ps" lops_tp $ \x ->
-         return $ returnSpecTerm lops_tp x
-       withPermStackM id
-         (\(pctx0 :>: _) -> pctx0 :>: typeTransF ttrans [f_tm])
-         m -}
+  [nuMP| SImpl_ElimLOwnedSimple mb_l mb_tps mb_ps |] ->
+    case (mbExprPermsMembers mb_ps, mbMaybe (mbMap2 lownedPermsSimpleIn mb_l mb_ps)) of
+      (Just vars, Just mb_ps') ->
+        do ectx <- infoCtx <$> ask
+           let etps = exprCtxType ectx
+           ttr_inF <- tpTransM $ ctxFunTypeTransM $ translate mb_ps'
+           ttr_outF <- tpTransM $ ctxFunTypeTransM $ translate mb_ps
+           withPermStackM id
+             (\(pctx :>: _) ->
+               pctx :>:
+               PTrans_LOwned (fmap (const []) mb_l)
+               (mbLift mb_tps) (mbLift mb_tps) mb_ps' mb_ps
+               (mkLOwnedTransId ectx ttr_inF ttr_outF vars))
+             m
+      _ ->
+          error "FIXME HERE NOWNOW: handle this error!"
 
   [nuMP| SImpl_LCurrentRefl l |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl

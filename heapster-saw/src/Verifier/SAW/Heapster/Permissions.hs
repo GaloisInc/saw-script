@@ -2787,6 +2787,12 @@ exprPermVarAndPerm _ = Nothing
 exprPermsToDistPerms :: ExprPerms ctx -> Maybe (DistPerms ctx)
 exprPermsToDistPerms = traverseRAssign exprPermVarAndPerm
 
+-- | Convert an 'ExprPerms' in bindings to a 'DistPerms' in bindings
+mbExprPermsToDistPerms :: Mb ctx (ExprPerms ps) ->
+                          Maybe (Mb ctx (DistPerms ps))
+mbExprPermsToDistPerms =
+  mbMaybe . mbMapCl $(mkClosed [| exprPermsToDistPerms |])
+
 -- | Find all permissions in an 'ExprPerms' list for a variable
 exprPermsForVar :: ExprVar a -> ExprPerms ps -> [ValuePerm a]
 exprPermsForVar _ MNil = []
@@ -2825,14 +2831,18 @@ mbDistPermsToExprPerms = mbMapCl $(mkClosed [| distPermsToExprPerms |])
 exprPermsVars :: ExprPerms ps -> Maybe (RAssign Name ps)
 exprPermsVars = fmap distPermsVars . exprPermsToDistPerms
 
+-- | Convert the variables in a 'DistPerms' in a binding to variables bound
+-- in that binding, if possible
+mbDistPermsMembers :: Mb ctx (DistPerms ps) -> Maybe (RAssign (Member ctx) ps)
+mbDistPermsMembers [nuP| mb_ps' :>: VarAndPerm mb_n _ |]
+  | Left memb <- mbNameBoundP mb_n = (:>: memb) <$> mbDistPermsMembers mb_ps'
+mbDistPermsMembers [nuP| MNil |] = Just MNil
+mbDistPermsMembers _ = Nothing
+
 -- | Convert the expressions in an 'ExprPerms' in a binding to variables bound
 -- in that binding, if possible
 mbExprPermsMembers :: Mb ctx (ExprPerms ps) -> Maybe (RAssign (Member ctx) ps)
-mbExprPermsMembers mb_ps =
-  mbMaybe (mbMapCl $(mkClosed [| exprPermsVars |]) mb_ps) >>= \mb_ns ->
-  traverseRAssign (\(Compose mb_n) -> case mbNameBoundP mb_n of
-                      Left memb -> Just memb
-                      _ -> Nothing) (mbRAssign mb_ns)
+mbExprPermsMembers = mbExprPermsToDistPerms >=> mbDistPermsMembers
 
 -- | Convert the expressions in an 'ExprPerms' to variables, if possible, and
 -- collect them into a list
