@@ -1691,13 +1691,15 @@ data LLVMArrayBorrowTrans ctx w =
 data LOwnedInfo ps ctx =
   LOwnedInfo { lownedInfoECtx :: ExprTransCtx ctx,
                lownedInfoPCtx :: PermTransCtx ctx ps,
-               lownedInfoPVars :: RAssign (Member ctx) ps }
+               lownedInfoPVars :: RAssign (Member ctx) ps,
+               lownedInfoRetType :: TypeDesc }
 
 -- | Convert an 'ImpTransInfo' to an 'LOwnedInfo'
 impInfoToLOwned :: ImpTransInfo ext blocks tops rets ps ctx -> LOwnedInfo ps ctx
 impInfoToLOwned (ImpTransInfo {..}) =
   LOwnedInfo { lownedInfoECtx = itiExprCtx, lownedInfoPCtx = itiPermStack,
-               lownedInfoPVars = itiPermStackVars }
+               lownedInfoPVars = itiPermStackVars,
+               lownedInfoRetType = itiReturnType }
 
 -- | Convert an 'LOwnedInfo' to an 'ImpTransInfo' using an existing 'ImpTransInfo'
 lownedInfoToImp :: LOwnedInfo ps ctx ->
@@ -1706,7 +1708,8 @@ lownedInfoToImp :: LOwnedInfo ps ctx ->
 lownedInfoToImp (LOwnedInfo {..}) (ImpTransInfo {..}) =
   ImpTransInfo { itiExprCtx = lownedInfoECtx, itiPermStack = lownedInfoPCtx,
                  itiPermStackVars = lownedInfoPVars,
-                 itiPermCtx = RL.map (const PTrans_True) lownedInfoECtx, .. }
+                 itiPermCtx = RL.map (const PTrans_True) lownedInfoECtx,
+                 itiReturnType = lownedInfoRetType, .. }
 
 loInfoSetPerms :: PermTransCtx ctx ps' -> RAssign (Member ctx) ps' ->
                   LOwnedInfo ps ctx -> LOwnedInfo ps' ctx
@@ -1716,11 +1719,11 @@ loInfoSetPerms ps' vars' (LOwnedInfo {..}) =
 loInfoSplit :: Proxy ps1 -> RAssign any ps2 ->
                LOwnedInfo (ps1 :++: ps2) ctx ->
                (LOwnedInfo ps1 ctx, LOwnedInfo ps2 ctx)
-loInfoSplit prx1 prx2 loInfo =
-  let ctx = lownedInfoECtx loInfo
-      (ps1, ps2) = RL.split prx1 prx2 (lownedInfoPCtx loInfo)
-      (vars1, vars2) = RL.split prx1 prx2 (lownedInfoPVars loInfo) in
-  (LOwnedInfo ctx ps1 vars1, LOwnedInfo ctx ps2 vars2)
+loInfoSplit prx1 prx2 (LOwnedInfo {..}) =
+  let (ps1, ps2) = RL.split prx1 prx2 lownedInfoPCtx
+      (vars1, vars2) = RL.split prx1 prx2 lownedInfoPVars in
+  (LOwnedInfo { lownedInfoPCtx = ps1, lownedInfoPVars = vars1, .. },
+   LOwnedInfo { lownedInfoPCtx = ps2, lownedInfoPVars = vars2, .. })
 
 loInfoAppend :: LOwnedInfo ps1 ctx -> LOwnedInfo ps2 ctx ->
                 LOwnedInfo (ps1 :++: ps2) ctx
@@ -1785,7 +1788,8 @@ extLOwnedInfoExt :: ExprCtxExt ctx1 ctx2 -> LOwnedInfo ps ctx1 ->
 extLOwnedInfoExt cext@(ExprCtxExt ectx3) (LOwnedInfo {..}) =
   LOwnedInfo { lownedInfoECtx = extExprTransCtx cext lownedInfoECtx,
                lownedInfoPCtx = extPermTransCtxExt cext lownedInfoPCtx,
-               lownedInfoPVars = RL.map (weakenMemberR ectx3) lownedInfoPVars }
+               lownedInfoPVars = RL.map (weakenMemberR ectx3) lownedInfoPVars,
+               .. }
 
 
 -- | FIXME HERE NOWNOW: docs; explain that it's as if the input LOwnedInfo is
@@ -1860,22 +1864,17 @@ mkLOwnedTransTermFromTerm :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps_in ->
                              RAssign (Member ctx) ps_out -> SpecTerm ->
                              LOwnedTransTerm ctx ps_in ps_out
 mkLOwnedTransTermFromTerm ectx ttr_inF ttr_outF vars_out t =
-  LOwnedTransM $ \cext loInfo k -> error "FIXME HERE NOWNOW" {-
-
-  gmodify $ \(ExprCtxExt ectx') loInfo ->
-  let etps = exprCtxType ectx
-      lrt = piExprPermLRT etps tps_extra_in tps_out
-  let ttr_out =
-        extRelPermsTypeTransMulti ectx' ttr_outF $ lownedInfoECtx loInfo in
-  let ps_out =
-        if length (typeTransTypes ttr_out) == 0 then
-          typeTransF ttr_out []
-        else
-          typeTransF (tupleTypeTrans ttr_out)
-          [applyTermLikeMulti t $ transTerms $ lownedInfoPCtx loInfo] in
-  LOwnedInfo { lownedInfoECtx = lownedInfoECtx loInfo,
-               lownedInfoPCtx = ps_out,
-               lownedInfoPVars = RL.map (weakenMemberR ectx') vars_out } -}
+  LOwnedTransM $ \(ExprCtxExt ectx') loInfo k ->
+  let lrt = piExprPermLRT (exprCtxType ectx) ttr_inF ttr_outF
+      t_app = applyClosSpecTerm lrt t (transTerms $ lownedInfoPCtx loInfo)
+      t_ret_trans = tupleTypeTrans $ ttr_outF ectx
+      t_ret_tp = typeTransTupleType $ ttr_outF ectx in
+  bindSpecTerm t_ret_tp (typeDescType $ lownedInfoRetType loInfo) t_app $
+  lambdaTermLike "lowned_ret" t_ret_tp $ \lowned_ret ->
+  let pctx_out' =
+        extPermTransCtxMulti ectx' $ typeTransF t_ret_trans [lowned_ret]
+      vars_out' = RL.map (weakenMemberR ectx') vars_out in
+  k reflExprCtxExt (loInfoSetPerms pctx_out' vars_out' loInfo) ()
 
 lownedTransTermTerm :: PureTypeTrans (ExprTransCtx ctx) ->
                        RAssign (Member ctx) ps_in ->
@@ -1885,9 +1884,10 @@ lownedTransTermTerm :: PureTypeTrans (ExprTransCtx ctx) ->
 lownedTransTermTerm ectx vars_in ps_inF ps_outF t =
   lambdaTrans "e" ectx $ \exprs ->
   lambdaTrans "p" (ps_inF exprs) $ \ps_in ->
+  let ret_tp = typeTransTupleDesc $ ps_outF exprs in
   let loInfo =
         LOwnedInfo { lownedInfoECtx = exprs, lownedInfoPCtx = ps_in,
-                     lownedInfoPVars = vars_in } in
+                     lownedInfoPVars = vars_in, lownedInfoRetType = ret_tp } in
   runLOwnedTransM t reflExprCtxExt loInfo $ \_ loInfo_out () ->
   transTupleTerm (lownedInfoPCtx loInfo_out)
 
