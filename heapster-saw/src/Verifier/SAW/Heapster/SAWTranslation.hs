@@ -1716,11 +1716,12 @@ loInfoSetPerms :: PermTransCtx ctx ps' -> RAssign (Member ctx) ps' ->
 loInfoSetPerms ps' vars' (LOwnedInfo {..}) =
   LOwnedInfo { lownedInfoPCtx = ps', lownedInfoPVars = vars', ..}
 
-loInfoSplit :: Proxy ps1 -> RAssign any ps2 ->
+loInfoSplit :: prx ps1 -> RAssign any ps2 ->
                LOwnedInfo (ps1 :++: ps2) ctx ->
                (LOwnedInfo ps1 ctx, LOwnedInfo ps2 ctx)
-loInfoSplit prx1 prx2 (LOwnedInfo {..}) =
-  let (ps1, ps2) = RL.split prx1 prx2 lownedInfoPCtx
+loInfoSplit (_ :: prx ps1) prx2 (LOwnedInfo {..}) =
+  let prx1 :: Proxy ps1 = Proxy
+      (ps1, ps2) = RL.split prx1 prx2 lownedInfoPCtx
       (vars1, vars2) = RL.split prx1 prx2 lownedInfoPVars in
   (LOwnedInfo { lownedInfoPCtx = ps1, lownedInfoPVars = vars1, .. },
    LOwnedInfo { lownedInfoPCtx = ps2, lownedInfoPVars = vars2, .. })
@@ -1927,12 +1928,13 @@ weakenLOwnedTransTerm ttr_out t =
                         (MNil :>:) $ extPermTransExt cext $ typeTransF ttr_out $
                         transTerms $ lownedInfoPCtx info_tp })
 
-bindLOwnedTransTerm ::
-  Proxy ps_extra1 -> RAssign any ps_extra2 -> RAssign any ps_in ->
+-- | Combine 'LOwnedTransTerm's for the 'SImpl_MapLifetime' rule
+mapLtLOwnedTransTerm ::
+  prx ps_extra1 -> RAssign any1 ps_extra2 -> RAssign any2 ps_in ->
   LOwnedTransTerm ctx (ps_extra1 :++: ps_in) ps_mid ->
   LOwnedTransTerm ctx (ps_extra2 :++: ps_mid) ps_out ->
   LOwnedTransTerm ctx ((ps_extra1 :++: ps_extra2) :++: ps_in) ps_out
-bindLOwnedTransTerm prx_extra1 prx_extra2 prx_in t1 t2 =
+mapLtLOwnedTransTerm prx_extra1 prx_extra2 prx_in t1 t2 =
   ggetting $ \cext info_extra_in ->
   let (info_extra, info_in) = loInfoSplit Proxy prx_in info_extra_in
       (info_extra1, info_extra2) =
@@ -2015,6 +2017,33 @@ lownedTransTerm (mbExprPermsMembers ->
 lownedTransTerm _ _ =
   failTermLike "FIXME HERE NOWNOW: write this error message"
 
+-- | Apply the 'SImpl_MapLifetime' rule to an 'LOwnedTrans'
+mapLtLOwnedTrans ::
+  PermTransCtx ctx ps1 -> RAssign (Member ctx) ps1 ->
+  RelPermsTypeTrans ctx ps1 ->
+  PermTransCtx ctx ps2 -> RAssign (Member ctx) ps2 ->
+  RelPermsTypeTrans ctx ps2 ->
+  RAssign any ps_in' -> RelPermsTypeTrans ctx ps_in' ->
+  RelPermsTypeTrans ctx ps_out' ->
+  LOwnedTransTerm ctx (ps1 :++: ps_in') ps_in ->
+  LOwnedTransTerm ctx (ps2 :++: ps_out) ps_out' ->
+  LOwnedTrans ctx ps_extra ps_in ps_out ->
+  LOwnedTrans ctx ((ps1 :++: ps_extra) :++: ps2) ps_in' ps_out'
+mapLtLOwnedTrans pctx1 vars1 ttr1F pctx2 vars2 ttr2F
+  prx_in' ttr_inF' ttr_outF' t1 t2
+  (LOwnedTrans {..}) =
+  LOwnedTrans
+  { lotrECtx = lotrECtx
+  , lotrPsExtra = RL.append (RL.append pctx1 lotrPsExtra) pctx2
+  , lotrVarsExtra = RL.append (RL.append vars1 lotrVarsExtra) vars2
+  , lotrRelTransIn = ttr_inF' , lotrRelTransOut = ttr_outF'
+  , lotrRelTransExtra =
+      appRelPermsTypeTrans (appRelPermsTypeTrans ttr1F lotrRelTransExtra) ttr2F
+  , lotrTerm =
+      mapLtLOwnedTransTerm (RL.append pctx1 lotrPsExtra) pctx2 prx_in'
+      (mapLtLOwnedTransTerm pctx1 lotrPsExtra prx_in' t1 lotrTerm)
+      t2
+  }
 
 -- | The translation of the vacuously true permission
 pattern PTrans_True :: PermTrans ctx a
@@ -4191,64 +4220,53 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            RL.append pctx (typeTransF pctx_out_trans $ transTerms ptrans_x))
          m
 
-  [nuMP| SImpl_MapLifetime l _ _ _ ps_in ps_out _ _
+  [nuMP| SImpl_MapLifetime _ _ tps_in tps_out _ _ tps_in' tps_out'
                            ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
-    error "FIXME HERE NOWNOW"
-    -- First, translate the output permissions and all of the perm lists
-    {-
-    do pctx_out_trans <- translateSimplImplOut mb_simpl
-       ps_in_trans <- tupleTypeTrans <$> translate ps_in
-       ps_out_trans <- tupleTypeTrans <$> translate ps_out
-       ps_in'_trans <- tupleTypeTrans <$> translate ps_in'
-       ps_out'_trans <- tupleTypeTrans <$> translate ps_out'
-       -- ps1_trans <- translate ps1
-       -- ps2_trans <- translate ps2
+    case (mbDistPermsMembers ps1, mbDistPermsMembers ps2) of
+      (Just vars1, Just vars2) ->
+        do ttr_inF' <- tpTransM $ ctxFunTypeTransM $ translate ps_in'
+           ttr_outF' <- tpTransM $ ctxFunTypeTransM $ translate ps_out'
+           ttr1F <- tpTransM $ ctxFunTypeTransM $ translate ps1
+           ttr2F <- tpTransM $ ctxFunTypeTransM $ translate ps2
+           t1 <-
+             translateLOwnedPermImpl "Error mapping lowned input perms:" impl_in
+           t2 <-
+             translateLOwnedPermImpl "Error mapping lowned output perms:" impl_out
 
-       -- Next, split out the various input permissions from the rest of the pctx
-       let prxs1 = mbRAssignProxies ps1
-       let prxs2 = mbRAssignProxies ps2
-       let prxs_in = RL.append prxs1 prxs2 :>: Proxy
-       pctx <- itiPermStack <$> ask
-       (pctx_ps, pctx12 :>: ptrans_l) <- pure $ RL.split ps0 prxs_in pctx
-       let (pctx1, pctx2) = RL.split prxs1 prxs2 pctx12
+           -- Next, split out the various input permissions from the rest of the pctx
+           let prxs1 = mbRAssignProxies ps1
+           let prxs2 = mbRAssignProxies ps2
+           let prxs_in = RL.append prxs1 prxs2 :>: Proxy
+           let prxs_in' = cruCtxProxies $ mbLift tps_in'
+           pctx <- itiPermStack <$> ask
+           let (pctx0, pctx12 :>: ptrans_l) = RL.split ps0 prxs_in pctx
+           let (pctx1, pctx2) = RL.split prxs1 prxs2 pctx12
 
-       -- Also split out the input variables and replace them with the ps_out vars
-       pctx_vars <- itiPermStackVars <$> ask
-       let (vars_ps, vars12 :>: _) = RL.split ps0 prxs_in pctx_vars
-       let (vars1, vars2) = RL.split prxs1 prxs2 vars12
-       let vars_out = vars_ps :>: translateVar l
+           -- Also split out the input variables and replace them with the ps_out vars
+           pctx_vars <- itiPermStackVars <$> ask
+           let (vars_ps, vars12 :>: _) = RL.split ps0 prxs_in pctx_vars
+           let (vars1, vars2) = RL.split prxs1 prxs2 vars12
 
-       -- Now build the output lowned function by composing the input lowned
-       -- function with the translations of the implications on inputs and outputs
-       let fromJustOrError (Just x) = x
-           fromJustOrError Nothing = error "translateSimplImpl: SImpl_MapLifetime"
-           ps_in'_vars =
-             RL.map (translateVar . getCompose) $ mbRAssign $
-             fmap (fromJustOrError . exprPermsVars) ps_in'
-           ps_out_vars =
-             RL.map (translateVar . getCompose) $ mbRAssign $
-             fmap (fromJustOrError . exprPermsVars) ps_out
-       impl_in_tm <-
-         translateCurryLocalPermImpl "Error mapping lifetime input perms:" impl_in
-         pctx1 vars1 ps_in'_trans ps_in'_vars ps_in_trans
-       impl_out_tm <-
-         translateCurryLocalPermImpl "Error mapping lifetime output perms:" impl_out
-         pctx2 vars2 ps_out_trans ps_out_vars ps_out'_trans
-       l_res_tm_h <-
-         applyNamedSpecOpEmptyM "Prelude.composeS"
-         [typeTransType1Imp ps_in_trans, typeTransType1Imp ps_out_trans,
-          typeTransType1Imp ps_out'_trans, transTerm1 ptrans_l, impl_out_tm]
-       l_res_tm <-
-         applyNamedSpecOpEmptyM "Prelude.composeS"
-         [typeTransType1Imp ps_in'_trans, typeTransType1Imp ps_in_trans,
-          typeTransType1Imp ps_out'_trans, impl_in_tm, l_res_tm_h]
-
-       -- Finally, update the permissions
-       withPermStackM
-         (\_ -> vars_out)
-         (\_ -> RL.append pctx_ps $ typeTransF pctx_out_trans [l_res_tm])
-         m
-      -}
+           withPermStackM
+             (\(_ :>: l) -> vars_ps :>: l)
+             (\case
+                 (_ :>:
+                  PTrans_LOwned mb_ls
+                  (testEquality (mbLift tps_in) -> Just Refl)
+                  (testEquality (mbLift tps_out) -> Just Refl) _ _ lotr)
+                   ->
+                   pctx0 :>:
+                   PTrans_LOwned mb_ls (mbLift tps_in') (mbLift tps_out')
+                   ps_in' ps_out'
+                   (mapLtLOwnedTrans pctx1 vars1 ttr1F pctx2 vars2 ttr2F
+                    prxs_in' ttr_inF' ttr_outF' t1 t2 lotr)
+                 _ ->
+                   panic "translateSimplImpl"
+                   ["In SImpl_MapLifetime rule: expected an lowned permission"])
+             m
+      _ ->
+        panic "translateSimplImpl"
+        ["In SImpl_MapLifetime rule: malformed ps1 or ps2"]
 
   [nuMP| SImpl_EndLifetime _ _ _ ps_in ps_out |] ->
     -- First, translate the output permissions and the input and output types of
