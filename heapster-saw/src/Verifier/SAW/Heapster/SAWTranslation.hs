@@ -1687,7 +1687,7 @@ data LLVMArrayBorrowTrans ctx w =
     llvmArrayBorrowTransProps :: [BVPropTrans ctx w] }
 -}
 
--- | FIXME HERE NOWNOW: document all of this!
+-- | FIXME HERE NOW: document all of this!
 data LOwnedInfo ps ctx =
   LOwnedInfo { lownedInfoECtx :: ExprTransCtx ctx,
                lownedInfoPCtx :: PermTransCtx ctx ps,
@@ -1793,7 +1793,7 @@ extLOwnedInfoExt cext@(ExprCtxExt ectx3) (LOwnedInfo {..}) =
                .. }
 
 
--- | FIXME HERE NOWNOW: docs; explain that it's as if the input LOwnedInfo is
+-- | FIXME HERE NOW: docs; explain that it's as if the input LOwnedInfo is
 -- relative to ctx_in and the output is relative to ctx_out except this ensures
 -- that those are extensions of what they are supposed to be
 newtype LOwnedTransM ps_in ps_out ctx a =
@@ -2015,7 +2015,7 @@ lownedTransTerm (mbExprPermsMembers ->
   applyClosSpecTerm lrt (mkFreshClosSpecTerm lrt (const fun_tm))
   (transTerms ectx ++ transTerms ps_extra)
 lownedTransTerm _ _ =
-  failTermLike "FIXME HERE NOWNOW: write this error message"
+  failTermLike "FIXME HERE NOW: write this error message"
 
 -- | Apply the 'SImpl_MapLifetime' rule to an 'LOwnedTrans'
 mapLtLOwnedTrans ::
@@ -2105,6 +2105,21 @@ unPTransLLVMArray :: String -> PermTrans ctx (LLVMPointerType w) ->
                      LLVMArrayPermTrans ctx w
 unPTransLLVMArray _ (PTrans_Conj [APTrans_LLVMArray aptrans]) = aptrans
 unPTransLLVMArray str _ = error (str ++ ": not an LLVM array permission")
+
+data SomeLOwnedTrans ctx ps_in ps_out =
+  forall ps_extra. SomeLOwnedTrans (LOwnedTrans ctx ps_extra ps_in ps_out)
+
+-- | Extract the 'LOwnedTrans' of a conjunction of a single @lowned@ permission
+-- with the specified input and output types
+unPTransLOwned :: String -> Mb ctx (CruCtx ps_in) -> Mb ctx (CruCtx ps_out) ->
+                  PermTrans ctx LifetimeType ->
+                  SomeLOwnedTrans ctx ps_in ps_out
+unPTransLOwned _ tps_in tps_out
+  (PTrans_LOwned _ (testEquality (mbLift tps_in) -> Just Refl)
+   (testEquality (mbLift tps_out) -> Just Refl) _ _ lotr)
+  = SomeLOwnedTrans lotr
+unPTransLOwned fname _ _ _ =
+  panic fname ["Expected lowned permission"]
 
 -- | Add a borrow translation to the translation of an array permission
 
@@ -3384,7 +3399,7 @@ instance Semigroup HasFailures where
 instance Monoid HasFailures where
   mempty = NoFailures
 
--- | FIXME HERE NOWNOW: docs!
+-- | FIXME HERE NOW: docs!
 data CtxExt ctx1 ctx2 where
   CtxExt :: RAssign Proxy ctx3 -> CtxExt ctx1 (ctx1 :++: ctx3)
 
@@ -4220,90 +4235,85 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            RL.append pctx (typeTransF pctx_out_trans $ transTerms ptrans_x))
          m
 
-  [nuMP| SImpl_MapLifetime _ _ tps_in tps_out _ _ tps_in' tps_out'
+  [nuMP| SImpl_MapLifetime _ mb_ls tps_in tps_out _ _ tps_in' tps_out'
                            ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
-    case (mbDistPermsMembers ps1, mbDistPermsMembers ps2) of
-      (Just vars1, Just vars2) ->
-        do ttr_inF' <- tpTransM $ ctxFunTypeTransM $ translate ps_in'
-           ttr_outF' <- tpTransM $ ctxFunTypeTransM $ translate ps_out'
-           ttr1F <- tpTransM $ ctxFunTypeTransM $ translate ps1
-           ttr2F <- tpTransM $ ctxFunTypeTransM $ translate ps2
-           t1 <-
-             translateLOwnedPermImpl "Error mapping lowned input perms:" impl_in
-           t2 <-
-             translateLOwnedPermImpl "Error mapping lowned output perms:" impl_out
+    -- First, translate the various permissions and implications
+    do ttr_inF' <- tpTransM $ ctxFunTypeTransM $ translate ps_in'
+       ttr_outF' <- tpTransM $ ctxFunTypeTransM $ translate ps_out'
+       ttr1F <- tpTransM $ ctxFunTypeTransM $ translate ps1
+       ttr2F <- tpTransM $ ctxFunTypeTransM $ translate ps2
+       t1 <-
+         translateLOwnedPermImpl "Error mapping lowned input perms:" impl_in
+       t2 <-
+         translateLOwnedPermImpl "Error mapping lowned output perms:" impl_out
 
-           -- Next, split out the various input permissions from the rest of the pctx
-           let prxs1 = mbRAssignProxies ps1
-           let prxs2 = mbRAssignProxies ps2
-           let prxs_in = RL.append prxs1 prxs2 :>: Proxy
-           let prxs_in' = cruCtxProxies $ mbLift tps_in'
-           pctx <- itiPermStack <$> ask
-           let (pctx0, pctx12 :>: ptrans_l) = RL.split ps0 prxs_in pctx
-           let (pctx1, pctx2) = RL.split prxs1 prxs2 pctx12
+       -- Next, split out the various input permissions from the rest of the pctx
+       let prxs1 = mbRAssignProxies ps1
+       let prxs2 = mbRAssignProxies ps2
+       let prxs_in = RL.append prxs1 prxs2 :>: Proxy
+       let prxs_in' = cruCtxProxies $ mbLift tps_in'
+       pctx <- itiPermStack <$> ask
+       let (pctx0, pctx12 :>: ptrans_l) = RL.split ps0 prxs_in pctx
+       let (pctx1, pctx2) = RL.split prxs1 prxs2 pctx12
+       let some_lotr =
+             unPTransLOwned "translateSimplImpl" tps_in tps_out ptrans_l
 
-           -- Also split out the input variables and replace them with the ps_out vars
-           pctx_vars <- itiPermStackVars <$> ask
-           let (vars_ps, vars12 :>: _) = RL.split ps0 prxs_in pctx_vars
-           let (vars1, vars2) = RL.split prxs1 prxs2 vars12
+       -- Also split out the input variables and replace them with the ps_out vars
+       pctx_vars <- itiPermStackVars <$> ask
+       let (vars_ps, vars12 :>: _) = RL.split ps0 prxs_in pctx_vars
+       let (vars1, vars2) = RL.split prxs1 prxs2 vars12
 
-           withPermStackM
-             (\(_ :>: l) -> vars_ps :>: l)
-             (\case
-                 (_ :>:
-                  PTrans_LOwned mb_ls
-                  (testEquality (mbLift tps_in) -> Just Refl)
-                  (testEquality (mbLift tps_out) -> Just Refl) _ _ lotr)
-                   ->
-                   pctx0 :>:
-                   PTrans_LOwned mb_ls (mbLift tps_in') (mbLift tps_out')
-                   ps_in' ps_out'
-                   (mapLtLOwnedTrans pctx1 vars1 ttr1F pctx2 vars2 ttr2F
-                    prxs_in' ttr_inF' ttr_outF' t1 t2 lotr)
-                 _ ->
-                   panic "translateSimplImpl"
-                   ["In SImpl_MapLifetime rule: expected an lowned permission"])
-             m
-      _ ->
-        panic "translateSimplImpl"
-        ["In SImpl_MapLifetime rule: malformed ps1 or ps2"]
+       -- Finally, modify the PTrans_LOwned on top of the stack using
+       -- mapLtLOwnedTrans
+       withPermStackM
+         (\(_ :>: l) -> vars_ps :>: l)
+         (\_ ->
+           case some_lotr of
+             SomeLOwnedTrans lotr ->
+               pctx0 :>:
+               PTrans_LOwned mb_ls (mbLift tps_in') (mbLift tps_out') ps_in' ps_out'
+               (mapLtLOwnedTrans pctx1 vars1 ttr1F pctx2 vars2 ttr2F
+                prxs_in' ttr_inF' ttr_outF' t1 t2 lotr))
+         m
 
-  [nuMP| SImpl_EndLifetime _ _ _ ps_in ps_out |] ->
-    -- First, translate the output permissions and the input and output types of
-    -- the monadic function for the lifeime ownership permission
-    error "FIXME HERE NOWNOW" {-
-    do ps_out_trans <- tupleTypeTrans <$> translate ps_out
+  [nuMP| SImpl_EndLifetime _ tps_in tps_out ps_in ps_out |] ->
+    -- First, translate the in and out permissions of the lowned permission
+    do ps_in_trans <- translate ps_in
+       ps_out_trans <- tupleTypeTrans <$> translate ps_out
        let prxs_in = mbRAssignProxies ps_in :>: Proxy
+       let lrt_out = typeDescLRT $ typeTransTupleDesc ps_out_trans
+       let lrt = arrowLRTTrans "p" ps_in_trans lrt_out
 
        -- Next, split out the ps_in permissions from the rest of the pctx
        pctx <- itiPermStack <$> ask
        let (pctx_ps, pctx_in :>: ptrans_l) = RL.split ps0 prxs_in pctx
+       let some_lotr =
+             unPTransLOwned "translateSimplImpl" tps_in tps_out ptrans_l
 
        -- Also split out the ps_in variables and replace them with the ps_out vars
        pctx_vars <- itiPermStackVars <$> ask
        let (ps_vars, _ :>: _) = RL.split ps0 prxs_in pctx_vars
-       let fromJustHelper (Just x) = x
-           fromJustHelper _ = error "translateSimplImpl: SImpl_EndLifetime"
-       let vars_out =
-             RL.append ps_vars $ RL.map (translateVar . getCompose) $
-             mbRAssign $ fmap (fromJustHelper . exprPermsVars) ps_out
+       let vars_out = case mbExprPermsMembers ps_out of
+             Just x -> x
+             Nothing -> panic "translateSimplImpl"
+               ["In SImpl_EndLifetime rule: malformed ps_out"]
 
        -- Now we apply the lifetime ownerhip function to ps_in and bind its output
        -- in the rest of the computation
-       lifted_m <-
-         applyNamedSpecOpM "Prelude.liftStackS"
-         [typeTransType1Imp ps_out_trans,
-          applyTermLike (transTerm1 ptrans_l) (transTupleTerm pctx_in)]
-       bindSpecMTransM
-         lifted_m
-         ps_out_trans
-         "endl_ps"
-         (\pctx_out ->
-           withPermStackM
-           (\(_ :>: l) -> vars_out :>: l)
-           (\_ -> RL.append pctx_ps pctx_out :>:
-                  PTrans_Conj [APTrans_LFinished])
-           m) -}
+       case some_lotr of
+         SomeLOwnedTrans lotr ->
+           bindSpecMTransM
+           (callClosSpecTerm
+            lrt_out (applyClosSpecTerm
+                     lrt (lownedTransTerm ps_in lotr) (transTerms pctx_in)))
+           ps_out_trans
+           "endl_ps"
+           (\pctx_out ->
+             withPermStackM
+             (\(_ :>: l) -> RL.append ps_vars vars_out :>: l)
+             (\_ -> RL.append pctx_ps pctx_out :>:
+                    PTrans_Conj [APTrans_LFinished])
+             m)
 
   [nuMP| SImpl_IntroLOwnedSimple _ _ _ |] ->
     do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
@@ -4329,7 +4339,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                (mkLOwnedTransId ectx ttr_inF ttr_outF vars))
              m
       _ ->
-        mkErrorComp "FIXME HERE NOWNOW: write this error!"
+        panic "translateSimplImpl"
+        ["In SImpl_ElimLOwnedSimple rule: malformed permissions argument"]
 
   [nuMP| SImpl_LCurrentRefl l |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
