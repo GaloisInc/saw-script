@@ -173,9 +173,7 @@ tyToShape col = go
       where
         -- We use a ref (of the same mutability as `ty`) when possible, to
         -- avoid unnecessary clobbering.
-        refTy = case ty of
-            M.TyRef _ _ -> M.TyRef ty' mutbl
-            _ -> M.TyRef ty' mutbl
+        refTy = M.TyRef ty' mutbl
         usizeTy = M.TyUint M.USize
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
