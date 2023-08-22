@@ -710,6 +710,8 @@ verifyPrestate cc mspec globals0 =
 
      return (args, cs, env, globals2)
 
+-- | Simulate a MIR function with Crucible as part of a 'mir_verify' command,
+-- making sure to install any overrides that the user supplies.
 verifySimulate ::
   Options ->
   MIRCrucibleContext ->

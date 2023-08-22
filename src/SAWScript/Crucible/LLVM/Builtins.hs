@@ -1407,6 +1407,8 @@ withBreakpointCfgAndBlockId opts context name parent k =
          Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
          Nothing -> fail $ "Unexpected breakpoint name: " ++ name
 
+-- | Simulate an LLVM function with Crucible as part of a 'llvm_verify' command,
+-- making sure to install any overrides that the user supplies.
 verifySimulate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
