@@ -186,6 +186,9 @@ instance Liftable Ident where
 instance NuMatching OpenTerm where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance NuMatching SpecTerm where
+  nuMatchingProof = unsafeMbTypeRepr
+
 instance NuMatching GlobalSymbol where
   nuMatchingProof = unsafeMbTypeRepr
 

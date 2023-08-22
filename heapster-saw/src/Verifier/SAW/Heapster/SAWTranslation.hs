@@ -1622,11 +1622,9 @@ data AtomicPermTrans ctx a where
   APTrans_Struct :: PermTransCtx ctx (CtxToRList args) ->
                     AtomicPermTrans ctx (StructType args)
 
-  -- | The translation of functional permission is either a SAW term of
-  -- functional type or a recursive call to the @n@th function in the most
-  -- recently bound frame of recursive functions
+  -- | The translation of functional permission is a SAW term of closure type
   APTrans_Fun :: Mb ctx (FunPerm ghosts (CtxToRList cargs) gouts ret) ->
-                 Either Natural SpecTerm ->
+                 FunTransTerm ->
                  AtomicPermTrans ctx (FunctionHandleType cargs ret)
 
   -- | Propositional permissions are represented by a SAW term
@@ -2043,6 +2041,29 @@ mapLtLOwnedTrans pctx1 vars1 ttr1F pctx2 vars2 ttr2F
       t2
   }
 
+
+-- | The translation of a function permission to a term
+data FunTransTerm
+     -- | A monadic function represented as a closure, i.e., a term of type
+     -- @LRTClos stk lrt@, where @stk@ is the current stack and @lrt@ is the
+     -- supplied 'OpenTerm'
+  = FunTransClos OpenTerm SpecTerm
+    -- | A monadic function represented as a monadic function, i.e., a term of
+    -- type @SpecFun E stk lrt@, where @E@ is the current event type, @stk@ is
+    -- the current stack, and @lrt@ is the supplied 'OpenTerm'
+  | FunTransFun OpenTerm SpecTerm
+
+-- | Convert a 'FunTransTerm' to a closure, i.e., term of type @LRTClos stk lrt@
+funTransTermToClos :: FunTransTerm -> SpecTerm
+funTransTermToClos (FunTransClos _ clos) = clos
+funTransTermToClos (FunTransFun lrt f) = mkFreshClosSpecTerm lrt (const f)
+
+-- | Apply a 'FunTransTerm' to a list of arguments
+applyFunTransTerm :: FunTransTerm -> [SpecTerm] -> SpecTerm
+applyFunTransTerm (FunTransClos lrt clos) = applyClosSpecTerm lrt clos
+applyFunTransTerm (FunTransFun _ f) = applyTermLikeMulti f
+
+
 -- | The translation of the vacuously true permission
 pattern PTrans_True :: PermTrans ctx a
 pattern PTrans_True = PTrans_Conj []
@@ -2056,6 +2077,12 @@ pattern PTrans_LOwned ::
   PermTrans ctx a
 pattern PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t =
   PTrans_Conj [APTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t]
+
+-- | A single function permission
+pattern PTrans_Fun :: () => (a ~ FunctionHandleType cargs ret) =>
+                      Mb ctx (FunPerm ghosts (CtxToRList cargs) gouts ret) ->
+                      FunTransTerm -> PermTrans ctx a
+pattern PTrans_Fun mb_fun_perm tr = PTrans_Conj [APTrans_Fun mb_fun_perm tr]
 
 -- | Build a type translation for a disjunctive, existential, or named
 -- permission that uses the 'PTrans_Term' constructor
@@ -2188,15 +2215,7 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_LCurrent _) = []
   transTerms APTrans_LFinished = []
   transTerms (APTrans_Struct pctx) = transTerms pctx
-  transTerms (APTrans_Fun _ (Right t)) = [t]
-  transTerms (APTrans_Fun _ (Left _)) =
-    -- FIXME: handling this would probably require polymorphism over FunStack
-    -- arguments in the translation of functions, because passing a pointer to a
-    -- recursively defined function would not be in the empty FunStack
-    [failTermLike
-     ("Heapster cannot (yet) translate recursive calls into terms; " ++
-      "This probably resulted from a function that takes a pointer to " ++
-      "a function that is recursively defined with it")]
+  transTerms (APTrans_Fun _ t) = [funTransTermToClos t]
   transTerms (APTrans_BVProp prop) = transTerms prop
   transTerms APTrans_Any = []
 
@@ -2799,7 +2818,8 @@ instance TransInfo info =>
       fmap APTrans_Struct <$> translate ps
     [nuMP| Perm_Fun fun_perm |] ->
       translate fun_perm >>= \tp_desc ->
-      return $ mkImpTypeTrans1 tp_desc (APTrans_Fun fun_perm . Right)
+      return $ mkImpTypeTrans1 tp_desc (APTrans_Fun fun_perm .
+                                        FunTransClos (typeDescLRT tp_desc))
     [nuMP| Perm_BVProp prop |] ->
       fmap APTrans_BVProp <$> translate prop
     [nuMP| Perm_Any |] -> return $ mkImpTypeTrans0 APTrans_Any
@@ -3015,7 +3035,7 @@ translateEntryRetType (TypedEntry {..}
 data TypedEntryTrans ext blocks tops rets args ghosts =
   TypedEntryTrans { typedEntryTransEntry ::
                       TypedEntry TransPhase ext blocks tops rets args ghosts,
-                    typedEntryTransRecIx :: Maybe (Natural, OpenTerm) }
+                    typedEntryTransClos :: Maybe (OpenTerm, SpecTerm) }
 
 -- | A mapping from a block to the SAW functions for each entrypoint
 data TypedBlockTrans ext blocks tops rets args =
@@ -5544,15 +5564,15 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
      () <- assertPermStackEqM nm mb_perms
 
      -- Now check if entryID has an associated multiFixS-bound function
-     case typedEntryTransRecIx entry_trans of
-       Just (ix, lrt) ->
+     case typedEntryTransClos entry_trans of
+       Just (lrt, clos_tm) ->
          -- If so, build the associated CallS term
          -- FIXME: refactor the code that gets the exprs for the stack
          do expr_ctx <- itiExprCtx <$> ask
             arg_membs <- itiPermStackVars <$> ask
             let e_args = RL.map (flip RL.get expr_ctx) arg_membs
             i_args <- itiPermStack <$> ask
-            return (applyClosSpecTerm lrt (mkBaseClosSpecTerm ix)
+            return (applyClosSpecTerm lrt clos_tm
                     (exprCtxToTerms e_args ++ permCtxToTerms i_args))
        Nothing ->
          inEmptyEnvImpTransM $ inCtxTransM ectx $
@@ -5619,8 +5639,7 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
 
   -- FIXME HERE: document this!
   [nuMP| TypedCall _freg fun_perm _ gexprs args |] ->
-    error "FIXME HERE NOWNOW: call the def"
-    {-
+    error "FIXME HERE NOWNOW" {-
     do f_trans <- getTopPermM
        ectx_outer <- itiExprCtx <$> ask
        let rets = mbLift $ mbMapCl $(mkClosed [| funPermRets |]) fun_perm
@@ -5642,11 +5661,11 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
              exprCtxToTerms ectx_gexprs ++ exprCtxToTerms ectx_args ++
              permCtxToTerms pctx_ghosts_args
        fret_trm <- case f_trans of
-         PTrans_Conj [APTrans_Fun _ (Right f)] ->
+         PTrans_Fun _ (Right f) ->
            applyNamedSpecOpM "Prelude.liftStackS"
            [fret_tp, applyTermLikeMulti f all_args]
-         PTrans_Conj [APTrans_Fun _ (Left ix)] ->
-           applyCallS ix all_args
+         PTrans_Fun _ (Left ix) ->
+           applyCallS ix allo_args
          _ -> error "translateStmt: TypedCall: unexpected function permission"
        bindSpecMTransM
          fret_trm fret_tp "call_ret_val" $ \ret_val ->
@@ -5801,21 +5820,37 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
          Nothing -> error ("translateLLVMStmt: TypedLLVMResolveGlobal: "
                            ++ " no translation of symbol "
                            ++ globalSymbolName (mbLift gsym))
-         Just (_, Left i)
+         Just (_, GlobalTransDef spec_def)
            | [nuP| ValPerm_LLVMFunPtr fun_tp (ValPerm_Fun fun_perm) |] <- p ->
-             let ptrans = PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
-                                       PTrans_Conj [APTrans_Fun
-                                                    fun_perm (Left i)]] in
-             withPermStackM (:>: Member_Base)
-             (:>: extPermTrans ETrans_LLVM ptrans) m
-         Just (_, Left _) ->
-           error ("translateLLVMStmt: TypedLLVMResolveGlobal: "
-                  ++ " unexpected recursive call translation for symbol "
-                  ++ globalSymbolName (mbLift gsym))
-         Just (_, Right ts) ->
-           translate (extMb p) >>= \ptrans ->
-           let ts_imp = map openTermLike ts in
-           withPermStackM (:>: Member_Base) (:>: typeTransF ptrans ts_imp) m
+             do lrt <- typeDescLRT <$> translate (extMb fun_perm)
+                let ptrans =
+                      PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
+                                   PTrans_Fun fun_perm $ FunTransFun lrt $
+                                   importDefSpecTerm spec_def]
+                withPermStackM (:>: Member_Base)
+                  (:>: extPermTrans ETrans_LLVM ptrans) m
+         Just (_, GlobalTransDef _) ->
+           panic "translateLLVMStmt"
+           ["TypedLLVMResolveGlobal: "
+            ++ " unexpected recursive function translation for symbol "
+            ++ globalSymbolName (mbLift gsym)]
+         Just (_, GlobalTransClos clos)
+           | [nuP| ValPerm_LLVMFunPtr fun_tp (ValPerm_Fun fun_perm) |] <- p ->
+             do lrt <- typeDescLRT <$> translate (extMb fun_perm)
+                let ptrans =
+                      PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
+                                   PTrans_Fun fun_perm $ FunTransClos lrt clos]
+                withPermStackM (:>: Member_Base)
+                  (:>: extPermTrans ETrans_LLVM ptrans) m
+         Just (_, GlobalTransClos _) ->
+           panic "translateLLVMStmt"
+           ["TypedLLVMResolveGlobal: "
+            ++ " unexpected recursive function translation for symbol "
+            ++ globalSymbolName (mbLift gsym)]
+         Just (_, GlobalTransTerms ts) ->
+           do ptrans <- translate (extMb p)
+              let ts_imp = map openTermLike ts
+              withPermStackM (:>: Member_Base) (:>: typeTransF ptrans ts_imp) m
 
   [nuMP| TypedLLVMIte _ mb_r1 _ _ |] ->
     inExtTransM ETrans_LLVM $

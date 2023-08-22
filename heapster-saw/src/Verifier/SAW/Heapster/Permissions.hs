@@ -79,6 +79,7 @@ import Data.Parameterized.Pair
 import Prettyprinter as PP
 import Prettyprinter.Render.String (renderString)
 
+import Verifier.SAW.Utils (panic)
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.LLVM.DataLayout
@@ -852,6 +853,17 @@ data SomeNamedShape where
   SomeNamedShape :: (1 <= w, KnownNat w) => NamedShape b args w ->
                     SomeNamedShape
 
+-- | The result of translating a global symbol to a SAW core term
+data GlobalTrans
+     -- | A translation to a list of terms, as defined in @SAWTranslation.hs@
+  = GlobalTransTerms [OpenTerm]
+    -- | A translation to a spec definition, i.e., a term of type @SpecDef@;
+    -- note that this is only applicable to function permissions
+  | GlobalTransDef OpenTerm
+    -- | A translation to a locally-defined closure, i.e., a term of type
+    -- @LRTClos@; note that this is only applicable to function permissions
+  | GlobalTransClos SpecTerm
+
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
 -- a permission and a translation of that permission to either a list of terms
 -- or a recursive call to the @n@th function in the most recently bound frame of
@@ -859,8 +871,7 @@ data SomeNamedShape where
 data PermEnvGlobalEntry where
   PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
                         ValuePerm (LLVMPointerType w) ->
-                        Either Natural [OpenTerm] ->
-                        PermEnvGlobalEntry
+                        GlobalTrans -> PermEnvGlobalEntry
 
 -- | The different sorts hints for blocks
 data BlockHintSort args where
@@ -959,6 +970,7 @@ $(mkNuMatching [t| PermEnvFunEntry |])
 $(mkNuMatching [t| SomeNamedPerm |])
 $(mkNuMatching [t| SomeNamedShape |])
 $(mkNuMatching [t| PermEnvGlobalEntry |])
+$(mkNuMatching [t| GlobalTrans |])
 $(mkNuMatching [t| forall args. BlockHintSort args |])
 $(mkNuMatching [t| forall blocks init ret args.
                 BlockHint blocks init ret args |])
@@ -6302,8 +6314,7 @@ unfoldConjPerm npn args off
   , TrueRepr <- nameIsConjRepr npn' =
     [Perm_NamedConj npn' args' off']
 unfoldConjPerm _ _ _ =
-  -- NOTE: this should never happen
-  error "unfoldConjPerm"
+  panic "unfoldConjPerm" []
 
 -- | Test if two expressions are definitely unequal
 exprsUnequal :: PermExpr a -> PermExpr a -> Bool
@@ -7306,7 +7317,7 @@ psubstSet memb e (PartialSubst elems) =
   RL.modify memb
   (\pse -> case pse of
       PSubstElem Nothing -> PSubstElem $ Just e
-      PSubstElem (Just _) -> error "psubstSet: value already set for variable")
+      PSubstElem (Just _) -> panic "psubstSet" ["value already set for variable"])
   elems
 
 -- | Extend a partial substitution with an unassigned variable
@@ -7463,7 +7474,7 @@ abstractFreeVars :: (AbstractVars a, FreeVars a) => a -> AbsObj a
 abstractFreeVars a
   | Some ns <- freeVarsRAssign a
   , Just cl_mb_a <- abstractVars ns a = AbsObj ns cl_mb_a
-abstractFreeVars _ = error "abstractFreeVars"
+abstractFreeVars _ = panic "abstractFreeVars" []
 
 
 -- | Try to close an expression by calling 'abstractPEVars' with an empty list
@@ -8271,7 +8282,8 @@ permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (Right [t]) : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (GlobalTransTerms [t])
+          : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
 permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
@@ -8280,7 +8292,8 @@ permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
 permEnvAddGlobalSymFunMulti env sym (w :: f w) ps_ts =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtrs w $ map fst ps_ts in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (Right $ map snd ps_ts) : permEnvGlobalSyms env }
+          PermEnvGlobalEntry sym p (GlobalTransTerms $ map snd ps_ts)
+          : permEnvGlobalSyms env }
 
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
 permEnvAddGlobalSyms :: PermEnv -> [PermEnvGlobalEntry] -> PermEnv
@@ -8349,8 +8362,8 @@ requireNamedPerm :: PermEnv -> NamedPermName ns args a -> NamedPerm ns args a
 requireNamedPerm env npn
   | Just np <- lookupNamedPerm env npn = np
 requireNamedPerm _ npn =
-  error ("requireNamedPerm: named perm does not exist: "
-         ++ namedPermNameName npn)
+  panic "requireNamedPerm" ["named perm does not exist: "
+                            ++ namedPermNameName npn]
 
 -- | Look up an LLVM shape by name in a 'PermEnv' and cast it to a given width
 lookupNamedShape :: PermEnv -> String -> Maybe SomeNamedShape
@@ -8361,11 +8374,10 @@ lookupNamedShape env nm =
 -- | Look up the permissions and translation for a 'GlobalSymbol' at a
 -- particular machine word width
 lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
-                      Maybe (ValuePerm (LLVMPointerType w),
-                             Either Natural [OpenTerm])
+                      Maybe (ValuePerm (LLVMPointerType w), GlobalTrans)
 lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
   helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
-            Maybe (ValuePerm (LLVMPointerType w), Either Natural [OpenTerm])
+            Maybe (ValuePerm (LLVMPointerType w), GlobalTrans)
   helper  (PermEnvGlobalEntry sym'
             (p :: ValuePerm (LLVMPointerType w')) tr:_) sym w
     | sym' == sym
@@ -8461,7 +8473,7 @@ setVarPerm x p =
   over (varPerm x) $ \p' ->
   case p' of
     ValPerm_True -> p
-    _ -> error "setVarPerm: permission for variable already set!"
+    _ -> panic "setVarPerm" ["permission for variable already set!"]
 
 -- | Get a permission list for multiple variables
 varPermsMulti :: RAssign Name ns -> PermSet ps -> DistPerms ns
@@ -8724,7 +8736,7 @@ getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where
 deletePerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet ps
 deletePerm x p =
   over (varPerm x) $ \p' ->
-  if p' == p then ValPerm_True else error "deletePerm"
+  if p' == p then ValPerm_True else panic "deletePerm" []
 
 -- | Push a new distinguished permission onto the top of the stack
 pushPerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet (ps :> a)
