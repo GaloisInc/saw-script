@@ -44,9 +44,10 @@ import qualified Data.BitVector.Sized as BV
 import Data.Functor.Compose
 import Control.Applicative
 import Control.Lens hiding ((:>), Index, ix, op, getting)
-import Control.Monad.Reader
-import Control.Monad.Writer
-import Control.Monad.State
+import qualified Control.Monad as Monad
+import Control.Monad.Reader hiding (ap)
+import Control.Monad.Writer hiding (ap)
+import Control.Monad.State hiding (ap)
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.Fail as Fail
 
@@ -821,8 +822,8 @@ lambdaTupleTransM x ttrans body_f =
 piLRTTrans :: String -> PureTypeTrans tr -> (tr -> OpenTerm) -> OpenTerm
 piLRTTrans x tps body_f =
   foldr (\(i,tp) rest_f vars ->
-          let var = pack (x ++ show (i :: Integer))
-              t = lambdaOpenTerm var tp (\var -> rest_f (vars ++ [var])) in
+          let nm = pack (x ++ show (i :: Integer))
+              t = lambdaOpenTerm nm tp (\var -> rest_f (vars ++ [var])) in
           ctorOpenTerm "Prelude.LRT_FunDep" [tp, t])
   (body_f . typeTransF tps) (zip [0..] $ typeTransTypes tps) []
 
@@ -838,17 +839,17 @@ piLRTTransM x tps body_f =
 --
 -- of monadic arrow types over the @LetRecType@ type descriptions @lrti@ in a
 -- 'TypeTrans'
-arrowLRTTrans :: String -> ImpTypeTrans tr -> OpenTerm -> OpenTerm
-arrowLRTTrans x tps body_top =
-  foldr (\(i,d) body ->
+arrowLRTTrans :: ImpTypeTrans tr -> OpenTerm -> OpenTerm
+arrowLRTTrans tps body_top =
+  foldr (\d body ->
           ctorOpenTerm "Prelude.LRT_FunClos" [typeDescLRT d, body])
-  body_top (zip [0..] $ typeTransDescs tps)
+  body_top (typeTransDescs tps)
 
 -- | Perform 'arrowLRTTrans' inside a translation monad
-arrowLRTTransM :: String -> ImpTypeTrans tr ->
+arrowLRTTransM :: ImpTypeTrans tr ->
                   TransM info ctx OpenTerm -> TransM info ctx OpenTerm
-arrowLRTTransM x tps body =
-  ask >>= \info -> return (arrowLRTTrans x tps (runTransM body info))
+arrowLRTTransM tps body =
+  ask >>= \info -> return (arrowLRTTrans tps (runTransM body info))
 
 -- FIXME: should only need to build pi-abstractions as LetRecTypes... right?
 {-
@@ -1035,9 +1036,6 @@ sigmaElimPermTransM :: (TransInfo info) =>
 sigmaElimPermTransM x tp_l mb_p tp_ret_m f sigma = case mbMatch mb_p of
   [nuMP| ValPerm_Eq e |] ->
     do let tp_l_trm = openTermLike $ typeTransTupleType tp_l
-       tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
-                                              typeTransTupleType <$>
-                                              inExtTransM tr (translate mb_p))
        tp_ret <- typeTransTupleType <$> tp_ret_m
        sawLetTransM x tp_l_trm tp_ret sigma $ \sigma_pure ->
          f (typeTransF (tupleTypeTrans tp_l) [sigma_pure]) (PTrans_Eq e)
@@ -1729,11 +1727,12 @@ loInfoSplit (_ :: prx ps1) prx2 (LOwnedInfo {..}) =
 loInfoAppend :: LOwnedInfo ps1 ctx -> LOwnedInfo ps2 ctx ->
                 LOwnedInfo (ps1 :++: ps2) ctx
 loInfoAppend info1 info2 =
-  LOwnedInfo { lownedInfoPCtx =
+  LOwnedInfo { lownedInfoECtx = lownedInfoECtx info1
+             , lownedInfoPCtx =
                  RL.append (lownedInfoPCtx info1) (lownedInfoPCtx info2)
              , lownedInfoPVars =
                  RL.append (lownedInfoPVars info1) (lownedInfoPVars info2)
-             , .. }
+             , lownedInfoRetType = lownedInfoRetType info1 }
 
 -- | An extension of type context @ctx1@ to @ctx2@, which is
 -- just an 'ExprTransCtx' for the suffix @ctx3@ such that @ctx1:++:ctx3 = ctx2@
@@ -1820,7 +1819,7 @@ instance Functor (LOwnedTransM ps_in ps_out ctx) where
 
 instance Applicative (LOwnedTransM ps ps ctx) where
   pure x = LOwnedTransM $ \_ s k -> k reflExprCtxExt s x
-  (<*>) = ap
+  (<*>) = Monad.ap
 
 instance Monad (LOwnedTransM ps ps ctx) where
   (>>=) = (>>>=)
@@ -1906,8 +1905,7 @@ idLOwnedTransTerm :: RelPermsTypeTrans ctx ps_out ->
                      LOwnedTransTerm ctx ps_in ps_out
 idLOwnedTransTerm ttr_outF vars_out =
   gmodify $ \(ExprCtxExt ectx') loInfo ->
-  let ectx = lownedInfoECtx loInfo
-      ttr_out =
+  let ttr_out =
         extRelPermsTypeTransMulti ectx' ttr_outF $ lownedInfoECtx loInfo
       vars_out' = RL.map (weakenMemberR ectx') vars_out in
   loInfo { lownedInfoPVars = vars_out',
@@ -2967,7 +2965,7 @@ arrowLRTPermCtx :: TransInfo info => Mb ctx (ValuePerms ps) ->
                    TransM info ctx OpenTerm ->
                    TransM info ctx OpenTerm
 arrowLRTPermCtx ps body =
-  translate ps >>= \tptrans -> arrowLRTTransM "p" tptrans body
+  translate ps >>= \tptrans -> arrowLRTTransM tptrans body
 
 -- | Build a @LetRecType@ describing a monadic SAW core function that takes in:
 -- values for all the expression types in an 'ExprTransCtx' as dependent
@@ -2979,7 +2977,7 @@ piExprPermLRT :: PureTypeTrans (ExprTransCtx ctx) ->
                  OpenTerm
 piExprPermLRT etps ptps_in_F ptps_out_F =
   piLRTTrans "e" etps $ \ectx ->
-  arrowLRTTrans "p" (ptps_in_F ectx) $
+  arrowLRTTrans (ptps_in_F ectx) $
   typeDescLRT $ typeTransTupleDesc (ptps_out_F ectx)
 
 -- | Build the return type for a function; FIXME: documentation
@@ -4166,9 +4164,9 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       pctx :>: PTrans_Conj [APTrans_IsLLVMPtr] :>: ptrans)
     m
 
-  [nuMP| SImpl_SplitLifetime mb_x f args l l2 _ _ _ _ _ |] ->
+  [nuMP| SImpl_SplitLifetime mb_x f args l mb_l2 _ _ _ _ _ |] ->
     -- FIXME HERE: get rid of the mbMaps!
-    do let l2_e = fmap PExpr_Var l2
+    do let l2_e = fmap PExpr_Var mb_l2
        let f_l_args = mbMap3 ltFuncApply f args l
        let f_l2_min = mbMap2 ltFuncMinApply f l2_e
        let x_tp = mbVarType mb_x
@@ -4213,7 +4211,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ _ mb_l2 |] ->
     withPermStackM
-    (\(ns :>: l :>: l2) -> ns :>: l)
+    (\(ns :>: l :>: _) -> ns :>: l)
     (\case
         (pctx :>:
          PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t :>: _) ->
@@ -4282,7 +4280,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        ps_out_trans <- tupleTypeTrans <$> translate ps_out
        let prxs_in = mbRAssignProxies ps_in :>: Proxy
        let lrt_out = typeDescLRT $ typeTransTupleDesc ps_out_trans
-       let lrt = arrowLRTTrans "p" ps_in_trans lrt_out
+       let lrt = arrowLRTTrans ps_in_trans lrt_out
 
        -- Next, split out the ps_in permissions from the rest of the pctx
        pctx <- itiPermStack <$> ask
@@ -4328,7 +4326,6 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     case (mbExprPermsMembers mb_ps, mbMaybe (mbMap2 lownedPermsSimpleIn mb_l mb_ps)) of
       (Just vars, Just mb_ps') ->
         do ectx <- infoCtx <$> ask
-           let etps = exprCtxType ectx
            ttr_inF <- tpTransM $ ctxFunTypeTransM $ translate mb_ps'
            ttr_outF <- tpTransM $ ctxFunTypeTransM $ translate mb_ps
            withPermStackM id
@@ -4949,17 +4946,18 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          m
 
   ([nuMP| Impl1_BeginLifetime |], _) ->
-    error "FIXME HERE NOWNOW"
-    {-
     translatePermImplUnary mb_impls $ \m ->
     inExtTransM ETrans_Lifetime $
-    do tp_trans <- translateClosed (ValPerm_LOwned
-                                    [] CruCtxNil CruCtxNil MNil MNil)
-       id_fun <-
-         lambdaOpenTermTransM "ps_empty" unitTypeOpenTerm $ \x ->
-         applyNamedSpecOpM "Prelude.retS" [unitTypeOpenTerm, x]
-       withPermStackM (:>: Member_Base) (:>: typeTransF tp_trans [id_fun]) m
-      -}
+    do ectx <- itiExprCtx <$> ask
+       let prxs = RL.map (const Proxy) ectx
+       let mb_ps = (nuMulti prxs (const MNil))
+       let ttr = const $ pure MNil
+       withPermStackM (:>: Member_Base)
+         (:>:
+          PTrans_LOwned
+          (nuMulti prxs (const [])) CruCtxNil CruCtxNil mb_ps mb_ps
+          (mkLOwnedTransId ectx ttr ttr MNil))
+         m
 
   -- If e1 and e2 are already equal, short-circuit the proof construction and then
   -- elimination
