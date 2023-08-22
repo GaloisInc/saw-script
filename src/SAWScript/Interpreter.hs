@@ -1094,7 +1094,7 @@ primitives = Map.fromList
     , "caching has yet to actually be used, then the value of the environment"
     , "variable is ignored."
     ]
-  
+
   , prim "clean_solver_cache" "TopLevel ()"
     (pureVal clean_solver_cache)
     Current
@@ -3196,7 +3196,7 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate must hold.  Acts as `llvm_precond`"
     , "or `llvm_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `llvm_execute_func`."
+    , "it appears (i.e., before or after `llvm_execute_func`)."
     ]
 
   , prim "llvm_setup_with_tag" "String -> LLVMSetup () -> LLVMSetup ()"
@@ -3764,7 +3764,7 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate must hold.  Acts as `jvm_precond`"
     , "or `jvm_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `jvm_execute_func`."
+    , "it appears (i.e., before or after `jvm_execute_func`)."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
@@ -3862,7 +3862,7 @@ primitives = Map.fromList
     Experimental
     [ "State that the given predicate must hold.  Acts as `mir_precond`"
     , "or `mir_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `mir_execute_func`."
+    , "it appears (i.e., before or after `mir_execute_func`)."
     ]
 
   , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
