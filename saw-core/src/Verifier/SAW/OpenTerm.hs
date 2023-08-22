@@ -88,7 +88,7 @@ module Verifier.SAW.OpenTerm (
   SpecTerm(), defineSpecOpenTerm, lambdaPureSpecTerm, lambdaPureSpecTermMulti,
   lrtClosTypeSpecTerm, sawLetPureSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
-  callDefSpecTerm, monadicSpecOp,
+  importDefSpecTerm, monadicSpecOp,
   specMTypeSpecTerm, returnSpecTerm, bindSpecTerm, errorSpecTerm,
   ) where
 
@@ -1082,9 +1082,10 @@ callClosSpecTerm tp clos =
   applySpecTermMulti (monadicSpecOp "Prelude.CallS")
   [openTermSpecTerm tp, clos]
 
--- | Call another spec definition inside a spec definition, by importing it
-callDefSpecTerm :: OpenTerm -> SpecTerm
-callDefSpecTerm def = SpecTerm $
+-- | Import another spec definition inside a spec definition, and return the
+-- @SpecFun@ that calls its body
+importDefSpecTerm :: OpenTerm -> SpecTerm
+importDefSpecTerm def = SpecTerm $
   do (imp_ix, st) <- specStInsImport def <$> get
      put st
      return $
