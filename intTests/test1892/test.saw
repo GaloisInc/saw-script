@@ -1,0 +1,2 @@
+import "M.cry";
+prove_print z3 {{ f == X::a + Y::a }};
