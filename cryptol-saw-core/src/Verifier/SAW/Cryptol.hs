@@ -1375,6 +1375,10 @@ importName cnm =
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
               topChunks = C.modNameChunksText topMod
               modNms    = topChunks ++ map C.identText nested
+              -- If the name came from a module parameter, add the module
+              -- parameter identifier to distinguish between names that have the
+              -- same identifier but come from different module parameters (see
+              -- #1892)
               ifaceNms  = case C.ogFromParam og of
                             Just i  -> [C.identText i]
                             Nothing -> []
