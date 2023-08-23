@@ -104,12 +104,17 @@ mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
 type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 
-
-data MirPointsTo = MirPointsTo MS.AllocIndex [MS.SetupValue MIR]
+-- | Unlike @LLVMPointsTo@ and @JVMPointsTo@, 'MirPointsTo' contains a /list/ of
+-- 'MS.SetupValue's on the right-hand side. This is due to how slices are
+-- represented in @crucible-mir-comp@, which stores the list of values
+-- referenced by the slice. The @mir_points_to@ command, on the other hand,
+-- always creates 'MirPointsTo' values with exactly one value in the list (see
+-- the @firstPointsToReferent@ function in "SAWScript.Crucible.MIR.Override").
+data MirPointsTo = MirPointsTo MS.ConditionMetadata MS.AllocIndex [MS.SetupValue MIR]
     deriving (Show)
 
 instance PP.Pretty MirPointsTo where
-    pretty (MirPointsTo alloc sv) = PP.parens $
+    pretty (MirPointsTo _md alloc sv) = PP.parens $
         PP.pretty (show alloc) PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
 
 data MirAllocSpec tp = MirAllocSpec

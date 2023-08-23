@@ -15,6 +15,7 @@ module SAWScript.Crucible.MIR.Override
   , learnCond
   , matchArg
   , decodeMIRVal
+  , firstPointsToReferent
   ) where
 
 import qualified Control.Exception as X
@@ -38,6 +39,7 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Types as Crucible
+import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
@@ -61,7 +63,6 @@ import SAWScript.Crucible.MIR.MethodSpecIR
 import SAWScript.Crucible.MIR.ResolveSetupValue
 import SAWScript.Crucible.MIR.TypeShape
 import SAWScript.Options
-import SAWScript.Panic
 import SAWScript.Utils (handleException)
 
 -- A few convenient synonyms
@@ -146,6 +147,18 @@ enforceDisjointness cc loc ss =
         , (_, Some q)      <- ps
         ]
 
+-- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
+-- referent on the right-hand side. As a result, this function should never
+-- fail.
+firstPointsToReferent ::
+  MonadFail m => [MS.SetupValue MIR] -> m (MS.SetupValue MIR)
+firstPointsToReferent referents =
+  case referents of
+    [referent] -> pure referent
+    _ -> fail $
+      "Unexpected mir_points_to statement with " ++ show (length referents) ++
+      " referent(s)"
+
 instantiateExtResolveSAWPred ::
   SharedContext ->
   MIRCrucibleContext ->
@@ -226,8 +239,16 @@ learnPointsTo ::
   MS.PrePost                 ->
   MirPointsTo                ->
   OverrideMatcher MIR w ()
-learnPointsTo _opts _sc _cc _spec _prepost _pt =
-  panic "learnPointsTo" ["not yet implemented"]
+learnPointsTo opts sc cc spec prepost (MirPointsTo md allocIdx referents) =
+  mccWithBackend cc $ \bak ->
+  do let col = cc ^. mccRustModule . Mir.rmCS ^. Mir.collection
+     globals <- OM (use overrideGlobals)
+     Some mp <- resolveAllocIndexMIR allocIdx
+     let mpMirTy = mp^.mpMirType
+     let mpTpr = tyToShapeEq col mpMirTy (mp^.mpType)
+     val <- firstPointsToReferent referents
+     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes (mp^.mpType) (mp^.mpRef)
+     matchArg opts sc cc spec prepost md (MIRVal mpTpr v) mpMirTy val
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -339,7 +360,12 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: MirPointsTo -> OverrideMatcher MIR w Bool
-    checkPointsTo = panic "matchPointsTos" ["not yet implemented"]
+    checkPointsTo (MirPointsTo _ allocIdx _) = checkAllocIndex allocIdx
+
+    checkAllocIndex :: AllocIndex -> OverrideMatcher MIR w Bool
+    checkAllocIndex i =
+      do m <- OM (use setupValueSub)
+         return (Map.member i m)
 
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
@@ -409,6 +435,11 @@ readPartExprMaybe _sym W4.Unassigned = Nothing
 readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = Just v
   | otherwise = Nothing
+
+resolveAllocIndexMIR :: AllocIndex -> OverrideMatcher MIR w (Some (MirPointer Sym))
+resolveAllocIndexMIR i =
+  do m <- OM (use setupValueSub)
+     pure $ lookupAllocIndex m i
 
 resolveSetupValueMIR ::
   Options              ->

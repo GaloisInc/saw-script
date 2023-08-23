@@ -22,12 +22,14 @@ import Mir.Intrinsics (MIR)
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
 import SAWScript.Crucible.MIR.Builtins
     ( mir_alloc,
       mir_alloc_mut,
       mir_fresh_var,
       mir_execute_func,
       mir_load_module,
+      mir_points_to,
       mir_postcond,
       mir_precond,
       mir_return )
@@ -46,7 +48,7 @@ import SAWServer
       setServerVal )
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Data.Contract
-    ( PointsTo,
+    ( PointsTo(PointsTo),
       PointsToBitfield,
       Allocated(Allocated),
       ContractVar(ContractVar),
@@ -110,8 +112,16 @@ compileMIRContract fileReader bic cenv0 c =
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       PointsTo JSONMIRType (P.Expr P.PName) ->
       MIRSetupM ()
-    setupPointsTo _env _pt =
-      MIRSetupM $ fail "Points-to not currently implemented in the MIR API."
+    setupPointsTo _ (PointsTo _ _ Nothing _) =
+      MIRSetupM $ fail "Points-to without type checking not supported in the MIR API."
+    setupPointsTo _ (PointsTo _ _ (Just (CheckAgainstCastedType _)) _) =
+      MIRSetupM $ fail "Points-to + type checking against a casted type not supported in the MIR API."
+    setupPointsTo _ (PointsTo _ _ _ (Just _)) =
+      MIRSetupM $ fail "Conditional points-to not supported in the MIR API."
+    setupPointsTo env (PointsTo p v (Just CheckAgainstPointerType) Nothing) =
+      do ptr <- getSetupVal env p
+         val <- getSetupVal env v
+         mir_points_to ptr val
 
     setupPointsToBitfields :: PointsToBitfield JSONMIRType (P.Expr P.PName) -> MIRSetupM ()
     setupPointsToBitfields _ =

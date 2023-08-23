@@ -267,8 +267,14 @@ addArg tpr argRef msb =
             return (sv, sv')
 
         let (svs, svs') = unzip svPairs
-        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs :)
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs' :)
+        let md = MS.ConditionMetadata
+                 { MS.conditionLoc = loc
+                 , MS.conditionTags = mempty
+                 , MS.conditionType = "add argument value"
+                 , MS.conditionContext = ""
+                 }
+        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (fr ^. frAlloc) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (fr ^. frAlloc) svs' :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
   where
@@ -287,6 +293,7 @@ setReturn tpr argRef msb =
   ovrWithBackend $ \bak ->
   execBuilderT msb $ do
     let sym = backendGetSym bak
+    loc <- liftIO $ W4.getCurrentProgramLoc sym
     let ty = case msb ^. msbSpec . MS.csRet of
             Just x -> x
             Nothing -> M.TyTuple []
@@ -305,7 +312,13 @@ setReturn tpr argRef msb =
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs :)
+        let md = MS.ConditionMetadata
+                 { MS.conditionLoc = loc
+                 , MS.conditionTags = mempty
+                 , MS.conditionType = "set return value"
+                 , MS.conditionContext = ""
+                 }
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (fr ^. frAlloc) svs :)
 
     msbSpec . MS.csRetValue .= Just sv
   where
@@ -616,7 +629,7 @@ substMethodSpec sc sm ms = do
         sv' <- goSetupValue sv
         return (ty, sv')
 
-    goPointsTo (MirPointsTo alloc svs) = MirPointsTo alloc <$> mapM goSetupValue svs
+    goPointsTo (MirPointsTo md alloc svs) = MirPointsTo md alloc <$> mapM goSetupValue svs
 
     goSetupValue sv = case sv of
         MS.SetupVar _ -> return sv
