@@ -3038,10 +3038,9 @@ translateEntryRetType (TypedEntry {..}
 -- * The Implication Translation Monad
 ----------------------------------------------------------------------
 
--- | A mapping from a block entrypoint to a corresponding SAW variable that is
+-- | A mapping from a block entrypoint to a corresponding SAW closure that is
 -- bound to its translation if it has one: only those entrypoints marked as the
--- heads of strongly-connect components have translations as letrec-bound
--- variables
+-- heads of strongly-connect components have translations as closures
 data TypedEntryTrans ext blocks tops rets args ghosts =
   TypedEntryTrans { typedEntryTransEntry ::
                       TypedEntry TransPhase ext blocks tops rets args ghosts,
@@ -5573,11 +5572,12 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
                                 typedEntryPermsIn entry) mb_s
      () <- assertPermStackEqM nm mb_perms
 
-     -- Now check if entryID has an associated multiFixS-bound function
+     -- Now check if entryID has an associated recursive closure
      case typedEntryTransClos entry_trans of
        Just (lrt, clos_tm) ->
-         -- If so, build the associated CallS term
-         -- FIXME: refactor the code that gets the exprs for the stack
+         -- If so, build the associated CallS term, which applies the closure to
+         -- the expressions with permissions on the stack followed by the proofs
+         -- objects for those permissions
          do expr_ctx <- itiExprCtx <$> ask
             arg_membs <- itiPermStackVars <$> ask
             let e_args = RL.map (flip RL.get expr_ctx) arg_membs
@@ -5585,6 +5585,9 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
             return (applyClosSpecTerm lrt clos_tm
                     (exprCtxToTerms e_args ++ permCtxToTerms i_args))
        Nothing ->
+         -- Otherwise, continue translating with the target entrypoint, with all
+         -- the current expressions free but with only those permissions on top
+         -- of the stack
          inEmptyEnvImpTransM $ inCtxTransM ectx $
          do perms_trans <- translate $ typedEntryPermsIn entry
             withPermStackM
@@ -5933,10 +5936,6 @@ instance PermCheckExtC ext exprExt =>
   translateF mb_seq = translate mb_seq
 
 
-{-
-NOWNOW:
-- change uses of TypeTrans to include the purity flag
-
 ----------------------------------------------------------------------
 -- * Translating CFGs
 ----------------------------------------------------------------------
@@ -5946,14 +5945,11 @@ data SomeTypedEntry ext blocks tops rets =
   forall ghosts args.
   SomeTypedEntry (TypedEntry TransPhase ext blocks tops rets args ghosts)
 
--- | Get all entrypoints in a block map that will be translated to letrec-bound
--- variables, which is all entrypoints with in-degree > 1
---
--- FIXME: consider whether we want let and not letRec for entrypoints that have
--- in-degree > 1 but are not the heads of loops
-typedBlockLetRecEntries :: TypedBlockMap TransPhase ext blocks tops rets ->
+-- | Get all entrypoints in a block map that will be translated to closures,
+-- which is all entrypoints with in-degree > 1
+typedBlockClosEntries :: TypedBlockMap TransPhase ext blocks tops rets ->
                            [SomeTypedEntry ext blocks tops rets]
-typedBlockLetRecEntries =
+typedBlockClosEntries =
   concat . RL.mapToList (map (\(Some entry) ->
                                SomeTypedEntry entry)
                          . filter (anyF typedEntryHasMultiInDegree)
@@ -5961,99 +5957,67 @@ typedBlockLetRecEntries =
 
 -- | Fold a function over each 'TypedEntry' in a 'TypedBlockMap' that
 -- corresponds to a letrec-bound variable
-foldBlockMapLetRec ::
+foldBlockMapClos ::
   (forall args ghosts.
    TypedEntry TransPhase ext blocks tops rets args ghosts -> b -> b) ->
   b -> TypedBlockMap TransPhase ext blocks tops rets -> b
-foldBlockMapLetRec f r =
-  foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockLetRecEntries
+foldBlockMapClos f r =
+  foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockClosEntries
 
 -- | Map a function over each 'TypedEntry' in a 'TypedBlockMap' that
 -- corresponds to a letrec-bound variable
-mapBlockMapLetRec ::
+mapBlockMapClos ::
   (forall args ghosts.
    TypedEntry TransPhase ext blocks tops rets args ghosts -> b) ->
   TypedBlockMap TransPhase ext blocks tops rets -> [b]
-mapBlockMapLetRec f =
-  map (\(SomeTypedEntry entry) -> f entry) . typedBlockLetRecEntries
+mapBlockMapClos f =
+  map (\(SomeTypedEntry entry) -> f entry) . typedBlockClosEntries
 
 -- | Build a @LetRecType@ that describes the type of the translation of a
--- 'TypedEntry'
-translateEntryLRT :: PermEnv ->
-                     TypedEntry TransPhase ext blocks tops rets args ghosts ->
-                     OpenTerm
-translateEntryLRT env entry@(TypedEntry {..}) =
-  runNilTypeTransM env noChecks $
+-- 'TypedEntry' to a closure
+translateEntryLRT :: TypedEntry TransPhase ext blocks tops rets args ghosts ->
+                     TypeTransM ctx OpenTerm
+translateEntryLRT entry@(TypedEntry {..}) =
+  inEmptyCtxTransM $
   translateClosed (typedEntryAllArgs entry) >>= \arg_tps ->
   piLRTTransM "arg" arg_tps $ \ectx ->
   inCtxTransM ectx $
   translate typedEntryPermsIn >>= \perms_in_tps ->
-  piLRTTransM "p" perms_in_tps $ \_ ->
+  arrowLRTTransM perms_in_tps $
   translateEntryRetType entry >>= \retType ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret" [retType]
+  return $ ctorOpenTerm "Prelude.LRT_Ret" [typeDescLRT retType]
 
 -- | Build a list of @LetRecType@ values that describe the types of all of the
--- entrypoints in a 'TypedBlockMap' that will be bound as recursive functions
-translateBlockMapLRTs :: PermEnv ->
-                         TypedBlockMap TransPhase ext blocks tops rets ->
-                         [OpenTerm]
-translateBlockMapLRTs env blkMap =
-  mapBlockMapLetRec (translateEntryLRT env) blkMap
+-- entrypoints in a 'TypedBlockMap' that will be translated to closures
+translateBlockMapLRTs :: TypedBlockMap TransPhase ext blocks tops rets ->
+                         TypeTransM ctx [OpenTerm]
+translateBlockMapLRTs blkMap =
+  sequence $ mapBlockMapClos translateEntryLRT blkMap
 
--- | Return a @LetRecType@ value for the translation of the function permission
--- of a CFG
-translateCFGInitEntryLRT :: PermEnv ->
-                            TypedCFG ext blocks ghosts inits gouts ret ->
-                            OpenTerm
-translateCFGInitEntryLRT env (tpcfgFunPerm ->
-                              (FunPerm ghosts args gouts ret perms_in perms_out)) =
-  runNilTypeTransM env noChecks $
-  translateClosed (appendCruCtx ghosts args) >>= \ctx_trans ->
-  piLRTTransM "arg" ctx_trans $ \ectx ->
-  inCtxTransM ectx $
-  translate perms_in >>= \perms_trans ->
-  piLRTTransM "perm" perms_trans $ \_ ->
-  translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
+-- | Translate the function permission of a CFG to a @LetRecType@
+translateCFGLRT :: TypedCFG ext blocks ghosts inits gouts ret ->
+                   TypeTransM ctx OpenTerm
+translateCFGLRT cfg =
+  typeDescLRT <$> translateClosed (tpcfgFunPerm cfg)
 
--- | FIXME HERE NOW: docs
-translateCFGLRTs :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
-                    [OpenTerm]
-translateCFGLRTs env cfg =
-  translateCFGInitEntryLRT env cfg :
-  translateBlockMapLRTs env (tpcfgBlockMap cfg)
-
--- | Apply @mkFrameCall@ to a frame, an index @n@ in that frame, and list of
--- arguments to build a recursive call to the @n@th function in the frame
-mkFrameCall :: OpenTerm -> Natural -> [OpenTerm] -> OpenTerm
-mkFrameCall frame ix args =
-  applyGlobalOpenTerm "Prelude.mkFrameCall" (frame : natOpenTerm ix : args)
-
--- | Apply the @callS@ operation to some arguments to build a recursive call
-applyCallS :: Natural -> [OpenTerm] ->
-              ImpTransM ext blocks tops rets ps ctx OpenTerm
-applyCallS ix args =
-  do stack <- itiFunStack <$> ask
-     case funStackTopAndPrev stack of
-       Just (frame, prev_stack) ->
-         let call = mkFrameCall frame ix args in
-         applyNamedEventOpM "Prelude.callS" [prev_stack, frame, call]
-       Nothing ->
-         error "applyCallS: Attempt to call a recursive function that is not in scope"
-
--- | FIXME HERE NOW: docs
+-- | Translate a 'TypedEntry' to a 'TypedEntryTrans' by associating a closure
+-- term with it if it has one, i.e., if its in-degree is greater than 1. If it
+-- does need a closure, the 'Natural' state tracks the index to be used for the
+-- next closure, so use the current value and increment it.
 translateTypedEntry ::
   Some (TypedEntry TransPhase ext blocks tops rets args) ->
-  StateT Natural (TypeTransM ctx) (Some (TypedEntryTrans ext blocks tops rets args))
+  StateT Natural (TypeTransM ctx) (Some
+                                   (TypedEntryTrans ext blocks tops rets args))
 translateTypedEntry (Some entry) =
   if typedEntryHasMultiInDegree entry then
     do i <- get
        put (i+1)
-       return (Some (TypedEntryTrans entry $ Just i))
+       lrt <- lift $ translateEntryLRT entry
+       return (Some (TypedEntryTrans entry $ Just (lrt, mkBaseClosSpecTerm i)))
   else return $ Some (TypedEntryTrans entry Nothing)
 
--- | Computes a list of @TypedEntryTrans@ values from a list of
--- @TypedEntry@ values that pair each entry with their translation
+-- | Translate a 'TypedBlock' to a 'TypedBlockTrans' by translating each
+-- entrypoint in the block using 'translateTypedEntry'
 translateTypedBlock ::
   TypedBlock TransPhase ext blocks tops rets args ->
   StateT Natural (TypeTransM ctx) (TypedBlockTrans ext blocks tops rets args)
@@ -6061,8 +6025,8 @@ translateTypedBlock blk =
   TypedBlockTrans <$>
   mapM translateTypedEntry (blk ^. typedBlockEntries)
 
--- | Translate a @TypedBlockMap@ to a @TypedBlockMapTrans@ by generating
--- @CallS@ calls for each of the entrypoints that represents a recursive call
+-- | Translate a 'TypedBlockMap' to a 'TypedBlockMapTrans' by translating every
+-- entrypoint using 'translateTypedEntry'
 translateTypedBlockMap ::
   TypedBlockMap TransPhase ext blocks tops rets ->
   StateT Natural (TypeTransM ctx) (TypedBlockMapTrans ext blocks tops rets)
@@ -6078,7 +6042,7 @@ translateTypedBlockMap blkMap =
 translateEntryBody :: PermCheckExtC ext exprExt =>
                       TypedBlockMapTrans ext blocks tops rets ->
                       TypedEntry TransPhase ext blocks tops rets args ghosts ->
-                      TypeTransM RNil OpenTerm
+                      TypeTransM RNil SpecTerm
 translateEntryBody mapTrans entry =
   lambdaExprCtx (typedEntryAllArgs entry) $
   lambdaPermCtx (typedEntryPermsIn entry) $ \pctx ->
@@ -6086,15 +6050,20 @@ translateEntryBody mapTrans entry =
      impTransM (RL.members pctx) pctx mapTrans retType $
        translate $ _mbBinding $ typedEntryBody entry
 
--- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
--- letrec-bound functions to SAW core functions as in 'translateEntryBody'
-translateBlockMapBodies :: PermCheckExtC ext exprExt => FunStack ->
+-- | Translate all the entrypoints in a 'TypedBlockMap' that translate to
+-- closures into the @LetRecType@s and bodies of those closures
+translateBlockMapBodies :: PermCheckExtC ext exprExt =>
                            TypedBlockMapTrans ext blocks tops rets ->
                            TypedBlockMap TransPhase ext blocks tops rets ->
-                           TypeTransM RNil [OpenTerm]
-translateBlockMapBodies stack mapTrans blkMap =
-  sequence $
-  mapBlockMapLetRec (translateEntryBody stack mapTrans) blkMap
+                           TypeTransM RNil [(OpenTerm, SpecTerm)]
+translateBlockMapBodies mapTrans blkMap =
+  sequence $ mapBlockMapClos (\entry ->
+                               (,) <$> translateEntryLRT entry <*>
+                               translateEntryBody mapTrans entry) blkMap
+
+{-
+NOWNOW:
+- change uses of TypeTrans to include the purity flag
 
 -- | FIXME HERE NOW: docs
 translateCFGInitEntryBody ::
