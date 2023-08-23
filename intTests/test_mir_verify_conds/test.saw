@@ -1,0 +1,56 @@
+enable_experimental;
+
+// A spec using mir_precond
+
+let add1_precond_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x < 0xffffffff }};
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 }});
+};
+
+// A spec using mir_assert in a precondition
+
+let add1_precond_assert_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_assert {{ x < 0xffffffff }};
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 }});
+};
+
+// A spec using mir_postcond
+
+let add1_postcond_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x < 0xffffffff }};
+
+  mir_execute_func [mir_term x];
+
+  x' <- mir_fresh_var "x'" mir_u32;
+  mir_return (mir_term x');
+  mir_postcond {{ x < x' }};
+};
+
+// A spec using mir_assert in a postcondition
+
+let add1_postcond_assert_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x < 0xffffffff }};
+
+  mir_execute_func [mir_term x];
+
+  x' <- mir_fresh_var "x'" mir_u32;
+  mir_return (mir_term x');
+  mir_assert {{ x < x' }};
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::add1" [] false add1_precond_spec z3;
+mir_verify m "test::add1" [] false add1_precond_assert_spec z3;
+mir_verify m "test::add1" [] false add1_postcond_spec z3;
+mir_verify m "test::add1" [] false add1_postcond_assert_spec z3;

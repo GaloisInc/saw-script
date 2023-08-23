@@ -61,6 +61,8 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.TypedTerm as SAW
 
+import SAWScript.Crucible.MIR.TypeShape
+
 import Mir.Compositional.Convert
 import Mir.Compositional.DefId (hasInstPrefix)
 

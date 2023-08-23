@@ -53,6 +53,8 @@ import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as MS
+import SAWScript.Crucible.MIR.MethodSpecIR
+import SAWScript.Crucible.MIR.TypeShape
 
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
@@ -60,7 +62,6 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
-import Mir.Compositional.MethodSpec
 
 
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
@@ -288,7 +289,12 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
             Map.toList $ ms ^. MS.csPostState . MS.csAllocs
     postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, Some allocSpec) -> do
         ref <- newMirRefSim (allocSpec ^. maType)
-        return (alloc, Some $ MirPointer (allocSpec ^. maType) ref)
+        return ( alloc
+               , Some $ MirPointer (allocSpec ^. maType)
+                                   (allocSpec ^. maMutbl)
+                                   (allocSpec ^. maMirType)
+                                   ref
+               )
     let allocMap = preAllocMap <> postAllocMap
 
     -- Handle return value and post-state PointsTos
@@ -403,10 +409,10 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv sv = go shp rv sv
-    go (RefShape refTy _ tpr) ref (MS.SetupVar alloc) =
-        goRef refTy tpr ref alloc 0
-    go (RefShape refTy _ tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
-        goRef refTy tpr ref alloc idx
+    go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupVar alloc) =
+        goRef refTy pointeeTy mutbl tpr ref alloc 0
+    go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
+        goRef refTy pointeeTy mutbl tpr ref alloc idx
     go (FnPtrShape _ _ _) _ _ =
         error "Function pointers not currently supported in overrides"
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
@@ -432,13 +438,15 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
 
     goRef :: forall tp'.
         M.Ty ->
+        M.Ty ->
+        M.Mutability ->
         TypeRepr tp' ->
         MirReferenceMux sym tp' ->
         MS.AllocIndex ->
         -- | The expected offset of `ref` past the start of the allocation.
         Int ->
         MirOverrideMatcher sym ()
-    goRef refTy tpr ref alloc refOffset = do
+    goRef refTy pointeeTy mutbl tpr ref alloc refOffset = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
         optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
@@ -486,7 +494,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
               | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
                     show tpr ++ " does not match " ++ show (ptr ^. mpType)
-        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr ref')
+        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr mutbl pointeeTy ref')
 
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
@@ -524,7 +532,7 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
     go (StructShape _ _ flds) (MS.SetupStruct _ False svs) =
         AnyValue (StructRepr $ fmapFC fieldShapeType flds) <$> goFields flds svs
     go (TransparentShape _ shp) sv = go shp sv
-    go (RefShape _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
+    go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of
             Just Refl -> return $ ptr ^. mpRef
             Nothing -> error $ "setupToReg: type error: bad reference type for " ++ show alloc ++

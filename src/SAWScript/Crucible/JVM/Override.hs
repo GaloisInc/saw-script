@@ -354,24 +354,6 @@ learnCond opts sc cc cs prepost ss =
      enforceCompleteSubstitution loc ss
 
 
--- | Verify that all of the fresh variables for the given
--- state spec have been "learned". If not, throws
--- 'AmbiguousVars' exception.
-enforceCompleteSubstitution :: W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
-enforceCompleteSubstitution loc ss =
-
-  do sub <- OM (use termSub)
-
-     let -- predicate matches terms that are not covered by the computed
-         -- term substitution
-         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
-
-         -- list of all terms not covered by substitution
-         missing = filter isMissing (view MS.csFreshVars ss)
-
-     unless (null missing) (failure loc (AmbiguousVars missing))
-
-
 -- execute a pre/post condition
 executeCond ::
   Options ->
@@ -590,7 +572,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
     MS.SetupNull () ->
       do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
-         addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost) ""))
+         addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ MS.stateCond prepost) ""))
 
     MS.SetupGlobal empty _ -> absurd empty
 
@@ -659,7 +641,7 @@ matchTerm sc cc md prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             p <- liftIO $ resolveBoolTerm (cc ^. jccSym) t
-            addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost) ""))
+            addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ MS.stateCond prepost) ""))
 
 ------------------------------------------------------------------------
 
@@ -756,10 +738,6 @@ learnPointsTo opts sc cc spec prepost pt =
 
 ------------------------------------------------------------------------
 
-stateCond :: PrePost -> String
-stateCond PreState = "precondition"
-stateCond PostState = "postcondition"
-
 -- | Process a "crucible_equal" statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
@@ -776,7 +754,7 @@ learnEqual opts sc cc spec md prepost v1 v2 =
   do val1 <- resolveSetupValueJVM opts cc sc spec v1
      val2 <- resolveSetupValueJVM opts cc sc spec v2
      p <- liftIO (equalValsPred cc val1 val2)
-     let name = "equality " ++ stateCond prepost
+     let name = "equality " ++ MS.stateCond prepost
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
@@ -794,7 +772,7 @@ learnPred sc cc md prepost t =
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. jccSym) u
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
 
 ------------------------------------------------------------------------
 
