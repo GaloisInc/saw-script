@@ -360,6 +360,11 @@ mkImpTypeTrans1 d f = TypeTransImpure [d] $ \case
   [t] -> f t
   _ -> panic "mkImpTypeTrans1" ["incorrect number of terms"]
 
+-- | Build a type translation whose representation type is just SAW core terms
+-- of the supplied type
+mkTermImpTypeTrans :: TypeDesc -> ImpTypeTrans SpecTerm
+mkTermImpTypeTrans d = mkImpTypeTrans1 d id
+
 -- | Extract out the single SAW type associated with a 'TypeTrans', or the unit
 -- type if it has 0 SAW types. It is an error if it has 2 or more SAW types.
 typeTransType1 :: HasCallStack => TypeTrans p tr -> PurityTerm p
@@ -2935,10 +2940,15 @@ instance HasPureTrans (AtomicPerm a) where
     [nuMP| Perm_BVProp _ |] -> True
     [nuMP| Perm_Any |] -> True
 
-instance HasPureTrans (ValuePerms as) where
+instance HasPureTrans (ValuePerms ps) where
   hasPureTrans p = case mbMatch p of
     [nuMP| MNil |] -> True
     [nuMP| ps :>: p' |] -> hasPureTrans ps && hasPureTrans p'
+
+instance HasPureTrans (DistPerms ps) where
+  hasPureTrans p = case mbMatch p of
+    [nuMP| MNil |] -> True
+    [nuMP| ps :>: VarAndPerm _ p' |] -> hasPureTrans ps && hasPureTrans p'
 
 instance HasPureTrans (LLVMFieldPerm w sz) where
   hasPureTrans (mbMatch -> [nuMP| LLVMFieldPerm { llvmFieldContents = p } |]) =
@@ -3328,7 +3338,7 @@ compReturnTypeM = typeDescType <$> compReturnTypeDescM
 -- | Like 'compReturnTypeM' but build a 'TypeTrans'
 compReturnTypeTransM ::
   ImpTransM ext blocks tops rets ps_out ctx (ImpTypeTrans SpecTerm)
-compReturnTypeTransM = flip mkImpTypeTrans1 id <$> compReturnTypeDescM
+compReturnTypeTransM = mkTermImpTypeTrans <$> compReturnTypeDescM
 
 -- | Build an @errorS@ computation with the given error message
 mkErrorComp :: String -> ImpTransM ext blocks tops rets ps_out ctx SpecTerm
@@ -5639,7 +5649,6 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
 
   -- FIXME HERE: document this!
   [nuMP| TypedCall _freg fun_perm _ gexprs args |] ->
-    error "FIXME HERE NOWNOW" {-
     do f_trans <- getTopPermM
        ectx_outer <- itiExprCtx <$> ask
        let rets = mbLift $ mbMapCl $(mkClosed [| funPermRets |]) fun_perm
@@ -5654,21 +5663,21 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
        pctx_in <- RL.tail <$> itiPermStack <$> ask
        let (pctx_ghosts_args, _) =
              RL.split (RL.append ectx_gexprs ectx_args) ectx_gexprs pctx_in
-       fret_tp <- sigmaTypeTransM "ret" rets_trans (hasPureTrans perms_out)
-                    (\ectx -> inExtMultiTransM ectx (typeTransTupleDesc <$>
-                                                     translate perms_out))
+       fret_tp <-
+         mkTermImpTypeTrans <$>
+         sigmaTypeTransM "ret" rets_trans (hasPureTrans perms_out)
+         (\ectx -> inExtMultiTransM ectx (typeTransTupleDesc <$>
+                                          translate perms_out))
        let all_args =
              exprCtxToTerms ectx_gexprs ++ exprCtxToTerms ectx_args ++
              permCtxToTerms pctx_ghosts_args
-       fret_trm <- case f_trans of
-         PTrans_Fun _ (Right f) ->
-           applyNamedSpecOpM "Prelude.liftStackS"
-           [fret_tp, applyTermLikeMulti f all_args]
-         PTrans_Fun _ (Left ix) ->
-           applyCallS ix allo_args
-         _ -> error "translateStmt: TypedCall: unexpected function permission"
+       let fapp_trm = case f_trans of
+             PTrans_Fun _ f_trm -> applyFunTransTerm f_trm all_args
+             _ ->
+               panic "translateStmt"
+               ["TypedCall: unexpected function permission"]
        bindSpecMTransM
-         fret_trm fret_tp "call_ret_val" $ \ret_val ->
+         fapp_trm fret_tp "call_ret_val" $ \ret_val ->
          sigmaElimTransM "elim_call_ret_val" rets_trans
            (flip inExtMultiTransM (translate perms_out)) compReturnTypeTransM
            (\rets_ectx pctx ->
@@ -5681,7 +5690,7 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
                suffixMembers ectx_outer rets_prxs)
              (const pctx)
              m)
-           ret_val -}
+           ret_val
 
   -- FIXME HERE: figure out why these asserts always translate to ite True
   [nuMP| TypedAssert e _ |] ->
