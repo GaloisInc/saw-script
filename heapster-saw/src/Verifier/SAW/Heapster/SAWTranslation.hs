@@ -6268,6 +6268,12 @@ someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
 someCFGAndPermLRT env (SomeCFGAndPerm _ _ _ fun_perm) =
   typeDescLRT $ runNilTypeTransM env noChecks $ translateClosed fun_perm
 
+-- | Construct a spec definition type for the event type in the supplied
+-- environment with the supplied @LetRecType@
+permEnvSpecDefOpenTerm :: PermEnv -> OpenTerm -> OpenTerm
+permEnvSpecDefOpenTerm env lrt =
+  applyGlobalOpenTerm "Prelude.SpecDef"
+  [identOpenTerm (permEnvSpecMEventType env), lrt]
 
 -- | Type-check a list of functions in the Heapster type system, translate each
 -- to a spec definition bound to the SAW core 'String' name associated with it,
@@ -6303,10 +6309,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     new_entries <-
       zipWithM
       (\(SomeTypedCFG sym nm cfg) (lrt, def_tm) ->
-        do tp <-
-             completeNormOpenTerm sc $
-             applyGlobalOpenTerm "Prelude.SpecDef"
-             [identOpenTerm (permEnvSpecMEventType env), lrt]
+        do tp <- completeNormOpenTerm sc $ permEnvSpecDefOpenTerm env lrt
            tm <- completeNormOpenTerm sc def_tm
            let ident = mkSafeIdent mod_name nm
            scInsertDef sc mod_name ident tp tm
@@ -6323,6 +6326,14 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
 ----------------------------------------------------------------------
 -- * Top-level Entrypoints for Translating Other Things
 ----------------------------------------------------------------------
+
+-- | Translate a function permission to the type of a spec definition for the
+-- translation of a function with that permission
+translateCompleteFunPerm :: SharedContext -> PermEnv ->
+                            FunPerm ghosts args gouts ret -> IO Term
+translateCompleteFunPerm sc env fun_perm =
+  completeNormOpenTerm sc $ permEnvSpecDefOpenTerm env $ typeDescLRT $
+  runNilTypeTransM env noChecks (translateClosed fun_perm)
 
 -- | Translate a 'TypeRepr' to the SAW core type it represents
 translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
