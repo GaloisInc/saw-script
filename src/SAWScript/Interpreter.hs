@@ -3837,7 +3837,7 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
     -- Crucible/MIR commands
 
-  , prim "mir_alloc" "MIRType -> MIRSetup SetupValue"
+  , prim "mir_alloc" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc)
     Experimental
     [ "Declare that an immutable reference to the given type should be allocated"
@@ -3847,7 +3847,7 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
-  , prim "mir_alloc_mut" "MIRType -> MIRSetup SetupValue"
+  , prim "mir_alloc_mut" "MIRType -> MIRSetup MIRValue"
     (pureVal mir_alloc_mut)
     Experimental
     [ "Declare that a mutable reference to the given type should be allocated"
@@ -3888,6 +3888,18 @@ primitives = Map.fromList
     (pureVal mir_load_module)
     Experimental
     [ "Load a MIR JSON file and return a handle to it." ]
+
+  , prim "mir_points_to" "MIRValue -> MIRValue -> MIRSetup ()"
+    (pureVal mir_points_to)
+    Experimental
+    [ "Declare that the memory location indicated by the given reference (first"
+    , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before `mir_execute_func`) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after `mir_execute_func`), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
 
   , prim "mir_postcond" "Term -> MIRSetup ()"
     (pureVal mir_postcond)
