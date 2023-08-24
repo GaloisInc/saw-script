@@ -53,6 +53,7 @@ module SAWScript.Crucible.JVM.Setup.Value
   ) where
 
 import           Control.Lens
+import           Data.Void (Void)
 import qualified Prettyprinter as PPL
 
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
@@ -74,24 +75,23 @@ import qualified SAWScript.Crucible.Common.Setup.Value as MS
 --------------------------------------------------------------------------------
 -- ** Language features
 
-type instance MS.HasSetupNull CJ.JVM = 'True
-type instance MS.HasSetupGlobal CJ.JVM = 'False
-type instance MS.HasSetupStruct CJ.JVM = 'False
-type instance MS.HasSetupArray CJ.JVM = 'False
-type instance MS.HasSetupElem CJ.JVM = 'False
-type instance MS.HasSetupField CJ.JVM = 'False
-type instance MS.HasSetupCast CJ.JVM = 'False
-type instance MS.HasSetupUnion CJ.JVM = 'False
-type instance MS.HasSetupGlobalInitializer CJ.JVM = 'False
+type instance MS.XSetupNull CJ.JVM = ()
+type instance MS.XSetupGlobal CJ.JVM = Void
+type instance MS.XSetupStruct CJ.JVM = Void
+type instance MS.XSetupArray CJ.JVM = Void
+type instance MS.XSetupElem CJ.JVM = Void
+type instance MS.XSetupField CJ.JVM = Void
+type instance MS.XSetupCast CJ.JVM = Void
+type instance MS.XSetupUnion CJ.JVM = Void
+type instance MS.XSetupGlobalInitializer CJ.JVM = Void
 
-type instance MS.HasGhostState CJ.JVM = 'False
+type instance MS.XGhostState CJ.JVM = Void
 
 type JIdent = String -- FIXME(huffman): what to put here?
 
 type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
-type instance MS.CastType CJ.JVM = ()
 type instance MS.ResolvedState CJ.JVM = ()
 
 --------------------------------------------------------------------------------

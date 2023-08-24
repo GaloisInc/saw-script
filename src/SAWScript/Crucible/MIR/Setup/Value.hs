@@ -46,6 +46,7 @@ import Control.Lens (makeLenses)
 import Data.Parameterized.Classes
 import Data.Parameterized.Some
 import Data.Text (Text)
+import Data.Void (Void)
 
 import Lang.Crucible.FunctionHandle (HandleAllocator)
 import Lang.Crucible.Types
@@ -57,17 +58,17 @@ import qualified Mir.Mir as M
 import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.Setup.Value as MS
 
-type instance MS.HasSetupNull MIR = 'False
-type instance MS.HasSetupGlobal MIR = 'False
-type instance MS.HasSetupStruct MIR = 'True
-type instance MS.HasSetupArray MIR = 'True
-type instance MS.HasSetupElem MIR = 'True
-type instance MS.HasSetupField MIR = 'True
-type instance MS.HasSetupCast MIR = 'False
-type instance MS.HasSetupUnion MIR = 'False
-type instance MS.HasSetupGlobalInitializer MIR = 'False
+type instance MS.XSetupNull MIR = Void
+type instance MS.XSetupGlobal MIR = Void
+type instance MS.XSetupStruct MIR = ()
+type instance MS.XSetupArray MIR = ()
+type instance MS.XSetupElem MIR = ()
+type instance MS.XSetupField MIR = ()
+type instance MS.XSetupCast MIR = Void
+type instance MS.XSetupUnion MIR = Void
+type instance MS.XSetupGlobalInitializer MIR = Void
 
-type instance MS.HasGhostState MIR = 'False
+type instance MS.XGhostState MIR = Void
 
 type instance MS.TypeName MIR = Text
 type instance MS.ExtType MIR = M.Ty
@@ -76,7 +77,6 @@ type instance MS.MethodId MIR = DefId
 type instance MS.AllocSpec MIR = Some MirAllocSpec
 type instance MS.PointsTo MIR = MirPointsTo
 type instance MS.ResolvedState MIR = ()
-type instance MS.CastType MIR = ()
 
 type instance MS.Codebase MIR = CollectionState
 

@@ -116,21 +116,21 @@ import           Verifier.SAW.TypedTerm
 
 data LLVM (arch :: CL.LLVMArch)
 
-type instance Setup.HasSetupNull (LLVM _) = 'True
-type instance Setup.HasSetupStruct (LLVM _) = 'True
-type instance Setup.HasSetupArray (LLVM _) = 'True
-type instance Setup.HasSetupElem (LLVM _) = 'True
-type instance Setup.HasSetupField (LLVM _) = 'True
-type instance Setup.HasSetupCast (LLVM _) = 'True
-type instance Setup.HasSetupUnion (LLVM _) = 'True
-type instance Setup.HasSetupGlobal (LLVM _) = 'True
-type instance Setup.HasSetupGlobalInitializer (LLVM _) = 'True
+type instance Setup.XSetupNull (LLVM _) = ()
+-- 'True' if this is an LLVM packed struct, 'False' otherwise.
+type instance Setup.XSetupStruct (LLVM _) = Bool
+type instance Setup.XSetupArray (LLVM _) = ()
+type instance Setup.XSetupElem (LLVM _) = ()
+type instance Setup.XSetupField (LLVM _) = ()
+type instance Setup.XSetupCast (LLVM _) = L.Type
+type instance Setup.XSetupUnion (LLVM _) = ()
+type instance Setup.XSetupGlobal (LLVM _) = ()
+type instance Setup.XSetupGlobalInitializer (LLVM _) = ()
 
-type instance Setup.HasGhostState (LLVM _) = 'True
+type instance Setup.XGhostState (LLVM _) = ()
 
 type instance Setup.TypeName (LLVM arch) = CL.Ident
 type instance Setup.ExtType (LLVM arch) = CL.MemType
-type instance Setup.CastType (LLVM arch) = L.Type
 
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId

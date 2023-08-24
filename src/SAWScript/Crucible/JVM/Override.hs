@@ -964,11 +964,11 @@ instantiateSetupValue sc s v =
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
     MS.SetupNull ()                   -> return v
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where

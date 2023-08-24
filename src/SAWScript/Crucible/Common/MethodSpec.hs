@@ -15,8 +15,10 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -32,23 +34,19 @@ module SAWScript.Crucible.Common.MethodSpec
   , AllocSpec
   , TypeName
   , ExtType
-  , CastType
   , PointsTo
   , AllocGlobal
   , ResolvedState
 
-  , BoolToType
-  , B
-
-  , HasSetupNull
-  , HasSetupStruct
-  , HasSetupArray
-  , HasSetupElem
-  , HasSetupField
-  , HasSetupGlobal
-  , HasSetupCast
-  , HasSetupUnion
-  , HasSetupGlobalInitializer
+  , XSetupNull
+  , XSetupStruct
+  , XSetupArray
+  , XSetupElem
+  , XSetupField
+  , XSetupGlobal
+  , XSetupCast
+  , XSetupUnion
+  , XSetupGlobalInitializer
 
   , SetupValue(..)
   , SetupValueHas
@@ -62,7 +60,7 @@ module SAWScript.Crucible.Common.MethodSpec
   , setupToTypedTerm
   , setupToTerm
 
-  , HasGhostState
+  , XGhostState
   , GhostValue
   , GhostType
   , GhostGlobal
@@ -111,10 +109,12 @@ module SAWScript.Crucible.Common.MethodSpec
   , makeCrucibleMethodSpecIR
   ) where
 
+import           Data.Kind (Type)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import           Data.Time.Clock
+import           Data.Void (absurd)
 
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
@@ -126,9 +126,11 @@ import           Data.Parameterized.Nonce
 -- what4
 import           What4.ProgramLoc (ProgramLoc(plSourceLoc), Position)
 
+import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
+import           Mir.Intrinsics (MIR)
 
 import qualified Cryptol.Utils.PP as Cryptol
 
@@ -136,6 +138,9 @@ import           Verifier.SAW.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
 
 import           SAWScript.Crucible.Common.Setup.Value
+import           SAWScript.Crucible.LLVM.Setup.Value (LLVM)
+import           SAWScript.Crucible.JVM.Setup.Value ()
+import           SAWScript.Crucible.MIR.Setup.Value ()
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
@@ -153,29 +158,74 @@ stateCond PostState = "postcondition"
 --------------------------------------------------------------------------------
 -- ** SetupValue
 
+-- | A singleton type that encodes the extensions used for each SAW backend.
+-- Matching on a value of type @'SAWExt' ext@ allows one to learn which backend
+-- is currently in use.
+data SAWExt :: Type -> Type where
+  LLVMExt :: SAWExt (LLVM arch)
+  JVMExt  :: SAWExt JVM
+  MIRExt  :: SAWExt MIR
+
+-- | This allows checking which SAW backend we are using at runtime.
+class IsExt ext where
+  sawExt :: SAWExt ext
+
+instance IsExt (LLVM arch) where
+  sawExt = LLVMExt
+instance IsExt JVM where
+  sawExt = JVMExt
+instance IsExt MIR where
+  sawExt = MIRExt
+
 -- | Note that most 'SetupValue' concepts (like allocation indices)
 --   are implementation details and won't be familiar to users.
---   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
---   with @PP.pretty@ instead.
-ppSetupValue :: Show (CastType ext) => SetupValue ext -> PP.Doc ann
+--   Consider using 'resolveSetupValue' and printing the language-specific value
+--   (e.g., an 'LLVMVal') with @PP.pretty@ instead.
+ppSetupValue :: forall ext ann. IsExt ext => SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> ppAllocIndex i
   SetupNull _    -> PP.pretty "NULL"
-  SetupStruct _ packed vs
-    | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
-    | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
+  SetupStruct x vs ->
+    case (ext, x) of
+      (LLVMExt, packed) ->
+        ppSetupStructLLVM packed vs
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, ()) ->
+        ppSetupStructDefault vs
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
   SetupUnion _ v u -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ u)
-  SetupCast _ v tp -> PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show tp)
+  SetupCast x v ->
+    case (ext, x) of
+      (LLVMExt, tp) ->
+        PP.parens (ppSetupValue v) PP.<> PP.pretty (" AS " ++ show tp)
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, empty) ->
+        absurd empty
   SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
   SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")
   where
+    ext :: SAWExt ext
+    ext = sawExt @ext
+
     commaList :: [PP.Doc ann] -> PP.Doc ann
     commaList []     = PP.emptyDoc
     commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
+
+    ppSetupStructLLVM ::
+         Bool
+         -- ^ 'True' if this is an LLVM packed struct, 'False' otherwise.
+      -> [SetupValue ext] -> PP.Doc ann
+    ppSetupStructLLVM packed vs
+      | packed    = PP.angles (ppSetupStructDefault vs)
+      | otherwise = ppSetupStructDefault vs
+
+    ppSetupStructDefault :: [SetupValue ext] -> PP.Doc ann
+    ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))
 
 ppAllocIndex :: AllocIndex -> PP.Doc ann
 ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
@@ -224,7 +274,7 @@ setupToTerm opts sc =
   \case
     SetupTerm term -> return (ttTerm term)
 
-    SetupStruct _ _ fields ->
+    SetupStruct _ fields ->
       do ts <- mapM (setupToTerm opts sc) fields
          lift $ scTuple sc ts
 
@@ -248,7 +298,7 @@ setupToTerm opts sc =
              typ <- lift $ scTypeOf sc et
              lift $ scAt sc lent typ art ixt
 
-        SetupStruct _ _ fs ->
+        SetupStruct _ fs ->
           do st <- setupToTerm opts sc base
              lift $ scTupleSelector sc st ind (length fs)
 
@@ -270,14 +320,14 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 data SetupCondition ext where
   SetupCond_Equal    :: ConditionMetadata -> SetupValue ext -> SetupValue ext -> SetupCondition ext
   SetupCond_Pred     :: ConditionMetadata -> TypedTerm -> SetupCondition ext
-  SetupCond_Ghost    :: B (HasGhostState ext) ->
+  SetupCond_Ghost    :: XGhostState ext ->
                         ConditionMetadata ->
                         GhostGlobal ->
                         TypedTerm ->
                         SetupCondition ext
 
 deriving instance ( SetupValueHas Show ext
-                  , Show (B (HasGhostState ext))
+                  , Show (XGhostState ext)
                   ) => Show (SetupCondition ext)
 
 -- | Verification state (either pre- or post-) specification

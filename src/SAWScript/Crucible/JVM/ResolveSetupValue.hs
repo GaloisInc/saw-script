@@ -139,11 +139,11 @@ typeOfSetupValue _cc env _nameEnv val =
       -- type-safe field accesses.
       return (J.ClassType (J.mkClassName "java/lang/Object"))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 
@@ -170,11 +170,11 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where

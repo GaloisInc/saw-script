@@ -120,7 +120,7 @@ resolveSetupValueInfo cc env nameEnv v =
            -- TODO? is this a panic situation?
            throwError $ "Type information for local allocation value not found: " ++ show i
 
-    SetupCast () _ (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
+    SetupCast (L.Alias alias) _ -> pure (L.guessAliasInfo mdMap alias)
 
     SetupField () a n ->
       do i <- resolveSetupValueInfo cc env nameEnv a
@@ -445,7 +445,7 @@ typeOfSetupValue cc env nameEnv val =
                 , show (ppTypedTermType tp)
                 ]
 
-    SetupStruct () packed vs ->
+    SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
@@ -469,9 +469,9 @@ typeOfSetupValue cc env nameEnv val =
                         [ "Could not determine LLVM type from computed debug type information:"
                         , show info
                         ]
-           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast () v ltp)
+           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast ltp v)
 
-    SetupCast () v ltp ->
+    SetupCast ltp v ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          if Crucible.isPointerMemType memTy
            then
@@ -614,11 +614,11 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     SetupTerm tm -> resolveTypedTerm cc tm
     -- NB, SetupCast values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
-    SetupCast () v _lty -> resolveSetupVal cc mem env tyenv nameEnv v
+    SetupCast _lty v -> resolveSetupVal cc mem env tyenv nameEnv v
     -- NB, SetupUnion values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
     SetupUnion () v _n -> resolveSetupVal cc mem env tyenv nameEnv v
-    SetupStruct () packed vs -> do
+    SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals
       let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))

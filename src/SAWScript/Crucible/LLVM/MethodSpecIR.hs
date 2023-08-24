@@ -382,13 +382,13 @@ anySetupArray :: [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
 anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map (\a -> getAllLLVM a) vals)
 
 anySetupStruct :: Bool -> [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
-anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map (\a -> getAllLLVM a) vals)
+anySetupStruct b vals = mkAllLLVM (MS.SetupStruct b $ map (\a -> getAllLLVM a) vals)
 
 anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
 anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
 
 anySetupCast :: AllLLVM MS.SetupValue -> L.Type -> AllLLVM MS.SetupValue
-anySetupCast val ty = mkAllLLVM (MS.SetupCast () (getAllLLVM val) ty)
+anySetupCast val ty = mkAllLLVM (MS.SetupCast ty (getAllLLVM val))
 
 anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
 anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
@@ -447,7 +447,7 @@ markResolved val0 path0 rs = go path0 val0
         MS.SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
         MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
         MS.SetupField _ v fld -> go (ResolvedField fld : path) v
-        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
+        MS.SetupCast tp v     -> go (ResolvedCast tp : path) v
         _                     -> rs
 
     ins path Nothing = Just [path]
@@ -468,7 +468,7 @@ testResolved val0 path0 rs = go path0 val0
         MS.SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
         MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
         MS.SetupField _ v fld -> go (ResolvedField fld : path) v
-        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
+        MS.SetupCast tp v     -> go (ResolvedCast tp : path) v
         _                     -> False
 
     test _ Nothing = False

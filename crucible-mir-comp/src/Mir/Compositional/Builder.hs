@@ -635,11 +635,11 @@ substMethodSpec sc sm ms = do
         MS.SetupVar _ -> return sv
         MS.SetupTerm tt -> MS.SetupTerm <$> goTypedTerm tt
         MS.SetupNull _ -> return sv
-        MS.SetupStruct b packed svs -> MS.SetupStruct b packed <$> mapM goSetupValue svs
+        MS.SetupStruct b svs -> MS.SetupStruct b <$> mapM goSetupValue svs
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
-        MS.SetupCast v _ _ -> case v of {}
+        MS.SetupCast v _ -> case v of {}
         MS.SetupUnion v _ _ -> case v of {}
         MS.SetupGlobal _ _ -> return sv
         MS.SetupGlobalInitializer _ _ -> return sv
@@ -677,14 +677,14 @@ regToSetup bak p eval shp rv = go shp rv
 
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
-    go (UnitShape _) () = return $ MS.SetupStruct () False []
+    go (UnitShape _) () = return $ MS.SetupStruct () []
     go (PrimShape _ btpr) expr = do
         -- Record all vars used in `expr`
         cache <- use msbVisitCache
         visitExprVars cache expr $ \var -> do
             msbPrePost p . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ _ flds) rvs = MS.SetupStruct () False <$> goFields flds rvs
+    go (TupleShape _ _ flds) rvs = MS.SetupStruct () <$> goFields flds rvs
     go (ArrayShape _ _ shp) vec = do
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
@@ -695,7 +695,7 @@ regToSetup bak p eval shp rv = go shp rv
         return $ MS.SetupArray () svs
     go (StructShape _ _ flds) (AnyValue tpr rvs)
       | Just Refl <- testEquality tpr shpTpr =
-        MS.SetupStruct () False <$> goFields flds rvs
+        MS.SetupStruct () <$> goFields flds rvs
       | otherwise = error $ "regToSetup: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds

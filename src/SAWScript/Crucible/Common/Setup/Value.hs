@@ -32,28 +32,24 @@ module SAWScript.Crucible.Common.Setup.Value
   , AllocSpec
   , TypeName
   , ExtType
-  , CastType
   , PointsTo
   , AllocGlobal
   , ResolvedState
 
-  , BoolToType
-  , B
-
-  , HasSetupNull
-  , HasSetupStruct
-  , HasSetupArray
-  , HasSetupElem
-  , HasSetupField
-  , HasSetupGlobal
-  , HasSetupCast
-  , HasSetupUnion
-  , HasSetupGlobalInitializer
+  , XSetupNull
+  , XSetupStruct
+  , XSetupArray
+  , XSetupElem
+  , XSetupField
+  , XSetupGlobal
+  , XSetupCast
+  , XSetupUnion
+  , XSetupGlobalInitializer
 
   , SetupValue(..)
   , SetupValueHas
 
-  , HasGhostState
+  , XGhostState
 
   , ConditionMetadata(..)
 
@@ -66,7 +62,6 @@ module SAWScript.Crucible.Common.Setup.Value
 import           Data.Constraint (Constraint)
 import           Data.Kind (Type)
 import           Data.Set (Set)
-import           Data.Void (Void)
 
 import           What4.ProgramLoc (ProgramLoc)
 
@@ -93,9 +88,6 @@ type family TypeName ext :: Type
 -- | The type of types of the syntax extension we're dealing with
 type family ExtType ext :: Type
 
--- | The types that can appear in casts
-type family CastType ext :: Type
-
 -- | The type of points-to assertions
 type family PointsTo ext :: Type
 
@@ -108,24 +100,34 @@ type family ResolvedState ext :: Type
 --------------------------------------------------------------------------------
 -- ** SetupValue
 
--- | An injective type family mapping type-level booleans to types
-type family BoolToType (b :: Bool) = (t :: Type) | t -> b where
-  BoolToType 'True  = ()
-  BoolToType 'False = Void
+-- The following type families are extension fields, which describe what
+-- SetupValues are legal for which language backends. Instances for these type
+-- families adhere to the following conventions:
+--
+-- - If a SetupValue constructor is used in a particular backend and there is
+--   some data that is /only/ used by that backend, then the corresponding
+--   extension field should have a @type instance@ that evaluates to the type of
+--   that data. For instance, the @XSetupCast@ instance for @LLVM@ might
+--   evaluate to an LLVM @Type@ to represent the type to cast to.
+--
+-- - If a SetupValue constructor is used in a particular backend but there is
+--   no backend-specific information, then the corresponding extension field
+--   should have a @type instance@ that evaluates to @()@.
+--
+-- - If a SetupValue constructor is not used in a particular backend, its
+--   corresponding extension field should have a @type instance@ that evaluates
+--   to Void. Any code that pattern matches on the constructor should then
+--   dispatch on the Void value using the 'absurd' function.
 
-type B b = BoolToType b
-
- -- The following type families describe what SetupValues are legal for which
- -- languages.
-type family HasSetupNull ext :: Bool
-type family HasSetupStruct ext :: Bool
-type family HasSetupArray ext :: Bool
-type family HasSetupElem ext :: Bool
-type family HasSetupField ext :: Bool
-type family HasSetupGlobal ext :: Bool
-type family HasSetupCast ext :: Bool
-type family HasSetupUnion ext :: Bool
-type family HasSetupGlobalInitializer ext :: Bool
+type family XSetupNull ext
+type family XSetupStruct ext
+type family XSetupArray ext
+type family XSetupElem ext
+type family XSetupField ext
+type family XSetupGlobal ext
+type family XSetupCast ext
+type family XSetupUnion ext
+type family XSetupGlobalInitializer ext
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
 -- during symbolic execution, which includes both 'Term' values, pointers, and
@@ -133,35 +135,35 @@ type family HasSetupGlobalInitializer ext :: Bool
 data SetupValue ext where
   SetupVar    :: AllocIndex -> SetupValue ext
   SetupTerm   :: TypedTerm -> SetupValue ext
-  SetupNull   :: B (HasSetupNull ext) -> SetupValue ext
-  -- | If the 'Bool' is 'True', it's a (LLVM) packed struct
-  SetupStruct :: B (HasSetupStruct ext) -> Bool -> [SetupValue ext] -> SetupValue ext
-  SetupArray  :: B (HasSetupArray ext) -> [SetupValue ext] -> SetupValue ext
-  SetupElem   :: B (HasSetupElem ext) -> SetupValue ext -> Int -> SetupValue ext
-  SetupField  :: B (HasSetupField ext) -> SetupValue ext -> String -> SetupValue ext
-  SetupCast   :: B (HasSetupCast ext) -> SetupValue ext -> CastType ext -> SetupValue ext
-  SetupUnion  :: B (HasSetupUnion ext) -> SetupValue ext -> String -> SetupValue ext
+  SetupNull   :: XSetupNull ext -> SetupValue ext
+  SetupStruct :: XSetupStruct ext -> [SetupValue ext] -> SetupValue ext
+  SetupArray  :: XSetupArray ext -> [SetupValue ext] -> SetupValue ext
+  SetupElem   :: XSetupElem ext -> SetupValue ext -> Int -> SetupValue ext
+  SetupField  :: XSetupField ext -> SetupValue ext -> String -> SetupValue ext
+  SetupCast   :: XSetupCast ext -> SetupValue ext -> SetupValue ext
+  SetupUnion  :: XSetupUnion ext -> SetupValue ext -> String -> SetupValue ext
 
   -- | A pointer to a global variable
-  SetupGlobal :: B (HasSetupGlobal ext) -> String -> SetupValue ext
+  SetupGlobal :: XSetupGlobal ext -> String -> SetupValue ext
   -- | This represents the value of a global's initializer.
   SetupGlobalInitializer ::
-    B (HasSetupGlobalInitializer ext) -> String -> SetupValue ext
+    XSetupGlobalInitializer ext -> String -> SetupValue ext
 
--- | This constraint can be solved for any ext so long as '()' and 'Void' have
---   the constraint. Unfortunately, GHC can't (yet?) reason over the equations
---   in our closed type family, and realize that
+-- | This constraint can be solved for any ext so long as '()', 'Void', and any
+--   other types used in the right-hand sides of extension field
+--   @type instance@s have the constraint. Unfortunately, GHC can't (yet?)
+--   reason over the equations in our closed type family and realize that, so we
+--   must explicitly abstract this reasoning out into a type synonym.
 type SetupValueHas (c :: Type -> Constraint) ext =
-  ( c (B (HasSetupNull ext))
-  , c (B (HasSetupStruct ext))
-  , c (B (HasSetupArray ext))
-  , c (B (HasSetupElem ext))
-  , c (B (HasSetupField ext))
-  , c (B (HasSetupCast ext))
-  , c (B (HasSetupUnion ext))
-  , c (B (HasSetupGlobal ext))
-  , c (B (HasSetupGlobalInitializer ext))
-  , c (CastType ext)
+  ( c (XSetupNull ext)
+  , c (XSetupStruct ext)
+  , c (XSetupArray ext)
+  , c (XSetupElem ext)
+  , c (XSetupField ext)
+  , c (XSetupCast ext)
+  , c (XSetupUnion ext)
+  , c (XSetupGlobal ext)
+  , c (XSetupGlobalInitializer ext)
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
@@ -178,7 +180,7 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 
 -- TODO: documentation
 
-type family HasGhostState ext :: Bool
+type family XGhostState ext
 
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions
