@@ -1,0 +1,6 @@
+module F where
+
+import interface A as X
+import interface A as Y
+
+f = X::a + Y::a

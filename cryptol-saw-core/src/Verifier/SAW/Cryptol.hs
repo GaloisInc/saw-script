@@ -72,7 +72,7 @@ import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), mkIdent
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
   , ModName, modNameToText, identText, interactiveName
-  , ModPath(..), modPathSplit, ogModule, Namespace(NSValue)
+  , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
   )
 import qualified Cryptol.Utils.RecordMap as C
@@ -1375,10 +1375,18 @@ importName cnm =
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
               topChunks = C.modNameChunksText topMod
               modNms    = topChunks ++ map C.identText nested
+              -- If the name came from a module parameter, add the module
+              -- parameter identifier to distinguish between names that have the
+              -- same identifier but come from different module parameters (see
+              -- #1892)
+              ifaceNms  = case C.ogFromParam og of
+                            Just i  -> [C.identText i]
+                            Nothing -> []
               shortNm   = C.identText (C.nameIdent cnm)
-              longNm    = Text.intercalate "::" (modNms ++ [shortNm])
+              nmParts   = modNms ++ ifaceNms ++ [shortNm]
+              longNm    = Text.intercalate "::" nmParts
               aliases   = [shortNm, longNm]
-              uri       = cryptolURI (modNms ++ [shortNm]) Nothing
+              uri       = cryptolURI nmParts Nothing
            in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
