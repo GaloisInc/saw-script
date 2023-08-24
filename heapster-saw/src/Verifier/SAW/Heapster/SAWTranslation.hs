@@ -6004,34 +6004,53 @@ translateCFGLRT cfg =
 -- term with it if it has one, i.e., if its in-degree is greater than 1. If it
 -- does need a closure, the 'Natural' state tracks the index to be used for the
 -- next closure, so use the current value and increment it.
+--
+-- Note that the return type is a monad inside a monad. This is so that the
+-- caller can see the 'Natural' state without running the 'TypeTransM'
+-- computation, which is necessary later on for tying the knot
 translateTypedEntry ::
   Some (TypedEntry TransPhase ext blocks tops rets args) ->
-  StateT Natural (TypeTransM ctx) (Some
-                                   (TypedEntryTrans ext blocks tops rets args))
+  State Natural (TypeTransM RNil (Some
+                                  (TypedEntryTrans ext blocks tops rets args)))
 translateTypedEntry (Some entry) =
   if typedEntryHasMultiInDegree entry then
     do i <- get
        put (i+1)
-       lrt <- lift $ translateEntryLRT entry
-       return (Some (TypedEntryTrans entry $ Just (lrt, mkBaseClosSpecTerm i)))
-  else return $ Some (TypedEntryTrans entry Nothing)
+       return $ do lrt <- translateEntryLRT entry
+                   return (Some (TypedEntryTrans entry $
+                                 Just (lrt, mkBaseClosSpecTerm i)))
+  else return $ return $ Some (TypedEntryTrans entry Nothing)
 
 -- | Translate a 'TypedBlock' to a 'TypedBlockTrans' by translating each
--- entrypoint in the block using 'translateTypedEntry'
+-- entrypoint in the block using 'translateTypedEntry'; see
+-- 'translateTypedEntry' for an explanation of the monad-in-monad type
 translateTypedBlock ::
   TypedBlock TransPhase ext blocks tops rets args ->
-  StateT Natural (TypeTransM ctx) (TypedBlockTrans ext blocks tops rets args)
+  State Natural (TypeTransM RNil (TypedBlockTrans ext blocks tops rets args))
 translateTypedBlock blk =
-  TypedBlockTrans <$>
+  (TypedBlockTrans <$>) <$> sequence <$>
   mapM translateTypedEntry (blk ^. typedBlockEntries)
 
+-- | Helper function to translate a 'TypedBlockMap' to a 'TypedBlockMapTrans' by
+-- translating every entrypoint using 'translateTypedEntry'; see
+-- 'translateTypedEntry' for an explanation of the monad-in-monad type
+translateTypedBlockMapH ::
+  RAssign (TypedBlock TransPhase ext blocks tops rets) blks ->
+  State Natural (TypeTransM RNil
+                 (RAssign (TypedBlockTrans ext blocks tops rets) blks))
+translateTypedBlockMapH MNil = return $ return MNil
+translateTypedBlockMapH (blkMap :>: blk) =
+  do blkMapTransM <- translateTypedBlockMapH blkMap
+     blkTransM <- translateTypedBlock blk
+     return ((:>:) <$> blkMapTransM <*> blkTransM)
+
 -- | Translate a 'TypedBlockMap' to a 'TypedBlockMapTrans' by translating every
--- entrypoint using 'translateTypedEntry'
+-- entrypoint using 'translateTypedEntry'; see 'translateTypedEntry' for an
+-- explanation of the monad-in-monad type
 translateTypedBlockMap ::
   TypedBlockMap TransPhase ext blocks tops rets ->
-  StateT Natural (TypeTransM ctx) (TypedBlockMapTrans ext blocks tops rets)
-translateTypedBlockMap blkMap =
-  traverseRAssign translateTypedBlock blkMap
+  State Natural (TypeTransM RNil (TypedBlockMapTrans ext blocks tops rets))
+translateTypedBlockMap = translateTypedBlockMapH
 
 -- | Translate the typed statements of an entrypoint to a function
 --
@@ -6061,17 +6080,15 @@ translateBlockMapBodies mapTrans blkMap =
                                (,) <$> translateEntryLRT entry <*>
                                translateEntryBody mapTrans entry) blkMap
 
-{-
-NOWNOW:
-- change uses of TypeTrans to include the purity flag
-
--- | FIXME HERE NOW: docs
-translateCFGInitEntryBody ::
+-- | Translate a CFG to a monadic function that takes all the top-level
+-- arguments to that CFG and calls into its initial entrypoint; this monadic
+-- function is used as the body of one of the closures used to translate the CFG
+translateCFGInitBody ::
   PermCheckExtC ext exprExt =>
   TypedBlockMapTrans ext blocks (ghosts :++: inits) (gouts :> ret) ->
   TypedCFG ext blocks ghosts inits gouts ret ->
-  TypeTransM RNil OpenTerm
-translateCFGInitEntryBody mapTrans (cfg :: TypedCFG ext blocks ghosts inits gouts ret) =
+  TypeTransM RNil SpecTerm
+translateCFGInitBody mapTrans cfg =
   let fun_perm = tpcfgFunPerm cfg
       h = tpcfgHandle cfg
       ctx = typedFnHandleAllArgs h
@@ -6096,17 +6113,64 @@ translateCFGInitEntryBody mapTrans (cfg :: TypedCFG ext blocks ghosts inits gout
   translateCallEntry "CFG" init_entry (nuMulti all_px id) (nuMulti all_px $
                                                            const MNil)
 
--- | FIXME HERE NOW: docs
-translateCFGBodies :: PermCheckExtC ext exprExt => Natural ->
-                      TypedCFG ext blocks ghosts inits gouts ret ->
-                      TypeTransM RNil [OpenTerm]
-translateCFGBodies start_ix cfg =
+-- | Translate a CFG to a monadic function that passes all of its arguments to
+-- the closure with the given index, which is meant to be the closure whose body
+-- is defined by 'translateCFGInitBody'
+translateCFGIxCall :: TypedCFG ext blocks ghosts inits gouts ret -> Natural ->
+                      TypeTransM RNil SpecTerm
+translateCFGIxCall cfg ix =
+  do let fun_perm = tpcfgFunPerm cfg
+         h = tpcfgHandle cfg
+         ctx = typedFnHandleAllArgs h
+     lrt <- translateCFGLRT cfg
+     lambdaExprCtx ctx $ lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
+       (infoCtx <$> ask) >>= \ectx ->
+       return $
+       applyClosSpecTerm lrt (mkBaseClosSpecTerm ix) (transTerms ectx ++
+                                                      transTerms pctx)
+
+-- | FIXME HERE NOWNOW: docs
+data CFGTrans =
+  CFGTrans { cfgTransLRT :: OpenTerm,
+             cfgTransCloss :: [(OpenTerm,SpecTerm)],
+             cfgTransBody :: SpecTerm }
+
+-- | Translate a CFG to a list of closure definitions, represented as a pair of
+-- a @LetRecType@ and a monadic function of that @LetRecType@. These closures
+-- are for the CFG itself and for all of its entrypoints that are translated to
+-- closures, i.e., with in-degree > 1. Use the current 'Natural' in the 'State'
+-- monad as the starting index for these closures, and increment that 'Natural'
+-- state for each closure body returned. Also return the 'Natural' index used
+-- for the closure for the entire CFG. See 'translateTypedEntry' for an
+-- explanation of the monad-in-monad type.
+translateCFG :: PermCheckExtC ext exprExt =>
+                TypedCFG ext blocks ghosts inits gouts ret ->
+                State Natural (Natural, TypeTransM RNil CFGTrans)
+translateCFG cfg =
   do let blkMap = tpcfgBlockMap cfg
-     mapTrans <-
-       evalStateT (translateTypedBlockMap blkMap) (start_ix+1)
-     bodies <- translateBlockMapBodies stack mapTrans blkMap
-     init_body <- translateCFGInitEntryBody mapTrans cfg
-     return (init_body : bodies)
+     -- Get the natural number index for the top-level closure of the CFG
+     cfg_ix <- get
+     put (cfg_ix + 1)
+     -- Translate the block map of the CFG by generating calls to closures for
+     -- all the entrypoints with in-degree > 1
+     mapTransM <- translateTypedBlockMap blkMap
+     -- Return the CFG index and the computation for creating the bodies
+     return
+       (cfg_ix,
+        do mapTrans <- mapTransM
+           -- Generate the actual closure bodies + LRTs for those entrypoints
+           closs <- translateBlockMapBodies mapTrans blkMap
+           -- Generate the closure body + LRT for the entire CFG
+           cfg_clos_body <- translateCFGInitBody mapTrans cfg
+           cfg_lrt <- translateCFGLRT cfg
+           let cfg_clos = (cfg_lrt,cfg_clos_body)
+           -- Generate the body of the CFG, that calls the cfg_body closure
+           cfg_body <- translateCFGIxCall cfg cfg_ix
+           -- Then, finally, return all the closure lrts and bodies
+           return $ CFGTrans cfg_lrt (cfg_clos : closs) cfg_body)
+
+
+{- FIXME HERE NOWNOW: I don't think we need any of the following any more...
 
 -- | Lambda-abstract over all the expression and permission arguments of the
 -- translation of a CFG, passing them to a Haskell function
@@ -6139,18 +6203,12 @@ translateCFG env prev_stack frame bodies ix cfg =
   lambdaCFGArgs env cfg $ \args ->
   applyNamedEventOpM "Prelude.multiFixS" [prev_stack, frame, bodies,
                                           mkFrameCall frame ix args]
+-}
 
 
 ----------------------------------------------------------------------
 -- * Translating Sets of CFGs
 ----------------------------------------------------------------------
-
--- | An existentially quantified tuple of a 'CFG', its function permission, and
--- a 'String' name we want to translate it to
-data SomeCFGAndPerm ext where
-  SomeCFGAndPerm :: GlobalSymbol -> String -> CFG ext blocks inits ret ->
-                    FunPerm ghosts (CtxToRList inits) gouts ret ->
-                    SomeCFGAndPerm ext
 
 -- | An existentially quantified tuple of a 'TypedCFG', its 'GlobalSymbol', and
 -- a 'String' name we want to translate it to
@@ -6159,6 +6217,52 @@ data SomeTypedCFG ext where
                   TypedCFG ext blocks ghosts inits gouts ret ->
                   SomeTypedCFG ext
 
+-- | Helper function to build an LLVM function permission from a 'FunPerm'
+mkPtrFunPerm :: HasPtrWidth w => FunPerm ghosts args gouts ret ->
+                ValuePerm (LLVMPointerType w)
+mkPtrFunPerm fun_perm =
+  withKnownNat ?ptrWidth $ ValPerm_Conj1 $ mkPermLLVMFunPtr ?ptrWidth fun_perm
+
+-- | Extract the 'FunPerm' of a 'SomeTypedCFG' as a permission on LLVM function
+-- pointer values
+someTypedCFGPtrPerm :: HasPtrWidth w => SomeTypedCFG LLVM ->
+                       ValuePerm (LLVMPointerType w)
+someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) = mkPtrFunPerm $ tpcfgFunPerm cfg
+
+-- | Convert a 'SomedTypedCFG' and a closure index for its initial entrypoint
+-- closure into an entry in the permission environment
+someTypedCFGIxEntry :: HasPtrWidth w => SomeTypedCFG LLVM -> Natural ->
+                       PermEnvGlobalEntry
+someTypedCFGIxEntry (SomeTypedCFG sym _ cfg) ix =
+  withKnownNat ?ptrWidth $
+  PermEnvGlobalEntry sym (mkPtrFunPerm $ tpcfgFunPerm cfg)
+  (GlobalTransClos $ mkBaseClosSpecTerm ix)
+
+-- | Translate a list of CFGs for mutually recursive functions to a list of spec
+-- definitions
+translateCFGsToDefs :: HasPtrWidth w => PermEnv -> ChecksFlag ->
+                       [SomeTypedCFG LLVM] -> [OpenTerm]
+translateCFGsToDefs env checks some_cfgs =
+  let (cfg_ixs, cfg_transsM) =
+        unzip $ evalState (mapM (\(SomeTypedCFG _ _ cfg) ->
+                                  translateCFG cfg) some_cfgs) 0
+      tmp_env = permEnvAddGlobalSyms env $
+        zipWith someTypedCFGIxEntry some_cfgs cfg_ixs
+      cfg_transs = runNilTypeTransM tmp_env checks $ sequence cfg_transsM
+      closs = concat $ map cfgTransCloss cfg_transs in
+  map (\cfg_trans ->
+        defineSpecOpenTerm (identOpenTerm $ permEnvSpecMEventType env) closs
+        (cfgTransLRT cfg_trans) (cfgTransBody cfg_trans))
+  cfg_transs
+
+
+-- | An existentially quantified tuple of a 'CFG', its function permission, and
+-- a 'String' name we want to translate it to
+data SomeCFGAndPerm ext where
+  SomeCFGAndPerm :: GlobalSymbol -> String -> CFG ext blocks inits ret ->
+                    FunPerm ghosts (CtxToRList inits) gouts ret ->
+                    SomeCFGAndPerm ext
+
 -- | Extract the 'GlobalSymbol' from a 'SomeCFGAndPerm'
 someCFGAndPermSym :: SomeCFGAndPerm ext -> GlobalSymbol
 someCFGAndPermSym (SomeCFGAndPerm sym _ _ _) = sym
@@ -6166,12 +6270,6 @@ someCFGAndPermSym (SomeCFGAndPerm sym _ _ _) = sym
 -- | Extract the 'String' name from a 'SomeCFGAndPerm'
 someCFGAndPermToName :: SomeCFGAndPerm ext -> String
 someCFGAndPermToName (SomeCFGAndPerm _ nm _ _) = nm
-
--- | Helper function to build an LLVM function permission from a 'FunPerm'
-mkPtrFunPerm :: HasPtrWidth w => FunPerm ghosts args gouts ret ->
-                ValuePerm (LLVMPointerType w)
-mkPtrFunPerm fun_perm =
-  withKnownNat ?ptrWidth $ ValPerm_Conj1 $ mkPermLLVMFunPtr ?ptrWidth fun_perm
 
 -- | Map a 'SomeCFGAndPerm' to a 'PermEnvGlobalEntry' with no translation, i.e.,
 -- with an 'error' term for the translation
@@ -6185,35 +6283,12 @@ someCFGAndPermGlobalEntry (SomeCFGAndPerm sym _ _ fun_perm) =
 -- | Convert the 'FunPerm' of a 'SomeCFGAndPerm' to an inductive @LetRecType@
 -- description of the SAW core type it translates to
 someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
-someCFGAndPermLRT env (SomeCFGAndPerm _ _ _
-                       (FunPerm ghosts args gouts ret perms_in perms_out)) =
-  runNilTypeTransM env noChecks $
-  translateClosed (appendCruCtx ghosts args) >>= \ctx_trans ->
-  piLRTTransM "arg" ctx_trans $ \ectx ->
-  inCtxTransM ectx $
-  translate perms_in >>= \perms_trans ->
-  piLRTTransM "perm" perms_trans $ \_ ->
-  translateRetType (CruCtxCons gouts ret) perms_out >>= \ret_tp ->
-  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
+someCFGAndPermLRT env (SomeCFGAndPerm _ _ _ fun_perm) =
+  typeDescLRT $ runNilTypeTransM env noChecks $ translateClosed fun_perm
 
--- | Extract the 'FunPerm' of a 'SomeTypedCFG' as a permission on LLVM function
--- pointer values
-someTypedCFGPtrPerm :: HasPtrWidth w => SomeTypedCFG LLVM ->
-                       ValuePerm (LLVMPointerType w)
-someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) = mkPtrFunPerm $ tpcfgFunPerm cfg
 
--- | Make a term of type @LetRecTypes@ from a list of @LetRecType@ terms
-lrtsOpenTerm :: [OpenTerm] -> OpenTerm
-lrtsOpenTerm lrts =
-  let tp = dataTypeOpenTerm "Prelude.LetRecType" [] in
-  foldr (\hd tl -> ctorOpenTerm "Prelude.Cons1" [tp, hd, tl])
-  (ctorOpenTerm "Prelude.Nil1" [tp])
-  lrts
-
--- | Make the type @List1 LetRecType@ of recursive function frames
-frameTypeOpenTerm :: OpenTerm
-frameTypeOpenTerm = dataTypeOpenTerm "Prelude.List1" [dataTypeOpenTerm
-                                                      "Prelude.LetRecType" []]
+{-
+NOWNOW
 
 -- | FIXME HERE NOW: docs
 tcTranslateAddCFGs ::
