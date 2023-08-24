@@ -72,6 +72,7 @@ import qualified Lang.Crucible.CFG.Expr as Expr
 import Lang.Crucible.CFG.Core
 
 import Verifier.SAW.Utils (panic)
+import Verifier.SAW.Name
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
@@ -856,18 +857,18 @@ arrowLRTTransM :: ImpTypeTrans tr ->
 arrowLRTTransM tps body =
   ask >>= \info -> return (arrowLRTTrans tps (runTransM body info))
 
--- FIXME: should only need to build pi-abstractions as LetRecTypes... right?
-{-
 -- | Build a pi-abstraction over the types in a 'TypeTrans' inside a
 -- translation monad, using the 'String' as a variable name prefix
-piTransM :: String -> TypeTrans tr -> (tr -> TransM info ctx OpenTerm) ->
+piTransM :: String -> PureTypeTrans tr -> (tr -> TransM info ctx OpenTerm) ->
             TransM info ctx OpenTerm
 piTransM x tps body_f =
   ask >>= \info ->
   return (piOpenTermMulti
-          (zipWith (\i tp -> (pack (x ++ show (i :: Integer)), tp)) [0..] $ typeTransTypes tps)
+          (zipWith (\i tp -> (pack (x ++ show (i :: Integer)), tp))
+           [0..] (typeTransTypes tps))
           (\ts -> runTransM (body_f $ typeTransF tps ts) info))
 
+{-
 -- | Build a pi-abstraction inside the 'TransM' monad
 piOpenTermTransM :: String -> OpenTerm ->
                     (OpenTerm -> TransM info ctx OpenTerm) ->
@@ -1262,6 +1263,13 @@ lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx SpecTerm ->
 lambdaExprCtx ctx m =
   translateClosed ctx >>= \tptrans ->
   lambdaTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
+
+-- | Translate all types in a Crucible context and pi-abstract over them
+piExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
+             TransM info RNil OpenTerm
+piExprCtx ctx m =
+  translateClosed ctx >>= \tptrans ->
+  piTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
 -- | Translate all types in a Crucible context and pi-abstract over them,
 -- building the resulting type as a @LetRecType@
@@ -6129,7 +6137,9 @@ translateCFGIxCall cfg ix =
        applyClosSpecTerm lrt (mkBaseClosSpecTerm ix) (transTerms ectx ++
                                                       transTerms pctx)
 
--- | FIXME HERE NOWNOW: docs
+-- | The components of the spec definition that a CFG translates to. Note that,
+-- if the CFG is for a function that is mutually recursive with other functions,
+-- then it also needs the closures of those functions in its spec definition.
 data CFGTrans =
   CFGTrans { cfgTransLRT :: OpenTerm,
              cfgTransCloss :: [(OpenTerm,SpecTerm)],
@@ -6170,42 +6180,6 @@ translateCFG cfg =
            return $ CFGTrans cfg_lrt (cfg_clos : closs) cfg_body)
 
 
-{- FIXME HERE NOWNOW: I don't think we need any of the following any more...
-
--- | Lambda-abstract over all the expression and permission arguments of the
--- translation of a CFG, passing them to a Haskell function
-lambdaCFGArgs :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
-                 ([OpenTerm] -> TypeTransM (ghosts :++: inits) OpenTerm) ->
-                 OpenTerm
-lambdaCFGArgs env cfg bodyF =
-  runNilTypeTransM env noChecks $
-  lambdaExprCtx (typedFnHandleAllArgs (tpcfgHandle cfg)) $
-  lambdaPermCtx (funPermIns $ tpcfgFunPerm cfg) $ \pctx ->
-  do ectx <- infoCtx <$> ask
-     bodyF (transTerms ectx ++ transTerms pctx)
-
--- | Pi-abstract over all the expression and permission arguments of the
--- translation of a CFG, passing them to a Haskell function
-piCFGArgs :: PermEnv -> TypedCFG ext blocks ghosts inits gouts ret ->
-             TypeTransM (ghosts :++: inits) OpenTerm ->
-             OpenTerm
-piCFGArgs env cfg bodyM =
-  runNilTypeTransM env noChecks $
-  piLRTExprCtx (typedFnHandleAllArgs (tpcfgHandle cfg)) $
-  arrowLRTPermCtx (funPermIns $ tpcfgFunPerm cfg) bodyM
-
--- | Translate a typed CFG to a SAW term (FIXME HERE NOW: explain the term that
--- is generated and the fun args)
-translateCFG :: PermEnv -> OpenTerm -> OpenTerm -> OpenTerm -> Natural ->
-                TypedCFG ext blocks ghosts inits gouts ret ->
-                OpenTerm
-translateCFG env prev_stack frame bodies ix cfg =
-  lambdaCFGArgs env cfg $ \args ->
-  applyNamedEventOpM "Prelude.multiFixS" [prev_stack, frame, bodies,
-                                          mkFrameCall frame ix args]
--}
-
-
 ----------------------------------------------------------------------
 -- * Translating Sets of CFGs
 ----------------------------------------------------------------------
@@ -6238,10 +6212,10 @@ someTypedCFGIxEntry (SomeTypedCFG sym _ cfg) ix =
   PermEnvGlobalEntry sym (mkPtrFunPerm $ tpcfgFunPerm cfg)
   (GlobalTransClos $ mkBaseClosSpecTerm ix)
 
--- | Translate a list of CFGs for mutually recursive functions to a list of spec
--- definitions
+-- | Translate a list of CFGs for mutually recursive functions to a list of
+-- @LetRecType@s and spec definitions of those @LetRecType@s
 translateCFGsToDefs :: HasPtrWidth w => PermEnv -> ChecksFlag ->
-                       [SomeTypedCFG LLVM] -> [OpenTerm]
+                       [SomeTypedCFG LLVM] -> [(OpenTerm,OpenTerm)]
 translateCFGsToDefs env checks some_cfgs =
   let (cfg_ixs, cfg_transsM) =
         unzip $ evalState (mapM (\(SomeTypedCFG _ _ cfg) ->
@@ -6251,8 +6225,10 @@ translateCFGsToDefs env checks some_cfgs =
       cfg_transs = runNilTypeTransM tmp_env checks $ sequence cfg_transsM
       closs = concat $ map cfgTransCloss cfg_transs in
   map (\cfg_trans ->
-        defineSpecOpenTerm (identOpenTerm $ permEnvSpecMEventType env) closs
-        (cfgTransLRT cfg_trans) (cfgTransBody cfg_trans))
+        let lrt = cfgTransLRT cfg_trans in
+        (lrt,
+         defineSpecOpenTerm (identOpenTerm $ permEnvSpecMEventType env) closs
+         lrt (cfgTransBody cfg_trans)))
   cfg_transs
 
 
@@ -6278,7 +6254,8 @@ someCFGAndPermGlobalEntry :: HasPtrWidth w => SomeCFGAndPerm ext ->
 someCFGAndPermGlobalEntry (SomeCFGAndPerm sym _ _ fun_perm) =
   withKnownNat ?ptrWidth $
   PermEnvGlobalEntry sym (mkPtrFunPerm fun_perm) $
-  error "someCFGAndPermGlobalEntry: unexpected translation during type-checking"
+  panic "someCFGAndPermGlobalEntry"
+  ["Attempt to translate CFG during its own type-checking"]
 
 -- | Convert the 'FunPerm' of a 'SomeCFGAndPerm' to an inductive @LetRecType@
 -- description of the SAW core type it translates to
@@ -6287,10 +6264,10 @@ someCFGAndPermLRT env (SomeCFGAndPerm _ _ _ fun_perm) =
   typeDescLRT $ runNilTypeTransM env noChecks $ translateClosed fun_perm
 
 
-{-
-NOWNOW
-
--- | FIXME HERE NOW: docs
+-- | Type-check a list of functions in the Heapster type system, translate each
+-- to a spec definition bound to the SAW core 'String' name associated with it,
+-- add these translations as function permissions in the current environment,
+-- and return the list of type-checked CFGs
 tcTranslateAddCFGs ::
   HasPtrWidth w => SharedContext -> ModuleName -> PermEnv -> ChecksFlag ->
   EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
@@ -6304,7 +6281,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     let tmp_env1 =
           permEnvAddGlobalSyms env $
           map someCFGAndPermGlobalEntry cfgs_and_perms
-    let tcfgs =
+    let tc_cfgs =
           flip map cfgs_and_perms $ \(SomeCFGAndPerm gsym nm cfg fun_perm) ->
           SomeTypedCFG gsym nm $
           debugTraceTraceLvl dlevel ("Type-checking " ++ show gsym) $
@@ -6312,90 +6289,40 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
           ("With type:\n" ++ permPrettyString emptyPPInfo fun_perm) $
           tcCFG ?ptrWidth tmp_env1 endianness dlevel fun_perm cfg
 
-    -- Next, generate a frame, i.e., a list of all the LetRecTypes in all of the
-    -- functions, along with a list of indices into that list of where the LRTs
-    -- of each function are in that list, and make a definition for the frame
-    let gen_lrts_ixs (i::Natural) (SomeTypedCFG _ _ tcfg : tcfgs') =
-          let lrts = translateCFGLRTs env tcfg in
-          (i, lrts) : gen_lrts_ixs (i + fromIntegral (length lrts)) tcfgs'
-        gen_lrts_ixs _ [] = []
-    let (fun_ixs, lrtss) = unzip $ gen_lrts_ixs 0 tcfgs
-    let lrts = concat lrtss
-    frame_tm <- completeNormOpenTerm sc $ lrtsOpenTerm lrts
-    let (cfg_and_perm, _) = expectLengthAtLeastOne cfgs_and_perms
-    let frame_ident =
-          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
-                                ++ "__frame")
-    frame_tp <- completeNormOpenTerm sc frameTypeOpenTerm
-    scInsertDef sc mod_name frame_ident frame_tp frame_tm
-    let frame = globalOpenTerm frame_ident
+    -- Next, translate all those CFGs to spec definitions
+    let lrts_defs = translateCFGsToDefs env checks tc_cfgs
 
-    -- Now, generate a SAW core tuple of all the bodies of mutually recursive
-    -- functions for all the CFGs
-    bodies_tm <-
-      completeNormOpenTerm sc $
-      runNilTypeTransM env checks $
-      -- Create a temporary PermEnv that maps each Crucible symbol with a CFG in
-      -- our list to a recursive call to the corresponding function in our new
-      -- frame of recursive functions
-      do tmp_env <-
-           permEnvAddGlobalSyms env <$>
-           zipWithM (\some_tpcfg@(SomeTypedCFG sym _ _) i ->
-                      do let fun_p = someTypedCFGPtrPerm some_tpcfg
-                         return $ PermEnvGlobalEntry sym fun_p (Left i))
-           tcfgs fun_ixs
-         bodiess <-
-           local (\info -> info { ttiPermEnv = tmp_env }) $
-           zipWithM (\i (SomeTypedCFG _ _ cfg) ->
-                      translateCFGBodies stack i cfg) fun_ixs tcfgs
-         return $ tupleOpenTerm $ concat bodiess
-
-    -- Add a named definition for bodies_tm
-    let bodies_ident =
-          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
-                                ++ "__bodies")
-    bodies_tp <-
-      completeNormOpenTerm sc $
-      runNilTypeTransM env checks $
-      applyNamedEventOpM "Prelude.FrameTuple" [funStackTerm stack, frame]
-    scInsertDef sc mod_name bodies_ident bodies_tp bodies_tm
-    let bodies = globalOpenTerm bodies_ident
-
-    -- Finally, generate definitions for each of our functions as applications
-    -- of multiFixS to our the bodies function defined above
+    -- Insert each spec definition as a SAW core definition bound to its
+    -- corresponding ident in the SAW core module mod_name, and generate entries
+    -- for the environment mapping each function name to its SAW core ident
     new_entries <-
       zipWithM
-      (\(SomeTypedCFG sym nm cfg) i ->
+      (\(SomeTypedCFG sym nm cfg) (lrt, def_tm) ->
         do tp <-
-             completeNormOpenTerm sc $ piCFGArgs env cfg $
-             let fun_perm = tpcfgFunPerm cfg in
-             translateRetType (funPermRets fun_perm) (funPermOuts fun_perm) >>=
-             specMTypeTransM emptyStackOpenTerm
-           tm <- completeNormOpenTerm sc $
-             translateCFG env emptyStackOpenTerm frame bodies i cfg
+             completeNormOpenTerm sc $
+             applyGlobalOpenTerm "Prelude.SpecDef"
+             [identOpenTerm (permEnvSpecMEventType env), lrt]
+           tm <- completeNormOpenTerm sc def_tm
            let ident = mkSafeIdent mod_name nm
            scInsertDef sc mod_name ident tp tm
            let perm = mkPtrFunPerm $ tpcfgFunPerm cfg
-           return $ PermEnvGlobalEntry sym perm (Right [globalOpenTerm ident]))
-      tcfgs fun_ixs
-    return (permEnvAddGlobalSyms env new_entries, tcfgs)
+           return $ PermEnvGlobalEntry sym perm (GlobalTransDef $
+                                                 globalOpenTerm ident))
+      tc_cfgs lrts_defs
+
+    -- Add the new entries to the environment and return the new environment and
+    -- the type-checked CFGs
+    return (permEnvAddGlobalSyms env new_entries, tc_cfgs)
 
 
 ----------------------------------------------------------------------
 -- * Top-level Entrypoints for Translating Other Things
 ----------------------------------------------------------------------
 
--- | Translate a 'FunPerm' to the SAW core type it represents
-translateCompleteFunPerm :: SharedContext -> PermEnv ->
-                            FunPerm ghosts args gouts ret -> IO Term
-translateCompleteFunPerm sc env fun_perm =
-  completeNormOpenTerm sc $
-  runNilTypeTransM env noChecks (translate $ emptyMb fun_perm)
-
 -- | Translate a 'TypeRepr' to the SAW core type it represents
 translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
 translateCompleteType sc env typ_perm =
-  completeNormOpenTerm sc $ typeTransType1Imp $
+  completeNormOpenTerm sc $ typeTransType1 $
   runNilTypeTransM env noChecks $ translate $ emptyMb typ_perm
 
 -- | Translate a 'TypeRepr' within the given context of type arguments to the
@@ -6404,9 +6331,10 @@ translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
                               CruCtx args -> Mb args (TypeRepr a) -> IO Term
 translateCompleteTypeInCtx sc env args ret =
   completeNormOpenTerm sc $
-  runNilTypeTransM env noChecks (piExprCtx args (typeTransType1Imp <$>
+  runNilTypeTransM env noChecks (piExprCtx args (typeTransType1 <$>
                                                  translate ret))
 
+{-
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a SAW
 -- core function type in a manner similar to 'translateCompleteFunPerm', except
 -- that the returned function type is not in the @SpecM@ monad.
