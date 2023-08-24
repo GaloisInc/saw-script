@@ -127,6 +127,11 @@ typeDescType :: TypeDesc -> SpecTerm
 typeDescType (TypeDescPure tp) = openTermLike tp
 typeDescType (TypeDescLRT _ tp) = tp
 
+-- | Get the pure type described by a 'TypeDesc', if there is one
+typeDescPureType :: TypeDesc -> Maybe OpenTerm
+typeDescPureType (TypeDescPure tp) = Just tp
+typeDescPureType (TypeDescLRT _ _) = Nothing
+
 -- | Get the @LetRecType@ that encodes the type of a 'TypeDesc'
 typeDescLRT :: TypeDesc -> OpenTerm
 typeDescLRT (TypeDescPure tp) = ctorOpenTerm "Prelude.LRT_Type" [tp]
@@ -6334,17 +6339,25 @@ translateCompleteTypeInCtx sc env args ret =
   runNilTypeTransM env noChecks (piExprCtx args (typeTransType1 <$>
                                                  translate ret))
 
-{-
--- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a SAW
--- core function type in a manner similar to 'translateCompleteFunPerm', except
--- that the returned function type is not in the @SpecM@ monad.
+-- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a pure
+-- SAW core function type, not in the @SpecM@ monad. It is an error if any of
+-- the permissions are impure, such as @lowned@ permissions.
 translateCompletePureFun :: SharedContext -> PermEnv
                          -> CruCtx ctx -- ^ Type arguments
                          -> Mb ctx (ValuePerms args) -- ^ Input perms
                          -> Mb ctx (ValuePerm ret) -- ^ Return type perm
                          -> IO Term
-translateCompletePureFun sc env ctx args ret =
-  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
-  piExprCtx ctx $ arrowLRTPermCtx args $
-  typeTransTupleType <$> translate ret
--}
+translateCompletePureFun sc env ctx ps_in p_out =
+  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $ piExprCtx ctx $
+  do ps_in_trans <- translate ps_in
+     p_out_trans <- translate p_out
+     let justOrPanic (Just x) = x
+         justOrPanic Nothing =
+           panic "translateCompletePureFun"
+           ["Attempt to translate an impure permission to a pure type"]
+     let (tps_in, tp_out) =
+           justOrPanic
+           ((,) <$>
+            mapM typeDescPureType (typeTransDescs ps_in_trans) <*>
+            typeDescPureType (tupleOfTypeDescs $ typeTransDescs p_out_trans))
+     return $ piOpenTermMulti (map ("_",) tps_in) (const tp_out)
