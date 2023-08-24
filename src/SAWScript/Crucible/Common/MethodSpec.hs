@@ -21,7 +21,95 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module SAWScript.Crucible.Common.MethodSpec where
+module SAWScript.Crucible.Common.MethodSpec
+  ( AllocIndex(..)
+  , nextAllocIndex
+
+  , PrePost(..)
+  , stateCond
+
+  , CrucibleContext
+  , AllocSpec
+  , TypeName
+  , ExtType
+  , CastType
+  , PointsTo
+  , AllocGlobal
+  , ResolvedState
+
+  , BoolToType
+  , B
+
+  , HasSetupNull
+  , HasSetupStruct
+  , HasSetupArray
+  , HasSetupElem
+  , HasSetupField
+  , HasSetupGlobal
+  , HasSetupCast
+  , HasSetupUnion
+  , HasSetupGlobalInitializer
+
+  , SetupValue(..)
+  , SetupValueHas
+
+  , ppSetupValue
+  , ppAllocIndex
+  , ppTypedTerm
+  , ppTypedTermType
+  , ppTypedExtCns
+
+  , setupToTypedTerm
+  , setupToTerm
+
+  , HasGhostState
+  , GhostValue
+  , GhostType
+  , GhostGlobal
+
+  , ConditionMetadata(..)
+
+  , SetupCondition(..)
+  , StateSpec(..)
+  , csAllocs
+  , csPointsTos
+  , csConditions
+  , csFreshVars
+  , csVarTypeNames
+  , initialStateSpec
+
+  , MethodId
+  , Codebase
+
+  , CrucibleMethodSpecIR(..)
+  , csMethod
+  , csArgs
+  , csRet
+  , csPreState
+  , csPostState
+  , csArgBindings
+  , csRetValue
+  , csGlobalAllocs
+  , csCodebase
+  , csLoc
+  , ProofMethod(..)
+  , SpecNonce
+  , VCStats(..)
+  , ProvedSpec(..)
+  , psSpecIdent
+  , psProofMethod
+  , psSpec
+  , psSolverStats
+  , psVCStats
+  , psSpecDeps
+  , psElapsedTime
+  , mkProvedSpec
+  , prettyPosition
+  , ppMethodSpec
+  , csAllocations
+  , csTypeNames
+  , makeCrucibleMethodSpecIR
+  ) where
 
 import           Data.Constraint (Constraint)
 import           Data.Map (Map)
