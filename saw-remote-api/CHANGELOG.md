@@ -1,5 +1,19 @@
 # Revision history for saw-remote-api
 
+## next -- TBA
+
+* Add remote API support for SAW's experimental MIR verification support:
+
+  * The `SAW/MIR/load module` command loads a MIR JSON file into SAW.
+  * The `SAW/MIR/verify` command performs verification of a MIR function.
+
+  See the [remote API
+  documentation](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawmirload-module-command)
+  for more detailed APIs for each of these commands. For more information about
+  how SAW's MIR verification support works in general, see the `mir_*` commands
+  documented in the [SAW
+  manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
 ## 1.0.0 -- 2023-06-26
 
 * The v1.0.0 release is made in tandem with the SAW 1.0 release. See the

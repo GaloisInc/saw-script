@@ -247,7 +247,7 @@ notEqual cond opts loc cc sc spec expected actual = do
   prettyLLVMVal      <- ppLLVMVal cc actual
   prettySetupLLVMVal <- ppSetupValueAsLLVMVal opts cc sc spec expected
   let msg = unlines
-        [ "Equality " ++ stateCond cond
+        [ "Equality " ++ MS.stateCond cond
         , "Expected value (as a SAW value): "
         , show (MS.ppSetupValue expected)
         , "Expected value (as a Crucible value): "
@@ -810,27 +810,6 @@ assertTermEqualities sc cc = do
   traverse_ assertTermEquality =<< OM (use termEqs)
 
 
--- | Verify that all of the fresh variables for the given
--- state spec have been "learned". If not, throws
--- 'AmbiguousVars' exception.
-enforceCompleteSubstitution ::
-  W4.ProgramLoc ->
-  MS.StateSpec (LLVM arch) ->
-  OverrideMatcher (LLVM arch) md ()
-enforceCompleteSubstitution loc ss =
-
-  do sub <- OM (use termSub)
-
-     let -- predicate matches terms that are not covered by the computed
-         -- term substitution
-         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
-
-         -- list of all terms not covered by substitution
-         missing = filter isMissing (view MS.csFreshVars ss)
-
-     unless (null missing) (failure loc (AmbiguousVars missing))
-
-
 -- execute a pre/post condition
 executeCond :: ( ?lc :: Crucible.TypeContext
                , ?memOpts :: Crucible.MemOptions
@@ -1219,7 +1198,7 @@ assignTerm sc cc md prepost var val =
 
 --          do t <- liftIO $ scEq sc old val
 --             p <- liftIO $ resolveSAWPred cc t
---             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
+--             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ MS.stateCond prepost))
 
 ------------------------------------------------------------------------
 
@@ -1504,7 +1483,7 @@ matchTerm sc cc md prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             let msg = unlines $
-                  [ "Literal equality " ++ stateCond prepost
+                  [ "Literal equality " ++ MS.stateCond prepost
 --                  , "Expected term: " ++ prettyTerm expect
 --                  , "Actual term:   " ++ prettyTerm real
                   ]
@@ -1642,7 +1621,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr (Crucible.memImplHeap mem)
             let errMsg = PP.vcat $ map (PP.pretty . unwords)
                   [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
-                  , [ "in the ", stateCond prepost, "of an override" ]
+                  , [ "in the ", MS.stateCond prepost, "of an override" ]
                   , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
                   ]
             case maybe_allocation_array of
@@ -1816,7 +1795,7 @@ summarizeBadLoad cc memTy prepost ptr =
      sz = Crucible.memTypeSize dataLayout memTy
  in map (PP.pretty . unwords)
     [ [ "When reading through pointer:", show (Crucible.ppPtr ptr) ]
-    , [ "in the ", stateCond prepost, "of an override" ]
+    , [ "in the ", MS.stateCond prepost, "of an override" ]
     , [ "Tried to read something of size:"
       , show (Crucible.bytesToInteger sz)
       ]
@@ -1856,10 +1835,6 @@ describeConcreteMemoryLoadFailure mem badLoadSummary ptr = do
 
 ------------------------------------------------------------------------
 
-stateCond :: PrePost -> String
-stateCond PreState = "precondition"
-stateCond PostState = "postcondition"
-
 -- | Process an @llvm_equal@ statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
@@ -1877,7 +1852,7 @@ learnEqual opts sc cc spec md prepost v1 v2 = do
   (_, val1) <- resolveSetupValueLLVM opts cc sc spec v1
   (_, val2) <- resolveSetupValueLLVM opts cc sc spec v2
   p         <- liftIO (equalValsPred cc val1 val2)
-  let name = "equality " ++ stateCond prepost
+  let name = "equality " ++ MS.stateCond prepost
   let loc = MS.conditionLoc md
   addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
@@ -1894,7 +1869,7 @@ learnPred ::
 learnPred sc cc md prepost t =
   do p <- instantiateExtResolveSAWPred sc cc t
      let loc = MS.conditionLoc md
-     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
+     addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
 
 instantiateExtResolveSAWPred ::
   (?w4EvalTactic :: W4EvalTactic) =>

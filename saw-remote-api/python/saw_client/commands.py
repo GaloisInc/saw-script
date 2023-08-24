@@ -251,6 +251,63 @@ class JVMVerify(SAWCommand):
     def process_result(self, res : Any) -> Any:
         return res
 
+class MIRLoadModule(SAWCommand):
+    def __init__(self, connection : argo.HasProtocolState,
+                 name : str,
+                 json_file : str,
+                 timeout : Optional[float]) -> None:
+        super(MIRLoadModule, self).__init__(
+            'SAW/MIR/load module',
+            {'name': name, 'JSON file': json_file},
+            connection,
+            timeout=timeout
+        )
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class MIRAssume(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module : str,
+            function : str,
+            setup : Any,
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
+        params = {'module': module,
+                  'function': function,
+                  'contract': setup,
+                  'lemma name': lemma_name}
+        super(MIRAssume, self).__init__('SAW/MIR/assume', params, connection, timeout=timeout)
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class MIRVerify(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module : str,
+            function : str,
+            lemmas : List[str],
+            check_sat : bool,
+            setup : Any,
+            script : ProofScript,
+            lemma_name : str,
+            timeout : Optional[float]) -> None:
+        params = {'module': module,
+                  'function': function,
+                  'lemmas': lemmas,
+                  'check sat': check_sat,
+                  'contract': setup,
+                  'script': script,
+                  'lemma name': lemma_name}
+        super(MIRVerify, self).__init__('SAW/MIR/verify', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class Prove(SAWCommand):
     def __init__(
             self,

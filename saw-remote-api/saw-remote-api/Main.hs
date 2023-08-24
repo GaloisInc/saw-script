@@ -38,6 +38,9 @@ import SAWServer.LLVMVerify
       llvmVerifyX86 )
 import SAWServer.MIRCrucibleSetup
     ( mirLoadModuleDescr, mirLoadModule )
+import SAWServer.MIRVerify
+    ( mirAssumeDescr, mirAssume,
+      mirVerifyDescr, mirVerify )
 import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
@@ -121,6 +124,14 @@ sawMethods =
       "SAW/MIR/load module"
       mirLoadModuleDescr
       mirLoadModule
+  , Argo.command
+     "SAW/MIR/verify"
+     mirVerifyDescr
+     mirVerify
+  , Argo.command
+     "SAW/MIR/assume"
+     mirAssumeDescr
+     mirAssume
   -- Yosys
   , Argo.command
      "SAW/Yosys/import"
