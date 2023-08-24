@@ -13,6 +13,10 @@
   how SAW's MIR verification support works in general, see the `mir_*` commands
   documented in the [SAW
   manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+* The API for `"array"` `setup value`s now has an `"element type"` field. For
+  LLVM verification, this field is optional. For MIR verification, this field
+  is required if the `"elements"` value is empty and optional if the
+  `"elements"` value is non-empty.
 
 ## 1.0.0 -- 2023-06-26
 

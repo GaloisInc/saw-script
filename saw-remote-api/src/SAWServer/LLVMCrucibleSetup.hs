@@ -176,7 +176,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       CrucibleSetupVal JSONLLVMType (P.Expr P.PName) ->
       LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
     getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
-    getSetupVal env (ArrayValue elts) =
+    getSetupVal env (ArrayValue _ elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
     getSetupVal env (TupleValue elts) =

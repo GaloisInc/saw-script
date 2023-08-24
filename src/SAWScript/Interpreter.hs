@@ -93,6 +93,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
 import           Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
@@ -3855,6 +3856,13 @@ primitives = Map.fromList
     , "the function expects the object to be allocated before it runs."
     , "After `mir_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    ]
+
+  , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupArray :: Mir.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing an array of the given type, with the"
+    , "given list of values as elements."
     ]
 
   , prim "mir_assert" "Term -> MIRSetup ()"
