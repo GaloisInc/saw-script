@@ -146,6 +146,7 @@ library
     SAWScript.Crucible.Common.ResolveSetupValue
     SAWScript.Crucible.Common.Setup.Builtins
     SAWScript.Crucible.Common.Setup.Type
+    SAWScript.Crucible.Common.Setup.Value
 
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.Boilerplate
