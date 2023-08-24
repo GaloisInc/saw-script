@@ -25,7 +25,35 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.Crucible.JVM.MethodSpecIR where
+module SAWScript.Crucible.JVM.MethodSpecIR
+  ( JIdent
+
+  , JVMMethodId(..)
+  , jvmMethodKey
+  , jvmClassName
+  , jvmMethodName
+  , csMethodKey
+  , csMethodName
+
+  , Allocation(..)
+  , allocationType
+
+  , JVMPointsTo(..)
+  , overlapPointsTo
+  , ppPointsTo
+
+  , JVMCrucibleContext(..)
+  , jccJVMClass
+  , jccCodebase
+  , jccJVMContext
+  , jccBackend
+  , jccHandleAllocator
+  , jccWithBackend
+  , jccSym
+
+  , initialDefCrucibleMethodSpecIR
+  , initialCrucibleSetupState
+  ) where
 
 import           Control.Lens
 import qualified Prettyprinter as PPL
