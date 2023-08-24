@@ -109,6 +109,7 @@ import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue
+import           SAWScript.Crucible.JVM.Setup.Value ()
 import           SAWScript.Options
 import           SAWScript.Panic
 import           SAWScript.Utils (handleException)
@@ -121,7 +122,6 @@ type SetupValue = MS.SetupValue CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
-type instance Pointer' CJ.JVM Sym = JVMRefVal
 
 -- TODO: Improve?
 ppJVMVal :: JVMVal -> PP.Doc ann

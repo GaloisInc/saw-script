@@ -134,13 +134,12 @@ import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
 import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.Crucible.LLVM.ResolveSetupValue
+import           SAWScript.Crucible.LLVM.Setup.Value ()
 import           SAWScript.Options
 import           SAWScript.Panic
 import           SAWScript.Utils (bullets, handleException)
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
-
-type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 
 -- | An override packaged together with its preconditions, labeled with some
 --   human-readable info about each condition.

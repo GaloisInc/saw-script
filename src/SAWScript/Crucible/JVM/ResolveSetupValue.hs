@@ -68,6 +68,7 @@ import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWScript.Panic
 import SAWScript.Crucible.JVM.MethodSpecIR
+import SAWScript.Crucible.JVM.Setup.Value (JVMRefVal)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
 
@@ -81,8 +82,6 @@ instance Show JVMVal where
   show (RVal _) = "RVal"
   show (IVal _) = "IVal"
   show (LVal _) = "LVal"
-
-type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 
 type SetupValue = MS.SetupValue CJ.JVM
 

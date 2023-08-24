@@ -84,11 +84,11 @@ import           SAWScript.Crucible.Common (Sym, sawCoreState, HasSymInterface(.
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Crucible.LLVM.Setup.Value (LLVMPtr)
 import qualified SAWScript.Proof as SP
 
 
 type LLVMVal = Crucible.LLVMVal Sym
-type LLVMPtr wptr = Crucible.LLVMPtr Sym wptr
 
 
 

@@ -28,6 +28,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.Crucible.JVM.Setup.Value
@@ -47,6 +48,8 @@ module SAWScript.Crucible.JVM.Setup.Value
   , jccJVMContext
   , jccBackend
   , jccHandleAllocator
+
+  , JVMRefVal
   ) where
 
 import           Control.Lens
@@ -55,6 +58,7 @@ import qualified Prettyprinter as PPL
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 -- crucible-jvm
+import qualified Lang.Crucible.Simulator as CS
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as CB
 
@@ -65,7 +69,7 @@ import qualified Language.JVM.Parser as J
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
 import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import qualified SAWScript.Crucible.Common.Setup.Value as MS
 
 --------------------------------------------------------------------------------
 -- ** Language features
@@ -148,3 +152,10 @@ data JVMCrucibleContext =
 makeLenses ''JVMCrucibleContext
 
 type instance MS.CrucibleContext CJ.JVM = JVMCrucibleContext
+
+--------------------------------------------------------------------------------
+-- *** Pointers
+
+type instance MS.Pointer' CJ.JVM Sym = JVMRefVal
+
+type JVMRefVal = CS.RegValue Sym CJ.JVMRefType

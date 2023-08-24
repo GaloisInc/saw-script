@@ -30,6 +30,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.Crucible.LLVM.Setup.Value
@@ -75,6 +76,8 @@ module SAWScript.Crucible.LLVM.Setup.Value
   , emptyResolvedState
   , rsAllocs
   , rsGlobals
+    -- * @LLVMPtr@
+  , LLVMPtr
   ) where
 
 import           Control.Lens
@@ -338,3 +341,10 @@ emptyResolvedState :: LLVMResolvedState
 emptyResolvedState = ResolvedState Map.empty Map.empty
 
 makeLenses ''LLVMResolvedState
+
+--------------------------------------------------------------------------------
+-- *** Pointers
+
+type instance Setup.Pointer' (LLVM arch) Sym = LLVMPtr (CL.ArchWidth arch)
+
+type LLVMPtr wptr = CL.LLVMPtr Sym wptr

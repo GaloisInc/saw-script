@@ -59,6 +59,8 @@ module SAWScript.Crucible.Common.Setup.Value
 
   , MethodId
   , Codebase
+
+  , Pointer'
   ) where
 
 import           Data.Constraint (Constraint)
@@ -200,3 +202,8 @@ type family MethodId ext :: Type
 --
 -- Examples: An 'LLVMModule', a Java 'Codebase'
 type family Codebase ext :: Type
+
+--------------------------------------------------------------------------------
+-- *** Pointers
+
+type family Pointer' ext sym :: Type
