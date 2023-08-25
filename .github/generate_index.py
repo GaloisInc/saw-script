@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# TODO: Clean up, only run in main, etc
+# This script generates an HTML index file for all coverage reports
 
 import glob
 
@@ -23,7 +23,7 @@ FOOTER = """
 if __name__ == "__main__":
   with open("index.html", "w") as f:
     f.write(HEADER)
-    for dir in glob.glob("coverage-html-*"):
+    for dir in sorted(glob.glob("coverage-html-*")):
       pr_num = dir[14:]
       link_dest = f"{dir}/hpc_index.html"
       f.write(f"    <li><a href={link_dest}>{pr_num}</a></li>")

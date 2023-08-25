@@ -77,18 +77,18 @@ build() {
   fi
 }
 
+# Gather and tar up all HPC coverage files
 collect_hpc_files() {
   local MIX_FILES=$(find dist-newstyle -name "*.mix")
   local GENERATED_HS_FILES=$(find dist-newstyle/build -name "*.hs")
   tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES}
 }
 
+# Download HTML coverage reports and generate an index file linking to them
 collect_all_html() {
   local HTML_DIR=all-html
   mkdir ${HTML_DIR}
-  (cd ${HTML_DIR} && gh run download -p "coverage-html-*" && python3 ../.github/generate_index.py > index.html)
-  ls
-  ls ${HTML_DIR}
+  (cd ${HTML_DIR} && gh run download -p "coverage-html-*" && python3 ../.github/generate_index.py)
 }
 
 install_system_deps() {

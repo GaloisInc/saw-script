@@ -121,10 +121,6 @@ jobs:
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
 
-      # TODO: Does this need updating for the HPC build? Or is it handled by
-      # the cabal.GHC-*.config line (which may include HPC config info)? This
-      # runs BEFORE build, so I think the config file doesn't capture the HPC
-      # modification.
       - uses: actions/cache/restore@v3
         name: Restore cabal store cache
         with:
@@ -490,8 +486,6 @@ jobs:
       - shell: bash
         if: matrix.hpc == true
         run: |
-          ls -lh
-          ls -lh hpc.tar.gz
           tar xvf hpc.tar.gz
           ./compute-coverage.sh
 
