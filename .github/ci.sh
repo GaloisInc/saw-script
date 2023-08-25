@@ -86,7 +86,7 @@ collect_hpc_files() {
 collect_all_html() {
   local HTML_DIR=all-html
   mkdir ${HTML_DIR}
-  (cd ${HTML_DIR} && gh run download -p "coverage-html-*")
+  (cd ${HTML_DIR} && gh run download -p "coverage-html-*" && python3 ../.github/generate_index.py > index.html)
   ls
   ls ${HTML_DIR}
 }
