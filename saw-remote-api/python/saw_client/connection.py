@@ -229,6 +229,45 @@ class SAWConnection:
             LLVMAssume(self, module, function, contract, lemma_name, timeout)
         return self.most_recent_result
 
+    def mir_load_module(self, name: str, mir_json_file: str, timeout : Optional[float] = None)  -> Command:
+        """Create an instance of the `MIRLoadClass` command. Documentation on the purpose
+        and use of this command is associated with the top-level `mir_load_class`
+        function.
+        """
+        self.most_recent_result = MIRLoadModule(self, name, mir_json_file, timeout)
+        return self.most_recent_result
+
+    def mir_verify(self,
+                   module: str,
+                   function: str,
+                   lemmas: List[str],
+                   check_sat: bool,
+                   contract: Any,
+                   script: ProofScript,
+                   lemma_name: str,
+                   timeout : Optional[float] = None) -> Command:
+        """Create an instance of the `MIRVerify` command. Documentation on the purpose
+        and use of this command is associated with the top-level `mir_verify`
+        function.
+        """
+        self.most_recent_result = \
+            MIRVerify(self, module, function, lemmas, check_sat, contract, script, lemma_name, timeout)
+        return self.most_recent_result
+
+    def mir_assume(self,
+                   module: str,
+                   function: str,
+                   contract: Any,
+                   lemma_name: str,
+                   timeout : Optional[float] = None) -> Command:
+        """Create an instance of the `MIRAssume` command. Documentation on the purpose
+        and use of this command is associated with the top-level `mir_assume`
+        function.
+        """
+        self.most_recent_result = \
+            LLVMAssume(self, module, function, contract, lemma_name, timeout)
+        return self.most_recent_result
+
     def yosys_import(self, name: str, path: str, timeout : Optional[float] = None) -> Command:
         self.most_recent_result = YosysImport(self, name, path, timeout)
         return self.most_recent_result

@@ -41,9 +41,9 @@ $idchar    = [$alpha $digit \' \_]
 $codechar  = [$graphic $whitechar]
 
 @reservedid  = import|and|let|rec|in|do|if|then|else|as|hiding|typedef
-             |CryptolSetup|JavaSetup|LLVMSetup|ProofScript|TopLevel|CrucibleSetup
+             |CryptolSetup|JavaSetup|LLVMSetup|MIRSetup|ProofScript|TopLevel|CrucibleSetup
              |Int|String|Term|Type|Bool|AIG|CFG
-             |CrucibleMethodSpec|LLVMSpec|JVMMethodSpec|JVMSpec
+             |CrucibleMethodSpec|LLVMSpec|JVMMethodSpec|JVMSpec|MIRSpec
 
 @punct       = "," | ";" | "(" | ")" | ":" | "::" | "[" | "]" | "<-" | "->"
              | "=" | "{" | "}" | "." | "\"

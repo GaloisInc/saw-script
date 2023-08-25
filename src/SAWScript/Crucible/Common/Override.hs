@@ -51,6 +51,7 @@ module SAWScript.Crucible.Common.Override
   , writeGlobal
   , failure
   , getSymInterface
+  , enforceCompleteSubstitution
   --
   , assignmentToList
   , MetadataMap
@@ -58,6 +59,7 @@ module SAWScript.Crucible.Common.Override
 
 import qualified Control.Exception as X
 import           Control.Lens
+import           Control.Monad (unless)
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
@@ -67,6 +69,7 @@ import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
 import           Data.Kind (Type)
+import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Set (Set)
 import           Data.Typeable (Typeable)
@@ -273,7 +276,7 @@ instance ( PP.Pretty (ExtType ext)
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
-         , Typeable ext 
+         , Typeable ext
          ) => X.Exception (OverrideFailure ext)
 
 --------------------------------------------------------------------------------
@@ -375,6 +378,26 @@ failure loc e = OM (lift (throwE (OF loc e)))
 
 getSymInterface :: Monad m => OverrideMatcher' sym ext md m sym
 getSymInterface = OM (use syminterface)
+
+-- | Verify that all of the fresh variables for the given
+-- state spec have been "learned". If not, throws
+-- 'AmbiguousVars' exception.
+enforceCompleteSubstitution ::
+  W4.ProgramLoc ->
+  MS.StateSpec ext ->
+  OverrideMatcher ext w ()
+enforceCompleteSubstitution loc ss =
+
+  do sub <- OM (use termSub)
+
+     let -- predicate matches terms that are not covered by the computed
+         -- term substitution
+         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
+
+         -- list of all terms not covered by substitution
+         missing = filter isMissing (view MS.csFreshVars ss)
+
+     unless (null missing) (failure loc (AmbiguousVars missing))
 
 ------------------------------------------------------------------------
 

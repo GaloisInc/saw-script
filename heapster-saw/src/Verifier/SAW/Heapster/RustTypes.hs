@@ -898,24 +898,24 @@ instance PermPretty Some3FunPerm where
   permPrettyM (Some3FunPerm fun_perm) = permPrettyM fun_perm
 
 -- | Try to convert a 'Some3FunPerm' to a 'SomeFunPerm' at a specific type
-un3SomeFunPerm :: CruCtx args -> TypeRepr ret -> Some3FunPerm ->
-                  RustConvM (SomeFunPerm args ret)
+un3SomeFunPerm :: (Fail.MonadFail m) => CruCtx args -> TypeRepr ret -> Some3FunPerm ->
+                  m (SomeFunPerm args ret)
 un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   | Just Refl <- testEquality args (funPermArgs fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
-  rsPPInfo >>= \ppInfo ->
-  fail $ renderDoc $ vsep
-  [ pretty "Unexpected LLVM type for function permission:"
-  , permPretty ppInfo fun_perm
-  , pretty "Actual LLVM type of function:"
-    <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
-    <+> PP.group (permPretty ppInfo ret)
-  , pretty "Expected LLVM type of function:"
-    <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
-    <+> pretty "=>"
-    <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
+  let ppInfo = emptyPPInfo in
+    fail $ renderDoc $ vsep
+    [ pretty "Unexpected LLVM type for function permission:"
+    , permPretty ppInfo fun_perm
+    , pretty "Actual LLVM type of function:"
+      <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
+      <+> PP.group (permPretty ppInfo ret)
+    , pretty "Expected LLVM type of function:"
+      <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
+      <+> pretty "=>"
+      <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
 
 -- | This is the more general form of 'funPerm3FromArgLayout, where there can be
 -- ghost variables in the 'ArgLayout'
@@ -1548,7 +1548,16 @@ rsConvertFun _ _ _ _ = fail "rsConvertFun: unsupported Rust function type"
 parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         PermEnv -> prx w -> CruCtx args -> TypeRepr ret ->
                         String -> m (SomeFunPerm args ret)
-parseFunPermFromRust env w args ret str
+parseFunPermFromRust env w args ret str =
+  do get3SomeFunPerm <- parseSome3FunPermFromRust env w str
+     un3SomeFunPerm args ret get3SomeFunPerm
+  
+
+-- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
+parseSome3FunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
+                        PermEnv -> prx w ->
+                        String -> m Some3FunPerm
+parseSome3FunPermFromRust env w str
   | Just i <- findIndex (== '>') str
   , (gen_str, fn_str) <- splitAt (i+1) str
   , Right (Generics rust_ls1 rust_tvars wc span) <-
@@ -1556,10 +1565,7 @@ parseFunPermFromRust env w args ret str
   , Right (BareFn _ abi rust_ls2 fn_tp _) <-
       parse (inputStreamFromString fn_str) =
     runLiftRustConvM (mkRustConvInfo env) $
-    do some_fun_perm <-
-         rsConvertFun w abi (Generics
-                             (rust_ls1 ++ rust_ls2) rust_tvars wc span) fn_tp
-       un3SomeFunPerm args ret some_fun_perm
+    rsConvertFun w abi (Generics (rust_ls1 ++ rust_ls2) rust_tvars wc span) fn_tp
 
   | Just i <- findIndex (== '>') str
   , (gen_str, _) <- splitAt (i+1) str
@@ -1570,7 +1576,7 @@ parseFunPermFromRust env w args ret str
   , (_, fn_str) <- splitAt (i+1) str
   , Left err <- parse @(Ty Span) (inputStreamFromString fn_str) =
     fail ("Error parsing generics: " ++ show err)
-parseFunPermFromRust _ _ _ _ str =
+parseSome3FunPermFromRust _ _ str =
     fail ("Malformed Rust type: " ++ str)
 
 -- | Parse a polymorphic Rust type declaration and convert it to a Heapster

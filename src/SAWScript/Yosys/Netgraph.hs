@@ -24,7 +24,6 @@ import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (throw)
 
-import qualified Data.Tuple as Tuple
 import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 import Data.Map (Map)
@@ -44,45 +43,11 @@ import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
 import SAWScript.Yosys.Cell
 
-moduleInputPorts :: Module -> Map Text [Bitrep]
-moduleInputPorts m =
-  Map.fromList
-  . Maybe.mapMaybe
-  ( \(nm, ip) ->
-      if ip ^. portDirection == DirectionInput || ip ^. portDirection == DirectionInout
-      then Just (nm, ip ^. portBits)
-      else Nothing
-  )
-  . Map.assocs
-  $ m ^. modulePorts
-
-moduleOutputPorts :: Module -> Map Text [Bitrep]
-moduleOutputPorts m =
-  Map.fromList
-  . Maybe.mapMaybe
-  ( \(nm, ip) ->
-      if ip ^. portDirection == DirectionOutput || ip ^. portDirection == DirectionInout
-      then Just (nm, ip ^. portBits)
-      else Nothing
-  )
-  . Map.assocs
-  $ m ^. modulePorts
-
-cellInputConnections :: Cell [b] -> Map Text [b]
-cellInputConnections c = Map.intersection (c ^. cellConnections) inp
-  where
-    inp = Map.filter (\d -> d == DirectionInput || d == DirectionInout) $ c ^. cellPortDirections
-
-cellOutputConnections :: Ord b => Cell [b] -> Map [b] Text
-cellOutputConnections c = Map.fromList . fmap Tuple.swap . Map.toList $ Map.intersection (c ^. cellConnections) out
-  where
-    out = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
-
 cellToEdges :: (Ord b, Eq b) => Cell [b] -> [(b, [b])]
 cellToEdges c = (, inputBits) <$> outputBits
   where
     inputBits = List.nub . mconcat . Map.elems $ cellInputConnections c
-    outputBits = List.nub . mconcat . Map.keys $ cellOutputConnections c
+    outputBits = List.nub . mconcat . Map.elems $ cellOutputConnections c
 
 --------------------------------------------------------------------------------
 -- ** Building a network graph from a Yosys module
@@ -112,7 +77,7 @@ moduleNetgraph m =
       $ m ^. modulePorts --
     cellToNodes :: (Text, Cell [Bitrep]) -> [((Text, Cell [Bitrep]), Bitrep, [Bitrep])]
     cellToNodes (nm, c)
-      | c ^. cellType == "$dff" = ((nm, c), , []) <$> outputBits
+      | c ^. cellType == CellTypeDff = ((nm, c), , []) <$> outputBits
       | otherwise = ((nm, c), , inputBits) <$> outputBits
       where
         inputBits :: [Bitrep]
@@ -155,21 +120,6 @@ data ConvertedModule = ConvertedModule
   , _convertedModuleCryptolType :: C.Type
   }
 makeLenses ''ConvertedModule
-
--- | Given a bit pattern ([Bitrep]) and a term, construct a map associating that output pattern with
--- the term, and each bit of that pattern with the corresponding bit of the term.
-deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
-deriveTermsByIndices sc rep t = do
-  boolty <- liftIO $ SC.scBoolType sc
-  telems <- forM [0..length rep] $ \index -> do
-    tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
-    idx <- liftIO . SC.scNat sc $ fromIntegral index
-    bit <- liftIO $ SC.scAt sc tlen boolty t idx
-    liftIO $ SC.scSingle sc boolty bit
-  pure . Map.fromList $ mconcat
-    [ [(rep, t)]
-    , zip ((:[]) <$> rep) telems
-    ]
 
 lookupPatternTerm ::
   (MonadIO m, Ord b, Show b) =>
@@ -214,7 +164,7 @@ netgraphToTerms sc env ng inputs
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
               -- special handling for $dff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
-              | c ^. cellType == "$dff"
+              | c ^. cellType == CellTypeDff
               , Just dffout <- Map.lookup "Q" $ c ^. cellConnections -> do
                   r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
                   ts <- deriveTermsByIndices sc dffout r
@@ -227,14 +177,17 @@ netgraphToTerms sc env ng inputs
 
                   r <- primCellToTerm sc c args >>= \case
                     Just r -> pure r
-                    Nothing -> case Map.lookup (c ^. cellType) env of
-                      Just cm -> do
-                        r <- cryptolRecord sc args
-                        liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
-                      Nothing -> throw $ YosysErrorNoSuchCellType (c ^. cellType) cnm
+                    Nothing ->
+                      let submoduleName = asUserType $ c ^. cellType in
+                      case Map.lookup submoduleName env of
+                        Just cm -> do
+                          r <- cryptolRecord sc args
+                          liftIO $ SC.scApply sc (cm ^. convertedModuleTerm) r
+                        Nothing ->
+                            throw $ YosysErrorNoSuchSubmodule  submoduleName cnm
 
                   -- once we've built a term, insert it along with each of its bits
-                  ts <- forM (Map.assocs $ cellOutputConnections c) $ \(out, o) -> do
+                  ts <- forM (Map.assocs $ cellOutputConnections c) $ \(o, out) -> do
                     t <- cryptolRecordSelect sc outputFields r o
                     deriveTermsByIndices sc out t
                   pure $ Map.union (Map.unions ts) acc

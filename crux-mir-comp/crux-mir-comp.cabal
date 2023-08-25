@@ -34,6 +34,7 @@ library
                  crux-mir,
                  saw-core,
                  saw-core-what4,
+                 saw-script,
                  cryptol,
                  cryptol-saw-core
 
