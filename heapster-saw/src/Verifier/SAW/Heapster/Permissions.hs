@@ -7280,6 +7280,10 @@ newtype PartialSubst ctx =
 emptyPSubst :: RAssign any ctx -> PartialSubst ctx
 emptyPSubst = PartialSubst . RL.map (\_ -> PSubstElem Nothing)
 
+-- | Build a fully-defined partial substitution from a regular substitution
+psubstOfSubst :: PermSubst ctx -> PartialSubst ctx
+psubstOfSubst = PartialSubst . RL.map (PSubstElem . Just) . unPermSubst
+
 -- | Return the set of variables that have been assigned values by a partial
 -- substitution inside a binding for all of its variables
 psubstMbDom :: PartialSubst ctx -> Mb ctx (NameSet CrucibleType)
