@@ -420,6 +420,16 @@ tupleTypeTrans (TypeTransImpure tps f) =
 typeTransTupleDesc :: TypeTrans b tr -> TypeDesc
 typeTransTupleDesc = tupleOfTypeDescs . typeTransDescs
 
+-- | Form the pure SAW core type that is the tuple of all the SAW core types in
+-- a 'TypeTrans', if those types are all pure; it is an error if they are not
+typeTransPureTupleType :: TypeTrans p tr -> OpenTerm
+typeTransPureTupleType (TypeTransPure tps _) = tupleOfTypes tps
+typeTransPureTupleType (TypeTransImpure tps _) =
+  case typeDescPureType $ tupleOfTypeDescs tps of
+    Just tp -> tp
+    Nothing -> panic "typeTransPureTupleType"
+      ["Expected pure type but found impure type"]
+
 {-
 -- | Convert a 'TypeTrans' over 0 or more types to one over 1 type of the form
 -- @#(tp1, #(tp2, ... #(tpn, #()) ...))@. This is "strict" in the sense that
@@ -589,6 +599,10 @@ instance IsTermTrans (ExprTransCtx ctx) where
 -- | Map a context of expression translations to a list of 'SpecTerm's
 exprCtxToTerms :: ExprTransCtx tps -> [SpecTerm]
 exprCtxToTerms = concat . RL.mapToList transTerms
+
+-- | Map a context of expression translations to a list of 'OpenTerm's
+exprCtxToPureTerms :: ExprTransCtx tps -> [OpenTerm]
+exprCtxToPureTerms = concat . RL.mapToList transPureTerms
 
 -- | Map an 'ExprTrans' to its type translation
 exprTransType :: ExprTrans tp -> PureTypeTrans (ExprTrans tp)
@@ -810,6 +824,18 @@ lambdaTransM :: String -> TypeTrans p tr -> (tr -> TransM info ctx SpecTerm) ->
                 TransM info ctx SpecTerm
 lambdaTransM x tp body_f =
   ask >>= \info -> return (lambdaTrans x tp (flip runTransM info . body_f))
+
+-- | Build a nested lambda-abstraction
+--
+-- > \x1:tp1 -> ... -> \xn:tpn -> body
+--
+-- over the types in a pure 'TypeTrans' inside a translation monad, using the
+-- 'String' as a variable name prefix for the @xi@ variables, returning a pure
+-- term
+lambdaPureTransM :: String -> PureTypeTrans tr ->
+                    (tr -> TransM info ctx OpenTerm) -> TransM info ctx OpenTerm
+lambdaPureTransM x tp body_f =
+  ask >>= \info -> return (lambdaPureTrans x tp (flip runTransM info . body_f))
 
 -- | Build a lambda-abstraction
 --
@@ -1269,6 +1295,13 @@ lambdaExprCtx ctx m =
   translateClosed ctx >>= \tptrans ->
   lambdaTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
+-- | Translate all types in a Crucible context and lambda-abstract over them
+lambdaExprCtxPure :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
+                     TransM info RNil OpenTerm
+lambdaExprCtxPure ctx m =
+  translateClosed ctx >>= \tptrans ->
+  lambdaPureTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
+
 -- | Translate all types in a Crucible context and pi-abstract over them
 piExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
              TransM info RNil OpenTerm
@@ -1501,7 +1534,7 @@ instance HasPureTrans (PermExpr a) where
     [nuMP| PExpr_EqShape _ _ |] -> True
     [nuMP| PExpr_PtrShape _ _ sh |] -> hasPureTrans sh
     [nuMP| PExpr_FieldShape fsh |] -> hasPureTrans fsh
-    [nuMP| PExpr_ArrayShape mb_len _ sh |] -> hasPureTrans sh
+    [nuMP| PExpr_ArrayShape _ _ sh |] -> hasPureTrans sh
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
       hasPureTrans sh1 && hasPureTrans sh2
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
@@ -2927,7 +2960,7 @@ instance HasPureTrans (ValuePerm a) where
       -- unfold to an impure permission
       hasPureTrans args
     [nuMP| ValPerm_Conj ps |] -> hasPureTrans ps
-    [nuMP| ValPerm_Var x _ |] -> False
+    [nuMP| ValPerm_Var _ _ |] -> False
     [nuMP| ValPerm_False |] -> True
 
 instance HasPureTrans (AtomicPerm a) where
@@ -2943,7 +2976,7 @@ instance HasPureTrans (AtomicPerm a) where
       -- FIXME: this is technically incorrect, since a defined permission could
       -- unfold to an impure permission
       hasPureTrans args
-    [nuMP| Perm_LLVMFrame fp |] -> True
+    [nuMP| Perm_LLVMFrame _ |] -> True
     [nuMP| Perm_LOwned _ _ _ _ _ |] -> False
     [nuMP| Perm_LOwnedSimple _ _ |] -> True
     [nuMP| Perm_LCurrent _ |] -> True
