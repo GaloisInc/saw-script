@@ -19,11 +19,13 @@ module SAWScript.Crucible.MIR.ResolveSetupValue
   , resolveSAWPred
   , equalRefsPred
   , equalValsPred
+  , checkCompatibleTys
+  , mirAdtToTy
   , MIRTypeOfError(..)
   ) where
 
 import           Control.Lens
-import           Control.Monad (zipWithM)
+import           Control.Monad (unless, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
 import qualified Data.BitVector.Sized as BV
 import qualified Data.Functor.Product as Functor
@@ -31,19 +33,24 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.TraversableFC as FC
 import           Data.Text (Text)
 import qualified Data.Vector as V
 import           Data.Vector (Vector)
 import           Data.Void (absurd)
+import           Numeric.Natural (Natural)
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
-import Lang.Crucible.Simulator (RegValue, RegValue'(..))
+import Lang.Crucible.Simulator (AnyValue(..), RegValue, RegValue'(..))
+import Lang.Crucible.Types (TypeRepr(..))
+import qualified Mir.DefId as Mir
 import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
+import qualified Mir.TransTy as Mir
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
@@ -122,13 +129,14 @@ typeOfSetupValue mcc env nameEnv val =
         tp -> X.throwM (MIRInvalidTypedTerm tp)
     MS.SetupArray elemTy vs ->
       pure $ Mir.TyArray elemTy (length vs)
+    MS.SetupStruct adt _ ->
+      pure $ mirAdtToTy adt
     MS.SetupTuple () vals -> do
       tys <- traverse (typeOfSetupValue mcc env nameEnv) vals
       pure $ Mir.TyTuple tys
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _                -> panic "typeOfSetupValue" ["structs not yet implemented"]
     MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "typeOfSetupValue" ["fields not yet implemented"]
     MS.SetupCast empty _              -> absurd empty
@@ -164,7 +172,51 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupTerm tm -> resolveTypedTerm mcc tm
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _                -> panic "resolveSetupValue" ["structs not yet implemented"]
+    MS.SetupStruct adt flds ->
+      case adt of
+        _ | adt ^. Mir.adtReprTransparent,
+            [fld] <- flds -> do
+          MIRVal shp fld' <- resolveSetupVal mcc env tyenv nameEnv fld
+          pure $ MIRVal (TransparentShape (mirAdtToTy adt) shp) fld'
+        Mir.Adt nm Mir.Struct [variant] _ _ _ _ -> do
+          flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
+          let expectedFlds = variant ^. Mir.vfields
+          let expectedFldsNum = length expectedFlds
+          let actualFldTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+          let actualFldsNum = length actualFldTys
+          unless (expectedFldsNum == actualFldsNum) $
+            fail $ unlines
+              [ "Mismatch in number of struct fields"
+              , "Struct name: " ++ show nm
+              , "Expected number of fields: " ++ show expectedFldsNum
+              , "Actual number of fields:   " ++ show actualFldsNum
+              ]
+          zipWithM_
+            (\expectedFld actualFldTy ->
+              let expectedFldTy = expectedFld ^. Mir.fty in
+              let expectedFldName = expectedFld ^. Mir.fName in
+              unless (checkCompatibleTys expectedFldTy actualFldTy) $
+                fail $ unlines
+                  [ "Struct field type mismatch"
+                  , "Field name: " ++ show expectedFldName
+                  , "Expected type: " ++ show expectedFldTy
+                  , "Given type: " ++ show actualFldTy
+                  ])
+            expectedFlds
+            actualFldTys
+          Some fldAssn <-
+            pure $ Ctx.fromList $
+            map (\(MIRVal shp v) ->
+                  if Mir.canInitialize col (shapeMirTy shp)
+                  then Some $ Functor.Pair (ReqField shp) (RV v)
+                  else Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
+                flds'
+          let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
+          let structShp = StructShape (mirAdtToTy adt) actualFldTys fldShpAssn
+          let structTpr = StructRepr (FC.fmapFC fieldShapeType fldShpAssn)
+          pure $ MIRVal structShp (AnyValue structTpr valAssn)
+        Mir.Adt _ ak _ _ _ _ _ ->
+          panic "resolveSetupVal" ["AdtKind " ++ show ak ++ " not yet implemented"]
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
@@ -408,3 +460,175 @@ equalValsPred ::
   MIRVal ->
   IO (W4.Pred Sym)
 equalValsPred = panic "equalValsPred" ["not yet implemented"]
+
+-- | Check if two 'Mir.Ty's are compatible in SAW. This is a slightly coarser
+-- notion of equality to reflect the fact that MIR's type system is richer than
+-- Cryptol's type system, and some types which would be distinct in MIR are in
+-- fact equal when converted to the equivalent Cryptol types. In particular:
+--
+-- 1. A @u<N>@ type is always compatible with an @i<N>@ type. For instance, @u8@
+--    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
+--    bit sizes of both types must be the same. For instance, @u8@ is /not/
+--    compatible with @i16@.
+--
+-- 2. The @usize@/@isize@ types are always compatible with @u<N>@/@i<N>@, where
+--    @N@ is the number of bits corresponding to the 'Mir.SizeBits' type in
+--    "Mir.Intrinsics". (This is a bit unsavory, as the actual size of
+--    @usize@/@isize@ is platform-dependent, but this is the current approach.)
+--
+-- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
+--    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
+--    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
+--    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
+--    with @ty_n_b@.
+--
+-- See also @checkRegisterCompatibility@ in "SAWScript.Crucible.LLVM.Builtins"
+-- and @registerCompatible@ in "SAWScript.Crucible.JVM.Builtins", which fill a
+-- similar niche in the LLVM and JVM backends, respectively.
+checkCompatibleTys :: Mir.Ty -> Mir.Ty -> Bool
+checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2
+
+-- | Like 'Mir.Ty', but where:
+--
+-- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
+--   'TyViewInt' constructor.
+--
+-- * 'TyViewInt' uses 'BaseSizeView' instead of 'Mir.BaseSize'.
+--
+-- * Recursive occurrences of 'Mir.Ty' use 'TyView' instead. This also applies
+--   to fields of type 'SubstsView' and 'FnSigView', which also replace 'Mir.Ty'
+--   with 'TyView' in their definitions.
+--
+-- This provides a coarser notion of equality than what the 'Eq' instance for
+-- 'Mir.Ty' provides, which distinguishes the two sorts of integer types.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data TyView
+  = TyViewBool
+  | TyViewChar
+    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
+    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'Mir.BaseSize'.
+  | TyViewInt !BaseSizeView
+  | TyViewTuple ![TyView]
+  | TyViewSlice !TyView
+  | TyViewArray !TyView !Int
+  | TyViewRef !TyView !Mir.Mutability
+  | TyViewAdt !Mir.DefId !Mir.DefId !SubstsView
+  | TyViewFnDef !Mir.DefId
+  | TyViewClosure [TyView]
+  | TyViewStr
+  | TyViewFnPtr !FnSigView
+  | TyViewDynamic !Mir.TraitName
+  | TyViewRawPtr !TyView !Mir.Mutability
+  | TyViewFloat !Mir.FloatKind
+  | TyViewDowncast !TyView !Integer
+  | TyViewNever
+  | TyViewForeign
+  | TyViewLifetime
+  | TyViewConst
+  | TyViewErased
+  | TyViewInterned Mir.TyName
+  deriving Eq
+
+-- | Like 'Mir.BaseSize', but without a special case for @usize@/@isize@.
+-- Instead, these are mapped to their actual size, which is determined by the
+-- number of bits in the 'Mir.SizeBits' type in "Mir.Intrinsics". (This is a bit
+-- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
+-- this is the current approach.)
+data BaseSizeView
+  = B8View
+  | B16View
+  | B32View
+  | B64View
+  | B128View
+  deriving Eq
+
+-- | Like 'Mir.Substs', but using 'TyView's instead of 'Mir.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+newtype SubstsView = SubstsView [TyView]
+  deriving Eq
+
+-- | Like 'Mir.FnSig', but using 'TyView's instead of 'Mir.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data FnSigView = FnSigView {
+    _fsvarg_tys    :: ![TyView]
+  , _fsvreturn_ty  :: !TyView
+  , _fsvabi        :: Mir.Abi
+  , _fsvspreadarg  :: Maybe Int
+  }
+  deriving Eq
+
+-- | Convert a 'Mir.Ty' value to a 'TyView' value.
+tyView :: Mir.Ty -> TyView
+-- The two most important cases. Both sorts of integers are mapped to TyViewInt.
+tyView (Mir.TyInt  bs) = TyViewInt (baseSizeView bs)
+tyView (Mir.TyUint bs) = TyViewInt (baseSizeView bs)
+-- All other cases are straightforward.
+tyView Mir.TyBool = TyViewBool
+tyView Mir.TyChar = TyViewChar
+tyView (Mir.TyTuple tys) = TyViewTuple (map tyView tys)
+tyView (Mir.TySlice ty) = TyViewSlice (tyView ty)
+tyView (Mir.TyArray ty n) = TyViewArray (tyView ty) n
+tyView (Mir.TyRef ty mut) = TyViewRef (tyView ty) mut
+tyView (Mir.TyAdt monoDid origDid substs) =
+  TyViewAdt monoDid origDid (substsView substs)
+tyView (Mir.TyFnDef did) = TyViewFnDef did
+tyView (Mir.TyClosure tys) = TyViewClosure (map tyView tys)
+tyView Mir.TyStr = TyViewStr
+tyView (Mir.TyFnPtr sig) = TyViewFnPtr (fnSigView sig)
+tyView (Mir.TyDynamic trait) = TyViewDynamic trait
+tyView (Mir.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut
+tyView (Mir.TyFloat fk) = TyViewFloat fk
+tyView (Mir.TyDowncast ty n) = TyViewDowncast (tyView ty) n
+tyView Mir.TyNever = TyViewNever
+tyView Mir.TyForeign = TyViewForeign
+tyView Mir.TyLifetime = TyViewLifetime
+tyView Mir.TyConst = TyViewConst
+tyView Mir.TyErased = TyViewErased
+tyView (Mir.TyInterned nm) = TyViewInterned nm
+
+-- | Convert a 'Mir.BaseSize' value to a 'BaseSizeView' value.
+baseSizeView :: Mir.BaseSize -> BaseSizeView
+baseSizeView Mir.B8    = B8View
+baseSizeView Mir.B16   = B16View
+baseSizeView Mir.B32   = B32View
+baseSizeView Mir.B64   = B64View
+baseSizeView Mir.B128  = B128View
+baseSizeView Mir.USize =
+  case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of
+    Just bsv -> bsv
+    Nothing ->
+      error $ "Mir.Intrinsics.BaseSize bit size not supported: " ++ show sizeBitsRepr
+  where
+    sizeBitsRepr = W4.knownNat @Mir.SizeBits
+
+    bitSizesMap :: Map Natural BaseSizeView
+    bitSizesMap = Map.fromList
+      [ (W4.natValue (W4.knownNat @8),   B8View)
+      , (W4.natValue (W4.knownNat @16),  B16View)
+      , (W4.natValue (W4.knownNat @32),  B32View)
+      , (W4.natValue (W4.knownNat @64),  B64View)
+      , (W4.natValue (W4.knownNat @128), B128View)
+      ]
+
+-- | Convert a 'Mir.Substs' value to a 'SubstsView' value.
+substsView :: Mir.Substs -> SubstsView
+substsView (Mir.Substs tys) = SubstsView (map tyView tys)
+
+-- | Convert a 'Mir.FnSig' value to a 'FnSigView' value.
+fnSigView :: Mir.FnSig -> FnSigView
+fnSigView (Mir.FnSig argTys retTy abi spreadarg) =
+  FnSigView (map tyView argTys) (tyView retTy) abi spreadarg
+
+-- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
+mirAdtToTy :: Mir.Adt -> Mir.Ty
+mirAdtToTy adt =
+  Mir.TyAdt (adt ^. Mir.adtname) (adt ^. Mir.adtOrigDefId) (adt ^. Mir.adtOrigSubsts)

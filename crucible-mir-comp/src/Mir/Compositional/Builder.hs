@@ -694,9 +694,17 @@ regToSetup bak p eval shp rv = go shp rv
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
         return $ MS.SetupArray elemTy svs
-    go (StructShape _ _ flds) (AnyValue tpr rvs)
+    go (StructShape tyAdt _ flds) (AnyValue tpr rvs)
       | Just Refl <- testEquality tpr shpTpr =
-        MS.SetupStruct () <$> goFields flds rvs
+        case tyAdt of
+          M.TyAdt adtName _ _ -> do
+            mbAdt <- use $ msbCollection . M.adts . at adtName
+            case mbAdt of
+              Just adt -> MS.SetupStruct adt <$> goFields flds rvs
+              Nothing -> error $ "regToSetup: Could not find ADT named: "
+                              ++ show adtName
+          _ -> error $ "regToSetup: Found non-ADT type for struct: "
+                    ++ show (PP.pretty tyAdt)
       | otherwise = error $ "regToSetup: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds

@@ -1,0 +1,155 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let s1_adt = mir_find_adt m "test::S1" [];
+let s2_adt = mir_find_adt m "test::S2" [mir_u32, mir_u32];
+let s3_adt = mir_find_adt m "test::S3" [];
+let s4_adt = mir_find_adt m "test::S4" [];
+
+let foo_adt_1 = mir_find_adt m "test::Foo" [mir_array 4 mir_u8];
+let foo_adt_2 = mir_find_adt m "test::Foo" [mir_adt s2_adt];
+
+let option_adt = mir_find_adt m "core::option::Option" [mir_adt s2_adt];
+
+let f_spec adt = do {
+    x1 <- mir_fresh_var "x1" mir_u32;
+    y1 <- mir_fresh_var "y1" mir_u32;
+    let s = mir_struct_value
+              adt
+              [ mir_term x1
+              , mir_term y1
+              ];
+
+    mir_execute_func [s];
+
+    let s' = mir_struct_value
+              adt
+              [ mir_term {{ y1 + 1 }}
+              , mir_term {{ x1 + 2 }}
+              ];
+    mir_return s';
+};
+
+
+let f1_spec = f_spec s1_adt;
+let f2_spec = f_spec s2_adt;
+let f3_spec = f_spec s3_adt;
+
+let f4_spec = do {
+    x4 <- mir_fresh_var "x4" mir_u32;
+    let s = mir_struct_value s4_adt [mir_term x4];
+
+    mir_execute_func [s];
+
+    let s' = mir_struct_value s4_adt [mir_term {{ x4 + 2 }}];
+    mir_return s';
+};
+
+let g_spec = do {
+    s_ptr <- mir_alloc (mir_adt s1_adt);
+    x1 <- mir_fresh_var "x1" mir_u32;
+    y1 <- mir_fresh_var "y1" mir_u32;
+    let s = mir_struct_value
+              s1_adt
+              [ mir_term x1
+              , mir_term y1
+              ];
+    mir_points_to s_ptr s;
+
+    mir_execute_func [s_ptr];
+
+    let s' = mir_struct_value
+              s1_adt
+              [ mir_term {{ y1 + 1 }}
+              , mir_term {{ x1 + 2 }}
+              ];
+    mir_return s';
+};
+
+let h_spec = do {
+    s_ptr <- mir_alloc_mut (mir_adt s1_adt);
+    x1 <- mir_fresh_var "x1" mir_u32;
+    y1 <- mir_fresh_var "y1" mir_u32;
+    let s = mir_struct_value
+              s1_adt
+              [ mir_term x1
+              , mir_term y1
+              ];
+    mir_points_to s_ptr s;
+
+    mir_execute_func [s_ptr];
+
+    let s' = mir_struct_value
+              s1_adt
+              [ mir_term {{ y1 + 1 }}
+              , mir_term {{ x1 + 2 }}
+              ];
+    mir_points_to s_ptr s';
+};
+
+let bar_spec = do {
+    f1_ptr <- mir_alloc_mut (mir_adt foo_adt_1);
+    f1_arr_val0 <- mir_fresh_var "f1_arr_val0" mir_u8;
+    f1_arr_val1 <- mir_fresh_var "f1_arr_val1" mir_u8;
+    f1_arr_val2 <- mir_fresh_var "f1_arr_val2" mir_u8;
+    f1_arr_val3 <- mir_fresh_var "f1_arr_val3" mir_u8;
+    let f1_arr_val = mir_array_value
+                       mir_u8
+                       [ mir_term f1_arr_val0
+                       , mir_term f1_arr_val1
+                       , mir_term f1_arr_val2
+                       , mir_term f1_arr_val3
+                       ];
+    let f1_foo_val = mir_struct_value foo_adt_1 [f1_arr_val];
+    mir_points_to f1_ptr f1_foo_val;
+
+    f2_ptr <- mir_alloc_mut (mir_adt foo_adt_2);
+    f2_s2_val0 <- mir_fresh_var "f2_s2_val0" mir_u32;
+    f2_s2_val1 <- mir_fresh_var "f2_s2_val1" mir_u32;
+    let f2_s2_val = mir_struct_value
+                      s2_adt
+                      [ mir_term f2_s2_val0
+                      , mir_term f2_s2_val1
+                      ];
+    let f2_foo_val = mir_struct_value foo_adt_2 [f2_s2_val];
+    mir_points_to f2_ptr f2_foo_val;
+
+    mir_execute_func [f1_ptr, f2_ptr];
+
+    let f1_arr_val' = mir_array_value
+                        mir_u8
+                        [ mir_term f1_arr_val0
+                        , mir_term {{ 42 : [8] }}
+                        , mir_term f1_arr_val2
+                        , mir_term f1_arr_val3
+                        ];
+    let f1_foo_val' = mir_struct_value foo_adt_1 [f1_arr_val'];
+    mir_points_to f1_ptr f1_foo_val';
+
+    let f2_s2_val' = mir_struct_value
+                       s2_adt
+                       [ mir_term f2_s2_val1
+                       , mir_term f2_s2_val1
+                       ];
+    let f2_foo_val' = mir_struct_value foo_adt_2 [f2_s2_val'];
+    mir_points_to f2_ptr f2_foo_val';
+
+    mir_return f2_ptr;
+};
+
+mir_verify m "test::f1" [] false f1_spec z3;
+mir_verify m "test::f2" [] false f2_spec z3;
+mir_verify m "test::f3" [] false f3_spec z3;
+mir_verify m "test::f4" [] false f4_spec z3;
+mir_verify m "test::g" [] false g_spec z3;
+mir_verify m "test::h" [] false h_spec z3;
+
+fails (
+  mir_verify m "test::f1" [] false f2_spec z3
+);
+fails (
+  mir_verify m "test::f2" [] false f1_spec z3
+);
+
+mir_verify m "test::bar" [] false bar_spec z3;

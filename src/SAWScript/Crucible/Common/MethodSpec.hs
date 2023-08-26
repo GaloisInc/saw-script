@@ -193,7 +193,7 @@ ppSetupValue setupval = case setupval of
         ppSetupStructLLVM packed vs
       (JVMExt, empty) ->
         absurd empty
-      (MIRExt, ()) ->
+      (MIRExt, _defId) ->
         ppSetupStructDefault vs
   SetupTuple x vs ->
     case (ext, x) of

@@ -268,6 +268,21 @@ class SAWConnection:
             LLVMAssume(self, module, function, contract, lemma_name, timeout)
         return self.most_recent_result
 
+    def mir_find_adt(self,
+                     module_server_name : str,
+                     adt_orig_name : str,
+                     tys : List[MIRType],
+                     adt_server_name: str,
+                     timeout : Optional[float] = None) -> Command:
+        """Consult the given MIR module (``module_server_name``) to find an
+           algebraic data type (ADT) with ``adt_orig_name`` as its identifier
+           and ``tys`` as the types used to instantiate the type parameters. If
+           such an ADT cannot be found in the module, this will raise an error.
+        """
+        self.most_recent_result = \
+            MIRFindADT(self, module_server_name, adt_orig_name, tys, adt_server_name, timeout)
+        return self.most_recent_result
+
     def yosys_import(self, name: str, path: str, timeout : Optional[float] = None) -> Command:
         self.most_recent_result = YosysImport(self, name, path, timeout)
         return self.most_recent_result
