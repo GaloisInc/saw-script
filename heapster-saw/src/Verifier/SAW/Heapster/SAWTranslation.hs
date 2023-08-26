@@ -633,10 +633,8 @@ exprCtxType (ectx :>: e) = (:>:) <$> exprCtxType ectx <*> exprTransType e
 -- 'transPureTerms', except that all type descriptions are mapped to pure types,
 -- not terms of type @LetRecType@. Return 'Nothing' if this is not possible.
 exprTransPureTypeTerms :: ExprTrans tp -> Maybe [OpenTerm]
-exprTransPureTypeTerms (ETrans_Shape (TypeDescPure tp)) = Just [tp]
-exprTransPureTypeTerms (ETrans_Shape (TypeDescLRT _ _)) = Nothing
-exprTransPureTypeTerms (ETrans_Perm (TypeDescPure tp)) = Just [tp]
-exprTransPureTypeTerms (ETrans_Perm (TypeDescLRT _ _)) = Nothing
+exprTransPureTypeTerms (ETrans_Shape d) = (:[]) <$> typeDescPureType d
+exprTransPureTypeTerms (ETrans_Perm d) = (:[]) <$> typeDescPureType d
 exprTransPureTypeTerms etrans = Just $ transPureTerms etrans
 
 -- | Map an 'ExprTransCtx' to the SAW core terms it contains, similarly to
@@ -1192,101 +1190,125 @@ instance TransInfo info => Translate info ctx (NatRepr n) OpenTerm where
 returnType1 :: OpenTerm -> TransM info ctx (PureTypeTrans (ExprTrans a))
 returnType1 tp = return $ mkPureTypeTrans1 tp ETrans_Term
 
+-- | Translate a pure expression type to a 'TypeTrans', which both gives a list
+-- of 0 or more SAW core types and also gives a function to create an expression
+-- translation from SAW core terms of those types. The 'Bool' flag indicates
+-- whether the translation should be only to pure types, meaning that shapes and
+-- permissions are translated to SAW core types; otherwise, they are translated
+-- to terms of SAW core type @LetRecType@, which can only be used for describing
+-- monadic computations.
+translateType :: TransInfo info => Bool -> TypeRepr a ->
+                 TransM info ctx (PureTypeTrans (ExprTrans a))
+translateType _ AnyRepr =
+  return $ error "Translate: Any"
+translateType _ UnitRepr =
+  return $ mkPureTypeTrans0 ETrans_Unit
+translateType _ BoolRepr =
+  returnType1 $ globalOpenTerm "Prelude.Bool"
+translateType _ NatRepr =
+  returnType1 $ dataTypeOpenTerm "Prelude.Nat" []
+translateType _ IntegerRepr =
+  return $ error "translate: IntegerRepr"
+translateType _ RealValRepr =
+  return $ error "translate: RealValRepr"
+translateType _ ComplexRealRepr =
+  return $ error "translate: ComplexRealRepr"
+translateType _ (SequenceRepr{}) =
+  return $ error "translate: SequenceRepr"
+translateType _ (BVRepr w) =
+  returnType1 =<< bitvectorTransM (translateClosed w)
+translateType _ (VectorRepr AnyRepr) =
+  return $ mkPureTypeTrans0 ETrans_AnyVector
 
--- FIXME: explain this translation
+-- Our special-purpose intrinsic types, whose translations do not have
+-- computational content
+translateType _ (LLVMPointerRepr _) =
+  return $ mkPureTypeTrans0 ETrans_LLVM
+translateType _ (LLVMBlockRepr _) =
+  return $ mkPureTypeTrans0 ETrans_LLVMBlock
+translateType _ (LLVMFrameRepr _) =
+  return $ mkPureTypeTrans0 ETrans_LLVMFrame
+translateType _ LifetimeRepr =
+  return $ mkPureTypeTrans0 ETrans_Lifetime
+translateType _ PermListRepr =
+  returnType1 (sortOpenTerm $ mkSort 0)
+translateType _ RWModalityRepr =
+  return $ mkPureTypeTrans0 ETrans_RWModality
+
+-- Permissions and LLVM shapes translate to types (for the pure translation) or
+-- LetRecTypes (for the impure translation)
+translateType False (ValuePermRepr _) =
+  return $ mkPureTypeTrans1 (dataTypeOpenTerm "Prelude.LetRecType" [])
+  (ETrans_Perm . typeDescFromLRT)
+translateType True (ValuePermRepr _) =
+  return $ mkPureTypeTrans1 (sortOpenTerm $ mkSort 0)
+  (ETrans_Perm . TypeDescPure)
+translateType False (LLVMShapeRepr _) =
+  return $ mkPureTypeTrans1 (dataTypeOpenTerm "Prelude.LetRecType" [])
+  (ETrans_Shape . typeDescFromLRT)
+translateType True (LLVMShapeRepr _) =
+  return $ mkPureTypeTrans1 (sortOpenTerm $ mkSort 0)
+  (ETrans_Shape . TypeDescPure)
+
+-- We can't handle any other special-purpose types
+translateType _ (IntrinsicRepr _ _) =
+  return $ error "translate: IntrinsicRepr"
+
+translateType _ (RecursiveRepr _ _) =
+  return $ error "translate: RecursiveRepr"
+translateType _ (FloatRepr _) =
+  returnType1 $ dataTypeOpenTerm "Prelude.Float" []
+translateType _ (IEEEFloatRepr _) =
+  return $ error "translate: IEEEFloatRepr"
+translateType _ CharRepr =
+  return $ error "translate: CharRepr"
+translateType _ (StringRepr UnicodeRepr) =
+  returnType1 stringTypeOpenTerm
+translateType _ (StringRepr _) =
+  return $ error "translate: StringRepr non-unicode"
+translateType _ (FunctionHandleRepr _ _) =
+  -- NOTE: function permissions translate to the SAW function, but the function
+  -- handle itself has no SAW translation
+  return $ mkPureTypeTrans0 ETrans_Fun
+translateType _ (MaybeRepr _) =
+  return $ error "translate: MaybeRepr"
+translateType _ (VectorRepr _) =
+  return $ error "translate: VectorRepr (can't map to Vec without size)"
+translateType b (StructRepr tps) =
+  fmap ETrans_Struct <$> translateCtx b (mkCruCtx tps)
+translateType _ (VariantRepr _) =
+  return $ error "translate: VariantRepr"
+translateType _ (ReferenceRepr _) =
+  return $ error "translate: ReferenceRepr"
+translateType _ (WordMapRepr _ _) =
+  return $ error "translate: WordMapRepr"
+translateType _ (StringMapRepr _) =
+  return $ error "translate: StringMapRepr"
+translateType _ (SymbolicArrayRepr _ _) =
+  return $ error "translate: SymbolicArrayRepr"
+translateType _ (SymbolicStructRepr _) =
+  return $ error "translate: SymbolicStructRepr"
+
 instance TransInfo info =>
          Translate info ctx (TypeRepr a) (PureTypeTrans (ExprTrans a)) where
-  translate mb_tp = case mbMatch mb_tp of
-    [nuMP| AnyRepr |] ->
-      return $ error "Translate: Any"
-    [nuMP| UnitRepr |] ->
-      return $ mkPureTypeTrans0 ETrans_Unit
-    [nuMP| BoolRepr |] ->
-      returnType1 $ globalOpenTerm "Prelude.Bool"
-    [nuMP| NatRepr |] ->
-      returnType1 $ dataTypeOpenTerm "Prelude.Nat" []
-    [nuMP| IntegerRepr |] ->
-      return $ error "translate: IntegerRepr"
-    [nuMP| RealValRepr |] ->
-      return $ error "translate: RealValRepr"
-    [nuMP| ComplexRealRepr |] ->
-      return $ error "translate: ComplexRealRepr"
-    [nuMP| SequenceRepr{} |] ->
-      return $ error "translate: SequenceRepr"
-    [nuMP| BVRepr w |] ->
-      returnType1 =<< bitvectorTransM (translate w)
-    [nuMP| VectorRepr AnyRepr |] ->
-      return $ mkPureTypeTrans0 ETrans_AnyVector
+  translate mb_tp = translateType False $ mbLift mb_tp
 
-    -- Our special-purpose intrinsic types, whose translations do not have
-    -- computational content
-    [nuMP| LLVMPointerRepr _ |] ->
-      return $ mkPureTypeTrans0 ETrans_LLVM
-    [nuMP| LLVMBlockRepr _ |] ->
-      return $ mkPureTypeTrans0 ETrans_LLVMBlock
-    [nuMP| LLVMFrameRepr _ |] ->
-      return $ mkPureTypeTrans0 ETrans_LLVMFrame
-    [nuMP| LifetimeRepr |] ->
-      return $ mkPureTypeTrans0 ETrans_Lifetime
-    [nuMP| PermListRepr |] ->
-      returnType1 (sortOpenTerm $ mkSort 0)
-    [nuMP| RWModalityRepr |] ->
-      return $ mkPureTypeTrans0 ETrans_RWModality
-
-    -- Permissions and LLVM shapes translate to types
-    [nuMP| ValuePermRepr _ |] ->
-      return $ mkPureTypeTrans1 (dataTypeOpenTerm "Prelude.LetRecType" [])
-      (ETrans_Perm . typeDescFromLRT)
-    [nuMP| LLVMShapeRepr _ |] ->
-      return $ mkPureTypeTrans1 (dataTypeOpenTerm "Prelude.LetRecType" [])
-      (ETrans_Shape . typeDescFromLRT)
-
-    -- We can't handle any other special-purpose types
-    [nuMP| IntrinsicRepr _ _ |] ->
-      return $ error "translate: IntrinsicRepr"
-
-    [nuMP| RecursiveRepr _ _ |] ->
-      return $ error "translate: RecursiveRepr"
-    [nuMP| FloatRepr _ |] ->
-      returnType1 $ dataTypeOpenTerm "Prelude.Float" []
-    [nuMP| IEEEFloatRepr _ |] ->
-      return $ error "translate: IEEEFloatRepr"
-    [nuMP| CharRepr |] ->
-      return $ error "translate: CharRepr"
-    [nuMP| StringRepr UnicodeRepr |] ->
-      returnType1 stringTypeOpenTerm
-    [nuMP| StringRepr _ |] ->
-      return $ error "translate: StringRepr non-unicode"
-    [nuMP| FunctionHandleRepr _ _ |] ->
-      -- NOTE: function permissions translate to the SAW function, but the
-      -- function handle itself has no SAW translation
-      return $ mkPureTypeTrans0 ETrans_Fun
-    [nuMP| MaybeRepr _ |] ->
-      return $ error "translate: MaybeRepr"
-    [nuMP| VectorRepr _ |] ->
-      return $ error "translate: VectorRepr (can't map to Vec without size)"
-    [nuMP| StructRepr tps |] ->
-      fmap ETrans_Struct <$> translate (fmap mkCruCtx tps)
-    [nuMP| VariantRepr _ |] ->
-      return $ error "translate: VariantRepr"
-    [nuMP| ReferenceRepr _ |] ->
-      return $ error "translate: ReferenceRepr"
-    [nuMP| WordMapRepr _ _ |] ->
-      return $ error "translate: WordMapRepr"
-    [nuMP| StringMapRepr _ |] ->
-      return $ error "translate: StringMapRepr"
-    [nuMP| SymbolicArrayRepr _ _ |] ->
-      return $ error "translate: SymbolicArrayRepr"
-    [nuMP| SymbolicStructRepr _ |] ->
-      return $ error "translate: SymbolicStructRepr"
-
+-- | Translate a context of types to a type translation using 'translateType'
+translateCtx :: TransInfo info => Bool -> CruCtx tps ->
+                TransM info ctx (PureTypeTrans (ExprTransCtx tps))
+translateCtx _ CruCtxNil = return $ mkPureTypeTrans0 MNil
+translateCtx b (CruCtxCons ctx tp) =
+  liftA2 (:>:) <$> translateCtx b ctx <*> translateType b tp
 
 instance TransInfo info =>
          Translate info ctx (CruCtx as) (PureTypeTrans (ExprTransCtx as)) where
-  translate mb_ctx = case mbMatch mb_ctx of
-    [nuMP| CruCtxNil |] -> return $ mkPureTypeTrans0 MNil
-    [nuMP| CruCtxCons ctx tp |] ->
-      liftA2 (:>:) <$> translate ctx <*> translate tp
+  translate mb_ctx = translateCtx False $ mbLift mb_ctx
+
+-- | Translate all types in a 'CruCtx' to their pure types, meaning specifically
+-- that permissions and shapes are translated to types and not @LetRecType@s
+translateCtxPure :: TransInfo info => CruCtx ctx ->
+                    TransM info ctx' (PureTypeTrans (ExprTransCtx ctx))
+translateCtxPure = translateCtx True
 
 -- | Translate all types in a Crucible context and lambda-abstract over them
 lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx SpecTerm ->
@@ -1295,11 +1317,12 @@ lambdaExprCtx ctx m =
   translateClosed ctx >>= \tptrans ->
   lambdaTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
--- | Translate all types in a Crucible context and lambda-abstract over them
+-- | Translate all types in a Crucible context to pure types and lambda-abstract
+-- over those types
 lambdaExprCtxPure :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
                      TransM info RNil OpenTerm
 lambdaExprCtxPure ctx m =
-  translateClosed ctx >>= \tptrans ->
+  translateCtxPure ctx >>= \tptrans ->
   lambdaPureTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
 -- | Translate all types in a Crucible context and pi-abstract over them
