@@ -571,6 +571,16 @@ class OpenTermLike t where
   -- | Build a @t@ for a datatype applied to its arguments
   dataTypeTermLike :: Ident -> [t] -> t
 
+instance OpenTermLike OpenTerm where
+  openTermLike = id
+  typeOfTermLike = openTermType
+  flatTermLike = flatOpenTerm
+  applyTermLike = applyOpenTerm
+  lambdaTermLike = lambdaOpenTerm
+  piTermLike = piOpenTerm
+  ctorTermLike = ctorOpenTerm
+  dataTypeTermLike = dataTypeOpenTerm
+
 -- Lift an OpenTermLike instance from t to functions from some type a to t,
 -- where the OpenTermLike methods pass the same input a argument to all subterms
 instance OpenTermLike t => OpenTermLike (a -> t) where
