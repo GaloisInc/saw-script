@@ -101,6 +101,11 @@ weakenMemberR :: RAssign any ctx2 -> Member ctx1 a -> Member (ctx1 :++: ctx2) a
 weakenMemberR MNil memb = memb
 weakenMemberR (ctx1 :>: _) memb = Member_Step (weakenMemberR ctx1 memb)
 
+-- | Apply the @LRT_SpecM@ combinator to turn a @LetRecType@ for a return value
+-- into a monadic type
+specLRTOpenTerm :: OpenTerm -> OpenTerm
+specLRTOpenTerm lrt = ctorTermLike "Prelude.LRT_SpecM" [lrt]
+
 
 ----------------------------------------------------------------------
 -- * Type Translations
@@ -3052,7 +3057,7 @@ instance TransInfo info =>
       Refl ->
         fmap typeDescFromLRT $ piLRTExprCtxApp tops $
         arrowLRTPermCtx (mbCombine tops_prxs perms_in) $
-        fmap typeDescLRT $
+        fmap (specLRTOpenTerm . typeDescLRT) $
         translateRetType rets (mbCombine
                                (RL.append tops_prxs rets_prxs) perms_out)
 
@@ -3089,7 +3094,7 @@ piExprPermLRT :: PureTypeTrans (ExprTransCtx ctx) ->
 piExprPermLRT etps ptps_in_F ptps_out_F =
   piLRTTrans "e" etps $ \ectx ->
   arrowLRTTrans (ptps_in_F ectx) $
-  typeDescLRT $ typeTransTupleDesc (ptps_out_F ectx)
+  specLRTOpenTerm $ typeDescLRT $ typeTransTupleDesc (ptps_out_F ectx)
 
 -- | Build the return type for a function; FIXME: documentation
 translateRetType :: TransInfo info => CruCtx rets ->
