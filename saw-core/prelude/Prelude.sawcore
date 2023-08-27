@@ -2755,6 +2755,42 @@ orS E stack a m1 m2 =
 primitive CallS : (E:EvType) -> (stk:FunStack) -> (R:LetRecType) ->
                   LRTClos stk (LRT_SpecM R) -> SpecM E stk (LRTArg stk R);
 
+-- A monadic function whose type is described by the encoding lrt
+SpecFun : EvType -> FunStack -> LetRecType -> sort 0;
+SpecFun E stk lrt =
+  lrtPi stk lrt (\ (args:LRTInput stk lrt) ->
+                   SpecM E stk (LRTOutput stk lrt args));
+
+-- Apply a closure to all of its arguments and then call it using CallS
+applyCallClos : (E:EvType) -> (stk:FunStack) -> (lrt:LetRecType) ->
+                LRTClos stk lrt -> SpecFun E stk lrt;
+applyCallClos E stk lrt =
+  LetRecType#rec
+    (\ (lrt:LetRecType) -> LRTClos stk lrt -> SpecFun E stk lrt)
+    (\ (R:LetRecType) (_:LRTClos stk R -> SpecFun E stk R)
+       (clos:LRTClos stk (LRT_SpecM R)) ->
+       CallS E stk R clos)
+    (\ (A:sort 0) (B:A -> LetRecType)
+       (rec:(a:A) -> LRTClos stk (B a) -> SpecFun E stk (B a))
+       (clos:LRTClos stk (LRT_FunDep A B)) (a:A) ->
+       rec a (applyLRTClosDep stk A B clos a))
+    (\ (A:LetRecType) (_:LRTClos stk A -> SpecFun E stk A)
+       (B:LetRecType) (rec:LRTClos stk B -> SpecFun E stk B)
+       (clos:LRTClos stk (LRT_FunClos A B)) (arg:LRTArg stk A) ->
+       rec (applyLRTClosClos stk A B clos arg))
+    (\ (A:sort 0) (_:LRTClos stk (LRT_Type A)) (v:Void) ->
+       elimVoid (SpecM E stk (LRTOutput stk (LRT_Type A) v)) v)
+    (\ (F:sort 0 -> sort 0 -> sort 0) (validF:ValidLRTFunctor2 F)
+       (A:LetRecType) (_:LRTClos stk A -> SpecFun E stk A)
+       (B:LetRecType) (_:LRTClos stk B -> SpecFun E stk B)
+       (_:LRTClos stk (LRT_BinOp F validF A B)) (v:Void) ->
+       elimVoid (SpecM E stk (LRTOutput stk (LRT_BinOp F validF A B) v)) v)
+    (\ (A:sort 0) (B:A -> LetRecType)
+       (_:(a:A) -> LRTClos stk (B a) -> SpecFun E stk (B a))
+       (_:LRTClos stk (LRT_Sigma A B)) (v:Void) ->
+       elimVoid (SpecM E stk (LRTOutput stk (LRT_Sigma A B) v)) v)
+    lrt;
+
 
 --
 -- The category of stack inclusions
@@ -2869,12 +2905,6 @@ weakenRightStackIncl stk1 stk2 =
 --
 -- Spec definitions
 --
-
--- A monadic function whose type is described by the encoding lrt
-SpecFun : EvType -> FunStack -> LetRecType -> sort 0;
-SpecFun E stk lrt =
-  lrtPi stk lrt (\ (args:LRTInput stk lrt) ->
-                   SpecM E stk (LRTOutput stk lrt args));
 
 -- A monadic function that is polymorphic in its function stack
 PolySpecFun : EvType -> FunStack -> LetRecType -> sort 1;

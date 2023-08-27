@@ -88,7 +88,7 @@ module Verifier.SAW.OpenTerm (
   SpecTerm(), defineSpecOpenTerm, lambdaPureSpecTerm, lambdaPureSpecTermMulti,
   lrtClosTypeSpecTerm, sawLetPureSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
-  importDefSpecTerm, monadicSpecOp,
+  applyCallClosSpecTerm, importDefSpecTerm, monadicSpecOp,
   specMTypeSpecTerm, returnSpecTerm, bindSpecTerm, errorSpecTerm,
   ) where
 
@@ -1103,6 +1103,13 @@ callClosSpecTerm :: OpenTerm -> SpecTerm -> SpecTerm
 callClosSpecTerm tp clos =
   applySpecTermMulti (monadicSpecOp "Prelude.CallS")
   [openTermSpecTerm tp, clos]
+
+-- | Convert a closure of a given @LetRecType@ to a spec function and apply it
+-- to some number of arguments
+applyCallClosSpecTerm :: OpenTerm -> SpecTerm -> [SpecTerm] -> SpecTerm
+applyCallClosSpecTerm lrt clos args =
+  applySpecTermMulti (monadicSpecOp "Prelude.applyCallClos")
+  (openTermSpecTerm lrt : clos : args)
 
 -- | Import another spec definition inside a spec definition, and return the
 -- @SpecFun@ that calls its body
