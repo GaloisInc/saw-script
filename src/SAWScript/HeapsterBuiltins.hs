@@ -86,6 +86,7 @@ import Data.Parameterized.TraversableF
 import Data.Parameterized.TraversableFC
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Name
 import Verifier.SAW.Module as Mod
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
