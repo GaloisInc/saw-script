@@ -832,13 +832,13 @@ specStExtraRecs st = reverse $ specStExtraRecsRev st
 specStImports :: SpecTermState -> [OpenTerm]
 specStImports st = reverse (specStImportsRev st)
 
--- | Increment the context length of a 'SpecTermState'
-specStIncCtx :: SpecTermState -> SpecTermState
-specStIncCtx st = st { specStCtxLen = specStCtxLen st + 1 }
+-- | Increment the context length of a 'SpecTermState' by the specified amount
+specStIncCtx :: Int -> SpecTermState -> SpecTermState
+specStIncCtx inc st = st { specStCtxLen = specStCtxLen st + inc }
 
--- | Decrement the context length of a 'SpecTermState'
-specStDecCtx :: SpecTermState -> SpecTermState
-specStDecCtx st = st { specStCtxLen = specStCtxLen st - 1 }
+-- | Decrement the context length of a 'SpecTermState' by the specified amount
+specStDecCtx :: Int -> SpecTermState -> SpecTermState
+specStDecCtx dec st = st { specStCtxLen = specStCtxLen st - dec }
 
 specStInsTempClos :: OpenTerm -> SpecTermState -> (Natural, SpecTermState)
 specStInsTempClos lrt st =
@@ -924,7 +924,9 @@ openTermSpecTerm t =
        OpenTerm $
        do ctx <- askCtx
           if length ctx == ctx_len then unOpenTerm t else
-            panic "openTermSpecTerm" ["Typing context not of expected length"]
+            panic "openTermSpecTerm" ["Typing context not of expected length\n" ++
+                                      "Found: " ++ show (length ctx) ++
+                                      ", Expected: " ++ show ctx_len]
 
 -- | Return the type of a 'SpecTerm' as a 'SpecTerm'
 specTermType :: SpecTerm -> SpecTerm
@@ -944,13 +946,19 @@ topVarSpecTerm =
             typeInferComplete (LocalVar (inner_ctx_len
                                          - outer_ctx_len) :: TermF Term)
 
+-- | Run a 'SpecTermM' computation with a 'specStCtxLen' value that has been
+-- incremented by the specified amount. This means that the computation is
+-- intuitively inside a binding for that many variables.
+withIncCtxLen :: Int -> SpecTermM a -> SpecTermM a
+withIncCtxLen inc m =
+  do modify (specStIncCtx inc)
+     ret <- m
+     modify (specStDecCtx inc)
+     return ret
+
 -- | Run a 'SpecTermM' computation in a context with an extra bound variable
-withVarSpecTermM :: SpecTermM a -> SpecTermM a
-withVarSpecTermM m =
-  do modify specStIncCtx
-     a <- m
-     modify specStDecCtx
-     return a
+withVarSpecTermM :: SpecTermM SpecInfoTerm -> SpecTermM SpecInfoTerm
+withVarSpecTermM m = withIncCtxLen 1 m
 
 -- | Build a lambda abstraction as a 'SpecTerm' from a function that takes in a
 -- pure 'OpenTerm'
@@ -1035,8 +1043,12 @@ defineSpecOpenTerm :: OpenTerm -> [(OpenTerm,SpecTerm)] ->
 defineSpecOpenTerm ev base_recs_in lrt body_in =
   runSpecTermM ev (fromIntegral $ length base_recs_in) $
   do base_recs <-
+       -- NOTE: the closures and the final body are going to be stuck inside a
+       -- lambda binding for the stack and stackIncl by mkPolySpecLambda, below,
+       -- so we increment their context lenghts for their SpecTermM computations
+       withIncCtxLen 2 $
        forM base_recs_in $ \(fun_lrt,fun_tm) -> mkSpecRecFunM fun_lrt fun_tm
-     body <- unSpecTerm body_in
+     body <- withIncCtxLen 2 $ unSpecTerm body_in
      final_st <- get
      let all_recs = base_recs ++ specStExtraRecs final_st
      let local_stk = specRecFunsStack all_recs
