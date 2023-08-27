@@ -2122,8 +2122,6 @@ some parts of `mir_verify` are not currently implemented, so it is possible
 that using `mir_verify` on some programs will fail. Features that are not yet
 implemented include the following:
 
-* MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
-  `mir_verify` must always be the empty list at present)
 * The ability to construct MIR `enum` values in specifications
 
 The `String` supplied as an argument to `mir_verify` is expected to be a
@@ -2415,6 +2413,296 @@ llvm_verify m "dbl" [add_ms] false dbl_setup abc;
 In this case, doing the verification compositionally doesn't save
 computational effort, since the functions are so simple, but it
 illustrates the approach.
+
+### Compositional Verification and Mutable Allocations
+
+A common pitfall when using compositional verification is to reuse a
+specification that underspecifies the value of a mutable allocation. In
+general, doing so can lead to unsound verification, so SAW goes through great
+lengths to check for this.
+
+Here is an example of this pitfall in an LLVM verification. Given this C code:
+
+~~~ .c
+void side_effect(uint32_t *a) {
+  *a = 0;
+}
+
+uint32_t foo(uint32_t x) {
+  uint32_t b = x;
+  side_effect(&b);
+  return b;
+}
+~~~
+
+And the following SAW specifications:
+
+~~~
+let side_effect_spec = do {
+  a_ptr <- llvm_alloc (llvm_int 32);
+  a_val <- llvm_fresh_var "a_val" (llvm_int 32);
+  llvm_points_to a_ptr (llvm_term a_val);
+
+  llvm_execute_func [a_ptr];
+};
+
+let foo_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+
+  llvm_execute_func [llvm_term x];
+
+  llvm_return (llvm_term x);
+};
+~~~
+
+Should SAW be able to verify the `foo` function against `foo_spec` using
+compositional verification? That is, should the following be expected to work?
+
+~~~
+side_effect_ov <- llvm_verify m "side_effect" [] false side_effect_spec z3;
+llvm_verify m "foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+A literal reading of `side_effect_spec` would suggest that the `side_effect`
+function allocates `a_ptr` but then does nothing with it, implying that `foo`
+returns its argument unchanged. This is incorrect, however, as the
+`side_effect` function actually changes its argument to point to `0`, so the
+`foo` function ought to return `0` as a result. SAW should not verify `foo`
+against `foo_spec`, and indeed it does not.
+
+The problem is that `side_effect_spec` underspecifies the value of `a_ptr` in
+its postconditions, which can lead to the potential unsoundness seen above when
+`side_effect_spec` is used in compositional verification. To prevent this
+source of unsoundness, SAW will _invalidate_ the underlying memory of any
+mutable pointers (i.e., those declared with `llvm_alloc`, not
+`llvm_alloc_global`) allocated in the preconditions of compositional override
+that do not have a corresponding `llvm_points_to` statement in the
+postconditions. Attempting to read from invalidated memory constitutes an
+error, as can be seen in this portion of the error message when attempting to
+verify `foo` against `foo_spec`:
+
+~~~
+invalidate (state of memory allocated in precondition (at side.saw:3:12) not described in postcondition)
+~~~
+
+To fix this particular issue, add an `llvm_points_to` statement to
+`side_effect_spec`:
+
+~~~
+let side_effect_spec = do {
+  a_ptr <- llvm_alloc (llvm_int 32);
+  a_val <- llvm_fresh_var "a_val" (llvm_int 32);
+  llvm_points_to a_ptr (llvm_term a_val);
+
+  llvm_execute_func [a_ptr];
+
+  // This is new
+  llvm_points_to a_ptr (llvm_term {{ 0 : [32] }});
+};
+~~~
+
+After making this change, SAW will reject `foo_spec` for a different reason, as
+it claims that `foo` returns its argument unchanged when it actually returns
+`0`.
+
+Note that invalidating memory itself does not constitute an error, so if the
+`foo` function never read the value of `b` after calling `side_effect(&b)`,
+then there would be no issue. It is only when a function attempts to _read_
+from invalidated memory that an error is thrown. In general, it can be
+difficult to predict when a function will or will not read from invalidated
+memory, however. For this reason, it is recommended to always specify the
+values of mutable allocations in the postconditions of your specs, as it can
+avoid pitfalls like the one above.
+
+The same pitfalls apply to compositional MIR verification, with a couple of key
+differences. In MIR verification, mutable references are allocated using
+`mir_alloc_mut`. Here is a Rust version of the pitfall program above:
+
+~~~ .rs
+pub fn side_effect(a: &mut u32) {
+    *a = 0;
+}
+
+pub fn foo(x: u32) -> u32 {
+    let mut b: u32 = x;
+    side_effect(&mut b);
+    b
+}
+~~~
+
+~~~
+let side_effect_spec = do {
+  a_ref <- mir_alloc_mut mir_u32;
+  a_val <- mir_fresh_var "a_val" mir_u32;
+  mir_points_to a_ref (mir_term a_val);
+
+  mir_execute_func [a_ref];
+};
+
+let foo_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x }});
+};
+~~~
+
+Just like above, if you attempted to prove `foo` against `foo_spec` using
+compositional verification:
+
+~~~
+side_effect_ov <- mir_verify m "test::side_effect" [] false side_effect_spec z3;
+mir_verify m "test::foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+Then SAW would throw an error, as `side_effect_spec` underspecifies the value
+of `a_ref` in its postconditions. `side_effect_spec` can similarly be repaired
+by adding a `mir_points_to` statement involving `a_ref` in `side_effect_spec`'s
+postconditions.
+
+MIR verification differs slightly from LLVM verification in how it catches
+underspecified mutable allocations when using compositional overrides. The LLVM
+memory model achieves this by invalidating the underlying memory in
+underspecified allocations. The MIR memory model, on the other hand, does not
+have a direct counterpart to memory invalidation. As a result, any MIR overrides
+must specify the values of all mutable allocations in their postconditions,
+_even if the function that calls the override never uses the allocations_.
+
+To illustrate this point more finely, suppose that the `foo` function had
+instead been defined like this:
+
+~~~ .rs
+pub fn foo(x: u32) -> u32 {
+    let mut b: u32 = x;
+    side_effect(&mut b);
+    42
+}
+~~~
+
+Here, it does not particularly matter what effects the `side_effect` function
+has on its argument, as `foo` will now return `42` regardless. Still, if you
+attempt to prove `foo` by using `side_effect` as a compositional override, then
+it is strictly required that you specify the value of `side_effect`'s argument
+in its postconditions, even though the answer that `foo` returns is unaffected
+by this. This is in contrast with LLVM verification, where one could get away
+without specifying `side_effect`'s argument in this example, as the invalidated
+memory in `b` would never be read.
+
+### Compositional Verification and Mutable Global Variables
+
+Just like with local mutable allocations (see the previous section),
+specifications used in compositional overrides must specify the values of
+mutable global variables in their postconditions. To illustrate this using LLVM
+verification, here is a variant of the C program from the previous example that
+uses a mutable global variable `a`:
+
+~~~ .c
+
+uint32_t a = 42;
+
+void side_effect(void) {
+  a = 0;
+}
+
+uint32_t foo(void) {
+  side_effect();
+  return a;
+}
+~~~
+
+If we attempted to verify `foo` against this `foo_spec` specification using
+compositional verification:
+
+~~~
+let side_effect_spec = do {
+  llvm_alloc_global "a";
+  llvm_points_to (llvm_global "a") (llvm_global_initializer "a");
+
+  llvm_execute_func [];
+};
+
+let foo_spec = do {
+  llvm_alloc_global "a";
+  llvm_points_to (llvm_global "a") (llvm_global_initializer "a");
+
+  llvm_execute_func [];
+
+  llvm_return (llvm_global_initializer "a");
+};
+
+side_effect_ov <- llvm_verify m "side_effect" [] false side_effect_spec z3;
+llvm_verify m "foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+Then SAW would reject it, as `side_effect_spec` does not specify what `a`'s
+value should be in its postconditions. Just as with local mutable allocations,
+SAW will invalidate the underlying memory in `a`, and subsequently reading from
+`a` in the `foo` function will throw an error. The solution is to add an
+`llvm_points_to` statement in the postconditions that declares that `a`'s value
+is set to `0`.
+
+The same concerns apply to MIR verification, where mutable global variables are
+referred to as `static mut` items. (See the [MIR static
+items](#mir-static-items) section for more information). Here is a Rust version
+of the program above:
+
+~~~ .rs
+static mut A: u32 = 42;
+
+pub fn side_effect() {
+    unsafe {
+        A = 0;
+    }
+}
+
+pub fn foo() -> u32 {
+    side_effect();
+    unsafe { A }
+}
+~~~
+
+~~~
+let side_effect_spec = do {
+  mir_points_to (mir_static "test::A") (mir_static_initializer "test::A");
+
+  mir_execute_func [];
+};
+
+let foo_spec = do {
+  mir_points_to (mir_static "test::A") (mir_static_initializer "test::A");
+
+  mir_execute_func [];
+
+  mir_return (mir_static_initializer "test::A");
+};
+
+side_effect_ov <- mir_verify m "side_effect" [] false side_effect_spec z3;
+mir_verify m "foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+Just as above, we can repair this by adding a `mir_points_to` statement in
+`side_effect_spec`'s postconditions that specifies that `A` is set to `0`.
+
+Recall from the previous section that MIR verification is stricter than LLVM
+verification when it comes to specifying mutable allocations in the
+postconditions of compositional overrides. This is especially true for mutable
+static items. In MIR verification, any compositional overrides must specify the
+values of all mutable static items in the entire program in their
+postconditions, _even if the function that calls the override never uses the
+static items_. For example, if the `foo` function were instead defined like
+this:
+
+~~~ .rs
+pub fn foo() -> u32 {
+    side_effect();
+    42
+}
+~~~
+
+Then it is still required for `side_effect_spec` to specify what `A`'s value
+will be in its postconditions, despite the fact that this has no effect on the
+value that `foo` will return.
 
 ## Specifying Heap Layout
 
@@ -2906,7 +3194,9 @@ accounted for explicitly in the specification: if `llvm_alloc_global` is
 used in the precondition, there must be a corresponding `llvm_points_to`
 in the postcondition describing the new state of that global. Otherwise, a
 specification might not fully capture the behavior of the function, potentially
-leading to unsoundness in the presence of compositional verification.
+leading to unsoundness in the presence of compositional verification. (For more
+details on this point, see the [Compositional Verification and Mutable Global
+Variables](#compositional-verification-and-mutable-global-variables) section.)
 
 Immutable (i.e. `const`) global variables are allocated implicitly, and do not
 require a call to `llvm_alloc_global`.
@@ -3062,6 +3352,13 @@ m <- mir_load_module "statics.linked-mir.json";
 mir_verify m "statics::f" [] false f_spec z3;
 ~~~
 
+In order to use a specification involving mutable static items for
+compositional verification, it is required to specify the value of all mutable
+static items using the `mir_points_to` command in the specification's
+postconditions. For more details on this point, see the [Compositional
+Verification and Mutable Global
+Variables](#compositional-verification-and-mutable-global-variables) section.
+
 ## Preconditions and Postconditions
 
 Sometimes a function is only well-defined under certain conditions, or
@@ -3099,18 +3396,18 @@ the target code. However, in some cases, it can be useful to use a
 `MethodSpec` to specify some code that either doesn't exist or is hard
 to prove. The previously-mentioned [`assume_unsat`
 tactic](#miscellaneous-tactics) omits proof but does not prevent
-simulation of the function. To skip simulation altogether, one can use:
+simulation of the function. To skip simulation altogether, one can use
+one of the following commands:
 
 ~~~
 llvm_unsafe_assume_spec :
   LLVMModule -> String -> LLVMSetup () -> TopLevel CrucibleMethodSpec
-~~~
 
-Or, in the experimental JVM implementation:
-
-~~~
 jvm_unsafe_assume_spec :
   JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec
+
+mir_unsafe_assume_spec :
+  MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
 ~~~
 
 ## A Heap-Based Example

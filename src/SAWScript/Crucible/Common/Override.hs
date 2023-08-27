@@ -78,10 +78,10 @@ import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
-import           Data.Proxy (Proxy(..))
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
+import           Data.Proxy (Proxy(..))
 import           Data.Set (Set)
 import           Data.Typeable (Typeable)
 import           Data.Void

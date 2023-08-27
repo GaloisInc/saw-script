@@ -8,7 +8,8 @@
   * The `mir_verify` function performs verification of a MIR function.
   * The `mir_find_adt` function looks up an algebraic data type (ADT) name in a
     MIR module.
-
+  * The `mir_assume` function assumes a specification for a MIR function without
+    performing any verification.
   * The `saw_client.mir` module contains utility functions for constructing
     MIR types.
 

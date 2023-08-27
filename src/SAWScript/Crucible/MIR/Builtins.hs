@@ -23,6 +23,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_postcond
   , mir_precond
   , mir_return
+  , mir_unsafe_assume_spec
   , mir_verify
     -- ** MIR slices
   , mir_slice_value
@@ -60,11 +61,12 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
-import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
 import Data.IORef
-import qualified Data.List.Extra as List (find, groupOn)
+import qualified Data.List as List (find)
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
@@ -129,6 +131,7 @@ import SAWScript.Panic
 import qualified SAWScript.Position as SS
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Utils (neGroupOn)
 import SAWScript.Value
 
 type AssumptionReason = (MS.ConditionMetadata, String)
@@ -494,6 +497,22 @@ mir_points_to_check_lhs_validity ref loc =
        _ -> throwCrucibleSetup loc $ "lhs not a reference type: "
                                   ++ show (PP.pretty refTy)
 
+mir_unsafe_assume_spec ::
+  Mir.RustModule ->
+  String       {- ^ Name of the function -} ->
+  MIRSetupM () {- ^ Boundary specification -} ->
+  TopLevel Lemma
+mir_unsafe_assume_spec rm nm setup =
+  do cc <- setupCrucibleContext rm
+     pos <- getPosition
+     let loc = SS.toW4Loc "_SAW_assume_spec" pos
+     fn <- findFn rm nm
+     let st0 = initialCrucibleSetupState cc fn loc
+     ms <- (view Setup.csMethodSpec) <$>
+             execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
+     ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
+     returnProof ps
+
 mir_verify ::
   Mir.RustModule ->
   String {- ^ method name -} ->
@@ -514,19 +533,16 @@ mir_verify rm nm lemmas checkSat setup tactic =
      let sym = cc^.mccSym
      let globals0 = cc^.mccSymGlobalState
 
+     sosp <- rwSingleOverrideSpecialCase <$> getTopLevelRW
+     let ?singleOverrideSpecialCase = sosp
+
      pos <- getPosition
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "mir_verify" profFile
 
-     let cs = rm ^. Mir.rmCS
-         col = cs ^. Mir.collection
-         crateDisambigs = cs ^. Mir.crateHashesMap
-     did <- findDefId crateDisambigs (Text.pack nm)
-     fn <- case Map.lookup did (col ^. Mir.functions) of
-         Just x -> return x
-         Nothing -> fail $ "Couldn't find MIR function named: " ++ nm
+     fn <- findFn rm nm
      let st0 = initialCrucibleSetupState cc fn loc
 
      -- execute commands of the method spec
@@ -672,17 +688,21 @@ assertEqualVals cc v1 v2 =
      toSC sym st =<< equalValsPred cc v1 v2
 
 registerOverride ::
+  (?singleOverrideSpecialCase :: Bool) =>
   Options ->
   MIRCrucibleContext ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym MIR ->
   W4.ProgramLoc ->
   IORef MetadataMap {- ^ metadata map -} ->
-  [MethodSpec] ->
+  NonEmpty MethodSpec ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym MIR rtp args ret ()
-registerOverride _opts cc _ctx _top_loc _mdMap cs =
-  do let c0 = head cs
+registerOverride opts cc _ctx _top_loc mdMap cs =
+  do let sym = cc^.mccSym
+     let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
      let rm = cc^.mccRustModule
+
+     sc <- saw_ctx <$> liftIO (sawCoreState sym)
 
      Crucible.AnyCFG cfg <- lookupDefIdCFG rm method
      let h = Crucible.cfgHandle cfg
@@ -693,7 +713,7 @@ registerOverride _opts cc _ctx _top_loc _mdMap cs =
        $ Crucible.mkOverride'
            (Crucible.handleName h)
            retTy
-           (panic "registerOverride.methodSpecHandler" ["not yet implemented"])
+           (methodSpecHandler opts sc cc mdMap cs h)
 
 resolveArguments ::
   MIRCrucibleContext ->
@@ -734,46 +754,8 @@ setupPrePointsTos ::
   [MirPointsTo] ->
   Crucible.SymGlobalState Sym ->
   IO (Crucible.SymGlobalState Sym)
-setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
-  where
-    tyenv = MS.csAllocations mspec
-    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
-
-    doPointsTo ::
-         Crucible.SymGlobalState Sym
-      -> MirPointsTo
-      -> IO (Crucible.SymGlobalState Sym)
-    doPointsTo globals (MirPointsTo _ reference referents) =
-      mccWithBackend cc $ \bak -> do
-        MIRVal referenceShp referenceVal <-
-          resolveSetupVal cc env tyenv nameEnv reference
-        -- By the time we reach here, we have already checked (in mir_points_to)
-        -- that we are in fact dealing with a reference value, so the call to
-        -- `testRefShape` below should always succeed.
-        IsRefShape _ _ _ referenceInnerTy <-
-          case testRefShape referenceShp of
-            Just irs -> pure irs
-            Nothing ->
-              panic "setupPrePointsTos"
-                    [ "Unexpected non-reference type:"
-                    , show $ PP.pretty $ shapeMirTy referenceShp
-                    ]
-        referent <- firstPointsToReferent referents
-        MIRVal referentShp referentVal <-
-          resolveSetupVal cc env tyenv nameEnv referent
-        -- By the time we reach here, we have already checked (in mir_points_to)
-        -- that the type of the reference is compatible with the right-hand side
-        -- value, so the equality check below should never fail.
-        Refl <-
-          case W4.testEquality referenceInnerTy (shapeType referentShp) of
-            Just r -> pure r
-            Nothing ->
-              panic "setupPrePointsTos"
-                    [ "Unexpected type mismatch between reference and referent"
-                    , "Reference type: " ++ show referenceInnerTy
-                    , "Referent type:  " ++ show (shapeType referentShp)
-                    ]
-        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes referenceVal referentVal
+setupPrePointsTos mspec cc env pts mem0 =
+  foldM (doPointsTo mspec cc env) mem0 pts
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -974,7 +956,9 @@ verifyPrestate cc mspec globals0 =
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      (env, globals1) <- runStateT
-       (traverse (doAlloc cc) (mspec ^. MS.csPreState . MS.csAllocs))
+       (traverse
+         (\alloc -> StateT (\globals -> doAlloc cc globals alloc))
+         (mspec ^. MS.csPreState . MS.csAllocs))
        globals0
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
@@ -1004,6 +988,7 @@ verifyPrestate cc mspec globals0 =
 -- | Simulate a MIR function with Crucible as part of a 'mir_verify' command,
 -- making sure to install any overrides that the user supplies.
 verifySimulate ::
+  (?singleOverrideSpecialCase :: Bool) =>
   Options ->
   MIRCrucibleContext ->
   [Crucible.GenericExecutionFeature Sym] ->
@@ -1040,7 +1025,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
           let fnCall = Crucible.regValue <$> Crucible.callCFG methodCfg regmap
           let overrideSim =
                 do mapM_ (registerOverride opts cc simctx top_loc mdMap)
-                           (List.groupOn (view MS.csMethod) (map (view MS.psSpec) lemmas))
+                           (neGroupOn (view MS.csMethod) (map (view MS.psSpec) lemmas))
                    liftIO $
                      for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
                        do expr <- resolveSAWPred cc p
@@ -1130,41 +1115,6 @@ cryptolTypeOfActual mty =
     baseSizeType Mir.B128  = Just $ Cryptol.tWord $ Cryptol.tNum (128 :: Integer)
     baseSizeType Mir.USize = Just $ Cryptol.tWord $ Cryptol.tNum $ natValue $ knownNat @Mir.SizeBits
 
--- | Allocate memory for each 'mir_alloc' or 'mir_alloc_mut'.
-doAlloc ::
-     MIRCrucibleContext
-  -> Some MirAllocSpec
-  -> StateT (Crucible.SymGlobalState Sym) IO (Some (MirPointer Sym))
-doAlloc cc (Some ma) =
-  mccWithBackend cc $ \bak ->
-  do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
-     let halloc = cc^.mccHandleAllocator
-     let sym = backendGetSym bak
-     let iTypes = Mir.mirIntrinsicTypes
-     Some tpr <- pure $ Mir.tyToRepr col (ma^.maMirType)
-
-     -- Create an uninitialized `MirVector_PartialVector` of length 1 and
-     -- return a pointer to its element.
-     ref <- liftIO $
-       Mir.newMirRefIO sym halloc (Mir.MirVectorRepr tpr)
-
-     globals <- get
-     globals' <- liftIO $ do
-       one <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1
-       vec <- Mir.mirVector_uninitIO bak one
-       Mir.writeMirRefIO bak globals iTypes ref vec
-     put globals'
-
-     ptr <- liftIO $ do
-       zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
-       Mir.subindexMirRefIO bak iTypes tpr ref zero
-     pure $ Some MirPointer
-       { _mpType = tpr
-       , _mpMutbl = ma^.maMutbl
-       , _mpMirType = ma^.maMirType
-       , _mpRef = ptr
-       }
-
 -- Find the ADT definition that is monomorphized from `origName` with `substs`.
 -- This should only be used on types that are known to be present in the crate
 -- after dead code elimination - for example, because the type appears in the
@@ -1176,6 +1126,20 @@ findAdt col origName substs =
         Nothing -> fail $ "Unknown ADT: " ++ show (origName, substs)
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
+
+-- | Find the 'Mir.Fn' corresponding to the given function name (supplied as a
+-- 'String'). If none can be found or if there are multiple functions
+-- corresponding to that name (see the Haddocks for 'findDefId'), then this will
+-- fail.
+findFn :: Mir.RustModule -> String -> TopLevel Mir.Fn
+findFn rm nm = do
+  let cs = rm ^. Mir.rmCS
+      col = cs ^. Mir.collection
+      crateDisambigs = cs ^. Mir.crateHashesMap
+  did <- findDefId crateDisambigs (Text.pack nm)
+  case Map.lookup did (col ^. Mir.functions) of
+      Just x -> return x
+      Nothing -> fail $ "Couldn't find MIR function named: " ++ nm
 
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get

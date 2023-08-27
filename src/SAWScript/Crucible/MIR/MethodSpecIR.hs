@@ -1,4 +1,5 @@
 {-# Language DataKinds #-}
+{-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
 {-# Language RankNTypes #-}
 {-# Language TemplateHaskell #-}
@@ -33,6 +34,9 @@ module SAWScript.Crucible.MIR.MethodSpecIR
   , maMirType
   , maLen
 
+  , mutIso
+  , isMut
+
     -- * @MirPointer@
   , MirPointer(..)
   , mpType
@@ -51,7 +55,7 @@ module SAWScript.Crucible.MIR.MethodSpecIR
   , initialCrucibleSetupState
   ) where
 
-import Control.Lens (Getter, (^.), to)
+import Control.Lens (Getter, Iso', Lens', (^.), iso, to)
 import qualified Prettyprinter as PP
 
 import Lang.Crucible.FunctionHandle (HandleAllocator)
@@ -82,6 +86,19 @@ mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 instance PP.Pretty MirPointsTo where
     pretty (MirPointsTo _md ref sv) = PP.parens $
         MS.ppSetupValue ref PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
+
+mutIso :: Iso' M.Mutability Bool
+mutIso =
+  iso
+    (\case
+      M.Mut -> True
+      M.Immut -> False)
+    (\case
+      True -> M.Mut
+      False -> M.Immut)
+
+isMut :: Lens' (MirAllocSpec tp) Bool
+isMut = maMutbl . mutIso
 
 type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
 
