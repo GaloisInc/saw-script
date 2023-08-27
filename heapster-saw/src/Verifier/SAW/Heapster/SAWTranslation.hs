@@ -255,7 +255,7 @@ specMTypeDesc d =
 -- special case that 0 types maps to the unit value @()@ (and 1 value just maps
 -- to itself). Note that this is different from 'tupleOpenTerm', which
 -- always ends with unit, i.e., which returns @t1*(t2*...*(tn-1*(tn*())))@.
-tupleOfTerms :: [SpecTerm] -> SpecTerm
+tupleOfTerms :: OpenTermLike tm => [tm] -> tm
 tupleOfTerms [] = unitTermLike
 tupleOfTerms [t] = t
 tupleOfTerms (t:ts) = pairTermLike t $ tupleOfTerms ts
@@ -1275,7 +1275,7 @@ translateType _ (MaybeRepr _) =
 translateType _ (VectorRepr _) =
   return $ error "translate: VectorRepr (can't map to Vec without size)"
 translateType b (StructRepr tps) =
-  fmap ETrans_Struct <$> translateCtx b (mkCruCtx tps)
+  fmap ETrans_Struct <$> combineCtxTranss <$> translateCtx b (mkCruCtx tps)
 translateType _ (VariantRepr _) =
   return $ error "translate: VariantRepr"
 translateType _ (ReferenceRepr _) =
@@ -1293,22 +1293,33 @@ instance TransInfo info =>
          Translate info ctx (TypeRepr a) (PureTypeTrans (ExprTrans a)) where
   translate mb_tp = translateType False $ mbLift mb_tp
 
+newtype ExprTypeTrans a = ExprTypeTrans (PureTypeTrans (ExprTrans a))
+
 -- | Translate a context of types to a type translation using 'translateType'
 translateCtx :: TransInfo info => Bool -> CruCtx tps ->
-                TransM info ctx (PureTypeTrans (ExprTransCtx tps))
-translateCtx _ CruCtxNil = return $ mkPureTypeTrans0 MNil
-translateCtx b (CruCtxCons ctx tp) =
-  liftA2 (:>:) <$> translateCtx b ctx <*> translateType b tp
+                TransM info ctx (RAssign ExprTypeTrans tps)
+translateCtx b ctx =
+  traverseRAssign (\tp -> ExprTypeTrans <$>
+                          translateType b tp) (cruCtxToTypes ctx)
+
+-- | Combine the translations of each type in a context into a single type
+-- translation for the entire context
+combineCtxTranss :: RAssign ExprTypeTrans tps ->
+                    PureTypeTrans (ExprTransCtx tps)
+combineCtxTranss MNil = mkPureTypeTrans0 MNil
+combineCtxTranss (transs :>: ExprTypeTrans trans) =
+  (:>:) <$> combineCtxTranss transs <*> trans
 
 instance TransInfo info =>
          Translate info ctx (CruCtx as) (PureTypeTrans (ExprTransCtx as)) where
-  translate mb_ctx = translateCtx False $ mbLift mb_ctx
+  translate mb_ctx =
+    combineCtxTranss <$> translateCtx False (mbLift mb_ctx)
 
 -- | Translate all types in a 'CruCtx' to their pure types, meaning specifically
 -- that permissions and shapes are translated to types and not @LetRecType@s
 translateCtxPure :: TransInfo info => CruCtx ctx ->
                     TransM info ctx' (PureTypeTrans (ExprTransCtx ctx))
-translateCtxPure = translateCtx True
+translateCtxPure ctx = combineCtxTranss <$> translateCtx True ctx
 
 -- | Translate all types in a Crucible context and lambda-abstract over them
 lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx SpecTerm ->
