@@ -1337,10 +1337,10 @@ lambdaExprCtxPure ctx m =
   lambdaPureTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
 -- | Translate all types in a Crucible context and pi-abstract over them
-piExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
-             TransM info RNil OpenTerm
-piExprCtx ctx m =
-  translateClosed ctx >>= \tptrans ->
+piExprCtxPure :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
+                 TransM info RNil OpenTerm
+piExprCtxPure ctx m =
+  translateCtxPure ctx >>= \tptrans ->
   piTransM "e" tptrans (\ectx -> inCtxTransM ectx m)
 
 -- | Translate all types in a Crucible context and pi-abstract over them,
@@ -1949,7 +1949,7 @@ mkLOwnedTransTermFromTerm :: ExprTransCtx ctx -> RelPermsTypeTrans ctx ps_in ->
 mkLOwnedTransTermFromTerm ectx ttr_inF ttr_outF vars_out t =
   LOwnedTransM $ \(ExprCtxExt ectx') loInfo k ->
   let lrt = piExprPermLRT (exprCtxType ectx) ttr_inF ttr_outF
-      t_app = applyClosSpecTerm lrt t (transTerms $ lownedInfoPCtx loInfo)
+      t_app = applyCallClosSpecTerm lrt t (transTerms $ lownedInfoPCtx loInfo)
       t_ret_trans = tupleTypeTrans $ ttr_outF ectx
       t_ret_tp = typeTransTupleType $ ttr_outF ectx in
   bindSpecTerm t_ret_tp (typeDescType $ lownedInfoRetType loInfo) t_app $
@@ -2080,7 +2080,8 @@ weakenLOwnedTrans tp_in tp_out (LOwnedTrans {..}) =
                 lotrTerm = weakenLOwnedTransTerm (tp_out lotrECtx) lotrTerm, .. }
 
 -- | Convert an 'LOwnedTrans' to a closure that gets added to the list of
--- closures for the current spec definition
+-- closures for the current spec definition, and partially apply that closure to
+-- the current expression context and its @ps_extra@ terms
 lownedTransTerm :: Mb ctx (ExprPerms ps_in) ->
                    LOwnedTrans ctx ps_extra ps_in ps_out -> SpecTerm
 lownedTransTerm (mbExprPermsMembers ->
@@ -2145,7 +2146,7 @@ funTransTermToClos (FunTransFun lrt f) = mkFreshClosSpecTerm lrt (const f)
 
 -- | Apply a 'FunTransTerm' to a list of arguments
 applyFunTransTerm :: FunTransTerm -> [SpecTerm] -> SpecTerm
-applyFunTransTerm (FunTransClos lrt clos) = applyClosSpecTerm lrt clos
+applyFunTransTerm (FunTransClos lrt clos) = applyCallClosSpecTerm lrt clos
 applyFunTransTerm (FunTransFun _ f) = applyTermLikeMulti f
 
 
@@ -4410,9 +4411,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        case some_lotr of
          SomeLOwnedTrans lotr ->
            bindSpecMTransM
-           (callClosSpecTerm
-            lrt_out (applyClosSpecTerm
-                     lrt (lownedTransTerm ps_in lotr) (transTerms pctx_in)))
+           (applyCallClosSpecTerm
+            lrt (lownedTransTerm ps_in lotr) (transTerms pctx_in))
            ps_out_trans
            "endl_ps"
            (\pctx_out ->
@@ -5662,7 +5662,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
             arg_membs <- itiPermStackVars <$> ask
             let e_args = RL.map (flip RL.get expr_ctx) arg_membs
             i_args <- itiPermStack <$> ask
-            return (applyClosSpecTerm lrt clos_tm
+            return (applyCallClosSpecTerm lrt clos_tm
                     (exprCtxToTerms e_args ++ permCtxToTerms i_args))
        Nothing ->
          -- Otherwise, continue translating with the target entrypoint, with all
@@ -6206,8 +6206,8 @@ translateCFGIxCall cfg ix =
      lambdaExprCtx ctx $ lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
        (infoCtx <$> ask) >>= \ectx ->
        return $
-       applyClosSpecTerm lrt (mkBaseClosSpecTerm ix) (transTerms ectx ++
-                                                      transTerms pctx)
+       applyCallClosSpecTerm lrt (mkBaseClosSpecTerm ix) (transTerms ectx ++
+                                                          transTerms pctx)
 
 -- | The components of the spec definition that a CFG translates to. Note that,
 -- if the CFG is for a function that is mutually recursive with other functions,
@@ -6406,16 +6406,15 @@ translateCompleteFunPerm sc env fun_perm =
 translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
 translateCompleteType sc env typ_perm =
   completeNormOpenTerm sc $ typeTransType1 $
-  runNilTypeTransM env noChecks $ translate $ emptyMb typ_perm
+  runNilTypeTransM env noChecks $ translateType True typ_perm
 
 -- | Translate a 'TypeRepr' within the given context of type arguments to the
 -- SAW core type it represents
 translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
                               CruCtx args -> Mb args (TypeRepr a) -> IO Term
 translateCompleteTypeInCtx sc env args ret =
-  completeNormOpenTerm sc $
-  runNilTypeTransM env noChecks (piExprCtx args (typeTransType1 <$>
-                                                 translate ret))
+  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
+  piExprCtxPure args (typeTransType1 <$> translateType True (mbLift ret))
 
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a pure
 -- SAW core function type, not in the @SpecM@ monad. It is an error if any of
@@ -6426,7 +6425,7 @@ translateCompletePureFun :: SharedContext -> PermEnv
                          -> Mb ctx (ValuePerm ret) -- ^ Return type perm
                          -> IO Term
 translateCompletePureFun sc env ctx ps_in p_out =
-  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $ piExprCtx ctx $
+  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $ piExprCtxPure ctx $
   do ps_in_trans <- translate ps_in
      p_out_trans <- translate p_out
      let justOrPanic (Just x) = x
