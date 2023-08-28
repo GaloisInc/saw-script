@@ -57,6 +57,7 @@ import Text.Printf (printf)
 import Text.Read (readMaybe)
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
+import qualified Cryptol.Utils.PP as Cryptol
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 import qualified Verifier.SAW.Cryptol.Monadify as Monadify
@@ -1225,6 +1226,151 @@ provePrim script t = do
     ValidProof _ thm -> SV.recordProof thm
     _ -> return ()
   return res
+
+-- | Use bisimulation to prove that two terms simulate eachother.
+--
+-- Given a relation @rel@, term @lhs@, and term @rhs@, the prover considers
+-- @lhs@ and @rhs@ bisimilar when:
+--   forall s1 s2 in out.
+--     rel (s1, out) (s2, out) -> rel (lhs (s1, in)) (rhs (s2, in))
+proveBisimulation ::
+  ProofScript () ->
+  -- ^ Proof script to use over generated bisimulation term
+  TypedTerm ->
+  -- ^ Relation over states and outputs for terms to prove bisimilar. Must have
+  -- type @(lhsState, output) -> (rhsState, output) -> Bit@.
+  TypedTerm ->
+  -- ^ LHS of bisimulation. Must have type
+  -- @(lhsState, input) -> (lhsState, output)@
+  TypedTerm ->
+  -- ^ RHS of bisimulation. Must have type
+  -- @(rhsState, input) -> (rhsState, output)@
+  TopLevel ProofResult
+proveBisimulation script relation lhs rhs = do
+  sc <- getSharedContext
+
+  -- Typechecking
+  (lhsStateType, rhsStateType, outputType) <- typecheckRelation
+  lhsInputType <- typecheckSide lhs lhsStateType outputType
+  rhsInputType <- typecheckSide rhs rhsStateType outputType
+  unless (lhsInputType == rhsInputType) $
+    fail $ unlines [ "Error: Mismatched input types in bisimulation terms."
+                   , "  LHS input type: " ++ Cryptol.pretty lhsInputType
+                   , "  RHS input type: " ++ Cryptol.pretty rhsInputType ]
+
+  -- Outer function inputs
+  input <- io $ scLocalVar sc 0
+  lhsState <- io $ scLocalVar sc 1
+  rhsState <- io $ scLocalVar sc 2
+  initLhsOutput <- io $ scLocalVar sc 3
+  initRhsOutput <- io $ scLocalVar sc 4
+
+  -- LHS/RHS inputs
+  lhsTuple <- io $ scTuple sc [lhsState, input]
+  rhsTuple <- io $ scTuple sc [rhsState, input]
+
+  -- LHS/RHS outputs
+  lhsOutput <- io $ scApply sc (ttTerm lhs) lhsTuple
+  rhsOutput <- io $ scApply sc (ttTerm rhs) rhsTuple
+
+  -- Initial relation inputs
+  initRelArg1 <- io $ scTuple sc [lhsState, initLhsOutput]
+  initRelArg2 <- io $ scTuple sc [rhsState, initRhsOutput]
+
+  -- Initial relation result
+  initRelation <- scRelation sc initRelArg1 initRelArg2
+
+  -- Relation over outputs
+  relationRes <- scRelation sc lhsOutput rhsOutput
+
+  -- initRelation implies relationRes
+  implication <- io $ scImplies sc initRelation relationRes
+
+  -- Function to prove
+  args <- mapM (importArg sc) [ ("initRhsOutput", outputType)
+                              , ("initLhsOutput", outputType)
+                              , ("rhsState", rhsStateType)
+                              , ("lhsState", lhsStateType)
+                              , ("input", lhsInputType) ]
+  theorem <- io $ scLambdaList sc args implication
+
+  io (mkTypedTerm sc theorem) >>= provePrim script
+
+  where
+    -- Typecheck relation. Evaluates to a tuple containing the LHS state type,
+    -- RHS statetype, and expected output type.
+    typecheckRelation :: TopLevel (C.Type, C.Type, C.Type)
+    typecheckRelation =
+      case ttType relation of
+        TypedTermSchema
+          (C.Forall
+            []
+            []
+            (C.TCon
+              (C.TC C.TCFun)
+              [ C.TCon (C.TC (C.TCTuple 2)) [s1, o1]
+              , C.TCon
+                (C.TC C.TCFun)
+                [ C.TCon (C.TC (C.TCTuple 2)) [s2, o2]
+                , C.TCon (C.TC C.TCBit) []]])) -> do
+          unless (o1 == o2) $ fail $ unlines
+            [ "Error: Mismatched output types in relation."
+            , "LHS output type: " ++ Cryptol.pretty o1
+            , "RHS output type: " ++ Cryptol.pretty o2 ]
+
+          return (s1, s2, o1)
+        _ -> fail $ "Error: Unexpected relation type: "
+                 ++ show (ppTypedTermType (ttType relation))
+
+    -- Typecheck bisimulation term. Returns the term's output type.
+    typecheckSide :: TypedTerm -> C.Type -> C.Type -> TopLevel C.Type
+    typecheckSide side stateType outputType =
+      case ttType side of
+        TypedTermSchema
+          (C.Forall
+            []
+            []
+            (C.TCon
+              (C.TC C.TCFun)
+              [ C.TCon (C.TC (C.TCTuple 2)) [s, i]
+              , C.TCon (C.TC (C.TCTuple 2)) [s', o] ])) -> do
+          unless (s == stateType) $ fail $ unlines
+            [ "Error: State type in bisimulation term input does not match state type in relation."
+            , "  Expected: " ++ Cryptol.pretty stateType
+            , "  Actual: " ++ Cryptol.pretty s]
+
+          unless (s' == stateType) $ fail $ unlines
+            [ "Error: State type in bisimulation term output does not match state type in relation."
+            , "  Expected: " ++ Cryptol.pretty stateType
+            , "  Actual: " ++ Cryptol.pretty s']
+
+          unless (o == outputType) $ fail $ unlines
+            [ "Error: Output type in bisimulation term does not match output type in relation."
+            , "  Expected: " ++ Cryptol.pretty outputType
+            , "  Actual: " ++ Cryptol.pretty o ]
+
+          return i
+        _ ->
+          let stStr = Cryptol.pretty stateType in
+          fail $ unlines
+          [ "Error: Unexpected bisimulation term type."
+          , "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)"
+          , "  Actual: " ++ show (ppTypedTermType (ttType side)) ]
+
+    -- Generate 'Term' for application of a relation
+    scRelation :: SharedContext -> Term -> Term -> TopLevel Term
+    scRelation sc relLhs relRhs = io $
+      scApplyAll sc (ttTerm relation) [relLhs, relRhs]
+
+    -- Given a 'LocalName' and 'Type' for a function argument, return the same
+    -- 'LocalName' and a 'Term' for the argument type. This function is intended
+    -- to be used in conjunction with 'scLambdaList'.
+    importArg :: SharedContext
+              -> (LocalName, C.Type)
+              -> TopLevel (LocalName, Term)
+    importArg sc (name, t) = do
+      t' <- io $ Cryptol.importType sc Cryptol.emptyEnv t
+      return (name, t')
 
 proveHelper ::
   String ->

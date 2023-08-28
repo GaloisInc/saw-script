@@ -1663,6 +1663,23 @@ primitives = Map.fromList
     , "successful, and aborts if unsuccessful."
     ]
 
+  , prim "prove_bisim"         "ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult"
+    (pureVal proveBisimulation)
+    Experimental
+    [ "Use bisimulation to prove that two terms simulate eachother.  The first"
+    , "argument is a relation over the states and outputs for the second and"
+    , "third terms. The relation must have the type"
+    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The second and third"
+    , "arguments are the two terms to prove bisimilar. They must have the types"
+    , "'(lhsState, input) -> (lhsState, output)' and"
+    , "'(rhsState, input) -> (rhsState, output)' respectively."
+    , ""
+    , "Let the first argument be called 'rel', the second 'lhs', and the"
+    , "third 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
+    , "  forall s1 s2 in out."
+    , "    rel (s1, out) (s2, out) -> rel (lhs (s1, in)) (rhs (s2, in))"
+    ]
+
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
