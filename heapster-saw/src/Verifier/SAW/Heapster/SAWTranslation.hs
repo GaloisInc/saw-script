@@ -4523,6 +4523,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       do ttrans <- translateSimplImplOutHead mb_simpl
          args_trans <- translate args
+         let args_tms = case exprCtxPureTypeTerms args_trans of
+               Just tms -> map openTermLike tms
+               Nothing -> panic "translateSimplImpl"
+                 ["SImpl_IntroLLVMBlockNamed: found impure terms"]
          fold_id <-
            case fold_ids of
              [nuP| Just (fold_id,_) |] -> return fold_id
@@ -4530,8 +4534,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          withPermStackM id
            (\(pctx :>: ptrans_x) ->
              pctx :>: typeTransF ttrans [applyGlobalTermLike (mbLift fold_id)
-                                         (transTerms args_trans ++
-                                          transTerms ptrans_x)])
+                                         (args_tms ++ transTerms ptrans_x)])
            m
 
   -- Intro for a defined named shape (the other case) is a no-op
@@ -4543,6 +4546,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            m
 
     | otherwise -> fail "translateSimplImpl: SImpl_IntroLLVMBlockNamed, unknown named shape"
+
   -- Elim for a recursive named shape applies the unfold function to the
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
@@ -4551,6 +4555,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       do ttrans <- translateSimplImplOutHead mb_simpl
          args_trans <- translate args
+         let args_tms = case exprCtxPureTypeTerms args_trans of
+               Just tms -> map openTermLike tms
+               Nothing -> panic "translateSimplImpl"
+                 ["SImpl_IntroLLVMBlockNamed: found impure terms"]
          unfold_id <-
            case fold_ids of
              [nuP| Just (_,unfold_id) |] -> return unfold_id
@@ -4558,8 +4566,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          withPermStackM id
            (\(pctx :>: ptrans_x) ->
              pctx :>: typeTransF ttrans [applyGlobalTermLike (mbLift unfold_id)
-                                         (transTerms args_trans ++
-                                          transTerms ptrans_x)])
+                                         (args_tms ++ transTerms ptrans_x)])
            m
 
   -- Intro for a defined named shape (the other case) is a no-op
@@ -4684,25 +4691,31 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
+       let args_tms = case exprCtxPureTypeTerms args_trans of
+             Just tms -> map openTermLike tms
+             Nothing -> panic "translateSimplImpl"
+               ["SImpl_FoldNamed: impure arguments"]
        ttrans <- translateSimplImplOutHead mb_simpl
        let fold_ident = mbLift $ fmap recPermFoldFun rp
        withPermStackM id
          (\(pctx :>: ptrans_x) ->
            pctx :>: typeTransF ttrans [applyGlobalTermLike fold_ident
-                                       (transTerms args_trans
-                                        ++ transTerms ptrans_x)])
+                                       (args_tms ++ transTerms ptrans_x)])
          m
 
   [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Rec rp) args _ |] ->
     do args_trans <- translate args
-       ttrans <- translateSimplImplOutHead mb_simpl
+       let args_tms = case exprCtxPureTypeTerms args_trans of
+             Just tms -> map openTermLike tms
+             Nothing -> panic "translateSimplImpl"
+               ["SImpl_UnfoldNamed: impure arguments"]
+       ttrans <- tupleTypeTrans <$> translateSimplImplOutHead mb_simpl
        let unfold_ident = mbLift $ fmap recPermUnfoldFun rp
        withPermStackM id
          (\(pctx :>: ptrans_x) ->
            pctx :>:
-           typeTransF (tupleTypeTrans ttrans) [applyGlobalTermLike unfold_ident
-                                               (transTerms args_trans
-                                                ++ [transTerm1 ptrans_x])])
+           typeTransF ttrans [applyGlobalTermLike unfold_ident
+                              (args_tms ++ [transTerm1 ptrans_x])])
          m
 
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Defined _) _ _ |] ->
