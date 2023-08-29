@@ -576,10 +576,11 @@ mkStructuralMismatch ::
   SetupValue {- ^ the value from the spec -} ->
   Mir.Ty     {- ^ the expected type -} ->
   OverrideMatcher MIR w (OverrideFailureReason MIR)
-mkStructuralMismatch _opts cc _sc spec (MIRVal shp _) setupval mty = do
+mkStructuralMismatch _opts cc _sc spec mirVal setupval mty = do
+  let sym = cc^.mccSym
   setupTy <- typeOfSetupValueMIR cc spec setupval
   pure $ StructuralMismatch
-            (PP.pretty shp) -- TODO: Print the entire value, not just the type shape
+            (ppMIRVal sym mirVal)
             (MS.ppSetupValue setupval)
             (Just setupTy)
             mty
