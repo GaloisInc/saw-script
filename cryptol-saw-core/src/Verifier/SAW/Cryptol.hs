@@ -1396,107 +1396,112 @@ importName cnm =
 -- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
-importDeclGroup declOpts sc env (C.Recursive [decl]) =
-  case C.dDefinition decl of
-    C.DPrim ->
-      panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
-
-    C.DForeign _ mexpr ->
-      case mexpr of
-        Nothing -> panic "importDeclGroup"
-          [ "Foreign declaration without cryptol body in recursive group:"
-          , show (C.dName decl) ]
-        Just expr -> addExpr expr
-
-    C.DExpr expr -> addExpr expr
-
-  where
-  addExpr expr =
-    do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
-       t' <- importSchema sc env (C.dSignature decl)
-       e' <- importExpr' sc env1 (C.dSignature decl) expr
-       let x = nameToLocalName (C.dName decl)
-       f' <- scLambda sc x t' e'
-       rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-       rhs' <- case declOpts of
-                 TopLevelDeclGroup _ ->
-                   do nmi <- importName (C.dName decl)
-                      scConstant' sc nmi rhs t'
-                 NestedDeclGroup -> return rhs
-       let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                      , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-       return env'
-
-
--- - A group of mutually-recursive declarations -
--- We handle this by "tupling up" all the declarations using a record and
--- taking the fixpoint at this record type.  The desired declarations are then
--- achieved by projecting the field names from this record.
 importDeclGroup declOpts sc env (C.Recursive decls) =
-  do -- build the environment for the declaration bodies
-     let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
+  case decls of
 
-     -- grab a reference to the outermost variable; this will be the record in the body
-     -- of the lambda we build later
-     v0 <- scLocalVar sc 0
+    [decl] ->
+      case C.dDefinition decl of
 
-     -- build a list of projections from a record variable
-     vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
+        C.DPrim ->
+          panic "importDeclGroup"
+            ["Primitive declarations cannot be recursive:", show (C.dName decl)]
 
-     -- the types of the declarations
-     tm <- traverse (importSchema sc env . C.dSignature) dm
-     -- the type of the recursive record
-     rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+        C.DForeign _ mexpr ->
+          case mexpr of
+            Nothing -> panicForeignNoExpr decl
+            Just expr -> addExpr expr
 
-     let env1 = liftEnv env
-     let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
-                     , envC = Map.union (fmap C.dSignature dm) (envC env1)
-                     , envS = rect : envS env1 }
+        C.DExpr expr -> addExpr expr
 
-     let extractDeclExpr decl =
-           case C.dDefinition decl of
-             C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
-             C.DForeign _ mexpr ->
-               case mexpr of
-                 Nothing -> panic "importDeclGroup"
-                   [ "Foreign declaration without cryptol body in recursive group:"
-                   , show (C.dName decl) ]
-                 Just expr ->
-                   importExpr' sc env2 (C.dSignature decl) expr
-             C.DPrim ->
+      where
+      addExpr expr = do
+        env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
+        t' <- importSchema sc env (C.dSignature decl)
+        e' <- importExpr' sc env1 (C.dSignature decl) expr
+        let x = nameToLocalName (C.dName decl)
+        f' <- scLambda sc x t' e'
+        rhs <- scGlobalApply sc "Prelude.fix" [t', f']
+        rhs' <- case declOpts of
+                  TopLevelDeclGroup _ ->
+                    do nmi <- importName (C.dName decl)
+                       scConstant' sc nmi rhs t'
+                  NestedDeclGroup -> return rhs
+        let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
+                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+        return env'
+
+    -- - A group of mutually-recursive declarations -
+    -- We handle this by "tupling up" all the declarations using a record and
+    -- taking the fixpoint at this record type.  The desired declarations are
+    -- then achieved by projecting the field names from this record.
+    _ -> do
+      -- build the environment for the declaration bodies
+      let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
+
+      -- grab a reference to the outermost variable; this will be the record in the body
+      -- of the lambda we build later
+      v0 <- scLocalVar sc 0
+
+      -- build a list of projections from a record variable
+      vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
+
+      -- the types of the declarations
+      tm <- traverse (importSchema sc env . C.dSignature) dm
+      -- the type of the recursive record
+      rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+
+      let env1 = liftEnv env
+      let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
+                      , envC = Map.union (fmap C.dSignature dm) (envC env1)
+                      , envS = rect : envS env1 }
+
+      let extractDeclExpr decl =
+            case C.dDefinition decl of
+              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
+              C.DForeign _ mexpr ->
+                case mexpr of
+                  Nothing -> panicForeignNoExpr decl
+                  Just expr ->
+                    importExpr' sc env2 (C.dSignature decl) expr
+              C.DPrim ->
                 panic "importDeclGroup"
                         [ "Primitive declarations cannot be recursive:"
                         , show (C.dName decl)
                         ]
 
-     -- the raw imported bodies of the declarations
-     em <- traverse extractDeclExpr dm
+      -- the raw imported bodies of the declarations
+      em <- traverse extractDeclExpr dm
 
-     -- the body of the recursive record
-     recv <- scRecord sc (Map.mapKeys nameToFieldName em)
+      -- the body of the recursive record
+      recv <- scRecord sc (Map.mapKeys nameToFieldName em)
 
-     -- build a lambda from the record body...
-     f <- scLambda sc "fixRecord" rect recv
+      -- build a lambda from the record body...
+      f <- scLambda sc "fixRecord" rect recv
 
-     -- and take its fixpoint
-     rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
+      -- and take its fixpoint
+      rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
-     -- finally, build projections from the fixed record to shove into the environment
-     -- if toplevel, then wrap each binding with a Constant constructor
-     let mkRhs d t =
-           do let s = nameToFieldName (C.dName d)
-              r <- scRecordSelect sc rhs s
-              case declOpts of
-                TopLevelDeclGroup _ ->
-                  do nmi <- importName (C.dName d)
-                     scConstant' sc nmi r t
-                NestedDeclGroup -> return r
-     rhss <- sequence (Map.intersectionWith mkRhs dm tm)
+      -- finally, build projections from the fixed record to shove into the environment
+      -- if toplevel, then wrap each binding with a Constant constructor
+      let mkRhs d t =
+            do let s = nameToFieldName (C.dName d)
+               r <- scRecordSelect sc rhs s
+               case declOpts of
+                 TopLevelDeclGroup _ ->
+                   do nmi <- importName (C.dName d)
+                      scConstant' sc nmi r t
+                 NestedDeclGroup -> return r
+      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-     let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
+      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
                     , envC = Map.union (fmap C.dSignature dm) (envC env)
                     }
-     return env'
+      return env'
+
+  where
+  panicForeignNoExpr decl = panic "importDeclGroup"
+    [ "Foreign declaration without Cryptol body in recursive group:"
+    , show (C.dName decl) ]
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
 
