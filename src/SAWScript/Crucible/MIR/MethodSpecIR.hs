@@ -27,6 +27,7 @@ module SAWScript.Crucible.MIR.MethodSpecIR
 
     -- * @MirAllocSpec@
   , MirAllocSpec(..)
+  , maConditionMetadata
   , maType
   , maMutbl
   , maMirType
