@@ -2443,6 +2443,21 @@ data LetRecType : sort 1 where {
   LRT_Sigma : (a:sort 0) -> (a -> LetRecType) -> LetRecType;
 }
 
+-- The explicit recursor for LetRecType
+LetRecType__rec :
+  (P : LetRecType -> sort 1) -> ((R:LetRecType) -> P R -> P (LRT_SpecM R)) ->
+  ((A : sort 0) -> (B : A -> LetRecType) -> ((a:A) -> P (B a)) ->
+   P (LRT_FunDep A B)) ->
+  ((A:LetRecType) -> P A -> (B:LetRecType) -> P B -> P (LRT_FunClos A B)) ->
+  ((A : sort 0) -> P (LRT_Type A)) ->
+  ((F : sort 0 -> sort 0 -> sort 0) -> (v : ValidLRTFunctor2 F) ->
+   (A:LetRecType) -> P A -> (B:LetRecType) -> P B -> P (LRT_BinOp F v A B)) ->
+  ((A : sort 0) -> (B : A -> LetRecType) -> ((a:A) -> P (B a)) ->
+   P (LRT_Sigma A B)) ->
+  (lrt:LetRecType) -> P lrt;
+LetRecType__rec P f1 f2 f3 f4 f5 f6 lrt =
+  LetRecType#rec P f1 f2 f3 f4 f5 f6 lrt;
+
 -- A trivially inhabied "default" LetRecType, representing void -> void
 default_lrt : LetRecType;
 default_lrt = LRT_FunDep Void (\ (_:Void) -> LRT_SpecM (LRT_Type Void));
@@ -2495,7 +2510,7 @@ primitive LRTClos : FunStack -> LetRecType -> sort 0;
 -- to its corresponding SAW core type
 LRTArg : FunStack -> LetRecType -> sort 0;
 LRTArg stack argTp =
-  LetRecType#rec
+  LetRecType__rec
   (\ (_:LetRecType) -> sort 0)
   (\ (R:LetRecType) (_:sort 0) -> LRTClos stack (LRT_SpecM R))
   (\ (A:sort 0) (B:A -> LetRecType) (_:A -> sort 0) ->
@@ -2525,7 +2540,7 @@ applyLRTClosNRet stk =
     (\ (_:Nat) -> LetRecType -> sort 0)
     (LRTClos stk)
     (\ (_:Nat) (rec:LetRecType -> sort 0) (lrt:LetRecType) ->
-       LetRecType#rec
+       LetRecType__rec
          (\ (_:LetRecType) -> sort 0)
          (\ (R:LetRecType) (_:sort 0) -> Void -> Void)
          (\ (A:sort 0) (B:A -> LetRecType) (_:A -> sort 0) ->
@@ -2549,7 +2564,7 @@ applyLRTClosN stk =
     (\ (n':Nat)
        (rec:(lrt:LetRecType) -> LRTClos stk lrt -> applyLRTClosNRet stk n' lrt)
        (lrt_top:LetRecType) ->
-       LetRecType#rec
+       LetRecType__rec
          (\ (lrt:LetRecType) -> LRTClos stk lrt ->
             applyLRTClosNRet stk (Succ n') lrt)
          (\ (R:LetRecType)
@@ -2579,7 +2594,7 @@ applyLRTClosN stk =
 -- any LetRecType that is not a valid monadic function type.
 LRTInput : FunStack -> LetRecType -> sort 0;
 LRTInput stack lrt =
-  LetRecType#rec
+  LetRecType__rec
   (\ (lrt:LetRecType) -> sort 0)
   (\ (_:LetRecType) (_:sort 0) -> #())
   (\ (A:sort 0) (_:A -> LetRecType) (rec:A -> sort 0) ->
@@ -2598,7 +2613,7 @@ LRTInput stack lrt =
 -- function to the arguments a1 ... an in an LRTInput
 LRTOutput : (stack:FunStack) -> (lrt:LetRecType) -> LRTInput stack lrt -> sort 0;
 LRTOutput stack lrt =
-  LetRecType#rec
+  LetRecType__rec
   (\ (lrt:LetRecType) -> LRTInput stack lrt -> sort 0)
   (\ (R:LetRecType) (_:LRTInput stack R -> sort 0) (_:#()) -> LRTArg stack R)
   (\ (A:sort 0) (B:A -> LetRecType)
@@ -2626,7 +2641,7 @@ LRTOutput stack lrt =
 lrtPi : (stack:FunStack) -> (lrt:LetRecType) ->
         (LRTInput stack lrt -> sort 0) -> sort 0;
 lrtPi stack lrt_top =
-  LetRecType#rec
+  LetRecType__rec
   (\ (lrt:LetRecType) -> (LRTInput stack lrt -> sort 0) -> sort 0)
   (\ (R:LetRecType) (_:(LRTInput stack R -> sort 0) -> sort 0)
      (rec:#() -> sort 0) -> rec ())
@@ -2765,7 +2780,7 @@ SpecFun E stk lrt =
 applyCallClos : (E:EvType) -> (stk:FunStack) -> (lrt:LetRecType) ->
                 LRTClos stk lrt -> SpecFun E stk lrt;
 applyCallClos E stk lrt =
-  LetRecType#rec
+  LetRecType__rec
     (\ (lrt:LetRecType) -> LRTClos stk lrt -> SpecFun E stk lrt)
     (\ (R:LetRecType) (_:LRTClos stk R -> SpecFun E stk R)
        (clos:LRTClos stk (LRT_SpecM R)) ->
