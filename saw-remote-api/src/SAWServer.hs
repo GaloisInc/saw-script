@@ -49,10 +49,10 @@ import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 
-import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWScript.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
+import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.Options (Options(..), processEnv, defaultOptions)
 import SAWScript.Position (Pos(..))

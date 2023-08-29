@@ -208,7 +208,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
         -- to allocation `alloc` before we see the PointsTo for `alloc` itself.
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
-        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo alloc svs) -> do
+        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md alloc svs) -> do
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
@@ -223,12 +223,6 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                let md = MS.ConditionMetadata
-                         { MS.conditionLoc = loc
-                         , MS.conditionTags = mempty
-                         , MS.conditionType = "points-to"
-                         , MS.conditionContext = ""
-                         }
                 matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Validity checks
@@ -317,7 +311,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
     -- figuring out which memory is accessible and mutable and thus needs to be
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
-    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo alloc svs) -> do
+    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md alloc svs) -> do
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
