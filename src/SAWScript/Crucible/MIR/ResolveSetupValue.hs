@@ -23,6 +23,7 @@ module SAWScript.Crucible.MIR.ResolveSetupValue
   , equalValsPred
   , checkCompatibleTys
   , readMaybeType
+  , firstPointsToReferent
   , mirAdtToTy
   , findDefId
   , findDefIdEither
@@ -951,6 +952,18 @@ readPartExprMaybe _sym W4.Unassigned = Nothing
 readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = Just v
   | otherwise = Nothing
+
+-- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
+-- referent on the right-hand side. As a result, this function should never
+-- fail.
+firstPointsToReferent ::
+  MonadFail m => [MS.SetupValue MIR] -> m (MS.SetupValue MIR)
+firstPointsToReferent referents =
+  case referents of
+    [referent] -> pure referent
+    _ -> fail $
+      "Unexpected mir_points_to statement with " ++ show (length referents) ++
+      " referent(s)"
 
 -- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
 mirAdtToTy :: Mir.Adt -> Mir.Ty

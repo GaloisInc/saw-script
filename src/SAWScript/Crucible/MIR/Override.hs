@@ -15,7 +15,6 @@ module SAWScript.Crucible.MIR.Override
   , learnCond
   , matchArg
   , decodeMIRVal
-  , firstPointsToReferent
   ) where
 
 import qualified Control.Exception as X
@@ -149,18 +148,6 @@ enforceDisjointness cc loc ss =
         , (_, Some p) : ps <- tails mems
         , (_, Some q)      <- ps
         ]
-
--- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
--- referent on the right-hand side. As a result, this function should never
--- fail.
-firstPointsToReferent ::
-  MonadFail m => [MS.SetupValue MIR] -> m (MS.SetupValue MIR)
-firstPointsToReferent referents =
-  case referents of
-    [referent] -> pure referent
-    _ -> fail $
-      "Unexpected mir_points_to statement with " ++ show (length referents) ++
-      " referent(s)"
 
 instantiateExtResolveSAWPred ::
   SharedContext ->
