@@ -369,21 +369,6 @@ executeCond opts sc cc cs ss =
      traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
 
 
--- | Allocate fresh variables for all of the "fresh" vars
--- used in this phase and add them to the term substitution.
-refreshTerms ::
-  SharedContext {- ^ shared context -} ->
-  StateSpec     {- ^ current phase spec -} ->
-  OverrideMatcher CJ.JVM w ()
-refreshTerms sc ss =
-  do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
-     OM (termSub %= Map.union extension)
-  where
-    freshenTerm (TypedExtCns _cty ec) =
-      do ec' <- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)
-         new <- liftIO $ scExtCns sc ec'
-         return (ecVarIndex ec, new)
-
 ------------------------------------------------------------------------
 
 -- | Generate assertions that all of the memory allocations matched by
