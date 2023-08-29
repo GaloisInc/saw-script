@@ -744,14 +744,19 @@ importPrimitive sc primOpts env n sch
   -- Optionally, create an opaque constant representing the primitive
   -- if it doesn't match one of the ones we know about.
   | Just _ <- C.asPrim n, allowUnknownPrimitives primOpts =
-      do t <- importSchema sc env sch
-         nmi <- importName n
-         scOpaqueConstant sc nmi t
+      importOpaque sc env n sch
 
   -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
 
   | otherwise = panic "Improper Cryptol primitive name" [show n]
+
+-- | Create an opaque constant with the given name and schema
+importOpaque :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
+importOpaque sc env n sch = do
+  t <- importSchema sc env sch
+  nmi <- importName n
+  scOpaqueConstant sc nmi t
 
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
@@ -1392,24 +1397,31 @@ importDeclGroup declOpts sc env (C.Recursive [decl]) =
     C.DPrim ->
       panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
 
-    C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+    C.DForeign _ mexpr ->
+      case mexpr of
+        Nothing -> panic "importDeclGroup"
+          [ "Foreign declaration without cryptol body in recursive group:"
+          , show (C.dName decl) ]
+        Just expr -> addExpr expr
 
-    C.DExpr expr ->
-      do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
-         t' <- importSchema sc env (C.dSignature decl)
-         e' <- importExpr' sc env1 (C.dSignature decl) expr
-         let x = nameToLocalName (C.dName decl)
-         f' <- scLambda sc x t' e'
-         rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-         rhs' <- case declOpts of
-                   TopLevelDeclGroup _ ->
-                     do nmi <- importName (C.dName decl)
-                        scConstant' sc nmi rhs t'
-                   NestedDeclGroup -> return rhs
-         let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                        , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-         return env'
+    C.DExpr expr -> addExpr expr
+
+  where
+  addExpr expr =
+    do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
+       t' <- importSchema sc env (C.dSignature decl)
+       e' <- importExpr' sc env1 (C.dSignature decl) expr
+       let x = nameToLocalName (C.dName decl)
+       f' <- scLambda sc x t' e'
+       rhs <- scGlobalApply sc "Prelude.fix" [t', f']
+       rhs' <- case declOpts of
+                 TopLevelDeclGroup _ ->
+                   do nmi <- importName (C.dName decl)
+                      scConstant' sc nmi rhs t'
+                 NestedDeclGroup -> return rhs
+       let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
+                      , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+       return env'
 
 
 -- - A group of mutually-recursive declarations -
@@ -1440,8 +1452,13 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
      let extractDeclExpr decl =
            case C.dDefinition decl of
              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
-             C.DForeign {} ->
-               error "`foreign` imports may not be used in SAW specifications"
+             C.DForeign _ mexpr ->
+               case mexpr of
+                 Nothing -> panic "importDeclGroup"
+                   [ "Foreign declaration without cryptol body in recursive group:"
+                   , show (C.dName decl) ]
+                 Just expr ->
+                   importExpr' sc env2 (C.dSignature decl) expr
              C.DPrim ->
                 panic "importDeclGroup"
                         [ "Primitive declarations cannot be recursive:"
@@ -1477,32 +1494,41 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
                     }
      return env'
 
-importDeclGroup declOpts sc env (C.NonRecursive decl) =
-  case C.dDefinition decl of
-    C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+importDeclGroup declOpts sc env (C.NonRecursive decl) = do
+
+  rhs <- case C.dDefinition decl of
+    C.DForeign _ mexpr
+      | TopLevelDeclGroup _ <- declOpts ->
+        case mexpr of
+          Nothing -> importOpaque sc env (C.dName decl) (C.dSignature decl)
+          Just expr ->
+            importConstant =<< importExpr' sc env (C.dSignature decl) expr
+      | otherwise ->
+        panic "importDeclGroup"
+          ["Foreign declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DPrim
-     | TopLevelDeclGroup primOpts <- declOpts -> do
-        rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
-        let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
-                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
-                       }
-        return env'
-     | otherwise -> do
+      | TopLevelDeclGroup primOpts <- declOpts ->
+        importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
+      | otherwise -> do
         panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
-     rhs <- importExpr' sc env (C.dSignature decl) expr
-     rhs' <- case declOpts of
-               TopLevelDeclGroup _ ->
-                 do nmi <- importName (C.dName decl)
-                    t <- importSchema sc env (C.dSignature decl)
-                    scConstant' sc nmi rhs t
-               NestedDeclGroup -> return rhs
-     let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                    , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-     return env'
+      rhs <- importExpr' sc env (C.dSignature decl) expr
+      case declOpts of
+        TopLevelDeclGroup _ -> importConstant rhs
+        NestedDeclGroup -> return rhs
+
+  pure env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
+           , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
+           }
+
+  where
+  importConstant rhs = do
+    nmi <- importName (C.dName decl)
+    t <- importSchema sc env (C.dSignature decl)
+    scConstant' sc nmi rhs t
+
 
 data ImportPrimitiveOptions =
   ImportPrimitiveOptions
@@ -1714,7 +1740,7 @@ importMatches sc env (C.Let decl : matches) =
   case C.dDefinition decl of
 
     C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+      panic "importMatches" ["Foreign declarations not allowed in 'let':", show (C.dName decl)]
 
     C.DPrim -> do
      panic "importMatches" ["Primitive declarations not allowed in 'let':", show (C.dName decl)]
