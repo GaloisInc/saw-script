@@ -5,12 +5,8 @@ From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From Coq Require Export Logic.Eqdep.
-From CryptolToCoq Require Export CompM.
 
-From EnTree Require Export
-     Basics.HeterogeneousRelations
-     Basics.QuantType
-     Ref.SpecM.
+From EnTree Require Export EnTreeSpecs.
 
 (***
  *** sawLet

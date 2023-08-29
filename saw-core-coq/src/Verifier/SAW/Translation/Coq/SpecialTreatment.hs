@@ -198,7 +198,10 @@ sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
 entreeSpecsModule :: ModuleName
-entreeSpecsModule = mkModuleName ["EnTree.EnTreeSpecs"]
+entreeSpecsModule = mkModuleName ["SpecM"]
+
+polyListModule :: ModuleName
+polyListModule = mkModuleName ["PolyList"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
@@ -490,44 +493,75 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("test_fun6",            skip)
   ]
 
+  -- LetRecTypes
+  ++
+  [ ("LetRecType",           mapsTo entreeSpecsModule "LetRecType")
+  , ("LRT_SpecM",            mapsToExpl entreeSpecsModule "LRT_SpecM")
+  , ("LRT_FunDep",           mapsToExpl entreeSpecsModule "LRT_FunDep")
+  , ("LRT_FunClos",          mapsToExpl entreeSpecsModule "LRT_FunClos")
+  , ("LRT_Type",             mapsToExpl entreeSpecsModule "LRT_Type")
+  , ("LRT_BinOp",            mapsToExpl entreeSpecsModule "LRT_BinOp")
+  , ("LRT_Sigma",            mapsToExpl entreeSpecsModule "LRT_Sigma")
+  , ("LetRecType__rec",      mapsToExpl entreeSpecsModule "LetRecType_rect")
+  , ("ValidLRTFunctor2",     mapsToExpl entreeSpecsModule "ColimFunctor2")
+  , ("pair_ValidLRTFunctor2", mapsToExpl entreeSpecsModule "Pair_ColimFunctor2")
+  , ("either_ValidLRTFunctor2", skip) -- FIXME: implement this!
+  , ("LRT_Either",           skip) -- FIXME: implement this!
+  , ("Vec_ValidLRTFunctor2", mapsTo entreeSpecsModule "Vec_ColimFunctor2")
+  ]
+
   -- The specification monad
   ++
   [ ("EvType",               mapsTo entreeSpecsModule "EvType")
   , ("Build_EvType",         mapsTo entreeSpecsModule "Build_EvType")
   , ("evTypeType",           mapsTo entreeSpecsModule "evTypeType")
   , ("evRetType",            mapsTo entreeSpecsModule "evRetType")
-  , ("SpecM",                mapsToExpl entreeSpecsModule "SpecM")
-  , ("retS",                 mapsToExpl entreeSpecsModule "RetS")
-  , ("bindS",                mapsToExpl entreeSpecsModule "BindS")
-  , ("errorS",               mapsToExpl entreeSpecsModule "ErrorS")
-  , ("liftStackS",           mapsToExpl entreeSpecsModule "liftStackS")
-  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 3)
-  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 3)
   , ("FunStack",             mapsTo entreeSpecsModule "FunStack")
+  , ("nthLRT",               mapsToExpl entreeSpecsModule "nthLRT")
+  , ("LRTClos",              mapsTo entreeSpecsModule "LRTClos")
+  , ("LRTArg" ,              mapsTo entreeSpecsModule "LRTArg")
+  , ("applyLRTClosDep" ,     mapsTo entreeSpecsModule "applyLRTClosDep")
+  , ("applyLRTClosClos" ,    mapsTo entreeSpecsModule "applyLRTClosClos")
+  , ("applyLRTClosNRet" ,    mapsTo entreeSpecsModule "applyLRTClosNRet")
+  , ("applyLRTClosN" ,       mapsTo entreeSpecsModule "applyLRTClosN")
   , ("LRTInput",             mapsToExpl entreeSpecsModule "LRTInput")
   , ("LRTOutput",            mapsToExpl entreeSpecsModule "LRTOutput")
-  , ("lrt1Pi",               mapsToExpl entreeSpecsModule "lrtPi")
-  , ("lrtLambda",            mapsToExpl entreeSpecsModule "lrtLambda")
-  , ("nthLRT",               mapsToExpl entreeSpecsModule "nthLRT")
-  , ("FrameCall",            mapsToExpl entreeSpecsModule "FrameCall")
-  , ("FrameCallOfArgs",      mapsToExpl entreeSpecsModule "FrameCallOfArgs")
-  , ("mkFrameCall",          mapsToExpl entreeSpecsModule "mkFrameCall")
-  , ("FrameCallRet",         mapsToExpl entreeSpecsModule "FrameCallRet")
-  , ("LRTType",              mapsToExpl entreeSpecsModule "LRTType")
-  , ("FrameTuple",           mapsToExpl entreeSpecsModule "FrameTuple")
-  , ("callS",                mapsToExpl entreeSpecsModule "CallS")
-  , ("multiFixS",            mapsToExpl entreeSpecsModule "MultiFixS")
-  , ("FunStackE_type",       mapsToExpl entreeSpecsModule "FunStackE")
-  , ("FunStackE_enc",        replace (Coq.Lambda [Coq.Binder "E" (Just (Coq.Var "SpecM.EvType"))]
-                                       (Coq.App (Coq.ExplVar "SpecM.FunStackE_encodes")
-                                         [Coq.App (Coq.Var "SpecM.evTypeType") [Coq.Var "E"],
-                                          Coq.App (Coq.Var "SpecM.evRetType") [Coq.Var "E"]])))
+  , ("lrtPi",                mapsToExpl entreeSpecsModule "lrtPi")
+  , ("StackCall",            mapsToExpl entreeSpecsModule "StackCall")
+  , ("StackCallOfArgs",      mapsToExpl entreeSpecsModule "StackCallOfArgs")
+  , ("StackCallRet",         mapsToExpl entreeSpecsModule "StackCallRet")
+  , ("FunStackE",            mapsToExpl entreeSpecsModule "FunStackE")
+  , ("FunStackERet",         mapsToExpl entreeSpecsModule "FunStackERet")
+  , ("SpecM",                mapsTo entreeSpecsModule "SpecM")
+  , ("retS",                 mapsToExpl entreeSpecsModule "RetS")
+  , ("bindS",                mapsToExpl entreeSpecsModule "BindS")
+  , ("triggerS",             mapsToExpl entreeSpecsModule "TriggerS")
+  , ("errorS",               mapsToExpl entreeSpecsModule "ErrorS")
+  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 3)
+  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 3)
+  , ("assumeS",              mapsToExpl entreeSpecsModule "AssumeS")
+  , ("assertS",              mapsToExpl entreeSpecsModule "AssertS")
+  , ("CallS",                mapsToExpl entreeSpecsModule "CallS")
+  , ("SpecFun",              mapsTo entreeSpecsModule "SpecFun")
+  , ("applyCallClos",        skip) -- FIXME: translation bug!
+  , ("stackIncl",            mapsTo entreeSpecsModule "stackIncl")
+  , ("StackTuple",           mapsTo entreeSpecsModule "StackTuple")
+  , ("SpecDef",              mapsTo entreeSpecsModule "SpecDef")
+  , ("SpecImp",              mapsTo entreeSpecsModule "SpecImp")
+  , ("Build_SpecImp",        mapsTo entreeSpecsModule "Build_SpecImp")
+  , ("SpecImpType",          mapsTo entreeSpecsModule "SpecImpType")
+  , ("defineSpecStack",      mapsTo entreeSpecsModule "defineSpecStack")
+  , ("defineSpec",           mapsTo entreeSpecsModule "defineSpec")
+  , ("mkLocalLRTClos",       mapsTo entreeSpecsModule "mkLocalLRTClos")
+  , ("nthImport",            mapsTo entreeSpecsModule "nthImport")
+  , ("callNthImportS",       mapsTo entreeSpecsModule "callNthImportS")
+
   , ("SpecPreRel",           mapsToExpl entreeSpecsModule "SpecPreRel")
   , ("SpecPostRel",          mapsToExpl entreeSpecsModule "SpecPostRel")
   , ("eqPreRel",             mapsToExpl entreeSpecsModule "eqPreRel")
   , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel")
-  , ("refinesS",             mapsToExpl entreeSpecsModule "spec_refines")
-  , ("refinesS_eq",          mapsToExpl entreeSpecsModule "spec_refines_eq")
+  , ("refinesS",             skip)
+  , ("refinesS_eq",          skip)
   ]
 
   -- Dependent pairs
@@ -549,18 +583,11 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Lists at sort 1
   ++
-  [ ("List1", mapsToExpl datatypesModule "list")
-  , ("Nil1", mapsToExpl datatypesModule "nil")
-  , ("Cons1", mapsToExpl datatypesModule "cons")
+  [ ("List1", mapsToExpl polyListModule "plist")
+  , ("Nil1", mapsToExpl polyListModule "pnil")
+  , ("Cons1", mapsToExpl polyListModule "pcons")
   ]
 
-  -- Lists at sort 2
-  ++
-  [ ("List2", mapsToExpl datatypesModule "list")
-  , ("Nil2", mapsToExpl datatypesModule "nil")
-  , ("Cons2", mapsToExpl datatypesModule "cons")
-  , ("List2__rec", mapsToExpl datatypesModule "list_rect")
-  ]
 
 escapeIdent :: String -> String
 escapeIdent str
