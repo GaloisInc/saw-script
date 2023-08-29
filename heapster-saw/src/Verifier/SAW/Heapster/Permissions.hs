@@ -8279,14 +8279,15 @@ permEnvAddOpaqueShape env nm args mb_len tp_id =
           SomeNamedShape (NamedShape nm args $
                           OpaqueShapeBody mb_len tp_id) : permEnvNamedShapes env }
 
--- | Add a global symbol with a function permission to a 'PermEnv'
+-- | Add a global symbol with a function permission along with its translation
+-- to a spec definition to a 'PermEnv'
 permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
                           f w -> FunPerm ghosts args gouts ret ->
                           OpenTerm -> PermEnv
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (GlobalTransTerms [t])
+          PermEnvGlobalEntry sym p (GlobalTransDef t)
           : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
