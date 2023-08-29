@@ -758,6 +758,11 @@ importOpaque sc env n sch = do
   nmi <- importName n
   scOpaqueConstant sc nmi t
 
+importConstant :: SharedContext -> Env -> C.Name -> C.Schema -> Term -> IO Term
+importConstant sc env n sch rhs = do
+  nmi <- importName n
+  t <- importSchema sc env sch
+  scConstant' sc nmi rhs t
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
@@ -1510,8 +1515,9 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
       | TopLevelDeclGroup _ <- declOpts ->
         case mexpr of
           Nothing -> importOpaque sc env (C.dName decl) (C.dSignature decl)
-          Just expr ->
-            importConstant =<< importExpr' sc env (C.dSignature decl) expr
+          Just expr -> do
+            rhs <- importExpr' sc env (C.dSignature decl) expr
+            importConstant sc env (C.dName decl) (C.dSignature decl) rhs
       | otherwise ->
         panic "importDeclGroup"
           ["Foreign declarations only allowed at top-level:", show (C.dName decl)]
@@ -1525,18 +1531,13 @@ importDeclGroup declOpts sc env (C.NonRecursive decl) = do
     C.DExpr expr -> do
       rhs <- importExpr' sc env (C.dSignature decl) expr
       case declOpts of
-        TopLevelDeclGroup _ -> importConstant rhs
+        TopLevelDeclGroup _ ->
+          importConstant sc env (C.dName decl) (C.dSignature decl) rhs
         NestedDeclGroup -> return rhs
 
   pure env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
            , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
            }
-
-  where
-  importConstant rhs = do
-    nmi <- importName (C.dName decl)
-    t <- importSchema sc env (C.dSignature decl)
-    scConstant' sc nmi rhs t
 
 
 data ImportPrimitiveOptions =
