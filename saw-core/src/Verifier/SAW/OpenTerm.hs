@@ -865,10 +865,14 @@ specStSetClosBody clos_ix body st =
   st { specStExtraRecsRev =
          setNthClosBodyRev (fromIntegral clos_ix) body (specStExtraRecsRev st) }
 
-specStInsImport :: OpenTerm -> SpecTermState -> (Natural, SpecTermState)
-specStInsImport def st =
+-- | Add a spec import with the given @LetRecType@ and body to the list of
+-- imported spec definitions in a 'SpecTermState'
+specStInsImport :: OpenTerm -> OpenTerm -> SpecTermState ->
+                   (Natural, SpecTermState)
+specStInsImport lrt def st =
+  let imp = ctorOpenTerm "Prelude.Build_SpecImp" [specStEvType st, lrt, def] in
   (fromIntegral (length $ specStImportsRev st),
-   st { specStImportsRev = def : specStImportsRev st })
+   st { specStImportsRev = imp : specStImportsRev st })
 
 initSpecTermState :: OpenTerm -> Natural -> Int -> SpecTermState
 initSpecTermState ev n ctx_len =
@@ -1113,9 +1117,9 @@ applyCallClosSpecTerm lrt clos args =
 
 -- | Import another spec definition inside a spec definition, and return the
 -- @SpecFun@ that calls its body
-importDefSpecTerm :: OpenTerm -> SpecTerm
-importDefSpecTerm def = SpecTerm $
-  do (imp_ix, st) <- specStInsImport def <$> get
+importDefSpecTerm :: OpenTerm -> OpenTerm -> SpecTerm
+importDefSpecTerm lrt def = SpecTerm $
+  do (imp_ix, st) <- specStInsImport lrt def <$> get
      put st
      return $
        applySpecInfoTerm (applyStackInclOp "Prelude.callNthImportS")
