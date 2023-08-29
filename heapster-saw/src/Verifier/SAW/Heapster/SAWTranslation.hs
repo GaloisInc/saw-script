@@ -5936,7 +5936,7 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
                 let ptrans =
                       PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
                                    PTrans_Fun fun_perm $ FunTransFun lrt $
-                                   importDefSpecTerm spec_def]
+                                   importDefSpecTerm lrt spec_def]
                 withPermStackM (:>: Member_Base)
                   (:>: extPermTrans ETrans_LLVM ptrans) m
          Just (_, GlobalTransDef _) ->
