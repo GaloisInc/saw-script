@@ -1390,6 +1390,10 @@ importName cnm =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
+--
+-- For Cryptol @foreign@ declarations, we import them as regular
+-- cryptol expressions if a cryptol implementation exists, and as an
+-- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
 importDeclGroup declOpts sc env (C.Recursive [decl]) =
