@@ -1392,7 +1392,7 @@ importName cnm =
 -- expressions instead.
 --
 -- For Cryptol @foreign@ declarations, we import them as regular
--- cryptol expressions if a cryptol implementation exists, and as an
+-- Cryptol expressions if a Cryptol implementation exists, and as an
 -- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
