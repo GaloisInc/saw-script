@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/GaloisInc/saw-script/workflows/Nightly%20Builds/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
+[![Build Status](https://github.com/GaloisInc/saw-script/workflows/SAWScript/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
 
 # SAWScript
 
