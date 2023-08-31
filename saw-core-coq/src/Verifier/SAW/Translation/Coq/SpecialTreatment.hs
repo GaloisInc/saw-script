@@ -279,6 +279,10 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("RecordType__rec", skip)
   ]
 
+  -- Void
+  ++
+  [ ("Void", mapsTo datatypesModule "Empty_set")]
+
   -- Decidable equality, does not make sense in Coq unless turned into a type
   -- class
   -- Apparently, this is not used much for Cryptol, so we can skip it.
