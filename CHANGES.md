@@ -1,3 +1,12 @@
+# Nightly -- ????-??-??
+
+## New Features
+* SAW now supports loading and reasoning about Cryptol declarations that make use of numeric constraint guards.  For more information on numeric constraint guards, see the [relavent section of the Cryptol reference manual](https://galoisinc.github.io/cryptol/master/BasicSyntax.html#numeric-constraint-guards).
+* Add an experimental `mir_verify` command, along with related utilities for
+  constructing specifications for MIR/Rust programs. For more information, see
+  the `mir_*` commands documented in the [SAW
+  manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features

@@ -41,7 +41,6 @@ library
   exposed-modules: Mir.Compositional.Builder
                    Mir.Compositional.Clobber
                    Mir.Compositional.Convert
-                   Mir.Compositional.MethodSpec
                    Mir.Compositional.Override
 
   ghc-options: -Wall -Wno-name-shadowing

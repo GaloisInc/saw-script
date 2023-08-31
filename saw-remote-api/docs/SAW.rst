@@ -433,8 +433,95 @@ Parameter fields
   
   
 
-``module name``
+``JSON file``
   The file containing the MIR JSON file to load.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/MIR/verify (command)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Verify the named MIR method meets its specification.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The module of the function being verified.
+  
+  
+
+``function``
+  The function being verified.
+  
+  
+
+``lemmas``
+  The specifications to use for other functions during this verification.
+  
+  
+
+``check sat``
+  Whether or not to enable path satisfiability checking.
+  
+  
+
+``contract``
+  The specification to verify for the function.
+  
+  
+
+``script``
+  The script to use to prove the validity of the resulting verification conditions.
+  
+  
+
+``lemma name``
+  The name to refer to this verification/contract by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
+SAW/MIR/assume (command)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Assume the named MIR method meets its specification.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The LLVM  module containing the function.
+  
+  
+
+``function``
+  The function we are assuming a contract for.
+  
+  
+
+``contract``
+  The specification to assume for the function.
+  
+  
+
+``lemma name``
+  The name to refer to this assumed contract by later.
   
   
 

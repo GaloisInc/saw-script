@@ -59,6 +59,7 @@ import Control.Exception
   'CryptolSetup' { TReserved _ "CryptolSetup"   }
   'JavaSetup'    { TReserved _ "JavaSetup"      }
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
+  'MIRSetup'     { TReserved _ "MIRSetup"       }
   'ProofScript'  { TReserved _ "ProofScript"    }
   'TopLevel'     { TReserved _ "TopLevel"       }
   'CrucibleSetup'{ TReserved _ "CrucibleSetup"  }
@@ -66,6 +67,7 @@ import Control.Exception
   'LLVMSpec'     { TReserved _ "LLVMSpec"       }
   'JVMMethodSpec'{ TReserved _ "JVMMethodSpec"  }
   'JVMSpec'      { TReserved _ "JVMSpec"        }
+  'MIRSpec'      { TReserved _ "MIRSpec"        }
   'Bool'         { TReserved _ "Bool"           }
   'Int'          { TReserved _ "Int"            }
   'String'       { TReserved _ "String"         }
@@ -229,6 +231,7 @@ BaseType :: { Type }
  | 'LLVMSpec' 				{ LType (getPos $1) tLLVMSpec           }
  | 'JVMMethodSpec'			{ LType (getPos $1) tJVMSpec            }
  | 'JVMSpec' 				{ LType (getPos $1) tJVMSpec            }
+ | 'MIRSpec' 				{ LType (getPos $1) tMIRSpec            }
  | '(' Type ')'                         { LType (maxSpan [$1, $3]) $2           }
  | '(' commas2(Type) ')'                { LType (maxSpan [$1, $3]) (tTuple $2)  }
  | '[' Type ']'                         { LType (maxSpan [$1, $3]) (tArray $2)  }
@@ -238,6 +241,7 @@ Context :: { Type }
  : 'CryptolSetup'                       { tContext CryptolSetup   }
  | 'JavaSetup'                          { tContext JavaSetup      }
  | 'LLVMSetup'                          { tContext LLVMSetup      }
+ | 'MIRSetup'                           { tContext MIRSetup       }
  | 'ProofScript'                        { tContext ProofScript    }
  | 'TopLevel'                           { tContext TopLevel       }
  | 'CrucibleSetup'                      { tContext LLVMSetup      }

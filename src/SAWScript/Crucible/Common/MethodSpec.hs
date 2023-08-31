@@ -67,6 +67,10 @@ data PrePost
   = PreState | PostState
   deriving (Eq, Ord, Show)
 
+stateCond :: PrePost -> String
+stateCond PreState = "precondition"
+stateCond PostState = "postcondition"
+
 --------------------------------------------------------------------------------
 -- *** Extension-specific information
 

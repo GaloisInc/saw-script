@@ -109,6 +109,13 @@ SAW also uses several environment variables for configuration:
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
+`SAW_SOLVER_CACHE_PATH`
+
+  ~ Specify a path at which to keep a cache of solver results obtained during
+  calls to certain tactics. A cache is not created at this path until it is
+  needed. See the section **Caching Solver Results** for more detail about this
+  feature.
+
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
 
@@ -1244,6 +1251,100 @@ differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
 
+## Caching Solver Results
+
+SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.
+
+This caching is available for all tactics which call out to automated provers
+at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+`rme`, and the family of `unint` tactics described in the previous section.
+
+When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the `abc` tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.
+
+The simplest way to enable solver caching is to set the environment variable
+`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+`saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created `saw` or `saw-remote-api`
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.
+
+There are also a number of SAW commands related to solver caching.
+
+* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+  remainder of the current session, but opens an LMDB database at the specified
+  path immediately. If a cache is already in use in the current session
+  (i.e. through a prior call to `set_solver_cache_path` or through
+  `SAW_SOLVER_CACHE_PATH` being set and the cache being used at least once)
+  then all entries in the cache already in use will be copied to the new cache
+  being opened.
+
+* `clean_solver_cache` will remove all entries in the solver result cache
+  which were created using solver backend versions which do not match the
+  versions in the current environment. This can be run after an update to
+  clear out any old, unusable entries from the solver cache.
+
+* `print_solver_cache` prints to the console all entries in the cache whose
+  SHA256 hash keys start with the given hex string. Providing an empty string
+  results in all entries in the cache being printed.
+
+* `print_solver_cache_stats` prints to the console statistics including the
+  size of the solver cache, where on disk it is stored, and some counts of how
+  often it has been used during the current session.
+
+For performing more complicated database operations on the set of cached
+results, the file `solver_cache.py` is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.
+
+Below is an example of using solver caching with `saw -v Debug`. Only the
+relevant output is shown, the rest abbreviated with "...".
+
+~~~~
+sawscript> set_solver_cache_path "example.cache"
+sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
+[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
+                                  {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)
+...
+sawscript> print_solver_cache "d1f5a76e7a0b7c01"
+[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb
+[22:13:13.250] - Result: unsat
+[22:13:13.250] - Solver: "SBV->Z3"
+[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit
+[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC
+
+sawscript> print_solver_cache "4ee451f8429c2dfe"
+[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752
+[22:13:16.727] - Result: unsat
+[22:13:16.727] - Solver: "W4 ->z3"
+[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit
+[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC
+
+sawscript> print_solver_cache_stats
+[22:13:20.585] == Solver result cache statistics ==
+[22:13:20.585] - 2 results cached in example.cache
+[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
+[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
+~~~~
+
 ## Other External Provers
 
 In addition to the built-in automated provers already discussed, SAW
@@ -1636,9 +1737,9 @@ file to the `mir_load_module` function:
 
 * `mir_load_module : String -> TopLevel MIRModule`
 
-SAW currently supports Rust code that can be built with a [March 22, 2020 Rust
-nightly](https://static.rust-lang.org/dist/2020-03-22/).  If you encounter a
-Rust feature that SAW does not support, please report it [on
+SAW currently supports Rust code that can be built with a [January 23, 2023
+Rust nightly](https://static.rust-lang.org/dist/2023-01-23/).  If you encounter
+a Rust feature that SAW does not support, please report it [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
 
 ## Notes on Compiling Code for SAW
@@ -1812,7 +1913,7 @@ allocated during execution is allowed).
 
 The direct extraction process just discussed automatically introduces
 symbolic variables and then abstracts over them, yielding a SAWScript
-`Term` that reflects the semantics of the original Java or LLVM code.
+`Term` that reflects the semantics of the original Java, LLVM, or MIR code.
 For simple functions, this is often the most convenient interface. For
 more complex code, however, it can be necessary (or more natural) to
 specifically introduce fresh variables and indicate what portions of the
@@ -1939,7 +2040,7 @@ The built-in functions described so far work by extracting models of
 code that can then be used for a variety of purposes, including proofs
 about the properties of the code.
 
-When the goal is to prove equivalence between some LLVM or Java code and
+When the goal is to prove equivalence between some LLVM, Java, or MIR code and
 a specification, however, a more declarative approach is sometimes
 convenient. The following sections describe an approach that combines
 model extraction and verification with respect to a specification. A
@@ -1971,8 +2072,7 @@ gives the proof script to use for verification. The result is a proved
 specification that can be used to simplify verification of functions
 that call this one.
 
-A similar command for JVM programs is available if `enable_experimental`
-has been run.
+Similar commands are available for JVM programs:
 
 ~~~~
 jvm_verify :
@@ -1985,8 +2085,79 @@ jvm_verify :
   TopLevel JVMMethodSpec
 ~~~~
 
-Now we describe how to construct a value of type `LLVMSetup ()` (or
-`JVMSetup ()`).
+And for MIR programs:
+
+~~~~
+mir_verify :
+  MIRModule ->
+  String ->
+  [MIRSpec] ->
+  Bool ->
+  MIRSetup () ->
+  ProofScript () ->
+  TopLevel MIRSpec
+~~~~
+
+### Running a MIR-based verification
+
+`mir_verify` requires `enable_experimental` in order to be used.  Moreover,
+some parts of `mir_verify` are not currently implemented, so it is possible
+that using `mir_verify` on some programs will fail. Features that are not yet
+implemented include the following:
+
+* MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
+  `mir_verify` must always be the empty list at present)
+* The ability to construct MIR `struct` or `enum` values in specifications
+* The ability to specify the layout of slice values
+
+The `String` supplied as an argument to `mir_verify` is expected to be a
+function _identifier_. An identifier is expected adhere to one of the following
+conventions:
+
+* `<crate name>/<disambiguator>::<function path>`
+* `<crate name>::<function path>`
+
+Where:
+
+* `<crate name>` is the name of the crate in which the function is defined. (If
+  you produced your MIR JSON file by compiling a single `.rs` file with
+  `saw-rustc`, then the crate name is the same as the name of the file, but
+  without the `.rs` file extension.)
+* `<disambiguator>` is a hash of the crate and its dependencies. In extreme
+  cases, it is possible for two different crates to have identical crate names,
+  in which case the disambiguator must be used to distinguish between the two
+  crates. In the common case, however, most crate names will correspond to
+  exactly one disambiguator, and you are allowed to leave out the
+  `/<disambiguator>` part of the `String` in this case. If you supply an
+  identifier with an ambiguous crate name and omit the disambiguator, then SAW
+  will raise an error.
+* `<function path>` is the path to the function within the crate. Sometimes,
+  this is as simple as the function name itself. In other cases, a function
+  path may involve multiple _segments_, depending on the module hierarchy for
+  the program being verified. For instance, a `read` function located in
+  `core/src/ptr/mod.rs` will have the identifier:
+
+  ```
+  core::ptr::read
+  ```
+
+  Where `core` is the crate name and `ptr::read` is the function path, which
+  has two segments `ptr` and `read`. There are also some special forms of
+  segments that appear for functions defined in certain language constructs.
+  For instance, if a function is defined in an `impl` block, then it will have
+  `{impl}` as one of its segments, e.g.,
+
+  ```
+  core::ptr::const_ptr::{impl}::offset
+  ```
+
+  If you are in doubt about what the full identifier for a given function is,
+  consult the MIR JSON file for your program.
+
+-----
+
+Now we describe how to construct a value of type `LLVMSetup ()`, `JVMSetup ()`,
+or `MIRSetup ()`.
 
 ## Structure of a Specification
 
@@ -1998,32 +2169,32 @@ A specifications for Crucible consists of three logical components:
 
 * A specification of the expected final value of the program state.
 
-These three portions of the specification are written in sequence within
-a `do` block of `LLVMSetup` (or `JVMSetup`) type. The command
-`llvm_execute_func` (or `jvm_execute_func`) separates the
-specification of the initial state from the specification of the final
-state, and specifies the arguments to the function in terms of the
-initial state. Most of the commands available for state description will
-work either before or after `llvm_execute_func`, though with
-slightly different meaning, as described below.
+These three portions of the specification are written in sequence within a `do`
+block of type `{LLVM,JVM,MIR}Setup`. The command `{llvm,jvm,mir}_execute_func`
+separates the specification of the initial state from the specification of the
+final state, and specifies the arguments to the function in terms of the
+initial state. Most of the commands available for state description will work
+either before or after `{llvm,jvm,mir}_execute_func`, though with slightly
+different meaning, as described below.
 
 ## Creating Fresh Variables
 
-In any case where you want to prove a property of a function for an
-entire class of inputs (perhaps all inputs) rather than concrete values,
-the initial values of at least some elements of the program state must
-contain fresh variables. These are created in a specification with the
-`llvm_fresh_var` and `jvm_fresh_var` commands rather than
-`fresh_symbolic`.
+In any case where you want to prove a property of a function for an entire
+class of inputs (perhaps all inputs) rather than concrete values, the initial
+values of at least some elements of the program state must contain fresh
+variables. These are created in a specification with the
+`{llvm,jvm,mir}_fresh_var` commands rather than `fresh_symbolic`.
 
 * `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
 
 * `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
+* `mir_fresh_var : String -> MIRType -> MIRSetup Term`
+
 The first parameter to both functions is a name, used only for
 presentation. It's possible (though not recommended) to create multiple
 variables with the same name, but SAW will distinguish between them
-internally. The second parameter is the LLVM (or Java) type of the
+internally. The second parameter is the LLVM, Java, or MIR type of the
 variable. The resulting `Term` can be used in various subsequent
 commands.
 
@@ -2050,12 +2221,45 @@ Java types are built up using the following functions:
 * `java_class : String -> JavaType`
 * `java_array : Int -> JavaType -> JavaType`
 
+MIR types are built up using the following functions:
+
+* `mir_array : Int -> MIRType -> MIRType`
+* `mir_bool : MIRType`
+* `mir_char : MIRType`
+* `mir_i8 : MIRType`
+* `mir_i6 : MIRType`
+* `mir_i32 : MIRType`
+* `mir_i64 : MIRType`
+* `mir_i128 : MIRType`
+* `mir_isize : MIRType`
+* `mir_f32 : MIRType`
+* `mir_f64 : MIRType`
+* `mir_ref : MIRType -> MIRType`
+* `mir_ref_mut : MIRType -> MIRType`
+* `mir_slice : MIRType -> MIRType`
+* `mir_str : MIRType`
+* `mir_tuple : [MIRType] -> MIRType`
+* `mir_u8 : MIRType`
+* `mir_u6 : MIRType`
+* `mir_u32 : MIRType`
+* `mir_u64 : MIRType`
+* `mir_u128 : MIRType`
+* `mir_usize : MIRType`
+
 Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
 concrete size. Therefore, all analysis results are valid only under the
 assumption that any arrays have the specific size indicated, and may not
-hold for other sizes. The `llvm_int` function also takes an `Int`
-parameter indicating the variable's bit width.
+hold for other sizes.
+
+The `llvm_int` function takes an `Int` parameter indicating the variable's bit
+width. For example, the C `uint16_t` and `int16_t` types correspond to
+`llvm_int 16`. The C `bool` type is slightly trickier. A bare `bool` type
+typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
+composite type such as a pointer, array, or struct, then it corresponds to
+`llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
+down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
+bitcode by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
@@ -2080,27 +2284,31 @@ values that can occur during symbolic execution, which includes both
 `Term` values, pointers, and composite types consisting of either of
 these (both structures and arrays).
 
-The `llvm_term` and `jvm_term` functions create a `SetupValue` or
-`JVMValue` from a `Term`:
+The `llvm_term`, `jvm_term`, and `mir_term` functions create a `SetupValue`,
+`JVMValue`, or `MIRValue`, respectively, from a `Term`:
 
 * `llvm_term : Term -> SetupValue`
 * `jvm_term : Term -> JVMValue`
+* `mir_term : Term -> MIRValue`
 
 ## Executing
 
-Once the initial state has been configured, the `llvm_execute_func`
+Once the initial state has been configured, the `{llvm,jvm,mir}_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
 * `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
+* `jvm_execute_func : [JVMValue] -> JVMSetup ()`
+* `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
-verified use the `llvm_return` or `jvm_return` command.
+verified use the `{llvm,jvm,mir}_return` command.
 
 * `llvm_return : SetupValue -> LLVMSetup ()`
 * `jvm_return : JVMValue -> JVMSetup ()`
+* `mir_return : MIRValue -> MIRSetup ()`
 
 ## A First Simple Example
 
@@ -2143,11 +2351,11 @@ of properties we have already proved about its callees rather than
 analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
-The `llvm_verify` and `jvm_verify` functions return values of
-type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
-values are opaque objects that internally contain both the information
-provided in the associated `JVMSetup` or `LLVMSetup` blocks and
-the results of the verification process.
+The `llvm_verify`, `jvm_verify`, and `mir_verify` functions return values of
+type `CrucibleMethodSpec`, `JVMMethodSpec`, and `MIRMethodSpec`, respectively.
+These values are opaque objects that internally contain both the information
+provided in the associated `LLVMSetup`, `JVMSetup`, or `MIRSetup` blocks,
+respectively, and the results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
 argument of the `..._verify` functions. For any function or method
@@ -2156,7 +2364,7 @@ calls to the associated target. Instead, it will perform the following
 steps:
 
 * Check that all `llvm_points_to` and `llvm_precond` statements
-  (or the corresponding JVM statements) in the specification are
+  (or the corresponding JVM or MIR statements) in the specification are
   satisfied.
 
 * Update the simulator state and optionally construct a return value as
@@ -2217,6 +2425,17 @@ array of the given concrete size, with elements of the given type.
 * `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
 of the given class name.
 
+The experimental MIR implementation also has a `mir_alloc` function, which
+behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
+but there is also a `mir_alloc_mut` function for creating a mutable reference:
+
+* `mir_alloc : MIRType -> MIRSetup SetupValue`
+
+* `mir_alloc_mut : MIRType -> MIRSetup SetupValue`
+
+MIR tracks whether references are mutable or immutable at the type level, so it
+is important to use the right allocation command for a given reference type.
+
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
@@ -2241,15 +2460,19 @@ will not modify. Unlike `llvm_alloc`, regions allocated with
 
 ## Specifying Heap Values
 
-Pointers returned by `llvm_alloc` don't, initially, point to
-anything. So if you pass such a pointer directly into a function that
-tried to dereference it, symbolic execution will fail with a message
-about an invalid load. For some functions, such as those that are
-intended to initialize data structures (writing to the memory pointed
-to, but never reading from it), this sort of uninitialized memory is
-appropriate. In most cases, however, it's more useful to state that a
-pointer points to some specific (usually symbolic) value, which you can
-do with the `llvm_points_to` command.
+Pointers returned by `llvm_alloc`, `jvm_alloc_{array,object}`, or
+`mir_alloc{,_mut}` don't initially point to anything. So if you pass such a
+pointer directly into a function that tried to dereference it, symbolic
+execution will fail with a message about an invalid load. For some functions,
+such as those that are intended to initialize data structures (writing to the
+memory pointed to, but never reading from it), this sort of uninitialized
+memory is appropriate. In most cases, however, it's more useful to state that a
+pointer points to some specific (usually symbolic) value, which you can do with
+the *points-to* family of commands.
+
+### LLVM heap values
+
+LLVM verification primarily uses the `llvm_points_to` command:
 
 * `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
@@ -2271,6 +2494,49 @@ checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
 reinterpretation is intentional. As an alternative, one
 may instead use `llvm_cast_pointer` to line up the static types.
+
+### JVM heap values
+
+JVM verification has two categories of commands for specifying heap values.
+One category consists of the `jvm_*_is` commands, which allow users to directly
+specify what value a heap object points to. There are specific commands for
+each type of JVM heap object:
+
+* `jvm_array_is : JVMValue -> Term -> JVMSetup ()` declares that an array (the
+  first argument) contains a sequence of values (the second argument).
+* `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` declares that an
+  array (the first argument) has an element at the given index (the second
+  argument) containing the given value (the third argument).
+* `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()` declares that
+  an object (the first argument) has a field (the second argument) containing
+  the given value (the third argument).
+* `jvm_static_field_is : String -> JVMValue -> JVMSetup ()` declares that a
+  named static field (the first argument) contains the given value (the second
+  argument). By default, the field name is assumed to belong to the same class
+  as the method being specified. Static fields belonging to other classes can
+  be selected using the `<classname>.<fieldname>` syntax in the first argument.
+
+Another category consists of the `jvm_modifies_*` commands. Like the `jvm_*_is`
+commands, these specify that a JVM heap object points to valid memory, but
+unlike the `jvm_*_is` commands, they leave the exact value being pointed to as
+unspecified. These are useful for writing partial specifications for methods
+that modify some heap value, but without saying anything specific about the new
+value.
+
+* `jvm_modifies_array : JVMValue -> JVMSetup ()`
+* `jvm_modifies_elem : JVMValue -> Int -> JVMSetup ()`
+* `jvm_modifies_field : JVMValue -> String -> JVMSetup ()`
+* `jvm_modifies_static_field : String -> JVMSetup ()`
+
+### MIR heap values
+
+MIR verification has a single `mir_points_to` command:
+
+* `mir_points_to : SetupValue -> SetupValue -> MIRSetup ()`
+takes two `SetupValue` arguments, the first of which must be a reference,
+and states that the memory specified by that reference should contain the
+value given in the second argument (which may be any type of
+`SetupValue`).
 
 ## Working with Compound Types
 
@@ -2451,7 +2717,7 @@ verification](#compositional-verification).
 To understand the issues surrounding global variables, consider the following C
 code:
 
-<!-- This should (partially) match intTests/test0036_globals/test.c -->
+<!-- This matches intTests/test0036_globals/test-signed.c -->
 ~~~
 int x = 0;
 
@@ -2468,7 +2734,7 @@ int g(int z) {
 
 One might initially write the following specifications for `f` and `g`:
 
-<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+<!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
@@ -2499,12 +2765,13 @@ To deal with this, we can use the following function:
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
-<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+<!-- This matches intTests/test0036_globals/test-signed.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
 
 let init_global name = do {
+  llvm_alloc_global name;
   llvm_points_to (llvm_global name)
                  (llvm_global_initializer name);
 };
@@ -2512,6 +2779,7 @@ let init_global name = do {
 f_spec <- llvm_verify m "f" [] true (do {
     y <- llvm_fresh_var "y" (llvm_int 32);
     init_global "x";
+    llvm_precond {{ y < 2^^31 - 1 }};
     llvm_execute_func [llvm_term y];
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
@@ -2521,7 +2789,9 @@ which initializes `x` to whatever it is initialized to in the C code at
 the beginning of verification. This specification is now safe for
 compositional verification: SAW won't use the specification `f_spec`
 unless it can determine that `x` still has its initial value at the
-point of a call to `f`.
+point of a call to `f`. This specification also constrains `y` to prevent
+signed integer overflow resulting from the `x + y` expression in `f`,
+which is undefined behavior in C.
 
 ## Preconditions and Postconditions
 
@@ -2537,6 +2807,9 @@ values in scope at the time.
 * `jvm_precond : Term -> JVMSetup ()`
 * `jvm_postcond : Term -> JVMSetup ()`
 * `jvm_assert : Term -> JVMSetup ()`
+* `mir_precond : Term -> MIRSetup ()`
+* `mir_postcond : Term -> MIRSetup ()`
+* `mir_assert : Term -> MIRSetup ()`
 
 These commands take `Term` arguments, and therefore cannot describe
 the values of pointers. The "assert" variants will work in either pre-
@@ -3184,3 +3457,244 @@ problem with this aspect of the translation.
 
 [^5]: https://coq.inria.fr
 [^6]: https://github.com/mit-plv/fiat-crypto
+
+# Analyzing Hardware Circuits using Yosys
+SAW has experimental support for analysis of hardware descriptions written in VHDL ([via GHDL](https://github.com/ghdl/ghdl-yosys-plugin)) through an intermediate representation produced by [Yosys](https://yosyshq.net/yosys/).
+This generally follows the same conventions and idioms used in the rest of SAWScript.
+
+## Processing VHDL With Yosys
+Given a VHDL file `test.vhd` containing an entity `test`, one can generate an intermediate representation `test.json` suitable for loading into SAW:
+
+~~~~
+$ ghdl -a test.vhd
+$ yosys
+...
+Yosys 0.10+1 (git sha1 7a7df9a3b4, gcc 10.3.0 -fPIC -Os)
+yosys> ghdl test
+
+1. Executing GHDL.
+Importing module test.
+
+yosys> write_json test.json
+
+2. Executing JSON backend.
+~~~~
+
+It can sometimes be helpful to invoke additional Yosys passes between the `ghdl` and `write_json` commands.
+For example, at present SAW does not support the `$pmux` cell type.
+Yosys is able to convert `$pmux` cells into trees of `$mux` cells using the `pmuxtree` command.
+We expect there are many other situations where Yosys' considerable library of commands is valuable for pre-processing.
+
+## Example: Ripple-Carry Adder
+Consider three VHDL entities.
+First, a half-adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity half is
+  port (
+    a : in std_logic;
+    b : in std_logic;
+    c : out std_logic;
+    s : out std_logic
+  );
+end half;
+
+architecture halfarch of half is
+begin
+  c <= a and b;
+  s <= a xor b;
+end halfarch;
+~~~~
+
+Next, a one-bit adder built atop that half-adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity full is
+  port (
+    a : in std_logic;
+    b : in std_logic;
+    cin : in std_logic;
+    cout : out std_logic;
+    s : out std_logic
+  );
+end full;
+
+architecture fullarch of full is
+  signal half0c : std_logic;
+  signal half0s : std_logic;
+  signal half1c : std_logic;
+begin
+  half0 : entity work.half port map (a => a, b => b, c => half0c, s => half0s);
+  half1 : entity work.half port map (a => half0s, b => cin, c => half1c, s => s);
+  cout <= half0c or half1c;
+end fullarch;
+~~~~
+
+Finally, a four-bit adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity add4 is
+  port (
+    a : in std_logic_vector(0 to 3);
+    b : in std_logic_vector(0 to 3);
+    res : out std_logic_vector(0 to 3)
+  );
+end add4;
+
+architecture add4arch of add4 is
+  signal full0cout : std_logic;
+  signal full1cout : std_logic;
+  signal full2cout : std_logic;
+  signal ignore : std_logic;
+begin
+  full0 : entity work.full port map (a => a(0), b => b(0), cin => '0', cout => full0cout, s => res(0));
+  full1 : entity work.full port map (a => a(1), b => b(1), cin => full0cout, cout => full1cout, s => res(1));
+  full2 : entity work.full port map (a => a(2), b => b(2), cin => full1cout, cout => full2cout, s => res(2));
+  full3 : entity work.full port map (a => a(3), b => b(3), cin => full2cout, cout => ignore, s => res(3));
+end add4arch;
+~~~~
+
+Using GHDL and Yosys, we can convert the VHDL source above into a format that SAW can import.
+If all of the code above is in a file `adder.vhd`, we can run the following commands:
+
+~~~~
+$ ghdl -a adder.vhd
+$ yosys -p 'ghdl add4; write_json adder.json'
+~~~~
+
+The produced file `adder.json` can then be loaded into SAW with `yosys_import`:
+
+~~~~
+$ saw
+...
+sawscript> enable_experimental
+sawscript> m <- yosys_import "adder.json"
+sawscript> :type m
+Term
+sawscript> type m
+[23:57:14.492] {add4 : {a : [4], b : [4]} -> {res : [4]},
+ full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]},
+ half : {a : [1], b : [1]} -> {c : [1], s : [1]}}
+~~~~
+
+`yosys_import` returns a `Term` with a Cryptol record type, where the fields correspond to each VHDL module.
+We can access the fields of this record like we would any Cryptol record, and call the functions within like any Cryptol function.
+
+~~~~
+sawscript> type {{ m.add4 }}
+[00:00:25.255] {a : [4], b : [4]} -> {res : [4]}
+sawscript> eval_int {{ (m.add4 { a = 1, b = 2 }).res }}
+[00:02:07.329] 3
+~~~~
+
+We can also use all of SAW's infrastructure for asking solvers about `Term`s, such as the `sat` and `prove` commands.
+For example:
+
+~~~~
+sawscript> sat w4 {{ m.add4 === \_ -> { res = 5 } }}
+[00:04:41.993] Sat: [_ = (5, 0)]
+sawscript> prove z3 {{ m.add4 === \inp -> { res = inp.a + inp.b } }}
+[00:05:43.659] Valid
+sawscript> prove yices {{ m.add4 === \inp -> { res = inp.a - inp.b } }}
+[00:05:56.171] Invalid: [_ = (8, 13)]
+~~~~
+
+The full library of `ProofScript` tactics is available in this setting.
+If necessary, proof tactics like `simplify` can be used to rewrite goals before querying a solver.
+
+Special support is provided for the common case of equivalence proofs between HDL modules and other `Term`s (e.g. Cryptol functions, other HDL modules, or "extracted" imperative LLVM or JVM code).
+The command `yosys_verify` has an interface similar to `llvm_verify`: given a specification, some lemmas, and a proof tactic, it produces evidence of a proven equivalence that may be passed as a lemma to future calls of `yosys_verify`.
+For example, consider the following Cryptol specifications for one-bit and four-bit adders:
+
+~~~~cryptol
+cryfull :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+cryfull inp = { cout = [cout], s = [s] }
+  where [cout, s] = zext inp.a + zext inp.b + zext inp.cin
+
+cryadd4 : {a : [4], b : [4]} -> {res : [4]}
+cryadd4 inp = { res = inp.a + inp.b }
+~~~~
+
+We can prove equivalence between `cryfull` and the VHDL `full` module:
+
+~~~~
+sawscript> full_spec <- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;
+~~~~
+
+The result `full_spec` can then be used as an "override" when proving equivalence between `cryadd4` and the VHDL `add4` module:
+
+~~~~
+sawscript> add4_spec <- yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_spec] w4;
+~~~~
+
+The above could also be accomplished through the use of `prove_print` and term rewriting, but it is much more verbose.
+
+`yosys_verify` may also be given a list of preconditions under which the equivalence holds.
+For example, consider the following Cryptol specification for `full` that ignores the `cin` bit:
+
+~~~~cryptol
+cryfullnocarry :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+cryfullnocarry inp = { cout = [cout], s = [s] }
+  where [cout, s] = zext inp.a + zext inp.b
+~~~~
+
+This is not equivalent to `full` in general, but it is if constrained to inputs where `cin = 0`.
+We may express that precondition like so:
+
+~~~~
+sawscript> full_nocarry_spec <- yosys_verify {{ adderm.full }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -> inp.cin == 0}}] {{ cryfullnocarry }} [] w4;
+~~~~
+
+The resulting override `full_nocarry_spec` may still be used in the proof for `add4` (this is accomplished by rewriting to a conditional expression).
+
+## API Reference
+N.B: The following commands must first be enabled using `enable_experimental`.
+
+* `yosys_import : String -> TopLevel Term` produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command.
+  The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
+  Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.
+  For example, consider a Yosys JSON file derived from the following VHDL entities:
+  ~~~~vhdl
+  entity half is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      c : out std_logic;
+      s : out std_logic
+    );
+  end half;
+
+  entity full is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      cin : in std_logic;
+      cout : out std_logic;
+      s : out std_logic
+    );
+  end full;
+  ~~~~
+  The resulting `Term` will have the type:
+  ~~~~
+  { half : {a : [1], b : [1]} -> {c : [1], s : [1]}
+  , full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+  }
+  ~~~~
+* `yosys_verify : Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem` proves equality between an HDL module and a specification.
+  The first parameter is the HDL module - given a record `m` from `yosys_import`, this will typically look something like `{{ m.foo }}`.
+  The second parameter is a list of preconditions for the equality.
+  The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module.
+  The fourth parameter is a list of "overrides", which witness the results of previous `yosys_verify` proofs.
+  These overrides can be used to simplify terms by replacing use sites of submodules with their specifications.
+
+  Note that `Term`s derived from HDL modules are "first class", and are not restricted to `yosys_verify`: they may also be used with SAW's typical `Term` infrastructure like `sat`, `prove_print`, term rewriting, etc.
+  `yosys_verify` simply provides a convenient and familiar interface, similar to `llvm_verify` or `jvm_verify`.

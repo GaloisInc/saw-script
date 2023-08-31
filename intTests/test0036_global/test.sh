@@ -8,7 +8,9 @@ set -e
 $SAW test-appropriate-overrides.saw
 $SAW test-global-initializer.saw
 $SAW test-sketchy-overrides-O2.saw
+$SAW test-signed.saw
 
 # These tests should fail
 ! $SAW test-no-init.saw
 ! $SAW test-sketchy-overrides-O1.saw
+! $SAW test-signed-fail.saw

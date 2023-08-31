@@ -27,7 +27,7 @@ fn from_bits(x: [bool; 8]) -> u8 {
     ((x[7] as u8) << 0)
 }
 
-#[crux_test]
+#[crux::test]
 fn test() {
     let x = u8::symbolic("x");
     let y = u8::symbolic("y");
