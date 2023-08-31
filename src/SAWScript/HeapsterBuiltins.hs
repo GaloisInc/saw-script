@@ -1243,8 +1243,7 @@ heapster_export_coq _bic _opts henv filename =
            vcat [preamble coq_trans_conf {
                    postPreamble =
                        "From CryptolToCoq Require Import SAWCorePrelude.\n" ++
-                       "From CryptolToCoq Require Import SAWCoreBitvectors.\n" ++
-                       "From CryptolToCoq Require Import SpecMExtra.\n" },
+                       "From CryptolToCoq Require Import SAWCoreBitvectors.\n" },
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 
