@@ -84,7 +84,7 @@ library
     , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
-    , sbv >= 9.1 && < 9.3
+    , sbv >= 9.1 && < 10.3
     , serialise
     , split
     , temporary

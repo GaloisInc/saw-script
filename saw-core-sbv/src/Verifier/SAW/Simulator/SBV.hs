@@ -37,6 +37,9 @@ module Verifier.SAW.Simulator.SBV
   ) where
 
 import Data.SBV.Dynamic
+#if MIN_VERSION_sbv(10,0,0)
+import Data.SBV.Internals (UICodeKind(..))
+#endif
 
 import Verifier.SAW.Simulator.SBV.SWord
 
@@ -667,7 +670,14 @@ parseUninterpreted cws nm ty =
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
-mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
+mkUninterpreted k args nm =
+  svUninterpreted k nm'
+#if MIN_VERSION_sbv(10,0,0)
+                  UINone
+#else
+                  Nothing
+#endif
+                  args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
 sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
