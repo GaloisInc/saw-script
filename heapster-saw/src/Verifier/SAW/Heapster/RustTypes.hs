@@ -1587,10 +1587,7 @@ parseSome3FunPermFromRust _ _ str =
 parseNamedShapeFromRustDecl :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                                PermEnv -> prx w -> String ->
                                m (SomePartialNamedShape w)
-parseNamedShapeFromRustDecl env w str
-  | Right item <- parse @(Item Span) (inputStreamFromString str) =
-    runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item
-  | Left err <- parse @(Item Span) (inputStreamFromString str) =
-    fail ("Error parsing top-level item: " ++ show err)
-parseNamedShapeFromRustDecl _ _ str =
-  fail ("Malformed Rust type: " ++ str)
+parseNamedShapeFromRustDecl env w str =
+  case parse @(Item Span) (inputStreamFromString str) of
+   Right item -> runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item
+   Left err -> fail ("Error parsing top-level item: " ++ show err)
