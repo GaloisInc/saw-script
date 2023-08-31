@@ -8,7 +8,8 @@ module Mir.Compositional.Clobber
 where
 
 import Control.Lens ((^.), (^?), ix)
-import Control.Monad.Except
+import Control.Monad (forM_)
+import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC

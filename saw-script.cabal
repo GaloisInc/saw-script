@@ -23,7 +23,7 @@ library
   default-language: Haskell2010
   build-depends:
       base >= 4.9
-    , aeson >= 2.0 && < 2.2
+    , aeson >= 2.0 && < 2.3
     , aig
     , array
     , binary

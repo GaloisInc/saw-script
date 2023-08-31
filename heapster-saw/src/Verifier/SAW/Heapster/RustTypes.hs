@@ -36,9 +36,11 @@ import GHC.TypeLits
 import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant
 import Data.Functor.Product
-import Control.Applicative
-import Control.Monad.Reader
-import Control.Monad.Except
+import qualified Control.Applicative as App
+import Control.Monad (MonadPlus(..))
+import Control.Monad.Except (Except, MonadError(..), runExcept)
+import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.Fail as Fail
 
@@ -1313,7 +1315,7 @@ data SomeMbWithPerms a where
 instance Functor SomeMbWithPerms where
   fmap f (SomeMbWithPerms ctx ps mb_a) = SomeMbWithPerms ctx ps (fmap f mb_a)
 
-instance Applicative SomeMbWithPerms where
+instance App.Applicative SomeMbWithPerms where
   pure a = SomeMbWithPerms CruCtxNil (emptyMb MNil) $ emptyMb a
   liftA2 f (SomeMbWithPerms ctx1 mb_ps1 mb_a1) (SomeMbWithPerms ctx2 mb_ps2 mb_a2) =
     SomeMbWithPerms (appendCruCtx ctx1 ctx2)

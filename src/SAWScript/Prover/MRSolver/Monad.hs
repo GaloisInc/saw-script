@@ -27,10 +27,13 @@ module SAWScript.Prover.MRSolver.Monad where
 import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad (MonadPlus(..), foldM)
 import Control.Monad.Catch (MonadThrow, MonadCatch)
+import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.State (MonadState(..), StateT(..), modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import GHC.Generics
 

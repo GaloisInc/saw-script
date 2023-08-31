@@ -150,8 +150,11 @@ import Numeric.Natural (Natural)
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
-import Control.Monad.Reader
-import Control.Monad.Except
+import Control.Monad ((>=>), forM, zipWithM, zipWithM_)
+import Control.Monad.Except (MonadError(..))
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)

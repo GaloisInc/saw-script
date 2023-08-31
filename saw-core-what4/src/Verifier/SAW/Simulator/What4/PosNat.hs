@@ -42,7 +42,7 @@
 module Verifier.SAW.Simulator.What4.PosNat where
 -- TODO: find the right place for this code
 
-import GHC.TypeNats
+import GHC.TypeNats (KnownNat, Nat)
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Some(Some(..))
 

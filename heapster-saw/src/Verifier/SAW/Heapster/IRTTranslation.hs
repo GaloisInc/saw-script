@@ -34,9 +34,10 @@ module Verifier.SAW.Heapster.IRTTranslation (
 import Numeric.Natural
 import Data.Functor.Const
 import GHC.TypeLits
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad (zipWithM)
+import Control.Monad.Except (MonadError(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..), withReaderT)
+import Control.Monad.State (MonadState(..), State, evalState)
 
 import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits

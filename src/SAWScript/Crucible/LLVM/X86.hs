@@ -36,12 +36,15 @@ import Control.Lens.TH (makeLenses)
 import System.IO (stdout)
 import Control.Exception (throw)
 import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
-import Control.Monad.State
-import Control.Monad.Reader (runReaderT)
+import Control.Monad (forM, forM_, unless, when, zipWithM)
 import Control.Monad.Catch (MonadThrow)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.State (MonadState, StateT(..), execStateT, gets)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
+import Data.Functor (void)
 import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector

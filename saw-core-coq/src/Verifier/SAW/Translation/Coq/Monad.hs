@@ -22,8 +22,8 @@ module Verifier.SAW.Translation.Coq.Monad
   ) where
 
 import qualified Control.Monad.Except as Except
-import Control.Monad.Reader hiding (fail)
-import Control.Monad.State hiding (fail, state)
+import Control.Monad.Reader (MonadReader, ReaderT(..))
+import Control.Monad.State (MonadState, StateT(..))
 import Prelude hiding (fail)
 
 import Verifier.SAW.SharedTerm

@@ -75,7 +75,7 @@ import qualified Control.Monad.Fail as Fail
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat)
 import Data.Text (Text)
 
 import Data.Binding.Hobbits hiding (sym)

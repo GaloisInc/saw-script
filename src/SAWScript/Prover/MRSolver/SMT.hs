@@ -24,8 +24,10 @@ module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Control.Monad.Except
+import Control.Monad (MonadPlus(..), (<=<), join, when, zipWithM)
 import Control.Monad.Catch (throwM, catch)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import Data.Foldable (foldrM, foldlM)
 import GHC.Generics

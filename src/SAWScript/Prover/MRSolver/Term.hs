@@ -34,7 +34,9 @@ module SAWScript.Prover.MRSolver.Term where
 
 import Data.String
 import Data.IORef
-import Control.Monad.Reader
+import Control.Monad (foldM)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), Reader, runReader)
 import qualified Data.IntMap as IntMap
 import Numeric.Natural (Natural)
 import GHC.Generics

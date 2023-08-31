@@ -46,8 +46,9 @@ module Verifier.SAW.Term.Pretty
 
 import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
-import Control.Monad.Reader
-import Control.Monad.State.Strict as State
+import Control.Monad (forM)
+import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
+import Control.Monad.State.Strict (MonadState(..), State, execState)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif

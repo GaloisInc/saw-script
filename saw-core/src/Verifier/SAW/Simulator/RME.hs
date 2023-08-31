@@ -24,8 +24,9 @@ module Verifier.SAW.Simulator.RME
   , withBitBlastedSATQuery
   ) where
 
-import Control.Monad.Identity
-import Control.Monad.State
+import Control.Monad (unless)
+import Control.Monad.Identity (Identity(..))
+import Control.Monad.State (MonadState(..), State, evalState)
 import Data.Bits
 import Data.IntTrie (IntTrie)
 import qualified Data.IntTrie as IntTrie
