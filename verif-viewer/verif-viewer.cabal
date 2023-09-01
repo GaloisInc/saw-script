@@ -4,7 +4,7 @@ License:            BSD3
 License-file:       LICENSE
 Author:             Galois, Inc.
 Maintainer:         rdockins@galois.com
-Copyright:          (c) 2021 Galois Inc.
+Copyright:          (c) 2021-2023 Galois Inc.
 Category:           Formal Methods
 Build-type:         Simple
 cabal-version:      >= 1.8
