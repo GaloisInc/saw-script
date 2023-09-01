@@ -534,7 +534,7 @@ bindTransToPiBinder (BindTrans { .. }) =
   case bindTransImps of
     [] | bindTransIdent == "_" -> [Coq.PiBinder Nothing bindTransType]
     [] -> [Coq.PiBinder (Just bindTransIdent) bindTransType]
-    otherwise ->
+    _ ->
       Coq.PiBinder (Just bindTransIdent) bindTransType :
       map (\(n,ty) -> Coq.PiImplicitBinder (Just n) ty) bindTransImps
 
@@ -546,9 +546,10 @@ bindTransToPiBinder (BindTrans { .. }) =
 -- is bound to its Coq identifier.
 translateBinder :: TermTranslationMonad m => LocalName -> Term ->
                    (BindTrans -> m a) -> m a
-translateBinder n ty@(asPiList -> (args, asSortWithFlags -> mb_sort)) f =
+translateBinder n ty@(asPiList -> (args, pi_body)) f =
   do ty' <- translateTerm ty
-     let flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
+     let mb_sort = asSortWithFlags pi_body
+         flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
          flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
                            ("QT", "QuantType")]
      withSAWVar n $ \n' ->
