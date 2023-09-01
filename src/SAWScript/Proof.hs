@@ -291,7 +291,7 @@ splitImpl sc (Prop p)
 
   -- Handle the case of (H1 -> H2), where H1 and H2 are in Prop
   | Just (_nm, arg, c) <- asPi p
-  , looseVars c == emptyBitSet -- make sure this is a nondependent Pi (AKA arrow type)
+  , termIsClosed c -- make sure this is a nondependent Pi (AKA arrow type)
   = termToMaybeProp sc arg >>= \case
       Nothing -> return Nothing
       Just h  -> return (Just (h, Prop c))
@@ -1458,7 +1458,7 @@ normalizeConcl sc p =
          case asPi t of
            Just (_nm, arg, body)
              -- check that this is non-dependent Pi (AKA arrow type)
-             | looseVars body == emptyBitSet ->
+             | termIsClosed body ->
              termToMaybeProp sc arg >>= \case
                Nothing -> return (RawSequent [] [p])
                Just h  ->
@@ -1523,7 +1523,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
     -- and the given evidence must match the expected prop.
     checkApply nenv mkSqt (Prop p) (Right e:es)
       | Just (_lnm, tp, body) <- asPi p
-      , looseVars body == emptyBitSet
+      , termIsClosed body
       = do (d1,sy1) <- check nenv e . mkSqt =<< termToProp sc tp
            (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
@@ -1951,7 +1951,7 @@ sequentToSATQuery sc unintSet sqt =
                        body' <- instantiateVar sc 0 etm body
                        processUnivAssert mmap ((ec,fot):vars) xs body'
                   Nothing
-                    | looseVars body == emptyBitSet ->
+                    | termIsClosed body ->
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing ->
@@ -1984,7 +1984,7 @@ sequentToSATQuery sc unintSet sqt =
                        body' <- instantiateVar sc 0 etm body
                        processConcl mmap (Map.insert ec fot vars, xs) body'
                   Nothing
-                    | looseVars body == emptyBitSet ->
+                    | termIsClosed body ->
                         do asrt <- processAssert mmap tp
                            processConcl mmap (vars, asrt : xs) body
                     | otherwise ->

@@ -669,7 +669,7 @@ filterOccurenceMap min_occs global_p =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
-        (if global_p then looseVars t == emptyBitSet else True))
+        (if global_p then termIsClosed t else True))
 
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
