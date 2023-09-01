@@ -123,11 +123,11 @@ typeOfSetupValue _mcc env _nameEnv val =
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _ _              -> panic "typeOfSetupValue" ["structs not yet implemented"]
+    MS.SetupStruct _ _                -> panic "typeOfSetupValue" ["structs not yet implemented"]
     MS.SetupArray _ _                 -> panic "typeOfSetupValue" ["arrays not yet implemented"]
     MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "typeOfSetupValue" ["fields not yet implemented"]
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 
@@ -160,7 +160,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupTerm tm -> resolveTypedTerm mcc tm
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _ _              -> panic "resolveSetupValue" ["structs not yet implemented"]
+    MS.SetupStruct _ _                -> panic "resolveSetupValue" ["structs not yet implemented"]
     MS.SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     MS.SetupArray () vs -> do
       vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
@@ -186,7 +186,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                       (Mir.MirVector_Vector vals')
     MS.SetupElem _ _ _                -> panic "resolveSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "resolveSetupValue" ["fields not yet implemented"]
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 

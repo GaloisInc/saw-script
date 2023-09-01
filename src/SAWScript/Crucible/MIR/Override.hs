@@ -181,11 +181,11 @@ instantiateSetupValue sc s v =
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _ _              -> return v
+    MS.SetupStruct _ _                -> return v
     MS.SetupArray _ _                 -> return v
     MS.SetupElem _ _ _                -> return v
     MS.SetupField _ _ _               -> return v
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where
@@ -308,7 +308,7 @@ matchArg opts sc cc cs _prepost md actual@(MIRVal (RefShape _refTy pointeeTy mut
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 

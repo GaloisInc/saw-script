@@ -134,13 +134,12 @@ import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
 import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.Crucible.LLVM.ResolveSetupValue
+import           SAWScript.Crucible.LLVM.Setup.Value ()
 import           SAWScript.Options
 import           SAWScript.Panic
 import           SAWScript.Utils (bullets, handleException)
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
-
-type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 
 -- | An override packaged together with its preconditions, labeled with some
 --   human-readable info about each condition.
@@ -1117,11 +1116,11 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupVars v =
       case v of
         SetupVar i                 -> Set.singleton i
-        SetupStruct _ _ xs         -> foldMap setupVars xs
+        SetupStruct _ xs           -> foldMap setupVars xs
         SetupArray _ xs            -> foldMap setupVars xs
         SetupElem _ x _            -> setupVars x
         SetupField _ x _           -> setupVars x
-        SetupCast _ x _            -> setupVars x
+        SetupCast _ x              -> setupVars x
         SetupUnion _ x _           -> setupVars x
         SetupTerm _                -> Set.empty
         SetupNull _                -> Set.empty
@@ -1292,7 +1291,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
           | (x, z) <- zip (V.toList xs) zs ]
 
     -- match the fields of struct point-wise
-    (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct () _ zs) ->
+    (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct _ zs) ->
       sequence_
         [ matchArg opts sc cc cs prepost md x y z
         | ((_,x),y,z) <- zip3 (V.toList xs)
@@ -2471,9 +2470,9 @@ instantiateSetupValue ::
 instantiateSetupValue sc s v =
   case v of
     SetupVar{}               -> return v
-    SetupTerm tt             -> SetupTerm        <$> doTerm tt
-    SetupStruct () p vs      -> SetupStruct () p <$> mapM (instantiateSetupValue sc s) vs
-    SetupArray () vs         -> SetupArray ()    <$> mapM (instantiateSetupValue sc s) vs
+    SetupTerm tt             -> SetupTerm     <$> doTerm tt
+    SetupStruct p vs         -> SetupStruct p <$> mapM (instantiateSetupValue sc s) vs
+    SetupArray () vs         -> SetupArray () <$> mapM (instantiateSetupValue sc s) vs
     SetupElem{}              -> return v
     SetupField{}             -> return v
     SetupCast{}              -> return v
