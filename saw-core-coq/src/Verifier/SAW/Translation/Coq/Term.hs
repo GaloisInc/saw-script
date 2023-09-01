@@ -179,8 +179,10 @@ invalidateOpenSharing =
 
 -- | Run a translation in a context with one more SAW core variable with the
 -- given name. Pass the corresponding Coq identifier used for this SAW core
--- variable to the computation in which it is bound. This invalidates all
--- non-closed shared names, since sharing does not
+-- variable to the computation in which it is bound. This invalidates all shared
+-- terms that are not closed, since these shared terms now correspond to
+-- different terms (with greater deBruijn indices) that have different
+-- 'TermIndex'es.
 withSAWVar :: TermTranslationMonad m => LocalName -> (Coq.Ident -> m a) -> m a
 withSAWVar n m =
   invalidateOpenSharing $ withFreshIdent n $ \n_coq ->
