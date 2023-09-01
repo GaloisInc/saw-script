@@ -32,7 +32,7 @@ module SAWScript.AST
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
-       , tJVMSpec, tLLVMSpec
+       , tJVMSpec, tLLVMSpec, tMIRSpec
        , tBlock, tContext, tVar
 
        , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
@@ -178,6 +178,7 @@ data Context
   = CryptolSetup
   | JavaSetup
   | LLVMSetup
+  | MIRSetup
   | ProofScript
   | TopLevel
   | CrucibleSetup
@@ -212,6 +213,7 @@ data TyCon
   | CFGCon
   | JVMSpecCon
   | LLVMSpecCon
+  | MIRSpecCon
   | ContextCon Context
   deriving (Eq, Show)
 
@@ -394,6 +396,7 @@ instance PrettyPrint TyCon where
     CFGCon         -> "CFG"
     JVMSpecCon     -> "JVMSpec"
     LLVMSpecCon    -> "LLVMSpec"
+    MIRSpecCon     -> "MIRSpec"
     BlockCon       -> "<Block>"
     ContextCon cxt -> pretty par cxt
 
@@ -402,6 +405,7 @@ instance PrettyPrint Context where
     CryptolSetup -> "CryptolSetup"
     JavaSetup    -> "JavaSetup"
     LLVMSetup    -> "LLVMSetup"
+    MIRSetup     -> "MIRSetup"
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
     CrucibleSetup-> "CrucibleSetup"
@@ -470,6 +474,9 @@ tJVMSpec = TyCon JVMSpecCon []
 
 tLLVMSpec :: Type
 tLLVMSpec = TyCon LLVMSpecCon []
+
+tMIRSpec :: Type
+tMIRSpec = TyCon MIRSpecCon []
 
 tBlock :: Type -> Type -> Type
 tBlock c t = TyCon BlockCon [c,t]

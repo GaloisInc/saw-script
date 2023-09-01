@@ -1198,8 +1198,8 @@ instantiateLocalVars sc f initialLevel t0 =
     go l t =
       case t of
         Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppFreeVars = fv, stAppTermF = tf}
-          | fv == emptyBitSet -> return t -- closed terms map to themselves
+        STApp{ stAppIndex = tidx, stAppFreeVars = _, stAppTermF = tf}
+          | termIsClosed t -> return t -- closed terms map to themselves
           | otherwise -> useCache ?cache (tidx, l) (go' l tf)
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
@@ -1559,7 +1559,7 @@ scConstant :: SharedContext
            -> Term   -- ^ The type
            -> IO Term
 scConstant sc name rhs ty =
-  do unless (looseVars rhs == emptyBitSet) $
+  do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
@@ -1580,7 +1580,7 @@ scConstant' :: SharedContext
            -> Term   -- ^ The type
            -> IO Term
 scConstant' sc nmi rhs ty =
-  do unless (looseVars rhs == emptyBitSet) $
+  do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs

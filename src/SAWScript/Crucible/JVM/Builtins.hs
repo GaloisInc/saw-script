@@ -620,6 +620,8 @@ registerOverride opts cc _ctx top_loc mdMap cs =
 
 --------------------------------------------------------------------------------
 
+-- | Simulate a JVM function with Crucible as part of a 'jvm_verify' command,
+-- making sure to install any overrides that the user supplies.
 verifySimulate ::
   Options ->
   JVMCrucibleContext ->

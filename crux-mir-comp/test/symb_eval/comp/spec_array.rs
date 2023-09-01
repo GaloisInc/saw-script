@@ -6,7 +6,7 @@ fn f(x: [u8; 2]) -> [u8; 2] {
     [x[1], x[0]]
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     let x = <[u8; 2]>::symbolic("x");
@@ -31,7 +31,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f() {
     f_spec().enable();
 

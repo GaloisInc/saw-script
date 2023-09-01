@@ -1,5 +1,23 @@
 # Revision history for saw-client
 
+## next -- TBA
+
+* Add Python bindings for SAW's experimental MIR verification support:
+
+  * The `mir_load_module` function loads a MIR JSON file into SAW.
+  * The `mir_verify` function performs verification of a MIR function.
+  * The `saw_client.mir` module contains utility functions for constructing
+    MIR types.
+
+  For more information about how SAW's MIR verification support works in
+  general, see the `mir_*` commands documented in the [SAW
+  manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
+## 1.0.1 -- YYYY-MM-DD
+
+* Add `solver_cache.py` implementing an interface for interacting with SAW
+  solver cache databases.
+
 ## 1.0.0 -- 2023-06-26
 
 * The v1.0.0 release is made in tandem with the SAW 1.0 release. See the

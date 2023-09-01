@@ -15,6 +15,7 @@ module SAWServer.Exceptions (
   , notAYosysImport
   , notAYosysSequential
   , notAMIRModule
+  , notAMIRMethodSpecIR
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -202,6 +203,17 @@ notAMIRModule name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not a MIR module")
+    (Just $ object ["name" .= name])
+
+notAMIRMethodSpecIR ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a method specification IR -}->
+  JSONRPCException
+notAMIRMethodSpecIR name =
+  makeJSONRPCException 10150
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a MIR method specification")
     (Just $ object ["name" .= name])
 
 cantLoadLLVMModule :: String -> JSONRPCException

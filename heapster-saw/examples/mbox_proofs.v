@@ -64,7 +64,7 @@ Proof.
             (bvSub 64 i strt)
             len
             (bvSub 64 bv64_128 strt)
-            e
+            _1
             pf1)) as H.
     rewrite bvAdd_Sub_cancel. intros H.
     rewrite (UIP_bool _ _ H pf).

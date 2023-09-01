@@ -121,16 +121,10 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
 import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
-import           Data.Map ( Map )
 import qualified Data.Map as Map
-import qualified Data.Text as Text
-import           Data.Type.Equality (TestEquality(..))
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
-import qualified Text.PrettyPrint.HughesPJ as PP
-
-import qualified Data.LLVM.BitCode as LLVM
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pp)
@@ -141,9 +135,6 @@ import qualified Data.Parameterized.Map as MapF
 
 import           What4.ProgramLoc (ProgramLoc)
 
-import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
@@ -153,47 +144,16 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
-
-import           SAWScript.Proof (TheoremNonce)
+import           SAWScript.Crucible.LLVM.Setup.Value
 
 import           Verifier.SAW.Simulator.What4.ReturnTrip ( toSC, saw_ctx )
 
-import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
 
 --------------------------------------------------------------------------------
--- ** Language features
-
-data LLVM (arch :: CL.LLVMArch)
-
-type instance MS.HasSetupNull (LLVM _) = 'True
-type instance MS.HasSetupStruct (LLVM _) = 'True
-type instance MS.HasSetupArray (LLVM _) = 'True
-type instance MS.HasSetupElem (LLVM _) = 'True
-type instance MS.HasSetupField (LLVM _) = 'True
-type instance MS.HasSetupCast (LLVM _) = 'True
-type instance MS.HasSetupUnion (LLVM _) = 'True
-type instance MS.HasSetupGlobal (LLVM _) = 'True
-type instance MS.HasSetupGlobalInitializer (LLVM _) = 'True
-
-type instance MS.HasGhostState (LLVM _) = 'True
-
-type instance MS.TypeName (LLVM arch) = CL.Ident
-type instance MS.ExtType (LLVM arch) = CL.MemType
-type instance MS.CastType (LLVM arch) = L.Type
-
---------------------------------------------------------------------------------
 -- *** LLVMMethodId
-
-data LLVMMethodId =
-  LLVMMethodId
-    { _llvmMethodName   :: String
-    , _llvmMethodParent :: Maybe String -- ^ Something to do with breakpoints...
-    } deriving (Eq, Ord, Show)
-
-makeLenses ''LLVMMethodId
 
 csName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) String
 csName = MS.csMethod . llvmMethodName
@@ -201,37 +161,8 @@ csName = MS.csMethod . llvmMethodName
 csParentName :: Lens' (MS.CrucibleMethodSpecIR (LLVM arch)) (Maybe String)
 csParentName = MS.csMethod . llvmMethodParent
 
-instance PPL.Pretty LLVMMethodId where
-  pretty = PPL.pretty . view llvmMethodName
-
-type instance MS.MethodId (LLVM _) = LLVMMethodId
-
 --------------------------------------------------------------------------------
 -- *** LLVMAllocSpec
-
--- | Allocation initialization policy
-data LLVMAllocSpecInit
-  = LLVMAllocSpecSymbolicInitialization
-    -- ^ allocation is initialized with a fresh symbolic array of bytes
-  | LLVMAllocSpecNoInitialization
-    -- ^ allocation not initialized
-  deriving (Eq, Ord, Show)
-
-data LLVMAllocSpec =
-  LLVMAllocSpec
-    { _allocSpecMut   :: CL.Mutability
-    , _allocSpecType  :: CL.MemType
-    , _allocSpecAlign :: CL.Alignment
-    , _allocSpecBytes :: Term
-    , _allocSpecMd    :: MS.ConditionMetadata
-    , _allocSpecFresh :: Bool -- ^ Whether declared with @crucible_fresh_pointer@
-    , _allocSpecInit :: LLVMAllocSpecInit
-    }
-  deriving (Eq, Show)
-
-makeLenses ''LLVMAllocSpec
-
-type instance MS.AllocSpec (LLVM _) = LLVMAllocSpec
 
 mutIso :: Iso' CL.Mutability Bool
 mutIso =
@@ -245,86 +176,6 @@ mutIso =
 
 isMut :: Lens' LLVMAllocSpec Bool
 isMut = allocSpecMut . mutIso
-
---------------------------------------------------------------------------------
--- *** LLVMModule
-
--- | An 'LLVMModule' contains an LLVM module that has been parsed from
--- a bitcode file and translated to Crucible.
-data LLVMModule arch =
-  LLVMModule
-  { _modFilePath :: FilePath
-  , _modAST :: L.Module
-  , _modTrans :: CL.ModuleTranslation arch
-  }
--- NOTE: Type 'LLVMModule' is exported as an abstract type, and we
--- maintain the invariant that the 'FilePath', 'Module', and
--- 'ModuleTranslation' fields are all consistent with each other;
--- 'loadLLVMModule' is the only function that is allowed to create
--- values of type 'LLVMModule'.
-
--- | The file path that the LLVM module was loaded from.
-modFilePath :: LLVMModule arch -> FilePath
-modFilePath = _modFilePath
-
--- | The parsed AST of the LLVM module.
-modAST :: LLVMModule arch -> L.Module
-modAST = _modAST
-
--- | The Crucible translation of an LLVM module.
-modTrans :: LLVMModule arch -> CL.ModuleTranslation arch
-modTrans = _modTrans
-
--- | Load an LLVM module from the given bitcode file, then parse and
--- translate to Crucible.
-loadLLVMModule ::
-  (?transOpts :: CL.TranslationOptions) =>
-  FilePath ->
-  Crucible.HandleAllocator ->
-  IO (Either LLVM.Error (Some LLVMModule))
-loadLLVMModule file halloc =
-  do parseResult <- LLVM.parseBitCodeFromFile file
-     case parseResult of
-       Left err -> return (Left err)
-       Right llvm_mod ->
-         do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
-            Some mtrans <- CL.translateModule halloc memVar llvm_mod
-            return (Right (Some (LLVMModule file llvm_mod mtrans)))
-
-instance TestEquality LLVMModule where
-  -- As 'LLVMModule' is an abstract type, we know that the values must
-  -- have been created by a call to 'loadLLVMModule'. Furthermore each
-  -- call to 'translateModule' generates a 'ModuleTranslation' that
-  -- contains a fresh nonce; thus comparison of the 'modTrans' fields
-  -- is sufficient to guarantee equality of two 'LLVMModule' values.
-  testEquality m1 m2 = testEquality (modTrans m1) (modTrans m2)
-
-type instance MS.Codebase (LLVM arch) = LLVMModule arch
-
-showLLVMModule :: LLVMModule arch -> String
-showLLVMModule (LLVMModule name m _) =
-  unlines [ "Module: " ++ name
-          , "Types:"
-          , showParts L.ppTypeDecl (L.modTypes m)
-          , "Globals:"
-          , showParts ppGlobal' (L.modGlobals m)
-          , "External references:"
-          , showParts L.ppDeclare (L.modDeclares m)
-          , "Definitions:"
-          , showParts ppDefine' (L.modDefines m)
-          ]
-  where
-    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
-    ppGlobal' g =
-      L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
-      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
-      L.ppType (L.globalType g)
-    ppDefine' d =
-      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
-      L.ppType (L.defRetType d) PP.<+>
-      L.ppSymbol (L.defName d) PP.<>
-      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
-      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
 
 --------------------------------------------------------------------------------
 -- ** Ghost state
@@ -346,19 +197,6 @@ instance Crucible.IntrinsicClass Sym MS.GhostValue where
 
 --------------------------------------------------------------------------------
 -- ** CrucibleContext
-
-type instance MS.CrucibleContext (LLVM arch) = LLVMCrucibleContext arch
-
-data LLVMCrucibleContext arch =
-  LLVMCrucibleContext
-  { _ccLLVMModule      :: LLVMModule arch
-  , _ccBackend         :: SomeOnlineBackend
-  , _ccLLVMSimContext  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
-  , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
-  , _ccBasicSS         :: Simpset TheoremNonce
-  }
-
-makeLenses ''LLVMCrucibleContext
 
 ccLLVMModuleAST :: LLVMCrucibleContext arch -> L.Module
 ccLLVMModuleAST = modAST . _ccLLVMModule
@@ -385,19 +223,6 @@ ccSym = to (\cc -> ccWithBackend cc backendGetSym)
 --------------------------------------------------------------------------------
 -- ** PointsTo
 
-type instance MS.PointsTo (LLVM arch) = LLVMPointsTo arch
-
-data LLVMPointsTo arch
-  = LLVMPointsTo MS.ConditionMetadata (Maybe TypedTerm) (MS.SetupValue (LLVM arch)) (LLVMPointsToValue arch)
-    -- | A variant of 'LLVMPointsTo' tailored to the @llvm_points_to_bitfield@
-    -- command, which doesn't quite fit into the 'LLVMPointsToValue' paradigm.
-    -- The 'String' represents the name of the field within the bitfield.
-  | LLVMPointsToBitfield MS.ConditionMetadata (MS.SetupValue (LLVM arch)) String (MS.SetupValue (LLVM arch))
-
-data LLVMPointsToValue arch
-  = ConcreteSizeValue (MS.SetupValue (LLVM arch))
-  | SymbolicSizeValue TypedTerm TypedTerm
-
 -- | Return the 'ProgramLoc' corresponding to an 'LLVMPointsTo' statement.
 llvmPointsToProgramLoc :: LLVMPointsTo arch -> ProgramLoc
 llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md
@@ -422,21 +247,6 @@ instance PPL.Pretty (LLVMPointsToValue arch) where
     ConcreteSizeValue val -> MS.ppSetupValue val
     SymbolicSizeValue arr sz ->
       MS.ppTypedTerm arr PPL.<+> PPL.pretty "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.pretty "]"
-
---------------------------------------------------------------------------------
--- ** AllocGlobal
-
-type instance MS.AllocGlobal (LLVM arch) = LLVMAllocGlobal arch
-
-data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
-
-ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc ann
-ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
-  PPL.pretty "allocate global"
-  PPL.<+> PPL.pretty name
-
-instance PPL.Pretty (LLVMAllocGlobal arch) where
-  pretty = ppAllocGlobal
 
 --------------------------------------------------------------------------------
 -- ** ???
@@ -572,13 +382,13 @@ anySetupArray :: [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
 anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map (\a -> getAllLLVM a) vals)
 
 anySetupStruct :: Bool -> [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
-anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map (\a -> getAllLLVM a) vals)
+anySetupStruct b vals = mkAllLLVM (MS.SetupStruct b $ map (\a -> getAllLLVM a) vals)
 
 anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
 anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
 
 anySetupCast :: AllLLVM MS.SetupValue -> L.Type -> AllLLVM MS.SetupValue
-anySetupCast val ty = mkAllLLVM (MS.SetupCast () (getAllLLVM val) ty)
+anySetupCast val ty = mkAllLLVM (MS.SetupCast ty (getAllLLVM val))
 
 anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
 anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
@@ -622,43 +432,6 @@ getSomeLLVM x = All (Compose x)
 --------------------------------------------------------------------------------
 -- *** ResolvedState
 
-type instance MS.ResolvedState (LLVM arch) = LLVMResolvedState
-
-data ResolvedPathItem
-  = ResolvedField String
-  | ResolvedElem Int
-  | ResolvedCast L.Type
- deriving (Show, Eq, Ord)
-
-type ResolvedPath = [ResolvedPathItem]
-
--- | A datatype to keep track of which parts of the simulator state
--- have been initialized already. For each allocation unit or global,
--- we keep a list of element-paths that identify the initialized
--- sub-components.
---
--- Note that the data collected and maintained by this datatype
--- represents a \"best-effort\" check that attempts to prevent
--- the user from stating unsatisfiable method specifications.
---
--- It will not prevent all cases of overlapping points-to
--- specifications, especially in the presence of pointer casts.
--- A typical result of overlapping specifications will be
--- successful (vacuous) verifications of functions resulting in
--- overrides that cannot be used at call sites (as their
--- preconditions are unsatisfiable).
-data LLVMResolvedState =
-  ResolvedState
-    { _rsAllocs :: Map MS.AllocIndex [ResolvedPath]
-    , _rsGlobals :: Map String [ResolvedPath]
-    }
-  deriving (Eq, Ord, Show)
-
-emptyResolvedState :: LLVMResolvedState
-emptyResolvedState = ResolvedState Map.empty Map.empty
-
-makeLenses ''LLVMResolvedState
-
 -- | Record the initialization of the pointer represented by the given
 -- SetupValue.
 markResolved ::
@@ -674,7 +447,7 @@ markResolved val0 path0 rs = go path0 val0
         MS.SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
         MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
         MS.SetupField _ v fld -> go (ResolvedField fld : path) v
-        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
+        MS.SetupCast tp v     -> go (ResolvedCast tp : path) v
         _                     -> rs
 
     ins path Nothing = Just [path]
@@ -695,7 +468,7 @@ testResolved val0 path0 rs = go path0 val0
         MS.SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
         MS.SetupElem _ v idx  -> go (ResolvedElem idx : path) v
         MS.SetupField _ v fld -> go (ResolvedField fld : path) v
-        MS.SetupCast _ v tp   -> go (ResolvedCast tp : path) v
+        MS.SetupCast tp v     -> go (ResolvedCast tp : path) v
         _                     -> False
 
     test _ Nothing = False

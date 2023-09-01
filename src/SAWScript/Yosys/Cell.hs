@@ -14,7 +14,6 @@ module SAWScript.Yosys.Cell where
 
 import Control.Lens ((^.))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Exception (throw)
 
 import Data.Char (digitToInt)
 import Data.Map (Map)
@@ -122,25 +121,44 @@ primCellToTerm ::
   Cell [b] {- ^ Cell type -} ->
   Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
   m (Maybe SC.Term)
-primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^. cellType of
-  "$not" -> bvUnaryOp . liftUnary sc $ SC.scBvNot sc
-  "$pos" -> do
+primCellToTerm sc c args = do
+  mm <- primCellToMap sc c args
+  mt <- traverse (cryptolRecord sc) mm
+  traverse (validateTerm sc typeCheckMsg) mt
+  where
+    typeCheckMsg :: Text
+    typeCheckMsg = mconcat
+      [ "translating a cell with type \""
+      , Text.pack $ show $ c ^. cellType
+      , "\""
+      ]
+
+primCellToMap ::
+  forall m b.
+  MonadIO m =>
+  SC.SharedContext ->
+  Cell [b] {- ^ Cell type -} ->
+  Map Text SC.Term {- ^ Mapping of input names to input terms -} ->
+  m (Maybe (Map Text SC.Term))
+primCellToMap sc c args = case c ^. cellType of
+  CellTypeNot -> bvUnaryOp . liftUnary sc $ SC.scBvNot sc
+  CellTypePos -> do
     res <- input "A"
     output res
-  "$neg" -> bvUnaryOp . liftUnary sc $ SC.scBvNeg sc
-  "$and" -> bvBinaryOp . liftBinary sc $ SC.scBvAnd sc
-  "$or" -> bvBinaryOp . liftBinary sc $ SC.scBvOr sc
-  "$xor" -> bvBinaryOp . liftBinary sc $ SC.scBvXor sc
-  "$xnor" -> bvBinaryOp . liftBinary sc $ \w x y -> do
+  CellTypeNeg -> bvUnaryOp . liftUnary sc $ SC.scBvNeg sc
+  CellTypeAnd -> bvBinaryOp . liftBinary sc $ SC.scBvAnd sc
+  CellTypeOr -> bvBinaryOp . liftBinary sc $ SC.scBvOr sc
+  CellTypeXor -> bvBinaryOp . liftBinary sc $ SC.scBvXor sc
+  CellTypeXnor -> bvBinaryOp . liftBinary sc $ \w x y -> do
     r <- SC.scBvXor sc w x y
     SC.scBvNot sc w r
-  "$reduce_and" -> bvReduce True =<< do
+  CellTypeReduceAnd -> bvReduce True =<< do
     liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "and"
-  "$reduce_or" -> bvReduce False =<< do
+  CellTypeReduceOr -> bvReduce False =<< do
     liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
-  "$reduce_xor" -> bvReduce False =<< do
+  CellTypeReduceXor -> bvReduce False =<< do
     liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "xor"
-  "$reduce_xnor" -> bvReduce True =<< do
+  CellTypeReduceXnor -> bvReduce True =<< do
     boolTy <- liftIO $ SC.scBoolType sc
     xEC <- liftIO $ SC.scFreshEC sc "x" boolTy
     x <- liftIO $ SC.scExtCns sc xEC
@@ -149,34 +167,34 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     r <- liftIO $ SC.scXor sc x y
     res <- liftIO $ SC.scNot sc r
     liftIO $ SC.scAbstractExts sc [xEC, yEC] res
-  "$reduce_bool" -> bvReduce False =<< do
+  CellTypeReduceBool -> bvReduce False =<< do
     liftIO . SC.scLookupDef sc $ SC.mkIdent SC.preludeName "or"
-  "$shl" -> do
+  CellTypeShl -> do
     ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
     nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShl sc w ta nb
     output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
-  "$shr" -> do
+  CellTypeShr -> do
     ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
     nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShr sc w ta nb
     output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
-  "$sshl" -> do
+  CellTypeSshl -> do
     ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
     nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvShl sc w ta nb
     output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
-  "$sshr" -> do
+  CellTypeSshr -> do
     ta <- fmap cellTermTerm . flipEndianness sc =<< input "A"
     nb <- cellTermNat sc =<< flipEndianness sc =<< input "B"
     w <- outputWidth
     res <- liftIO $ SC.scBvSShr sc w ta nb
     output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
   -- "$shift" -> _
-  "$shiftx" -> do
+  CellTypeShiftx -> do
     let w = max (connWidthNat "A") (connWidthNat "B")
     wt <- liftIO $ SC.scNat sc w
     CellTerm ta _ _ <- extTrunc sc w =<< flipEndianness sc =<< input "A"
@@ -193,39 +211,39 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       then liftIO $ SC.scIte sc ty cond tcase ecase
       else pure tcase
     output =<< flipEndianness sc (CellTerm res (connWidthNat "A") (connSigned "A"))
-  "$lt" -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULt sc
-  "$le" -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULe sc
-  "$gt" -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGt sc
-  "$ge" -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGe sc
-  "$eq" -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc
-  "$ne" -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
+  CellTypeLt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULt sc
+  CellTypeLe -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvULe sc
+  CellTypeGt -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGt sc
+  CellTypeGe -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvUGe sc
+  CellTypeEq -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc
+  CellTypeNe -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
     r <- SC.scBvEq sc w x y
     SC.scNot sc r
-  "$eqx" -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc
-  "$nex" -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
+  CellTypeEqx -> bvBinaryCmp . liftBinaryCmp sc $ SC.scBvEq sc
+  CellTypeNex -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
     r <- SC.scBvEq sc w x y
     SC.scNot sc r
-  "$add" -> bvBinaryOp . liftBinary sc $ SC.scBvAdd sc
-  "$sub" -> bvBinaryOp . liftBinary sc $ SC.scBvSub sc
-  "$mul" -> bvBinaryOp . liftBinary sc $ SC.scBvMul sc
-  "$div" -> bvBinaryOp . liftBinary sc $ SC.scBvUDiv sc
-  "$mod" -> bvBinaryOp . liftBinary sc $ SC.scBvURem sc
+  CellTypeAdd -> bvBinaryOp . liftBinary sc $ SC.scBvAdd sc
+  CellTypeSub -> bvBinaryOp . liftBinary sc $ SC.scBvSub sc
+  CellTypeMul -> bvBinaryOp . liftBinary sc $ SC.scBvMul sc
+  CellTypeDiv -> bvBinaryOp . liftBinary sc $ SC.scBvUDiv sc
+  CellTypeMod -> bvBinaryOp . liftBinary sc $ SC.scBvURem sc
   -- "$modfloor" -> _
-  "$logic_not" -> do
+  CellTypeLogicNot -> do
     w <- connWidth "A"
     ta <- cellTermTerm <$> input "A"
     anz <- liftIO $ SC.scBvNonzero sc w ta
     res <- liftIO $ SC.scNot sc anz
     outputBit res
-  "$logic_and" -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
+  CellTypeLogicAnd -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
     xnz <- liftIO $ SC.scBvNonzero sc w x
     ynz <- liftIO $ SC.scBvNonzero sc w y
     liftIO $ SC.scAnd sc xnz ynz
-  "$logic_or" -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
+  CellTypeLogicOr -> bvBinaryCmp . liftBinaryCmp sc $ \w x y -> do
     xnz <- liftIO $ SC.scBvNonzero sc w x
     ynz <- liftIO $ SC.scBvNonzero sc w y
     liftIO $ SC.scOr sc xnz ynz
-  "$mux" -> do
+  CellTypeMux -> do
     ta <- cellTermTerm <$> input "A"
     tb <- cellTermTerm <$> input "B"
     ts <- cellTermTerm <$> input "S"
@@ -235,7 +253,7 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     ty <- liftIO $ SC.scBitvector sc width
     res <- liftIO $ SC.scIte sc ty snz tb ta
     output $ CellTerm res (connWidthNat "A") (connSigned "A")
-  "$pmux" -> do
+  CellTypePmux -> do
     ta <- cellTermTerm <$> input "A"
     tb <- cellTermTerm <$> input "B"
     ts <- cellTermTerm <$> input "S"
@@ -266,28 +284,16 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
     resPair <- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
     res <- liftIO $ SC.scPairRight sc resPair
     output $ CellTerm res (connWidthNat "A") (connSigned "Y")
-  "$adff" -> throw $ YosysErrorUnsupportedFF "$adff"
-  "$sdff" -> throw $ YosysErrorUnsupportedFF "$sdff"
-  "$aldff" -> throw $ YosysErrorUnsupportedFF "$aldff"
-  "$dffsr" -> throw $ YosysErrorUnsupportedFF "$dffsr"
-  "$dffe" -> throw $ YosysErrorUnsupportedFF "$dffe"
-  "$adffe" -> throw $ YosysErrorUnsupportedFF "$adffe"
-  "$sdffe" -> throw $ YosysErrorUnsupportedFF "$sdffe"
-  "$sdffce" -> throw $ YosysErrorUnsupportedFF "$sdffce"
-  "$aldffe" -> throw $ YosysErrorUnsupportedFF "$aldffe"
-  "$dffsre" -> throw $ YosysErrorUnsupportedFF "$dffsre"
   -- "$bmux" -> _
   -- "$demux" -> _
   -- "$lut" -> _
   -- "$slice" -> _
   -- "$concat" -> _
-  _ -> pure Nothing
+  CellTypeDff -> pure Nothing
+  CellTypeUserType _ -> pure Nothing
   where
-    nm = c ^. cellType
-    typeCheckMsg :: Text
-    typeCheckMsg = mconcat
-      [ "translating a cell with type \"", nm, "\""
-      ]
+    nm :: Text
+    nm = Text.pack $ show $ c ^. cellType
 
     textBinNat :: Text -> Natural
     textBinNat = fromIntegral . Text.foldl' (\a x -> digitToInt x + a * 2) 0
@@ -310,31 +316,31 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       Nothing -> panic "cellToTerm" [Text.unpack $ mconcat [nm, " missing input ", inpNm]]
       Just a -> pure $ CellTerm a (connWidthNat inpNm) (connSigned inpNm)
 
-    output :: CellTerm -> m (Maybe SC.Term)
+    output :: CellTerm -> m (Maybe (Map Text SC.Term))
     output (CellTerm ct cw _) = do
       let res = CellTerm ct cw (connSigned "Y")
       eres <- extTrunc sc (connWidthNat "Y") =<< flipEndianness sc res
       CellTerm t _ _ <- flipEndianness sc eres
-      fmap Just . cryptolRecord sc $ Map.fromList
+      pure . Just $ Map.fromList
         [ ("Y", t)
         ]
 
-    outputBit :: SC.Term -> m (Maybe SC.Term)
+    outputBit :: SC.Term -> m (Maybe (Map Text SC.Term))
     outputBit res = do
       bool <- liftIO $ SC.scBoolType sc
       vres <- liftIO $ SC.scSingle sc bool res
-      fmap Just . cryptolRecord sc $ Map.fromList
+      pure . Just $ Map.fromList
         [ ("Y", vres)
         ]
 
     -- convert input to big endian
-    bvUnaryOp :: (CellTerm -> m CellTerm) -> m (Maybe SC.Term)
+    bvUnaryOp :: (CellTerm -> m CellTerm) -> m (Maybe (Map Text SC.Term))
     bvUnaryOp f = do
       t <- flipEndianness sc =<< input "A"
       res <- f t
       output =<< flipEndianness sc res
     -- convert inputs to big endian and extend inputs to output width
-    bvBinaryOp :: (CellTerm -> CellTerm -> m CellTerm) -> m (Maybe SC.Term)
+    bvBinaryOp :: (CellTerm -> CellTerm -> m CellTerm) -> m (Maybe (Map Text SC.Term))
     bvBinaryOp f = do
       let w = connWidthNat "Y"
       ta <- extTrunc sc w =<< flipEndianness sc =<< input "A"
@@ -342,13 +348,13 @@ primCellToTerm sc c args = traverse (validateTerm sc typeCheckMsg) =<< case c ^.
       res <- f ta tb
       output =<< flipEndianness sc res
     -- convert inputs to big endian and extend inputs to max input width, output is a single bit
-    bvBinaryCmp :: (CellTerm -> CellTerm -> m SC.Term) -> m (Maybe SC.Term)
+    bvBinaryCmp :: (CellTerm -> CellTerm -> m SC.Term) -> m (Maybe (Map Text SC.Term))
     bvBinaryCmp f = do
       ta <- flipEndianness sc =<< input "A"
       tb <- flipEndianness sc =<< input "B"
       res <- uncurry f =<< extMax sc ta tb
       outputBit res
-    bvReduce :: Bool -> SC.Term -> m (Maybe SC.Term)
+    bvReduce :: Bool -> SC.Term -> m (Maybe (Map Text SC.Term))
     bvReduce boolIdentity boolFun = do
       CellTerm t _ _ <- input "A"
       w <- connWidth "A"

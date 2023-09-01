@@ -21,6 +21,7 @@ library
   default-language: Haskell2010
   build-depends: base >= 4.9 && < 5,
                  text,
+                 extra,
                  crucible,
                  parameterized-utils >= 1.0.8,
                  containers,
@@ -33,12 +34,14 @@ library
                  crux-mir,
                  saw-core,
                  saw-core-what4,
+                 saw-script,
                  cryptol,
                  cryptol-saw-core
 
   hs-source-dirs: src
   exposed-modules: Mir.Compositional
                    Mir.Cryptol
+  other-modules:   Mir.Compositional.DefId
 
   ghc-options: -Wall -Wno-name-shadowing
 
@@ -104,6 +107,8 @@ test-suite test
                 config-schema,
                 config-value,
                 bytestring,
+                regex-base,
+                regex-posix,
                 utf8-string
 
   default-language: Haskell2010
