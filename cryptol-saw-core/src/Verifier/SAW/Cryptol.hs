@@ -744,15 +744,25 @@ importPrimitive sc primOpts env n sch
   -- Optionally, create an opaque constant representing the primitive
   -- if it doesn't match one of the ones we know about.
   | Just _ <- C.asPrim n, allowUnknownPrimitives primOpts =
-      do t <- importSchema sc env sch
-         nmi <- importName n
-         scOpaqueConstant sc nmi t
+      importOpaque sc env n sch
 
   -- Panic if we don't know the given primitive (TODO? probably shouldn't be a panic)
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
 
   | otherwise = panic "Improper Cryptol primitive name" [show n]
 
+-- | Create an opaque constant with the given name and schema
+importOpaque :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
+importOpaque sc env n sch = do
+  t <- importSchema sc env sch
+  nmi <- importName n
+  scOpaqueConstant sc nmi t
+
+importConstant :: SharedContext -> Env -> C.Name -> C.Schema -> Term -> IO Term
+importConstant sc env n sch rhs = do
+  nmi <- importName n
+  t <- importSchema sc env sch
+  scConstant' sc nmi rhs t
 
 allPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 allPrims = prelPrims <> arrayPrims <> floatPrims <> suiteBPrims <> primeECPrims
@@ -1393,124 +1403,150 @@ importName cnm =
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
 -- expressions instead.
+--
+-- For Cryptol @foreign@ declarations, we import them as regular
+-- Cryptol expressions if a Cryptol implementation exists, and as an
+-- opaque constant otherwise.
 importDeclGroup :: DeclGroupOptions -> SharedContext -> Env -> C.DeclGroup -> IO Env
 
-importDeclGroup declOpts sc env (C.Recursive [decl]) =
-  case C.dDefinition decl of
-    C.DPrim ->
-      panic "importDeclGroup" ["Primitive declarations cannot be recursive:", show (C.dName decl)]
-
-    C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
-
-    C.DExpr expr ->
-      do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
-         t' <- importSchema sc env (C.dSignature decl)
-         e' <- importExpr' sc env1 (C.dSignature decl) expr
-         let x = nameToLocalName (C.dName decl)
-         f' <- scLambda sc x t' e'
-         rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-         rhs' <- case declOpts of
-                   TopLevelDeclGroup _ ->
-                     do nmi <- importName (C.dName decl)
-                        scConstant' sc nmi rhs t'
-                   NestedDeclGroup -> return rhs
-         let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                        , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-         return env'
-
-
--- - A group of mutually-recursive declarations -
--- We handle this by "tupling up" all the declarations using a record and
--- taking the fixpoint at this record type.  The desired declarations are then
--- achieved by projecting the field names from this record.
 importDeclGroup declOpts sc env (C.Recursive decls) =
-  do -- build the environment for the declaration bodies
-     let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
+  case decls of
 
-     -- grab a reference to the outermost variable; this will be the record in the body
-     -- of the lambda we build later
-     v0 <- scLocalVar sc 0
+    [decl] ->
+      case C.dDefinition decl of
 
-     -- build a list of projections from a record variable
-     vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
+        C.DPrim ->
+          panic "importDeclGroup"
+            ["Primitive declarations cannot be recursive:", show (C.dName decl)]
 
-     -- the types of the declarations
-     tm <- traverse (importSchema sc env . C.dSignature) dm
-     -- the type of the recursive record
-     rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+        C.DForeign _ mexpr ->
+          case mexpr of
+            Nothing -> panicForeignNoExpr decl
+            Just expr -> addExpr expr
 
-     let env1 = liftEnv env
-     let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
-                     , envC = Map.union (fmap C.dSignature dm) (envC env1)
-                     , envS = rect : envS env1 }
+        C.DExpr expr -> addExpr expr
 
-     let extractDeclExpr decl =
-           case C.dDefinition decl of
-             C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
-             C.DForeign {} ->
-               error "`foreign` imports may not be used in SAW specifications"
-             C.DPrim ->
+      where
+      addExpr expr = do
+        env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
+        t' <- importSchema sc env (C.dSignature decl)
+        e' <- importExpr' sc env1 (C.dSignature decl) expr
+        let x = nameToLocalName (C.dName decl)
+        f' <- scLambda sc x t' e'
+        rhs <- scGlobalApply sc "Prelude.fix" [t', f']
+        rhs' <- case declOpts of
+                  TopLevelDeclGroup _ ->
+                    do nmi <- importName (C.dName decl)
+                       scConstant' sc nmi rhs t'
+                  NestedDeclGroup -> return rhs
+        let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
+                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
+        return env'
+
+    -- - A group of mutually-recursive declarations -
+    -- We handle this by "tupling up" all the declarations using a record and
+    -- taking the fixpoint at this record type.  The desired declarations are
+    -- then achieved by projecting the field names from this record.
+    _ -> do
+      -- build the environment for the declaration bodies
+      let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
+
+      -- grab a reference to the outermost variable; this will be the record in the body
+      -- of the lambda we build later
+      v0 <- scLocalVar sc 0
+
+      -- build a list of projections from a record variable
+      vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
+
+      -- the types of the declarations
+      tm <- traverse (importSchema sc env . C.dSignature) dm
+      -- the type of the recursive record
+      rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
+
+      let env1 = liftEnv env
+      let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
+                      , envC = Map.union (fmap C.dSignature dm) (envC env1)
+                      , envS = rect : envS env1 }
+
+      let extractDeclExpr decl =
+            case C.dDefinition decl of
+              C.DExpr expr -> importExpr' sc env2 (C.dSignature decl) expr
+              C.DForeign _ mexpr ->
+                case mexpr of
+                  Nothing -> panicForeignNoExpr decl
+                  Just expr ->
+                    importExpr' sc env2 (C.dSignature decl) expr
+              C.DPrim ->
                 panic "importDeclGroup"
                         [ "Primitive declarations cannot be recursive:"
                         , show (C.dName decl)
                         ]
 
-     -- the raw imported bodies of the declarations
-     em <- traverse extractDeclExpr dm
+      -- the raw imported bodies of the declarations
+      em <- traverse extractDeclExpr dm
 
-     -- the body of the recursive record
-     recv <- scRecord sc (Map.mapKeys nameToFieldName em)
+      -- the body of the recursive record
+      recv <- scRecord sc (Map.mapKeys nameToFieldName em)
 
-     -- build a lambda from the record body...
-     f <- scLambda sc "fixRecord" rect recv
+      -- build a lambda from the record body...
+      f <- scLambda sc "fixRecord" rect recv
 
-     -- and take its fixpoint
-     rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
+      -- and take its fixpoint
+      rhs <- scGlobalApply sc "Prelude.fix" [rect, f]
 
-     -- finally, build projections from the fixed record to shove into the environment
-     -- if toplevel, then wrap each binding with a Constant constructor
-     let mkRhs d t =
-           do let s = nameToFieldName (C.dName d)
-              r <- scRecordSelect sc rhs s
-              case declOpts of
-                TopLevelDeclGroup _ ->
-                  do nmi <- importName (C.dName d)
-                     scConstant' sc nmi r t
-                NestedDeclGroup -> return r
-     rhss <- sequence (Map.intersectionWith mkRhs dm tm)
+      -- finally, build projections from the fixed record to shove into the environment
+      -- if toplevel, then wrap each binding with a Constant constructor
+      let mkRhs d t =
+            do let s = nameToFieldName (C.dName d)
+               r <- scRecordSelect sc rhs s
+               case declOpts of
+                 TopLevelDeclGroup _ ->
+                   do nmi <- importName (C.dName d)
+                      scConstant' sc nmi r t
+                 NestedDeclGroup -> return r
+      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
-     let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
+      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
                     , envC = Map.union (fmap C.dSignature dm) (envC env)
                     }
-     return env'
+      return env'
 
-importDeclGroup declOpts sc env (C.NonRecursive decl) =
-  case C.dDefinition decl of
-    C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+  where
+  panicForeignNoExpr decl = panic "importDeclGroup"
+    [ "Foreign declaration without Cryptol body in recursive group:"
+    , show (C.dName decl) ]
+
+importDeclGroup declOpts sc env (C.NonRecursive decl) = do
+
+  rhs <- case C.dDefinition decl of
+    C.DForeign _ mexpr
+      | TopLevelDeclGroup _ <- declOpts ->
+        case mexpr of
+          Nothing -> importOpaque sc env (C.dName decl) (C.dSignature decl)
+          Just expr -> do
+            rhs <- importExpr' sc env (C.dSignature decl) expr
+            importConstant sc env (C.dName decl) (C.dSignature decl) rhs
+      | otherwise ->
+        panic "importDeclGroup"
+          ["Foreign declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DPrim
-     | TopLevelDeclGroup primOpts <- declOpts -> do
-        rhs <- importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
-        let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
-                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
-                       }
-        return env'
-     | otherwise -> do
+      | TopLevelDeclGroup primOpts <- declOpts ->
+        importPrimitive sc primOpts env (C.dName decl) (C.dSignature decl)
+      | otherwise -> do
         panic "importDeclGroup" ["Primitive declarations only allowed at top-level:", show (C.dName decl)]
 
     C.DExpr expr -> do
-     rhs <- importExpr' sc env (C.dSignature decl) expr
-     rhs' <- case declOpts of
-               TopLevelDeclGroup _ ->
-                 do nmi <- importName (C.dName decl)
-                    t <- importSchema sc env (C.dSignature decl)
-                    scConstant' sc nmi rhs t
-               NestedDeclGroup -> return rhs
-     let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
-                    , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
-     return env'
+      rhs <- importExpr' sc env (C.dSignature decl) expr
+      case declOpts of
+        TopLevelDeclGroup _ ->
+          importConstant sc env (C.dName decl) (C.dSignature decl) rhs
+        NestedDeclGroup -> return rhs
+
+  pure env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
+           , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env)
+           }
+
 
 data ImportPrimitiveOptions =
   ImportPrimitiveOptions
@@ -1722,7 +1758,7 @@ importMatches sc env (C.Let decl : matches) =
   case C.dDefinition decl of
 
     C.DForeign {} ->
-      error "`foreign` imports may not be used in SAW specifications"
+      panic "importMatches" ["Foreign declarations not allowed in 'let':", show (C.dName decl)]
 
     C.DPrim -> do
      panic "importMatches" ["Primitive declarations not allowed in 'let':", show (C.dName decl)]

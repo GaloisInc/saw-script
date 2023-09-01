@@ -356,7 +356,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
-    go (UnitShape _) () (MS.SetupStruct () False []) = return ()
+    go (UnitShape _) () (MS.SetupStruct () []) = return ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
@@ -390,14 +390,14 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
                         ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
                             show (W4.printSymExpr val))
                         ""
-    go (TupleShape _ _ flds) rvs (MS.SetupStruct () False svs) = goFields flds rvs svs
+    go (TupleShape _ _ flds) rvs (MS.SetupStruct () svs) = goFields flds rvs svs
     go (ArrayShape _ _ shp) vec (MS.SetupArray () svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
-    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct () False svs)
+    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct () svs)
       | Just Refl <- testEquality tpr shpTpr = goFields flds rvs svs
       | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
@@ -510,7 +510,7 @@ setupToReg :: forall sym t st fs tp.
 setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
-    go (UnitShape _) (MS.SetupStruct _ False []) = return ()
+    go (UnitShape _) (MS.SetupStruct _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
         Some expr <- termToExpr sym sc regMap term
@@ -519,11 +519,11 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ _ flds) (MS.SetupStruct _ False svs) = goFields flds svs
+    go (TupleShape _ _ flds) (MS.SetupStruct _ svs) = goFields flds svs
     go (ArrayShape _ _ shp) (MS.SetupArray _ svs) = do
         rvs <- mapM (go shp) svs
         return $ MirVector_Vector $ V.fromList rvs
-    go (StructShape _ _ flds) (MS.SetupStruct _ False svs) =
+    go (StructShape _ _ flds) (MS.SetupStruct _ svs) =
         AnyValue (StructRepr $ fmapFC fieldShapeType flds) <$> goFields flds svs
     go (TransparentShape _ shp) sv = go shp sv
     go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of

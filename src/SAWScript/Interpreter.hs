@@ -74,7 +74,7 @@ import SAWScript.SolverVersions
 import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
-import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
@@ -4122,41 +4122,7 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve True))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this can"
-    , " be done, this refinement will be used in future calls to"
-    , " Mr. Solver, and if it cannot, the script will exit. See also:"
-    , " mr_solver_test, mr_solver_query." ]
-
-  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve False))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this cannot"
-    , " be done, the script will exit. See also: mr_solver_prove,"
-    , " mr_solver_query - unlike the former, this refinement will not"
-    , " be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverQuery)
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another, returning"
-    , " true iff this can be done. See also: mr_solver_prove,"
-    , " mr_solver_test - unlike the former, this refinement will not"
-    , " be considered in future calls to Mr. Solver, and unlike both,"
-    , " this command will never fail." ]
-
-  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverAssume)
-    Experimental
-    [ "Add the refinement of the two given expressions as an assumption"
-    , " which will be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
@@ -4164,10 +4130,41 @@ primitives = Map.fromList
     , " 3 = all debug output" ]
 
   , prim "mrsolver" "ProofScript ()"
-    (scVal mrSolverTactic)
+    (pureVal (mrSolver emptyRefnset))
     Experimental
-    [ "Use MRSolver to prove a current goal of the form:"
-    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
+
+  , prim "empty_rs"            "Refnset"
+    (pureVal (emptyRefnset :: SAWRefnset))
+    Experimental
+    [ "The empty refinement set, containing no refinements." ]
+
+  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
+    (funVal2 addrefn)
+    Experimental
+    [ "Add a proved refinement theorem to a given refinement set." ]
+
+  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
+    (funVal2 addrefns)
+    Experimental
+    [ "Add proved refinement theorems to a given refinement set." ]
+
+  , prim "mrsolver_with" "Refnset -> ProofScript ()"
+    (pureVal mrSolver)
+    Experimental
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
+    , " the given set of refinements taken as assumptions" ]
+
+  , prim "refines" "[Term] -> Term -> Term -> Term"
+    (funVal3 refinesTerm)
+    Experimental
+    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
+    , " as as well as two terms containing those variables, which may be"
+    , " either terms or functions in the SpecM monad, construct the"
+    , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
+    , " given terms, with the given variables generalized with a Pi type." ]
 
     ---------------------------------------------------------------------
 
@@ -4630,6 +4627,11 @@ primitives = Map.fromList
                -> Options -> BuiltinContext -> Value
     funVal2 f _ _ = VLambda $ \a -> return $ VLambda $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
+
+    funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
+               -> Options -> BuiltinContext -> Value
+    funVal3 f _ _ = VLambda $ \a -> return $ VLambda $ \b -> return $ VLambda $ \c ->
+      fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
 
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Options -> BuiltinContext -> Value
