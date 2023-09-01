@@ -668,8 +668,8 @@ translateTermUnshared t = do
     Lambda {} ->
       let (params, e) = asLambdaList t in
       translateParams params $ \paramTerms ->
-      do e' <- translateTermLet e
-         return (Coq.Lambda paramTerms e')
+        do e' <- translateTermLet e
+           return (Coq.Lambda paramTerms e')
 
     App {} ->
       -- asApplyAll: innermost argument first
