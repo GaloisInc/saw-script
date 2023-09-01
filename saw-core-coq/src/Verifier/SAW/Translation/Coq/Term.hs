@@ -530,13 +530,13 @@ bindTransToBinder (BindTrans {..}) =
 
 -- | Convert a 'BindTrans' to a list of Coq type-level pi-abstraction binders
 bindTransToPiBinder :: BindTrans -> [Coq.PiBinder]
-bindTransToPiBinder (BindTrans { bindTransImps = [], .. })
-  | bindTransIdent == "_" = [Coq.PiBinder Nothing bindTransType]
-bindTransToPiBinder (BindTrans { bindTransImps = [], .. }) =
-  [Coq.PiBinder (Just bindTransIdent) bindTransType]
-bindTransToPiBinder (BindTrans{..}) =
-  Coq.PiBinder (Just bindTransIdent) bindTransType :
-  map (\(n,ty) -> Coq.PiImplicitBinder (Just n) ty) bindTransImps
+bindTransToPiBinder (BindTrans { .. }) =
+  case bindTransImps of
+    [] | bindTransIdent == "_" -> [Coq.PiBinder Nothing bindTransType]
+    [] -> [Coq.PiBinder (Just bindTransIdent) bindTransType]
+    otherwise ->
+      Coq.PiBinder (Just bindTransIdent) bindTransType :
+      map (\(n,ty) -> Coq.PiImplicitBinder (Just n) ty) bindTransImps
 
 -- | Given a 'LocalName' and its type (as a 'Term'), translate the 'LocalName'
 -- to a Coq identifier, translate the type to a Coq term, and generate zero or
@@ -624,9 +624,9 @@ translateTermLet t =
       shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occ_map
       share_tms = map snd shares in
   -- NOTE: larger terms always have later stAppIndices than their subterms, so
-  -- IntMap.elems above is guaranteed to return subterms before superterms; this
-  -- ensures that the right-hand sides in our nested let-bindings below only
-  -- refer to variables bound earlier, not later
+  -- IntMap.assocs above is guaranteed to return subterms before superterms;
+  -- this ensures that the right-hand sides in our nested let-bindings below
+  -- only refer to variables bound earlier, not later
   withSharedTerms shares $ \names ->
   do defs <- traverse translateTermUnshared share_tms
      body <- translateTerm t
