@@ -81,9 +81,9 @@ whereBindings _                       = Nothing
 --   We can't handle primitives currently
 declDefExpr :: AST.DeclDef -> Maybe AST.Expr
 declDefExpr = \case
-   AST.DPrim      -> Nothing
-   AST.DForeign {} -> Nothing
-   AST.DExpr expr -> Just expr
+   AST.DPrim            -> Nothing
+   AST.DForeign _ mexpr -> mexpr
+   AST.DExpr expr       -> Just expr
 
 -- | If a lambda is of the form @\(a,b,...,z) -> ...)@ then give the list of names bound in the tuple
 tupleLambdaBindings :: AST.Expr -> Maybe [AST.Name]
