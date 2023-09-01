@@ -175,11 +175,10 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 --------------------------------------------------------------------------------
 -- ** Ghost state
 
--- TODO: This is language-independent, it should be always-true rather than a
--- toggle.
-
--- TODO: documentation
-
+-- | This extension field controls whether ghost state is enabled for a
+-- particular language backend. At the moment, ghost state is only enabled for
+-- the LLVM backend, but we want to expand this to cover other language backends
+-- in the future. See <https://github.com/GaloisInc/saw-script/issues/1929>.
 type family XGhostState ext
 
 --------------------------------------------------------------------------------
