@@ -125,13 +125,13 @@ type TermTranslationMonad m =
   TranslationMonad TranslationReader TranslationState m
 
 -- | Get just the 'TranslationReader' component of the reader value
-askTrr :: TermTranslationMonad m => m TranslationReader
-askTrr = otherConfiguration <$> ask
+askTR :: TermTranslationMonad m => m TranslationReader
+askTR = otherConfiguration <$> ask
 
 -- | Modify just the 'TranslationReader' component of the reader value
-localTrr :: TermTranslationMonad m =>
+localTR :: TermTranslationMonad m =>
             (TranslationReader -> TranslationReader) -> m a -> m a
-localTrr f =
+localTR f =
   local (\r -> r { otherConfiguration = f (otherConfiguration r) })
 
 -- | Take a Coq identifier that ends in a number (i.e., a sequence of digits)
@@ -149,7 +149,7 @@ nextVariant = reverse . go . reverse
 -- | Find an fresh, as-yet-unused variant of the given Coq identifier
 freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident
 freshVariant x =
-  do used <- view unavailableIdents <$> askTrr
+  do used <- view unavailableIdents <$> askTR
      let ident0 = x
      let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
      return $ findVariant ident0
@@ -158,7 +158,7 @@ freshVariant x =
 -- translation computation, so that computation does not shadow it
 withUsedCoqIdent :: TermTranslationMonad m => Coq.Ident -> m a -> m a
 withUsedCoqIdent ident m =
-  localTrr (over unavailableIdents (Set.insert ident)) m
+  localTR (over unavailableIdents (Set.insert ident)) m
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
@@ -175,7 +175,7 @@ withFreshIdent n f =
 -- | Invalidate all shared subterms that are not closed in a translation
 invalidateOpenSharing :: TermTranslationMonad m => m a -> m a
 invalidateOpenSharing =
-  localTrr (over sharedNames $ IntMap.filter sharedNameIsClosed)
+  localTR (over sharedNames $ IntMap.filter sharedNameIsClosed)
 
 -- | Run a translation in a context with one more SAW core variable with the
 -- given name. Pass the corresponding Coq identifier used for this SAW core
@@ -184,7 +184,7 @@ invalidateOpenSharing =
 withSAWVar :: TermTranslationMonad m => LocalName -> (Coq.Ident -> m a) -> m a
 withSAWVar n m =
   invalidateOpenSharing $ withFreshIdent n $ \n_coq ->
-  localTrr (over localEnvironment (n_coq :)) $ m n_coq
+  localTR (over localEnvironment (n_coq :)) $ m n_coq
 
 -- | Find a fresh name generated from 'nextSharedName' to use in place of the
 -- supplied 'Term' with the supplied index, and associate that index with the
@@ -193,10 +193,10 @@ withSAWVar n m =
 withSharedTerm :: TermTranslationMonad m => TermIndex -> Term ->
                   (Coq.Ident -> m a) -> m a
 withSharedTerm idx t f =
-  do ident <- (view nextSharedName <$> askTrr) >>= freshVariant
+  do ident <- (view nextSharedName <$> askTR) >>= freshVariant
      let sh_nm = SharedName ident $ termIsClosed t
-     localTrr (set nextSharedName (nextVariant ident) .
-               over sharedNames (IntMap.insert idx sh_nm)) $
+     localTR (set nextSharedName (nextVariant ident) .
+              over sharedNames (IntMap.insert idx sh_nm)) $
        withUsedCoqIdent ident $ f ident
 
 -- | Use 'withSharedTerm' to mark a list of terms as being shared
@@ -489,13 +489,13 @@ asApplyAllRecognizer t = do _ <- asApp t
 -- variables and no bound Coq identifiers
 withTopTranslationState :: TermTranslationMonad m => m a -> m a
 withTopTranslationState m =
-  localTrr (\r ->
-             TranslationReader {
-               _currentModule     = view currentModule r,
-               _localEnvironment  = [],
-               _unavailableIdents = reservedIdents,
-               _sharedNames       = IntMap.empty,
-               _nextSharedName    = "var__0" }) m
+  localTR (\r ->
+            TranslationReader {
+              _currentModule     = view currentModule r,
+              _localEnvironment  = [],
+              _unavailableIdents = reservedIdents,
+              _sharedNames       = IntMap.empty,
+              _nextSharedName    = "var__0" }) m
 
 -- | Generate a Coq @Definition@ with a given name, body, and type, using the
 -- lambda-bound variable names for the variables if they are available
@@ -641,7 +641,7 @@ translateTerm t =
   case t of
     Unshared {} -> translateTermUnshared t
     STApp { stAppIndex = i } ->
-      do shared <- view sharedNames <$> askTrr
+      do shared <- view sharedNames <$> askTR
          case IntMap.lookup i shared of
            Nothing -> translateTermUnshared t
            Just sh -> pure (Coq.Var $ sharedNameIdent sh)
@@ -651,7 +651,7 @@ translateTermUnshared :: TermTranslationMonad m => Term -> m Coq.Term
 translateTermUnshared t = do
   -- traceTerm "translateTerm" t $
   -- NOTE: env is in innermost-first order
-  env <- view localEnvironment <$> askTrr
+  env <- view localEnvironment <$> askTR
   -- let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
   -- case t' of
   case unwrapTermF t of
