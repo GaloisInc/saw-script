@@ -507,8 +507,8 @@ mkMemoLocal cfg memoClosed t env = go mempty t
   where
     go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
     go memo (Unshared tf) = goTermF memo tf
-    go memo (t@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf })
-      | termIsClosed t = pure memo
+    go memo (t'@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf })
+      | termIsClosed t' = pure memo
       | otherwise =
         case IMap.lookup i memo of
           Just _ -> pure memo
@@ -580,11 +580,11 @@ evalOpen cfg memoClosed t env = do
   memoLocal <- mkMemoLocal cfg memoClosed t env
   let eval :: Term -> MValue l
       eval (Unshared tf) = evalF tf
-      eval (t@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf }) =
+      eval (t'@STApp{ stAppIndex = i, stAppFreeVars = _, stAppTermF = tf }) =
         case IMap.lookup i memo of
           Just x -> force x
           Nothing -> evalF tf
-        where memo = if termIsClosed t then memoClosed else memoLocal
+        where memo = if termIsClosed t' then memoClosed else memoLocal
       evalF :: TermF Term -> MValue l
       evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
   eval t
