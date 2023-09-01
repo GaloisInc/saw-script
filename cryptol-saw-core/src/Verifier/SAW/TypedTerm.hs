@@ -49,7 +49,7 @@ data TypedTermType
  deriving Show
 
 
--- | Convert the 'ttTerm' field of a 'TypedTerm' to a SAW core term
+-- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
 ttTypeAsTerm :: SharedContext -> Env -> TypedTerm -> IO Term
 ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =
   importSchema sc env schema
