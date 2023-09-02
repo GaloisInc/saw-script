@@ -1,0 +1,9 @@
+module Parameterized where
+
+parameter
+    type gamma : #
+    type constraint (fin gamma, gamma >= 2, 32 >= width gamma)
+
+// Constraint guard with type dependent on module parameter value
+v : [gamma]
+v | () => 0
