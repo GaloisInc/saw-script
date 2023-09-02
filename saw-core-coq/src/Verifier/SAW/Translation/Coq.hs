@@ -121,7 +121,7 @@ translateTermAsDeclImports configuration name t tp = do
   doc <-
     TermTranslation.translateDefDoc
       configuration
-      (TermTranslation.TranslationReader Nothing)
+      Nothing
       [] name t tp
   return $ vcat [preamble configuration, hardline <> doc]
 

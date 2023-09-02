@@ -60,7 +60,7 @@ module Verifier.SAW.Term.Functor
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
   , decrBitSet, multiDecrBitSet, completeBitSet, singletonBitSet, bitSetElems
   , smallestBitSetElem
-  , looseVars, smallestFreeVar
+  , looseVars, smallestFreeVar, termIsClosed
   ) where
 
 import Data.Bits
@@ -609,3 +609,7 @@ looseVars (Unshared f) = freesTermF (fmap looseVars f)
 -- | Compute the value of the smallest variable in the term, if any.
 smallestFreeVar :: Term -> Maybe Int
 smallestFreeVar = smallestBitSetElem . looseVars
+
+-- | Test whether a 'Term' is closed, i.e., has no free variables
+termIsClosed :: Term -> Bool
+termIsClosed t = looseVars t == emptyBitSet
