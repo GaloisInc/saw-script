@@ -182,7 +182,7 @@ instantiateSetupValue sc s v =
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct _ _                -> return v
-    MS.SetupArray _ _                 -> return v
+    MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupElem _ _ _                -> return v
     MS.SetupField _ _ _               -> return v
     MS.SetupCast empty _              -> absurd empty
@@ -301,23 +301,37 @@ matchArg opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expec
        realTerm <- valueToSC sym md failMsg tval actual
        matchTerm sc cc md prepost realTerm (ttTerm expectedTT)
 
-matchArg opts sc cc cs _prepost md actual@(MIRVal (RefShape _refTy pointeeTy mutbl tpr) ref) expectedTy setupval =
-  case setupval of
-    MS.SetupVar var ->
+matchArg opts sc cc cs prepost md actual expectedTy expected =
+  mccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
+  case (actual, expectedTy, expected) of
+    (MIRVal (RefShape _refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) ->
       do assignVar cc md var (Some (MirPointer tpr mutbl pointeeTy ref))
 
-    MS.SetupNull empty                -> absurd empty
-    MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupCast empty _              -> absurd empty
-    MS.SetupUnion empty _ _           -> absurd empty
-    MS.SetupGlobalInitializer empty _ -> absurd empty
+    -- match arrays point-wise
+    (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)
+      | Mir.MirVector_Vector xs' <- xs
+      , V.length xs' == length zs ->
+        sequence_
+          [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
+          | (x, z) <- zip (V.toList xs') zs ]
 
-    _ -> failure (cs ^. MS.csLoc) =<<
-           mkStructuralMismatch opts cc sc cs actual setupval expectedTy
+      | Mir.MirVector_PartialVector xs' <- xs
+      , V.length xs' == length zs ->
+        do xs'' <- liftIO $
+             traverse (readMaybeType sym "vector element" (shapeType elemShp)) xs'
+           sequence_
+             [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
+             | (x, z) <- zip (V.toList xs'') zs ]
 
-matchArg opts sc cc cs _prepost md actual expectedTy expected =
-  failure (MS.conditionLoc md) =<<
-    mkStructuralMismatch opts cc sc cs actual expected expectedTy
+    (_, _, MS.SetupNull empty)                -> absurd empty
+    (_, _, MS.SetupGlobal empty _)            -> absurd empty
+    (_, _, MS.SetupCast empty _)              -> absurd empty
+    (_, _, MS.SetupUnion empty _ _)           -> absurd empty
+    (_, _, MS.SetupGlobalInitializer empty _) -> absurd empty
+
+    _ -> failure (MS.conditionLoc md) =<<
+           mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern

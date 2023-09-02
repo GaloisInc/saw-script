@@ -2621,6 +2621,13 @@ the value of an array element.
 * `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
 
+In the experimental MIR verification implementation, the following functions
+construct compound values:
+
+* `mir_array_value : MIRType -> [SetupValue] -> SetupValue` constructs an array
+  of the given type whose elements consist of the given values. Supplying the
+  element type is necessary to support length-0 arrays.
+
 ### Bitfields
 
 SAW has experimental support for specifying `struct`s with bitfields, such as

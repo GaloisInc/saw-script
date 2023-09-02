@@ -391,7 +391,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
                             show (W4.printSymExpr val))
                         ""
     go (TupleShape _ _ flds) rvs (MS.SetupStruct () svs) = goFields flds rvs svs
-    go (ArrayShape _ _ shp) vec (MS.SetupArray () svs) = case vec of
+    go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p

@@ -12,6 +12,9 @@
   For more information about how SAW's MIR verification support works in
   general, see the `mir_*` commands documented in the [SAW
   manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+* The `array()` function now takes an additional `element_type` argument, which
+  defaults to `None`. If constructing a MIR array with no elements, then the
+  `element_type` must be specified. Otherwise, this argument is optional.
 
 ## 1.0.1 -- YYYY-MM-DD
 

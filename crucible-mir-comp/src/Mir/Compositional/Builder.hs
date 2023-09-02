@@ -685,14 +685,14 @@ regToSetup bak p eval shp rv = go shp rv
             msbPrePost p . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
     go (TupleShape _ _ flds) rvs = MS.SetupStruct () <$> goFields flds rvs
-    go (ArrayShape _ _ shp) vec = do
+    go (ArrayShape _ elemTy shp) vec = do
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
             MirVector_PartialVector v -> forM (toList v) $ \p -> do
                 rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
-        return $ MS.SetupArray () svs
+        return $ MS.SetupArray elemTy svs
     go (StructShape _ _ flds) (AnyValue tpr rvs)
       | Just Refl <- testEquality tpr shpTpr =
         MS.SetupStruct () <$> goFields flds rvs
