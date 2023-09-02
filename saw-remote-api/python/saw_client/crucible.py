@@ -148,6 +148,15 @@ class StructVal(SetupVal):
         self.fields = fields
 
     def to_json(self) -> JSON:
+        return {'setup value': 'struct', 'elements': [fld.to_json() for fld in self.fields]}
+
+class TupleVal(SetupVal):
+    fields : List[SetupVal]
+
+    def __init__(self, fields : List[SetupVal]) -> None:
+        self.fields = fields
+
+    def to_json(self) -> JSON:
         return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
 
 class ElemVal(SetupVal):
@@ -727,3 +736,15 @@ def struct(*fields : SetupVal) -> SetupVal:
         if not isinstance(field, SetupVal):
             raise ValueError('struct expected a SetupVal, but got {field!r}')
     return StructVal(list(fields))
+
+def tuple_value(*fields : SetupVal) -> SetupVal:
+    """Returns a MIR tuple value with the given ``fields`` (i.e., a ``TupleVal``).
+    Using this function with LLVM or JVM verification will raise an error.
+
+    Unlike most other functions in saw_client.crucible, this has a ``_value``
+    suffix so as not to clash with the built-in ``tuple()`` function in Python.
+    """
+    for field in fields:
+        if not isinstance(field, SetupVal):
+            raise ValueError('tuple expected a SetupVal, but got {field!r}')
+    return TupleVal(list(fields))

@@ -2627,6 +2627,8 @@ construct compound values:
 * `mir_array_value : MIRType -> [SetupValue] -> SetupValue` constructs an array
   of the given type whose elements consist of the given values. Supplying the
   element type is necessary to support length-0 arrays.
+* `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
+  list of values as elements.
 
 ### Bitfields
 

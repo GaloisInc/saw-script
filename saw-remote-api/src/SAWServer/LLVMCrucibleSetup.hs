@@ -179,9 +179,11 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getSetupVal env (ArrayValue _ elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
-    getSetupVal env (TupleValue elts) =
+    getSetupVal env (StructValue elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
+    getSetupVal _ (TupleValue _) =
+      LLVMCrucibleSetupM $ fail "Tuple setup values unsupported in the LLVM API."
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld

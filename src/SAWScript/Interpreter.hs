@@ -3954,6 +3954,13 @@ primitives = Map.fromList
     Experimental
     [ "Construct a `MIRValue` from a `Term`." ]
 
+  , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR tuple with the given list of"
+    , "values as elements."
+    ]
+
   , prim "mir_verify"
     "MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec"
     (pureVal mir_verify)

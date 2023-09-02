@@ -80,6 +80,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text, pack)
 import qualified Data.Vector as V
+import           Data.Void (absurd)
 import           GHC.Generics (Generic)
 import           Numeric.Natural
 import qualified Prettyprinter as PP
@@ -1117,6 +1118,7 @@ matchPointsTos opts sc cc spec prepost = go False []
       case v of
         SetupVar i                 -> Set.singleton i
         SetupStruct _ xs           -> foldMap setupVars xs
+        SetupTuple empty _         -> absurd empty
         SetupArray _ xs            -> foldMap setupVars xs
         SetupElem _ x _            -> setupVars x
         SetupField _ x _           -> setupVars x
@@ -1297,6 +1299,9 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
         | ((_,x),y,z) <- zip3 (V.toList xs)
                               (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                               zs ]
+
+    (_, _, SetupTuple empty _) ->
+      absurd empty
 
     (Crucible.LLVMValInt blk off, _, SetupElem () v i) | Crucible.isPointerMemType expectedTy ->
       do let tyenv = MS.csAllocations cs
@@ -2480,6 +2485,7 @@ instantiateSetupValue sc s v =
     SetupNull{}              -> return v
     SetupGlobal{}            -> return v
     SetupGlobalInitializer{} -> return v
+    SetupTuple empty _       -> absurd empty
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 

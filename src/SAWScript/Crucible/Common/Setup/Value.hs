@@ -38,6 +38,7 @@ module SAWScript.Crucible.Common.Setup.Value
 
   , XSetupNull
   , XSetupStruct
+  , XSetupTuple
   , XSetupArray
   , XSetupElem
   , XSetupField
@@ -121,6 +122,7 @@ type family ResolvedState ext :: Type
 
 type family XSetupNull ext
 type family XSetupStruct ext
+type family XSetupTuple ext
 type family XSetupArray ext
 type family XSetupElem ext
 type family XSetupField ext
@@ -137,6 +139,7 @@ data SetupValue ext where
   SetupTerm   :: TypedTerm -> SetupValue ext
   SetupNull   :: XSetupNull ext -> SetupValue ext
   SetupStruct :: XSetupStruct ext -> [SetupValue ext] -> SetupValue ext
+  SetupTuple  :: XSetupTuple ext -> [SetupValue ext] -> SetupValue ext
   SetupArray  :: XSetupArray ext -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: XSetupElem ext -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: XSetupField ext -> SetupValue ext -> String -> SetupValue ext
@@ -157,6 +160,7 @@ data SetupValue ext where
 type SetupValueHas (c :: Type -> Constraint) ext =
   ( c (XSetupNull ext)
   , c (XSetupStruct ext)
+  , c (XSetupTuple ext)
   , c (XSetupArray ext)
   , c (XSetupElem ext)
   , c (XSetupField ext)
