@@ -292,13 +292,10 @@ replacePrim pat replace t = do
   let tpat  = ttTerm pat
   let trepl = ttTerm replace
 
-  let fvpat = looseVars tpat
-  let fvrepl = looseVars trepl
-
-  unless (fvpat == emptyBitSet) $ fail $ unlines
+  unless (termIsClosed tpat) $ fail $ unlines
     [ "pattern term is not closed", show tpat ]
 
-  unless (fvrepl == emptyBitSet) $ fail $ unlines
+  unless (termIsClosed trepl) $ fail $ unlines
     [ "replacement term is not closed", show trepl ]
 
   io $ do
@@ -781,13 +778,13 @@ build_congruence sc tm =
      case asPiList ty of
        ([],_) -> fail "congruence_for: Term is not a function"
        (pis, body) ->
-         if looseVars body == emptyBitSet then
+         if termIsClosed body then
            loop pis []
          else
            fail "congruence_for: cannot build congruence for dependent functions"
  where
   loop ((nm,tp):pis) vars =
-    if looseVars tp == emptyBitSet then
+    if termIsClosed tp then
       do l <- scFreshEC sc (nm <> "_1") tp
          r <- scFreshEC sc (nm <> "_2") tp
          loop pis ((l,r):vars)
