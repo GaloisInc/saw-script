@@ -16,3 +16,7 @@ fails (prove_print z3 {{ \(x : [64]) -> incomplete x }});
 prove_print z3 {{ dependent`{1} == [True] }};
 prove_print z3 {{ dependent`{3} == [False, False, False] }};
 prove_print z3 {{ dependent`{0} == [] }};
+
+// Test constraint guards dependently typed on module parameters
+import "Instantiated.cry";
+prove_print z3 {{ v == 0 }};
