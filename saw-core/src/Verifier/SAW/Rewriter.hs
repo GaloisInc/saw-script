@@ -245,8 +245,8 @@ scMatch sc pat term =
     -- saves the names associated with those bound variables.
     match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
              MaybeT IO MatchState
-    match _ _ (STApp i _ fv _) (STApp j _ _ _) s
-      | fv == emptyBitSet && i == j = return s
+    match _ _ t@(STApp i _ _ _) (STApp j _ _ _) s
+      | termIsClosed t && i == j = return s
     match depth env x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y) >>
@@ -875,8 +875,7 @@ replaceTerm :: Ord a =>
   Term         {- ^ the term in which to perform the replacement -} ->
   IO (Set a, Term)
 replaceTerm sc ss (pat, repl) t = do
-    let fvs = looseVars pat
-    unless (fvs == emptyBitSet) $ fail $ unwords
+    unless (termIsClosed pat) $ fail $ unwords
        [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss

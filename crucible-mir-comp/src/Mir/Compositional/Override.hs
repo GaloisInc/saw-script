@@ -53,6 +53,8 @@ import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as MS
+import SAWScript.Crucible.MIR.MethodSpecIR
+import SAWScript.Crucible.MIR.TypeShape
 
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
@@ -60,7 +62,6 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
-import Mir.Compositional.MethodSpec
 
 
 type MirOverrideMatcher sym a = forall p rorw rtp args ret.
@@ -207,7 +208,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
         -- to allocation `alloc` before we see the PointsTo for `alloc` itself.
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
-        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo alloc svs) -> do
+        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md alloc svs) -> do
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
@@ -222,12 +223,6 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
                 rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
-                let md = MS.ConditionMetadata
-                         { MS.conditionLoc = loc
-                         , MS.conditionTags = mempty
-                         , MS.conditionType = "points-to"
-                         , MS.conditionContext = ""
-                         }
                 matchArg sym sc eval (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
         -- Validity checks
@@ -288,7 +283,12 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
             Map.toList $ ms ^. MS.csPostState . MS.csAllocs
     postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, Some allocSpec) -> do
         ref <- newMirRefSim (allocSpec ^. maType)
-        return (alloc, Some $ MirPointer (allocSpec ^. maType) ref)
+        return ( alloc
+               , Some $ MirPointer (allocSpec ^. maType)
+                                   (allocSpec ^. maMutbl)
+                                   (allocSpec ^. maMirType)
+                                   ref
+               )
     let allocMap = preAllocMap <> postAllocMap
 
     -- Handle return value and post-state PointsTos
@@ -311,7 +311,7 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
     -- figuring out which memory is accessible and mutable and thus needs to be
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
-    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo alloc svs) -> do
+    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md alloc svs) -> do
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
@@ -356,7 +356,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
-    go (UnitShape _) () (MS.SetupStruct () False []) = return ()
+    go (UnitShape _) () (MS.SetupStruct () []) = return ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
@@ -390,23 +390,23 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
                         ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
                             show (W4.printSymExpr val))
                         ""
-    go (TupleShape _ _ flds) rvs (MS.SetupStruct () False svs) = goFields flds rvs svs
-    go (ArrayShape _ _ shp) vec (MS.SetupArray () svs) = case vec of
+    go (TupleShape _ _ flds) rvs (MS.SetupStruct () svs) = goFields flds rvs svs
+    go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
-    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct () False svs)
+    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct () svs)
       | Just Refl <- testEquality tpr shpTpr = goFields flds rvs svs
       | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv sv = go shp rv sv
-    go (RefShape refTy _ tpr) ref (MS.SetupVar alloc) =
-        goRef refTy tpr ref alloc 0
-    go (RefShape refTy _ tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
-        goRef refTy tpr ref alloc idx
+    go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupVar alloc) =
+        goRef refTy pointeeTy mutbl tpr ref alloc 0
+    go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
+        goRef refTy pointeeTy mutbl tpr ref alloc idx
     go (FnPtrShape _ _ _) _ _ =
         error "Function pointers not currently supported in overrides"
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
@@ -432,13 +432,15 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
 
     goRef :: forall tp'.
         M.Ty ->
+        M.Ty ->
+        M.Mutability ->
         TypeRepr tp' ->
         MirReferenceMux sym tp' ->
         MS.AllocIndex ->
         -- | The expected offset of `ref` past the start of the allocation.
         Int ->
         MirOverrideMatcher sym ()
-    goRef refTy tpr ref alloc refOffset = do
+    goRef refTy pointeeTy mutbl tpr ref alloc refOffset = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
         optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
@@ -486,7 +488,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
               | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
                     show tpr ++ " does not match " ++ show (ptr ^. mpType)
-        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr ref')
+        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr mutbl pointeeTy ref')
 
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,
@@ -508,7 +510,7 @@ setupToReg :: forall sym t st fs tp.
 setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
-    go (UnitShape _) (MS.SetupStruct _ False []) = return ()
+    go (UnitShape _) (MS.SetupStruct _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
         Some expr <- termToExpr sym sc regMap term
@@ -517,14 +519,14 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ _ flds) (MS.SetupStruct _ False svs) = goFields flds svs
+    go (TupleShape _ _ flds) (MS.SetupStruct _ svs) = goFields flds svs
     go (ArrayShape _ _ shp) (MS.SetupArray _ svs) = do
         rvs <- mapM (go shp) svs
         return $ MirVector_Vector $ V.fromList rvs
-    go (StructShape _ _ flds) (MS.SetupStruct _ False svs) =
+    go (StructShape _ _ flds) (MS.SetupStruct _ svs) =
         AnyValue (StructRepr $ fmapFC fieldShapeType flds) <$> goFields flds svs
     go (TransparentShape _ shp) sv = go shp sv
-    go (RefShape _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
+    go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of
             Just Refl -> return $ ptr ^. mpRef
             Nothing -> error $ "setupToReg: type error: bad reference type for " ++ show alloc ++

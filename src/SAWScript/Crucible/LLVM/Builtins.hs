@@ -11,7 +11,6 @@ Stability   : provisional
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
@@ -46,7 +45,6 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_ghost_value
     , llvm_declare_ghost_state
     , llvm_equal
-    , CheckPointsToType(..)
     , llvm_points_to
     , llvm_conditional_points_to
     , llvm_points_to_at_type
@@ -1407,6 +1405,8 @@ withBreakpointCfgAndBlockId opts context name parent k =
          Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
          Nothing -> fail $ "Unexpected breakpoint name: " ++ name
 
+-- | Simulate an LLVM function with Crucible as part of a 'llvm_verify' command,
+-- making sure to install any overrides that the user supplies.
 verifySimulate ::
   ( ?lc :: Crucible.TypeContext
   , ?memOpts::Crucible.MemOptions
@@ -2215,7 +2215,7 @@ constructExpandedSetupValue cc sc loc t =
          traverse (constructExpandedSetupValue cc sc loc)
                   (Crucible.siFieldTypes si)
       -- FIXME: should this always be unpacked?
-      pure $ mkAllLLVM $ SetupStruct () False $ map (\a -> getAllLLVM a) fields
+      pure $ mkAllLLVM $ SetupStruct False $ map (\a -> getAllLLVM a) fields
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of
@@ -2503,7 +2503,7 @@ llvm_fresh_pointer lty =
      constructFreshPointer (llvmTypeAlias lty) loc memTy
 
 llvm_cast_pointer :: AllLLVM SetupValue -> L.Type -> AllLLVM SetupValue
-llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast () (getAllLLVM ptr) lty)
+llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast lty (getAllLLVM ptr))
 
 constructFreshPointer ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -2563,7 +2563,7 @@ llvm_points_to_at_type ::
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
 llvm_points_to_at_type ptr ty val =
-  llvm_points_to_internal (Just (CheckAgainstCastedType ty)) Nothing ptr val
+  llvm_points_to_internal (Just (Setup.CheckAgainstCastedType ty)) Nothing ptr val
 
 llvm_conditional_points_to_at_type ::
   TypedTerm ->
@@ -2572,30 +2572,18 @@ llvm_conditional_points_to_at_type ::
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
 llvm_conditional_points_to_at_type cond ptr ty val =
-  llvm_points_to_internal (Just (CheckAgainstCastedType ty)) (Just cond) ptr val
-
--- | When invoking @llvm_points_to@ and friends, against what should SAW check
--- the type of the RHS value?
-data CheckPointsToType ty
-  = CheckAgainstPointerType
-    -- ^ Check the type of the RHS value against the type that the LHS points to.
-    --   Used for @llvm_{conditional_}points_to@.
-  | CheckAgainstCastedType ty
-    -- ^ Check the type of the RHS value against the provided @ty@, which
-    --   the LHS pointer is casted to.
-    --   Used for @llvm_{conditional_}points_to_at_type@.
-  deriving (Functor, Foldable, Traversable)
+  llvm_points_to_internal (Just (Setup.CheckAgainstCastedType ty)) (Just cond) ptr val
 
 -- | If the argument is @True@, check the type of the RHS value against the
 -- type that the LHS points to (i.e., @'Just' 'CheckAgainstPointerType'@).
 -- Otherwise, don't check the type of the RHS value at all (i.e., 'Nothing').
-shouldCheckAgainstPointerType :: Bool -> Maybe (CheckPointsToType ty)
-shouldCheckAgainstPointerType b = if b then Just CheckAgainstPointerType else Nothing
+shouldCheckAgainstPointerType :: Bool -> Maybe (Setup.CheckPointsToType ty)
+shouldCheckAgainstPointerType b = if b then Just Setup.CheckAgainstPointerType else Nothing
 
 llvm_points_to_internal ::
-  Maybe (CheckPointsToType L.Type) {- ^ If 'Just', check the type of the RHS value.
-                                        If 'Nothing', don't check the type of the
-                                        RHS value at all. -} ->
+  Maybe (Setup.CheckPointsToType L.Type)
+  {- ^ If 'Just', check the type of the RHS value.
+       If 'Nothing', don't check the type of the RHS value at all. -} ->
   Maybe TypedTerm ->
   AllLLVM SetupValue {- ^ lhs pointer -} ->
   AllLLVM SetupValue {- ^ rhs value -} ->
@@ -2614,9 +2602,9 @@ llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val)
 
           valTy <- exceptToFail $ typeOfSetupValue cc env nameEnv val
           case mbCheckType of
-            Nothing                          -> pure ()
-            Just CheckAgainstPointerType     -> checkMemTypeCompatibility loc lhsTy valTy
-            Just (CheckAgainstCastedType ty) -> do
+            Nothing                                -> pure ()
+            Just Setup.CheckAgainstPointerType     -> checkMemTypeCompatibility loc lhsTy valTy
+            Just (Setup.CheckAgainstCastedType ty) -> do
               ty' <- memTypeForLLVMType loc ty
               checkMemTypeCompatibility loc ty' valTy
 

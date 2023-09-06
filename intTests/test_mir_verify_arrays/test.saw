@@ -1,0 +1,80 @@
+enable_experimental;
+
+let f_spec = do {
+  x0_ref <- mir_alloc mir_u32;
+  x0 <- mir_fresh_var "x0" mir_u32;
+  mir_points_to x0_ref (mir_term x0);
+
+  x1_ref <- mir_alloc mir_u32;
+  x1 <- mir_fresh_var "x1" mir_u32;
+  mir_points_to x1_ref (mir_term x1);
+
+  let x = mir_array_value (mir_ref mir_u32) [x0_ref, x1_ref];
+
+  mir_execute_func [x];
+
+  mir_return (mir_term {{ x0 + x1 }});
+};
+
+let g_spec = do {
+  x0_ref <- mir_alloc_mut mir_u32;
+
+  x1_ref <- mir_alloc_mut mir_u32;
+  x1 <- mir_fresh_var "x1" mir_u32;
+  mir_points_to x1_ref (mir_term x1);
+
+  let x = mir_array_value (mir_ref_mut mir_u32) [x0_ref, x1_ref];
+
+  mir_execute_func [x];
+
+  mir_points_to x0_ref (mir_term {{ 42 : [32] }});
+  mir_points_to x1_ref (mir_term {{ x1 + 1 }});
+};
+
+let h_spec = do {
+  mir_execute_func [];
+
+  x0_ref <- mir_alloc mir_u32;
+  mir_points_to x0_ref (mir_term {{ 27 : [32] }});
+
+  x1_ref <- mir_alloc mir_u32;
+  mir_points_to x1_ref (mir_term {{ 42 : [32] }});
+
+  let x = mir_array_value (mir_ref mir_u32) [x0_ref, x1_ref];
+  mir_return x;
+};
+
+let i_spec = do {
+  let x = mir_term {{ [] : [0][32] }};
+  mir_execute_func [x];
+
+  mir_return (mir_array_value mir_u64 []);
+};
+
+let i_spec_bad1 = do {
+  let x = mir_term {{ [42] : [1][32] }};
+  mir_execute_func [x];
+
+  mir_return (mir_array_value mir_u64 []);
+};
+
+let i_spec_bad2 = do {
+  let x = mir_term {{ [] : [0][32] }};
+  mir_execute_func [x];
+
+  mir_return (mir_array_value mir_u64 [mir_term {{ 42 : [64] }}]);
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [] false g_spec z3;
+mir_verify m "test::h" [] false h_spec z3;
+mir_verify m "test::i" [] false i_spec z3;
+
+fails (
+  mir_verify m "test::i" [] false i_spec_bad1 z3
+);
+fails (
+  mir_verify m "test::i" [] false i_spec_bad2 z3
+);

@@ -1,0 +1,54 @@
+enable_experimental;
+
+let read_from_ref_spec = do {
+  ptr <- mir_alloc mir_u32;
+  x <- mir_fresh_var "x" mir_u32;
+  mir_points_to ptr (mir_term x);
+
+  mir_execute_func [ptr];
+
+  mir_return (mir_term x);
+};
+
+// This spec will cause SAW to read from uninitialized memory.
+
+let read_from_ref_spec_bad = do {
+  ptr <- mir_alloc mir_u32;
+
+  mir_execute_func [ptr];
+
+  mir_return (mir_term {{ 42 : [32] }});
+};
+
+let write_to_ref_spec = do {
+  ptr <- mir_alloc_mut mir_u32;
+  y <- mir_fresh_var "y" mir_u32;
+
+  mir_execute_func [ptr, mir_term y];
+
+  mir_points_to ptr (mir_term y);
+};
+
+// This spec contains a type error, as `write_to_ref` expects a mutable
+// reference, but the spec allocates an immutable reference.
+
+let write_to_ref_spec_bad = do {
+  ptr <- mir_alloc mir_u32;
+  y <- mir_fresh_var "y" mir_u32;
+
+  mir_execute_func [ptr, mir_term y];
+
+  mir_points_to ptr (mir_term y);
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::read_from_ref" [] false read_from_ref_spec z3;
+mir_verify m "test::write_to_ref" [] false write_to_ref_spec z3;
+
+fails (
+  mir_verify m "test::read_from_ref" [] false read_from_ref_spec_bad z3
+);
+fails (
+  mir_verify m "test::write_to_ref" [] false write_to_ref_spec_bad z3
+);
