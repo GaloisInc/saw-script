@@ -604,7 +604,6 @@ jobs:
           chmod +x bin/*
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
-          chmod -R +rw cache
 
       - uses: actions/cache/save@v3
         name: Save SMT solver result cache

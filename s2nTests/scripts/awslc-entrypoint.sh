@@ -17,3 +17,4 @@ export SAW_SOLVER_CACHE_PATH=/saw-cache
 
 ./scripts/entrypoint_check.sh
 
+chmod -R +rw cache
