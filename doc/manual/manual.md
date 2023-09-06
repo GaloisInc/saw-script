@@ -2435,9 +2435,9 @@ The experimental MIR implementation also has a `mir_alloc` function, which
 behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
 but there is also a `mir_alloc_mut` function for creating a mutable reference:
 
-* `mir_alloc : MIRType -> MIRSetup SetupValue`
+* `mir_alloc : MIRType -> MIRSetup MIRValue`
 
-* `mir_alloc_mut : MIRType -> MIRSetup SetupValue`
+* `mir_alloc_mut : MIRType -> MIRSetup MIRValue`
 
 MIR tracks whether references are mutable or immutable at the type level, so it
 is important to use the right allocation command for a given reference type.
@@ -2538,7 +2538,7 @@ value.
 
 MIR verification has a single `mir_points_to` command:
 
-* `mir_points_to : SetupValue -> SetupValue -> MIRSetup ()`
+* `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
 takes two `SetupValue` arguments, the first of which must be a reference,
 and states that the memory specified by that reference should contain the
 value given in the second argument (which may be any type of
@@ -2624,7 +2624,7 @@ specifies the name of an object field.
 In the experimental MIR verification implementation, the following functions
 construct compound values:
 
-* `mir_array_value : MIRType -> [SetupValue] -> SetupValue` constructs an array
+* `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
   of the given type whose elements consist of the given values. Supplying the
   element type is necessary to support length-0 arrays.
 * `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
