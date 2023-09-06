@@ -6,4 +6,8 @@ parameter
 
 // Constraint guard with type dependent on module parameter value
 v : [gamma]
-v | () => 0
+v | (gamma == 3) => 0
+  // Cryptol replaces this next constraint with `TError 3 == 2` when
+  // instantiating `Instantiated.cry`
+  | (gamma == 2) => 1
+  | () => 2
