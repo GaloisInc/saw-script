@@ -600,8 +600,8 @@ jobs:
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
-          mkdir cache
           chmod +x bin/*
+          mkdir cache && touch cache/data.mdb cache/lock.mdb
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
