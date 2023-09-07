@@ -1270,27 +1270,32 @@ proveBisimulation script relation lhs rhs = do
   initRhsOutput <- io $ scLocalVar sc 4   -- out2
 
   -- LHS/RHS inputs
-  lhsTuple <- io $ scTuple sc [lhsState, input]
-  rhsTuple <- io $ scTuple sc [rhsState, input]
+  lhsTuple <- io $ scTuple sc [lhsState, input]  -- (s1, in)
+  rhsTuple <- io $ scTuple sc [rhsState, input]  -- (s2, in)
 
   -- LHS/RHS outputs
-  lhsOutput <- io $ scApply sc (ttTerm lhs) lhsTuple
-  rhsOutput <- io $ scApply sc (ttTerm rhs) rhsTuple
+  lhsOutput <- io $ scApply sc (ttTerm lhs) lhsTuple  -- lhs (s1, in)
+  rhsOutput <- io $ scApply sc (ttTerm rhs) rhsTuple  -- rhs (s2, in)
 
   -- Initial relation inputs
-  initRelArg1 <- io $ scTuple sc [lhsState, initLhsOutput]
-  initRelArg2 <- io $ scTuple sc [rhsState, initRhsOutput]
+  initRelArg1 <- io $ scTuple sc [lhsState, initLhsOutput]  -- (s1, out1)
+  initRelArg2 <- io $ scTuple sc [rhsState, initRhsOutput]  -- (s2, out2)
 
   -- Initial relation result
+  -- rel (s1, out1) (s2, out2)
   initRelation <- scRelation sc initRelArg1 initRelArg2
 
   -- Relation over outputs
+  -- rel (lhs (s1, in)) (rhs (s2, in))
   relationRes <- scRelation sc lhsOutput rhsOutput
 
   -- initRelation implies relationRes
+  -- rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))
   implication <- io $ scImplies sc initRelation relationRes
 
   -- Function to prove
+  -- forall s1 s2 in out1 out2.
+  --   rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))
   args <- mapM (importArg sc) [ ("initRhsOutput", outputType)
                               , ("initLhsOutput", outputType)
                               , ("rhsState", rhsStateType)
