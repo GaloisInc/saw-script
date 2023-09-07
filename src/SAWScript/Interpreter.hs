@@ -1676,8 +1676,8 @@ primitives = Map.fromList
     , ""
     , "Let the first argument be called 'rel', the second 'lhs', and the"
     , "third 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
-    , "  forall s1 s2 in out."
-    , "    rel (s1, out) (s2, out) -> rel (lhs (s1, in)) (rhs (s2, in))"
+    , "  forall s1 s2 in out1 out2."
+    , "    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))"
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"

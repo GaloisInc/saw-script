@@ -1231,8 +1231,8 @@ provePrim script t = do
 --
 -- Given a relation @rel@, term @lhs@, and term @rhs@, the prover considers
 -- @lhs@ and @rhs@ bisimilar when:
---   forall s1 s2 in out.
---     rel (s1, out) (s2, out) -> rel (lhs (s1, in)) (rhs (s2, in))
+--   forall s1 s2 in out1 out2.
+--     rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))
 proveBisimulation ::
   ProofScript () ->
   -- ^ Proof script to use over generated bisimulation term
@@ -1258,12 +1258,13 @@ proveBisimulation script relation lhs rhs = do
                    , "  LHS input type: " ++ Cryptol.pretty lhsInputType
                    , "  RHS input type: " ++ Cryptol.pretty rhsInputType ]
 
-  -- Outer function inputs
-  input <- io $ scLocalVar sc 0
-  lhsState <- io $ scLocalVar sc 1
-  rhsState <- io $ scLocalVar sc 2
-  initLhsOutput <- io $ scLocalVar sc 3
-  initRhsOutput <- io $ scLocalVar sc 4
+  -- Outer function inputs. See comments to the right of each line to see how
+  -- they line up with the @forall@ in the haddocs for this function.
+  input <- io $ scLocalVar sc 0           -- in
+  lhsState <- io $ scLocalVar sc 1        -- s1
+  rhsState <- io $ scLocalVar sc 2        -- s2
+  initLhsOutput <- io $ scLocalVar sc 3   -- out1
+  initRhsOutput <- io $ scLocalVar sc 4   -- out2
 
   -- LHS/RHS inputs
   lhsTuple <- io $ scTuple sc [lhsState, input]
