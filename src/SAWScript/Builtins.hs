@@ -1229,8 +1229,11 @@ provePrim script t = do
 
 -- | Use bisimulation to prove that two terms simulate each other.
 --
--- Given a relation @rel@, term @lhs@, and term @rhs@, the prover considers
--- @lhs@ and @rhs@ bisimilar when:
+-- Given the following:
+-- * A relation @rel : (lhsState, output) -> (rhsState, output) -> Bit@
+-- * A term @lhs : (lhsState, input) -> (lhsState, output)@
+-- * A term @rhs : (rhsState, input) -> (rhsState, output)@
+-- the prover considers @lhs@ and @rhs@ bisimilar when:
 --   forall s1 s2 in out1 out2.
 --     rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))
 proveBisimulation ::
