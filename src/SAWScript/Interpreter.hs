@@ -1666,7 +1666,7 @@ primitives = Map.fromList
   , prim "prove_bisim"         "ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult"
     (pureVal proveBisimulation)
     Experimental
-    [ "Use bisimulation to prove that two terms simulate eachother.  The first"
+    [ "Use bisimulation to prove that two terms simulate each other.  The first"
     , "argument is a relation over the states and outputs for the second and"
     , "third terms. The relation must have the type"
     , "'(lhsState, output) -> (rhsState, output) -> Bit'. The second and third"

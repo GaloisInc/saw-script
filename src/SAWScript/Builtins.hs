@@ -1227,7 +1227,7 @@ provePrim script t = do
     _ -> return ()
   return res
 
--- | Use bisimulation to prove that two terms simulate eachother.
+-- | Use bisimulation to prove that two terms simulate each other.
 --
 -- Given a relation @rel@, term @lhs@, and term @rhs@, the prover considers
 -- @lhs@ and @rhs@ bisimilar when:
