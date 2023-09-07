@@ -76,7 +76,7 @@ module SAWScript.SolverCache
 import System.Directory (createDirectoryIfMissing)
 import Control.Exception (try, SomeException)
 import Control.Monad (when, forM_)
-import System.Timeout (timeout)
+import System.CPUTime (getCPUTime)
 
 import GHC.Generics (Generic)
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
@@ -123,14 +123,18 @@ import SAWScript.Proof
 
 -- | Run the given IO action, but if the given 'timeout' (in microseconds) is
 -- reached or the action encounters any 'SomeException', 'Left' is returned
-tryWithTimeout :: Int -> IO a -> IO (Either String a)
-tryWithTimeout t_us m = try (timeout t_us m) <&> \case
+tryWithTimeout :: Int -> IO a -> IO (Either String (a, Double))
+tryWithTimeout t_us m = try timed_m <&> \case
   Right (Just a) -> Right a
   Right Nothing -> let t_str | t_us `mod` 1000000 == 0 = show (t_us `div` 1000000) ++ "s"
                              | t_us `mod` 1000    == 0 = show (t_us `div` 1000) ++ "ms"
                              | otherwise               = show t_us ++ "us"
                     in Left $ "Operation timed out (" ++ t_str ++ ")"
   Left (exn :: SomeException) -> Left $ show exn
+  where timed_m = do t1 <- getCPUTime
+                     a <- m
+                     t2 <- getCPUTime
+                     return $ Just (a, fromIntegral (t2 - t1) / 1e-12)
 
 -- | Encode a 'ByteString' as a hex string
 encodeHex :: ByteString -> String
@@ -448,10 +452,10 @@ tryTransaction :: (LMDB.Mode tmode, LMDB.SubMode LMDB.ReadWrite tmode) =>
                   SolverCache ->
                   (LMDB.Database SolverCacheKey SolverCacheValue ->
                    LMDB.Transaction tmode a) ->
-                  IO (Either String a, SolverCache)
+                  IO (Either String (a, Double), SolverCache)
 tryTransaction cache@SolverCache{..} t =
   tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache) >>= \case
-    Right (env, db, cache') -> 
+    Right ((env, db, cache'), _) -> 
       (,cache') <$> tryWithTimeout solverCacheTimeout
                                    (LMDB.transaction env (t db))
     Left err ->
@@ -483,15 +487,16 @@ lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} ->
                  (stats M.! Inserts, stats M.! FailedInserts))
       upd _ v = Just v { solverCacheValueLastUsed = now } in
   tryTransaction cache (LMDB.updateLookupWithKey upd k) >>= \case
-    (Right (Just v), cache') -> do
-      printOutLn opts Info (ss ++ " Using cached result: " ++ show k)
+    (Right (Just v, t), cache') -> do
+      printOutLn opts Info (ss ++ " (" ++ show t ++ "s) Using cached result: " ++ show k)
       modifyIORef solverCacheStats $ M.adjust (+1) Lookups
       return (Just v, cache')
     (Left err, cache') -> do
       printOutLn opts Warn (ss ++ " Solver cache lookup failed:\n" ++ err)
       modifyIORef solverCacheStats $ M.adjust (+1) FailedLookups
       return (Nothing, cache')
-    (Right Nothing, cache') -> do
+    (Right (Nothing, t), cache') -> do
+      printOutLn opts Info (ss ++ " (" ++ show t ++ "s) Cache lookup missed: " ++ show k)
       return (Nothing, cache')
 
 -- | Add a 'SolverCacheValue' to the solver result cache
@@ -500,9 +505,9 @@ insertInSolverCache k v = SCOpOrDefault () $ \opts cache@SolverCache{..} ->
   readIORef solverCacheStats >>= \stats ->
   let ss = show ((stats M.! Lookups, stats M.! FailedLookups),
                  (stats M.! Inserts, stats M.! FailedInserts)) in
-  printOutLn opts Info (ss ++ " Caching result: " ++ show k) >>
   tryTransaction cache (LMDB.insert k v) >>= \case
-    (Right (), cache') -> do
+    (Right ((), t), cache') -> do
+      printOutLn opts Info (ss ++ " (" ++ show t ++ "s) Cached result: " ++ show k)
       modifyIORef solverCacheStats $ M.adjust (+1) Inserts
       return ((), cache')
     (Left err, cache') -> do
