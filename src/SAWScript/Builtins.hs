@@ -1301,8 +1301,13 @@ proveBisimulation script relation lhs rhs = do
   io (mkTypedTerm sc theorem) >>= provePrim script
 
   where
-    -- Typecheck relation. Evaluates to a tuple containing the LHS state type,
-    -- RHS statetype, and expected output type.
+    -- Typecheck relation. The expected type for a relation is:
+    -- @(lhsStateType, outputType) -> (rhsStateType, outputType) -> Bit@
+    --
+    -- If the relation typechecks, 'typecheckRelation' evaluates to a tuple of:
+    -- @(lhsStateType, rhsStateType, outputType)@
+    -- Otherwise, this invokes 'fail' with a description of the specific
+    -- typechecking error.
     typecheckRelation :: TopLevel (C.Type, C.Type, C.Type)
     typecheckRelation =
       case ttType relation of
@@ -1326,7 +1331,13 @@ proveBisimulation script relation lhs rhs = do
         _ -> fail $ "Error: Unexpected relation type: "
                  ++ show (ppTypedTermType (ttType relation))
 
-    -- Typecheck bisimulation term. Returns the term's output type.
+    -- Typecheck bisimulation term. The expected type for a bisimulation term
+    -- is:
+    -- @(stateType, inputType) -> (stateType, outputType)@
+    --
+    -- If the term typechecks, this function returns @inputType@.  Otherwise,
+    -- this funciton invokes 'fail' with a description of the specific
+    -- typechecking error.
     typecheckSide :: TypedTerm -> C.Type -> C.Type -> TopLevel C.Type
     typecheckSide side stateType outputType =
       case ttType side of
