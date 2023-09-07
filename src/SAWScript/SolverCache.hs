@@ -478,14 +478,17 @@ solverCacheOpDefault (SCOpOrDefault a _) = Just a
 lookupInSolverCache :: SolverCacheKey -> SolverCacheOp (Maybe SolverCacheValue)
 lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} ->
   getCurrentTime >>= \now ->
-  let upd _ v = Just v { solverCacheValueLastUsed = now } in
+  readIORef solverCacheStats >>= \stats ->
+  let ss = show ((stats M.! Lookups, stats M.! FailedLookups),
+                 (stats M.! Inserts, stats M.! FailedInserts))
+      upd _ v = Just v { solverCacheValueLastUsed = now } in
   tryTransaction cache (LMDB.updateLookupWithKey upd k) >>= \case
     (Right (Just v), cache') -> do
-      printOutLn opts Debug ("Using cached result: " ++ show k)
+      printOutLn opts Info (ss ++ " Using cached result: " ++ show k)
       modifyIORef solverCacheStats $ M.adjust (+1) Lookups
       return (Just v, cache')
     (Left err, cache') -> do
-      printOutLn opts Warn ("Solver cache lookup failed:\n" ++ err)
+      printOutLn opts Warn (ss ++ " Solver cache lookup failed:\n" ++ err)
       modifyIORef solverCacheStats $ M.adjust (+1) FailedLookups
       return (Nothing, cache')
     (Right Nothing, cache') -> do
@@ -494,13 +497,16 @@ lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} ->
 -- | Add a 'SolverCacheValue' to the solver result cache
 insertInSolverCache :: SolverCacheKey -> SolverCacheValue -> SolverCacheOp ()
 insertInSolverCache k v = SCOpOrDefault () $ \opts cache@SolverCache{..} ->
-  printOutLn opts Debug ("Caching result: " ++ show k) >>
+  readIORef solverCacheStats >>= \stats ->
+  let ss = show ((stats M.! Lookups, stats M.! FailedLookups),
+                 (stats M.! Inserts, stats M.! FailedInserts)) in
+  printOutLn opts Info (ss ++ " Caching result: " ++ show k) >>
   tryTransaction cache (LMDB.insert k v) >>= \case
     (Right (), cache') -> do
       modifyIORef solverCacheStats $ M.adjust (+1) Inserts
       return ((), cache')
     (Left err, cache') -> do
-      printOutLn opts Warn ("Solver cache insert failed:\n" ++ err)
+      printOutLn opts Warn (ss ++ " Solver cache insert failed:\n" ++ err)
       modifyIORef solverCacheStats $ M.adjust (+1) FailedInserts
       return ((), cache')
 

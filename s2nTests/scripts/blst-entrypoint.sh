@@ -26,4 +26,3 @@ yices-smt2 --version
 saw proof/memory_safety.saw
 
 ./scripts/check.sh | if grep False; then exit 1; fi
-echo "print_solver_cache_stats" | bin/saw
