@@ -411,7 +411,7 @@ lazyOpenSolverCache path = do
                        solverCacheDB      = Nothing,
                        solverCacheStats   = stats,
                        solverCacheMapSize = 4 {- GiB -} * 1073741824,
-                       solverCacheTimeout = 1 {- sec -} * 1000000 }
+                       solverCacheTimeout = 2 {- sec -} * 1000000 }
 
 -- | Create a 'SolverCache' with the given 'FilePath' and open an LMDB database
 -- at that path (i.e. `solverCacheEnv` and `solverCacheDB` are both 'Just')
