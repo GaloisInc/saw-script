@@ -356,6 +356,7 @@ importNumericConstraintAsBool sc env prop =
       rhs' <- importType sc env rhs
       scAnd sc lhs' rhs'
     C.TCon (C.PC C.PTrue) [] -> scBool sc True
+    C.TCon (C.TError _) _ -> scBool sc False
     C.TUser _ _ t -> importNumericConstraintAsBool sc env t
     _ -> panic
       "importNumericConstraintAsBool"
