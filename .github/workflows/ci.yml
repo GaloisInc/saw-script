@@ -193,6 +193,24 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
+      ##########################################################################
+      # We upload an archive containing SAW, and also and archive containing SAW
+      # and the set of possible SMT solvers, but only for our "primary"
+      # distribution (currently: GHC 8.10.7).  These archives are utilized in
+      # subsequent CI jobs, but are also published for external users, and are
+      # therefore signed.
+      #
+      # In addition, if we built with HPC, we upload a tarball containing the
+      # HPC-enabled binaries and HPC-specific files generated during the build
+      # process.  These are mostly used for subsequent CI jobs that will
+      # generate a coverage report, and the binaries are essentially the same as
+      # those collected for the previous operation, but they are captured in
+      # their original cabal-generated locations where they are expected to live
+      # for subsequent coverage collection.
+
+      # In the next 3 steps we check that `matrix.hpc == false` so that if the
+      # distribution version matches the HPC version, the HPC build artifacts do
+      # not clobber the non-HPC distribution artifacts.
       - if: matrix.ghc == '8.10.7' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
@@ -455,6 +473,10 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
+  # The coverage job is similar to the cabal-test job, but it only runs the HPC
+  # enabled SAW build against the integration test suite. It then collects the
+  # test coverage results, generates an HTML summary, and publishes the results
+  # to github pages.
   coverage:
     name: "Run integration tests with coverage reporting"
     needs: build
