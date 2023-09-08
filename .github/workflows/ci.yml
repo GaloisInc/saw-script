@@ -487,7 +487,6 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: "${{ runner.os }}-hpc.tar.gz"
-          path: dist/bin
 
       - uses: actions/download-artifact@v2
         with:
