@@ -464,8 +464,11 @@ jobs:
   coverage:
     name: "Run integration tests with coverage reporting"
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     if: github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
     steps:
       - uses: actions/checkout@v2
         with:
@@ -474,7 +477,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          BUILD_TARGET_OS: ${{ runner.os }}
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -486,7 +489,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: dist-tests-${{ runner.os }}
+          name: dist-tests-${{ matrix.os }}
           path: dist-tests
 
       - uses: actions/setup-java@v1
