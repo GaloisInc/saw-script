@@ -484,13 +484,17 @@ jobs:
           name: "${{ runner.os }}-with-hpc-bins"
           path: dist/bin
 
-      - shell: bash
-        run: chmod +x bin/*
-
       - uses: actions/download-artifact@v2
         with:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
+
+      - name: Update permissions
+        shell: bash
+        run: |
+          chmod +x dist/bin/*
+          chmod +x bin/*
+          chmod +x dist-tests/*
 
       - uses: actions/setup-java@v1
         with:
