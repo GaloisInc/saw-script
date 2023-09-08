@@ -216,12 +216,6 @@ jobs:
           name: ${{ runner.os }}-bins
 
       - if: matrix.run-tests && matrix.hpc == true
-        uses: actions/upload-artifact@v2
-        with:
-          path: dist/bin
-          name: ${{ runner.os }}-with-hpc-bins
-
-      - if: matrix.run-tests && matrix.hpc == true
         shell: bash
         run: .github/ci.sh collect_hpc_files
 
@@ -474,11 +468,6 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
-
-      - uses: actions/download-artifact@v2
-        with:
-          name: "${{ runner.os }}-with-hpc-bins"
-          path: dist/bin
 
       - uses: actions/download-artifact@v2
         with:

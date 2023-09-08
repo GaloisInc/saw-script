@@ -77,11 +77,12 @@ build() {
   fi
 }
 
-# Gather and tar up all HPC coverage files
+# Gather and tar up all HPC coverage files and binaries
 collect_hpc_files() {
   local MIX_FILES=$(find dist-newstyle -name "*.mix")
   local GENERATED_HS_FILES=$(find dist-newstyle/build -name "*.hs")
-  tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES}
+  local BINS="dist/bin"
+  tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES} ${BINS}
 }
 
 # Download HTML coverage reports and generate an index file linking to them
