@@ -470,10 +470,6 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
     steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
