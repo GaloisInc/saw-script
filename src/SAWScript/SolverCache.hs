@@ -116,7 +116,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Options hiding (cleanSolverCache)
+import SAWScript.Options
 import SAWScript.Proof
 
 

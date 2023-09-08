@@ -25,7 +25,7 @@ import qualified SAWScript.REPL.Haskeline as REPL
 import qualified SAWScript.REPL.Monad as REPL
 import SAWScript.Version (shortVersionText)
 import SAWScript.Value (AIGProxy(..))
-import qualified SAWScript.SolverCache as Cache
+import SAWScript.SolverCache
 import SAWScript.SolverVersions
 import qualified Data.AIG.CompactGraph as AIG
 
@@ -42,7 +42,7 @@ main = do
       case files of
         _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
         _ | showHelp opts'' -> err opts'' (usageInfo header options)
-        _ | Just path <- cleanSolverCache opts'' -> doCleanSolverCache opts'' path
+        _ | Just path <- cleanCacheOpt opts'' -> doCleanSolverCache opts'' path
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
         [file] -> checkZ3 opts'' *>
@@ -63,9 +63,9 @@ main = do
             (hPutStrLn stderr msg)
           exitProofUnknown
         doCleanSolverCache opts path | not (null path) = do
-          cache <- Cache.lazyOpenSolverCache path
-          vs <- getSolverBackendVersions Cache.allBackends
-          fst <$> Cache.solverCacheOp (Cache.cleanSolverCache vs) opts cache
+          cache <- lazyOpenSolverCache path
+          vs <- getSolverBackendVersions allBackends
+          fst <$> solverCacheOp (cleanSolverCache vs) opts cache
         doCleanSolverCache opts _ =
           err opts "Error: either --clean-solver-cache must be given an argument or SAW_SOLVER_CACHE_PATH must be set"
 

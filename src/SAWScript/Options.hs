@@ -40,7 +40,7 @@ data Options = Options
   , showVersion      :: Bool
   , printShowPos     :: Bool
   , useColor         :: Bool
-  , cleanSolverCache :: Maybe FilePath
+  , cleanCacheOpt    :: Maybe FilePath
   , printOutFn       :: Verbosity -> String -> IO ()
   , summaryFile      :: Maybe FilePath
   , summaryFormat    :: SummaryFormat
@@ -79,7 +79,7 @@ defaultOptions
     , showHelp = False
     , showVersion = False
     , useColor = True
-    , cleanSolverCache = Nothing
+    , cleanCacheOpt = Nothing
     , summaryFile = Nothing
     , summaryFormat = Pretty
     }
@@ -164,9 +164,9 @@ options =
      (\mb_path opts -> do
         mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
         let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
-        return opts { cleanSolverCache = Just path })
+        return opts { cleanCacheOpt = Just path })
      "path")
-    "Run clean_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH"
+    "Run clean_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit"
   , Option "s" ["summary"]
     (ReqArg
      (\file opts -> return opts { summaryFile = Just file })

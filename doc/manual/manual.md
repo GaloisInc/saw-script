@@ -86,6 +86,14 @@ command-line options:
 
   ~ Set the verbosity level of the SAWScript interpreter.
 
+`--clean-solver-cache[=path]`
+
+  ~ Run the `clean_solver_cache` command on the solver cache at the given
+  path, or if no path is given, the solver cache at the value of the
+  `SAW_SOLVER_CACHE_PATH` environment variable, then exit. See the section
+  **Caching Solver Results** for a description of the `clean_solver_cache`
+  command and the solver caching feature in general.
+
 SAW also uses several environment variables for configuration:
 
 `CRYPTOLPATH`
@@ -1300,7 +1308,9 @@ There are also a number of SAW commands related to solver caching.
 * `clean_solver_cache` will remove all entries in the solver result cache
   which were created using solver backend versions which do not match the
   versions in the current environment. This can be run after an update to
-  clear out any old, unusable entries from the solver cache.
+  clear out any old, unusable entries from the solver cache. This command can
+  also be run directly from the command line through the `--clean-solver-cache`
+  command-line option.
 
 * `print_solver_cache` prints to the console all entries in the cache whose
   SHA256 hash keys start with the given hex string. Providing an empty string

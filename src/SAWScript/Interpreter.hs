@@ -62,7 +62,7 @@ import qualified SAWScript.Import
 import SAWScript.HeapsterBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
-import SAWScript.Options hiding (cleanSolverCache)
+import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkDecl, checkDeclGroup)
 import SAWScript.Parser (parseSchema)
