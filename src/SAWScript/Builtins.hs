@@ -1296,11 +1296,13 @@ proveBisimulation script relation lhs rhs = do
   -- Function to prove
   -- forall s1 s2 in out1 out2.
   --   rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))
-  args <- mapM (importArg sc) [ ("initRhsOutput", outputType)
-                              , ("initLhsOutput", outputType)
-                              , ("rhsState", rhsStateType)
-                              , ("lhsState", lhsStateType)
-                              , ("input", lhsInputType) ]
+  args <- io $ mapM
+    (\(name, t) -> (name,) <$> Cryptol.importType sc Cryptol.emptyEnv t)
+    [ ("initRhsOutput", outputType)
+    , ("initLhsOutput", outputType)
+    , ("rhsState", rhsStateType)
+    , ("lhsState", lhsStateType)
+    , ("input", lhsInputType) ]
   theorem <- io $ scLambdaList sc args implication
 
   io (mkTypedTerm sc theorem) >>= provePrim script
@@ -1381,16 +1383,6 @@ proveBisimulation script relation lhs rhs = do
     scRelation :: SharedContext -> Term -> Term -> TopLevel Term
     scRelation sc relLhs relRhs = io $
       scApplyAll sc (ttTerm relation) [relLhs, relRhs]
-
-    -- Given a 'LocalName' and 'Type' for a function argument, return the same
-    -- 'LocalName' and a 'Term' for the argument type. This function is intended
-    -- to be used in conjunction with 'scLambdaList'.
-    importArg :: SharedContext
-              -> (LocalName, C.Type)
-              -> TopLevel (LocalName, Term)
-    importArg sc (name, t) = do
-      t' <- io $ Cryptol.importType sc Cryptol.emptyEnv t
-      return (name, t')
 
 proveHelper ::
   String ->
