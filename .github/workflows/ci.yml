@@ -397,34 +397,24 @@ jobs:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-22.04]
         continue-on-error: [false]
-        hpc: [false]
         include:
           - suite: integration_tests
             os: macos-12
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
-            hpc: false
           - suite: integration_tests
             os: windows-2019
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
-            hpc: false
-          - suite: integration_tests
-            os: ubuntu-22.04
-            continue-on-error: false
-            hpc: true
         exclude:
           - suite: integration_tests
             os: macos-12
             continue-on-error: false
-            hpc: false
           - suite: integration_tests
             os: windows-2019
             continue-on-error: false
-            hpc: false
           - suite: integration_tests
             os: ubuntu-22.04
             continue-on-error: false
-            hpc: false
     steps:
       - uses: actions/checkout@v2
         with:
@@ -436,21 +426,9 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
-        if: matrix.hpc == false
         with:
           name: "${{ runner.os }}-bins"
           path: dist/bin
-
-      - uses: actions/download-artifact@v2
-        if: matrix.hpc == true
-        with:
-          name: "${{ runner.os }}-with-hpc-bins"
-          path: dist/bin
-
-      - uses: actions/download-artifact@v2
-        if: matrix.hpc == true
-        with:
-          name: "${{ runner.os }}-hpc.tar.gz"
 
       - shell: bash
         if: "runner.os != 'Windows'"
@@ -483,32 +461,69 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
+  coverage:
+    name: "Run integration tests with coverage reporting"
+    needs: build
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
       - shell: bash
-        if: matrix.hpc == true
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ runner.os }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-with-hpc-bins"
+          path: dist/bin
+
+      - shell: bash
+        run: chmod +x bin/*
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-tests-${{ runner.os }}
+          path: dist-tests
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      - name: Run integration tests
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          dist-tests/integration_tests
+
+      - name: Compute coverage
+        shell: bash
         run: |
           tar xvf hpc.tar.gz
           ./compute-coverage.sh
 
-      - if: matrix.hpc == true && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v2
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
 
-      - shell: bash
-        if: matrix.hpc == true
+      - name: Gather HPC coverage files
+        shell: bash
         run: .github/ci.sh collect_all_html
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Upload pages artifact
-        if: matrix.hpc == true
         uses: actions/upload-pages-artifact@v1
         with:
           path: all-html
 
       - name: Deploy to github pages
-        if: matrix.hpc == true
         id: deployment
         uses: actions/deploy-pages@v2
 
