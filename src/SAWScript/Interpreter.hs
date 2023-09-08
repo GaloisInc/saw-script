@@ -56,6 +56,7 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
+import SAWScript.Bisimulation
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
@@ -74,7 +75,7 @@ import SAWScript.SolverVersions
 import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
-import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
@@ -93,6 +94,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
 import           Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
@@ -1660,6 +1662,23 @@ primitives = Map.fromList
     , "a proposition is valid. For example, this is useful for proving a goal"
     , "obtained with 'offline_extcore' or 'parse_core'. Returns a Theorem if"
     , "successful, and aborts if unsuccessful."
+    ]
+
+  , prim "prove_bisim"         "ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult"
+    (pureVal proveBisimulation)
+    Experimental
+    [ "Use bisimulation to prove that two terms simulate each other.  The first"
+    , "argument is a relation over the states and outputs for the second and"
+    , "third terms. The relation must have the type"
+    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The second and third"
+    , "arguments are the two terms to prove bisimilar. They must have the types"
+    , "'(lhsState, input) -> (lhsState, output)' and"
+    , "'(rhsState, input) -> (rhsState, output)' respectively."
+    , ""
+    , "Let the first argument be called 'rel', the second 'lhs', and the"
+    , "third 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
+    , "  forall s1 s2 in out1 out2."
+    , "    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))"
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
@@ -3857,6 +3876,13 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
+  , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupArray :: Mir.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing an array of the given type, with the"
+    , "given list of values as elements."
+    ]
+
   , prim "mir_assert" "Term -> MIRSetup ()"
     (pureVal mir_assert)
     Experimental
@@ -4122,41 +4148,7 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve True))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this can"
-    , " be done, this refinement will be used in future calls to"
-    , " Mr. Solver, and if it cannot, the script will exit. See also:"
-    , " mr_solver_test, mr_solver_query." ]
-
-  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve False))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this cannot"
-    , " be done, the script will exit. See also: mr_solver_prove,"
-    , " mr_solver_query - unlike the former, this refinement will not"
-    , " be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverQuery)
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another, returning"
-    , " true iff this can be done. See also: mr_solver_prove,"
-    , " mr_solver_test - unlike the former, this refinement will not"
-    , " be considered in future calls to Mr. Solver, and unlike both,"
-    , " this command will never fail." ]
-
-  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverAssume)
-    Experimental
-    [ "Add the refinement of the two given expressions as an assumption"
-    , " which will be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
@@ -4164,10 +4156,41 @@ primitives = Map.fromList
     , " 3 = all debug output" ]
 
   , prim "mrsolver" "ProofScript ()"
-    (scVal mrSolverTactic)
+    (pureVal (mrSolver emptyRefnset))
     Experimental
-    [ "Use MRSolver to prove a current goal of the form:"
-    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
+
+  , prim "empty_rs"            "Refnset"
+    (pureVal (emptyRefnset :: SAWRefnset))
+    Experimental
+    [ "The empty refinement set, containing no refinements." ]
+
+  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
+    (funVal2 addrefn)
+    Experimental
+    [ "Add a proved refinement theorem to a given refinement set." ]
+
+  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
+    (funVal2 addrefns)
+    Experimental
+    [ "Add proved refinement theorems to a given refinement set." ]
+
+  , prim "mrsolver_with" "Refnset -> ProofScript ()"
+    (pureVal mrSolver)
+    Experimental
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
+    , " the given set of refinements taken as assumptions" ]
+
+  , prim "refines" "[Term] -> Term -> Term -> Term"
+    (funVal3 refinesTerm)
+    Experimental
+    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
+    , " as as well as two terms containing those variables, which may be"
+    , " either terms or functions in the SpecM monad, construct the"
+    , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
+    , " given terms, with the given variables generalized with a Pi type." ]
 
     ---------------------------------------------------------------------
 
@@ -4630,6 +4653,11 @@ primitives = Map.fromList
                -> Options -> BuiltinContext -> Value
     funVal2 f _ _ = VLambda $ \a -> return $ VLambda $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
+
+    funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
+               -> Options -> BuiltinContext -> Value
+    funVal3 f _ _ = VLambda $ \a -> return $ VLambda $ \b -> return $ VLambda $ \c ->
+      fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
 
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Options -> BuiltinContext -> Value

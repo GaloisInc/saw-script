@@ -3,7 +3,7 @@
 
 module Verifier.SAW.Translation.Coq.CryptolModule where
 
-import           Control.Lens                       (over, set, view)
+import           Control.Lens                       (over, view)
 import           Control.Monad                      (forM)
 import           Control.Monad.State                (modify)
 import qualified Data.Map                           as Map
@@ -27,9 +27,7 @@ translateTypedTermMap defs = forM defs translateAndRegisterEntry
     translateAndRegisterEntry (name, t, tp) = do
       let nameStr = unpackIdent (nameIdent name)
       decl <-
-        TermTranslation.withLocalTranslationState $
-        do modify $ set TermTranslation.localEnvironment [nameStr]
-           t_trans <- TermTranslation.translateTerm t
+        do t_trans <- TermTranslation.translateTerm t
            tp_trans <- TermTranslation.translateTerm tp
            return $ TermTranslation.mkDefinition nameStr t_trans tp_trans
       modify $ over TermTranslation.globalDeclarations (nameStr :)
@@ -55,7 +53,7 @@ translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =
        (reverse . view TermTranslation.topLevelDeclarations . snd <$>
         TermTranslation.runTermTranslationMonad
         configuration
-        (TermTranslation.TranslationReader Nothing) -- TODO: this should be Just no?
+        Nothing -- TODO: this should be Just no?
         globalDecls
         []
         (translateTypedTermMap defs))

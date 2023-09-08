@@ -120,14 +120,15 @@ typeOfSetupValue _mcc env _nameEnv val =
             Right mirTy -> return mirTy
         TypedTermSchema s -> X.throwM (MIRPolymorphicType s)
         tp -> X.throwM (MIRInvalidTypedTerm tp)
+    MS.SetupArray elemTy vs ->
+      pure $ Mir.TyArray elemTy (length vs)
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _ _              -> panic "typeOfSetupValue" ["structs not yet implemented"]
-    MS.SetupArray _ _                 -> panic "typeOfSetupValue" ["arrays not yet implemented"]
+    MS.SetupStruct _ _                -> panic "typeOfSetupValue" ["structs not yet implemented"]
     MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "typeOfSetupValue" ["fields not yet implemented"]
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 
@@ -160,19 +161,14 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupTerm tm -> resolveTypedTerm mcc tm
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _ _              -> panic "resolveSetupValue" ["structs not yet implemented"]
-    MS.SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
-    MS.SetupArray () vs -> do
+    MS.SetupStruct _ _                -> panic "resolveSetupValue" ["structs not yet implemented"]
+    MS.SetupArray elemTy vs -> do
       vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
 
       Some (shp :: TypeShape tp) <-
-        case V.head vals of
-          MIRVal shp _ -> pure (Some shp)
+        pure $ tyToShape col elemTy
 
-      let mirTy :: Mir.Ty
-          mirTy = shapeMirTy shp
-
-          vals' :: Vector (RegValue Sym tp)
+      let vals' :: Vector (RegValue Sym tp)
           vals' = V.map (\(MIRVal shp' val') ->
                           case W4.testEquality shp shp' of
                             Just Refl -> val'
@@ -182,13 +178,15 @@ resolveSetupVal mcc env tyenv nameEnv val =
                               , show shp'
                               ])
                         vals
-      return $ MIRVal (ArrayShape (Mir.TyArray mirTy (V.length vals)) mirTy shp)
+      return $ MIRVal (ArrayShape (Mir.TyArray elemTy (V.length vals)) elemTy shp)
                       (Mir.MirVector_Vector vals')
     MS.SetupElem _ _ _                -> panic "resolveSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "resolveSetupValue" ["fields not yet implemented"]
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+  where
+    col = mcc ^. mccRustModule . Mir.rmCS . Mir.collection
 
 resolveTypedTerm ::
   MIRCrucibleContext ->

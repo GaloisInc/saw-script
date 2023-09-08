@@ -754,7 +754,13 @@ In addition to the use of brackets to write Cryptol expressions inline,
 several built-in functions can extract `Term` values from Cryptol files
 in other ways. The `import` command at the top level imports all
 top-level definitions from a Cryptol file and places them in scope
-within later bracketed expressions.
+within later bracketed expressions. This includes [Cryptol `foreign`
+declarations](https://galoisinc.github.io/cryptol/master/FFI.html). If a
+[Cryptol implementation of a foreign
+function](https://galoisinc.github.io/cryptol/master/FFI.html#cryptol-implementation-of-foreign-functions)
+is present, then it will be used as the definition when reasoning about
+the function. Otherwise, the function will be imported as an opaque
+constant with no definition.
 
 The `cryptol_load` command behaves similarly, but returns a
 `CryptolModule` instead. If any `CryptolModule` is in scope, its
@@ -2614,6 +2620,13 @@ the value of an array element.
 
 * `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
+
+In the experimental MIR verification implementation, the following functions
+construct compound values:
+
+* `mir_array_value : MIRType -> [SetupValue] -> SetupValue` constructs an array
+  of the given type whose elements consist of the given values. Supplying the
+  element type is necessary to support length-0 arrays.
 
 ### Bitfields
 

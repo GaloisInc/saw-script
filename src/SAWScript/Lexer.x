@@ -71,7 +71,6 @@ $charesc     = [abfnrtv\\\"\'\&]
 sawTokens :-
 
 $white+                          ;
-"\n"                             ;
 "//".*                           ;
 "/*"                             { cnst TCmntS           }
 "*/"                             { cnst TCmntE           }

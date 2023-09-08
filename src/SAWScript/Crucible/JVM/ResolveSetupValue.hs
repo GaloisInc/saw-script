@@ -68,6 +68,7 @@ import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWScript.Panic
 import SAWScript.Crucible.JVM.MethodSpecIR
+import SAWScript.Crucible.JVM.Setup.Value (JVMRefVal)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
 
@@ -81,8 +82,6 @@ instance Show JVMVal where
   show (RVal _) = "RVal"
   show (IVal _) = "IVal"
   show (LVal _) = "LVal"
-
-type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 
 type SetupValue = MS.SetupValue CJ.JVM
 
@@ -140,11 +139,11 @@ typeOfSetupValue _cc env _nameEnv val =
       -- type-safe field accesses.
       return (J.ClassType (J.mkClassName "java/lang/Object"))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
 
@@ -171,11 +170,11 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where

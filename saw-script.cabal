@@ -113,6 +113,7 @@ library
     SAWScript.AutoMatch.LLVM
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
+    SAWScript.Bisimulation
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Exceptions
@@ -146,6 +147,7 @@ library
     SAWScript.Crucible.Common.ResolveSetupValue
     SAWScript.Crucible.Common.Setup.Builtins
     SAWScript.Crucible.Common.Setup.Type
+    SAWScript.Crucible.Common.Setup.Value
 
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.Boilerplate
@@ -153,6 +155,7 @@ library
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
     SAWScript.Crucible.LLVM.ResolveSetupValue
+    SAWScript.Crucible.LLVM.Setup.Value
     SAWScript.Crucible.LLVM.Skeleton
     SAWScript.Crucible.LLVM.Skeleton.Builtins
     SAWScript.Crucible.LLVM.X86
@@ -162,11 +165,13 @@ library
     SAWScript.Crucible.JVM.MethodSpecIR
     SAWScript.Crucible.JVM.Override
     SAWScript.Crucible.JVM.ResolveSetupValue
+    SAWScript.Crucible.JVM.Setup.Value
 
     SAWScript.Crucible.MIR.Builtins
     SAWScript.Crucible.MIR.MethodSpecIR
     SAWScript.Crucible.MIR.Override
     SAWScript.Crucible.MIR.ResolveSetupValue
+    SAWScript.Crucible.MIR.Setup.Value
     SAWScript.Crucible.MIR.TypeShape
 
     SAWScript.Prover.Mode
@@ -178,6 +183,7 @@ library
     SAWScript.Prover.MRSolver.Monad
     SAWScript.Prover.MRSolver.SMT
     SAWScript.Prover.MRSolver.Solver
+    SAWScript.Prover.MRSolver.Evidence
     SAWScript.Prover.MRSolver.Term
     SAWScript.Prover.RME
     SAWScript.Prover.ABC

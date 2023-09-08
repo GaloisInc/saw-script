@@ -10,8 +10,9 @@ module SAWServer.MIRCrucibleSetup
   ) where
 
 import Control.Exception (throw)
-import Control.Lens ( view )
+import Control.Lens ( (^.), view )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
+import Control.Monad.State ( MonadState(..) )
 import Data.Aeson ( FromJSON(..), withObject, (.:) )
 import Data.ByteString (ByteString)
 import Data.Map (Map)
@@ -21,7 +22,8 @@ import Mir.Intrinsics (MIR)
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
-import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import qualified SAWScript.Crucible.Common.Setup.Type as MS
 import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
 import SAWScript.Crucible.MIR.Builtins
     ( mir_alloc,
@@ -33,6 +35,7 @@ import SAWScript.Crucible.MIR.Builtins
       mir_postcond,
       mir_precond,
       mir_return )
+import SAWScript.Crucible.MIR.ResolveSetupValue (typeOfSetupValue)
 import SAWScript.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
@@ -61,7 +64,7 @@ import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
 import SAWServer.TrackFile ( trackFile )
 
-newtype ServerSetupVal = Val (SetupValue MIR)
+newtype ServerSetupVal = Val (MS.SetupValue MIR)
 
 compileMIRContract ::
   (FilePath -> IO ByteString) ->
@@ -159,9 +162,24 @@ compileMIRContract fileReader bic cenv0 c =
       MS.SetupTerm <$> getTypedTerm cenv expr
     getSetupVal _ NullValue =
       MIRSetupM $ fail "Null setup values unsupported in the MIR API."
-    getSetupVal env (ArrayValue elts) =
-      do elts' <- mapM (getSetupVal env) elts
-         MIRSetupM $ return $ MS.SetupArray () elts'
+    getSetupVal env (ArrayValue mbEltTy elts) =
+      case (mbEltTy, elts) of
+        (Nothing, []) ->
+          MIRSetupM $ fail "Empty MIR array with unknown element type."
+        (Just eltTy, []) ->
+          return $ MS.SetupArray (mirType eltTy) []
+        (_, elt:eltss) ->
+          do st <- MIRSetupM get
+             let cc = st ^. MS.csCrucibleContext
+             let mspec = st ^. MS.csMethodSpec
+             let allocEnv = MS.csAllocations mspec
+             let nameEnv = MS.csTypeNames mspec
+             elt' <- getSetupVal env elt
+             eltss' <- mapM (getSetupVal env) eltss
+             ty' <- case mbEltTy of
+                      Just eltTy -> pure $ mirType eltTy
+                      Nothing -> MIRSetupM $ typeOfSetupValue cc allocEnv nameEnv elt'
+             return $ MS.SetupArray ty' (elt':eltss')
     getSetupVal _ (TupleValue _) =
       MIRSetupM $ fail "Tuple setup values unsupported in the MIR API."
     getSetupVal _ (FieldLValue _ _) =

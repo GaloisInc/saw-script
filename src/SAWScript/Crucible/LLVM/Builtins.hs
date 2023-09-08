@@ -2215,7 +2215,7 @@ constructExpandedSetupValue cc sc loc t =
          traverse (constructExpandedSetupValue cc sc loc)
                   (Crucible.siFieldTypes si)
       -- FIXME: should this always be unpacked?
-      pure $ mkAllLLVM $ SetupStruct () False $ map (\a -> getAllLLVM a) fields
+      pure $ mkAllLLVM $ SetupStruct False $ map (\a -> getAllLLVM a) fields
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of
@@ -2503,7 +2503,7 @@ llvm_fresh_pointer lty =
      constructFreshPointer (llvmTypeAlias lty) loc memTy
 
 llvm_cast_pointer :: AllLLVM SetupValue -> L.Type -> AllLLVM SetupValue
-llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast () (getAllLLVM ptr) lty)
+llvm_cast_pointer ptr lty = mkAllLLVM (SetupCast lty (getAllLLVM ptr))
 
 constructFreshPointer ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>

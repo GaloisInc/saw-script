@@ -20,7 +20,7 @@ Stability   : provisional
 
 module SAWScript.Crucible.Common.Override
   ( Pointer
-  , Pointer'
+  , MS.Pointer'
   , OverrideState
   , OverrideState'(..)
   , osAsserts
@@ -68,7 +68,6 @@ import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
-import           Data.Kind (Type)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Set (Set)
@@ -96,6 +95,7 @@ import qualified What4.ProgramLoc as W4
 import           SAWScript.Exceptions
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
+import           SAWScript.Crucible.Common.Setup.Value as MS
 
 -- TODO, not sure this is the best place for this definition
 type MetadataMap =
@@ -106,13 +106,11 @@ type MetadataMap =
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
-type family Pointer' ext sym :: Type
-
-type Pointer ext = Pointer' ext Sym
+type Pointer ext = MS.Pointer' ext Sym
 
 data OverrideState' sym ext = OverrideState
   { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex (Pointer' ext sym)
+    _setupValueSub :: Map AllocIndex (MS.Pointer' ext sym)
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term

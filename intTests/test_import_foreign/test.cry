@@ -1,0 +1,4 @@
+foreign add : [8] -> [8] -> [8]
+add x y = x + y
+
+foreign f : [8] -> [8]

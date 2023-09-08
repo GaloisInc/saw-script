@@ -41,9 +41,6 @@ import GHC.Generics
 import Prettyprinter
 import Data.Text (Text, unpack)
 
-import Data.Map (Map)
-import qualified Data.Map as Map
-
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
@@ -309,61 +306,6 @@ asLambdaName _ = Nothing
 
 
 ----------------------------------------------------------------------
--- * Mr Solver Environments
-----------------------------------------------------------------------
-
--- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
--- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
-data FunAssumpRHS = OpaqueFunAssump FunName [Term]
-                  | RewriteFunAssump NormComp
-
--- | An assumption that a named function refines some specification. This has
--- the form
---
--- > forall x1, ..., xn. F e1 ... ek |= m
---
--- for some universal context @x1:T1, .., xn:Tn@, some list of argument
--- expressions @ei@ over the universal @xj@ variables, and some right-hand side
--- computation expression @m@.
-data FunAssump = FunAssump {
-  -- | The uvars that were in scope when this assumption was created
-  fassumpCtx :: MRVarCtx,
-  -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
-  fassumpArgs :: [Term],
-  -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: FunAssumpRHS
-}
-
--- | A map from function names to function refinement assumptions over that
--- name
---
--- FIXME: this should probably be an 'IntMap' on the 'VarIndex' of globals
-type FunAssumps = Map FunName FunAssump
-
--- | A global MR Solver environment
-data MREnv = MREnv {
-  -- | The set of function refinements to be assumed by to Mr. Solver (which
-  -- have hopefully been proved previously...)
-  mreFunAssumps :: FunAssumps,
-  -- | The debug level, which controls debug printing
-  mreDebugLevel :: Int
-}
-
--- | The empty 'MREnv'
-emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreFunAssumps = Map.empty, mreDebugLevel = 0 }
-
--- | Add a 'FunAssump' to a Mr Solver environment
-mrEnvAddFunAssump :: FunName -> FunAssump -> MREnv -> MREnv
-mrEnvAddFunAssump f fassump env =
-  env { mreFunAssumps = Map.insert f fassump (mreFunAssumps env) }
-
--- | Set the debug level of a Mr Solver environment
-mrEnvSetDebugLevel :: Int -> MREnv -> MREnv
-mrEnvSetDebugLevel dlvl env = env { mreDebugLevel = dlvl }
-
-
-----------------------------------------------------------------------
 -- * Utility Functions for Transforming 'Term's
 ----------------------------------------------------------------------
 
@@ -371,23 +313,29 @@ mrEnvSetDebugLevel dlvl env = env { mreDebugLevel = dlvl }
 traverseSubterms :: MonadTerm m => (Term -> m Term) -> Term -> m Term
 traverseSubterms f (unwrapTermF -> tf) = traverse f tf >>= mkTermF
 
+-- | Like 'memoFixTermFun', but threads through an accumulating argument
+memoFixTermFunAccum :: MonadIO m =>
+                       ((b -> Term -> m a) -> b -> Term -> m a) ->
+                       b -> Term -> m a
+memoFixTermFunAccum f acc_top term_top =
+  do table_ref <- liftIO $ newIORef IntMap.empty
+     let go acc t@(STApp { stAppIndex = ix }) =
+           liftIO (readIORef table_ref) >>= \table ->
+           case IntMap.lookup ix table of
+             Just ret -> return ret
+             Nothing ->
+               do ret <- f go acc t
+                  liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)
+                  return ret
+         go acc t = f go acc t
+     go acc_top term_top
+
 -- | Build a recursive memoized function for tranforming 'Term's. Take in a
 -- function @f@ that intuitively performs one step of the transformation and
 -- allow it to recursively call the memoized function being defined by passing
 -- it as the first argument to @f@.
 memoFixTermFun :: MonadIO m => ((Term -> m a) -> Term -> m a) -> Term -> m a
-memoFixTermFun f term_top =
-  do table_ref <- liftIO $ newIORef IntMap.empty
-     let go t@(STApp { stAppIndex = ix }) =
-           liftIO (readIORef table_ref) >>= \table ->
-           case IntMap.lookup ix table of
-             Just ret -> return ret
-             Nothing ->
-               do ret <- f go t
-                  liftIO $ modifyIORef' table_ref (IntMap.insert ix ret)
-                  return ret
-         go t = f go t
-     go term_top
+memoFixTermFun f = memoFixTermFunAccum (f .) ()
 
 
 ----------------------------------------------------------------------
@@ -490,13 +438,17 @@ newtype PPInCtxM a = PPInCtxM (Reader [LocalName] a)
 runPPInCtxM :: PPInCtxM a -> MRVarCtx -> a
 runPPInCtxM (PPInCtxM m) = runReader m . map fst . mrVarCtxInnerToOuter
 
+-- | Pretty-print an object in a SAW core context
+ppInCtx :: PrettyInCtx a => MRVarCtx -> a -> SawDoc
+ppInCtx ctx a = runPPInCtxM (prettyInCtx a) ctx
+
 -- | Pretty-print an object in a SAW core context and render to a 'String'
 showInCtx :: PrettyInCtx a => MRVarCtx -> a -> String
-showInCtx ctx a = renderSawDoc defaultPPOpts $ runPPInCtxM (prettyInCtx a) ctx
+showInCtx ctx a = renderSawDoc defaultPPOpts $ ppInCtx ctx a
 
 -- | Pretty-print an object in the empty SAW core context
 ppInEmptyCtx :: PrettyInCtx a => a -> SawDoc
-ppInEmptyCtx a = runPPInCtxM (prettyInCtx a) emptyMRVarCtx
+ppInEmptyCtx = ppInCtx emptyMRVarCtx
 
 -- | A generic function for pretty-printing an object in a SAW core context of
 -- locally-bound names
@@ -514,6 +466,10 @@ prettyAppList = fmap (group . hang 2 . vsep) . sequence
 prettyTermApp :: Term -> [Term] -> PPInCtxM SawDoc
 prettyTermApp f_top args =
   prettyInCtx $ foldl (\f arg -> Unshared $ App f arg) f_top args
+
+-- | Pretty-print the application of a 'Term' in a SAW core context
+ppTermAppInCtx :: MRVarCtx -> Term -> [Term] -> SawDoc
+ppTermAppInCtx ctx f_top args = runPPInCtxM (prettyTermApp f_top args) ctx
 
 instance PrettyInCtx MRVarCtx where
   prettyInCtx = return . align . sep . helper [] . mrVarCtxOuterToInner where

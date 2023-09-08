@@ -4,7 +4,7 @@
 module SAWServer.Data.SetupValue (CrucibleSetupVal) where
 
 import Control.Applicative
-import Data.Aeson (FromJSON(..), withObject, withText, (.:))
+import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?))
 
 import SAWServer
 
@@ -47,7 +47,7 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cr
           TagNamedValue -> NamedValue <$> o .: "name"
           TagNullValue -> pure NullValue
           TagCryptol -> CryptolExpr <$> o .: "expression"
-          TagArrayValue -> ArrayValue <$> o .: "elements"
+          TagArrayValue -> ArrayValue <$> o .:? "element type" <*> o .: "elements"
           TagTupleValue -> TupleValue <$> o .: "elements"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagCastLValue -> CastLValue <$> o .: "base" <*> o .: "type"
