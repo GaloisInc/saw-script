@@ -215,11 +215,11 @@ jobs:
           path: dist/bin
           name: ${{ runner.os }}-bins
 
-      - if: matrix.run-tests && matrix.hpc == true
+      - if: matrix.hpc == true
         shell: bash
         run: .github/ci.sh collect_hpc_files
 
-      - if: matrix.run-tests && matrix.hpc == true
+      - if: matrix.hpc == true
         uses: actions/upload-artifact@v2
         with:
           path: hpc.tar.gz
