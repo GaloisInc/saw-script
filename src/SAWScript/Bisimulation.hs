@@ -4,6 +4,40 @@ Description : Implementations of SAW-Script bisimulation prover
 License     : BSD3
 Maintainer  : bboston7
 Stability   : experimental
+
+This module provides tools to prove bisimilarity of two circuits, or of a
+circuit and a specification. At the moment, it does this through the single
+'proveBisimulation' function, but we will expand this module with additional
+functionality in the future.
+
+At its core, we want to prove that two circuits executing in lockstep satisfy
+some relation over the state of each circuit and their outputs. To achieve this,
+the 'proveBisimulation' command takes:
+* A relation @rel : (lhsState, output) -> (rhsState, output) -> Bit@
+* A term @lhs : (lhsState, input) -> (lhsState, output)@
+* A term @rhs : (rhsState, input) -> (rhsState, output)@
+and considers @lhs@ and @rhs@ bisimilar when:
+  forall s1 s2 in out1 out2.
+    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))
+
+One natural question is why the relation has the type
+@(lhsState, output) -> (rhsState, output) -> Bit@ instead of something simpler
+like @lhsState -> rhsState -> Bit@. We require the user to specify when outputs
+satisfy the relation because it is not always the case that circuit outputs
+agree exactly after each simulation step. Specifically, one circuit may complete
+some calculation in @N@ steps and another in @M@ steps where @N != M@. In this
+case, the user may not want to check the circuit outputs for equality until the
+greater of @N@ and @M@ steps have passed. The simpler relation type would not
+enable specification of this property.
+
+The main downside of this approach is that the resulting forall in the formula
+sent to the SMT solver quantifies over the initial output of the circuits prior
+to simulating a step. This can be confusing when reading the SAW source code,
+and could be resolved by requiring the user to provide two different relations
+(one over states, and one over states and outputs), but this puts more burden on
+the end user who would have to write two relations rather than just one. As
+such, we've chosen the approach that's easier on the end user, rather than the
+one that's easier on the SAW implementer.
 -}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
