@@ -62,9 +62,9 @@ build() {
   else
     pkgs=(saw crux-mir-comp saw-remote-api)
   fi
-  tee -a cabal.project.local > /dev/null < cabal.project.ci
+  cat cabal.project.ci >> cabal.project.local
   if [[ "$ENABLE_HPC" == "true" ]]; then
-    tee -a cabal.project.local > /dev/null < cabal.project.ci-hpc
+    cat cabal.project.ci-hpc >> cabal.project.local
   fi
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
@@ -87,7 +87,7 @@ collect_hpc_files() {
 # Download HTML coverage reports and generate an index file linking to them
 collect_all_html() {
   local HTML_DIR=all-html
-  mkdir ${HTML_DIR}
+  mkdir -p ${HTML_DIR}
   (cd ${HTML_DIR} && gh run download -p "coverage-html-*" && python3 ../.github/generate_index.py)
 }
 
