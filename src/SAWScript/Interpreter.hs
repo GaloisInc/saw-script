@@ -56,6 +56,7 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
+import SAWScript.Bisimulation
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
@@ -1661,6 +1662,23 @@ primitives = Map.fromList
     , "a proposition is valid. For example, this is useful for proving a goal"
     , "obtained with 'offline_extcore' or 'parse_core'. Returns a Theorem if"
     , "successful, and aborts if unsuccessful."
+    ]
+
+  , prim "prove_bisim"         "ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult"
+    (pureVal proveBisimulation)
+    Experimental
+    [ "Use bisimulation to prove that two terms simulate each other.  The first"
+    , "argument is a relation over the states and outputs for the second and"
+    , "third terms. The relation must have the type"
+    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The second and third"
+    , "arguments are the two terms to prove bisimilar. They must have the types"
+    , "'(lhsState, input) -> (lhsState, output)' and"
+    , "'(rhsState, input) -> (rhsState, output)' respectively."
+    , ""
+    , "Let the first argument be called 'rel', the second 'lhs', and the"
+    , "third 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
+    , "  forall s1 s2 in out1 out2."
+    , "    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))"
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
