@@ -3976,6 +3976,22 @@ primitives = Map.fromList
     , "create; use `mir_find_adt` to retrieve a MIRAdt value."
     ]
 
+  , prim "mir_static"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing a reference to the named static."
+    , "The String should be the name of a static value."
+    ]
+
+  , prim "mir_static_initializer"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobalInitializer () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing the value of the initializer of a named"
+    , "static. The String should be the name of a static value."
+    ]
+
   , prim "mir_term"
     "Term -> MIRValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue MIR))

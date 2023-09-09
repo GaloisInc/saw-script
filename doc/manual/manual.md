@@ -2788,6 +2788,10 @@ them.
 
 ## Global variables
 
+SAW supports verifying LLVM and MIR specifications involving global variables.
+
+### LLVM global variables
+
 Mutable global variables that are accessed in a function must first be allocated
 by calling `llvm_alloc_global` on the name of the global.
 
@@ -2891,6 +2895,68 @@ unless it can determine that `x` still has its initial value at the
 point of a call to `f`. This specification also constrains `y` to prevent
 signed integer overflow resulting from the `x + y` expression in `f`,
 which is undefined behavior in C.
+
+### MIR static items
+
+Rust's static items are the MIR version of global variables. A reference to a
+static item can be accessed with the `mir_static` function. This function takes
+a `String` representing a static item's identifier, and this identifier is
+expected to adhere to the naming conventions outlined in the "Running a
+MIR-based verification" section:
+
+* `mir_static : String -> MIRValue`
+
+References to static values can be initialized with the `mir_points_to`
+command, just like with other forms of references. Immutable static items
+(e.g., `static X: u8 = 42`) are initialized implicitly in every SAW
+specification, so there is no need for users to do so manually. Mutable static
+items (e.g., `static mut Y: u8 = 27`), on the other hand, are *not* initialized
+implicitly, and users must explicitly pick a value to initialize them with.
+
+The `mir_static_initializer` function can be used to access the initial value
+of a static item in a MIR program. Like with `mir_static`, the `String`
+supplied as an argument must be a valid identifier:
+
+* `mir_static_initializer : String -> MIRValue`.
+
+As an example of how to use these functions, here is a Rust program involving
+static items:
+
+~~~ .rs
+// statics.rs
+static     S1: u8 = 1;
+static mut S2: u8 = 2;
+
+pub fn f() -> u8 {
+    // Reading a mutable static item requires an `unsafe` block due to
+    // concurrency-related concerns. We are only concerned about the behavior
+    // of this program in a single-threaded context, so this is fine.
+    let s2 = unsafe { S2 };
+    S1 + s2
+}
+~~~
+
+We can write a specification for `f` like so:
+
+~~~
+// statics.saw
+enable_experimental;
+
+let f_spec = do {
+  mir_points_to (mir_static "statics::S2")
+                (mir_static_initializer "statics::S2");
+  // Note that we do not initialize S1, as immutable static items are implicitly
+  // initialized in every specification.
+
+  mir_execute_func [];
+
+  mir_return (mir_term {{ 3 : [8] }});
+};
+
+m <- mir_load_module "statics.linked-mir.json";
+
+mir_verify m "statics::f" [] false f_spec z3;
+~~~
 
 ## Preconditions and Postconditions
 

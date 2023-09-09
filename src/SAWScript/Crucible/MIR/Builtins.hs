@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -56,21 +57,21 @@ import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Foldable as F
 import Data.Foldable (for_)
 import Data.IORef
 import qualified Data.List.Extra as List (find, groupOn)
-import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (knownNat, natValue)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
+import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
@@ -81,8 +82,10 @@ import qualified Cryptol.TypeCheck.Type as Cryptol
 import qualified Lang.Crucible.Analysis.Postdom as Crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
+import qualified Lang.Crucible.CFG.Extension as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Mir.DefId as Mir
@@ -91,8 +94,8 @@ import qualified Mir.Generator as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Intrinsics as Mir
 import qualified Mir.ParseTranslate as Mir
-import qualified Mir.Trans as Mir
 import Mir.TransCustom (customOps)
+import qualified Mir.Trans as Mir
 import qualified Mir.TransTy as Mir
 
 import qualified What4.Config as W4
@@ -129,10 +132,9 @@ type MethodSpec = MS.CrucibleMethodSpecIR MIR
 type SetupCondition = MS.SetupCondition MIR
 
 -- TODO: something useful with the global pair?
-ppMIRAbortedResult :: MIRCrucibleContext
-                   -> Crucible.AbortedResult Sym a
+ppMIRAbortedResult :: Crucible.AbortedResult Sym a
                    -> PP.Doc ann
-ppMIRAbortedResult _cc = ppAbortedResult (\_gp -> mempty)
+ppMIRAbortedResult = ppAbortedResult (\_gp -> mempty)
 
 -----
 -- Commands
@@ -218,15 +220,11 @@ mir_load_module inputFile = do
    b <- io $ BSL.readFile inputFile
 
    opts <- getOptions
-   let ?debug = simVerbose opts
-   -- For now, we use the same default settings for implicit parameters as in
-   -- crux-mir. We may want to add options later that allow configuring these.
-   let ?assertFalseOnError = True
-   let ?printCrucible = False
-
    halloc <- getHandleAlloc
-   col <- io $ Mir.parseMIR inputFile b
-   io $ Mir.translateMIR mempty col halloc
+
+   withImplicitParams opts $ do
+     col <- io $ Mir.parseMIR inputFile b
+     io $ Mir.translateMIR mempty col halloc
 
 mir_return :: SetupValue -> MIRSetupM ()
 mir_return retVal =
@@ -336,6 +334,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
      cc <- setupCrucibleContext rm
      SomeOnlineBackend bak <- pure (cc^.mccBackend)
      let sym = cc^.mccSym
+     let globals0 = cc^.mccSymGlobalState
 
      pos <- getPosition
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
@@ -363,7 +362,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
        unwords ["Verifying", show (methodSpec ^. MS.csMethod), "..."]
 
      -- construct the initial state for verifications
-     (args, assumes, env, globals1) <- io $ verifyPrestate cc methodSpec Crucible.emptyGlobals
+     (args, assumes, env, globals1) <- io $ verifyPrestate cc methodSpec globals0
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
@@ -830,27 +829,14 @@ verifySimulate ::
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =
   mccWithBackend cc $ \bak ->
   do let rm = cc^.mccRustModule
-     let cfgMap = rm ^. Mir.rmCFGs
      let cs = rm ^. Mir.rmCS
      let col = cs ^. Mir.collection
      let method = mspec ^. MS.csMethod
      let verbosity = simVerbose opts
-     let halloc = cc^.mccHandleAllocator
+     let simctx = cc^.mccSimContext
 
      when (verbosity > 2) $
           putStrLn "starting executeCrucibleMIR"
-
-     -- Translate the static initializer function
-     let ?debug = simVerbose opts
-     -- For now, we use the same default settings for implicit parameters as in
-     -- crux-mir. We may want to add options later that allow configuring these.
-     let ?assertFalseOnError = True
-     let ?customOps          = customOps
-     Crucible.AnyCFG staticInitCfg <- Mir.transStatics cs halloc
-     let staticInitHndl = Crucible.cfgHandle staticInitCfg
-     Refl <- case testEquality (Crucible.handleArgTypes staticInitHndl) Ctx.Empty of
-       Just e -> pure e
-       Nothing -> fail "mir_verify: static initializer should not require arguments"
 
      -- Find and run the target function
      Crucible.AnyCFG methodCfg <- lookupDefIdCFG rm method
@@ -859,20 +845,11 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
      let methodRetTy = Crucible.handleReturnType methodHndl
 
      regmap <- prepareArgs methodArgTys (map snd args)
-     res <-
+     (_, Crucible.GlobalPair retval globals1) <-
        do let feats = pfs
-          let simctx = Crucible.initSimContext bak Mir.mirIntrinsicTypes halloc stdout
-                         (Crucible.FnBindings Crucible.emptyHandleMap) Mir.mirExtImpl
-                         SAWCruciblePersonality
-          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler methodRetTy
           let fnCall = Crucible.regValue <$> Crucible.callCFG methodCfg regmap
           let overrideSim =
-                do forM_ cfgMap $ \(Crucible.AnyCFG cfg) ->
-                     Crucible.bindFnHandle (Crucible.cfgHandle cfg) $
-                     Crucible.UseCFG cfg (Crucible.postdomInfo cfg)
-                   _ <- Crucible.callCFG staticInitCfg Crucible.emptyRegMap
-
-                   mapM_ (registerOverride opts cc simctx top_loc mdMap)
+                do mapM_ (registerOverride opts cc simctx top_loc mdMap)
                            (List.groupOn (view MS.csMethod) (map (view MS.psSpec) lemmas))
                    liftIO $
                      for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
@@ -880,36 +857,20 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
                           let loc = MS.conditionLoc md
                           Crucible.addAssumption bak (Crucible.GenericAssumption loc reason expr)
                    fnCall
-          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
-            (simSt (Crucible.runOverrideSim methodRetTy overrideSim))
+          runCrucible opts simctx globals (map Crucible.genericToExecutionFeature feats)
+                      methodRetTy overrideSim
 
-     case res of
-       Crucible.FinishedResult _ pr ->
-         do Crucible.GlobalPair retval globals1 <-
-              case pr of
-                Crucible.TotalRes gp -> return gp
-                Crucible.PartialRes _ _ gp _ ->
-                  do printOutLn opts Info "Symbolic simulation completed with side conditions."
-                     return gp
-            let ret_ty = mspec ^. MS.csRet
-            retval' <-
-              case ret_ty of
-                Nothing -> return Nothing
-                Just ret_mt ->
-                  case retval of
-                    Crucible.RegEntry ty val ->
-                      case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of
-                        Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
-                        Just v -> return (Just (ret_mt, v))
-            return (retval', globals1)
-
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppMIRAbortedResult cc ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
-
-       Crucible.TimeoutResult _cxt -> fail "Symbolic execution timed out."
+     let ret_ty = mspec ^. MS.csRet
+     retval' <-
+       case ret_ty of
+         Nothing -> return Nothing
+         Just ret_mt ->
+           case retval of
+             Crucible.RegEntry ty val ->
+               case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of
+                 Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
+                 Just v -> return (Just (ret_mt, v))
+     return (retval', globals1)
 
   where
     prepareArg :: forall tp. Crucible.TypeRepr tp -> MIRVal -> IO (Crucible.RegValue Sym tp)
@@ -1026,46 +987,6 @@ findAdt col origName substs =
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
 
--- | Given a function name @fnName@, attempt to look up its corresponding
--- 'Mir.DefId'. Currently, the following types of function names are permittd:
---
--- * @<crate_name>/<disambiguator>::<function_name>: A fully disambiguated name.
---
--- * @<crate_name>::<function_name>: A name without a disambiguator. In this
---   case, SAW will attempt to look up a disambiguator from the @crateDisambigs@
---   map. If none can be found, or if there are multiple disambiguators for the
---   given @<crate_name>@, then this will fail.
-findDefId :: Map Text (NonEmpty Text) -> Text -> TopLevel Mir.DefId
-findDefId crateDisambigs fnName = do
-    (crate, path) <-
-      case edid of
-        crate:path -> pure (crate, path)
-        [] -> fail $ unlines
-                [ "The function `" ++ fnNameStr ++ "` lacks a crate."
-                , "Consider providing one, e.g., `<crate_name>::" ++ fnNameStr ++ "`."
-                ]
-    let crateStr = Text.unpack crate
-    case Text.splitOn "/" crate of
-      [crateNoDisambig, disambig] ->
-        pure $ Mir.textId $ Text.intercalate "::"
-             $ (crateNoDisambig <> "/" <> disambig) : path
-      [_] ->
-        case Map.lookup crate crateDisambigs of
-            Just allDisambigs@(disambig :| otherDisambigs)
-              |  F.null otherDisambigs
-              -> pure $ Mir.textId $ Text.intercalate "::"
-                      $ (crate <> "/" <> disambig) : path
-              |  otherwise
-              -> fail $ unlines $
-                   [ "ambiguous crate " ++ crateStr
-                   , "crate disambiguators:"
-                   ] ++ F.toList (Text.unpack <$> allDisambigs)
-            Nothing -> fail $ "unknown crate " ++ crateStr
-      _ -> fail $ "Malformed crate name: " ++ show crateStr
-  where
-    fnNameStr = Text.unpack fnName
-    edid = Text.splitOn "::" fnName
-
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
 
@@ -1081,13 +1002,49 @@ lookupDefIdCFG rm method =
     Just x -> return x
     Nothing -> fail $ "Couldn't find CFG for MIR function: " ++ show method
 
+-- | Some boilerplate code needed to invoke 'Crucible.executeCrucible' and
+-- extract the results.
+runCrucible ::
+  Crucible.IsSyntaxExtension ext =>
+  Options ->
+  Crucible.SimContext p Sym ext ->
+  Crucible.SymGlobalState Sym ->
+  [Crucible.ExecutionFeature p Sym ext (Crucible.RegEntry Sym a)] ->
+  Crucible.TypeRepr a ->
+  Crucible.OverrideSim p Sym ext (Crucible.RegEntry Sym a) Crucible.EmptyCtx a (Crucible.RegValue Sym a) ->
+  IO (Crucible.SimContext p Sym ext, Crucible.GlobalPair Sym (Crucible.RegEntry Sym a))
+runCrucible opts simCtx globals execFeatures ovRetTpr ovSim = do
+  let initExecState =
+        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler ovRetTpr $
+        Crucible.runOverrideSim ovRetTpr ovSim
+  res <- Crucible.executeCrucible execFeatures initExecState
+  case res of
+    Crucible.FinishedResult simctx pr ->
+      case pr of
+        Crucible.TotalRes gp -> return (simctx, gp)
+        Crucible.PartialRes _ _ gp _ ->
+          do printOutLn opts Info "Symbolic simulation completed with side conditions."
+             return (simctx, gp)
+
+    Crucible.AbortedResult _ ar -> do
+      let resultDoc = ppMIRAbortedResult ar
+      fail $ unlines [ "Symbolic execution failed."
+                     , show resultDoc
+                     ]
+
+    Crucible.TimeoutResult _cxt ->
+      fail "Symbolic execution timed out."
+
 setupCrucibleContext :: Mir.RustModule -> TopLevel MIRCrucibleContext
 setupCrucibleContext rm =
   do halloc <- getHandleAlloc
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc
-     bak <- io $ newSAWCoreBackend pathSatSolver sym
+     someBak@(SomeOnlineBackend bak) <- io $ newSAWCoreBackend pathSatSolver sym
+     let cs     = rm ^. Mir.rmCS
+     let col    = cs ^. Mir.collection
+     let cfgMap = rm ^. Mir.rmCFGs
      opts <- getOptions
      io $ do let cfg = W4.getConfiguration sym
              verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -1097,10 +1054,149 @@ setupCrucibleContext rm =
      -- TODO! there's a lot of options setup we need to replicate
      --  from SAWScript.Crucible.LLVM.Builtins
 
+     -- There is quite a bit of faff below, all for the sake of translating
+     -- top-level static values. See Note [Translating MIR statics in SAW] for
+     -- a high-level description of what this code is doing.
+     Crucible.AnyCFG staticInitCfg <-
+       withImplicitParams opts $ io $ Mir.transStatics cs halloc
+     let staticInitHndl   = Crucible.cfgHandle staticInitCfg
+     let staticInitArgTys = Crucible.handleArgTypes staticInitHndl
+     let staticInitRetTy  = Crucible.handleReturnType staticInitHndl
+     Refl <- case testEquality staticInitArgTys Ctx.Empty of
+       Just e ->
+         pure e
+       Nothing ->
+         panic "setupCrucibleContext"
+               [ "static initializer should not require arguments:"
+               , show staticInitArgTys
+               ]
+     Refl <- case testEquality staticInitRetTy Crucible.UnitRepr of
+       Just e ->
+         pure e
+       Nothing ->
+         panic "setupCrucibleContext"
+               [ "static initializer should return ():"
+               , show staticInitRetTy
+               ]
+
+     let bindings = Crucible.fnBindingsFromList $
+                    map (\(Crucible.AnyCFG cfg) ->
+                          Crucible.FnBinding
+                            (Crucible.cfgHandle cfg)
+                            (Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $
+                    Map.elems cfgMap
+     let simctx0 = Crucible.initSimContext bak
+                     Mir.mirIntrinsicTypes halloc stdout
+                     bindings Mir.mirExtImpl
+                     SAWCruciblePersonality
+     let globals0 = Crucible.emptyGlobals
+     let setupGlobals = Crucible.regValue <$> Crucible.callCFG staticInitCfg Crucible.emptyRegMap
+     -- Step (1) in Note [Translating MIR statics in SAW]
+     (simctx1, gp) <- io $ runCrucible opts simctx0 globals0 [] Crucible.UnitRepr setupGlobals
+     let globalsAllStatics = gp ^. Crucible.gpGlobals
+     -- Step (2) in Note [Translating MIR statics in SAW]
+     let (globalsImmutStaticsOnly, staticInitializerPairs) =
+           mapAccumL
+             (\globals (staticDefId, Mir.StaticVar gv) ->
+               let static =
+                     case Map.lookup staticDefId (col ^. Mir.statics) of
+                       Just static' ->
+                         static'
+                       Nothing ->
+                         panic "setupCrucibleContext"
+                               [ "staticDefId not in statics map:"
+                               , show staticDefId
+                               ] in
+               case Crucible.lookupGlobal gv globalsAllStatics of
+                 Just rv ->
+                   let pair = MapF.Pair gv (Crucible.RV rv) in
+                   if static ^. Mir.sMutable
+                     then (globals, pair)
+                     else (Crucible.insertGlobal gv rv globals, pair)
+                 Nothing ->
+                   panic "setupCrucibleContext"
+                         [ "Static GlobalVar not in SymGlobalState:"
+                         , show gv
+                         ])
+             globals0
+             (cs ^. Mir.staticMap . to Map.toList)
+     let staticInitializerMap = MapF.fromList staticInitializerPairs
+
      return MIRCrucibleContext { _mccRustModule = rm
-                               , _mccBackend = bak
-                               , _mccHandleAllocator = halloc
+                               , _mccBackend = someBak
+                               , _mccSimContext = simctx1
+                               , _mccSymGlobalState = globalsImmutStaticsOnly
+                               , _mccStaticInitializerMap = staticInitializerMap
                                }
+
+{-
+Note [Translating MIR statics in SAW]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Translating top-level static values in the SAW MIR backend requires some care.
+This is because we want to treat immutable and mutable static differently:
+
+* Immutable statics should be implicitly initialized in each specification
+  without any action required on the user's end.
+
+* Mutable statics should /not/ be initialized in a specification unless a user
+  explicitly declares it with `mir_points_to (mir_static ...) ...`. This is
+  because a mutable static's value can change over the course of a program, so
+  we require users to be precise about what the value should be before and after
+  invoking a function.
+
+This poses a challenge when translating static values in SAW. It is tempting to
+only translate the immutable statics and not the mutable statics (similarly to
+how the SAW LLVM backend handles translation), but this will not work in
+general. Consider this program:
+
+  static mut S1: u32 = 1;
+  static S2: u32 = unsafe { S1 };
+
+  pub fn f() {
+      ... S2 ...
+  }
+
+The initial value of S2 (an immutable static) depends on having first translated
+the initial value of S1 (a mutable static). If we do not translate mutable
+statics in SAW, the translation of S1 will not succeed.
+
+We solve this problem by doing the following:
+
+1. Use Crucible to translate all top-level static values (both immutable and
+   mutable). This produces a SymGlobalState that contains every static's
+   initializer value.
+
+2. Consult the updated SymGlobalState to produce the following:
+
+   (a) A subset of the SymGlobalState that only contains the initializer values
+       for the immutable statics. This will be used later to initialize the
+       Crucible state when translating the function being verified with
+       mir_verify.
+
+   (b) A MirStaticInitializerMap mapping all static variables (both immutable
+       and mutable) to their initializer values. This will be used later to
+       power the mir_static_initializer function.
+
+This is a bit clunky, but it's unclear how to do better without significantly
+changing how crucible-mir translates top-level static values.
+-}
+
+-- | Define several commonly used implicit parameters in @crucible-mir@ and
+-- call a continuation with these parameters.
+withImplicitParams ::
+  Options ->
+  ( ( ?debug :: Int, ?customOps :: Mir.CustomOpMap
+    , ?assertFalseOnError :: Bool, ?printCrucible :: Bool
+    ) => r) ->
+  r
+withImplicitParams opts k =
+  let ?debug = simVerbose opts in
+      -- For now, we use the same default settings for implicit parameters as in
+      -- crux-mir. We may want to add options later that allow configuring these.
+  let ?assertFalseOnError = True in
+  let ?customOps          = customOps in
+  let ?printCrucible      = False in
+  k
 
 --------------------------------------------------------------------------------
 -- Errors

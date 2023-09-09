@@ -601,7 +601,7 @@ checkDisjoint bak refs = go refs
 -- that will be put into a 'MirPointsTo' value's left-hand side is a
 -- 'MS.SetupVar', so we can safely use this function on such 'MS.SetupValue's.
 -- Other parts of SAW can break this assumption (e.g., if you wrote something
--- like @mir_points_to (mir_global "X") ...@ in a SAW specification), but these
+-- like @mir_points_to (mir_static "X") ...@ in a SAW specification), but these
 -- parts of SAW are not used in @crucible-mir-comp@.
 setupVarAllocIndex :: Applicative m => MS.SetupValue MIR -> m MS.AllocIndex
 setupVarAllocIndex (MS.SetupVar idx) = pure idx
