@@ -399,9 +399,6 @@ jobs:
 
   cabal-test:
     runs-on: ${{ matrix.os }}
-    permissions:
-      pages: write
-      id-token: write
     needs: [build]
     strategy:
       fail-fast: false
@@ -482,18 +479,24 @@ jobs:
     needs: build
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'pull_request'
+    permissions:
+      pages: write
+      id-token: write
     strategy:
       matrix:
         os: [ubuntu-22.04]
     steps:
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-
       - uses: actions/download-artifact@v2
         with:
           name: "${{ runner.os }}-hpc.tar.gz"
+
+      - name: Install system dependencies
+        shell: bash
+        run: |
+          tar xvf hpc.tar.gz
+          .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -522,7 +525,6 @@ jobs:
       - name: Compute coverage
         shell: bash
         run: |
-          tar xvf hpc.tar.gz
           ./compute-coverage.sh
 
       - uses: actions/upload-artifact@v2
