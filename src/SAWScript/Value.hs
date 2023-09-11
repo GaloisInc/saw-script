@@ -62,6 +62,7 @@ import qualified Prettyprinter as PP
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.Crucible.Common as Common
@@ -148,6 +149,7 @@ data Value
   | VSimpset SAWSimpset
   | VRefnset SAWRefnset
   | VTheorem Theorem
+  | VBisimTheorem BisimTheorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
@@ -361,6 +363,7 @@ showsPrecValue opts nenv p v =
     VTheorem thm ->
       showString "Theorem " .
       showParen True (showString (prettyProp opts' nenv (thmProp thm)))
+    VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
@@ -1262,6 +1265,13 @@ instance IsValue Theorem where
 instance FromValue Theorem where
     fromValue (VTheorem t) = t
     fromValue _ = error "fromValue Theorem"
+
+instance IsValue BisimTheorem where
+    toValue = VBisimTheorem
+
+instance FromValue BisimTheorem where
+    fromValue (VBisimTheorem t) = t
+    fromValue _ = error "fromValue BisimTheorem"
 
 instance IsValue JavaType where
     toValue t = VJavaType t

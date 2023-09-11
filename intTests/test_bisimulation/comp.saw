@@ -1,13 +1,29 @@
-/* Test the prove_bisim command with a compositional circuit. At the moment,
- * prove_bisim does not have any notion of compositionality, but this example
- * is simple enough to work as-is */
+/* Test the prove_bisim command with a compositional circuit */
 
 import "Comp.cry";
 
 enable_experimental;
 
-res <- prove_bisim z3 {{ andRel }} {{ andImp }} {{ andSpec }};
-print res;
+// Prove 'andImp' and 'andSpec' simulate eachother
+and_res <- prove_bisim z3
+                       []
+                       {{ andStateRel }}
+                       {{ andOutputRel }}
+                       {{ andImp }}
+                       {{ andSpec }};
 
-res2 <- prove_bisim z3 {{ nandRel }} {{ nandImp }} {{ nandSpec }};
-print res2;
+// Prove 'nandImp' and 'nandSpec' simulate eachother, using 'and_res' in the
+// process.
+nand_res <- prove_bisim (do {
+    unfolding ["nandImp", "nandSpec"];
+    w4_unint_z3 ["andImp", "andSpec" ];
+  })
+  [and_res] {{ \x -> nandStateRel x }} {{ \x -> nandOutputRel x }} {{ nandImp }} {{ nandSpec }};
+
+// Test using theorem that doesn't apply
+prove_bisim z3
+            [nand_res]
+            {{ andStateRel }}
+            {{ andOutputRel }}
+            {{ andImp }}
+            {{ andSpec }};

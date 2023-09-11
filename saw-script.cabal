@@ -114,6 +114,7 @@ library
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
     SAWScript.Bisimulation
+    SAWScript.Bisimulation.BisimTheorem
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Exceptions
