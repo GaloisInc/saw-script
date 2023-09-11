@@ -82,7 +82,7 @@ collect_hpc_files() {
   local MIX_FILES=$(find dist-newstyle -name "*.mix")
   local GENERATED_HS_FILES=$(find dist-newstyle/build -name "*.hs")
   local BINS="dist/bin .github compute-coverage.sh"
-  local TESTS="intTests"
+  local TESTS="intTests doc examples deps/cryptol-specs"
   tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES} ${BINS} ${TESTS}
 }
 
