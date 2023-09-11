@@ -182,6 +182,8 @@ compileJVMContract fileReader bic cenv0 c =
       MS.SetupTerm <$> getTypedTerm cenv expr
     getSetupVal _ (ArrayValue _ _) =
       JVMSetupM $ fail "Array setup values unsupported in JVM API."
+    getSetupVal _ (StructValue _) =
+      JVMSetupM $ fail "Struct setup values unsupported in JVM API."
     getSetupVal _ (TupleValue _) =
       JVMSetupM $ fail "Tuple setup values unsupported in JVM API."
     getSetupVal _ (FieldLValue _ _) =

@@ -40,6 +40,7 @@ module SAWScript.Crucible.Common.MethodSpec
 
   , XSetupNull
   , XSetupStruct
+  , XSetupTuple
   , XSetupArray
   , XSetupElem
   , XSetupField
@@ -194,6 +195,14 @@ ppSetupValue setupval = case setupval of
         absurd empty
       (MIRExt, ()) ->
         ppSetupStructDefault vs
+  SetupTuple x vs ->
+    case (ext, x) of
+      (LLVMExt, empty) ->
+        absurd empty
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, ()) ->
+        PP.parens (commaList (map ppSetupValue vs))
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)

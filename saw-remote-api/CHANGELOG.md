@@ -17,6 +17,9 @@
   LLVM verification, this field is optional. For MIR verification, this field
   is required if the `"elements"` value is empty and optional if the
   `"elements"` value is non-empty.
+* The old `"tuple"` `setup value` has been renamed to `"struct"`. This better
+  reflects its intended purpose of representing struct values. There is now a
+  new `"tuple"` `setup value` that is only used to represent MIR tuples.
 
 ## 1.0.0 -- 2023-06-26
 

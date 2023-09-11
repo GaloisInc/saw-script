@@ -15,6 +15,8 @@
 * The `array()` function now takes an additional `element_type` argument, which
   defaults to `None`. If constructing a MIR array with no elements, then the
   `element_type` must be specified. Otherwise, this argument is optional.
+* Add a `tuple_value()` function for constructing MIR tuples. Using this
+  function with LLVM or JVM verification will raise an error.
 
 ## 1.0.1 -- YYYY-MM-DD
 

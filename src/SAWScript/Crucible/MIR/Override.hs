@@ -182,6 +182,7 @@ instantiateSetupValue sc s v =
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct _ _                -> return v
+    MS.SetupTuple x vs                -> MS.SetupTuple x <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupElem _ _ _                -> return v
     MS.SetupField _ _ _               -> return v
@@ -323,6 +324,21 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
            sequence_
              [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
              | (x, z) <- zip (V.toList xs'') zs ]
+
+    -- match the fields of a tuple point-wise
+    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
+      sequence_
+        [ case xFldShp of
+            ReqField shp ->
+              matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+            OptField shp -> do
+              x' <- liftIO $ readMaybeType sym "field" (shapeType shp) x
+              matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+        | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
+            zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                 ys
+                 zs
+        ]
 
     (_, _, MS.SetupNull empty)                -> absurd empty
     (_, _, MS.SetupGlobal empty _)            -> absurd empty

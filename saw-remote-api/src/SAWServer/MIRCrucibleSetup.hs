@@ -180,8 +180,11 @@ compileMIRContract fileReader bic cenv0 c =
                       Just eltTy -> pure $ mirType eltTy
                       Nothing -> MIRSetupM $ typeOfSetupValue cc allocEnv nameEnv elt'
              return $ MS.SetupArray ty' (elt':eltss')
-    getSetupVal _ (TupleValue _) =
-      MIRSetupM $ fail "Tuple setup values unsupported in the MIR API."
+    getSetupVal _ (StructValue _) =
+      MIRSetupM $ fail "Struct setup values unsupported in the MIR API."
+    getSetupVal env (TupleValue elems) = do
+      elems' <- mapM (getSetupVal env) elems
+      pure $ MS.SetupTuple () elems'
     getSetupVal _ (FieldLValue _ _) =
       MIRSetupM $ fail "Field l-values unsupported in the MIR API."
     getSetupVal _ (CastLValue _ _) =

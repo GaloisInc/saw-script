@@ -105,7 +105,7 @@ typeOfSetupValue ::
   Map AllocIndex Text ->
   SetupValue ->
   m Mir.Ty
-typeOfSetupValue _mcc env _nameEnv val =
+typeOfSetupValue mcc env nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
@@ -122,6 +122,9 @@ typeOfSetupValue _mcc env _nameEnv val =
         tp -> X.throwM (MIRInvalidTypedTerm tp)
     MS.SetupArray elemTy vs ->
       pure $ Mir.TyArray elemTy (length vs)
+    MS.SetupTuple () vals -> do
+      tys <- traverse (typeOfSetupValue mcc env nameEnv) vals
+      pure $ Mir.TyTuple tys
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
@@ -162,6 +165,17 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct _ _                -> panic "resolveSetupValue" ["structs not yet implemented"]
+    MS.SetupTuple () flds -> do
+      flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
+      let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+      Some fldAssn <-
+        pure $ Ctx.fromList $
+        map (\(MIRVal shp v) ->
+              Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
+            flds'
+      let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
+      let tupleShp = TupleShape (Mir.TyTuple fldMirTys) fldMirTys fldShpAssn
+      pure $ MIRVal tupleShp valAssn
     MS.SetupArray elemTy vs -> do
       vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
 
@@ -186,6 +200,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
   where
+    sym = mcc ^. mccSym
     col = mcc ^. mccRustModule . Mir.rmCS . Mir.collection
 
 resolveTypedTerm ::
