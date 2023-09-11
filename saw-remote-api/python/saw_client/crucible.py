@@ -143,12 +143,16 @@ class Allocated(NamedSetupVal):
 
 class StructVal(SetupVal):
     fields : List[SetupVal]
+    mir_adt : Optional[MIRAdt]
 
-    def __init__(self, fields : List[SetupVal]) -> None:
+    def __init__(self, fields : List[SetupVal], mir_adt : Optional[MIRAdt] = None) -> None:
         self.fields = fields
+        self.mir_adt = mir_adt
 
     def to_json(self) -> JSON:
-        return {'setup value': 'struct', 'elements': [fld.to_json() for fld in self.fields]}
+        return {'setup value': 'struct',
+                'elements': [fld.to_json() for fld in self.fields],
+                'MIR ADT server name': self.mir_adt.server_name if self.mir_adt is not None else None}
 
 class TupleVal(SetupVal):
     fields : List[SetupVal]
@@ -730,12 +734,16 @@ def null() -> SetupVal:
     """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
 
-def struct(*fields : SetupVal) -> SetupVal:
-    """Returns an LLVM structure value with the given ``fields`` (i.e., a ``StructVal``)."""
+def struct(*fields : SetupVal, mir_adt : Optional[MIRAdt] = None) -> SetupVal:
+    """Returns a structure value with the given ``fields`` (i.e., a ``StructVal``).
+    For MIR structures, it is required to also pass a ``mir_adt`` representing
+    the type of struct being constructed. Passing ``mir_adt`` for LLVM for JVM
+    verification will raise an error.
+    """
     for field in fields:
         if not isinstance(field, SetupVal):
             raise ValueError('struct expected a SetupVal, but got {field!r}')
-    return StructVal(list(fields))
+    return StructVal(list(fields), mir_adt)
 
 def tuple_value(*fields : SetupVal) -> SetupVal:
     """Returns a MIR tuple value with the given ``fields`` (i.e., a ``TupleVal``).

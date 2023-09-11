@@ -29,6 +29,10 @@ u64   = MIRU64Type()
 u128  = MIRU128Type()
 usize = MIRUsizeType()
 
+def adt_ty(adt: MIRAdt) -> 'MIRAdtType':
+    """An algebraic data type (ADT), i.e., a struct or an enum."""
+    return MIRAdtType(adt)
+
 def array_ty(size : int, ty : 'MIRType') -> 'MIRArrayType':
     """``[ty; size]``, i.e. a MIR array of ``size`` elements of type ``ty``."""
     return MIRArrayType(ty, size)

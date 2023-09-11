@@ -179,7 +179,10 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getSetupVal env (ArrayValue _ elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
-    getSetupVal env (StructValue elts) =
+    getSetupVal _env (StructValue (Just _) _elts) =
+      LLVMCrucibleSetupM $
+      fail "LLVM verification does not support struct values with MIR ADTs."
+    getSetupVal env (StructValue Nothing elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
     getSetupVal _ (TupleValue _) =

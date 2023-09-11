@@ -397,7 +397,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
-    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct () svs)
+    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct _ svs)
       | Just Refl <- testEquality tpr shpTpr = goFields flds rvs svs
       | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr

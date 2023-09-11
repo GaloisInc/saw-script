@@ -532,6 +532,42 @@ No return fields
 
 
 
+SAW/MIR/find ADT (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Consult the a MIR module to find an algebraic data type (ADT) with the supplied identifier and type parameter substitutions. If such an ADT cannot be found in the module, this will raise an error.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The server name of the MIR module containing the ADT.
+  
+  
+
+``ADT original name``
+  The original (pre-monomorphized) ADT name.
+  
+  
+
+``type substitutions``
+  The types to substitute the ADT's type parameters with.
+  
+  
+
+``ADT server name``
+  The server name to refer to the ADT by later.
+  
+  
+
+Return fields
++++++++++++++
+
+No return fields
+
+
+
 SAW/Yosys/import (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

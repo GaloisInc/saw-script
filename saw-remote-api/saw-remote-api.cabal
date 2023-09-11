@@ -84,6 +84,7 @@ library
                    SAWServer.LLVMCrucibleSetup,
                    SAWServer.LLVMVerify,
                    SAWServer.MIRCrucibleSetup,
+                   SAWServer.MIRFindADT,
                    SAWServer.MIRVerify,
                    SAWServer.NoParams,
                    SAWServer.OK,

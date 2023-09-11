@@ -13,6 +13,7 @@ from cryptol import cryptoltypes
 from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
+from . import mir
 from . import exceptions
 from . import option
 from . import proofscript
@@ -751,6 +752,22 @@ def mir_verify(module: MIRModule,
         raise result.exception from None
 
     return result
+
+
+def mir_find_adt(module: MIRModule,
+                 adt_orig_name: str,
+                 *tys: mir.MIRType,
+                 adt_server_name_hint: Optional[str] = None) -> mir.MIRAdt:
+    """Consult the given MIR module (``module_server_name``) to find an
+       algebraic data type (ADT) with ``adt_orig_name`` as its identifier and
+       ``tys`` as the types used to instantiate the type parameters. If such an
+       ADT cannot be found in the module, this will raise an error.
+    """
+    if adt_server_name_hint is None:
+        adt_server_name_hint = adt_orig_name
+    adt_server_name = __fresh_server_name(adt_server_name_hint)
+    __get_designated_connection().mir_find_adt(module.server_name, adt_orig_name, list(tys), adt_server_name).result()
+    return mir.MIRAdt(adt_orig_name, adt_server_name)
 
 
 def prove(goal: cryptoltypes.CryptolJSON,

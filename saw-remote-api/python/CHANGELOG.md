@@ -6,6 +6,9 @@
 
   * The `mir_load_module` function loads a MIR JSON file into SAW.
   * The `mir_verify` function performs verification of a MIR function.
+  * The `mir_find_adt` function looks up an algebraic data type (ADT) name in a
+    MIR module.
+
   * The `saw_client.mir` module contains utility functions for constructing
     MIR types.
 
@@ -15,6 +18,10 @@
 * The `array()` function now takes an additional `element_type` argument, which
   defaults to `None`. If constructing a MIR array with no elements, then the
   `element_type` must be specified. Otherwise, this argument is optional.
+* The `struct()` function now takes an additional `mir_adt` argument, which
+  defaults to `None`. If building a MIR struct, this `mir_adt` argument is
+  required. Passing a `mir_adt` argument when building an LLVM struct will raise
+  an error.
 * Add a `tuple_value()` function for constructing MIR tuples. Using this
   function with LLVM or JVM verification will raise an error.
 

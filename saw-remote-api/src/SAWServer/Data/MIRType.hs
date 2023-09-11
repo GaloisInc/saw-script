@@ -3,13 +3,18 @@
 module SAWServer.Data.MIRType (JSONMIRType, mirType) where
 
 import Control.Applicative
+import qualified Control.Exception as X
+import Control.Lens ((^.))
 import qualified Data.Aeson as JSON
 import Data.Aeson (withObject, withText, (.:))
 
-import Mir.Mir (BaseSize(..), FloatKind(..), Ty(..))
+import qualified Mir.Mir as Mir
+
+import SAWServer (SAWEnv, ServerName, getMIRAdtEither)
 
 data MIRTypeTag
-  = TagArray
+  = TagAdt
+  | TagArray
   | TagBool
   | TagI8
   | TagI16
@@ -33,6 +38,7 @@ instance JSON.FromJSON MIRTypeTag where
   parseJSON =
     withText "MIR type tag" $
     \case
+      "adt" -> pure TagAdt
       "array" -> pure TagArray
       "bool" -> pure TagBool
       "i8" -> pure TagI8
@@ -54,7 +60,26 @@ instance JSON.FromJSON MIRTypeTag where
       "usize" -> pure TagUsize
       _ -> empty
 
-newtype JSONMIRType = JSONMIRType { getMIRType :: Ty }
+-- | This is like 'Mir.Ty', but with the following differences:
+--
+-- 1. This only contains the subset of MIR types that are currently supported
+--    by the SAW remote API.
+--
+-- 2. 'JSONTyAdt' only contains a 'ServerName' that points points to an
+--    'Mir.Adt', as opposed to 'Mir.TyAdt', which contains a full 'Mir.Adt'.
+--    The advantage of only containing a 'Mir.TyAdt' is that we do not have to
+--    represent the entirety of a 'Mir.Adt' definition in JSON each time we want
+--    to reference the ADT in a type.
+data JSONMIRType
+  = JSONTyAdt !ServerName
+  | JSONTyArray !JSONMIRType !Int
+  | JSONTyBool
+  | JSONTyFloat !Mir.FloatKind
+  | JSONTyInt !Mir.BaseSize
+  | JSONTySlice !JSONMIRType
+  | JSONTyStr
+  | JSONTyTuple ![JSONMIRType]
+  | JSONTyUint !Mir.BaseSize
 
 instance JSON.FromJSON JSONMIRType where
   parseJSON =
@@ -62,28 +87,49 @@ instance JSON.FromJSON JSONMIRType where
 
     where
       primType =
-        withObject "MIR type" $ \o -> fmap JSONMIRType $
+        withObject "MIR type" $ \o ->
         o .: "type" >>=
         \case
-          TagArray -> TyArray <$> (getMIRType <$> o .: "element type") <*> o .: "size"
-          TagBool -> pure TyBool
-          TagI8 -> pure $ TyInt B8
-          TagI16 -> pure $ TyInt B16
-          TagI32 -> pure $ TyInt B32
-          TagI64 -> pure $ TyInt B64
-          TagI128 -> pure $ TyInt B128
-          TagIsize -> pure $ TyInt USize
-          TagF32 -> pure $ TyFloat F32
-          TagF64 -> pure $ TyFloat F64
-          TagSlice -> TySlice <$> (getMIRType <$> o .: "slice type")
-          TagStr -> pure TyStr
-          TagTuple -> TyTuple <$> (fmap getMIRType <$> o .: "tuple types")
-          TagU8 -> pure $ TyUint B8
-          TagU16 -> pure $ TyUint B16
-          TagU32 -> pure $ TyUint B32
-          TagU64 -> pure $ TyUint B64
-          TagU128 -> pure $ TyUint B128
-          TagUsize -> pure $ TyUint USize
+          TagAdt -> JSONTyAdt <$> o .: "ADT server name"
+          TagArray -> JSONTyArray <$> o .: "element type" <*> o .: "size"
+          TagBool -> pure JSONTyBool
+          TagI8 -> pure $ JSONTyInt Mir.B8
+          TagI16 -> pure $ JSONTyInt Mir.B16
+          TagI32 -> pure $ JSONTyInt Mir.B32
+          TagI64 -> pure $ JSONTyInt Mir.B64
+          TagI128 -> pure $ JSONTyInt Mir.B128
+          TagIsize -> pure $ JSONTyInt Mir.USize
+          TagF32 -> pure $ JSONTyFloat Mir.F32
+          TagF64 -> pure $ JSONTyFloat Mir.F64
+          TagSlice -> JSONTySlice <$> o .: "slice type"
+          TagStr -> pure JSONTyStr
+          TagTuple -> JSONTyTuple <$> o .: "tuple types"
+          TagU8 -> pure $ JSONTyUint Mir.B8
+          TagU16 -> pure $ JSONTyUint Mir.B16
+          TagU32 -> pure $ JSONTyUint Mir.B32
+          TagU64 -> pure $ JSONTyUint Mir.B64
+          TagU128 -> pure $ JSONTyUint Mir.B128
+          TagUsize -> pure $ JSONTyUint Mir.USize
 
-mirType :: JSONMIRType -> Ty
-mirType = getMIRType
+-- | Convert a 'JSONMIRType' to a 'Mir.Ty'. The only interesting case is the
+-- 'JSONTyAdt' case, which looks up a 'Mir.Adt' from a 'ServerName'.
+mirType :: SAWEnv -> JSONMIRType -> Mir.Ty
+mirType sawenv = go
+  where
+    go :: JSONMIRType -> Mir.Ty
+    go (JSONTyAdt sn) =
+      case getMIRAdtEither sawenv sn of
+        Left ex -> X.throw ex
+        Right adt ->
+          Mir.TyAdt (adt ^. Mir.adtname)
+                    (adt ^. Mir.adtOrigDefId)
+                    (adt ^. Mir.adtOrigSubsts)
+
+    go (JSONTyArray ty n) = Mir.TyArray (go ty) n
+    go JSONTyBool = Mir.TyBool
+    go (JSONTyFloat fk) = Mir.TyFloat fk
+    go (JSONTyInt bs) = Mir.TyInt bs
+    go (JSONTySlice ty) = Mir.TySlice (go ty)
+    go JSONTyStr = Mir.TyStr
+    go (JSONTyTuple ts) = Mir.TyTuple (map go ts)
+    go (JSONTyUint bs) = Mir.TyUint bs
