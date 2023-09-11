@@ -39,6 +39,7 @@ import qualified Data.Vector as V
 import           Data.Vector (Vector)
 import           Data.Void (absurd)
 import           Numeric.Natural (Natural)
+import qualified Prettyprinter as PP
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
@@ -199,8 +200,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 fail $ unlines
                   [ "Struct field type mismatch"
                   , "Field name: " ++ show expectedFldName
-                  , "Expected type: " ++ show expectedFldTy
-                  , "Given type: " ++ show actualFldTy
+                  , "Expected type: " ++ show (PP.pretty expectedFldTy)
+                  , "Given type:    " ++ show (PP.pretty actualFldTy)
                   ])
             expectedFlds
             actualFldTys

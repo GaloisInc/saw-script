@@ -1124,23 +1124,23 @@ instance Show MIRSetupError where
         unlines
         [ "mir_execute_func: Argument type mismatch"
         , "Argument position: " ++ show i
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
+        , "Expected type: " ++ show (PP.pretty expected)
+        , "Given type:    " ++ show (PP.pretty found)
         ]
       MIRArgNumberWrong expected found ->
         unlines
         [ "mir_execute_func: Wrong number of arguments"
         , "Expected: " ++ show expected
-        , "Given: " ++ show found
+        , "Given:    " ++ show found
         ]
       MIRReturnUnexpected found ->
         unlines
         [ "mir_return: Unexpected return value for void method"
-        , "Given type: " ++ show found
+        , "Given type: " ++ show (PP.pretty found)
         ]
       MIRReturnTypeMismatch expected found ->
         unlines
         [ "mir_return: Return type mismatch"
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
+        , "Expected type: " ++ show (PP.pretty expected)
+        , "Given type:    " ++ show (PP.pretty found)
         ]
