@@ -99,7 +99,7 @@ type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 -- referenced by the slice. The @mir_points_to@ command, on the other hand,
 -- always creates 'MirPointsTo' values with exactly one value in the list (see
 -- the @firstPointsToReferent@ function in "SAWScript.Crucible.MIR.Override").
-data MirPointsTo = MirPointsTo MS.ConditionMetadata MS.AllocIndex [MS.SetupValue MIR]
+data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) [MS.SetupValue MIR]
     deriving (Show)
 
 data MirAllocSpec tp = MirAllocSpec

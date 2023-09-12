@@ -65,8 +65,8 @@ mccSym :: Getter MIRCrucibleContext Sym
 mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
 instance PP.Pretty MirPointsTo where
-    pretty (MirPointsTo _md alloc sv) = PP.parens $
-        PP.pretty (show alloc) PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
+    pretty (MirPointsTo _md ref sv) = PP.parens $
+        MS.ppSetupValue ref PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
 
 type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
 

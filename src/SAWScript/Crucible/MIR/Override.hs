@@ -30,6 +30,7 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Data.Vector as V
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
@@ -242,16 +243,29 @@ learnPointsTo ::
   MS.PrePost                 ->
   MirPointsTo                ->
   OverrideMatcher MIR w ()
-learnPointsTo opts sc cc spec prepost (MirPointsTo md allocIdx referents) =
+learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
   mccWithBackend cc $ \bak ->
   do let col = cc ^. mccRustModule . Mir.rmCS ^. Mir.collection
      globals <- OM (use overrideGlobals)
-     Some mp <- resolveAllocIndexMIR allocIdx
-     let mpMirTy = mp^.mpMirType
-     let mpTpr = tyToShapeEq col mpMirTy (mp^.mpType)
-     val <- firstPointsToReferent referents
-     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes (mp^.mpType) (mp^.mpRef)
-     matchArg opts sc cc spec prepost md (MIRVal mpTpr v) mpMirTy val
+     MIRVal referenceShp referenceVal <-
+       resolveSetupValueMIR opts cc sc spec reference
+     -- By the time we reach here, we have already checked (in mir_points_to)
+     -- that we are in fact dealing with a reference value, so the call to
+     -- `testRefShape` below should always succeed.
+     IsRefShape _ referenceInnerMirTy _ referenceInnerTpr <-
+       case testRefShape referenceShp of
+         Just irs -> pure irs
+         Nothing ->
+           panic "learnPointsTo"
+                 [ "Unexpected non-reference type:"
+                 , show $ PP.pretty $ shapeMirTy referenceShp
+                 ]
+     let innerShp = tyToShapeEq col referenceInnerMirTy referenceInnerTpr
+     referentVal <- firstPointsToReferent referents
+     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes
+       referenceInnerTpr referenceVal
+     matchArg opts sc cc spec prepost md (MIRVal innerShp v)
+       referenceInnerMirTy referentVal
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -423,12 +437,29 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: MirPointsTo -> OverrideMatcher MIR w Bool
-    checkPointsTo (MirPointsTo _ allocIdx _) = checkAllocIndex allocIdx
+    checkPointsTo (MirPointsTo _ ref _) = checkSetupValue ref
 
-    checkAllocIndex :: AllocIndex -> OverrideMatcher MIR w Bool
-    checkAllocIndex i =
+    checkSetupValue :: SetupValue -> OverrideMatcher MIR w Bool
+    checkSetupValue v =
       do m <- OM (use setupValueSub)
-         return (Map.member i m)
+         return (all (`Map.member` m) (setupVars v))
+
+    -- Compute the set of variable identifiers in a 'SetupValue'
+    setupVars :: SetupValue -> Set AllocIndex
+    setupVars v =
+      case v of
+        MS.SetupVar i                     -> Set.singleton i
+        MS.SetupStruct _ xs               -> foldMap setupVars xs
+        MS.SetupTuple _ xs                -> foldMap setupVars xs
+        MS.SetupArray _ xs                -> foldMap setupVars xs
+        MS.SetupElem _ x _                -> setupVars x
+        MS.SetupField _ x _               -> setupVars x
+        MS.SetupTerm _                    -> Set.empty
+        MS.SetupCast empty _              -> absurd empty
+        MS.SetupUnion empty _ _           -> absurd empty
+        MS.SetupNull empty                -> absurd empty
+        MS.SetupGlobal empty _            -> absurd empty
+        MS.SetupGlobalInitializer empty _ -> absurd empty
 
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
@@ -498,11 +529,6 @@ readPartExprMaybe _sym W4.Unassigned = Nothing
 readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = Just v
   | otherwise = Nothing
-
-resolveAllocIndexMIR :: AllocIndex -> OverrideMatcher MIR w (Some (MirPointer Sym))
-resolveAllocIndexMIR i =
-  do m <- OM (use setupValueSub)
-     pure $ lookupAllocIndex m i
 
 resolveSetupValueMIR ::
   Options              ->

@@ -279,11 +279,6 @@ mir_points_to ref val =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
 
-     allocIdx <-
-       case ref of
-         MS.SetupVar idx -> pure idx
-         _ -> X.throwM $ MIRPointsToNonReference ref
-
      referentTy <- mir_points_to_check_lhs_validity ref loc
      valTy <- typeOfSetupValue cc env nameEnv val
      unless (checkCompatibleTys referentTy valTy) $
@@ -300,7 +295,7 @@ mir_points_to ref val =
               , MS.conditionType = "MIR points-to"
               , MS.conditionContext = ""
               }
-     Setup.addPointsTo (MirPointsTo md allocIdx [val])
+     Setup.addPointsTo (MirPointsTo md ref [val])
 
 -- | Perform a set of validity checks on the LHS reference value in a
 -- 'mir_points_to' command. In particular:
@@ -320,7 +315,8 @@ mir_points_to_check_lhs_validity ref loc =
      refTy <- typeOfSetupValue cc env nameEnv ref
      case refTy of
        Mir.TyRef referentTy _ -> pure referentTy
-       _ -> throwCrucibleSetup loc $ "lhs not a reference type: " ++ show refTy
+       _ -> throwCrucibleSetup loc $ "lhs not a reference type: "
+                                  ++ show (PP.pretty refTy)
 
 mir_verify ::
   Mir.RustModule ->
@@ -558,25 +554,37 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
          Crucible.SymGlobalState Sym
       -> MirPointsTo
       -> IO (Crucible.SymGlobalState Sym)
-    doPointsTo globals (MirPointsTo _ allocIdx referents) =
+    doPointsTo globals (MirPointsTo _ reference referents) =
       mccWithBackend cc $ \bak -> do
+        MIRVal referenceShp referenceVal <-
+          resolveSetupVal cc env tyenv nameEnv reference
+        -- By the time we reach here, we have already checked (in mir_points_to)
+        -- that we are in fact dealing with a reference value, so the call to
+        -- `testRefShape` below should always succeed.
+        IsRefShape _ _ _ referenceInnerTy <-
+          case testRefShape referenceShp of
+            Just irs -> pure irs
+            Nothing ->
+              panic "setupPrePointsTos"
+                    [ "Unexpected non-reference type:"
+                    , show $ PP.pretty $ shapeMirTy referenceShp
+                    ]
         referent <- firstPointsToReferent referents
-        MIRVal referentTy referentVal <-
+        MIRVal referentShp referentVal <-
           resolveSetupVal cc env tyenv nameEnv referent
-        Some mp <- pure $ lookupAllocIndex env allocIdx
         -- By the time we reach here, we have already checked (in mir_points_to)
         -- that the type of the reference is compatible with the right-hand side
         -- value, so the equality check below should never fail.
         Refl <-
-          case W4.testEquality (mp^.mpType) (shapeType referentTy) of
+          case W4.testEquality referenceInnerTy (shapeType referentShp) of
             Just r -> pure r
             Nothing ->
               panic "setupPrePointsTos"
                     [ "Unexpected type mismatch between reference and referent"
-                    , "Reference type: " ++ show (mp^.mpType)
-                    , "Referent type:  " ++ show (shapeType referentTy)
+                    , "Reference type: " ++ show referenceInnerTy
+                    , "Referent type:  " ++ show (shapeType referentShp)
                     ]
-        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes (mp^.mpRef) referentVal
+        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes referenceVal referentVal
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -1100,7 +1108,6 @@ setupCrucibleContext rm =
 
 data MIRSetupError
   = MIRFreshVarInvalidType Mir.Ty
-  | MIRPointsToNonReference SetupValue
   | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
@@ -1115,11 +1122,6 @@ instance Show MIRSetupError where
     case err of
       MIRFreshVarInvalidType jty ->
         "mir_fresh_var: Invalid type: " ++ show jty
-      MIRPointsToNonReference ptr ->
-        unlines
-        [ "mir_points_to: Left-hand side is not a valid reference"
-        , show (MS.ppSetupValue ptr)
-        ]
       MIRArgTypeMismatch i expected found ->
         unlines
         [ "mir_execute_func: Argument type mismatch"
