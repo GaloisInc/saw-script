@@ -67,5 +67,5 @@ main = do
           vs <- getSolverBackendVersions allBackends
           fst <$> solverCacheOp (cleanSolverCache vs) opts cache
         doCleanSolverCache opts _ =
-          err opts "Error: either --clean-solver-cache must be given an argument or SAW_SOLVER_CACHE_PATH must be set"
+          err opts "Error: either --clean-mismatched-versions-solver-cache must be given an argument or SAW_SOLVER_CACHE_PATH must be set"
 

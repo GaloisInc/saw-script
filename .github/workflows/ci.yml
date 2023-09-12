@@ -443,7 +443,7 @@ jobs:
         if: "matrix.suite == 'integration_tests'"
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
-          dist/bin/saw --clean-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
 
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
