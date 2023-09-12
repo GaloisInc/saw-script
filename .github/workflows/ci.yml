@@ -486,15 +486,14 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
     steps:
-      - uses: actions/download-artifact@v2
+      # Need a copy of the source to generate coverage HTML
+      - uses: actions/checkout@v2
         with:
-          name: "${{ runner.os }}-hpc.tar.gz"
+          submodules: true
 
       - name: Install system dependencies
         shell: bash
-        run: |
-          tar xvf hpc.tar.gz
-          .github/ci.sh install_system_deps
+        run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
 
@@ -503,9 +502,14 @@ jobs:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
 
-      - name: Update permissions
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-hpc.tar.gz"
+
+      - name: Setup test environment
         shell: bash
         run: |
+          tar xvf hpc.tar.gz
           chmod +x dist/bin/*
           chmod +x bin/*
           chmod +x dist-tests/*
