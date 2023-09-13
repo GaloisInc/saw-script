@@ -1,0 +1,13 @@
+/* Test the prove_bisim command with a compositional circuit. At the moment,
+ * prove_bisim does not have any notion of compositionality, but this example
+ * is simple enough to work as-is */
+
+import "Comp.cry";
+
+enable_experimental;
+
+res <- prove_bisim z3 {{ andRel }} {{ andImp }} {{ andSpec }};
+print res;
+
+res2 <- prove_bisim z3 {{ nandRel }} {{ nandImp }} {{ nandSpec }};
+print res2;

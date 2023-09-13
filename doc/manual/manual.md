@@ -3797,3 +3797,202 @@ N.B: The following commands must first be enabled using `enable_experimental`.
 
   Note that `Term`s derived from HDL modules are "first class", and are not restricted to `yosys_verify`: they may also be used with SAW's typical `Term` infrastructure like `sat`, `prove_print`, term rewriting, etc.
   `yosys_verify` simply provides a convenient and familiar interface, similar to `llvm_verify` or `jvm_verify`.
+
+# Bisimulation Prover
+
+SAW contains a bisimulation prover to prove that two terms simulate each other.
+This prover allows users to prove that two terms executing in lockstep satisfy
+some relation over the state of each circuit and their outputs.  This type of
+proof is useful in demonstrating the eventual equivalence of two circuits, or
+of a circuit and a functional specification.  SAW enables these proofs with the
+experimental `prove_bisim` command:
+
+~~~~
+prove_bisim : ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult
+~~~~
+
+When invoking `prove_bisim strat relation lhs rhs`, the arguments represent the
+following:
+
+1. `strat`: A proof strategy to use during verification.
+2. `relation`: A relation between `lhs` and `rhs`.  This relation must have the
+   type `(lhsState, output) -> (rhsState, output) -> Bit`. The relation's first
+   argument is a pair consisting of `lhs`'s state and output following
+   execution. The relation's second argument is a pair consisting of `rhs`'s
+   state and output following execution. `relation` then then returns a `Bit`
+   indicating whether the two arguments satisfy the bisimulation relation. That
+   is, whether the terms simulate each other.
+3. `lhs`: A term that simulates `rhs`. `lhs` must have the type
+   `(lhsState, input) -> (lhsState, output)`.  The first argument to `lhs` is a
+   tuple containing the internal state of `lhs`, as well as the input to `lhs`.
+   `lhs` returns a tuple containing its internal state after execution, as well
+   as its output.
+4. `rhs`: A term that simulates `lhs`. `rhs` must have the type
+   `(rhsState, input) -> (rhsState, output)`.  The first argument to `rhs` is a
+   tuple containing the internal state of `rhs`, as well as the input to `rhs`.
+   `rhs` returns a tuple containing its internal state after execution, as well
+   as its output.
+
+`prove_bisim` returns a `ProofResult` indicating whether `lhs` and `rhs` are
+bisimilar, given the relation `relation`.
+
+## Bisimulation Example
+
+This section walks through an example proving that the Cryptol implementation
+of an AND gate that makes use of internal state and takes two cycles to
+complete is equivalent to a pure function that computes the logical AND of its
+inputs in one cycle. First, we define the implementation's state type:
+
+~~~~
+type andState = { loaded : Bit, origX : Bit, origY : Bit }
+~~~~
+
+`andState` is a record type with three fields:
+
+1. `loaded`: A `Bit` indicating whether the input to the AND gate has been
+   loaded into the state record.
+2. `origX`: A `Bit` storing the first input to the AND gate.
+3. `origY`: A `Bit` storing the second input to the AND gate.
+
+Now, we define the AND gate's implementation:
+
+~~~~
+andImp : (andState, (Bit, Bit)) -> (andState, (Bit, Bit))
+andImp (s, (x, y)) =
+  if s.loaded /\ x == s.origX /\ y == s.origY
+  then (s, (True, s.origX && s.origY))
+  else ({ loaded = True, origX = x, origY = y }, (False, 0))
+~~~~
+
+`andImp` takes a tuple as input where the first field is an `andState` holding
+the gate's internal state, and second field is a tuple containing the inputs to
+the AND gate. `andImp` returns a tuple consisting of the updated `andState` and
+the gate's output.  The output is a tuple where the first field is a ready bit
+that is `1` when the second field is ready to be read, and the second field
+is the result of gate's computation.
+
+`andImp` takes two cycles to complete:
+
+1. The first cycle loads the inputs into its state's `origX` and `origY` fields
+   and sets `loaded` to `True`. It sets both of its output bits to `0`.
+2. The second cycle uses the stored input values to compute the logical AND.
+   It sets its ready bit to `1` and its second output to the logical AND
+   result.
+
+So long as the inputs remain fixed after the second cycle, `andImp`'s output
+remains unchanged.  If the inputs change, then `andImp` restarts the
+computation (even if the inputs change between the first and second cycles).
+
+Next, we define the pure function we'd like to prove `andImp` bisimilar to:
+
+~~~~
+andSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+andSpec (_, (x, y))= ((), (True, x && y))
+~~~~
+
+`andSpec` takes a tuple as input where the first field is `()`, indicating that
+`andSpec` is a pure function without internal state, and the second field is a
+tuple containing the inputs to the AND function. `andSpec` returns a tuple
+consisting of `()` (again, because `andSpec` is stateless) and the function's
+output.  Like `andImp`, the output is a tuple where the first field is a ready
+bit that is `1` when the second field is ready to be read, and the second field
+is the result of the function's computation.
+
+`andSpec` completes in a single cycle, and as such its ready bit is always `1`.
+It computes the logical AND directly on the function's inputs using Cryptol's
+`(&&)` operator.
+
+Lastly, we define a relation over `andImp` and `andSpec`:
+
+~~~~
+andRel : (andState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+andRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+~~~~
+
+`andRel` takes two arguments:
+
+1. A return value from `andImp`. Specifically, a pair consisting of an
+   `andState` and a pair containing a ready bit and result of the logical AND.
+2. A return value from `andSpec`. Specifically, a pair consisting of an empty
+   state `()` and a pair containing a ready bit and result of the logical AND.
+
+`andRel` returns a `Bit` indicating whether the relation is satisfied.  It
+considers the relation satisfied in two ways:
+
+1. If `andImp`'s ready bit is set, the relation is satisfied if the output
+   values `impO` and `specO` from `andImp` and `andSpec` respectively are
+   equivalent.
+2. If `andImp`'s ready bit is not set, the relation is satisfied.
+
+Put another way, the relation is satisfied if the end result of `andImp` and
+`andSpec` are equivalent.  The relation permits intermediate outputs to differ.
+
+We can verify that this relation is always satisfied--and therefore the two
+terms are bisimilar--by using `prove_bisim`:
+
+~~~~
+import "And.cry";
+enable_experimental;
+
+res <- prove_bisim z3 {{ andRel }} {{ andImp }} {{ andSpec }};
+print res;
+~~~~
+
+Upon running this script, SAW prints `Valid` indicating that `andImp` and
+`andSpec` are bisimilar, given the relation `andRel`.
+
+### Building a NAND gate
+
+We can make the example more interesting by reusing components to build a NAND
+gate.  We first define a state type for the NAND gate implementation that
+contains `andImp`'s state.  This NAND gate will not need any additional state,
+so we will define a type `nandState` that is equal to `andState`:
+
+~~~~
+type nandState = andState
+~~~~
+
+Now, we define an implementation `nandImp` that calls `andImp` and negates the
+result:
+
+~~~~
+nandImp : (nandState, (Bit, Bit)) -> (nandState, (Bit, Bit))
+nandImp x = (s, (andReady, ~andRes))
+  where
+    (s ,(andReady, andRes)) = andImp x
+~~~~
+
+Note that `nandImp` is careful to preserve the ready status of `andImp`.
+Because `nandImp` relies on `andImp`, it also takes two cycles to compute the
+logical NAND of its inputs.
+
+Next, we define a specification `nandSpec` in terms of `andSpec`:
+
+~~~~
+nandSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+nandSpec (_, (x, y)) = ((), (True, ~ (andSpec ((), (x, y))).1.1))
+~~~~
+
+As with `andSpec`, `nandSpec` is pure and computes its result in a single
+cycle.
+
+Lastly, we define a relation indicating that `nandImp` and `nandSpec` produce
+equivalent results once `nandImp`'s ready bit is `1`:
+
+~~~~
+nandRel : (nandState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+nandRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+~~~~
+
+To prove that `nandImp` and `nandSpec` are bisimilar, we again use
+`prove_bisim`:
+
+~~~~
+res2 <- prove_bisim z3 {{ nandRel }} {{ nandImp }} {{ nandSpec }};
+print res2;
+~~~~
+
+Upon running this portion of the script, SAW prints `Valid` confirming that the
+two terms are bisimilar, given the relation `nandRel`.
