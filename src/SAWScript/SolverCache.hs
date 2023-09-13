@@ -69,7 +69,7 @@ module SAWScript.SolverCache
   , insertInSolverCache
   , setSolverCachePath
   , printSolverCacheByHex
-  , cleanSolverCache
+  , cleanMismatchedVersionsSolverCache
   , printSolverCacheStats
   , testSolverCacheStats
   ) where
@@ -554,8 +554,8 @@ printSolverCacheByHex hex_pref = SCOpOrFail $ \opts cache -> do
 
 -- | Remove all entries in the solver result cache which have version(s) that
 -- do not match the current version(s) or are marked as stale
-cleanSolverCache :: SolverBackendVersions -> SolverCacheOp ()
-cleanSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
+cleanMismatchedVersionsSolverCache :: SolverBackendVersions -> SolverCacheOp ()
+cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
   let known_curr_base_vs = M.filter isJust curr_base_vs
       mismatched_vs vs = M.mapMaybe id $ M.intersectionWith
         (\base_ver v_ver -> if base_ver /= v_ver

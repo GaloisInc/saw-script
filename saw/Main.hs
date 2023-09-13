@@ -42,7 +42,7 @@ main = do
       case files of
         _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
         _ | showHelp opts'' -> err opts'' (usageInfo header options)
-        _ | Just path <- cleanCacheOpt opts'' -> doCleanSolverCache opts'' path
+        _ | Just path <- cleanMisVsCache opts'' -> doCleanMisVsCache opts'' path
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
         [file] -> checkZ3 opts'' *>
@@ -62,10 +62,10 @@ main = do
           when (verbLevel opts >= Error)
             (hPutStrLn stderr msg)
           exitProofUnknown
-        doCleanSolverCache opts path | not (null path) = do
+        doCleanMisVsCache opts path | not (null path) = do
           cache <- lazyOpenSolverCache path
           vs <- getSolverBackendVersions allBackends
-          fst <$> solverCacheOp (cleanSolverCache vs) opts cache
-        doCleanSolverCache opts _ =
+          fst <$> solverCacheOp (cleanMismatchedVersionsSolverCache vs) opts cache
+        doCleanMisVsCache opts _ =
           err opts "Error: either --clean-mismatched-versions-solver-cache must be given an argument or SAW_SOLVER_CACHE_PATH must be set"
 

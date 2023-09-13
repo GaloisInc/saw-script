@@ -40,7 +40,7 @@ data Options = Options
   , showVersion      :: Bool
   , printShowPos     :: Bool
   , useColor         :: Bool
-  , cleanCacheOpt    :: Maybe FilePath
+  , cleanMisVsCache  :: Maybe FilePath
   , printOutFn       :: Verbosity -> String -> IO ()
   , summaryFile      :: Maybe FilePath
   , summaryFormat    :: SummaryFormat
@@ -79,7 +79,7 @@ defaultOptions
     , showHelp = False
     , showVersion = False
     , useColor = True
-    , cleanCacheOpt = Nothing
+    , cleanMisVsCache = Nothing
     , summaryFile = Nothing
     , summaryFormat = Pretty
     }
@@ -164,7 +164,7 @@ options =
      (\mb_path opts -> do
         mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
         let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
-        return opts { cleanCacheOpt = Just path })
+        return opts { cleanMisVsCache = Just path })
      "path")
     "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit"
   , Option "s" ["summary"]

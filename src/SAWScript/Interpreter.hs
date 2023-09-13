@@ -658,7 +658,7 @@ set_solver_cache_path path = do
 clean_mismatched_versions_solver_cache :: TopLevel ()
 clean_mismatched_versions_solver_cache = do
   vs <- io $ getSolverBackendVersions allBackends
-  onSolverCache (cleanSolverCache vs)
+  onSolverCache (cleanMismatchedVersionsSolverCache vs)
 
 test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
                            Integer -> TopLevel ()
