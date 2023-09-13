@@ -229,6 +229,7 @@ mrFreshCallVars ev stack frame defs_tm =
   do
     -- First, make fresh function constants for all the recursive functions,
     -- noting that each constant must abstract out the current uvar context
+    -- (see mrFreshVar)
     new_stack <- liftSC2 scGlobalApply "Prelude.pushFunStack" [frame, stack]
     lrts <- liftSC1 scWhnf frame >>= \case
        (asList1 -> Just lrts) -> return lrts
@@ -238,14 +239,14 @@ mrFreshCallVars ev stack frame defs_tm =
     fun_vars <- mapM (mrFreshVar "F") fun_tps
 
     -- Next, match on the tuple of recursive function definitions and convert
-    -- each definition to a function body, by lambda-abstracting all the current
-    -- uvars and then replacing all recursive calls in each function body with
-    -- our new variable terms (which are applied to the current uvars; see
-    -- mrVarTerm)
+    -- each definition to a function body, by replacing all recursive calls in
+    -- each function body with our new variable terms (which are applied to the
+    -- current uvars; see mrVarTerm) and then lambda-abstracting all the
+    -- current uvars
     fun_tms <- mapM mrVarTerm fun_vars
     defs_tm' <- liftSC1 scWhnf defs_tm
     bodies <- case asNestedPairs defs_tm' of
-      Just defs -> mapM (lambdaUVarsM >=> mrReplaceCallsWithTerms fun_tms) defs
+      Just defs -> mapM (mrReplaceCallsWithTerms fun_tms >=> lambdaUVarsM) defs
       Nothing -> throwMRFailure (MalformedDefs defs_tm)
 
     -- Remember the body associated with each fresh function constant
