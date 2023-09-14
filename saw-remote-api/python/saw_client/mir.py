@@ -68,6 +68,16 @@ def array_ty(size : int, ty : 'MIRType') -> 'MIRArrayType':
     """``[ty; size]``, i.e. a MIR array of ``size`` elements of type ``ty``."""
     return MIRArrayType(ty, size)
 
+def ref_ty(ty : 'MIRType') -> 'MIRRefType':
+    """``&ty``, i.e., an immutable MIR reference type pointing to something of
+    type ``ty``."""
+    return MIRRefType(ty)
+
+def ref_mut_ty(ty : 'MIRType') -> 'MIRRefMutType':
+    """``&mut ty``, i.e., a mutable MIR reference type pointing to something of
+    type ``ty``."""
+    return MIRRefMutType(ty)
+
 def slice_ty(ty : MIRType) -> 'MIRSliceType':
     """``[ty]``, i.e., a MIR slice to a type ``ty``. Currently, SAW can only
     handle references to slices (``&[ty]``)"""
