@@ -656,10 +656,10 @@ set_solver_cache_path path = do
     Nothing -> do cache <- io $ openSolverCache path
                   putTopLevelRW rw { rwSolverCache = Just cache }
 
-clean_solver_cache :: TopLevel ()
-clean_solver_cache = do
+clean_mismatched_versions_solver_cache :: TopLevel ()
+clean_mismatched_versions_solver_cache = do
   vs <- io $ getSolverBackendVersions allBackends
-  onSolverCache (cleanSolverCache vs)
+  onSolverCache (cleanMismatchedVersionsSolverCache vs)
 
 test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
                            Integer -> TopLevel ()
@@ -1097,8 +1097,8 @@ primitives = Map.fromList
     , "variable is ignored."
     ]
 
-  , prim "clean_solver_cache" "TopLevel ()"
-    (pureVal clean_solver_cache)
+  , prim "clean_mismatched_versions_solver_cache" "TopLevel ()"
+    (pureVal clean_mismatched_versions_solver_cache)
     Current
     [ "Remove all entries in the solver result cache which were created"
     , "using solver backend versions which do not match the versions"

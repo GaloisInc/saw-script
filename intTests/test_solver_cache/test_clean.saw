@@ -6,7 +6,7 @@ set_solver_cache_path "test_solver_cache.cache";
 test_solver_cache_stats 6 0 0 0 0;
 
 // After cleaning, all SBV entries should be removed (see test.sh)
-clean_solver_cache;
+clean_mismatched_versions_solver_cache;
 test_solver_cache_stats 4 0 0 0 0;
 
 // After running test_ops, we should have all the original entries back,
