@@ -429,9 +429,6 @@ jobs:
           - suite: integration_tests
             os: windows-2019
             continue-on-error: false
-          - suite: integration_tests
-            os: ubuntu-22.04
-            continue-on-error: false
     steps:
       - uses: actions/checkout@v2
         with:
