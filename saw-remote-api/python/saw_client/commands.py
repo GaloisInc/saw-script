@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set, Union, overload
 
 from cryptol import cryptoltypes
 from . import exceptions
+from .mir_type import *
 from .proofscript import *
 from .option import *
 
@@ -304,6 +305,24 @@ class MIRVerify(SAWCommand):
                   'script': script,
                   'lemma name': lemma_name}
         super(MIRVerify, self).__init__('SAW/MIR/verify', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class MIRFindADT(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module_server_name : str,
+            adt_orig_name : str,
+            tys : List[MIRType],
+            adt_server_name : str,
+            timeout : Optional[float]) -> None:
+        params = {'module': module_server_name,
+                  'ADT original name': adt_orig_name,
+                  'type substitutions': [ty.to_json() for ty in tys],
+                  'ADT server name': adt_server_name}
+        super(MIRFindADT, self).__init__('SAW/MIR/find ADT', params, connection, timeout=timeout)
 
     def process_result(self, res : Any) -> Any:
         return res

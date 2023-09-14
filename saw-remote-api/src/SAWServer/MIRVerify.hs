@@ -20,6 +20,7 @@ import SAWServer
     ( SAWState,
       SAWTask(MIRSetup),
       sawBIC,
+      sawEnv,
       sawTask,
       sawTopLevelRW,
       pushTask,
@@ -50,8 +51,9 @@ mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scri
             rm <- getMIRModule modName
             let bic = view sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
+                sawenv = view sawEnv state
             fileReader <- Argo.getFileReader
-            setup <- compileMIRContract fileReader bic cenv <$>
+            setup <- compileMIRContract fileReader bic cenv sawenv <$>
                      traverse getCryptolExpr contract
             res <- case mode of
               VerifyContract -> do

@@ -86,6 +86,15 @@ command-line options:
 
   ~ Set the verbosity level of the SAWScript interpreter.
 
+`--clean-mismatched-versions-solver-cache[=path]`
+
+  ~ Run the `clean_mismatched_versions_solver_cache` command on the solver
+  cache at the given path, or if no path is given, the solver cache at the
+  value of the `SAW_SOLVER_CACHE_PATH` environment variable, then exit. See
+  the section **Caching Solver Results** for a description of the
+  `clean_mismatched_versions_solver_cache` command and the solver caching
+  feature in general.
+
 SAW also uses several environment variables for configuration:
 
 `CRYPTOLPATH`
@@ -1297,10 +1306,12 @@ There are also a number of SAW commands related to solver caching.
   then all entries in the cache already in use will be copied to the new cache
   being opened.
 
-* `clean_solver_cache` will remove all entries in the solver result cache
-  which were created using solver backend versions which do not match the
-  versions in the current environment. This can be run after an update to
-  clear out any old, unusable entries from the solver cache.
+* `clean_mismatched_versions_solver_cache` will remove all entries in the
+  solver result cache which were created using solver backend versions which do
+  not match the versions in the current environment. This can be run after an
+  update to clear out any old, unusable entries from the solver cache. This
+  command can also be run directly from the command line through the
+  `--clean-mismatched-versions-solver-cache` command-line option.
 
 * `print_solver_cache` prints to the console all entries in the cache whose
   SHA256 hash keys start with the given hex string. Providing an empty string
@@ -2113,7 +2124,7 @@ implemented include the following:
 
 * MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
   `mir_verify` must always be the empty list at present)
-* The ability to construct MIR `struct` or `enum` values in specifications
+* The ability to construct MIR `enum` values in specifications
 * The ability to specify the layout of slice values
 
 The `String` supplied as an argument to `mir_verify` is expected to be a
@@ -2229,6 +2240,7 @@ Java types are built up using the following functions:
 
 MIR types are built up using the following functions:
 
+* `mir_adt : MIRAdt -> MIRType`
 * `mir_array : Int -> MIRType -> MIRType`
 * `mir_bool : MIRType`
 * `mir_char : MIRType`
@@ -2435,9 +2447,9 @@ The experimental MIR implementation also has a `mir_alloc` function, which
 behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
 but there is also a `mir_alloc_mut` function for creating a mutable reference:
 
-* `mir_alloc : MIRType -> MIRSetup SetupValue`
+* `mir_alloc : MIRType -> MIRSetup MIRValue`
 
-* `mir_alloc_mut : MIRType -> MIRSetup SetupValue`
+* `mir_alloc_mut : MIRType -> MIRSetup MIRValue`
 
 MIR tracks whether references are mutable or immutable at the type level, so it
 is important to use the right allocation command for a given reference type.
@@ -2538,7 +2550,7 @@ value.
 
 MIR verification has a single `mir_points_to` command:
 
-* `mir_points_to : SetupValue -> SetupValue -> MIRSetup ()`
+* `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
 takes two `SetupValue` arguments, the first of which must be a reference,
 and states that the memory specified by that reference should contain the
 value given in the second argument (which may be any type of
@@ -2624,9 +2636,83 @@ specifies the name of an object field.
 In the experimental MIR verification implementation, the following functions
 construct compound values:
 
-* `mir_array_value : MIRType -> [SetupValue] -> SetupValue` constructs an array
+* `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
   of the given type whose elements consist of the given values. Supplying the
   element type is necessary to support length-0 arrays.
+* `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
+  with the given list of values as elements. The `MIRAdt` argument determines
+  what struct type to create.
+
+  See the "Finding MIR alegraic data types" section for more information on how
+  to compute a `MIRAdt` value to pass to `mir_struct_value`.
+* `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
+  list of values as elements.
+
+### Finding MIR alegraic data types
+
+We collectively refer to MIR `struct`s and `enum`s together as _algebraic data
+types_, or ADTs for short. ADTs have identifiers to tell them apart, and a
+single ADT declaration can give rise to multiple identifiers depending on how
+the declaration is used. For example:
+
+~~~~ .rs
+pub struct S<A, B> {
+    pub x: A,
+    pub y: B,
+}
+
+pub fn f() -> S<u8, u16> {
+    S {
+        x: 1,
+        y: 2,
+    }
+}
+
+pub fn g() -> S<u32, u64> {
+    S {
+        x: 3,
+        y: 4,
+    }
+}
+~~~~
+
+This program as a single `struct` declaration `S`, which is used in the
+functions `f` and `g`. Note that `S`'s declaration is _polymorphic_, as it uses
+type parameters, but the uses of `S` in `f` and `g` are _monomorphic_, as `S`'s
+type parameters are fully instantiated. Each unique, monomorphic instantiation
+of an ADT gives rise to its own identifier. In the example above, this might
+mean that the following identifiers are created when this code is compiled with
+`mir-json`:
+
+* `S<u8, u16>` gives rise to `example/abcd123::S::_adt456`
+* `S<u32, u64>` gives rise to `example/abcd123::S::_adt789`
+
+The suffix `_adt<number>` is autogenerated by `mir-json` and is typically
+difficult for humans to guess. For this reason, we offer a command to look up
+an ADT more easily:
+
+* `mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt` consults the
+  given `MIRModule` to find an algebraic data type (`MIRAdt`). It uses the given
+  `String` as an identifier and the given MIRTypes as the types to instantiate
+  the type parameters of the ADT. If such a `MIRAdt` cannot be found in the
+  `MIRModule`, this will raise an error.
+
+Note that the `String` argument to `mir_find_adt` does not need to include the
+`_adt<num>` suffix, as `mir_find_adt` will discover this for you. The `String`
+is expected to adhere to the identifier conventions described in the "Running a
+MIR-based verification" section. For instance, the following two lines will
+look up `S<u8, u16>` and `S<u32, u64>` from the example above as `MIRAdt`s:
+
+~~~~
+m <- mir_load_module "example.linked-mir.json";
+
+s_8_16  <- mir_find_adt m "example::S" [mir_u8,  mir_u16];
+s_32_64 <- mir_find_adt m "example::S" [mir_u32, mir_u64];
+~~~~
+
+The `mir_adt` command (for constructing a struct type) and `mir_struct_value`
+(for constructing a struct value) commands in turn take a `MIRAdt` as an
+argument.
 
 ### Bitfields
 

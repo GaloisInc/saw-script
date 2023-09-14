@@ -60,7 +60,8 @@ import qualified SAWScript.Crucible.Common.Setup.Value as MS
 
 type instance MS.XSetupNull MIR = Void
 type instance MS.XSetupGlobal MIR = Void
-type instance MS.XSetupStruct MIR = ()
+type instance MS.XSetupStruct MIR = M.Adt
+type instance MS.XSetupTuple MIR = ()
 -- The 'M.Ty' represents the type of array elements.
 type instance MS.XSetupArray MIR = M.Ty
 type instance MS.XSetupElem MIR = ()

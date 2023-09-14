@@ -656,10 +656,10 @@ set_solver_cache_path path = do
     Nothing -> do cache <- io $ openSolverCache path
                   putTopLevelRW rw { rwSolverCache = Just cache }
 
-clean_solver_cache :: TopLevel ()
-clean_solver_cache = do
+clean_mismatched_versions_solver_cache :: TopLevel ()
+clean_mismatched_versions_solver_cache = do
   vs <- io $ getSolverBackendVersions allBackends
-  onSolverCache (cleanSolverCache vs)
+  onSolverCache (cleanMismatchedVersionsSolverCache vs)
 
 test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
                            Integer -> TopLevel ()
@@ -1097,8 +1097,8 @@ primitives = Map.fromList
     , "variable is ignored."
     ]
 
-  , prim "clean_solver_cache" "TopLevel ()"
-    (pureVal clean_solver_cache)
+  , prim "clean_mismatched_versions_solver_cache" "TopLevel ()"
+    (pureVal clean_mismatched_versions_solver_cache)
     Current
     [ "Remove all entries in the solver result cache which were created"
     , "using solver backend versions which do not match the versions"
@@ -3903,6 +3903,15 @@ primitives = Map.fromList
     , "section."
     ]
 
+  , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"
+    (funVal3 mir_find_adt)
+    Experimental
+    [ "Consult the given MIRModule to find an algebraic data type (MIRAdt)"
+    , "with the given String as an identifier and the given MIRTypes as the"
+    , "types used to instantiate the type parameters. If such a MIRAdt cannot"
+    , "be found in the MIRModule, this will raise an error."
+    ]
+
   , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
     (pureVal mir_fresh_var)
     Experimental
@@ -3948,11 +3957,26 @@ primitives = Map.fromList
     , "mir_return statement is required if and only if the method"
     , "has a non-() return type." ]
 
+  , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupStruct :: Mir.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR struct with the given list of"
+    , "values as elements. The MIRAdt argument determines what struct type to"
+    , "create; use `mir_find_adt` to retrieve a MIRAdt value."
+    ]
+
   , prim "mir_term"
     "Term -> MIRValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue MIR))
     Experimental
     [ "Construct a `MIRValue` from a `Term`." ]
+
+  , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR tuple with the given list of"
+    , "values as elements."
+    ]
 
   , prim "mir_verify"
     "MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec"
@@ -3965,6 +3989,14 @@ primitives = Map.fromList
     , "describes how to set up the symbolic execution engine before verification."
     , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
+    ]
+
+  , prim "mir_adt" "MIRAdt -> MIRType"
+    (pureVal mir_adt)
+    Experimental
+    [ "The type of a MIR algebraic data type (ADT), i.e., a struct or enum,"
+    , "corresponding to the given MIRAdt. Use the `mir_find_adt` command to"
+    , "retrieve a MIRAdt value."
     ]
 
   , prim "mir_array" "Int -> MIRType -> MIRType"

@@ -43,6 +43,7 @@ import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
+import qualified Mir.TransTy as Mir
 import qualified What4.Expr as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
@@ -63,6 +64,7 @@ import SAWScript.Crucible.MIR.MethodSpecIR
 import SAWScript.Crucible.MIR.ResolveSetupValue
 import SAWScript.Crucible.MIR.TypeShape
 import SAWScript.Options
+import SAWScript.Panic (panic)
 import SAWScript.Utils (handleException)
 
 -- A few convenient synonyms
@@ -179,10 +181,11 @@ instantiateSetupValue sc s v =
   case v of
     MS.SetupVar _                     -> return v
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
+    MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
+    MS.SetupStruct did vs             -> MS.SetupStruct did <$> mapM (instantiateSetupValue sc s) vs
+    MS.SetupTuple x vs                -> MS.SetupTuple x <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _                -> return v
-    MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupElem _ _ _                -> return v
     MS.SetupField _ _ _               -> return v
     MS.SetupCast empty _              -> absurd empty
@@ -324,6 +327,50 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
              | (x, z) <- zip (V.toList xs'') zs ]
 
+    -- match the underlying field of a repr(transparent) struct
+    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt [z])
+      | Just y <- Mir.reprTransparentFieldTy col adt ->
+        matchArg opts sc cc cs prepost md (MIRVal shp val) y z
+
+    -- match the fields of a struct point-wise
+    (MIRVal (StructShape _ _ xsFldShps) (Crucible.AnyValue tpr@(Crucible.StructRepr _) xs),
+     Mir.TyAdt _ _ _,
+     MS.SetupStruct adt zs)
+      | Ctx.sizeInt (Ctx.size xs) == length zs
+      , let xsTpr = Crucible.StructRepr (FC.fmapFC fieldShapeType xsFldShps)
+      , Just Refl <- W4.testEquality tpr xsTpr ->
+        case adt of
+          Mir.Adt _ Mir.Struct [v] _ _ _ _ ->
+            let ys = v ^.. Mir.vfields . each . Mir.fty in
+            sequence_
+              [ case xFldShp of
+                  ReqField shp ->
+                    matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+                  OptField shp -> do
+                    x' <- liftIO $ readMaybeType sym "field" (shapeType shp) x
+                    matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+              | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
+                  zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                       ys
+                       zs ]
+          Mir.Adt _ ak _ _ _ _ _ ->
+            panic "matchArg" ["AdtKind " ++ show ak ++ " not yet implemented"]
+
+    -- match the fields of a tuple point-wise
+    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
+      sequence_
+        [ case xFldShp of
+            ReqField shp ->
+              matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+            OptField shp -> do
+              x' <- liftIO $ readMaybeType sym "field" (shapeType shp) x
+              matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+        | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
+            zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                 ys
+                 zs
+        ]
+
     (_, _, MS.SetupNull empty)                -> absurd empty
     (_, _, MS.SetupGlobal empty _)            -> absurd empty
     (_, _, MS.SetupCast empty _)              -> absurd empty
@@ -332,6 +379,8 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
 
     _ -> failure (MS.conditionLoc md) =<<
            mkStructuralMismatch opts cc sc cs actual expected expectedTy
+  where
+    col = cc ^. mccRustModule . Mir.rmCS . Mir.collection
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern

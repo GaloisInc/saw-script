@@ -13,6 +13,7 @@ data SetupValTag
   | TagNullValue
   | TagCryptol
   | TagArrayValue
+  | TagStructValue
   | TagTupleValue
   | TagFieldLValue
   | TagCastLValue
@@ -29,6 +30,7 @@ instance FromJSON SetupValTag where
       "null" -> pure TagNullValue
       "Cryptol" -> pure TagCryptol
       "array" -> pure TagArrayValue
+      "struct" -> pure TagStructValue
       "tuple" -> pure TagTupleValue
       "field" -> pure TagFieldLValue
       "cast"  -> pure TagCastLValue
@@ -48,6 +50,7 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cr
           TagNullValue -> pure NullValue
           TagCryptol -> CryptolExpr <$> o .: "expression"
           TagArrayValue -> ArrayValue <$> o .:? "element type" <*> o .: "elements"
+          TagStructValue -> StructValue <$> o .:? "MIR ADT server name" <*> o .: "elements"
           TagTupleValue -> TupleValue <$> o .: "elements"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagCastLValue -> CastLValue <$> o .: "base" <*> o .: "type"

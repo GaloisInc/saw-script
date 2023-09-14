@@ -1,9 +1,23 @@
 from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Union, overload
 
 class MIRType(metaclass=ABCMeta):
     @abstractmethod
     def to_json(self) -> Any: pass
+
+@dataclass
+class MIRAdt:
+    orig_name: str
+    server_name: str
+
+class MIRAdtType(MIRType):
+    def __init__(self, adt : 'MIRAdt') -> None:
+        self.adt = adt
+
+    def to_json(self) -> Any:
+        return { 'type': 'adt',
+                 'ADT server name': self.adt.server_name }
 
 class MIRArrayType(MIRType):
     def __init__(self, element_type : 'MIRType', size : int) -> None:
