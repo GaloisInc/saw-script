@@ -583,6 +583,8 @@ class Contract:
         return self.postcondition(expression)
 
     def returns(self, val : Union[Void,SetupVal]) -> None:
+        """Declare the return value for the function ``Contract`` being
+        specified."""
         if self.__state == 'post':
             if self.__returns is None:
                 self.__returns = val
