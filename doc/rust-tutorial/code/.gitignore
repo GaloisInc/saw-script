@@ -1,0 +1,10 @@
+tmp
+
+*.exe
+*.mir
+*.rlib
+
+first-example
+generics-take-1
+generics-take-2
+saw-basics

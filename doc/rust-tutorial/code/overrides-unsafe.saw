@@ -1,0 +1,22 @@
+enable_experimental;
+
+m <- mir_load_module "overrides.linked-mir.json";
+
+let g_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 }});
+};
+
+let f_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 3 }});
+};
+
+g_ov <- mir_unsafe_assume_spec m "overrides::g" g_spec;
+mir_verify m "overrides::f" [g_ov] false f_spec z3;

@@ -1,0 +1,33 @@
+enable_experimental;
+
+let index_spec = do {
+  arr <- mir_fresh_var "arr" (mir_array 3 mir_u32);
+  idx <- mir_fresh_var "idx" mir_usize;
+  mir_precond {{ 0 <= idx }}; // Lower bound of idx
+  mir_precond {{ idx <= 2 }}; // Upper bound of idx
+
+  mir_execute_func [mir_term arr, mir_term idx];
+
+  mir_return (mir_term {{ arr @ idx }});
+};
+
+m <- mir_load_module "arrays.linked-mir.json";
+
+mir_verify m "arrays::index" [] false index_spec z3;
+
+let index_alt_spec = do {
+  arr0 <- mir_fresh_var "arr0" mir_u32;
+  arr1 <- mir_fresh_var "arr1" mir_u32;
+  arr2 <- mir_fresh_var "arr2" mir_u32;
+  let arr = mir_array_value mir_u32 [mir_term arr0, mir_term arr1, mir_term arr2];
+
+  idx <- mir_fresh_var "idx" mir_usize;
+  mir_precond {{ 0 <= idx }}; // Lower bound of idx
+  mir_precond {{ idx <= 2 }}; // Upper bound of idx
+
+  mir_execute_func [arr, mir_term idx];
+
+  mir_return (mir_term {{ [arr0, arr1, arr2] @ idx }});
+};
+
+mir_verify m "arrays::index" [] false index_alt_spec z3;
