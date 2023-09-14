@@ -516,10 +516,15 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    @deprecated
     def proclaim(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
-        """DEPRECATED: Use ``precondition`` or ``postcondition`` instead. This method will
-        eventually be removed."""
+        """Asserts ``proposition`` for the function ``Contract`` being
+        specified.
+
+        Usable either before or after ``execute_func`` in the contract
+        specification. If this is used before ``execute_func``, then
+        ``proposition`` is asserted as a precondition. If this is used after
+        ``execute_func``, then ``proposition`` is asserted as a postcondition.
+        """
         if not isinstance(proposition, CryptolTerm):
             condition = Condition(CryptolTerm(proposition))
         else:
