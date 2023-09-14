@@ -515,6 +515,7 @@ jobs:
       id-token: write
     strategy:
       matrix:
+        suite: ['integration_tests']
         os: [ubuntu-22.04]
     steps:
       # Need a copy of the source to generate coverage HTML
@@ -550,6 +551,25 @@ jobs:
           java-version: "8"
           java-package: jdk
           architecture: x64
+
+      # NOTE: This job uses the SMT solver cache to improve performance but it
+      # does not save the updated SMT solver cache. This is because the
+      # `cabal-test` also runs the integration tests and uploads an updated
+      # cache. Because the test suite is the same, the resulting cache files
+      # would also be identical.
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - shell: bash
+        name: Enable solver caching
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
 
       - name: Run integration tests
         shell: bash
