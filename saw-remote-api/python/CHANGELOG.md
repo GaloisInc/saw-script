@@ -26,6 +26,9 @@
   function with LLVM or JVM verification will raise an error.
 * The `proclaim` function (which is the Python counterpart to to
   `{llvm,jvm,mir}_assert` in SAWScript) is no longer deprecated.
+* Add a `proclaim_f` function. This behaves like the `proclaim` function, except
+  that it takes a `cry_f`-style format string as an argument. That is,
+  `proclaim_f(...)` is equivalent to `proclaim(cry_f(...))`.
 
 ## 1.0.1 -- YYYY-MM-DD
 

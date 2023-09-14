@@ -536,6 +536,12 @@ class Contract:
         else:
             raise Exception("wrong state")
 
+    def proclaim_f(self, s : str) -> None:
+        """Proclaims an assertion using a ``cry_f``-style format string, i.e.
+        ``proclaim_f(...)`` is equivalent to ``proclaim(cry_f(...))``"""
+        expression = to_cryptol_str_customf(s, frames=1, filename="<proclaim_f>")
+        return self.proclaim(expression)
+
     def precondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
         """Establishes ``proposition`` as a precondition for the function ```Contract```
         being specified.
