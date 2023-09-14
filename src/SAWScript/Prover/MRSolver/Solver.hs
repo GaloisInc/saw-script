@@ -811,10 +811,10 @@ mrRefines' (RetS e) (ErrorS _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorS _) (RetS e) = throwMRFailure (ReturnNotError e)
 
 -- maybe elimination on equality types
-mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
+mrRefines' (MaybeElim (Type cond_tp@(asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
+     cond_pf <- mrDummyProof cond_tp
      m1' <- applyNormCompFun f1 cond_pf
      cond_holds <- mrProvable cond
      not_cond_holds <- mrProvable not_cond
@@ -823,10 +823,10 @@ mrRefines' (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
        (_, True) -> mrRefines m1 m2
        _ -> withAssumption cond (mrRefines m1' m2) >>
             withAssumption not_cond (mrRefines m1 m2)
-mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
+mrRefines' m1 (MaybeElim (Type cond_tp@(asEq -> Just (tp,e1,e2))) m2 f2 _) =
   do cond <- mrEq' tp e1 e2
      not_cond <- liftSC1 scNot cond
-     cond_pf <- liftSC1 scEqTrue cond >>= mrDummyProof
+     cond_pf <- mrDummyProof cond_tp
      m2' <- applyNormCompFun f2 cond_pf
      cond_holds <- mrProvable cond
      not_cond_holds <- mrProvable not_cond
@@ -837,10 +837,10 @@ mrRefines' m1 (MaybeElim (Type (asEq -> Just (tp,e1,e2))) m2 f2 _) =
             withAssumption not_cond (mrRefines m1 m2)
 
 -- maybe elimination on isFinite types
-mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
+mrRefines' (MaybeElim (Type fin_tp@(asIsFinite -> Just n1)) m1 f1 _) m2 =
   do n1_norm <- mrNormOpenTerm n1
      maybe_assump <- mrGetDataTypeAssump n1_norm
-     fin_pf <- mrIsFinite n1_norm >>= mrDummyProof
+     fin_pf <- mrDummyProof fin_tp
      case (maybe_assump, asNum n1_norm) of
        (_, Just (Left _)) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
        (_, Just (Right _)) -> mrRefines m1 m2
@@ -852,10 +852,10 @@ mrRefines' (MaybeElim (Type (asIsFinite -> Just n1)) m1 f1 _) m2 =
          (withUVarLift "n" (Type nat_tp) (n1_norm, f1, m2) $ \ n (n1', f1', m2') ->
            withDataTypeAssump n1' (IsNum n)
            (applyNormCompFun f1' n >>= flip mrRefines m2'))
-mrRefines' m1 (MaybeElim (Type (asIsFinite -> Just n2)) m2 f2 _) =
+mrRefines' m1 (MaybeElim (Type fin_tp@(asIsFinite -> Just n2)) m2 f2 _) =
   do n2_norm <- mrNormOpenTerm n2
      maybe_assump <- mrGetDataTypeAssump n2_norm
-     fin_pf <- mrIsFinite n2_norm >>= mrDummyProof
+     fin_pf <- mrDummyProof fin_tp
      case (maybe_assump, asNum n2_norm) of
        (_, Just (Left _)) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
        (_, Just (Right _)) -> mrRefines m1 m2

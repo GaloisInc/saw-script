@@ -546,10 +546,6 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 -- * Functions for Building Terms
 ----------------------------------------------------------------------
 
--- | Create a term representing the type @IsFinite n@
-mrIsFinite :: Term -> MRM t Term
-mrIsFinite n = liftSC2 scGlobalApply "CryptolM.isFinite" [n]
-
 -- | Create a term representing an application of @Prelude.error@
 mrErrorTerm :: Term -> T.Text -> MRM t Term
 mrErrorTerm a str =
