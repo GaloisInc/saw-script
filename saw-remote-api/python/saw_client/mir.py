@@ -9,28 +9,59 @@ from .crucible import *
 ##################################################
 
 bool_ty = MIRBoolType()
-char_ty = MIRCharType()
-str_ty  = MIRStrType()
+"""A MIR boolean type."""
 
-i8    = MIRI8Type()
-i16   = MIRI16Type()
-i32   = MIRI32Type()
-i64   = MIRI64Type()
-i128  = MIRI128Type()
+char_ty = MIRCharType()
+"""A MIR character type."""
+
+str_ty = MIRStrType()
+"""A MIR string type. Currently, SAW can only handle references to strings
+(``&str``)."""
+
+i8 = MIRI8Type()
+"""A MIR 8-bit signed integer type."""
+
+i16 = MIRI16Type()
+"""A MIR 16-bit signed integer type."""
+
+i32 = MIRI32Type()
+"""A MIR 32-bit signed integer type."""
+
+i64 = MIRI64Type()
+"""A MIR 64-bit signed integer type."""
+
+i128 = MIRI128Type()
+"""A MIR 128-bit signed integer type."""
+
 isize = MIRIsizeType()
+"""A MIR signed integer type that is pointer-sized."""
 
 f32 = MIRF32Type()
-f64 = MIRF64Type()
+"""A MIR single-precision floating-point type."""
 
-u8    = MIRU8Type()
-u16   = MIRU16Type()
-u32   = MIRU32Type()
-u64   = MIRU64Type()
-u128  = MIRU128Type()
+f64 = MIRF64Type()
+"""A MIR double-precision floating-point type."""
+
+u8 = MIRU8Type()
+"""A MIR 8-bit unsigned integer type."""
+
+u16 = MIRU16Type()
+"""A MIR 16-bit unsigned integer type."""
+
+u32 = MIRU32Type()
+"""A MIR 32-bit unsigned integer type."""
+
+u64 = MIRU64Type()
+"""A MIR 64-bit unsigned integer type."""
+
+u128 = MIRU128Type()
+"""A MIR 128-bit unsigned integer type."""
+
 usize = MIRUsizeType()
+"""A MIR unsigned integer type that is pointer-sized."""
 
 def adt_ty(adt: MIRAdt) -> 'MIRAdtType':
-    """An algebraic data type (ADT), i.e., a struct or an enum."""
+    """A MIR algebraic data type (ADT), i.e., a struct or an enum."""
     return MIRAdtType(adt)
 
 def array_ty(size : int, ty : 'MIRType') -> 'MIRArrayType':
@@ -38,7 +69,8 @@ def array_ty(size : int, ty : 'MIRType') -> 'MIRArrayType':
     return MIRArrayType(ty, size)
 
 def slice_ty(ty : MIRType) -> 'MIRSliceType':
-    """``[ty]``, i.e., a MIR slice to a type ``ty``."""
+    """``[ty]``, i.e., a MIR slice to a type ``ty``. Currently, SAW can only
+    handle references to slices (``&[ty]``)"""
     return MIRSliceType(ty)
 
 def tuple_ty(*tuple_types : MIRType) -> 'MIRTupleType':
