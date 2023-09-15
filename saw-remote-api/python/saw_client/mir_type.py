@@ -69,6 +69,22 @@ class MIRIsizeType(MIRType):
     def to_json(self) -> Any:
         return { 'type': 'isize' }
 
+class MIRRefType(MIRType):
+    def __init__(self, referent_type : 'MIRType') -> None:
+        self.referent_type = referent_type
+
+    def to_json(self) -> Any:
+        return { 'type': 'ref',
+                 'referent type': self.referent_type.to_json() }
+
+class MIRRefMutType(MIRType):
+    def __init__(self, referent_type : 'MIRType') -> None:
+        self.referent_type = referent_type
+
+    def to_json(self) -> Any:
+        return { 'type': 'ref mut',
+                 'referent type': self.referent_type.to_json() }
+
 class MIRSliceType(MIRType):
     def __init__(self, slice_type : 'MIRType') -> None:
         self.slice_type = slice_type

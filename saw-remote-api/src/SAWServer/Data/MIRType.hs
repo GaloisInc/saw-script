@@ -16,6 +16,7 @@ data MIRTypeTag
   = TagAdt
   | TagArray
   | TagBool
+  | TagChar
   | TagI8
   | TagI16
   | TagI32
@@ -24,6 +25,8 @@ data MIRTypeTag
   | TagIsize
   | TagF32
   | TagF64
+  | TagRef
+  | TagRefMut
   | TagSlice
   | TagStr
   | TagTuple
@@ -41,6 +44,7 @@ instance JSON.FromJSON MIRTypeTag where
       "adt" -> pure TagAdt
       "array" -> pure TagArray
       "bool" -> pure TagBool
+      "char" -> pure TagChar
       "i8" -> pure TagI8
       "i16" -> pure TagI16
       "i32" -> pure TagI32
@@ -49,6 +53,8 @@ instance JSON.FromJSON MIRTypeTag where
       "isize" -> pure TagIsize
       "f32" -> pure TagF32
       "f64" -> pure TagF64
+      "ref" -> pure TagRef
+      "ref mut" -> pure TagRefMut
       "slice" -> pure TagSlice
       "str" -> pure TagStr
       "tuple" -> pure TagTuple
@@ -74,8 +80,10 @@ data JSONMIRType
   = JSONTyAdt !ServerName
   | JSONTyArray !JSONMIRType !Int
   | JSONTyBool
+  | JSONTyChar
   | JSONTyFloat !Mir.FloatKind
   | JSONTyInt !Mir.BaseSize
+  | JSONTyRef !JSONMIRType !Mir.Mutability
   | JSONTySlice !JSONMIRType
   | JSONTyStr
   | JSONTyTuple ![JSONMIRType]
@@ -93,6 +101,7 @@ instance JSON.FromJSON JSONMIRType where
           TagAdt -> JSONTyAdt <$> o .: "ADT server name"
           TagArray -> JSONTyArray <$> o .: "element type" <*> o .: "size"
           TagBool -> pure JSONTyBool
+          TagChar -> pure JSONTyChar
           TagI8 -> pure $ JSONTyInt Mir.B8
           TagI16 -> pure $ JSONTyInt Mir.B16
           TagI32 -> pure $ JSONTyInt Mir.B32
@@ -101,6 +110,8 @@ instance JSON.FromJSON JSONMIRType where
           TagIsize -> pure $ JSONTyInt Mir.USize
           TagF32 -> pure $ JSONTyFloat Mir.F32
           TagF64 -> pure $ JSONTyFloat Mir.F64
+          TagRef -> JSONTyRef <$> o .: "referent type" <*> pure Mir.Immut
+          TagRefMut -> JSONTyRef <$> o .: "referent type" <*> pure Mir.Mut
           TagSlice -> JSONTySlice <$> o .: "slice type"
           TagStr -> pure JSONTyStr
           TagTuple -> JSONTyTuple <$> o .: "tuple types"
@@ -127,8 +138,10 @@ mirType sawenv = go
 
     go (JSONTyArray ty n) = Mir.TyArray (go ty) n
     go JSONTyBool = Mir.TyBool
+    go JSONTyChar = Mir.TyChar
     go (JSONTyFloat fk) = Mir.TyFloat fk
     go (JSONTyInt bs) = Mir.TyInt bs
+    go (JSONTyRef ty mut) = Mir.TyRef (go ty) mut
     go (JSONTySlice ty) = Mir.TySlice (go ty)
     go JSONTyStr = Mir.TyStr
     go (JSONTyTuple ts) = Mir.TyTuple (map go ts)
