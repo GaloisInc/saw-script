@@ -1668,15 +1668,16 @@ primitives = Map.fromList
     (pureVal proveBisimulation)
     Experimental
     [ "Use bisimulation to prove that two terms simulate each other.  The first"
-    , "argument is a relation over the states and outputs for the second and"
-    , "third terms. The relation must have the type"
-    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The second and third"
+    , "argument is the proof strategy to use.  The second argument is a"
+    , "relation over the states and outputs for the third and fourth"
+    , "arguments. The relation must have the type"
+    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The third and fourth"
     , "arguments are the two terms to prove bisimilar. They must have the types"
     , "'(lhsState, input) -> (lhsState, output)' and"
     , "'(rhsState, input) -> (rhsState, output)' respectively."
     , ""
-    , "Let the first argument be called 'rel', the second 'lhs', and the"
-    , "third 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
+    , "Let the second argument be called 'rel', the third 'lhs', and the"
+    , "fourth 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
     , "  forall s1 s2 in out1 out2."
     , "    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))"
     ]
