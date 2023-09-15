@@ -3996,3 +3996,22 @@ print res2;
 
 Upon running this portion of the script, SAW prints `Valid` confirming that the
 two terms are bisimilar, given the relation `nandRel`.
+
+## Understanding the proof goal
+
+While not necessary for simple proofs, more advanced proofs may require
+inspecting the proof goal.  `prove_bisim` generates and attempts to solve the
+proof goal:
+
+~~~~
+forall s1 s2 in out1 out2.
+    relation (s1, out1) (s2, out2) -> relation (lhs (s1, in)) (rhs (s2, in))
+~~~~
+
+where the variables in the `forall` are:
+
+* `s1`: Initial state for `lhs`
+* `s2`: Initial state for `rhs`
+* `in`: Input value to `lhs` and `rhs`
+* `out1`: Initial output value for `lhs`
+* `out2`: Initial output value for `rhs`
