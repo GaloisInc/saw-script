@@ -516,10 +516,15 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    @deprecated
     def proclaim(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
-        """DEPRECATED: Use ``precondition`` or ``postcondition`` instead. This method will
-        eventually be removed."""
+        """Asserts ``proposition`` for the function ``Contract`` being
+        specified.
+
+        Usable either before or after ``execute_func`` in the contract
+        specification. If this is used before ``execute_func``, then
+        ``proposition`` is asserted as a precondition. If this is used after
+        ``execute_func``, then ``proposition`` is asserted as a postcondition.
+        """
         if not isinstance(proposition, CryptolTerm):
             condition = Condition(CryptolTerm(proposition))
         else:
@@ -530,6 +535,12 @@ class Contract:
             self.__post_state.conditions.append(condition)
         else:
             raise Exception("wrong state")
+
+    def proclaim_f(self, s : str) -> None:
+        """Proclaims an assertion using a ``cry_f``-style format string, i.e.
+        ``proclaim_f(...)`` is equivalent to ``proclaim(cry_f(...))``"""
+        expression = to_cryptol_str_customf(s, frames=1, filename="<proclaim_f>")
+        return self.proclaim(expression)
 
     def precondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
         """Establishes ``proposition`` as a precondition for the function ```Contract```
@@ -572,6 +583,8 @@ class Contract:
         return self.postcondition(expression)
 
     def returns(self, val : Union[Void,SetupVal]) -> None:
+        """Declare the return value for the function ``Contract`` being
+        specified."""
         if self.__state == 'post':
             if self.__returns is None:
                 self.__returns = val
