@@ -3,7 +3,7 @@ module Comp where
 // Specification for a functional AND gate. First output bit is the ready bit,
 // second bit is the result
 andSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
-andSpec (_, (x, y))= ((), (True, x && y))
+andSpec (_, (x, y)) = ((), (True, x && y))
 
 // Specification for a functional NAND gate. First output bit is the ready bit,
 // second bit is the result

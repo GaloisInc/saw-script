@@ -3887,7 +3887,7 @@ Next, we define the pure function we'd like to prove `andImp` bisimilar to:
 
 ~~~~
 andSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
-andSpec (_, (x, y))= ((), (True, x && y))
+andSpec (_, (x, y)) = ((), (True, x && y))
 ~~~~
 
 `andSpec` takes a tuple as input where the first field is `()`, indicating that
