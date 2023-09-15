@@ -16,7 +16,16 @@ on:
   workflow_dispatch:
 
 env:
-  CACHE_VERSION: 1
+  # The CABAL_CACHE_VERSION and SOLVER_CACHE_VERSION environment variables
+  # can be updated to force the use of a new cabal or solver cache if the
+  # respective current cache contents become corrupted/invalid.  This can
+  # sometimes happen when (for example) the OS version is changed but
+  # older .so files are cached, which can have various effects
+  # (e.g. cabal complains it can't find a valid version of the "happy"
+  # tool).
+  CABAL_CACHE_VERSION: 1
+  SOLVER_CACHE_VERSION: 1
+
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
 
   # Solver package snapshot date - also update in the following locations:
@@ -119,9 +128,9 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
           restore-keys: |
-            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+            ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
         shell: bash
@@ -211,8 +220,7 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
-            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
   mr-solver-tests:
     needs: [build]
@@ -421,12 +429,35 @@ jobs:
           java-package: jdk
           architecture: x64
 
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - shell: bash
+        name: Enable solver caching
+        if: "matrix.suite == 'integration_tests'"
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
+
+      - uses: actions/cache/save@v3
+        name: Save SMT solver result cache
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
 
   build-push-image:
     runs-on: ubuntu-22.04
@@ -567,12 +598,29 @@ jobs:
         working-directory: s2nTests
         run: docker-compose build s2n
 
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        with:
+          path: s2nTests/cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
+          restore-keys:
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-
+
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
           chmod +x bin/*
+          mkdir -p cache && touch cache/data.mdb cache/lock.mdb
+          chmod -R +rw cache
           make ${{ matrix.s2n-target }}
+
+      - uses: actions/cache/save@v3
+        name: Save SMT solver result cache
+        if: always()
+        with:
+          path: s2nTests/cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
 
   exercises:
     name: "Test SAW exercises"

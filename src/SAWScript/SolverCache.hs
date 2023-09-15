@@ -44,6 +44,7 @@ were obtained by the backends in the first place).
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.SolverCache
@@ -68,7 +69,7 @@ module SAWScript.SolverCache
   , insertInSolverCache
   , setSolverCachePath
   , printSolverCacheByHex
-  , cleanSolverCache
+  , cleanMismatchedVersionsSolverCache
   , printSolverCacheStats
   , testSolverCacheStats
   ) where
@@ -411,7 +412,7 @@ lazyOpenSolverCache path = do
                        solverCacheDB      = Nothing,
                        solverCacheStats   = stats,
                        solverCacheMapSize = 4 {- GiB -} * 1073741824,
-                       solverCacheTimeout = 1 {- sec -} * 1000000 }
+                       solverCacheTimeout = 2 {- sec -} * 1000000 }
 
 -- | Create a 'SolverCache' with the given 'FilePath' and open an LMDB database
 -- at that path (i.e. `solverCacheEnv` and `solverCacheDB` are both 'Just')
@@ -478,12 +479,13 @@ solverCacheOpDefault (SCOpOrDefault a _) = Just a
 lookupInSolverCache :: SolverCacheKey -> SolverCacheOp (Maybe SolverCacheValue)
 lookupInSolverCache k = SCOpOrDefault Nothing $ \opts cache@SolverCache{..} ->
   getCurrentTime >>= \now ->
-  let upd _ v = Just v { solverCacheValueLastUsed = now } in
-  tryTransaction cache (LMDB.updateLookupWithKey upd k) >>= \case
+  let upd v = Just v { solverCacheValueLastUsed = now } in
+  tryTransaction @LMDB.ReadOnly cache (LMDB.lookup k) >>= \case
     (Right (Just v), cache') -> do
       printOutLn opts Debug ("Using cached result: " ++ show k)
       modifyIORef solverCacheStats $ M.adjust (+1) Lookups
-      return (Just v, cache')
+      cache'' <- snd <$> tryTransaction cache' (LMDB.update upd k)
+      return (Just v, cache'')
     (Left err, cache') -> do
       printOutLn opts Warn ("Solver cache lookup failed:\n" ++ err)
       modifyIORef solverCacheStats $ M.adjust (+1) FailedLookups
@@ -552,8 +554,8 @@ printSolverCacheByHex hex_pref = SCOpOrFail $ \opts cache -> do
 
 -- | Remove all entries in the solver result cache which have version(s) that
 -- do not match the current version(s) or are marked as stale
-cleanSolverCache :: SolverBackendVersions -> SolverCacheOp ()
-cleanSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
+cleanMismatchedVersionsSolverCache :: SolverBackendVersions -> SolverCacheOp ()
+cleanMismatchedVersionsSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
   let known_curr_base_vs = M.filter isJust curr_base_vs
       mismatched_vs vs = M.mapMaybe id $ M.intersectionWith
         (\base_ver v_ver -> if base_ver /= v_ver
@@ -574,6 +576,10 @@ cleanSolverCache curr_base_vs = SCOpOrFail $ \opts cache -> do
     printOutLn opts Info $
       "- " ++ showSolverBackendVersion backend v1 [] ++
       " (Current: " ++ showSolverBackendVersion backend v2 [] ++ ")"
+  sz <- LMDB.readOnlyTransaction env $ LMDB.size db
+  let (sz0, sz1) = if sz == 1 then ("is", "") else ("are", "s")
+  printOutLn opts Info $ "There " ++ sz0 ++ " " ++ show sz ++ " result"
+                                  ++ sz1 ++ " remaining in the cache"
   return ((), cache')
 
 -- | Print out statistics about how the solver cache was used

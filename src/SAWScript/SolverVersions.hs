@@ -54,7 +54,7 @@ getSolverBackendVersion backend = case backend of
   What4     -> return what4Hash
   SBV       -> return (Just VERSION_sbv)
   AIG       -> return aigHash
-  RME       -> return (Just hash)
+  RME       -> return rmeHash
   -- We use individual cases for the remaining constructors to ensure that if
   -- a new backend is added, a warning is generated for this pattern match
   ABC       -> getSolverVersion SBV.ABC

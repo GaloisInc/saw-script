@@ -16,6 +16,7 @@ services:
     image: s2n
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+      - ${PWD:-.}/cache:/saw-cache:rw
 
   awslc:
     build:
@@ -24,6 +25,7 @@ services:
     image: awslc
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+      - ${PWD:-.}/cache:/saw-cache:rw
 
   blst:
     build:
@@ -32,3 +34,4 @@ services:
     image: blst
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+      - ${PWD:-.}/cache:/saw-cache:rw
