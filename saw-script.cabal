@@ -152,6 +152,7 @@ library
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.Boilerplate
     SAWScript.Crucible.LLVM.CrucibleLLVM
+    SAWScript.Crucible.LLVM.FFI
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
     SAWScript.Crucible.LLVM.ResolveSetupValue
