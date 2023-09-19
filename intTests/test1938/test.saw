@@ -1,0 +1,18 @@
+// Test that the `abc` and `w4_abc_verilog` proof scripts will report invalid
+// goals that do not contain any variables. We test this both directly (with the
+// trivial `False` property) as well as via an LLVM verification involving a
+// proof goal that evaluates to `False`.
+
+fails (prove_print abc            {{ False }});
+fails (prove_print w4_abc_verilog {{ False }});
+
+m <- llvm_load_module "test.bc";
+
+// This will generate a failing proof goal about `x` being read-only.
+let setup = do {
+  x <- llvm_alloc_readonly (llvm_int 32);
+  llvm_execute_func [x];
+};
+
+fails (llvm_verify m "test" [] true setup abc);
+fails (llvm_verify m "test" [] true setup w4_abc_verilog);
