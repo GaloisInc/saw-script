@@ -8,7 +8,6 @@ module SAWScript.Prover.ABC
 import Control.Monad (unless)
 import Control.Monad.IO.Class
 import qualified Data.ByteString.Char8 as C8
-import Data.Char (isSpace)
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -16,8 +15,9 @@ import qualified Data.Text as Text
 import Text.Read (readMaybe)
 
 import System.Directory
+import System.FilePath ((</>))
 import System.IO
-import System.IO.Temp (emptySystemTempFile)
+import System.IO.Temp (createTempDirectory, getCanonicalTemporaryDirectory)
 import System.Process (readProcessWithExitCode)
 
 import qualified Data.AIG as AIG
@@ -105,11 +105,11 @@ w4AbcExternal ::
   SATQuery ->
   TopLevel (Maybe CEX, String)
 w4AbcExternal exporter argFn _hashcons satq =
-       -- Create temporary files
-    do let tpl = "abc_verilog.v"
-           tplCex = "abc_verilog.cex"
-       tmp <- liftIO $ emptySystemTempFile tpl
-       tmpCex <- liftIO $ emptySystemTempFile tplCex
+       -- Create a temporary directory to put input and output files
+    do canonTmpDir <- liftIO getCanonicalTemporaryDirectory
+       tmpDir <- liftIO $ createTempDirectory canonTmpDir "saw_abc_external"
+       let tmp = tmpDir </> "abc_verilog.v"
+           tmpCex = tmpDir </> "abc_verilog.cex"
 
        (argNames, argTys) <- unzip <$> exporter tmp satq
 
@@ -117,18 +117,21 @@ w4AbcExternal exporter argFn _hashcons satq =
        let execName = "abc"
            args = ["-q", argFn tmp tmpCex]
        (_out, _err) <- liftIO $ readProcessExitIfFailure execName args
-       cexText <- liftIO $ C8.unpack <$> C8.readFile tmpCex
-       liftIO $ removeFile tmp
-       liftIO $ removeFile tmpCex
-
-       -- Parse and report results
-       res <- if all isSpace cexText
-              then return Nothing
-              else do cex <- liftIO $ parseAigerCex cexText argTys
-                      case cex of
-                        Left parseErr -> fail parseErr
-                        Right vs -> return $ Just model
-                          where model = zip argNames (map toFirstOrderValue vs)
+       cexExists <- liftIO $ doesFileExist tmpCex
+       res <-
+         if cexExists
+           then do
+             -- If a counterexample file exists, parse and report the results.
+             cexText <- liftIO $ C8.unpack <$> C8.readFile tmpCex
+             cex <- liftIO $ parseAigerCex cexText argTys
+             case cex of
+               Left parseErr -> fail parseErr
+               Right vs -> return $ Just model
+                 where model = zip argNames (map toFirstOrderValue vs)
+           else
+             -- Otherwise, there is no counterexample.
+             return Nothing
+       liftIO $ removeDirectoryRecursive tmpDir
        return (res, "abc_verilog")
 
 parseAigerCex :: String -> [FiniteType] -> IO (Either String [FiniteValue])
@@ -137,11 +140,15 @@ parseAigerCex text tys =
     -- Output from `write_cex`
     [cex] ->
       case words cex of
+        -- Queries with no variables will result in a blank line of output.
+        [] -> pure $ liftCexBB tys []
         [bits] -> liftCexBB tys <$> mapM bitToBool bits
         _ -> fail $ "invalid counterexample line: " ++ cex
     -- Output from `write_aiger_cex`
     [_, cex] ->
       case words cex of
+        -- Queries with no variables will result in an empty vector of output.
+        [_] -> pure $ liftCexBB tys []
         [bits, _] -> liftLECexBB tys <$> mapM bitToBool bits
         _ -> fail $ "invalid counterexample line: " ++ cex
     _ -> fail $ "invalid counterexample text: " ++ text
