@@ -48,6 +48,9 @@ library
         Handlers.TextDocument.SemanticTokensFull
 
         SAWT
+        SAWT.Checkpoint
+        SAWT.IO
+        SAWT.State
         SAWT.Interpret
 
         Server

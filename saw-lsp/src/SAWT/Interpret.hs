@@ -8,7 +8,7 @@ import Data.List.NonEmpty qualified as NE
 import SAWScript.AST (Stmt)
 import SAWScript.Interpreter qualified as SAW
 import SAWScript.Value qualified as SAW
-import SAWT
+import SAWT.IO
   ( Checkpoint (..),
     Checkpoints,
     SAWT,
