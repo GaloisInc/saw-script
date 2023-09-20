@@ -1090,7 +1090,8 @@ mrGetFunAssump nm = lookupFunAssump nm <$> mrRefnset
 withFunAssump :: FunName -> [Term] -> Term -> MRM t a -> MRM t a
 withFunAssump fname args rhs m =
   do k <- mkCompFunReturn <$> mrFunOutType fname args
-     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k) "|=" rhs
+     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args Unlifted k)
+                                     "|=" rhs
      ctx <- mrUVars
      rs <- mrRefnset
      let assump = FunAssump ctx fname args (RewriteFunAssump rhs) Nothing

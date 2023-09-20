@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- This is to stop GHC 8.8.4's pattern match checker exceeding its limit when
@@ -19,32 +20,47 @@ Portability : non-portable (language extensions)
 
 This module implements a monadic-recursive solver, for proving that one monadic
 term refines another. The algorithm works on the "monadic normal form" of
-computations, which uses the following laws to simplify binds in computations,
-where either is the sum elimination function defined in the SAW core prelude:
+computations, which uses the following laws to simplify binds and calls to
+@liftStackS@ in computations, where @either@ is the sum elimination function
+defined in the SAW core prelude:
 
-returnM x >>= k               = k x
-errorM str >>= k              = errorM
-(m >>= k1) >>= k2             = m >>= \x -> k1 x >>= k2
-(existsM f) >>= k             = existsM (\x -> f x >>= k)
-(forallM f) >>= k             = forallM (\x -> f x >>= k)
-(assumingM b m) >>= k         = assumingM b (m >>= k)
-(assertingM b m) >>= k        = assertingM b (m >>= k)
-(orM m1 m2) >>= k             = orM (m1 >>= k) (m2 >>= k)
-(if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>1 k
-(either f1 f2 e) >>= k        = either (\x -> f1 x >= k) (\x -> f2 x >= k) e
-(letrecM funs body) >>= k     = letrecM funs (\F1 ... Fn -> body F1 ... Fn >>= k)
+> retS x >>= k                  = k x
+> errorS str >>= k              = errorM
+> (m >>= k1) >>= k2             = m >>= \x -> k1 x >>= k2
+> (existsS f) >>= k             = existsM (\x -> f x >>= k)
+> (forallS f) >>= k             = forallM (\x -> f x >>= k)
+> (assumingS b m) >>= k         = assumingM b (m >>= k)
+> (assertingS b m) >>= k        = assertingM b (m >>= k)
+> (orS m1 m2) >>= k             = orM (m1 >>= k) (m2 >>= k)
+> (if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>= k
+> (either f1 f2 e) >>= k        = either (\x -> f1 x >>= k) (\x -> f2 x >>= k) e
+> (multiFixS funs body) >>= k   = multiFixS funs (\F1 ... Fn -> body F1 ... Fn >>= k)
+> 
+> liftStackS (retS x)                = retS x
+> liftStackS (errorS str)            = errorS str
+> liftStackS (m >>= k)               = liftStackS m >>= \x -> liftStackS (k x)
+> liftStackS (existsS f)             = existsM (\x -> liftStackS (f x))
+> liftStackS (forallS f)             = forallM (\x -> liftStackS (f x))
+> liftStackS (assumingS b m)         = assumingM b (liftStackS m)
+> liftStackS (assertingS b m)        = assertingM b (liftStackS m)
+> liftStackS (orS m1 m2)             = orM (liftStackS m1) (liftStackS m2)
+> liftStackS (if b then m1 else m2)  = if b then liftStackS m1 else liftStackS m2
+> liftStackS (either f1 f2 e)        = either (\x -> liftStackS f1 x) (\x -> liftStackS f2 x) e
+> liftStackS (multiFixS funs body)   = multiFixS funs (\F1 ... Fn -> liftStackS (body F1 ... Fn))
 
-The resulting computations of one of the following forms:
+The resulting computations are in one of the following forms:
 
-returnM e  |  errorM str  |  existsM f  |  forallM f  |  orM m1 m2  |
-if b then m1 else m2  |  either f1 f2 e  |  F e1 ... en  |  F e1 ... en >>= k  |
-letrecM lrts B (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> m)
+> returnM e  |  errorM str  |  existsM f  |  forallM f  |  assumingS b m  |
+> assertingS b m  |  orM m1 m2  |  if b then m1 else m2  |  either f1 f2 e  |
+> F e1 ... en  |  liftStackS (F e1 ... en)  |
+> F e1 ... en >>= k  | liftStackS (F e1 ... en) >>= k  |
+> multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> m)
 
-The form F e1 ... en refers to a recursively-defined function or a function
-variable that has been locally bound by a letrecM. Either way, monadic
+The form @F e1 ... en@ refers to a recursively-defined function or a function
+variable that has been locally bound by a @multiFixS@. Either way, monadic
 normalization does not attempt to normalize these functions.
 
-The algorithm maintains a context of three sorts of variables: letrec-bound
+The algorithm maintains a context of three sorts of variables: @multiFixS@-bound
 variables, existential variables, and universal variables. Universal variables
 are represented as free SAW core variables, while the other two forms of
 variable are represented as SAW core 'ExtCns's terms, which are essentially
@@ -52,73 +68,78 @@ axioms that have been generated internally. These 'ExtCns's are Skolemized,
 meaning that they take in as arguments all universal variables that were in
 scope when they were created. The context also maintains a partial substitution
 for the existential variables, as they become instantiated with values, and it
-additionally remembers the bodies / unfoldings of the letrec-bound variables.
+additionally remembers the bodies / unfoldings of the @multiFixS@-bound variables.
 
-The goal of the solver at any point is of the form C |- m1 |= m2, meaning that
-we are trying to prove m1 refines m2 in context C. This proceed by cases:
+The goal of the solver at any point is of the form @C |- m1 |= m2@, meaning that
+we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 
-C |- returnM e1 |= returnM e2: prove C |- e1 = e2
+> C |- retS e1 |= retS e2: prove C |- e1 = e2
+> 
+> C |- errorS str1 |= errorS str2: vacuously true
+> 
+> C |- if b then m1' else m1'' |= m2: prove C,b=true |- m1' |= m2 and
+> C,b=false |- m1'' |= m2, skipping either case where C,b=X is unsatisfiable;
+> 
+> C |- m1 |= if b then m2' else m2'': similar to the above
+> 
+> C |- either T U (SpecM V) f1 f2 e |= m: prove C,x:T,e=inl x |- f1 x |= m and
+> C,y:U,e=inl y |- f2 y |= m, again skippping any case with unsatisfiable context;
+> 
+> C |- m |= either T U (SpecM V) f1 f2 e: similar to previous
+> 
+> C |- m |= forallS f: make a new universal variable x and recurse
+> 
+> C |- existsS f |= m: make a new universal variable x and recurse (existential
+> elimination uses universal variables and vice-versa)
+> 
+> C |- m |= existsS f: make a new existential variable x and recurse
+> 
+> C |- forallS f |= m: make a new existential variable x and recurse
+> 
+> C |- m |= orS m1 m2: try to prove C |- m |= m1, and if that fails, backtrack and
+> prove C |- m |= m2
+> 
+> C |- orS m1 m2 |= m: prove both C |- m1 |= m and C |- m2 |= m
+> 
+> C |- multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) |= m: create
+> multiFixS-bound variables F1 through Fn in the context bound to their unfoldings
+> f1 through fn, respectively, and recurse on body |= m
+> 
+> C |- m |= multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
+> previous case
+> 
+> C |- F e1 ... en >>= k |= F e1' ... en' >>= k': prove C |- ei = ei' for each i
+> and then prove k x |= k' x for new universal variable x
+> 
+> C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
+> 
+> * If we have an assumption that forall x1 ... xj, F a1 ... an |= F' a1' .. am',
+>   prove ei = ai and ei' = ai' and then that C |- k x |= k' x for fresh uvar x
+> 
+> * If we have an assumption that forall x1, ..., xn, F e1'' ... en'' |= m' for
+>   some ei'' and m', match the ei'' against the ei by instantiating the xj with
+>   fresh evars, and if this succeeds then recursively prove C |- m' >>= k |= RHS
+> 
+> (We don't do this one right now)
+> * If we have an assumption that forall x1', ..., xn', m |= F e1'' ... en'' for
+>   some ei'' and m', match the ei'' against the ei by instantiating the xj with
+>   fresh evars, and if this succeeds then recursively prove C |- LHS |= m' >>= k'
+> 
+> * If either side is a definition whose unfolding does not contain multiFixS, or
+>   any related operations, unfold it
+> 
+> * If F and F' have the same return type, add an assumption forall uvars in scope
+>   that F e1 ... en |= F' e1' ... em' and unfold both sides, recursively proving
+>   that F_body e1 ... en |= F_body' e1' ... em'. Then also prove k x |= k' x for
+>   fresh uvar x.
+> 
+> * Otherwise we don't know to "split" one of the sides into a bind whose
+>   components relate to the two components on the other side, so just fail
 
-C |- errorM str1 |= errorM str2: vacuously true
-
-C |- if b then m1' else m1'' |= m2: prove C,b=true |- m1' |= m2 and
-C,b=false |- m1'' |= m2, skipping either case where C,b=X is unsatisfiable;
-
-C |- m1 |= if b then m2' else m2'': similar to the above
-
-C |- either T U (SpecM V) f1 f2 e |= m: prove C,x:T,e=inl x |- f1 x |= m and
-C,y:U,e=inl y |- f2 y |= m, again skippping any case with unsatisfiable context;
-
-C |- m |= either T U (SpecM V) f1 f2 e: similar to previous
-
-C |- m |= forallM f: make a new universal variable x and recurse
-
-C |- existsM f |= m: make a new universal variable x and recurse (existential
-elimination uses universal variables and vice-versa)
-
-C |- m |= existsM f: make a new existential variable x and recurse
-
-C |- forall f |= m: make a new existential variable x and recurse
-
-C |- m |= orM m1 m2: try to prove C |- m |= m1, and if that fails, backtrack and
-prove C |- m |= m2
-
-C |- orM m1 m2 |= m: prove both C |- m1 |= m and C |- m2 |= m
-
-C |- letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) |= m: create
-letrec-bound variables F1 through Fn in the context bound to their unfoldings f1
-through fn, respectively, and recurse on body |= m
-
-C |- m |= letrec (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
-previous case
-
-C |- F e1 ... en >>= k |= F e1' ... en' >>= k': prove C |- ei = ei' for each i
-and then prove k x |= k' x for new universal variable x
-
-C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
-
-* If we have an assumption that forall x1 ... xj, F a1 ... an |= F' a1' .. am',
-  prove ei = ai and ei' = ai' and then that C |- k x |= k' x for fresh uvar x
-
-* If we have an assumption that forall x1, ..., xn, F e1'' ... en'' |= m' for
-  some ei'' and m', match the ei'' against the ei by instantiating the xj with
-  fresh evars, and if this succeeds then recursively prove C |- m' >>= k |= RHS
-
-(We don't do this one right now)
-* If we have an assumption that forall x1', ..., xn', m |= F e1'' ... en'' for
-  some ei'' and m', match the ei'' against the ei by instantiating the xj with
-  fresh evars, and if this succeeds then recursively prove C |- LHS |= m' >>= k'
-
-* If either side is a definition whose unfolding does not contain letrecM, fixM,
-  or any related operations, unfold it
-
-* If F and F' have the same return type, add an assumption forall uvars in scope
-  that F e1 ... en |= F' e1' ... em' and unfold both sides, recursively proving
-  that F_body e1 ... en |= F_body' e1' ... em'. Then also prove k x |= k' x for
-  fresh uvar x.
-
-* Otherwise we don't know to "split" one of the sides into a bind whose
-  components relate to the two components on the other side, so just fail
+Note that if either side of the final case is wrapped in a @liftStackS@, the
+behavior is identical, just with a @liftStackS@ wrapped around the appropriate
+unfolded function body or bodies. The only exception is the second to final case,
+which also requires the both functions either be lifted or unlifted.
 -}
 
 module SAWScript.Prover.MRSolver.Solver where
@@ -281,6 +302,8 @@ normComp (CompTerm t) =
          normBind norm (CompFunTerm (SpecMParams e stack) f)
     (isGlobalDef "Prelude.errorS" -> Just (), [_, _, _, str]) ->
       return (ErrorS str)
+    (isGlobalDef "Prelude.liftStackS" -> Just (), [ev, stk, _, t']) ->
+      normCompTerm t' >>= liftStackNormComp (SpecMParams ev stk)
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
     (isGlobalDef "Prelude.either" -> Just (),
@@ -327,7 +350,8 @@ normComp (CompTerm t) =
         -- that it must be applied to all of the uvars as well as the args
         let var = CallSName (fun_vars !! (fromIntegral i))
         all_args <- (++ args) <$> getAllUVarTerms
-        FunBind var all_args <$> mkCompFunReturn <$> mrFunOutType var all_args
+        FunBind var all_args Unlifted <$> mkCompFunReturn <$>
+          mrFunOutType var all_args
 
     (isGlobalDef "Prelude.multiArgFixS" -> Just (), _ev:_stack:_lrt:body:args) ->
       do
@@ -348,7 +372,8 @@ normComp (CompTerm t) =
         -- well as the args
         let var = CallSName fun_var
         all_args <- (++ args) <$> getAllUVarTerms
-        FunBind var all_args <$> mkCompFunReturn <$> mrFunOutType var all_args
+        FunBind var all_args Unlifted <$> mkCompFunReturn <$>
+          mrFunOutType var all_args
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
@@ -445,11 +470,11 @@ normComp (CompTerm t) =
     -- FIXME: substitute for evars if they have been instantiated
     ((asExtCns -> Just ec), args) ->
       do fun_name <- extCnsToFunName ec
-         FunBind fun_name args <$> mkCompFunReturn <$>
+         FunBind fun_name args Unlifted <$> mkCompFunReturn <$>
            mrFunOutType fun_name args
 
     ((asGlobalFunName -> Just f), args) ->
-      FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
+      FunBind f args Unlifted <$> mkCompFunReturn <$> mrFunOutType f args
 
     _ -> throwMRFailure (MalformedComp t)
 
@@ -472,7 +497,7 @@ normBind (AssumeBoolBind cond f) k =
   return $ AssumeBoolBind cond (compFunComp f k)
 normBind (ExistsBind tp f) k = return $ ExistsBind tp (compFunComp f k)
 normBind (ForallBind tp f) k = return $ ForallBind tp (compFunComp f k)
-normBind (FunBind f args k1) k2
+normBind (FunBind f args isLifted k1) k2
   -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
   {-
   | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
@@ -489,18 +514,80 @@ normBind (FunBind f args k1) k2
     do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
        c <- compFunReturnType k2
        return $ FunBind f (args_pre ++ [cont']) (CompFunReturn (Type c))
-  | otherwise -} = return $ FunBind f args (compFunComp k1 k2)
+  | otherwise -} = return $ FunBind f args isLifted (compFunComp k1 k2)
 
--- | Bind a 'Term' for a computation with a function and normalize
-normBindTerm :: Term -> CompFun -> MRM t NormComp
-normBindTerm t f = normCompTerm t >>= \m -> normBind m f
+-- | Bind a computation in whnf with a function, normalize, and then call
+-- 'liftStackNormComp' if the first argument is 'Lifted'. If the first argument
+-- is 'Unlifted', this function is the same as 'normBind'.
+normBindLiftStack :: IsLifted -> NormComp -> CompFun -> MRM t NormComp
+normBindLiftStack Unlifted t f = normBind t f
+normBindLiftStack Lifted t f =
+  liftStackNormComp (compFunSpecMParams f) t >>= \t' -> normBind t' f
+
+-- | Bind a 'Term' for a computation with with a function, normalize, and then
+-- call 'liftStackNormComp' if the first argument is 'Lifted'. See:
+-- 'normBindLiftStack'.
+normBindTermLiftStack :: IsLifted -> Term -> CompFun -> MRM t NormComp
+normBindTermLiftStack isLifted t f =
+  normCompTerm t >>= \m -> normBindLiftStack isLifted m f
+
+
+-- | Apply @liftStackS@ to a computation in whnf, and normalize
+liftStackNormComp :: SpecMParams Term -> NormComp -> MRM t NormComp
+liftStackNormComp _ (RetS t) = return (RetS t)
+liftStackNormComp _ (ErrorS msg) = return (ErrorS msg)
+liftStackNormComp params (Ite cond comp1 comp2) =
+  Ite cond <$> liftStackComp params comp1 <*> liftStackComp params comp2
+liftStackNormComp params (Eithers elims t) =
+  Eithers <$> mapM (\(tp,f) -> (tp,) <$> liftStackCompFun params f) elims
+          <*> return t
+liftStackNormComp params (MaybeElim tp m f t) =
+  MaybeElim tp <$> liftStackComp params m
+               <*> liftStackCompFun params f <*> return t
+liftStackNormComp params (OrS comp1 comp2) =
+  OrS <$> liftStackComp params comp1 <*> liftStackComp params comp2
+liftStackNormComp params (AssertBoolBind cond f) =
+  AssertBoolBind cond <$> liftStackCompFun params f
+liftStackNormComp params (AssumeBoolBind cond f) =
+  AssumeBoolBind cond <$> liftStackCompFun params f
+liftStackNormComp params (ExistsBind tp f) =
+  ExistsBind tp <$> liftStackCompFun params f
+liftStackNormComp params (ForallBind tp f) =
+  ForallBind tp <$> liftStackCompFun params f
+liftStackNormComp params (FunBind f args _ k) =
+  FunBind f args Lifted <$> liftStackCompFun params k
+
+-- | Apply @liftStackS@ to a computation
+liftStackComp :: SpecMParams Term -> Comp -> MRM t Comp
+liftStackComp (SpecMParams ev stk) (CompTerm t) = mrTypeOf t >>= \case
+  (asSpecM -> Just (_, tp)) ->
+    CompTerm <$> liftSC2 scGlobalApply "Prelude.liftStackS" [ev, stk, tp, t]
+  _ -> error "liftStackComp: type not of the form: SpecM a"
+liftStackComp _ (CompReturn t) = return $ CompReturn t
+liftStackComp params (CompBind c f) =
+  CompBind <$> liftStackComp params c <*> liftStackCompFun params f
+
+-- | Apply @liftStackS@ to the bodies of a composition of functions
+liftStackCompFun :: SpecMParams Term -> CompFun -> MRM t CompFun
+liftStackCompFun params@(SpecMParams ev stk) (CompFunTerm _ f) = mrTypeOf f >>= \case
+  (asPi -> Just (_, _, asSpecM -> Just (_, tp))) ->
+    let nm = maybe "ret_val" id (asLambdaName f) in
+    CompFunTerm params <$>
+      mrLambdaLift1 (nm, tp) (ev, stk, tp, f) (\arg (ev', stk', tp', f') ->
+        do app <- mrApplyAll f' [arg]
+           liftSC2 scGlobalApply "Prelude.liftStackS" [ev', stk', tp', app])
+  _ -> error "liftStackCompFun: type not of the form: a -> SpecM b"
+liftStackCompFun params (CompFunReturn _ tp) = return $ CompFunReturn params tp
+liftStackCompFun params (CompFunComp f g) =
+  CompFunComp <$> liftStackCompFun params f <*> liftStackCompFun params g
+
 
 {-
 -- | Get the return type of a 'CompFun'
 compFunReturnType :: CompFun -> MRM t Term
 compFunReturnType (CompFunTerm _ t) = mrTypeOf t
 compFunReturnType (CompFunComp _ g) = compFunReturnType g
-compFunReturnType (CompFunReturn (Type t)) = return t
+compFunReturnType (CompFunReturn _ _) = error "FIXME"
 -}
 
 -- | Apply a computation function to a term argument to get a computation
@@ -561,7 +648,7 @@ applyNormCompFun f arg = applyCompFun f arg >>= normComp
 -- | Convert a 'FunAssumpRHS' to a 'NormComp'
 mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM t NormComp
 mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
-  FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
+  FunBind f args Unlifted <$> mkCompFunReturn <$> mrFunOutType f args
 mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = normCompTerm rhs
 
 
@@ -957,9 +1044,9 @@ mrRefines' (OrS m1 m1') m2 =
 
 -- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
-mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
+mrRefines' m1@(FunBind (EVarFunName _) _ _ _) m2 =
   throwMRFailure (CompsDoNotRefine m1 m2)
-mrRefines' m1 m2@(FunBind (EVarFunName _) _ _) =
+mrRefines' m1 m2@(FunBind (EVarFunName _) _ _ _) =
   throwMRFailure (CompsDoNotRefine m1 m2)
 {-
 mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
@@ -970,13 +1057,15 @@ mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
-mrRefines' (FunBind (CallSName f) args1 k1) (FunBind (CallSName f') args2 k2)
-  | f == f' && length args1 == length args2 =
+mrRefines' (FunBind (CallSName f) args1 isLifted k1)
+           (FunBind (CallSName f') args2 isLifted' k2)
+  | f == f' && isLifted == isLifted' && length args1 == length args2 =
     zipWithM_ mrAssertProveEq args1 args2 >>
     mrFunOutType (CallSName f) args1 >>= \(_, tp) ->
     mrRefinesFun tp k1 tp k2
 
-mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
+mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
+           m2@(FunBind f2 args2 isLifted2 k2) =
   mrFunOutType f1 args1 >>= \(_, tp1) ->
   mrFunOutType f2 args2 >>= \(_, tp2) ->
   findInjConvs tp1 Nothing tp2 Nothing >>= \mb_convs ->
@@ -1015,7 +1104,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- unfolds and is not recursive in itself, unfold f2 and recurse
   (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
     | Just (f2_body, False) <- maybe_f2_body ->
-    normBindTerm f2_body k2 >>= \m2' ->
+    normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' ->
     recordUsedFunAssump fa >> mrRefines m1 m2'
 
   -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
@@ -1037,25 +1126,27 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBind rhs'' k1
+       m1' <- normBindLiftStack isLifted1 rhs'' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
   _ | Just (f1_body, False) <- maybe_f1_body ->
-      normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
+      normBindTermLiftStack isLifted1 f1_body k1 >>= \m1' -> mrRefines m1' m2
 
   -- If f2 unfolds and is not recursive in itself, unfold it and recurse
   _ | Just (f2_body, False) <- maybe_f2_body ->
-      normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
+      normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
-  -- assumption that f1 refines some specification, and both f1 and f2 are
-  -- recursive and have return types which are heterogeneously related, then
-  -- try to coinductively prove that f1 args1 |= f2 args2 under the assumption
-  -- that f1 args1 |= f2 args2, and then try to prove that k1 |= k2
+  -- assumption that f1 refines some specification, both are either lifted or
+  -- unlifted, and both f1 and f2 are recursive and have return types which are
+  -- heterogeneously related, then try to coinductively prove that
+  -- f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2, and
+  -- then try to prove that k1 |= k2
   _ | Just _ <- mb_convs
     , Just _ <- maybe_f1_body
-    , Just _ <- maybe_f2_body ->
+    , Just _ <- maybe_f2_body
+    , isLifted1 == isLifted2 ->
       mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
 
   -- If we cannot line up f1 and f2, then making progress here would require us
@@ -1064,10 +1155,12 @@ mrRefines' m1@(FunBind f1 args1 k1) m2@(FunBind f2 args2 k2) =
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
   _ ->
-    mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2 >>
-    throwMRFailure (CompsDoNotRefine m1 m2)
+    do if isLifted1 /= isLifted2
+       then debugPrint 1 "mrRefines: isLifted cases do not match"
+       else mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2
+       throwMRFailure (CompsDoNotRefine m1 m2)
 
-mrRefines' m1@(FunBind f1 args1 k1) m2 =
+mrRefines' m1@(FunBind f1 args1 isLifted1 k1) m2 =
   mrGetFunAssump f1 >>= \case
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
@@ -1077,7 +1170,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBind rhs'' k1
+       m1' <- normBindLiftStack isLifted1 rhs'' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1
@@ -1086,19 +1179,19 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
 
     -- If f1 unfolds and is not recursive in itself, unfold it and recurse
     Just (f1_body, False) ->
-      normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
+      normBindTermLiftStack isLifted1 f1_body k1 >>= \m1' -> mrRefines m1' m2
 
     -- Otherwise we would have to somehow split m2 into some computation of the
     -- form m2' >>= k2 where f1 args1 |= m2' and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
     _ -> mrRefines'' m1 m2
 
-mrRefines' m1 m2@(FunBind f2 args2 k2) =
+mrRefines' m1 m2@(FunBind f2 args2 isLifted2 k2) =
   mrFunBodyRecInfo f2 args2 >>= \case
 
   -- If f2 unfolds and is not recursive in itself, unfold it and recurse
   Just (f2_body, False) ->
-    normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
+    normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If f2 unfolds but is recursive, and k2 is the trivial continuation, meaning
   -- m2 is just f2 args2, use the law of coinduction to prove m1 |= f2 args2 by
