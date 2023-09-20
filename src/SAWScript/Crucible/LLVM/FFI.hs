@@ -10,11 +10,13 @@ module SAWScript.Crucible.LLVM.FFI
 
 import           Control.Monad
 import           Control.Monad.Trans
+import           Data.Bits                            (finiteBitSize)
 import           Data.List
 import qualified Data.Map                             as Map
 import           Data.Maybe
 import           Data.Text                            (Text)
 import qualified Data.Text                            as Text
+import           Foreign.C.Types                      (CSize)
 
 import qualified Text.LLVM.AST                        as LLVM
 
@@ -98,11 +100,14 @@ llvm_ffi_setup appTypedTerm = do
     sizeTerm <- completeOpenTerm sc $
       applyGlobalOpenTerm "Cryptol.ecNumber"
         [ closedOpenTerm tyArgTerm
-        , vectorTypeOpenTerm (natOpenTerm 64) boolTypeOpenTerm
+        , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
         , applyGlobalOpenTerm "Cryptol.PLiteralSeqBool"
-            [ctorOpenTerm "Cryptol.TCNum" [natOpenTerm 64]]
+            [ctorOpenTerm "Cryptol.TCNum" [sizeBitSize]]
         ]
     anySetupTerm <$> mkTypedTerm sc sizeTerm
+    where
+    sizeBitSize = natOpenTerm $
+      fromIntegral $ finiteBitSize (undefined :: CSize)
 
   setupInArg :: TypeEnv -> Text -> FFIType ->
     LLVMCrucibleSetupM (Term, AllLLVM SetupValue)
