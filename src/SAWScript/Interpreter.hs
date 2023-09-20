@@ -3646,7 +3646,7 @@ primitives = Map.fromList
     (pureVal llvm_ffi_setup)
     Current
     [ "Generate a LLVMSetup spec that can be used to verify the given term"
-    , "containing a Cryptol foreign function."
+    , "containing a Cryptol foreign function fully applied to any type arguments."
     ]
 
     ---------------------------------------------------------------------
