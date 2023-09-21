@@ -4,9 +4,7 @@
 
 module Server.Monad where
 
-import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (TChan, atomically, newTChan)
-import Control.Monad (void)
 import Control.Monad.Catch (Exception, MonadCatch, MonadThrow (throwM))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
@@ -16,14 +14,13 @@ import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
 import Server.Config
-import Server.Reactor (ReactorInput, reactor)
+import Server.Reactor (ReactorInput)
 import Text.Printf (printf)
 
 -------------------------------------------------------------------------------
 
 data ServerEnv = ServerEnv
   { serverConfig :: !(LanguageContextEnv Config),
-    -- serverWorkerChannel :: !(TChan WorkerInput),
     serverReactorChannel :: !(TChan ReactorInput),
     serverLogFile :: !FilePath
   }
@@ -32,15 +29,9 @@ newServerEnv :: LanguageContextEnv Config -> IO ServerEnv
 newServerEnv env =
   do
     rChannel <- atomically newTChan
-    wChannel <- atomically newTChan
-
-    void $ forkIO (reactor rChannel)
-    -- void $ forkIO (worker wChannel)
-
     pure
       ServerEnv
         { serverConfig = env,
-          -- serverWorkerChannel = wChannel,
           serverReactorChannel = rChannel,
           serverLogFile = defaultLogFile
         }

@@ -15,6 +15,7 @@ import Language.LSP.Types
 import Server.Config (Config, emptyConfig)
 import Server.Monad
 import System.IO (hPrint, hPutStrLn, stderr)
+import Server.Reactor (launchReactor)
 
 run :: IO Int
 run = runServer server -- `catch` handler
@@ -50,8 +51,9 @@ doInitialize' ::
   IO (Either ResponseError ServerEnv)
 doInitialize' cfg initMsg =
   do
-    serverEnv <- newServerEnv cfg
-    pure (Right serverEnv)
+    ServerEnv{..} <- newServerEnv cfg
+    launchReactor serverReactorChannel
+    pure (Right ServerEnv{..})
 
 interpretHandler' :: ServerEnv -> (ServerM <~> IO)
 interpretHandler' serverEnv = Iso serverToIO ioToServer
