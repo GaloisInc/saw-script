@@ -33,7 +33,7 @@ doSemanticTokens ::
   ServerM ()
 doSemanticTokens request responder =
   do
-    debug "doSemanticTokens"
+    debug "doSemanticTokens" "doing semantic tokens"
     -- doc <- getVirtualFile normalizedUri
     -- wChannel <- asks ssWorkerChannel
     -- liftIO $ atomically $ writeTChan wChannel (Worker.SemanticTokens uri)

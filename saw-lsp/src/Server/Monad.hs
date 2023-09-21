@@ -15,14 +15,13 @@ import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
 import Server.Config
 import Server.Reactor (ReactorInput)
-import Text.Printf (printf)
+import System.Log.Logger (debugM, infoM)
 
 -------------------------------------------------------------------------------
 
 data ServerEnv = ServerEnv
   { seConfig :: !(LanguageContextEnv Config),
-    seReactorChannel :: !(TChan ReactorInput),
-    seLogFile :: !FilePath
+    seReactorChannel :: !(TChan ReactorInput)
   }
 
 newServerEnv :: LanguageContextEnv Config -> IO ServerEnv
@@ -32,8 +31,7 @@ newServerEnv cfg =
     pure
       ServerEnv
         { seConfig = cfg,
-          seReactorChannel = rChannel,
-          seLogFile = defaultLogFile
+          seReactorChannel = rChannel
         }
 
 -------------------------------------------------------------------------------
@@ -83,17 +81,11 @@ liftMaybe e m =
 
 instance Exception ResponseError
 
-defaultLogFile :: FilePath
-defaultLogFile = "/Users/sam/projects/do1/saw-script/saw-lsp/log.txt"
+info :: String -> String -> ServerM ()
+info loc msg = liftIO (infoM loc msg)
 
-debug :: Text -> ServerM ()
-debug = debug' . Text.unpack
-
-debug' :: String -> ServerM ()
-debug' s =
-  do
-    logFile <- asks seLogFile
-    liftIO $ appendFile logFile $ printf "[debug] %s\n" s
+debug :: String -> String -> ServerM ()
+debug loc msg = liftIO (debugM loc msg)
 
 inform :: Text -> ServerM ()
 inform msg = sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)

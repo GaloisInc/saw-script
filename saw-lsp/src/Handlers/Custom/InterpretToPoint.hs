@@ -49,7 +49,7 @@ doInterp ::
   ServerM ()
 doInterp request responder =
   do
-    inform "Interpreting script"
+    info "doInterp" "Interpreting script"
     interpParams <- liftEither (fromParams (request ^. LSP.params))
 
     fileStmts <- resolve (uri interpParams)
@@ -97,8 +97,8 @@ displayGoal goal =
         highlight = Nothing -- Just (LSP.Range (LSP.Position 0 5) (LSP.Position 1 3))
         showDocParams = ShowDocumentParams goalUri externalApplication takeFocus highlight
     _ <- sendRequest (SCustomMethod "$/displayGoal") (Aeson.toJSON showDocParams) \case
-      Left err -> debug' (show err)
-      Right _ -> debug "success"
+      Left err -> debug "displayGoal" (show err)
+      Right _ -> debug "displayGoal" "success"
     pure ()
 
 parseSAWFile :: FilePath -> Text -> Either String [Stmt]

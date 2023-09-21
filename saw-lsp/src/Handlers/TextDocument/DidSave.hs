@@ -12,6 +12,6 @@ handleTextDocumentDidSave = notificationHandler STextDocumentDidSave doSave
 doSave :: NotificationMessage 'TextDocumentDidSave -> ServerM ()
 doSave notif =
   do
-    debug "doSave"
+    debug "doSave" "doSave"
   where
     tdi = notif ^. LSP.params . LSP.textDocument
