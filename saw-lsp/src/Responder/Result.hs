@@ -8,5 +8,5 @@ threadHandle = ThreadHandle
 
 data Result
   = Pending ThreadHandle
-  | Success
+  | Success String
   | Failure String

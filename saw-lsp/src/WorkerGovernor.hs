@@ -100,4 +100,4 @@ kill tHandle =
     threads <- gets wgThreads
     case threads Map.!? tHandle of
       Nothing -> pure (Failure "thread not found")
-      Just tID -> liftIO (killThread tID) >> pure Success
+      Just tID -> liftIO (killThread tID) >> pure (Success "thread killed")

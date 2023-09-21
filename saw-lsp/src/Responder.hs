@@ -1,25 +1,102 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+
 module Responder where
 
-import Control.Concurrent (ThreadId, forkIO)
-import Control.Concurrent.STM (TChan, atomically, readTChan)
+import Control.Concurrent (forkIO)
+import Control.Concurrent.STM (TChan, atomically, readTChan, writeTChan)
 import Control.Monad
-import Language.LSP.Server (LanguageContextEnv, runLspT)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.State (MonadState, StateT, evalStateT, gets)
+import Language.LSP.Server (LanguageContextEnv, LspT, runLspT, sendRequest)
+import Language.LSP.Types
+  ( MessageActionItem (..),
+    MessageType (..),
+    SMethod (..),
+    ShowMessageRequestParams (..),
+  )
 import Responder.Result
 import Server.Config (Config)
-import Server.Monad
+import Server.Monad (inform)
+import System.Log.Logger (warningM)
+import WorkerGovernor (Action (..))
 
-launchResponder :: LanguageContextEnv Config -> TChan Result -> IO ()
-launchResponder cfg channel = void (forkIO (forever (responder cfg channel)))
+launchResponder :: LanguageContextEnv Config -> TChan Action -> TChan Result -> IO ()
+launchResponder cfg actionChannel resultChannel =
+  let st = mkResponderState cfg resultChannel actionChannel
+   in void (forkIO (runResponder (forever responder) st))
 
-responder :: LanguageContextEnv Config -> TChan Result -> IO ()
-responder cfg channel =
+newtype Responder a = Responder {unResponder :: StateT ResponderState IO a}
+  deriving
+    ( Applicative,
+      Functor,
+      Monad,
+      MonadIO,
+      MonadState ResponderState
+    )
+
+runResponder :: Responder a -> ResponderState -> IO a
+runResponder (Responder action) = evalStateT action
+
+data ResponderState = ResponderState
+  { rsCfg :: LanguageContextEnv Config,
+    rsResultChannel :: TChan Result,
+    rsActionChannel :: TChan Action
+  }
+
+mkResponderState :: LanguageContextEnv Config -> TChan Result -> TChan Action -> ResponderState
+mkResponderState cfg resultChannel actionChannel =
+  ResponderState {rsCfg = cfg, rsResultChannel = resultChannel, rsActionChannel = actionChannel}
+
+readResult :: Responder Result
+readResult =
   do
-    result <- atomically (readTChan channel)
-    case result of
-      Pending tid -> informClient "success"
-      Success -> pure ()
-      Failure err -> pure ()
-  where
-    informClient msg = runLspT cfg (inform msg)
+    chan <- gets rsResultChannel
+    liftIO (atomically (readTChan chan))
 
--- foo = inform
+writeAction :: Action -> Responder ()
+writeAction action =
+  do
+    chan <- gets rsActionChannel
+    liftIO (atomically (writeTChan chan action))
+
+responder :: Responder ()
+responder =
+  do
+    result <- readResult
+    case result of
+      Pending tHandle -> pending tHandle
+      Success str -> informClient ("success: " <> str)
+      Failure err -> informClient ("failure: " <> err)
+  where
+    informClient msg = lsp (inform msg)
+
+lsp :: LspT Config IO a -> Responder a
+lsp action =
+  do
+    cfg <- gets rsCfg
+    liftIO (runLspT cfg action)
+
+pending :: ThreadHandle -> Responder ()
+pending tHandle =
+  do
+    chan <- gets rsActionChannel
+    lsp $
+      do
+        let params =
+              ShowMessageRequestParams
+                MtInfo
+                "Started a thread"
+                (Just [MessageActionItem "kill it"])
+        _ <- sendRequest
+          SWindowShowMessageRequest
+          params
+          \case
+            Right (Just (MessageActionItem "kill it")) ->
+              do
+                liftIO (warningM "pending" "ur killing it sis!!!!!!")
+                liftIO (atomically (writeTChan chan (Kill tHandle)))
+                pure ()
+            _ -> pure ()
+        pure ()

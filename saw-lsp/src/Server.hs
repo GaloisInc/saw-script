@@ -55,7 +55,7 @@ doInitialize' cfg initMsg =
 
     launchReactor seReactorChannel
     launchWorkerGovernor seWorkerGovernorChannel seResponderChannel
-    launchResponder seConfig seResponderChannel
+    launchResponder seConfig seWorkerGovernorChannel seResponderChannel
 
     pure (Right ServerEnv {..})
 
