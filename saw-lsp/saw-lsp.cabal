@@ -54,6 +54,7 @@ library
         SAWT.Interpret
 
         Server
+        Server.Config
         Server.Error
         Server.Monad
         Server.Reactor

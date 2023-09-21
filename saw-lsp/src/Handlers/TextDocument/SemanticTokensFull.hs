@@ -22,8 +22,7 @@ import Language.LSP.VFS (virtualFileText)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Position as SAW (Pos (..))
 import SAWScript.Token as SAW (Token (..))
-import Server.Monad (ServerM, ServerEnv (serverWorkerChannel), debug, liftEither, liftMaybe)
-import Server.Worker
+import Server.Monad (ServerM, debug, liftEither, liftMaybe)
 
 handleTextDocumentSemanticTokensFull :: Handlers ServerM
 handleTextDocumentSemanticTokensFull = requestHandler STextDocumentSemanticTokensFull doSemanticTokens

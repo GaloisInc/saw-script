@@ -17,8 +17,7 @@ import Handlers.TextDocument.DidSave (handleTextDocumentDidSave)
 import Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull)
 import Language.LSP.Server (Handler, Handlers, mapHandlers)
 import Language.LSP.Types (From (..), Method, MethodType (..))
-import SAWT (getRef)
-import Server.Monad (ServerEnv (serverReactorChannel), ServerM, liftSAW, runServerM')
+import Server.Monad (ServerEnv (serverReactorChannel), ServerM, runServerM)
 import Server.Reactor (ReactorInput (..))
 
 handlers :: Handlers ServerM
@@ -41,13 +40,12 @@ dispatchRequest ::
 dispatchRequest handler = \msg request ->
   do
     serverEnv <- ask
-    sawStateRef <- liftSAW getRef
     let rChannel = serverReactorChannel serverEnv
     liftIO $
       atomically $
         writeTChan rChannel $
           ReactorAction $
-            runServerM' (handler msg request) serverEnv sawStateRef
+            runServerM (handler msg request) serverEnv
 
 dispatchNotification ::
   forall (a :: Method 'FromClient 'Notification).
@@ -56,10 +54,9 @@ dispatchNotification ::
 dispatchNotification handler = \notif ->
   do
     serverEnv <- ask
-    sawStateRef <- liftSAW getRef
     let rChannel = serverReactorChannel serverEnv
     liftIO $
       atomically $
         writeTChan rChannel $
           ReactorAction $
-            runServerM' (handler notif) serverEnv sawStateRef
+            runServerM (handler notif) serverEnv

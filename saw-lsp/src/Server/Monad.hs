@@ -11,29 +11,19 @@ import Control.Monad.Catch (Exception, MonadCatch, MonadThrow (throwM))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
-import Control.Monad.Trans (MonadTrans (..))
-import Data.Aeson (FromJSON)
-import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
-import SAWT
+import Server.Config
 import Server.Reactor (ReactorInput, reactor)
-import Server.Worker (WorkerInput)
 import Text.Printf (printf)
-
-newtype Config = Config ()
-  deriving (FromJSON)
-
-emptyConfig :: Config
-emptyConfig = Config ()
 
 -------------------------------------------------------------------------------
 
 data ServerEnv = ServerEnv
   { serverConfig :: !(LanguageContextEnv Config),
-    serverWorkerChannel :: !(TChan WorkerInput),
+    -- serverWorkerChannel :: !(TChan WorkerInput),
     serverReactorChannel :: !(TChan ReactorInput),
     serverLogFile :: !FilePath
   }
@@ -50,7 +40,7 @@ newServerEnv env =
     pure
       ServerEnv
         { serverConfig = env,
-          serverWorkerChannel = wChannel,
+          -- serverWorkerChannel = wChannel,
           serverReactorChannel = rChannel,
           serverLogFile = defaultLogFile
         }
@@ -58,7 +48,7 @@ newServerEnv env =
 -------------------------------------------------------------------------------
 
 newtype ServerM a = ServerM
-  { getServerM :: ReaderT ServerEnv (SAWT (LspM Config)) a
+  { getServerM :: ReaderT ServerEnv (LspM Config) a
   }
   deriving
     ( Applicative,
@@ -74,22 +64,11 @@ newtype ServerM a = ServerM
 instance MonadLsp Config ServerM where
   getLspEnv = asks serverConfig
 
-runServerM :: ServerM a -> ServerEnv -> SAWState -> IO a
-runServerM (ServerM r) serverEnv sawState =
+runServerM :: ServerM a -> ServerEnv -> IO a
+runServerM (ServerM r) serverEnv =
   do
-    let sawAction = runReaderT r serverEnv
-        lspAction = runSAWT sawAction sawState
+    let lspAction = runReaderT r serverEnv
     runLspT (serverConfig serverEnv) lspAction
-
-runServerM' :: ServerM a -> ServerEnv -> IORef SAWState -> IO a
-runServerM' (ServerM r) serverEnv sawStateRef =
-  do
-    let sawAction = runReaderT r serverEnv
-        lspAction = runSAWT' sawAction sawStateRef
-    runLspT (serverConfig serverEnv) lspAction
-
-liftSAW :: SAWT (LspM Config) a -> ServerM a
-liftSAW action = ServerM (lift action)
 
 liftEither :: Either ResponseError a -> ServerM a
 liftEither e =

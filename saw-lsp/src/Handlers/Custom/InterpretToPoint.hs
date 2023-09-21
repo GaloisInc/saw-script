@@ -55,8 +55,8 @@ doInterp request responder =
     fileStmts <- resolve (uri interpParams)
     truncatedStmts <- truncateStmts (posn interpParams) fileStmts
 
-    (matchedPrefix, _val, outM) <- liftSAW (interpretSAWScript True truncatedStmts)
-    inform' $ printf "Reusing prior execution of %i statements" matchedPrefix
+    (matchedPrefix, _val, outM) <- undefined -- liftSAW (interpretSAWScript True truncatedStmts)
+    -- inform' $ printf "Reusing prior execution of %i statements" matchedPrefix
 
     let goal = fromMaybe "<no goal>" outM
     displayGoal goal

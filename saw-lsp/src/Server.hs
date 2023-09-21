@@ -12,7 +12,7 @@ import Data.Text qualified as Text
 import Handlers (handlers)
 import Language.LSP.Server
 import Language.LSP.Types
-import SAWT (SAWState, newSAWState)
+import Server.Config (Config, emptyConfig)
 import Server.Monad
 import System.IO (hPrint, hPutStrLn, stderr)
 
@@ -47,18 +47,17 @@ onConfigurationChange' _old v =
 doInitialize' ::
   LanguageContextEnv Config ->
   RequestMessage 'Initialize ->
-  IO (Either ResponseError (ServerEnv, IORef SAWState))
+  IO (Either ResponseError ServerEnv)
 doInitialize' env initMsg =
   do
     serverEnv <- newServerEnv env
-    sawStateRef <- newSAWState >>= newIORef
-    pure (Right (serverEnv, sawStateRef))
+    pure (Right serverEnv)
 
-interpretHandler' :: (ServerEnv, IORef SAWState) -> (ServerM <~> IO)
-interpretHandler' (serverEnv, sawStateRef) = Iso serverToIO ioToServer
+interpretHandler' :: ServerEnv -> (ServerM <~> IO)
+interpretHandler' serverEnv = Iso serverToIO ioToServer
   where
     serverToIO :: ServerM a -> IO a
-    serverToIO action = runServerM' action serverEnv sawStateRef
+    serverToIO action = runServerM action serverEnv
 
     ioToServer :: IO a -> ServerM a
     ioToServer = liftIO
