@@ -16,7 +16,7 @@ import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMe
 import Responder.Result
 import Server.Config
 import Server.Reactor (ReactorInput)
-import System.Log.Logger (debugM, infoM)
+import System.Log.Logger (debugM, infoM, warningM)
 import WorkerGovernor
 
 -------------------------------------------------------------------------------
@@ -95,14 +95,19 @@ info loc msg = liftIO (infoM loc msg)
 debug :: String -> String -> ServerM ()
 debug loc msg = liftIO (debugM loc msg)
 
-inform :: MonadLsp config f => Text -> f ()
-inform msg = sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
+warning :: String -> String -> ServerM ()
+warning loc msg = liftIO (warningM loc msg)
 
-inform' :: String -> ServerM ()
-inform' = inform . Text.pack
+--------------------------------------------------------------------------------
 
-warn :: Text -> ServerM ()
-warn msg = sendNotification SWindowShowMessage (ShowMessageParams MtWarning msg)
+informText :: MonadLsp config f => Text -> f ()
+informText msg = sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
 
-warn' :: String -> ServerM ()
-warn' = warn . Text.pack
+inform :: MonadLsp config f => String -> f ()
+inform = informText . Text.pack
+
+warnText :: MonadLsp config f => Text -> f ()
+warnText msg = sendNotification SWindowShowMessage (ShowMessageParams MtWarning msg)
+
+warn :: MonadLsp config f => String -> f ()
+warn = warnText . Text.pack
