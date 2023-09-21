@@ -14,7 +14,7 @@ import Responder.Result (Result (..), ThreadHandle, threadHandle)
 
 data Action
   = Spawn
-  | Kill ThreadId
+  | Kill ThreadHandle
 
 data WorkerGovernorState = WorkerGovernorState
   { wgInput :: TChan Action,
@@ -80,19 +80,23 @@ workerGovernor :: WorkerGovernor ()
 workerGovernor =
   do
     action <- readAction
-    case action of
-      Spawn -> spawn
-      Kill tid -> kill tid
+    result <-
+      case action of
+        Spawn -> spawn
+        Kill tID -> kill tID
+    writeResult result
 
-spawn :: WorkerGovernor ()
+spawn :: WorkerGovernor Result
 spawn =
   do
     tID <- liftIO (forkIO (forever (pure ())))
     tHandle <- registerThread tID
-    writeResult (Pending tHandle)
+    pure (Pending tHandle)
 
-kill :: ThreadId -> WorkerGovernor ()
-kill tid =
+kill :: ThreadHandle -> WorkerGovernor Result
+kill tHandle =
   do
-    liftIO (killThread tid)
-    writeResult Success
+    threads <- gets wgThreads
+    case threads Map.!? tHandle of
+      Nothing -> pure (Failure "thread not found")
+      Just tID -> liftIO (killThread tID) >> pure Success
