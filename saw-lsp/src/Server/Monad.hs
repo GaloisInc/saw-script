@@ -16,22 +16,26 @@ import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMe
 import Server.Config
 import Server.Reactor (ReactorInput)
 import System.Log.Logger (debugM, infoM)
+import WorkerGovernor
 
 -------------------------------------------------------------------------------
 
 data ServerEnv = ServerEnv
   { seConfig :: !(LanguageContextEnv Config),
-    seReactorChannel :: !(TChan ReactorInput)
+    seReactorChannel :: !(TChan ReactorInput),
+    seWorkerGovernorChannel :: !(TChan Action)
   }
 
 newServerEnv :: LanguageContextEnv Config -> IO ServerEnv
 newServerEnv cfg =
   do
     rChannel <- atomically newTChan
+    wgChannel <- atomically newTChan
     pure
       ServerEnv
         { seConfig = cfg,
-          seReactorChannel = rChannel
+          seReactorChannel = rChannel,
+          seWorkerGovernorChannel = wgChannel
         }
 
 -------------------------------------------------------------------------------
