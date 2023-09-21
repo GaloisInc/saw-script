@@ -61,7 +61,6 @@ library
         Server.Error
         Server.Monad
         Server.Reactor
-        Server.Worker
 
         Util.FList
         Util.Stack
