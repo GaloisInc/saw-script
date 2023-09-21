@@ -48,9 +48,9 @@ doInitialize' ::
   LanguageContextEnv Config ->
   RequestMessage 'Initialize ->
   IO (Either ResponseError ServerEnv)
-doInitialize' env initMsg =
+doInitialize' cfg initMsg =
   do
-    serverEnv <- newServerEnv env
+    serverEnv <- newServerEnv cfg
     pure (Right serverEnv)
 
 interpretHandler' :: ServerEnv -> (ServerM <~> IO)
