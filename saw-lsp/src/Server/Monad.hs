@@ -20,20 +20,20 @@ import Text.Printf (printf)
 -------------------------------------------------------------------------------
 
 data ServerEnv = ServerEnv
-  { serverConfig :: !(LanguageContextEnv Config),
-    serverReactorChannel :: !(TChan ReactorInput),
-    serverLogFile :: !FilePath
+  { seConfig :: !(LanguageContextEnv Config),
+    seReactorChannel :: !(TChan ReactorInput),
+    seLogFile :: !FilePath
   }
 
 newServerEnv :: LanguageContextEnv Config -> IO ServerEnv
-newServerEnv env =
+newServerEnv cfg =
   do
     rChannel <- atomically newTChan
     pure
       ServerEnv
-        { serverConfig = env,
-          serverReactorChannel = rChannel,
-          serverLogFile = defaultLogFile
+        { seConfig = cfg,
+          seReactorChannel = rChannel,
+          seLogFile = defaultLogFile
         }
 
 -------------------------------------------------------------------------------
@@ -53,13 +53,13 @@ newtype ServerM a = ServerM
     )
 
 instance MonadLsp Config ServerM where
-  getLspEnv = asks serverConfig
+  getLspEnv = asks seConfig
 
 runServerM :: ServerM a -> ServerEnv -> IO a
 runServerM (ServerM r) serverEnv =
   do
     let lspAction = runReaderT r serverEnv
-    runLspT (serverConfig serverEnv) lspAction
+    runLspT (seConfig serverEnv) lspAction
 
 liftEither :: Either ResponseError a -> ServerM a
 liftEither e =
@@ -92,7 +92,7 @@ debug = debug' . Text.unpack
 debug' :: String -> ServerM ()
 debug' s =
   do
-    logFile <- asks serverLogFile
+    logFile <- asks seLogFile
     liftIO $ appendFile logFile $ printf "[debug] %s\n" s
 
 inform :: Text -> ServerM ()

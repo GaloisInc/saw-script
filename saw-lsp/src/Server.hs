@@ -52,7 +52,7 @@ doInitialize' ::
 doInitialize' cfg initMsg =
   do
     ServerEnv{..} <- newServerEnv cfg
-    launchReactor serverReactorChannel
+    launchReactor seReactorChannel
     pure (Right ServerEnv{..})
 
 interpretHandler' :: ServerEnv -> (ServerM <~> IO)

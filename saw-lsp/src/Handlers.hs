@@ -17,7 +17,7 @@ import Handlers.TextDocument.DidSave (handleTextDocumentDidSave)
 import Handlers.TextDocument.SemanticTokensFull (handleTextDocumentSemanticTokensFull)
 import Language.LSP.Server (Handler, Handlers, mapHandlers)
 import Language.LSP.Types (From (..), Method, MethodType (..))
-import Server.Monad (ServerEnv (serverReactorChannel), ServerM, runServerM)
+import Server.Monad (ServerEnv (seReactorChannel), ServerM, runServerM)
 import Server.Reactor (ReactorInput (..))
 
 handlers :: Handlers ServerM
@@ -40,7 +40,7 @@ dispatchRequest ::
 dispatchRequest handler = \msg request ->
   do
     serverEnv <- ask
-    let rChannel = serverReactorChannel serverEnv
+    let rChannel = seReactorChannel serverEnv
     liftIO $
       atomically $
         writeTChan rChannel $
@@ -54,7 +54,7 @@ dispatchNotification ::
 dispatchNotification handler = \notif ->
   do
     serverEnv <- ask
-    let rChannel = serverReactorChannel serverEnv
+    let rChannel = seReactorChannel serverEnv
     liftIO $
       atomically $
         writeTChan rChannel $
