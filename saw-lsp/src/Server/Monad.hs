@@ -13,6 +13,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
+import Responder.Result
 import Server.Config
 import Server.Reactor (ReactorInput)
 import System.Log.Logger (debugM, infoM)
@@ -23,7 +24,8 @@ import WorkerGovernor
 data ServerEnv = ServerEnv
   { seConfig :: !(LanguageContextEnv Config),
     seReactorChannel :: !(TChan ReactorInput),
-    seWorkerGovernorChannel :: !(TChan Action)
+    seWorkerGovernorChannel :: !(TChan Action),
+    seResponderChannel :: !(TChan Result)
   }
 
 newServerEnv :: LanguageContextEnv Config -> IO ServerEnv
@@ -31,11 +33,13 @@ newServerEnv cfg =
   do
     rChannel <- atomically newTChan
     wgChannel <- atomically newTChan
+    respChannel <- atomically newTChan
     pure
       ServerEnv
         { seConfig = cfg,
           seReactorChannel = rChannel,
-          seWorkerGovernorChannel = wgChannel
+          seWorkerGovernorChannel = wgChannel,
+          seResponderChannel = respChannel
         }
 
 -------------------------------------------------------------------------------
@@ -91,7 +95,7 @@ info loc msg = liftIO (infoM loc msg)
 debug :: String -> String -> ServerM ()
 debug loc msg = liftIO (debugM loc msg)
 
-inform :: Text -> ServerM ()
+inform :: MonadLsp config f => Text -> f ()
 inform msg = sendNotification SWindowShowMessage (ShowMessageParams MtInfo msg)
 
 inform' :: String -> ServerM ()

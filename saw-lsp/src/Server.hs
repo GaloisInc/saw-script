@@ -17,6 +17,7 @@ import Server.Monad
 import Server.Reactor (launchReactor)
 import System.IO (hPrint, hPutStrLn, stderr)
 import WorkerGovernor (launchWorkerGovernor)
+import Responder (launchResponder)
 
 run :: IO Int
 run = runServer server -- `catch` handler
@@ -55,7 +56,8 @@ doInitialize' cfg initMsg =
     ServerEnv {..} <- newServerEnv cfg
 
     launchReactor seReactorChannel
-    launchWorkerGovernor seWorkerGovernorChannel
+    launchWorkerGovernor seWorkerGovernorChannel seResponderChannel
+    launchResponder seConfig seResponderChannel
 
     pure (Right ServerEnv {..})
 
