@@ -1,8 +1,12 @@
-module Responder.Result where
+module Responder.Result (Result (..), ThreadHandle, threadHandle) where
 
-import Control.Concurrent (ThreadId)
+newtype ThreadHandle = ThreadHandle Int
+  deriving (Eq, Ord)
+
+threadHandle :: Int -> ThreadHandle
+threadHandle = ThreadHandle
 
 data Result
-  = Pending ThreadId
+  = Pending ThreadHandle
   | Success
   | Failure String
