@@ -47,6 +47,9 @@ library
         Handlers.TextDocument.DidSave
         Handlers.TextDocument.SemanticTokensFull
 
+        Responder
+        Responder.Result
+
         SAWT
         SAWT.Checkpoint
         SAWT.IO
