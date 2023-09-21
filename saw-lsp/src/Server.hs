@@ -2,22 +2,20 @@
 
 module Server where
 
-import Control.Concurrent (threadDelay)
-import Control.Exception (SomeException, catch)
+import Control.Exception (SomeException)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson qualified as Aeson
-import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Handlers (handlers)
 import Language.LSP.Server
 import Language.LSP.Types
+import Responder (launchResponder)
 import Server.Config (Config, emptyConfig)
 import Server.Monad
 import Server.Reactor (launchReactor)
 import System.IO (hPrint, hPutStrLn, stderr)
 import WorkerGovernor (launchWorkerGovernor)
-import Responder (launchResponder)
 
 run :: IO Int
 run = runServer server -- `catch` handler
