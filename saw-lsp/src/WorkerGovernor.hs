@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module WorkerGovernor where
 
@@ -89,7 +90,7 @@ workerGovernor =
 spawn :: WorkerGovernor Result
 spawn =
   do
-    tID <- liftIO (forkIO (forever (pure ())))
+    tID <- liftIO (forkIO (forever (threadDelay 1_000_000)))
     tHandle <- registerThread tID
     pure (Pending tHandle)
 
