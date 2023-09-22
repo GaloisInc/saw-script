@@ -20,6 +20,7 @@ module SAWScript.Crucible.MIR.TypeShape
   , shapeToTerm
   , IsRefShape(..)
   , testRefShape
+  , sliceShapeParts
   ) where
 
 import Control.Lens ((^.), (^..), each)
@@ -74,6 +75,26 @@ data TypeShape (tp :: CrucibleType) where
              -> TypeRepr tp
              -- ^ The Crucible representation of the pointee type
              -> TypeShape (MirReferenceType tp)
+    -- | A shape for a slice reference (e.g., @&[T]@), which is represented in
+    -- @crucible-mir@ as a 'MirSlice', i.e., a 'StructType' where the first type
+    -- in the struct is a reference to @T@, and the second type in the struct is
+    -- the length of the slice. The @crucible-mir@ representations for tuples
+    -- and slices are almost, but not quite, the same, as tuples can wrap their
+    -- fields in 'MaybeType's (see 'FieldShape') but slices never do this.
+    -- Nevertheless, many places in the code effectively treat tuples and slices
+    -- identically (modulo 'MaybeType's).
+    --
+    -- To make it easier to recurse on the 'TypeShape's for the slice's
+    -- reference and length types, we provide the 'sliceShapeParts' function.
+    SliceShape :: M.Ty
+               -- ^ The type of @&[T]@.
+               -> M.Ty
+               -- ^ The type of @T@.
+               -> M.Mutability
+               -- ^ Is the reference mutable or immutable?
+               -> TypeRepr tp
+               -- ^ The Crucible representation of @T@.
+               -> TypeShape (MirSlice tp)
     -- | Note that 'FnPtrShape' contains only 'TypeRepr's for the argument and
     -- result types, not 'TypeShape's, as none of our operations need to recurse
     -- inside them.
@@ -161,22 +182,9 @@ tyToShape col = go
     goRef ty ty' mutbl
       | M.TySlice slicedTy <- ty'
       , Some tpr <- tyToRepr col slicedTy
-      = Some $
-         TupleShape ty [refTy, usizeTy]
-             (Empty
-                :> ReqField (RefShape refTy slicedTy mutbl tpr)
-                :> ReqField (PrimShape usizeTy BaseUsizeRepr))
+      = Some $ SliceShape ty slicedTy mutbl tpr
       | M.TyStr <- ty'
-      = Some $
-        TupleShape ty [refTy, usizeTy]
-            (Empty
-                :> ReqField (RefShape refTy (M.TyUint M.B8) mutbl (BVRepr (knownNat @8)))
-                :> ReqField (PrimShape usizeTy BaseUsizeRepr))
-      where
-        -- We use a ref (of the same mutability as `ty`) when possible, to
-        -- avoid unnecessary clobbering.
-        refTy = M.TyRef ty' mutbl
-        usizeTy = M.TyUint M.USize
+      = Some $ SliceShape ty (M.TyUint M.B8) mutbl (BVRepr (knownNat @8))
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
     goRef ty ty' mutbl | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' mutbl tpr
@@ -209,6 +217,7 @@ shapeType = go
     go (StructShape _ _ _flds) = AnyRepr
     go (TransparentShape _ shp) = go shp
     go (RefShape _ _ _ tpr) = MirReferenceRepr tpr
+    go (SliceShape _ _ _ tpr) = MirSliceRepr tpr
     go (FnPtrShape _ args ret) = FunctionHandleRepr args ret
 
 fieldShapeType :: FieldShape tp -> TypeRepr tp
@@ -223,6 +232,7 @@ shapeMirTy (ArrayShape ty _ _) = ty
 shapeMirTy (StructShape ty _ _) = ty
 shapeMirTy (TransparentShape ty _) = ty
 shapeMirTy (RefShape ty _ _ _) = ty
+shapeMirTy (SliceShape ty _ _ _) = ty
 shapeMirTy (FnPtrShape ty _ _) = ty
 
 fieldShapeMirTy :: FieldShape tp -> M.Ty
@@ -273,6 +283,22 @@ testRefShape shp =
     RefShape ty ty' mut shp'
       -> Just $ IsRefShape ty ty' mut shp'
     _ -> Nothing
+
+-- | Construct the 'TypeShape's for a slice's reference and length types.
+sliceShapeParts ::
+    M.Ty ->
+    M.Mutability ->
+    TypeRepr tp ->
+    (TypeShape (MirReferenceType tp), TypeShape UsizeType)
+sliceShapeParts referentTy refMutbl referentTpr =
+    ( RefShape refTy referentTy refMutbl referentTpr
+    , PrimShape usizeTy BaseUsizeRepr
+    )
+  where
+    -- We use a ref (of the same mutability as `ty`) when possible, to
+    -- avoid unnecessary clobbering.
+    refTy = M.TyRef referentTy refMutbl
+    usizeTy = M.TyUint M.USize
 
 $(pure [])
 

@@ -39,6 +39,7 @@ module SAWScript.Crucible.Common.Setup.Value
   , XSetupNull
   , XSetupStruct
   , XSetupTuple
+  , XSetupSlice
   , XSetupArray
   , XSetupElem
   , XSetupField
@@ -123,6 +124,7 @@ type family ResolvedState ext :: Type
 type family XSetupNull ext
 type family XSetupStruct ext
 type family XSetupTuple ext
+type family XSetupSlice ext
 type family XSetupArray ext
 type family XSetupElem ext
 type family XSetupField ext
@@ -139,12 +141,18 @@ data SetupValue ext where
   SetupTerm   :: TypedTerm -> SetupValue ext
   SetupNull   :: XSetupNull ext -> SetupValue ext
   SetupStruct :: XSetupStruct ext -> [SetupValue ext] -> SetupValue ext
-  SetupTuple  :: XSetupTuple ext -> [SetupValue ext] -> SetupValue ext
   SetupArray  :: XSetupArray ext -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: XSetupElem ext -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: XSetupField ext -> SetupValue ext -> String -> SetupValue ext
   SetupCast   :: XSetupCast ext -> SetupValue ext -> SetupValue ext
   SetupUnion  :: XSetupUnion ext -> SetupValue ext -> String -> SetupValue ext
+
+  -- | A tuple value. At the moment, this is only ever used for MIR
+  -- verification.
+  SetupTuple :: XSetupTuple ext -> [SetupValue ext] -> SetupValue ext
+  -- | A slice value. At the moment, this is only ever used for MIR
+  -- verification.
+  SetupSlice :: XSetupSlice ext -> SetupValue ext
 
   -- | A pointer to a global variable
   SetupGlobal :: XSetupGlobal ext -> String -> SetupValue ext
@@ -161,6 +169,7 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   ( c (XSetupNull ext)
   , c (XSetupStruct ext)
   , c (XSetupTuple ext)
+  , c (XSetupSlice ext)
   , c (XSetupArray ext)
   , c (XSetupElem ext)
   , c (XSetupField ext)

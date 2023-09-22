@@ -22,6 +22,9 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_precond
   , mir_return
   , mir_verify
+    -- ** MIR slices
+  , mir_slice_value
+  , mir_slice_range_value
     -- ** MIR types
   , mir_adt
   , mir_array
@@ -153,6 +156,21 @@ mir_alloc_internal mut mty =
   do st <- get
      let mcc = st ^. Setup.csCrucibleContext
      let col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
+
+     -- We disallow creating slice references (e.g., &[u8] or &str) using
+     -- mir_alloc, as it is unclear what length to give the resulting slice
+     -- value.
+     case mty of
+       Mir.TySlice _ ->
+         fail $ unlines
+           [ "mir_alloc and mir_alloc_mut cannot be used to create slice references."
+           , "Use the mir_slice_value or mir_slice_range_value functions instead."
+           ]
+       Mir.TyStr ->
+         fail "mir_alloc and mir_alloc_mut cannot be used to create str references."
+       _ ->
+         pure ()
+
      Some tpr <- pure $ Mir.tyToRepr col mty
      n <- Setup.csVarCounter <<%= MS.nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?=
@@ -392,6 +410,18 @@ mir_verify rm nm lemmas checkSat setup tactic =
      let diff = diffUTCTime end start
      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats lemmaSet diff)
      returnProof ps
+
+-----
+-- MIR slices
+-----
+
+mir_slice_value :: MS.SetupValue MIR -> MS.SetupValue MIR
+mir_slice_value arrRef = MS.SetupSlice (MirSetupSlice arrRef)
+
+mir_slice_range_value ::
+  MS.SetupValue MIR -> Int -> Int -> MS.SetupValue MIR
+mir_slice_range_value arrRef start end =
+  MS.SetupSlice (MirSetupSliceRange arrRef start end)
 
 -----
 -- Mir.Types

@@ -637,6 +637,7 @@ substMethodSpec sc sm ms = do
         MS.SetupNull _ -> return sv
         MS.SetupStruct b svs -> MS.SetupStruct b <$> mapM goSetupValue svs
         MS.SetupTuple b svs -> MS.SetupTuple b <$> mapM goSetupValue svs
+        MS.SetupSlice slice -> MS.SetupSlice <$> goSetupSlice slice
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
@@ -651,6 +652,14 @@ substMethodSpec sc sm ms = do
         MS.SetupCond_Pred loc <$> goTypedTerm tt
     goSetupCondition (MS.SetupCond_Ghost b loc gg tt) =
         MS.SetupCond_Ghost b loc gg <$> goTypedTerm tt
+
+    goSetupSlice (MirSetupSliceRaw ref len) =
+      MirSetupSliceRaw <$> goSetupValue ref <*> goSetupValue len
+    goSetupSlice (MirSetupSlice arr) =
+      MirSetupSlice <$> goSetupValue arr
+    goSetupSlice (MirSetupSliceRange arr start end) = do
+      arr' <- goSetupValue arr
+      pure $ MirSetupSliceRange arr' start end
 
     goTypedTerm tt = do
         term' <- goTerm $ SAW.ttTerm tt
@@ -737,6 +746,11 @@ regToSetup bak p eval shp rv = go shp rv
         alloc <- refToAlloc bak p mutbl ty' tpr startRef len
         let offsetSv idx sv = if idx == 0 then sv else MS.SetupElem () sv idx
         return $ offsetSv idx $ MS.SetupVar alloc
+    go (SliceShape _ ty mutbl tpr) (Empty :> RV refRV :> RV lenRV) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        refSV <- go refShp refRV
+        lenSV <- go lenShp lenRV
+        pure $ MS.SetupSlice $ MirSetupSliceRaw refSV lenSV
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
 

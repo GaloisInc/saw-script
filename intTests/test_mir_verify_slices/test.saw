@@ -1,0 +1,115 @@
+enable_experimental;
+
+let oneThroughFive = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
+
+let f_spec_1 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_value a];
+
+  mir_return (mir_term {{ 3 : [32] }});
+};
+
+let f_spec_2 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_range_value a 1 3];
+
+  mir_return (mir_term {{ 5 : [32] }});
+};
+
+// mir_slice_value must take an array reference as an argument.
+// Passing a bare array constitutes a type error.
+let f_fail_spec_1 = do {
+  let arr = mir_array_value mir_u32 [mir_term {{ 1 : [32] }}];
+  mir_execute_func [mir_slice_value arr];
+
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+// The end value of the range given to mir_slice_range_value must be less
+// than the length of the slice.
+let f_fail_spec_2 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_range_value a 0 5];
+
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+// The start value of the range given to mir_slice_range_value must not
+// exceed the end value.
+let f_fail_spec_3 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_range_value a 6 5];
+
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+// Indexing into a length-0 slice is disallowed.
+let f_fail_spec_4 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_range_value a 0 0];
+
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+// f requires a slice of length at least two.
+let f_fail_spec_5 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_range_value a 0 1];
+
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+// mir_alloc cannot be used to allocate slice references.
+let f_fail_spec_6 = do {
+  s <- mir_alloc (mir_slice mir_u32);
+
+  mir_execute_func [s];
+
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+// mir_alloc cannot be used to allocate str references.
+let g_fail_spec = do {
+  s <- mir_alloc mir_str;
+
+  mir_execute_func [s];
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::f" [] false f_spec_1 z3;
+mir_verify m "test::f" [] false f_spec_2 z3;
+
+fails (
+  mir_verify m "test::f" [] false f_fail_spec_1 z3
+);
+fails (
+  mir_verify m "test::f" [] false f_fail_spec_2 z3
+);
+fails (
+  mir_verify m "test::f" [] false f_fail_spec_3 z3
+);
+fails (
+  mir_verify m "test::f" [] false f_fail_spec_4 z3
+);
+fails (
+  mir_verify m "test::f" [] false f_fail_spec_5 z3
+);
+fails (
+  mir_verify m "test::f" [] false f_fail_spec_6 z3
+);
+fails (
+  mir_verify m "test::g" [] false g_fail_spec z3
+);

@@ -576,6 +576,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
 
     MS.SetupGlobal empty _ -> absurd empty
     MS.SetupTuple  empty _ -> absurd empty
+    MS.SetupSlice  empty   -> absurd empty
 
     _ -> failure (cs ^. MS.csLoc) =<<
            mkStructuralMismatch opts cc sc cs actual setupval expectedTy
@@ -967,6 +968,7 @@ instantiateSetupValue sc s v =
     MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _            -> absurd empty
     MS.SetupTuple empty _             -> absurd empty
+    MS.SetupSlice empty               -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty

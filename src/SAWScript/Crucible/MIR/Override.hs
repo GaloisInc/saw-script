@@ -22,6 +22,7 @@ import qualified Control.Exception as X
 import Control.Lens
 import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO(..))
+import qualified Data.BitVector.Sized as BV
 import Data.Foldable (for_, traverse_)
 import qualified Data.Functor.Product as Functor
 import Data.List (tails)
@@ -184,6 +185,7 @@ instantiateSetupValue sc s v =
     MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupStruct did vs             -> MS.SetupStruct did <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupTuple x vs                -> MS.SetupTuple x <$> mapM (instantiateSetupValue sc s) vs
+    MS.SetupSlice slice               -> MS.SetupSlice <$> instantiateSetupSlice slice
     MS.SetupNull empty                -> absurd empty
     MS.SetupGlobal _ _                -> return v
     MS.SetupElem _ _ _                -> return v
@@ -193,6 +195,17 @@ instantiateSetupValue sc s v =
     MS.SetupGlobalInitializer _ _     -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
+
+    instantiateSetupSlice :: MirSetupSlice -> IO MirSetupSlice
+    instantiateSetupSlice (MirSetupSliceRaw ref len) =
+      MirSetupSliceRaw
+        <$> instantiateSetupValue sc s ref
+        <*> instantiateSetupValue sc s len
+    instantiateSetupSlice (MirSetupSlice arr) =
+      MirSetupSlice <$> instantiateSetupValue sc s arr
+    instantiateSetupSlice (MirSetupSliceRange arr start end) = do
+      arr' <- instantiateSetupValue sc s arr
+      pure $ MirSetupSliceRange arr' start end
 
 -- learn pre/post condition
 learnCond ::
@@ -383,6 +396,49 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                  zs
         ]
 
+    -- Match the parts of a slice point-wise
+    (MIRVal (SliceShape _ actualElemTy actualMutbl actualElemTpr)
+            (Ctx.Empty Ctx.:> Crucible.RV actualRef Ctx.:> Crucible.RV actualLen),
+     Mir.TyRef (Mir.TySlice expectedElemTy) expectedMutbl,
+     MS.SetupSlice slice) ->
+      case slice of
+        MirSetupSliceRaw{} ->
+          panic "matchArg" ["SliceRaw not yet implemented"]
+
+        MirSetupSlice expectedRef -> do
+          actualRefTy <- typeOfSetupValue cc tyenv nameEnv expectedRef
+          case actualRefTy of
+            Mir.TyRef (Mir.TyArray _ expectedLen) _
+              |  Just actualLenBV <- W4.asBV actualLen
+              ,  BV.asUnsigned actualLenBV == toInteger expectedLen
+              -> do let (actualRefShp, _actualLenShp) =
+                          sliceShapeParts actualElemTy actualMutbl actualElemTpr
+                    matchArg opts sc cc cs prepost md
+                      (MIRVal actualRefShp actualRef)
+                      (Mir.TyRef expectedElemTy expectedMutbl)
+                      expectedRef
+
+            _ -> fail_
+
+        MirSetupSliceRange expectedRef expectedStart expectedEnd
+          |  Just actualLenBV <- W4.asBV actualLen
+          ,  BV.asUnsigned actualLenBV == toInteger (expectedEnd - expectedStart)
+          -> do startBV <- liftIO $
+                  W4.bvLit sym W4.knownNat $
+                  BV.mkBV W4.knownNat $
+                  toInteger expectedStart
+                actualRef' <- liftIO $
+                  Mir.mirRef_offsetIO bak iTypes actualElemTpr actualRef startBV
+                let (actualRefShp, _actualLenShp) =
+                      sliceShapeParts actualElemTy actualMutbl actualElemTpr
+                matchArg opts sc cc cs prepost md
+                  (MIRVal actualRefShp actualRef')
+                  (Mir.TyRef expectedElemTy expectedMutbl)
+                  expectedRef
+
+          |  otherwise
+          -> fail_
+
     (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name) -> do
       static <- findStatic colState name
       Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
@@ -409,11 +465,16 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
   where
     colState = cc ^. mccRustModule . Mir.rmCS
     col      = colState ^. Mir.collection
+    tyenv    = MS.csAllocations cs
+    nameEnv  = MS.csTypeNames cs
 
     loc   = MS.conditionLoc md
     fail_ = failure loc =<<
               mkStructuralMismatch opts cc sc cs actual expected expectedTy
     notEq = notEqual prepost opts loc cc sc cs expected actual
+
+    iTypes :: Crucible.IntrinsicTypes Sym
+    iTypes = Mir.mirIntrinsicTypes
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern
@@ -470,6 +531,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupVar i                     -> Set.singleton i
         MS.SetupStruct _ xs               -> foldMap setupVars xs
         MS.SetupTuple _ xs                -> foldMap setupVars xs
+        MS.SetupSlice slice               -> setupSlice slice
         MS.SetupArray _ xs                -> foldMap setupVars xs
         MS.SetupElem _ x _                -> setupVars x
         MS.SetupField _ x _               -> setupVars x
@@ -479,6 +541,15 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupCast empty _              -> absurd empty
         MS.SetupUnion empty _ _           -> absurd empty
         MS.SetupNull empty                -> absurd empty
+
+    -- Compute the set of variable identifiers in a 'MirSetupSlice'
+    setupSlice :: MirSetupSlice -> Set AllocIndex
+    setupSlice (MirSetupSliceRaw ref len) =
+      setupVars ref <> setupVars len
+    setupSlice (MirSetupSlice arr) =
+      setupVars arr
+    setupSlice (MirSetupSliceRange arr _start _end) =
+      setupVars arr
 
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->

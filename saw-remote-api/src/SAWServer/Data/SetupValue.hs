@@ -15,6 +15,8 @@ data SetupValTag
   | TagArrayValue
   | TagStructValue
   | TagTupleValue
+  | TagSliceValue
+  | TagSliceRangeValue
   | TagFieldLValue
   | TagCastLValue
   | TagUnionLValue
@@ -32,6 +34,8 @@ instance FromJSON SetupValTag where
       "array" -> pure TagArrayValue
       "struct" -> pure TagStructValue
       "tuple" -> pure TagTupleValue
+      "slice" -> pure TagSliceValue
+      "slice range" -> pure TagSliceRangeValue
       "field" -> pure TagFieldLValue
       "cast"  -> pure TagCastLValue
       "union" -> pure TagUnionLValue
@@ -52,6 +56,8 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cr
           TagArrayValue -> ArrayValue <$> o .:? "element type" <*> o .: "elements"
           TagStructValue -> StructValue <$> o .:? "MIR ADT server name" <*> o .: "elements"
           TagTupleValue -> TupleValue <$> o .: "elements"
+          TagSliceValue -> SliceValue <$> o .: "base"
+          TagSliceRangeValue -> SliceRangeValue <$> o .: "base" <*> o .: "start" <*> o .: "end"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagCastLValue -> CastLValue <$> o .: "base" <*> o .: "type"
           TagUnionLValue -> UnionLValue <$> o .: "base" <*> o .: "field"
