@@ -1,6 +1,6 @@
 module Logging where
 
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import System.Log (Priority (..))
 import System.Log.Handler.Simple (fileHandler)
 import System.Log.Logger (addHandler, debugM, infoM, setLevel, updateGlobalLogger, warningM)
