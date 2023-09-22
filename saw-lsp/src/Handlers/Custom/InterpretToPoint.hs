@@ -39,6 +39,7 @@ import Server.Error (internalError)
 import Server.Monad
 import System.IO.Temp (writeSystemTempFile)
 import Text.Printf (printf)
+import Message (Action (..))
 
 handleInterpretToPoint :: Handlers ServerM
 handleInterpretToPoint = requestHandler (SCustomMethod "$/interpretToPoint") doInterp

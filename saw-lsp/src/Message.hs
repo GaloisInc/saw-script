@@ -1,4 +1,4 @@
-module Responder.Result (Result (..), ThreadHandle, threadHandle) where
+module Message where
 
 newtype ThreadHandle = ThreadHandle Int
   deriving (Eq, Ord, Show)
@@ -10,3 +10,7 @@ data Result
   = Pending ThreadHandle
   | Success String
   | Failure String
+
+data Action
+  = Spawn
+  | Kill ThreadHandle

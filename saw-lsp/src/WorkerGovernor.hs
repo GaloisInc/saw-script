@@ -11,11 +11,9 @@ import Control.Monad.IO.Class
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Responder.Result (Result (..), ThreadHandle, threadHandle)
+import Message (Action(..), Result (..), ThreadHandle, threadHandle)
 
-data Action
-  = Spawn
-  | Kill ThreadHandle
+
 
 data WorkerGovernorState = WorkerGovernorState
   { wgInput :: TChan Action,

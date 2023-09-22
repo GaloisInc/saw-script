@@ -13,11 +13,10 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
-import Responder.Result
 import Server.Config
 import Server.Reactor (ReactorInput)
 import System.Log.Logger (debugM, infoM, warningM)
-import WorkerGovernor
+import Message
 
 -------------------------------------------------------------------------------
 

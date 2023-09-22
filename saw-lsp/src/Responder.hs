@@ -16,11 +16,10 @@ import Language.LSP.Types
     SMethod (..),
     ShowMessageRequestParams (..),
   )
-import Responder.Result
+import Message (Action (..), Result (..), ThreadHandle)
 import Server.Config (Config)
 import Server.Monad (inform)
 import System.Log.Logger (warningM)
-import WorkerGovernor (Action (..))
 
 launchResponder :: LanguageContextEnv Config -> TChan Action -> TChan Result -> IO ()
 launchResponder cfg actionChannel resultChannel =
