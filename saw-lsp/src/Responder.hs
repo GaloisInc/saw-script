@@ -19,12 +19,15 @@ import Language.LSP.Types
 import Message (Action (..), Result (..), ThreadHandle)
 import Server.Config (Config)
 import Server.Monad (inform)
-import System.Log.Logger (warningM)
+import System.Log.Handler.Simple ( fileHandler )
+import System.Log.Logger (Priority (..), addHandler, debugM, setLevel, updateGlobalLogger)
 
 launchResponder :: LanguageContextEnv Config -> TChan Action -> TChan Result -> IO ()
 launchResponder cfg actionChannel resultChannel =
-  let st = mkResponderState cfg resultChannel actionChannel
-   in void (forkIO (runResponder (forever responder) st))
+  do
+    initializeLogging
+    let st = mkResponderState cfg resultChannel actionChannel
+    void (forkIO (runResponder (forever responder) st))
 
 newtype Responder a = Responder {unResponder :: StateT ResponderState IO a}
   deriving
@@ -63,7 +66,9 @@ writeAction action =
 responder :: Responder ()
 responder =
   do
+    debug "about to read result"
     result <- readResult
+    debug ("read result: " <> show result)
     case result of
       Pending tHandle -> pending tHandle
       Success str -> informClient ("success: " <> str)
@@ -94,8 +99,23 @@ pending tHandle =
           \case
             Right (Just (MessageActionItem "kill it")) ->
               do
-                liftIO (warningM "pending" "ur killing it sis!!!!!!")
+                debug "ur killing it sis!!!!!!"
                 liftIO (atomically (writeTChan chan (Kill tHandle)))
                 pure ()
             _ -> pure ()
         pure ()
+
+--------------------------------------------------------------------------------
+
+initializeLogging :: IO ()
+initializeLogging =
+  do
+    updateGlobalLogger logName (setLevel DEBUG)
+    h <- fileHandler "responder.log" DEBUG
+    updateGlobalLogger logName (addHandler h)
+
+logName :: String
+logName = "Responder"
+
+debug :: MonadIO m => String -> m ()
+debug = liftIO . debugM logName

@@ -10,4 +10,4 @@ handleTextDocumentDidChange = notificationHandler STextDocumentDidChange doChang
 doChange :: NotificationMessage 'TextDocumentDidChange -> ServerM ()
 doChange notif =
   do
-    debug "doChange" "doChange"
+    debug "doChange"

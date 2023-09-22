@@ -10,7 +10,9 @@ data Result
   = Pending ThreadHandle
   | Success String
   | Failure String
+  deriving (Show)
 
 data Action
   = Spawn
   | Kill ThreadHandle
+  deriving (Show)

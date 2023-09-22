@@ -13,10 +13,11 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
+import Message
 import Server.Config
 import Server.Reactor (ReactorInput)
-import System.Log.Logger (debugM, infoM, warningM)
-import Message
+import System.Log.Handler.Simple (fileHandler)
+import System.Log.Logger (Priority (..), addHandler, debugM, infoM, setLevel, updateGlobalLogger, warningM)
 
 -------------------------------------------------------------------------------
 
@@ -88,14 +89,24 @@ liftMaybe e m =
 
 instance Exception ResponseError
 
-info :: String -> String -> ServerM ()
-info loc msg = liftIO (infoM loc msg)
+initializeLogging :: IO ()
+initializeLogging =
+  do
+    updateGlobalLogger logName (setLevel DEBUG)
+    h <- fileHandler "server.log" DEBUG
+    updateGlobalLogger logName (addHandler h)
 
-debug :: String -> String -> ServerM ()
-debug loc msg = liftIO (debugM loc msg)
+logName :: String
+logName = "Server"
 
-warning :: String -> String -> ServerM ()
-warning loc msg = liftIO (warningM loc msg)
+info :: String -> ServerM ()
+info = liftIO . infoM logName
+
+debug :: String -> ServerM ()
+debug = liftIO . debugM logName
+
+warning :: String -> ServerM ()
+warning = liftIO . warningM logName
 
 --------------------------------------------------------------------------------
 

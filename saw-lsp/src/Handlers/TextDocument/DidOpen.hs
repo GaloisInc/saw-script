@@ -12,7 +12,7 @@ handleTextDocumentDidOpen = notificationHandler STextDocumentDidOpen doOpen
 doOpen :: NotificationMessage 'TextDocumentDidOpen -> ServerM ()
 doOpen notif =
   do
-    debug "doOpen" "doOpen"
+    debug "doOpen"
   where
     -- let res = mkResponse uri
     -- sendNotification

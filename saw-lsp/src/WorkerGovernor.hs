@@ -11,9 +11,9 @@ import Control.Monad.IO.Class
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Message (Action(..), Result (..), ThreadHandle, threadHandle)
-
-
+import Message (Action (..), Result (..), ThreadHandle, threadHandle)
+import System.Log.Handler.Simple
+import System.Log.Logger (Priority (DEBUG), addHandler, debugM, setLevel, updateGlobalLogger)
 
 data WorkerGovernorState = WorkerGovernorState
   { wgInput :: TChan Action,
@@ -72,13 +72,17 @@ registerThread tid =
 
 launchWorkerGovernor :: TChan Action -> TChan Result -> IO ()
 launchWorkerGovernor actionChannel resultChannel =
-  let st = mkWorkerGovernorState actionChannel resultChannel
-   in void (forkIO (runWorkerGovernor (forever workerGovernor) st))
+  do
+    initializeLogging
+    let st = mkWorkerGovernorState actionChannel resultChannel
+    void (forkIO (runWorkerGovernor (forever workerGovernor) st))
 
 workerGovernor :: WorkerGovernor ()
 workerGovernor =
   do
+    debug "ready to read action"
     action <- readAction
+    debug $ "read " <> show action
     result <-
       case action of
         Spawn -> spawn
@@ -99,3 +103,18 @@ kill tHandle =
     case threads Map.!? tHandle of
       Nothing -> pure (Failure "thread not found")
       Just tID -> liftIO (killThread tID) >> pure (Success "thread killed")
+
+--------------------------------------------------------------------------------
+
+initializeLogging :: IO ()
+initializeLogging =
+  do
+    updateGlobalLogger logName (setLevel DEBUG)
+    h <- fileHandler "worker-governor.log" DEBUG
+    updateGlobalLogger logName (addHandler h)
+
+logName :: String
+logName = "WorkerGovernor"
+
+debug :: String -> WorkerGovernor ()
+debug = liftIO . debugM logName

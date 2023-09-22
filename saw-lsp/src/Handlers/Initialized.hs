@@ -12,4 +12,4 @@ doInitialized ::
   ServerM ()
 doInitialized notif =
   do
-    debug "doInitialized" "doInitialized"
+    debug "doInitialized"
