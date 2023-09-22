@@ -4,9 +4,11 @@
 
 module Handlers.Custom.InterpretToPoint where
 
+import Control.Concurrent.STM (atomically, writeTChan)
 import Control.Lens ((^.))
 import Control.Monad.Catch (throwM)
 import Control.Monad.Cont (MonadIO (liftIO))
+import Control.Monad.Reader (ask)
 import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as Aeson
@@ -50,17 +52,24 @@ doInterp ::
   ServerM ()
 doInterp request responder =
   do
-    info "doInterp" "Interpreting script"
-    interpParams <- liftEither (fromParams (request ^. LSP.params))
+    warning "doInterp" "Interpreting script"
 
-    fileStmts <- resolve (uri interpParams)
-    truncatedStmts <- truncateStmts (posn interpParams) fileStmts
+    ServerEnv {..} <- ask
 
-    (matchedPrefix, _val, outM) <- undefined -- liftSAW (interpretSAWScript True truncatedStmts)
-    -- inform' $ printf "Reusing prior execution of %i statements" matchedPrefix
+    liftIO (atomically (writeTChan seWorkerGovernorChannel Spawn))
 
-    let goal = fromMaybe "<no goal>" outM
-    displayGoal goal
+    -- undefined
+
+-- interpParams <- liftEither (fromParams (request ^. LSP.params))
+
+-- fileStmts <- resolve (uri interpParams)
+-- truncatedStmts <- truncateStmts (posn interpParams) fileStmts
+
+-- (matchedPrefix, _val, outM) <- undefined -- liftSAW (interpretSAWScript True truncatedStmts)
+-- -- inform' $ printf "Reusing prior execution of %i statements" matchedPrefix
+
+-- let goal = fromMaybe "<no goal>" outM
+-- displayGoal goal
 
 resolve :: Uri -> ServerM [Stmt]
 resolve uri =
@@ -76,7 +85,7 @@ truncateStmts position fileStmts =
   do
     uuid <- liftIO UUID.nextRandom
     let truncatedStmts = truncateScript position (show uuid) fileStmts
-    inform' $
+    inform $
       printf
         "Truncating %i statements to %i statements"
         (length fileStmts)
@@ -84,7 +93,7 @@ truncateStmts position fileStmts =
     case truncatedStmts of
       [] ->
         let msg = "Cannot interpret empty script"
-         in warn msg >> throwM (internalError msg)
+         in warnText msg >> throwM (internalError msg)
       (stmt : stmts) ->
         pure (stmt :| stmts)
 
