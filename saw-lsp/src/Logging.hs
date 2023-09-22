@@ -1,17 +1,28 @@
 module Logging where
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import System.IO
 import System.Log (Priority (..))
 import System.Log.Formatter (simpleLogFormatter)
 import System.Log.Handler (LogHandler (setFormatter))
-import System.Log.Handler.Simple (fileHandler)
+import System.Log.Handler.Simple (GenericHandler (closeFunc), streamHandler)
 import System.Log.Logger (addHandler, debugM, infoM, setLevel, updateGlobalLogger, warningM)
+
+-- | A file handler that opens its files in write mode
+--
+-- Largely courtesy of `System.Log.Handler.Simple`'s source
+writeFileHandler :: FilePath -> Priority -> IO (GenericHandler Handle)
+writeFileHandler fp priority =
+  do
+    h <- openFile fp WriteMode
+    sh <- streamHandler h priority
+    return (sh {closeFunc = hClose})
 
 initializeLogging :: String -> FilePath -> IO ()
 initializeLogging logName logFile =
   do
     updateGlobalLogger logName (setLevel logLevel)
-    h <- formatted <$> fileHandler logFile logLevel
+    h <- formatted <$> writeFileHandler logFile logLevel
     updateGlobalLogger logName (addHandler h)
   where
     logLevel = DEBUG
