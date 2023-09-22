@@ -43,7 +43,7 @@ import           Verifier.SAW.TypedTerm
 -- | Generate a @LLVMSetup@ spec that can be used to verify the given term
 -- containing a Cryptol foreign function fully applied to any type arguments.
 llvm_ffi_setup :: TypedTerm -> LLVMCrucibleSetupM ()
-llvm_ffi_setup appTypedTerm = do
+llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   cryEnv <- lll $ rwCryptol <$> getMergedEnv
   sc <- lll getSharedContext
   case asConstant funTerm of
@@ -54,22 +54,18 @@ llvm_ffi_setup appTypedTerm = do
         tenv <- buildTypeEnv ffiTParams tyArgTerms
         sizeArgs <- lio $ traverse (mkSizeArg sc) tyArgTerms
         (argTerms, inArgss) <- unzip <$> zipWithM
-          (\i -> setupInArg sc tenv ("in" <> Text.pack (show i)))
+          (\i -> setupInArg tenv ("in" <> Text.pack (show i)))
           [0 :: Integer ..]
           ffiArgTypes
         let inArgs = concat inArgss
         (outArgs, post) <- setupRet sc tenv ffiRetType
         llvm_execute_func (sizeArgs ++ inArgs ++ outArgs)
-        ret <- lio $ completeOpenTerm sc $
-          applyOpenTermMulti (closedOpenTerm appTerm)
-            (map closedOpenTerm argTerms)
-        post ret
+        post $ applyOpenTermMulti (closedOpenTerm appTerm) argTerms
     _ ->
       throw "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
   where
 
-  appTerm = ttTerm appTypedTerm
   (funTerm, tyArgTerms) = asApplyAll appTerm
 
   throw :: String -> LLVMCrucibleSetupM a
@@ -95,21 +91,20 @@ llvm_ffi_setup appTypedTerm = do
 
   mkSizeArg :: SharedContext -> Term -> IO (AllLLVM SetupValue)
   mkSizeArg sc tyArgTerm = do
-    sizeTerm <- completeOpenTerm sc $
+    anySetupOpenTerm sc $
       applyGlobalOpenTerm "Cryptol.ecNumber"
         [ closedOpenTerm tyArgTerm
         , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
         , applyGlobalOpenTerm "Cryptol.PLiteralSeqBool"
             [ctorOpenTerm "Cryptol.TCNum" [sizeBitSize]]
         ]
-    anySetupTerm <$> mkTypedTerm sc sizeTerm
     where
     sizeBitSize = natOpenTerm $
       fromIntegral $ finiteBitSize (undefined :: CSize)
 
-  setupInArg :: SharedContext -> TypeEnv -> Text -> FFIType ->
-    LLVMCrucibleSetupM (Term, [AllLLVM SetupValue])
-  setupInArg sc tenv = go
+  setupInArg :: TypeEnv -> Text -> FFIType ->
+    LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
+  setupInArg tenv = go
     where
     go name ffiType =
       case ffiType of
@@ -117,7 +112,7 @@ llvm_ffi_setup appTypedTerm = do
         FFIBasic ffiBasicType -> do
           llvmType <- convertBasicType ffiBasicType
           x <- llvm_fresh_var name llvmType
-          pure (ttTerm x, [anySetupTerm x])
+          pure (closedOpenTerm (ttTerm x), [anySetupTerm x])
         FFIArray lengths ffiBasicType -> do
           len <- getArrayLen tenv lengths
           llvmType <- convertBasicType ffiBasicType
@@ -125,35 +120,31 @@ llvm_ffi_setup appTypedTerm = do
           arr <- llvm_fresh_var name arrType
           ptr <- llvm_alloc_readonly arrType
           llvm_points_to True ptr (anySetupTerm arr)
-          pure (ttTerm arr, [ptr])
+          pure (closedOpenTerm (ttTerm arr), [ptr])
         FFITuple ffiTypes ->
-          tupleInArgs =<< zipWithM
+          tupleInArgs <$> zipWithM
             (\i -> go (name <> "." <> Text.pack (show i)))
             [0 :: Integer ..]
             ffiTypes
         FFIRecord ffiTypeMap ->
-          tupleInArgs =<< traverse
+          tupleInArgs <$> traverse
             (\(field, ty) -> go (name <> "." <> identText field) ty)
             (displayFields ffiTypeMap)
-    tupleInArgs (unzip -> (terms, inArgss)) = do
-      tupleTerm <- lio $ completeOpenTerm sc $
-        tupleOpenTerm' $ map closedOpenTerm terms
-      pure (tupleTerm, concat inArgss)
+    tupleInArgs (unzip -> (terms, inArgss)) =
+      (tupleOpenTerm' terms, concat inArgss)
 
   setupRet :: SharedContext -> TypeEnv -> FFIType ->
-    LLVMCrucibleSetupM ([AllLLVM SetupValue], Term -> LLVMCrucibleSetupM ())
+    LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   setupRet sc tenv ffiType =
     case ffiType of
       FFIBool -> throw "Bit not supported"
       FFIBasic _ -> do
-        let post ret = do
-              retSetupValue <- lio $ anySetupTerm <$> mkTypedTerm sc ret
-              llvm_return retSetupValue
+        let post ret = llvm_return =<< lio (anySetupOpenTerm sc ret)
         pure ([], post)
       _ -> setupOutArg sc tenv ffiType
 
   setupOutArg :: SharedContext -> TypeEnv -> FFIType ->
-    LLVMCrucibleSetupM ([AllLLVM SetupValue], Term -> LLVMCrucibleSetupM ())
+    LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   setupOutArg sc tenv = go
     where
     go ffiType =
@@ -170,18 +161,14 @@ llvm_ffi_setup appTypedTerm = do
         FFIRecord ffiTypeMap -> tupleOutArgs (recordElements ffiTypeMap)
     simpleOutArg llvmType = do
       ptr <- llvm_alloc llvmType
-      let post ret = do
-            retSetupValue <- lio $ anySetupTerm <$> mkTypedTerm sc ret
-            llvm_points_to True ptr retSetupValue
+      let post ret = llvm_points_to True ptr =<< lio (anySetupOpenTerm sc ret)
       pure ([ptr], post)
     tupleOutArgs ffiTypes = do
       (outArgss, posts) <- mapAndUnzipM go ffiTypes
       let len = fromIntegral $ length ffiTypes
           post ret =
-            for_ (zip [0..] posts) \(i, p) -> do
-              ret' <- lio $ completeOpenTerm sc $
-                projTupleOpenTerm' i len (closedOpenTerm ret)
-              p ret'
+            for_ (zip [0..] posts) \(i, p) ->
+              p (projTupleOpenTerm' i len ret)
       pure (concat outArgss, post)
 
   getArrayLen :: TypeEnv -> [Type] -> LLVMCrucibleSetupM Int
@@ -211,6 +198,10 @@ llvm_ffi_setup appTypedTerm = do
           FFIFloat64 -> llvm_double
   convertBasicType (FFIBasicRef _) =
     throw "GMP types (Integer, Z) not supported"
+
+anySetupOpenTerm :: SharedContext -> OpenTerm -> IO (AllLLVM SetupValue)
+anySetupOpenTerm sc openTerm =
+  anySetupTerm <$> (mkTypedTerm sc =<< completeOpenTerm sc openTerm)
 
 lll :: TopLevel a -> LLVMCrucibleSetupM a
 lll x = LLVMCrucibleSetupM $ lift $ lift x
