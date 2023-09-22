@@ -30,7 +30,7 @@ module Verifier.SAW.OpenTerm (
   arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
-  tupleOpenTerm', tupleTypeOpenTerm',
+  tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
@@ -59,6 +59,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Module
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Utils
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
@@ -229,6 +230,14 @@ tupleOpenTerm' ts = foldr1 pairTypeOpenTerm ts
 tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
 tupleTypeOpenTerm' [] = unitTypeOpenTerm
 tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+
+projTupleOpenTerm' :: Natural -> Natural -> OpenTerm -> OpenTerm
+projTupleOpenTerm' _ 0 _ = panic "projTupleOpenTerm'" ["Projection of 0-tuple"]
+projTupleOpenTerm' 0 1 t = t
+projTupleOpenTerm' 0 _ t = pairLeftOpenTerm t
+projTupleOpenTerm' i n t
+  | i < n     = projTupleOpenTerm' (i - 1) (n - 1) (pairRightOpenTerm t)
+  | otherwise = panic "projTupleOpenTerm'" ["Index out of bounds"]
 
 -- | Build a record value as an 'OpenTerm'
 recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm

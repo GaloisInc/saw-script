@@ -1,5 +1,4 @@
 {-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ViewPatterns      #-}
@@ -11,6 +10,7 @@ module SAWScript.Crucible.LLVM.FFI
 import           Control.Monad
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
+import           Data.Foldable
 import           Data.List
 import qualified Data.Map                             as Map
 import           Data.Maybe
@@ -58,17 +58,12 @@ llvm_ffi_setup appTypedTerm = do
           [0 :: Integer ..]
           ffiArgTypes
         let inArgs = concat inArgss
-        retTerm <- lio $ completeOpenTerm sc $
+        (outArgs, post) <- setupRet sc tenv ffiRetType
+        llvm_execute_func (sizeArgs ++ inArgs ++ outArgs)
+        ret <- lio $ completeOpenTerm sc $
           applyOpenTermMulti (closedOpenTerm appTerm)
             (map closedOpenTerm argTerms)
-        retSetupValue <- lio $ anySetupTerm <$> mkTypedTerm sc retTerm
-        setupRet tenv ffiRetType >>= \case
-          Nothing -> do
-            llvm_execute_func (sizeArgs ++ inArgs)
-            llvm_return retSetupValue
-          Just outArg -> do
-            llvm_execute_func (sizeArgs ++ inArgs ++ [outArg])
-            llvm_points_to True outArg retSetupValue
+        post ret
     _ ->
       throw "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
@@ -131,32 +126,63 @@ llvm_ffi_setup appTypedTerm = do
           ptr <- llvm_alloc_readonly arrType
           llvm_points_to True ptr (anySetupTerm arr)
           pure (ttTerm arr, [ptr])
-        FFITuple types ->
-          collectTuple =<< zipWithM
+        FFITuple ffiTypes ->
+          tupleInArgs =<< zipWithM
             (\i -> go (name <> "." <> Text.pack (show i)))
             [0 :: Integer ..]
-            types
-        FFIRecord typeMap ->
-          collectTuple =<< traverse
+            ffiTypes
+        FFIRecord ffiTypeMap ->
+          tupleInArgs =<< traverse
             (\(field, ty) -> go (name <> "." <> identText field) ty)
-            (displayFields typeMap)
-    collectTuple (unzip -> (terms, inArgss)) = do
+            (displayFields ffiTypeMap)
+    tupleInArgs (unzip -> (terms, inArgss)) = do
       tupleTerm <- lio $ completeOpenTerm sc $
         tupleOpenTerm' $ map closedOpenTerm terms
       pure (tupleTerm, concat inArgss)
 
-  setupRet :: TypeEnv -> FFIType ->
-    LLVMCrucibleSetupM (Maybe (AllLLVM SetupValue))
-  setupRet tenv ffiType =
+  setupRet :: SharedContext -> TypeEnv -> FFIType ->
+    LLVMCrucibleSetupM ([AllLLVM SetupValue], Term -> LLVMCrucibleSetupM ())
+  setupRet sc tenv ffiType =
     case ffiType of
       FFIBool -> throw "Bit not supported"
-      FFIBasic _ -> pure Nothing
-      FFIArray lengths ffiBasicType -> do
-        len <- getArrayLen tenv lengths
-        llvmType <- convertBasicType ffiBasicType
-        Just <$> llvm_alloc (llvm_array len llvmType)
-      FFITuple _ -> throw "Tuples not supported"
-      FFIRecord _ -> throw "Records not supported"
+      FFIBasic _ -> do
+        let post ret = do
+              retSetupValue <- lio $ anySetupTerm <$> mkTypedTerm sc ret
+              llvm_return retSetupValue
+        pure ([], post)
+      _ -> setupOutArg sc tenv ffiType
+
+  setupOutArg :: SharedContext -> TypeEnv -> FFIType ->
+    LLVMCrucibleSetupM ([AllLLVM SetupValue], Term -> LLVMCrucibleSetupM ())
+  setupOutArg sc tenv = go
+    where
+    go ffiType =
+      case ffiType of
+        FFIBool -> throw "Bit not supported"
+        FFIBasic ffiBasicType -> do
+          llvmType <- convertBasicType ffiBasicType
+          simpleOutArg llvmType
+        FFIArray lengths ffiBasicType -> do
+          len <- getArrayLen tenv lengths
+          llvmType <- convertBasicType ffiBasicType
+          simpleOutArg (llvm_array len llvmType)
+        FFITuple ffiTypes -> tupleOutArgs ffiTypes
+        FFIRecord ffiTypeMap -> tupleOutArgs (recordElements ffiTypeMap)
+    simpleOutArg llvmType = do
+      ptr <- llvm_alloc llvmType
+      let post ret = do
+            retSetupValue <- lio $ anySetupTerm <$> mkTypedTerm sc ret
+            llvm_points_to True ptr retSetupValue
+      pure ([ptr], post)
+    tupleOutArgs ffiTypes = do
+      (outArgss, posts) <- mapAndUnzipM go ffiTypes
+      let len = fromIntegral $ length ffiTypes
+          post ret =
+            for_ (zip [0..] posts) \(i, p) -> do
+              ret' <- lio $ completeOpenTerm sc $
+                projTupleOpenTerm' i len (closedOpenTerm ret)
+              p ret'
+      pure (concat outArgss, post)
 
   getArrayLen :: TypeEnv -> [Type] -> LLVMCrucibleSetupM Int
   getArrayLen tenv lengths =
