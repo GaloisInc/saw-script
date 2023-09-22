@@ -22,7 +22,7 @@ import Language.LSP.Types
 import Logging qualified as L
 import Message (Action (..), Result (..), ThreadHandle)
 import Server.Config (Config)
-import Server.Monad (inform)
+import Server.Monad (inform, warn)
 import System.IO.Temp (writeSystemTempFile)
 
 launchResponder :: LanguageContextEnv Config -> TChan Action -> TChan Result -> IO ()
@@ -76,9 +76,10 @@ responder =
       Pending tHandle -> pending tHandle
       DisplayGoal goal -> displayGoal goal
       Success str -> informClient ("success: " <> str)
-      Failure err -> informClient ("failure: " <> err)
+      Failure err -> warnClient ("failure: " <> err)
   where
     informClient msg = lsp (inform msg)
+    warnClient msg = lsp (warn msg)
 
 lsp :: LspT Config IO a -> Responder a
 lsp action =
