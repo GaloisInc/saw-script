@@ -4,22 +4,23 @@ module Worker where
 
 import Control.Concurrent (myThreadId)
 import Control.Concurrent.STM (TChan, TVar, atomically, readTVarIO, writeTChan, writeTVar)
+import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
 import Control.Monad.Trans (lift)
+import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Logging qualified as L
 import Message (Result (..))
 import SAWScript.AST
 import SAWScript.AST qualified as SAW
 import SAWScript.Value qualified as SAW
 import SAWT.Checkpoint (Checkpoint (..), Checkpoints, Script)
 import SAWT.Checkpoint qualified as C
-import Logging qualified as L
 import SAWT.Monad (SAWT)
 import SAWT.Monad qualified as SAWT
 import Util.FList (FList (..), after, fingers)
-import Data.List (intercalate)
 
 -- Workers are SAW computations that have access to shared memory, which
 -- functions as a cache for intermediate results of proof script interpretation.
@@ -40,27 +41,28 @@ mkWorkerState checkpoints chan =
 
 --------------------------------------------------------------------------------
 
-newtype Worker a = Worker {unWorker :: StateT WorkerState (SAWT IO) a}
+newtype Worker a = Worker {unWorker :: StateT WorkerState (ExceptT String (SAWT IO)) a}
   deriving
     ( Applicative,
       Functor,
       Monad,
       MonadIO,
+      MonadError String,
       MonadState WorkerState
     )
 
-runWorker :: Worker a -> WorkerState -> IO a
+runWorker :: Worker a -> WorkerState -> IO (Either String a)
 runWorker (Worker action) workerState =
   do
-    tid <- myThreadId
-    let tnum = last (words (show tid)) -- XXX make better
-    L.initializeLogging logName ("worker" <> tnum <> ".log")
+    tnum <- last . words . show <$> myThreadId -- XXX make better
+    L.initializeLogging logName ("worker-" <> tnum <> ".log")
+    let exceptAction = evalStateT action workerState
+        sawAction = runExceptT exceptAction
     sawEnv <- SAWT.newSAWEnv
-    let sawAction = evalStateT action workerState
     SAWT.evalSAWT sawAction sawEnv
 
 liftSAW :: SAWT IO a -> Worker a
-liftSAW = Worker . lift
+liftSAW = Worker . lift . lift
 
 --------------------------------------------------------------------------------
 
@@ -132,10 +134,10 @@ interpretSAWScript :: [Stmt] -> Worker ()
 interpretSAWScript stmts =
   do
     case stmts of
-      [] -> pure ()
+      [] -> throwError "empty script"
       (s : ss) ->
         do
-          Checkpoint{..} <- interpretSAWScriptNE (s :| ss)
+          Checkpoint {..} <- interpretSAWScriptNE (s :| ss)
           -- the checkpoint has already been cached, but we'll need to unpack it
           -- to display the goal
           let output = intercalate "\n" ckOutput
@@ -180,7 +182,7 @@ orderedPartitions = reverse . fingers
 interpretSAWStmt :: Stmt -> Worker Checkpoint
 interpretSAWStmt stmt =
   do
-    debug $ "about to interpret " <> show stmt
+    debug "about to interpret stmt"
     script <- C.addStmtToScript stmt <$> getScript
     checkpoint <- findCheckpoint script
     case checkpoint of

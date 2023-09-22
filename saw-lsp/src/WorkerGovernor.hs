@@ -15,7 +15,7 @@ import Logging qualified as L
 import Message (Action (..), Result (..), ThreadHandle, threadHandle)
 import SAWScript.AST (Stmt)
 import SAWT.Checkpoint (Checkpoints)
-import Worker (interpretSAWScript, mkWorkerState, runWorker)
+import Worker (Worker, interpretSAWScript, mkWorkerState, runWorker)
 
 data WorkerGovernorState = WorkerGovernorState
   { wgInput :: TChan Action,
@@ -107,10 +107,7 @@ spawn =
 interpret :: [Stmt] -> WorkerGovernor Result
 interpret stmts =
   do
-    rChan <- gets wgOutput
-    ckVar <- gets wgCheckpoints
-    let st = mkWorkerState ckVar rChan
-    tID <- liftIO (forkIO (runWorker (interpretSAWScript stmts) st))
+    tID <- forkWorker (interpretSAWScript stmts)
     tHandle <- registerThread tID
     pure (Pending tHandle)
 
@@ -121,6 +118,25 @@ kill tHandle =
     case threads Map.!? tHandle of
       Nothing -> pure (Failure "thread not found")
       Just tID -> liftIO (killThread tID) >> pure (Success "thread killed")
+
+--------------------------------------------------------------------------------
+
+forkWorker :: Worker a -> WorkerGovernor ThreadId
+forkWorker action =
+  do
+    rChan <- gets wgOutput
+    ckVar <- gets wgCheckpoints
+    let st = mkWorkerState ckVar rChan
+    liftIO (forkIO (void (actAndReport st rChan)))
+  where
+    actAndReport state chan =
+      do
+        result <- runWorker action state
+        atomically $
+          writeTChan chan $
+            case result of
+              Left err -> Failure err
+              Right res -> Success "worker finished"
 
 --------------------------------------------------------------------------------
 
