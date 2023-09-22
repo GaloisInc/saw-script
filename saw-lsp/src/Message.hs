@@ -1,5 +1,7 @@
 module Message where
 
+import SAWScript.AST (Stmt)
+
 newtype ThreadHandle = ThreadHandle Int
   deriving (Eq, Ord, Show)
 
@@ -14,5 +16,6 @@ data Result
 
 data Action
   = Spawn
+  | Interpret [Stmt]
   | Kill ThreadHandle
   deriving (Show)
