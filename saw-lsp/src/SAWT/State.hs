@@ -5,10 +5,12 @@
 module SAWT.State where
 
 import Control.Exception (SomeException, try)
+import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState (..), StateT (..), evalStateT, execStateT, gets)
 import Data.AIG.CompactGraph qualified as AIG
 import Data.IORef (IORef, atomicModifyIORef', newIORef)
+import SAWScript.AST qualified as SAW
 import SAWScript.Interpreter qualified as SAW
 import SAWScript.Options (Options (..), Verbosity (..), printOutVia)
 import SAWScript.Options qualified as SAW
@@ -81,3 +83,17 @@ flushOutput =
 
 atomicModifyIORef :: IORef t -> (t -> t) -> IO ()
 atomicModifyIORef ref f = atomicModifyIORef' ref (\x -> (f x, ()))
+
+--------------------------------------------------------------------------------
+
+interpretStmt :: MonadIO m => SAW.Stmt -> SAWT m (SAW.Value, [String])
+interpretStmt stmt = liftTopLevel (SAW.interpretStmt False stmt)
+
+createSAWCheckpoint :: MonadIO m => SAWT m SAW.TopLevelCheckpoint
+createSAWCheckpoint =
+  do
+    rw <- gets seTopLevelRW
+    liftIO (SAW.makeCheckpoint rw)
+
+restoreSAWCheckpoint :: MonadIO m => SAW.TopLevelCheckpoint -> SAWT m ()
+restoreSAWCheckpoint ck = void (liftTopLevel (SAW.restoreCheckpoint ck))

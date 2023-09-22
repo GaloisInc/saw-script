@@ -38,8 +38,11 @@ instance Monoid Checkpoints where
 data Checkpoint = Checkpoint
   { ckEnv :: SAW.TopLevelCheckpoint,
     ckVal :: SAW.Value,
-    ckOutput :: Maybe String
+    ckOutput :: [String]
   }
+
+createCheckpoint :: SAW.TopLevelCheckpoint -> SAW.Value -> [String] -> Checkpoint
+createCheckpoint ckEnv ckVal ckOutput = Checkpoint {..}
 
 addCheckpoint :: Script -> Checkpoint -> Checkpoints -> Checkpoints
 addCheckpoint script ck (Checkpoints cks) = Checkpoints (HMap.insert script ck cks)

@@ -68,6 +68,7 @@ library
         Util.FList
         Util.Stack
 
+        Worker
         WorkerGovernor
 
         Sample
