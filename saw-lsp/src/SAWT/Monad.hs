@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
-module SAWT.State where
+module SAWT.Monad where
 
 import Control.Exception (SomeException, try)
 import Control.Monad (void)

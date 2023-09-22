@@ -55,7 +55,7 @@ library
 
         SAWT
         SAWT.Checkpoint
-        SAWT.State
+        SAWT.Monad
 
         Server
         Server.Config

@@ -16,8 +16,8 @@ import SAWScript.Value qualified as SAW
 import SAWT.Checkpoint (Checkpoint (..), Checkpoints, Script)
 import SAWT.Checkpoint qualified as C
 import Logging qualified as L
-import SAWT.State (SAWT)
-import SAWT.State qualified as SAWT
+import SAWT.Monad (SAWT)
+import SAWT.Monad qualified as SAWT
 import Util.FList (FList (..), after, fingers)
 
 -- Workers are SAW computations that have access to shared memory, which
