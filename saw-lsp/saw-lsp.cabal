@@ -47,6 +47,8 @@ library
         Handlers.TextDocument.DidSave
         Handlers.TextDocument.SemanticTokensFull
 
+        Logging
+
         Message
 
         Responder

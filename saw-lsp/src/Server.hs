@@ -10,9 +10,10 @@ import Data.Text qualified as Text
 import Handlers (handlers)
 import Language.LSP.Server
 import Language.LSP.Types
+import Logging qualified as L
 import Responder (launchResponder)
 import Server.Config (Config, emptyConfig)
-import Server.Monad (ServerEnv (..), ServerM, initializeLogging, newServerEnv, runServerM)
+import Server.Monad (ServerEnv (..), ServerM, logName, newServerEnv, runServerM)
 import Server.Reactor (launchReactor)
 import System.IO (hPrint, hPutStrLn, stderr)
 import WorkerGovernor (launchWorkerGovernor)
@@ -53,7 +54,7 @@ doInitialize' cfg initMsg =
   do
     ServerEnv {..} <- newServerEnv cfg
 
-    initializeLogging
+    L.initializeLogging logName "server.log"
     launchReactor seReactorChannel
     launchWorkerGovernor seWorkerGovernorChannel seResponderChannel
     launchResponder seConfig seWorkerGovernorChannel seResponderChannel

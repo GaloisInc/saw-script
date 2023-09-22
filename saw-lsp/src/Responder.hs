@@ -16,16 +16,15 @@ import Language.LSP.Types
     SMethod (..),
     ShowMessageRequestParams (..),
   )
+import Logging qualified as L
 import Message (Action (..), Result (..), ThreadHandle)
 import Server.Config (Config)
 import Server.Monad (inform)
-import System.Log.Handler.Simple ( fileHandler )
-import System.Log.Logger (Priority (..), addHandler, debugM, setLevel, updateGlobalLogger)
 
 launchResponder :: LanguageContextEnv Config -> TChan Action -> TChan Result -> IO ()
 launchResponder cfg actionChannel resultChannel =
   do
-    initializeLogging
+    L.initializeLogging logName "responder.log"
     let st = mkResponderState cfg resultChannel actionChannel
     void (forkIO (runResponder (forever responder) st))
 
@@ -107,15 +106,8 @@ pending tHandle =
 
 --------------------------------------------------------------------------------
 
-initializeLogging :: IO ()
-initializeLogging =
-  do
-    updateGlobalLogger logName (setLevel DEBUG)
-    h <- fileHandler "responder.log" DEBUG
-    updateGlobalLogger logName (addHandler h)
-
 logName :: String
 logName = "Responder"
 
 debug :: MonadIO m => String -> m ()
-debug = liftIO . debugM logName
+debug = L.debug logName

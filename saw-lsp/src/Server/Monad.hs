@@ -6,18 +6,17 @@ module Server.Monad where
 
 import Control.Concurrent.STM (TChan, atomically, newTChan)
 import Control.Monad.Catch (Exception, MonadCatch, MonadThrow (throwM))
-import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
 import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
+import Logging qualified as L
 import Message
 import Server.Config
 import Server.Reactor (ReactorInput)
-import System.Log.Handler.Simple (fileHandler)
-import System.Log.Logger (Priority (..), addHandler, debugM, infoM, setLevel, updateGlobalLogger, warningM)
 
 -------------------------------------------------------------------------------
 
@@ -89,24 +88,17 @@ liftMaybe e m =
 
 instance Exception ResponseError
 
-initializeLogging :: IO ()
-initializeLogging =
-  do
-    updateGlobalLogger logName (setLevel DEBUG)
-    h <- fileHandler "server.log" DEBUG
-    updateGlobalLogger logName (addHandler h)
-
 logName :: String
 logName = "Server"
 
 info :: String -> ServerM ()
-info = liftIO . infoM logName
+info = L.info logName
 
 debug :: String -> ServerM ()
-debug = liftIO . debugM logName
+debug = L.debug logName
 
 warning :: String -> ServerM ()
-warning = liftIO . warningM logName
+warning = L.warning logName
 
 --------------------------------------------------------------------------------
 

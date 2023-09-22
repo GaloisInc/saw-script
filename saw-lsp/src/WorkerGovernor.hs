@@ -11,9 +11,8 @@ import Control.Monad.IO.Class
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Logging qualified as L
 import Message (Action (..), Result (..), ThreadHandle, threadHandle)
-import System.Log.Handler.Simple
-import System.Log.Logger (Priority (DEBUG), addHandler, debugM, setLevel, updateGlobalLogger)
 
 data WorkerGovernorState = WorkerGovernorState
   { wgInput :: TChan Action,
@@ -73,7 +72,7 @@ registerThread tid =
 launchWorkerGovernor :: TChan Action -> TChan Result -> IO ()
 launchWorkerGovernor actionChannel resultChannel =
   do
-    initializeLogging
+    L.initializeLogging logName "worker-governor.log"
     let st = mkWorkerGovernorState actionChannel resultChannel
     void (forkIO (runWorkerGovernor (forever workerGovernor) st))
 
@@ -106,15 +105,8 @@ kill tHandle =
 
 --------------------------------------------------------------------------------
 
-initializeLogging :: IO ()
-initializeLogging =
-  do
-    updateGlobalLogger logName (setLevel DEBUG)
-    h <- fileHandler "worker-governor.log" DEBUG
-    updateGlobalLogger logName (addHandler h)
-
 logName :: String
 logName = "WorkerGovernor"
 
 debug :: String -> WorkerGovernor ()
-debug = liftIO . debugM logName
+debug = L.debug logName
