@@ -10,6 +10,7 @@ threadHandle = ThreadHandle
 
 data Result
   = Pending ThreadHandle
+  | DisplayGoal String
   | Success String
   | Failure String
   deriving (Show)

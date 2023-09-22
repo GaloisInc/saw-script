@@ -23,9 +23,7 @@ import Language.LSP.Types
     RequestMessage,
     ResponseError,
     SMethod (..),
-    ShowDocumentParams (ShowDocumentParams),
     Uri,
-    filePathToUri,
     toNormalizedUri,
     uriToFilePath,
   )
@@ -37,7 +35,6 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
 import Server.Error (internalError)
 import Server.Monad
-import System.IO.Temp (writeSystemTempFile)
 import Text.Printf (printf)
 
 handleInterpretToPoint :: Handlers ServerM
@@ -78,20 +75,6 @@ truncateStmts position fileStmts =
         (length fileStmts)
         (length truncatedStmts)
     pure truncatedStmts
-
-displayGoal :: String -> ServerM ()
-displayGoal goal =
-  do
-    goalFilePath <- liftIO $ writeSystemTempFile "lsp" goal
-    let goalUri = filePathToUri goalFilePath
-        externalApplication = Just False
-        takeFocus = Just False
-        highlight = Nothing -- Just (LSP.Range (LSP.Position 0 5) (LSP.Position 1 3))
-        showDocParams = ShowDocumentParams goalUri externalApplication takeFocus highlight
-    _ <- sendRequest (SCustomMethod "$/displayGoal") (Aeson.toJSON showDocParams) \case
-      Left err -> debug (show err)
-      Right _ -> debug "success"
-    pure ()
 
 parseSAWFile :: FilePath -> Text -> Either String [Stmt]
 parseSAWFile path text =

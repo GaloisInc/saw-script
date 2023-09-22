@@ -9,17 +9,21 @@ import Control.Concurrent.STM (TChan, atomically, readTChan, writeTChan)
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState, StateT, evalStateT, gets)
+import Data.Aeson qualified as Aeson
 import Language.LSP.Server (LanguageContextEnv, LspT, runLspT, sendRequest)
 import Language.LSP.Types
   ( MessageActionItem (..),
     MessageType (..),
     SMethod (..),
+    ShowDocumentParams (..),
     ShowMessageRequestParams (..),
+    filePathToUri,
   )
 import Logging qualified as L
 import Message (Action (..), Result (..), ThreadHandle)
 import Server.Config (Config)
 import Server.Monad (inform)
+import System.IO.Temp (writeSystemTempFile)
 
 launchResponder :: LanguageContextEnv Config -> TChan Action -> TChan Result -> IO ()
 launchResponder cfg actionChannel resultChannel =
@@ -70,6 +74,7 @@ responder =
     debug ("read result: " <> show result)
     case result of
       Pending tHandle -> pending tHandle
+      DisplayGoal goal -> displayGoal goal
       Success str -> informClient ("success: " <> str)
       Failure err -> informClient ("failure: " <> err)
   where
@@ -103,6 +108,21 @@ pending tHandle =
                 pure ()
             _ -> pure ()
         pure ()
+
+displayGoal :: String -> Responder ()
+displayGoal goal =
+  lsp $
+    do
+      goalFilePath <- liftIO $ writeSystemTempFile "lsp" goal
+      let goalUri = filePathToUri goalFilePath
+          externalApplication = Just False
+          takeFocus = Just False
+          highlight = Nothing -- Just (LSP.Range (LSP.Position 0 5) (LSP.Position 1 3))
+          showDocParams = ShowDocumentParams goalUri externalApplication takeFocus highlight
+      _ <- sendRequest (SCustomMethod "$/displayGoal") (Aeson.toJSON showDocParams) \case
+        Left err -> debug (show err)
+        Right _ -> debug "success"
+      pure ()
 
 --------------------------------------------------------------------------------
 

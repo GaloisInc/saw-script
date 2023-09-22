@@ -19,6 +19,7 @@ import Logging qualified as L
 import SAWT.Monad (SAWT)
 import SAWT.Monad qualified as SAWT
 import Util.FList (FList (..), after, fingers)
+import Data.List (intercalate)
 
 -- Workers are SAW computations that have access to shared memory, which
 -- functions as a cache for intermediate results of proof script interpretation.
@@ -134,10 +135,11 @@ interpretSAWScript stmts =
       [] -> pure ()
       (s : ss) ->
         do
-          checkpoint <- interpretSAWScriptNE (s :| ss)
+          Checkpoint{..} <- interpretSAWScriptNE (s :| ss)
           -- the checkpoint has already been cached, but we'll need to unpack it
           -- to display the goal
-          alertResponder (Success "finished interpreting script")
+          let output = intercalate "\n" ckOutput
+          alertResponder (DisplayGoal output)
 
 interpretSAWScriptNE :: NonEmpty Stmt -> Worker Checkpoint
 interpretSAWScriptNE stmts@(s :| ss) =
