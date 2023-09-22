@@ -53,7 +53,6 @@ library
 
         Responder
 
-        SAWT
         SAWT.Checkpoint
         SAWT.Monad
 

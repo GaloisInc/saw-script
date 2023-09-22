@@ -104,7 +104,7 @@ pending tHandle =
           \case
             Right (Just (MessageActionItem "kill it")) ->
               do
-                debug "ur killing it sis!!!!!!"
+                debug "killing..."
                 liftIO (atomically (writeTChan chan (Kill tHandle)))
                 pure ()
             _ -> pure ()
