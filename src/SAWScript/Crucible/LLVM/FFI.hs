@@ -24,7 +24,9 @@ import           Cryptol.Eval.Type
 import           Cryptol.TypeCheck.FFI.FFIType
 import           Cryptol.TypeCheck.Solver.InfNat
 import           Cryptol.TypeCheck.Type
+import           Cryptol.Utils.Ident
 import           Cryptol.Utils.PP                     (pretty)
+import           Cryptol.Utils.RecordMap
 
 import           SAWScript.Builtins
 import           SAWScript.Crucible.Common.MethodSpec
@@ -51,10 +53,11 @@ llvm_ffi_setup appTypedTerm = do
           throw "Cannot verify foreign function with no Cryptol implementation"
         tenv <- buildTypeEnv ffiTParams tyArgTerms
         sizeArgs <- lio $ traverse (mkSizeArg sc) tyArgTerms
-        (argTerms, inArgs) <- unzip <$> zipWithM
-          (\i -> setupInArg tenv ("in" <> Text.pack (show i)))
+        (argTerms, inArgss) <- unzip <$> zipWithM
+          (\i -> setupInArg sc tenv ("in" <> Text.pack (show i)))
           [0 :: Integer ..]
           ffiArgTypes
+        let inArgs = concat inArgss
         retTerm <- lio $ completeOpenTerm sc $
           applyOpenTermMulti (closedOpenTerm appTerm)
             (map closedOpenTerm argTerms)
@@ -109,25 +112,38 @@ llvm_ffi_setup appTypedTerm = do
     sizeBitSize = natOpenTerm $
       fromIntegral $ finiteBitSize (undefined :: CSize)
 
-  setupInArg :: TypeEnv -> Text -> FFIType ->
-    LLVMCrucibleSetupM (Term, AllLLVM SetupValue)
-  setupInArg tenv name ffiType =
-    case ffiType of
-      FFIBool -> throw "Bit not supported"
-      FFIBasic ffiBasicType -> do
-        llvmType <- convertBasicType ffiBasicType
-        x <- llvm_fresh_var name llvmType
-        pure (ttTerm x, anySetupTerm x)
-      FFIArray lengths ffiBasicType -> do
-        len <- getArrayLen tenv lengths
-        llvmType <- convertBasicType ffiBasicType
-        let arrType = llvm_array len llvmType
-        arr <- llvm_fresh_var name arrType
-        ptr <- llvm_alloc_readonly arrType
-        llvm_points_to True ptr (anySetupTerm arr)
-        pure (ttTerm arr, ptr)
-      FFITuple _ -> throw "Tuples not supported"
-      FFIRecord _ -> throw "Records not supported"
+  setupInArg :: SharedContext -> TypeEnv -> Text -> FFIType ->
+    LLVMCrucibleSetupM (Term, [AllLLVM SetupValue])
+  setupInArg sc tenv = go
+    where
+    go name ffiType =
+      case ffiType of
+        FFIBool -> throw "Bit not supported"
+        FFIBasic ffiBasicType -> do
+          llvmType <- convertBasicType ffiBasicType
+          x <- llvm_fresh_var name llvmType
+          pure (ttTerm x, [anySetupTerm x])
+        FFIArray lengths ffiBasicType -> do
+          len <- getArrayLen tenv lengths
+          llvmType <- convertBasicType ffiBasicType
+          let arrType = llvm_array len llvmType
+          arr <- llvm_fresh_var name arrType
+          ptr <- llvm_alloc_readonly arrType
+          llvm_points_to True ptr (anySetupTerm arr)
+          pure (ttTerm arr, [ptr])
+        FFITuple types ->
+          collectTuple =<< zipWithM
+            (\i -> go (name <> "." <> Text.pack (show i)))
+            [0 :: Integer ..]
+            types
+        FFIRecord typeMap ->
+          collectTuple =<< traverse
+            (\(field, ty) -> go (name <> "." <> identText field) ty)
+            (displayFields typeMap)
+    collectTuple (unzip -> (terms, inArgss)) = do
+      tupleTerm <- lio $ completeOpenTerm sc $
+        tupleOpenTerm' $ map closedOpenTerm terms
+      pure (tupleTerm, concat inArgss)
 
   setupRet :: TypeEnv -> FFIType ->
     LLVMCrucibleSetupM (Maybe (AllLLVM SetupValue))
