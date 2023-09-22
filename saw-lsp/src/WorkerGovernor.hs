@@ -13,22 +13,30 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import Logging qualified as L
 import Message (Action (..), Result (..), ThreadHandle, threadHandle)
+import SAWScript.AST (Stmt)
+import SAWT.Checkpoint (Checkpoints)
+import Worker (interpretSAWScript, mkWorkerState, runWorker)
 
 data WorkerGovernorState = WorkerGovernorState
   { wgInput :: TChan Action,
     wgFresh :: Int,
     wgThreads :: Map ThreadHandle ThreadId,
+    wgCheckpoints :: TVar Checkpoints,
     wgOutput :: TChan Result
   }
 
-mkWorkerGovernorState :: TChan Action -> TChan Result -> WorkerGovernorState
-mkWorkerGovernorState aChan rChan =
-  WorkerGovernorState
-    { wgInput = aChan,
-      wgFresh = 0,
-      wgThreads = mempty,
-      wgOutput = rChan
-    }
+newWorkerGovernorState :: TChan Action -> TChan Result -> IO WorkerGovernorState
+newWorkerGovernorState aChan rChan =
+  do
+    cks <- newTVarIO mempty
+    pure
+      WorkerGovernorState
+        { wgInput = aChan,
+          wgFresh = 0,
+          wgThreads = mempty,
+          wgOutput = rChan,
+          wgCheckpoints = cks
+        }
 
 newtype WorkerGovernor a = WorkerGovernor
   { unWorkerGovernor :: StateT WorkerGovernorState IO a
@@ -73,7 +81,7 @@ launchWorkerGovernor :: TChan Action -> TChan Result -> IO ()
 launchWorkerGovernor actionChannel resultChannel =
   do
     L.initializeLogging logName "worker-governor.log"
-    let st = mkWorkerGovernorState actionChannel resultChannel
+    st <- newWorkerGovernorState actionChannel resultChannel
     void (forkIO (runWorkerGovernor (forever workerGovernor) st))
 
 workerGovernor :: WorkerGovernor ()
@@ -85,6 +93,7 @@ workerGovernor =
     result <-
       case action of
         Spawn -> spawn
+        Interpret stmts -> interpret stmts
         Kill tID -> kill tID
     writeResult result
 
@@ -92,6 +101,16 @@ spawn :: WorkerGovernor Result
 spawn =
   do
     tID <- liftIO (forkIO (forever (threadDelay 1_000_000)))
+    tHandle <- registerThread tID
+    pure (Pending tHandle)
+
+interpret :: [Stmt] -> WorkerGovernor Result
+interpret stmts =
+  do
+    rChan <- gets wgOutput
+    ckVar <- gets wgCheckpoints
+    let st = mkWorkerState ckVar rChan
+    tID <- liftIO (forkIO (runWorker (interpretSAWScript stmts) st))
     tHandle <- registerThread tID
     pure (Pending tHandle)
 
