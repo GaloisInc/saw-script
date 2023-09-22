@@ -36,7 +36,6 @@ import Language.LSP.VFS (virtualFileText)
 import SAWScript.AST (Stmt (..))
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
-import SAWT.Interpret (interpretSAWScript)
 import Server.Error (internalError)
 import Server.Monad
 import System.IO.Temp (writeSystemTempFile)

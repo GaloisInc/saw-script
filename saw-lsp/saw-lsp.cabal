@@ -55,9 +55,7 @@ library
 
         SAWT
         SAWT.Checkpoint
-        SAWT.IO
         SAWT.State
-        SAWT.Interpret
 
         Server
         Server.Config
