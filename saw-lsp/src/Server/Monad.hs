@@ -12,7 +12,7 @@ import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Language.LSP.Server
-import Language.LSP.Types (MessageType (..), ResponseError, SMethod (..), ShowMessageParams (..))
+import Language.LSP.Types (ErrorCode (..), MessageType (..), ResponseError (..), SMethod (..), ShowMessageParams (..))
 import Logging qualified as L
 import Message
 import Server.Config
@@ -87,6 +87,9 @@ liftMaybe e m =
 -------------------------------------------------------------------------------
 
 instance Exception ResponseError
+
+internalError :: Text -> ResponseError
+internalError s = ResponseError InternalError s Nothing
 
 logName :: String
 logName = "Server"

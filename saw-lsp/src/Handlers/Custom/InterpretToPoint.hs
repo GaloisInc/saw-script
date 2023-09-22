@@ -33,7 +33,6 @@ import Message (Action (..))
 import SAWScript.AST (Stmt (..))
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser (parseModule)
-import Server.Error (internalError)
 import Server.Monad
 import Text.Printf (printf)
 

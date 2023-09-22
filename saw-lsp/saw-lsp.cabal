@@ -58,7 +58,6 @@ library
 
         Server
         Server.Config
-        Server.Error
         Server.Monad
         Server.Reactor
 
