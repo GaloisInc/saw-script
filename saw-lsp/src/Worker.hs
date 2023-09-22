@@ -14,6 +14,7 @@ import SAWScript.AST
 import SAWScript.Value qualified as SAW
 import SAWT.Checkpoint (Checkpoint (..), Checkpoints, Script)
 import SAWT.Checkpoint qualified as C
+import Logging qualified as L
 import SAWT.State (SAWT)
 import SAWT.State qualified as SAWT
 
@@ -48,6 +49,9 @@ newtype Worker a = Worker {unWorker :: StateT WorkerState (SAWT IO) a}
 runWorker :: Worker a -> WorkerState -> IO a
 runWorker (Worker action) workerState =
   do
+    tid <- myThreadId
+    let tnum = last (words (show tid)) -- XXX make better
+    L.initializeLogging logName ("worker" <> tnum <> ".log")
     sawEnv <- SAWT.newSAWEnv
     let sawAction = evalStateT action workerState
     SAWT.evalSAWT sawAction sawEnv
@@ -104,6 +108,7 @@ restoreCheckpoint Checkpoint {..} = liftSAW (SAWT.restoreSAWCheckpoint ckEnv)
 interpretSAWStmt :: Stmt -> Worker Checkpoint
 interpretSAWStmt stmt =
   do
+    debug $ "about to interpret " <> show stmt
     script <- C.addStmtToScript stmt <$> getScript
     checkpoint <- findCheckpoint script
     case checkpoint of
@@ -119,3 +124,11 @@ interpretSAWStmt stmt =
           restoreCheckpoint ck
           putScript script
           pure ck
+
+--------------------------------------------------------------------------------
+
+logName :: String
+logName = "Worker"
+
+debug :: String -> Worker ()
+debug = L.debug logName
