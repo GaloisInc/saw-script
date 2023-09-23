@@ -87,7 +87,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   buildTypeEnv params [] = throw $
     "Foreign function not fully instantiated;\n"
     ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)
-  buildTypeEnv [] _ = throw "Too many arguments"
+  buildTypeEnv [] _ = throw "Too many type arguments"
 
   mkSizeArg :: SharedContext -> Term -> IO (AllLLVM SetupValue)
   mkSizeArg sc tyArgTerm = do
