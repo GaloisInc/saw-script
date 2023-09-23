@@ -116,3 +116,11 @@ warnText msg = sendNotification SWindowShowMessage (ShowMessageParams MtWarning 
 
 warn :: MonadLsp config f => String -> f ()
 warn = warnText . Text.pack
+
+--------------------------------------------------------------------------------
+
+tellWorkerGovernor :: Action -> ServerM ()
+tellWorkerGovernor action =
+  do
+    wgChan <- asks seWorkerGovernorChannel
+    liftIO (atomically (writeTChan wgChan action))

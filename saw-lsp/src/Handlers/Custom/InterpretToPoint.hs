@@ -4,10 +4,8 @@
 
 module Handlers.Custom.InterpretToPoint where
 
-import Control.Concurrent.STM (atomically, writeTChan)
 import Control.Lens ((^.))
 import Control.Monad.Cont (MonadIO (liftIO))
-import Control.Monad.Reader (ask)
 import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as Aeson
@@ -47,12 +45,11 @@ doInterp request responder =
   do
     debug "Interpreting script"
 
-    ServerEnv {..} <- ask
     interpParams <- liftEither (fromParams (request ^. LSP.params))
     fileStmts <- resolve (uri interpParams)
     truncatedStmts <- truncateStmts (posn interpParams) fileStmts
 
-    liftIO (atomically (writeTChan seWorkerGovernorChannel (Interpret truncatedStmts)))
+    tellWorkerGovernor (Interpret truncatedStmts)
 
 resolve :: Uri -> ServerM [Stmt]
 resolve uri =
