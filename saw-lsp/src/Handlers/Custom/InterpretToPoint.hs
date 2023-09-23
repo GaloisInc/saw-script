@@ -47,7 +47,7 @@ doInterp request responder =
     debug "Interpreting script"
     interpParams <- liftEither (fromParams (request ^. LSP.params))
     (filePath, fileText) <- resolve (uri interpParams)
-    tellWorkerGovernor (Interpret filePath fileText (posn interpParams))
+    tellWorkerGovernor (InterpretToPoint filePath fileText (posn interpParams))
 
 resolve :: Uri -> ServerM (FilePath, Text)
 resolve uri =

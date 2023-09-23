@@ -22,7 +22,7 @@ data Result
 
 data Action
   = Spawn
-  | Interpret FilePath Text Position
+  | InterpretToPoint FilePath Text Position
   | Kill ThreadHandle
   deriving (Show)
 

@@ -93,7 +93,7 @@ workerGovernor =
     result <-
       case action of
         Spawn -> spawn
-        Interpret filePath fileText posn -> interpret filePath fileText posn
+        InterpretToPoint filePath fileText posn -> interpret filePath fileText posn
         Kill tID -> kill tID
     writeResult result
 
