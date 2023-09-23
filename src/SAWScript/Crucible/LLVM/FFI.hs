@@ -10,7 +10,6 @@ module SAWScript.Crucible.LLVM.FFI
 import           Control.Monad
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
-import           Data.Foldable
 import           Data.List
 import qualified Data.Map                             as Map
 import           Data.Maybe
@@ -33,6 +32,7 @@ import           SAWScript.Crucible.Common.MethodSpec
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.LLVMBuiltins
+import           SAWScript.Panic
 import           SAWScript.Value
 import           Verifier.SAW.CryptolEnv
 import           Verifier.SAW.OpenTerm
@@ -157,19 +157,35 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
           len <- getArrayLen tenv lengths
           llvmType <- convertBasicType ffiBasicType
           simpleOutArg (llvm_array len llvmType)
-        FFITuple ffiTypes -> tupleOutArgs ffiTypes
-        FFIRecord ffiTypeMap -> tupleOutArgs (recordElements ffiTypeMap)
+        FFITuple ffiTypes -> do
+          (outArgss, posts) <- mapAndUnzipM go ffiTypes
+          let len = fromIntegral $ length ffiTypes
+              post ret = zipWithM_
+                (\i p -> p (projTupleOpenTerm' i len ret))
+                [0..]
+                posts
+          pure (concat outArgss, post)
+        FFIRecord ffiTypeMap -> do
+          -- The FFI passes record elements by display order, while SAW
+          -- represents records by tuples in canonical order
+          (outArgss, posts) <- mapAndUnzipM go (displayElements ffiTypeMap)
+          let canonFields = map fst $ canonicalFields ffiTypeMap
+              len = fromIntegral $ length canonFields
+              post ret = zipWithM_
+                (\field p -> do
+                  let ix = fromIntegral
+                        case elemIndex field canonFields of
+                          Just i -> i
+                          Nothing -> panic "setupOutArg"
+                            ["Bad record field access"]
+                  p (projTupleOpenTerm' ix len ret))
+                (displayOrder ffiTypeMap)
+                posts
+          pure (concat outArgss, post)
     simpleOutArg llvmType = do
       ptr <- llvm_alloc llvmType
       let post ret = llvm_points_to True ptr =<< lio (anySetupOpenTerm sc ret)
       pure ([ptr], post)
-    tupleOutArgs ffiTypes = do
-      (outArgss, posts) <- mapAndUnzipM go ffiTypes
-      let len = fromIntegral $ length ffiTypes
-          post ret =
-            for_ (zip [0..] posts) \(i, p) ->
-              p (projTupleOpenTerm' i len ret)
-      pure (concat outArgss, post)
 
   getArrayLen :: TypeEnv -> [Type] -> LLVMCrucibleSetupM Int
   getArrayLen tenv lengths =
