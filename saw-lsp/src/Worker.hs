@@ -4,6 +4,7 @@ module Worker where
 
 import Control.Concurrent (myThreadId)
 import Control.Concurrent.STM (TChan, TVar, atomically, readTVarIO, writeTChan, writeTVar)
+import Control.Monad (when)
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
@@ -12,6 +13,7 @@ import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Logging qualified as L
@@ -142,21 +144,25 @@ parseSAWFile path text =
     let lexed = lexSAW path (Text.unpack text)
     first show (parseModule lexed)
 
-interpretSAWScript :: FilePath -> Text -> Position -> Worker ()
+-- | If provided a position, interpret only the script truncated at that
+-- position and send a DisplayGoal message on completion
+interpretSAWScript :: FilePath -> Text -> Maybe Position -> Worker ()
 interpretSAWScript filePath fileText position =
   do
     stmts <- case parseSAWFile filePath fileText of
       Left err -> throwError err
       Right ss -> pure ss
-    case truncateScript position "XXX" stmts of
+    let stmts' =
+          case position of
+            Nothing -> stmts
+            Just p -> truncateScript p "XXX" stmts
+    case stmts' of
       [] -> throwError "empty script"
       (s : ss) ->
         do
           Checkpoint {..} <- interpretSAWScriptNE (s :| ss)
-          -- the checkpoint has already been cached, but we'll need to unpack it
-          -- to display the goal
           let output = intercalate "\n" ckOutput
-          alertResponder (DisplayGoal output)
+          when (isJust position) (alertResponder (DisplayGoal output))
 
 interpretSAWScriptNE :: NonEmpty Stmt -> Worker Checkpoint
 interpretSAWScriptNE stmts@(s :| ss) =

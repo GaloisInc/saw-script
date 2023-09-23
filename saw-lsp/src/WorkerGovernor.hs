@@ -93,7 +93,8 @@ workerGovernor =
     result <-
       case action of
         Spawn -> spawn
-        InterpretToPoint filePath fileText posn -> interpret filePath fileText posn
+        Interpret filePath fileText -> interpret filePath fileText Nothing
+        InterpretToPoint filePath fileText posn -> interpret filePath fileText (Just posn)
         Kill tID -> kill tID
     writeResult result
 
@@ -104,10 +105,10 @@ spawn =
     tHandle <- registerThread tID
     pure (Pending tHandle)
 
-interpret :: FilePath -> Text -> Position -> WorkerGovernor Result
-interpret filePath fileText position =
+interpret :: FilePath -> Text -> Maybe Position -> WorkerGovernor Result
+interpret filePath fileText positionM =
   do
-    tID <- forkWorker (interpretSAWScript filePath fileText position)
+    tID <- forkWorker (interpretSAWScript filePath fileText positionM)
     tHandle <- registerThread tID
     pure (Pending tHandle)
 
