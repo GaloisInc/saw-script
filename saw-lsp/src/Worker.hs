@@ -8,19 +8,25 @@ import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
 import Control.Monad.Trans (lift)
+import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Data.Text (Text)
+import Data.Text qualified as Text
 import Logging qualified as L
-import Message (Result (..))
+import Message (Position, Result (..))
 import SAWScript.AST
 import SAWScript.AST qualified as SAW
+import SAWScript.Lexer (lexSAW)
+import SAWScript.Parser (parseModule)
 import SAWScript.Value qualified as SAW
 import SAWT.Checkpoint (Checkpoint (..), Checkpoints, Script)
 import SAWT.Checkpoint qualified as C
 import SAWT.Monad (SAWT)
 import SAWT.Monad qualified as SAWT
 import Util.FList (FList (..), after, fingers)
+import Worker.Truncate (truncateScript)
 
 -- Workers are SAW computations that have access to shared memory, which
 -- functions as a cache for intermediate results of proof script interpretation.
@@ -130,10 +136,19 @@ restoreCheckpoint Checkpoint {..} = liftSAW (SAWT.restoreSAWCheckpoint ckEnv)
 -- - [ ] Signal errors
 -- - [x] Signal results
 
-interpretSAWScript :: [Stmt] -> Worker ()
-interpretSAWScript stmts =
+parseSAWFile :: FilePath -> Text -> Either String [Stmt]
+parseSAWFile path text =
   do
-    case stmts of
+    let lexed = lexSAW path (Text.unpack text)
+    first show (parseModule lexed)
+
+interpretSAWScript :: FilePath -> Text -> Position -> Worker ()
+interpretSAWScript filePath fileText position =
+  do
+    stmts <- case parseSAWFile filePath fileText of
+      Left err -> throwError err
+      Right ss -> pure ss
+    case truncateScript position "XXX" stmts of
       [] -> throwError "empty script"
       (s : ss) ->
         do

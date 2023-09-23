@@ -11,9 +11,9 @@ import Control.Monad.IO.Class
 import Control.Monad.State (MonadState, StateT, evalStateT, gets, modify)
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Text (Text)
 import Logging qualified as L
-import Message (Action (..), Result (..), ThreadHandle, threadHandle)
-import SAWScript.AST (Stmt)
+import Message (Action (..), Position, Result (..), ThreadHandle, threadHandle)
 import SAWT.Checkpoint (Checkpoints)
 import Worker (Worker, interpretSAWScript, mkWorkerState, runWorker)
 
@@ -93,7 +93,7 @@ workerGovernor =
     result <-
       case action of
         Spawn -> spawn
-        Interpret stmts -> interpret stmts
+        Interpret filePath fileText posn -> interpret filePath fileText posn
         Kill tID -> kill tID
     writeResult result
 
@@ -104,10 +104,10 @@ spawn =
     tHandle <- registerThread tID
     pure (Pending tHandle)
 
-interpret :: [Stmt] -> WorkerGovernor Result
-interpret stmts =
+interpret :: FilePath -> Text -> Position -> WorkerGovernor Result
+interpret filePath fileText position =
   do
-    tID <- forkWorker (interpretSAWScript stmts)
+    tID <- forkWorker (interpretSAWScript filePath fileText position)
     tHandle <- registerThread tID
     pure (Pending tHandle)
 

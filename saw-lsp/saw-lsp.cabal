@@ -40,7 +40,6 @@ library
     exposed-modules:
         Handlers
         Handlers.Custom.InterpretToPoint
-        Handlers.Custom.InterpretToPoint.Truncate
         Handlers.Initialized
         Handlers.TextDocument.DidChange
         Handlers.TextDocument.DidOpen
@@ -65,6 +64,7 @@ library
         Util.Stack
 
         Worker
+        Worker.Truncate
         WorkerGovernor
 
         Sample

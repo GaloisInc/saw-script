@@ -1,23 +1,11 @@
 {-# LANGUAGE BlockArguments #-}
 
-module Handlers.Custom.InterpretToPoint.Truncate (Position (..), truncateScript) where
+module Worker.Truncate (Position (..), truncateScript) where
 
-import Data.Aeson ((.:))
-import Data.Aeson qualified as Aeson
 import Data.Maybe (mapMaybe)
+import Message (Position (..))
 import SAWScript.AST (Expr (..), Located (..), Pattern (..), Stmt (..))
 import SAWScript.Position (Pos (..), getPos)
-
--- Include absolute offset?
-data Position = Position
-  { line :: Int,
-    character :: Int
-  }
-  deriving (Show)
-
-instance Aeson.FromJSON Position where
-  parseJSON = Aeson.withObject "Position" \v ->
-    Position <$> v .: "line" <*> v .: "character"
 
 -- | At the given `Position`, which we assume to be within an expression
 -- containing a list of statements, insert a call to `print_goal` and a call to

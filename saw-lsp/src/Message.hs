@@ -1,5 +1,10 @@
+{-# LANGUAGE BlockArguments #-}
+
 module Message where
 
+import Data.Aeson ((.:))
+import Data.Aeson qualified as Aeson
+import Data.Text (Text)
 import SAWScript.AST (Stmt)
 
 newtype ThreadHandle = ThreadHandle Int
@@ -17,6 +22,17 @@ data Result
 
 data Action
   = Spawn
-  | Interpret [Stmt]
+  | Interpret FilePath Text Position
   | Kill ThreadHandle
   deriving (Show)
+
+-- Include absolute offset?
+data Position = Position
+  { line :: Int,
+    character :: Int
+  }
+  deriving (Show)
+
+instance Aeson.FromJSON Position where
+  parseJSON = Aeson.withObject "Position" \v ->
+    Position <$> v .: "line" <*> v .: "character"

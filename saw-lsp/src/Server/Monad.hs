@@ -4,9 +4,9 @@
 
 module Server.Monad where
 
-import Control.Concurrent.STM (TChan, atomically, newTChan)
+import Control.Concurrent.STM (TChan, atomically, newTChan, writeTChan)
 import Control.Monad.Catch (Exception, MonadCatch, MonadThrow (throwM))
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Data.Text (Text)
