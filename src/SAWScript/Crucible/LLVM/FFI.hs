@@ -123,11 +123,10 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     where
     go name ffiType =
       case ffiType of
-        FFIBool -> throw "Bit not supported"
-        FFIBasic ffiBasicType -> do
-          ti <- basicTypeInfo sc ffiBasicType
-          (x, cryTerm) <- singleInArg ti
-          pure (cryTerm, [anySetupTerm x])
+        FFIBool ->
+          valueInArg (boolTypeInfo sc)
+        FFIBasic ffiBasicType ->
+          valueInArg =<< basicTypeInfo sc ffiBasicType
         FFIArray lengths ffiBasicType -> do
           len <- getArrayLen tenv lengths
           FFITypeInfo {..} <- arrayTypeInfo sc len ffiBasicType
@@ -140,6 +139,9 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         FFIRecord ffiTypeMap ->
           tupleInArgs <$> setupRecordArgs go name ffiTypeMap
       where
+      valueInArg ffiTypeInfo = do
+        (x, cryTerm) <- singleInArg ffiTypeInfo
+        pure (cryTerm, [anySetupTerm x])
       singleInArg FFITypeInfo {..} = do
         x <- llvm_fresh_var name ffiLLVMType
         let ox = typedToOpenTerm x
@@ -157,23 +159,24 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   setupRet sc tenv ffiType =
     case ffiType of
-      FFIBool -> throw "Bit not supported"
-      FFIBasic ffiBasicType -> do
-        FFITypeInfo {..} <- basicTypeInfo sc ffiBasicType
-        let post cryRet = do
-              sCryRet <- lio $ openToSetupTerm sc cryRet
-              case ffiConv of
-                Just FFIConv {..} -> do
-                  llvmRet <- llvm_fresh_var "ret" ffiLLVMType
-                  llvm_return (anySetupTerm llvmRet)
-                  {- basicToCry llvmRet == cryRet -}
-                  llvmRetCry <- lio $ openToSetupTerm sc $
-                    applyOpenTerm ffiToCry $ typedToOpenTerm llvmRet
-                  llvm_equal llvmRetCry sCryRet
-                Nothing ->
-                  llvm_return sCryRet
-        pure ([], post)
-      _ -> setupOutArg sc tenv ffiType
+      FFIBool               -> pure $ retValue (boolTypeInfo sc)
+      FFIBasic ffiBasicType -> retValue <$> basicTypeInfo sc ffiBasicType
+      _                     -> setupOutArg sc tenv ffiType
+    where
+    retValue FFITypeInfo {..} = ([], post)
+      where
+      post cryRet = do
+        sCryRet <- lio $ openToSetupTerm sc cryRet
+        case ffiConv of
+          Just FFIConv {..} -> do
+            llvmRet <- llvm_fresh_var "ret" ffiLLVMType
+            llvm_return (anySetupTerm llvmRet)
+            {- ffiToCry llvmRet == cryRet -}
+            llvmRetCry <- lio $ openToSetupTerm sc $
+              applyOpenTerm ffiToCry $ typedToOpenTerm llvmRet
+            llvm_equal llvmRetCry sCryRet
+          Nothing ->
+            llvm_return sCryRet
 
   setupOutArg :: SharedContext -> TypeEnv -> FFIType ->
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
@@ -181,7 +184,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     where
     go name ffiType =
       case ffiType of
-        FFIBool -> throw "Bit not supported"
+        FFIBool ->
+          singleOutArg $ boolTypeInfo sc
         FFIBasic ffiBasicType ->
           singleOutArg =<< basicTypeInfo sc ffiBasicType
         FFIArray lengths ffiBasicType -> do
@@ -221,6 +225,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                 Just FFIConv {..} -> do
                   out <- llvm_fresh_var name ffiLLVMType
                   llvm_points_to True ptr (anySetupTerm out)
+                  {- ffiToCry out == ret -}
                   outCry <- lio $ openToSetupTerm sc $
                     applyOpenTerm ffiToCry $ typedToOpenTerm out
                   llvm_equal outCry sret
@@ -265,7 +270,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                     applyGlobalOpenTerm "Prelude.at"
                       [lenTerm, ffiLLVMCoreType, arr, natOpenTerm i]
             , ffiToCry =
-                {- map basicToCry
+                {- map ffiToCry
                 => Prelude.map ffiLLVMCoreType ffiCryType ffiToCry len -}
                 applyGlobalOpenTerm "Prelude.map"
                   [ffiLLVMCoreType, ffiCryType, ffiToCry, lenTerm]
@@ -282,31 +287,14 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
           , ffiLLVMCoreType = bvTypeOpenTerm (llvmSize :: Natural)
           , ffiConv = do
               guard (n < llvmSize)
-              let zeroLenTerm = natOpenTerm (llvmSize - n)
               Just FFIConv
                 { ffiCryType = bvTypeOpenTerm n
-                , ffiPrecond = \x {- : Vec llvmSize Bool -} -> do
-                    {- take (llvmSize - n) x == zero
-                    => Prelude.bvEq (llvmSize - n)
-                                    (take Bool (llvmSize - n) n x)
-                                    (bvNat (llvmSize - n) 0) -}
-                    let precond =
-                          applyGlobalOpenTerm "Prelude.bvEq"
-                            [ zeroLenTerm
-                            , applyGlobalOpenTerm "Prelude.take"
-                                [ boolTypeOpenTerm
-                                , zeroLenTerm
-                                , natOpenTerm n
-                                , x]
-                            , applyGlobalOpenTerm "Prelude.bvNat"
-                                [zeroLenTerm, natOpenTerm 0]
-                            ]
-                    llvm_precond =<< lio (openToTypedTerm sc precond)
+                , ffiPrecond = precondBVZeroPrefix sc llvmSize (llvmSize - n)
                 , ffiToCry =
                     {- drop (llvmSize - n)
                     => Prelude.bvTrunc (llvmSize - n) n -}
                     applyGlobalOpenTerm "Prelude.bvTrunc"
-                      [zeroLenTerm, natOpenTerm n]
+                      [natOpenTerm (llvmSize - n), natOpenTerm n]
                 }
           }
         where
@@ -327,6 +315,45 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
               , .. }
   basicTypeInfo _ (FFIBasicRef _) =
     throw "GMP types (Integer, Z) not supported"
+
+boolTypeInfo :: SharedContext -> FFITypeInfo
+boolTypeInfo sc =
+  FFITypeInfo
+    { ffiLLVMType = llvm_int 8
+    , ffiLLVMCoreType = bvTypeOpenTerm (8 :: Natural)
+    , ffiConv =
+        Just FFIConv
+          { ffiCryType = boolTypeOpenTerm
+          , ffiPrecond = precondBVZeroPrefix sc 8 7
+          , ffiToCry =
+              {- (!= zero)
+              => bvNonzero 8 -}
+              applyGlobalOpenTerm "Prelude.bvNonzero" [natOpenTerm 8]
+          }
+    }
+
+precondBVZeroPrefix :: SharedContext ->
+  Natural {- totalLen -} -> Natural ->
+  OpenTerm {- Vec totalLen Bool -} -> LLVMCrucibleSetupM ()
+precondBVZeroPrefix sc totalLen zeroLen x = do
+  let zeroLenTerm = natOpenTerm zeroLen
+      {- take zeroLen x == zero
+      => Prelude.bvEq zeroLen
+                      (take Bool zeroLen (totalLen - zeroLen) x)
+                      (bvNat zeroLen 0) -}
+      precond =
+        applyGlobalOpenTerm "Prelude.bvEq"
+          [ zeroLenTerm
+          , applyGlobalOpenTerm "Prelude.take"
+              [ boolTypeOpenTerm
+              , zeroLenTerm
+              , natOpenTerm (totalLen - zeroLen)
+              , x
+              ]
+          , applyGlobalOpenTerm "Prelude.bvNat"
+              [zeroLenTerm, natOpenTerm 0]
+          ]
+  llvm_precond =<< lio (openToTypedTerm sc precond)
 
 openToTypedTerm :: SharedContext -> OpenTerm -> IO TypedTerm
 openToTypedTerm sc openTerm = mkTypedTerm sc =<< completeOpenTerm sc openTerm
