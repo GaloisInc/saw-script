@@ -10,12 +10,15 @@ module SAWScript.Crucible.LLVM.FFI
 import           Control.Monad
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
+import           Data.Foldable
+import           Data.Functor
 import           Data.List
 import qualified Data.Map                             as Map
 import           Data.Maybe
 import           Data.Text                            (Text)
 import qualified Data.Text                            as Text
 import           Foreign.C.Types                      (CSize)
+import           Numeric.Natural
 
 import qualified Text.LLVM.AST                        as LLVM
 
@@ -23,7 +26,7 @@ import           Cryptol.Eval.Type
 import           Cryptol.TypeCheck.FFI.FFIType
 import           Cryptol.TypeCheck.Solver.InfNat
 import           Cryptol.TypeCheck.Type
-import           Cryptol.Utils.Ident
+import           Cryptol.Utils.Ident                  as Cry
 import           Cryptol.Utils.PP                     (pretty)
 import           Cryptol.Utils.RecordMap
 
@@ -40,6 +43,18 @@ import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
+data FFITypeInfo = FFITypeInfo
+  { ffiLLVMType     :: LLVM.Type
+  , ffiLLVMCoreType :: OpenTerm
+  , ffiConv         :: Maybe FFIConv
+  }
+
+data FFIConv = FFIConv
+  { ffiCryType :: OpenTerm
+  , ffiPrecond :: OpenTerm {- : ffiLLVMType -} -> LLVMCrucibleSetupM ()
+  , ffiToCry   :: OpenTerm -- : ffiLLVMType -> ffiCryType
+  }
+
 -- | Generate a @LLVMSetup@ spec that can be used to verify the given term
 -- containing a Cryptol foreign function fully applied to any type arguments.
 llvm_ffi_setup :: TypedTerm -> LLVMCrucibleSetupM ()
@@ -54,7 +69,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         tenv <- buildTypeEnv ffiTParams tyArgTerms
         sizeArgs <- lio $ traverse (mkSizeArg sc) tyArgTerms
         (argTerms, inArgss) <- unzip <$> zipWithM
-          (\i -> setupInArg tenv ("in" <> Text.pack (show i)))
+          (\i -> setupInArg sc tenv ("in" <> Text.pack (show i)))
           [0 :: Integer ..]
           ffiArgTypes
         let inArgs = concat inArgss
@@ -91,7 +106,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
 
   mkSizeArg :: SharedContext -> Term -> IO (AllLLVM SetupValue)
   mkSizeArg sc tyArgTerm = do
-    anySetupOpenTerm sc $
+    openToSetupTerm sc $
       applyGlobalOpenTerm "Cryptol.ecNumber"
         [ closedOpenTerm tyArgTerm
         , vectorTypeOpenTerm sizeBitSize boolTypeOpenTerm
@@ -102,63 +117,78 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     sizeBitSize = natOpenTerm $
       fromIntegral $ finiteBitSize (undefined :: CSize)
 
-  setupInArg :: TypeEnv -> Text -> FFIType ->
+  setupInArg :: SharedContext -> TypeEnv -> Text -> FFIType ->
     LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
-  setupInArg tenv = go
+  setupInArg sc tenv = go
     where
     go name ffiType =
       case ffiType of
         FFIBool -> throw "Bit not supported"
         FFIBasic ffiBasicType -> do
-          llvmType <- convertBasicType ffiBasicType
-          x <- llvm_fresh_var name llvmType
-          pure (closedOpenTerm (ttTerm x), [anySetupTerm x])
+          ti <- basicTypeInfo sc ffiBasicType
+          (x, cryTerm) <- singleInArg ti
+          pure (cryTerm, [anySetupTerm x])
         FFIArray lengths ffiBasicType -> do
           len <- getArrayLen tenv lengths
-          llvmType <- convertBasicType ffiBasicType
-          let arrType = llvm_array len llvmType
-          arr <- llvm_fresh_var name arrType
-          ptr <- llvm_alloc_readonly arrType
+          FFITypeInfo {..} <- arrayTypeInfo sc len ffiBasicType
+          (arr, cryTerm) <- singleInArg FFITypeInfo {..}
+          ptr <- llvm_alloc_readonly ffiLLVMType
           llvm_points_to True ptr (anySetupTerm arr)
-          pure (closedOpenTerm (ttTerm arr), [ptr])
+          pure (cryTerm, [ptr])
         FFITuple ffiTypes ->
-          tupleInArgs <$> zipWithM
-            (\i -> go (name <> "." <> Text.pack (show i)))
-            [0 :: Integer ..]
-            ffiTypes
+          tupleInArgs <$> setupTupleArgs go name ffiTypes
         FFIRecord ffiTypeMap ->
-          tupleInArgs <$> traverse
-            (\(field, ty) -> go (name <> "." <> identText field) ty)
-            (displayFields ffiTypeMap)
-    tupleInArgs (unzip -> (terms, inArgss)) =
-      (tupleOpenTerm' terms, concat inArgss)
+          tupleInArgs <$> setupRecordArgs go name ffiTypeMap
+      where
+      singleInArg FFITypeInfo {..} = do
+        x <- llvm_fresh_var name ffiLLVMType
+        let ox = typedToOpenTerm x
+        cryTerm <-
+          case ffiConv of
+            Just FFIConv {..} -> do
+              ffiPrecond ox
+              pure $ applyOpenTerm ffiToCry ox
+            Nothing -> pure ox
+        pure (x, cryTerm)
+      tupleInArgs (unzip -> (terms, inArgss)) =
+        (tupleOpenTerm' terms, concat inArgss)
 
   setupRet :: SharedContext -> TypeEnv -> FFIType ->
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   setupRet sc tenv ffiType =
     case ffiType of
       FFIBool -> throw "Bit not supported"
-      FFIBasic _ -> do
-        let post ret = llvm_return =<< lio (anySetupOpenTerm sc ret)
+      FFIBasic ffiBasicType -> do
+        FFITypeInfo {..} <- basicTypeInfo sc ffiBasicType
+        let post cryRet = do
+              sCryRet <- lio $ openToSetupTerm sc cryRet
+              case ffiConv of
+                Just FFIConv {..} -> do
+                  llvmRet <- llvm_fresh_var "ret" ffiLLVMType
+                  llvm_return (anySetupTerm llvmRet)
+                  {- basicToCry llvmRet == cryRet -}
+                  llvmRetCry <- lio $ openToSetupTerm sc $
+                    applyOpenTerm ffiToCry $ typedToOpenTerm llvmRet
+                  llvm_equal llvmRetCry sCryRet
+                Nothing ->
+                  llvm_return sCryRet
         pure ([], post)
       _ -> setupOutArg sc tenv ffiType
 
   setupOutArg :: SharedContext -> TypeEnv -> FFIType ->
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
-  setupOutArg sc tenv = go
+  setupOutArg sc tenv = go "out"
     where
-    go ffiType =
+    go name ffiType =
       case ffiType of
         FFIBool -> throw "Bit not supported"
-        FFIBasic ffiBasicType -> do
-          llvmType <- convertBasicType ffiBasicType
-          simpleOutArg llvmType
+        FFIBasic ffiBasicType ->
+          singleOutArg =<< basicTypeInfo sc ffiBasicType
         FFIArray lengths ffiBasicType -> do
           len <- getArrayLen tenv lengths
-          llvmType <- convertBasicType ffiBasicType
-          simpleOutArg (llvm_array len llvmType)
+          singleOutArg =<< arrayTypeInfo sc len ffiBasicType
         FFITuple ffiTypes -> do
-          (outArgss, posts) <- mapAndUnzipM go ffiTypes
+          (outArgss, posts) <- unzip <$> setupTupleArgs go name ffiTypes
           let len = fromIntegral $ length ffiTypes
               post ret = zipWithM_
                 (\i p -> p (projTupleOpenTerm' i len ret))
@@ -168,7 +198,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         FFIRecord ffiTypeMap -> do
           -- The FFI passes record elements by display order, while SAW
           -- represents records by tuples in canonical order
-          (outArgss, posts) <- mapAndUnzipM go (displayElements ffiTypeMap)
+          (outArgss, posts) <- unzip <$> setupRecordArgs go name ffiTypeMap
           let canonFields = map fst $ canonicalFields ffiTypeMap
               len = fromIntegral $ length canonFields
               post ret = zipWithM_
@@ -182,10 +212,33 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                 (displayOrder ffiTypeMap)
                 posts
           pure (concat outArgss, post)
-    simpleOutArg llvmType = do
-      ptr <- llvm_alloc llvmType
-      let post ret = llvm_points_to True ptr =<< lio (anySetupOpenTerm sc ret)
-      pure ([ptr], post)
+      where
+      singleOutArg FFITypeInfo {..} = do
+        ptr <- llvm_alloc ffiLLVMType
+        let post ret = do
+              sret <- lio $ openToSetupTerm sc ret
+              case ffiConv of
+                Just FFIConv {..} -> do
+                  out <- llvm_fresh_var name ffiLLVMType
+                  llvm_points_to True ptr (anySetupTerm out)
+                  outCry <- lio $ openToSetupTerm sc $
+                    applyOpenTerm ffiToCry $ typedToOpenTerm out
+                  llvm_equal outCry sret
+                Nothing -> do
+                  llvm_points_to True ptr sret
+        pure ([ptr], post)
+
+  setupTupleArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
+    Text -> [FFIType] -> LLVMCrucibleSetupM [a]
+  setupTupleArgs setup name =
+    zipWithM (\i -> setup (name <> "." <> Text.pack (show i))) [0 :: Integer ..]
+
+  setupRecordArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
+    Text -> RecordMap Cry.Ident FFIType -> LLVMCrucibleSetupM [a]
+  setupRecordArgs setup name ffiTypeMap =
+    traverse
+      (\(field, ty) -> setup (name <> "." <> identText field) ty)
+      (displayFields ffiTypeMap)
 
   getArrayLen :: TypeEnv -> [Type] -> LLVMCrucibleSetupM Int
   getArrayLen tenv lengths =
@@ -193,31 +246,96 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
       [len] -> pure $ fromInteger $ finNat' $ evalNumType tenv len
       _     -> throw "Multidimensional arrays not supported"
 
-  convertBasicType :: FFIBasicType -> LLVMCrucibleSetupM LLVM.Type
-  convertBasicType (FFIBasicVal ffiBasicValType) =
+  arrayTypeInfo :: SharedContext -> Int -> FFIBasicType ->
+    LLVMCrucibleSetupM FFITypeInfo
+  arrayTypeInfo sc len ffiBasicType = do
+    let lenTerm = natOpenTerm $ fromIntegral len
+    FFITypeInfo {..} <- basicTypeInfo sc ffiBasicType
+    pure FFITypeInfo
+      { ffiLLVMType = llvm_array len ffiLLVMType
+      , ffiLLVMCoreType = vectorTypeOpenTerm lenTerm ffiLLVMCoreType
+      , ffiConv = ffiConv <&> \FFIConv {..} ->
+          FFIConv
+            { ffiCryType = vectorTypeOpenTerm lenTerm ffiCryType
+            , ffiPrecond = \arr {- : Vec len ffiLLVMCoreType -} -> do
+                for_ [0 .. fromIntegral len - 1] \i -> do
+                  {- arr @ i
+                  => Prelude.at len ffiLLVMCoreType arr i -}
+                  ffiPrecond $
+                    applyGlobalOpenTerm "Prelude.at"
+                      [lenTerm, ffiLLVMCoreType, arr, natOpenTerm i]
+            , ffiToCry =
+                {- map basicToCry
+                => Prelude.map ffiLLVMCoreType ffiCryType ffiToCry len -}
+                applyGlobalOpenTerm "Prelude.map"
+                  [ffiLLVMCoreType, ffiCryType, ffiToCry, lenTerm]
+            }
+      }
+
+  basicTypeInfo :: SharedContext -> FFIBasicType ->
+    LLVMCrucibleSetupM FFITypeInfo
+  basicTypeInfo sc (FFIBasicVal ffiBasicValType) = pure
     case ffiBasicValType of
-      FFIWord n ffiWordSize
-        | n == size -> pure $ llvm_int size
-        | otherwise -> throw
-          "Only exact machine-sized bitvectors (8, 16, 32, 64 bits) supported"
+      FFIWord (fromInteger -> n) ffiWordSize ->
+        FFITypeInfo
+          { ffiLLVMType = llvm_int llvmSize
+          , ffiLLVMCoreType = bvTypeOpenTerm (llvmSize :: Natural)
+          , ffiConv = do
+              guard (n < llvmSize)
+              let zeroLenTerm = natOpenTerm (llvmSize - n)
+              Just FFIConv
+                { ffiCryType = bvTypeOpenTerm n
+                , ffiPrecond = \x {- : Vec llvmSize Bool -} -> do
+                    {- take (llvmSize - n) x == zero
+                    => Prelude.bvEq (llvmSize - n)
+                                    (take Bool (llvmSize - n) n x)
+                                    (bvNat (llvmSize - n) 0) -}
+                    let precond =
+                          applyGlobalOpenTerm "Prelude.bvEq"
+                            [ zeroLenTerm
+                            , applyGlobalOpenTerm "Prelude.take"
+                                [ boolTypeOpenTerm
+                                , zeroLenTerm
+                                , natOpenTerm n
+                                , x]
+                            , applyGlobalOpenTerm "Prelude.bvNat"
+                                [zeroLenTerm, natOpenTerm 0]
+                            ]
+                    llvm_precond =<< lio (openToTypedTerm sc precond)
+                , ffiToCry =
+                    {- drop (llvmSize - n)
+                    => Prelude.bvTrunc (llvmSize - n) n -}
+                    applyGlobalOpenTerm "Prelude.bvTrunc"
+                      [zeroLenTerm, natOpenTerm n]
+                }
+          }
         where
-        size :: Integral a => a
-        size =
+        llvmSize :: Integral a => a
+        llvmSize =
           case ffiWordSize of
             FFIWord8  -> 8
             FFIWord16 -> 16
             FFIWord32 -> 32
             FFIWord64 -> 64
-      FFIFloat _ _ ffiFloatSize -> pure
-        case ffiFloatSize of
-          FFIFloat32 -> llvm_float
-          FFIFloat64 -> llvm_double
-  convertBasicType (FFIBasicRef _) =
+      FFIFloat _ _ ffiFloatSize ->
+        let (ffiLLVMType, ffiLLVMCoreType) =
+              case ffiFloatSize of
+                FFIFloat32 -> (llvm_float, globalOpenTerm "Prelude.Float")
+                FFIFloat64 -> (llvm_double, globalOpenTerm "Prelude.Double")
+        in  FFITypeInfo
+              { ffiConv = Nothing
+              , .. }
+  basicTypeInfo _ (FFIBasicRef _) =
     throw "GMP types (Integer, Z) not supported"
 
-anySetupOpenTerm :: SharedContext -> OpenTerm -> IO (AllLLVM SetupValue)
-anySetupOpenTerm sc openTerm =
-  anySetupTerm <$> (mkTypedTerm sc =<< completeOpenTerm sc openTerm)
+openToTypedTerm :: SharedContext -> OpenTerm -> IO TypedTerm
+openToTypedTerm sc openTerm = mkTypedTerm sc =<< completeOpenTerm sc openTerm
+
+openToSetupTerm :: SharedContext -> OpenTerm -> IO (AllLLVM SetupValue)
+openToSetupTerm sc openTerm = anySetupTerm <$> openToTypedTerm sc openTerm
+
+typedToOpenTerm :: TypedTerm -> OpenTerm
+typedToOpenTerm = closedOpenTerm . ttTerm
 
 lll :: TopLevel a -> LLVMCrucibleSetupM a
 lll x = LLVMCrucibleSetupM $ lift $ lift x
