@@ -53,6 +53,7 @@ data FFIConv = FFIConv
   { ffiCryType :: OpenTerm
   , ffiPrecond :: OpenTerm {- : ffiLLVMType -} -> LLVMCrucibleSetupM ()
   , ffiToCry   :: OpenTerm -- : ffiLLVMType -> ffiCryType
+  , ffiCryEq   :: OpenTerm -- : ffiCryType -> ffiCryType -> Bool
   }
 
 -- | Generate a @LLVMSetup@ spec that can be used to verify the given term
@@ -165,18 +166,20 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     where
     retValue FFITypeInfo {..} = ([], post)
       where
-      post cryRet = do
-        sCryRet <- lio $ openToSetupTerm sc cryRet
+      post cryRet =
         case ffiConv of
           Just FFIConv {..} -> do
             llvmRet <- llvm_fresh_var "ret" ffiLLVMType
             llvm_return (anySetupTerm llvmRet)
-            {- ffiToCry llvmRet == cryRet -}
-            llvmRetCry <- lio $ openToSetupTerm sc $
-              applyOpenTerm ffiToCry $ typedToOpenTerm llvmRet
-            llvm_equal llvmRetCry sCryRet
+            -- ffiToCry llvmRet == cryRet
+            eqTerm <- lio $ openToTypedTerm sc $
+              applyOpenTermMulti ffiCryEq
+                [ applyOpenTerm ffiToCry (typedToOpenTerm llvmRet)
+                , cryRet
+                ]
+            llvm_postcond eqTerm
           Nothing ->
-            llvm_return sCryRet
+            llvm_return =<< lio (openToSetupTerm sc cryRet)
 
   setupOutArg :: SharedContext -> TypeEnv -> FFIType ->
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
@@ -220,17 +223,19 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
       singleOutArg FFITypeInfo {..} = do
         ptr <- llvm_alloc ffiLLVMType
         let post ret = do
-              sret <- lio $ openToSetupTerm sc ret
               case ffiConv of
                 Just FFIConv {..} -> do
                   out <- llvm_fresh_var name ffiLLVMType
                   llvm_points_to True ptr (anySetupTerm out)
-                  {- ffiToCry out == ret -}
-                  outCry <- lio $ openToSetupTerm sc $
-                    applyOpenTerm ffiToCry $ typedToOpenTerm out
-                  llvm_equal outCry sret
+                  -- ffiToCry out == ret
+                  eqTerm <- lio $ openToTypedTerm sc $
+                    applyOpenTermMulti ffiCryEq
+                      [ applyOpenTerm ffiToCry (typedToOpenTerm out)
+                      , ret
+                      ]
+                  llvm_postcond eqTerm
                 Nothing -> do
-                  llvm_points_to True ptr sret
+                  llvm_points_to True ptr =<< lio (openToSetupTerm sc ret)
         pure ([ptr], post)
 
   setupTupleArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
@@ -274,6 +279,10 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                 => Prelude.map ffiLLVMCoreType ffiCryType ffiToCry len -}
                 applyGlobalOpenTerm "Prelude.map"
                   [ffiLLVMCoreType, ffiCryType, ffiToCry, lenTerm]
+            , ffiCryEq =
+                -- Prelude.vecEq len ffiCryType ffiCryEq
+                applyGlobalOpenTerm "Prelude.vecEq"
+                  [lenTerm, ffiCryType, ffiCryEq]
             }
       }
 
@@ -295,6 +304,9 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                     => Prelude.bvTrunc (llvmSize - n) n -}
                     applyGlobalOpenTerm "Prelude.bvTrunc"
                       [natOpenTerm (llvmSize - n), natOpenTerm n]
+                , ffiCryEq =
+                    -- Prelude.bvEq n
+                    applyGlobalOpenTerm "Prelude.bvEq" [natOpenTerm n]
                 }
           }
         where
@@ -329,6 +341,9 @@ boolTypeInfo sc =
               {- (!= zero)
               => bvNonzero 8 -}
               applyGlobalOpenTerm "Prelude.bvNonzero" [natOpenTerm 8]
+          , ffiCryEq =
+              -- Prelude.boolEq
+              globalOpenTerm "Prelude.boolEq"
           }
     }
 
@@ -337,11 +352,11 @@ precondBVZeroPrefix :: SharedContext ->
   OpenTerm {- Vec totalLen Bool -} -> LLVMCrucibleSetupM ()
 precondBVZeroPrefix sc totalLen zeroLen x = do
   let zeroLenTerm = natOpenTerm zeroLen
-      {- take zeroLen x == zero
-      => Prelude.bvEq zeroLen
-                      (take Bool zeroLen (totalLen - zeroLen) x)
-                      (bvNat zeroLen 0) -}
       precond =
+        {- take zeroLen x == zero
+        => Prelude.bvEq zeroLen
+                        (take Bool zeroLen (totalLen - zeroLen) x)
+                        (bvNat zeroLen 0) -}
         applyGlobalOpenTerm "Prelude.bvEq"
           [ zeroLenTerm
           , applyGlobalOpenTerm "Prelude.take"
