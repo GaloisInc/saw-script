@@ -2147,202 +2147,6 @@ BV_complete_induction w p f x0 =
 
 
 --------------------------------------------------------------------------------
--- Iso-recursive types
-
-data IRTDesc (As:ListSort) : sort 0 where {
-  IRT_varD   : Nat -> IRTDesc As; -- an IRTDesc var
-  IRT_mu     : IRTDesc As -> IRTDesc As; -- binds a varD
-  IRT_Either : IRTDesc As -> IRTDesc As -> IRTDesc As;
-  IRT_prod   : IRTDesc As -> IRTDesc As -> IRTDesc As;
-  IRT_sigT   : (i:Nat) -> (listSortGet As i -> IRTDesc As) -> IRTDesc As;
-  IRT_BVVec  : (n:Nat) -> Vec n Bool -> (D:IRTDesc As) -> IRTDesc As;
-  IRT_unit   : IRTDesc As;
-  IRT_empty  : IRTDesc As;
-  IRT_varT   : (i:Nat) -> IRTDesc As; -- a sort var, i.e. an index into `As`
-}
-
-IRTDesc__rec : (As:ListSort) -> (P : IRTDesc As -> sort 1) ->
-               ((i:Nat) -> P (IRT_varD As i)) ->
-               ((D:IRTDesc As) -> P D -> P (IRT_mu As D)) ->
-               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
-                  P (IRT_Either As Dl Dr)) ->
-               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
-                  P (IRT_prod As Dl Dr)) ->
-               ((i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-                  ((a:listSortGet As i) -> P (Df a)) -> P (IRT_sigT As i Df)) ->
-               ((n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) -> P D ->
-                  P (IRT_BVVec As n len D)) ->
-               P (IRT_unit As) -> P (IRT_empty As) ->
-               ((i:Nat) -> P (IRT_varT As i)) ->
-               (D:IRTDesc As) -> P D;
-IRTDesc__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D = IRTDesc#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D;
-
--- A list of substitutions for a context of iso-recursive type descriptions
-data IRTSubsts (As:ListSort) : sort 0 where {
-  IRTs_Nil : IRTSubsts As;
-  IRTs_Cons : IRTDesc As -> IRTSubsts As -> IRTSubsts As;
-}
-
-IRTSubsts__rec : (As:ListSort) -> (P : IRTSubsts As -> sort 1) -> P (IRTs_Nil As) ->
-                 ((D:IRTDesc As) -> (Ds:IRTSubsts As) -> P Ds -> P (IRTs_Cons As D Ds)) ->
-                 (Ds:IRTSubsts As) -> P Ds;
-IRTSubsts__rec As P f1 f2 Ds = IRTSubsts#rec As P f1 f2 Ds;
-
--- The IRTDesc at the given index in an IRTSubsts or IRT_empty if the
--- index is out of bounds
-atIRTs : (As:ListSort) -> IRTSubsts As -> Nat -> IRTDesc As;
-atIRTs As = IRTSubsts__rec As (\ (_:IRTSubsts As) -> Nat -> IRTDesc As)
-  (\ (_:Nat) -> IRT_empty As)
-  (\ (D:IRTDesc As) (_:IRTSubsts As) (rec : Nat -> IRTDesc As) ->
-     Nat_cases (IRTDesc As) D (\ (n:Nat) (_:IRTDesc As) -> rec n));
-
--- A IRTSubsts with the first n (or all, if n > length) entries removed
-dropIRTs : (As:ListSort) -> IRTSubsts As -> Nat -> IRTSubsts As;
-dropIRTs As = IRTSubsts__rec As (\ (_:IRTSubsts As) -> Nat -> IRTSubsts As)
-  (\ (_:Nat) -> IRTs_Nil As)
-  (\ (_:IRTDesc As) (Ds:IRTSubsts As) (rec : Nat -> IRTSubsts As) ->
-     Nat_cases (IRTSubsts As) Ds (\ (n:Nat) (_ : IRTSubsts As) -> rec n));
-
--- The type corresponding to an iso-recursive type description
-data IRT (As:ListSort) : IRTSubsts As -> IRTDesc As -> sort 0 where {
-  IRT_elemD    : (Ds:IRTSubsts As) -> (i:Nat) ->
-                 IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) ->
-                 IRT As Ds (IRT_varD As i);
-  IRT_fold     : (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-                 IRT As (IRTs_Cons As (IRT_mu As D) Ds) D -> IRT As Ds (IRT_mu As D);
-  IRT_Left     : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dl -> IRT As Ds (IRT_Either As Dl Dr);
-  IRT_Right    : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dr -> IRT As Ds (IRT_Either As Dl Dr);
-  IRT_pair     : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dl -> IRT As Ds Dr -> IRT As Ds (IRT_prod As Dl Dr);
-  IRT_existT   : (Ds:IRTSubsts As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-                 (a:listSortGet As i) -> IRT As Ds (Df a) -> IRT As Ds (IRT_sigT As i Df);
-  IRT_genBVVec : (Ds:IRTSubsts As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
-                 ((i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) -> IRT As Ds (IRT_BVVec As n len D);
-  IRT_tt       : (Ds:IRTSubsts As) -> IRT As Ds (IRT_unit As);
-  IRT_elemT    : (Ds:IRTSubsts As) -> (i:Nat) ->
-                 listSortGet As i -> IRT As Ds (IRT_varT As i);
-}
-
-IRT__rec : (As:ListSort) -> (P : (Ds:IRTSubsts As) -> (D:IRTDesc As) -> IRT As Ds D -> sort 1) ->
-           ((Ds:IRTSubsts As) -> (i:Nat) ->
-              (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
-              P (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) x ->
-              P Ds (IRT_varD As i) (IRT_elemD As Ds i x)) ->
-           ((Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-              (x:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
-              P (IRTs_Cons As (IRT_mu As D) Ds) D x ->
-              P Ds (IRT_mu As D) (IRT_fold As Ds D x)) ->
-           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xl:IRT As Ds Dl) ->
-              P Ds Dl xl -> P Ds (IRT_Either As Dl Dr) (IRT_Left As Ds Dl Dr xl)) ->
-           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xr:IRT As Ds Dr) ->
-              P Ds Dr xr -> P Ds (IRT_Either As Dl Dr) (IRT_Right As Ds Dl Dr xr)) ->
-           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-              (xl:IRT As Ds Dl) -> P Ds Dl xl ->
-              (xr:IRT As Ds Dr) -> P Ds Dr xr ->
-              P Ds (IRT_prod As Dl Dr) (IRT_pair As Ds Dl Dr xl xr)) ->
-           ((Ds:IRTSubsts As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-              (a:listSortGet As i) -> (xf:IRT As Ds (Df a)) -> P Ds (Df a) xf ->
-              P Ds (IRT_sigT As i Df) (IRT_existT As Ds i Df a xf)) ->
-           ((Ds:IRTSubsts As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
-              (xg : (i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) ->
-              ((i:Vec n Bool) -> (pf:is_bvult n i len) -> P Ds D (xg i pf)) ->
-              P Ds (IRT_BVVec As n len D) (IRT_genBVVec As Ds n len D xg)) ->
-           ((Ds:IRTSubsts As) -> P Ds (IRT_unit As) (IRT_tt As Ds)) ->
-           ((Ds:IRTSubsts As) -> (i:Nat) -> (a:listSortGet As i) ->
-              P Ds (IRT_varT As i) (IRT_elemT As Ds i a)) ->
-           (Ds:IRTSubsts As) -> (D:IRTDesc As) -> (x:IRT As Ds D) -> P Ds D x;
-IRT__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 Ds D x = IRT#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 Ds D x;
-
--- The type of a once-unfolded iso-recursive type
-UnfoldedIRT : (As:ListSort) -> IRTSubsts As -> IRTDesc As -> sort 0;
-UnfoldedIRT As Ds D = IRTDesc__rec As (\ (_:IRTDesc As) -> IRTSubsts As -> sort 0)
-  (\ (i:Nat) (Ds:IRTSubsts As) ->
-      IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
-  (\ (D:IRTDesc As) (rec : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      rec (IRTs_Cons As (IRT_mu As D) Ds))
-  (\ (_:IRTDesc As) (recl : IRTSubsts As -> sort 0)
-     (_:IRTDesc As) (recr : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      Either (recl Ds) (recr Ds))
-  (\ (_:IRTDesc As) (recl : IRTSubsts As -> sort 0)
-     (_:IRTDesc As) (recr : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      recl Ds * recr Ds)
-  (\ (i:Nat) (_ : listSortGet As i -> IRTDesc As)
-     (recf : listSortGet As i -> IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      Sigma (listSortGet As i) (\ (a:listSortGet As i) -> recf a Ds))
-  (\ (n:Nat) (len:Vec n Bool) (_:IRTDesc As)
-     (rec : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      BVVec n len (rec Ds))
-  (\ (_:IRTSubsts As) -> #())
-  (\ (_:IRTSubsts As) -> Eq Bool True False)
-  (\ (i:Nat) (_:IRTSubsts As) -> listSortGet As i) D Ds;
-
--- `fold` and `unfold` for IRTs
-
-unfoldIRT : (As:ListSort) -> (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-            IRT As Ds D -> UnfoldedIRT As Ds D;
-unfoldIRT As = IRT__rec As (\ (Ds:IRTSubsts As) (D:IRTDesc As) (_:IRT As Ds D) -> UnfoldedIRT As Ds D)
-  (\ (Ds:IRTSubsts As) (i:Nat) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
-     (_:UnfoldedIRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) -> x)
-  (\ (Ds:IRTSubsts As) (D:IRTDesc As) (_:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D)
-     (rec: UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) -> rec)
-  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
-     (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl) ->
-      Left (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recl)
-  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
-     (_:IRT As Ds Dr) (recr:UnfoldedIRT As Ds Dr) ->
-      Right (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recr)
-  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
-     (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl)
-     (_:IRT As Ds Dr) (recr:UnfoldedIRT As Ds Dr) ->
-      (recl, recr))
-  (\ (Ds:IRTSubsts As) (i:Nat) (Df : listSortGet As i -> IRTDesc As) (a:listSortGet As i)
-     (_:IRT As Ds (Df a)) (recf:UnfoldedIRT As Ds (Df a)) ->
-      exists (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a)) a recf)
-  (\ (Ds:IRTSubsts As) (n:Nat) (len:Vec n Bool) (D:IRTDesc As)
-     (_ : (i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D)
-     (recg : (i:Vec n Bool) -> is_bvult n i len -> UnfoldedIRT As Ds D) ->
-      genBVVec n len (UnfoldedIRT As Ds D) recg)
-  (\ (Ds:IRTSubsts As) -> ())
-  (\ (Ds:IRTSubsts As) (i:Nat) (a:listSortGet As i) -> a);
-
-foldIRT : (As:ListSort) -> (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-          UnfoldedIRT As Ds D -> IRT As Ds D;
-foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-  (\ (i:Nat) (Ds:IRTSubsts As) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
-      IRT_elemD As Ds i x)
-  (\ (D:IRTDesc As) (rec : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-     (Ds:IRTSubsts As) (x:UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
-      IRT_fold As Ds D (rec (IRTs_Cons As (IRT_mu As D) Ds) x))
-  (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
-     (Dr:IRTDesc As) (recr : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
-     (Ds:IRTSubsts As) (x:Either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr)) ->
-      either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) (IRT As Ds (IRT_Either As Dl Dr))
-             (\ (xl:UnfoldedIRT As Ds Dl) -> IRT_Left  As Ds Dl Dr (recl Ds xl))
-             (\ (xr:UnfoldedIRT As Ds Dr) -> IRT_Right As Ds Dl Dr (recr Ds xr)) x)
-  (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
-     (Dr:IRTDesc As) (recr : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
-     (Ds:IRTSubsts As) (x:UnfoldedIRT As Ds Dl * UnfoldedIRT As Ds Dr) ->
-      uncurry (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) (IRT As Ds (IRT_prod As Dl Dr))
-              (\ (xl:UnfoldedIRT As Ds Dl) (xr:UnfoldedIRT As Ds Dr) ->
-                  IRT_pair As Ds Dl Dr (recl Ds xl) (recr Ds xr)) x)
-  (\ (i:Nat) (Df : listSortGet As i -> IRTDesc As)
-     (recf : (a:listSortGet As i) -> (Ds:IRTSubsts As) -> UnfoldedIRT As Ds (Df a) -> IRT As Ds (Df a))
-     (Ds:IRTSubsts As) (x:Sigma (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a))) ->
-      uncurrySigma (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a)) (IRT As Ds (IRT_sigT As i Df))
-                   (\ (a:listSortGet As i) (xf:UnfoldedIRT As Ds (Df a)) ->
-                       IRT_existT As Ds i Df a (recf a Ds xf)) x)
-  (\ (n:Nat) (len:Vec n Bool) (D:IRTDesc As) (recg : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-     (Ds:IRTSubsts As) (x : BVVec n len (UnfoldedIRT As Ds D)) ->
-      IRT_genBVVec As Ds n len D (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
-                                     recg Ds (atBVVec n len (UnfoldedIRT As Ds D) x i pf)))
-  (\ (Ds:IRTSubsts As) (x:#()) -> IRT_tt As Ds)
-  (\ (Ds:IRTSubsts As) (x:Eq Bool True False) -> efq (IRT As Ds (IRT_empty As)) x)
-  (\ (i:Nat) (Ds:IRTSubsts As) (x:listSortGet As i) -> IRT_elemT As Ds i x) D Ds;
-
-
---------------------------------------------------------------------------------
 -- Lists at sort 1
 
 -- The type List1 itself
@@ -2386,6 +2190,204 @@ nth_default1 a d l =
     (\ (x:a) (_:List1 a) (rec:Nat -> a) (n:Nat) ->
        Nat_cases a x (\ (m:Nat) (_:a) -> rec m) n)
     l;
+
+
+--------------------------------------------------------------------------------
+-- Type descriptions
+
+-- Arithmetic kinds --
+
+-- The kinds for objects that can be used in type-level arithmetic expressions
+data ArithKind : sort 0 where {
+  Kind_nat : ArithKind;
+  Kind_bv : (w:Nat) -> ArithKind;
+}
+
+-- The type of an element of an ArithKind
+arithKindElem : ArithKind -> sort 0;
+arithKindElem AK =
+  ArithKind#rec (\ (_:ArithKind) -> sort 0) Nat (\ (w:Nat) -> Vec w Bool) AK;
+
+-- The unary operations for type-level arithmetic expressions
+data ArithUnOp : ArithKind -> ArithKind -> sort 0 where {
+  UnOp_BVToNat : (w:Nat) -> ArithUnOp (Kind_bv w) Kind_nat;
+  UnOp_NatToBV : (w:Nat) -> ArithUnOp Kind_nat (Kind_bv w);
+}
+
+-- Evaluate a unary operation to a function on elements of its ArithKinds
+evalUnOp : (AK1 AK2:ArithKind) -> ArithUnOp AK1 AK2 -> arithKindElem AK1 ->
+           arithKindElem AK2;
+evalUnOp AK1 AK2 op =
+  ArithUnOp#rec (\ (AK1 AK2:ArithKind) (_:ArithUnOp AK1 AK2) ->
+                   arithKindElem AK1 -> arithKindElem AK2)
+    (\ (w:Nat) -> bvToNat w)
+    (\ (w:Nat) -> bvNat w)
+    AK1 AK2 op;
+
+-- The binary operations for type-level arithmetic expressions
+data ArithBinOp : ArithKind -> ArithKind -> ArithKind -> sort 0 where {
+  BinOp_AddNat : ArithBinOp Kind_nat Kind_nat Kind_nat;
+  BinOp_MulNat : ArithBinOp Kind_nat Kind_nat Kind_nat;
+  BinOp_AddBV : (w:Nat) -> ArithBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
+  BinOp_MulBV : (w:Nat) -> ArithBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
+}
+
+-- Evaluate a binary operation to a function on elements of its ArithKinds
+evalBinOp : (AK1 AK2 AK3:ArithKind) -> ArithBinOp AK1 AK2 AK3 ->
+            arithKindElem AK1 -> arithKindElem AK2 -> arithKindElem AK3;
+evalBinOp AK1 AK2 AK3 op =
+  ArithBinOp#rec (\ (AK1 AK2 AK3:ArithKind) (_:ArithBinOp AK1 AK2 AK3) ->
+                    arithKindElem AK1 -> arithKindElem AK2 -> arithKindElem AK3)
+    addNat mulNat bvAdd bvMul
+    AK1 AK2 AK3 op;
+
+
+-- Kind and type descriptions --
+
+-- The kinds used for type descriptions, which can either be arithmetic or the
+-- kind of type descriptions themselves
+data KindDesc : sort 0 where {
+  Kind_Arith : ArithKind -> KindDesc;
+  Kind_Tp : KindDesc;
+}
+
+-- Type-level arithmetic expressions
+data ArithExpr : ArithKind -> sort 0 where {
+  Arith_Const : (AK:ArithKind) -> arithKindElem AK -> ArithExpr AK;
+  Arith_Var : (AK:ArithKind) -> Nat -> ArithExpr AK;
+  Arith_UnOp : (AK1 AK2:ArithKind) -> ArithUnOp AK1 AK2 ->
+               ArithExpr AK1 -> ArithExpr AK2;
+  Arith_BinOp : (AK1 AK2 AK3:ArithKind) -> ArithBinOp AK1 AK2 AK3 ->
+                ArithExpr AK1 -> ArithExpr AK2 -> ArithExpr AK3;
+}
+
+-- Type descriptions, which form an inductive description of types. These types
+-- are higher-order in the sense that they include encodings for function
+-- index types that can be used in SpecM computations to perform corecursive
+-- function calls.
+data TpDesc : sort 0 where {
+  -- The type of a function index for a nullary monadic function, i.e., a
+  -- function index with type SpecM R for type description R
+  Tp_M : TpDesc -> TpDesc;
+
+  -- The type of a function index for a dependent monadic function that takes
+  -- in an element of the left-hand kind and substitutes that into the
+  -- right-hand type description
+  Tp_Pi : KindDesc -> TpDesc -> TpDesc;
+
+  -- the type of a function index for a function from the left-hand type
+  -- description to the right-hand one
+  Tp_Arr : TpDesc -> TpDesc -> TpDesc;
+
+  -- An element of a kind at the object level
+  Tp_Kind : KindDesc -> TpDesc;
+
+  -- Pair and sum types
+  Tp_Pair : TpDesc -> TpDesc -> TpDesc;
+  Tp_Sum : TpDesc -> TpDesc -> TpDesc;
+
+  -- Dependent pair types Tp_Sigma K B, whose first element is an element e of
+  -- kind K and whose second element is of substitution instance [e/x]B
+  Tp_Sigma : KindDesc -> TpDesc -> TpDesc;
+
+  -- Vector types
+  Tp_Vec : TpDesc -> ArithExpr Kind_nat -> TpDesc;
+
+  -- Inductive types, where Kind_Ind A is equivalent to [Kind_Ind A/x]A
+  Tp_Ind : TpDesc -> TpDesc;
+
+  -- Type variables, used for types bound by pis, sigmas, and inductive types
+  Tp_Var : Nat -> TpDesc;
+
+  -- The empty type
+  Tp_Void : TpDesc;
+}
+
+
+-- Type-level environments --
+
+-- Decide equality for arithmetic kinds
+proveEqArithKind : (AK1 AK2 : ArithKind) -> Maybe (Eq ArithKind AK1 AK2);
+proveEqArithKind AK1_top =
+  ArithKind#rec
+    (\ (AK1:ArithKind) -> (AK2:ArithKind) -> Maybe (Eq ArithKind AK1 AK2))
+    (\ (AK2_top:ArithKind) ->
+       ArithKind#rec (\ (AK2:ArithKind) -> Maybe (Eq ArithKind Kind_nat AK2))
+         (Just (Eq ArithKind Kind_nat Kind_nat) (Refl ArithKind Kind_nat))
+         (\ (w:Nat) -> Nothing (Eq ArithKind Kind_nat (Kind_bv w)))
+         AK2_top)
+    (\ (w1:Nat) (AK2_top:ArithKind) ->
+       ArithKind#rec (\ (AK2:ArithKind) -> Maybe (Eq ArithKind (Kind_bv w1) AK2))
+         (Nothing (Eq ArithKind (Kind_bv w1) Kind_nat))
+         (\ (w2:Nat) ->
+            Maybe__rec
+              (Eq Nat w1 w2)
+              (\ (_:Maybe (Eq Nat w1 w2)) ->
+                 Maybe (Eq ArithKind (Kind_bv w1) (Kind_bv w2)))
+              (Nothing (Eq ArithKind (Kind_bv w1) (Kind_bv w2)))
+              (\ (e:Eq Nat w1 w2) ->
+                 Just (Eq ArithKind (Kind_bv w1) (Kind_bv w2))
+                      (eq_cong Nat w1 w2 e ArithKind (\ (w:Nat) -> Kind_bv w)))
+              (proveEqNat w1 w2))
+         AK2_top)
+    AK1_top;
+
+-- Decide equality for kind descriptions
+proveEqKindDesc : (K1 K2 : KindDesc) -> Maybe (Eq KindDesc K1 K2);
+proveEqKindDesc K1_top =
+  KindDesc#rec
+    (\ (K1:KindDesc) -> (K2:KindDesc) -> Maybe (Eq KindDesc K1 K2))
+    (\ (AK1:ArithKind) (K2_top:KindDesc) ->
+       KindDesc#rec
+         (\ (K2:KindDesc) -> Maybe (Eq KindDesc (Kind_Arith AK1) K2))
+         (\ (AK2:ArithKind) ->
+            Maybe__rec
+              (Eq ArithKind AK1 AK2)
+              (\ (_:Maybe (Eq ArithKind AK1 AK2)) ->
+                 Maybe (Eq KindDesc (Kind_Arith AK1) (Kind_Arith AK2)))
+              (Nothing (Eq KindDesc (Kind_Arith AK1) (Kind_Arith AK2)))
+              (\ (e:Eq ArithKind AK1 AK2) ->
+                 Just (Eq KindDesc (Kind_Arith AK1) (Kind_Arith AK2))
+                      (eq_cong ArithKind AK1 AK2 e KindDesc
+                               (\ (AK:ArithKind) -> Kind_Arith AK)))
+              (proveEqArithKind AK1 AK2))
+         (Nothing (Eq KindDesc (Kind_Arith AK1) Kind_Tp))
+         K2_top)
+    (\ (K2_top:KindDesc) ->
+       KindDesc#rec
+         (\ (K2:KindDesc) -> Maybe (Eq KindDesc Kind_Tp K2))
+         (\ (AK2:ArithKind) -> Nothing (Eq KindDesc Kind_Tp (Kind_Arith AK2)))
+         (Just (Eq KindDesc Kind_Tp Kind_Tp) (Refl KindDesc Kind_Tp))
+         K2_top)
+    K1_top;
+
+-- An element of a kind
+kindElem : KindDesc -> sort 0;
+kindElem K =
+  KindDesc#rec (\ (_:KindDesc) -> sort 0)
+    (\ (AK:ArithKind) -> arithKindElem AK)
+    TpDesc
+    K;
+
+-- The default element of an arithmetic kind
+defaultAKElem : (AK:ArithKind) -> arithKindElem AK;
+defaultAKElem AK = ArithKind#rec arithKindElem 0 (\ (w:Nat) -> bvNat w 0) AK;
+
+-- The default element of a kind
+defaultKindElem : (K:KindDesc) -> kindElem K;
+defaultKindElem K = KindDesc#rec kindElem defaultAKElem Tp_Void K;
+
+-- An element of an environment is a value, i.e., an element of some kind
+TpEnvElem : sort 0;
+TpEnvElem = Sigma KindDesc kindElem;
+
+-- An environment is a substitution from variables to values
+TpEnv : sort 0;
+TpEnv = List TpEnvElem;
+
+
+
+-- FIXME HERE
 
 
 --------------------------------------------------------------------------------
