@@ -502,7 +502,7 @@ typeOfSetupValue cc env nameEnv val =
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
                      | otherwise -> throwError $ unwords $
                          [ "typeOfSetupValue: array type index out of bounds"
                          , "(index: " ++ show i ++ ")"
@@ -574,7 +574,7 @@ resolveSetupElemOffset cc env nameEnv v i = do
            Right memTy' ->
              case memTy' of
                Crucible.ArrayType n memTy''
-                 | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                 | fromIntegral i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
                Crucible.StructType si ->
                  case Crucible.siFieldOffset si i of
                    Just d -> return d
