@@ -11,7 +11,10 @@
  *   - fixed number of buckets: we don't rebalance if some buckets get long
  *     entry chains
  *
- * sottile2@llnl.gov // June 2023
+ * Author: Matthew Sottile
+ *         sottile2@llnl.gov 
+ * 
+ * June 2023
  */
 
 #include <stdint.h>
@@ -21,7 +24,8 @@
 /* global assumptions
 
    POOLSIZE never changes
-   NUMBUCKETS never changes1
+   NUMBUCKETS never changes
+   CAP never changes
 */
 
 typedef struct Entry {
