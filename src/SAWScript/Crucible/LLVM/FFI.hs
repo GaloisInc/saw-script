@@ -235,18 +235,6 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                   cryEq out cryRet
         pure ([ptr], post)
 
-  setupTupleArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
-    Text -> [FFIType] -> LLVMCrucibleSetupM [a]
-  setupTupleArgs setup name =
-    zipWithM (\i -> setup (name <> "." <> Text.pack (show i))) [0 :: Integer ..]
-
-  setupRecordArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
-    Text -> RecordMap Cry.Ident FFIType -> LLVMCrucibleSetupM [a]
-  setupRecordArgs setup name ffiTypeMap =
-    traverse
-      (\(field, ty) -> setup (name <> "." <> identText field) ty)
-      (displayFields ffiTypeMap)
-
   arrayTypeInfo :: SharedContext -> TypeEnv -> [Type] -> FFIBasicType ->
     LLVMCrucibleSetupM FFITypeInfo
   arrayTypeInfo sc tenv lenTypes ffiBasicType = do
@@ -435,6 +423,18 @@ precondBVZeroPrefix sc totalLen zeroLen x = do
               [zeroLenTerm, natOpenTerm 0]
           ]
   llvm_precond =<< lio (openToTypedTerm sc precond)
+
+setupTupleArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
+  Text -> [FFIType] -> LLVMCrucibleSetupM [a]
+setupTupleArgs setup name =
+  zipWithM (\i -> setup (name <> "." <> Text.pack (show i))) [0 :: Integer ..]
+
+setupRecordArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
+  Text -> RecordMap Cry.Ident FFIType -> LLVMCrucibleSetupM [a]
+setupRecordArgs setup name ffiTypeMap =
+  traverse
+    (\(field, ty) -> setup (name <> "." <> identText field) ty)
+    (displayFields ffiTypeMap)
 
 doFFIPostcond :: SharedContext -> Maybe FFIConv ->
   Either
