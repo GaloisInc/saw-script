@@ -114,6 +114,10 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
 
   mkSizeArg :: SharedContext -> Term -> IO (AllLLVM SetupValue)
   mkSizeArg sc tyArgTerm = do
+    {- `tyArgTerm : [sizeBitSize]
+    => Cryptol.ecNumber tyArgTerm (Vec sizeBitSize Bool)
+                        (Cryptol.PLiteralSeqBool (Cryptol.TCNum sizeBitSize))
+    -}
     openToSetupTerm sc $
       applyGlobalOpenTerm "Cryptol.ecNumber"
         [ closedOpenTerm tyArgTerm
