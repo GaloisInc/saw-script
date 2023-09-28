@@ -3,6 +3,8 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ViewPatterns      #-}
 
+-- | Commands for verifying Cryptol foreign functions against their Cryptol
+-- implementations.
 module SAWScript.Crucible.LLVM.FFI
   ( llvm_ffi_setup
   ) where
@@ -44,22 +46,43 @@ import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
+-- | Information about a Cryptol 'FFIType' that tells us how to generate a setup
+-- spec for values of that type.
 data FFITypeInfo = FFITypeInfo
-  { ffiLLVMType     :: LLVM.Type
+  { -- | The representation of the type when passed to the foreign (LLVM)
+    -- function.
+    ffiLLVMType     :: LLVM.Type
+    -- | The same as 'ffiLLVMType' but as a SAWCore term.
   , ffiLLVMCoreType :: OpenTerm
+    -- | If 'Nothing' then the Cryptol and foreign representations are the same
+    -- and there is no need to convert.
   , ffiConv         :: Maybe FFIConv
   }
 
+-- | How to convert between the Cryptol and foreign representations of an
+-- 'FFIType'.
 data FFIConv = FFIConv
-  { ffiCryType  :: OpenTerm
+  { -- | The representation of the type when passed to the Cryptol function.
+    ffiCryType  :: OpenTerm
+    -- | Assert any preconditions guaranteed by the Cryptol FFI on the LLVM
+    -- representation.
   , ffiPrecond  :: OpenTerm {- : ffiLLVMType -} -> LLVMCrucibleSetupM ()
+    -- | Convert from the foreign representation to the Cryptol representation.
   , ffiToCry    :: OpenTerm {- : ffiLLVMType -} -> OpenTerm {- : ffiCryType -}
   , ffiPostcond :: FFIPostcond
   }
 
+-- | How to check functional correctness of an 'FFIType' result.
 data FFIPostcond
+  -- | Convert the Cryptol result to the LLVM representation using the given
+  -- function, and check directly that it is the same as the LLVM result. This
+  -- is used when the Cryptol and LLVM representations are isomorphic, so there
+  -- is no "extra" information in the LLVM representation that we don't care
+  -- about.
   = FFIPostcondConvToLLVM
       (OpenTerm {- : ffiCryType -} -> OpenTerm {- : FFILLVMType -})
+  -- | Convert the LLVM result to Cryptol representation, and assert as a
+  -- postcondition an equality between them, using the given equality function.
   | FFIPostcondConvToCryEq
       OpenTerm -- : ffiCryType -> ffiCryType -> Bool
 
@@ -75,15 +98,14 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         when (isNothing funDef) do
           throw "Cannot verify foreign function with no Cryptol implementation"
         tenv <- buildTypeEnv ffiTParams tyArgTerms
-        sizeArgs <- lio $ traverse (mkSizeArg sc) tyArgTerms
-        (argTerms, inArgss) <- unzip <$> zipWithM
+        llvmSizeArgs <- lio $ traverse (mkSizeArg sc) tyArgTerms
+        (cryArgs, concat -> llvmInArgs) <- unzip <$> zipWithM
           (\i -> setupInArg sc tenv ("in" <> Text.pack (show i)))
           [0 :: Integer ..]
           ffiArgTypes
-        let inArgs = concat inArgss
-        (outArgs, post) <- setupRet sc tenv ffiRetType
-        llvm_execute_func (sizeArgs ++ inArgs ++ outArgs)
-        post $ applyOpenTermMulti (closedOpenTerm appTerm) argTerms
+        (llvmOutArgs, post) <- setupRet sc tenv ffiRetType
+        llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
+        post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs
     _ ->
       throw "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
@@ -129,6 +151,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     sizeBitSize = natOpenTerm $
       fromIntegral $ finiteBitSize (undefined :: CSize)
 
+  -- | Do setup for an input argument, returning the term to pass to the Cryptol
+  -- function and a list of arguments to pass to the LLVM function.
   setupInArg :: SharedContext -> TypeEnv -> Text -> FFIType ->
     LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
   setupInArg sc tenv = go
@@ -166,6 +190,9 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
       tupleInArgs (unzip -> (terms, inArgss)) =
         (tupleOpenTerm' terms, concat inArgss)
 
+  -- | Do setup for the return value, returning a list of output arguments to
+  -- pass to the LLVM function and a function that asserts functional
+  -- correctness given the Cryptol result.
   setupRet :: SharedContext -> TypeEnv -> FFIType ->
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   setupRet sc tenv ffiType =
@@ -185,6 +212,10 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                 cryEq llvmRet cryRet
       in  ([], post)
 
+  -- | Do setup for a return value passed as output arguments to the LLVM
+  -- function, returning a list of output arguments to pass to the LLVM function
+  -- and a function that asserts functional correctness given the Cryptol
+  -- result.
   setupOutArg :: SharedContext -> TypeEnv -> FFIType ->
     LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
   setupOutArg sc tenv = go "out"
@@ -235,6 +266,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                   cryEq out cryRet
         pure ([ptr], post)
 
+  -- | Type info for the 'FFIArray' type.
   arrayTypeInfo :: SharedContext -> TypeEnv -> [Type] -> FFIBasicType ->
     LLVMCrucibleSetupM FFITypeInfo
   arrayTypeInfo sc tenv lenTypes ffiBasicType = do
@@ -250,6 +282,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
       , ffiLLVMCoreType = vectorTypeOpenTerm totalLenTerm ffiLLVMCoreType
       , ffiConv =
           case (lenTerms, ffiConv) of
+            -- If the array is flat and there is no need to convert individual
+            -- elements, then there is no need to convert the array
             ([_], Nothing) -> Nothing
             _ -> do
               let basicCryType = maybe ffiLLVMCoreType ffiCryType ffiConv
@@ -301,6 +335,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                 , ffiPostcond =
                     case basicPostcond of
                       FFIPostcondConvToLLVM toLLVM ->
+                        -- If the element representations are isomorphic, then
+                        -- the array representations are isomorphic as well
                         FFIPostcondConvToLLVM \cryArr ->
                           let flatCryArr =
                                 {- if lens = [x, y, z]
@@ -340,6 +376,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
                 }
       }
 
+  -- | Type info for a 'FFIBasicType'.
   basicTypeInfo :: SharedContext -> FFIBasicType ->
     LLVMCrucibleSetupM FFITypeInfo
   basicTypeInfo sc (FFIBasicVal ffiBasicValType) = pure
@@ -349,6 +386,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
           { ffiLLVMType = llvm_int llvmSize
           , ffiLLVMCoreType = bvTypeOpenTerm (llvmSize :: Natural)
           , ffiConv = do
+              -- No need for conversion if the word size exactly matches a
+              -- machine word size.
               guard (n < llvmSize)
               Just FFIConv
                 { ffiCryType = bvTypeOpenTerm n
@@ -382,6 +421,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   basicTypeInfo _ (FFIBasicRef _) =
     throw "GMP types (Integer, Z) not supported"
 
+-- | Type info for 'FFIBool'.
 boolTypeInfo :: SharedContext -> FFITypeInfo
 boolTypeInfo sc =
   FFITypeInfo
@@ -401,6 +441,7 @@ boolTypeInfo sc =
           }
     }
 
+-- | Assert the precondition that a prefix of the given bitvector is zero.
 precondBVZeroPrefix :: SharedContext ->
   Natural {- totalLen -} -> Natural ->
   OpenTerm {- Vec totalLen Bool -} -> LLVMCrucibleSetupM ()
@@ -424,11 +465,15 @@ precondBVZeroPrefix sc totalLen zeroLen x = do
           ]
   llvm_precond =<< lio (openToTypedTerm sc precond)
 
+-- | Call the given setup function on subparts of the tuple, naming them by
+-- index.
 setupTupleArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
   Text -> [FFIType] -> LLVMCrucibleSetupM [a]
 setupTupleArgs setup name =
   zipWithM (\i -> setup (name <> "." <> Text.pack (show i))) [0 :: Integer ..]
 
+-- | Call the given setup function on subparts of the record, naming them by
+-- field name.
 setupRecordArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
   Text -> RecordMap Cry.Ident FFIType -> LLVMCrucibleSetupM [a]
 setupRecordArgs setup name ffiTypeMap =
@@ -436,9 +481,15 @@ setupRecordArgs setup name ffiTypeMap =
     (\(field, ty) -> setup (name <> "." <> identText field) ty)
     (displayFields ffiTypeMap)
 
+-- | Given an 'FFIConv', return a function asserting functional correctness
+-- using the method provided in the given 'ffiPrecond'. If no 'FFIConv', then
+-- return a trivial conversion to LLVM.
 doFFIPostcond :: SharedContext -> Maybe FFIConv ->
   Either
+    -- Given the Cryptol result, convert it to the LLVM representation.
     (OpenTerm {- ffiCryType -} -> LLVMCrucibleSetupM (AllLLVM SetupValue))
+    -- Given the LLVM result and the Cryptol result, convert the LLVM result to
+    -- the Cryptol representation then assert they are equal.
     (TypedTerm {- ffiLLVMType -} ->
      OpenTerm {- ffiCryType -} ->
      LLVMCrucibleSetupM ())
@@ -457,6 +508,8 @@ doFFIPostcond sc conv =
     Nothing -> toLLVMWith id
   where
   toLLVMWith toLLVM = Left (lio . openToSetupTerm sc . toLLVM)
+
+-- Utility functions
 
 openToTypedTerm :: SharedContext -> OpenTerm -> IO TypedTerm
 openToTypedTerm sc openTerm = mkTypedTerm sc =<< completeOpenTerm sc openTerm

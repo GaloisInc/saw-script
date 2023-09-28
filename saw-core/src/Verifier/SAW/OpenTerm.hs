@@ -231,6 +231,8 @@ tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
 tupleTypeOpenTerm' [] = unitTypeOpenTerm
 tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
 
+-- | Given an index and total length, project out of a right-nested tuple
+-- without unit as the right-most element
 projTupleOpenTerm' :: Natural -> Natural -> OpenTerm -> OpenTerm
 projTupleOpenTerm' _ 0 _ = panic "projTupleOpenTerm'" ["Projection of 0-tuple"]
 projTupleOpenTerm' 0 1 t = t
