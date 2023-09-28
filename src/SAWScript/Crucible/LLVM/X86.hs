@@ -540,7 +540,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
         case fixpointSelect of
           NoFixpoint -> return ([], Nothing)
           SimpleFixpoint func ->
-            do (f, ref) <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
+            do let ?ptrWidth = knownNat @64
+               (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar Nothing
                return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
