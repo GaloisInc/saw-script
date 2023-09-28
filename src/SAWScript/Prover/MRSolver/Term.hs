@@ -246,6 +246,8 @@ data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
 asSpecM :: Term -> Maybe (SpecMParams Term, Term)
 asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, stack, tp])) =
   return (SpecMParams { specMEvType = ev, specMStack = stack }, tp)
+asSpecM (asApplyAll -> (isGlobalDef "Prelude.CompM" -> Just (), _)) =
+  error "CompM found instead of SpecM"
 asSpecM _ = fail "not a SpecM type!"
 
 -- | Test if a type normalizes to a monadic function type of 0 or more arguments
