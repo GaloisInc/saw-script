@@ -1700,7 +1700,7 @@ data List (a : sort 0) : sort 0
   }
 
 List__rec :
-  (a : sort 0) -> (P : List a -> sort 0) -> P (Nil a) ->
+  (a : sort 0) -> (P : List a -> sort 1) -> P (Nil a) ->
   ((x : a) -> (l : List a) -> P l -> P (Cons a x l)) ->
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
@@ -2261,6 +2261,15 @@ data ArithExpr : ArithKind -> sort 0 where {
                 ArithExpr AK1 -> ArithExpr AK2 -> ArithExpr AK3;
 }
 
+-- The natural number N as an ArithExpr
+ArithN : Nat -> ArithExpr Kind_nat;
+ArithN n = Arith_Const Kind_nat n;
+
+-- The natural number 0 as an ArithExpr
+ArithZ : ArithExpr Kind_nat;
+ArithZ = Arith_Const Kind_nat 0;
+
+
 -- Type descriptions, which form an inductive description of types. These types
 -- are higher-order in the sense that they include encodings for function
 -- index types that can be used in SpecM computations to perform corecursive
@@ -2385,9 +2394,318 @@ TpEnvElem = Sigma KindDesc kindElem;
 TpEnv : sort 0;
 TpEnv = List TpEnvElem;
 
+-- The empty environment
+nilTpEnv : TpEnv;
+nilTpEnv = Nil TpEnvElem;
+
+-- Add a value to a type environment
+envConsElem : (K:KindDesc) -> kindElem K -> TpEnv -> TpEnv;
+envConsElem K elem env =
+  Cons TpEnvElem (exists KindDesc kindElem K elem) env;
+
+-- Eliminate a TpEnvElem at a particular kind, returning the default element of
+-- that kind if the kind of the head does not match
+elimTpEnvElem : (K:KindDesc) -> TpEnvElem -> kindElem K;
+elimTpEnvElem K elem =
+  Maybe__rec
+    (Eq KindDesc (Sigma_proj1 KindDesc kindElem elem) K)
+    (\ (_ : Maybe (Eq KindDesc (Sigma_proj1 KindDesc kindElem elem) K)) ->
+       kindElem K)
+    (defaultKindElem K)
+    (\ (e : (Eq KindDesc (Sigma_proj1 KindDesc kindElem elem) K)) ->
+       Eq__rec
+         KindDesc (Sigma_proj1 KindDesc kindElem elem)
+         (\ (X : KindDesc) (_ : Eq KindDesc (Sigma_proj1 KindDesc kindElem elem) X) ->
+            kindElem X)
+         (Sigma_proj2 KindDesc kindElem elem)
+         K e)
+    (proveEqKindDesc (Sigma_proj1 KindDesc kindElem elem) K);
+
+-- Get the head value of a TpEnv at a particular kind, returning the default
+-- element of that kind if the kind of the head does not match or env is empty
+headTpEnv : (K:KindDesc) -> TpEnv -> kindElem K;
+headTpEnv K env =
+  List__rec TpEnvElem (\ (_:TpEnv) -> kindElem K)
+    (defaultKindElem K)
+    (\ (elem:TpEnvElem) (_:TpEnv) (_:kindElem K) -> elimTpEnvElem K elem)
+    env;
+
+-- Get the tail of an environment
+tailTpEnv : TpEnv -> TpEnv;
+tailTpEnv =
+  List__rec TpEnvElem (\ (_:TpEnv) -> TpEnv) nilTpEnv
+    (\ (_:TpEnvElem) (tl:TpEnv) (_:TpEnv) -> tl);
 
 
--- FIXME HERE
+-- Substitution and evaluation --
+
+-- Substitute an environment into a variable of a particular kind at lifting
+-- level n, meaning that the environment is a substitution for the variables
+-- starting at n. Return the new value of the variable if it was substituted for
+-- (meaning it has index n + i for some index i in the environment) or the new
+-- variable number if it was not.
+substVar : Nat -> TpEnv -> (K:KindDesc) -> Nat -> Either (kindElem K) Nat;
+substVar n_top env_top K var_top =
+  Nat__rec
+    (\ (_:Nat) -> Nat -> TpEnv -> Either (kindElem K) Nat)
+
+    -- var = 0 case
+    (\ (n:Nat) (env:TpEnv) ->
+       Nat__rec (\ (_:Nat) -> Either (kindElem K) Nat)
+
+         -- If the lifting level = 0, then substitute, returning the head of env
+         (Left (kindElem K) Nat (headTpEnv K env))
+
+         -- If not, return var unchanged, i.e., 0
+         (\ (_:Nat) (_:Either (kindElem K) Nat) ->
+            Right (kindElem K) Nat 0)
+
+         n)
+
+    -- var = Succ var' case
+    (\ (var':Nat) (rec:Nat -> TpEnv -> Either (kindElem K) Nat)
+       (n:Nat) (env:TpEnv) ->
+       Nat__rec (\ (_:Nat) -> Either (kindElem K) Nat)
+
+         -- If the lifting level = 0, recursively substitue the tail of env into
+         -- var'; this intuitively decrements var' and the size of env
+         (rec 0 (tailTpEnv env))
+
+         -- If the lifting level = S n', recursively substitute with the
+         -- decremented lifting level n', incrementing the result if it is still
+         -- a variable index
+         (\ (n':Nat) (_:Either (kindElem K) Nat) ->
+            Either__rec (kindElem K) Nat
+              (\ (_:Either (kindElem K) Nat) -> Either (kindElem K) Nat)
+
+              -- Value return case: return the value unchanged
+              --
+              -- NOTE: even though, for kind Kind_Tp, we are substituting type
+              -- descriptions that could have free variables, we are *not*
+              -- lifting them, because we are assuming that type descriptions
+              -- which are "values" in environments are closed. Thus,
+              -- techincally, this substitution can capture free variables. This
+              -- should not come up in practice, though, since all type
+              -- descriptions are expected to be machine-generated.
+              (\ (ret:kindElem K) -> Left (kindElem K) Nat ret)
+
+              -- Variable return case: increment the returned variable index
+              (\ (ret_ix:Nat) -> Right (kindElem K) Nat (Succ ret_ix))
+
+              (rec n' env))
+         n)
+    var_top n_top env_top;
+
+-- Evaluate a variable to a value, using the default value for free variables
+evalVar : Nat -> TpEnv -> (K:KindDesc) -> Nat -> kindElem K;
+evalVar n env K var =
+  Either__rec (kindElem K) Nat (\ (_:Either (kindElem K) Nat) -> kindElem K)
+    (\ (v:kindElem K) -> v)
+    (\ (_:Nat) -> defaultKindElem K)
+    (substVar n env K var);
+
+-- Substitute an environment at lifting level n into arithmetic expression e
+substArithExpr : Nat -> TpEnv -> (AK:ArithKind) -> ArithExpr AK -> ArithExpr AK;
+substArithExpr n env AK_top e =
+  ArithExpr#rec (\ (AK:ArithKind) (_:ArithExpr AK) -> ArithExpr AK)
+    (\ (AK:ArithKind) (v:arithKindElem AK) -> Arith_Const AK v)
+    (\ (AK:ArithKind) (ix:Nat) ->
+       Either__rec (arithKindElem AK) Nat
+         (\ (_:Either (arithKindElem AK) Nat) -> ArithExpr AK)
+         (\ (v:arithKindElem AK) -> Arith_Const AK v)
+         (\ (ix':Nat) -> Arith_Var AK ix')
+         (substVar n env (Kind_Arith AK) ix))
+    (\ (AK1 AK2:ArithKind) (op:ArithUnOp AK1 AK2)
+       (_:ArithExpr AK1) (rec:ArithExpr AK1) ->
+       Arith_UnOp AK1 AK2 op rec)
+    (\ (AK1 AK2 AK3:ArithKind) (op:ArithBinOp AK1 AK2 AK3)
+       (_:ArithExpr AK1) (rec1:ArithExpr AK1)
+       (_:ArithExpr AK2) (rec2:ArithExpr AK2) ->
+       Arith_BinOp AK1 AK2 AK3 op rec1 rec2)
+    AK_top
+    e;
+
+-- Evaluate an arithmetic expression to a value
+evalArithExpr : TpEnv -> (AK:ArithKind) -> ArithExpr AK -> arithKindElem AK;
+evalArithExpr env AK_top e =
+  ArithExpr#rec (\ (AK:ArithKind) (_:ArithExpr AK) -> arithKindElem AK)
+    (\ (AK:ArithKind) (v:arithKindElem AK) -> v)
+    (\ (AK:ArithKind) (ix:Nat) -> evalVar 0 env (Kind_Arith AK) ix)
+    (\ (AK1 AK2:ArithKind) (op:ArithUnOp AK1 AK2)
+       (_:ArithExpr AK1) (rec:arithKindElem AK1) ->
+       evalUnOp AK1 AK2 op rec)
+    (\ (AK1 AK2 AK3:ArithKind) (op:ArithBinOp AK1 AK2 AK3)
+       (_:ArithExpr AK1) (rec1:arithKindElem AK1)
+       (_:ArithExpr AK2) (rec2:arithKindElem AK2) ->
+       evalBinOp AK1 AK2 AK3 op rec1 rec2)
+    AK_top
+    e;
+
+-- Substitute an environment at lifting level n into type description T
+tpSubst : Nat -> TpEnv -> TpDesc -> TpDesc;
+tpSubst n_top env_top T_top =
+  TpDesc#rec (\ (_:TpDesc) -> Nat -> TpEnv -> TpDesc)
+    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_M (rec n env))
+    (\ (K:KindDesc) (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_Pi K (rec (Succ n) env))
+    (\ (_:TpDesc) (recA:Nat -> TpEnv -> TpDesc) (_:TpDesc)
+       (recB:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_Arr (recA n env) (recB n env))
+    (\ (K:KindDesc) (_:Nat) (_:TpEnv) ->
+       Tp_Kind K)
+    (\ (_:TpDesc) (recA:Nat -> TpEnv -> TpDesc) (_:TpDesc)
+       (recB:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_Pair (recA n env) (recB n env))
+    (\ (_:TpDesc) (recA:Nat -> TpEnv -> TpDesc) (_:TpDesc)
+       (recB:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_Sum (recA n env) (recB n env))
+    (\ (K:KindDesc) (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_Sigma K (rec (Succ n) env))
+    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (len:ArithExpr Kind_nat)
+       (n:Nat) (env:TpEnv) ->
+       Tp_Vec (rec n env) (substArithExpr n env Kind_nat len))
+    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       Tp_Ind (rec (Succ n) env))
+    (\ (ix:Nat) (n:Nat) (env:TpEnv) ->
+       Either__rec (kindElem Kind_Tp) Nat
+         (\ (_:Either (kindElem Kind_Tp) Nat) -> TpDesc)
+         (\ (U:TpDesc) -> U)
+         (\ (ix':Nat) -> Tp_Var ix')
+         (substVar n env Kind_Tp ix))
+    (\ (n:Nat) (env:TpEnv) -> Tp_Void)
+  T_top n_top env_top;
+
+-- Unfold an inductive type description Tp_Ind A by substituting the current
+-- environment augmented with the mapping from deBruijn index 0 to Tp_Ind A
+unfoldIndTpDesc : TpEnv -> TpDesc -> TpDesc;
+unfoldIndTpDesc env T =
+  tpSubst 0 (envConsElem Kind_Tp (tpSubst 0 env (Tp_Ind T)) env) T;
+
+
+-- Elements of type descriptions --
+
+-- An identifier for a corecursive function in a SpecM computation. In the Coq
+-- model, this is just a natural number index (hence the name), but we leave its
+-- structure opaque in SAW because client code should not break the abstraction.
+primitive FunIx : TpDesc -> sort 0;
+
+-- A list of function indexes with the given types
+FunIxs : List TpDesc -> sort 0;
+FunIxs = List__rec TpDesc (\ (_:List TpDesc) -> sort 0) #()
+           (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) -> FunIx T * rec);
+
+-- Inductively-defined elements of a type description relative to an
+-- environment, which acts as a substitution of values for the free variables
+data indElem : TpEnv -> TpDesc -> sort 0 where {
+  -- Monadic and function types are just function indexes
+  Elem_M : (env:TpEnv) -> (R:TpDesc) -> FunIx (tpSubst 0 env (Tp_M R)) ->
+           indElem env (Tp_M R);
+  Elem_Pi : (env:TpEnv) -> (K:KindDesc) -> (T:TpDesc) ->
+            FunIx (tpSubst 0 env (Tp_Pi K T)) -> indElem env (Tp_Pi K T);
+  Elem_Arr : (env:TpEnv) -> (T U:TpDesc) ->
+             FunIx (tpSubst 0 env (Tp_Arr T U)) -> indElem env (Tp_Arr T U);
+
+  -- Tp_Kind K is the type of elements of kind K, lowered to the object level
+  Elem_Kind : (env:TpEnv) -> (K:KindDesc) -> kindElem K -> indElem env (Tp_Kind K);
+
+  -- Elements of pair and sum types are just pairs and sums
+  Elem_Pair : (env:TpEnv) -> (T U:TpDesc) -> indElem env T -> indElem env U ->
+              indElem env (Tp_Pair T U);
+  Elem_SumL : (env:TpEnv) -> (T U:TpDesc) -> indElem env T ->
+              indElem env (Tp_Sum T U);
+  Elem_SumR : (env:TpEnv) -> (T U:TpDesc) -> indElem env U ->
+              indElem env (Tp_Sum T U);
+
+  -- An element of Tp_Sigma K T is an element e of K plus an element of [e/x]U
+  Elem_Sigma : (env:TpEnv) -> (K:KindDesc) -> (T:TpDesc) ->
+               (elem1:kindElem K) -> indElem (envConsElem K elem1 env) T ->
+               indElem env (Tp_Sigma K T);
+
+  -- Elements of vector types are built using nil and cons constructors, to
+  -- build a vector of elements with a concrete size, along with a final cast
+  -- constructor, to cast the size to an expression equal to that concrete size
+  Elem_VecNil : (env:TpEnv) -> (T:TpDesc) -> indElem env (Tp_Vec T ArithZ);
+  Elem_VecCons : (env:TpEnv) -> (T:TpDesc) -> (n:Nat) ->
+                 indElem env T -> indElem env (Tp_Vec T (ArithN n)) ->
+                 indElem env (Tp_Vec T (ArithN (Succ n)));
+  Elem_VecCast : (env:TpEnv) -> (T:TpDesc) -> (e1 e2:ArithExpr Kind_nat) ->
+                 Eq Nat (evalArithExpr env Kind_nat e1)
+                        (evalArithExpr env Kind_nat e2) ->
+                 indElem env (Tp_Vec T e1) -> indElem env (Tp_Vec T e2);
+
+  -- An element of inductive type Tp_Ind T is an element of the one-step
+  -- unfolding [Tp_Ind T/x]T of the body of the inductive type. Note that we
+  -- perform the full substitution of env as part of this unfolding, rather than
+  -- just adding Tp_Ind T to the current environment, because the two are
+  -- equivalent, but this version is easier to use.
+  Elem_Ind : (env:TpEnv) -> (T:TpDesc) -> indElem nilTpEnv (unfoldIndTpDesc env T) ->
+             indElem env (Tp_Ind T);
+
+  -- An element of a variable is an element of the evaluation of that variable
+  -- to a type (or of TP_Void if the variable is unbound or of the wrong kind)
+  Elem_Var : (env:TpEnv) -> (var:Nat) -> indElem nilTpEnv (evalVar 0 env Kind_Tp var) ->
+             indElem env (Tp_Var var);
+
+  -- No constructor for Tp_Void
+}
+
+
+-- Elements of a type description relative to an environment. This is isomorphic
+-- to indElem, above, but yields the types you would expect rather than a single
+-- inductive type. See indElem for a more detailed explanation of how the types
+-- are defined.
+tpElemEnv : TpEnv -> TpDesc -> sort 0;
+tpElemEnv env_top T_top =
+  TpDesc#rec (\ (_:TpDesc) -> TpEnv -> sort 0)
+    (\ (R:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
+       FunIx (tpSubst 0 env (Tp_M R)))
+    (\ (K:KindDesc) (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
+       FunIx (tpSubst 0 env (Tp_Pi K T)))
+    (\ (T:TpDesc) (_:TpEnv -> sort 0) (U:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
+       FunIx (tpSubst 0 env (Tp_Arr T U)))
+    (\ (K:KindDesc) (_:TpEnv) -> kindElem K)
+    (\ (T:TpDesc) (recT:TpEnv -> sort 0) (U:TpDesc) (recU:TpEnv -> sort 0)
+       (env:TpEnv) ->
+       recT env * recU env)
+    (\ (T:TpDesc) (recT:TpEnv -> sort 0) (U:TpDesc) (recU:TpEnv -> sort 0)
+       (env:TpEnv) ->
+       Either (recT env) (recU env))
+    (\ (K:KindDesc) (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
+       Sigma (kindElem K) (\ (v:kindElem K) -> rec (envConsElem K v env)))
+    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (len:ArithExpr Kind_nat) (env:TpEnv) ->
+       Vec (evalArithExpr env Kind_nat len) (rec env))
+    (\ (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
+       indElem nilTpEnv (unfoldIndTpDesc env T))
+    (\ (var:Nat) (env:TpEnv) ->
+       -- Note: we have to use indElem here, rather than tpElem, because this
+       -- would not be an inductively smaller recursive call to take tpElem of
+       -- the substitution instance
+       indElem nilTpEnv (evalVar 0 env Kind_Tp var))
+    (\ (_:TpEnv) -> Void)
+    T_top env_top;
+
+-- Elements of a type description = elements relative to the empty environment
+tpElem : TpDesc -> sort 0;
+tpElem = tpElemEnv nilTpEnv;
+
+-- Convert an inductively-defined element to a recursively-defined one
+primitive indToTpElem : (env:TpEnv) -> (T:TpDesc) ->
+                        indElem env T -> tpElemEnv env T;
+
+-- Convert a recursively-defined element to an inductively-defined one
+primitive tpToIndElem : (env:TpEnv) -> (T:TpDesc) ->
+                        tpElemEnv env T -> indElem env T;
+
+-- Fold an element of [Tp_Ind T/x]T to an element of Tp_Ind T
+foldTpElem : (T:TpDesc) -> tpElem (unfoldIndTpDesc nilTpEnv T) ->
+             tpElem (Tp_Ind T);
+foldTpElem T = tpToIndElem nilTpEnv (unfoldIndTpDesc nilTpEnv T);
+
+-- Unfold an element of Tp_Ind T to an element of [Tp_Ind T/x]T
+unfoldTpElem : (T:TpDesc) -> tpElem (Tp_Ind T) ->
+               tpElem (unfoldIndTpDesc nilTpEnv T);
+unfoldTpElem T = indToTpElem nilTpEnv (unfoldIndTpDesc nilTpEnv T);
 
 
 --------------------------------------------------------------------------------
