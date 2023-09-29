@@ -899,8 +899,8 @@ throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
 throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
 
-throwLLVM' :: Text -> String -> LLVMCrucibleSetupM a
-throwLLVM' nm msg = do
+throwLLVMFun :: Text -> String -> LLVMCrucibleSetupM a
+throwLLVMFun nm msg = do
   loc <- LLVMCrucibleSetupM $ getW4Position nm
   throwLLVM loc msg
 

@@ -123,7 +123,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
 
 throw :: Ctx => String -> LLVMCrucibleSetupM a
 throw msg =
-  throwLLVM' "llvm_ffi_setup" $
+  throwLLVMFun "llvm_ffi_setup" $
     "Cannot generate FFI setup for " ++ showTerm (funTerm ?ctx) ++ ":\n" ++ msg
 
 buildTypeEnv :: Ctx => [TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
