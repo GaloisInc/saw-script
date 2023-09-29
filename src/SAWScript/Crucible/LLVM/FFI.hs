@@ -107,7 +107,8 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
     Just (ec, funDef)
       | Just FFIFunType {..} <- Map.lookup (ecName ec) (eFFITypes cryEnv) -> do
         when (isNothing funDef) do
-          throw "Cannot verify foreign function with no Cryptol implementation"
+          throwFFISetup
+            "Cannot verify foreign function with no Cryptol implementation"
         tenv <- buildTypeEnv ffiTParams tyArgTerms
         llvmSizeArgs <- lio $ traverse mkSizeArg tyArgTerms
         (cryArgs, concat -> llvmInArgs) <- unzip <$> zipWithM
@@ -118,11 +119,11 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
         post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs
     _ ->
-      throw
+      throwFFISetup
         "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
-throw :: Ctx => String -> LLVMCrucibleSetupM a
-throw msg =
+throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
+throwFFISetup msg =
   throwLLVMFun "llvm_ffi_setup" $
     "Cannot generate FFI setup for " ++ showTerm (funTerm ?ctx) ++ ":\n" ++ msg
 
@@ -134,11 +135,12 @@ buildTypeEnv (param:params) (argTerm:argTerms) =
       bindTypeVar (TVBound param) (Left (Nat (toInteger n))) <$>
         buildTypeEnv params argTerms
     _ ->
-      throw $ "Not a numeric literal type argument: " ++ showTerm argTerm
-buildTypeEnv params [] = throw $
+      throwFFISetup $
+        "Not a numeric literal type argument: " ++ showTerm argTerm
+buildTypeEnv params [] = throwFFISetup $
   "Foreign function not fully instantiated;\n"
   ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)
-buildTypeEnv [] _ = throw "Too many type arguments"
+buildTypeEnv [] _ = throwFFISetup "Too many type arguments"
 
 mkSizeArg :: Ctx => Term -> IO (AllLLVM SetupValue)
 mkSizeArg tyArgTerm = do
@@ -378,7 +380,8 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
       in  FFITypeInfo
             { ffiConv = Nothing
             , .. }
-basicTypeInfo (FFIBasicRef _) = throw "GMP types (Integer, Z) not supported"
+basicTypeInfo (FFIBasicRef _) =
+  throwFFISetup "GMP types (Integer, Z) not supported"
 
 -- | Assert the precondition that a prefix of the given bitvector is zero.
 precondBVZeroPrefix :: Ctx =>
