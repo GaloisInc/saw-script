@@ -80,7 +80,7 @@ initsLoop ys zs acc
    where (y : [1]_) # ys' = ys
 
 foreign zipMul3 : {n, m, p} (fin n, fin m, fin p) =>
-  [n][32] -> [m][32] -> [p][32] -> [min n (min m p)][32]
+  [n][27] -> [m][27] -> [p][27] -> [min n (min m p)][27]
 zipMul3 xs ys zs = [x * y * z | x <- xs | y <- ys | z <- zs]
 
 // Nested sequences
