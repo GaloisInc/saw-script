@@ -43,6 +43,7 @@ import           SAWScript.Panic
 import           SAWScript.Value
 import           Verifier.SAW.CryptolEnv
 import           Verifier.SAW.OpenTerm
+import           Verifier.SAW.Prelude
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
@@ -91,9 +92,8 @@ data FFIPostcond
   = FFIPostcondConvToLLVM
       (OpenTerm {- : ffiCryType -} -> OpenTerm {- : FFILLVMType -})
   -- | Convert the LLVM result to Cryptol representation, and assert as a
-  -- postcondition an equality between them, using the given equality function.
+  -- postcondition that it is equal to the Cryptol result.
   | FFIPostcondConvToCryEq
-      OpenTerm -- : ffiCryType -> ffiCryType -> Bool
 
 -- | Generate a @LLVMSetup@ spec that can be used to verify the given term
 -- containing a Cryptol foreign function fully applied to any type arguments.
@@ -290,16 +290,18 @@ doFFIPostcond conv =
   case conv of
     Just FFIConv {..} ->
       case ffiPostcond of
-        FFIPostcondConvToCryEq cryEq ->
+        FFIPostcondConvToCryEq ->
           Right \llvmTerm cryTerm -> do
             -- ffiToCry llvmTerm == cryTerm
-            eqTerm <- lio $ openToTypedTerm $
-              applyOpenTermMulti cryEq
-                [ffiToCry (typedToOpenTerm llvmTerm), cryTerm]
+            lhs <- lio $ completeOpenTerm sc $
+              ffiToCry $ typedToOpenTerm llvmTerm
+            rhs <- lio $ completeOpenTerm sc cryTerm
+            eqTerm <- lio $ mkTypedTerm sc =<< scEq sc lhs rhs
             llvm_postcond eqTerm
         FFIPostcondConvToLLVM toLLVM -> toLLVMWith toLLVM
     Nothing -> toLLVMWith id
   where
+  FFISetupCtx {..} = ?ctx
   toLLVMWith toLLVM = Left (lio . openToSetupTerm . toLLVM)
 
 -- | Call the given setup function on subparts of the tuple, naming them by
@@ -332,9 +334,7 @@ boolTypeInfo =
               {- x != zero
               => bvNonzero 8 x -}
               applyGlobalOpenTerm "Prelude.bvNonzero" [natOpenTerm 8, x]
-          , ffiPostcond = FFIPostcondConvToCryEq $
-              -- Prelude.boolEq
-              globalOpenTerm "Prelude.boolEq"
+          , ffiPostcond = FFIPostcondConvToCryEq
           }
     }
 
@@ -359,9 +359,7 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
                   => Prelude.bvTrunc (llvmSize - n) n x -}
                   applyGlobalOpenTerm "Prelude.bvTrunc"
                     [natOpenTerm (llvmSize - n), natOpenTerm n, x]
-              , ffiPostcond = FFIPostcondConvToCryEq $
-                  -- Prelude.bvEq n
-                  applyGlobalOpenTerm "Prelude.bvEq" [natOpenTerm n]
+              , ffiPostcond = FFIPostcondConvToCryEq
               }
         }
       where
@@ -501,18 +499,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                               , totalLenTerm
                               , flatCryArr
                               ]
-                    FFIPostcondConvToCryEq cryEq ->
-                      FFIPostcondConvToCryEq $
-                        {- if lens = [x, y, z]
-                            vecEq x (Vec y (Vec z ffiCryType))
-                                  (vecEq y (Vec z ffiCryType)
-                                         (vecEq z ffiCryType cryEq)) -}
-                        foldr
-                          (\(len, elemType) eq ->
-                            applyGlobalOpenTerm "Prelude.vecEq"
-                              [len, elemType, eq])
-                          cryEq
-                          (zip lenTerms cumulElemTypes)
+                    FFIPostcondConvToCryEq -> FFIPostcondConvToCryEq
               }
     }
 
