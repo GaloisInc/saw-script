@@ -182,7 +182,7 @@ buildTypeEnv (param:params) (argTerm:argTerms) =
 buildTypeEnv params [] = throwFFISetup $
   "Foreign function not fully instantiated;\n"
   ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)
-buildTypeEnv [] _ = throwFFISetup "Too many type arguments"
+buildTypeEnv [] _ = throwFFISetup "Too many (type) arguments"
 
 -- | Given a Cryptol type argument as a term, return the corresponding size_t
 -- LLVM argument.
