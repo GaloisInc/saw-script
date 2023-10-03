@@ -3393,12 +3393,12 @@ syntactically to the format described above (``{{ fun`{tyArg0, tyArg1,
 ### Supported types
 
 `llvm_ffi_setup` supports all Cryptol types that are supported by the
-Cryptol FFI, with the exception of `Integer`, `Z`, and `Float`.
-`Integer` and `Z` are not supported since they are translated to `gmp`
-arbitrary-precision types which are hard for SAW to handle without
-additional overrides. There is no fundamental obstacle to supporting
-`Float`, and in fact `llvm_ffi_setup` itself does work with Cryptol
-floating point types, but the underlying functions such as
+Cryptol FFI, with the exception of `Integer`, `Rational`, `Z`, and
+`Float`. `Integer`, `Rational`, and `Z` are not supported since they are
+translated to `gmp` arbitrary-precision types which are hard for SAW to
+handle without additional overrides. There is no fundamental obstacle to
+supporting `Float`, and in fact `llvm_ffi_setup` itself does work with
+Cryptol floating point types, but the underlying functions such as
 `llvm_fresh_var` do not, so until that is implemented `llvm_ffi_setup`
 can generate a spec involving floating point types but it cannot
 actually be run.
