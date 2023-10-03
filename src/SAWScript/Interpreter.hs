@@ -3649,16 +3649,6 @@ primitives = Map.fromList
     , "containing a Cryptol foreign function fully applied to any type arguments."
     ]
 
-  , prim "llvm_ffi_verify" "LLVMModule -> Term -> [LLVMSpec] -> Bool -> ProofScript() -> TopLevel LLVMSpec"
-    (pureVal llvm_ffi_verify)
-    Experimental
-    [ "Verify that for the given monomorphic Cryptol term, consisting of a"
-    , "Cryptol foreign function fully applied to any type arguments, the foreign"
-    , "implementation from the given LLVM module matches the Cryptol"
-    , "implementation."
-    , "This is just a wrapper around 'llvm_ffi_setup' and 'llvm_verify'."
-    ]
-
     ---------------------------------------------------------------------
     -- Crucible/JVM commands
 

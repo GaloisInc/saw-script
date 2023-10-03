@@ -1,16 +1,14 @@
-{-# LANGUAGE BlockArguments        #-}
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE ImplicitParams        #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE ConstraintKinds   #-}
+{-# LANGUAGE ImplicitParams    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 -- | Commands for verifying Cryptol foreign functions against their Cryptol
 -- implementations.
 module SAWScript.Crucible.LLVM.FFI
-  ( llvm_ffi_verify
-  , llvm_ffi_setup
+  ( llvm_ffi_setup
   ) where
 
 import           Control.Monad
@@ -27,14 +25,13 @@ import qualified Data.Text                            as Text
 import           Foreign.C.Types                      (CSize)
 import           Numeric.Natural
 
-import           Data.Parameterized.Some
 import qualified Text.LLVM.AST                        as LLVM
 
 import           Cryptol.Eval.Type
 import           Cryptol.TypeCheck.FFI.FFIType
 import           Cryptol.TypeCheck.Solver.InfNat
 import           Cryptol.TypeCheck.Type
-import qualified Cryptol.Utils.Ident                  as Cry
+import           Cryptol.Utils.Ident                  as Cry
 import           Cryptol.Utils.PP                     (pretty)
 import           Cryptol.Utils.RecordMap
 
@@ -45,27 +42,16 @@ import           SAWScript.LLVMBuiltins
 import           SAWScript.Panic
 import           SAWScript.Value
 import           Verifier.SAW.CryptolEnv
-import qualified Verifier.SAW.Name                    as SAW
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Prelude
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
--- | The extracted information from a Cryptol expression taken in by
--- 'llvm_ffi_verify' and 'llvm_ffi_setup'.
-data InstForeign = InstForeign
-  { funName    :: Text
-  , appTerm    :: Term
-  , tyArgTerms :: [Term]
-  , ffiFunType :: FFIFunType
-  }
-
 -- | Commonly used things that need to be passed around.
 data FFISetupCtx = FFISetupCtx
-  { cmdName :: Text
-  , sc      :: SharedContext
-  , funName :: Text
+  { sc      :: SharedContext
+  , funTerm :: Term
   }
 
 type Ctx = (?ctx :: FFISetupCtx)
@@ -109,66 +95,38 @@ data FFIPostcond
   -- postcondition that it is equal to the Cryptol result.
   | FFIPostcondConvToCryEq
 
--- | Verify that for the given monomorphic Cryptol term, consisting of a Cryptol
--- foreign function fully applied to any type arguments, the foreign
--- implementation from the given LLVM module matches the Cryptol implementation.
---
--- This is just a wrapper around 'llvm_ffi_setup' and 'llvm_verify'.
-llvm_ffi_verify :: Some LLVMModule -> TypedTerm -> [SomeLLVM ProvedSpec] ->
-  Bool -> ProofScript () -> TopLevel (SomeLLVM ProvedSpec)
-llvm_ffi_verify lm appTypedTerm lemmas checkSat tactic = do
-  InstForeign {..} <- extractForeignFunction appTypedTerm
-  llvm_verify lm (Text.unpack funName) lemmas checkSat
-    (generateFFISetup "llvm_ffi_verify" InstForeign {..}) tactic
-
--- | Generate a @LLVMSetup@ spec that can be used to verify the given
--- monomorphic Cryptol term, consisting of a Cryptol foreign function fully
--- applied to any type arguments.
+-- | Generate a @LLVMSetup@ spec that can be used to verify the given term
+-- containing a Cryptol foreign function fully applied to any type arguments.
 llvm_ffi_setup :: TypedTerm -> LLVMCrucibleSetupM ()
-llvm_ffi_setup appTypedTerm = do
-  instForeign <- lll $ extractForeignFunction appTypedTerm
-  generateFFISetup "llvm_ffi_setup" instForeign
-
--- | Decompose the given 'TypedTerm' as an application of a Cryptol foreign
--- function and look up its 'FFIFunType'.
-extractForeignFunction :: TypedTerm -> TopLevel InstForeign
-extractForeignFunction TypedTerm { ttTerm = appTerm } = do
-  cryEnv <- rwCryptol <$> getMergedEnv
-  case asConstant funTerm of
-    Just (EC {..}, funDef)
-      | Just ffiFunType <- Map.lookup ecName (eFFITypes cryEnv) -> do
-        when (isNothing funDef) do
-          throwExtract
-            "Cannot verify foreign function with no Cryptol implementation"
-        pure InstForeign { funName = SAW.toShortName ecName, .. }
-    _ ->
-      throwExtract
-        "Not a (monomorphic instantiation of a) Cryptol foreign function"
-  where
-  (funTerm, tyArgTerms) = asApplyAll appTerm
-  throwExtract msg = throwTopLevel $
-    "Cannot verify Cryptol foreign function " ++ showTerm funTerm ++ ":\n"
-      ++ msg
-
--- | Actually generate the SetupScript given a decomposed foreign function
--- application.
-generateFFISetup :: Text -> InstForeign -> LLVMCrucibleSetupM ()
-generateFFISetup cmdName InstForeign {..} = do
-  let FFIFunType {..} = ffiFunType
+llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
+  let (funTerm, tyArgTerms) = asApplyAll appTerm
   sc <- lll getSharedContext
   let ?ctx = FFISetupCtx {..}
-  tenv <- buildTypeEnv ffiTParams tyArgTerms
-  llvmSizeArgs <- lio $ traverse mkSizeArg tyArgTerms
-  (cryArgs, concat -> llvmInArgs) <- unzip <$> zipWithM
-    (\i -> setupInArg tenv ("in" <> Text.pack (show i)))
-    [0 :: Integer ..]
-    ffiArgTypes
-  (llvmOutArgs, post) <- setupRet tenv ffiRetType
-  llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
-  post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs
+  cryEnv <- lll $ rwCryptol <$> getMergedEnv
+  case asConstant funTerm of
+    Just (ec, funDef)
+      | Just FFIFunType {..} <- Map.lookup (ecName ec) (eFFITypes cryEnv) -> do
+        when (isNothing funDef) do
+          throwFFISetup
+            "Cannot verify foreign function with no Cryptol implementation"
+        tenv <- buildTypeEnv ffiTParams tyArgTerms
+        llvmSizeArgs <- lio $ traverse mkSizeArg tyArgTerms
+        (cryArgs, concat -> llvmInArgs) <- unzip <$> zipWithM
+          (\i -> setupInArg tenv ("in" <> Text.pack (show i)))
+          [0 :: Integer ..]
+          ffiArgTypes
+        (llvmOutArgs, post) <- setupRet tenv ffiRetType
+        llvm_execute_func (llvmSizeArgs ++ llvmInArgs ++ llvmOutArgs)
+        post $ applyOpenTermMulti (closedOpenTerm appTerm) cryArgs
+    _ ->
+      throwFFISetup
+        "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
--- | Given a list of type parameters and their actual values as terms, create a
--- type environment binding them.
+throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
+throwFFISetup msg =
+  throwLLVMFun "llvm_ffi_setup" $
+    "Cannot generate FFI setup for " ++ showTerm (funTerm ?ctx) ++ ":\n" ++ msg
+
 buildTypeEnv :: Ctx => [TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
@@ -184,8 +142,6 @@ buildTypeEnv params [] = throwFFISetup $
   ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)
 buildTypeEnv [] _ = throwFFISetup "Too many (type) arguments"
 
--- | Given a Cryptol type argument as a term, return the corresponding size_t
--- LLVM argument.
 mkSizeArg :: Ctx => Term -> IO (AllLLVM SetupValue)
 mkSizeArg tyArgTerm = do
   {- `tyArgTerm : [sizeBitSize]
@@ -361,7 +317,7 @@ setupRecordArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
   Text -> RecordMap Cry.Ident FFIType -> LLVMCrucibleSetupM [a]
 setupRecordArgs setup name ffiTypeMap =
   traverse
-    (\(field, ty) -> setup (name <> "." <> Cry.identText field) ty)
+    (\(field, ty) -> setup (name <> "." <> identText field) ty)
     (displayFields ffiTypeMap)
 
 -- | Type info for 'FFIBool'.
@@ -548,12 +504,6 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
     }
 
 -- Utility functions
-
-throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
-throwFFISetup msg =
-  throwLLVMFun cmdName $
-    "Cannot generate FFI setup for " ++ Text.unpack funName ++ ":\n" ++ msg
-  where FFISetupCtx {..} = ?ctx
 
 openToTypedTerm :: Ctx => OpenTerm -> IO TypedTerm
 openToTypedTerm openTerm = mkTypedTerm sc =<< completeOpenTerm sc openTerm
