@@ -29,8 +29,8 @@
 -- representation is not surjective, then preconditions are necessary to assert
 -- that the LLVM input variables start in a state that is in the image of such
 -- mapping (a fact which the LLVM implementation of the function may depend on).
--- Similarly, for function outputs where the mapping from LLVM to Cryptol
--- representation is not injective, we cannot directly verify functional
+-- Similarly, for function outputs where the mapping from Cryptol to LLVM
+-- representation is not unique, we cannot directly verify functional
 -- correctness by using @llvm_return@ (for LLVM return values) or
 -- @llvm_points_to@ (for LLVM output arguments) on the Cryptol function output
 -- converted to LLVM representation. Instead, we must create a fresh symbolic
@@ -44,6 +44,7 @@ import           Control.Monad
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
 import           Data.Foldable
+import           Data.Functor
 import           Data.List
 import           Data.List.NonEmpty                   (NonEmpty (..))
 import qualified Data.List.NonEmpty                   as NE
@@ -102,27 +103,32 @@ data FFITypeInfo = FFITypeInfo
 -- 'FFIType'.
 data FFIConv = FFIConv
   { -- | The representation of the type when passed to the Cryptol function.
-    ffiCryType  :: OpenTerm
+    ffiCryType :: OpenTerm
     -- | Assert any preconditions guaranteed by the Cryptol FFI on the LLVM
     -- representation.
-  , ffiPrecond  :: OpenTerm {- : ffiLLVMType -} -> LLVMCrucibleSetupM ()
+  , ffiPrecond :: OpenTerm {- : ffiLLVMType -} -> LLVMCrucibleSetupM ()
     -- | Convert from the foreign representation to the Cryptol representation.
-  , ffiToCry    :: OpenTerm {- : ffiLLVMType -} -> OpenTerm {- : ffiCryType -}
-  , ffiPostcond :: FFIPostcond
+  , ffiToCry :: OpenTerm {- : ffiLLVMType -} -> OpenTerm {- : ffiCryType -}
+    -- | Convert from the Cryptol representation to the foreign representation.
+    -- This is only defined when this conversion is unique, that is, when the
+    -- Cryptol and LLVM representations are isomorphic and this function is the
+    -- inverse of 'ffiToCry'.
+  , ffiToLLVM :: Maybe
+      (OpenTerm {- : ffiCryType -} -> OpenTerm {- : FFILLVMType -})
   }
 
 -- | How to check functional correctness of an 'FFIType' result.
 data FFIPostcond
   -- | Convert the Cryptol result to the LLVM representation using the given
-  -- function, and check directly that it is the same as the LLVM result. This
-  -- is used when the Cryptol and LLVM representations are isomorphic, so there
-  -- is no "extra" information in the LLVM representation that we don't care
-  -- about.
+  -- function, for use with @llvm_return@ or @llvm_points_to@.
   = FFIPostcondConvToLLVM
-      (OpenTerm {- : ffiCryType -} -> OpenTerm {- : FFILLVMType -})
-  -- | Convert the LLVM result to Cryptol representation, and assert as a
-  -- postcondition that it is equal to the Cryptol result.
+      (OpenTerm {- : ffiCryType -} -> LLVMCrucibleSetupM (AllLLVM SetupValue))
+  -- | Given the LLVM result and the Cryptol result, convert the LLVM result to
+  -- the Cryptol representation then assert as a postcondition that they are
+  -- equal.
   | FFIPostcondConvToCryEq
+      (TypedTerm {- ffiLLVMType -} -> OpenTerm {- ffiCryType -} ->
+        LLVMCrucibleSetupM ())
 
 -- | Generate a @LLVMSetup@ spec that can be used to verify that the given
 -- monomorphic Cryptol term, consisting of a Cryptol foreign function fully
@@ -247,10 +253,10 @@ setupRet tenv ffiType =
   where
   retValue FFITypeInfo {..} =
     let post cryRet =
-          case doFFIPostcond ffiConv of
-            Left toLLVM ->
+          case getFFIPostcond ffiConv of
+            FFIPostcondConvToLLVM toLLVM ->
               llvm_return =<< toLLVM cryRet
-            Right cryEq -> do
+            FFIPostcondConvToCryEq cryEq -> do
               llvmRet <- llvm_fresh_var "ret" ffiLLVMType
               llvm_return (anySetupTerm llvmRet)
               cryEq llvmRet cryRet
@@ -301,44 +307,36 @@ setupOutArg tenv = go "out"
     singleOutArg FFITypeInfo {..} = do
       ptr <- llvm_alloc ffiLLVMType
       let post cryRet =
-            case doFFIPostcond ffiConv of
-              Left toLLVM ->
+            case getFFIPostcond ffiConv of
+              FFIPostcondConvToLLVM toLLVM ->
                 llvm_points_to True ptr =<< toLLVM cryRet
-              Right cryEq -> do
+              FFIPostcondConvToCryEq cryEq -> do
                 out <- llvm_fresh_var name ffiLLVMType
                 llvm_points_to True ptr (anySetupTerm out)
                 cryEq out cryRet
       pure ([ptr], post)
 
--- | Given an 'FFIConv', return a function asserting functional correctness
--- using the method provided in the given 'ffiPrecond'. If no 'FFIConv', then
+-- | Given an 'FFIConv', return a way to assert functional correctness,
+-- preferring 'FFIPostcondConvToLLVM' when possible. If no 'FFIConv', then
 -- return a trivial conversion to LLVM.
-doFFIPostcond :: Ctx => Maybe FFIConv ->
-  Either
-    -- Given the Cryptol result, convert it to the LLVM representation.
-    (OpenTerm {- ffiCryType -} -> LLVMCrucibleSetupM (AllLLVM SetupValue))
-    -- Given the LLVM result and the Cryptol result, convert the LLVM result to
-    -- the Cryptol representation then assert they are equal.
-    (TypedTerm {- ffiLLVMType -} ->
-     OpenTerm {- ffiCryType -} ->
-     LLVMCrucibleSetupM ())
-doFFIPostcond conv =
+getFFIPostcond :: Ctx => Maybe FFIConv -> FFIPostcond
+getFFIPostcond conv =
   case conv of
     Just FFIConv {..} ->
-      case ffiPostcond of
-        FFIPostcondConvToCryEq ->
-          Right \llvmTerm cryTerm -> do
+      case ffiToLLVM of
+        Just toLLVM -> toLLVMWith toLLVM
+        Nothing ->
+          FFIPostcondConvToCryEq \llvmTerm cryTerm -> do
             -- ffiToCry llvmTerm == cryTerm
             lhs <- lio $ completeOpenTerm sc $
               ffiToCry $ typedToOpenTerm llvmTerm
             rhs <- lio $ completeOpenTerm sc cryTerm
             eqTerm <- lio $ mkTypedTerm sc =<< scEq sc lhs rhs
             llvm_postcond eqTerm
-        FFIPostcondConvToLLVM toLLVM -> toLLVMWith toLLVM
     Nothing -> toLLVMWith id
   where
   FFISetupCtx {..} = ?ctx
-  toLLVMWith toLLVM = Left (lio . openToSetupTerm . toLLVM)
+  toLLVMWith toLLVM = FFIPostcondConvToLLVM (lio . openToSetupTerm . toLLVM)
 
 -- | Call the given setup function on subparts of the tuple, naming them by
 -- index.
@@ -370,7 +368,7 @@ boolTypeInfo =
               {- x != zero
               => bvNonzero 8 x -}
               applyGlobalOpenTerm "Prelude.bvNonzero" [natOpenTerm 8, x]
-          , ffiPostcond = FFIPostcondConvToCryEq
+          , ffiToLLVM = Nothing
           }
     }
 
@@ -395,7 +393,7 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
                   => Prelude.bvTrunc (llvmSize - n) n x -}
                   applyGlobalOpenTerm "Prelude.bvTrunc"
                     [natOpenTerm (llvmSize - n), natOpenTerm n, x]
-              , ffiPostcond = FFIPostcondConvToCryEq
+              , ffiToLLVM = Nothing
               }
         }
       where
@@ -462,8 +460,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
           ([_], Nothing) -> Nothing
           _ -> do
             let basicCryType = maybe ffiLLVMCoreType ffiCryType ffiConv
-                basicPostcond =
-                  maybe (FFIPostcondConvToLLVM id) ffiPostcond ffiConv
+                basicToLLVM = maybe (Just id) ffiToLLVM ffiConv
                 cumulLenTerms = map natOpenTerm $ scanl1 (*) lens
                 arrCryType :| cumulElemTypes =
                   NE.scanr vectorTypeOpenTerm basicCryType lenTerms
@@ -506,36 +503,32 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                             [cumulLen, dimLen, arrElemType, arr])
                         flatCryArr
                         cumul
-              , ffiPostcond =
-                  case basicPostcond of
-                    FFIPostcondConvToLLVM toLLVM ->
-                      -- If the element representations are isomorphic, then the
-                      -- array representations are isomorphic as well
-                      FFIPostcondConvToLLVM \cryArr ->
-                        let flatCryArr =
-                              {- if lens = [x, y, z]
-                                  join (x * y) z ffiCryType
-                                      (join x y (Vec z ffiCryType) cryArr) -}
-                              foldr
-                                (\(cumulLen, dimLen, arrElemType) arr ->
-                                  applyGlobalOpenTerm "Prelude.join"
-                                    [cumulLen, dimLen, arrElemType, arr])
-                                cryArr
-                                (reverse cumul)
-                        in  {- map toLLVM flatCryArr
-                            => Prelude.map basicCryType
-                                           ffiLLVMCoreType
-                                           (\x -> toLLVM x)
-                                           totalLen
-                                           flatCryArr -}
-                            applyGlobalOpenTerm "Prelude.map"
-                              [ basicCryType
-                              , ffiLLVMCoreType
-                              , lambdaOpenTerm "x" basicCryType toLLVM
-                              , totalLenTerm
-                              , flatCryArr
-                              ]
-                    FFIPostcondConvToCryEq -> FFIPostcondConvToCryEq
+              , ffiToLLVM = basicToLLVM <&> \toLLVM cryArr ->
+                  -- If the element representations are isomorphic, then the
+                  -- array representations are isomorphic as well
+                  let flatCryArr =
+                        {- if lens = [x, y, z]
+                            join (x * y) z ffiCryType
+                                 (join x y (Vec z ffiCryType) cryArr) -}
+                        foldr
+                          (\(cumulLen, dimLen, arrElemType) arr ->
+                            applyGlobalOpenTerm "Prelude.join"
+                              [cumulLen, dimLen, arrElemType, arr])
+                          cryArr
+                          (reverse cumul)
+                  in  {- map toLLVM flatCryArr
+                      => Prelude.map basicCryType
+                                     ffiLLVMCoreType
+                                     (\x -> toLLVM x)
+                                     totalLen
+                                     flatCryArr -}
+                      applyGlobalOpenTerm "Prelude.map"
+                        [ basicCryType
+                        , ffiLLVMCoreType
+                        , lambdaOpenTerm "x" basicCryType toLLVM
+                        , totalLenTerm
+                        , flatCryArr
+                        ]
               }
     }
 
