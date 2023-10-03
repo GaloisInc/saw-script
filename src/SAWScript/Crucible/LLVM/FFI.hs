@@ -7,6 +7,35 @@
 
 -- | Commands for verifying Cryptol foreign functions against their Cryptol
 -- implementations.
+--
+-- Since the Cryptol FFI specifies the exact way that foreign function
+-- implementations are called
+-- (https://galoisinc.github.io/cryptol/master/FFI.html), we can automatically
+-- generate the necessary LLVM setup script for verifying Cryptol foreign
+-- functions which also have Cryptol reference implementations. However, often
+-- the foreign (LLVM) representation of Cryptol data types as specified by the
+-- FFI is different from the representation that SAW directly maps the Cryptol
+-- type to (e.g. bitvectors are widened to machine-size integers, and
+-- multidimensional arrays are flattened). Therefore, if we were writing the
+-- setup spec by hand, we would use some Cryptol built in functions to do the
+-- appropriate conversions. Here, we use the SAW Core built in functions (which
+-- the Cryptol builtins are converted to) directly for these operations.
+--
+-- In order for SAW to match overrides with the resulting LLVM spec, we always
+-- create symbolic variables in the LLVM representation and pass them directly
+-- as arguments to the LLVM function, while asserting the necessary
+-- preconditions and doing the appropriate conversions to pass the Cryptol
+-- version of the variables to Cryptol. If the mapping from Cryptol to LLVM
+-- representation is not surjective, then preconditions are necessary to assert
+-- that the LLVM input variables start in a state that is in the image of such
+-- mapping (a fact which the LLVM implementation of the function may depend on).
+-- Similarly, for function outputs where the mapping from LLVM to Cryptol
+-- representation is not injective, we cannot directly verify functional
+-- correctness by using @llvm_return@ (for LLVM return values) or
+-- @llvm_points_to@ (for LLVM output arguments) on the Cryptol function output
+-- converted to LLVM representation. Instead, we must create a fresh symbolic
+-- variable representing the LLVM output, then convert that to Cryptol
+-- representation and compare it with the Cryptol result.
 module SAWScript.Crucible.LLVM.FFI
   ( llvm_ffi_setup
   ) where
