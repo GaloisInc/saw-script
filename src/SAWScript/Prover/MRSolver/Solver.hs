@@ -149,7 +149,7 @@ import Data.Either
 import Numeric.Natural (Natural)
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
--- import Data.Bits (shiftL)
+import Data.Bits (shiftL)
 import Control.Monad.Reader
 import Control.Monad.Except
 import qualified Data.Map as Map
@@ -388,59 +388,57 @@ normComp (CompTerm t) =
 
     -- Convert `atM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecAtM`
-    (asGlobalDef -> Just "CryptolM.atM", [(asBvToNat -> Just (_w1, _n)), _a, _xs,
-                                          (asBvToNat -> Just (_w2, _i))]) ->
-      error "FIXME HERE NOW: need SpecM version of atM"
-      {-
+    (asGlobalDef -> Just "CryptolM.atM", [ev, stack,
+                                          (asBvToNat -> Just (w1, n)), a, xs,
+                                          (asBvToNat -> Just (w2, i))]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
-           mrApplyAll body [w1, n, a, xs, i] >>= normCompTerm
-         else throwMRFailure (MalformedComp t) -}
+           mrApplyAll body [ev, stack, w1, n, a, xs, i] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
 
     -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.atM", [_n_tm@(asNat -> Just _n), _a, _xs,
+    (asGlobalDef -> Just "CryptolM.atM", [ev, stack,
+                                          n_tm@(asNat -> Just n), a, xs,
                                           (asBvToNat ->
-                                             Just (_w_tm@(asNat -> Just _w),
-                                                   _i))]) ->
-      error "FIXME HERE NOW: need SpecM version of atM"
-      {-
+                                             Just (w_tm@(asNat -> Just w),
+                                                   i))]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          if n < 1 `shiftL` fromIntegral w then do
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (atM)" w_tm n'
-           mrApplyAll body [w_tm, n', a, xs', i] >>= normCompTerm
-         else throwMRFailure (MalformedComp t) -}
+           mrApplyAll body [ev, stack, w_tm, n', a, xs', i] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
 
     -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecUpdateM`
-    (asGlobalDef -> Just "CryptolM.updateM", [(asBvToNat -> Just (_w1, _n)), _a, _xs,
-                                              (asBvToNat -> Just (_w2, _i)), _x]) ->
-      error "FIXME HERE NOW: need SpecM version of updateM"
-      {-
+    (asGlobalDef -> Just "CryptolM.updateM", [ev, stack,
+                                              (asBvToNat -> Just (w1, n)), a, xs,
+                                              (asBvToNat -> Just (w2, i)), x]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
-           mrApplyAll body [w1, n, a, xs, i, x] >>= normCompTerm
-         else throwMRFailure (MalformedComp t) -}
+           mrApplyAll body [ev, stack, w1, n, a, xs, i, x] >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
 
     -- Convert `updateM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.updateM",
-     [_n_tm@(asNat -> Just _n), _a, _xs, (asBvToNat ->
-                                      Just (_w_tm@(asNat -> Just _w), _i)), _x]) ->
-      error "FIXME HERE NOW: need SpecM version of updateM"
-      {-
+    (asGlobalDef -> Just "CryptolM.updateM", [ev, stack,
+                                              n_tm@(asNat -> Just n), a, xs,
+                                              (asBvToNat ->
+                                                 Just (w_tm@(asNat -> Just w),
+                                                       i)), x]) ->
       do body <- mrGlobalDefBody "CryptolM.fromBVVecUpdateM"
          if n < 1 `shiftL` fromIntegral w then do
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (updateM)" w_tm n'
            err_tm <- mrErrorTerm a "normComp (updateM)"
-           mrApplyAll body [w_tm, n', a, xs', i, x, err_tm, n_tm] >>= normCompTerm
-         else throwMRFailure (MalformedComp t) -}
+           mrApplyAll body [ev, stack, w_tm, n', a, xs', i, x, err_tm, n_tm]
+             >>= normCompTerm
+         else throwMRFailure (MalformedComp t)
 
     -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
     (f@(asGlobalDef -> Just ident), args)
