@@ -2195,79 +2195,82 @@ nth_default1 a d l =
 --------------------------------------------------------------------------------
 -- Type descriptions
 
--- Arithmetic kinds --
+-- Expression kinds --
 
--- The kinds for objects that can be used in type-level arithmetic expressions
-data ArithKind : sort 0 where {
-  Kind_nat : ArithKind;
-  Kind_bv : (w:Nat) -> ArithKind;
+-- The kinds for objects that can be used in type-level expressions
+data ExprKind : sort 0 where {
+  Kind_unit : ExprKind;
+  Kind_bool : ExprKind;
+  Kind_nat : ExprKind;
+  Kind_bv : (w:Nat) -> ExprKind;
 }
 
--- The type of an element of an ArithKind
-arithKindElem : ArithKind -> sort 0;
-arithKindElem AK =
-  ArithKind#rec (\ (_:ArithKind) -> sort 0) Nat (\ (w:Nat) -> Vec w Bool) AK;
+-- The type of an element of an ExprKind
+exprKindElem : ExprKind -> sort 0;
+exprKindElem EK =
+  ExprKind#rec (\ (_:ExprKind) -> sort 0)
+    #() Bool Nat (\ (w:Nat) -> Vec w Bool) EK;
 
--- The unary operations for type-level arithmetic expressions
-data ArithUnOp : ArithKind -> ArithKind -> sort 0 where {
-  UnOp_BVToNat : (w:Nat) -> ArithUnOp (Kind_bv w) Kind_nat;
-  UnOp_NatToBV : (w:Nat) -> ArithUnOp Kind_nat (Kind_bv w);
+-- The unary operations for type-level expressions
+data TpExprUnOp : ExprKind -> ExprKind -> sort 0 where {
+  UnOp_BVToNat : (w:Nat) -> TpExprUnOp (Kind_bv w) Kind_nat;
+  UnOp_NatToBV : (w:Nat) -> TpExprUnOp Kind_nat (Kind_bv w);
 }
 
--- Evaluate a unary operation to a function on elements of its ArithKinds
-evalUnOp : (AK1 AK2:ArithKind) -> ArithUnOp AK1 AK2 -> arithKindElem AK1 ->
-           arithKindElem AK2;
-evalUnOp AK1 AK2 op =
-  ArithUnOp#rec (\ (AK1 AK2:ArithKind) (_:ArithUnOp AK1 AK2) ->
-                   arithKindElem AK1 -> arithKindElem AK2)
+-- Evaluate a unary operation to a function on elements of its ExprKinds
+evalUnOp : (EK1 EK2:ExprKind) -> TpExprUnOp EK1 EK2 -> exprKindElem EK1 ->
+           exprKindElem EK2;
+evalUnOp EK1 EK2 op =
+  TpExprUnOp#rec (\ (EK1 EK2:ExprKind) (_:TpExprUnOp EK1 EK2) ->
+                   exprKindElem EK1 -> exprKindElem EK2)
     (\ (w:Nat) -> bvToNat w)
     (\ (w:Nat) -> bvNat w)
-    AK1 AK2 op;
+    EK1 EK2 op;
 
--- The binary operations for type-level arithmetic expressions
-data ArithBinOp : ArithKind -> ArithKind -> ArithKind -> sort 0 where {
-  BinOp_AddNat : ArithBinOp Kind_nat Kind_nat Kind_nat;
-  BinOp_MulNat : ArithBinOp Kind_nat Kind_nat Kind_nat;
-  BinOp_AddBV : (w:Nat) -> ArithBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
-  BinOp_MulBV : (w:Nat) -> ArithBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
+-- The binary operations for type-level expressions
+data TpExprBinOp : ExprKind -> ExprKind -> ExprKind -> sort 0 where {
+  BinOp_AddNat : TpExprBinOp Kind_nat Kind_nat Kind_nat;
+  BinOp_MulNat : TpExprBinOp Kind_nat Kind_nat Kind_nat;
+  BinOp_AddBV : (w:Nat) -> TpExprBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
+  BinOp_MulBV : (w:Nat) -> TpExprBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
 }
 
--- Evaluate a binary operation to a function on elements of its ArithKinds
-evalBinOp : (AK1 AK2 AK3:ArithKind) -> ArithBinOp AK1 AK2 AK3 ->
-            arithKindElem AK1 -> arithKindElem AK2 -> arithKindElem AK3;
-evalBinOp AK1 AK2 AK3 op =
-  ArithBinOp#rec (\ (AK1 AK2 AK3:ArithKind) (_:ArithBinOp AK1 AK2 AK3) ->
-                    arithKindElem AK1 -> arithKindElem AK2 -> arithKindElem AK3)
+-- Evaluate a binary operation to a function on elements of its ExprKinds
+evalBinOp : (EK1 EK2 EK3:ExprKind) -> TpExprBinOp EK1 EK2 EK3 ->
+            exprKindElem EK1 -> exprKindElem EK2 -> exprKindElem EK3;
+evalBinOp EK1 EK2 EK3 op =
+  TpExprBinOp#rec (\ (EK1 EK2 EK3:ExprKind) (_:TpExprBinOp EK1 EK2 EK3) ->
+                    exprKindElem EK1 -> exprKindElem EK2 -> exprKindElem EK3)
     addNat mulNat bvAdd bvMul
-    AK1 AK2 AK3 op;
+    EK1 EK2 EK3 op;
 
 
 -- Kind and type descriptions --
 
--- The kinds used for type descriptions, which can either be arithmetic or the
--- kind of type descriptions themselves
+-- The kinds used for type descriptions, which can either be an expression kind
+-- or the kind of type descriptions themselves
 data KindDesc : sort 0 where {
-  Kind_Arith : ArithKind -> KindDesc;
+  Kind_Expr : ExprKind -> KindDesc;
   Kind_Tp : KindDesc;
 }
 
--- Type-level arithmetic expressions
-data ArithExpr : ArithKind -> sort 0 where {
-  Arith_Const : (AK:ArithKind) -> arithKindElem AK -> ArithExpr AK;
-  Arith_Var : (AK:ArithKind) -> Nat -> ArithExpr AK;
-  Arith_UnOp : (AK1 AK2:ArithKind) -> ArithUnOp AK1 AK2 ->
-               ArithExpr AK1 -> ArithExpr AK2;
-  Arith_BinOp : (AK1 AK2 AK3:ArithKind) -> ArithBinOp AK1 AK2 AK3 ->
-                ArithExpr AK1 -> ArithExpr AK2 -> ArithExpr AK3;
+-- Type-level expressions
+data TpExpr : ExprKind -> sort 0 where {
+  TpExpr_Const : (EK:ExprKind) -> exprKindElem EK -> TpExpr EK;
+  TpExpr_Var : (EK:ExprKind) -> Nat -> TpExpr EK;
+  TpExpr_UnOp : (EK1 EK2:ExprKind) -> TpExprUnOp EK1 EK2 ->
+               TpExpr EK1 -> TpExpr EK2;
+  TpExpr_BinOp : (EK1 EK2 EK3:ExprKind) -> TpExprBinOp EK1 EK2 EK3 ->
+                TpExpr EK1 -> TpExpr EK2 -> TpExpr EK3;
 }
 
--- The natural number N as an ArithExpr
-ArithN : Nat -> ArithExpr Kind_nat;
-ArithN n = Arith_Const Kind_nat n;
+-- The natural number N as a TpExpr
+TpExprN : Nat -> TpExpr Kind_nat;
+TpExprN n = TpExpr_Const Kind_nat n;
 
--- The natural number 0 as an ArithExpr
-ArithZ : ArithExpr Kind_nat;
-ArithZ = Arith_Const Kind_nat 0;
+-- The natural number 0 as a TpExpr
+TpExprZ : TpExpr Kind_nat;
+TpExprZ = TpExpr_Const Kind_nat 0;
 
 
 -- Type descriptions, which form an inductive description of types. These types
@@ -2300,7 +2303,7 @@ data TpDesc : sort 0 where {
   Tp_Sigma : KindDesc -> TpDesc -> TpDesc;
 
   -- Vector types
-  Tp_Vec : TpDesc -> ArithExpr Kind_nat -> TpDesc;
+  Tp_Vec : TpDesc -> TpExpr Kind_nat -> TpDesc;
 
   -- Inductive types, where Kind_Ind A is equivalent to [Kind_Ind A/x]A
   Tp_Ind : TpDesc -> TpDesc;
@@ -2315,57 +2318,75 @@ data TpDesc : sort 0 where {
 
 -- Type-level environments --
 
--- Decide equality for arithmetic kinds
-proveEqArithKind : (AK1 AK2 : ArithKind) -> Maybe (Eq ArithKind AK1 AK2);
-proveEqArithKind AK1_top =
-  ArithKind#rec
-    (\ (AK1:ArithKind) -> (AK2:ArithKind) -> Maybe (Eq ArithKind AK1 AK2))
-    (\ (AK2_top:ArithKind) ->
-       ArithKind#rec (\ (AK2:ArithKind) -> Maybe (Eq ArithKind Kind_nat AK2))
-         (Just (Eq ArithKind Kind_nat Kind_nat) (Refl ArithKind Kind_nat))
-         (\ (w:Nat) -> Nothing (Eq ArithKind Kind_nat (Kind_bv w)))
-         AK2_top)
-    (\ (w1:Nat) (AK2_top:ArithKind) ->
-       ArithKind#rec (\ (AK2:ArithKind) -> Maybe (Eq ArithKind (Kind_bv w1) AK2))
-         (Nothing (Eq ArithKind (Kind_bv w1) Kind_nat))
+-- Decide equality for expression kinds
+proveEqExprKind : (EK1 EK2 : ExprKind) -> Maybe (Eq ExprKind EK1 EK2);
+proveEqExprKind EK1_top =
+  ExprKind#rec
+    (\ (EK1:ExprKind) -> (EK2:ExprKind) -> Maybe (Eq ExprKind EK1 EK2))
+    (\ (EK2_top:ExprKind) ->
+       ExprKind#rec (\ (EK2:ExprKind) -> Maybe (Eq ExprKind Kind_unit EK2))
+         (Just (Eq ExprKind Kind_unit Kind_unit) (Refl ExprKind Kind_unit))
+         (Nothing (Eq ExprKind Kind_unit Kind_bool))
+         (Nothing (Eq ExprKind Kind_unit Kind_nat))
+         (\ (w:Nat) -> Nothing (Eq ExprKind Kind_unit (Kind_bv w)))
+         EK2_top)
+    (\ (EK2_top:ExprKind) ->
+       ExprKind#rec (\ (EK2:ExprKind) -> Maybe (Eq ExprKind Kind_bool EK2))
+         (Nothing (Eq ExprKind Kind_bool Kind_unit))
+         (Just (Eq ExprKind Kind_bool Kind_bool) (Refl ExprKind Kind_bool))
+         (Nothing (Eq ExprKind Kind_bool Kind_nat))
+         (\ (w:Nat) -> Nothing (Eq ExprKind Kind_bool (Kind_bv w)))
+         EK2_top)
+    (\ (EK2_top:ExprKind) ->
+       ExprKind#rec (\ (EK2:ExprKind) -> Maybe (Eq ExprKind Kind_nat EK2))
+         (Nothing (Eq ExprKind Kind_nat Kind_unit))
+         (Nothing (Eq ExprKind Kind_nat Kind_bool))
+         (Just (Eq ExprKind Kind_nat Kind_nat) (Refl ExprKind Kind_nat))
+         (\ (w:Nat) -> Nothing (Eq ExprKind Kind_nat (Kind_bv w)))
+         EK2_top)
+    (\ (w1:Nat) (EK2_top:ExprKind) ->
+       ExprKind#rec (\ (EK2:ExprKind) -> Maybe (Eq ExprKind (Kind_bv w1) EK2))
+         (Nothing (Eq ExprKind (Kind_bv w1) Kind_unit))
+         (Nothing (Eq ExprKind (Kind_bv w1) Kind_bool))
+         (Nothing (Eq ExprKind (Kind_bv w1) Kind_nat))
          (\ (w2:Nat) ->
             Maybe__rec
               (Eq Nat w1 w2)
               (\ (_:Maybe (Eq Nat w1 w2)) ->
-                 Maybe (Eq ArithKind (Kind_bv w1) (Kind_bv w2)))
-              (Nothing (Eq ArithKind (Kind_bv w1) (Kind_bv w2)))
+                 Maybe (Eq ExprKind (Kind_bv w1) (Kind_bv w2)))
+              (Nothing (Eq ExprKind (Kind_bv w1) (Kind_bv w2)))
               (\ (e:Eq Nat w1 w2) ->
-                 Just (Eq ArithKind (Kind_bv w1) (Kind_bv w2))
-                      (eq_cong Nat w1 w2 e ArithKind (\ (w:Nat) -> Kind_bv w)))
+                 Just (Eq ExprKind (Kind_bv w1) (Kind_bv w2))
+                      (eq_cong Nat w1 w2 e ExprKind (\ (w:Nat) -> Kind_bv w)))
               (proveEqNat w1 w2))
-         AK2_top)
-    AK1_top;
+         EK2_top)
+    EK1_top;
 
 -- Decide equality for kind descriptions
 proveEqKindDesc : (K1 K2 : KindDesc) -> Maybe (Eq KindDesc K1 K2);
 proveEqKindDesc K1_top =
   KindDesc#rec
     (\ (K1:KindDesc) -> (K2:KindDesc) -> Maybe (Eq KindDesc K1 K2))
-    (\ (AK1:ArithKind) (K2_top:KindDesc) ->
+    (\ (EK1:ExprKind) (K2_top:KindDesc) ->
        KindDesc#rec
-         (\ (K2:KindDesc) -> Maybe (Eq KindDesc (Kind_Arith AK1) K2))
-         (\ (AK2:ArithKind) ->
+         (\ (K2:KindDesc) -> Maybe (Eq KindDesc (Kind_Expr EK1) K2))
+         (\ (EK2:ExprKind) ->
             Maybe__rec
-              (Eq ArithKind AK1 AK2)
-              (\ (_:Maybe (Eq ArithKind AK1 AK2)) ->
-                 Maybe (Eq KindDesc (Kind_Arith AK1) (Kind_Arith AK2)))
-              (Nothing (Eq KindDesc (Kind_Arith AK1) (Kind_Arith AK2)))
-              (\ (e:Eq ArithKind AK1 AK2) ->
-                 Just (Eq KindDesc (Kind_Arith AK1) (Kind_Arith AK2))
-                      (eq_cong ArithKind AK1 AK2 e KindDesc
-                               (\ (AK:ArithKind) -> Kind_Arith AK)))
-              (proveEqArithKind AK1 AK2))
-         (Nothing (Eq KindDesc (Kind_Arith AK1) Kind_Tp))
+              (Eq ExprKind EK1 EK2)
+              (\ (_:Maybe (Eq ExprKind EK1 EK2)) ->
+                 Maybe (Eq KindDesc (Kind_Expr EK1) (Kind_Expr EK2)))
+              (Nothing (Eq KindDesc (Kind_Expr EK1) (Kind_Expr EK2)))
+              (\ (e:Eq ExprKind EK1 EK2) ->
+                 Just (Eq KindDesc (Kind_Expr EK1) (Kind_Expr EK2))
+                      (eq_cong ExprKind EK1 EK2 e KindDesc
+                               (\ (EK:ExprKind) -> Kind_Expr EK)))
+              (proveEqExprKind EK1 EK2))
+         (Nothing (Eq KindDesc (Kind_Expr EK1) Kind_Tp))
          K2_top)
     (\ (K2_top:KindDesc) ->
        KindDesc#rec
          (\ (K2:KindDesc) -> Maybe (Eq KindDesc Kind_Tp K2))
-         (\ (AK2:ArithKind) -> Nothing (Eq KindDesc Kind_Tp (Kind_Arith AK2)))
+         (\ (EK2:ExprKind) -> Nothing (Eq KindDesc Kind_Tp (Kind_Expr EK2)))
          (Just (Eq KindDesc Kind_Tp Kind_Tp) (Refl KindDesc Kind_Tp))
          K2_top)
     K1_top;
@@ -2374,17 +2395,17 @@ proveEqKindDesc K1_top =
 kindElem : KindDesc -> sort 0;
 kindElem K =
   KindDesc#rec (\ (_:KindDesc) -> sort 0)
-    (\ (AK:ArithKind) -> arithKindElem AK)
+    (\ (EK:ExprKind) -> exprKindElem EK)
     TpDesc
     K;
 
--- The default element of an arithmetic kind
-defaultAKElem : (AK:ArithKind) -> arithKindElem AK;
-defaultAKElem AK = ArithKind#rec arithKindElem 0 (\ (w:Nat) -> bvNat w 0) AK;
+-- The default element of an expression kind
+defaultEKElem : (EK:ExprKind) -> exprKindElem EK;
+defaultEKElem EK = ExprKind#rec exprKindElem () False 0 (\ (w:Nat) -> bvNat w 0) EK;
 
 -- The default element of a kind
 defaultKindElem : (K:KindDesc) -> kindElem K;
-defaultKindElem K = KindDesc#rec kindElem defaultAKElem Tp_Void K;
+defaultKindElem K = KindDesc#rec kindElem defaultEKElem Tp_Void K;
 
 -- An element of an environment is a value, i.e., an element of some kind
 TpEnvElem : sort 0;
@@ -2504,41 +2525,41 @@ evalVar n env K var =
     (\ (_:Nat) -> defaultKindElem K)
     (substVar n env K var);
 
--- Substitute an environment at lifting level n into arithmetic expression e
-substArithExpr : Nat -> TpEnv -> (AK:ArithKind) -> ArithExpr AK -> ArithExpr AK;
-substArithExpr n env AK_top e =
-  ArithExpr#rec (\ (AK:ArithKind) (_:ArithExpr AK) -> ArithExpr AK)
-    (\ (AK:ArithKind) (v:arithKindElem AK) -> Arith_Const AK v)
-    (\ (AK:ArithKind) (ix:Nat) ->
-       Either__rec (arithKindElem AK) Nat
-         (\ (_:Either (arithKindElem AK) Nat) -> ArithExpr AK)
-         (\ (v:arithKindElem AK) -> Arith_Const AK v)
-         (\ (ix':Nat) -> Arith_Var AK ix')
-         (substVar n env (Kind_Arith AK) ix))
-    (\ (AK1 AK2:ArithKind) (op:ArithUnOp AK1 AK2)
-       (_:ArithExpr AK1) (rec:ArithExpr AK1) ->
-       Arith_UnOp AK1 AK2 op rec)
-    (\ (AK1 AK2 AK3:ArithKind) (op:ArithBinOp AK1 AK2 AK3)
-       (_:ArithExpr AK1) (rec1:ArithExpr AK1)
-       (_:ArithExpr AK2) (rec2:ArithExpr AK2) ->
-       Arith_BinOp AK1 AK2 AK3 op rec1 rec2)
-    AK_top
+-- Substitute an environment at lifting level n into type-level expression e
+substTpExpr : Nat -> TpEnv -> (EK:ExprKind) -> TpExpr EK -> TpExpr EK;
+substTpExpr n env EK_top e =
+  TpExpr#rec (\ (EK:ExprKind) (_:TpExpr EK) -> TpExpr EK)
+    (\ (EK:ExprKind) (v:exprKindElem EK) -> TpExpr_Const EK v)
+    (\ (EK:ExprKind) (ix:Nat) ->
+       Either__rec (exprKindElem EK) Nat
+         (\ (_:Either (exprKindElem EK) Nat) -> TpExpr EK)
+         (\ (v:exprKindElem EK) -> TpExpr_Const EK v)
+         (\ (ix':Nat) -> TpExpr_Var EK ix')
+         (substVar n env (Kind_Expr EK) ix))
+    (\ (EK1 EK2:ExprKind) (op:TpExprUnOp EK1 EK2)
+       (_:TpExpr EK1) (rec:TpExpr EK1) ->
+       TpExpr_UnOp EK1 EK2 op rec)
+    (\ (EK1 EK2 EK3:ExprKind) (op:TpExprBinOp EK1 EK2 EK3)
+       (_:TpExpr EK1) (rec1:TpExpr EK1)
+       (_:TpExpr EK2) (rec2:TpExpr EK2) ->
+       TpExpr_BinOp EK1 EK2 EK3 op rec1 rec2)
+    EK_top
     e;
 
--- Evaluate an arithmetic expression to a value
-evalArithExpr : TpEnv -> (AK:ArithKind) -> ArithExpr AK -> arithKindElem AK;
-evalArithExpr env AK_top e =
-  ArithExpr#rec (\ (AK:ArithKind) (_:ArithExpr AK) -> arithKindElem AK)
-    (\ (AK:ArithKind) (v:arithKindElem AK) -> v)
-    (\ (AK:ArithKind) (ix:Nat) -> evalVar 0 env (Kind_Arith AK) ix)
-    (\ (AK1 AK2:ArithKind) (op:ArithUnOp AK1 AK2)
-       (_:ArithExpr AK1) (rec:arithKindElem AK1) ->
-       evalUnOp AK1 AK2 op rec)
-    (\ (AK1 AK2 AK3:ArithKind) (op:ArithBinOp AK1 AK2 AK3)
-       (_:ArithExpr AK1) (rec1:arithKindElem AK1)
-       (_:ArithExpr AK2) (rec2:arithKindElem AK2) ->
-       evalBinOp AK1 AK2 AK3 op rec1 rec2)
-    AK_top
+-- Evaluate a type-level expression to a value
+evalTpExpr : TpEnv -> (EK:ExprKind) -> TpExpr EK -> exprKindElem EK;
+evalTpExpr env EK_top e =
+  TpExpr#rec (\ (EK:ExprKind) (_:TpExpr EK) -> exprKindElem EK)
+    (\ (EK:ExprKind) (v:exprKindElem EK) -> v)
+    (\ (EK:ExprKind) (ix:Nat) -> evalVar 0 env (Kind_Expr EK) ix)
+    (\ (EK1 EK2:ExprKind) (op:TpExprUnOp EK1 EK2)
+       (_:TpExpr EK1) (rec:exprKindElem EK1) ->
+       evalUnOp EK1 EK2 op rec)
+    (\ (EK1 EK2 EK3:ExprKind) (op:TpExprBinOp EK1 EK2 EK3)
+       (_:TpExpr EK1) (rec1:exprKindElem EK1)
+       (_:TpExpr EK2) (rec2:exprKindElem EK2) ->
+       evalBinOp EK1 EK2 EK3 op rec1 rec2)
+    EK_top
     e;
 
 -- Substitute an environment at lifting level n into type description T
@@ -2562,9 +2583,9 @@ tpSubst n_top env_top T_top =
        Tp_Sum (recA n env) (recB n env))
     (\ (K:KindDesc) (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
        Tp_Sigma K (rec (Succ n) env))
-    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (len:ArithExpr Kind_nat)
+    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (len:TpExpr Kind_nat)
        (n:Nat) (env:TpEnv) ->
-       Tp_Vec (rec n env) (substArithExpr n env Kind_nat len))
+       Tp_Vec (rec n env) (substTpExpr n env Kind_nat len))
     (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
        Tp_Ind (rec (Succ n) env))
     (\ (ix:Nat) (n:Nat) (env:TpEnv) ->
@@ -2625,13 +2646,13 @@ data indElem : TpEnv -> TpDesc -> sort 0 where {
   -- Elements of vector types are built using nil and cons constructors, to
   -- build a vector of elements with a concrete size, along with a final cast
   -- constructor, to cast the size to an expression equal to that concrete size
-  Elem_VecNil : (env:TpEnv) -> (T:TpDesc) -> indElem env (Tp_Vec T ArithZ);
+  Elem_VecNil : (env:TpEnv) -> (T:TpDesc) -> indElem env (Tp_Vec T TpExprZ);
   Elem_VecCons : (env:TpEnv) -> (T:TpDesc) -> (n:Nat) ->
-                 indElem env T -> indElem env (Tp_Vec T (ArithN n)) ->
-                 indElem env (Tp_Vec T (ArithN (Succ n)));
-  Elem_VecCast : (env:TpEnv) -> (T:TpDesc) -> (e1 e2:ArithExpr Kind_nat) ->
-                 Eq Nat (evalArithExpr env Kind_nat e1)
-                        (evalArithExpr env Kind_nat e2) ->
+                 indElem env T -> indElem env (Tp_Vec T (TpExprN n)) ->
+                 indElem env (Tp_Vec T (TpExprN (Succ n)));
+  Elem_VecCast : (env:TpEnv) -> (T:TpDesc) -> (e1 e2:TpExpr Kind_nat) ->
+                 Eq Nat (evalTpExpr env Kind_nat e1)
+                        (evalTpExpr env Kind_nat e2) ->
                  indElem env (Tp_Vec T e1) -> indElem env (Tp_Vec T e2);
 
   -- An element of inductive type Tp_Ind T is an element of the one-step
@@ -2673,8 +2694,8 @@ tpElemEnv env_top T_top =
        Either (recT env) (recU env))
     (\ (K:KindDesc) (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
        Sigma (kindElem K) (\ (v:kindElem K) -> rec (envConsElem K v env)))
-    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (len:ArithExpr Kind_nat) (env:TpEnv) ->
-       Vec (evalArithExpr env Kind_nat len) (rec env))
+    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (len:TpExpr Kind_nat) (env:TpEnv) ->
+       Vec (evalTpExpr env Kind_nat len) (rec env))
     (\ (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
        indElem nilTpEnv (unfoldIndTpDesc env T))
     (\ (var:Nat) (env:TpEnv) ->
@@ -2810,7 +2831,7 @@ specFun E env_top T_top =
     (\ (T:TpDesc) (_:TpEnv -> sort 0)
        (U:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
     (\ (K:KindDesc) (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
-    (\ (_:TpDesc) (_:TpEnv -> sort 0) (_:ArithExpr Kind_nat) (env:TpEnv) -> #())
+    (\ (_:TpDesc) (_:TpEnv -> sort 0) (_:TpExpr Kind_nat) (env:TpEnv) -> #())
     (\ (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
     (\ (var:Nat) (env:TpEnv) -> #())
     (\ (_:TpEnv) -> #())
