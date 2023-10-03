@@ -122,11 +122,14 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
       throwFFISetup
         "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
+-- | Report an error in generating setup for a foreign function.
 throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
 throwFFISetup msg =
   throwLLVMFun "llvm_ffi_setup" $
     "Cannot generate FFI setup for " ++ showTerm (funTerm ?ctx) ++ ":\n" ++ msg
 
+-- | Given a list of type parameters and their actual values as terms, create a
+-- type environment binding them.
 buildTypeEnv :: Ctx => [TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
@@ -142,6 +145,8 @@ buildTypeEnv params [] = throwFFISetup $
   ++ "Missing type arguments for: " ++ intercalate ", " (map pretty params)
 buildTypeEnv [] _ = throwFFISetup "Too many (type) arguments"
 
+-- | Given a Cryptol type argument as a term, return the corresponding size_t
+-- LLVM argument.
 mkSizeArg :: Ctx => Term -> IO (AllLLVM SetupValue)
 mkSizeArg tyArgTerm = do
   {- `tyArgTerm : [sizeBitSize]
