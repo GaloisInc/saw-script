@@ -413,7 +413,7 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
             { ffiConv = Nothing
             , .. }
 basicTypeInfo (FFIBasicRef _) =
-  throwFFISetup "GMP types (Integer, Z) not supported"
+  throwFFISetup "GMP types (Integer, Rational, Z) not supported"
 
 -- | Assert the precondition that a prefix of the given bitvector is zero.
 precondBVZeroPrefix :: Ctx =>
