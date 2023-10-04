@@ -2852,7 +2852,7 @@ primitive LambdaS : (E:EvType) -> (T:TpDesc) -> specFun E nilTpEnv T -> FunIx T;
 -- f, FunIx T -> specFun E nil T, is the same as specFun E nil (Tp_Arr T T) when
 -- T is a monadic function type.
 primitive FixS : (E:EvType) -> (T:TpDesc) ->
-                 (FunIx T -> specFun E nilTpEnv T) -> FunIx T;
+                 (FunIx T -> specFun E nilTpEnv T) -> SpecM E (FunIx T);
 
 
 -- The multi-arity function type from FunIxs to a given output type
