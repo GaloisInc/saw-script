@@ -2305,7 +2305,7 @@ data TpDesc : sort 0 where {
   -- Vector types
   Tp_Vec : TpDesc -> TpExpr Kind_nat -> TpDesc;
 
-  -- Inductive types, where Kind_Ind A is equivalent to [Kind_Ind A/x]A
+  -- Inductive types, where Tp_Ind A is equivalent to [Tp_Ind A/x]A
   Tp_Ind : TpDesc -> TpDesc;
 
   -- Type variables, used for types bound by pis, sigmas, and inductive types
@@ -2314,6 +2314,11 @@ data TpDesc : sort 0 where {
   -- The empty type
   Tp_Void : TpDesc;
 }
+
+-- The type description for the type BVVec n len d
+Tp_BVVec : TpDesc -> (n:Nat) -> TpExpr (Kind_bv n) -> TpDesc;
+Tp_BVVec d n len =
+  Tp_Vec d (TpExpr_UnOp (Kind_bv n) Kind_nat (UnOp_BVToNat n) len);
 
 
 -- Type-level environments --
