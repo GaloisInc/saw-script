@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE EmptyCase #-}
@@ -171,6 +172,10 @@ mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 specMParamsArgs :: SpecMParams Term -> [Term]
 specMParamsArgs (SpecMParams ev stack) = [ev, stack]
 
+-- | A datatype indicating whether an application of a 'FunName' is wrapped in
+-- a call to @liftStackS@ - used in the 'FunBind' constructor of 'NormComp'
+data IsLifted = Lifted | Unlifted deriving (Generic, Eq, Show)
+
 -- | A Haskell representation of a @SpecM@ in "monadic normal form"
 data NormComp
   = RetS Term -- ^ A term @retS _ _ a x@
@@ -183,8 +188,9 @@ data NormComp
   | AssumeBoolBind Term CompFun -- ^ the bind of an @assumeBoolS@ computation
   | ExistsBind Type CompFun -- ^ the bind of an @existsS@ computation
   | ForallBind Type CompFun -- ^ the bind of a @forallS@ computation
-  | FunBind FunName [Term] CompFun
-    -- ^ Bind a monadic function with @N@ arguments in an @a -> SpecM b@ term
+  | FunBind FunName [Term] IsLifted CompFun
+    -- ^ Bind a monadic function with @N@ arguments, possibly wrapped in a call
+    -- to @liftStackS@, in an @a -> SpecM b@ term
   deriving (Generic, Show)
 
 -- | An eliminator for an @Eithers@ type is a pair of the type of the disjunct
@@ -240,6 +246,8 @@ data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
 asSpecM :: Term -> Maybe (SpecMParams Term, Term)
 asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, stack, tp])) =
   return (SpecMParams { specMEvType = ev, specMStack = stack }, tp)
+asSpecM (asApplyAll -> (isGlobalDef "Prelude.CompM" -> Just (), _)) =
+  error "CompM found instead of SpecM"
 asSpecM _ = fail "not a SpecM type!"
 
 -- | Test if a type normalizes to a monadic function type of 0 or more arguments
@@ -418,6 +426,7 @@ instance TermLike Natural where
 
 deriving anyclass instance TermLike Type
 deriving instance TermLike (SpecMParams Term)
+deriving instance TermLike IsLifted
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp
@@ -532,7 +541,8 @@ instance PrettyInCtx Comp where
   prettyInCtx (CompBind c f) =
     prettyAppList [prettyInCtx c, return ">>=", prettyInCtx f]
   prettyInCtx (CompReturn t) =
-    prettyAppList [ return "returnM", return "_", parens <$> prettyInCtx t]
+    prettyAppList [return "retS", return "_", return "_",
+                   parens <$> prettyInCtx t]
 
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm _ t) = prettyInCtx t
@@ -576,10 +586,21 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallBind tp k) =
     prettyAppList [return "forallS", return "_", return "_", prettyInCtx tp,
                    return ">>=", parens <$> prettyInCtx k]
-  prettyInCtx (FunBind f args (CompFunReturn _ _)) =
-    prettyTermApp (funNameTerm f) args
-  prettyInCtx (FunBind f [] k) =
-    prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]
-  prettyInCtx (FunBind f args k) =
-    prettyAppList [parens <$> prettyTermApp (funNameTerm f) args,
-                   return ">>=", prettyInCtx k]
+  prettyInCtx (FunBind f args isLifted (CompFunReturn _ _)) =
+    snd $ prettyInCtxFunBindH f args isLifted
+  prettyInCtx (FunBind f args isLifted k)
+    | (g, m) <- prettyInCtxFunBindH f args isLifted =
+    prettyAppList [g <$> m, return ">>=", prettyInCtx k]
+
+-- | A helper function for the 'FunBind' case of 'prettyInCtx'. Returns the
+-- string you would get if the associated 'CompFun' is 'CompFunReturn', as well
+-- as a 'SawDoc' function (which is either 'id' or 'parens') to apply in the
+-- case where the associated 'CompFun' is something else.
+prettyInCtxFunBindH :: FunName -> [Term] -> IsLifted ->
+                       (SawDoc -> SawDoc, PPInCtxM SawDoc)
+prettyInCtxFunBindH f [] Unlifted = (id, prettyInCtx f)
+prettyInCtxFunBindH f args Unlifted = (parens,) $
+  prettyTermApp (funNameTerm f) args
+prettyInCtxFunBindH f args Lifted = (parens,) $
+  prettyAppList [return "liftStackS", return "_", return "_", return "_",
+                 parens <$> prettyTermApp (funNameTerm f) args]
