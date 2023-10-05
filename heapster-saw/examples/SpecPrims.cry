@@ -2,11 +2,11 @@ module SpecPrims where
 
 /* Specification primitives */
 
-// The specification that holds for for some element of type a
+// The specification that holds for some element of type a
 exists : {a} a
 exists = error "Cannot run exists"
 
-// The specification that holds for for all elements of type a
+// The specification that holds for all elements of type a
 forall : {a} a
 forall = error "Cannot run forall"
 
