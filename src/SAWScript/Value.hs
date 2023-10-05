@@ -899,6 +899,11 @@ throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
 throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
 
+throwLLVMFun :: Text -> String -> LLVMCrucibleSetupM a
+throwLLVMFun nm msg = do
+  loc <- LLVMCrucibleSetupM $ getW4Position nm
+  throwLLVM loc msg
+
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc

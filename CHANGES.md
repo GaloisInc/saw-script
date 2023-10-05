@@ -13,6 +13,10 @@
   information, see the
   [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#cryptol-and-its-role-in-saw).
 
+* Building on the above feature, SAW now supports automatically
+  generating LLVM setup scripts for Cryptol FFI functions with the
+  `llvm_ffi_setup` command. For more information, see the [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#verifying-cryptol-ffi-functions).
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features

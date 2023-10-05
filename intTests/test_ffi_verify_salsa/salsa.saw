@@ -1,0 +1,10 @@
+enable_experimental;
+
+import "salsa.cry";
+
+let cipher_setup (a : Int) (w : Int) = llvm_ffi_setup {{ cipher`{a, w} }};
+
+m <- llvm_load_module "salsa.bc";
+for [1, 2] (\a ->
+  for [1, 2, 63, 64, 65] (\w ->
+    llvm_verify m "cipher" [] false (cipher_setup a w) z3));

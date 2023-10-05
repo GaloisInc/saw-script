@@ -3337,6 +3337,89 @@ let main : TopLevel () = do {
 
 [^4]: https://en.wikipedia.org/wiki/Salsa20
 
+## Verifying Cryptol FFI functions
+
+SAW has special support for verifying the correctness of Cryptol's
+[`foreign`
+functions](https://galoisinc.github.io/cryptol/master/FFI.html),
+implemented in a language such as C which compiles to LLVM, provided
+that there exists a [reference Cryptol
+implementation](https://galoisinc.github.io/cryptol/master/FFI.html#cryptol-implementation-of-foreign-functions)
+of the function as well. Since the way in which `foreign` functions are
+called is precisely specified by the Cryptol FFI, SAW is able to
+generate a `LLVMSetup ()` spec directly from the type of a Cryptol
+`foreign` function. This is done with the `llvm_ffi_setup` command,
+which is experimental and requires `enable_experimental;` to be run
+beforehand.
+```
+llvm_ffi_setup : Term -> LLVMSetup ()
+```
+
+For instance, for the simple imported Cryptol foreign function `foreign
+add : [32] -> [32] -> [32]` we can obtain a `LLVMSetup` spec simply by
+writing
+```
+let add_setup = llvm_ffi_setup {{ add }};
+```
+which behind the scenes expands to something like
+```
+let add_setup = do {
+  in0 <- llvm_fresh_var "in0" (llvm_int 32);
+  in1 <- llvm_fresh_var "in1" (llvm_int 32);
+  llvm_execute_func [llvm_term in0, llvm_term in1];
+  llvm_return (llvm_term {{ add in0 in1 }});
+};
+```
+
+### Polymorphism
+
+In general, Cryptol `foreign` functions can be polymorphic, with type
+parameters of kind `#`, representing e.g. the sizes of input sequences.
+However, any individual `LLVMSetup ()` spec only specifies the behavior
+of the LLVM function on inputs of concrete sizes. We handle this by
+allowing the argument term of `llvm_ffi_setup` to contain any necessary
+type arguments in addition to the Cryptol function name, so that the
+resulting term is monomorphic. The user can then define a parameterized
+specification simply as a SAWScript function in the usual way. For
+example, for a function `foreign f : {n, m} (fin n, fin m) => [n][32] ->
+[m][32]`, we can obtain a parameterized `LLVMSetup` spec by
+```
+let f_setup (n : Int) (m : Int) = llvm_ffi_setup {{ f`{n, m} }};
+```
+Note that the `Term` parameter that `llvm_ffi_setup` takes is restricted
+syntactically to the format described above (``{{ fun`{tyArg0, tyArg1,
+..., tyArgN} }}``), and cannot be any arbitrary term.
+
+### Supported types
+
+`llvm_ffi_setup` supports all Cryptol types that are supported by the
+Cryptol FFI, with the exception of `Integer`, `Rational`, `Z`, and
+`Float`. `Integer`, `Rational`, and `Z` are not supported since they are
+translated to `gmp` arbitrary-precision types which are hard for SAW to
+handle without additional overrides. There is no fundamental obstacle to
+supporting `Float`, and in fact `llvm_ffi_setup` itself does work with
+Cryptol floating point types, but the underlying functions such as
+`llvm_fresh_var` do not, so until that is implemented `llvm_ffi_setup`
+can generate a spec involving floating point types but it cannot
+actually be run.
+
+### Performing the verification
+
+The resulting `LLVMSetup ()` spec can be used with the existing
+`llvm_verify` function to perform the actual verification. And the
+`LLVMSpec` output from that can be used as an override as usual for
+further compositional verification.
+```
+f_ov <- llvm_verify mod "f" [] true (f_setup 3 5) z3;
+```
+
+As with the Cryptol FFI itself, SAW does not manage the compilation of
+the C source implementations of `foreign` functions to LLVM bitcode. For
+the verification to be meaningful, is expected that the LLVM module
+passed to `llvm_verify` matches the compiled dynamic library actually
+used with the Cryptol interpreter. Alternatively, on x86_64 Linux, SAW
+can perform verification directly on the `.so` ELF file with the
+experimental `llvm_verify_x86` command.
 
 # Extraction to the Coq theorem prover
 

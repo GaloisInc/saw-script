@@ -104,6 +104,7 @@ import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
+import           SAWScript.Crucible.LLVM.FFI
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -3640,6 +3641,15 @@ primitives = Map.fromList
     (\_ _ -> toValue llvm_spec_size)
     Current
     [ "Legacy alternative name for `llvm_spec_size`." ]
+
+  , prim "llvm_ffi_setup"  "Term -> LLVMSetup ()"
+    (pureVal llvm_ffi_setup)
+    Experimental
+    [ "Generate a @LLVMSetup@ spec that can be used to verify that the given"
+    , "monomorphic Cryptol term, consisting of a Cryptol foreign function"
+    , "fully applied to any type arguments, has a correct foreign (LLVM)"
+    , "implementation with respect to its Cryptol implementation."
+    ]
 
     ---------------------------------------------------------------------
     -- Crucible/JVM commands

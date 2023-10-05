@@ -185,6 +185,7 @@ check_cryptol_specs testPath disabled tests = testCase "cryptol-specs Available"
                           , "test0035_aes_consistent"
                           , "test_w4"
                           , "test_examples"
+                          , "test_ffi_verify_salsa"
                           ]
       cspec_dir = takeDirectory testPath </> "deps" </> "cryptol-specs"
   in if need_cryptol_spec
