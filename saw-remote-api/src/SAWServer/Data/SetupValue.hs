@@ -23,6 +23,7 @@ data SetupValTag
   | TagElemLValue
   | TagGlobalInit
   | TagGlobalLValue
+  | TagFreshExpandedValue
 
 instance FromJSON SetupValTag where
   parseJSON =
@@ -42,6 +43,7 @@ instance FromJSON SetupValTag where
       "element lvalue" -> pure TagElemLValue
       "global initializer" -> pure TagGlobalInit
       "global lvalue" -> pure TagGlobalLValue
+      "fresh expanded" -> pure TagFreshExpandedValue
       _ -> empty
 
 instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cryptolExpr) where
@@ -64,3 +66,4 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cr
           TagElemLValue -> ElementLValue <$> o .: "base" <*> o .: "index"
           TagGlobalInit -> GlobalInitializer <$> o .: "name"
           TagGlobalLValue -> GlobalLValue <$> o .: "name"
+          TagFreshExpandedValue -> FreshExpandedValue <$> o .: "prefix" <*> o .: "type"

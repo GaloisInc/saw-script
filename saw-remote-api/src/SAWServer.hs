@@ -124,6 +124,7 @@ data CrucibleSetupVal ty e
   | GlobalLValue String
   | NamedValue ServerName
   | CryptolExpr e
+  | FreshExpandedValue Text ty
   deriving stock (Foldable, Functor, Traversable)
 
 data SetupStep ty

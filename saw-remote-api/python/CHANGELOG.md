@@ -31,6 +31,12 @@
 * Add a `proclaim_f` function. This behaves like the `proclaim` function, except
   that it takes a `cry_f`-style format string as an argument. That is,
   `proclaim_f(...)` is equivalent to `proclaim(cry_f(...))`.
+* Add a `fresh_expanded` function that creates a value entirely populated by
+  fresh symbolic variables. For compound types such as structs or arrays, this
+  will explicitly set each field or element to contain a fresh symbolic
+  variable. This function is currently only supported with LLVM and MIR
+  verification, and using this function with JVM verification will raise an
+  error.
 
 ## 1.0.1 -- YYYY-MM-DD
 

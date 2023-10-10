@@ -2650,6 +2650,19 @@ construct compound values:
 * `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
   list of values as elements.
 
+To specify a compound value in which each element or field is symbolic, it
+would be possible, but tedious, to use a large number of `mir_fresh_var`
+invocations in conjunction with the commands above. However, the following
+function can simplify the common case where you want every element or field to
+have a fresh value:
+
+* `mir_fresh_expanded_value : String -> MIRType -> MIRSetup MIRValue`
+
+The `String` argument denotes a prefix to use when generating the names of
+fresh symbolic variables. The `MIRType` can be any type, with the exception of
+reference types (or compound types that contain references as elements or
+fields), which are not currently supported.
+
 ### MIR slices
 
 Slices are a unique form of compound type that is currently only used during

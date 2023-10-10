@@ -28,6 +28,7 @@ import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
 import SAWScript.Crucible.MIR.Builtins
     ( mir_alloc,
       mir_alloc_mut,
+      mir_fresh_expanded_value,
       mir_fresh_var,
       mir_execute_func,
       mir_load_module,
@@ -202,6 +203,9 @@ compileMIRContract fileReader bic cenv0 sawenv c =
       pure $ MS.SetupGlobalInitializer () name
     getSetupVal _ (GlobalLValue name) =
       pure $ MS.SetupGlobal () name
+    getSetupVal _ (FreshExpandedValue pfx ty) =
+      let ty' = mirType sawenv ty in
+      mir_fresh_expanded_value pfx ty'
     getSetupVal env (SliceValue base) = do
       base' <- getSetupVal env base
       pure $ mir_slice_value base'
