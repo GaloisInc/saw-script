@@ -14,6 +14,12 @@ atCryM = at;
 
 -- Alternate versions of Prelude functions, changed to use genCryM and atCryM
 
+takeCryM : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
+takeCryM a m n v = genCryM m a (\ (i : Nat) -> at (addNat m n) a v i);
+
+dropCryM : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec n a;
+dropCryM a m n v = genCryM n a (\ (i : Nat) -> at (addNat m n) a v (addNat m i));
+
 joinCryM : (m n : Nat) -> (a : isort 0) ->
            Vec m (Vec n a) -> Vec (mulNat m n) a;
 joinCryM m n a v =
@@ -678,7 +684,7 @@ ecTakeM E stack =
             SpecM E stack (Vec m a))
          -- The case (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:qisort 0) -> \ (xs: Vec (addNat m n) a) ->
-            retS E stack (Vec m a) (take a m n xs))
+            retS E stack (Vec m a) (takeCryM a m n xs))
          -- The case (TCNum m, infinity)
          (\ (a:qisort 0) -> \ (xs: Stream (SpecM E stack a)) ->
             vecSequenceM E stack a m (streamTake (SpecM E stack a) m xs)))
@@ -702,7 +708,7 @@ ecDropM E stack =
        Num_rec
          (\ (n:Num) -> (a:isort 0) -> mseq E stack (tcAdd (TCNum m) n) a -> mseq E stack n a)
          -- The case (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> drop a m n)
+         (\ (n:Nat) -> \ (a:isort 0) -> dropCryM a m n)
          -- The case (TCNum m, infinity)
          (\ (a:isort 0) -> streamDrop (SpecM E stack a) m));
 

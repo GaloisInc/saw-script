@@ -117,6 +117,7 @@ primGenBVVec sc n =
   PrimFilterFun "primGenBVVec" $
   \case
     VExtra (VExtraTerm _ t) -> primGenBVVecFilter sc n t
+    VWord (Left (_, t)) -> primGenBVVecFilter sc n t
     _ -> mzero
 
 -- | The filter function for 'primGenBVVec', and one case of 'primGenCryM'
@@ -148,8 +149,13 @@ primGenCryM sc =
   (\case
       VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, f))) ->
         return (Nothing, f)
+      VWord (Left (_, asGenCryMTerm -> Just (_, _, f))) ->
+        return (Nothing, f)
       VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
                                                         v, _, _))) ->
+        (Just n,) <$> primGenBVVecFilter sc n v
+      VWord (Left (_, asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
+                                                  v, _, _))) ->
         (Just n,) <$> primGenBVVecFilter sc n v
       _ -> mzero
   ) . uncurry
@@ -189,7 +195,12 @@ primBVVecFromVecArg sc a =
     VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
                                                       v, _, _))) ->
       return $ FromBVVec n len v
+    VWord (Left (_, asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
+                                                v, _, _))) ->
+      return $ FromBVVec n len v
     VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, body))) ->
+      return $ GenCryM body
+    VWord (Left (_, asGenCryMTerm -> Just (_, _, body))) ->
       return $ GenCryM body
     VVector vs ->
       lift $ BVVecLit <$>
