@@ -12,9 +12,15 @@ module SAWScript.Crucible.MIR.MethodSpecIR
     MIRCrucibleContext(..)
   , mccRustModule
   , mccBackend
+  , mccSimContext
+  , mccSymGlobalState
+  , mccStaticInitializerMap
   , mccHandleAllocator
   , mccWithBackend
   , mccSym
+
+    -- * @MirStaticInitializerMap@
+  , MirStaticInitializerMap
 
     -- * @MirPointsTo@
   , MirPointsTo(..)
@@ -44,6 +50,8 @@ module SAWScript.Crucible.MIR.MethodSpecIR
 import Control.Lens (Getter, (^.), to)
 import qualified Prettyprinter as PP
 
+import Lang.Crucible.FunctionHandle (HandleAllocator)
+import Lang.Crucible.Simulator (SimContext(..))
 import Mir.Generator
 import Mir.Intrinsics
 import qualified Mir.Mir as M
@@ -53,6 +61,9 @@ import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import           SAWScript.Crucible.MIR.Setup.Value
+
+mccHandleAllocator :: Getter MIRCrucibleContext HandleAllocator
+mccHandleAllocator = mccSimContext . to simHandleAllocator
 
 mccWithBackend ::
   MIRCrucibleContext ->
@@ -65,8 +76,8 @@ mccSym :: Getter MIRCrucibleContext Sym
 mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 
 instance PP.Pretty MirPointsTo where
-    pretty (MirPointsTo _md alloc sv) = PP.parens $
-        PP.pretty (show alloc) PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
+    pretty (MirPointsTo _md ref sv) = PP.parens $
+        MS.ppSetupValue ref PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
 
 type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
 

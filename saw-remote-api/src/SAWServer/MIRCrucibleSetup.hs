@@ -196,6 +196,10 @@ compileMIRContract fileReader bic cenv0 sawenv c =
     getSetupVal env (TupleValue elems) = do
       elems' <- mapM (getSetupVal env) elems
       pure $ MS.SetupTuple () elems'
+    getSetupVal _ (GlobalInitializer name) =
+      pure $ MS.SetupGlobalInitializer () name
+    getSetupVal _ (GlobalLValue name) =
+      pure $ MS.SetupGlobal () name
     getSetupVal _ (FieldLValue _ _) =
       MIRSetupM $ fail "Field l-values unsupported in the MIR API."
     getSetupVal _ (CastLValue _ _) =
@@ -204,10 +208,6 @@ compileMIRContract fileReader bic cenv0 sawenv c =
       MIRSetupM $ fail "Union l-values unsupported in the MIR API."
     getSetupVal _ (ElementLValue _ _) =
       MIRSetupM $ fail "Element l-values unsupported in the MIR API."
-    getSetupVal _ (GlobalInitializer _) =
-      MIRSetupM $ fail "Global initializers unsupported in the MIR API."
-    getSetupVal _ (GlobalLValue _) =
-      MIRSetupM $ fail "Global l-values unsupported in the MIR API."
 
 data MIRLoadModuleParams
   = MIRLoadModuleParams ServerName FilePath

@@ -18,6 +18,8 @@ module SAWScript.Crucible.MIR.TypeShape
   , shapeMirTy
   , fieldShapeMirTy
   , shapeToTerm
+  , IsRefShape(..)
+  , testRefShape
   ) where
 
 import Control.Lens ((^.), (^..), each)
@@ -250,6 +252,27 @@ shapeToTerm sc = go
     goField :: forall tp'. FieldShape tp' -> m SAW.Term
     goField (OptField shp) = go shp
     goField (ReqField shp) = go shp
+
+-- | A witness that a 'TypeShape' is equal to a 'RefShape'.
+data IsRefShape (tp :: CrucibleType) where
+  IsRefShape :: M.Ty
+             -- ^ The reference type
+             -> M.Ty
+             -- ^ The pointee type
+             -> M.Mutability
+             -- ^ Is the reference mutable or immutable?
+             -> TypeRepr tp
+             -- ^ The Crucible representation of the pointee type
+             -> IsRefShape (MirReferenceType tp)
+
+-- | Check that a 'TypeShape' is equal to a 'RefShape'. If so, return 'Just' a
+-- witness of that equality. Otherwise, return 'Nothing'.
+testRefShape :: TypeShape tp -> Maybe (IsRefShape tp)
+testRefShape shp =
+  case shp of
+    RefShape ty ty' mut shp'
+      -> Just $ IsRefShape ty ty' mut shp'
+    _ -> Nothing
 
 $(pure [])
 

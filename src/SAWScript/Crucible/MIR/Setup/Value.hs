@@ -22,7 +22,12 @@ module SAWScript.Crucible.MIR.Setup.Value
     MIRCrucibleContext(..)
   , mccRustModule
   , mccBackend
-  , mccHandleAllocator
+  , mccSimContext
+  , mccSymGlobalState
+  , mccStaticInitializerMap
+
+    -- * @MirStaticInitializerMap@
+  , MirStaticInitializerMap
 
     -- * @MirPointsTo@
   , MirPointsTo(..)
@@ -44,11 +49,12 @@ module SAWScript.Crucible.MIR.Setup.Value
 
 import Control.Lens (makeLenses)
 import Data.Parameterized.Classes
+import Data.Parameterized.Map (MapF)
 import Data.Parameterized.Some
 import Data.Text (Text)
 import Data.Void (Void)
 
-import Lang.Crucible.FunctionHandle (HandleAllocator)
+import Lang.Crucible.Simulator (GlobalVar, RegValue', SimContext, SymGlobalState)
 import Lang.Crucible.Types
 import Mir.DefId
 import Mir.Generator
@@ -59,7 +65,7 @@ import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.Setup.Value as MS
 
 type instance MS.XSetupNull MIR = Void
-type instance MS.XSetupGlobal MIR = Void
+type instance MS.XSetupGlobal MIR = ()
 type instance MS.XSetupStruct MIR = M.Adt
 type instance MS.XSetupTuple MIR = ()
 -- The 'M.Ty' represents the type of array elements.
@@ -68,7 +74,7 @@ type instance MS.XSetupElem MIR = ()
 type instance MS.XSetupField MIR = ()
 type instance MS.XSetupCast MIR = Void
 type instance MS.XSetupUnion MIR = Void
-type instance MS.XSetupGlobalInitializer MIR = Void
+type instance MS.XSetupGlobalInitializer MIR = ()
 
 type instance MS.XGhostState MIR = Void
 
@@ -84,14 +90,23 @@ type instance MS.Codebase MIR = CollectionState
 
 data MIRCrucibleContext =
   MIRCrucibleContext
-  { _mccRustModule      :: RustModule
-  , _mccBackend         :: SomeOnlineBackend
-  , _mccHandleAllocator :: HandleAllocator
+  { _mccRustModule           :: RustModule
+  , _mccBackend              :: SomeOnlineBackend
+  , _mccSimContext           :: SimContext (SAWCruciblePersonality Sym) Sym MIR
+  , _mccSymGlobalState       :: SymGlobalState Sym
+  , _mccStaticInitializerMap :: MirStaticInitializerMap
   }
 
 type instance MS.CrucibleContext MIR = MIRCrucibleContext
 
 type instance MS.Pointer' MIR sym = Some (MirPointer sym)
+
+-- | A 'MirStaticInitializerMap' maps the 'GlobalVar's of each top-level static
+-- value in a 'Mir.RustModule' to its initializer value (post-Crucible
+-- translation). See @Note [Translating MIR statics in SAW]@ in
+-- "SAWScript.Crucible.MIR.Builtins" for more details on how this map is
+-- created.
+type MirStaticInitializerMap = MapF GlobalVar (RegValue' Sym)
 
 -- | Unlike @LLVMPointsTo@ and @JVMPointsTo@, 'MirPointsTo' contains a /list/ of
 -- 'MS.SetupValue's on the right-hand side. This is due to how slices are
@@ -99,7 +114,7 @@ type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 -- referenced by the slice. The @mir_points_to@ command, on the other hand,
 -- always creates 'MirPointsTo' values with exactly one value in the list (see
 -- the @firstPointsToReferent@ function in "SAWScript.Crucible.MIR.Override").
-data MirPointsTo = MirPointsTo MS.ConditionMetadata MS.AllocIndex [MS.SetupValue MIR]
+data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) [MS.SetupValue MIR]
     deriving (Show)
 
 data MirAllocSpec tp = MirAllocSpec

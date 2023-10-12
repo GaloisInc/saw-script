@@ -208,7 +208,8 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
         -- to allocation `alloc` before we see the PointsTo for `alloc` itself.
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
-        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md alloc svs) -> do
+        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md ref svs) -> do
+            alloc <- setupVarAllocIndex ref
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
@@ -311,7 +312,8 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
     -- figuring out which memory is accessible and mutable and thus needs to be
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
-    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md alloc svs) -> do
+    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md ref svs) -> do
+        alloc <- setupVarAllocIndex ref
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
@@ -589,3 +591,20 @@ checkDisjoint bak refs = go refs
             assert bak disjoint $ GenericSimError $
                 "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
         go rest
+
+-- | Take a 'MS.SetupValue' that is assumed to be a bare 'MS.SetupVar' and
+-- extract the underlying 'MS.AllocIndex'. If this assumption does not hold,
+-- this function will raise an error.
+--
+-- This is used in conjunction with 'MirPointsTo' values. With the way that
+-- @crucible-mir-comp@ is currently set up, the only sort of 'MS.SetupValue'
+-- that will be put into a 'MirPointsTo' value's left-hand side is a
+-- 'MS.SetupVar', so we can safely use this function on such 'MS.SetupValue's.
+-- Other parts of SAW can break this assumption (e.g., if you wrote something
+-- like @mir_points_to (mir_static "X") ...@ in a SAW specification), but these
+-- parts of SAW are not used in @crucible-mir-comp@.
+setupVarAllocIndex :: Applicative m => MS.SetupValue MIR -> m MS.AllocIndex
+setupVarAllocIndex (MS.SetupVar idx) = pure idx
+setupVarAllocIndex val =
+  error $ "setupVarAllocIndex: Expected SetupVar, received: "
+       ++ show (MS.ppSetupValue val)
