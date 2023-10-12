@@ -76,7 +76,7 @@ data MRFailure
   = TermsNotRel Bool Term Term
   | TypesNotRel Bool Type Type
   | CompsDoNotRefine NormComp NormComp
-  | ReturnNotError Term
+  | ReturnNotError (Either Term Term) Term
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
@@ -149,8 +149,9 @@ instance PrettyInCtx MRFailure where
     ppWithPrefixSep "Types not heterogeneously related:" tp1 "and" tp2
   prettyInCtx (CompsDoNotRefine m1 m2) =
     ppWithPrefixSep "Could not prove refinement: " m1 "|=" m2
-  prettyInCtx (ReturnNotError t) =
-    ppWithPrefix "errorS computation not equal to:" (RetS t)
+  prettyInCtx (ReturnNotError eith_terr t) =
+    let (lr_s, terr) = either ("left",) ("right",) eith_terr in
+    ppWithPrefixSep "errorS:" terr (" on the " ++ lr_s ++ " does not match retS:") t
   prettyInCtx (FunsNotEq nm1 nm2) =
     vsepM [return "Named functions not equal:",
            prettyInCtx nm1, prettyInCtx nm2]

@@ -892,8 +892,8 @@ mrRefines' :: NormComp -> NormComp -> MRM t ()
 
 mrRefines' (RetS e1) (RetS e2) = mrAssertProveRel True e1 e2
 mrRefines' (ErrorS _) (ErrorS _) = return ()
-mrRefines' (RetS e) (ErrorS _) = throwMRFailure (ReturnNotError e)
-mrRefines' (ErrorS _) (RetS e) = throwMRFailure (ReturnNotError e)
+mrRefines' (RetS e) (ErrorS err) = throwMRFailure (ReturnNotError (Right err) e)
+mrRefines' (ErrorS err) (RetS e) = throwMRFailure (ReturnNotError (Left  err) e)
 
 -- maybe elimination on equality types
 mrRefines' (MaybeElim (Type cond_tp@(asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
