@@ -1432,7 +1432,8 @@ defaultMonTable =
   , mmSemiPureFin 0 1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPureFin 0 1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
+  , mmSemiPure "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
+  , mmSemiPureFin 0 1 "Cryptol.PZeroSeqBool" "CryptolM.PZeroMSeqBool" True
 
     -- PLogic constraints
   , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True

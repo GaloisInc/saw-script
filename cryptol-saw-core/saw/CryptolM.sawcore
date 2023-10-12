@@ -525,6 +525,12 @@ PZeroMSeq E stack n_top a pa =
           (seqConst TCInf (SpecM E stack a) (retS E stack a pa))
           n_top;
 
+PZeroMSeqBool : (E:EvType) -> (stack:FunStack) ->
+                (n : Num) -> isFinite n -> PZero (mseq E stack n Bool);
+PZeroMSeqBool E stack =
+  Num_rec_fin (\ (n:Num) -> PZero (mseq E stack n Bool))
+              (\ (n:Nat) -> bvNat n 0);
+
 -- PLogic
 PLogicSpecM : (E:EvType) -> (stack:FunStack) ->
               (a : sort 0) -> PLogic a -> PLogic (SpecM E stack a);
