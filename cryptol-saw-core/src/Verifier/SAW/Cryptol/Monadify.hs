@@ -490,6 +490,9 @@ monadifyType ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
 monadifyType _ (asGlobalDef -> Just bool_id)
   | bool_id == "Prelude.Bool" =
     mkMonType0 (globalOpenTerm "Prelude.Bool")
+monadifyType _ (asGlobalDef -> Just integer_id)
+  | integer_id == "Prelude.Integer" =
+    mkMonType0 (globalOpenTerm "Prelude.Integer")
 {-
 monadifyType ctx (asApplyAll -> (f, args))
   | Just glob <- asTypedGlobalDef f
