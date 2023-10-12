@@ -147,6 +147,7 @@ module SAWScript.Prover.MRSolver.Solver where
 import Data.Maybe
 import Data.Either
 import Numeric.Natural (Natural)
+import qualified Data.Text as T
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
@@ -1019,10 +1020,25 @@ mrRefines' m1 (Eithers ((tp,f2):elims) t2) =
 
 mrRefines' m1 (AssumeBoolBind cond2 k2) =
   do m2 <- liftSC0 scUnitValue >>= applyCompFun k2
-     withAssumption cond2 $ mrRefines m1 m2
+     not_cond2 <- liftSC1 scNot cond2
+     cond2_true_pv <- mrProvable cond2
+     cond2_false_pv <- mrProvable not_cond2
+     case (cond2_true_pv, cond2_false_pv) of
+       (True, _) -> mrRefines m1 m2
+       (_, True) -> return ()
+       _ -> withAssumption cond2 $ mrRefines m1 m2
 mrRefines' (AssertBoolBind cond1 k1) m2 =
   do m1 <- liftSC0 scUnitValue >>= applyCompFun k1
-     withAssumption cond1 $ mrRefines m1 m2
+     cond1_str <- flip showInCtx cond1 <$> mrUVars
+     let err_txt = "mrRefines failed assertion: " <> T.pack cond1_str
+     m1' <- ErrorS <$> liftSC1 scString err_txt
+     not_cond1 <- liftSC1 scNot cond1
+     cond1_true_pv <- mrProvable cond1
+     cond1_false_pv <- mrProvable not_cond1
+     case (cond1_true_pv, cond1_false_pv) of
+       (True, _) -> mrRefines m1 m2
+       (_, True) -> mrRefines m1' m2
+       _ -> withAssumption cond1 $ mrRefines m1 m2
 
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
