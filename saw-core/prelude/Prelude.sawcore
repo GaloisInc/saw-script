@@ -1844,6 +1844,34 @@ eithers a =
 
 
 --------------------------------------------------------------------------------
+-- Nested Sigma types
+
+-- FIXME: Sigmas isn't used yet, but is here in case we need it later
+
+-- Form the multiple arrow type a1 -> ... -> an -> b
+arrowsType : ListSort -> sort 0 -> sort 0;
+arrowsType as b =
+  ListSort__rec (\ (_:ListSort) -> sort 0) b
+    (\ (a:sort 0) (_:ListSort) (rec:sort 0) -> a -> rec)
+    as;
+
+-- Form the type a1 -> ... -> an -> sort 0 of a type-level function over the as
+arrowsSort : ListSort -> sort 1;
+arrowsSort as =
+  ListSort#rec (\ (_:ListSort) -> sort 1) (sort 0)
+    (\ (a:sort 0) (_:ListSort) (rec:sort 1) -> a -> rec)
+    as;
+
+-- The right-nested sigma type Sigma a1 (\ x1 -> Sigma a2 (\ x2 -> ... (b x1 ... xn)))
+Sigmas : (as:ListSort) -> arrowsSort as -> sort 0;
+Sigmas =
+  ListSort__rec (\ (as:ListSort) -> arrowsSort as -> sort 0)
+    (\ (b:sort 0) -> b)
+    (\ (a:sort 0) (as:ListSort) (rec:arrowsSort as -> sort 0)
+       (b:a -> arrowsSort as) -> Sigma a (\ (x:a) -> rec (b x)));
+
+
+--------------------------------------------------------------------------------
 -- Lists of 64-bit words (for testing Heapster)
 
 data W64List : sort 0 where {
