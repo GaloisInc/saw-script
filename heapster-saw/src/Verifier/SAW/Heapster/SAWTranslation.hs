@@ -139,12 +139,12 @@ funIxTypeOpenTerm t = applyGlobalOpenTerm "Prelude.FunIx" [t]
 
 -- | Build the type @Sigma a (\ (x:a) -> b)@ from variable name @x@, type @a@,
 -- and type-level function @b@
-sigmaTypeOpenTerm :: String -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+sigmaTypeOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 sigmaTypeOpenTerm x tp f =
   dataTypeOpenTerm "Prelude.Sigma" [tp, lambdaOpenTerm x tp f]
 
 -- | Build the type @Sigma a1 (\ (x1:a1) -> Sigma a2 (\ (x2:a2) -> ...))@
-sigmaTypeOpenTermMulti :: String -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
+sigmaTypeOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
                           OpenTerm
 sigmaTypeOpenTermMulti _ [] f = f []
 sigmaTypeOpenTermMulti x (tp:tps) f =
@@ -153,14 +153,14 @@ sigmaTypeOpenTermMulti x (tp:tps) f =
 
 -- | Build the dependent pair @exists a (\ (x:a) -> b) x y@ whose type is given
 -- by 'sigmaTypeOpenTerm'
-sigmaOpenTerm :: String -> OpenTerm -> (OpenTerm -> OpenTerm) ->
+sigmaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) ->
                  OpenTerm -> OpenTerm -> OpenTerm
 sigmaOpenTerm x tp tp_f trm_l trm_r =
   ctorOpenTerm "Prelude.exists" [tp, lambdaOpenTerm x tp tp_f, trm_l, trm_r]
 
 -- | Build the right-nested dependent pair @(x1, (x2, ...(xn, y)))@ whose type
 -- is given by 'sigmaTypeOpenTermMulti'
-sigmaOpenTermMulti :: String -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
+sigmaOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
                       [OpenTerm] -> OpenTerm -> OpenTerm
 sigmaOpenTermMulti _ [] _ [] trm = trm
 sigmaOpenTermMulti x (tp:tps) tp_f (trm_l:trms_l) trm_r =
@@ -171,11 +171,11 @@ sigmaOpenTermMulti _ _ _ _ _ =
 
 -- | Take a nested dependent pair (of the type returned by
 -- 'sigmaTypeOpenTermMulti') and apply a function @f@ to all of its projections
-sigmaElimOpenTermMulti :: String -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
+sigmaElimOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
                           OpenTerm -> ([OpenTerm] -> OpenTerm) -> OpenTerm
 sigmaElimOpenTermMulti _ [] _ t f_elim = f_elim [t]
 sigmaElimOpenTermMulti x (tp:tps) tp_f sig f_elim =
-  let b_fun = lambdaOpenTerm x tp (\x -> sigmaTypeOpenTermMulti x tps (tp_f . (x:)))
+  let b_fun = lambdaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:)))
       proj1 = applyGlobalOpenTerm "Prelude.Sigma_proj1" [tp, b_fun, sig]
       proj2 = applyGlobalOpenTerm "Prelude.Sigma_proj2" [tp, b_fun, sig] in
   sigmaElimOpenTermMulti x tps (tp_f . (proj1:)) proj2 (f_elim . (proj1:))
@@ -277,7 +277,7 @@ arrowTpDescMulti tps_in tp_out = foldr arrowTpDesc tp_out tps_in
 
 -- | Build the type description for a pi-abstraction over a kind description
 piTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
-piTpDesc kd tpd = ctorOpenTerm "Prelude.Tp_Pi" kd tpd
+piTpDesc kd tpd = ctorOpenTerm "Prelude.Tp_Pi" [kd, tpd]
 
 -- | Build the type description for a multi-arity pi-abstraction over a sequence
 -- of kind descriptions, i.e., SAW core terms of type @KindDesc@
@@ -911,7 +911,7 @@ eithersElimTransM tps tp_ret fs eith =
 -- | Build the right-nested dependent pair type whose sequence of left-hand
 -- projections have the types of the supplied 'TypeTrans' and whose right-hand
 -- projection is the 'typeTransTupleType' of the supplied monadic function
-sigmaTypeTransM :: String -> TypeTrans trL ->
+sigmaTypeTransM :: LocalName -> TypeTrans trL ->
                    (trL -> TransM info ctx (TypeTrans trR)) ->
                    TransM info ctx OpenTerm
 sigmaTypeTransM x tptrans tp_f =
@@ -921,7 +921,7 @@ sigmaTypeTransM x tptrans tp_f =
 
 -- | Like 'sigmaTypeTransM', but translates 'exists x.eq(y)' into the tuple of
 -- types of 'x', omitting the right-hand projection type
-sigmaTypePermTransM :: TransInfo info => String ->
+sigmaTypePermTransM :: TransInfo info => LocalName ->
                        TypeTrans (ExprTrans trL) ->
                        Mb (ctx :> trL) (ValuePerm trR) ->
                        TransM info ctx OpenTerm
@@ -936,7 +936,7 @@ sigmaTypePermTransM x ttrans mb_p = case mbMatch mb_p of
 -- be in a larger context than that of the right-hand projection argument, so we
 -- allow the representation types to be different to accommodate for this.
 sigmaTransM :: (IsTermTrans trL, IsTermTrans trR2) =>
-               String -> TypeTrans trL ->
+               LocalName -> TypeTrans trL ->
                (trL -> TransM info ctx (TypeTrans trR1)) ->
                trL -> TransM info ctx trR2 ->
                TransM info ctx OpenTerm
@@ -950,7 +950,7 @@ sigmaTransM x tp_l tp_r lhs rhs_m =
 
 -- | Like `sigmaTransM`, but translates `exists x.eq(y)` into just `x`
 sigmaPermTransM :: (TransInfo info, IsTermTrans trR2) =>
-                   String -> TypeTrans (ExprTrans trL) ->
+                   LocalName -> TypeTrans (ExprTrans trL) ->
                    Mb (ctx :> trL) (ValuePerm trR1) ->
                    ExprTrans trL -> TransM info ctx trR2 ->
                    TransM info ctx OpenTerm
@@ -961,7 +961,7 @@ sigmaPermTransM x ttrans mb_p etrans rhs_m = case mbMatch mb_p of
 
 -- | Eliminate a dependent pair of the type returned by 'sigmaTypeTransM'
 sigmaElimTransM :: (IsTermTrans trL, IsTermTrans trR) =>
-                   String -> TypeTrans trL ->
+                   LocalName -> TypeTrans trL ->
                    (trL -> TransM info ctx (TypeTrans trR)) ->
                    TransM info ctx (TypeTrans trRet) ->
                    (trL -> trR -> TransM info ctx OpenTerm) ->
@@ -986,7 +986,7 @@ sigmaElimTransM x tp_l tp_r_mF _tp_ret_m f sigma =
 
 -- | Like `sigmaElimTransM`, but translates `exists x.eq(y)` into just `x`
 sigmaElimPermTransM :: (TransInfo info) =>
-                       String -> TypeTrans (ExprTrans trL) ->
+                       LocalName -> TypeTrans (ExprTrans trL) ->
                        Mb (ctx :> trL) (ValuePerm trR) ->
                        TransM info ctx (TypeTrans trRet) ->
                        (ExprTrans trL -> PermTrans (ctx :> trL) trR ->
@@ -1163,7 +1163,7 @@ translateType (StructRepr tps) =
 
 -- Default case is to panic for unsupported types
 translateType tp =
-  panic "translateType" ["Type not supported: " show tp]
+  panic "translateType" ["Type not supported: " ++ show tp]
 
 
 -- | Translate a 'CruCtx' to a 'TypeTrans' and to a list of kind descriptions
@@ -1480,6 +1480,10 @@ instance TransInfo info =>
   translate (mbMatch -> [nuMP| LLVMFieldShape p |]) =
     descTransM (translateDescs p)
 
+instance TranslateDescs (LLVMFieldShape w) where
+  translateDescs (mbMatch -> [nuMP| LLVMFieldShape p |]) =
+    translateDescs p
+
 -- A sequence of expressions translates to an ExprTransctx
 instance TransInfo info =>
          Translate info ctx (PermExprs as) (ExprTransCtx as) where
@@ -1524,7 +1528,8 @@ translateBVFactorDesc mb_f =
       translateBVVarDesc w mb_x
 
 -- | Translate an expression of bitvector type to a type-level expression
-translateBVDesc :: Mb ctx (PermExpr (BVType w)) -> DescTransM ctx OpenTerm
+translateBVDesc :: KnownNat w => Mb ctx (PermExpr (BVType w)) ->
+                   DescTransM ctx OpenTerm
 translateBVDesc mb_e =
   let w = mbExprBVTypeWidth mb_e in
   case mbMatch mb_e of
@@ -1550,14 +1555,18 @@ instance TranslateDescs (PermExpr (LLVMShapeType w)) where
         [nuMP| DefinedShapeBody _ |] ->
           translateDescs (mbMap2 unfoldNamedShape nmsh args)
         [nuMP| OpaqueShapeBody _ trans_id |] ->
+          {-
           (:[]) <$> applyGlobalOpenTerm (mbLift trans_id) <$>
-          transTerms <$> translate args
+          transTerms <$> translate args -}
+          error "FIXME HERE NOWNOW: translate opaque shapes to descs (how to handle args?)"
         [nuMP| RecShapeBody _ trans_id |] ->
+          {-
           (:[]) <$> applyGlobalOpenTerm (mbLift trans_id) <$>
-          transTerms <$> translate args
+          transTerms <$> translate args -}
+          error "FIXME HERE NOWNOW: translate rec shapes to descs (how to handle args?)"
     [nuMP| PExpr_EqShape _ _ |] -> return []
     [nuMP| PExpr_PtrShape _ _ sh |] -> translateDescs sh
-    [nuMP| PExpr_FieldShape fsh |] -> translate fsh
+    [nuMP| PExpr_FieldShape fsh |] -> translateDescs fsh
     [nuMP| PExpr_ArrayShape mb_len _ mb_sh |] ->
       do let w = natVal4 mb_len
          let w_term = natOpenTerm w
@@ -2820,6 +2829,11 @@ instance TransInfo info =>
       fmap APTrans_BVProp <$> translate prop
     [nuMP| Perm_Any |] -> return $ mkTypeTrans0 APTrans_Any
 
+
+instance TranslateDescs (AtomicPerm a) where
+  translateDescs mb_p = error "FIXME HERE NOWNOW"
+
+
 -- | Translate an array permission to a 'TypeTrans' for an array permission
 -- translation, also returning the translations of the bitvector width as a
 -- natural, the length of the array as a bitvector, and the type of the elements
@@ -2875,6 +2889,13 @@ instance TransInfo info =>
     [nuMP| ValPerms_Cons ps p |] ->
       liftA2 (:>:) <$> translate ps <*> translate p
 
+instance TranslateDescs (ValuePerms ps) where
+  translateDescs mb_ps = case mbMatch mb_ps of
+    [nuMP| ValPerms_Nil |] -> return []
+    [nuMP| ValPerms_Cons ps p |] ->
+      (++) <$> translateDescs ps <*> translateDescs p
+
+
 -- Translate a DistPerms by translating its corresponding ValuePerms
 instance TransInfo info =>
          Translate info ctx (DistPerms ps) (TypeTrans
@@ -2894,6 +2915,14 @@ instance TransInfo info =>
   translate mb_ps =
     error ("Translating expression permissions that could not be converted " ++
            "to variable permissions:" ++ permPrettyString emptyPPInfo mb_ps)
+
+instance TranslateDescs (ExprPerms ps) where
+  translateDescs mb_eps
+    | Just mb_ps <- mbExprPermsToValuePerms mb_eps = translateDescs mb_ps
+  translateDescs mb_ps =
+    error ("Translating expression permissions that could not be converted " ++
+           "to variable permissions:" ++ permPrettyString emptyPPInfo mb_ps)
+
 
 -- Translate a FunPerm to a pi-abstraction (FIXME HERE NOW: document translation)
 instance TransInfo info =>
@@ -2916,18 +2945,19 @@ instance TransInfo info =>
 instance TranslateDescs (FunPerm ghosts args gouts ret) where
   translateDescs (mbMatch ->
                   [nuMP| FunPerm ghosts args gouts ret perms_in perms_out |]) =
-    do let tops = appendCruCtx (mbLift ghosts) (mbLift args)
-           tops_prxs = cruCtxProxies tops
-           rets = CruCtxCons (mbLift gouts) (mbLift ret)
-           rets_prxs = cruCtxProxies rets
-       ds_in <- translateDescs perms_in
-       ctx <- dtiProxies <$> ask
-       case RL.appendAssoc ctx tops_prxs rets_prxs of
-         Refl ->
-           inExtCtxDescTransM tops $ \kdescs ->
-           (\d -> [d]) <$> piTpDescMulti kdescs <$>
-           translateRetTpDesc rets (mbCombine
-                                    (RL.append tops_prxs rets_prxs) perms_out)
+    let tops = appendCruCtx (mbLift ghosts) (mbLift args)
+        tops_prxs = cruCtxProxies tops
+        rets = CruCtxCons (mbLift gouts) (mbLift ret)
+        rets_prxs = cruCtxProxies rets in
+    (dtiProxies <$> ask) >>= \ctx ->
+    case RL.appendAssoc ctx tops_prxs rets_prxs of
+      Refl ->
+        inExtCtxDescTransM tops $ \kdescs ->
+        (\d -> [d]) <$> piTpDescMulti kdescs <$>
+        do ds_in <- translateDescs (mbCombine tops_prxs perms_in)
+           arrowTpDescMulti ds_in <$>
+             translateRetTpDesc rets (mbCombine
+                                      (RL.append tops_prxs rets_prxs) perms_out)
 
 -- | Lambda-abstraction over a permission
 lambdaPermTrans :: TransInfo info => String -> Mb ctx (ValuePerm a) ->
