@@ -445,7 +445,7 @@ arrowOpenTerm x tp body = piOpenTerm x tp (const body)
 
 -- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
 piOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
-                       OpenTerm
+                   OpenTerm
 piOpenTermMulti xs_tps body_f =
   foldr (\(x,tp) rest_f xs ->
           piOpenTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
