@@ -43,7 +43,6 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_spec_size
     , llvm_spec_solvers
     , llvm_ghost_value
-    , llvm_declare_ghost_state
     , llvm_equal
     , llvm_points_to
     , llvm_conditional_points_to
@@ -2794,14 +2793,6 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
               , MS.conditionContext = ""
               }
      Setup.addCondition (MS.SetupCond_Equal md val1 val2)
-
-llvm_declare_ghost_state ::
-  String         ->
-  TopLevel Value
-llvm_declare_ghost_state name =
-  do allocator <- getHandleAlloc
-     global <- liftIO (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr)
-     return (VGhostVar global)
 
 llvm_ghost_value ::
   MS.GhostGlobal ->

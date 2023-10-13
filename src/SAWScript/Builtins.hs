@@ -42,6 +42,7 @@ import Data.IORef
 import Data.List (isPrefixOf, isInfixOf, sort)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
+import Data.Parameterized.Classes (KnownRepr(..))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -117,6 +118,9 @@ import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (mkIdent, packModName,
                                            textToModName, PrimIdent(..))
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
+
+-- crucible
+import Lang.Crucible.CFG.Common (freshGlobalVar)
 
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
@@ -2465,3 +2469,11 @@ writeVerificationSummary = do
                        JSON -> jsonVerificationSummary
                        Pretty -> prettyVerificationSummary ppOpts nenv
         in io $ writeFile f' $ formatSummary summary
+
+declare_ghost_state ::
+  String         ->
+  TopLevel SV.Value
+declare_ghost_state name =
+  do allocator <- getHandleAlloc
+     global <- liftIO (freshGlobalVar allocator (Text.pack name) knownRepr)
+     return (SV.VGhostVar global)

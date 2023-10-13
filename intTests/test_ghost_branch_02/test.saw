@@ -21,7 +21,7 @@ let g_spec : CrucibleSetup () = do {
 };
 
 let main : TopLevel () = do {
-  x <- llvm_declare_ghost_state "x";
+  x <- declare_ghost_state "x";
   m <- llvm_load_module "test.bc";
   f_lt_ov <- llvm_unsafe_assume_spec m "f" (f_lt_spec x);
   f_ge_ov <- llvm_unsafe_assume_spec m "f" (f_ge_spec x);

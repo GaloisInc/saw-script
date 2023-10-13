@@ -3541,7 +3541,7 @@ thought of as additional global state that is visible only to the
 verifier. Ghost state with a given name can be declared at the top level
 with the following function:
 
-* `llvm_declare_ghost_state : String -> TopLevel Ghost`
+* `declare_ghost_state : String -> TopLevel Ghost`
 
 Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
