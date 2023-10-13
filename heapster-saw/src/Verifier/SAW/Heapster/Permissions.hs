@@ -375,7 +375,7 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_LLVMFree :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                    AtomicPerm (LLVMPointerType w)
 
-  -- | Says that we known an LLVM value is a function pointer whose function has
+  -- | Says that we know an LLVM value is a function pointer whose function has
   -- the given permissions
   Perm_LLVMFunPtr :: (1 <= w, KnownNat w) =>
                      TypeRepr (FunctionHandleType cargs ret) ->
@@ -658,17 +658,19 @@ data NamedShapeBody b args w where
                       NamedShapeBody 'True args w
 
   -- | An opaque shape has no body, just a length and a translation to a type
+  -- description given by an identifier
   OpaqueShapeBody :: Mb args (PermExpr (BVType w)) -> Ident ->
                      NamedShapeBody 'False args w
 
   -- | A recursive shape body has a one-step unfolding to a shape, which can
-  -- refer to the shape itself via the last bound variable; it also has
-  -- identifiers for the type it is translated to, along with fold and unfold
-  -- functions for mapping to and from this type. The fold and unfold functions
-  -- can be undefined if we are in the process of defining this recusive shape.
+  -- refer to the shape itself via the last bound variable. It also has an
+  -- identifier for a function that takes in translations of the @args@ and
+  -- returns the type description that is the translation of substituting those
+  -- translations of the @args@ into the given shape. Note that this is just an
+  -- optimization to make it more concise to expression this substitution
+  -- instance.
   RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
-                  Ident -> Maybe (Ident, Ident) ->
-                  NamedShapeBody 'True args w
+                  Ident -> NamedShapeBody 'True args w
 
 -- | An offset that is added to a permission. Only makes sense for llvm
 -- permissions (at least for now...?)
@@ -853,16 +855,19 @@ data SomeNamedShape where
   SomeNamedShape :: (1 <= w, KnownNat w) => NamedShape b args w ->
                     SomeNamedShape
 
--- | The result of translating a global symbol to a SAW core term
+-- | The result of translating a global symbol to SAW core terms
 data GlobalTrans
      -- | A translation to a list of terms, as defined in @SAWTranslation.hs@
   = GlobalTransTerms [OpenTerm]
-    -- | A translation to a spec definition, i.e., a term of type @SpecDef@;
-    -- note that this is only applicable to function permissions
-  | GlobalTransDef OpenTerm
-    -- | A translation to a locally-defined closure, i.e., a term of type
-    -- @LRTClos@; note that this is only applicable to function permissions
-  | GlobalTransClos SpecTerm
+    -- | A translation to a list of specification functions, i.e., to SAW core
+    -- terms of type @specFun E T@ for some type description @T@. This case is
+    -- here because this is different than the normal translation of a function,
+    -- which is to a SAW core term of type @FunIx T@. Accordingly, this is only
+    -- applicable to function permissions. The reason this is a list of terms
+    -- instead of just a single term is to support a single symbol having
+    -- multiple different function permissions, each with its own specification
+    -- function
+  | GlobalTransFuns [OpenTerm]
 
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
 -- a permission and a translation of that permission to either a list of terms
@@ -897,9 +902,16 @@ data BlockHint blocks init ret args where
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
+-- | A SAW core identifier that indicates an event type for the @SpecM@ monad
+newtype EventType = EventType { evTypeToIdent :: Ident }
+
+-- | Convert an 'EventType' to a SAW core term
+evTypeTerm :: EventType -> OpenTerm
+evTypeTerm = globalOpenTerm . evTypeToIdent
+
 -- | The default event type uses the @Void@ type for events
-defaultSpecMEventType :: Ident
-defaultSpecMEventType = fromString "Prelude.VoidEv"
+defaultSpecMEventType :: EventType
+defaultSpecMEventType = EventType $ fromString "Prelude.VoidEv"
 
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
@@ -909,8 +921,12 @@ data PermEnv = PermEnv {
   permEnvNamedShapes :: [SomeNamedShape],
   permEnvGlobalSyms :: [PermEnvGlobalEntry],
   permEnvHints :: [Hint],
-  permEnvSpecMEventType :: Ident
+  permEnvEventType :: EventType
   }
+
+-- | Get the 'EventType' of a 'PermEnv' as a SAW core term
+permEnvEventTypeTerm :: PermEnv -> OpenTerm
+permEnvEventTypeTerm = evTypeTerm . permEnvEventType
 
 
 ----------------------------------------------------------------------
@@ -975,6 +991,7 @@ $(mkNuMatching [t| forall args. BlockHintSort args |])
 $(mkNuMatching [t| forall blocks init ret args.
                 BlockHint blocks init ret args |])
 $(mkNuMatching [t| Hint |])
+$(mkNuMatching [t| EventType |])
 $(mkNuMatching [t| PermEnv |])
 
 -- NOTE: this instance would require a NuMatching instance for NameMap...
@@ -3036,7 +3053,7 @@ deriving instance Eq (NamedShapeBody b args w)
 
 -- | Test if a 'NamedShape' is recursive
 namedShapeIsRecursive :: NamedShape b args w -> Bool
-namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _)) = True
+namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _)) = True
 namedShapeIsRecursive _ = False
 
 -- | Test if a 'NamedShape' in a binding is recursive
@@ -3049,7 +3066,7 @@ mbNamedShapeIsRecursive =
 namedShapeCanUnfoldRepr :: NamedShape b args w -> BoolRepr b
 namedShapeCanUnfoldRepr (NamedShape _ _ (DefinedShapeBody _)) = TrueRepr
 namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _)) = FalseRepr
-namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _)) = TrueRepr
+namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _)) = TrueRepr
 
 -- | Get a 'BoolRepr' for the Boolean flag for whether a named shape in a
 -- binding can be unfolded
@@ -4349,7 +4366,7 @@ findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
     -- the variable fields
     findEqVarFieldsInShapeH (unfoldNamedShape nmsh args)
 findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
-  | RecShapeBody _ _ _ <- namedShapeBody nmsh =
+  | RecShapeBody _ _ <- namedShapeBody nmsh =
     do seen_names <- ask
        if Set.member (namedShapeName nmsh) seen_names then
          return NameSet.empty
@@ -4385,7 +4402,7 @@ llvmShapeLength (PExpr_NamedShape _ _ (NamedShape _ _
                                        (OpaqueShapeBody mb_len _)) args) =
   Just $ subst (substOfExprs args) mb_len
 llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
-                                            (RecShapeBody _ _ _)) args) =
+                                            (RecShapeBody _ _)) args) =
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
@@ -4710,7 +4727,7 @@ instance AbstractModalities (AtomicPerm a) where
 namedShapeBodyShape :: KnownNat w => NamedShape 'True args w ->
                        Mb args (PermExpr (LLVMShapeType w))
 namedShapeBodyShape (NamedShape _ _ (DefinedShapeBody mb_sh)) = mb_sh
-namedShapeBodyShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) =
+namedShapeBodyShape sh@(NamedShape _ _ (RecShapeBody mb_sh _)) =
   let (prxs :>: _) = mbToProxy mb_sh in
   nuMulti prxs $ \ns ->
   subst (substOfExprs (namesToExprs ns :>:
@@ -4722,7 +4739,7 @@ unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
                     PermExpr (LLVMShapeType w)
 unfoldNamedShape (NamedShape _ _ (DefinedShapeBody mb_sh)) args =
   subst (substOfExprs args) mb_sh
-unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) args =
+unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _)) args =
   subst (substOfExprs (args :>: PExpr_NamedShape Nothing Nothing sh args)) mb_sh
 
 -- | Unfold a named shape and apply 'modalize' to the result
@@ -6122,7 +6139,7 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
     -- HACK: the real computation we want to perform is to assume nmsh is copyable
     -- and prove it is under that assumption; to accomplish this, we substitute
     -- the empty shape for the recursive shape
-    RecShapeBody mb_sh _ _ ->
+    RecShapeBody mb_sh _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
 shapeIsCopyable _ (PExpr_EqShape _ _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
@@ -6506,7 +6523,7 @@ instance FreeVars (NamedShape b args w) where
 instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
   freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
-  freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
+  freeVars (RecShapeBody mb_sh _) = freeVars mb_sh
 
 
 -- | Find all equality permissions @eq(e)@ contained in another permission
@@ -6543,7 +6560,7 @@ instance ContainedEqVars (PermExpr (LLVMShapeType w)) where
                                          (OpaqueShapeBody _ _)) _) =
     NameSet.empty
   containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
-                                         (RecShapeBody mb_sh _ _)) args) =
+                                         (RecShapeBody mb_sh _)) args) =
     -- NOTE: we unfold the shape with the empty shape substituted for recursive
     -- occurrences of the shape name, to avoid an infinite loop
     containedEqVars $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
@@ -6955,10 +6972,9 @@ genSubstNSB px s mb_body = case mbMatch mb_body of
       DefinedShapeBody <$> genSubstMb px s mb_sh
     [nuMP| OpaqueShapeBody mb_len trans_id |] ->
       OpaqueShapeBody <$> genSubstMb px s mb_len <*> return (mbLift trans_id)
-    [nuMP| RecShapeBody mb_sh trans_id fold_ids |] ->
+    [nuMP| RecShapeBody mb_sh trans_id |] ->
       RecShapeBody <$> genSubstMb (px :>: Proxy) s mb_sh
                    <*> return (mbLift trans_id)
-                   <*> return (mbLift fold_ids)
 
 instance SubstVar s m => Substable s (NamedPermName ns args a) m where
   genSubst _ mb_rpn = return $ mbLift mb_rpn
@@ -7905,11 +7921,10 @@ instance AbstractVars (NamedShapeBody b args w) where
     absVarsReturnH ns1 ns2 ($(mkClosed [| \i l -> OpaqueShapeBody l i |])
                              `clApply` toClosed trans_id)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_len
-  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id fold_ids) =
+  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id) =
     absVarsReturnH ns1 ns2 ($(mkClosed
-                              [| \i1 i2 l -> RecShapeBody l i1 i2 |])
-                             `clApply` toClosed trans_id
-                             `clApply` toClosed fold_ids)
+                              [| \i l -> RecShapeBody l i |])
+                             `clApply` toClosed trans_id)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
 
 instance AbstractVars (NamedPermName ns args a) where
@@ -8280,14 +8295,14 @@ permEnvAddOpaqueShape env nm args mb_len tp_id =
                           OpaqueShapeBody mb_len tp_id) : permEnvNamedShapes env }
 
 -- | Add a global symbol with a function permission along with its translation
--- to a spec definition to a 'PermEnv'
+-- to a spec function to a 'PermEnv'
 permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
                           f w -> FunPerm ghosts args gouts ret ->
                           OpenTerm -> PermEnv
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (GlobalTransDef t)
+          PermEnvGlobalEntry sym p (GlobalTransFuns [t])
           : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
@@ -8297,7 +8312,7 @@ permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
 permEnvAddGlobalSymFunMulti env sym (w :: f w) ps_ts =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtrs w $ map fst ps_ts in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (GlobalTransTerms $ map snd ps_ts)
+          PermEnvGlobalEntry sym p (GlobalTransFuns $ map snd ps_ts)
           : permEnvGlobalSyms env }
 
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
