@@ -13,8 +13,10 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -22,6 +24,7 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.Common.MethodSpec
   ( AllocIndex(..)
@@ -62,7 +65,6 @@ module SAWScript.Crucible.Common.MethodSpec
   , setupToTypedTerm
   , setupToTerm
 
-  , XGhostState
   , GhostValue
   , GhostType
   , GhostGlobal
@@ -118,6 +120,7 @@ import           Data.Set (Set)
 import           Data.Time.Clock
 import           Data.Void (absurd)
 
+import           Control.Monad (when)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
@@ -132,13 +135,17 @@ import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import           Mir.Intrinsics (MIR)
 
+import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
 import           Verifier.SAW.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
+import           Verifier.SAW.Simulator.What4.ReturnTrip as SAWVerifier
 
+import           SAWScript.Crucible.Common (Sym, sawCoreState)
 import           SAWScript.Crucible.Common.Setup.Value
 import           SAWScript.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWScript.Crucible.JVM.Setup.Value ()
@@ -344,21 +351,33 @@ type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
 type GhostGlobal = Crucible.GlobalVar GhostType
 
+instance Crucible.IntrinsicClass Sym GhostValue where
+  type Intrinsic Sym GhostValue ctx = (Cryptol.Schema, Term)
+  muxIntrinsic sym _ _namerep _ctx prd (thnSch,thn) (elsSch,els) =
+    do when (thnSch /= elsSch) $ fail $ unlines $
+         [ "Attempted to mux ghost variables of different types:"
+         , show (Cryptol.pp thnSch)
+         , show (Cryptol.pp elsSch)
+         ]
+       st <- sawCoreState sym
+       let sc  = saw_ctx st
+       prd' <- toSC sym st prd
+       typ  <- scTypeOf sc thn
+       res  <- scIte sc typ prd' thn els
+       return (thnSch, res)
+
 --------------------------------------------------------------------------------
 -- *** StateSpec
 
 data SetupCondition ext where
   SetupCond_Equal    :: ConditionMetadata -> SetupValue ext -> SetupValue ext -> SetupCondition ext
   SetupCond_Pred     :: ConditionMetadata -> TypedTerm -> SetupCondition ext
-  SetupCond_Ghost    :: XGhostState ext ->
-                        ConditionMetadata ->
+  SetupCond_Ghost    :: ConditionMetadata ->
                         GhostGlobal ->
                         TypedTerm ->
                         SetupCondition ext
 
-deriving instance ( SetupValueHas Show ext
-                  , Show (XGhostState ext)
-                  ) => Show (SetupCondition ext)
+deriving instance SetupValueHas Show ext => Show (SetupCondition ext)
 
 -- | Verification state (either pre- or post-) specification
 data StateSpec ext = StateSpec

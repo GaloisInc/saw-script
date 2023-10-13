@@ -31,6 +31,7 @@ import SAWScript.Crucible.MIR.Builtins
       mir_fresh_expanded_value,
       mir_fresh_var,
       mir_execute_func,
+      mir_ghost_value,
       mir_load_module,
       mir_points_to,
       mir_postcond,
@@ -58,10 +59,11 @@ import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCE
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
       PointsToBitfield,
+      GhostValue(GhostValue),
       Allocated(Allocated),
       ContractVar(ContractVar),
-      Contract(preVars, preConds, preAllocated, prePointsTos, prePointsToBitfields,
-               argumentVals, postVars, postConds, postAllocated, postPointsTos, postPointsToBitfields,
+      Contract(preVars, preConds, preAllocated, preGhostValues, prePointsTos, prePointsToBitfields,
+               argumentVals, postVars, postConds, postAllocated, postGhostValues, postPointsTos, postPointsToBitfields,
                returnVal) )
 import SAWServer.Data.MIRType (JSONMIRType, mirType)
 import SAWServer.Exceptions ( notAtTopLevel )
@@ -74,24 +76,25 @@ newtype ServerSetupVal = Val (MS.SetupValue MIR)
 compileMIRContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
+  Map ServerName MS.GhostGlobal ->
   CryptolEnv ->
   SAWEnv ->
   Contract JSONMIRType (P.Expr P.PName) ->
   MIRSetupM ()
-compileMIRContract fileReader bic cenv0 sawenv c =
+compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
   do allocsPre <- mapM setupAlloc (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= mir_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
      mapM_ setupPointsToBitfields (prePointsToBitfields c)
-     --mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
+     mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= mir_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
      (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= mir_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
      mapM_ setupPointsToBitfields (postPointsToBitfields c)
-     --mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
+     mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
      case returnVal c of
        Just v -> getSetupVal (envPost, cenvPost) v >>= mir_return
        Nothing -> return ()
@@ -136,7 +139,10 @@ compileMIRContract fileReader bic cenv0 sawenv c =
     setupPointsToBitfields _ =
       MIRSetupM $ fail "Points-to-bitfield not supported in the MIR API."
 
-    --setupGhostValue _ _ _ = fail "Ghost values not supported yet in the MIR API."
+    setupGhostValue genv cenv (GhostValue serverName e) =
+      do g <- resolve genv serverName
+         t <- getTypedTerm cenv e
+         mir_ghost_value g t
 
     resolve :: Map ServerName a -> ServerName -> MIRSetupM a
     resolve env name =

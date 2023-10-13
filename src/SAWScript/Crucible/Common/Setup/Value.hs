@@ -51,8 +51,6 @@ module SAWScript.Crucible.Common.Setup.Value
   , SetupValue(..)
   , SetupValueHas
 
-  , XGhostState
-
   , ConditionMetadata(..)
 
   , MethodId
@@ -184,15 +182,6 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 -- TypedTerm is neither Eq nor Ord
 -- deriving instance (SetupValueHas Eq ext) => Eq (SetupValue ext)
 -- deriving instance (SetupValueHas Ord ext) => Ord (SetupValue ext)
-
---------------------------------------------------------------------------------
--- ** Ghost state
-
--- | This extension field controls whether ghost state is enabled for a
--- particular language backend. At the moment, ghost state is only enabled for
--- the LLVM backend, but we want to expand this to cover other language backends
--- in the future. See <https://github.com/GaloisInc/saw-script/issues/1929>.
-type family XGhostState ext
 
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions

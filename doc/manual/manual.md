@@ -3545,14 +3545,15 @@ with the following function:
 
 Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
-function can be used to specify its value:
+functions can be used to specify its value:
 
 * `llvm_ghost_value : Ghost -> Term -> LLVMSetup ()`
+* `jvm_ghost_value  : Ghost -> Term -> JVMSetup  ()`
+* `mir_ghost_value  : Ghost -> Term -> MIRSetup  ()`
 
-Currently, this function can only be used for LLVM verification, though
-that will likely be generalized in the future. It can be used in either
-the pre state or the post state, to specify the value of ghost state
-either before or after the execution of the function, respectively.
+These can be used in either the pre state or the post state, to specify the
+value of ghost state either before or after the execution of the function,
+respectively.
 
 ## An Extended Example
 

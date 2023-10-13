@@ -188,6 +188,7 @@ import Verifier.SAW.TypedTerm
 
 -- saw-script
 import SAWScript.AST (Located(..))
+import SAWScript.Builtins (ghost_value)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Versions
@@ -1205,7 +1206,7 @@ setupPrestateConditions mspec cc mem env = aux []
       let lp = Crucible.LabeledPred (ttTerm tm) (md, "precondition") in
       aux (lp:acc) globals xs
 
-    aux acc globals (MS.SetupCond_Ghost () _md var val : xs) =
+    aux acc globals (MS.SetupCond_Ghost _md var val : xs) =
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
@@ -2799,15 +2800,7 @@ llvm_ghost_value ::
   TypedTerm ->
   LLVMCrucibleSetupM ()
 llvm_ghost_value ghost val = LLVMCrucibleSetupM $
-  do loc <- getW4Position "llvm_ghost_value"
-     tags <- view Setup.croTags
-     let md = MS.ConditionMetadata
-              { MS.conditionLoc = loc
-              , MS.conditionTags = tags
-              , MS.conditionType = "ghost value"
-              , MS.conditionContext = ""
-              }
-     Setup.addCondition (MS.SetupCond_Ghost () md ghost val)
+  ghost_value ghost val
 
 llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -> [String]
 llvm_spec_solvers (SomeLLVM ps) =

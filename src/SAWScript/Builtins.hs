@@ -27,6 +27,7 @@ import Data.Functor
 import Control.Applicative
 import Data.Monoid
 #endif
+import Control.Lens (view)
 import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
@@ -135,7 +136,8 @@ import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWScript.SolverCache
 import SAWScript.SolverVersions
 
-import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
+import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import SAWScript.Crucible.Common.Setup.Type (addCondition, croTags)
 import SAWScript.Prover.Util(checkBooleanSchema)
 import SAWScript.Prover.SolverStats
 import qualified SAWScript.Prover.SBV as Prover
@@ -161,7 +163,7 @@ definePrim name (TypedTerm (TypedTermSchema schema) rhs) =
 definePrim _name (TypedTerm tp _) =
   fail $ unlines
     [ "Expected term with Cryptol schema type, but got"
-    , show (ppTypedTermType tp)
+    , show (MS.ppTypedTermType tp)
     ]
 
 sbvUninterpreted :: String -> Term -> TopLevel Uninterp
@@ -699,7 +701,7 @@ term_type tt =
     TypedTermSchema sch -> pure sch
     tp -> fail $ unlines
             [ "Term does not have a Cryptol type"
-            , show (ppTypedTermType tp)
+            , show (MS.ppTypedTermType tp)
             ]
 
 goal_eval :: [String] -> ProofScript ()
@@ -2477,3 +2479,18 @@ declare_ghost_state name =
   do allocator <- getHandleAlloc
      global <- liftIO (freshGlobalVar allocator (Text.pack name) knownRepr)
      return (SV.VGhostVar global)
+
+ghost_value ::
+  MS.GhostGlobal ->
+  TypedTerm ->
+  SV.CrucibleSetup ext ()
+ghost_value ghost val =
+  do loc <- SV.getW4Position "ghost_value"
+     tags <- view croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "ghost value"
+              , MS.conditionContext = ""
+              }
+     addCondition (MS.SetupCond_Ghost md ghost val)

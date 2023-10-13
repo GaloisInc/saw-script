@@ -9,6 +9,7 @@ module SAWServer.MIRVerify
 
 import Prelude hiding (mod)
 import Control.Lens
+import qualified Data.Map as Map
 
 import SAWScript.Crucible.MIR.Builtins
     ( mir_unsafe_assume_spec, mir_verify )
@@ -26,6 +27,7 @@ import SAWServer
       pushTask,
       dropTask,
       setServerVal,
+      getGhosts,
       getMIRModule,
       getMIRMethodSpecIR )
 import SAWServer.CryptolExpression (getCryptolExpr)
@@ -53,7 +55,8 @@ mirVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scri
                 cenv = rwCryptol (view sawTopLevelRW state)
                 sawenv = view sawEnv state
             fileReader <- Argo.getFileReader
-            setup <- compileMIRContract fileReader bic cenv sawenv <$>
+            ghostEnv <- Map.fromList <$> getGhosts
+            setup <- compileMIRContract fileReader bic ghostEnv cenv sawenv <$>
                      traverse getCryptolExpr contract
             res <- case mode of
               VerifyContract -> do

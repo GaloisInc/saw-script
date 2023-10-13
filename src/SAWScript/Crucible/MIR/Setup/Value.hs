@@ -81,8 +81,6 @@ type instance MS.XSetupCast MIR = Void
 type instance MS.XSetupUnion MIR = Void
 type instance MS.XSetupGlobalInitializer MIR = ()
 
-type instance MS.XGhostState MIR = Void
-
 type instance MS.TypeName MIR = Text
 type instance MS.ExtType MIR = M.Ty
 

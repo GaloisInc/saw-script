@@ -65,11 +65,16 @@ module SAWScript.Crucible.Common.Override
   --
   , assignmentToList
   , MetadataMap
+  --
+  , learnGhost
+  , executeGhost
+  , instantiateExtMatchTerm
+  , matchTerm
   ) where
 
 import qualified Control.Exception as X
 import           Control.Lens
-import           Control.Monad (foldM, unless)
+import           Control.Monad (foldM, unless, when)
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
@@ -82,6 +87,7 @@ import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
 import           Data.Proxy (Proxy(..))
+import qualified Data.Set as Set
 import           Data.Set (Set)
 import           Data.Typeable (Typeable)
 import           Data.Void
@@ -92,9 +98,12 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
+import           Verifier.SAW.Prelude as SAWVerifier (scEq)
 import           Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.TypedAST as SAWVerifier
 import           Verifier.SAW.TypedTerm as SAWVerifier
+
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.Online as Crucible
@@ -529,3 +538,102 @@ assignmentToList ::
   Ctx.Assignment (Crucible.RegEntry sym) ctx ->
   [Crucible.AnyValue sym]
 assignmentToList = toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x y)
+
+------------------------------------------------------------------------
+
+learnGhost ::
+  SharedContext                                          ->
+  MS.ConditionMetadata                                   ->
+  PrePost                                                ->
+  MS.GhostGlobal                                            ->
+  TypedTerm                                              ->
+  OverrideMatcher ext md ()
+learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
+  do (sch,tm) <- readGlobal var
+     when (sch /= schEx) $ fail $ unlines $
+       [ "Ghost variable had the wrong type:"
+       , "- Expected: " ++ show (Cryptol.pp schEx)
+       , "- Actual:   " ++ show (Cryptol.pp sch)
+       ]
+     instantiateExtMatchTerm sc md prepost tm tmEx
+learnGhost _sc _md _prepost _var (TypedTerm tp _)
+  = fail $ unlines
+      [ "Ghost variable expected value has improper type"
+      , "expected Cryptol schema type, but got"
+      , show (MS.ppTypedTermType tp)
+      ]
+
+executeGhost ::
+  SharedContext ->
+  MS.ConditionMetadata ->
+  MS.GhostGlobal ->
+  TypedTerm ->
+  OverrideMatcher ext RW ()
+executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =
+  do s <- OM (use termSub)
+     tm' <- liftIO (scInstantiateExt sc s tm)
+     writeGlobal var (sch,tm')
+executeGhost _sc _md _var (TypedTerm tp _) =
+  fail $ unlines
+    [ "executeGhost: improper value type"
+    , "expected Cryptol schema type, but got"
+    , show (MS.ppTypedTermType tp)
+    ]
+
+-- | NOTE: The two 'Term' arguments must have the same type.
+instantiateExtMatchTerm ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  MS.ConditionMetadata ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
+  OverrideMatcher ext md ()
+instantiateExtMatchTerm sc md prepost actual expected = do
+  sub <- OM (use termSub)
+  matchTerm sc md prepost actual =<< liftIO (scInstantiateExt sc sub expected)
+
+matchTerm ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  MS.ConditionMetadata ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
+  OverrideMatcher ext md ()
+
+matchTerm _ _ _ real expect | real == expect = return ()
+matchTerm sc md prepost real expect =
+  do let loc = MS.conditionLoc md
+     free <- OM (use osFree)
+     case unwrapTermF expect of
+       FTermF (ExtCns ec)
+         | Set.member (ecVarIndex ec) free ->
+         do assignTerm sc md prepost (ecVarIndex ec) real
+
+       _ ->
+         do t <- liftIO $ scEq sc real expect
+            let msg = unlines $
+                  [ "Literal equality " ++ MS.stateCond prepost
+--                  , "Expected term: " ++ prettyTerm expect
+--                  , "Actual term:   " ++ prettyTerm real
+                  ]
+            addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+--  where prettyTerm = show . ppTermDepth 20
+
+assignTerm ::
+  SharedContext      {- ^ context for constructing SAW terms    -} ->
+  MS.ConditionMetadata ->
+  PrePost                                                          ->
+  VarIndex {- ^ external constant index -} ->
+  Term     {- ^ value                   -} ->
+  OverrideMatcher ext md ()
+
+assignTerm sc md prepost var val =
+  do mb <- OM (use (termSub . at var))
+     case mb of
+       Nothing -> OM (termSub . at var ?= val)
+       Just old ->
+         matchTerm sc md prepost val old
+
+--          do t <- liftIO $ scEq sc old val
+--             p <- liftIO $ resolveSAWPred cc t
+--             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ MS.stateCond prepost))

@@ -38,6 +38,8 @@
   variable. This function is currently only supported with LLVM and MIR
   verification, and using this function with JVM verification will raise an
   error.
+* The `create_ghost_variable()` and `ghost_value()` functions are now supported
+  with JVM and MIR verification.
 
 ## 1.0.1 -- YYYY-MM-DD
 

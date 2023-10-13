@@ -35,6 +35,8 @@
 * Add `"slice"` and `"slice range"` `setup value`s representing slices in MIR
   verification. Attempting to use these in LLVM or JVM verification will raise
   an error.
+* The `SAW/create ghost variable` command and the associated
+  `ghost variable value` value are now supported with JVM and MIR verification.
 
 ## 1.0.0 -- 2023-06-26
 

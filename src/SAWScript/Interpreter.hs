@@ -3633,6 +3633,20 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_ghost_value`."]
 
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (pureVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "mir_ghost_value"
+    "Ghost -> Term -> MIRSetup ()"
+    (pureVal mir_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
     Current

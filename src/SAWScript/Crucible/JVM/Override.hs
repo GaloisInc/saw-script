@@ -92,8 +92,6 @@ import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Prelude (scEq)
-import           Verifier.SAW.TypedAST
 import           Verifier.SAW.TypedTerm
 
 import           Verifier.SAW.Simulator.What4.ReturnTrip (toSC)
@@ -326,13 +324,13 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   which involves writing values into memory, computing the return value,
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
-  forall ret w.
+  forall ret.
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
-  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym ret)
+  OverrideMatcher CJ.JVM RW (Crucible.RegValue Sym ret)
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs ^. MS.csPostState)
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
@@ -350,8 +348,20 @@ learnCond opts sc cc cs prepost ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
+     assertTermEqualities sc cc
      enforceDisjointness cc loc ss
      enforceCompleteSubstitution loc ss
+
+
+assertTermEqualities ::
+  SharedContext ->
+  JVMCrucibleContext ->
+  OverrideMatcher CJ.JVM md ()
+assertTermEqualities sc cc = do
+  let assertTermEquality (t, md, e) = do
+        p <- instantiateExtResolveSAWPred sc cc t
+        addAssert p md e
+  traverse_ assertTermEquality =<< OM (use termEqs)
 
 
 -- execute a pre/post condition
@@ -361,7 +371,7 @@ executeCond ::
   JVMCrucibleContext ->
   CrucibleMethodSpecIR ->
   StateSpec ->
-  OverrideMatcher CJ.JVM w ()
+  OverrideMatcher CJ.JVM RW ()
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
      traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
@@ -508,26 +518,6 @@ assignVar cc md var ref =
 
 ------------------------------------------------------------------------
 
-
-assignTerm ::
-  SharedContext      {- ^ context for constructing SAW terms    -} ->
-  JVMCrucibleContext    {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  PrePost                                                          ->
-  VarIndex {- ^ external constant index -} ->
-  Term     {- ^ value                   -} ->
-  OverrideMatcher CJ.JVM w ()
-
-assignTerm sc cc md prepost var val =
-  do mb <- OM (use (termSub . at var))
-     case mb of
-       Nothing -> OM (termSub . at var ?= val)
-       Just old ->
-         matchTerm sc cc md prepost val old
-
-
-------------------------------------------------------------------------
-
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   Options          {- ^ saw script print out opts -} ->
@@ -547,7 +537,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expec
   = do sym <- Ov.getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
        realTerm <- valueToSC sym md failMsg tval actual
-       matchTerm sc cc md prepost realTerm (ttTerm expectedTT)
+       matchTerm sc md prepost realTerm (ttTerm expectedTT)
 
 matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
   case setupval of
@@ -606,32 +596,6 @@ valueToSC _sym md failMsg _tval _val =
 
 ------------------------------------------------------------------------
 
--- | NOTE: The two 'Term' arguments must have the same type.
-matchTerm ::
-  SharedContext   {- ^ context for constructing SAW terms    -} ->
-  JVMCrucibleContext {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  PrePost                                                       ->
-  Term            {- ^ exported concrete term                -} ->
-  Term            {- ^ expected specification term           -} ->
-  OverrideMatcher CJ.JVM w ()
-
-matchTerm _ _ _ _ real expect | real == expect = return ()
-matchTerm sc cc md prepost real expect =
-  do free <- OM (use osFree)
-     let loc = MS.conditionLoc md
-     case unwrapTermF expect of
-       FTermF (ExtCns ec)
-         | Set.member (ecVarIndex ec) free ->
-         do assignTerm sc cc md prepost (ecVarIndex ec) real
-
-       _ ->
-         do t <- liftIO $ scEq sc real expect
-            p <- liftIO $ resolveBoolTerm (cc ^. jccSym) t
-            addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ MS.stateCond prepost) ""))
-
-------------------------------------------------------------------------
-
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
 learnSetupCondition ::
@@ -642,9 +606,11 @@ learnSetupCondition ::
   PrePost                    ->
   SetupCondition             ->
   OverrideMatcher CJ.JVM w ()
-learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal md val1 val2)  = learnEqual opts sc cc spec md prepost val1 val2
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred md tm)         = learnPred sc cc md prepost (ttTerm tm)
-learnSetupCondition _opts _ _ _ _ (MS.SetupCond_Ghost empty _ _ _) = absurd empty
+learnSetupCondition opts sc cc spec prepost cond =
+  case cond of
+    MS.SetupCond_Equal md val1 val2 -> learnEqual opts sc cc spec md prepost val1 val2
+    MS.SetupCond_Pred md tm         -> learnPred sc cc md prepost (ttTerm tm)
+    MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
 ------------------------------------------------------------------------
 
@@ -717,7 +683,7 @@ learnPointsTo opts sc cc spec prepost pt =
          ety_tm <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv ety
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
-         matchTerm sc cc md prepost realTerm (ttTerm tt)
+         matchTerm sc md prepost realTerm (ttTerm tt)
 
     -- If the right-hand-side is 'Nothing', this is indicates a "modifies" declaration,
     -- which should probably not appear in the pre-state section, and has no effect.
@@ -761,6 +727,15 @@ learnPred sc cc md prepost t =
      let loc = MS.conditionLoc md
      addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError (MS.stateCond prepost) ""))
 
+instantiateExtResolveSAWPred ::
+  SharedContext ->
+  JVMCrucibleContext ->
+  Term ->
+  OverrideMatcher CJ.JVM md (W4.Pred Sym)
+instantiateExtResolveSAWPred sc cc cond = do
+  sub <- OM (use termSub)
+  liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
+
 ------------------------------------------------------------------------
 
 -- TODO: replace (W4.ProgramLoc, J.Type) by some allocation datatype
@@ -800,10 +775,13 @@ executeSetupCondition ::
   JVMCrucibleContext            ->
   CrucibleMethodSpecIR       ->
   SetupCondition             ->
-  OverrideMatcher CJ.JVM w ()
-executeSetupCondition opts sc cc spec (MS.SetupCond_Equal md val1 val2) = executeEqual opts sc cc spec md val1 val2
-executeSetupCondition _opts sc cc _    (MS.SetupCond_Pred md tm)        = executePred sc cc md tm
-executeSetupCondition _ _ _ _    (MS.SetupCond_Ghost empty _ _ _)        = absurd empty
+  OverrideMatcher CJ.JVM RW ()
+executeSetupCondition opts sc cc spec =
+  \case
+    MS.SetupCond_Equal md val1 val2 ->
+      executeEqual opts sc cc spec md val1 val2
+    MS.SetupCond_Pred md tm -> executePred sc cc md tm
+    MS.SetupCond_Ghost md var val -> executeGhost sc md var val
 
 ------------------------------------------------------------------------
 
