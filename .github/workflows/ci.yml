@@ -96,6 +96,18 @@ jobs:
             cabal: "3.10.1.0"
             run-tests: true
             hpc: true
+        exclude:
+          # We exclude the GHC 8.10.7 job on Windows, as it is known to suffer
+          # from a hard-to-diagnose memory-related issue that does not affect
+          # later versions of GHC on Windows. (See
+          # https://github.com/GaloisInc/saw-script/issues/1961.) When we drop
+          # support for 8.10 entirely from SAW's support Window, we can remove
+          # this part of the matrix entirely.
+          - os: windows-2019
+            ghc: "8.10.7"
+            cabal: "3.10.1.0"
+            run-tests: true
+            hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
