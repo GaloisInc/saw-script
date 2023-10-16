@@ -18,25 +18,6 @@ extract_exe() {
   $IS_WIN || chmod +x "$2/$name"
 }
 
-retry() {
-  echo "Attempting with retry:" "$@"
-  local n=1
-  while true; do
-    if "$@"; then
-      break
-    else
-      if [[ $n -lt 3 ]]; then
-        sleep $n # don't retry immediately
-        ((n++))
-        echo "Command failed. Attempt $n/3:"
-      else
-        echo "The command has failed after $n attempts."
-        return 1
-      fi
-    fi
-  done
-}
-
 setup_dist_bins() {
   if $IS_WIN; then
     is_exe "dist/bin" "saw" && return
@@ -66,15 +47,11 @@ build() {
   if [[ "$ENABLE_HPC" == "true" ]]; then
     cat cabal.project.ci-hpc >> cabal.project.local
   fi
-  if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
-    if [[ "$RUNNER_OS" == "macOS" ]]; then
-      echo "Working around a dylib issue on macos by removing the cache and trying again"
-      cabal v2-clean
-      retry cabal v2-build "$@" "${pkgs[@]}"
-    else
-      return 1
-    fi
-  fi
+  # In the distant past, we had to retry the `cabal build` command to work
+  # around issues with caching dylib files on macOS. These issues appear to
+  # be less likely with modern GitHub Actions caching, so we have removed the
+  # retry logic.
+  cabal v2-build "$@" "${pkgs[@]}"
 }
 
 # Gather and tar up all HPC coverage files and binaries
