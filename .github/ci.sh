@@ -47,6 +47,10 @@ build() {
   if [[ "$ENABLE_HPC" == "true" ]]; then
     cat cabal.project.ci-hpc >> cabal.project.local
   fi
+  # In the distant past, we had to retry the `cabal build` command to work
+  # around issues with caching dylib files on macOS. These issues appear to
+  # be less likely with modern GitHub Actions caching, so we have removed the
+  # retry logic.
   cabal v2-build "$@" "${pkgs[@]}"
 }
 
