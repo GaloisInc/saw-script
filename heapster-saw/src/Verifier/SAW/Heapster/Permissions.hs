@@ -657,20 +657,20 @@ data NamedShapeBody b args w where
   DefinedShapeBody :: Mb args (PermExpr (LLVMShapeType w)) ->
                       NamedShapeBody 'True args w
 
-  -- | An opaque shape has no body, just a length and a translation to a type
-  -- description given by an identifier
-  OpaqueShapeBody :: Mb args (PermExpr (BVType w)) -> Ident ->
+  -- | An opaque shape has no body, just a length and a translation to two
+  -- identifiers, the first for a function from translations of the @args@ to
+  -- the type to use as the translation of the opaque shape applied to @args@ and
+  -- one for a type description with @args@ as free variables
+  OpaqueShapeBody :: Mb args (PermExpr (BVType w)) -> Ident -> Ident ->
                      NamedShapeBody 'False args w
 
   -- | A recursive shape body has a one-step unfolding to a shape, which can
-  -- refer to the shape itself via the last bound variable. It also has an
-  -- identifier for a function that takes in translations of the @args@ and
-  -- returns the type description that is the translation of substituting those
-  -- translations of the @args@ into the given shape. Note that this is just an
-  -- optimization to make it more concise to expression this substitution
-  -- instance.
+  -- refer to the shape itself via the last bound variable. It also has two
+  -- identifiers, one for a function from translations of the @args@ to the type
+  -- to use as the translation of the shape applied to @args@ and one for
+  -- a type description with @args@ as free variables.
   RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
-                  Ident -> NamedShapeBody 'True args w
+                  Ident -> Ident -> NamedShapeBody 'True args w
 
 -- | An offset that is added to a permission. Only makes sense for llvm
 -- permissions (at least for now...?)
@@ -693,7 +693,8 @@ data NamedPerm ns args a where
 -- identifier that it is translated to
 data OpaquePerm b args a = OpaquePerm {
   opaquePermName :: NamedPermName (OpaqueSort b) args a,
-  opaquePermTrans :: Ident
+  opaquePermTrans :: Ident,
+  opaquePermTransDesc :: Ident
   }
 
 -- | The interpretation of a recursive permission as a reachability permission.
@@ -729,6 +730,7 @@ data ReachMethods reach args a where
 data RecPerm b reach args a = RecPerm {
   recPermName :: NamedPermName (RecursiveSort b reach) args a,
   recPermTransType :: Ident,
+  recPermTransDesc :: Ident,
   recPermFoldFun :: Ident,
   recPermUnfoldFun :: Ident,
   recPermReachMethods :: ReachMethods args a reach,
@@ -3053,7 +3055,7 @@ deriving instance Eq (NamedShapeBody b args w)
 
 -- | Test if a 'NamedShape' is recursive
 namedShapeIsRecursive :: NamedShape b args w -> Bool
-namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _)) = True
+namedShapeIsRecursive (NamedShape _ _ (RecShapeBody _ _ _)) = True
 namedShapeIsRecursive _ = False
 
 -- | Test if a 'NamedShape' in a binding is recursive
@@ -3065,8 +3067,8 @@ mbNamedShapeIsRecursive =
 -- unfolded
 namedShapeCanUnfoldRepr :: NamedShape b args w -> BoolRepr b
 namedShapeCanUnfoldRepr (NamedShape _ _ (DefinedShapeBody _)) = TrueRepr
-namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _)) = FalseRepr
-namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _)) = TrueRepr
+namedShapeCanUnfoldRepr (NamedShape _ _ (OpaqueShapeBody _ _ _)) = FalseRepr
+namedShapeCanUnfoldRepr (NamedShape _ _ (RecShapeBody _ _ _)) = TrueRepr
 
 -- | Get a 'BoolRepr' for the Boolean flag for whether a named shape in a
 -- binding can be unfolded
@@ -4366,7 +4368,7 @@ findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
     -- the variable fields
     findEqVarFieldsInShapeH (unfoldNamedShape nmsh args)
 findEqVarFieldsInShapeH (PExpr_NamedShape _ _ nmsh args)
-  | RecShapeBody _ _ <- namedShapeBody nmsh =
+  | RecShapeBody _ _ _ <- namedShapeBody nmsh =
     do seen_names <- ask
        if Set.member (namedShapeName nmsh) seen_names then
          return NameSet.empty
@@ -4399,10 +4401,10 @@ llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
                                             (DefinedShapeBody _)) args) =
   llvmShapeLength (unfoldNamedShape nmsh args)
 llvmShapeLength (PExpr_NamedShape _ _ (NamedShape _ _
-                                       (OpaqueShapeBody mb_len _)) args) =
+                                       (OpaqueShapeBody mb_len _ _)) args) =
   Just $ subst (substOfExprs args) mb_len
 llvmShapeLength (PExpr_NamedShape _ _ nmsh@(NamedShape _ _
-                                            (RecShapeBody _ _)) args) =
+                                            (RecShapeBody _ _ _)) args) =
   -- FIXME: if the recursive shape contains itself *not* under a pointer, then
   -- this could diverge
   llvmShapeLength (unfoldNamedShape nmsh args)
@@ -4727,7 +4729,7 @@ instance AbstractModalities (AtomicPerm a) where
 namedShapeBodyShape :: KnownNat w => NamedShape 'True args w ->
                        Mb args (PermExpr (LLVMShapeType w))
 namedShapeBodyShape (NamedShape _ _ (DefinedShapeBody mb_sh)) = mb_sh
-namedShapeBodyShape sh@(NamedShape _ _ (RecShapeBody mb_sh _)) =
+namedShapeBodyShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) =
   let (prxs :>: _) = mbToProxy mb_sh in
   nuMulti prxs $ \ns ->
   subst (substOfExprs (namesToExprs ns :>:
@@ -4739,7 +4741,7 @@ unfoldNamedShape :: KnownNat w => NamedShape 'True args w -> PermExprs args ->
                     PermExpr (LLVMShapeType w)
 unfoldNamedShape (NamedShape _ _ (DefinedShapeBody mb_sh)) args =
   subst (substOfExprs args) mb_sh
-unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _)) args =
+unfoldNamedShape sh@(NamedShape _ _ (RecShapeBody mb_sh _ _)) args =
   subst (substOfExprs (args :>: PExpr_NamedShape Nothing Nothing sh args)) mb_sh
 
 -- | Unfold a named shape and apply 'modalize' to the result
@@ -6134,12 +6136,12 @@ shapeIsCopyable rw (PExpr_NamedShape maybe_rw' _ nmsh args) =
       let rw' = maybe rw id maybe_rw' in
       shapeIsCopyable rw' $ unfoldNamedShape nmsh args
     -- NOTE: we are assuming that opaque shapes are copyable iff their args are
-    OpaqueShapeBody _ _ ->
+    OpaqueShapeBody _ _ _ ->
       namedPermArgsAreCopyable (namedShapeArgs nmsh) args
     -- HACK: the real computation we want to perform is to assume nmsh is copyable
     -- and prove it is under that assumption; to accomplish this, we substitute
     -- the empty shape for the recursive shape
-    RecShapeBody mb_sh _ ->
+    RecShapeBody mb_sh _ _ ->
       shapeIsCopyable rw $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
 shapeIsCopyable _ (PExpr_EqShape _ _) = True
 shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
@@ -6522,8 +6524,8 @@ instance FreeVars (NamedShape b args w) where
 
 instance FreeVars (NamedShapeBody b args w) where
   freeVars (DefinedShapeBody mb_sh) = freeVars mb_sh
-  freeVars (OpaqueShapeBody mb_len _) = freeVars mb_len
-  freeVars (RecShapeBody mb_sh _) = freeVars mb_sh
+  freeVars (OpaqueShapeBody mb_len _ _) = freeVars mb_len
+  freeVars (RecShapeBody mb_sh _ _) = freeVars mb_sh
 
 
 -- | Find all equality permissions @eq(e)@ contained in another permission
@@ -6557,10 +6559,10 @@ instance ContainedEqVars (PermExpr (LLVMShapeType w)) where
                                               (DefinedShapeBody _)) args) =
     containedEqVars (unfoldNamedShape nmsh args)
   containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
-                                         (OpaqueShapeBody _ _)) _) =
+                                         (OpaqueShapeBody _ _ _)) _) =
     NameSet.empty
   containedEqVars (PExpr_NamedShape _ _ (NamedShape _ _
-                                         (RecShapeBody mb_sh _)) args) =
+                                         (RecShapeBody mb_sh _ _)) args) =
     -- NOTE: we unfold the shape with the empty shape substituted for recursive
     -- occurrences of the shape name, to avoid an infinite loop
     containedEqVars $ subst (substOfExprs (args :>: PExpr_EmptyShape)) mb_sh
@@ -6970,11 +6972,13 @@ genSubstNSB ::
 genSubstNSB px s mb_body = case mbMatch mb_body of
     [nuMP| DefinedShapeBody mb_sh |] ->
       DefinedShapeBody <$> genSubstMb px s mb_sh
-    [nuMP| OpaqueShapeBody mb_len trans_id |] ->
+    [nuMP| OpaqueShapeBody mb_len trans_id desc_id |] ->
       OpaqueShapeBody <$> genSubstMb px s mb_len <*> return (mbLift trans_id)
-    [nuMP| RecShapeBody mb_sh trans_id |] ->
+      <*> return (mbLift desc_id)
+    [nuMP| RecShapeBody mb_sh trans_id desc_id |] ->
       RecShapeBody <$> genSubstMb (px :>: Proxy) s mb_sh
                    <*> return (mbLift trans_id)
+                   <*> return (mbLift desc_id)
 
 instance SubstVar s m => Substable s (NamedPermName ns args a) m where
   genSubst _ mb_rpn = return $ mbLift mb_rpn
@@ -6991,12 +6995,12 @@ instance SubstVar s m => Substable s (NamedPerm ns args a) m where
     [nuMP| NamedPerm_Defined p |] -> NamedPerm_Defined <$> genSubst s p
 
 instance SubstVar s m => Substable s (OpaquePerm ns args a) m where
-  genSubst _ (mbMatch -> [nuMP| OpaquePerm n i |]) =
-    return $ OpaquePerm (mbLift n) (mbLift i)
+  genSubst _ (mbMatch -> [nuMP| OpaquePerm n i1 i2 |]) =
+    return $ OpaquePerm (mbLift n) (mbLift i1) (mbLift i2)
 
 instance SubstVar s m => Substable s (RecPerm ns reach args a) m where
-  genSubst s (mbMatch -> [nuMP| RecPerm rpn dt_i f_i u_i reachMeths cases |]) =
-    RecPerm (mbLift rpn) (mbLift dt_i) (mbLift f_i) (mbLift u_i)
+  genSubst s (mbMatch -> [nuMP| RecPerm rpn dt_i d_i f_i u_i reachMeths cases |]) =
+    RecPerm (mbLift rpn) (mbLift dt_i) (mbLift d_i) (mbLift f_i) (mbLift u_i)
             (mbLift reachMeths) <$> mapM (genSubstMb (cruCtxProxies (mbLift (fmap namedPermNameArgs rpn))) s) (mbList cases)
 
 instance SubstVar s m => Substable s (DefinedPerm ns args a) m where
@@ -7917,14 +7921,16 @@ instance AbstractVars (NamedShapeBody b args w) where
   abstractPEVars ns1 ns2 (DefinedShapeBody mb_sh) =
     absVarsReturnH ns1 ns2 $(mkClosed [| DefinedShapeBody |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
-  abstractPEVars ns1 ns2 (OpaqueShapeBody mb_len trans_id) =
-    absVarsReturnH ns1 ns2 ($(mkClosed [| \i l -> OpaqueShapeBody l i |])
-                             `clApply` toClosed trans_id)
+  abstractPEVars ns1 ns2 (OpaqueShapeBody mb_len trans_id desc_id) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| \i1 i2 l -> OpaqueShapeBody l i1 i2 |])
+                            `clApply` toClosed trans_id
+                            `clApply` toClosed desc_id)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_len
-  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id) =
+  abstractPEVars ns1 ns2 (RecShapeBody mb_sh trans_id desc_id) =
     absVarsReturnH ns1 ns2 ($(mkClosed
-                              [| \i l -> RecShapeBody l i |])
-                             `clApply` toClosed trans_id)
+                              [| \i1 i2 l -> RecShapeBody l i1 i2 |])
+                            `clApply` toClosed trans_id
+                            `clApply` toClosed desc_id)
     `clMbMbApplyM` abstractPEVars ns1 ns2 mb_sh
 
 instance AbstractVars (NamedPermName ns args a) where
@@ -8204,11 +8210,11 @@ permEnvAddNamedShape env ns =
 
 -- | Add an opaque named permission to a 'PermEnv'
 permEnvAddOpaquePerm :: PermEnv -> String -> CruCtx args -> TypeRepr a ->
-                        Ident -> PermEnv
-permEnvAddOpaquePerm env str args tp i =
+                        Ident -> Ident -> PermEnv
+permEnvAddOpaquePerm env str args tp trans_id d_id =
   let n = NamedPermName str tp args (OpaqueSortRepr
                                      TrueRepr) NameNonReachConstr in
-  permEnvAddNamedPerm env $ NamedPerm_Opaque $ OpaquePerm n i
+  permEnvAddNamedPerm env $ NamedPerm_Opaque $ OpaquePerm n trans_id d_id
 
 -- | Add a recursive named permission to a 'PermEnv', assuming that the
 -- 'recPermCases' and the fold and unfold functions depend recursively on the
@@ -8223,7 +8229,7 @@ permEnvAddOpaquePerm env str args tp i =
 -- 'recPermCases' can be called multiple times, so should not perform any
 -- non-idempotent mutation in the monad @m@.
 permEnvAddRecPermM :: Monad m => PermEnv -> String -> CruCtx args ->
-                      TypeRepr a -> Ident ->
+                      TypeRepr a -> Ident -> Ident ->
                       (forall b. NameReachConstr (RecursiveSort b reach) args a) ->
                       (forall b. NamedPermName (RecursiveSort b reach) args a ->
                        PermEnv -> m [Mb args (ValuePerm a)]) ->
@@ -8232,14 +8238,14 @@ permEnvAddRecPermM :: Monad m => PermEnv -> String -> CruCtx args ->
                       (forall b. NamedPermName (RecursiveSort b reach) args a ->
                        PermEnv -> m (ReachMethods args a reach)) ->
                       m PermEnv
-permEnvAddRecPermM env nm args tp trans_ident reachC casesF foldIdentsF reachMethsF =
+permEnvAddRecPermM env nm args tp trans_ident d_ident reachC casesF foldIdentsF reachMethsF =
   -- NOTE: we start by assuming nm is conjoinable, and then, if it's not, we
   -- call casesF again, and thereby compute a fixed-point
   do let reach = nameReachConstrBool reachC
      let mkTmpEnv :: NamedPermName (RecursiveSort b reach) args a -> PermEnv
          mkTmpEnv npn =
            permEnvAddNamedPerm env $ NamedPerm_Rec $
-           RecPerm npn trans_ident
+           RecPerm npn trans_ident d_ident
            (error "Analyzing recursive perm cases before it is defined!")
            (error "Folding recursive perm before it is defined!")
            (error "Using reachability methods for recursive perm before it is defined!")
@@ -8254,7 +8260,7 @@ permEnvAddRecPermM env nm args tp trans_ident reachC casesF foldIdentsF reachMet
               (fold_ident, unfold_ident) <- identsF tmp_env
               reachMeths <- rmethsF tmp_env
               return $ permEnvAddNamedPerm env $ NamedPerm_Rec $
-                RecPerm npn trans_ident fold_ident unfold_ident reachMeths cases
+                RecPerm npn trans_ident d_ident fold_ident unfold_ident reachMeths cases
      let npn1 = NamedPermName nm tp args (RecursiveSortRepr TrueRepr reach) reachC
      cases1 <- casesF npn1 (mkTmpEnv npn1)
      case someBool $ all (mbLift . fmap isConjPerm) cases1 of
@@ -8288,11 +8294,12 @@ permEnvAddDefinedShape env nm args mb_sh =
 -- | Add an opaque LLVM shape to a permission environment
 permEnvAddOpaqueShape :: (1 <= w, KnownNat w) => PermEnv -> String ->
                          CruCtx args -> Mb args (PermExpr (BVType w)) ->
-                         Ident -> PermEnv
-permEnvAddOpaqueShape env nm args mb_len tp_id =
+                         Ident -> Ident -> PermEnv
+permEnvAddOpaqueShape env nm args mb_len tp_id d_id =
   env { permEnvNamedShapes =
           SomeNamedShape (NamedShape nm args $
-                          OpaqueShapeBody mb_len tp_id) : permEnvNamedShapes env }
+                          OpaqueShapeBody mb_len tp_id d_id)
+          : permEnvNamedShapes env }
 
 -- | Add a global symbol with a function permission along with its translation
 -- to a spec function to a 'PermEnv'

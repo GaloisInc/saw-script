@@ -234,15 +234,20 @@ bvVecTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
 bvVecTpDesc w_term len_term elem_d =
   applyGlobalOpenTerm "Prelude.Tp_BVVec" [elem_d, w_term, len_term]
 
+-- | Build a type expression of type @TpExpr EK@ of kind description @EK@ from a
+-- type-level value of type @exprKindElem EK@
+constTpExpr :: OpenTerm -> OpenTerm -> OpenTerm
+constTpExpr k_d v = ctorOpenTerm "Prelude.TpExpr_Const" [k_d, v]
+
 -- | Build a type description expression from a bitvector value of a given width
 bvConstTpExpr :: Natural -> OpenTerm -> OpenTerm
-bvConstTpExpr w bv = ctorOpenTerm "Prelude.TpExpr_Const" [bvExprKind w, bv]
+bvConstTpExpr w bv = constTpExpr (bvExprKind w) bv
 
 -- | Build a type expression for the bitvector sum of a list of type
 -- expressions, all of the given width
 bvSumTpExprs :: Natural -> [OpenTerm] -> OpenTerm
 bvSumTpExprs w [] = bvConstTpExpr w (natOpenTerm 0)
-bvSumTpExprs w [bv] = bv
+bvSumTpExprs _ [bv] = bv
 bvSumTpExprs w (bv:bvs) =
   ctorOpenTerm "Prelude.TpExpr_BinOp"
   [bvExprKind w, bvExprKind w, bvExprKind w,
@@ -285,12 +290,30 @@ piTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
 piTpDescMulti ks tp = foldr piTpDesc tp ks
 
 -- | Build a type description for a free deBruijn index
-varTpDesc :: Natural -> OpenTerm
-varTpDesc ix = ctorOpenTerm "Prelude.Tp_Var" [natOpenTerm ix]
+varTpDesc :: OpenTerm -> Natural -> OpenTerm
+varTpDesc d ix = ctorOpenTerm "Prelude.Tp_Var" [d, natOpenTerm ix]
 
 -- | Build a type-level expression with a given @ExprKind@ for a free variable
 varTpExpr :: OpenTerm -> Natural -> OpenTerm
 varTpExpr ek ix = ctorOpenTerm "Prelude.TpExpr_Var" [ek, natOpenTerm ix]
+
+-- | Build the type description @Tp_Subst T K e@ that represents an explicit
+-- substitution of expression @e@ of kind @K@ into type description @T@
+substTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
+substTpDesc d k_d e = applyGlobalOpenTerm "Prelude.Tp_Subst" [d,k_d,e]
+
+-- | Build the type description that performs 0 or more explicit substitutions
+substTpDescMulti :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm
+substTpDescMulti d [] [] = d
+substTpDescMulti d (k_d:k_ds) (e:es) =
+  substTpDescMulti (substTpDesc d k_d e) k_ds es
+substTpDescMulti _ _ _ =
+  panic "substTpDescMulti" ["Mismatched number of kinds versus expressions"]
+
+-- | Build the type description that performs 0 or more explicit substitutions
+-- from a type description given by an identifier
+substIdTpDescMulti :: Ident -> [OpenTerm] -> [OpenTerm] -> OpenTerm
+substIdTpDescMulti i = substTpDescMulti (globalOpenTerm i)
 
 -- | Map from type description @T@ to the type @T@ describes
 tpElemTypeOpenTerm :: OpenTerm -> OpenTerm
@@ -488,7 +511,7 @@ data ExprTrans (a :: CrucibleType) where
 
   -- | The translation for every other expression type is just a SAW term. Note
   -- that this construct should not be used for the types handled above.
-  ETrans_Term :: OpenTerm -> ExprTrans a
+  ETrans_Term :: TypeRepr a -> OpenTerm -> ExprTrans a
 
 -- | A context mapping bound names to their type-level SAW translations
 type ExprTransCtx = RAssign ExprTrans
@@ -497,13 +520,13 @@ type ExprTransCtx = RAssign ExprTrans
 -- | Destruct an 'ExprTrans' of shape type to a list of type descriptions
 unETransShape :: ExprTrans (LLVMShapeType w) -> [OpenTerm]
 unETransShape (ETrans_Shape d) = d
-unETransShape (ETrans_Term _) =
+unETransShape (ETrans_Term _ _) =
   panic "unETransShape" ["Incorrect translation of a shape expression"]
 
 -- | Destruct an 'ExprTrans' of permission type to a list of type descriptions
 unETransPerm :: ExprTrans (ValuePermType a) -> [OpenTerm]
 unETransPerm (ETrans_Perm d) = d
-unETransPerm (ETrans_Term _) =
+unETransPerm (ETrans_Term _ _) =
   panic "unETransPerm" ["Incorrect translation of a shape expression"]
 
 
@@ -556,7 +579,7 @@ instance IsTermTrans (ExprTrans tp) where
   transTerms ETrans_AnyVector = []
   transTerms (ETrans_Shape ds) = [tupleTpDesc ds]
   transTerms (ETrans_Perm ds) = [tupleTpDesc ds]
-  transTerms (ETrans_Term t) = [t]
+  transTerms (ETrans_Term _ t) = [t]
 
 instance IsTermTrans (ExprTransCtx ctx) where
   transTerms MNil = []
@@ -582,7 +605,8 @@ exprTransType (ETrans_Shape _) =
   mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Shape [d])
 exprTransType (ETrans_Perm _) =
   mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Perm [d])
-exprTransType (ETrans_Term t) = mkTypeTrans1 (openTermType t) ETrans_Term
+exprTransType (ETrans_Term tp t) =
+  mkTypeTrans1 (openTermType t) (ETrans_Term tp)
 
 -- | Map a context of expression translation to a list of the SAW core types of
 -- all the terms it contains
@@ -590,6 +614,27 @@ exprCtxType :: ExprTransCtx ctx -> TypeTrans (ExprTransCtx ctx)
 exprCtxType MNil = mkTypeTrans0 MNil
 exprCtxType (ectx :>: e) = (:>:) <$> exprCtxType ectx <*> exprTransType e
 
+
+-- | Convert an 'ExprTrans' to a list of SAW core terms of type @kindExpr K@,
+-- one for each kind description @K@ returned by 'translateType' for the type of
+-- the 'ExprTrans'
+exprTransDescs :: ExprTrans a -> [OpenTerm]
+exprTransDescs ETrans_LLVM = []
+exprTransDescs ETrans_LLVMBlock = []
+exprTransDescs ETrans_LLVMFrame = []
+exprTransDescs ETrans_Lifetime = []
+exprTransDescs ETrans_RWModality = []
+exprTransDescs (ETrans_Struct etranss) =
+  concat $ RL.mapToList exprTransDescs etranss
+exprTransDescs ETrans_Fun = []
+exprTransDescs ETrans_Unit = []
+exprTransDescs ETrans_AnyVector = []
+exprTransDescs (ETrans_Shape ds) = ds
+exprTransDescs (ETrans_Perm ds) = ds
+exprTransDescs (ETrans_Term tp t) =
+  case translateKindDescs tp of
+    [d] -> [ctorOpenTerm "Prelude.TpExpr_Const" [d, t]]
+    _ -> panic "exprTransDescs" ["ETrans_Term type has incorrect number of kinds"]
 
 -- | A "proof" that @ctx2@ is an extension of @ctx1@, i.e., that @ctx2@ equals
 -- @ctx1 :++: ctx3@ for some @ctx3@
@@ -1117,8 +1162,13 @@ instance TransInfo info => Translate info ctx (NatRepr n) OpenTerm where
   translate mb_n = return $ natOpenTerm $ mbLift $ fmap natValue mb_n
 
 -- | Make a type translation that uses a single term of the given type
-mkTermType1 :: OpenTerm -> TypeTrans (ExprTrans a)
-mkTermType1 tp = mkTypeTrans1 tp ETrans_Term
+mkTermType1 :: KnownRepr TypeRepr a => OpenTerm -> TypeTrans (ExprTrans a)
+mkTermType1 tp = mkTypeTrans1 tp (ETrans_Term knownRepr)
+
+-- | Make a type translation that uses a single term of the given type using an
+-- explicit 'TypeRepr' for the Crucible type
+mkTermType1Repr :: TypeRepr a -> OpenTerm -> TypeTrans (ExprTrans a)
+mkTermType1Repr repr tp = mkTypeTrans1 tp (ETrans_Term repr)
 
 
 -- | Translate a permission expression type to a 'TypeTrans' and to a list of
@@ -1130,6 +1180,7 @@ translateType BoolRepr =
 translateType NatRepr =
   (mkTermType1 (dataTypeOpenTerm "Prelude.Nat" []), [natKindDesc])
 translateType (BVRepr w) =
+  withKnownNat w
   (mkTermType1 (bitvectorTypeOpenTerm (natOpenTerm $ natValue w)),
    [bvKindDesc (natValue w)])
 translateType (VectorRepr AnyRepr) = (mkTypeTrans0 ETrans_AnyVector, [])
@@ -1152,8 +1203,8 @@ translateType (LLVMShapeRepr _) =
   (mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Shape [d]),
    [tpKindDesc])
 
-translateType (FloatRepr _) =
-  (mkTermType1 $ dataTypeOpenTerm "Prelude.Float" [],
+translateType tp@(FloatRepr _) =
+  (mkTermType1Repr tp $ dataTypeOpenTerm "Prelude.Float" [],
    panic "translateType" ["Type descriptions of floats not yet supported"])
 
 translateType (StringRepr UnicodeRepr) =
@@ -1296,12 +1347,15 @@ descTransM =
   withInfoM $ \info ->
   DescTransInfo (infoCtx info) MNil (infoEnv info) (infoChecksFlag info)
 
--- | The class for translating to type descriptions. This should hold for any
--- type that has a 'Translate' instance to a 'TypeTrans'. The type descriptions
--- returned in this case should describe exactly the types in the 'TypeTrans'
--- returned by the 'Translate' instance, though 'translateDesc' is allowed to
--- 'panic' in some cases where 'translate' succeeds, meaning that some of the
--- types cannot be described in type descriptions.
+-- | The class for translating to type descriptions or type-level expressions.
+-- This should hold for any type that has a 'Translate' instance to a
+-- 'TypeTrans'. The type descriptions returned in this case should describe
+-- exactly the types in the 'TypeTrans' returned by the 'Translate' instance,
+-- though 'translateDesc' is allowed to 'panic' in some cases where 'translate'
+-- succeeds, meaning that some of the types cannot be described in type
+-- descriptions. This also holds for the 'PermExpr' type, where the return
+-- values are type-level expressions for each of the kind descriptions returned
+-- by 'translateType'.
 class TranslateDescs a where
   translateDescs :: Mb ctx a -> DescTransM ctx [OpenTerm]
 
@@ -1310,8 +1364,18 @@ class TranslateDescs a where
 translateDesc :: TranslateDescs a => Mb ctx a -> DescTransM ctx OpenTerm
 translateDesc mb_a = tupleTpDesc <$> translateDescs mb_a
 
--- | Translate a variable to either a SAW core value or a natural number
--- deBruijn index, depending on the current description context
+-- | Translate to a single type description or type expression, raising an error
+-- if the given construct translates to 0 or more than 1 SAW core term
+translateDesc1 :: TranslateDescs a => Mb ctx a -> DescTransM ctx OpenTerm
+translateDesc1 mb_a = translateDescs mb_a >>= \case
+  [d] -> return d
+  ds -> panic "translateDesc1" ["Expected one type-level expression, found "
+                                ++ show (length ds)]
+
+-- | Translate a variable to either a SAW core value, if it is bound to a value,
+-- or a natural number deBruijn index for the the first of the 0 or more
+-- deBruijn indices that the variable translates to along with their kind
+-- descriptions if not
 translateVarDesc :: Mb ctx (ExprVar a) ->
                     DescTransM ctx (Either (ExprTrans a) (Natural, [OpenTerm]))
 translateVarDesc mb_x = flip dtiTranslateMemb (translateVar mb_x) <$> ask
@@ -1424,23 +1488,23 @@ instance TransInfo info =>
     [nuMP| PExpr_Var x |] -> translate x
     [nuMP| PExpr_Unit |] -> return ETrans_Unit
     [nuMP| PExpr_Bool True |] ->
-      return $ ETrans_Term $ globalOpenTerm "Prelude.True"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.True"
     [nuMP| PExpr_Bool False |] ->
-      return $ ETrans_Term $ globalOpenTerm "Prelude.False"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.False"
     [nuMP| PExpr_Nat i |] ->
-      return $ ETrans_Term $ natOpenTerm $ mbLift i
+      return $ ETrans_Term knownRepr $ natOpenTerm $ mbLift i
     [nuMP| PExpr_String str |] ->
-      return $ ETrans_Term $ stringLitOpenTerm $ pack $ mbLift str
+      return $ ETrans_Term knownRepr $ stringLitOpenTerm $ pack $ mbLift str
     [nuMP| PExpr_BV bvfactors@[] off |] ->
       let w = natRepr3 bvfactors in
-      return $ ETrans_Term $ bvBVOpenTerm w $ mbLift off
+      return $ ETrans_Term knownRepr $ bvBVOpenTerm w $ mbLift off
     [nuMP| PExpr_BV bvfactors (BV.BV 0) |] ->
       let w = natVal3 bvfactors in
-      ETrans_Term <$> foldr1 (bvAddOpenTerm w) <$> translate bvfactors
+      ETrans_Term knownRepr <$> foldr1 (bvAddOpenTerm w) <$> translate bvfactors
     [nuMP| PExpr_BV bvfactors off |] ->
       do let w = natRepr3 bvfactors
          bv_transs <- translate bvfactors
-         return $ ETrans_Term $
+         return $ ETrans_Term knownRepr $
            foldr (bvAddOpenTerm $ natValue w) (bvBVOpenTerm w $ mbLift off) bv_transs
     [nuMP| PExpr_Struct args |] ->
       ETrans_Struct <$> translate args
@@ -1449,11 +1513,11 @@ instance TransInfo info =>
     [nuMP| PExpr_LLVMWord _ |] -> return ETrans_LLVM
     [nuMP| PExpr_LLVMOffset _ _ |] -> return ETrans_LLVM
     [nuMP| PExpr_Fun _ |] -> return ETrans_Fun
-    [nuMP| PExpr_PermListNil |] -> return $ ETrans_Term unitTypeOpenTerm
+    [nuMP| PExpr_PermListNil |] -> return $ ETrans_Term knownRepr unitTypeOpenTerm
     [nuMP| PExpr_PermListCons _ _ p l |] ->
-      ETrans_Term <$> (pairTypeOpenTerm <$>
-                       (typeTransTupleType <$> translate p) <*>
-                       (translate1 l))
+      ETrans_Term knownRepr <$> (pairTypeOpenTerm <$>
+                                 (typeTransTupleType <$> translate p) <*>
+                                 (translate1 l))
     [nuMP| PExpr_RWModality _ |] -> return ETrans_RWModality
 
     -- LLVM shapes are translated to type descriptions by translateDescs
@@ -1548,31 +1612,48 @@ translateBVDesc mb_e =
          let i_expr = translateBVConstDesc w $ mbLift mb_i
          return $ bvSumTpExprs (natValue w) (fs_exprs ++ [i_expr])
 
--- Expressions of shape type translate to a list of type descriptions
-instance TranslateDescs (PermExpr (LLVMShapeType w)) where
+-- translateDescs on permission expressions yield a list of SAW core terms of
+-- type @kindExpr K@, one for each kind @K@ in the list of kind descriptions
+-- returned by translateType
+instance TranslateDescs (PermExpr a) where
   translateDescs mb_e = case mbMatch mb_e of
     [nuMP| PExpr_Var mb_x |] ->
       translateVarDesc mb_x >>= \case
-      Left d -> return $ unETransShape d
-      Right (ix, [_]) -> return [varTpDesc ix]
-      Right (_, ds) ->
-        panic "translateDescs" ["Expected one kind for variable, found "
-                                ++ show (length ds)]
+      Left etrans -> return $ exprTransDescs etrans
+      Right (ix, ds) -> return $ zipWith varTpDesc ds [ix..]
+    [nuMP| PExpr_Unit |] -> return []
+    [nuMP| PExpr_Bool b |] ->
+      return [constTpExpr boolKindDesc $ boolOpenTerm $ mbLift b]
+    [nuMP| PExpr_Nat n |] ->
+      return [constTpExpr natKindDesc $ natOpenTerm $ mbLift n]
+    [nuMP| PExpr_String _ |] ->
+      panic "translateDescs"
+      ["Cannot (yet?) translate strings to type-level expressions"]
+    [nuMP| PExpr_BV _ _ |] -> (:[]) <$> translateBVDesc mb_e
+    [nuMP| PExpr_Struct es |] -> translateDescs es
+    [nuMP| PExpr_Always |] -> return []
+    [nuMP| PExpr_LLVMWord _ |] -> return []
+    [nuMP| PExpr_LLVMOffset _ _ |] -> return []
+    [nuMP| PExpr_Fun _ |] -> return []
+    [nuMP| PExpr_PermListNil |] ->
+      panic "translateDescs" ["PermList type no longer supported!"]
+    [nuMP| PExpr_PermListCons _ _ _ _ |] ->
+      panic "translateDescs" ["PermList type no longer supported!"]
+    [nuMP| PExpr_RWModality _ |] -> return []
+
     [nuMP| PExpr_EmptyShape |] -> return []
     [nuMP| PExpr_NamedShape _ _ nmsh args |] ->
       case mbMatch $ fmap namedShapeBody nmsh of
         [nuMP| DefinedShapeBody _ |] ->
           translateDescs (mbMap2 unfoldNamedShape nmsh args)
-        [nuMP| OpaqueShapeBody _ trans_id |] ->
-          {-
-          (:[]) <$> applyGlobalOpenTerm (mbLift trans_id) <$>
-          transTerms <$> translate args -}
-          error "FIXME HERE NOWNOW: translate opaque shapes to descs (how to handle args?)"
-        [nuMP| RecShapeBody _ trans_id |] ->
-          {-
-          (:[]) <$> applyGlobalOpenTerm (mbLift trans_id) <$>
-          transTerms <$> translate args -}
-          error "FIXME HERE NOWNOW: translate rec shapes to descs (how to handle args?)"
+        [nuMP| OpaqueShapeBody _ _ desc_id |] ->
+          do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
+             args_ds <- translateDescs args
+             return [substIdTpDescMulti (mbLift desc_id) k_ds args_ds]
+        [nuMP| RecShapeBody _ _ desc_id |] ->
+          do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
+             args_ds <- translateDescs args
+             return [substIdTpDescMulti (mbLift desc_id) k_ds args_ds]
     [nuMP| PExpr_EqShape _ _ |] -> return []
     [nuMP| PExpr_PtrShape _ _ sh |] -> translateDescs sh
     [nuMP| PExpr_FieldShape fsh |] -> translateDescs fsh
@@ -1595,6 +1676,14 @@ instance TranslateDescs (PermExpr (LLVMShapeType w)) where
       translateDesc (mbCombine RL.typeCtxProxies mb_sh)
     [nuMP| PExpr_FalseShape |] ->
       return [ctorOpenTerm "Prelude.Tp_Void" []]
+
+    [nuMP| PExpr_ValPerm mb_p |] -> translateDescs mb_p
+
+
+instance TranslateDescs (PermExprs tps) where
+  translateDescs mb_es = case mbMatch mb_es of
+    [nuMP| MNil |] -> return []
+    [nuMP| es :>: e |] -> (++) <$> translateDescs es <*> translateDescs e
 
 
 ----------------------------------------------------------------------
@@ -4404,7 +4493,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
   [nuMP| SImpl_IntroLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ _ |] <- mbMatch $ fmap namedShapeBody nmsh
+    | [nuMP| RecShapeBody _ _ _ |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       {-
       do ttrans <- translateSimplImplOutHead mb_simpl
@@ -4440,7 +4529,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
   -- translations of the arguments plus the translations of the proofs of the
   -- permissions
   [nuMP| SImpl_ElimLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ sh_id |] <- mbMatch $ fmap namedShapeBody nmsh
+    | [nuMP| RecShapeBody _ _ desc_id |] <- mbMatch $ fmap namedShapeBody nmsh
     , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
       {-
       do ttrans <- translateSimplImplOutHead mb_simpl
@@ -4903,7 +4992,8 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
        let sz2m1_tm = applyGlobalOpenTerm "Prelude.subNat" [sz2_tm, sz1_tm]
        let (e1_tm,e2_tm) =
              bvSplitOpenTerm (mbLift mb_endianness) sz1_tm sz2m1_tm e_tm
-       inExtTransM (ETrans_Term e1_tm) $ inExtTransM (ETrans_Term e2_tm) $
+       inExtTransM (ETrans_Term knownRepr e1_tm) $
+         inExtTransM (ETrans_Term knownRepr e2_tm) $
          translate
          (mbCombine RL.typeCtxProxies $ flip mbMapCl mb_fp
           ($(mkClosed
@@ -4931,7 +5021,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
        let sz2m1_tm = applyGlobalOpenTerm "Prelude.subNat" [sz2_tm, sz1_tm]
        let (e1_tm,_) =
              bvSplitOpenTerm (mbLift mb_endianness) sz1_tm sz2m1_tm e_tm
-       inExtTransM (ETrans_Term e1_tm) $
+       inExtTransM (ETrans_Term knownRepr e1_tm) $
          translate
          (mbCombine RL.typeCtxProxies $ flip mbMapCl mb_fp
           ($(mkClosed
@@ -4957,7 +5047,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
        sz2_tm <- translateClosed $ mbExprBVTypeWidth mb_e2
        let endianness = mbLift mb_endianness
        let e_tm = bvConcatOpenTerm endianness sz1_tm sz2_tm e1_tm e2_tm
-       inExtTransM (ETrans_Term e_tm) $
+       inExtTransM (ETrans_Term knownRepr e_tm) $
          translate (mbCombine RL.typeCtxProxies $
                     mbMap2 (\fp1 e2 ->
                              impl1ConcatLLVMWordFieldsOutPerms fp1 e2 endianness)
@@ -5271,7 +5361,7 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
          Translate info ctx (App ext RegWithVal tp) (ExprTrans tp) where
   translate mb_e = case mbMatch mb_e of
     [nuMP| BaseIsEq BaseBoolRepr e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.boolEq")
       [translateRWV e1, translateRWV e2]
   --  [nuMP| BaseIsEq BaseNatRepr e1 e2 |] ->
@@ -5279,7 +5369,7 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
   --    applyMultiPureTransM (return $ globalOpenTerm "Prelude.equalNat")
   --    [translateRWV e1, translateRWV e2]
     [nuMP| BaseIsEq (BaseBVRepr w) e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvEq")
       [translate w, translateRWV e1, translateRWV e2]
 
@@ -5287,56 +5377,56 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
 
     -- Booleans
     [nuMP| BoolLit True |] ->
-      return $ ETrans_Term $ globalOpenTerm "Prelude.True"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.True"
     [nuMP| BoolLit False |] ->
-      return $ ETrans_Term $ globalOpenTerm "Prelude.False"
+      return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.False"
     [nuMP| Not e |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.not")
       [translateRWV e]
     [nuMP| And e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.and")
       [translateRWV e1, translateRWV e2]
     [nuMP| Or e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.or")
       [translateRWV e1, translateRWV e2]
     [nuMP| BoolXor e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.xor")
       [translateRWV e1, translateRWV e2]
 
     -- Natural numbers
     [nuMP| Expr.NatLit n |] ->
-      return $ ETrans_Term $ natOpenTerm $ mbLift n
+      return $ ETrans_Term knownRepr $ natOpenTerm $ mbLift n
     [nuMP| NatLt e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.ltNat")
       [translateRWV e1, translateRWV e2]
     -- [nuMP| NatLe _ _ |] ->
     [nuMP| NatEq e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.equalNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatAdd e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.addNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatSub e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.subNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatMul e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.mulNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatDiv e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.divNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatMod e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.modNat")
       [translateRWV e1, translateRWV e2]
 
@@ -5348,130 +5438,131 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
     [nuMP| BVUndef w |] ->
       -- FIXME: we should really handle poison values; this translation just
       -- treats them as if there were the bitvector 0 value
-      return $ ETrans_Term $ bvBVOpenTerm (mbLift w) $ BV.zero (mbLift w)
+      return $ ETrans_Term knownRepr $
+      bvBVOpenTerm (mbLift w) $ BV.zero (mbLift w)
     [nuMP| BVLit w mb_bv |] ->
-      return $ ETrans_Term $ bvBVOpenTerm (mbLift w) $ mbLift mb_bv
+      return $ ETrans_Term knownRepr $ bvBVOpenTerm (mbLift w) $ mbLift mb_bv
     [nuMP| BVConcat w1 w2 e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.join")
       [translate w1, translate w2, translateRWV e1, translateRWV e2]
     [nuMP| BVTrunc w1 w2 e |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvTrunc")
       [return (natOpenTerm (natValue (mbLift w2) - natValue (mbLift w1))),
        translate w1,
        translateRWV e]
     [nuMP| BVZext w1 w2 e |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvUExt")
       [return (natOpenTerm (natValue (mbLift w1) - natValue (mbLift w2))),
        translate w2, translateRWV e]
     [nuMP| BVSext w1 w2 e |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSExt")
       [return (natOpenTerm (natValue (mbLift w1) - natValue (mbLift w2))),
        -- NOTE: bvSExt adds 1 to the 2nd arg
        return (natOpenTerm (natValue (mbLift w2) - 1)),
        translateRWV e]
     [nuMP| BVNot w e |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvNot")
       [translate w, translateRWV e]
     [nuMP| BVAnd w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvAnd")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVOr w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvOr")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVXor w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvXor")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVNeg w e |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvNeg")
       [translate w, translateRWV e]
     [nuMP| BVAdd w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvAdd")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSub w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSub")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVMul w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvMul")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUdiv w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvUDiv")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSdiv w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSDiv")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUrem w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvURem")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSrem w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSRem")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUle w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvule")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUlt w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvult")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSle w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvsle")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSlt w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvslt")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVCarry w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvCarry")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSCarry w e1 e2 |] ->
       -- NOTE: bvSCarry adds 1 to the bitvector length
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSCarry")
       [return w_minus_1, translateRWV e1, translateRWV e2]
     [nuMP| BVSBorrow w e1 e2 |] ->
       -- NOTE: bvSBorrow adds 1 to the bitvector length
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSBorrow")
       [return w_minus_1, translateRWV e1, translateRWV e2]
     [nuMP| BVShl w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvShiftL")
       [translate w, return (globalOpenTerm "Prelude.Bool"), translate w,
        return (globalOpenTerm "Prelude.False"), translateRWV e1, translateRWV e2]
     [nuMP| BVLshr w e1 e2 |] ->
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvShiftR")
       [translate w, return (globalOpenTerm "Prelude.Bool"), translate w,
        return (globalOpenTerm "Prelude.False"), translateRWV e1, translateRWV e2]
     [nuMP| BVAshr w e1 e2 |] ->
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSShiftR")
       [return w_minus_1, return (globalOpenTerm "Prelude.Bool"), translate w,
        translateRWV e1, translateRWV e2]
     [nuMP| BoolToBV mb_w e |] ->
       let w = mbLift mb_w in
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyMultiPureTransM (return $ globalOpenTerm "Prelude.ite")
       [bitvectorTransM (translate mb_w),
        translateRWV e,
@@ -5479,7 +5570,7 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
        return (bvBVOpenTerm w (BV.zero w))]
     [nuMP| BVNonzero mb_w e |] ->
       let w = mbLift mb_w in
-      ETrans_Term <$>
+      ETrans_Term knownRepr <$>
       applyPureTransM (return $ globalOpenTerm "Prelude.not")
       (applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvEq")
        [translate mb_w, translateRWV e,
@@ -5487,7 +5578,7 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
 
     -- Strings
     [nuMP| Expr.StringLit (UnicodeLiteral text) |] ->
-      return $ ETrans_Term $ stringLitOpenTerm $
+      return $ ETrans_Term knownRepr $ stringLitOpenTerm $
       mbLift text
 
     -- Everything else is an error
@@ -5719,7 +5810,7 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
                                            fmap (PExpr_LLVMWord . PExpr_Var) x)) m
 
   [nuMP| AssertLLVMWord reg _ |] ->
-    inExtTransM (ETrans_Term $ natOpenTerm 0) $
+    inExtTransM (ETrans_Term knownRepr $ natOpenTerm 0) $
     withPermStackM ((:>: Member_Base) . RL.tail)
     ((:>: (PTrans_Eq $ fmap (const $ PExpr_Nat 0) $ extMb reg)) . RL.tail)
     m
