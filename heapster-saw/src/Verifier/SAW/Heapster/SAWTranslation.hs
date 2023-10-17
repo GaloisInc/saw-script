@@ -4277,14 +4277,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_EndLifetime _ tps_in tps_out ps_in ps_out |] ->
-    error "FIXME HERE NOWNOW"
     -- First, translate the in and out permissions of the lowned permission
-    {-
-    do ps_in_trans <- translate ps_in
-       ps_out_trans <- tupleTypeTrans <$> translate ps_out
+    do dtr_in <- tpTransM $ translateDescType ps_in
+       dtr_out <- tpTransM $ translateDescType ps_out
        let prxs_in = mbRAssignProxies ps_in :>: Proxy
-       let lrt_out = typeDescLRT $ typeTransTupleDesc ps_out_trans
-       let lrt = arrowLRTTrans ps_in_trans lrt_out
+       let d = arrowDescTrans dtr_in dtr_out
 
        -- Next, split out the ps_in permissions from the rest of the pctx
        pctx <- itiPermStack <$> ask
@@ -4302,19 +4299,19 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
 
        -- Now we apply the lifetime ownerhip function to ps_in and bind its output
        -- in the rest of the computation
+       ev <- infoEvType <$> ask
        case some_lotr of
          SomeLOwnedTrans lotr ->
            bindSpecMTransM
-           (applyCallClosSpecTerm
-            lrt (lownedTransTerm ps_in lotr) (transTerms pctx_in))
-           ps_out_trans
+           (callSOpenTerm ev d (lownedTransTerm ps_in lotr) (transTerms pctx_in))
+           (descTypeTrans dtr_out)
            "endl_ps"
            (\pctx_out ->
              withPermStackM
              (\(_ :>: l) -> RL.append ps_vars vars_out :>: l)
              (\_ -> RL.append pctx_ps pctx_out :>:
                     PTrans_Conj [APTrans_LFinished])
-             m) -}
+             m)
 
   [nuMP| SImpl_IntroLOwnedSimple _ _ _ |] ->
     do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
