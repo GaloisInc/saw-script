@@ -5669,7 +5669,6 @@ exprOutPerm mb_x = case mbMatch mb_x of
   [nuMP| TypedExpr _ Nothing |] -> PTrans_True
 
 
-{-
 ----------------------------------------------------------------------
 -- * Translating Typed Crucible Jump Targets
 ----------------------------------------------------------------------
@@ -5716,7 +5715,7 @@ translateCallEntry :: forall ext exprExt tops args ghosts blocks ctx rets.
                       Mb ctx (RAssign ExprVar (tops :++: args)) ->
                       Mb ctx (RAssign ExprVar ghosts) ->
                       ImpTransM ext blocks tops rets
-                      ((tops :++: args) :++: ghosts) ctx SpecTerm
+                      ((tops :++: args) :++: ghosts) ctx OpenTerm
 translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
   do let entry = typedEntryTransEntry entry_trans
@@ -5730,17 +5729,18 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
                                 typedEntryPermsIn entry) mb_s
      () <- assertPermStackEqM nm mb_perms
 
-     -- Now check if entryID has an associated recursive closure
+     -- Now check if entryID has an associated recursive function index
      case typedEntryTransClos entry_trans of
-       Just (lrt, clos_tm) ->
-         -- If so, build the associated CallS term, which applies the closure to
-         -- the expressions with permissions on the stack followed by the proofs
-         -- objects for those permissions
-         do expr_ctx <- itiExprCtx <$> ask
+       Just (d, funix) ->
+         -- If so, build the associated CallS term, which applies the function
+         -- index to the expressions with permissions on the stack followed by
+         -- the proof objects for those permissions
+         do ev <- infoEvType <$> ask
+            expr_ctx <- itiExprCtx <$> ask
             arg_membs <- itiPermStackVars <$> ask
             let e_args = RL.map (flip RL.get expr_ctx) arg_membs
             i_args <- itiPermStack <$> ask
-            return (applyCallClosSpecTerm lrt clos_tm
+            return (callSOpenTerm ev d funix
                     (exprCtxToTerms e_args ++ permCtxToTerms i_args))
        Nothing ->
          -- Otherwise, continue translating with the target entrypoint, with all
@@ -5755,7 +5755,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
-         (CallSiteImplRet blocks tops args ghosts ps) SpecTerm where
+         (CallSiteImplRet blocks tops args ghosts ps) OpenTerm where
   translate (mbMatch ->
              [nuMP| CallSiteImplRet entryID ghosts Refl mb_tavars mb_gvars |]) =
     do entry_trans <-
@@ -5771,7 +5771,7 @@ instance PermCheckExtC ext exprExt =>
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
-         (TypedJumpTarget blocks tops ps) SpecTerm where
+         (TypedJumpTarget blocks tops ps) OpenTerm where
   translate (mbMatch -> [nuMP| TypedJumpTarget siteID _ _ mb_perms_in |]) =
     do SomeTypedCallSite site <-
          lookupCallSite (mbLift siteID) <$> itiBlockMapTrans <$> ask
@@ -5792,8 +5792,8 @@ instance PermCheckExtC ext exprExt =>
 translateStmt ::
   PermCheckExtC ext exprExt => ProgramLoc ->
   Mb ctx (TypedStmt ext stmt_rets ps_in ps_out) ->
-  ImpTransM ext blocks tops rets ps_out (ctx :++: stmt_rets) SpecTerm ->
-  ImpTransM ext blocks tops rets ps_in ctx SpecTerm
+  ImpTransM ext blocks tops rets ps_out (ctx :++: stmt_rets) OpenTerm ->
+  ImpTransM ext blocks tops rets ps_in ctx OpenTerm
 translateStmt loc mb_stmt m = case mbMatch mb_stmt of
   [nuMP| TypedSetReg tp e |] ->
     do tp_trans <- translate tp
@@ -5825,17 +5825,14 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
        let (pctx_ghosts_args, _) =
              RL.split (RL.append ectx_gexprs ectx_args) ectx_gexprs pctx_in
        fret_tp <-
-         mkTermTypeTrans <$>
-         sigmaTypeTransM "ret" rets_trans (hasPureTrans perms_out)
-         (\ectx -> inExtMultiTransM ectx (typeTransTupleDesc <$>
-                                          translate perms_out))
+         openTermTypeTrans <$>
+         sigmaTypeTransM "ret" rets_trans
+         (\ectx -> inExtMultiTransM ectx (translate perms_out))
        let all_args =
              exprCtxToTerms ectx_gexprs ++ exprCtxToTerms ectx_args ++
              permCtxToTerms pctx_ghosts_args
-       fun_tp_desc <- descTransM (translateDesc fun_perm)
-       fapp_trm <- case f_trans of
-             PTrans_Fun _ f_trm ->
-               applyEvOpM "Prelude.CallS" [fun_tp_desc, f_trm]
+       let fapp_trm = case f_trans of
+             PTrans_Fun _ f_trm -> applyFunTransTerm f_trm all_args
              _ ->
                panic "translateStmt"
                ["TypedCall: unexpected function permission"]
@@ -5868,8 +5865,8 @@ translateStmt loc mb_stmt m = case mbMatch mb_stmt of
 -- | Translate a 'TypedStmt' to a function on translation computations
 translateLLVMStmt ::
   Mb ctx (TypedLLVMStmt r ps_in ps_out) ->
-  ImpTransM ext blocks tops rets ps_out (ctx :> r) SpecTerm ->
-  ImpTransM ext blocks tops rets ps_in ctx SpecTerm
+  ImpTransM ext blocks tops rets ps_out (ctx :> r) OpenTerm ->
+  ImpTransM ext blocks tops rets ps_in ctx OpenTerm
 translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
   [nuMP| ConstructLLVMWord (TypedReg x) |] ->
     inExtTransM ETrans_LLVM $
@@ -5996,13 +5993,14 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
             ++ globalSymbolName (mbLift gsym)]
          Just (_, GlobalTransFuns [f])
            | [nuP| ValPerm_LLVMFunPtr fun_tp (ValPerm_Fun fun_perm) |] <- p ->
-             do d <- descTransM <$> translateDesc (extMb fun_perm)
+             do d <- descTransM $ translateDesc (extMb fun_perm)
                 let ptrans =
                       PTrans_Conj [APTrans_LLVMFunPtr (mbLift fun_tp) $
                                    PTrans_Fun fun_perm $ FunTransFun ev d f]
                 withPermStackM (:>: Member_Base)
                   (:>: extPermTrans ETrans_LLVM ptrans) m
-         Just (_, GlobalTransFun _) ->
+         Just (_, GlobalTransFuns _) ->
+           -- FIXME: make this handle multiple function translations
            panic "translateLLVMStmt"
            ["TypedLLVMResolveGlobal: unexpected function translation for symbol "
             ++ globalSymbolName (mbLift gsym)]
@@ -6029,9 +6027,10 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
-         (TypedRet tops rets ps) SpecTerm where
+         (TypedRet tops rets ps) OpenTerm where
   translate (mbMatch -> [nuMP| TypedRet Refl mb_rets mb_rets_ns mb_perms |]) =
-    do let perms =
+    do ev <- infoEvType <$> ask
+       let perms =
              mbMap2
              (\rets_ns ps -> varSubst (permVarSubstOfNames rets_ns) ps)
              mb_rets_ns mb_perms
@@ -6045,7 +6044,7 @@ instance PermCheckExtC ext exprExt =>
          (flip inExtMultiTransM $
           translate $ mbCombine rets_prxs mb_perms)
          rets_ns_trans (itiPermStack <$> ask)
-       return $ returnSpecTerm ret_tp sigma_trm
+       return $ retSOpenTerm ev ret_tp sigma_trm
 
 instance PermCheckExtC ext exprExt =>
          ImplTranslateF (TypedRet tops rets) ext blocks tops rets where
@@ -6053,7 +6052,7 @@ instance PermCheckExtC ext exprExt =>
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
-         (TypedTermStmt blocks tops rets ps) SpecTerm where
+         (TypedTermStmt blocks tops rets ps) OpenTerm where
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedJump impl_tgt |] -> translate impl_tgt
     [nuMP| TypedBr reg impl_tgt1 impl_tgt2 |] ->
@@ -6069,7 +6068,7 @@ instance PermCheckExtC ext exprExt =>
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
-         (TypedStmtSeq ext blocks tops rets ps) SpecTerm where
+         (TypedStmtSeq ext blocks tops rets ps) OpenTerm where
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedImplStmt impl_seq |] -> translate impl_seq
     [nuMP| TypedConsStmt loc stmt pxys mb_seq |] ->
@@ -6082,6 +6081,7 @@ instance PermCheckExtC ext exprExt =>
   translateF mb_seq = translate mb_seq
 
 
+{-
 ----------------------------------------------------------------------
 -- * Translating CFGs
 ----------------------------------------------------------------------
