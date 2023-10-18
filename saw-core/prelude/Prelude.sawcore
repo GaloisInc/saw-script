@@ -2333,20 +2333,44 @@ data TpDesc : sort 0 where {
   -- Vector types
   Tp_Vec : TpDesc -> TpExpr Kind_nat -> TpDesc;
 
+  -- The empty type
+  Tp_Void : TpDesc;
+
   -- Inductive types, where Tp_Ind A is equivalent to [Tp_Ind A/x]A
   Tp_Ind : TpDesc -> TpDesc;
 
   -- Type variables, used for types bound by pis, sigmas, and inductive types
   Tp_Var : Nat -> TpDesc;
 
-  -- The empty type
-  Tp_Void : TpDesc;
+  -- Explicit substitution of a type
+  Tp_TpSubst : TpDesc -> TpDesc -> TpDesc;
+
+  -- Explicit substitution of a type-level expression
+  Tp_ExprSubst : TpDesc -> (EK:ExprKind) -> TpExpr EK -> TpDesc;
+
 }
 
 -- The type description for the type BVVec n len d
 Tp_BVVec : TpDesc -> (n:Nat) -> TpExpr (Kind_bv n) -> TpDesc;
 Tp_BVVec d n len =
   Tp_Vec d (TpExpr_UnOp (Kind_bv n) Kind_nat (UnOp_BVToNat n) len);
+
+-- An expression (TpDesc or TpExpr) of a given kind
+kindExpr : KindDesc -> sort 0;
+kindExpr K =
+  KindDesc#rec (\ (_:KindDesc) -> sort 0)
+    (\ (EK:ExprKind) -> TpExpr EK)
+    TpDesc
+    K;
+
+-- Build an explicit substitution type for an arbitrary kind, using either the
+-- Tp_TpSubst or Tp_ExprSubst constructor
+Tp_Subst : TpDesc -> (K:KindDesc) -> kindExpr K -> TpDesc;
+Tp_Subst T K =
+  KindDesc#rec (\ (K:KindDesc) -> kindExpr K -> TpDesc)
+    (\ (EK:ExprKind) (e:TpExpr EK) -> Tp_ExprSubst T EK e)
+    (\ (U:TpDesc) -> Tp_TpSubst T U)
+    K;
 
 
 -- Type-level environments --
@@ -2619,6 +2643,7 @@ tpSubst n_top env_top T_top =
     (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (len:TpExpr Kind_nat)
        (n:Nat) (env:TpEnv) ->
        Tp_Vec (rec n env) (substTpExpr n env Kind_nat len))
+    (\ (n:Nat) (env:TpEnv) -> Tp_Void)
     (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
        Tp_Ind (rec (Succ n) env))
     (\ (ix:Nat) (n:Nat) (env:TpEnv) ->
@@ -2627,7 +2652,12 @@ tpSubst n_top env_top T_top =
          (\ (U:TpDesc) -> U)
          (\ (ix':Nat) -> Tp_Var ix')
          (substVar n env Kind_Tp ix))
-    (\ (n:Nat) (env:TpEnv) -> Tp_Void)
+    (\ (_:TpDesc) (rec_fun:Nat -> TpEnv -> TpDesc)
+       (_:TpDesc) (rec_arg:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
+       rec_fun n (envConsElem Kind_Tp (rec_arg n env) env))
+    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc)
+       (EK:ExprKind) (e:TpExpr EK) (n:Nat) (env:TpEnv) ->
+       rec n (envConsElem (Kind_Expr EK) (evalTpExpr env EK e) env))
   T_top n_top env_top;
 
 -- Unfold an inductive type description Tp_Ind A by substituting the current
@@ -2729,6 +2759,7 @@ tpElemEnv env_top T_top =
        Sigma (kindElem K) (\ (v:kindElem K) -> rec (envConsElem K v env)))
     (\ (_:TpDesc) (rec:TpEnv -> sort 0) (len:TpExpr Kind_nat) (env:TpEnv) ->
        Vec (evalTpExpr env Kind_nat len) (rec env))
+    (\ (_:TpEnv) -> Void)
     (\ (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
        indElem nilTpEnv (unfoldIndTpDesc env T))
     (\ (var:Nat) (env:TpEnv) ->
@@ -2736,7 +2767,12 @@ tpElemEnv env_top T_top =
        -- would not be an inductively smaller recursive call to take tpElem of
        -- the substitution instance
        indElem nilTpEnv (evalVar 0 env Kind_Tp var))
-    (\ (_:TpEnv) -> Void)
+    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (U:TpDesc) (_:TpEnv -> sort 0)
+       (env:TpEnv) ->
+       rec (envConsElem Kind_Tp (tpSubst 0 env U) env))
+    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (EK:ExprKind) (e:TpExpr EK)
+       (env:TpEnv) ->
+       rec (envConsElem (Kind_Expr EK) (evalTpExpr env EK e) env))
     T_top env_top;
 
 -- Elements of a type description = elements relative to the empty environment
@@ -2865,9 +2901,13 @@ specFun E env_top T_top =
        (U:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
     (\ (K:KindDesc) (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
     (\ (_:TpDesc) (_:TpEnv -> sort 0) (_:TpExpr Kind_nat) (env:TpEnv) -> #())
+    (\ (_:TpEnv) -> #())
     (\ (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
     (\ (var:Nat) (env:TpEnv) -> #())
-    (\ (_:TpEnv) -> #())
+    (\ (_:TpDesc) (_:TpEnv -> sort 0) (_:TpDesc) (_:TpEnv -> sort 0)
+       (_:TpEnv) -> #())
+    (\ (_:TpDesc) (_:TpEnv -> sort 0) (EK:ExprKind) (e:TpExpr EK) (_:TpEnv) ->
+       #())
     T_top env_top;
 
 -- Call a function index in a specification
