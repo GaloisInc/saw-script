@@ -2672,6 +2672,24 @@ idLOwnedTransTerm dtr_out vars_out =
              descTypeTransF (fmap (extPermTransCtxMulti ctx') dtr_out)
              (transTerms (lownedInfoPCtx loInfo)) }
 
+
+-- | Partially apply an 'LOwnedTransTerm' to some of its input permissions
+applyLOwnedTransTerm :: prx ps_in -> PermTransCtx ctx ps_extra ->
+                        RAssign (Member ctx) ps_extra ->
+                        LOwnedTransTerm ctx (ps_extra :++: ps_in) ps_out ->
+                        LOwnedTransTerm ctx ps_in ps_out
+applyLOwnedTransTerm _ ps_extra vars_extra t =
+  gmodify (\(ExprCtxExt ctx') loInfo ->
+            loInfoSetPerms
+            (RL.append (extPermTransCtxMulti ctx' ps_extra)
+             (lownedInfoPCtx loInfo))
+            (RL.append (RL.map (weakenMemberR ctx') vars_extra)
+             (lownedInfoPVars loInfo))
+            loInfo)
+  >>> t
+
+-- | Weaken an 'LOwnedTransTerm' by adding an extra permission to its input and
+-- output permissions
 weakenLOwnedTransTerm :: Desc1PermTpTrans ctx tp ->
                          LOwnedTransTerm ctx ps_in ps_out ->
                          LOwnedTransTerm ctx (ps_in :> tp) (ps_out :> tp)
@@ -2763,20 +2781,19 @@ weakenLOwnedTrans tp_in tp_out (LOwnedTrans {..}) =
                 lotrTpTransOut = liftA2 (:>:) lotrTpTransOut tp_out,
                 lotrTerm = weakenLOwnedTransTerm tp_out lotrTerm, .. }
 
--- | Convert an 'LOwnedTrans' to a closure that gets added to the list of
--- closures for the current spec definition, and partially apply that closure to
--- the current expression context and its @ps_extra@ terms
+-- | Convert an 'LOwnedTrans' to a function index from @ps_in@ to @ps_out@ by
+-- partially applying its function to the @ps_extra@ permissions it already
+-- contains and then applying the @LambdaS@ spec combinator
 lownedTransTerm :: Mb ctx (ExprPerms ps_in) ->
                    LOwnedTrans ctx ps_extra ps_in ps_out -> OpenTerm
 lownedTransTerm (mbExprPermsMembers -> Just vars_in) lotr =
-  let tps_extra_in =
-        liftA2 RL.append (lotrTpTransExtra lotr) (lotrTpTransIn lotr)
-      vars_extra_in = RL.append (lotrVarsExtra lotr) vars_in
-      d = arrowDescTrans tps_extra_in (lotrTpTransOut lotr) in
+  let d = arrowDescTrans (lotrTpTransIn lotr) (lotrTpTransOut lotr)
+      f = applyLOwnedTransTerm Proxy
+        (lotrPsExtra lotr) (lotrVarsExtra lotr) (lotrTerm lotr) in
   applyGlobalOpenTerm "Prelude.LambdaS"
   [evTypeTerm (lotrEvType lotr), d,
    lownedTransTermFun (lotrEvType lotr) (lotrECtx lotr)
-   vars_extra_in tps_extra_in (lotrTpTransOut lotr) (lotrTerm lotr)]
+   vars_in (lotrTpTransIn lotr) (lotrTpTransOut lotr) f]
 lownedTransTerm _ _ =
   failOpenTerm "FIXME HERE NOW: write this error message"
 
