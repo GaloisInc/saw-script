@@ -5394,7 +5394,6 @@ translateLOwnedPermImpl err (mbMatch -> [nuMP| LocalPermImpl mb_impl |]) =
          return $ k e_ext' (impInfoToLOwned info_out) ()
 
 
-{-
 ----------------------------------------------------------------------
 -- * Translating Typed Crucible Expressions
 ----------------------------------------------------------------------
@@ -5417,10 +5416,10 @@ instance TransInfo info =>
     [nuMP| RegWithVal _ e |] -> translate e
     [nuMP| RegNoVal x |] -> translate x
 
--- | Translate a 'RegWithVal' to exactly one SAW term via 'transPureTerm1'
+-- | Translate a 'RegWithVal' to exactly one SAW term via 'transTerm1'
 translateRWV :: TransInfo info => Mb ctx (RegWithVal a) ->
                 TransM info ctx OpenTerm
-translateRWV mb_rwv = transPureTerm1 <$> translate mb_rwv
+translateRWV mb_rwv = translate1 mb_rwv
 
 -- translate for a TypedExpr yields an ExprTrans
 instance (PermCheckExtC ext exprExt, TransInfo info) =>
@@ -5428,15 +5427,15 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
   translate mb_e = case mbMatch mb_e of
     [nuMP| BaseIsEq BaseBoolRepr e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.boolEq")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.boolEq")
       [translateRWV e1, translateRWV e2]
   --  [nuMP| BaseIsEq BaseNatRepr e1 e2 |] ->
   --    ETrans_Term <$>
-  --    applyMultiPureTransM (return $ globalOpenTerm "Prelude.equalNat")
+  --    applyMultiTransM (return $ globalOpenTerm "Prelude.equalNat")
   --    [translateRWV e1, translateRWV e2]
     [nuMP| BaseIsEq (BaseBVRepr w) e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvEq")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
       [translate w, translateRWV e1, translateRWV e2]
 
     [nuMP| EmptyApp |] -> return ETrans_Unit
@@ -5448,19 +5447,19 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
       return $ ETrans_Term knownRepr $ globalOpenTerm "Prelude.False"
     [nuMP| Not e |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.not")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.not")
       [translateRWV e]
     [nuMP| And e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.and")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.and")
       [translateRWV e1, translateRWV e2]
     [nuMP| Or e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.or")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.or")
       [translateRWV e1, translateRWV e2]
     [nuMP| BoolXor e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.xor")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.xor")
       [translateRWV e1, translateRWV e2]
 
     -- Natural numbers
@@ -5468,32 +5467,32 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
       return $ ETrans_Term knownRepr $ natOpenTerm $ mbLift n
     [nuMP| NatLt e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.ltNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.ltNat")
       [translateRWV e1, translateRWV e2]
     -- [nuMP| NatLe _ _ |] ->
     [nuMP| NatEq e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.equalNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.equalNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatAdd e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.addNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.addNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatSub e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.subNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.subNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatMul e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.mulNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.mulNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatDiv e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.divNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.divNat")
       [translateRWV e1, translateRWV e2]
     [nuMP| NatMod e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.modNat")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.modNat")
       [translateRWV e1, translateRWV e2]
 
     -- Function handles: the expression part of a function handle has no
@@ -5504,132 +5503,133 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
     [nuMP| BVUndef w |] ->
       -- FIXME: we should really handle poison values; this translation just
       -- treats them as if there were the bitvector 0 value
-      return $ ETrans_Term knownRepr $
+      return $ ETrans_Term (BVRepr $ mbLift w) $
       bvBVOpenTerm (mbLift w) $ BV.zero (mbLift w)
     [nuMP| BVLit w mb_bv |] ->
-      return $ ETrans_Term knownRepr $ bvBVOpenTerm (mbLift w) $ mbLift mb_bv
+      return $ ETrans_Term (BVRepr $ mbLift w) $
+      bvBVOpenTerm (mbLift w) $ mbLift mb_bv
     [nuMP| BVConcat w1 w2 e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.join")
+      ETrans_Term (BVRepr $ addNat (mbLift w1) (mbLift w2)) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.join")
       [translate w1, translate w2, translateRWV e1, translateRWV e2]
     [nuMP| BVTrunc w1 w2 e |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvTrunc")
+      ETrans_Term (BVRepr $ mbLift w1) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvTrunc")
       [return (natOpenTerm (natValue (mbLift w2) - natValue (mbLift w1))),
        translate w1,
        translateRWV e]
     [nuMP| BVZext w1 w2 e |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvUExt")
+      ETrans_Term (BVRepr $ mbLift w1) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvUExt")
       [return (natOpenTerm (natValue (mbLift w1) - natValue (mbLift w2))),
        translate w2, translateRWV e]
     [nuMP| BVSext w1 w2 e |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSExt")
+      ETrans_Term (BVRepr $ mbLift w1) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSExt")
       [return (natOpenTerm (natValue (mbLift w1) - natValue (mbLift w2))),
        -- NOTE: bvSExt adds 1 to the 2nd arg
        return (natOpenTerm (natValue (mbLift w2) - 1)),
        translateRWV e]
     [nuMP| BVNot w e |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvNot")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvNot")
       [translate w, translateRWV e]
     [nuMP| BVAnd w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvAnd")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvAnd")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVOr w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvOr")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvOr")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVXor w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvXor")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvXor")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVNeg w e |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvNeg")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvNeg")
       [translate w, translateRWV e]
     [nuMP| BVAdd w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvAdd")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvAdd")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSub w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSub")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSub")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVMul w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvMul")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvMul")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUdiv w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvUDiv")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvUDiv")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSdiv w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSDiv")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSDiv")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUrem w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvURem")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvURem")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSrem w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSRem")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSRem")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUle w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvule")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvule")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVUlt w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvult")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvult")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSle w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvsle")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvsle")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSlt w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvslt")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvslt")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVCarry w e1 e2 |] ->
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvCarry")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvCarry")
       [translate w, translateRWV e1, translateRWV e2]
     [nuMP| BVSCarry w e1 e2 |] ->
       -- NOTE: bvSCarry adds 1 to the bitvector length
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSCarry")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSCarry")
       [return w_minus_1, translateRWV e1, translateRWV e2]
     [nuMP| BVSBorrow w e1 e2 |] ->
       -- NOTE: bvSBorrow adds 1 to the bitvector length
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
       ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSBorrow")
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSBorrow")
       [return w_minus_1, translateRWV e1, translateRWV e2]
     [nuMP| BVShl w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvShiftL")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvShiftL")
       [translate w, return (globalOpenTerm "Prelude.Bool"), translate w,
        return (globalOpenTerm "Prelude.False"), translateRWV e1, translateRWV e2]
     [nuMP| BVLshr w e1 e2 |] ->
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvShiftR")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvShiftR")
       [translate w, return (globalOpenTerm "Prelude.Bool"), translate w,
        return (globalOpenTerm "Prelude.False"), translateRWV e1, translateRWV e2]
     [nuMP| BVAshr w e1 e2 |] ->
       let w_minus_1 = natOpenTerm (natValue (mbLift w) - 1) in
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvSShiftR")
+      ETrans_Term (BVRepr $ mbLift w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.bvSShiftR")
       [return w_minus_1, return (globalOpenTerm "Prelude.Bool"), translate w,
        translateRWV e1, translateRWV e2]
     [nuMP| BoolToBV mb_w e |] ->
       let w = mbLift mb_w in
-      ETrans_Term knownRepr <$>
-      applyMultiPureTransM (return $ globalOpenTerm "Prelude.ite")
+      ETrans_Term (BVRepr w) <$>
+      applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
       [bitvectorTransM (translate mb_w),
        translateRWV e,
        return (bvBVOpenTerm w (BV.one w)),
@@ -5637,8 +5637,8 @@ instance (PermCheckExtC ext exprExt, TransInfo info) =>
     [nuMP| BVNonzero mb_w e |] ->
       let w = mbLift mb_w in
       ETrans_Term knownRepr <$>
-      applyPureTransM (return $ globalOpenTerm "Prelude.not")
-      (applyMultiPureTransM (return $ globalOpenTerm "Prelude.bvEq")
+      applyTransM (return $ globalOpenTerm "Prelude.not")
+      (applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
        [translate mb_w, translateRWV e,
         return (bvBVOpenTerm w (BV.zero w))])
 
@@ -5669,6 +5669,7 @@ exprOutPerm mb_x = case mbMatch mb_x of
   [nuMP| TypedExpr _ Nothing |] -> PTrans_True
 
 
+{-
 ----------------------------------------------------------------------
 -- * Translating Typed Crucible Jump Targets
 ----------------------------------------------------------------------
