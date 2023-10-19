@@ -2930,18 +2930,18 @@ arrowIxs Ts_top a =
     (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) -> FunIx T -> rec)
     Ts_top;
 
--- The type of a tuple of spec functions of types Us that take in FunIxs for Ts
-arrowIxsSpecFuns : EvType -> List TpDesc -> List TpDesc -> sort 0;
-arrowIxsSpecFuns E Ts Us =
+-- The type of a tuple of spec functions of types Ts
+specFuns : EvType -> List TpDesc -> sort 0;
+specFuns E Ts =
   List__rec TpDesc (\ (_:List TpDesc) -> sort 0) #()
-    (\ (U:TpDesc) (_:List TpDesc) (rec:sort 0) ->
-       arrowIxs Ts (specFun E nilTpEnv U) * rec)
-    Us;
+    (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) ->
+       specFun E nilTpEnv T * rec)
+    Ts;
 
 -- The type of a tuple of spec function bodies that take in function indexes to
 -- allow them to corecursively call themselves
 MultiFixBodies : EvType -> List TpDesc -> sort 0;
-MultiFixBodies E Ts = arrowIxsSpecFuns E Ts Ts;
+MultiFixBodies E Ts = arrowIxs Ts (specFuns E Ts);
 
 -- Create a collection of corecursive functions in a SpecM computation as a
 -- fixed-point where the functions can call themselves and each other
