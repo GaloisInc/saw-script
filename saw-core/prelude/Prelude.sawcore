@@ -2949,10 +2949,9 @@ primitive MultiFixS : (E:EvType) -> (Ts:List TpDesc) ->
                       MultiFixBodies E Ts -> SpecM E (FunIxs Ts);
 
 -- Perform a computation that can call a collection of corecursive functions
-LetRecS : (E:EvType) -> (Ts:List TpDesc) -> (a:sort 0) ->
-          MultiFixBodies E Ts -> (FunIxs Ts -> SpecM E a) -> SpecM E a;
-LetRecS E Ts a funs body = bindS E (FunIxs Ts) a (MultiFixS E Ts funs) body;
-
+primitive LetRecS : (E:EvType) -> (Ts:List TpDesc) -> (a:sort 0) ->
+                    MultiFixBodies E Ts -> (arrowIxs Ts (SpecM E a)) ->
+                    SpecM E a;
 
 --
 -- Helper operations on SpecM
