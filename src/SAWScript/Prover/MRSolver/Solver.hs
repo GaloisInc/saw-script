@@ -441,11 +441,13 @@ normComp (CompTerm t) =
              >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
-    -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
+    -- Always unfold: sawLet, invariantHint, assumingS, assertingS,
+    --                multiArgFixS, lrtLambda, Num_rec
     (f@(asGlobalDef -> Just ident), args)
       | ident `elem` ["Prelude.sawLet", "Prelude.invariantHint",
-                      "Cryptol.Num_rec", "Prelude.multiArgFixS",
-                      "Prelude.lrtLambda"]
+                      "Prelude.assumingS", "Prelude.assertingS",
+                      "Prelude.multiArgFixS", "Prelude.lrtLambda",
+                      "Cryptol.Num_rec"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 

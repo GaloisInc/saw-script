@@ -1548,7 +1548,7 @@ monadifyName (ImportedName uri aliases) =
 monadifyNamedTermH :: SharedContext -> NameInfo -> Maybe Term -> Term ->
                       StateT MonadifyEnv IO MonTerm
 monadifyNamedTermH sc nmi maybe_trm tp =
-  trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
+  -- trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
   get >>= \env -> let ?specMParams = monEnvParams env in
   do let mtp = monadifyType [] tp
      nmi' <- lift $ monadifyName nmi
