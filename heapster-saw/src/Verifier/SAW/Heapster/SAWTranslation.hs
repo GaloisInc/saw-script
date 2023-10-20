@@ -360,6 +360,13 @@ letRecSOpenTerm ev ds ret_tp bodies body =
   applyGlobalOpenTerm "Prelude.LetRecS"
   [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds, ret_tp, bodies, body]
 
+-- | Build the type @MultiFixBodies E Ts@ from an event type and a list of type
+-- descriptions for @Ts@
+multiFixBodiesOpenTerm :: EventType -> [OpenTerm] -> OpenTerm
+multiFixBodiesOpenTerm ev ds =
+  applyGlobalOpenTerm "Prelude.MultiFixBodies"
+  [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds]
+
 
 ----------------------------------------------------------------------
 -- * Type Translations
@@ -6460,26 +6467,25 @@ translateCFGFromBodies cfgs bodies i
                                                         transTerms pctx)
        return $ letRecSOpenTerm ev ds ret_tp bodies body
 
--- | Translate a list of CFGs for mutually recursive functions to: a SAW core
--- term of type @MultiFixBodies@ that defines these functions mutually in terms
--- of themselves; and a function that takes in such a @MultiFixBodies@ term and
--- returns a list of SAW core types and functions for these CFGs that are
--- defined using the @MultiFixBodies@ term. This separation allows the caller to
--- insert the @MultiFixBodies@ term as a SAW core named definition and use the
--- definition name in the translations to functions.
+-- | Translate a list of CFGs for mutually recursive functions to: a list of
+-- type descriptions for the CFGS; a SAW core term of type @MultiFixBodies@ that
+-- defines these functions mutually in terms of themselves; and a function that
+-- takes in such a @MultiFixBodies@ term and returns a list of SAW core types
+-- and functions for these CFGs that are defined using the @MultiFixBodies@
+-- term. This separation allows the caller to insert the @MultiFixBodies@ term
+-- as a SAW core named definition and use the definition name in the
+-- translations to functions.
 translateCFGs :: HasPtrWidth w => PermEnv -> ChecksFlag ->
                  [SomeTypedCFG LLVM] ->
-                 (OpenTerm, OpenTerm -> [(OpenTerm,OpenTerm)])
+                 ([OpenTerm], OpenTerm, OpenTerm -> [(OpenTerm,OpenTerm)])
 translateCFGs env checks some_cfgs =
-  (runNilTypeTransM env checks (translateCFGBodiesTerm some_cfgs),
+  (runNilTypeTransM env checks (mapM translateSomeCFGDesc some_cfgs),
+   runNilTypeTransM env checks (translateCFGBodiesTerm some_cfgs),
    \bodies ->
    runNilTypeTransM env checks
    (zip <$> mapM translateSomeCFGType some_cfgs <*>
     mapM (translateCFGFromBodies some_cfgs bodies) [0..(length some_cfgs-1)]))
 
-
-{-
-FIXME HERE NOWNOWNOW
 
 -- | An existentially quantified tuple of a 'CFG', its function permission, and
 -- a 'String' name we want to translate it to
@@ -6497,7 +6503,8 @@ someCFGAndPermToName :: SomeCFGAndPerm ext -> String
 someCFGAndPermToName (SomeCFGAndPerm _ nm _ _) = nm
 
 -- | Map a 'SomeCFGAndPerm' to a 'PermEnvGlobalEntry' with no translation, i.e.,
--- with an 'error' term for the translation
+-- with an 'error' term for the translation. This is used to type-check
+-- functions that may call themselves before they have been translated.
 someCFGAndPermGlobalEntry :: HasPtrWidth w => SomeCFGAndPerm ext ->
                              PermEnvGlobalEntry
 someCFGAndPermGlobalEntry (SomeCFGAndPerm sym _ _ fun_perm) =
@@ -6505,19 +6512,6 @@ someCFGAndPermGlobalEntry (SomeCFGAndPerm sym _ _ fun_perm) =
   PermEnvGlobalEntry sym (mkPtrFunPerm fun_perm) $
   panic "someCFGAndPermGlobalEntry"
   ["Attempt to translate CFG during its own type-checking"]
-
--- | Convert the 'FunPerm' of a 'SomeCFGAndPerm' to an inductive @LetRecType@
--- description of the SAW core type it translates to
-someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
-someCFGAndPermLRT env (SomeCFGAndPerm _ _ _ fun_perm) =
-  typeDescLRT $ runNilTypeTransM env noChecks $ translateClosed fun_perm
-
--- | Construct a spec definition type for the event type in the supplied
--- environment with the supplied @LetRecType@
-permEnvSpecDefOpenTerm :: PermEnv -> OpenTerm -> OpenTerm
-permEnvSpecDefOpenTerm env lrt =
-  applyGlobalOpenTerm "Prelude.SpecDef"
-  [permEnvEventTypeTerm env, lrt]
 
 -- | Type-check a list of functions in the Heapster type system, translate each
 -- to a spec definition bound to the SAW core 'String' name associated with it,
@@ -6527,8 +6521,12 @@ tcTranslateAddCFGs ::
   HasPtrWidth w => SharedContext -> ModuleName -> PermEnv -> ChecksFlag ->
   EndianForm -> DebugLevel -> [SomeCFGAndPerm LLVM] ->
   IO (PermEnv, [SomeTypedCFG LLVM])
+
+-- NOTE: we add an explicit case for the empty list so we can take head of the
+-- cfgs_and_perms list below and know it will succeeed
+tcTranslateAddCFGs _ _ env _ _ _ [] = return (env, [])
+
 tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
-  withKnownNat ?ptrWidth $
   do
     -- First, we type-check all the CFGs, mapping them to SomeTypedCFGs; this
     -- uses a temporary PermEnv where all the function symbols being
@@ -6544,29 +6542,40 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
           ("With type:\n" ++ permPrettyString emptyPPInfo fun_perm) $
           tcCFG ?ptrWidth tmp_env1 endianness dlevel fun_perm cfg
 
-    -- Next, translate all those CFGs to spec definitions
-    let lrts_defs = translateCFGsToDefs env checks tc_cfgs
+    -- Next, translate those CFGs to a @MultiFixBodies@ term and a function from
+    -- that term to all the types and definitions for those CFGs
+    let (ds, bodies, trans_f) = translateCFGs env checks tc_cfgs
 
-    -- Insert each spec definition as a SAW core definition bound to its
-    -- corresponding ident in the SAW core module mod_name, and generate entries
-    -- for the environment mapping each function name to its SAW core ident
+    -- Insert a SAW core definition in the current SAW module for bodies
+    let ev = permEnvEventType env
+    let bodies_id =
+          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+                                ++ "__bodies")
+    bodies_tp <- completeOpenTerm sc $ multiFixBodiesOpenTerm ev ds
+    bodies_tm <- completeOpenTerm sc bodies
+    scInsertDef sc mod_name bodies_id bodies_tp bodies_tm
+
+    -- Now insert SAW core definitions for the translations of all the CFGs,
+    -- putting them all into new entries for the permissions environment
     new_entries <-
       zipWithM
-      (\(SomeTypedCFG sym nm cfg) (lrt, def_tm) ->
-        do tp <- completeNormOpenTerm sc $ permEnvSpecDefOpenTerm env lrt
-           tm <- completeNormOpenTerm sc def_tm
+      (\(SomeTypedCFG sym nm cfg) (tp, f) ->
+        withKnownNat ?ptrWidth $
+        do tp_trm <- completeOpenTerm sc tp
+           f_trm <- completeOpenTerm sc f
            let ident = mkSafeIdent mod_name nm
-           scInsertDef sc mod_name ident tp tm
+           scInsertDef sc mod_name ident tp_trm f_trm
            let perm = mkPtrFunPerm $ tpcfgFunPerm cfg
-           return $ PermEnvGlobalEntry sym perm (GlobalTransDef $
-                                                 globalOpenTerm ident))
-      tc_cfgs lrts_defs
+           return $ PermEnvGlobalEntry sym perm (GlobalTransFuns
+                                                 [globalOpenTerm ident]))
+      tc_cfgs (trans_f $ globalOpenTerm bodies_id)
 
-    -- Add the new entries to the environment and return the new environment and
-    -- the type-checked CFGs
+    -- Finally, add the new entries to the environment and return the new
+    -- environment and the type-checked CFGs
     return (permEnvAddGlobalSyms env new_entries, tc_cfgs)
 
 
+{-
 ----------------------------------------------------------------------
 -- * Top-level Entrypoints for Translating Other Things
 ----------------------------------------------------------------------
