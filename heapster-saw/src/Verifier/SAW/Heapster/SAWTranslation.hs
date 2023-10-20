@@ -6251,6 +6251,14 @@ translateTypedBlockMap ixs blkMap =
   (ret, []) -> return ret
   (_, _) -> panic "translateTypedBlockMap" ["Unused function indices"]
 
+-- | Build a nested lambda-abstraction over a sequence of function indexes of
+-- the given type descriptions and pass them to the supplied function
+lambdaFunIxsM :: String -> [OpenTerm] ->
+                 ([OpenTerm] -> TypeTransM ctx OpenTerm) ->
+                 TypeTransM ctx OpenTerm
+lambdaFunIxsM nm ds f =
+  lambdaTransM nm (openTermsTypeTrans $ map funIxTypeOpenTerm ds) f
+
 -- | Lambda-abstract over function indexes for all the entrypoints that have one
 -- in a 'TypedBlockMap', whose type descriptions are given as the first
 -- argument, and then use those function indexes to translate the block map to a
@@ -6260,8 +6268,7 @@ lambdaBlockMap :: [OpenTerm] -> TypedBlockMap TransPhase ext blocks tops rets ->
                    TypeTransM tops OpenTerm) ->
                   TypeTransM tops OpenTerm
 lambdaBlockMap blk_ds blkMap f =
-  lambdaTransM "f" (openTermsTypeTrans $
-                    map funIxTypeOpenTerm blk_ds) $ \funixs ->
+  lambdaFunIxsM "f_loop" blk_ds $ \funixs ->
   translateTypedBlockMap funixs blkMap >>= f
 
 
@@ -6298,8 +6305,9 @@ translateCFGInitBody ::
   PermCheckExtC ext exprExt =>
   TypedBlockMapTrans ext blocks (ghosts :++: inits) (gouts :> ret) ->
   TypedCFG ext blocks ghosts inits gouts ret ->
+  PermTransCtx (ghosts :++: inits) (ghosts :++: inits) ->
   TypeTransM (ghosts :++: inits) OpenTerm
-translateCFGInitBody mapTrans cfg =
+translateCFGInitBody mapTrans cfg pctx =
   let fun_perm = tpcfgFunPerm cfg
       h = tpcfgHandle cfg
       inits = typedFnHandleArgs h
@@ -6314,11 +6322,16 @@ translateCFGInitBody mapTrans cfg =
   -- the same as those top-level arguments and so get eq perms to relate them
   inExtMultiTransCopyLastM ghosts (cruCtxProxies inits) $
 
-  lambdaPermCtx (funPermToBlockInputs fun_perm) $ \pctx ->
-  let all_membs = RL.members pctx
-      all_px = RL.map (\_ -> Proxy) pctx
+  -- Pass in all the terms in pctx to build pctx', which is the same permissions
+  -- as pctx except with all the eq permissions added to the end of the input
+  -- permissions by funPermToBlockInputs; these introduce no extra terms, so the
+  -- terms for the two are the same
+  translate (funPermToBlockInputs fun_perm) >>= \ps'_trans ->
+  let pctx' = typeTransF ps'_trans (transTerms pctx)
+      all_membs = RL.members pctx'
+      all_px = RL.map (\_ -> Proxy) pctx'
       init_entry = lookupEntryTransCast (tpcfgEntryID cfg) CruCtxNil mapTrans in
-  impTransM all_membs pctx mapTrans retTypeTrans $
+  impTransM all_membs pctx' mapTrans retTypeTrans $
   translateCallEntry "CFG" init_entry (nuMulti all_px id) (nuMulti all_px $
                                                            const MNil)
 
@@ -6328,14 +6341,18 @@ translateCFGInitBody mapTrans cfg =
 -- returns a sigma of its output values and permissions. This assumes that
 -- function indices have been bound for the function itself and any other
 -- functions it is mutually recursive with, and that these function indexes are
--- in the current permissions environment.
-translateCFG :: PermCheckExtC ext exprExt =>
-                TypedCFG ext blocks ghosts inits gouts ret ->
-                TypeTransM RNil OpenTerm
-translateCFG cfg =
+-- in the current permissions environment. That is, this translation is
+-- happening for the body of a @LetRecS@ definition that has bound function
+-- indexes for the function itself and all functions it is mutually recursive
+-- with.
+translateCFGBody :: PermCheckExtC ext exprExt =>
+                    TypedCFG ext blocks ghosts inits gouts ret ->
+                    TypeTransM RNil OpenTerm
+translateCFGBody cfg =
   let fun_perm = tpcfgFunPerm cfg
       blkMap = tpcfgBlockMap cfg in
   piExprCtx (funPermTops fun_perm) $
+  lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
   do ev <- infoEvType <$> ask
      blk_ds <- translateBlockMapDescs $ tpcfgBlockMap cfg
      ret_tp <- translateRetType (funPermRets fun_perm) (funPermOuts fun_perm)
@@ -6344,11 +6361,10 @@ translateCFG cfg =
        tupleOpenTerm <$> translateBlockMapBodies mapTrans blkMap
      body <-
        lambdaBlockMap blk_ds blkMap $ \mapTrans ->
-       translateCFGInitBody mapTrans cfg
+       translateCFGInitBody mapTrans cfg pctx
      return $ letRecSOpenTerm ev blk_ds ret_tp bodies body
 
 
-{-
 ----------------------------------------------------------------------
 -- * Translating Sets of CFGs
 ----------------------------------------------------------------------
@@ -6372,34 +6388,98 @@ someTypedCFGPtrPerm :: HasPtrWidth w => SomeTypedCFG LLVM ->
                        ValuePerm (LLVMPointerType w)
 someTypedCFGPtrPerm (SomeTypedCFG _ _ cfg) = mkPtrFunPerm $ tpcfgFunPerm cfg
 
--- | Convert a 'SomedTypedCFG' and a closure index for its initial entrypoint
--- closure into an entry in the permission environment
-someTypedCFGIxEntry :: HasPtrWidth w => SomeTypedCFG LLVM -> Natural ->
+-- | Apply 'translateCFGDesc' to the CFG in a 'SomeTypedCFG'
+translateSomeCFGDesc :: SomeTypedCFG LLVM -> TypeTransM ctx OpenTerm
+translateSomeCFGDesc (SomeTypedCFG _ _ cfg) = translateCFGDesc cfg
+
+-- | Translate a CFG to its type as a specification function
+translateSomeCFGType :: SomeTypedCFG LLVM -> TypeTransM ctx OpenTerm
+translateSomeCFGType (SomeTypedCFG _ _ cfg) =
+  translateClosed (tpcfgFunPerm cfg)
+
+-- | Apply 'translateCFGBody' to the CFG in a 'SomeTypedCFG'
+translateSomeCFGBody :: SomeTypedCFG LLVM -> TypeTransM RNil OpenTerm
+translateSomeCFGBody (SomeTypedCFG _ _ cfg) = translateCFGBody cfg
+
+-- | Build an entry in a permissions environment that associates the symbol of a
+-- 'SomeTypedCFG' with a function index term
+someTypedCFGIxEntry :: HasPtrWidth w => SomeTypedCFG LLVM -> OpenTerm ->
                        PermEnvGlobalEntry
-someTypedCFGIxEntry (SomeTypedCFG sym _ cfg) ix =
+someTypedCFGIxEntry some_cfg@(SomeTypedCFG sym _ _) funix =
+  -- NOTE: we use GlobalTransTerms instead of GlobalTransFuns because a function
+  -- index is the "normal" translation of a function permission, while
+  -- GlobalTransFuns specifies a specFun
   withKnownNat ?ptrWidth $
-  PermEnvGlobalEntry sym (mkPtrFunPerm $ tpcfgFunPerm cfg)
-  (GlobalTransClos $ mkBaseClosSpecTerm ix)
+  PermEnvGlobalEntry sym (someTypedCFGPtrPerm some_cfg)
+  (GlobalTransTerms [funix])
 
--- | Translate a list of CFGs for mutually recursive functions to a list of
--- @LetRecType@s and spec definitions of those @LetRecType@s
-translateCFGsToDefs :: HasPtrWidth w => PermEnv -> ChecksFlag ->
-                       [SomeTypedCFG LLVM] -> [(OpenTerm,OpenTerm)]
-translateCFGsToDefs env checks some_cfgs =
-  let (cfg_ixs, cfg_transsM) =
-        unzip $ evalState (mapM (\(SomeTypedCFG _ _ cfg) ->
-                                  translateCFG cfg) some_cfgs) 0
-      tmp_env = permEnvAddGlobalSyms env $
-        zipWith someTypedCFGIxEntry some_cfgs cfg_ixs
-      cfg_transs = runNilTypeTransM tmp_env checks $ sequence cfg_transsM
-      closs = concat $ map cfgTransCloss cfg_transs in
-  map (\cfg_trans ->
-        let lrt = cfgTransLRT cfg_trans in
-        (lrt,
-         defineSpecOpenTerm (permEnvEventTypeTerm env) closs
-         lrt (cfgTransBody cfg_trans)))
-  cfg_transs
+-- | Build a lambda-abstraction that takes in function indexes for all the CFGs
+-- in a list and then run the supplied computation with a 'PermEnv' that
+-- includes translations of the symbols for these CFGs to their corresponding
+-- lambda-bound xfunction indexes in this lambda-abstraction
+lambdaCFGPermEnv :: HasPtrWidth w => [SomeTypedCFG LLVM] ->
+                    TypeTransM ctx OpenTerm -> TypeTransM ctx OpenTerm
+lambdaCFGPermEnv some_cfgs m =
+  mapM translateSomeCFGDesc some_cfgs >>= \ds ->
+  lambdaFunIxsM "f" ds $ \funixs ->
+  let entries = zipWith someTypedCFGIxEntry some_cfgs funixs in
+  local (\info ->
+          info { ttiPermEnv =
+                   permEnvAddGlobalSyms (ttiPermEnv info) entries }) m
 
+-- | Translate a list of CFGs to a SAW core term of type @MultiFixBodies@ that
+-- lambda-abstracts over function indexes for all the CFGs and returns a tuple
+-- of their bodies as created by 'translateCFGBody'
+translateCFGBodiesTerm :: HasPtrWidth w => [SomeTypedCFG LLVM] ->
+                          TypeTransM RNil OpenTerm
+translateCFGBodiesTerm some_cfgs =
+  lambdaCFGPermEnv some_cfgs (tupleOpenTerm <$>
+                              mapM translateSomeCFGBody some_cfgs)
+
+-- | Build a @LetRecS@ term for the nth CFG in a list of CFGs that it is
+-- potentially mutually recursive with those CFGs from a SAW core term of type
+-- @MultiFixBodies@ that specifies how these corecursive functions are defined
+-- in terms of themselves and each other
+translateCFGFromBodies :: HasPtrWidth w => [SomeTypedCFG LLVM] -> OpenTerm ->
+                          Int -> TypeTransM RNil OpenTerm
+translateCFGFromBodies cfgs _ i
+  | i >= length cfgs
+  = panic "translateCFGFromBodies" ["Index out of bounds!"]
+translateCFGFromBodies cfgs bodies i
+  | SomeTypedCFG _ _ cfg <- cfgs!!i =
+    let fun_perm = tpcfgFunPerm cfg in
+    piExprCtx (funPermTops fun_perm) $
+    lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
+    do ev <- infoEvType <$> ask
+       ectx <- infoCtx <$> ask
+       ds <- mapM translateSomeCFGDesc cfgs
+       ret_tp <- translateRetType (funPermRets fun_perm) (funPermOuts fun_perm)
+       body <-
+         lambdaFunIxsM "f" ds $ \funixs ->
+         return $ callSOpenTerm ev (ds!!i) (funixs!!i) (transTerms ectx ++
+                                                        transTerms pctx)
+       return $ letRecSOpenTerm ev ds ret_tp bodies body
+
+-- | Translate a list of CFGs for mutually recursive functions to: a SAW core
+-- term of type @MultiFixBodies@ that defines these functions mutually in terms
+-- of themselves; and a function that takes in such a @MultiFixBodies@ term and
+-- returns a list of SAW core types and functions for these CFGs that are
+-- defined using the @MultiFixBodies@ term. This separation allows the caller to
+-- insert the @MultiFixBodies@ term as a SAW core named definition and use the
+-- definition name in the translations to functions.
+translateCFGs :: HasPtrWidth w => PermEnv -> ChecksFlag ->
+                 [SomeTypedCFG LLVM] ->
+                 (OpenTerm, OpenTerm -> [(OpenTerm,OpenTerm)])
+translateCFGs env checks some_cfgs =
+  (runNilTypeTransM env checks (translateCFGBodiesTerm some_cfgs),
+   \bodies ->
+   runNilTypeTransM env checks
+   (zip <$> mapM translateSomeCFGType some_cfgs <*>
+    mapM (translateCFGFromBodies some_cfgs bodies) [0..(length some_cfgs-1)]))
+
+
+{-
+FIXME HERE NOWNOWNOW
 
 -- | An existentially quantified tuple of a 'CFG', its function permission, and
 -- a 'String' name we want to translate it to
