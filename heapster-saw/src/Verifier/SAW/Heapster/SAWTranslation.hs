@@ -6575,24 +6575,23 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     return (permEnvAddGlobalSyms env new_entries, tc_cfgs)
 
 
-{-
 ----------------------------------------------------------------------
 -- * Top-level Entrypoints for Translating Other Things
 ----------------------------------------------------------------------
 
--- | Translate a function permission to the type of a spec definition for the
--- translation of a function with that permission
+-- | Translate a function permission to the type of the translation of a
+-- function with that function permission
 translateCompleteFunPerm :: SharedContext -> PermEnv ->
                             FunPerm ghosts args gouts ret -> IO Term
 translateCompleteFunPerm sc env fun_perm =
-  completeNormOpenTerm sc $ permEnvSpecDefOpenTerm env $ typeDescLRT $
+  completeNormOpenTerm sc $
   runNilTypeTransM env noChecks (translateClosed fun_perm)
 
--- | Translate a 'TypeRepr' to the SAW core type it represents
-translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
-translateCompleteType sc env typ_perm =
-  completeNormOpenTerm sc $ typeTransType1 $
-  runNilTypeTransM env noChecks $ translateType True typ_perm
+-- | Translate a 'TypeRepr' to the SAW core type it represents, raising an error
+-- if it translates to more than one type
+translateCompleteType :: SharedContext -> TypeRepr tp -> IO Term
+translateCompleteType sc tp =
+  completeNormOpenTerm sc $ typeTransType1 $ fst $ translateType tp
 
 -- | Translate a 'TypeRepr' within the given context of type arguments to the
 -- SAW core type it represents
@@ -6600,8 +6599,9 @@ translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
                               CruCtx args -> Mb args (TypeRepr a) -> IO Term
 translateCompleteTypeInCtx sc env args ret =
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
-  piExprCtxPure args (typeTransType1 <$> translateType True (mbLift ret))
+  piExprCtx args (return $ typeTransType1 $ fst $ translateType $ mbLift ret)
 
+{-
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a pure
 -- SAW core function type, not in the @SpecM@ monad. It is an error if any of
 -- the permissions are impure, such as @lowned@ permissions.
