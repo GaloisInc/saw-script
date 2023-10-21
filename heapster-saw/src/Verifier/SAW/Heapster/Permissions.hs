@@ -718,23 +718,26 @@ data ReachMethods reach args a where
     } -> ReachMethods (args :> a) a 'True
   NoReachMethods :: ReachMethods args a 'False
 
--- | A recursive permission is a disjunction of 1 or more permissions, each of
--- which can contain the recursive permission itself. NOTE: it is an error to
--- have an empty list of cases. A recursive permission is also associated with a
--- SAW datatype, given by a SAW 'Ident', and each disjunctive permission case is
--- associated with a constructor of that datatype. The @b@ flag indicates
--- whether this recursive permission can be used as an atomic permission, which
--- should be 'True' iff all of the cases are conjunctive permissions as in
--- 'isConjPerm'. If the recursive permission is a reachability permission, then
--- it also has a 'ReachMethods' structure.
+-- | A recursive permission is a permission that can recursively refer to
+-- itself. This is represented as a "body" of the recursive permission that has
+-- free variables for a list of arguments along with an extra free variable to
+-- recursively refer to the permission. The @b@ flag indicates whether this
+-- recursive permission can be used as an atomic permission, which should be
+-- 'True' iff 'isConjPerm' is for all substitution instances of the body. A
+-- recursive permission also has two SAW core identifiers that cache the
+-- translation of its body to a type and to a type description:
+-- 'recPermTransType' is a function that maps (translations of) the arguments to
+-- the translation of its body with these arguments to a type; while
+-- 'recPermTransDesc' is a type description with free deBruijn variable 0 for
+-- recursive instances of the recursive permission itself and free variables
+-- starting at 1 for all the arguments. If the recursive permission is a
+-- reachability permission, then it also has a 'ReachMethods' structure.
 data RecPerm b reach args a = RecPerm {
   recPermName :: NamedPermName (RecursiveSort b reach) args a,
   recPermTransType :: Ident,
   recPermTransDesc :: Ident,
-  recPermFoldFun :: Ident,
-  recPermUnfoldFun :: Ident,
   recPermReachMethods :: ReachMethods args a reach,
-  recPermCases :: [Mb args (ValuePerm a)]
+  recPermBody :: Mb (args :> ValuePermType a) (ValuePerm a)
   }
 
 -- | A defined permission is a name and a permission to which it is
@@ -6307,8 +6310,9 @@ funPermDistOuts fun_perm ghosts gexprs args gouts_ret =
 unfoldRecPerm :: RecPerm b reach args a -> PermExprs args -> PermOffset a ->
                  ValuePerm a
 unfoldRecPerm rp args off =
-  offsetPerm off $ foldr1 ValPerm_Or $ map (subst (substOfExprs args)) $
-  recPermCases rp
+  let p = ValPerm_Named (recPermName rp) args NoPermOffset in
+  offsetPerm off $ subst (substOfExprs (args :>: PExpr_ValPerm p)) $
+  recPermBody rp
 
 -- | Unfold a defined permission given arguments
 unfoldDefinedPerm :: DefinedPerm b args a -> PermExprs args ->
@@ -6999,9 +7003,10 @@ instance SubstVar s m => Substable s (OpaquePerm ns args a) m where
     return $ OpaquePerm (mbLift n) (mbLift i1) (mbLift i2)
 
 instance SubstVar s m => Substable s (RecPerm ns reach args a) m where
-  genSubst s (mbMatch -> [nuMP| RecPerm rpn dt_i d_i f_i u_i reachMeths cases |]) =
-    RecPerm (mbLift rpn) (mbLift dt_i) (mbLift d_i) (mbLift f_i) (mbLift u_i)
-            (mbLift reachMeths) <$> mapM (genSubstMb (cruCtxProxies (mbLift (fmap namedPermNameArgs rpn))) s) (mbList cases)
+  genSubst s (mbMatch -> [nuMP| RecPerm rpn dt_i d_i reachMeths body |]) =
+    let ctx = mbLift (fmap namedPermNameArgs rpn) in
+    RecPerm (mbLift rpn) (mbLift dt_i) (mbLift d_i) (mbLift reachMeths) <$>
+    genSubstMb (cruCtxProxies ctx :>: Proxy) s body
 
 instance SubstVar s m => Substable s (DefinedPerm ns args a) m where
   genSubst s (mbMatch -> [nuMP| DefinedPerm n p |]) =
@@ -8216,61 +8221,33 @@ permEnvAddOpaquePerm env str args tp trans_id d_id =
                                      TrueRepr) NameNonReachConstr in
   permEnvAddNamedPerm env $ NamedPerm_Opaque $ OpaquePerm n trans_id d_id
 
--- | Add a recursive named permission to a 'PermEnv', assuming that the
--- 'recPermCases' and the fold and unfold functions depend recursively on the
--- recursive named permission being defined. This is handled by adding a
--- "temporary" version of the named permission to the environment to be used to
--- compute the 'recPermCases' and the fold and unfold functions and then passing
--- the expanded environment with this temporary named permission to the supplied
--- functions for computing these values. This temporary named permission has its
--- 'recPermCases' and its fold and unfold functions undefined, so the supplied
--- functions cannot depend on these values being defined, which makes sense
--- because they are defining them! Note that the function for computing the
--- 'recPermCases' can be called multiple times, so should not perform any
--- non-idempotent mutation in the monad @m@.
+-- | Add a recursive named permission to a 'PermEnv', given a 'String' name for
+-- the permission, its argument types and permission type, identifiers for its
+-- 'recPermTransType' and 'recPermTransDesc' fields, its body, and optional
+-- reachability constraints and methods. The last two of these can depend on the
+-- @b@ flag computed for the body, and the last can take in the name being
+-- created and a temporary 'PermEnv' with this name added in order to construct
+-- the 'ReachMethods', which can be constructed in an arbitrary monad.
 permEnvAddRecPermM :: Monad m => PermEnv -> String -> CruCtx args ->
                       TypeRepr a -> Ident -> Ident ->
+                      Mb (args :> ValuePermType a) (ValuePerm a) ->
                       (forall b. NameReachConstr (RecursiveSort b reach) args a) ->
-                      (forall b. NamedPermName (RecursiveSort b reach) args a ->
-                       PermEnv -> m [Mb args (ValuePerm a)]) ->
-                      (forall b. NamedPermName (RecursiveSort b reach) args a ->
-                       [Mb args (ValuePerm a)] -> PermEnv -> m (Ident, Ident)) ->
                       (forall b. NamedPermName (RecursiveSort b reach) args a ->
                        PermEnv -> m (ReachMethods args a reach)) ->
                       m PermEnv
-permEnvAddRecPermM env nm args tp trans_ident d_ident reachC casesF foldIdentsF reachMethsF =
-  -- NOTE: we start by assuming nm is conjoinable, and then, if it's not, we
-  -- call casesF again, and thereby compute a fixed-point
-  do let reach = nameReachConstrBool reachC
-     let mkTmpEnv :: NamedPermName (RecursiveSort b reach) args a -> PermEnv
-         mkTmpEnv npn =
-           permEnvAddNamedPerm env $ NamedPerm_Rec $
-           RecPerm npn trans_ident d_ident
-           (error "Analyzing recursive perm cases before it is defined!")
-           (error "Folding recursive perm before it is defined!")
-           (error "Using reachability methods for recursive perm before it is defined!")
-           (error "Unfolding recursive perm before it is defined!")
-         mkRealEnv :: Monad m => NamedPermName (RecursiveSort b reach) args a ->
-                      [Mb args (ValuePerm a)] ->
-                      (PermEnv -> m (Ident, Ident)) ->
-                      (PermEnv -> m (ReachMethods args a reach)) ->
-                      m PermEnv
-         mkRealEnv npn cases identsF rmethsF =
-           do let tmp_env = mkTmpEnv npn
-              (fold_ident, unfold_ident) <- identsF tmp_env
-              reachMeths <- rmethsF tmp_env
-              return $ permEnvAddNamedPerm env $ NamedPerm_Rec $
-                RecPerm npn trans_ident d_ident fold_ident unfold_ident reachMeths cases
-     let npn1 = NamedPermName nm tp args (RecursiveSortRepr TrueRepr reach) reachC
-     cases1 <- casesF npn1 (mkTmpEnv npn1)
-     case someBool $ all (mbLift . fmap isConjPerm) cases1 of
-       Some TrueRepr -> mkRealEnv npn1 cases1 (foldIdentsF npn1 cases1) (reachMethsF npn1)
-       Some FalseRepr ->
-         do let npn2 = NamedPermName nm tp args (RecursiveSortRepr
-                                                 FalseRepr reach) reachC
-            cases2 <- casesF npn2 (mkTmpEnv npn2)
-            mkRealEnv npn2 cases2 (foldIdentsF npn2 cases2) (reachMethsF npn2)
-
+permEnvAddRecPermM env nm args tp trans_ident d_ident body reachC reachMethsF
+  | Some b <- someBool $ mbLift $ fmap isConjPerm body =
+    do let reach = nameReachConstrBool reachC
+       let npn = NamedPermName nm tp args (RecursiveSortRepr b reach) reachC
+       let tmp_env =
+             permEnvAddNamedPerm env $ NamedPerm_Rec $
+             RecPerm npn trans_ident d_ident
+             (error "Using reachability methods for recursive perm before it is defined!")
+             body
+       reachMeths <- reachMethsF npn tmp_env
+       return $ 
+         permEnvAddNamedPerm env $ NamedPerm_Rec $
+         RecPerm npn trans_ident d_ident reachMeths body
 
 -- | Add a defined named permission to a 'PermEnv'
 permEnvAddDefinedPerm :: PermEnv -> String -> CruCtx args -> TypeRepr a ->
