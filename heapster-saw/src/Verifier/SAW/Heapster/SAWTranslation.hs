@@ -239,7 +239,9 @@ tupleTpDesc (d : ds) = pairTpDesc d (tupleTpDesc ds)
 sumTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
 sumTpDesc d1 d2 = ctorOpenTerm "Prelude.Tp_Sum" [d1,d2]
 
--- | Build a type description for the type @BVVec n len d@
+-- | Build a type description for the type @BVVec n len d@ from a SAW core term
+-- @n@ of type @Nat@, a type expression @len@ for the length, and a type
+-- description @d@ for the element type
 bvVecTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
 bvVecTpDesc w_term len_term elem_d =
   applyGlobalOpenTerm "Prelude.Tp_BVVec" [elem_d, w_term, len_term]
@@ -298,6 +300,10 @@ piTpDesc kd tpd = ctorOpenTerm "Prelude.Tp_Pi" [kd, tpd]
 -- of kind descriptions, i.e., SAW core terms of type @KindDesc@
 piTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
 piTpDescMulti ks tp = foldr piTpDesc tp ks
+
+-- | The type description for the @Void@ type
+voidTpDesc :: OpenTerm
+voidTpDesc = ctorOpenTerm "Prelude.Tp_Void" []
 
 -- | Build a type description for a free deBruijn index
 varTpDesc :: OpenTerm -> Natural -> OpenTerm
@@ -366,6 +372,22 @@ multiFixBodiesOpenTerm :: EventType -> [OpenTerm] -> OpenTerm
 multiFixBodiesOpenTerm ev ds =
   applyGlobalOpenTerm "Prelude.MultiFixBodies"
   [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds]
+
+-- | Build a SAW core term for a type-level environment, i.e., a term of type
+-- @TpEnv@, from a list of kind descriptions and elements of those kind
+-- descriptions
+tpEnvOpenTerm :: [(OpenTerm,OpenTerm)] -> OpenTerm
+tpEnvOpenTerm =
+  foldr (\(k,v) env -> applyGlobalOpenTerm "Prelude.envConsElem" [k,v,env])
+  (ctorOpenTerm "Prelude.Nil" [globalOpenTerm "Prelude.TpEnvElem"])
+
+-- | Apply the @tpSubst@ combinator to substitute a type-level environment
+-- (built by applying 'tpEnvOpenTerm' to the supplied list) at the supplied
+-- natural number lifting level to a type description
+substEnvTpDesc :: Natural -> [(OpenTerm,OpenTerm)] -> OpenTerm -> OpenTerm
+substEnvTpDesc n ks_elems d =
+  applyGlobalOpenTerm "Prelude.tpSubst" [natOpenTerm n,
+                                         tpEnvOpenTerm ks_elems, d]
 
 
 ----------------------------------------------------------------------
@@ -1332,6 +1354,10 @@ data DescTransInfo ctx where
     ExprTransCtx ctx1 -> RAssign (Constant [OpenTerm]) ctx2 -> PermEnv ->
     ChecksFlag -> DescTransInfo (ctx1 :++: ctx2)
 
+-- | Extract the 'PermEnv' from a 'DescTransInfo'
+dtiEnv :: DescTransInfo ctx -> PermEnv
+dtiEnv (DescTransInfo _ _ env _) = env
+
 -- | Build a sequence of 'Proxy's for the context of a 'DescTransInfo'
 dtiProxies :: DescTransInfo ctx -> RAssign Proxy ctx
 dtiProxies (DescTransInfo ectx1 ctx2 _ _) =
@@ -1401,6 +1427,9 @@ descTransM =
 -- by 'translateType'.
 class TranslateDescs a where
   translateDescs :: Mb ctx a -> DescTransM ctx [OpenTerm]
+
+instance (NuMatching a, TranslateDescs a) => TranslateDescs [a] where
+  translateDescs l = concat <$> mapM translateDescs (mbList l)
 
 -- | Translate to a single type description by tupling all the descriptions
 -- return by 'translateDescs'
@@ -1627,8 +1656,7 @@ instance TransInfo info =>
          return $ ETrans_Shape [d] [tp]
     [nuMP| PExpr_FalseShape |] ->
       return $
-      ETrans_Shape [ctorOpenTerm "Prelude.Tp_Void" []] [dataTypeOpenTerm
-                                                        "Prelude.Void" []]
+      ETrans_Shape [voidTpDesc] [dataTypeOpenTerm "Prelude.Void" []]
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Perm <$> descTransM (translateDescs p) <*> (typeTransTypes <$>
@@ -1704,8 +1732,8 @@ translateBVDesc mb_e =
          return $ bvSumTpExprs (natValue w) (fs_exprs ++ [i_expr])
 
 -- translateDescs on permission expressions yield a list of SAW core terms of
--- type @kindExpr K@, one for each kind @K@ in the list of kind descriptions
--- returned by translateType
+-- types @kindExpr K1@, @kindExpr K2@, etc., one for each kind @K@ in the list
+-- of kind descriptions returned by translateType
 instance TranslateDescs (PermExpr a) where
   translateDescs mb_e = case mbMatch mb_e of
     [nuMP| PExpr_Var mb_x |] ->
@@ -1770,8 +1798,7 @@ instance TranslateDescs (PermExpr a) where
       inExtCtxDescTransM (singletonCruCtx tp) $ \kdescs ->
       (\d -> [d]) <$> sigmaTpDescMulti kdescs <$>
       translateDesc (mbCombine RL.typeCtxProxies mb_sh)
-    [nuMP| PExpr_FalseShape |] ->
-      return [ctorOpenTerm "Prelude.Tp_Void" []]
+    [nuMP| PExpr_FalseShape |] -> return [voidTpDesc]
 
     [nuMP| PExpr_ValPerm mb_p |] -> translateDescs mb_p
 
@@ -1780,6 +1807,21 @@ instance TranslateDescs (PermExprs tps) where
   translateDescs mb_es = case mbMatch mb_es of
     [nuMP| MNil |] -> return []
     [nuMP| es :>: e |] -> (++) <$> translateDescs es <*> translateDescs e
+
+
+-- | Build the type description that substitutes the translations of the
+-- supplied arguments into a type description for the body of an inductive type
+-- description. That is, for inductive type description @Tp_Ind T@, return the
+-- substitution instance @[args/xs]T@. Note that @T@ is expected to have
+-- deBruijn index 0 free, to represent resursive occurrences of the inductive
+-- type, and this substitution should preserve that, leaving index 0 free.
+substNamedIndTpDesc :: TransInfo info => Ident ->
+                       CruCtx tps -> Mb ctx (PermExprs tps) ->
+                       TransM info ctx OpenTerm
+substNamedIndTpDesc d_id tps args =
+  do let ks = snd $ translateCruCtx tps
+     args_exprs <- descTransM $ translateDescs args
+     return $ substEnvTpDesc 1 (zip ks args_exprs) (globalOpenTerm d_id)
 
 
 ----------------------------------------------------------------------
@@ -2844,6 +2886,7 @@ mapLtLOwnedTrans pctx1 vars1 dtr1 pctx2 vars2 dtr2
   (LOwnedTrans {..}) =
   LOwnedTrans
   { lotrEvType = lotrEvType
+  , lotrECtx = lotrECtx
   , lotrPsExtra = RL.append (RL.append pctx1 lotrPsExtra) pctx2
   , lotrVarsExtra = RL.append (RL.append vars1 lotrVarsExtra) vars2
   , lotrTpTransIn = dtr_in' , lotrTpTransOut = dtr_out'
@@ -2925,7 +2968,9 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
        len_tm <- translate len
        return $ BVRangeTrans rng off_tm len_tm
 
--- [| p :: ValuePerm |] = type of the impl translation of reg with perms p
+-- Translate a permission to a TypeTrans, that contains a list of 0 or more SAW
+-- core types along with a mapping from SAW core terms of those types to a
+-- PermTrans for the type of the permission
 instance TransInfo info =>
          Translate info ctx (ValuePerm a) (TypeTrans (PermTrans ctx a)) where
   translate p = case mbMatch p of
@@ -2943,25 +2988,13 @@ instance TransInfo info =>
       do env <- infoEnv <$> ask
          case lookupNamedPerm env (mbLift npn) of
            Just (NamedPerm_Opaque op) ->
-             error "FIXME HERE NOWNOW: translate opaque named permissions"
-             {-
-             exprCtxPureTypeTerms <$> translate args >>= \case
-             Just args_exprs ->
-               return $ mkPermTypeTrans1 p $ TypeDescPure $
-               applyGlobalOpenTerm (opaquePermTrans op) args_exprs
-             Nothing ->
-               panic "translate"
-               ["Heapster cannot yet handle opaque permissions over impure types"] -}
+             mkPermTypeTrans1 p <$>
+             applyGlobalOpenTerm (opaquePermTrans op) <$>
+             transTerms <$> translate args
            Just (NamedPerm_Rec rp) ->
-             error "FIXME HERE NOWNOW: translate recursive named permissions"
-             {-
-             exprCtxPureTypeTerms <$> translate args >>= \case
-             Just args_exprs ->
-               return $ mkPermTypeTrans1 p $ TypeDescPure $
-               applyOpenTermMulti (globalOpenTerm $ recPermTransType rp) args_exprs
-             Nothing ->
-               panic "translate"
-               ["Heapster cannot yet handle recursive permissions over impure types"] -}
+             mkPermTypeTrans1 p <$>
+             applyGlobalOpenTerm (recPermTransType rp) <$>
+             transTerms <$> translate args
            Just (NamedPerm_Defined dp) ->
              fmap (PTrans_Defined (mbLift npn) args off) <$>
              translate (mbMap2 (unfoldDefinedPerm dp) args off)
@@ -2970,13 +3003,42 @@ instance TransInfo info =>
       fmap PTrans_Conj <$> listTypeTrans <$> translate ps
     [nuMP| ValPerm_Var x _ |] ->
       do (_, tps) <- unETransPerm <$> translate x
-         return $ mkTypeTrans1 (tupleOfTypes tps) (PTrans_Term p)
+         return $ mkPermTypeTrans1 p (tupleOfTypes tps)
     [nuMP| ValPerm_False |] ->
       return $ mkPermTypeTrans1 p $ globalOpenTerm "Prelude.FalseProp"
 
-
+-- Translate a permission to type descriptions for the types returned by the
+-- Translate instance above
 instance TranslateDescs (ValuePerm a) where
-  translateDescs mb_p = error "FIXME HERE NOWNOW"
+  translateDescs mb_p = case mbMatch mb_p of
+    [nuMP| ValPerm_Eq _ |] -> return []
+    [nuMP| ValPerm_Or p1 p2 |] ->
+      (:[]) <$> (sumTpDesc <$> translateDesc p1 <*> translateDesc p2)
+    [nuMP| ValPerm_Exists mb_mb_p' |] ->
+      do let tp_repr = mbLift $ fmap bindingType mb_mb_p'
+         let mb_p' = mbCombine RL.typeCtxProxies mb_mb_p'
+         inExtCtxDescTransM (singletonCruCtx tp_repr) $ \kdescs ->
+           (:[]) <$> sigmaTpDescMulti kdescs <$> translateDesc mb_p'
+    [nuMP| ValPerm_Named mb_npn args off |] ->
+      do let npn = mbLift mb_npn
+         env <- dtiEnv <$> ask
+         args_ds <- translateDescs args
+         let (_, k_ds) = translateCruCtx (namedPermNameArgs npn)
+         case lookupNamedPerm env npn of
+           Just (NamedPerm_Opaque op) ->
+             return [substIdTpDescMulti (opaquePermTransDesc op) k_ds args_ds]
+           Just (NamedPerm_Rec rp) ->
+             return [substIdTpDescMulti (recPermTransDesc rp) k_ds args_ds]
+           Just (NamedPerm_Defined dp) ->
+             translateDescs (mbMap2 (unfoldDefinedPerm dp) args off)
+           Nothing -> panic "translate" ["Unknown permission name!"]
+    [nuMP| ValPerm_Conj ps |] -> translateDescs ps
+    [nuMP| ValPerm_Var mb_x _ |] ->
+      translateVarDesc mb_x >>= \case
+      Left etrans -> return $ fst $ unETransPerm etrans
+      Right (ix, ds) -> return $ zipWith varTpDesc ds [ix..]
+    [nuMP| ValPerm_False |] ->
+      return [voidTpDesc]
 
 
 instance TransInfo info =>
@@ -3031,7 +3093,7 @@ instance TransInfo info =>
                (APTrans_LOwned ls (mbLift tps_in) (mbLift tps_out) ps_in ps_out $
                 mkLOwnedTrans ev ectx dtr_in dtr_out vars_out t)
         Nothing ->
-          error "FIXME HERE NOWNOW: handle this error!"
+          panic "translate" ["lowned output permission is ill-formed"]
     [nuMP| Perm_LOwnedSimple tps lops |] ->
       return $ mkTypeTrans0 $ APTrans_LOwnedSimple (mbLift tps) lops
     [nuMP| Perm_LCurrent l |] ->
@@ -3052,7 +3114,36 @@ instance TransInfo info =>
 
 
 instance TranslateDescs (AtomicPerm a) where
-  translateDescs mb_p = error "FIXME HERE NOWNOW"
+  translateDescs mb_p = case mbMatch mb_p of
+    [nuMP| Perm_LLVMField fld |] -> translateDescs (fmap llvmFieldContents fld)
+    [nuMP| Perm_LLVMArray ap |] -> translateDescs ap
+    [nuMP| Perm_LLVMBlock bp |] -> translateDescs (fmap llvmBlockShape bp)
+    [nuMP| Perm_LLVMFree _ |] -> return []
+    [nuMP| Perm_LLVMFunPtr _ p |] -> translateDescs p
+    [nuMP| Perm_IsLLVMPtr |] -> return []
+    [nuMP| Perm_LLVMBlockShape sh |] -> translateDescs sh
+    [nuMP| Perm_NamedConj npn args off |] ->
+      translateDescs $ mbMap2 (ValPerm_Named $ mbLift npn) args off
+    [nuMP| Perm_LLVMFrame _ |] -> return []
+    [nuMP| Perm_LOwned _ _ _ ps_in ps_out |] ->
+      do ds_in <- translateDescs ps_in
+         d_out <- translateDesc ps_out
+         return [arrowTpDescMulti ds_in d_out]
+    [nuMP| Perm_LOwnedSimple _ _ |] -> return []
+    [nuMP| Perm_LCurrent _ |] -> return []
+    [nuMP| Perm_LFinished |] -> return []
+    [nuMP| Perm_Struct ps |] -> translateDescs ps
+    [nuMP| Perm_Fun fun_perm |] -> translateDescs fun_perm
+    [nuMP| Perm_BVProp _ |] ->
+      -- NOTE: Translating BVProps to type descriptions would require a lot more
+      -- type-level expressions, including a type-level kind for equality types,
+      -- that would greatly complicate the definition of type descriptions.
+      -- Instead, we choose not to translate them, meaning they cannot be used
+      -- in places where type descriptions are required, such as the types of
+      -- functions or lowned permissions.
+      panic "translateDescs"
+      ["Cannot translate BV propositions to type descriptions"]
+    [nuMP| Perm_Any |] -> return []
 
 
 -- | Translate an array permission to a 'TypeTrans' for an array permission
@@ -3086,6 +3177,18 @@ instance (1 <= w, KnownNat w, TransInfo info) =>
                                                (LLVMArrayPermTrans ctx w)) where
   translate mb_ap =
     (\(_,_,_,tp_trans) -> tp_trans) <$> translateLLVMArrayPerm mb_ap
+
+instance (1 <= w, KnownNat w) => TranslateDescs (LLVMArrayPerm w) where
+  translateDescs mb_ap =
+    do let w = natVal2 mb_ap
+       let w_term = natOpenTerm w
+       len_term <- translateDesc1 $ mbLLVMArrayLen mb_ap
+       -- To translate mb_ap to a type description, we form the block permission
+       -- for the first cell of the array and translate that to a type desc
+       elem_d <-
+         translateDesc $ mbMapCl $(mkClosed [| Perm_LLVMBlock .
+                                             llvmArrayPermHead |]) mb_ap
+       return [bvVecTpDesc w_term len_term elem_d]
 
 {-
 -- | Translate an 'LLVMArrayBorrow' into an 'LLVMArrayBorrowTrans'. This
@@ -4608,29 +4711,21 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: _) -> pctx :>: typeTransF ttrans [])
          m
 
-  -- Intro for a recursive named shape applies the fold function to the
-  -- translations of the arguments plus the translations of the proofs of the
-  -- permissions
+  -- Intro for a recursive named shape applies the fold function for the shape
   [nuMP| SImpl_IntroLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ _ _ |] <- mbMatch $ fmap namedShapeBody nmsh
-    , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
-      {-
+    | [nuMP| RecShapeBody _ _ mb_sh_id |] <- mbMatch $ fmap namedShapeBody nmsh
+    , [nuMP| PExpr_NamedShape _ _ nmsh' mb_args |] <- mbMatch $ fmap llvmBlockShape bp ->
+      -- NOTE: although nmsh' should equal nmsh, it's easier to just use nmsh'
+      -- rather than convince GHC that they have the same argument types
       do ttrans <- translateSimplImplOutHead mb_simpl
-         args_trans <- translate args
-         let args_tms = case exprCtxPureTypeTerms args_trans of
-               Just tms -> map openTermLike tms
-               Nothing -> panic "translateSimplImpl"
-                 ["SImpl_IntroLLVMBlockNamed: found impure terms"]
-         fold_id <-
-           case fold_ids of
-             [nuP| Just (fold_id,_) |] -> return fold_id
-             _ -> error "Folding recursive shape before it is defined!"
+         let args_ctx = mbLift $ fmap namedShapeArgs nmsh'
+         d <- substNamedIndTpDesc (mbLift mb_sh_id) args_ctx mb_args
          withPermStackM id
            (\(pctx :>: ptrans_x) ->
-             pctx :>: typeTransF ttrans [applyGlobalTermLike (mbLift fold_id)
-                                         (args_tms ++ transTerms ptrans_x)])
-           m -}
-      error "FIXME HERE NOWNOW: how to translate recursive named permissions"
+             pctx :>:
+             typeTransF ttrans [applyGlobalOpenTerm "Prelude.foldTpElem"
+                                [d, transTupleTerm ptrans_x]])
+           m
 
   -- Intro for a defined named shape (the other case) is a no-op
     | [nuMP| DefinedShapeBody _ |] <- mbMatch $ fmap namedShapeBody nmsh ->
@@ -4644,31 +4739,23 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
         panic "translateSimplImpl"
         ["SImpl_IntroLLVMBlockNamed, unknown named shape"]
 
-  -- Elim for a recursive named shape applies the unfold function to the
-  -- translations of the arguments plus the translations of the proofs of the
-  -- permissions
+  -- Elim for a recursive named shape applies the unfold function for the shape
   [nuMP| SImpl_ElimLLVMBlockNamed _ bp nmsh |]
-    | [nuMP| RecShapeBody _ _ desc_id |] <- mbMatch $ fmap namedShapeBody nmsh
-    , [nuMP| PExpr_NamedShape _ _ _ args |] <- mbMatch $ fmap llvmBlockShape bp ->
-      {-
+    | [nuMP| RecShapeBody _ _ mb_sh_id |] <- mbMatch $ fmap namedShapeBody nmsh
+    , [nuMP| PExpr_NamedShape _ _ nmsh' mb_args |] <- mbMatch $ fmap llvmBlockShape bp ->
+      -- NOTE: although nmsh' should equal nmsh, it's easier to just use nmsh'
+      -- rather than convince GHC that they have the same argument types
       do ttrans <- translateSimplImplOutHead mb_simpl
-         args_trans <- translate args
-         let args_tms = case exprCtxPureTypeTerms args_trans of
-               Just tms -> map openTermLike tms
-               Nothing -> panic "translateSimplImpl"
-                 ["SImpl_IntroLLVMBlockNamed: found impure terms"]
-         unfold_id <-
-           case fold_ids of
-             [nuP| Just (_,unfold_id) |] -> return unfold_id
-             _ -> error "Unfolding recursive shape before it is defined!"
+         let args_ctx = mbLift $ fmap namedShapeArgs nmsh'
+         d <- substNamedIndTpDesc (mbLift mb_sh_id) args_ctx mb_args
          withPermStackM id
            (\(pctx :>: ptrans_x) ->
-             pctx :>: typeTransF ttrans [applyGlobalTermLike (mbLift unfold_id)
-                                         (args_tms ++ transTerms ptrans_x)])
-           m -}
-      error "FIXME HERE NOWNOW: how to translate recursive named permissions"
+             pctx :>:
+             typeTransF ttrans [applyGlobalOpenTerm "Prelude.unfoldTpElem"
+                                [d, transTupleTerm ptrans_x]])
+           m
 
-  -- Intro for a defined named shape (the other case) is a no-op
+  -- Elim for a defined named shape (the other case) is a no-op
     | [nuMP| DefinedShapeBody _ |] <- mbMatch $ fmap namedShapeBody nmsh ->
       do ttrans <- translateSimplImplOutHead mb_simpl
          withPermStackM id
@@ -4787,56 +4874,43 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\(pctx :>: ptrans) -> pctx :>: typeTransF ttrans [transTerm1 ptrans])
          m
 
-  [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec rp) args _ |] ->
-    error "FIXME HERE NOWNOW: how to handle recursive perms"
-    {-
-    do args_trans <- translate args
-       let args_tms = case exprCtxPureTypeTerms args_trans of
-             Just tms -> map openTermLike tms
-             Nothing -> panic "translateSimplImpl"
-               ["SImpl_FoldNamed: impure arguments"]
-       ttrans <- translateSimplImplOutHead mb_simpl
-       let fold_ident = mbLift $ fmap recPermFoldFun rp
-       withPermStackM id
-         (\(pctx :>: ptrans_x) ->
-           pctx :>: typeTransF ttrans [applyGlobalTermLike fold_ident
-                                       (args_tms ++ transTerms ptrans_x)])
-         m -}
-
-  [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Rec rp) args _ |] ->
-    error "FIXME HERE NOWNOW: how to handle recursive perms"
-    {-
-    do args_trans <- translate args
-       let args_tms = case exprCtxPureTypeTerms args_trans of
-             Just tms -> map openTermLike tms
-             Nothing -> panic "translateSimplImpl"
-               ["SImpl_UnfoldNamed: impure arguments"]
-       ttrans <- tupleTypeTrans <$> translateSimplImplOutHead mb_simpl
-       let unfold_ident = mbLift $ fmap recPermUnfoldFun rp
+  [nuMP| SImpl_FoldNamed _ (NamedPerm_Rec mb_rp) mb_args _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       let args_ctx = mbLift $ fmap (namedPermNameArgs . recPermName) mb_rp
+       let d_id = mbLift $ fmap recPermTransDesc mb_rp
+       d <- substNamedIndTpDesc d_id args_ctx mb_args
        withPermStackM id
          (\(pctx :>: ptrans_x) ->
            pctx :>:
-           typeTransF ttrans [applyGlobalTermLike unfold_ident
-                              (args_tms ++ [transTerm1 ptrans_x])])
-         m -}
+           typeTransF ttrans [applyGlobalOpenTerm "Prelude.foldTpElem"
+                              [d, transTupleTerm ptrans_x]])
+         m
+
+  [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Rec mb_rp) mb_args _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       let args_ctx = mbLift $ fmap (namedPermNameArgs . recPermName) mb_rp
+       let d_id = mbLift $ fmap recPermTransDesc mb_rp
+       d <- substNamedIndTpDesc d_id args_ctx mb_args
+       withPermStackM id
+         (\(pctx :>: ptrans_x) ->
+           pctx :>:
+           typeTransF ttrans [applyGlobalOpenTerm "Prelude.unfoldTpElem"
+                              [d, transTupleTerm ptrans_x]])
+         m
 
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Defined _) _ _ |] ->
-    error "FIXME HERE NOWNOW: how to handle recursive perms"
-    {-
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans (transTerms ptrans))
-         m -}
+         m
 
   [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Defined _) _ _ |] ->
-    error "FIXME HERE NOWNOW: how to handle recursive perms"
-    {-
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans) ->
            pctx :>: typeTransF ttrans (transTerms ptrans))
-         m -}
+         m
 
   {-
   [nuMP| SImpl_Mu _ _ _ _ |] ->
