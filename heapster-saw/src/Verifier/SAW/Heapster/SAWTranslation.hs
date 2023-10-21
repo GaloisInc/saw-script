@@ -6675,27 +6675,15 @@ translateCompleteTypeInCtx sc env args ret =
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
   piExprCtx args (return $ typeTransType1 $ fst $ translateType $ mbLift ret)
 
-{-
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a pure
--- SAW core function type, not in the @SpecM@ monad. It is an error if any of
--- the permissions are impure, such as @lowned@ permissions.
-translateCompletePureFun :: SharedContext -> PermEnv
+-- SAW core function type, not in the @SpecM@ monad
+translateCompleteFunType :: SharedContext -> PermEnv
                          -> CruCtx ctx -- ^ Type arguments
                          -> Mb ctx (ValuePerms args) -- ^ Input perms
                          -> Mb ctx (ValuePerm ret) -- ^ Return type perm
                          -> IO Term
-translateCompletePureFun sc env ctx ps_in p_out =
-  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $ piExprCtxPure ctx $
-  do ps_in_trans <- translate ps_in
-     p_out_trans <- translate p_out
-     let justOrPanic (Just x) = x
-         justOrPanic Nothing =
-           panic "translateCompletePureFun"
-           ["Attempt to translate an impure permission to a pure type"]
-     let (tps_in, tp_out) =
-           justOrPanic
-           ((,) <$>
-            mapM typeDescPureType (typeTransDescs ps_in_trans) <*>
-            typeDescPureType (tupleOfTypeDescs $ typeTransDescs p_out_trans))
+translateCompleteFunType sc env ctx ps_in p_out =
+  completeNormOpenTerm sc $ runNilTypeTransM env noChecks $ piExprCtx ctx $
+  do tps_in <- typeTransTypes <$> translate ps_in
+     tp_out <- typeTransTupleType <$> translate p_out
      return $ piOpenTermMulti (map ("_",) tps_in) (const tp_out)
--}
