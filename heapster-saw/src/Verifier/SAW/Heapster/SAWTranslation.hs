@@ -1410,6 +1410,15 @@ inExtCtxDescTransM ctx m =
       kdescs = concat $ RL.toList kdesc_ctx in
   inExtDescTransMultiM kdesc_ctx $ m kdescs
 
+-- | Run a 'DescTransM' computation in an expression context that binds a
+-- context of deBruij indices.Pass the concatenated list of all the kind
+-- descriptions of those variables to the sub-computation.
+inCtxDescTransM :: CruCtx ctx -> ([OpenTerm] -> DescTransM ctx a) ->
+                   DescTransM RNil a
+inCtxDescTransM ctx m =
+  case RL.prependRNilEq (cruCtxProxies ctx) of
+    Refl -> inExtCtxDescTransM ctx m
+
 -- | Run a 'DescTransM' computation in any 'TransM' monad satifying 'TransInfo'
 descTransM :: TransInfo info => DescTransM ctx a -> TransM info ctx a
 descTransM =
@@ -6675,15 +6684,50 @@ translateCompleteTypeInCtx sc env args ret =
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
   piExprCtx args (return $ typeTransType1 $ fst $ translateType $ mbLift ret)
 
+-- | Translate a type-like construct to a type description of the type it
+-- represents in a context of free deBruijn indices
+translateCompleteDescInCtx :: TranslateDescs a => SharedContext -> PermEnv ->
+                              CruCtx args -> Mb args a -> IO Term
+translateCompleteDescInCtx sc env args mb_a =
+  completeOpenTerm sc $ runNilTypeTransM env noChecks $ descTransM $
+  inCtxDescTransM args $ const $ translateDesc mb_a
+
 -- | Translate an input list of 'ValuePerms' and an output 'ValuePerm' to a pure
 -- SAW core function type, not in the @SpecM@ monad
-translateCompleteFunType :: SharedContext -> PermEnv
-                         -> CruCtx ctx -- ^ Type arguments
-                         -> Mb ctx (ValuePerms args) -- ^ Input perms
-                         -> Mb ctx (ValuePerm ret) -- ^ Return type perm
-                         -> IO Term
-translateCompleteFunType sc env ctx ps_in p_out =
+translateCompletePureFunType :: SharedContext -> PermEnv
+                             -> CruCtx ctx -- ^ Type arguments
+                             -> Mb ctx (ValuePerms args) -- ^ Input perms
+                             -> Mb ctx (ValuePerm ret) -- ^ Return type perm
+                             -> IO Term
+translateCompletePureFunType sc env ctx ps_in p_out =
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $ piExprCtx ctx $
   do tps_in <- typeTransTypes <$> translate ps_in
      tp_out <- typeTransTupleType <$> translate p_out
      return $ piOpenTermMulti (map ("_",) tps_in) (const tp_out)
+
+-- | Translate a context of arguments to the type
+-- > (arg1:tp1) -> ... (argn:tpn) -> sort 0
+-- of a type-level function over those arguments
+translateExprTypeFunType :: SharedContext -> PermEnv -> CruCtx ctx -> IO Term
+translateExprTypeFunType sc env ctx =
+  liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
+  piExprCtx ctx $ return $ sortOpenTerm $ mkSort 0
+
+-- | Translate a context of arguments plus a type description @T@ that describes
+-- the body of an inductive type over those arguments -- meaning that it uses
+-- deBruijn index 0 for recursive occurrences of itself and the remaining
+-- deBruijn indices for the arguments -- to the type-level function
+--
+-- > \ arg1 -> ... \argn -> tpElemEnv (arg1, ..., argn) (Tp_Ind T)
+--
+-- that takes in the arguments and builds the inductive type
+translateIndTypeFun :: SharedContext -> PermEnv -> CruCtx ctx -> OpenTerm ->
+                       IO Term
+translateIndTypeFun sc env ctx d =
+  liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
+  lambdaExprCtx ctx $
+  do args_tms <- transTerms <$> infoCtx <$> ask
+     let ks = snd $ translateCruCtx ctx
+     return $ applyGlobalOpenTerm "Prelude.tpElemEnv"
+       [tpEnvOpenTerm (zip ks args_tms),
+        ctorOpenTerm "Prelude.Tp_Ind" [d]]

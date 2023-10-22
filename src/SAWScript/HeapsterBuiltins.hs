@@ -137,17 +137,10 @@ import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
 
-inExtCtxDescTransMNil :: CruCtx ctx ->
-                         ([OpenTerm] -> DescTransM ctx a) ->
-                         DescTransM RNil a
-inExtCtxDescTransMNil ctx m = error "FIXME HERE NOW"
+-- | Build the SAW core term for the type @TpDesc@
+tpDescTypeM :: MonadIO m => SharedContext -> m Term
+tpDescTypeM sc = liftIO $ completeOpenTerm sc tpDescTypeOpenTerm
 
--- FIXME: move to SAWTranslation.hs
-translateCompleteTypeDescInCtx :: TranslateDescs a => SharedContext -> PermEnv ->
-                                  CruCtx args -> Mb args a -> IO Term
-translateCompleteTypeDescInCtx sc env args mb_a =
-  completeOpenTerm sc $ runNilTypeTransM env noChecks $ descTransM $
-  inExtCtxDescTransMNil args $ const $ translateDesc mb_a
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
@@ -429,11 +422,9 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_str d_str =
      Some args <- parseCtxString "argument types" env args_str
      Some tp_perm <- parseTypeString "permission type" env tp_str
      sc <- getSharedContext
-     term_tp <- liftIO $
-       translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
-                                               const $ ValuePermRepr tp_perm)
+     term_tp <- liftIO $ translateExprTypeFunType sc env args
      term_ident <- parseAndInsDef henv nm term_tp term_str
-     d_tp <- liftIO $ completeOpenTerm sc tpDescTypeOpenTerm
+     d_tp <- tpDescTypeM sc
      d_ident <- parseAndInsDef henv (nm ++ "__desc") d_tp d_str
      let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident d_ident
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -444,46 +435,38 @@ heapster_define_recursive_perm :: BuiltinContext -> Options -> HeapsterEnv ->
                                   String -> String -> String -> String ->
                                   TopLevel ()
 heapster_define_recursive_perm _bic _opts henv nm args_str tp_str p_str =
-    do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-       let mnm = heapsterEnvSAWModule henv
-       sc <- getSharedContext
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     let mnm = heapsterEnvSAWModule henv
+     sc <- getSharedContext
 
-       -- Parse the arguments, the type, and the body
-       Some args_ctx <- parseParsedCtxString "argument types" env args_str
-       Some tp <- parseTypeString "permission type" env tp_str
-       let args = parsedCtxCtx args_ctx
-           args_p = CruCtxCons args (ValuePermRepr tp)
-       mb_p <- parsePermInCtxString "permission" env
-         (consParsedCtx nm (ValuePermRepr tp) args_ctx) tp p_str
+     -- Parse the arguments, the type, and the body
+     Some args_ctx <- parseParsedCtxString "argument types" env args_str
+     Some tp <- parseTypeString "permission type" env tp_str
+     let args = parsedCtxCtx args_ctx
+         args_p = CruCtxCons args (ValuePermRepr tp)
+     mb_p <- parsePermInCtxString "permission" env
+       (consParsedCtx nm (ValuePermRepr tp) args_ctx) tp p_str
 
-       -- Generate the type description for the body of the recursive perm
-       d_tp <- liftIO $ completeOpenTerm sc tpDescTypeOpenTerm
-       let d_ident = mkSafeIdent mnm (nm ++ "__desc")
-       d_trm <- liftIO $ translateCompleteTypeDescInCtx sc env args_p mb_p
-       liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
+     -- Generate the type description for the body of the recursive perm
+     d_tp <- tpDescTypeM sc
+     let d_ident = mkSafeIdent mnm (nm ++ "__desc")
+     d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_p
+     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
 
-       -- Generate the function \args -> tpElemEnv args (Ind d) from the
-       -- arguments to the type of the translation of the permission as the term
-       let trans_ident = mkSafeIdent mnm nm
-       trans_tp <-
-         liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
-         piExprCtx args $ return $ sortOpenTerm $ mkSort 0
-       trans_trm <-
-         liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
-         lambdaExprCtx args $
-         do args_tms <- transTerms <$> infoCtx <$> ask
-            let ks = snd $ translateCruCtx args
-            return $ applyGlobalOpenTerm "Prelude.tpElemEnv"
-              [tpEnvOpenTerm (zip ks args_tms),
-               ctorOpenTerm "Prelude.Tp_Ind" [globalOpenTerm d_ident]]
-       liftIO $ scInsertDef sc mnm trans_ident trans_tp trans_trm
+     -- Generate the function \args -> tpElemEnv args (Ind d) from the
+     -- arguments to the type of the translation of the permission as the term
+     let trans_ident = mkSafeIdent mnm nm
+     trans_tp <- liftIO $ translateExprTypeFunType sc env args
+     trans_trm <-
+       liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
+     liftIO $ scInsertDef sc mnm trans_ident trans_tp trans_trm
 
-       -- Add the recursive perm to the environment and update henv
-       env' <-
-         permEnvAddRecPermM env nm args tp trans_ident d_ident mb_p
-         NameNonReachConstr
-         (\_ _ -> return NoReachMethods)
-       liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+     -- Add the recursive perm to the environment and update henv
+     env' <-
+       permEnvAddRecPermM env nm args tp trans_ident d_ident mb_p
+       NameNonReachConstr
+       (\_ _ -> return NoReachMethods)
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 {-
 -- | Define a new recursive named permission with the given name, arguments,
