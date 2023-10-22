@@ -4248,47 +4248,32 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_perm)
     Experimental
-    [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
+    [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
     , " Heapster permission named nm with arguments parsed from args and type"
-    , " parsed from tp that translates to the named type trans"
+    , " tp that translates to the SAW core type trans with type description d"
     ]
 
   , prim "heapster_define_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> [String] -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_recursive_perm)
     Experimental
-    [ "heapster_define_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    [ "heapster_define_recursive_perm env nm arg_ctx tp p defined a recursive"
     , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to the permission"
-    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    , " type parsed from tp that translates to permissions p, which can"
+    , " resurively use nm (with no arguments) in those permissions"
     ]
 
-  , prim "heapster_define_irt_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal heapster_define_irt_recursive_perm)
-    Experimental
-    [ "heapster_define_irt_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
-    , " nm with arguments parsed from args_ctx and type parsed from value_type"
-    , " that translates to the appropriate IRT type. The resulting permission"
-    , " is equivalent to the permission p1 \\/ ... \\/ pn, where the pi can"
-    , " contain name."
-    ]
-
-  , prim "heapster_define_irt_recursive_shape"
+  , prim "heapster_define_recursive_shape"
     "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_irt_recursive_shape)
     Experimental
     [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
     , " defines a recursive named Heapser shape named nm with arguments"
-    , " parsed from args_ctx and width w that translates to the appropriate"
-    , " IRT type. The resulting shape is equivalent to the shape body_sh,"
-    , " where body_sh can contain name."
+    , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
+    , " whichx can contain name for recursive occurrences of the shape"
     ]
 
   , prim "heapster_define_reachability_perm"
