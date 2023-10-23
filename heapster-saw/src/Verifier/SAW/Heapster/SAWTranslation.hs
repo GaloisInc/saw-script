@@ -306,12 +306,16 @@ voidTpDesc :: OpenTerm
 voidTpDesc = ctorOpenTerm "Prelude.Tp_Void" []
 
 -- | Build a type description for a free deBruijn index
-varTpDesc :: OpenTerm -> Natural -> OpenTerm
-varTpDesc d ix = ctorOpenTerm "Prelude.Tp_Var" [d, natOpenTerm ix]
+varTpDesc :: Natural -> OpenTerm
+varTpDesc ix = ctorOpenTerm "Prelude.Tp_Var" [natOpenTerm ix]
 
 -- | Build a type-level expression with a given @ExprKind@ for a free variable
 varTpExpr :: OpenTerm -> Natural -> OpenTerm
 varTpExpr ek ix = ctorOpenTerm "Prelude.TpExpr_Var" [ek, natOpenTerm ix]
+
+-- | Build a kind expression of a given kind of a deBruijn index
+varKindExpr :: OpenTerm -> Natural -> OpenTerm
+varKindExpr d ix = applyGlobalOpenTerm "Prelude.varKindExpr" [d,natOpenTerm ix]
 
 -- | Build the type description @Tp_Subst T K e@ that represents an explicit
 -- substitution of expression @e@ of kind @K@ into type description @T@
@@ -1740,15 +1744,19 @@ translateBVDesc mb_e =
          let i_expr = translateBVConstDesc w $ mbLift mb_i
          return $ bvSumTpExprs (natValue w) (fs_exprs ++ [i_expr])
 
+-- translateDescs on a variable translates to a list of variable kind exprs
+instance TranslateDescs (ExprVar a) where
+  translateDescs mb_x =
+    translateVarDesc mb_x >>= \case
+    Left etrans -> return $ exprTransDescs etrans
+    Right (ix, ds) -> return $ zipWith varKindExpr ds [ix..]
+
 -- translateDescs on permission expressions yield a list of SAW core terms of
 -- types @kindExpr K1@, @kindExpr K2@, etc., one for each kind @K@ in the list
 -- of kind descriptions returned by translateType
 instance TranslateDescs (PermExpr a) where
   translateDescs mb_e = case mbMatch mb_e of
-    [nuMP| PExpr_Var mb_x |] ->
-      translateVarDesc mb_x >>= \case
-      Left etrans -> return $ exprTransDescs etrans
-      Right (ix, ds) -> return $ zipWith varTpDesc ds [ix..]
+    [nuMP| PExpr_Var mb_x |] -> translateDescs mb_x
     [nuMP| PExpr_Unit |] -> return []
     [nuMP| PExpr_Bool b |] ->
       return [constTpExpr boolKindDesc $ boolOpenTerm $ mbLift b]
@@ -3042,12 +3050,8 @@ instance TranslateDescs (ValuePerm a) where
              translateDescs (mbMap2 (unfoldDefinedPerm dp) args off)
            Nothing -> panic "translate" ["Unknown permission name!"]
     [nuMP| ValPerm_Conj ps |] -> translateDescs ps
-    [nuMP| ValPerm_Var mb_x _ |] ->
-      translateVarDesc mb_x >>= \case
-      Left etrans -> return $ fst $ unETransPerm etrans
-      Right (ix, ds) -> return $ zipWith varTpDesc ds [ix..]
-    [nuMP| ValPerm_False |] ->
-      return [voidTpDesc]
+    [nuMP| ValPerm_Var mb_x _ |] -> translateDescs mb_x
+    [nuMP| ValPerm_False |] -> return [voidTpDesc]
 
 
 instance TransInfo info =>
@@ -6091,7 +6095,7 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
                        \(_ :>: ret) fperm -> (PExpr_Var ret, sz):fperm]
       -- the unitTermLike argument is because ptrans_tp is a memblock permission
       -- with an empty shape; the empty shape expects a unit argument
-      :>: typeTransF ptrans_tp [unitTermLike])
+      :>: typeTransF ptrans_tp [])
     m
 
   [nuMP| TypedLLVMCreateFrame |] ->

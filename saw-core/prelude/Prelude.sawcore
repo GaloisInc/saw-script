@@ -2363,6 +2363,14 @@ kindExpr K =
     TpDesc
     K;
 
+-- An expression (TpDesc or TpExpr) of a given kind for a variable
+varKindExpr : (K:KindDesc) -> Nat -> kindExpr K;
+varKindExpr K =
+  KindDesc#rec (\ (K:KindDesc) -> Nat -> kindExpr K)
+    (\ (EK:ExprKind) (ix:Nat) -> TpExpr_Var EK ix)
+    (\ (ix:Nat) -> Tp_Var ix)
+    K;
+
 -- Build an explicit substitution type for an arbitrary kind, using either the
 -- Tp_TpSubst or Tp_ExprSubst constructor
 Tp_Subst : TpDesc -> (K:KindDesc) -> kindExpr K -> TpDesc;
