@@ -13,8 +13,6 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.HeapsterBuiltins
--- FIXME HERE NOW
-{-
        ( heapster_init_env
        , heapster_init_env_debug
        , heapster_init_env_from_file
@@ -31,9 +29,8 @@ module SAWScript.HeapsterBuiltins
        -- , heapster_typecheck_fun_rename_rs
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
-       , heapster_define_irt_recursive_perm
-       , heapster_define_irt_recursive_shape
        , heapster_define_reachability_perm
+       , heapster_define_recursive_shape
        , heapster_define_perm
        , heapster_define_llvmshape
        , heapster_define_opaque_llvmshape
@@ -60,7 +57,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_dump_ide_info
        , heapster_set_debug_level
        , heapster_set_translation_checks
-       ) -} where
+       ) where
 
 import Data.Maybe
 import Data.String
@@ -73,7 +70,6 @@ import Control.Applicative ( (<|>) )
 import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
-import Control.Monad.IO.Class
 import qualified Control.Monad.Fail as Fail
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
@@ -82,7 +78,6 @@ import GHC.TypeLits
 import Data.Text (Text)
 
 import Data.Binding.Hobbits hiding (sym)
-import qualified Data.Type.RList as RL
 
 import Data.Parameterized.BoolRepr
 import qualified Data.Parameterized.Context as Ctx
@@ -909,7 +904,6 @@ heapster_find_trait_method_symbol bic opts henv str =
     trait = intercalate ".." $ splitOn "::" colonTrait
 
 
-{-
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
 heapster_assume_fun_rename :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -939,19 +933,7 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
                                            (globalOpenTerm term_ident)
         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
 
-heapster_translate_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
-                                String -> TopLevel ()
-heapster_translate_rust_type _bic _opts henv perms_string =
-  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     let w64 = (knownNat @64::NatRepr 64)
-     leq_proof <- case decideLeq (knownNat @1) w64 of
-       Left pf -> return pf
-       Right _ -> fail "LLVM arch width is 0!"
-     withKnownNat w64 $ withLeqProof leq_proof $ do
-        Some3FunPerm fun_perm <-
-          parseSome3FunPermFromRust env w64 perms_string
-        liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
-        
+
 -- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
 -- associated with the supplied Heapster environment, and return its identifier
 insPrimitive :: HeapsterEnv -> String -> Term -> TopLevel Ident
@@ -974,7 +956,7 @@ insPrimitive henv nm tp =
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
 heapster_assume_fun_rename_prim :: BuiltinContext -> Options -> HeapsterEnv ->
-                              String -> String -> String -> TopLevel ()
+                                   String -> String -> String -> TopLevel ()
 heapster_assume_fun_rename_prim _bic _opts henv nm nm_to perms_string =
   do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
                               (lookupModContainingSym henv nm)
@@ -1042,12 +1024,21 @@ heapster_assume_fun_multi _bic _opts henv nm perms_terms_strings =
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
+-- | Type-check a list of potentially mutually recursive functions, each against
+-- its own function permission, specified as a list of pairs of a function
+-- name and a 'String' representation of its permission
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
                                [(String, String)] -> TopLevel ()
 heapster_typecheck_mut_funs bic opts henv =
   heapster_typecheck_mut_funs_rename bic opts henv .
   map (\(nm, perms_string) -> (nm, nm, perms_string))
 
+-- | Type-check a list of potentially mutually recursive functions, each against
+-- its own function permission, potentially renaming the functions in the
+-- generated SAW core specifications. The functions are specified as a list of
+-- triples @(nm,nm_to,perms)@ of the function symbol @nm@ in the binary, the
+-- desired name @mn_to@ for the SAW core specification, and the permissions
+-- @perms@ given as a 'String'
 heapster_typecheck_mut_funs_rename ::
   BuiltinContext -> Options -> HeapsterEnv ->
   [(String, String, String)] -> TopLevel ()
@@ -1098,11 +1089,14 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
      liftIO $ modifyIORef (heapsterEnvTCFGs henv) (\old -> map Some tcfgs ++ old)
 
 
+-- | Type-check a single function against a function permission
 heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
                           String -> String -> TopLevel ()
 heapster_typecheck_fun bic opts henv fn_name perms_string =
   heapster_typecheck_mut_funs bic opts henv [(fn_name, perms_string)]
 
+-- | Type-check a single function against a function permission and generate a
+-- SAW core specification with a potentially different name
 heapster_typecheck_fun_rename :: BuiltinContext -> Options -> HeapsterEnv ->
                                  String -> String -> String -> TopLevel ()
 heapster_typecheck_fun_rename bic opts henv fn_name fn_name_to perms_string =
@@ -1133,6 +1127,7 @@ heapster_set_event_type _bic _opts henv term_string =
      liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env ->
        env { permEnvEventType = EventType ev_id }
 
+-- | Fetch the SAW core definition associated with a name and print it
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()
 heapster_print_fun_trans _bic _opts henv fn_name =
@@ -1144,6 +1139,8 @@ heapster_print_fun_trans _bic _opts henv fn_name =
        liftIO $ scRequireDef sc $ mkSafeIdent saw_modname fn_name
      liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
 
+-- | Export all definitions in the SAW core module associated with a Heapster
+-- environment to a Coq file with the given name
 heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv ->
                        String -> TopLevel ()
 heapster_export_coq _bic _opts henv filename =
@@ -1158,18 +1155,38 @@ heapster_export_coq _bic _opts henv filename =
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 
+-- | Set the Hepaster debug level
 heapster_set_debug_level :: BuiltinContext -> Options -> HeapsterEnv ->
                             Int -> TopLevel ()
 heapster_set_debug_level _ _ env l =
   liftIO $ writeIORef (heapsterEnvDebugLevel env) (DebugLevel l)
 
+-- | Turn on or off the translation checks in the Heapster-to-SAW translation
 heapster_set_translation_checks :: BuiltinContext -> Options -> HeapsterEnv ->
                                    Bool -> TopLevel ()
 heapster_set_translation_checks _ _ env f =
   liftIO $ writeIORef (heapsterEnvChecksFlag env) (ChecksFlag f)
 
+-- | Parse a Rust type from an input string, translate it to a Heapster function
+-- permission, and print out that Heapster permission on stdout
+heapster_translate_rust_type :: BuiltinContext -> Options -> HeapsterEnv ->
+                                String -> TopLevel ()
+heapster_translate_rust_type _bic _opts henv perms_string =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     let w64 = (knownNat @64::NatRepr 64)
+     leq_proof <- case decideLeq (knownNat @1) w64 of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     withKnownNat w64 $ withLeqProof leq_proof $ do
+        Some3FunPerm fun_perm <-
+          parseSome3FunPermFromRust env w64 perms_string
+        liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
+
+-- | Parse a Heapster function permission from a 'String' and print it to
+-- stdout, using a particular symbol in an LLVM module as the type of the
+-- function that the permission applies to
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
-                       String -> String ->  TopLevel ()
+                       String -> String -> TopLevel ()
 heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =
   do let env = heapster_default_env -- FIXME: env should be an argument
      let _arch = llvmModuleArchRepr lm
@@ -1182,10 +1199,11 @@ heapster_parse_test _bic _opts _some_lm@(Some lm) fn_name perms_string =
                                                 ret perms_string
      liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
 
-heapster_dump_ide_info :: BuiltinContext -> Options -> HeapsterEnv -> String -> TopLevel ()
+-- | Dump the IDE information contained in a Heapster environment to a JSON file
+heapster_dump_ide_info :: BuiltinContext -> Options -> HeapsterEnv -> String ->
+                          TopLevel ()
 heapster_dump_ide_info _bic _opts henv filename = do
   -- heapster_typecheck_mut_funs bic opts henv [(fnName, perms)]
   penv <- io $ readIORef (heapsterEnvPermEnvRef henv)
   tcfgs <- io $ readIORef (heapsterEnvTCFGs henv)
   io $ HIDE.printIDEInfo penv tcfgs filename emptyPPInfo
--}

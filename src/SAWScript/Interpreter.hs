@@ -4266,18 +4266,8 @@ primitives = Map.fromList
     , " resurively use nm (with no arguments) in those permissions"
     ]
 
-  , prim "heapster_define_recursive_shape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_define_irt_recursive_shape)
-    Experimental
-    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
-    , " defines a recursive named Heapser shape named nm with arguments"
-    , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
-    , " whichx can contain name for recursive occurrences of the shape"
-    ]
-
   , prim "heapster_define_reachability_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_reachability_perm)
     Experimental
     [ "heapster_define_recursive_perm env name arg_ctx value_type"
@@ -4286,6 +4276,16 @@ primitives = Map.fromList
     , " type parsed from value_type that translates to the named type"
     , " trans_tp. The resulting permission is equivalent to he permission"
     , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    ]
+
+  , prim "heapster_define_recursive_shape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_recursive_shape)
+    Experimental
+    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
+    , " defines a recursive named Heapser shape named nm with arguments"
+    , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
+    , " whichx can contain name for recursive occurrences of the shape"
     ]
 
   , prim "heapster_define_perm"
@@ -4310,7 +4310,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_llvmshape)
     Experimental
-    [ "heapster_define_opaque_llvmshape henv nm w args len tp defines a Heapster"
+    [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
     , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
     , " Heapster does not know or care about the contents of memory of this shape"
     , " but instead treats that memory as an opaque object, defined only by its"
@@ -4319,8 +4319,9 @@ primitives = Map.fromList
     , " The henv argument is the Heapster environment this new shape is added to,"
     , " nm is its name, args is a context of argument variables for this shape,"
     , " len is an expression for the length of the shape in terms of the arguments,"
-    , " and tp gives the translation of the shape as a SAW core type over the"
-    , " translation of the arguments to SAW core variables."
+    , " tp gives the translation of the shape as a SAW core type over the"
+    , " translation of the arguments to SAW core variables, and d is a SAW core"
+    , " term of type TpDesc that describes the SAW core type."
     ]
 
   , prim "heapster_define_rust_type"
