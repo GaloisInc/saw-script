@@ -3713,13 +3713,13 @@ catchPImplTerm t t_catch =
 -- | The failure 'PImplTerm', which immediately calls its failure continuation
 failPImplTerm :: PImplTerm ext blocks tops rets ps ctx
 failPImplTerm =
-  PImplTerm $ \k -> compReturnTypeM >>= \tp -> return (implFailContTerm tp k)
+  PImplTerm $ \k -> returnTypeM >>= \tp -> return (implFailContTerm tp k)
 
 -- | Return the failure 'PImplTerm' like 'failPImplTerm' but use an alternate
 -- error message in the case that the failure continuation is an error message
 failPImplTermAlt :: String -> PImplTerm ext blocks tops rets ps ctx
 failPImplTermAlt msg = PImplTerm $ \k ->
-  compReturnTypeM >>= \tp ->
+  returnTypeM >>= \tp ->
   return (implFailContTerm tp (case k of
                                   ImplFailContMsg ev _ -> ImplFailContMsg ev msg
                                   _ -> k))
@@ -5308,9 +5308,10 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
     return $ PImplTerm $ \k ->
     do prop_tp_trans <- translate prop
-       ret_tp <- compReturnTypeM
+       ret_tp_m <- compReturnTypeM
+       ret_tp <- returnTypeM
        applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp
+         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "eq_pf" prop_tp_trans
            (\prop_trans ->
@@ -5337,7 +5338,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     , applyGlobalTransM "Prelude.bvEq"
       [ return (natOpenTerm w), translate1 e1, translate1 e2 ]
     , (\ret_tp ->
-        implFailAltContTerm ret_tp (mbLift prop_str) k) <$> compReturnTypeM
+        implFailAltContTerm ret_tp (mbLift prop_str) k) <$> returnTypeM
     , withPermStackM (:>: translateVar x)
       (:>: PTrans_Conj [APTrans_BVProp (BVPropTrans prop unitOpenTerm)]) $
       popPImplTerm trans k]
@@ -5364,9 +5365,10 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
     return $ PImplTerm $ \k ->
     do prop_tp_trans <- translate prop
-       ret_tp <- compReturnTypeM
+       ret_tp_m <- compReturnTypeM
+       ret_tp <- returnTypeM
        applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp
+         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ult_pf" prop_tp_trans
            (\prop_trans ->
@@ -5398,9 +5400,10 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
     return $ PImplTerm $ \k ->
     do prop_tp_trans <- translate prop
-       ret_tp <- compReturnTypeM
+       ret_tp_m <- compReturnTypeM
+       ret_tp <- returnTypeM
        applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp
+         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ule_pf" prop_tp_trans
            (\prop_trans ->
@@ -5434,9 +5437,10 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
     return $ PImplTerm $ \k ->
     do prop_tp_trans <- translate prop
-       ret_tp <- compReturnTypeM
+       ret_tp_m <- compReturnTypeM
+       ret_tp <- returnTypeM
        applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp
+         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ule_diff_pf" prop_tp_trans
            (\prop_trans ->
