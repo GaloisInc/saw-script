@@ -412,6 +412,7 @@ heapster_get_cfg _ _ henv nm =
     Just (Some lm) -> llvm_cfg (Some lm) nm
     Nothing -> fail ("Could not find CFG for symbol: " ++ nm)
 
+
 -- | Define a new opaque named permission with the given name, arguments, and
 -- type, that translates to the given named SAW core definition
 heapster_define_opaque_perm :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -428,6 +429,7 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_str d_str =
      d_ident <- parseAndInsDef henv (nm ++ "__desc") d_tp d_str
      let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident d_ident
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
 
 -- | Define a new recursive named permission with the given name, arguments,
 -- type, and permission that it unfolds to
@@ -455,18 +457,116 @@ heapster_define_recursive_perm _bic _opts henv nm args_str tp_str p_str =
 
      -- Generate the function \args -> tpElemEnv args (Ind d) from the
      -- arguments to the type of the translation of the permission as the term
-     let trans_ident = mkSafeIdent mnm nm
-     trans_tp <- liftIO $ translateExprTypeFunType sc env args
-     trans_trm <-
+     let transf_ident = mkSafeIdent mnm nm
+     transf_tp <- liftIO $ translateExprTypeFunType sc env args
+     transf_trm <-
        liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
-     liftIO $ scInsertDef sc mnm trans_ident trans_tp trans_trm
+     liftIO $ scInsertDef sc mnm transf_ident transf_tp transf_trm
 
      -- Add the recursive perm to the environment and update henv
      env' <-
-       permEnvAddRecPermM env nm args tp trans_ident d_ident mb_p
+       permEnvAddRecPermM env nm args tp transf_ident d_ident mb_p
        NameNonReachConstr
        (\_ _ -> return NoReachMethods)
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+
+-- | Define a new recursive named permission with the given name, arguments,
+-- type, and permission that it unfolds to, that forms a reachability
+-- permission, meaning it has the form
+--
+-- > P<args,x> := eq(x) or q
+--
+-- where the name @P@ occurs exactly once and @x@ occurs not at all in
+-- permission @q@. The last input should define a transitivity method as
+-- described in the documentation for the 'ReachMethods' type.
+heapster_define_reachability_perm :: BuiltinContext -> Options -> HeapsterEnv ->
+                                     String -> String -> String -> String ->
+                                     String -> TopLevel ()
+heapster_define_reachability_perm _bic _opts henv nm args_str tp_str p_str trans_fun_str =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     let mnm = heapsterEnvSAWModule henv
+     sc <- getSharedContext
+
+     -- Parse the arguments, the type, and the translation type
+     Some (tp :: TypeRepr tp) <- parseTypeString "permission type" env tp_str
+     (Some pre_args_ctx,
+      last_args_ctx :: ParsedCtx (RNil :> tp)) <-
+       do some_args_ctx <- parseParsedCtxString "argument types" env args_str
+          case some_args_ctx of
+            Some args_ctx
+              | CruCtxCons _ tp' <- parsedCtxCtx args_ctx
+              , Just Refl <- testEquality tp tp' ->
+                return (Some (parsedCtxUncons args_ctx), parsedCtxLast args_ctx)
+            _ -> Fail.fail "Incorrect type for last argument of reachability perm"
+     let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
+     let args = parsedCtxCtx args_ctx
+         args_p = CruCtxCons args (ValuePermRepr tp)
+     mb_p <- parsePermInCtxString "permission" env
+       (consParsedCtx nm (ValuePermRepr tp) args_ctx) tp p_str
+
+     -- Generate the type description for the body of the recursive perm
+     d_tp <- tpDescTypeM sc
+     let d_ident = mkSafeIdent mnm (nm ++ "__desc")
+     d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_p
+     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
+
+     -- Generate the function \args -> tpElemEnv args (Ind d) from the
+     -- arguments to the type of the translation of the permission as the term
+     let transf_ident = mkSafeIdent mnm nm
+     transf_tp <- liftIO $ translateExprTypeFunType sc env args
+     transf_trm <-
+       liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
+     liftIO $ scInsertDef sc mnm transf_ident transf_tp transf_trm
+
+     -- Add the recursive perm to the environment and update henv
+     env' <-
+       permEnvAddRecPermM env nm args tp transf_ident d_ident mb_p
+       NameReachConstr
+       (\npn tmp_env ->
+           -- Return the ReachMethods structure, which contains trans_ident.
+           -- Typecheck trans_ident with x:P<args,y>, y:P<args,z> -o x:P<args,z>
+           do trans_fun_tp <-
+                liftIO $
+                translateCompletePureFunType sc tmp_env (CruCtxCons args tp)
+                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: y :>: z) ->
+                  MNil :>:
+                  ValPerm_Named npn (namesToExprs (ns :>: y)) NoPermOffset :>:
+                  ValPerm_Named npn (namesToExprs (ns :>: z)) NoPermOffset)
+                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: _ :>: z) ->
+                  ValPerm_Named npn (namesToExprs (ns :>: z)) NoPermOffset)
+              trans_ident <-
+                parseAndInsDef henv ("trans_" ++ nm) trans_fun_tp trans_fun_str
+              return (ReachMethods trans_ident))
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+
+-- | Helper function to add a recursive named shape to a 'PermEnv', adding all
+-- the required identifiers to the given SAW core module
+addRecNamedShape :: 1 <= w => SharedContext -> PermEnv ->
+                    ModuleName -> String -> CruCtx args -> NatRepr w ->
+                    Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
+                    TopLevel PermEnv
+addRecNamedShape sc env mnm nm args w mb_sh =
+  -- Generate the type description for the body of the recursive shape
+  do d_tp <- tpDescTypeM sc
+     let d_ident = mkSafeIdent mnm (nm ++ "__desc")
+         args_p = CruCtxCons args (LLVMShapeRepr w)
+     d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_sh
+     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
+
+     -- Generate the function \args -> tpElemEnv args (Ind d) from the
+     -- arguments to the type of the translation of the permission as the term
+     let transf_ident = mkSafeIdent mnm nm
+     transf_tp <- liftIO $ translateExprTypeFunType sc env args
+     transf_trm <-
+       liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
+     liftIO $ scInsertDef sc mnm transf_ident transf_tp transf_trm
+
+     -- Add the recursive shape to the environment and update henv
+     let nmsh = NamedShape nm args $ RecShapeBody mb_sh transf_ident d_ident
+     return $ withKnownNat w $ permEnvAddNamedShape env nmsh
+
 
 -- | Define a new recursive named permission with the given name, arguments,
 -- type, and memory shape that it unfolds to
@@ -483,107 +583,13 @@ heapster_define_recursive_shape _bic _opts henv nm w_int args_str body_str =
        failOnNothing "Shape width must be positive" $ someKnownNatGeq1 w_int
      Some args_ctx <- parseParsedCtxString "argument types" env args_str
      let args = parsedCtxCtx args_ctx
-         args_p = CruCtxCons args (LLVMShapeRepr w)
      mb_sh <- parseExprInCtxString env (LLVMShapeRepr w)
        (consParsedCtx nm (LLVMShapeRepr w) args_ctx) body_str
 
-     -- Generate the type description for the body of the recursive shape
-     d_tp <- tpDescTypeM sc
-     let d_ident = mkSafeIdent mnm (nm ++ "__desc")
-     d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_sh
-     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
-
-     -- Generate the function \args -> tpElemEnv args (Ind d) from the
-     -- arguments to the type of the translation of the permission as the term
-     let trans_ident = mkSafeIdent mnm nm
-     trans_tp <- liftIO $ translateExprTypeFunType sc env args
-     trans_trm <-
-       liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
-     liftIO $ scInsertDef sc mnm trans_ident trans_tp trans_trm
-
-     -- Add the recursive shape to the environment and update henv
-     let nmsh = NamedShape nm args $ RecShapeBody mb_sh trans_ident d_ident
-     let env' = permEnvAddNamedShape env nmsh
+     -- Add the shape to the current environment
+     env' <- addRecNamedShape sc env mnm nm args w mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
-{-
--- | Define a new reachability permission
-heapster_define_reachability_perm :: BuiltinContext -> Options -> HeapsterEnv ->
-                                     String -> String -> String -> String ->
-                                     String -> String -> String -> String ->
-                                     TopLevel ()
-heapster_define_reachability_perm _bic _opts henv
-  nm args_str tp_str p_str trans_tp_str fold_fun_str unfold_fun_str trans_fun_str =
-    do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-       sc <- getSharedContext
-
-       -- Parse the arguments, the type, and the translation type
-       Some (tp :: TypeRepr tp) <- parseTypeString "permission type" env tp_str
-       (Some pre_args_ctx,
-        last_args_ctx :: ParsedCtx (RNil :> tp)) <-
-         do some_args_ctx <- parseParsedCtxString "argument types" env args_str
-            case some_args_ctx of
-              Some args_ctx
-                | CruCtxCons _ tp' <- parsedCtxCtx args_ctx
-                , Just Refl <- testEquality tp tp' ->
-                  return (Some (parsedCtxUncons args_ctx), parsedCtxLast args_ctx)
-              _ -> Fail.fail "Incorrect type for last argument of reachability perm"
-       let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
-       let args = parsedCtxCtx args_ctx
-       trans_tp <- liftIO $ 
-         translateCompleteTypeInCtx sc env args $
-         nus (cruCtxProxies args) $ const $ ValuePermRepr tp
-       trans_tp_ident <- parseAndInsDef henv nm trans_tp trans_tp_str
-
-       -- Use permEnvAddRecPermM to tie the knot of adding a recursive
-       -- permission whose cases and fold/unfold identifiers depend on that
-       -- recursive permission being defined
-       env' <-
-         permEnvAddRecPermM env nm args tp trans_tp_ident NameReachConstr
-         (\_ tmp_env ->
-           -- Return the disjunctive cases, which for P<args,e> are eq(e) and p
-           do p <- parsePermInCtxString "disjunctive perm" tmp_env args_ctx tp p_str
-              return [nus (cruCtxProxies args) (\(_ :>: n) ->
-                                                 ValPerm_Eq $ PExpr_Var n),
-                      p])
-         (\npn cases tmp_env ->
-           -- Return the Idents for the fold and unfold functions, which
-           -- includes type-checking them, using or_tp = \args. rec perm body,
-           -- where the body = the or of all the cases, and nm_tp =
-           -- \args.P<args>
-           do let or_tp = foldr1 (mbMap2 ValPerm_Or) cases
-                  nm_tp = nus (cruCtxProxies args)
-                    (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
-              -- Typecheck fold against body -o P<args>
-              fold_fun_tp <- liftIO $
-                translateCompletePureFun sc tmp_env args (singletonValuePerms <$>
-                                                          or_tp) nm_tp
-              -- Typecheck fold against P<args> -o body
-              unfold_fun_tp <- liftIO $
-                translateCompletePureFun sc tmp_env args (singletonValuePerms <$>
-                                                          nm_tp) or_tp
-              -- Build identifiers foldXXX and unfoldXXX
-              fold_ident <-
-                parseAndInsDef henv ("fold" ++ nm) fold_fun_tp fold_fun_str
-              unfold_ident <-
-                parseAndInsDef henv ("unfold" ++ nm) unfold_fun_tp unfold_fun_str
-              return (fold_ident, unfold_ident))
-         (\npn tmp_env ->
-           -- Return the ReachMethods structure, which contains trans_ident.
-           -- Typecheck trans_ident with x:P<args,y>, y:P<args,z> -o x:P<args,z>
-           do trans_fun_tp <-
-                liftIO $
-                translateCompletePureFun sc tmp_env (CruCtxCons args tp)
-                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: y :>: z) ->
-                  MNil :>:
-                  ValPerm_Named npn (namesToExprs (ns :>: y)) NoPermOffset :>:
-                  ValPerm_Named npn (namesToExprs (ns :>: z)) NoPermOffset)
-                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: _ :>: z) ->
-                  ValPerm_Named npn (namesToExprs (ns :>: z)) NoPermOffset)
-              trans_ident <-
-                parseAndInsDef henv ("trans" ++ nm) trans_fun_tp trans_fun_str
-              return (ReachMethods trans_ident))
-       liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Define a new named permission with the given name, arguments, and type
 -- that is equivalent to the given permission.
@@ -595,10 +601,11 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      Some args_ctx <- parseParsedCtxString "argument types" env args_str
      let args = parsedCtxCtx args_ctx
      Some tp_perm <- parseTypeString "permission type" env tp_str
-     perm <- parsePermInCtxString "disjunctive perm" env
+     perm <- parsePermInCtxString "permission body" env
                                    args_ctx tp_perm perm_string
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
 
 -- | Define a new named llvm shape with the given name, pointer width,
 -- arguments, and definition as a shape
@@ -615,14 +622,15 @@ heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
      let env' = withKnownNat w $ permEnvAddDefinedShape env nm args mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
+
 -- | Define a new opaque llvm shape with the given name, pointer width,
--- arguments, expression for the length in bytes, and SAW core expression for a
+-- arguments, expression for the length in bytes, SAW core expression for a
 -- type-level function from the Heapster translations of the argument types to a
--- SAW core type
+-- SAW core type, and SAW core expression for a type description of that type
 heapster_define_opaque_llvmshape :: BuiltinContext -> Options -> HeapsterEnv ->
-                                    String -> Int -> String -> String -> String ->
-                                    TopLevel ()
-heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_str =
+                                    String -> Int -> String -> String ->
+                                    String -> String -> TopLevel ()
+heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_str d_str =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      (Some (Pair w LeqProof)) <-
        failOnNothing "Shape width must be positive" $ someNatGeq1 w_int
@@ -630,17 +638,21 @@ heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_st
      let args = parsedCtxCtx args_ctx
      mb_len <- parseExprInCtxString env (BVRepr w) args_ctx len_str
      sc <- getSharedContext
+     d_tp <- tpDescTypeM sc
+     d_id <- parseAndInsDef henv (nm ++ "__desc") d_tp d_str
      tp_tp <- liftIO $
        translateCompleteTypeInCtx sc env args $
        nus (cruCtxProxies args) $ const $ ValuePermRepr $ LLVMShapeRepr w
      tp_id <- parseAndInsDef henv nm tp_tp tp_str
-     let env' = withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id
+     let env' =
+           withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id d_id
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
 
 -- | Define a new named LLVM shape from a Rust type declaration and an optional
 -- crate name that qualifies the type name
 heapster_define_rust_type_qual_opt :: BuiltinContext -> Options -> HeapsterEnv ->
-                                       Maybe String -> String -> TopLevel ()
+                                      Maybe String -> String -> TopLevel ()
 heapster_define_rust_type_qual_opt _bic _opts henv maybe_crate str =
   -- NOTE: Looking at first LLVM module to determine pointer width. Need to
   -- think more to determine if this is always a safe thing to do (e.g. are
@@ -664,13 +676,11 @@ heapster_define_rust_type_qual_opt _bic _opts henv maybe_crate str =
                                       }
                      env' = permEnvAddNamedShape env nsh
                  liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
-            RecShape nm ctx sh ->
+            RecShape nm ctx mb_sh ->
               do sc <- getSharedContext
                  let mnm = heapsterEnvSAWModule henv
                      nm' = crated_nm nm
-                     trans_ident = mkSafeIdent mnm (nm' ++ "_IRT")
-                 env' <-
-                   liftIO $ addIRTRecShape sc mnm env nm' ctx sh trans_ident
+                 env' <- addRecNamedShape sc env mnm nm' ctx w mb_sh
                  liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
@@ -898,6 +908,8 @@ heapster_find_trait_method_symbol bic opts henv str =
 
     trait = intercalate ".." $ splitOn "::" colonTrait
 
+
+{-
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by the second name
 heapster_assume_fun_rename :: BuiltinContext -> Options -> HeapsterEnv ->
