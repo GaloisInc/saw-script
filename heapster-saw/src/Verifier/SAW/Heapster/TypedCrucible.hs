@@ -1090,7 +1090,7 @@ type family TransData phase a where
 data CallSiteImplRet blocks tops args ghosts ps_out =
   CallSiteImplRet (TypedEntryID blocks args) (CruCtx ghosts)
   ((tops :++: args) :++: ghosts :~: ps_out)
-  (RAssign ExprVar (tops :++: args)) (RAssign ExprVar ghosts)
+  (RAssign ExprVar tops) (RAssign ExprVar args) (RAssign ExprVar ghosts)
 
 $(mkNuMatching [t| forall blocks tops args ghosts ps_out.
                 CallSiteImplRet blocks tops args ghosts ps_out |])
@@ -1098,9 +1098,10 @@ $(mkNuMatching [t| forall blocks tops args ghosts ps_out.
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (CallSiteImplRet
                                  blocks tops args ghosts ps) m where
-  genSubst s (mbMatch -> [nuMP| CallSiteImplRet entryID ghosts Refl tavars gvars |]) =
+  genSubst s (mbMatch ->
+              [nuMP| CallSiteImplRet entryID ghosts Refl tvars avars gvars |]) =
     CallSiteImplRet (mbLift entryID) (mbLift ghosts) Refl <$>
-    genSubst s tavars <*> genSubst s gvars
+    genSubst s tvars <*> genSubst s avars <*> genSubst s gvars
 
 instance SubstVar PermVarSubst m =>
          Substable1 PermVarSubst (CallSiteImplRet
@@ -1122,9 +1123,10 @@ idCallSiteImpl entryID tops args vars =
   let tops_args_prxs = cruCtxProxies (appendCruCtx tops args)
       vars_prxs = cruCtxProxies vars in
   CallSiteImpl $ mbCombine vars_prxs $ nuMulti tops_args_prxs $ \tops_args_ns ->
+  let (tops_ns, args_ns) = RL.split tops (cruCtxProxies args) tops_args_ns in
   nuMulti vars_prxs $ \vars_ns ->
   AnnotPermImpl "" $ PermImpl_Done $
-  CallSiteImplRet entryID vars Refl tops_args_ns vars_ns
+  CallSiteImplRet entryID vars Refl tops_ns args_ns vars_ns
 
 -- | A jump / branch to a particular entrypoint
 data TypedCallSite phase blocks tops args ghosts vars =
@@ -4235,7 +4237,7 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
   -- FIXME HERE NOW: add the input perms and call site to our error message
   let err = ppProofError ppInfo perms_out in
   pcmRunImplM ghosts err
-    (CallSiteImplRet destID ghosts Refl ns)
+    (CallSiteImplRet destID ghosts Refl tops_ns args_ns)
     (handleUnitVars ns >>>
      recombinePerms perms_in >>>
      proveVarsImplVarEVars perms_out

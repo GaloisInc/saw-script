@@ -334,7 +334,7 @@ varKindExpr d ix = applyGlobalOpenTerm "Prelude.varKindExpr" [d,natOpenTerm ix]
 
 -- | Build a kind expression of a given kind from an element of that kind
 constKindExpr :: OpenTerm -> OpenTerm -> OpenTerm
-constKindExpr d elem = applyGlobalOpenTerm "Prelude.constKindExpr" [d,elem]
+constKindExpr d e = applyGlobalOpenTerm "Prelude.constKindExpr" [d,e]
 
 -- | Build the type description @Tp_Subst T K e@ that represents an explicit
 -- substitution of expression @e@ of kind @K@ into type description @T@
@@ -5880,18 +5880,22 @@ translateApply nm f perms =
 translateCallEntry :: forall ext exprExt tops args ghosts blocks ctx rets.
                       PermCheckExtC ext exprExt => String ->
                       TypedEntryTrans ext blocks tops rets args ghosts ->
-                      Mb ctx (RAssign ExprVar (tops :++: args)) ->
+                      Mb ctx (RAssign ExprVar tops) ->
+                      Mb ctx (RAssign ExprVar args) ->
                       Mb ctx (RAssign ExprVar ghosts) ->
                       ImpTransM ext blocks tops rets
                       ((tops :++: args) :++: ghosts) ctx OpenTerm
-translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
+translateCallEntry nm entry_trans mb_tops mb_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
   do let entry = typedEntryTransEntry entry_trans
-     ectx <- translate $ mbMap2 RL.append mb_tops_args mb_ghosts
+     ectx_ag <- translate $ mbMap2 RL.append mb_args mb_ghosts
+     ectx <- translate (mbMap2 RL.append
+                        (mbMap2 RL.append mb_tops mb_args) mb_ghosts)
      stack <- itiPermStack <$> ask
+     let mb_tops_args = mbMap2 RL.append mb_tops mb_args
      let mb_s =
-           mbMap2 (\tops_args ghosts ->
-                    permVarSubstOfNames $ RL.append tops_args ghosts)
+           mbMap2 (\args ghosts ->
+                    permVarSubstOfNames $ RL.append args ghosts)
            mb_tops_args mb_ghosts
      let mb_perms = fmap (\s -> varSubst s $ mbValuePermsToDistPerms $
                                 typedEntryPermsIn entry) mb_s
@@ -5901,15 +5905,14 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
      case typedEntryTransIx entry_trans of
        Just (d, funix) ->
          -- If so, build the associated CallS term, which applies the function
-         -- index to the expressions with permissions on the stack followed by
-         -- the proof objects for those permissions
+         -- index to all the terms in the args and ghosts (but not the tops,
+         -- which are free) plus all the permissions on the stack
          do ev <- infoEvType <$> ask
             expr_ctx <- itiExprCtx <$> ask
             arg_membs <- itiPermStackVars <$> ask
-            let e_args = RL.map (flip RL.get expr_ctx) arg_membs
             i_args <- itiPermStack <$> ask
             return (callSOpenTerm ev d funix
-                    (exprCtxToTerms e_args ++ permCtxToTerms i_args))
+                    (exprCtxToTerms ectx_ag ++ permCtxToTerms i_args))
        Nothing ->
          -- Otherwise, continue translating with the target entrypoint, with all
          -- the current expressions free but with only those permissions on top
@@ -5925,11 +5928,11 @@ instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (CallSiteImplRet blocks tops args ghosts ps) OpenTerm where
   translate (mbMatch ->
-             [nuMP| CallSiteImplRet entryID ghosts Refl mb_tavars mb_gvars |]) =
+             [nuMP| CallSiteImplRet entryID ghosts Refl mb_tvars mb_avars mb_gvars |]) =
     do entry_trans <-
          lookupEntryTransCast (mbLift entryID) (mbLift ghosts) <$>
          itiBlockMapTrans <$> ask
-       translateCallEntry "CallSiteImplRet" entry_trans mb_tavars mb_gvars
+       translateCallEntry "CallSiteImplRet" entry_trans mb_tvars mb_avars mb_gvars
 
 instance PermCheckExtC ext exprExt =>
          ImplTranslateF (CallSiteImplRet blocks tops args ghosts)
@@ -6454,8 +6457,10 @@ translateCFGInitBody mapTrans cfg pctx =
       all_px = RL.map (\_ -> Proxy) pctx'
       init_entry = lookupEntryTransCast (tpcfgEntryID cfg) CruCtxNil mapTrans in
   impTransM all_membs pctx' mapTrans retTypeTrans $
-  translateCallEntry "CFG" init_entry (nuMulti all_px id) (nuMulti all_px $
-                                                           const MNil)
+  translateCallEntry "CFG" init_entry
+  (nuMulti all_px $ \ns -> fst $ RL.split pctx (cruCtxProxies inits) ns)
+  (nuMulti all_px $ \ns -> snd $ RL.split pctx (cruCtxProxies inits) ns)
+  (nuMulti all_px $ const MNil)
 
 
 -- | Translate a CFG to a function that takes in values for its top-level
