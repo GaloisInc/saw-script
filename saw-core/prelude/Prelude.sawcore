@@ -840,7 +840,7 @@ Nat_cases2 a f1 f2 f3 n m =
              Nat__rec (\ (m':Nat) -> a) (f2 n)
                       (\ (m':Nat) -> \ (frec':a) -> f3 n m' (f_rec m')) m) n m;
 
-eqNat : Nat -> Nat -> sort 1;
+eqNat : Nat -> Nat -> Prop;
 eqNat x y = Eq Nat x y;
 
 eqNatSucc : (x y : Nat) -> eqNat x y -> eqNat (Succ x) (Succ y);
@@ -879,7 +879,21 @@ primitive natCompareLe : (m n : Nat) -> Either (IsLtNat m n) (IsLeNat n m);
 
 -- | Test if m = n
 -- FIXME: implement this!
-primitive proveEqNat : (m n : Nat) -> Maybe (Eq Nat m n);
+proveEqNat : (m n : Nat) -> Maybe (Eq Nat m n);
+proveEqNat =
+  Nat__rec (\ (m:Nat) -> (n:Nat) -> Maybe (Eq Nat m n))
+    (Nat__rec (\ (n:Nat) -> Maybe (Eq Nat 0 n))
+       (Just (Eq Nat 0 0) (Refl Nat 0))
+       (\ (n:Nat) (_:Maybe (Eq Nat 0 n)) -> Nothing (Eq Nat 0 (Succ n))))
+    (\ (m:Nat) (rec: (n:Nat) -> Maybe (Eq Nat m n)) ->
+       Nat__rec (\ (n:Nat) -> Maybe (Eq Nat (Succ m) n))
+         (Nothing (Eq Nat (Succ m) 0))
+         (\ (n:Nat) (_:Maybe (Eq Nat (Succ m) n)) ->
+            maybe (Eq Nat m n) (Maybe (Eq Nat (Succ m) (Succ n)))
+              (Nothing (Eq Nat (Succ m) (Succ n)))
+              (\ (e:Eq Nat m n) ->
+                 Just (Eq Nat (Succ m) (Succ n)) (eqNatSucc m n e))
+              (rec n)));
 
 -- | Try to prove x <= y (FIXME: implement this from natCompareLe!)
 primitive proveLeNat : (x y : Nat) -> Maybe (IsLeNat x y);
