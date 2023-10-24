@@ -212,15 +212,21 @@ kindToTpDesc d = ctorOpenTerm "Prelude.Tp_Kind" [d]
 unitTpDesc :: OpenTerm
 unitTpDesc = ctorOpenTerm "Prelude.Tp_Kind" [unitKindDesc]
 
+-- | The expression kind for the Boolean type
+boolExprKind :: OpenTerm
+boolExprKind = ctorOpenTerm "Prelude.Kind_bool" []
+
 -- | The kind description for the Boolean type
 boolKindDesc :: OpenTerm
-boolKindDesc = ctorOpenTerm "Prelude.Kind_Expr" [ctorOpenTerm
-                                                 "Prelude.Kind_bool" []]
+boolKindDesc = ctorOpenTerm "Prelude.Kind_Expr" [boolExprKind]
+
+-- | The expression kind for the Nat type
+natExprKind :: OpenTerm
+natExprKind = ctorOpenTerm "Prelude.Kind_nat" []
 
 -- | The kind description for the Nat type
 natKindDesc :: OpenTerm
-natKindDesc = ctorOpenTerm "Prelude.Kind_Expr" [ctorOpenTerm
-                                                "Prelude.Kind_nat" []]
+natKindDesc = ctorOpenTerm "Prelude.Kind_Expr" [natExprKind]
 
 -- | The kind description for the type @bitvector w@
 bvKindDesc :: Natural -> OpenTerm
@@ -297,6 +303,10 @@ arrowTpDesc d_in d_out = ctorOpenTerm "Prelude.Tp_Arr" [d_in, d_out]
 arrowTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
 arrowTpDescMulti tps_in tp_out = foldr arrowTpDesc tp_out tps_in
 
+-- | Build the type description for a computation with a given return type
+tpMTpDesc :: OpenTerm -> OpenTerm
+tpMTpDesc d = ctorOpenTerm "Prelude.Tp_M" [d]
+
 -- | Build the type description for a pi-abstraction over a kind description
 piTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
 piTpDesc kd tpd = ctorOpenTerm "Prelude.Tp_Pi" [kd, tpd]
@@ -318,9 +328,13 @@ varTpDesc ix = ctorOpenTerm "Prelude.Tp_Var" [natOpenTerm ix]
 varTpExpr :: OpenTerm -> Natural -> OpenTerm
 varTpExpr ek ix = ctorOpenTerm "Prelude.TpExpr_Var" [ek, natOpenTerm ix]
 
--- | Build a kind expression of a given kind of a deBruijn index
+-- | Build a kind expression of a given kind from a deBruijn index
 varKindExpr :: OpenTerm -> Natural -> OpenTerm
 varKindExpr d ix = applyGlobalOpenTerm "Prelude.varKindExpr" [d,natOpenTerm ix]
+
+-- | Build a kind expression of a given kind from an element of that kind
+constKindExpr :: OpenTerm -> OpenTerm -> OpenTerm
+constKindExpr d elem = applyGlobalOpenTerm "Prelude.constKindExpr" [d,elem]
 
 -- | Build the type description @Tp_Subst T K e@ that represents an explicit
 -- substitution of expression @e@ of kind @K@ into type description @T@
@@ -697,7 +711,7 @@ exprTransDescs (ETrans_Shape ds _) = ds
 exprTransDescs (ETrans_Perm ds _) = ds
 exprTransDescs (ETrans_Term tp t) =
   case translateKindDescs tp of
-    [d] -> [ctorOpenTerm "Prelude.TpExpr_Const" [d, t]]
+    [d] -> [constKindExpr d t]
     _ -> panic "exprTransDescs" ["ETrans_Term type has incorrect number of kinds"]
 
 -- | A "proof" that @ctx2@ is an extension of @ctx1@, i.e., that @ctx2@ equals
@@ -1764,9 +1778,9 @@ instance TranslateDescs (PermExpr a) where
     [nuMP| PExpr_Var mb_x |] -> translateDescs mb_x
     [nuMP| PExpr_Unit |] -> return []
     [nuMP| PExpr_Bool b |] ->
-      return [constTpExpr boolKindDesc $ boolOpenTerm $ mbLift b]
+      return [constTpExpr boolExprKind $ boolOpenTerm $ mbLift b]
     [nuMP| PExpr_Nat n |] ->
-      return [constTpExpr natKindDesc $ natOpenTerm $ mbLift n]
+      return [constTpExpr natExprKind $ natOpenTerm $ mbLift n]
     [nuMP| PExpr_String _ |] ->
       panic "translateDescs"
       ["Cannot (yet?) translate strings to type-level expressions"]
@@ -3347,7 +3361,7 @@ translateRetTpDesc :: CruCtx rets ->
                       DescTransM ctx OpenTerm
 translateRetTpDesc rets ret_perms =
   inExtCtxDescTransM rets $ \kdescs ->
-  sigmaTpDescMulti kdescs <$> translateDesc ret_perms
+  tpMTpDesc <$> sigmaTpDescMulti kdescs <$> translateDesc ret_perms
 
 -- | Build the return type for the function resulting from an entrypoint
 translateEntryRetType :: TransInfo info =>
@@ -6459,7 +6473,7 @@ translateCFGBody :: PermCheckExtC ext exprExt =>
 translateCFGBody cfg =
   let fun_perm = tpcfgFunPerm cfg
       blkMap = tpcfgBlockMap cfg in
-  piExprCtx (funPermTops fun_perm) $
+  lambdaExprCtx (funPermTops fun_perm) $
   lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
   do ev <- infoEvType <$> ask
      blk_ds <- translateBlockMapDescs $ tpcfgBlockMap cfg
@@ -6556,7 +6570,7 @@ translateCFGFromBodies cfgs _ i
 translateCFGFromBodies cfgs bodies i
   | SomeTypedCFG _ _ cfg <- cfgs!!i =
     let fun_perm = tpcfgFunPerm cfg in
-    piExprCtx (funPermTops fun_perm) $
+    lambdaExprCtx (funPermTops fun_perm) $
     lambdaPermCtx (funPermIns fun_perm) $ \pctx ->
     do ev <- infoEvType <$> ask
        ectx <- infoCtx <$> ask

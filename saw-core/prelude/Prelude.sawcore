@@ -2486,6 +2486,14 @@ defaultEKElem EK = ExprKind#rec exprKindElem () False 0 (\ (w:Nat) -> bvNat w 0)
 defaultKindElem : (K:KindDesc) -> kindElem K;
 defaultKindElem K = KindDesc#rec kindElem defaultEKElem Tp_Void K;
 
+-- Build a kindExpr K from an element of kindElem K
+constKindExpr : (K:KindDesc) -> kindElem K -> kindExpr K;
+constKindExpr K =
+  KindDesc#rec (\ (K:KindDesc) -> kindElem K -> kindExpr K)
+    (\ (EK:ExprKind) (elem:exprKindElem EK) -> TpExpr_Const EK elem)
+    (\ (T:TpDesc) -> T)
+    K;
+
 -- An element of an environment is a value, i.e., an element of some kind
 TpEnvElem : sort 0;
 TpEnvElem = Sigma KindDesc kindElem;
