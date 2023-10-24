@@ -203,6 +203,11 @@ bvExprKind w = ctorOpenTerm "Prelude.Kind_bv" [natOpenTerm w]
 tpDescTypeOpenTerm :: OpenTerm
 tpDescTypeOpenTerm = dataTypeOpenTerm "Prelude.TpDesc" []
 
+-- | Convert a kind description to a type description with the @Tp_Kind@
+-- constructor
+kindToTpDesc :: OpenTerm -> OpenTerm
+kindToTpDesc d = ctorOpenTerm "Prelude.Tp_Kind" [d]
+
 -- | The type description for the unit type
 unitTpDesc :: OpenTerm
 unitTpDesc = ctorOpenTerm "Prelude.Tp_Kind" [unitKindDesc]
@@ -3031,6 +3036,11 @@ instance TranslateDescs (ValuePerm a) where
     [nuMP| ValPerm_Eq _ |] -> return []
     [nuMP| ValPerm_Or p1 p2 |] ->
       (:[]) <$> (sumTpDesc <$> translateDesc p1 <*> translateDesc p2)
+    [nuMP| ValPerm_Exists mb_mb_p' |]
+      | [nuP| ValPerm_Eq _ |] <- mbCombine RL.typeCtxProxies mb_mb_p' ->
+        let tp_repr = mbLift $ fmap bindingType mb_mb_p'
+            (_, k_ds) = translateType tp_repr in
+        return [tupleTpDesc $ map kindToTpDesc k_ds]
     [nuMP| ValPerm_Exists mb_mb_p' |] ->
       do let tp_repr = mbLift $ fmap bindingType mb_mb_p'
          let mb_p' = mbCombine RL.typeCtxProxies mb_mb_p'
