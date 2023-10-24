@@ -139,7 +139,7 @@ Qed.
 
 Definition coerce (a b : sort 0) (p : @eq (sort 0) a b) (x : a) : b :=
   match p in eq _ a' return a' with
-  | eq_refl _ => x
+  | @eq_refl _ _ => x
   end
 .
 Check eq_sym.
@@ -233,8 +233,8 @@ Definition IsLeNat__rec
   : forall (m : nat) (Hm : IsLeNat n m), p m Hm :=
   fix rec (m:nat) (Hm : IsLeNat n m) {struct Hm} : p m Hm :=
             match Hm as Hm' in le _ m' return p m' Hm' with
-            | le_n _ => Hbase
-            | le_S _ m H => Hstep m H (rec m H)
+            | @le_n _ => Hbase
+            | @le_S _ m H => Hstep m H (rec m H)
             end.
 
 (* We could have SAW autogenerate this definition in SAWCorePrelude, but it is
@@ -354,15 +354,19 @@ Global Instance Inhabited_RecordCons (fnm:string) (tp rest_tp:Type)
   := MkInhabited (RecordTypeCons fnm tp rest_tp) (RecordCons fnm inhabitant inhabitant).
 
 (* Get the head element of a non-empty record type *)
+(* NOTE: more recent versions of Coq seem to have changed constructor patterns
+so that the parameters of an inductive type are not required, even when they are
+specified in the Arguments declaration, so we use the explicit arguments
+@RecordCons pattern, since that does not change between Coq versions *)
 Definition recordHead {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : tp :=
   match r with
-  | RecordCons _ x _ => x
+  | @RecordCons _ _ _ x _ => x
   end.
 
 (* Get the tail of a non-empty record type *)
 Definition recordTail {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : rest_tp :=
   match r with
-  | RecordCons _ _ rest => rest
+  | @RecordCons _ _ _ _ rest => rest
   end.
 
 (* An inductive description of a string being a field in a record type *)
@@ -378,8 +382,8 @@ Global Hint Constructors IsRecordField : typeclass_instances.
 (* If str is a field in record type rtp, get its associated type *)
 Fixpoint getRecordFieldType rtp str `{irf:IsRecordField str rtp} : Type :=
   match irf with
-  | IsRecordField_Base _ tp rtp => tp
-  | IsRecordField_Step _ _ _ _ irf' => @getRecordFieldType _ _ irf'
+  | @IsRecordField_Base _ tp rtp => tp
+  | @IsRecordField_Step _ _ _ _ irf' => @getRecordFieldType _ _ irf'
   end.
 
 (* If str is a field in record r of record type rtp, get its associated value *)
@@ -387,8 +391,8 @@ Fixpoint getRecordField {rtp} str `{irf:IsRecordField str rtp} :
   rtp -> getRecordFieldType rtp str :=
   match irf in IsRecordField _ rtp
         return rtp -> getRecordFieldType rtp str (irf:=irf) with
-  | IsRecordField_Base _ tp rtp' => fun r => recordHead r
-  | IsRecordField_Step _ _ _ _ irf' =>
+  | @IsRecordField_Base _ tp rtp' => fun r => recordHead r
+  | @IsRecordField_Step _ _ _ _ irf' =>
     fun r => @getRecordField _ _ irf' (recordTail r)
   end.
 

@@ -200,6 +200,12 @@ sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 entreeSpecsModule :: ModuleName
 entreeSpecsModule = mkModuleName ["SpecM"]
 
+tpDescModule :: ModuleName
+tpDescModule = mkModuleName ["TpDesc"]
+
+fixtreeModule :: ModuleName
+fixtreeModule = mkModuleName ["FixTree"]
+
 polyListModule :: ModuleName
 polyListModule = mkModuleName ["PolyList"]
 
@@ -497,27 +503,33 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("test_fun6",            skip)
   ]
 
-  -- LetRecTypes
+  -- Either
   ++
-  [ ("LetRecType",           mapsTo entreeSpecsModule "LetRecType")
-  , ("LRT_SpecM",            mapsToExpl entreeSpecsModule "LRT_SpecM")
-  , ("LRT_FunDep",           mapsToExpl entreeSpecsModule "LRT_FunDep")
-  , ("LRT_FunClos",          mapsToExpl entreeSpecsModule "LRT_FunClos")
-  , ("LRT_Type",             mapsToExpl entreeSpecsModule "LRT_Type")
-  , ("LRT_BinOp",            mapsToExpl entreeSpecsModule "LRT_BinOp")
-  , ("LRT_Sigma",            mapsToExpl entreeSpecsModule "LRT_Sigma")
-  , ("LetRecType__rec",      mapsToExpl entreeSpecsModule "LetRecType_rect")
-  , ("ValidLRTFunctor2",     mapsToExpl entreeSpecsModule "ColimFunctor2")
-  , ("pair_ValidLRTFunctor2", mapsToExpl entreeSpecsModule "Pair_ColimFunctor2")
-  , ("either_ValidLRTFunctor2", skip) -- FIXME: implement this!
-  , ("LRT_Either",           skip) -- FIXME: implement this!
-  , ("Vec_ValidLRTFunctor2", mapsTo entreeSpecsModule "Vec_ColimFunctor2")
+  [ ("Either",     mapsTo datatypesModule "sum")
+  , ("Left",       mapsToExpl datatypesModule "inl")
+  , ("Right",       mapsToExpl datatypesModule "inr")
+  ]
+
+  -- Type descriptions
+  ++
+  map (\str -> (str, mapsToExpl tpDescModule str))
+  [ "ExprKind", "Kind_unit", "Kind_bool", "Kind_nat", "Kind_bv"
+  , "TpExprUnOp", "UnOp_BVToNat", "UnOp_NatToBV"
+  , "TpExprBinOp", "BinOp_AddNat", "BinOp_MulNat", "BinOp_AddBV", "BinOp_MulBV"
+  , "KindDesc", "Kind_Expr", "Kind_Tp"
+  , "TpExpr", "TpExpr_Const", "TpExpr_Var", "TpExpr_UnOp", "TpExpr_BinOp"
+  , "TpDesc", "Tp_M", "Tp_Pi", "Tp_Arr", "Tp_Kind", "Tp_Pair", "Tp_Sum"
+  , "Tp_Sigma", "Tp_Vec", "Tp_Void", "Tp_Ind", "Tp_Var", "Tp_TpSubst"
+  , "Tp_ExprSubst"
+  , "tpSubst", "elimTpEnvElem", "tpElemEnv"
+  , "indElem", "indToTpElem", "tpToIndElem"
   ]
 
   -- The specification monad
   ++
-  [ ("EvType",               mapsTo entreeSpecsModule "EvType")
-  , ("Build_EvType",         mapsTo entreeSpecsModule "Build_EvType")
+  [ ("EvType",               mapsTo fixtreeModule "EvType")
+  , ("Build_EvType",         mapsTo fixtreeModule "Build_EvType")
+  , ("FunIx",                mapsTo fixtreeModule "FunIx")
   , ("evTypeType",           mapsTo entreeSpecsModule "evTypeType")
   , ("evRetType",            mapsTo entreeSpecsModule "evRetType")
   , ("FunStack",             mapsTo entreeSpecsModule "FunStack")
@@ -541,8 +553,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bindS",                mapsToExpl entreeSpecsModule "BindS")
   , ("triggerS",             mapsToExpl entreeSpecsModule "TriggerS")
   , ("errorS",               mapsToExpl entreeSpecsModule "ErrorS")
-  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 3)
-  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 3)
+  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 2)
+  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 2)
   , ("assumeS",              mapsToExpl entreeSpecsModule "AssumeS")
   , ("assertS",              mapsToExpl entreeSpecsModule "AssertS")
   , ("CallS",                mapsToExpl entreeSpecsModule "CallS")

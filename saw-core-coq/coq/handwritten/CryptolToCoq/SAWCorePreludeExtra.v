@@ -126,28 +126,3 @@ Proof.
   rewrite (le_unique _ _ pf2 pf).
   reflexivity.
 Qed.
-
-
-Theorem fold_unfold_IRT As Ds D : forall x, foldIRT As Ds D (unfoldIRT As Ds D x) = x.
-Proof.
-  induction x; simpl; unfold uncurry; f_equal; try easy.
-  (* All that remains is the IRT_BVVec case, which requires functional extensionality
-     and the fact that genBVVec and atBVVec define an isomorphism *)
-  repeat (apply functional_extensionality_dep; intro).
-  rewrite at_gen_BVVec; eauto.
-Qed.
-
-Theorem unfold_fold_IRT As Ds D : forall u, unfoldIRT As Ds D (foldIRT As Ds D u) = u.
-Proof.
-  revert Ds; induction D; intros; try destruct u; simpl(*; f_equal; try easy*).
-  (* For some reason using `f_equal` above generates universe constraints like
-     `prod.u0 < eq.u0` which cause problems later on when it is assumed that
-     `eq.u0 = Coq.Relations.Relation_Definitions.1 <= prod.u0` by
-     `returnM_injective`. The easiest solution is just to not use `f_equal`
-     here, and rewrite by the relevant induction hypotheses instead. *)
-  all: try rewrite IHD; try rewrite IHD1; try rewrite IHD2; try rewrite H; try easy.
-  (* All that remains is the IRT_BVVec case, which requires functional extensionality
-     and the fact that genBVVec and atBVVec define an isomorphism *)
-  etransitivity; [ | apply gen_at_BVVec ].
-  f_equal; repeat (apply functional_extensionality_dep; intro); eauto.
-Qed.

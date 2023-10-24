@@ -6,6 +6,8 @@ From Coq Require Import Program.Basics.
 From Coq Require        Program.Equality.
 From Coq Require Import Vectors.Vector.
 From Coq Require Import Logic.Eqdep.
+From Coq Require Import Classes.RelationClasses.
+From Coq Require Import Classes.Morphisms.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
