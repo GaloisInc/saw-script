@@ -659,13 +659,12 @@ instance IsTermTrans (ExprTrans tp) where
   transTerms (ETrans_Term _ t) = [t]
 
 instance IsTermTrans (ExprTransCtx ctx) where
-  transTerms MNil = []
-  transTerms (ctx :>: etrans) = transTerms ctx ++ transTerms etrans
+  transTerms = concat . RL.mapToList transTerms
 
 
 -- | Map a context of expression translations to a list of 'OpenTerm's
 exprCtxToTerms :: ExprTransCtx tps -> [OpenTerm]
-exprCtxToTerms = concat . RL.mapToList transTerms
+exprCtxToTerms = transTerms
 
 -- | Map an 'ExprTrans' to its type translation
 exprTransType :: ExprTrans tp -> TypeTrans (ExprTrans tp)
@@ -1758,9 +1757,14 @@ translateBVDesc mb_e =
   let w = mbExprBVTypeWidth mb_e in
   case mbMatch mb_e of
     [nuMP| PExpr_Var mb_x |] -> translateBVVarDesc w mb_x
-    [nuMP| PExpr_BV mb_fs mb_i |] ->
-      do fs_exprs <- mapM translateBVFactorDesc $ mbList mb_fs
-         let i_expr = translateBVConstDesc w $ mbLift mb_i
+    [nuMP| PExpr_BV [] mb_off |] ->
+      return $ translateBVConstDesc w $ mbLift mb_off
+    [nuMP| PExpr_BV mb_factors (BV.BV 0) |] ->
+      bvSumTpExprs (natValue w) <$>
+      mapM translateBVFactorDesc (mbList mb_factors)
+    [nuMP| PExpr_BV mb_factors mb_off |] ->
+      do fs_exprs <- mapM translateBVFactorDesc $ mbList mb_factors
+         let i_expr = translateBVConstDesc w $ mbLift mb_off
          return $ bvSumTpExprs (natValue w) (fs_exprs ++ [i_expr])
 
 -- translateDescs on a variable translates to a list of variable kind exprs
@@ -2153,8 +2157,7 @@ instance IsTermTrans (PermTrans ctx a) where
   transTerms (PTrans_Term _ t) = [t]
 
 instance IsTermTrans (PermTransCtx ctx ps) where
-  transTerms MNil = []
-  transTerms (ctx :>: ptrans) = transTerms ctx ++ transTerms ptrans
+  transTerms = concat . RL.mapToList transTerms
 
 instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_LLVMField _ ptrans) = transTerms ptrans
@@ -2197,7 +2200,7 @@ instance IsTermTrans (LLVMArrayBorrowTrans ctx w) where
 -- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
 -- "invisible" ones whose permissions are translated to 'Nothing'
 permCtxToTerms :: PermTransCtx ctx tps -> [OpenTerm]
-permCtxToTerms = concat . RL.mapToList transTerms
+permCtxToTerms = transTerms
 
 -- | Extract out the permission of a permission translation result
 permTransPerm :: RAssign Proxy ctx -> PermTrans ctx a -> Mb ctx (ValuePerm a)
@@ -5908,11 +5911,9 @@ translateCallEntry nm entry_trans mb_tops mb_args mb_ghosts =
          -- index to all the terms in the args and ghosts (but not the tops,
          -- which are free) plus all the permissions on the stack
          do ev <- infoEvType <$> ask
-            expr_ctx <- itiExprCtx <$> ask
-            arg_membs <- itiPermStackVars <$> ask
-            i_args <- itiPermStack <$> ask
+            pctx <- itiPermStack <$> ask
             return (callSOpenTerm ev d funix
-                    (exprCtxToTerms ectx_ag ++ permCtxToTerms i_args))
+                    (exprCtxToTerms ectx_ag ++ permCtxToTerms pctx))
        Nothing ->
          -- Otherwise, continue translating with the target entrypoint, with all
          -- the current expressions free but with only those permissions on top
