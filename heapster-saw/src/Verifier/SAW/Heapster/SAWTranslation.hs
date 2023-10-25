@@ -295,17 +295,20 @@ sigmaTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
 sigmaTpDescMulti [] d = d
 sigmaTpDescMulti (k:ks) d = sigmaTpDesc k $ sigmaTpDescMulti ks d
 
--- | Build the type description for a function index of arrow type
+-- | Build an arrow type description for left- and right-hand type descriptions
 arrowTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
 arrowTpDesc d_in d_out = ctorOpenTerm "Prelude.Tp_Arr" [d_in, d_out]
 
--- | Build the type description for a function index of multi-arity arrow type
+-- | Build a multi-arity nested arrow type description
 arrowTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
-arrowTpDescMulti tps_in tp_out = foldr arrowTpDesc tp_out tps_in
+arrowTpDescMulti ds_in d_out = foldr arrowTpDesc d_out ds_in
 
--- | Build the type description for a computation with a given return type
-tpMTpDesc :: OpenTerm -> OpenTerm
-tpMTpDesc d = ctorOpenTerm "Prelude.Tp_M" [d]
+-- | Build the type description @Tp_Arr d1 (... (Tp_Arr dn (Tp_M d_ret)))@ for a
+-- monadic function that takes in the types described by @d1@ through @dn@ and
+-- returns the type described by @d_ret@
+funTpDesc :: [OpenTerm] -> OpenTerm -> OpenTerm
+funTpDesc ds_in d_ret =
+  arrowTpDescMulti ds_in (ctorOpenTerm "Prelude.Tp_M" [d_ret])
 
 -- | Build the type description for a pi-abstraction over a kind description
 piTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
@@ -1509,8 +1512,8 @@ descTypeTransF dtp_trans = typeTransF (descTypeTrans dtp_trans)
 -- order in the first type translation to the tuple of the types in the second
 arrowDescTrans :: DescTypeTrans tr1 -> DescTypeTrans tr2 -> OpenTerm
 arrowDescTrans tp1 tp2 =
-  arrowTpDescMulti (descTypeTransDescs tp1) (tupleTpDesc $
-                                             descTypeTransDescs tp2)
+  funTpDesc (descTypeTransDescs tp1) (tupleTpDesc $
+                                      descTypeTransDescs tp2)
 
 -- | Translate a type-like object to a type translation and type descriptions
 translateDescType :: TransInfo info => Translate info ctx a (TypeTrans tr) =>
@@ -2443,7 +2446,7 @@ data LLVMArrayPermTrans ctx w = LLVMArrayPermTrans {
 
 -- | Get the SAW type of the cells of the translation of an array permission
 llvmArrayTransCellType :: LLVMArrayPermTrans ctx w -> OpenTerm
-llvmArrayTransCellType = typeTransType1 . llvmArrayTransHeadCell
+llvmArrayTransCellType = typeTransTupleType . llvmArrayTransHeadCell
 
 
 -- | The translation of an 'LLVMArrayBorrow' is an element / proof of the
@@ -2508,7 +2511,7 @@ getLLVMArrayTransCell arr_trans mb_cell cell_tm (BVPropTrans _ in_rng_pf:_) =
   -- substitutes for all the names
   offsetLLVMAtomicPermTrans (mbMap2 llvmArrayCellToOffset
                              (llvmArrayTransPerm arr_trans) mb_cell) $
-  typeTransF (llvmArrayTransHeadCell arr_trans)
+  typeTransF (tupleTypeTrans (llvmArrayTransHeadCell arr_trans))
   [applyGlobalOpenTerm "Prelude.atBVVec"
    [natOpenTerm w, llvmArrayTransLen arr_trans,
     llvmArrayTransCellType arr_trans, llvmArrayTransTerm arr_trans,
@@ -2529,7 +2532,7 @@ setLLVMArrayTransCell arr_trans cell_tm cell_value =
         applyGlobalOpenTerm "Prelude.updBVVec"
         [natOpenTerm w, llvmArrayTransLen arr_trans,
          llvmArrayTransCellType arr_trans, llvmArrayTransTerm arr_trans,
-         cell_tm, transTerm1 cell_value] }
+         cell_tm, transTupleTerm cell_value] }
 
 
 -- | Read a slice (= a sub-array) of the translation of an LLVM array permission
@@ -3174,7 +3177,7 @@ instance TranslateDescs (AtomicPerm a) where
     [nuMP| Perm_LOwned _ _ _ ps_in ps_out |] ->
       do ds_in <- translateDescs ps_in
          d_out <- translateDesc ps_out
-         return [arrowTpDescMulti ds_in d_out]
+         return [funTpDesc ds_in d_out]
     [nuMP| Perm_LOwnedSimple _ _ |] -> return []
     [nuMP| Perm_LCurrent _ |] -> return []
     [nuMP| Perm_LFinished |] -> return []
@@ -3337,7 +3340,7 @@ instance TranslateDescs (FunPerm ghosts args gouts ret) where
         inExtCtxDescTransM tops $ \kdescs ->
         (\d -> [d]) <$> piTpDescMulti kdescs <$>
         do ds_in <- translateDescs (mbCombine tops_prxs perms_in)
-           arrowTpDescMulti ds_in <$>
+           funTpDesc ds_in <$>
              translateRetTpDesc rets (mbCombine
                                       (RL.append tops_prxs rets_prxs) perms_out)
 
@@ -3372,7 +3375,7 @@ translateRetTpDesc :: CruCtx rets ->
                       DescTransM ctx OpenTerm
 translateRetTpDesc rets ret_perms =
   inExtCtxDescTransM rets $ \kdescs ->
-  tpMTpDesc <$> sigmaTpDescMulti kdescs <$> translateDesc ret_perms
+  sigmaTpDescMulti kdescs <$> translateDesc ret_perms
 
 -- | Build the pure return type (not including the application of @SpecM@) for
 -- the function resulting from an entrypoint
@@ -6314,8 +6317,7 @@ translateEntryDesc (TypedEntry {..}) =
   inExtCtxDescTransM typedEntryGhosts $ \ghosts_kdescs ->
   do ds_in <- translateDescs typedEntryPermsIn
      return $
-       piTpDescMulti (args_kdescs ++ ghosts_kdescs) $
-       arrowTpDescMulti ds_in d_out
+       piTpDescMulti (args_kdescs ++ ghosts_kdescs) $ funTpDesc ds_in d_out
 
 -- | Build a list of type descriptions that describe the types of all of the
 -- entrypoints in a 'TypedBlockMap' that will be translated to functions
