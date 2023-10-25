@@ -24,7 +24,7 @@ monadic combinators for operating on terms.
 
 module SAWScript.Prover.MRSolver.Monad where
 
-import Data.List (find, findIndex, foldl')
+import Data.List (find, findIndex)
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
@@ -623,13 +623,38 @@ mrCtorApp = liftSC2 scCtorApp
 mrGlobalTerm :: Ident -> MRM t Term
 mrGlobalTerm = liftSC1 scGlobalDef
 
--- | Like 'scBvConst', but if given a bitvector literal it is converted to a
--- natural number literal
-mrBvToNat :: Term -> Term -> MRM t Term
-mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
-                                   mapM asBool -> Just bits)) =
-  liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-mrBvToNat n len = liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
+-- | Given a bit-width 'Term' and a natural number 'Term', return a bitvector
+-- 'Term' of the given bit-width only if we can can do so without truncation
+-- (i.e. only if we can ensure the given natural is in range)
+mrBvNatInRange :: Term -> Term -> MRM t (Maybe Term)
+mrBvNatInRange (asNat -> Just w) (asUnsignedConcreteBvToNat -> Just v)
+  | v < 2 ^ w = Just <$> liftSC2 scBvLit w (toInteger v)
+mrBvNatInRange w (asBvToNat -> Just (w', bv)) =
+  mrBvCastInRange w w' bv
+mrBvNatInRange w (asApplyAll -> (asGlobalDef -> Just "Prelude.intToNat",
+                                 [i])) = case i of
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+    mrBvNatInRange w v
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [w', bv])) ->
+    mrBvCastInRange w w' bv
+  _ -> return Nothing
+mrBvNatInRange _ _ = return Nothing
+
+-- | Given two bit-width 'Term's and a bitvector 'Term' of the second bit-width,
+-- return a bitvector 'Term' of the first bit-width only if we can can do so
+-- without truncation (i.e. only if we can ensure the given bitvector is in
+-- range)
+mrBvCastInRange :: Term -> Term -> Term -> MRM t (Maybe Term)
+mrBvCastInRange w1_t w2_t bv =
+  do w1_w2_cvt <- mrConvertible w1_t w2_t
+     if w1_w2_cvt then return $ Just bv
+     else case (asNat w1_t, asNat w1_t, asUnsignedConcreteBv bv) of
+       (Just w1, _, Just v) | v < 2 ^ w1 ->
+         Just <$> liftSC2 scBvLit w1 (toInteger v)
+       (Just w1, Just w2, _) | w1 > w2 -> 
+         do w1_sub_w2_t <- liftSC1 scNat (w1 - w2)
+            Just <$> liftSC3 scBvUExt w2_t w1_sub_w2_t bv
+       _ -> return Nothing
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in

@@ -261,12 +261,6 @@ isSpecFunType sc t = scWhnf sc t >>= \case
 -- * Useful 'Recognizer's for 'Term's
 ----------------------------------------------------------------------
 
--- | Recognize a 'Term' as an application of `bvToNat`
-asBvToNat :: Recognizer Term (Term, Term)
-asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
-                          [n, x])) = Just (n, x)
-asBvToNat _ = Nothing
-
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
 asEither (asCtor -> Just (c, [_, _, x]))
@@ -287,6 +281,12 @@ asIsFinite :: Recognizer Term Term
 asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
   Just n
 asIsFinite _ = Nothing
+
+-- | Recognize a term as being of the form @IsLtNat m n@
+asIsLtNat :: Recognizer Term (Term, Term)
+asIsLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [m, n])) =
+  Just (m, n)
+asIsLtNat _ = Nothing
 
 -- | Test if a 'Term' is a 'BVVec' type, excluding bitvectors
 asBVVecType :: Recognizer Term (Term, Term, Term)

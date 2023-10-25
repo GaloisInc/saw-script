@@ -255,10 +255,9 @@ bvVecAtM E stack n len a xs i =
 atM : (E:EvType) -> (stack:FunStack) ->
       (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> SpecM E stack a;
 atM E stack n a xs i =
-  maybe (IsLtNat i n) (SpecM E stack a)
-        (errorS E stack a "atM: invalid sequence index")
-        (\ (pf:IsLtNat i n) -> retS E stack a (atWithProof n a xs i pf))
-        (proveLtNat i n);
+  ite (SpecM E stack a) (ltNat i n)
+      (retS E stack a (at n a xs i))
+      (errorS E stack a "atM: invalid sequence index");
 
 bvVecUpdateM : (E:EvType) -> (stack:FunStack) ->
                (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
@@ -287,10 +286,9 @@ updateM : (E:EvType) -> (stack:FunStack) ->
           (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a ->
           SpecM E stack (Vec n a);
 updateM E stack n a xs i x =
-  maybe (IsLtNat i n) (SpecM E stack (Vec n a))
-        (errorS E stack (Vec n a) "updateM: invalid sequence index")
-        (\ (pf:IsLtNat i n) -> retS E stack (Vec n a) (updWithProof n a xs i x pf))
-        (proveLtNat i n);
+  ite (SpecM E stack (Vec n a)) (ltNat i n)
+      (retS E stack (Vec n a) (upd n a xs i x))
+      (errorS E stack (Vec n a) "updateM: invalid sequence index");
 
 eListSelM : (E:EvType) -> (stack:FunStack) ->
             (a : sort 0) -> (n : Num) -> mseq E stack n a -> Nat ->
