@@ -2364,6 +2364,14 @@ data TpDesc : sort 0 where {
 
 }
 
+-- The type description for the unit type
+Tp_Unit : TpDesc;
+Tp_Unit = Tp_Kind (Kind_Expr Kind_unit);
+
+-- The type description for a bitvector type
+Tp_bitvector : Nat -> TpDesc;
+Tp_bitvector w = Tp_Kind (Kind_Expr (Kind_bv w));
+
 -- The type description for the type BVVec n len d
 Tp_BVVec : TpDesc -> (n:Nat) -> TpExpr (Kind_bv n) -> TpDesc;
 Tp_BVVec d n len =
