@@ -23,6 +23,8 @@ From mathcomp Require Import tuple.
 From Coq Require Export ZArith.BinIntDef.
 From Coq Require Export PArith.BinPos.
 
+From EnTree Require Import EnTreeSpecs.
+
 Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.

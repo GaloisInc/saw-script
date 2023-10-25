@@ -6,7 +6,8 @@ From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From Coq Require Export Logic.Eqdep.
 
-From EnTree Require Export EnTreeSpecs.
+From EnTree Require Import EnTreeSpecs.
+
 
 (***
  *** sawLet
@@ -268,6 +269,9 @@ Arguments Datatypes.snd {_ _}.
 
 Definition Zero := O.
 Definition Succ := S.
+
+Definition addNat := Nat.add.
+Definition mulNat := Nat.mul.
 
 Global Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (PairType a b) :=
     MkInhabited (PairType a b) (PairValue a b inhabitant inhabitant).

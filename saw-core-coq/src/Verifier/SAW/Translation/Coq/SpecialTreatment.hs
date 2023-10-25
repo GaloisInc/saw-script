@@ -197,15 +197,10 @@ stringModule =
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
-entreeSpecsModule :: ModuleName
-entreeSpecsModule = mkModuleName ["SpecM"]
+specMModule :: ModuleName
+specMModule = mkModuleName ["SpecM"]
 
-tpDescModule :: ModuleName
-tpDescModule = mkModuleName ["TpDesc"]
-
-fixtreeModule :: ModuleName
-fixtreeModule = mkModuleName ["FixTree"]
-
+-- FIXME: I don't think we are even importing PolyList any more...
 polyListModule :: ModuleName
 polyListModule = mkModuleName ["PolyList"]
 
@@ -371,6 +366,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
   , ("Zero",      mapsTo sawDefinitionsModule "Zero")
   , ("Succ",      mapsTo sawDefinitionsModule "Succ")
+  , ("addNat",    mapsTo sawDefinitionsModule "addNat")
+  , ("mulNat",    mapsTo sawDefinitionsModule "mulNat")
   ]
 
   -- Vectors
@@ -512,7 +509,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Type descriptions
   ++
-  map (\str -> (str, mapsToExpl tpDescModule str))
+  map (\str -> (str, mapsToExpl specMModule str))
   [ "ExprKind", "Kind_unit", "Kind_bool", "Kind_nat", "Kind_bv"
   , "TpExprUnOp", "UnOp_BVToNat", "UnOp_NatToBV"
   , "TpExprBinOp", "BinOp_AddNat", "BinOp_MulNat", "BinOp_AddBV", "BinOp_MulBV"
@@ -527,55 +524,31 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- The specification monad
   ++
-  [ ("EvType",               mapsTo fixtreeModule "EvType")
-  , ("Build_EvType",         mapsTo fixtreeModule "Build_EvType")
-  , ("FunIx",                mapsTo fixtreeModule "FunIx")
-  , ("evTypeType",           mapsTo entreeSpecsModule "evTypeType")
-  , ("evRetType",            mapsTo entreeSpecsModule "evRetType")
-  , ("FunStack",             mapsTo entreeSpecsModule "FunStack")
-  , ("nthLRT",               mapsToExpl entreeSpecsModule "nthLRT")
-  , ("LRTClos",              mapsTo entreeSpecsModule "LRTClos")
-  , ("LRTArg" ,              mapsTo entreeSpecsModule "LRTArg")
-  , ("applyLRTClosDep" ,     mapsTo entreeSpecsModule "applyLRTClosDep")
-  , ("applyLRTClosClos" ,    mapsTo entreeSpecsModule "applyLRTClosClos")
-  , ("applyLRTClosNRet" ,    mapsTo entreeSpecsModule "applyLRTClosNRet")
-  , ("applyLRTClosN" ,       mapsTo entreeSpecsModule "applyLRTClosN")
-  , ("LRTInput",             mapsToExpl entreeSpecsModule "LRTInput")
-  , ("LRTOutput",            mapsToExpl entreeSpecsModule "LRTOutput")
-  , ("lrtPi",                mapsToExpl entreeSpecsModule "lrtPi")
-  , ("StackCall",            mapsToExpl entreeSpecsModule "StackCall")
-  , ("StackCallOfArgs",      mapsToExpl entreeSpecsModule "StackCallOfArgs")
-  , ("StackCallRet",         mapsToExpl entreeSpecsModule "StackCallRet")
-  , ("FunStackE",            mapsToExpl entreeSpecsModule "FunStackE")
-  , ("FunStackERet",         mapsToExpl entreeSpecsModule "FunStackERet")
-  , ("SpecM",                mapsTo entreeSpecsModule "SpecM")
-  , ("retS",                 mapsToExpl entreeSpecsModule "RetS")
-  , ("bindS",                mapsToExpl entreeSpecsModule "BindS")
-  , ("triggerS",             mapsToExpl entreeSpecsModule "TriggerS")
-  , ("errorS",               mapsToExpl entreeSpecsModule "ErrorS")
-  , ("forallS",              mapsToExplInferArg "SpecM.ForallS" 2)
-  , ("existsS",              mapsToExplInferArg "SpecM.ExistsS" 2)
-  , ("assumeS",              mapsToExpl entreeSpecsModule "AssumeS")
-  , ("assertS",              mapsToExpl entreeSpecsModule "AssertS")
-  , ("CallS",                mapsToExpl entreeSpecsModule "CallS")
-  , ("SpecFun",              mapsTo entreeSpecsModule "SpecFun")
-  , ("applyCallClos",        skip) -- FIXME: translation bug!
-  , ("stackIncl",            mapsTo entreeSpecsModule "stackIncl")
-  , ("StackTuple",           mapsTo entreeSpecsModule "StackTuple")
-  , ("SpecDef",              mapsTo entreeSpecsModule "SpecDef")
-  , ("SpecImp",              mapsTo entreeSpecsModule "SpecImp")
-  , ("Build_SpecImp",        mapsTo entreeSpecsModule "Build_SpecImp")
-  , ("SpecImpType",          mapsTo entreeSpecsModule "SpecImpType")
-  , ("defineSpecStack",      mapsTo entreeSpecsModule "defineSpecStack")
-  , ("defineSpec",           mapsTo entreeSpecsModule "defineSpec")
-  , ("mkLocalLRTClos",       mapsTo entreeSpecsModule "mkLocalLRTClos")
-  , ("nthImport",            mapsTo entreeSpecsModule "nthImport")
-  , ("callNthImportS",       mapsTo entreeSpecsModule "callNthImportS")
-
+  [ ("EvType",               mapsTo specMModule "EvType")
+  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
+  , ("FunIx",                mapsTo specMModule "FunIx")
+  , ("evTypeType",           mapsTo specMModule "evTypeType")
+  , ("evRetType",            mapsTo specMModule "evRetType")
+  , ("SpecM",                mapsTo specMModule "SpecM")
+  , ("retS",                 mapsToExpl specMModule "retS")
+  , ("bindS",                mapsToExpl specMModule "bindS")
+  , ("triggerS",             mapsToExpl specMModule "triggerS")
+  , ("errorS",               mapsToExpl specMModule "errorS")
+  , ("forallS",              mapsToExplInferArg "SpecM.forallS" 2)
+  , ("existsS",              mapsToExplInferArg "SpecM.existsS" 2)
+  , ("assumeS",              mapsToExpl specMModule "assumeS")
+  , ("assertS",              mapsToExpl specMModule "assertS")
+  , ("CallS",                mapsToExpl specMModule "CallS")
+  , ("LambdaS",              mapsToExpl specMModule "LambdaS")
+  , ("FixS",                 mapsToExpl specMModule "FixS")
+  , ("MultiFixS",            mapsToExpl specMModule "MultiFixS")
+  , ("LetRecS",              mapsToExpl specMModule "LetRecS")
+  , ("specFun",              mapsTo specMModule "specFun")
+    {-
   , ("SpecPreRel",           mapsToExpl entreeSpecsModule "SpecPreRel")
   , ("SpecPostRel",          mapsToExpl entreeSpecsModule "SpecPostRel")
   , ("eqPreRel",             mapsToExpl entreeSpecsModule "eqPreRel")
-  , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel")
+  , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel") -}
   , ("refinesS",             skip)
   , ("refinesS_eq",          skip)
   ]

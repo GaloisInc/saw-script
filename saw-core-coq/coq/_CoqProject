@@ -5,6 +5,7 @@ generated/CryptolToCoq/SAWCorePrelude.v
 generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
 # generated/CryptolToCoq/CryptolMPrimitivesForSAWCore.v
 
+handwritten/CryptolToCoq/SpecM.v
 # handwritten/CryptolToCoq/CompM.v
 # handwritten/CryptolToCoq/CompMExtra.v
 handwritten/CryptolToCoq/CoqVectorsExtra.v

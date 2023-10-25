@@ -35,9 +35,10 @@ Proof.
   induction x; induction y; simpl; auto.
 Defined.
 
+(* NOTE: addNat is now defined as Coq plus, so this is trivial *)
 Theorem addNat_add : forall x y, addNat x y = x + y.
 Proof.
-  induction x; simpl; auto.
+  reflexivity.
 Defined.
 
 Theorem subNat_sub : forall x y, subNat x y = x - y.
@@ -45,11 +46,10 @@ Proof.
   induction x; induction y; simpl; auto.
 Defined.
 
+(* NOTE: mulNat is now defined as Coq mult, so this is trivial *)
 Theorem mulNat_mul : forall x y, mulNat x y = x * y.
 Proof.
-  induction x; simpl; intros; auto.
-  rewrite IHx.
-  apply addNat_add.
+  reflexivity.
 Defined.
 
 Definition streamScanl (a b : sort 0) (f : b -> a -> b) (z:b) (xs:Stream a) : Stream b :=
