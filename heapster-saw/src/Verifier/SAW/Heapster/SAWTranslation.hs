@@ -359,6 +359,11 @@ tpElemTypeOpenTerm :: OpenTerm -> OpenTerm
 tpElemTypeOpenTerm d =
   applyGlobalOpenTerm "Prelude.tpElem" [d]
 
+-- | Build the computation type @SpecM E A@
+specMTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
+specMTypeOpenTerm ev tp =
+  applyGlobalOpenTerm "Prelude.SpecM" [evTypeTerm ev, tp]
+
 -- | Build a @SpecM@ computation that returns a value
 retSOpenTerm :: EventType -> OpenTerm -> OpenTerm -> OpenTerm
 retSOpenTerm ev tp x =
@@ -1129,6 +1134,8 @@ sigmaElimPermTransM x tp_l mb_p tp_ret_m f sigma = case mbMatch mb_p of
   _ ->
     sigmaElimTransM x tp_l (flip inExtTransM $ translate mb_p) tp_ret_m f sigma
 
+-- FIXME: consider using applyEventOpM and friends in the translation below
+
 -- | Apply an 'OpenTerm' to the current event type @E@ and to a
 -- list of other arguments
 applyEventOpM :: TransInfo info => OpenTerm -> [OpenTerm] ->
@@ -1143,11 +1150,10 @@ applyNamedEventOpM :: TransInfo info => Ident -> [OpenTerm] ->
                       TransM info ctx OpenTerm
 applyNamedEventOpM f args = applyEventOpM (globalOpenTerm f) args
 
--- | Generate the type @SpecM E evRetType stack A@ using the current event type
--- and the supplied @stack@ and type @A@
-specMTypeTransM :: TransInfo info => OpenTerm -> OpenTerm ->
-                   TransM info ctx OpenTerm
-specMTypeTransM stack tp = applyNamedEventOpM "Prelude.SpecM" [stack,tp]
+-- | Generate the type @SpecM E evRetType A@ using the current event type
+-- and the supplied type @A@
+specMTypeTransM :: TransInfo info => OpenTerm -> TransM info ctx OpenTerm
+specMTypeTransM tp = applyNamedEventOpM "Prelude.SpecM" [tp]
 
 
 -- | The class for translating to SAW
@@ -3305,11 +3311,13 @@ instance TransInfo info =>
         rets = CruCtxCons (mbLift gouts) (mbLift ret)
         rets_prxs = cruCtxProxies rets in
     (RL.map (const Proxy) <$> infoCtx <$> ask) >>= \ctx ->
+    (infoEvType <$> ask) >>= \ev ->
     case RL.appendAssoc ctx tops_prxs rets_prxs of
       Refl ->
         piExprCtxApp tops $
         do tptrans_in <- translate (mbCombine tops_prxs perms_in)
            piTransM "p" tptrans_in $ \_ ->
+             specMTypeOpenTerm ev <$>
              translateRetType rets (mbCombine
                                     (RL.append tops_prxs rets_prxs) perms_out)
 
@@ -3366,7 +3374,8 @@ translateRetTpDesc rets ret_perms =
   inExtCtxDescTransM rets $ \kdescs ->
   tpMTpDesc <$> sigmaTpDescMulti kdescs <$> translateDesc ret_perms
 
--- | Build the return type for the function resulting from an entrypoint
+-- | Build the pure return type (not including the application of @SpecM@) for
+-- the function resulting from an entrypoint
 translateEntryRetType :: TransInfo info =>
                          TypedEntry phase ext blocks tops rets args ghosts ->
                          TransM info ((tops :++: args) :++: ghosts) OpenTerm
