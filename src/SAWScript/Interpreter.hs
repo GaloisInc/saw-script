@@ -4307,7 +4307,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_llvmshape)
     Experimental
     [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
