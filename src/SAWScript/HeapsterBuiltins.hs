@@ -635,9 +635,7 @@ heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_st
      sc <- getSharedContext
      d_tp <- tpDescTypeM sc
      d_id <- parseAndInsDef henv (nm ++ "__desc") d_tp d_str
-     tp_tp <- liftIO $
-       translateCompleteTypeInCtx sc env args $
-       nus (cruCtxProxies args) $ const $ ValuePermRepr $ LLVMShapeRepr w
+     tp_tp <- liftIO $ translateExprTypeFunType sc env args
      tp_id <- parseAndInsDef henv nm tp_tp tp_str
      let env' =
            withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id d_id
