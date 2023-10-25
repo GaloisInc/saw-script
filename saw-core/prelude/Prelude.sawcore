@@ -2952,6 +2952,9 @@ primitive LambdaS : (E:EvType) -> (T:TpDesc) -> specFun E nilTpEnv T -> FunIx T;
 primitive FixS : (E:EvType) -> (T:TpDesc) ->
                  (FunIx T -> specFun E nilTpEnv T) -> SpecM E (FunIx T);
 
+-- A hint to Mr Solver that a recursive function has the given loop invariant
+invariantHint : (a : sort 0) -> Bool -> a -> a;
+invariantHint _ _ a = a;
 
 -- The multi-arity function type from FunIxs to a given output type
 arrowIxs : List TpDesc -> sort 0 -> sort 0;
