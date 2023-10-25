@@ -4809,7 +4809,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       do ttrans <- translateSimplImplOutHead mb_simpl
          withPermStackM id
            (\(pctx :>: ptrans) ->
-             pctx :>: typeTransF ttrans [transTerm1 ptrans])
+             pctx :>: typeTransF ttrans (transTerms ptrans))
            m
 
     | otherwise ->
