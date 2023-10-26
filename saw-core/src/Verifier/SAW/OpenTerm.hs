@@ -63,7 +63,7 @@ module Verifier.SAW.OpenTerm (
   arrayValueOpenTerm, vectorTypeOpenTerm, bvLitOpenTerm, bvTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
-  tupleOpenTerm', tupleTypeOpenTerm',
+  tupleOpenTerm', tupleTypeOpenTerm', projTupleOpenTerm',
   recordOpenTerm, recordTypeOpenTerm, projRecordOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
@@ -276,10 +276,23 @@ tupleOpenTerm' :: [OpenTerm] -> OpenTerm
 tupleOpenTerm' [] = unitOpenTerm
 tupleOpenTerm' ts = foldr1 pairTypeOpenTerm ts
 
--- | Build a right-nested tuple type as an 'OpenTerm'
+-- | Build a right-nested tuple type as an 'OpenTerm' but without adding a final
+-- unit type as the right-most element
 tupleTypeOpenTerm' :: [OpenTerm] -> OpenTerm
 tupleTypeOpenTerm' [] = unitTypeOpenTerm
 tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+
+-- | Project the @i@th element from a term of a right-nested tuple term that
+-- does not have a final unit type as the right-most type. Note that this
+-- requires knowing the length of @tps@.
+projTupleOpenTerm' :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
+projTupleOpenTerm' [] _ _ =
+  panic "projTupleOpenTerm'" ["projection of empty tuple!"]
+projTupleOpenTerm' [_] 0 tup = tup
+projTupleOpenTerm' (_:_) 0 tup = pairLeftOpenTerm tup
+projTupleOpenTerm' (_:tps) i tup =
+  projTupleOpenTerm' tps (i-1) $ pairRightOpenTerm tup
+
 
 -- | Build a record value as an 'OpenTerm'
 recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
