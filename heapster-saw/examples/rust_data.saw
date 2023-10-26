@@ -493,12 +493,9 @@ heapster_typecheck_fun_rename env mk_proj0_five_values_sym "mk_proj0_five_values
   "<> fn (x1:u32,x2:u32,x3:u32,x4:u32,x5:u32) -> u32";
 
 // ref_sum
-/*
 ref_sum_sym <- heapster_find_symbol env "7ref_sum";
-// FIXME: Get this working again
 heapster_typecheck_fun_rename env ref_sum_sym "ref_sum"
   "<'a,'b> fn (x:&'a u64, y:&'a u64) -> u64";
-*/
 
 // double_dup_ref
 double_dup_ref_sym <- heapster_find_symbol env "14double_dup_ref";
