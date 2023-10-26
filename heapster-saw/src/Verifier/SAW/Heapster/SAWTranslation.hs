@@ -482,49 +482,21 @@ typeTransType1 (TypeTrans [tp] _) = tp
 typeTransType1 _ =
   panic "typeTransType1" ["found multiple types where at most 1 was expected"]
 
--- | Build the tuple type @T1 * (T2 * ... * (Tn-1 * Tn))@ of @n@ types, with the
--- special case that 0 types maps to the unit type @#()@ (and 1 type just maps
--- to itself). Note that this is different from 'tupleTypeOpenTerm', which
--- always ends with unit, i.e., which returns @T1*(T2*...*(Tn-1*(Tn*#())))@.
-tupleOfTypes :: [OpenTerm] -> OpenTerm
-tupleOfTypes [] = unitTypeOpenTerm
-tupleOfTypes [tp] = tp
-tupleOfTypes (tp:tps) = pairTypeOpenTerm tp $ tupleOfTypes tps
-
--- | Build the tuple @(t1,(t2,(...,(tn-1,tn))))@ of @n@ terms, with the
--- special case that 0 types maps to the unit value @()@ (and 1 value just maps
--- to itself). Note that this is different from 'tupleOpenTerm', which
--- always ends with unit, i.e., which returns @t1*(t2*...*(tn-1*(tn*())))@.
-tupleOfTerms :: [OpenTerm] -> OpenTerm
-tupleOfTerms [] = unitOpenTerm
-tupleOfTerms [t] = t
-tupleOfTerms (t:ts) = pairOpenTerm t $ tupleOfTerms ts
-
--- | Project the @i@th element from a term of type @'tupleOfTypes' tps@. Note
--- that this requires knowing the length of @tps@.
-projTupleOfTypes :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
-projTupleOfTypes [] _ _ =
-  panic "projTupleOfTypes" ["projection of empty tuple!"]
-projTupleOfTypes [_] 0 tup = tup
-projTupleOfTypes (_:_) 0 tup = pairLeftOpenTerm tup
-projTupleOfTypes (_:tps) i tup =
-  projTupleOfTypes tps (i-1) $ pairRightOpenTerm tup
-
 -- | Map the 'typeTransTypes' field of a 'TypeTrans' to a single type, where a
 -- single type is mapped to itself, an empty list of types is mapped to @unit@,
 -- and a list of 2 or more types is mapped to a tuple of the types
 typeTransTupleType :: TypeTrans tr -> OpenTerm
-typeTransTupleType = tupleOfTypes . typeTransTypes
+typeTransTupleType = tupleOpenTerm' . typeTransTypes
 
--- | Convert a 'TypeTrans' over 0 or more types to one over the one type
--- returned by 'tupleOfTypes'
+-- | Convert a 'TypeTrans' over 0 or more types to one over a tuple of those
+-- types
 tupleTypeTrans :: TypeTrans tr -> TypeTrans tr
 tupleTypeTrans ttrans =
   let tps = typeTransTypes ttrans in
-  TypeTrans [tupleOfTypes tps]
+  TypeTrans [tupleTypeOpenTerm' tps]
   (\case
       [t] ->
-        typeTransF ttrans $ map (\i -> projTupleOfTypes tps i t) $
+        typeTransF ttrans $ map (\i -> projTupleOpenTerm' tps i t) $
         take (length $ typeTransTypes ttrans) [0..]
       _ -> panic "tupleTypeTrans" ["incorrect number of terms"])
 
@@ -626,7 +598,7 @@ class IsTermTrans tr where
 -- function returns an element of the type @'tupleTypeTrans' ttrans@.
 transTupleTerm :: IsTermTrans tr => tr -> OpenTerm
 transTupleTerm (transTerms -> [t]) = t
-transTupleTerm tr = tupleOfTerms $ transTerms tr
+transTupleTerm tr = tupleOpenTerm' $ transTerms tr
 
 {-
 -- | Build a tuple of the terms contained in a translation. This is "strict" in
@@ -1665,7 +1637,7 @@ instance TransInfo info =>
          (elem_ds, elem_tps) <- unETransShape <$> translate mb_sh
          return $
            ETrans_Shape [bvVecTpDesc w_term len_d (tupleTpDesc elem_ds)]
-           [bvVecTypeOpenTerm w_term len_term (tupleOfTypes elem_tps)]
+           [bvVecTypeOpenTerm w_term len_term (tupleTypeOpenTerm' elem_tps)]
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
       do (ds1, tps1) <- unETransShape <$> translate sh1
          (ds2, tps2) <- unETransShape <$> translate sh2
@@ -1675,7 +1647,8 @@ instance TransInfo info =>
          (ds2, tps2) <- unETransShape <$> translate sh2
          return $
            ETrans_Shape [sumTpDesc (tupleTpDesc ds1) (tupleTpDesc ds2)]
-           [eitherTypeOpenTerm (tupleOfTypes tps1) (tupleOfTypes tps2)]
+           [eitherTypeOpenTerm
+            (tupleTypeOpenTerm' tps1) (tupleTypeOpenTerm' tps2)]
     [nuMP| PExpr_ExShape mb_mb_sh |] ->
       do let tp_repr = mbLift $ fmap bindingType mb_mb_sh
          let mb_sh = mbCombine RL.typeCtxProxies mb_mb_sh
@@ -3051,7 +3024,7 @@ instance TransInfo info =>
       fmap PTrans_Conj <$> listTypeTrans <$> translate ps
     [nuMP| ValPerm_Var x _ |] ->
       do (_, tps) <- unETransPerm <$> translate x
-         return $ mkPermTypeTrans1 p (tupleOfTypes tps)
+         return $ mkPermTypeTrans1 p (tupleTypeOpenTerm' tps)
     [nuMP| ValPerm_False |] ->
       return $ mkPermTypeTrans1 p $ globalOpenTerm "Prelude.FalseProp"
 
