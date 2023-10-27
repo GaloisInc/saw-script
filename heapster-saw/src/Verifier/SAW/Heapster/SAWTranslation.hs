@@ -1091,10 +1091,10 @@ sigmaTransM x tp_l tp_r lhs rhs_m k =
   do info <- ask
      rhs <- rhs_m
      transTupleTermM rhs $ \rhs_tm ->
-       return (sigmaOpenTermMulti x (typeTransTypes tp_l)
-               (typeTransTupleType . flip runTransM info . tp_r . typeTransF tp_l)
-               (transTerms lhs)
-               rhs_tm)
+       k (sigmaOpenTermMulti x (typeTransTypes tp_l)
+          (typeTransTupleType . flip runTransM info . tp_r . typeTransF tp_l)
+          (transTerms lhs)
+          rhs_tm)
 
 -- | Like `sigmaTransM`, but translates `exists x.eq(y)` into just `x`
 sigmaPermTransM :: (TransInfo info, IsTermTransM info ctx trR2) =>
@@ -2639,6 +2639,8 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
 -- * Translations of Lifetime Ownership Permissions
 ----------------------------------------------------------------------
 
+-- FIXME: lownedInfoEvType field is redundant now that we have lownedInfoEnv
+
 -- | An 'LOwnedInfo' is essentially a set of translations of "proof objects" of
 -- permission list @ps@, in a variable context @ctx@, along with additional
 -- information (the @SpecM@ event type and the eventual return type of the
@@ -2854,14 +2856,15 @@ lownedTransTermFun :: PermEnv -> ExprTransCtx ctx ->
                       LOwnedTransTerm ctx ps_in ps_out -> OpenTerm
 lownedTransTermFun env ectx vars_in tps_in tps_out t =
   lambdaTrans "p" (descTypeTrans tps_in) $ \ps_in ->
-  let ret_tp = typeTransTupleType $ descTypeTrans tps_out in
+  let ret_tp = typeTransTupleType $ descTypeTrans tps_out
+      ev = permEnvEventType env in
   let loInfo =
         LOwnedInfo { lownedInfoECtx = ectx,
                      lownedInfoPCtx = ps_in, lownedInfoPVars = vars_in,
-                     lownedInfoEvType = permEnvEventType env,
+                     lownedInfoEvType = ev,
                      lownedInfoRetType = ret_tp, lownedInfoEnv = env } in
   runLOwnedTransM (t >>> pctxInTermsLOwnedTransM) reflExprCtxExt loInfo $
-  \_ loInfo_out ts -> tupleOpenTerm' ts
+  \_ loInfo_out ts -> retSOpenTerm ev ret_tp $ tupleOpenTerm' ts
 
 -- | Extend the expression context of an 'LOwnedTransTerm'
 extLOwnedTransTerm :: ExprTransCtx ctx2 ->
@@ -3011,7 +3014,7 @@ lownedTransTerm (mbExprPermsMembers -> Just vars_in) lotr k =
            vars_in (lotrTpTransIn lotr) (lotrTpTransOut lotr) lot
          ix_tptrans = openTermTypeTrans (funIxTypeOpenTerm d)
      ev <- infoEvType <$> ask
-     bindTransM (lambdaSOpenTerm ev d f) ix_tptrans "f_lowned" return
+     bindTransM (lambdaSOpenTerm ev d f) ix_tptrans "f_lowned" k
 lownedTransTerm _ _ _ =
   return $ failOpenTerm "FIXME HERE NOW: write this error message"
 
