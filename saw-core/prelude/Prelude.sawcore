@@ -2952,7 +2952,8 @@ specFun E env_top T_top =
 primitive CallS : (E:EvType) -> (T:TpDesc) -> FunIx T -> specFun E nilTpEnv T;
 
 -- Create a function index from a specification function in a specification
-primitive LambdaS : (E:EvType) -> (T:TpDesc) -> specFun E nilTpEnv T -> FunIx T;
+primitive LambdaS : (E:EvType) -> (T:TpDesc) -> specFun E nilTpEnv T ->
+                    SpecM E (FunIx T);
 
 -- Create a lambda as a fixed-point that can call itself. Note that the type of
 -- f, FunIx T -> specFun E nil T, is the same as specFun E nil (Tp_Arr T T) when
