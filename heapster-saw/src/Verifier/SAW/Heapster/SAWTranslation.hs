@@ -1187,7 +1187,7 @@ bindTransM :: TransInfoM info => OpenTerm -> TypeTrans tr -> String ->
 bindTransM m m_tptrans str f =
   do ev <- infoEvType <$> ask
      ret_tp <- returnTypeM
-     k_tm <- lambdaTransM str m_tptrans f
+     k_tm <- lambdaTupleTransM str m_tptrans f
      let m_tp = typeTransTupleType m_tptrans
      return $ bindSOpenTerm ev m_tp ret_tp m k_tm
 
@@ -2935,6 +2935,10 @@ mapLtLOwnedTransTerm prx_extra1 prx_extra2 prx_in t1 t2 =
   gmodify (\cext' info_out ->
             loInfoAppend (extLOwnedInfoExt cext' info_extra2) info_out) >>>
   extLOwnedTransM cext t2
+
+-- FIXME HERE NOW: LOwnedTrans should have an extra constructor for a function
+-- index that has not yet been converted to an LOwnedTransTerm; or maybe
+-- LOwnedTransTerm should have the two constructors?
 
 -- | The translation of an @lowned@ permission
 data LOwnedTrans ctx ps_extra ps_in ps_out =
@@ -6046,6 +6050,8 @@ translateCallEntry nm entry_trans mb_tops mb_args mb_ghosts =
          -- Otherwise, continue translating with the target entrypoint, with all
          -- the current expressions free but with only those permissions on top
          -- of the stack
+         --
+         -- FIXME HERE NOW: can we avoid doing transTermsM here?
          transTermsM pctx $ \pctx_ts ->
          inEmptyEnvImpTransM $ inCtxTransM ectx $
          do perms_trans <- translate $ typedEntryPermsIn entry
