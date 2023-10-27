@@ -274,7 +274,7 @@ projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
 -- as the right-most element
 tupleOpenTerm' :: [OpenTerm] -> OpenTerm
 tupleOpenTerm' [] = unitOpenTerm
-tupleOpenTerm' ts = foldr1 pairTypeOpenTerm ts
+tupleOpenTerm' ts = foldr1 pairOpenTerm ts
 
 -- | Build a right-nested tuple type as an 'OpenTerm' but without adding a final
 -- unit type as the right-most element
