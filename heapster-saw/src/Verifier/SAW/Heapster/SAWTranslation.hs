@@ -4570,13 +4570,17 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                          ++ "found non-field perm where field perm was expected")
        let arr_trans =
              unPTransLLVMArray
-             "translateSimplImpl: SImpl_LLVMArrayCellCopy" ptrans_array
+             "translateSimplImpl: SImpl_LLVMArrayCellReturn" ptrans_array
        {- let b_trans = llvmArrayTransFindBorrow (fmap FieldBorrow cell) arr_trans -}
+       let arr_trans' = arr_trans
+             { llvmArrayTransPerm =
+                 mbMap2 (\ap cell ->
+                          llvmArrayRemBorrow (FieldBorrow cell) ap) mb_ap mb_cell }
        cell_tm <- translate1 mb_cell
-       setLLVMArrayTransCell arr_trans cell_tm aptrans_cell $ \arr_trans' ->
+       setLLVMArrayTransCell arr_trans' cell_tm aptrans_cell $ \arr_trans'' ->
          withPermStackM RL.tail
          (\(pctx :>: _ :>: _) ->
-           pctx :>: PTrans_Conj [APTrans_LLVMArray arr_trans'])
+           pctx :>: PTrans_Conj [APTrans_LLVMArray arr_trans''])
          m
 
   [nuMP| SImpl_LLVMArrayContents _ mb_ap mb_sh impl |] ->
