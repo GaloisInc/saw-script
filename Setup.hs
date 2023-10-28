@@ -31,6 +31,11 @@ myBuild pd lbi uh flags = do
   aig_desc <- gitdescribe "deps/aig" (Just . init) Nothing Nothing
   w4_desc  <- gitdescribe "deps/what4" (Just . init) Nothing Nothing
 
+  rme_desc <- case hasGit of
+    Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
+                `catch` gitfailure Nothing
+    Nothing -> return Nothing
+
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
     , "-- | String describing the HEAD of saw-script at compile-time"
@@ -42,6 +47,10 @@ myBuild pd lbi uh flags = do
     , "-- | String describing the HEAD of the deps/what4 submodule at compile-time"
     , "what4Hash :: Maybe String"
     , "what4Hash = " ++ show w4_desc
+    , "-- | String describing the most recent commit which modified the rme directory"
+    , "-- at compile-time"
+    , "rmeHash :: Maybe String"
+    , "rmeHash = " ++ show rme_desc
     ]
 
   unless (null $ allBuildInfo pd) $

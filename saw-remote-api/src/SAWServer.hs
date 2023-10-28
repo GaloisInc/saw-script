@@ -40,8 +40,9 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as JSS
-import Mir.Intrinsics (MIR)
 import Mir.Generator (RustModule)
+import Mir.Intrinsics (MIR)
+import Mir.Mir (Adt)
 --import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
@@ -84,7 +85,7 @@ import SAWServer.Exceptions
       notAJVMMethodSpecIR,
       notAYosysImport,
       notAYosysTheorem, notAYosysSequential,
-      notAMIRModule, notAMIRMethodSpecIR
+      notAMIRModule, notAMIRMethodSpecIR, notAMIRAdt
     )
 
 type SAWCont = (SAWEnv, SAWTask)
@@ -106,7 +107,11 @@ instance Show SAWTask where
 
 data CrucibleSetupVal ty e
   = NullValue
-  | ArrayValue [CrucibleSetupVal ty e]
+  | ArrayValue (Maybe ty) [CrucibleSetupVal ty e]
+  | StructValue (Maybe ServerName) [CrucibleSetupVal ty e]
+    -- ^ The @'Maybe' 'ServerName'@ value represents a possible MIR
+    -- ADT. This should always be 'Just' with MIR verification and
+    -- 'Nothing' with LLVM or JVM verification.
   | TupleValue [CrucibleSetupVal ty e]
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal ty e) String
@@ -329,6 +334,7 @@ data ServerVal
   | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
   | VMIRModule RustModule
+  | VMIRAdt Adt
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
   | VMIRMethodSpecIR (CMS.ProvedSpec MIR)
@@ -347,6 +353,7 @@ instance Show ServerVal where
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
   show (VMIRModule _) = "VMIRModule"
+  show (VMIRAdt _) = "VMIRAdt"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
   show (VMIRMethodSpecIR _) = "VMIRMethodSpecIR"
@@ -412,6 +419,9 @@ instance IsServerVal (Some CMS.LLVMModule) where
 instance IsServerVal RustModule where
   toServerVal = VMIRModule
 
+instance IsServerVal Adt where
+  toServerVal = VMIRAdt
+
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
   do Argo.debugLog $ "Saving " <> (T.pack (show name))
@@ -426,12 +436,18 @@ setServerVal name val =
 
 getServerVal :: ServerName -> Argo.Command SAWState ServerVal
 getServerVal n =
-  do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
+  do sawenv <- view sawEnv <$> Argo.getState
      st <- Argo.getState @SAWState
      Argo.debugLog $ "Looking up " <> T.pack (show n) <> " in " <> T.pack (show st)
-     case M.lookup n serverEnv of
-       Nothing -> Argo.raise (serverValNotFound n)
-       Just val -> return val
+     case getServerValEither sawenv n of
+       Left ex -> Argo.raise ex
+       Right val -> return val
+
+getServerValEither :: SAWEnv -> ServerName -> Either Argo.JSONRPCException ServerVal
+getServerValEither (SAWEnv serverEnv) n =
+  case M.lookup n serverEnv of
+    Nothing -> Left (serverValNotFound n)
+    Just val -> Right val
 
 bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
@@ -472,6 +488,24 @@ getMIRModule n =
      case v of
        VMIRModule m -> return m
        _other -> Argo.raise (notAMIRModule n)
+
+getMIRAdt :: ServerName -> Argo.Command SAWState Adt
+getMIRAdt n =
+  do v <- getServerVal n
+     case mirAdtEither n v of
+       Left ex -> Argo.raise ex
+       Right adt -> pure adt
+
+getMIRAdtEither :: SAWEnv -> ServerName -> Either Argo.JSONRPCException Adt
+getMIRAdtEither sawenv n =
+  do v <- getServerValEither sawenv n
+     mirAdtEither n v
+
+mirAdtEither :: ServerName -> ServerVal -> Either Argo.JSONRPCException Adt
+mirAdtEither n v =
+  case v of
+    VMIRAdt adt -> Right adt
+    _other -> Left (notAMIRAdt n)
 
 getLLVMSetup :: ServerName -> Argo.Command SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =

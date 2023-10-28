@@ -176,12 +176,17 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       CrucibleSetupVal JSONLLVMType (P.Expr P.PName) ->
       LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
     getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
-    getSetupVal env (ArrayValue elts) =
+    getSetupVal env (ArrayValue _ elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
-    getSetupVal env (TupleValue elts) =
+    getSetupVal _env (StructValue (Just _) _elts) =
+      LLVMCrucibleSetupM $
+      fail "LLVM verification does not support struct values with MIR ADTs."
+    getSetupVal env (StructValue Nothing elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
+    getSetupVal _ (TupleValue _) =
+      LLVMCrucibleSetupM $ fail "Tuple setup values unsupported in the LLVM API."
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld

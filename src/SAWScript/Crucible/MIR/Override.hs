@@ -20,6 +20,7 @@ module SAWScript.Crucible.MIR.Override
 
 import qualified Control.Exception as X
 import Control.Lens
+import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Foldable (for_, traverse_)
 import qualified Data.Functor.Product as Functor
@@ -30,22 +31,22 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Data.Vector as V
 import Data.Void (absurd)
 import qualified Prettyprinter as PP
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
-import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Types as Crucible
 import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
+import qualified Mir.TransTy as Mir
 import qualified What4.Expr as W4
 import qualified What4.Interface as W4
-import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.Prelude (scEq)
@@ -63,6 +64,7 @@ import SAWScript.Crucible.MIR.MethodSpecIR
 import SAWScript.Crucible.MIR.ResolveSetupValue
 import SAWScript.Crucible.MIR.TypeShape
 import SAWScript.Options
+import SAWScript.Panic (panic)
 import SAWScript.Utils (handleException)
 
 -- A few convenient synonyms
@@ -179,15 +181,16 @@ instantiateSetupValue sc s v =
   case v of
     MS.SetupVar _                     -> return v
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
+    MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
+    MS.SetupStruct did vs             -> MS.SetupStruct did <$> mapM (instantiateSetupValue sc s) vs
+    MS.SetupTuple x vs                -> MS.SetupTuple x <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupNull empty                -> absurd empty
-    MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _                -> return v
-    MS.SetupArray _ _                 -> return v
+    MS.SetupGlobal _ _                -> return v
     MS.SetupElem _ _ _                -> return v
     MS.SetupField _ _ _               -> return v
     MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
-    MS.SetupGlobalInitializer empty _ -> absurd empty
+    MS.SetupGlobalInitializer _ _     -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 
@@ -239,16 +242,29 @@ learnPointsTo ::
   MS.PrePost                 ->
   MirPointsTo                ->
   OverrideMatcher MIR w ()
-learnPointsTo opts sc cc spec prepost (MirPointsTo md allocIdx referents) =
+learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
   mccWithBackend cc $ \bak ->
   do let col = cc ^. mccRustModule . Mir.rmCS ^. Mir.collection
      globals <- OM (use overrideGlobals)
-     Some mp <- resolveAllocIndexMIR allocIdx
-     let mpMirTy = mp^.mpMirType
-     let mpTpr = tyToShapeEq col mpMirTy (mp^.mpType)
-     val <- firstPointsToReferent referents
-     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes (mp^.mpType) (mp^.mpRef)
-     matchArg opts sc cc spec prepost md (MIRVal mpTpr v) mpMirTy val
+     MIRVal referenceShp referenceVal <-
+       resolveSetupValueMIR opts cc sc spec reference
+     -- By the time we reach here, we have already checked (in mir_points_to)
+     -- that we are in fact dealing with a reference value, so the call to
+     -- `testRefShape` below should always succeed.
+     IsRefShape _ referenceInnerMirTy _ referenceInnerTpr <-
+       case testRefShape referenceShp of
+         Just irs -> pure irs
+         Nothing ->
+           panic "learnPointsTo"
+                 [ "Unexpected non-reference type:"
+                 , show $ PP.pretty $ shapeMirTy referenceShp
+                 ]
+     let innerShp = tyToShapeEq col referenceInnerMirTy referenceInnerTpr
+     referentVal <- firstPointsToReferent referents
+     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes
+       referenceInnerTpr referenceVal
+     matchArg opts sc cc spec prepost md (MIRVal innerShp v)
+       referenceInnerMirTy referentVal
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -301,23 +317,103 @@ matchArg opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expec
        realTerm <- valueToSC sym md failMsg tval actual
        matchTerm sc cc md prepost realTerm (ttTerm expectedTT)
 
-matchArg opts sc cc cs _prepost md actual@(MIRVal (RefShape _refTy pointeeTy mutbl tpr) ref) expectedTy setupval =
-  case setupval of
-    MS.SetupVar var ->
+matchArg opts sc cc cs prepost md actual expectedTy expected =
+  mccWithBackend cc $ \bak -> do
+  let sym = backendGetSym bak
+  case (actual, expectedTy, expected) of
+    (MIRVal (RefShape _refTy pointeeTy mutbl tpr) ref, _, MS.SetupVar var) ->
       do assignVar cc md var (Some (MirPointer tpr mutbl pointeeTy ref))
 
-    MS.SetupNull empty                -> absurd empty
-    MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupCast empty _              -> absurd empty
-    MS.SetupUnion empty _ _           -> absurd empty
-    MS.SetupGlobalInitializer empty _ -> absurd empty
+    -- match arrays point-wise
+    (MIRVal (ArrayShape _ _ elemShp) xs, Mir.TyArray y _len, MS.SetupArray _elemTy zs)
+      | Mir.MirVector_Vector xs' <- xs
+      , V.length xs' == length zs ->
+        sequence_
+          [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
+          | (x, z) <- zip (V.toList xs') zs ]
 
-    _ -> failure (cs ^. MS.csLoc) =<<
-           mkStructuralMismatch opts cc sc cs actual setupval expectedTy
+      | Mir.MirVector_PartialVector xs' <- xs
+      , V.length xs' == length zs ->
+        do let xs'' = V.map (readMaybeType sym "vector element" (shapeType elemShp)) xs'
+           sequence_
+             [ matchArg opts sc cc cs prepost md (MIRVal elemShp x) y z
+             | (x, z) <- zip (V.toList xs'') zs ]
 
-matchArg opts sc cc cs _prepost md actual expectedTy expected =
-  failure (MS.conditionLoc md) =<<
-    mkStructuralMismatch opts cc sc cs actual expected expectedTy
+    -- match the underlying field of a repr(transparent) struct
+    (MIRVal (TransparentShape _ shp) val, _, MS.SetupStruct adt [z])
+      | Just y <- Mir.reprTransparentFieldTy col adt ->
+        matchArg opts sc cc cs prepost md (MIRVal shp val) y z
+
+    -- match the fields of a struct point-wise
+    (MIRVal (StructShape _ _ xsFldShps) (Crucible.AnyValue tpr@(Crucible.StructRepr _) xs),
+     Mir.TyAdt _ _ _,
+     MS.SetupStruct adt zs)
+      | Ctx.sizeInt (Ctx.size xs) == length zs
+      , let xsTpr = Crucible.StructRepr (FC.fmapFC fieldShapeType xsFldShps)
+      , Just Refl <- W4.testEquality tpr xsTpr ->
+        case adt of
+          Mir.Adt _ Mir.Struct [v] _ _ _ _ ->
+            let ys = v ^.. Mir.vfields . each . Mir.fty in
+            sequence_
+              [ case xFldShp of
+                  ReqField shp ->
+                    matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+                  OptField shp -> do
+                    let x' = readMaybeType sym "field" (shapeType shp) x
+                    matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+              | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
+                  zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                       ys
+                       zs ]
+          Mir.Adt _ ak _ _ _ _ _ ->
+            panic "matchArg" ["AdtKind " ++ show ak ++ " not yet implemented"]
+
+    -- match the fields of a tuple point-wise
+    (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
+      sequence_
+        [ case xFldShp of
+            ReqField shp ->
+              matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+            OptField shp -> do
+              let x' = readMaybeType sym "field" (shapeType shp) x
+              matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+        | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
+            zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                 ys
+                 zs
+        ]
+
+    (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name) -> do
+      static <- findStatic colState name
+      Mir.StaticVar yGlobalVar <- findStaticVar colState (static ^. Mir.sName)
+      let y = staticRefMux sym yGlobalVar
+      case W4.testEquality xTpr (Crucible.globalType yGlobalVar) of
+        Nothing -> fail_
+        Just Refl -> do
+          pred_ <- liftIO $
+            Mir.mirRef_eqIO bak x y
+          addAssert pred_ md =<< notEq
+    (_, _, MS.SetupGlobalInitializer () name) -> do
+      static <- findStatic colState name
+      let staticTy = static ^. Mir.sTy
+      unless (checkCompatibleTys expectedTy staticTy) fail_
+      staticInitMirVal <- findStaticInitializer cc static
+      pred_ <- liftIO $ equalValsPred cc staticInitMirVal actual
+      addAssert pred_ md =<< notEq
+
+    (_, _, MS.SetupNull empty)                -> absurd empty
+    (_, _, MS.SetupCast empty _)              -> absurd empty
+    (_, _, MS.SetupUnion empty _ _)           -> absurd empty
+
+    _ -> fail_
+  where
+    colState = cc ^. mccRustModule . Mir.rmCS
+    col      = colState ^. Mir.collection
+
+    loc   = MS.conditionLoc md
+    fail_ = failure loc =<<
+              mkStructuralMismatch opts cc sc cs actual expected expectedTy
+    notEq = notEqual prepost opts loc cc sc cs expected actual
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern
@@ -360,12 +456,29 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: MirPointsTo -> OverrideMatcher MIR w Bool
-    checkPointsTo (MirPointsTo _ allocIdx _) = checkAllocIndex allocIdx
+    checkPointsTo (MirPointsTo _ ref _) = checkSetupValue ref
 
-    checkAllocIndex :: AllocIndex -> OverrideMatcher MIR w Bool
-    checkAllocIndex i =
+    checkSetupValue :: SetupValue -> OverrideMatcher MIR w Bool
+    checkSetupValue v =
       do m <- OM (use setupValueSub)
-         return (Map.member i m)
+         return (all (`Map.member` m) (setupVars v))
+
+    -- Compute the set of variable identifiers in a 'SetupValue'
+    setupVars :: SetupValue -> Set AllocIndex
+    setupVars v =
+      case v of
+        MS.SetupVar i                     -> Set.singleton i
+        MS.SetupStruct _ xs               -> foldMap setupVars xs
+        MS.SetupTuple _ xs                -> foldMap setupVars xs
+        MS.SetupArray _ xs                -> foldMap setupVars xs
+        MS.SetupElem _ x _                -> setupVars x
+        MS.SetupField _ x _               -> setupVars x
+        MS.SetupTerm _                    -> Set.empty
+        MS.SetupGlobal _ _                -> Set.empty
+        MS.SetupGlobalInitializer _ _     -> Set.empty
+        MS.SetupCast empty _              -> absurd empty
+        MS.SetupUnion empty _ _           -> absurd empty
+        MS.SetupNull empty                -> absurd empty
 
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
@@ -413,33 +526,44 @@ mkStructuralMismatch _opts cc _sc spec (MIRVal shp _) setupval mty = do
             (Just setupTy)
             mty
 
-readMaybeType ::
-     Crucible.IsSymInterface sym
-  => sym
-  -> String
-  -> Crucible.TypeRepr tp
-  -> Crucible.RegValue sym (Crucible.MaybeType tp)
-  -> IO (Crucible.RegValue sym tp)
-readMaybeType sym desc tpr rv =
-  case readPartExprMaybe sym rv of
-    Just x -> return x
-    Nothing -> error $ "readMaybeType: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
+-- | Create an error stating that the 'MIRVal' was not equal to the 'SetupValue'
+notEqual ::
+  MS.PrePost ->
+  Options                     {- ^ output/verbosity options -} ->
+  W4.ProgramLoc               {- ^ where is the assertion from? -} ->
+  MIRCrucibleContext ->
+  SharedContext               {- ^ context for constructing SAW terms -} ->
+  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} ->
+  SetupValue                  {- ^ the value from the spec -} ->
+  MIRVal                      {- ^ the value from the simulator -} ->
+  OverrideMatcher MIR w Crucible.SimError
+notEqual cond opts loc cc sc spec expected actual = do
+  sym <- Ov.getSymInterface
+  let prettyMIRVal = ppMIRVal sym actual
+  prettySetupMIRVal <- ppSetupValueAsMIRVal opts cc sc spec expected
+  let msg = unlines
+        [ "Equality " ++ MS.stateCond cond
+        , "Expected value (as a SAW value): "
+        , show (MS.ppSetupValue expected)
+        , "Expected value (as a Crucible value): "
+        , show prettySetupMIRVal
+        , "Actual value: "
+        , show prettyMIRVal
+        ]
+  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
-readPartExprMaybe ::
-     Crucible.IsSymInterface sym
-  => sym
-  -> W4.PartExpr (W4.Pred sym) a
-  -> Maybe a
-readPartExprMaybe _sym W4.Unassigned = Nothing
-readPartExprMaybe _sym (W4.PE p v)
-  | Just True <- W4.asConstantPred p = Just v
-  | otherwise = Nothing
-
-resolveAllocIndexMIR :: AllocIndex -> OverrideMatcher MIR w (Some (MirPointer Sym))
-resolveAllocIndexMIR i =
-  do m <- OM (use setupValueSub)
-     pure $ lookupAllocIndex m i
+-- | Resolve a 'SetupValue' into a 'MIRVal' and pretty-print it
+ppSetupValueAsMIRVal ::
+  Options              {- ^ output/verbosity options -} ->
+  MIRCrucibleContext ->
+  SharedContext {- ^ context for constructing SAW terms -} ->
+  MS.CrucibleMethodSpecIR MIR {- ^ for name and typing environments -} ->
+  SetupValue ->
+  OverrideMatcher MIR w (PP.Doc ann)
+ppSetupValueAsMIRVal opts cc sc spec setupval = do
+  sym <- Ov.getSymInterface
+  mirVal <- resolveSetupValueMIR opts cc sc spec setupval
+  pure $ ppMIRVal sym mirVal
 
 resolveSetupValueMIR ::
   Options              ->
@@ -506,8 +630,8 @@ valueToSC sym md failMsg tval (MIRVal shp val) =
             liftIO (scVectorReduced sc t terms)
       |  Mir.MirVector_PartialVector vals <- val
       ,  toInteger (V.length vals) == n
-      -> do vals' <- liftIO $ V.toList <$>
-              traverse (readMaybeType sym "vector element" (shapeType arrShp)) vals
+      -> do let vals' = V.toList $
+                        V.map (readMaybeType sym "vector element" (shapeType arrShp)) vals
             terms <-
               traverse (\v -> valueToSC sym md failMsg cryty (MIRVal arrShp v)) vals'
             t <- shapeToTerm sc arrShp
@@ -528,7 +652,7 @@ valueToSC sym md failMsg tval (MIRVal shp val) =
         case fldShp of
           ReqField shp' ->
             pure $ MIRVal shp' tm
-          OptField shp' -> do
-            tm' <- liftIO $ readMaybeType sym "field" (shapeType shp') tm
-            pure $ MIRVal shp' tm'
+          OptField shp' ->
+            pure $ MIRVal shp'
+                 $ readMaybeType sym "field" (shapeType shp') tm
       valueToSC sym md failMsg ty mirVal

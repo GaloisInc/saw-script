@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -10,6 +11,7 @@
 -- | Turns 'SetupValue's back into 'MIRVal's.
 module SAWScript.Crucible.MIR.ResolveSetupValue
   ( MIRVal(..)
+  , ppMIRVal
   , resolveSetupVal
   , typeOfSetupValue
   , lookupAllocIndex
@@ -19,31 +21,57 @@ module SAWScript.Crucible.MIR.ResolveSetupValue
   , resolveSAWPred
   , equalRefsPred
   , equalValsPred
+  , checkCompatibleTys
+  , readMaybeType
+  , mirAdtToTy
+  , findDefId
+  , findDefIdEither
+  , findStatic
+  , findStaticInitializer
+  , findStaticVar
+  , staticRefMux
   , MIRTypeOfError(..)
   ) where
 
 import           Control.Lens
-import           Control.Monad (zipWithM)
+import           Control.Monad (guard, unless, zipWithM, zipWithM_)
 import qualified Control.Monad.Catch as X
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Maybe (MaybeT(..))
 import qualified Data.BitVector.Sized as BV
+import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
+import           Data.Kind (Type)
+import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Maybe (fromMaybe)
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
+import qualified Data.Text as Text
 import           Data.Text (Text)
 import qualified Data.Vector as V
 import           Data.Vector (Vector)
 import           Data.Void (absurd)
+import           Numeric.Natural (Natural)
+import qualified Prettyprinter as PP
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
-import Lang.Crucible.Simulator (RegValue, RegValue'(..))
+import Lang.Crucible.Backend (IsSymInterface)
+import Lang.Crucible.Simulator (AnyValue(..), GlobalVar(..), RegValue, RegValue'(..))
+import Lang.Crucible.Types (MaybeType, TypeRepr(..))
+import qualified Mir.DefId as Mir
+import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
+import qualified Mir.TransTy as Mir
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
@@ -70,12 +98,81 @@ import SAWScript.Panic
 data MIRVal where
   MIRVal :: TypeShape tp -> RegValue Sym tp -> MIRVal
 
+-- | Pretty-print a 'MIRVal'.
+ppMIRVal ::
+  forall ann.
+  Sym ->
+  MIRVal ->
+  PP.Doc ann
+ppMIRVal sym (MIRVal shp val) =
+  case shp of
+    UnitShape _ ->
+      PP.pretty val
+    PrimShape _ _ ->
+      W4.printSymExpr val
+    TupleShape _ _ fldShp ->
+      PP.parens $ prettyStructOrTuple fldShp val
+    ArrayShape _ _ shp' ->
+      case val of
+        Mir.MirVector_Vector vec ->
+          PP.brackets $ commaList $ V.toList $
+          fmap (\v -> ppMIRVal sym (MIRVal shp' v)) vec
+        Mir.MirVector_PartialVector vec ->
+          PP.braces $ commaList $ V.toList $
+          fmap (\v -> let v' = readMaybeType sym "vector element" (shapeType shp') v in
+                      ppMIRVal sym (MIRVal shp' v')) vec
+        Mir.MirVector_Array arr ->
+          W4.printSymExpr arr
+    StructShape _ _ fldShp
+      |  AnyValue (StructRepr fldTpr) fldVals <- val
+      ,  Just Refl <- W4.testEquality (FC.fmapFC fieldShapeType fldShp) fldTpr
+      -> PP.braces $ prettyStructOrTuple fldShp fldVals
+
+      | otherwise
+      -> error "Malformed MIRVal struct"
+    TransparentShape _ shp' ->
+      ppMIRVal sym $ MIRVal shp' val
+    RefShape _ _ _ _  ->
+      "<reference>"
+    FnPtrShape _ _ _ ->
+      PP.viaShow val
+  where
+    commaList :: [PP.Doc ann] -> PP.Doc ann
+    commaList []     = PP.emptyDoc
+    commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
+
+    prettyStructOrTuple ::
+      forall ctx.
+      Ctx.Assignment FieldShape ctx ->
+      Ctx.Assignment (RegValue' Sym) ctx ->
+      PP.Doc ann
+    prettyStructOrTuple fldShp fldVals =
+      commaList $
+      map (\(Some (Functor.Pair shp' (RV v))) -> prettyField shp' v) $
+      FC.toListFC Some $
+      Ctx.zipWith Functor.Pair fldShp fldVals
+
+    prettyField ::
+      forall tp.
+      FieldShape tp ->
+      RegValue Sym tp ->
+      PP.Doc ann
+    prettyField fldShp val' =
+      case fldShp of
+        OptField shp' ->
+          ppMIRVal sym $ MIRVal shp' $
+          readMaybeType sym "field" (shapeType shp') val'
+        ReqField shp' ->
+          ppMIRVal sym $ MIRVal shp' val'
+
 type SetupValue = MS.SetupValue MIR
 
 data MIRTypeOfError
   = MIRPolymorphicType Cryptol.Schema
   | MIRNonRepresentableType Cryptol.Type ToMIRTypeErr
   | MIRInvalidTypedTerm TypedTermType
+  | MIRInvalidIdentifier String
+  | MIRStaticNotFound Mir.DefId
 
 instance Show MIRTypeOfError where
   show (MIRPolymorphicType s) =
@@ -95,17 +192,29 @@ instance Show MIRTypeOfError where
     [ "Expected typed term with Cryptol-representable type, but got"
     , show (MS.ppTypedTermType tp)
     ]
+  show (MIRInvalidIdentifier errMsg) =
+    errMsg
+  show (MIRStaticNotFound did) =
+    staticNotFoundErr did
+
+staticNotFoundErr :: Mir.DefId -> String
+staticNotFoundErr did =
+  unlines
+  [ "Could not find static named:"
+  , show did
+  ]
 
 instance X.Exception MIRTypeOfError
 
 typeOfSetupValue ::
+  forall m.
   X.MonadThrow m =>
   MIRCrucibleContext ->
   Map AllocIndex (Some MirAllocSpec) ->
   Map AllocIndex Text ->
   SetupValue ->
   m Mir.Ty
-typeOfSetupValue _mcc env _nameEnv val =
+typeOfSetupValue mcc env nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
@@ -120,16 +229,26 @@ typeOfSetupValue _mcc env _nameEnv val =
             Right mirTy -> return mirTy
         TypedTermSchema s -> X.throwM (MIRPolymorphicType s)
         tp -> X.throwM (MIRInvalidTypedTerm tp)
+    MS.SetupArray elemTy vs ->
+      pure $ Mir.TyArray elemTy (length vs)
+    MS.SetupStruct adt _ ->
+      pure $ mirAdtToTy adt
+    MS.SetupTuple () vals -> do
+      tys <- traverse (typeOfSetupValue mcc env nameEnv) vals
+      pure $ Mir.TyTuple tys
+    MS.SetupGlobal () name ->
+      staticTyRef <$> findStatic cs name
+    MS.SetupGlobalInitializer () name -> do
+      static <- findStatic cs name
+      pure $ static ^. Mir.sTy
 
     MS.SetupNull empty                -> absurd empty
-    MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _                -> panic "typeOfSetupValue" ["structs not yet implemented"]
-    MS.SetupArray _ _                 -> panic "typeOfSetupValue" ["arrays not yet implemented"]
     MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "typeOfSetupValue" ["fields not yet implemented"]
     MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
-    MS.SetupGlobalInitializer empty _ -> absurd empty
+  where
+    cs = mcc ^. mccRustModule . Mir.rmCS
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
@@ -159,20 +278,69 @@ resolveSetupVal mcc env tyenv nameEnv val =
                     (ptr ^. mpRef)
     MS.SetupTerm tm -> resolveTypedTerm mcc tm
     MS.SetupNull empty                -> absurd empty
-    MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct _ _                -> panic "resolveSetupValue" ["structs not yet implemented"]
-    MS.SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
-    MS.SetupArray () vs -> do
+    MS.SetupStruct adt flds ->
+      case adt of
+        _ | adt ^. Mir.adtReprTransparent,
+            [fld] <- flds -> do
+          MIRVal shp fld' <- resolveSetupVal mcc env tyenv nameEnv fld
+          pure $ MIRVal (TransparentShape (mirAdtToTy adt) shp) fld'
+        Mir.Adt nm Mir.Struct [variant] _ _ _ _ -> do
+          flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
+          let expectedFlds = variant ^. Mir.vfields
+          let expectedFldsNum = length expectedFlds
+          let actualFldTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+          let actualFldsNum = length actualFldTys
+          unless (expectedFldsNum == actualFldsNum) $
+            fail $ unlines
+              [ "Mismatch in number of struct fields"
+              , "Struct name: " ++ show nm
+              , "Expected number of fields: " ++ show expectedFldsNum
+              , "Actual number of fields:   " ++ show actualFldsNum
+              ]
+          zipWithM_
+            (\expectedFld actualFldTy ->
+              let expectedFldTy = expectedFld ^. Mir.fty in
+              let expectedFldName = expectedFld ^. Mir.fName in
+              unless (checkCompatibleTys expectedFldTy actualFldTy) $
+                fail $ unlines
+                  [ "Struct field type mismatch"
+                  , "Field name: " ++ show expectedFldName
+                  , "Expected type: " ++ show (PP.pretty expectedFldTy)
+                  , "Given type:    " ++ show (PP.pretty actualFldTy)
+                  ])
+            expectedFlds
+            actualFldTys
+          Some fldAssn <-
+            pure $ Ctx.fromList $
+            map (\(MIRVal shp v) ->
+                  if Mir.canInitialize col (shapeMirTy shp)
+                  then Some $ Functor.Pair (ReqField shp) (RV v)
+                  else Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
+                flds'
+          let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
+          let structShp = StructShape (mirAdtToTy adt) actualFldTys fldShpAssn
+          let structTpr = StructRepr (FC.fmapFC fieldShapeType fldShpAssn)
+          pure $ MIRVal structShp (AnyValue structTpr valAssn)
+        Mir.Adt _ ak _ _ _ _ _ ->
+          panic "resolveSetupVal" ["AdtKind " ++ show ak ++ " not yet implemented"]
+    MS.SetupTuple () flds -> do
+      flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
+      let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+      Some fldAssn <-
+        pure $ Ctx.fromList $
+        map (\(MIRVal shp v) ->
+              Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
+            flds'
+      let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
+      let tupleShp = TupleShape (Mir.TyTuple fldMirTys) fldMirTys fldShpAssn
+      pure $ MIRVal tupleShp valAssn
+    MS.SetupArray elemTy vs -> do
       vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
 
       Some (shp :: TypeShape tp) <-
-        case V.head vals of
-          MIRVal shp _ -> pure (Some shp)
+        pure $ tyToShape col elemTy
 
-      let mirTy :: Mir.Ty
-          mirTy = shapeMirTy shp
-
-          vals' :: Vector (RegValue Sym tp)
+      let vals' :: Vector (RegValue Sym tp)
           vals' = V.map (\(MIRVal shp' val') ->
                           case W4.testEquality shp shp' of
                             Just Refl -> val'
@@ -182,13 +350,26 @@ resolveSetupVal mcc env tyenv nameEnv val =
                               , show shp'
                               ])
                         vals
-      return $ MIRVal (ArrayShape (Mir.TyArray mirTy (V.length vals)) mirTy shp)
+      return $ MIRVal (ArrayShape (Mir.TyArray elemTy (V.length vals)) elemTy shp)
                       (Mir.MirVector_Vector vals')
     MS.SetupElem _ _ _                -> panic "resolveSetupValue" ["elems not yet implemented"]
     MS.SetupField _ _ _               -> panic "resolveSetupValue" ["fields not yet implemented"]
     MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
-    MS.SetupGlobalInitializer empty _ -> absurd empty
+    MS.SetupGlobal () name -> do
+      static <- findStatic cs name
+      Mir.StaticVar gv <- findStaticVar cs (static ^. Mir.sName)
+      let sMut = staticMutability static
+          sTy  = static ^. Mir.sTy
+      pure $ MIRVal (RefShape (staticTyRef static) sTy sMut (globalType gv))
+           $ staticRefMux sym gv
+    MS.SetupGlobalInitializer () name -> do
+      static <- findStatic cs name
+      findStaticInitializer mcc static
+  where
+    sym = mcc ^. mccSym
+    cs  = mcc ^. mccRustModule . Mir.rmCS
+    col = cs ^. Mir.collection
 
 resolveTypedTerm ::
   MIRCrucibleContext ->
@@ -389,9 +570,418 @@ equalRefsPred cc mp1 mp2 =
     Nothing -> pure $ W4.falsePred sym
     Just Refl -> Mir.mirRef_eqIO bak (mp1^.mpRef) (mp2^.mpRef)
 
+-- | Check if two 'MIRVal's are equal.
 equalValsPred ::
   MIRCrucibleContext ->
   MIRVal ->
   MIRVal ->
   IO (W4.Pred Sym)
-equalValsPred = panic "equalValsPred" ["not yet implemented"]
+equalValsPred cc mv1 mv2 =
+  case (mv1, mv2) of
+    (MIRVal shp1 v1, MIRVal shp2 v2) -> do
+      mbEq <- runMaybeT $ do
+        guard $ checkCompatibleTys (shapeMirTy shp1) (shapeMirTy shp2)
+        Refl <- testEquality shp1 shp2
+        goTy shp1 v1 v2
+      pure $ fromMaybe (W4.falsePred sym) mbEq
+  where
+    sym = cc^.mccSym
+
+    testEquality :: forall k (f :: k -> Type) (a :: k) (b :: k)
+                  . W4.TestEquality f
+                 => f a -> f b -> MaybeT IO (a :~: b)
+    testEquality v1 v2 = MaybeT $ pure $ W4.testEquality v1 v2
+
+    goTy :: TypeShape tp
+         -> RegValue Sym tp
+         -> RegValue Sym tp
+         -> MaybeT IO (W4.Pred Sym)
+    goTy (UnitShape _) () () =
+      pure $ W4.truePred sym
+    goTy (PrimShape _ _) v1 v2 =
+      liftIO $ W4.isEq sym v1 v2
+    goTy (TupleShape _ _ fldShp) fldAssn1 fldAssn2 =
+      goFldAssn fldShp fldAssn1 fldAssn2
+    goTy (ArrayShape _ _ shp) vec1 vec2 =
+      goVec shp vec1 vec2
+    goTy (StructShape _ _ fldShp) any1 any2 =
+      case (any1, any2) of
+        (AnyValue (StructRepr fldCtx1) fldAssn1,
+         AnyValue (StructRepr fldCtx2) fldAssn2) -> do
+          Refl <- testEquality fldCtx1 fldCtx2
+          Refl <- testEquality (FC.fmapFC fieldShapeType fldShp) fldCtx1
+          goFldAssn fldShp fldAssn1 fldAssn2
+        (_, _) ->
+          pure $ W4.falsePred sym
+    goTy (TransparentShape _ shp) v1 v2 =
+      goTy shp v1 v2
+    goTy (RefShape _ _ _ _) ref1 ref2 =
+      mccWithBackend cc $ \bak ->
+        liftIO $ Mir.mirRef_eqIO bak ref1 ref2
+    goTy (FnPtrShape _ _ _) _fh1 _fh2 =
+      error "Function pointers not currently supported in overrides"
+
+    goVec :: TypeShape tp
+          -> Mir.MirVector Sym tp
+          -> Mir.MirVector Sym tp
+          -> MaybeT IO (W4.Pred Sym)
+    goVec shp (Mir.MirVector_Vector vec1)
+              (Mir.MirVector_Vector vec2) = do
+      eqs <- V.zipWithM (goTy shp) vec1 vec2
+      liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
+    goVec shp (Mir.MirVector_PartialVector vec1)
+              (Mir.MirVector_PartialVector vec2) = do
+      eqs <- V.zipWithM
+               (\v1 v2 -> do
+                 let readElem v = readMaybeType sym "vector element" (shapeType shp) v
+                 let v1' = readElem v1
+                 let v2' = readElem v2
+                 goTy shp v1' v2')
+               vec1
+               vec2
+      liftIO $ F.foldrM (W4.andPred sym) (W4.truePred sym) eqs
+    goVec _shp (Mir.MirVector_Array vec1) (Mir.MirVector_Array vec2) =
+      liftIO $ W4.arrayEq sym vec1 vec2
+    goVec _shp _vec1 _vec2 =
+      pure $ W4.falsePred sym
+
+    goFldAssn :: Ctx.Assignment FieldShape ctx
+              -> Ctx.Assignment (RegValue' Sym) ctx
+              -> Ctx.Assignment (RegValue' Sym) ctx
+              -> MaybeT IO (W4.Pred Sym)
+    goFldAssn fldShp fldAssn1 fldAssn2 =
+      FCI.ifoldrMFC
+        (\idx (Functor.Pair (RV fld1) (RV fld2)) z -> do
+          let shp = fldShp Ctx.! idx
+          eq <- goFld shp fld1 fld2
+          liftIO $ W4.andPred sym eq z)
+        (W4.truePred sym)
+        (Ctx.zipWith Functor.Pair fldAssn1 fldAssn2)
+
+    goFld :: FieldShape tp
+          -> RegValue Sym tp
+          -> RegValue Sym tp
+          -> MaybeT IO (W4.Pred Sym)
+    goFld shp v1 v2 =
+      case shp of
+        ReqField shp' ->
+          goTy shp' v1 v2
+        OptField shp' -> do
+          let readField v = readMaybeType sym "field" (shapeType shp') v
+          let v1' = readField v1
+          let v2' = readField v2
+          goTy shp' v1' v2'
+
+-- | Check if two 'Mir.Ty's are compatible in SAW. This is a slightly coarser
+-- notion of equality to reflect the fact that MIR's type system is richer than
+-- Cryptol's type system, and some types which would be distinct in MIR are in
+-- fact equal when converted to the equivalent Cryptol types. In particular:
+--
+-- 1. A @u<N>@ type is always compatible with an @i<N>@ type. For instance, @u8@
+--    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
+--    bit sizes of both types must be the same. For instance, @u8@ is /not/
+--    compatible with @i16@.
+--
+-- 2. The @usize@/@isize@ types are always compatible with @u<N>@/@i<N>@, where
+--    @N@ is the number of bits corresponding to the 'Mir.SizeBits' type in
+--    "Mir.Intrinsics". (This is a bit unsavory, as the actual size of
+--    @usize@/@isize@ is platform-dependent, but this is the current approach.)
+--
+-- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
+--    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
+--    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
+--    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
+--    with @ty_n_b@.
+--
+-- See also @checkRegisterCompatibility@ in "SAWScript.Crucible.LLVM.Builtins"
+-- and @registerCompatible@ in "SAWScript.Crucible.JVM.Builtins", which fill a
+-- similar niche in the LLVM and JVM backends, respectively.
+checkCompatibleTys :: Mir.Ty -> Mir.Ty -> Bool
+checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2
+
+-- | Like 'Mir.Ty', but where:
+--
+-- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
+--   'TyViewInt' constructor.
+--
+-- * 'TyViewInt' uses 'BaseSizeView' instead of 'Mir.BaseSize'.
+--
+-- * Recursive occurrences of 'Mir.Ty' use 'TyView' instead. This also applies
+--   to fields of type 'SubstsView' and 'FnSigView', which also replace 'Mir.Ty'
+--   with 'TyView' in their definitions.
+--
+-- This provides a coarser notion of equality than what the 'Eq' instance for
+-- 'Mir.Ty' provides, which distinguishes the two sorts of integer types.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data TyView
+  = TyViewBool
+  | TyViewChar
+    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
+    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'Mir.BaseSize'.
+  | TyViewInt !BaseSizeView
+  | TyViewTuple ![TyView]
+  | TyViewSlice !TyView
+  | TyViewArray !TyView !Int
+  | TyViewRef !TyView !Mir.Mutability
+  | TyViewAdt !Mir.DefId !Mir.DefId !SubstsView
+  | TyViewFnDef !Mir.DefId
+  | TyViewClosure [TyView]
+  | TyViewStr
+  | TyViewFnPtr !FnSigView
+  | TyViewDynamic !Mir.TraitName
+  | TyViewRawPtr !TyView !Mir.Mutability
+  | TyViewFloat !Mir.FloatKind
+  | TyViewDowncast !TyView !Integer
+  | TyViewNever
+  | TyViewForeign
+  | TyViewLifetime
+  | TyViewConst
+  | TyViewErased
+  | TyViewInterned Mir.TyName
+  deriving Eq
+
+-- | Like 'Mir.BaseSize', but without a special case for @usize@/@isize@.
+-- Instead, these are mapped to their actual size, which is determined by the
+-- number of bits in the 'Mir.SizeBits' type in "Mir.Intrinsics". (This is a bit
+-- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
+-- this is the current approach.)
+data BaseSizeView
+  = B8View
+  | B16View
+  | B32View
+  | B64View
+  | B128View
+  deriving Eq
+
+-- | Like 'Mir.Substs', but using 'TyView's instead of 'Mir.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+newtype SubstsView = SubstsView [TyView]
+  deriving Eq
+
+-- | Like 'Mir.FnSig', but using 'TyView's instead of 'Mir.Ty'.
+--
+-- This is an internal data type that is used to power the 'checkCompatibleTys'
+-- function. Refer to the Haddocks for that function for more information on why
+-- this is needed.
+data FnSigView = FnSigView {
+    _fsvarg_tys    :: ![TyView]
+  , _fsvreturn_ty  :: !TyView
+  , _fsvabi        :: Mir.Abi
+  , _fsvspreadarg  :: Maybe Int
+  }
+  deriving Eq
+
+-- | Convert a 'Mir.Ty' value to a 'TyView' value.
+tyView :: Mir.Ty -> TyView
+-- The two most important cases. Both sorts of integers are mapped to TyViewInt.
+tyView (Mir.TyInt  bs) = TyViewInt (baseSizeView bs)
+tyView (Mir.TyUint bs) = TyViewInt (baseSizeView bs)
+-- All other cases are straightforward.
+tyView Mir.TyBool = TyViewBool
+tyView Mir.TyChar = TyViewChar
+tyView (Mir.TyTuple tys) = TyViewTuple (map tyView tys)
+tyView (Mir.TySlice ty) = TyViewSlice (tyView ty)
+tyView (Mir.TyArray ty n) = TyViewArray (tyView ty) n
+tyView (Mir.TyRef ty mut) = TyViewRef (tyView ty) mut
+tyView (Mir.TyAdt monoDid origDid substs) =
+  TyViewAdt monoDid origDid (substsView substs)
+tyView (Mir.TyFnDef did) = TyViewFnDef did
+tyView (Mir.TyClosure tys) = TyViewClosure (map tyView tys)
+tyView Mir.TyStr = TyViewStr
+tyView (Mir.TyFnPtr sig) = TyViewFnPtr (fnSigView sig)
+tyView (Mir.TyDynamic trait) = TyViewDynamic trait
+tyView (Mir.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut
+tyView (Mir.TyFloat fk) = TyViewFloat fk
+tyView (Mir.TyDowncast ty n) = TyViewDowncast (tyView ty) n
+tyView Mir.TyNever = TyViewNever
+tyView Mir.TyForeign = TyViewForeign
+tyView Mir.TyLifetime = TyViewLifetime
+tyView Mir.TyConst = TyViewConst
+tyView Mir.TyErased = TyViewErased
+tyView (Mir.TyInterned nm) = TyViewInterned nm
+
+-- | Convert a 'Mir.BaseSize' value to a 'BaseSizeView' value.
+baseSizeView :: Mir.BaseSize -> BaseSizeView
+baseSizeView Mir.B8    = B8View
+baseSizeView Mir.B16   = B16View
+baseSizeView Mir.B32   = B32View
+baseSizeView Mir.B64   = B64View
+baseSizeView Mir.B128  = B128View
+baseSizeView Mir.USize =
+  case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of
+    Just bsv -> bsv
+    Nothing ->
+      error $ "Mir.Intrinsics.BaseSize bit size not supported: " ++ show sizeBitsRepr
+  where
+    sizeBitsRepr = W4.knownNat @Mir.SizeBits
+
+    bitSizesMap :: Map Natural BaseSizeView
+    bitSizesMap = Map.fromList
+      [ (W4.natValue (W4.knownNat @8),   B8View)
+      , (W4.natValue (W4.knownNat @16),  B16View)
+      , (W4.natValue (W4.knownNat @32),  B32View)
+      , (W4.natValue (W4.knownNat @64),  B64View)
+      , (W4.natValue (W4.knownNat @128), B128View)
+      ]
+
+-- | Convert a 'Mir.Substs' value to a 'SubstsView' value.
+substsView :: Mir.Substs -> SubstsView
+substsView (Mir.Substs tys) = SubstsView (map tyView tys)
+
+-- | Convert a 'Mir.FnSig' value to a 'FnSigView' value.
+fnSigView :: Mir.FnSig -> FnSigView
+fnSigView (Mir.FnSig argTys retTy abi spreadarg) =
+  FnSigView (map tyView argTys) (tyView retTy) abi spreadarg
+
+-- | Read the value out of a 'MaybeType' expression that is assumed to be
+-- assigned to a value. If this assumption does not hold (i.e., if the value is
+-- unassigned), then this function will raise an error.
+readMaybeType ::
+     IsSymInterface sym
+  => sym
+  -> String
+  -> TypeRepr tp
+  -> RegValue sym (MaybeType tp)
+  -> RegValue sym tp
+readMaybeType sym desc tpr rv =
+  case readPartExprMaybe sym rv of
+    Just x -> x
+    Nothing -> error $ "readMaybeType: accessed possibly-uninitialized " ++ desc ++
+        " of type " ++ show tpr
+
+readPartExprMaybe ::
+     IsSymInterface sym
+  => sym
+  -> W4.PartExpr (W4.Pred sym) a
+  -> Maybe a
+readPartExprMaybe _sym W4.Unassigned = Nothing
+readPartExprMaybe _sym (W4.PE p v)
+  | Just True <- W4.asConstantPred p = Just v
+  | otherwise = Nothing
+
+-- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
+mirAdtToTy :: Mir.Adt -> Mir.Ty
+mirAdtToTy adt =
+  Mir.TyAdt (adt ^. Mir.adtname) (adt ^. Mir.adtOrigDefId) (adt ^. Mir.adtOrigSubsts)
+
+-- | Like 'findDefIdEither', but any errors are thrown with 'fail'.
+findDefId :: MonadFail m => Map Text (NonEmpty Text) -> Text -> m Mir.DefId
+findDefId crateDisambigs fnName =
+  either fail pure $ findDefIdEither crateDisambigs fnName
+
+-- | Given a function name @fnName@, attempt to look up its corresponding
+-- 'Mir.DefId'. If successful, return it with 'Right'. Currently, the following
+-- types of function names are permittd:
+--
+-- * @<crate_name>/<disambiguator>::<function_name>: A fully disambiguated name.
+--
+-- * @<crate_name>::<function_name>: A name without a disambiguator. In this
+--   case, SAW will attempt to look up a disambiguator from the @crateDisambigs@
+--   map. If none can be found, or if there are multiple disambiguators for the
+--   given @<crate_name>@, then this will return an error message with 'Left'.
+findDefIdEither :: Map Text (NonEmpty Text) -> Text -> Either String Mir.DefId
+findDefIdEither crateDisambigs fnName = do
+    (crate, path) <-
+      case edid of
+        crate:path -> pure (crate, path)
+        [] -> Left $ unlines
+                [ "The function `" ++ fnNameStr ++ "` lacks a crate."
+                , "Consider providing one, e.g., `<crate_name>::" ++ fnNameStr ++ "`."
+                ]
+    let crateStr = Text.unpack crate
+    case Text.splitOn "/" crate of
+      [crateNoDisambig, disambig] ->
+        Right $ Mir.textId $ Text.intercalate "::"
+              $ (crateNoDisambig <> "/" <> disambig) : path
+      [_] ->
+        case Map.lookup crate crateDisambigs of
+            Just allDisambigs@(disambig :| otherDisambigs)
+              |  F.null otherDisambigs
+              -> Right $ Mir.textId $ Text.intercalate "::"
+                       $ (crate <> "/" <> disambig) : path
+              |  otherwise
+              -> Left $ unlines $
+                   [ "ambiguous crate " ++ crateStr
+                   , "crate disambiguators:"
+                   ] ++ F.toList (Text.unpack <$> allDisambigs)
+            Nothing -> Left $ "unknown crate " ++ crateStr
+      _ -> Left $ "Malformed crate name: " ++ show crateStr
+  where
+    fnNameStr = Text.unpack fnName
+    edid = Text.splitOn "::" fnName
+
+-- | Consult the given 'Mir.CollectionState' to find a 'Mir.Static' with the
+-- given 'String' as an identifier. If such a 'Mir.Static' cannot be found, this
+-- will raise an error.
+findStatic :: X.MonadThrow m => Mir.CollectionState -> String -> m Mir.Static
+findStatic cs name = do
+  did <- case findDefIdEither (cs ^. Mir.crateHashesMap) (Text.pack name) of
+    Left err -> X.throwM $ MIRInvalidIdentifier err
+    Right did -> pure did
+  case Map.lookup did (cs ^. Mir.collection . Mir.statics) of
+    Nothing -> X.throwM $ MIRStaticNotFound did
+    Just static -> pure static
+
+-- | Consult the given 'MIRCrucibleContext' to find the 'MIRVal' used to
+-- initialize a 'Mir.Static' value. If such a 'MIRVal' cannot be found, this
+-- will raise an error.
+findStaticInitializer ::
+  X.MonadThrow m =>
+  MIRCrucibleContext ->
+  Mir.Static ->
+  m MIRVal
+findStaticInitializer mcc static = do
+  Mir.StaticVar gv <- findStaticVar cs staticDefId
+  let staticShp = tyToShapeEq col (static ^. Mir.sTy) (globalType gv)
+  case MapF.lookup gv (mcc^.mccStaticInitializerMap) of
+    Just (RV staticInitVal) ->
+      pure $ MIRVal staticShp staticInitVal
+    Nothing ->
+      X.throwM $ MIRStaticNotFound staticDefId
+  where
+    staticDefId = static ^. Mir.sName
+    cs  = mcc ^. mccRustModule . Mir.rmCS
+    col = cs ^. Mir.collection
+
+-- | Consult the given 'Mir.CollectionState' to find a 'Mir.StaticVar' with the
+-- given 'Mir.DefId'. If such a 'Mir.StaticVar' cannot be found, this will raise
+-- an error.
+findStaticVar ::
+  X.MonadThrow m =>
+  Mir.CollectionState ->
+  Mir.DefId ->
+  m Mir.StaticVar
+findStaticVar cs staticDefId =
+  case Map.lookup staticDefId (cs ^. Mir.staticMap) of
+    Nothing -> X.throwM $ MIRStaticNotFound staticDefId
+    Just sv -> pure sv
+
+-- | Compute the 'Mir.Mutability' of a 'Mir.Static' value.
+staticMutability :: Mir.Static -> Mir.Mutability
+staticMutability static
+  | static ^. Mir.sMutable = Mir.Mut
+  | otherwise              = Mir.Immut
+
+-- | Compute a 'Mir.MirReferenceMux' pointing to a static value's 'GlobalVar'.
+staticRefMux ::
+  W4.IsSymExprBuilder sym =>
+  sym ->
+  GlobalVar tp ->
+  Mir.MirReferenceMux sym tp
+staticRefMux sym gv =
+  Mir.MirReferenceMux $
+  Mir.toFancyMuxTree sym $
+  Mir.MirReference (Mir.GlobalVar_RefRoot gv) Mir.Empty_RefPath
+
+-- | Compute the 'Mir.Ty' of a reference to a 'Mir.Static' value.
+staticTyRef :: Mir.Static -> Mir.Ty
+staticTyRef static =
+  Mir.TyRef
+    (static ^. Mir.sTy)
+    (staticMutability static)

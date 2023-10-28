@@ -38,6 +38,8 @@ import SAWServer.LLVMVerify
       llvmVerifyX86 )
 import SAWServer.MIRCrucibleSetup
     ( mirLoadModuleDescr, mirLoadModule )
+import SAWServer.MIRFindADT
+    ( mirFindADTDescr, mirFindADT )
 import SAWServer.MIRVerify
     ( mirAssumeDescr, mirAssume,
       mirVerifyDescr, mirVerify )
@@ -132,6 +134,10 @@ sawMethods =
      "SAW/MIR/assume"
      mirAssumeDescr
      mirAssume
+  , Argo.command
+     "SAW/MIR/find ADT"
+     mirFindADTDescr
+     mirFindADT
   -- Yosys
   , Argo.command
      "SAW/Yosys/import"

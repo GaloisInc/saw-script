@@ -17,9 +17,11 @@ noErrorsHDesc =
                              (TpExpr_Var (Kind_bv 64) 0))
                    (Tp_Kind (Kind_Expr (Kind_bv 64)))))));
 
+
 -- The helper function for noErrorsContains0
 --
 -- noErrorsContains0H len i v =
+<<<<<<< HEAD
 --   orS existsS (noErrorsContains0H len (i+1) v)
 noErrorsContains0H : (len i:Vec 64 Bool) -> BVVec 64 len (Vec 64 Bool) ->
                      SpecM VoidEv (BVVec 64 len (Vec 64 Bool) * Vec 64 Bool);

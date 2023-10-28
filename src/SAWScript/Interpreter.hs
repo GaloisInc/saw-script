@@ -56,6 +56,7 @@ import System.Process (readProcess)
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
+import SAWScript.Bisimulation
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
@@ -93,6 +94,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
 import           Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
@@ -102,6 +104,7 @@ import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
+import           SAWScript.Crucible.LLVM.FFI
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -654,10 +657,10 @@ set_solver_cache_path path = do
     Nothing -> do cache <- io $ openSolverCache path
                   putTopLevelRW rw { rwSolverCache = Just cache }
 
-clean_solver_cache :: TopLevel ()
-clean_solver_cache = do
+clean_mismatched_versions_solver_cache :: TopLevel ()
+clean_mismatched_versions_solver_cache = do
   vs <- io $ getSolverBackendVersions allBackends
-  onSolverCache (cleanSolverCache vs)
+  onSolverCache (cleanMismatchedVersionsSolverCache vs)
 
 test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
                            Integer -> TopLevel ()
@@ -1095,8 +1098,8 @@ primitives = Map.fromList
     , "variable is ignored."
     ]
 
-  , prim "clean_solver_cache" "TopLevel ()"
-    (pureVal clean_solver_cache)
+  , prim "clean_mismatched_versions_solver_cache" "TopLevel ()"
+    (pureVal clean_mismatched_versions_solver_cache)
     Current
     [ "Remove all entries in the solver result cache which were created"
     , "using solver backend versions which do not match the versions"
@@ -1660,6 +1663,24 @@ primitives = Map.fromList
     , "a proposition is valid. For example, this is useful for proving a goal"
     , "obtained with 'offline_extcore' or 'parse_core'. Returns a Theorem if"
     , "successful, and aborts if unsuccessful."
+    ]
+
+  , prim "prove_bisim"         "ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult"
+    (pureVal proveBisimulation)
+    Experimental
+    [ "Use bisimulation to prove that two terms simulate each other.  The first"
+    , "argument is the proof strategy to use.  The second argument is a"
+    , "relation over the states and outputs for the third and fourth"
+    , "arguments. The relation must have the type"
+    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The third and fourth"
+    , "arguments are the two terms to prove bisimilar. They must have the types"
+    , "'(lhsState, input) -> (lhsState, output)' and"
+    , "'(rhsState, input) -> (rhsState, output)' respectively."
+    , ""
+    , "Let the second argument be called 'rel', the third 'lhs', and the"
+    , "fourth 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
+    , "  forall s1 s2 in out1 out2."
+    , "    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))"
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
@@ -3621,6 +3642,15 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_spec_size`." ]
 
+  , prim "llvm_ffi_setup"  "Term -> LLVMSetup ()"
+    (pureVal llvm_ffi_setup)
+    Experimental
+    [ "Generate a @LLVMSetup@ spec that can be used to verify that the given"
+    , "monomorphic Cryptol term, consisting of a Cryptol foreign function"
+    , "fully applied to any type arguments, has a correct foreign (LLVM)"
+    , "implementation with respect to its Cryptol implementation."
+    ]
+
     ---------------------------------------------------------------------
     -- Crucible/JVM commands
 
@@ -3857,6 +3887,13 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
+  , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupArray :: Mir.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing an array of the given type, with the"
+    , "given list of values as elements."
+    ]
+
   , prim "mir_assert" "Term -> MIRSetup ()"
     (pureVal mir_assert)
     Experimental
@@ -3875,6 +3912,15 @@ primitives = Map.fromList
     , "section (after mir_execute_func). The effects of some MIRSetup"
     , "statements depend on whether they occur in the pre-state or post-state"
     , "section."
+    ]
+
+  , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"
+    (funVal3 mir_find_adt)
+    Experimental
+    [ "Consult the given MIRModule to find an algebraic data type (MIRAdt)"
+    , "with the given String as an identifier and the given MIRTypes as the"
+    , "types used to instantiate the type parameters. If such a MIRAdt cannot"
+    , "be found in the MIRModule, this will raise an error."
     ]
 
   , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
@@ -3922,11 +3968,42 @@ primitives = Map.fromList
     , "mir_return statement is required if and only if the method"
     , "has a non-() return type." ]
 
+  , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupStruct :: Mir.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR struct with the given list of"
+    , "values as elements. The MIRAdt argument determines what struct type to"
+    , "create; use `mir_find_adt` to retrieve a MIRAdt value."
+    ]
+
+  , prim "mir_static"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing a reference to the named static."
+    , "The String should be the name of a static value."
+    ]
+
+  , prim "mir_static_initializer"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobalInitializer () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing the value of the initializer of a named"
+    , "static. The String should be the name of a static value."
+    ]
+
   , prim "mir_term"
     "Term -> MIRValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue MIR))
     Experimental
     [ "Construct a `MIRValue` from a `Term`." ]
+
+  , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR tuple with the given list of"
+    , "values as elements."
+    ]
 
   , prim "mir_verify"
     "MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec"
@@ -3939,6 +4016,14 @@ primitives = Map.fromList
     , "describes how to set up the symbolic execution engine before verification."
     , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
+    ]
+
+  , prim "mir_adt" "MIRAdt -> MIRType"
+    (pureVal mir_adt)
+    Experimental
+    [ "The type of a MIR algebraic data type (ADT), i.e., a struct or enum,"
+    , "corresponding to the given MIRAdt. Use the `mir_find_adt` command to"
+    , "retrieve a MIRAdt value."
     ]
 
   , prim "mir_array" "Int -> MIRType -> MIRType"

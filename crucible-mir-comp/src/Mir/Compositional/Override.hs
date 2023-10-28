@@ -208,7 +208,8 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
         -- to allocation `alloc` before we see the PointsTo for `alloc` itself.
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
-        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md alloc svs) -> do
+        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo md ref svs) -> do
+            alloc <- setupVarAllocIndex ref
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
@@ -311,7 +312,8 @@ runSpec cs mh ms = ovrWithBackend $ \bak ->
     -- figuring out which memory is accessible and mutable and thus needs to be
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
-    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md alloc svs) -> do
+    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo _md ref svs) -> do
+        alloc <- setupVarAllocIndex ref
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
@@ -356,7 +358,7 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
-    go (UnitShape _) () (MS.SetupStruct () []) = return ()
+    go (UnitShape _) () (MS.SetupTuple () []) = return ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
@@ -390,14 +392,14 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
                         ("mismatch on " ++ show (W4.exprType expr) ++ ": expected " ++
                             show (W4.printSymExpr val))
                         ""
-    go (TupleShape _ _ flds) rvs (MS.SetupStruct () svs) = goFields flds rvs svs
-    go (ArrayShape _ _ shp) vec (MS.SetupArray () svs) = case vec of
+    go (TupleShape _ _ flds) rvs (MS.SetupTuple () svs) = goFields flds rvs svs
+    go (ArrayShape _ _ shp) vec (MS.SetupArray _ svs) = case vec of
         MirVector_Vector v -> zipWithM_ (\x y -> go shp x y) (toList v) svs
         MirVector_PartialVector pv -> forM_ (zip (toList pv) svs) $ \(p, sv) -> do
             rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
             go shp rv sv
         MirVector_Array _ -> error $ "matchArg: MirVector_Array NYI"
-    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct () svs)
+    go (StructShape _ _ flds) (AnyValue tpr rvs) (MS.SetupStruct _ svs)
       | Just Refl <- testEquality tpr shpTpr = goFields flds rvs svs
       | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
@@ -510,7 +512,7 @@ setupToReg :: forall sym t st fs tp.
 setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
-    go (UnitShape _) (MS.SetupStruct _ []) = return ()
+    go (UnitShape _) (MS.SetupTuple _ []) = return ()
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
         term <- liftIO $ SAW.scInstantiateExt sc termSub $ SAW.ttTerm tt
         Some expr <- termToExpr sym sc regMap term
@@ -519,7 +521,7 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ _ flds) (MS.SetupStruct _ svs) = goFields flds svs
+    go (TupleShape _ _ flds) (MS.SetupTuple _ svs) = goFields flds svs
     go (ArrayShape _ _ shp) (MS.SetupArray _ svs) = do
         rvs <- mapM (go shp) svs
         return $ MirVector_Vector $ V.fromList rvs
@@ -589,3 +591,20 @@ checkDisjoint bak refs = go refs
             assert bak disjoint $ GenericSimError $
                 "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
         go rest
+
+-- | Take a 'MS.SetupValue' that is assumed to be a bare 'MS.SetupVar' and
+-- extract the underlying 'MS.AllocIndex'. If this assumption does not hold,
+-- this function will raise an error.
+--
+-- This is used in conjunction with 'MirPointsTo' values. With the way that
+-- @crucible-mir-comp@ is currently set up, the only sort of 'MS.SetupValue'
+-- that will be put into a 'MirPointsTo' value's left-hand side is a
+-- 'MS.SetupVar', so we can safely use this function on such 'MS.SetupValue's.
+-- Other parts of SAW can break this assumption (e.g., if you wrote something
+-- like @mir_points_to (mir_static "X") ...@ in a SAW specification), but these
+-- parts of SAW are not used in @crucible-mir-comp@.
+setupVarAllocIndex :: Applicative m => MS.SetupValue MIR -> m MS.AllocIndex
+setupVarAllocIndex (MS.SetupVar idx) = pure idx
+setupVarAllocIndex val =
+  error $ "setupVarAllocIndex: Expected SetupVar, received: "
+       ++ show (MS.ppSetupValue val)

@@ -546,10 +546,6 @@ liftSC5 f a b c d e = mrSC >>= \sc -> liftIO (f sc a b c d e)
 -- * Functions for Building Terms
 ----------------------------------------------------------------------
 
--- | Create a term representing the type @IsFinite n@
-mrIsFinite :: Term -> MRM t Term
-mrIsFinite n = liftSC2 scGlobalApply "CryptolM.isFinite" [n]
-
 -- | Create a term representing an application of @Prelude.error@
 mrErrorTerm :: Term -> T.Text -> MRM t Term
 mrErrorTerm a str =
@@ -1094,7 +1090,8 @@ mrGetFunAssump nm = lookupFunAssump nm <$> mrRefnset
 withFunAssump :: FunName -> [Term] -> Term -> MRM t a -> MRM t a
 withFunAssump fname args rhs m =
   do k <- mkCompFunReturn <$> mrFunOutType fname args
-     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k) "|=" rhs
+     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args Unlifted k)
+                                     "|=" rhs
      ctx <- mrUVars
      rs <- mrRefnset
      let assump = FunAssump ctx fname args (RewriteFunAssump rhs) Nothing

@@ -85,6 +85,7 @@ import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
+import           Data.Void (Void)
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
@@ -119,6 +120,7 @@ data LLVM (arch :: CL.LLVMArch)
 type instance Setup.XSetupNull (LLVM _) = ()
 -- 'True' if this is an LLVM packed struct, 'False' otherwise.
 type instance Setup.XSetupStruct (LLVM _) = Bool
+type instance Setup.XSetupTuple (LLVM _) = Void
 type instance Setup.XSetupArray (LLVM _) = ()
 type instance Setup.XSetupElem (LLVM _) = ()
 type instance Setup.XSetupField (LLVM _) = ()

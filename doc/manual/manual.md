@@ -86,6 +86,15 @@ command-line options:
 
   ~ Set the verbosity level of the SAWScript interpreter.
 
+`--clean-mismatched-versions-solver-cache[=path]`
+
+  ~ Run the `clean_mismatched_versions_solver_cache` command on the solver
+  cache at the given path, or if no path is given, the solver cache at the
+  value of the `SAW_SOLVER_CACHE_PATH` environment variable, then exit. See
+  the section **Caching Solver Results** for a description of the
+  `clean_mismatched_versions_solver_cache` command and the solver caching
+  feature in general.
+
 SAW also uses several environment variables for configuration:
 
 `CRYPTOLPATH`
@@ -1297,10 +1306,12 @@ There are also a number of SAW commands related to solver caching.
   then all entries in the cache already in use will be copied to the new cache
   being opened.
 
-* `clean_solver_cache` will remove all entries in the solver result cache
-  which were created using solver backend versions which do not match the
-  versions in the current environment. This can be run after an update to
-  clear out any old, unusable entries from the solver cache.
+* `clean_mismatched_versions_solver_cache` will remove all entries in the
+  solver result cache which were created using solver backend versions which do
+  not match the versions in the current environment. This can be run after an
+  update to clear out any old, unusable entries from the solver cache. This
+  command can also be run directly from the command line through the
+  `--clean-mismatched-versions-solver-cache` command-line option.
 
 * `print_solver_cache` prints to the console all entries in the cache whose
   SHA256 hash keys start with the given hex string. Providing an empty string
@@ -2113,7 +2124,7 @@ implemented include the following:
 
 * MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
   `mir_verify` must always be the empty list at present)
-* The ability to construct MIR `struct` or `enum` values in specifications
+* The ability to construct MIR `enum` values in specifications
 * The ability to specify the layout of slice values
 
 The `String` supplied as an argument to `mir_verify` is expected to be a
@@ -2229,6 +2240,7 @@ Java types are built up using the following functions:
 
 MIR types are built up using the following functions:
 
+* `mir_adt : MIRAdt -> MIRType`
 * `mir_array : Int -> MIRType -> MIRType`
 * `mir_bool : MIRType`
 * `mir_char : MIRType`
@@ -2435,9 +2447,9 @@ The experimental MIR implementation also has a `mir_alloc` function, which
 behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
 but there is also a `mir_alloc_mut` function for creating a mutable reference:
 
-* `mir_alloc : MIRType -> MIRSetup SetupValue`
+* `mir_alloc : MIRType -> MIRSetup MIRValue`
 
-* `mir_alloc_mut : MIRType -> MIRSetup SetupValue`
+* `mir_alloc_mut : MIRType -> MIRSetup MIRValue`
 
 MIR tracks whether references are mutable or immutable at the type level, so it
 is important to use the right allocation command for a given reference type.
@@ -2538,7 +2550,7 @@ value.
 
 MIR verification has a single `mir_points_to` command:
 
-* `mir_points_to : SetupValue -> SetupValue -> MIRSetup ()`
+* `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
 takes two `SetupValue` arguments, the first of which must be a reference,
 and states that the memory specified by that reference should contain the
 value given in the second argument (which may be any type of
@@ -2621,6 +2633,87 @@ the value of an array element.
 * `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
 
+In the experimental MIR verification implementation, the following functions
+construct compound values:
+
+* `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
+  of the given type whose elements consist of the given values. Supplying the
+  element type is necessary to support length-0 arrays.
+* `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
+  with the given list of values as elements. The `MIRAdt` argument determines
+  what struct type to create.
+
+  See the "Finding MIR alegraic data types" section for more information on how
+  to compute a `MIRAdt` value to pass to `mir_struct_value`.
+* `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
+  list of values as elements.
+
+### Finding MIR alegraic data types
+
+We collectively refer to MIR `struct`s and `enum`s together as _algebraic data
+types_, or ADTs for short. ADTs have identifiers to tell them apart, and a
+single ADT declaration can give rise to multiple identifiers depending on how
+the declaration is used. For example:
+
+~~~~ .rs
+pub struct S<A, B> {
+    pub x: A,
+    pub y: B,
+}
+
+pub fn f() -> S<u8, u16> {
+    S {
+        x: 1,
+        y: 2,
+    }
+}
+
+pub fn g() -> S<u32, u64> {
+    S {
+        x: 3,
+        y: 4,
+    }
+}
+~~~~
+
+This program as a single `struct` declaration `S`, which is used in the
+functions `f` and `g`. Note that `S`'s declaration is _polymorphic_, as it uses
+type parameters, but the uses of `S` in `f` and `g` are _monomorphic_, as `S`'s
+type parameters are fully instantiated. Each unique, monomorphic instantiation
+of an ADT gives rise to its own identifier. In the example above, this might
+mean that the following identifiers are created when this code is compiled with
+`mir-json`:
+
+* `S<u8, u16>` gives rise to `example/abcd123::S::_adt456`
+* `S<u32, u64>` gives rise to `example/abcd123::S::_adt789`
+
+The suffix `_adt<number>` is autogenerated by `mir-json` and is typically
+difficult for humans to guess. For this reason, we offer a command to look up
+an ADT more easily:
+
+* `mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt` consults the
+  given `MIRModule` to find an algebraic data type (`MIRAdt`). It uses the given
+  `String` as an identifier and the given MIRTypes as the types to instantiate
+  the type parameters of the ADT. If such a `MIRAdt` cannot be found in the
+  `MIRModule`, this will raise an error.
+
+Note that the `String` argument to `mir_find_adt` does not need to include the
+`_adt<num>` suffix, as `mir_find_adt` will discover this for you. The `String`
+is expected to adhere to the identifier conventions described in the "Running a
+MIR-based verification" section. For instance, the following two lines will
+look up `S<u8, u16>` and `S<u32, u64>` from the example above as `MIRAdt`s:
+
+~~~~
+m <- mir_load_module "example.linked-mir.json";
+
+s_8_16  <- mir_find_adt m "example::S" [mir_u8,  mir_u16];
+s_32_64 <- mir_find_adt m "example::S" [mir_u32, mir_u64];
+~~~~
+
+The `mir_adt` command (for constructing a struct type) and `mir_struct_value`
+(for constructing a struct value) commands in turn take a `MIRAdt` as an
+argument.
+
 ### Bitfields
 
 SAW has experimental support for specifying `struct`s with bitfields, such as
@@ -2694,6 +2787,10 @@ compiling code involving bitfields in order for SAW to be able to reason about
 them.
 
 ## Global variables
+
+SAW supports verifying LLVM and MIR specifications involving global variables.
+
+### LLVM global variables
 
 Mutable global variables that are accessed in a function must first be allocated
 by calling `llvm_alloc_global` on the name of the global.
@@ -2798,6 +2895,68 @@ unless it can determine that `x` still has its initial value at the
 point of a call to `f`. This specification also constrains `y` to prevent
 signed integer overflow resulting from the `x + y` expression in `f`,
 which is undefined behavior in C.
+
+### MIR static items
+
+Rust's static items are the MIR version of global variables. A reference to a
+static item can be accessed with the `mir_static` function. This function takes
+a `String` representing a static item's identifier, and this identifier is
+expected to adhere to the naming conventions outlined in the "Running a
+MIR-based verification" section:
+
+* `mir_static : String -> MIRValue`
+
+References to static values can be initialized with the `mir_points_to`
+command, just like with other forms of references. Immutable static items
+(e.g., `static X: u8 = 42`) are initialized implicitly in every SAW
+specification, so there is no need for users to do so manually. Mutable static
+items (e.g., `static mut Y: u8 = 27`), on the other hand, are *not* initialized
+implicitly, and users must explicitly pick a value to initialize them with.
+
+The `mir_static_initializer` function can be used to access the initial value
+of a static item in a MIR program. Like with `mir_static`, the `String`
+supplied as an argument must be a valid identifier:
+
+* `mir_static_initializer : String -> MIRValue`.
+
+As an example of how to use these functions, here is a Rust program involving
+static items:
+
+~~~ .rs
+// statics.rs
+static     S1: u8 = 1;
+static mut S2: u8 = 2;
+
+pub fn f() -> u8 {
+    // Reading a mutable static item requires an `unsafe` block due to
+    // concurrency-related concerns. We are only concerned about the behavior
+    // of this program in a single-threaded context, so this is fine.
+    let s2 = unsafe { S2 };
+    S1 + s2
+}
+~~~
+
+We can write a specification for `f` like so:
+
+~~~
+// statics.saw
+enable_experimental;
+
+let f_spec = do {
+  mir_points_to (mir_static "statics::S2")
+                (mir_static_initializer "statics::S2");
+  // Note that we do not initialize S1, as immutable static items are implicitly
+  // initialized in every specification.
+
+  mir_execute_func [];
+
+  mir_return (mir_term {{ 3 : [8] }});
+};
+
+m <- mir_load_module "statics.linked-mir.json";
+
+mir_verify m "statics::f" [] false f_spec z3;
+~~~
 
 ## Preconditions and Postconditions
 
@@ -3244,6 +3403,89 @@ let main : TopLevel () = do {
 
 [^4]: https://en.wikipedia.org/wiki/Salsa20
 
+## Verifying Cryptol FFI functions
+
+SAW has special support for verifying the correctness of Cryptol's
+[`foreign`
+functions](https://galoisinc.github.io/cryptol/master/FFI.html),
+implemented in a language such as C which compiles to LLVM, provided
+that there exists a [reference Cryptol
+implementation](https://galoisinc.github.io/cryptol/master/FFI.html#cryptol-implementation-of-foreign-functions)
+of the function as well. Since the way in which `foreign` functions are
+called is precisely specified by the Cryptol FFI, SAW is able to
+generate a `LLVMSetup ()` spec directly from the type of a Cryptol
+`foreign` function. This is done with the `llvm_ffi_setup` command,
+which is experimental and requires `enable_experimental;` to be run
+beforehand.
+```
+llvm_ffi_setup : Term -> LLVMSetup ()
+```
+
+For instance, for the simple imported Cryptol foreign function `foreign
+add : [32] -> [32] -> [32]` we can obtain a `LLVMSetup` spec simply by
+writing
+```
+let add_setup = llvm_ffi_setup {{ add }};
+```
+which behind the scenes expands to something like
+```
+let add_setup = do {
+  in0 <- llvm_fresh_var "in0" (llvm_int 32);
+  in1 <- llvm_fresh_var "in1" (llvm_int 32);
+  llvm_execute_func [llvm_term in0, llvm_term in1];
+  llvm_return (llvm_term {{ add in0 in1 }});
+};
+```
+
+### Polymorphism
+
+In general, Cryptol `foreign` functions can be polymorphic, with type
+parameters of kind `#`, representing e.g. the sizes of input sequences.
+However, any individual `LLVMSetup ()` spec only specifies the behavior
+of the LLVM function on inputs of concrete sizes. We handle this by
+allowing the argument term of `llvm_ffi_setup` to contain any necessary
+type arguments in addition to the Cryptol function name, so that the
+resulting term is monomorphic. The user can then define a parameterized
+specification simply as a SAWScript function in the usual way. For
+example, for a function `foreign f : {n, m} (fin n, fin m) => [n][32] ->
+[m][32]`, we can obtain a parameterized `LLVMSetup` spec by
+```
+let f_setup (n : Int) (m : Int) = llvm_ffi_setup {{ f`{n, m} }};
+```
+Note that the `Term` parameter that `llvm_ffi_setup` takes is restricted
+syntactically to the format described above (``{{ fun`{tyArg0, tyArg1,
+..., tyArgN} }}``), and cannot be any arbitrary term.
+
+### Supported types
+
+`llvm_ffi_setup` supports all Cryptol types that are supported by the
+Cryptol FFI, with the exception of `Integer`, `Rational`, `Z`, and
+`Float`. `Integer`, `Rational`, and `Z` are not supported since they are
+translated to `gmp` arbitrary-precision types which are hard for SAW to
+handle without additional overrides. There is no fundamental obstacle to
+supporting `Float`, and in fact `llvm_ffi_setup` itself does work with
+Cryptol floating point types, but the underlying functions such as
+`llvm_fresh_var` do not, so until that is implemented `llvm_ffi_setup`
+can generate a spec involving floating point types but it cannot
+actually be run.
+
+### Performing the verification
+
+The resulting `LLVMSetup ()` spec can be used with the existing
+`llvm_verify` function to perform the actual verification. And the
+`LLVMSpec` output from that can be used as an override as usual for
+further compositional verification.
+```
+f_ov <- llvm_verify mod "f" [] true (f_setup 3 5) z3;
+```
+
+As with the Cryptol FFI itself, SAW does not manage the compilation of
+the C source implementations of `foreign` functions to LLVM bitcode. For
+the verification to be meaningful, is expected that the LLVM module
+passed to `llvm_verify` matches the compiled dynamic library actually
+used with the Cryptol interpreter. Alternatively, on x86_64 Linux, SAW
+can perform verification directly on the `.so` ELF file with the
+experimental `llvm_verify_x86` command.
 
 # Extraction to the Coq theorem prover
 
@@ -3704,3 +3946,221 @@ N.B: The following commands must first be enabled using `enable_experimental`.
 
   Note that `Term`s derived from HDL modules are "first class", and are not restricted to `yosys_verify`: they may also be used with SAW's typical `Term` infrastructure like `sat`, `prove_print`, term rewriting, etc.
   `yosys_verify` simply provides a convenient and familiar interface, similar to `llvm_verify` or `jvm_verify`.
+
+# Bisimulation Prover
+
+SAW contains a bisimulation prover to prove that two terms simulate each other.
+This prover allows users to prove that two terms executing in lockstep satisfy
+some relation over the state of each circuit and their outputs.  This type of
+proof is useful in demonstrating the eventual equivalence of two circuits, or
+of a circuit and a functional specification.  SAW enables these proofs with the
+experimental `prove_bisim` command:
+
+~~~~
+prove_bisim : ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult
+~~~~
+
+When invoking `prove_bisim strat relation lhs rhs`, the arguments represent the
+following:
+
+1. `strat`: A proof strategy to use during verification.
+2. `relation`: A relation between `lhs` and `rhs`.  This relation must have the
+   type `(lhsState, output) -> (rhsState, output) -> Bit`. The relation's first
+   argument is a pair consisting of `lhs`'s state and output following
+   execution. The relation's second argument is a pair consisting of `rhs`'s
+   state and output following execution. `relation` then then returns a `Bit`
+   indicating whether the two arguments satisfy the bisimulation relation. That
+   is, whether the terms simulate each other.
+3. `lhs`: A term that simulates `rhs`. `lhs` must have the type
+   `(lhsState, input) -> (lhsState, output)`.  The first argument to `lhs` is a
+   tuple containing the internal state of `lhs`, as well as the input to `lhs`.
+   `lhs` returns a tuple containing its internal state after execution, as well
+   as its output.
+4. `rhs`: A term that simulates `lhs`. `rhs` must have the type
+   `(rhsState, input) -> (rhsState, output)`.  The first argument to `rhs` is a
+   tuple containing the internal state of `rhs`, as well as the input to `rhs`.
+   `rhs` returns a tuple containing its internal state after execution, as well
+   as its output.
+
+`prove_bisim` returns a `ProofResult` indicating whether `lhs` and `rhs` are
+bisimilar, given the relation `relation`.
+
+## Bisimulation Example
+
+This section walks through an example proving that the Cryptol implementation
+of an AND gate that makes use of internal state and takes two cycles to
+complete is equivalent to a pure function that computes the logical AND of its
+inputs in one cycle. First, we define the implementation's state type:
+
+~~~~
+type andState = { loaded : Bit, origX : Bit, origY : Bit }
+~~~~
+
+`andState` is a record type with three fields:
+
+1. `loaded`: A `Bit` indicating whether the input to the AND gate has been
+   loaded into the state record.
+2. `origX`: A `Bit` storing the first input to the AND gate.
+3. `origY`: A `Bit` storing the second input to the AND gate.
+
+Now, we define the AND gate's implementation:
+
+~~~~
+andImp : (andState, (Bit, Bit)) -> (andState, (Bit, Bit))
+andImp (s, (x, y)) =
+  if s.loaded /\ x == s.origX /\ y == s.origY
+  then (s, (True, s.origX && s.origY))
+  else ({ loaded = True, origX = x, origY = y }, (False, 0))
+~~~~
+
+`andImp` takes a tuple as input where the first field is an `andState` holding
+the gate's internal state, and second field is a tuple containing the inputs to
+the AND gate. `andImp` returns a tuple consisting of the updated `andState` and
+the gate's output.  The output is a tuple where the first field is a ready bit
+that is `1` when the second field is ready to be read, and the second field
+is the result of gate's computation.
+
+`andImp` takes two cycles to complete:
+
+1. The first cycle loads the inputs into its state's `origX` and `origY` fields
+   and sets `loaded` to `True`. It sets both of its output bits to `0`.
+2. The second cycle uses the stored input values to compute the logical AND.
+   It sets its ready bit to `1` and its second output to the logical AND
+   result.
+
+So long as the inputs remain fixed after the second cycle, `andImp`'s output
+remains unchanged.  If the inputs change, then `andImp` restarts the
+computation (even if the inputs change between the first and second cycles).
+
+Next, we define the pure function we'd like to prove `andImp` bisimilar to:
+
+~~~~
+andSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+andSpec (_, (x, y)) = ((), (True, x && y))
+~~~~
+
+`andSpec` takes a tuple as input where the first field is `()`, indicating that
+`andSpec` is a pure function without internal state, and the second field is a
+tuple containing the inputs to the AND function. `andSpec` returns a tuple
+consisting of `()` (again, because `andSpec` is stateless) and the function's
+output.  Like `andImp`, the output is a tuple where the first field is a ready
+bit that is `1` when the second field is ready to be read, and the second field
+is the result of the function's computation.
+
+`andSpec` completes in a single cycle, and as such its ready bit is always `1`.
+It computes the logical AND directly on the function's inputs using Cryptol's
+`(&&)` operator.
+
+Lastly, we define a relation over `andImp` and `andSpec`:
+
+~~~~
+andRel : (andState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+andRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+~~~~
+
+`andRel` takes two arguments:
+
+1. A return value from `andImp`. Specifically, a pair consisting of an
+   `andState` and a pair containing a ready bit and result of the logical AND.
+2. A return value from `andSpec`. Specifically, a pair consisting of an empty
+   state `()` and a pair containing a ready bit and result of the logical AND.
+
+`andRel` returns a `Bit` indicating whether the relation is satisfied.  It
+considers the relation satisfied in two ways:
+
+1. If `andImp`'s ready bit is set, the relation is satisfied if the output
+   values `impO` and `specO` from `andImp` and `andSpec` respectively are
+   equivalent.
+2. If `andImp`'s ready bit is not set, the relation is satisfied.
+
+Put another way, the relation is satisfied if the end result of `andImp` and
+`andSpec` are equivalent.  The relation permits intermediate outputs to differ.
+
+We can verify that this relation is always satisfied--and therefore the two
+terms are bisimilar--by using `prove_bisim`:
+
+~~~~
+import "And.cry";
+enable_experimental;
+
+res <- prove_bisim z3 {{ andRel }} {{ andImp }} {{ andSpec }};
+print res;
+~~~~
+
+Upon running this script, SAW prints `Valid` indicating that `andImp` and
+`andSpec` are bisimilar, given the relation `andRel`.
+
+### Building a NAND gate
+
+We can make the example more interesting by reusing components to build a NAND
+gate.  We first define a state type for the NAND gate implementation that
+contains `andImp`'s state.  This NAND gate will not need any additional state,
+so we will define a type `nandState` that is equal to `andState`:
+
+~~~~
+type nandState = andState
+~~~~
+
+Now, we define an implementation `nandImp` that calls `andImp` and negates the
+result:
+
+~~~~
+nandImp : (nandState, (Bit, Bit)) -> (nandState, (Bit, Bit))
+nandImp x = (s, (andReady, ~andRes))
+  where
+    (s ,(andReady, andRes)) = andImp x
+~~~~
+
+Note that `nandImp` is careful to preserve the ready status of `andImp`.
+Because `nandImp` relies on `andImp`, it also takes two cycles to compute the
+logical NAND of its inputs.
+
+Next, we define a specification `nandSpec` in terms of `andSpec`:
+
+~~~~
+nandSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+nandSpec (_, (x, y)) = ((), (True, ~ (andSpec ((), (x, y))).1.1))
+~~~~
+
+As with `andSpec`, `nandSpec` is pure and computes its result in a single
+cycle.
+
+Lastly, we define a relation indicating that `nandImp` and `nandSpec` produce
+equivalent results once `nandImp`'s ready bit is `1`:
+
+~~~~
+nandRel : (nandState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+nandRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+~~~~
+
+To prove that `nandImp` and `nandSpec` are bisimilar, we again use
+`prove_bisim`:
+
+~~~~
+res2 <- prove_bisim z3 {{ nandRel }} {{ nandImp }} {{ nandSpec }};
+print res2;
+~~~~
+
+Upon running this portion of the script, SAW prints `Valid` confirming that the
+two terms are bisimilar, given the relation `nandRel`.
+
+## Understanding the proof goal
+
+While not necessary for simple proofs, more advanced proofs may require
+inspecting the proof goal.  `prove_bisim` generates and attempts to solve the
+proof goal:
+
+~~~~
+forall s1 s2 in out1 out2.
+    relation (s1, out1) (s2, out2) -> relation (lhs (s1, in)) (rhs (s2, in))
+~~~~
+
+where the variables in the `forall` are:
+
+* `s1`: Initial state for `lhs`
+* `s2`: Initial state for `rhs`
+* `in`: Input value to `lhs` and `rhs`
+* `out1`: Initial output value for `lhs`
+* `out2`: Initial output value for `rhs`

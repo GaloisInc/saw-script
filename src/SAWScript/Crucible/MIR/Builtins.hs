@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -13,6 +14,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_alloc_mut
   , mir_assert
   , mir_execute_func
+  , mir_find_adt
   , mir_fresh_var
   , mir_load_module
   , mir_points_to
@@ -21,6 +23,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_return
   , mir_verify
     -- ** MIR types
+  , mir_adt
   , mir_array
   , mir_bool
   , mir_char
@@ -54,24 +57,23 @@ import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Foldable as F
 import Data.Foldable (for_)
 import Data.IORef
-import qualified Data.List.Extra as List (groupOn)
-import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.Extra as List (find, groupOn)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (knownNat, natValue)
 import Data.Parameterized.Some (Some(..))
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
+import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
 import Data.Void (absurd)
-import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 import System.IO (stdout)
 
@@ -80,8 +82,10 @@ import qualified Cryptol.TypeCheck.Type as Cryptol
 import qualified Lang.Crucible.Analysis.Postdom as Crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
+import qualified Lang.Crucible.CFG.Extension as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Mir.DefId as Mir
@@ -90,8 +94,8 @@ import qualified Mir.Generator as Mir
 import Mir.Intrinsics (MIR)
 import qualified Mir.Intrinsics as Mir
 import qualified Mir.ParseTranslate as Mir
-import qualified Mir.Trans as Mir
 import Mir.TransCustom (customOps)
+import qualified Mir.Trans as Mir
 import qualified Mir.TransTy as Mir
 
 import qualified What4.Config as W4
@@ -128,10 +132,9 @@ type MethodSpec = MS.CrucibleMethodSpecIR MIR
 type SetupCondition = MS.SetupCondition MIR
 
 -- TODO: something useful with the global pair?
-ppMIRAbortedResult :: MIRCrucibleContext
-                   -> Crucible.AbortedResult Sym a
+ppMIRAbortedResult :: Crucible.AbortedResult Sym a
                    -> PP.Doc ann
-ppMIRAbortedResult _cc = ppAbortedResult (\_gp -> mempty)
+ppMIRAbortedResult = ppAbortedResult (\_gp -> mempty)
 
 -----
 -- Commands
@@ -186,6 +189,18 @@ mir_execute_func args =
      checkArgs 0 argTys args
      Setup.crucible_execute_func args
 
+-- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt'" with the given
+-- 'String' as an identifier and the given 'Mir.Ty's as the types used to
+-- instantiate the type parameters. If such a 'Mir.Adt' cannot be found in the
+-- 'Mir.RustModule', this will raise an error.
+mir_find_adt :: Mir.RustModule -> String -> [Mir.Ty] -> TopLevel Mir.Adt
+mir_find_adt rm origName substs = do
+  let cs = rm ^. Mir.rmCS
+      col = cs ^. Mir.collection
+      crateDisambigs = cs ^. Mir.crateHashesMap
+  origDid <- findDefId crateDisambigs (Text.pack origName)
+  findAdt col origDid (Mir.Substs substs)
+
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
 mir_fresh_var ::
@@ -205,15 +220,11 @@ mir_load_module inputFile = do
    b <- io $ BSL.readFile inputFile
 
    opts <- getOptions
-   let ?debug = simVerbose opts
-   -- For now, we use the same default settings for implicit parameters as in
-   -- crux-mir. We may want to add options later that allow configuring these.
-   let ?assertFalseOnError = True
-   let ?printCrucible = False
-
    halloc <- getHandleAlloc
-   col <- io $ Mir.parseMIR inputFile b
-   io $ Mir.translateMIR mempty col halloc
+
+   withImplicitParams opts $ do
+     col <- io $ Mir.parseMIR inputFile b
+     io $ Mir.translateMIR mempty col halloc
 
 mir_return :: SetupValue -> MIRSetupM ()
 mir_return retVal =
@@ -266,11 +277,6 @@ mir_points_to ref val =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
 
-     allocIdx <-
-       case ref of
-         MS.SetupVar idx -> pure idx
-         _ -> X.throwM $ MIRPointsToNonReference ref
-
      referentTy <- mir_points_to_check_lhs_validity ref loc
      valTy <- typeOfSetupValue cc env nameEnv val
      unless (checkCompatibleTys referentTy valTy) $
@@ -287,7 +293,7 @@ mir_points_to ref val =
               , MS.conditionType = "MIR points-to"
               , MS.conditionContext = ""
               }
-     Setup.addPointsTo (MirPointsTo md allocIdx [val])
+     Setup.addPointsTo (MirPointsTo md ref [val])
 
 -- | Perform a set of validity checks on the LHS reference value in a
 -- 'mir_points_to' command. In particular:
@@ -307,7 +313,8 @@ mir_points_to_check_lhs_validity ref loc =
      refTy <- typeOfSetupValue cc env nameEnv ref
      case refTy of
        Mir.TyRef referentTy _ -> pure referentTy
-       _ -> throwCrucibleSetup loc $ "lhs not a reference type: " ++ show refTy
+       _ -> throwCrucibleSetup loc $ "lhs not a reference type: "
+                                  ++ show (PP.pretty refTy)
 
 mir_verify ::
   Mir.RustModule ->
@@ -327,6 +334,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
      cc <- setupCrucibleContext rm
      SomeOnlineBackend bak <- pure (cc^.mccBackend)
      let sym = cc^.mccSym
+     let globals0 = cc^.mccSymGlobalState
 
      pos <- getPosition
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
@@ -354,7 +362,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
        unwords ["Verifying", show (methodSpec ^. MS.csMethod), "..."]
 
      -- construct the initial state for verifications
-     (args, assumes, env, globals1) <- io $ verifyPrestate cc methodSpec Crucible.emptyGlobals
+     (args, assumes, env, globals1) <- io $ verifyPrestate cc methodSpec globals0
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame bak
@@ -388,6 +396,9 @@ mir_verify rm nm lemmas checkSat setup tactic =
 -----
 -- Mir.Types
 -----
+
+mir_adt :: Mir.Adt -> Mir.Ty
+mir_adt = mirAdtToTy
 
 mir_array :: Int -> Mir.Ty -> Mir.Ty
 mir_array n t = Mir.TyArray t n
@@ -542,25 +553,37 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
          Crucible.SymGlobalState Sym
       -> MirPointsTo
       -> IO (Crucible.SymGlobalState Sym)
-    doPointsTo globals (MirPointsTo _ allocIdx referents) =
+    doPointsTo globals (MirPointsTo _ reference referents) =
       mccWithBackend cc $ \bak -> do
+        MIRVal referenceShp referenceVal <-
+          resolveSetupVal cc env tyenv nameEnv reference
+        -- By the time we reach here, we have already checked (in mir_points_to)
+        -- that we are in fact dealing with a reference value, so the call to
+        -- `testRefShape` below should always succeed.
+        IsRefShape _ _ _ referenceInnerTy <-
+          case testRefShape referenceShp of
+            Just irs -> pure irs
+            Nothing ->
+              panic "setupPrePointsTos"
+                    [ "Unexpected non-reference type:"
+                    , show $ PP.pretty $ shapeMirTy referenceShp
+                    ]
         referent <- firstPointsToReferent referents
-        MIRVal referentTy referentVal <-
+        MIRVal referentShp referentVal <-
           resolveSetupVal cc env tyenv nameEnv referent
-        Some mp <- pure $ lookupAllocIndex env allocIdx
         -- By the time we reach here, we have already checked (in mir_points_to)
         -- that the type of the reference is compatible with the right-hand side
         -- value, so the equality check below should never fail.
         Refl <-
-          case W4.testEquality (mp^.mpType) (shapeType referentTy) of
+          case W4.testEquality referenceInnerTy (shapeType referentShp) of
             Just r -> pure r
             Nothing ->
               panic "setupPrePointsTos"
                     [ "Unexpected type mismatch between reference and referent"
-                    , "Reference type: " ++ show (mp^.mpType)
-                    , "Referent type:  " ++ show (shapeType referentTy)
+                    , "Reference type: " ++ show referenceInnerTy
+                    , "Referent type:  " ++ show (shapeType referentShp)
                     ]
-        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes (mp^.mpRef) referentVal
+        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes referenceVal referentVal
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -806,27 +829,14 @@ verifySimulate ::
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat mdMap =
   mccWithBackend cc $ \bak ->
   do let rm = cc^.mccRustModule
-     let cfgMap = rm ^. Mir.rmCFGs
      let cs = rm ^. Mir.rmCS
      let col = cs ^. Mir.collection
      let method = mspec ^. MS.csMethod
      let verbosity = simVerbose opts
-     let halloc = cc^.mccHandleAllocator
+     let simctx = cc^.mccSimContext
 
      when (verbosity > 2) $
           putStrLn "starting executeCrucibleMIR"
-
-     -- Translate the static initializer function
-     let ?debug = simVerbose opts
-     -- For now, we use the same default settings for implicit parameters as in
-     -- crux-mir. We may want to add options later that allow configuring these.
-     let ?assertFalseOnError = True
-     let ?customOps          = customOps
-     Crucible.AnyCFG staticInitCfg <- Mir.transStatics cs halloc
-     let staticInitHndl = Crucible.cfgHandle staticInitCfg
-     Refl <- case testEquality (Crucible.handleArgTypes staticInitHndl) Ctx.Empty of
-       Just e -> pure e
-       Nothing -> fail "mir_verify: static initializer should not require arguments"
 
      -- Find and run the target function
      Crucible.AnyCFG methodCfg <- lookupDefIdCFG rm method
@@ -835,20 +845,11 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
      let methodRetTy = Crucible.handleReturnType methodHndl
 
      regmap <- prepareArgs methodArgTys (map snd args)
-     res <-
+     (_, Crucible.GlobalPair retval globals1) <-
        do let feats = pfs
-          let simctx = Crucible.initSimContext bak Mir.mirIntrinsicTypes halloc stdout
-                         (Crucible.FnBindings Crucible.emptyHandleMap) Mir.mirExtImpl
-                         SAWCruciblePersonality
-          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler methodRetTy
           let fnCall = Crucible.regValue <$> Crucible.callCFG methodCfg regmap
           let overrideSim =
-                do forM_ cfgMap $ \(Crucible.AnyCFG cfg) ->
-                     Crucible.bindFnHandle (Crucible.cfgHandle cfg) $
-                     Crucible.UseCFG cfg (Crucible.postdomInfo cfg)
-                   _ <- Crucible.callCFG staticInitCfg Crucible.emptyRegMap
-
-                   mapM_ (registerOverride opts cc simctx top_loc mdMap)
+                do mapM_ (registerOverride opts cc simctx top_loc mdMap)
                            (List.groupOn (view MS.csMethod) (map (view MS.psSpec) lemmas))
                    liftIO $
                      for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
@@ -856,36 +857,20 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
                           let loc = MS.conditionLoc md
                           Crucible.addAssumption bak (Crucible.GenericAssumption loc reason expr)
                    fnCall
-          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
-            (simSt (Crucible.runOverrideSim methodRetTy overrideSim))
+          runCrucible opts simctx globals (map Crucible.genericToExecutionFeature feats)
+                      methodRetTy overrideSim
 
-     case res of
-       Crucible.FinishedResult _ pr ->
-         do Crucible.GlobalPair retval globals1 <-
-              case pr of
-                Crucible.TotalRes gp -> return gp
-                Crucible.PartialRes _ _ gp _ ->
-                  do printOutLn opts Info "Symbolic simulation completed with side conditions."
-                     return gp
-            let ret_ty = mspec ^. MS.csRet
-            retval' <-
-              case ret_ty of
-                Nothing -> return Nothing
-                Just ret_mt ->
-                  case retval of
-                    Crucible.RegEntry ty val ->
-                      case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of
-                        Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
-                        Just v -> return (Just (ret_mt, v))
-            return (retval', globals1)
-
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppMIRAbortedResult cc ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
-
-       Crucible.TimeoutResult _cxt -> fail "Symbolic execution timed out."
+     let ret_ty = mspec ^. MS.csRet
+     retval' <-
+       case ret_ty of
+         Nothing -> return Nothing
+         Just ret_mt ->
+           case retval of
+             Crucible.RegEntry ty val ->
+               case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of
+                 Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
+                 Just v -> return (Just (ret_mt, v))
+     return (retval', globals1)
 
   where
     prepareArg :: forall tp. Crucible.TypeRepr tp -> MIRVal -> IO (Crucible.RegValue Sym tp)
@@ -915,173 +900,6 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
 --------------------------------------------------------------------------------
 -- Utilities
 --------------------------------------------------------------------------------
-
--- | Check if two 'Mir.Ty's are compatible in SAW. This is a slightly coarser
--- notion of equality to reflect the fact that MIR's type system is richer than
--- Cryptol's type system, and some types which would be distinct in MIR are in
--- fact equal when converted to the equivalent Cryptol types. In particular:
---
--- 1. A @u<N>@ type is always compatible with an @i<N>@ type. For instance, @u8@
---    is compatible with @i8@, and @u16@ is compatible with @i16@. Note that the
---    bit sizes of both types must be the same. For instance, @u8@ is /not/
---    compatible with @i16@.
---
--- 2. The @usize@/@isize@ types are always compatible with @u<N>@/@i<N>@, where
---    @N@ is the number of bits corresponding to the 'Mir.SizeBits' type in
---    "Mir.Intrinsics". (This is a bit unsavory, as the actual size of
---    @usize@/@isize@ is platform-dependent, but this is the current approach.)
---
--- 3. Compatibility applies recursively. For instance, @[ty_1; N]@ is compatible
---    with @[ty_2; N]@ iff @ty_1@ and @ty_2@ are compatibile. Similarly, a tuple
---    typle @(ty_1_a, ..., ty_n_a)@ is compatible with @(ty_1_b, ..., ty_n_b)@
---    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
---    with @ty_n_b@.
---
--- See also @checkRegisterCompatibility@ in "SAWScript.Crucible.LLVM.Builtins"
--- and @registerCompatible@ in "SAWScript.Crucible.JVM.Builtins", which fill a
--- similar niche in the LLVM and JVM backends, respectively.
-checkCompatibleTys :: Mir.Ty -> Mir.Ty -> Bool
-checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2
-
--- | Like 'Mir.Ty', but where:
---
--- * The 'TyInt' and 'TyUint' constructors have been collapsed into a single
---   'TyViewInt' constructor.
---
--- * 'TyViewInt' uses 'BaseSizeView' instead of 'Mir.BaseSize'.
---
--- * Recursive occurrences of 'Mir.Ty' use 'TyView' instead. This also applies
---   to fields of type 'SubstsView' and 'FnSigView', which also replace 'Mir.Ty'
---   with 'TyView' in their definitions.
---
--- This provides a coarser notion of equality than what the 'Eq' instance for
--- 'Mir.Ty' provides, which distinguishes the two sorts of integer types.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-data TyView
-  = TyViewBool
-  | TyViewChar
-    -- | The sole integer type. Both 'TyInt' and 'TyUint' are mapped to
-    -- 'TyViewInt', and 'BaseSizeView' is used instead of 'Mir.BaseSize'.
-  | TyViewInt !BaseSizeView
-  | TyViewTuple ![TyView]
-  | TyViewSlice !TyView
-  | TyViewArray !TyView !Int
-  | TyViewRef !TyView !Mir.Mutability
-  | TyViewAdt !Mir.DefId !Mir.DefId !SubstsView
-  | TyViewFnDef !Mir.DefId
-  | TyViewClosure [TyView]
-  | TyViewStr
-  | TyViewFnPtr !FnSigView
-  | TyViewDynamic !Mir.TraitName
-  | TyViewRawPtr !TyView !Mir.Mutability
-  | TyViewFloat !Mir.FloatKind
-  | TyViewDowncast !TyView !Integer
-  | TyViewNever
-  | TyViewForeign
-  | TyViewLifetime
-  | TyViewConst
-  | TyViewErased
-  | TyViewInterned Mir.TyName
-  deriving Eq
-
--- | Like 'Mir.BaseSize', but without a special case for @usize@/@isize@.
--- Instead, these are mapped to their actual size, which is determined by the
--- number of bits in the 'Mir.SizeBits' type in "Mir.Intrinsics". (This is a bit
--- unsavory, as the actual size of @usize@/@isize@ is platform-dependent, but
--- this is the current approach.)
-data BaseSizeView
-  = B8View
-  | B16View
-  | B32View
-  | B64View
-  | B128View
-  deriving Eq
-
--- | Like 'Mir.Substs', but using 'TyView's instead of 'Mir.Ty'.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-newtype SubstsView = SubstsView [TyView]
-  deriving Eq
-
--- | Like 'Mir.FnSig', but using 'TyView's instead of 'Mir.Ty'.
---
--- This is an internal data type that is used to power the 'checkCompatibleTys'
--- function. Refer to the Haddocks for that function for more information on why
--- this is needed.
-data FnSigView = FnSigView {
-    _fsvarg_tys    :: ![TyView]
-  , _fsvreturn_ty  :: !TyView
-  , _fsvabi        :: Mir.Abi
-  , _fsvspreadarg  :: Maybe Int
-  }
-  deriving Eq
-
--- | Convert a 'Mir.Ty' value to a 'TyView' value.
-tyView :: Mir.Ty -> TyView
--- The two most important cases. Both sorts of integers are mapped to TyViewInt.
-tyView (Mir.TyInt  bs) = TyViewInt (baseSizeView bs)
-tyView (Mir.TyUint bs) = TyViewInt (baseSizeView bs)
--- All other cases are straightforward.
-tyView Mir.TyBool = TyViewBool
-tyView Mir.TyChar = TyViewChar
-tyView (Mir.TyTuple tys) = TyViewTuple (map tyView tys)
-tyView (Mir.TySlice ty) = TyViewSlice (tyView ty)
-tyView (Mir.TyArray ty n) = TyViewArray (tyView ty) n
-tyView (Mir.TyRef ty mut) = TyViewRef (tyView ty) mut
-tyView (Mir.TyAdt monoDid origDid substs) =
-  TyViewAdt monoDid origDid (substsView substs)
-tyView (Mir.TyFnDef did) = TyViewFnDef did
-tyView (Mir.TyClosure tys) = TyViewClosure (map tyView tys)
-tyView Mir.TyStr = TyViewStr
-tyView (Mir.TyFnPtr sig) = TyViewFnPtr (fnSigView sig)
-tyView (Mir.TyDynamic trait) = TyViewDynamic trait
-tyView (Mir.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut
-tyView (Mir.TyFloat fk) = TyViewFloat fk
-tyView (Mir.TyDowncast ty n) = TyViewDowncast (tyView ty) n
-tyView Mir.TyNever = TyViewNever
-tyView Mir.TyForeign = TyViewForeign
-tyView Mir.TyLifetime = TyViewLifetime
-tyView Mir.TyConst = TyViewConst
-tyView Mir.TyErased = TyViewErased
-tyView (Mir.TyInterned nm) = TyViewInterned nm
-
--- | Convert a 'Mir.BaseSize' value to a 'BaseSizeView' value.
-baseSizeView :: Mir.BaseSize -> BaseSizeView
-baseSizeView Mir.B8    = B8View
-baseSizeView Mir.B16   = B16View
-baseSizeView Mir.B32   = B32View
-baseSizeView Mir.B64   = B64View
-baseSizeView Mir.B128  = B128View
-baseSizeView Mir.USize =
-  case Map.lookup (natValue sizeBitsRepr) bitSizesMap of
-    Just bsv -> bsv
-    Nothing ->
-      error $ "Mir.Intrinsics.BaseSize bit size not supported: " ++ show sizeBitsRepr
-  where
-    sizeBitsRepr = knownNat @Mir.SizeBits
-
-    bitSizesMap :: Map Natural BaseSizeView
-    bitSizesMap = Map.fromList
-      [ (natValue (knownNat @8),   B8View)
-      , (natValue (knownNat @16),  B16View)
-      , (natValue (knownNat @32),  B32View)
-      , (natValue (knownNat @64),  B64View)
-      , (natValue (knownNat @128), B128View)
-      ]
-
--- | Convert a 'Mir.Substs' value to a 'SubstsView' value.
-substsView :: Mir.Substs -> SubstsView
-substsView (Mir.Substs tys) = SubstsView (map tyView tys)
-
--- | Convert a 'Mir.FnSig' value to a 'FnSigView' value.
-fnSigView :: Mir.FnSig -> FnSigView
-fnSigView (Mir.FnSig argTys retTy abi spreadarg) =
-  FnSigView (map tyView argTys) (tyView retTy) abi spreadarg
 
 -- | Returns the Cryptol type of a MIR type, returning 'Nothing' if it is not
 -- easily expressible in Cryptol's type system or if it is not currently
@@ -1157,45 +975,17 @@ doAlloc cc (Some ma) =
        , _mpRef = ptr
        }
 
--- | Given a function name @fnName@, attempt to look up its corresponding
--- 'Mir.DefId'. Currently, the following types of function names are permittd:
---
--- * @<crate_name>/<disambiguator>::<function_name>: A fully disambiguated name.
---
--- * @<crate_name>::<function_name>: A name without a disambiguator. In this
---   case, SAW will attempt to look up a disambiguator from the @crateDisambigs@
---   map. If none can be found, or if there are multiple disambiguators for the
---   given @<crate_name>@, then this will fail.
-findDefId :: Map Text (NonEmpty Text) -> Text -> TopLevel Mir.DefId
-findDefId crateDisambigs fnName = do
-    (crate, path) <-
-      case edid of
-        crate:path -> pure (crate, path)
-        [] -> fail $ unlines
-                [ "The function `" ++ fnNameStr ++ "` lacks a crate."
-                , "Consider providing one, e.g., `<crate_name>::" ++ fnNameStr ++ "`."
-                ]
-    let crateStr = Text.unpack crate
-    case Text.splitOn "/" crate of
-      [crateNoDisambig, disambig] ->
-        pure $ Mir.textId $ Text.intercalate "::"
-             $ (crateNoDisambig <> "/" <> disambig) : path
-      [_] ->
-        case Map.lookup crate crateDisambigs of
-            Just allDisambigs@(disambig :| otherDisambigs)
-              |  F.null otherDisambigs
-              -> pure $ Mir.textId $ Text.intercalate "::"
-                      $ (crate <> "/" <> disambig) : path
-              |  otherwise
-              -> fail $ unlines $
-                   [ "ambiguous crate " ++ crateStr
-                   , "crate disambiguators:"
-                   ] ++ F.toList (Text.unpack <$> allDisambigs)
-            Nothing -> fail $ "unknown crate " ++ crateStr
-      _ -> fail $ "Malformed crate name: " ++ show crateStr
+-- Find the ADT definition that is monomorphized from `origName` with `substs`.
+-- This should only be used on types that are known to be present in the crate
+-- after dead code elimination - for example, because the type appears in the
+-- signature of a function that's being translated.
+findAdt :: Mir.Collection -> Mir.DefId -> Mir.Substs -> TopLevel Mir.Adt
+findAdt col origName substs =
+    case List.find (\adt -> adt ^. Mir.adtOrigSubsts == substs) insts of
+        Just x -> return x
+        Nothing -> fail $ "Unknown ADT: " ++ show (origName, substs)
   where
-    fnNameStr = Text.unpack fnName
-    edid = Text.splitOn "::" fnName
+    insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
 
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
@@ -1212,13 +1002,49 @@ lookupDefIdCFG rm method =
     Just x -> return x
     Nothing -> fail $ "Couldn't find CFG for MIR function: " ++ show method
 
+-- | Some boilerplate code needed to invoke 'Crucible.executeCrucible' and
+-- extract the results.
+runCrucible ::
+  Crucible.IsSyntaxExtension ext =>
+  Options ->
+  Crucible.SimContext p Sym ext ->
+  Crucible.SymGlobalState Sym ->
+  [Crucible.ExecutionFeature p Sym ext (Crucible.RegEntry Sym a)] ->
+  Crucible.TypeRepr a ->
+  Crucible.OverrideSim p Sym ext (Crucible.RegEntry Sym a) Crucible.EmptyCtx a (Crucible.RegValue Sym a) ->
+  IO (Crucible.SimContext p Sym ext, Crucible.GlobalPair Sym (Crucible.RegEntry Sym a))
+runCrucible opts simCtx globals execFeatures ovRetTpr ovSim = do
+  let initExecState =
+        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler ovRetTpr $
+        Crucible.runOverrideSim ovRetTpr ovSim
+  res <- Crucible.executeCrucible execFeatures initExecState
+  case res of
+    Crucible.FinishedResult simctx pr ->
+      case pr of
+        Crucible.TotalRes gp -> return (simctx, gp)
+        Crucible.PartialRes _ _ gp _ ->
+          do printOutLn opts Info "Symbolic simulation completed with side conditions."
+             return (simctx, gp)
+
+    Crucible.AbortedResult _ ar -> do
+      let resultDoc = ppMIRAbortedResult ar
+      fail $ unlines [ "Symbolic execution failed."
+                     , show resultDoc
+                     ]
+
+    Crucible.TimeoutResult _cxt ->
+      fail "Symbolic execution timed out."
+
 setupCrucibleContext :: Mir.RustModule -> TopLevel MIRCrucibleContext
 setupCrucibleContext rm =
   do halloc <- getHandleAlloc
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
      sym <- io $ newSAWCoreExprBuilder sc
-     bak <- io $ newSAWCoreBackend pathSatSolver sym
+     someBak@(SomeOnlineBackend bak) <- io $ newSAWCoreBackend pathSatSolver sym
+     let cs     = rm ^. Mir.rmCS
+     let col    = cs ^. Mir.collection
+     let cfgMap = rm ^. Mir.rmCFGs
      opts <- getOptions
      io $ do let cfg = W4.getConfiguration sym
              verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -1228,10 +1054,149 @@ setupCrucibleContext rm =
      -- TODO! there's a lot of options setup we need to replicate
      --  from SAWScript.Crucible.LLVM.Builtins
 
+     -- There is quite a bit of faff below, all for the sake of translating
+     -- top-level static values. See Note [Translating MIR statics in SAW] for
+     -- a high-level description of what this code is doing.
+     Crucible.AnyCFG staticInitCfg <-
+       withImplicitParams opts $ io $ Mir.transStatics cs halloc
+     let staticInitHndl   = Crucible.cfgHandle staticInitCfg
+     let staticInitArgTys = Crucible.handleArgTypes staticInitHndl
+     let staticInitRetTy  = Crucible.handleReturnType staticInitHndl
+     Refl <- case testEquality staticInitArgTys Ctx.Empty of
+       Just e ->
+         pure e
+       Nothing ->
+         panic "setupCrucibleContext"
+               [ "static initializer should not require arguments:"
+               , show staticInitArgTys
+               ]
+     Refl <- case testEquality staticInitRetTy Crucible.UnitRepr of
+       Just e ->
+         pure e
+       Nothing ->
+         panic "setupCrucibleContext"
+               [ "static initializer should return ():"
+               , show staticInitRetTy
+               ]
+
+     let bindings = Crucible.fnBindingsFromList $
+                    map (\(Crucible.AnyCFG cfg) ->
+                          Crucible.FnBinding
+                            (Crucible.cfgHandle cfg)
+                            (Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $
+                    Map.elems cfgMap
+     let simctx0 = Crucible.initSimContext bak
+                     Mir.mirIntrinsicTypes halloc stdout
+                     bindings Mir.mirExtImpl
+                     SAWCruciblePersonality
+     let globals0 = Crucible.emptyGlobals
+     let setupGlobals = Crucible.regValue <$> Crucible.callCFG staticInitCfg Crucible.emptyRegMap
+     -- Step (1) in Note [Translating MIR statics in SAW]
+     (simctx1, gp) <- io $ runCrucible opts simctx0 globals0 [] Crucible.UnitRepr setupGlobals
+     let globalsAllStatics = gp ^. Crucible.gpGlobals
+     -- Step (2) in Note [Translating MIR statics in SAW]
+     let (globalsImmutStaticsOnly, staticInitializerPairs) =
+           mapAccumL
+             (\globals (staticDefId, Mir.StaticVar gv) ->
+               let static =
+                     case Map.lookup staticDefId (col ^. Mir.statics) of
+                       Just static' ->
+                         static'
+                       Nothing ->
+                         panic "setupCrucibleContext"
+                               [ "staticDefId not in statics map:"
+                               , show staticDefId
+                               ] in
+               case Crucible.lookupGlobal gv globalsAllStatics of
+                 Just rv ->
+                   let pair = MapF.Pair gv (Crucible.RV rv) in
+                   if static ^. Mir.sMutable
+                     then (globals, pair)
+                     else (Crucible.insertGlobal gv rv globals, pair)
+                 Nothing ->
+                   panic "setupCrucibleContext"
+                         [ "Static GlobalVar not in SymGlobalState:"
+                         , show gv
+                         ])
+             globals0
+             (cs ^. Mir.staticMap . to Map.toList)
+     let staticInitializerMap = MapF.fromList staticInitializerPairs
+
      return MIRCrucibleContext { _mccRustModule = rm
-                               , _mccBackend = bak
-                               , _mccHandleAllocator = halloc
+                               , _mccBackend = someBak
+                               , _mccSimContext = simctx1
+                               , _mccSymGlobalState = globalsImmutStaticsOnly
+                               , _mccStaticInitializerMap = staticInitializerMap
                                }
+
+{-
+Note [Translating MIR statics in SAW]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Translating top-level static values in the SAW MIR backend requires some care.
+This is because we want to treat immutable and mutable static differently:
+
+* Immutable statics should be implicitly initialized in each specification
+  without any action required on the user's end.
+
+* Mutable statics should /not/ be initialized in a specification unless a user
+  explicitly declares it with `mir_points_to (mir_static ...) ...`. This is
+  because a mutable static's value can change over the course of a program, so
+  we require users to be precise about what the value should be before and after
+  invoking a function.
+
+This poses a challenge when translating static values in SAW. It is tempting to
+only translate the immutable statics and not the mutable statics (similarly to
+how the SAW LLVM backend handles translation), but this will not work in
+general. Consider this program:
+
+  static mut S1: u32 = 1;
+  static S2: u32 = unsafe { S1 };
+
+  pub fn f() {
+      ... S2 ...
+  }
+
+The initial value of S2 (an immutable static) depends on having first translated
+the initial value of S1 (a mutable static). If we do not translate mutable
+statics in SAW, the translation of S1 will not succeed.
+
+We solve this problem by doing the following:
+
+1. Use Crucible to translate all top-level static values (both immutable and
+   mutable). This produces a SymGlobalState that contains every static's
+   initializer value.
+
+2. Consult the updated SymGlobalState to produce the following:
+
+   (a) A subset of the SymGlobalState that only contains the initializer values
+       for the immutable statics. This will be used later to initialize the
+       Crucible state when translating the function being verified with
+       mir_verify.
+
+   (b) A MirStaticInitializerMap mapping all static variables (both immutable
+       and mutable) to their initializer values. This will be used later to
+       power the mir_static_initializer function.
+
+This is a bit clunky, but it's unclear how to do better without significantly
+changing how crucible-mir translates top-level static values.
+-}
+
+-- | Define several commonly used implicit parameters in @crucible-mir@ and
+-- call a continuation with these parameters.
+withImplicitParams ::
+  Options ->
+  ( ( ?debug :: Int, ?customOps :: Mir.CustomOpMap
+    , ?assertFalseOnError :: Bool, ?printCrucible :: Bool
+    ) => r) ->
+  r
+withImplicitParams opts k =
+  let ?debug = simVerbose opts in
+      -- For now, we use the same default settings for implicit parameters as in
+      -- crux-mir. We may want to add options later that allow configuring these.
+  let ?assertFalseOnError = True in
+  let ?customOps          = customOps in
+  let ?printCrucible      = False in
+  k
 
 --------------------------------------------------------------------------------
 -- Errors
@@ -1239,7 +1204,6 @@ setupCrucibleContext rm =
 
 data MIRSetupError
   = MIRFreshVarInvalidType Mir.Ty
-  | MIRPointsToNonReference SetupValue
   | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
@@ -1254,32 +1218,27 @@ instance Show MIRSetupError where
     case err of
       MIRFreshVarInvalidType jty ->
         "mir_fresh_var: Invalid type: " ++ show jty
-      MIRPointsToNonReference ptr ->
-        unlines
-        [ "mir_points_to: Left-hand side is not a valid reference"
-        , show (MS.ppSetupValue ptr)
-        ]
       MIRArgTypeMismatch i expected found ->
         unlines
         [ "mir_execute_func: Argument type mismatch"
         , "Argument position: " ++ show i
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
+        , "Expected type: " ++ show (PP.pretty expected)
+        , "Given type:    " ++ show (PP.pretty found)
         ]
       MIRArgNumberWrong expected found ->
         unlines
         [ "mir_execute_func: Wrong number of arguments"
         , "Expected: " ++ show expected
-        , "Given: " ++ show found
+        , "Given:    " ++ show found
         ]
       MIRReturnUnexpected found ->
         unlines
         [ "mir_return: Unexpected return value for void method"
-        , "Given type: " ++ show found
+        , "Given type: " ++ show (PP.pretty found)
         ]
       MIRReturnTypeMismatch expected found ->
         unlines
         [ "mir_return: Return type mismatch"
-        , "Expected type: " ++ show expected
-        , "Given type: " ++ show found
+        , "Expected type: " ++ show (PP.pretty expected)
+        , "Given type:    " ++ show (PP.pretty found)
         ]

@@ -1,0 +1,20 @@
+/* Test the prove_bisim command with some simple examples */
+
+import "Test.cry";
+
+enable_experimental;
+
+res <- prove_bisim z3 {{ rel }} {{ f1 }} {{ f2 }};
+print res;
+
+// Test incompatable input types
+fails (prove_bisim z3 {{ rel }} {{ f1 }} {{ f2_bad_input_type }});
+
+// Test incompatable output types
+fails (prove_bisim z3 {{ rel }} {{ f1 }} {{ f2_bad_output_type }});
+
+// Test bad relation type
+fails (prove_bisim z3 {{ True }} {{ f1 }} {{ f2 }});
+
+// Test wrong state type
+fails (prove_bisim z3 {{ rel }} {{ f2 }} {{ f2 }});

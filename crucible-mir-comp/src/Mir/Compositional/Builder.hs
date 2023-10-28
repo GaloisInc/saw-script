@@ -273,8 +273,8 @@ addArg tpr argRef msb =
                  , MS.conditionType = "add argument value"
                  , MS.conditionContext = ""
                  }
-        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (fr ^. frAlloc) svs :)
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (fr ^. frAlloc) svs' :)
+        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs' :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
   where
@@ -318,7 +318,7 @@ setReturn tpr argRef msb =
                  , MS.conditionType = "set return value"
                  , MS.conditionContext = ""
                  }
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (fr ^. frAlloc) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
 
     msbSpec . MS.csRetValue .= Just sv
   where
@@ -636,6 +636,7 @@ substMethodSpec sc sm ms = do
         MS.SetupTerm tt -> MS.SetupTerm <$> goTypedTerm tt
         MS.SetupNull _ -> return sv
         MS.SetupStruct b svs -> MS.SetupStruct b <$> mapM goSetupValue svs
+        MS.SetupTuple b svs -> MS.SetupTuple b <$> mapM goSetupValue svs
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
@@ -677,25 +678,33 @@ regToSetup bak p eval shp rv = go shp rv
 
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
-    go (UnitShape _) () = return $ MS.SetupStruct () []
+    go (UnitShape _) () = return $ MS.SetupTuple () []
     go (PrimShape _ btpr) expr = do
         -- Record all vars used in `expr`
         cache <- use msbVisitCache
         visitExprVars cache expr $ \var -> do
             msbPrePost p . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ _ flds) rvs = MS.SetupStruct () <$> goFields flds rvs
-    go (ArrayShape _ _ shp) vec = do
+    go (TupleShape _ _ flds) rvs = MS.SetupTuple () <$> goFields flds rvs
+    go (ArrayShape _ elemTy shp) vec = do
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
             MirVector_PartialVector v -> forM (toList v) $ \p -> do
                 rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
-        return $ MS.SetupArray () svs
-    go (StructShape _ _ flds) (AnyValue tpr rvs)
+        return $ MS.SetupArray elemTy svs
+    go (StructShape tyAdt _ flds) (AnyValue tpr rvs)
       | Just Refl <- testEquality tpr shpTpr =
-        MS.SetupStruct () <$> goFields flds rvs
+        case tyAdt of
+          M.TyAdt adtName _ _ -> do
+            mbAdt <- use $ msbCollection . M.adts . at adtName
+            case mbAdt of
+              Just adt -> MS.SetupStruct adt <$> goFields flds rvs
+              Nothing -> error $ "regToSetup: Could not find ADT named: "
+                              ++ show adtName
+          _ -> error $ "regToSetup: Found non-ADT type for struct: "
+                    ++ show (PP.pretty tyAdt)
       | otherwise = error $ "regToSetup: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds

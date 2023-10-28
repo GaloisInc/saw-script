@@ -41,6 +41,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, fromJust)
+import Data.Void (absurd)
 
 import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
@@ -450,6 +451,9 @@ typeOfSetupValue cc env nameEnv val =
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
 
+    SetupTuple empty _ ->
+      absurd empty
+
     SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
     SetupArray () (v : vs) ->
       do memTy <- typeOfSetupValue cc env nameEnv v
@@ -498,7 +502,7 @@ typeOfSetupValue cc env nameEnv val =
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
                      | otherwise -> throwError $ unwords $
                          [ "typeOfSetupValue: array type index out of bounds"
                          , "(index: " ++ show i ++ ")"
@@ -570,7 +574,7 @@ resolveSetupElemOffset cc env nameEnv v i = do
            Right memTy' ->
              case memTy' of
                Crucible.ArrayType n memTy''
-                 | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                 | fromIntegral i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
                Crucible.StructType si ->
                  case Crucible.siFieldOffset si i of
                    Just d -> return d
@@ -626,6 +630,8 @@ resolveSetupVal cc mem env tyenv nameEnv val =
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
+    SetupTuple empty _ ->
+      absurd empty
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do
       vals <- V.mapM (resolveSetupVal cc mem env tyenv nameEnv) (V.fromList vs)

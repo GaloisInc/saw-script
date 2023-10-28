@@ -110,6 +110,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Module
 import Verifier.SAW.Recognizer
+import Verifier.SAW.Utils
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
@@ -293,6 +294,17 @@ projTupleOpenTerm' (_:_) 0 tup = pairLeftOpenTerm tup
 projTupleOpenTerm' (_:tps) i tup =
   projTupleOpenTerm' tps (i-1) $ pairRightOpenTerm tup
 
+=======
+-- | Given an index and total length, project out of a right-nested tuple
+-- without unit as the right-most element
+projTupleOpenTerm' :: Natural -> Natural -> OpenTerm -> OpenTerm
+projTupleOpenTerm' _ 0 _ = panic "projTupleOpenTerm'" ["Projection of 0-tuple"]
+projTupleOpenTerm' 0 1 t = t
+projTupleOpenTerm' 0 _ t = pairLeftOpenTerm t
+projTupleOpenTerm' i n t
+  | i < n     = projTupleOpenTerm' (i - 1) (n - 1) (pairRightOpenTerm t)
+  | otherwise = panic "projTupleOpenTerm'" ["Index out of bounds"]
+>>>>>>> master
 
 -- | Build a record value as an 'OpenTerm'
 recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm

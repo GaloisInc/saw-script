@@ -89,6 +89,7 @@ envVarAssocList = map envVarAssoc
 --     - JAVA_HOME = path to java installation
 --     - TESTBASE = path to intTests directory
 --     - SAW_JDK_JAR = path to rt.jar
+--     - SAW_SOLVER_CACHE_PATH = optional path to solver result cache
 --
 --  These environment variables may already be set to supply default
 --  locations for these components.
@@ -132,7 +133,8 @@ testParams intTestBase verbose = do
       addEnvVar evs e = do v <- lookupEnv e
                            return $ updEnvVars e (fromMaybe "" v) evs
   -- override eVars0 with any environment variables set in this process
-  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "JAVAC", "JAVA_HOME", "SAW_JDK_JAR" ]
+  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH",
+                                 "JAVAC", "JAVA_HOME", "SAW_JDK_JAR" ]
 
   -- Create a pathlist of jars for invoking saw
   let jarsDir = absTestBase </> "jars"
@@ -183,6 +185,7 @@ check_cryptol_specs testPath disabled tests = testCase "cryptol-specs Available"
                           , "test0035_aes_consistent"
                           , "test_w4"
                           , "test_examples"
+                          , "test_ffi_verify_salsa"
                           ]
       cspec_dir = takeDirectory testPath </> "deps" </> "cryptol-specs"
   in if need_cryptol_spec

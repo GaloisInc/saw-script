@@ -6,6 +6,8 @@
 
   * The `SAW/MIR/load module` command loads a MIR JSON file into SAW.
   * The `SAW/MIR/verify` command performs verification of a MIR function.
+  * The `SAW/MIR/find ADT` command looks up an algebraic data type (ADT) name in
+    a MIR module.
 
   See the [remote API
   documentation](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawmirload-module-command)
@@ -13,6 +15,16 @@
   how SAW's MIR verification support works in general, see the `mir_*` commands
   documented in the [SAW
   manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+* The API for `"array"` `setup value`s now has an `"element type"` field. For
+  LLVM verification, this field is optional. For MIR verification, this field
+  is required if the `"elements"` value is empty and optional if the
+  `"elements"` value is non-empty.
+* The old `"tuple"` `setup value` has been renamed to `"struct"`. This better
+  reflects its intended purpose of representing struct values. There is now a
+  new `"tuple"` `setup value` that is only used to represent MIR tuples.
+* The API for `"struct"` `setup value`s now has a `"MIR ADT"` field. For
+  MIR verification, this field is required. For LLVM and JVM verification,
+  this field must be `null`, or else an error will be raised.
 
 ## 1.0.0 -- 2023-06-26
 

@@ -1,5 +1,5 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 8.10.7
+# - Artifact uploads for binaries are from GHC 9.2.7
 # - Builds for Ubuntu happen on 22.04. We also include a single configuration
 #   for 20.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
@@ -16,7 +16,16 @@ on:
   workflow_dispatch:
 
 env:
-  CACHE_VERSION: 1
+  # The CABAL_CACHE_VERSION and SOLVER_CACHE_VERSION environment variables
+  # can be updated to force the use of a new cabal or solver cache if the
+  # respective current cache contents become corrupted/invalid.  This can
+  # sometimes happen when (for example) the OS version is changed but
+  # older .so files are cached, which can have various effects
+  # (e.g. cabal complains it can't find a valid version of the "happy"
+  # tool).
+  CABAL_CACHE_VERSION: 1
+  SOLVER_CACHE_VERSION: 1
+
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
 
   # Solver package snapshot date - also update in the following locations:
@@ -71,14 +80,34 @@ jobs:
         cabal: ["3.10.1.0"]
         ghc: ["8.10.7", "9.2.7", "9.4.4"]
         run-tests: [true]
+        hpc: [false]
         include:
           # We include one job from an older Ubuntu LTS release to increase our
           # coverage of possible Linux configurations. Since we already run the
           # tests with the newest LTS release, we won't bother testing this one.
           - os: ubuntu-20.04
-            ghc: "8.10.7"
+            ghc: "9.2.7"
             cabal: "3.10.1.0"
             run-tests: false
+            hpc: false
+          # Include one job with HPC enabled
+          - os: ubuntu-22.04
+            ghc: "9.4.4"
+            cabal: "3.10.1.0"
+            run-tests: true
+            hpc: true
+        exclude:
+          # We exclude the GHC 8.10.7 job on Windows, as it is known to suffer
+          # from a hard-to-diagnose memory-related issue that does not affect
+          # later versions of GHC on Windows. (See
+          # https://github.com/GaloisInc/saw-script/issues/1961.) When we drop
+          # support for 8.10 entirely from SAW's support Window, we can remove
+          # this part of the matrix entirely.
+          - os: windows-2019
+            ghc: "8.10.7"
+            cabal: "3.10.1.0"
+            run-tests: true
+            hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -119,9 +148,9 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
           restore-keys: |
-            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+            ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - if: needs.config.outputs.release == 'true'
         shell: bash
@@ -134,6 +163,9 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh build
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
+
 
       - shell: bash
         env:
@@ -151,7 +183,7 @@ jobs:
           dest: dist-tests
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.10.7'"
+        if: "matrix.ghc == '9.2.7'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -168,21 +200,39 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.2.7' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.2.7' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
-      - if: matrix.ghc == '8.10.7'
+      ##########################################################################
+      # We upload an archive containing SAW, and also and archive containing SAW
+      # and the set of possible SMT solvers, but only for our "primary"
+      # distribution (currently: GHC 9.2.7).  These archives are utilized in
+      # subsequent CI jobs, but are also published for external users, and are
+      # therefore signed.
+      #
+      # In addition, if we built with HPC, we upload a tarball containing the
+      # HPC-enabled binaries and HPC-specific files generated during the build
+      # process.  These are mostly used for subsequent CI jobs that will
+      # generate a coverage report, and the binaries are essentially the same as
+      # those collected for the previous operation, but they are captured in
+      # their original cabal-generated locations where they are expected to live
+      # for subsequent coverage collection.
+
+      # In the next 3 steps we check that `matrix.hpc == false` so that if the
+      # distribution version matches the HPC version, the HPC build artifacts do
+      # not clobber the non-HPC distribution artifacts.
+      - if: matrix.ghc == '9.2.7' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -190,7 +240,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7'
+      - if: matrix.ghc == '9.2.7' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
@@ -198,11 +248,21 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7' && matrix.run-tests
+      - if: matrix.ghc == '9.2.7' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
           name: ${{ runner.os }}-bins
+
+      - if: matrix.hpc == true
+        shell: bash
+        run: .github/ci.sh collect_hpc_files
+
+      - if: matrix.hpc == true
+        uses: actions/upload-artifact@v2
+        with:
+          path: hpc.tar.gz
+          name: ${{ runner.os }}-hpc.tar.gz
 
       - uses: actions/cache/save@v3
         name: Save cabal store cache
@@ -211,8 +271,7 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
-            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
   mr-solver-tests:
     needs: [build]
@@ -421,12 +480,136 @@ jobs:
           java-package: jdk
           architecture: x64
 
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - shell: bash
+        name: Enable solver caching
+        if: "matrix.suite == 'integration_tests'"
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
+
+      - uses: actions/cache/save@v3
+        name: Save SMT solver result cache
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+
+  # The coverage job is similar to the cabal-test job, but it only runs the HPC
+  # enabled SAW build against the integration test suite. It then collects the
+  # test coverage results, generates an HTML summary, and publishes the results
+  # to github pages.
+  coverage:
+    name: "Run integration tests with coverage reporting"
+    needs: build
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'pull_request'
+    permissions:
+      pages: write
+      id-token: write
+    strategy:
+      matrix:
+        suite: ['integration_tests']
+        os: [ubuntu-22.04]
+    steps:
+      # Need a copy of the source to generate coverage HTML
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Install system dependencies
+        shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-hpc.tar.gz"
+
+      - name: Setup test environment
+        shell: bash
+        run: |
+          tar xvf hpc.tar.gz
+          chmod +x dist/bin/*
+          chmod +x bin/*
+          chmod +x dist-tests/*
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      # NOTE: This job uses the SMT solver cache to improve performance but it
+      # does not save the updated SMT solver cache. This is because the
+      # `cabal-test` also runs the integration tests and uploads an updated
+      # cache. Because the test suite is the same, the resulting cache files
+      # would also be identical.
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - shell: bash
+        name: Enable solver caching
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
+      - name: Run integration tests
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          dist-tests/integration_tests
+
+      - name: Compute coverage
+        shell: bash
+        run: |
+          ./compute-coverage.sh
+
+      - uses: actions/upload-artifact@v2
+        with:
+          path: hpc-html
+          name: coverage-html-${{ github.event.number }}
+
+      - name: Gather HPC coverage files
+        shell: bash
+        run: .github/ci.sh collect_all_html
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: all-html
+
+      - name: Deploy to github pages
+        id: deployment
+        uses: actions/deploy-pages@v2
 
   build-push-image:
     runs-on: ubuntu-22.04
@@ -544,7 +727,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.10.7"]
+        ghc: ["9.2.7"]
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -567,12 +750,29 @@ jobs:
         working-directory: s2nTests
         run: docker-compose build s2n
 
+      - uses: actions/cache/restore@v3
+        name: Restore SMT solver result cache
+        with:
+          path: s2nTests/cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
+          restore-keys:
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-
+
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
           chmod +x bin/*
+          mkdir -p cache && touch cache/data.mdb cache/lock.mdb
+          chmod -R +rw cache
           make ${{ matrix.s2n-target }}
+
+      - uses: actions/cache/save@v3
+        name: Save SMT solver result cache
+        if: always()
+        with:
+          path: s2nTests/cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
 
   exercises:
     name: "Test SAW exercises"
@@ -580,7 +780,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        ghc: ["8.10.7"]
+        ghc: ["9.2.7"]
     steps:
       - uses: actions/checkout@v2
       - run: |

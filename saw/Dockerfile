@@ -14,7 +14,7 @@ USER saw
 WORKDIR /home/saw
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
-COPY cabal.GHC-8.10.7.config cabal.project.freeze
+COPY cabal.GHC-9.2.7.config cabal.project.freeze
 ENV PATH=/home/saw/ghcup-download/bin:/home/saw/.ghcup/bin:$PATH
 RUN mkdir -p /home/saw/ghcup-download/bin && \
     curl -L https://downloads.haskell.org/~ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 -o /home/saw/ghcup-download/bin/ghcup && \
@@ -22,8 +22,8 @@ RUN mkdir -p /home/saw/ghcup-download/bin && \
 RUN mkdir -p /home/saw/.ghcup && \
     ghcup --version && \
     ghcup install cabal 3.8.1.0 && \
-    ghcup install ghc 8.10.7 && \
-    ghcup set ghc 8.10.7
+    ghcup install ghc 9.2.7 && \
+    ghcup set ghc 9.2.7
 RUN cabal v2-update
 RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
