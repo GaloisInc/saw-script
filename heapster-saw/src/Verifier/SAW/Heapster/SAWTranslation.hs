@@ -502,8 +502,9 @@ tupleTypeTrans ttrans =
   TypeTrans [tupleTypeOpenTerm' tps]
   (\case
       [t] ->
-        typeTransF ttrans $ map (\i -> projTupleOpenTerm' tps i t) $
-        take (length $ typeTransTypes ttrans) [0..]
+        let len = fromIntegral $ length tps in
+        typeTransF ttrans $ map (\i -> projTupleOpenTerm' len i t) $
+        take (length tps) [0..]
       _ -> panic "tupleTypeTrans" ["incorrect number of terms"])
 
 -- | Build a type translation for a list of translations

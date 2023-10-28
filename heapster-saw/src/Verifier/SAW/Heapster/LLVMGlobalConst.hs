@@ -301,9 +301,10 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
          scInsertDef sc mod_name ident complete_tp complete_t
          let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
          let t_ident = globalOpenTerm ident
+         let tps_len = fromIntegral $ length tps
          let projs =
-               map (\i -> projTupleOpenTerm' tps i t_ident)
-               [0 .. toInteger (length ts - 1)]
+               map (\i -> projTupleOpenTerm' tps_len i t_ident) $
+               take (length ts) [0 ..]
          return $ permEnvAddGlobalSyms env
            [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p
             (GlobalTransTerms projs)]

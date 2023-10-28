@@ -103,7 +103,6 @@ import Numeric.Natural
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
-import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
@@ -284,27 +283,15 @@ tupleTypeOpenTerm' [] = unitTypeOpenTerm
 tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
 
 -- | Project the @i@th element from a term of a right-nested tuple term that
--- does not have a final unit type as the right-most type. Note that this
--- requires knowing the length of @tps@.
-projTupleOpenTerm' :: [OpenTerm] -> Integer -> OpenTerm -> OpenTerm
-projTupleOpenTerm' [] _ _ =
-  panic "projTupleOpenTerm'" ["projection of empty tuple!"]
-projTupleOpenTerm' [_] 0 tup = tup
-projTupleOpenTerm' (_:_) 0 tup = pairLeftOpenTerm tup
-projTupleOpenTerm' (_:tps) i tup =
-  projTupleOpenTerm' tps (i-1) $ pairRightOpenTerm tup
-
-=======
--- | Given an index and total length, project out of a right-nested tuple
--- without unit as the right-most element
+-- does not have a final unit type as the right-most type. The first argument is
+-- the number of types used to make the tuple type and the second is the index.
 projTupleOpenTerm' :: Natural -> Natural -> OpenTerm -> OpenTerm
-projTupleOpenTerm' _ 0 _ = panic "projTupleOpenTerm'" ["Projection of 0-tuple"]
-projTupleOpenTerm' 0 1 t = t
-projTupleOpenTerm' 0 _ t = pairLeftOpenTerm t
-projTupleOpenTerm' i n t
-  | i < n     = projTupleOpenTerm' (i - 1) (n - 1) (pairRightOpenTerm t)
-  | otherwise = panic "projTupleOpenTerm'" ["Index out of bounds"]
->>>>>>> master
+projTupleOpenTerm' 0 _ _ =
+  panic "projTupleOpenTerm'" ["projection of empty tuple!"]
+projTupleOpenTerm' 1 0 tup = tup
+projTupleOpenTerm' _ 0 tup = pairLeftOpenTerm tup
+projTupleOpenTerm' len i tup =
+  projTupleOpenTerm' (len-1) (i-1) $ pairRightOpenTerm tup
 
 -- | Build a record value as an 'OpenTerm'
 recordOpenTerm :: [(FieldName, OpenTerm)] -> OpenTerm
