@@ -373,7 +373,6 @@ jobs:
           - name: Install on MacOS
             test: |
               cd saw-remote-api/python/
-              poetry update
               poetry install
               poetry run mypy --install-types --non-interactive saw_client/ || true
               poetry run mypy --install-types --non-interactive saw_client/

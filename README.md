@@ -45,6 +45,9 @@ To build SAWScript and related utilities from source:
     to install them: <https://www.haskell.org/ghcup/>. We recommend
     Cabal 3.4 or newer, and GHC 8.10, 9.2, or 9.4.
 
+    (If you are using the GHC 9.2 series, make sure to use 9.2.6 or later
+    to avoid [this bug](https://gitlab.haskell.org/ghc/ghc/-/issues/22491).)
+
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
     platforms. On Fedora, it is part of the `ncurses-compat-libs` package.
