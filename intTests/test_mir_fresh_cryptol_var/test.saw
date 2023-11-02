@@ -1,0 +1,15 @@
+enable_experimental;
+
+let id_spec cty = do {
+  x <- mir_fresh_cryptol_var "x" cty;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term x);
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::id_array" [] false (id_spec {| [5][32] |}) z3;
+mir_verify m "test::id_tuple" [] false (id_spec {| ([32], [32]) |}) z3;
+mir_verify m "test::id_u32" [] false (id_spec {| [32] |}) z3;
