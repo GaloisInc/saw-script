@@ -38,7 +38,6 @@ sleep 5 # let the server catch its breath and be ready for requests
 
 
   echo "Setting up python environment for remote server clients...";
-  poetry update;
   poetry install;
 
   export SAW_SERVER_URL="http://localhost:8080/";
