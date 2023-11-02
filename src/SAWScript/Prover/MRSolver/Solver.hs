@@ -755,7 +755,7 @@ proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
          f2 = coIndHypRHSFun hyp
          args1 = coIndHypLHS hyp
          args2 = coIndHypRHS hyp
-     debugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
+     mrDebugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
      lhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f1 args1
      rhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f2 args2
      (invar1, invar2) <- applyCoIndHypInvariants hyp
@@ -1106,7 +1106,7 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- If we have an opaque FunAssump that f1 args1' refines f2 args2', then
   -- prove that args1 = args1', args2 = args2', and then that k1 refines k2
   (_, Just fa@(FunAssump ctx _ args1' (OpaqueFunAssump f2' args2') _)) | f2 == f2' ->
-    do debugPretty 2 $ flip runPPInCtxM ctx $
+    do mrDebugPretty 2 $ flip runPPInCtxM ctx $
          prettyAppList [return "mrRefines using opaque FunAssump:",
                         prettyInCtx ctx, return ".",
                         prettyTermApp (funNameTerm f1) args1',
@@ -1130,7 +1130,7 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- case above, treat either case like we have a rewrite FunAssump and prove
   -- that args1 = args1' and then that f args refines m2
   (_, Just fa@(FunAssump ctx _ args1' rhs _)) ->
-    do debugPretty 2 $ flip runPPInCtxM ctx $
+    do mrDebugPretty 2 $ flip runPPInCtxM ctx $
          prettyAppList [return "mrRefines rewriting by FunAssump:",
                         prettyInCtx ctx, return ".",
                         prettyTermApp (funNameTerm f1) args1',
@@ -1174,7 +1174,7 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- up
   _ ->
     do if isLifted1 /= isLifted2
-       then debugPrint 1 "mrRefines: isLifted cases do not match"
+       then mrDebugPrint 1 "mrRefines: isLifted cases do not match"
        else mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2
        throwMRFailure (CompsDoNotRefine m1 m2)
 

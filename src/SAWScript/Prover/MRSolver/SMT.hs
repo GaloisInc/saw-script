@@ -360,8 +360,8 @@ smtNorm sc t =
 -- | Normalize a 'Term' using some Mr Solver specific primitives
 mrNormTerm :: Term -> MRM t Term
 mrNormTerm t =
-  debugPrint 2 "Normalizing term:" >>
-  debugPrettyInCtx 2 t >>
+  mrDebugPrint 2 "Normalizing term:" >>
+  mrDebugPrettyInCtx 2 t >>
   liftSC1 smtNorm t
 
 -- | Normalize an open term by wrapping it in lambdas, normalizing, and then
@@ -394,8 +394,8 @@ mrProvableRaw prop_term =
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      nenv <- liftIO (scGetNamingEnv sc)
-     debugPrint 2 ("Calling SMT solver with proposition: " ++
-                   prettyProp defaultPPOpts nenv prop)
+     mrDebugPrint 2 ("Calling SMT solver with proposition: " ++
+                     prettyProp defaultPPOpts nenv prop)
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
      -- execution
@@ -406,19 +406,19 @@ mrProvableRaw prop_term =
            e -> throwM e
      case smt_res of
        Left msg ->
-         debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
+         mrDebugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
            >> return False
        Right (stats, SolveUnknown) ->
-          debugPrint 2 "SMT solver response: unknown" >>
+          mrDebugPrint 2 "SMT solver response: unknown" >>
           recordUsedSolver stats prop_term >> return False
        Right (stats, SolveCounterexample cex) ->
-         debugPrint 2 "SMT solver response: not provable" >>
-         debugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
+         mrDebugPrint 2 "SMT solver response: not provable" >>
+         mrDebugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
            "\n - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
            " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
        Right (stats, SolveSuccess _) ->
-         debugPrint 2 "SMT solver response: provable" >>
+         mrDebugPrint 2 "SMT solver response: provable" >>
          recordUsedSolver stats prop_term >> return True
 
 -- | Test if a Boolean term over the current uvars is provable given the current
@@ -824,7 +824,7 @@ mrProveRel het t1 t2 =
              return False
      else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
              res <- withTermInCtx cond_in_ctx mrProvable
-             debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
+             mrDebugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
              return res
 
 -- | Prove that two terms are related, heterogeneously iff the first argument,

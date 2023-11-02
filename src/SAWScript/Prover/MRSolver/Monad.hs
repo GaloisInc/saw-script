@@ -688,8 +688,8 @@ mrFunOutType fname args =
     (asSpecM -> Just (params, tp)) -> (params,) <$> liftSC1 scWhnf tp
     _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
             pp_fname <- mrPPInCtx fname
-            debugPrint 0 "mrFunOutType: function does not have SpecM return type"
-            debugPretty 0 ("Function:" <> pp_fname <> " with type: " <> pp_ftype)
+            mrDebugPrint 0 "mrFunOutType: function does not have SpecM return type"
+            mrDebugPretty 0 ("Function:" <> pp_fname <> " with type: " <> pp_ftype)
             error "mrFunOutType"
 
 -- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
@@ -932,7 +932,7 @@ mrFreshVar nm tp = piUVarsM tp >>= mrFreshVarCl nm
 -- | Set the info associated with an 'MRVar', assuming it has not been set
 mrSetVarInfo :: MRVar -> MRVarInfo -> MRM t ()
 mrSetVarInfo var info =
-  debugPretty 3 ("mrSetVarInfo" <+> ppInEmptyCtx var <+> "=" <+> ppInEmptyCtx info) >>
+  mrDebugPretty 3 ("mrSetVarInfo" <+> ppInEmptyCtx var <+> "=" <+> ppInEmptyCtx info) >>
   (modify $ \st ->
    st { mrsVars =
           Map.alter (\case
@@ -1073,7 +1073,7 @@ mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 -- | Run a compuation under an additional co-inductive assumption
 withCoIndHyp :: CoIndHyp -> MRM t a -> MRM t a
 withCoIndHyp hyp m =
-  do debugPretty 2 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
+  do mrDebugPretty 2 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
      hyps' <- Map.insert (coIndHypLHSFun hyp,
                           coIndHypRHSFun hyp) hyp <$> mrCoIndHyps
      local (\info -> info { mriCoIndHyps = hyps' }) m
@@ -1209,19 +1209,19 @@ recordUsedFunAssump _ = return ()
 ----------------------------------------------------------------------
 
 -- | Print a 'String' if the debug level is at least the supplied 'Int'
-debugPrint :: Int -> String -> MRM t ()
-debugPrint i str =
+mrDebugPrint :: Int -> String -> MRM t ()
+mrDebugPrint i str =
   mrDebugLevel >>= \lvl ->
   if lvl >= i then liftIO (hPutStrLn stderr str) else return ()
 
 -- | Print a document if the debug level is at least the supplied 'Int'
-debugPretty :: Int -> SawDoc -> MRM t ()
-debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
+mrDebugPretty :: Int -> SawDoc -> MRM t ()
+mrDebugPretty i pp = mrDebugPrint i $ renderSawDoc defaultPPOpts pp
 
 -- | Pretty-print an object in the current context if the current debug level is
 -- at least the supplied 'Int'
-debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM t ()
-debugPrettyInCtx i a = mrUVars >>= \ctx -> debugPrint i (showInCtx ctx a)
+mrDebugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM t ()
+mrDebugPrettyInCtx i a = mrUVars >>= \ctx -> mrDebugPrint i (showInCtx ctx a)
 
 -- | Pretty-print an object relative to the current context
 mrPPInCtx :: PrettyInCtx a => a -> MRM t SawDoc
@@ -1232,7 +1232,7 @@ mrPPInCtx a = runPPInCtxM (prettyInCtx a) <$> mrUVars
 mrDebugPPPrefix :: PrettyInCtx a => Int -> String -> a -> MRM t ()
 mrDebugPPPrefix i pre a =
   mrUVars >>= \ctx ->
-  debugPretty i $
+  mrDebugPretty i $
   runPPInCtxM (group <$> nest 2 <$> ppWithPrefix pre a) ctx
 
 -- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
@@ -1241,5 +1241,5 @@ mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
                       Int -> String -> a -> String -> b -> MRM t ()
 mrDebugPPPrefixSep i pre a1 sp a2 =
   mrUVars >>= \ctx ->
-  debugPretty i $
+  mrDebugPretty i $
   runPPInCtxM (group <$> nest 2 <$> ppWithPrefixSep pre a1 sp a2) ctx
