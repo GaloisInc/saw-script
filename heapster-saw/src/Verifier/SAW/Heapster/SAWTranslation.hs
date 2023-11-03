@@ -35,7 +35,7 @@ import Prelude hiding (pi)
 import Data.Maybe
 import Numeric.Natural
 import Data.List hiding (inits)
-import Data.Text (pack)
+import Data.Text (Text, pack, append)
 import GHC.TypeLits
 import Data.BitVector.Sized (BV)
 import qualified Data.BitVector.Sized as BV
@@ -3627,6 +3627,10 @@ data ImplFailCont
     -- | An error message to print on failure
   | ImplFailContMsg String
 
+-- | The prefix used in error strings for implication failures
+implicationFailurePrefix :: Text
+implicationFailurePrefix = "Heapster implication failure:\n"
+
 -- | "Force" the translation of a possibly failing computation to always return
 -- a computation, even if it is just the failing computation
 forceImplTrans :: Maybe (ImplFailCont ->
@@ -3637,7 +3641,8 @@ forceImplTrans (Just trans) k = trans k
 forceImplTrans Nothing (ImplFailContTerm errM) = return errM
 forceImplTrans Nothing (ImplFailContMsg str) =
   returnTypeM >>= \tp ->
-  applyNamedSpecOpM "Prelude.errorS" [tp, stringLitOpenTerm (pack str)]
+  let str' = implicationFailurePrefix `append` pack str in
+  applyNamedSpecOpM "Prelude.errorS" [tp, stringLitOpenTerm str']
 
 -- | Perform a failure by jumping to a failure continuation or signaling an
 -- error, using an alternate error message in the latter case
@@ -3646,7 +3651,8 @@ implTransAltErr :: String -> ImplFailCont ->
 implTransAltErr _ (ImplFailContTerm errM) = return errM
 implTransAltErr str (ImplFailContMsg _) =
   returnTypeM >>= \tp ->
-  applyNamedSpecOpM "Prelude.errorS" [tp, stringLitOpenTerm (pack str)]
+  let str' = "Failed to prove: " `append` pack str in
+  applyNamedSpecOpM "Prelude.errorS" [tp, stringLitOpenTerm str']
 
 -- | Translate a normal unary 'PermImpl1' rule that succeeds and applies the
 -- translation function if the argument succeeds and fails if the translation of
