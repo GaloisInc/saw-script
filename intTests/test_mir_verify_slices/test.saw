@@ -29,15 +29,15 @@ let f_fail_spec_1 = do {
   mir_return (mir_term {{ 0 : [32] }});
 };
 
-// The end value of the range given to mir_slice_range_value must be less
-// than the length of the slice.
+// The end value of the range given to mir_slice_range_value must not
+// exceed the length of the slice.
 let f_fail_spec_2 = do {
   a <- mir_alloc (mir_array 5 mir_u32);
   mir_points_to a oneThroughFive;
 
-  mir_execute_func [mir_slice_range_value a 0 5];
+  mir_execute_func [mir_slice_range_value a 0 6];
 
-  mir_return (mir_term {{ 0 : [32] }});
+  mir_return (mir_term {{ 3 : [32] }});
 };
 
 // The start value of the range given to mir_slice_range_value must not

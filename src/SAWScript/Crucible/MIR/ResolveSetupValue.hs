@@ -376,7 +376,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 ++ " but ends at " ++ show end
           SetupSliceFromArray elemTpr sliceShp refVal0 len <-
             resolveSetupSliceFromArray bak arrRef
-          unless (end < len) $
+          unless (end <= len) $
             fail $ "range end index " ++ show end
                 ++ " out of range for slice of length " ++ show len
           startBV <- usizeBvLit sym start

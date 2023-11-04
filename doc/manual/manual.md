@@ -2659,16 +2659,22 @@ an existing reference value that points to the thing being sliced. The
 following commands are used to construct slices:
 
 * `mir_slice_value : MIRValue -> MIRValue`: the SAWScript expression
-  `mir_slice_value base` is equivalent to the Rust expression `base[..]`,
-  i.e., a slice of the entirety of `base`. `base` must be a reference to
-  an array value.
+  `mir_slice_value base` is equivalent to the Rust expression `&base[..]`,
+  i.e., a slice of the entirety of `base`. `base` must be a reference to an
+  array value (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
+  or `&mut [T]` (if `base` is a mutable reference).
 * `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the SAWScript
   expression `mir_slice_range_value base start end` is equivalent to the Rust
-  expression `base[start..end]`, i.e., a slice over a part of `base` which
-  ranges from `start` to `end`. `base` must be a reference to an array value,
-  and `start` and `end` are assumed to be zero-indexed. `start` must not exceed
-  `end`, and `end` must be strictly less than the length of the array that
-  `base` points to.
+  expression `&base[start..end]`, i.e., a slice over a part of `base` which
+  ranges from `start` to `end`. `base` must be a reference to an array value
+  (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
+  or `&mut [T]` (if `base` is a mutable reference).
+
+  `start` and `end` are assumed to be zero-indexed. `start` must not exceed
+  `end`, and `end` must not exceed the length of the array that `base` points
+  to.
 
 As an example of how to use these functions, consider this Rust function, which
 accepts an arbitrary slice as an argument:
@@ -2694,7 +2700,8 @@ let f_spec_1 = do {
 ~~~~
 
 Alternatively, we can write a specification that passes a part of this array
-which ranges from second element to the fourth.
+over the range `[1..3]`, i.e., ranging from second element to the fourth.
+Because this is a half-open range, the resulting slice has length 2:
 
 ~~~~
 let f_spec_2 = do {

@@ -3989,7 +3989,7 @@ primitives = Map.fromList
     [ "Create a MIRValue representing a slice over a given range. The first"
     , "argument must be a reference to an array value. The second and third"
     , "arguments represent the start and end of the range. The start must not"
-    , "exceed the end, and the end must be strictly less than the length of the"
+    , "exceed the end, and the end must not exceed the length of the"
     , "reference's array."
     ]
 
