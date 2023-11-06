@@ -2707,133 +2707,11 @@ unfoldIndTpDesc env T =
 
 -- Elements of type descriptions --
 
--- An identifier for a corecursive function in a SpecM computation. In the Coq
--- model, this is just a natural number index (hence the name), but we leave its
--- structure opaque in SAW because client code should not break the abstraction.
-primitive FunIx : TpDesc -> sort 0;
-
--- A list of function indexes with the given types
-FunIxs : List TpDesc -> sort 0;
-FunIxs = List__rec TpDesc (\ (_:List TpDesc) -> sort 0) #()
-           (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) -> FunIx T * rec);
-
--- Inductively-defined elements of a type description relative to an
--- environment, which acts as a substitution of values for the free variables
-data indElem : TpEnv -> TpDesc -> sort 0 where {
-  -- Monadic and function types are just function indexes
-  Elem_M : (env:TpEnv) -> (R:TpDesc) -> FunIx (tpSubst 0 env (Tp_M R)) ->
-           indElem env (Tp_M R);
-  Elem_Pi : (env:TpEnv) -> (K:KindDesc) -> (T:TpDesc) ->
-            FunIx (tpSubst 0 env (Tp_Pi K T)) -> indElem env (Tp_Pi K T);
-  Elem_Arr : (env:TpEnv) -> (T U:TpDesc) ->
-             FunIx (tpSubst 0 env (Tp_Arr T U)) -> indElem env (Tp_Arr T U);
-
-  -- Tp_Kind K is the type of elements of kind K, lowered to the object level
-  Elem_Kind : (env:TpEnv) -> (K:KindDesc) -> kindElem K -> indElem env (Tp_Kind K);
-
-  -- Elements of pair and sum types are just pairs and sums
-  Elem_Pair : (env:TpEnv) -> (T U:TpDesc) -> indElem env T -> indElem env U ->
-              indElem env (Tp_Pair T U);
-  Elem_SumL : (env:TpEnv) -> (T U:TpDesc) -> indElem env T ->
-              indElem env (Tp_Sum T U);
-  Elem_SumR : (env:TpEnv) -> (T U:TpDesc) -> indElem env U ->
-              indElem env (Tp_Sum T U);
-
-  -- An element of Tp_Sigma K T is an element e of K plus an element of [e/x]U
-  Elem_Sigma : (env:TpEnv) -> (K:KindDesc) -> (T:TpDesc) ->
-               (elem1:kindElem K) -> indElem (envConsElem K elem1 env) T ->
-               indElem env (Tp_Sigma K T);
-
-  -- Elements of vector types are built using nil and cons constructors, to
-  -- build a vector of elements with a concrete size, along with a final cast
-  -- constructor, to cast the size to an expression equal to that concrete size
-  Elem_VecNil : (env:TpEnv) -> (T:TpDesc) -> indElem env (Tp_Vec T TpExprZ);
-  Elem_VecCons : (env:TpEnv) -> (T:TpDesc) -> (n:Nat) ->
-                 indElem env T -> indElem env (Tp_Vec T (TpExprN n)) ->
-                 indElem env (Tp_Vec T (TpExprN (Succ n)));
-  Elem_VecCast : (env:TpEnv) -> (T:TpDesc) -> (e1 e2:TpExpr Kind_nat) ->
-                 Eq Nat (evalTpExpr env Kind_nat e1)
-                        (evalTpExpr env Kind_nat e2) ->
-                 indElem env (Tp_Vec T e1) -> indElem env (Tp_Vec T e2);
-
-  -- An element of inductive type Tp_Ind T is an element of the one-step
-  -- unfolding [Tp_Ind T/x]T of the body of the inductive type. Note that we
-  -- perform the full substitution of env as part of this unfolding, rather than
-  -- just adding Tp_Ind T to the current environment, because the two are
-  -- equivalent, but this version is easier to use.
-  Elem_Ind : (env:TpEnv) -> (T:TpDesc) -> indElem nilTpEnv (unfoldIndTpDesc env T) ->
-             indElem env (Tp_Ind T);
-
-  -- An element of a variable is an element of the evaluation of that variable
-  -- to a type (or of TP_Void if the variable is unbound or of the wrong kind)
-  Elem_Var : (env:TpEnv) -> (var:Nat) -> indElem nilTpEnv (evalVar 0 env Kind_Tp var) ->
-             indElem env (Tp_Var var);
-
-  -- No constructor for Tp_Void
-}
-
-
--- Elements of a type description relative to an environment. This is isomorphic
--- to indElem, above, but yields the types you would expect rather than a single
--- inductive type. See indElem for a more detailed explanation of how the types
--- are defined.
-tpElemEnv : TpEnv -> TpDesc -> sort 0;
-tpElemEnv env_top T_top =
-  TpDesc#rec (\ (_:TpDesc) -> TpEnv -> sort 0)
-    (\ (R:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
-       FunIx (tpSubst 0 env (Tp_M R)))
-    (\ (K:KindDesc) (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
-       FunIx (tpSubst 0 env (Tp_Pi K T)))
-    (\ (T:TpDesc) (_:TpEnv -> sort 0) (U:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
-       FunIx (tpSubst 0 env (Tp_Arr T U)))
-    (\ (K:KindDesc) (_:TpEnv) -> kindElem K)
-    (\ (T:TpDesc) (recT:TpEnv -> sort 0) (U:TpDesc) (recU:TpEnv -> sort 0)
-       (env:TpEnv) ->
-       recT env * recU env)
-    (\ (T:TpDesc) (recT:TpEnv -> sort 0) (U:TpDesc) (recU:TpEnv -> sort 0)
-       (env:TpEnv) ->
-       Either (recT env) (recU env))
-    (\ (K:KindDesc) (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
-       Sigma (kindElem K) (\ (v:kindElem K) -> rec (envConsElem K v env)))
-    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (len:TpExpr Kind_nat) (env:TpEnv) ->
-       Vec (evalTpExpr env Kind_nat len) (rec env))
-    (\ (_:TpEnv) -> Void)
-    (\ (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
-       indElem nilTpEnv (unfoldIndTpDesc env T))
-    (\ (var:Nat) (env:TpEnv) ->
-       -- Note: we have to use indElem here, rather than tpElem, because this
-       -- would not be an inductively smaller recursive call to take tpElem of
-       -- the substitution instance
-       indElem nilTpEnv (evalVar 0 env Kind_Tp var))
-    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (U:TpDesc) (_:TpEnv -> sort 0)
-       (env:TpEnv) ->
-       rec (envConsElem Kind_Tp (tpSubst 0 env U) env))
-    (\ (_:TpDesc) (rec:TpEnv -> sort 0) (EK:ExprKind) (e:TpExpr EK)
-       (env:TpEnv) ->
-       rec (envConsElem (Kind_Expr EK) (evalTpExpr env EK e) env))
-    T_top env_top;
-
--- Elements of a type description = elements relative to the empty environment
-tpElem : TpDesc -> sort 0;
-tpElem = tpElemEnv nilTpEnv;
-
--- Convert an inductively-defined element to a recursively-defined one
-primitive indToTpElem : (env:TpEnv) -> (T:TpDesc) ->
-                        indElem env T -> tpElemEnv env T;
-
--- Convert a recursively-defined element to an inductively-defined one
-primitive tpToIndElem : (env:TpEnv) -> (T:TpDesc) ->
-                        tpElemEnv env T -> indElem env T;
-
--- Fold an element of [Tp_Ind T/x]T to an element of Tp_Ind T
-foldTpElem : (T:TpDesc) -> tpElem (unfoldIndTpDesc nilTpEnv T) ->
-             tpElem (Tp_Ind T);
-foldTpElem T = tpToIndElem nilTpEnv (unfoldIndTpDesc nilTpEnv T);
-
--- Unfold an element of Tp_Ind T to an element of [Tp_Ind T/x]T
-unfoldTpElem : (T:TpDesc) -> tpElem (Tp_Ind T) ->
-               tpElem (unfoldIndTpDesc nilTpEnv T);
-unfoldTpElem T = indToTpElem nilTpEnv (unfoldIndTpDesc nilTpEnv T);
+-- The elements of an inductive type with type description T. This is defined in
+-- the Coq model, but the only way we use them in SAW is to fold and unfold them
+-- using the functions indToTpElem and tpToIndElem, below, so we leave the
+-- actual definition of this type opaque in SAW.
+primitive indElem : TpDesc -> sort 0;
 
 
 --------------------------------------------------------------------------------
@@ -2912,87 +2790,124 @@ orS : (E:EvType) -> (a : sort 0) -> SpecM E a -> SpecM E a -> SpecM E a;
 orS E a m1 m2 =
   bindS E Bool a (existsS E Bool) (\ (b:Bool) -> ite (SpecM E a) b m1 m2);
 
+-- Specialized inductive type to indicate if a type description is to be treated
+-- as a monadic function or as a data type
+data FunFlag : sort 0 where {
+  IsFun : FunFlag;
+  IsData : FunFlag;
+}
 
--- A monadic specification function of a given type description
-specFun : (E:EvType) -> TpEnv -> TpDesc -> sort 0;
-specFun E env_top T_top =
-  TpDesc#rec (\ (_:TpDesc) -> TpEnv -> sort 0)
+-- An if-then-else on whether a FunFlag is IsFun
+ifFun : (a : sort 1) -> FunFlag -> a -> a -> a;
+ifFun a fflag t f = FunFlag#rec (\ (_:FunFlag) -> a) t f fflag;
 
-    -- For Tp_M R, specFun returns SpecM E [env/xs]R
-    (\ (R:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) ->
-       SpecM E (tpElemEnv nilTpEnv (tpSubst 0 env R)))
+-- Elements of a type description relative to an environment. The Boolean flag
+-- isf indicates that the type description should be treated like a function
+-- type: for the three monadic function type descriptions, Tp_M, Tp_Pi, and
+-- Tp_Arr, this flag has no effect, but for the other types (that do not
+-- describe function types) the isf flag turns them into the trivial unit type.
+tpElemEnv : EvType -> TpEnv -> FunFlag -> TpDesc -> sort 0;
+tpElemEnv E env_top isf_top T_top =
+  TpDesc#rec (\ (_:TpDesc) -> TpEnv -> FunFlag -> sort 0)
+    (\ (R:TpDesc) (rec:TpEnv -> FunFlag -> sort 0) (env:TpEnv) (_:FunFlag) ->
+       SpecM E (rec env IsData))
+    (\ (K:KindDesc) (T:TpDesc) (rec:TpEnv -> FunFlag -> sort 0)
+       (env:TpEnv) (_:FunFlag) ->
+       (elem:kindElem K) -> rec (envConsElem K elem env) IsFun)
+    (\ (T:TpDesc) (recT:TpEnv -> FunFlag -> sort 0)
+       (U:TpDesc) (recU:TpEnv -> FunFlag -> sort 0) (env:TpEnv) (_:FunFlag) ->
+       recT env IsData -> recU env IsFun)
+    (\ (K:KindDesc) (_:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #() (kindElem K))
+    (\ (T:TpDesc) (recT:TpEnv -> FunFlag -> sort 0)
+       (U:TpDesc) (recU:TpEnv -> FunFlag -> sort 0) (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #() (recT env IsData * recU env IsData))
+    (\ (T:TpDesc) (recT:TpEnv -> FunFlag -> sort 0)
+       (U:TpDesc) (recU:TpEnv -> FunFlag -> sort 0) (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #() (Either (recT env IsData) (recU env IsData)))
+    (\ (K:KindDesc) (T:TpDesc) (rec:TpEnv -> FunFlag -> sort 0)
+       (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #()
+         (Sigma (kindElem K) (\ (v:kindElem K) ->
+                                rec (envConsElem K v env) IsData)))
+    (\ (_:TpDesc) (rec:TpEnv -> FunFlag -> sort 0) (len:TpExpr Kind_nat)
+       (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #() (Vec (evalTpExpr env Kind_nat len) (rec env IsData)))
+    (\ (_:TpEnv) (isf:FunFlag) -> ifFun (sort 0) isf #() Void)
+    (\ (T:TpDesc) (rec:TpEnv -> FunFlag -> sort 0) (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #() (indElem (unfoldIndTpDesc env T)))
+    (\ (var:Nat) (env:TpEnv) (isf:FunFlag) ->
+       -- Note: we have to use indElem here, rather than tpElem, because this
+       -- would not be an inductively smaller recursive call to take tpElem of
+       -- the substitution instance
+       indElem (tpSubst 0 env (Tp_Var var)))
+    (\ (_:TpDesc) (rec:TpEnv -> FunFlag -> sort 0)
+       (U:TpDesc) (_:TpEnv -> FunFlag -> sort 0) (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #() (rec (envConsElem Kind_Tp (tpSubst 0 env U) env) IsData))
+    (\ (_:TpDesc) (rec:TpEnv -> FunFlag -> sort 0) (EK:ExprKind) (e:TpExpr EK)
+       (env:TpEnv) (isf:FunFlag) ->
+       ifFun (sort 0) isf #()
+         (rec (envConsElem (Kind_Expr EK) (evalTpExpr env EK e) env) IsData))
+    T_top env_top isf_top;
 
-    -- For Tp_Pi K T, specFun quantifies over all elem:kindElem K and adds elem
-    -- to the environment for the recursive call to specFun T
-    (\ (K:KindDesc) (T:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
-       (elem:kindElem K) -> rec (envConsElem K elem env))
+-- Elements of a type description = elements relative to the empty environment
+tpElem : EvType -> TpDesc -> sort 0;
+tpElem E = tpElemEnv E nilTpEnv IsData;
 
-    -- For Tp_Arr T U, specFun returns the function type tpElem T -> specFun U
-    (\ (T:TpDesc) (_:TpEnv -> sort 0) (U:TpDesc) (rec:TpEnv -> sort 0) (env:TpEnv) ->
-       tpElemEnv env T -> rec env)
+-- Specification functions of a type description
+specFun : EvType -> TpDesc -> sort 0;
+specFun E = tpElemEnv E nilTpEnv IsFun;
 
-    -- Everything else is not a function type, so specFun returns the unit type
-    (\ (K:KindDesc) (_:TpEnv) -> #())
-    (\ (T:TpDesc) (_:TpEnv -> sort 0)
-       (U:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
-    (\ (T:TpDesc) (_:TpEnv -> sort 0)
-       (U:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
-    (\ (K:KindDesc) (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
-    (\ (_:TpDesc) (_:TpEnv -> sort 0) (_:TpExpr Kind_nat) (env:TpEnv) -> #())
-    (\ (_:TpEnv) -> #())
-    (\ (T:TpDesc) (_:TpEnv -> sort 0) (env:TpEnv) -> #())
-    (\ (var:Nat) (env:TpEnv) -> #())
-    (\ (_:TpDesc) (_:TpEnv -> sort 0) (_:TpDesc) (_:TpEnv -> sort 0)
-       (_:TpEnv) -> #())
-    (\ (_:TpDesc) (_:TpEnv -> sort 0) (EK:ExprKind) (e:TpExpr EK) (_:TpEnv) ->
-       #())
-    T_top env_top;
+-- Fold an element of [Tp_Ind T/x]T to an element of Tp_Ind T; note that folding
+-- is monadic, a detail which is explained in the Coq model
+primitive foldTpElem : (E:EvType) -> (T:TpDesc) ->
+                       tpElem E (unfoldIndTpDesc nilTpEnv T) ->
+                       SpecM E (tpElem E (Tp_Ind T));
 
--- Call a function index in a specification
-primitive CallS : (E:EvType) -> (T:TpDesc) -> FunIx T -> specFun E nilTpEnv T;
+-- Unfold an element of Tp_Ind T to an element of [Tp_Ind T/x]T; unfolding does
+-- not need to be monadic, unlike folding
+primitive unfoldTpElem : (E:EvType) -> (T:TpDesc) -> tpElem E (Tp_Ind T) ->
+                         tpElem E (unfoldIndTpDesc nilTpEnv T);
 
--- Create a function index from a specification function in a specification
-primitive LambdaS : (E:EvType) -> (T:TpDesc) -> specFun E nilTpEnv T ->
-                    SpecM E (FunIx T);
 
 -- Create a lambda as a fixed-point that can call itself. Note that the type of
--- f, FunIx T -> specFun E nil T, is the same as specFun E nil (Tp_Arr T T) when
--- T is a monadic function type.
+-- f, specFun E T -> specFun E T, is the same as specFun E (Tp_Arr T T) when T
+-- is a monadic function type.
 primitive FixS : (E:EvType) -> (T:TpDesc) ->
-                 (FunIx T -> specFun E nilTpEnv T) -> SpecM E (FunIx T);
+                 (specFun E T -> specFun E T) -> specFun E T;
 
 -- A hint to Mr Solver that a recursive function has the given loop invariant
 invariantHint : (a : sort 0) -> Bool -> a -> a;
 invariantHint _ _ a = a;
-
--- The multi-arity function type from FunIxs to a given output type
-arrowIxs : List TpDesc -> sort 0 -> sort 0;
-arrowIxs Ts_top a =
-  List__rec TpDesc (\ (_:List TpDesc) -> sort 0) a
-    (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) -> FunIx T -> rec)
-    Ts_top;
 
 -- The type of a tuple of spec functions of types Ts
 specFuns : EvType -> List TpDesc -> sort 0;
 specFuns E Ts =
   List__rec TpDesc (\ (_:List TpDesc) -> sort 0) #()
     (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) ->
-       specFun E nilTpEnv T * rec)
+       specFun E T * rec)
     Ts;
+
+-- Build the multi-arity function type specFun E T1 -> ... specFun E Tn -> A
+arrowSpecFuns : EvType -> List TpDesc -> sort 0 -> sort 0;
+arrowSpecFuns E Ts_top a =
+  List__rec TpDesc (\ (_:List TpDesc) -> sort 0) a
+    (\ (T:TpDesc) (_:List TpDesc) (rec:sort 0) -> specFun E T -> rec)
+    Ts_top;
 
 -- The type of a tuple of spec function bodies that take in function indexes to
 -- allow them to corecursively call themselves
 MultiFixBodies : EvType -> List TpDesc -> sort 0;
-MultiFixBodies E Ts = arrowIxs Ts (specFuns E Ts);
+MultiFixBodies E Ts = arrowSpecFuns E Ts (specFuns E Ts);
 
 -- Create a collection of corecursive functions in a SpecM computation as a
 -- fixed-point where the functions can call themselves and each other
 primitive MultiFixS : (E:EvType) -> (Ts:List TpDesc) ->
-                      MultiFixBodies E Ts -> SpecM E (FunIxs Ts);
+                      MultiFixBodies E Ts -> specFuns E Ts;
 
 -- Perform a computation that can call a collection of corecursive functions
 primitive LetRecS : (E:EvType) -> (Ts:List TpDesc) -> (a:sort 0) ->
-                    MultiFixBodies E Ts -> (arrowIxs Ts (SpecM E a)) ->
+                    MultiFixBodies E Ts -> arrowSpecFuns E Ts (SpecM E a) ->
                     SpecM E a;
 
 --
