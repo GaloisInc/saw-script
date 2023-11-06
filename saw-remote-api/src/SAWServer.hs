@@ -113,6 +113,8 @@ data CrucibleSetupVal ty e
     -- ADT. This should always be 'Just' with MIR verification and
     -- 'Nothing' with LLVM or JVM verification.
   | TupleValue [CrucibleSetupVal ty e]
+  | SliceValue (CrucibleSetupVal ty e)
+  | SliceRangeValue (CrucibleSetupVal ty e) Int Int
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal ty e) String
   | CastLValue (CrucibleSetupVal ty e) ty

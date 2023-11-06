@@ -42,6 +42,9 @@ module SAWScript.Crucible.MIR.MethodSpecIR
     -- * @MIRMethodSpec@
   , MIRMethodSpec
 
+    -- * @MirSetupSlice@
+  , MirSetupSlice(..)
+
     -- * Initial CrucibleSetupMethodSpec
   , initialDefCrucibleMethodSpecIR
   , initialCrucibleSetupState

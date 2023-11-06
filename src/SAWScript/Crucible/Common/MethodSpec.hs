@@ -41,6 +41,7 @@ module SAWScript.Crucible.Common.MethodSpec
   , XSetupNull
   , XSetupStruct
   , XSetupTuple
+  , XSetupSlice
   , XSetupArray
   , XSetupElem
   , XSetupField
@@ -141,7 +142,7 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 import           SAWScript.Crucible.Common.Setup.Value
 import           SAWScript.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWScript.Crucible.JVM.Setup.Value ()
-import           SAWScript.Crucible.MIR.Setup.Value ()
+import           SAWScript.Crucible.MIR.Setup.Value (MirSetupSlice(..))
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
@@ -202,7 +203,15 @@ ppSetupValue setupval = case setupval of
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ()) ->
-        PP.parens (commaList (map ppSetupValue vs))
+        ppSetupTuple vs
+  SetupSlice x ->
+    case (ext, x) of
+      (LLVMExt, empty) ->
+        absurd empty
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, slice) ->
+        ppMirSetupSlice slice
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
@@ -235,6 +244,18 @@ ppSetupValue setupval = case setupval of
 
     ppSetupStructDefault :: [SetupValue ext] -> PP.Doc ann
     ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))
+
+    ppSetupTuple :: [SetupValue MIR] -> PP.Doc ann
+    ppSetupTuple vs = PP.parens (commaList (map ppSetupValue vs))
+
+    ppMirSetupSlice :: MirSetupSlice -> PP.Doc ann
+    ppMirSetupSlice (MirSetupSliceRaw ref len) =
+      PP.pretty "SliceRaw" <> ppSetupTuple [ref, len]
+    ppMirSetupSlice (MirSetupSlice arr) =
+      ppSetupValue arr <> PP.pretty "[..]"
+    ppMirSetupSlice (MirSetupSliceRange arr start end) =
+      ppSetupValue arr <> PP.pretty "[" <> PP.pretty start <>
+      PP.pretty ".." <> PP.pretty end <> PP.pretty "]"
 
 ppAllocIndex :: AllocIndex -> PP.Doc ann
 ppAllocIndex i = PP.pretty '@' <> PP.viaShow i

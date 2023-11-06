@@ -3875,6 +3875,10 @@ primitives = Map.fromList
     , "the function expects the object to be allocated before it runs."
     , "After `mir_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
     ]
 
   , prim "mir_alloc_mut" "MIRType -> MIRSetup MIRValue"
@@ -3885,6 +3889,10 @@ primitives = Map.fromList
     , "the function expects the object to be allocated before it runs."
     , "After `mir_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
     ]
 
   , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
@@ -3967,6 +3975,23 @@ primitives = Map.fromList
     [ "Specify the given value as the return value of the method. A"
     , "mir_return statement is required if and only if the method"
     , "has a non-() return type." ]
+
+  , prim "mir_slice_value" "MIRValue -> MIRValue"
+    (pureVal mir_slice_value)
+    Experimental
+    [ "Create a MIRValue representing a slice. The argument must be a"
+    , "reference to an array value."
+    ]
+
+  , prim "mir_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
+    (pureVal mir_slice_range_value)
+    Experimental
+    [ "Create a MIRValue representing a slice over a given range. The first"
+    , "argument must be a reference to an array value. The second and third"
+    , "arguments represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed the length of the"
+    , "reference's array."
+    ]
 
   , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupStruct :: Mir.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))

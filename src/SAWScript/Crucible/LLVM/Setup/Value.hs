@@ -121,6 +121,7 @@ type instance Setup.XSetupNull (LLVM _) = ()
 -- 'True' if this is an LLVM packed struct, 'False' otherwise.
 type instance Setup.XSetupStruct (LLVM _) = Bool
 type instance Setup.XSetupTuple (LLVM _) = Void
+type instance Setup.XSetupSlice (LLVM _) = Void
 type instance Setup.XSetupArray (LLVM _) = ()
 type instance Setup.XSetupElem (LLVM _) = ()
 type instance Setup.XSetupField (LLVM _) = ()

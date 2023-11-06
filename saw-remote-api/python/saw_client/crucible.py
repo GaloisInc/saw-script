@@ -163,6 +163,32 @@ class TupleVal(SetupVal):
     def to_json(self) -> JSON:
         return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
 
+class SliceVal(SetupVal):
+    base : SetupVal
+
+    def __init__(self, base : SetupVal) -> None:
+        self.base = base
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'slice',
+                'base': self.base.to_json()}
+
+class SliceRangeVal(SetupVal):
+    base : SetupVal
+    start : int
+    end : int
+
+    def __init__(self, base : SetupVal, start : int, end : int) -> None:
+        self.base = base
+        self.start = start
+        self.end = end
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'slice range',
+                'base': self.base.to_json(),
+                'start': self.start,
+                'end': self.end}
+
 class ElemVal(SetupVal):
     base : SetupVal
     index : int
@@ -746,6 +772,24 @@ def global_initializer(name: str) -> SetupVal:
 def null() -> SetupVal:
     """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
+
+def slice_value(base : SetupVal) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base``, where ``base``
+    must be a reference to an array. Using this function with LLVM or JVM
+    verification will raise an error.
+
+    Unlike most other functions in saw_client.crucible, this has a ``_value``
+    suffix so as not to clash with the built-in ``slice()`` function in Python.
+    """
+    return SliceVal(base)
+
+def slice_range(base : SetupVal, start : int, end : int) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base`` over a given range,
+    where ``base`` must be a reference to an array, and ``start`` and ``end``
+    delimit the range of values in the slice. Using this function with LLVM or
+    JVM verification will raise an error.
+    """
+    return SliceRangeVal(base, start, end)
 
 def struct(*fields : SetupVal, mir_adt : Optional[MIRAdt] = None) -> SetupVal:
     """Returns a structure value with the given ``fields`` (i.e., a ``StructVal``).

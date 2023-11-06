@@ -134,6 +134,8 @@ ppMIRVal sym (MIRVal shp val) =
       ppMIRVal sym $ MIRVal shp' val
     RefShape _ _ _ _  ->
       "<reference>"
+    SliceShape _ _ _ _ ->
+      "<slice>"
     FnPtrShape _ _ _ ->
       PP.viaShow val
   where
@@ -173,6 +175,7 @@ data MIRTypeOfError
   | MIRInvalidTypedTerm TypedTermType
   | MIRInvalidIdentifier String
   | MIRStaticNotFound Mir.DefId
+  | MIRSliceNonArrayReference Mir.Ty
 
 instance Show MIRTypeOfError where
   show (MIRPolymorphicType s) =
@@ -196,6 +199,11 @@ instance Show MIRTypeOfError where
     errMsg
   show (MIRStaticNotFound did) =
     staticNotFoundErr did
+  show (MIRSliceNonArrayReference ty) =
+    unlines
+    [ "Expected a reference to an array, but got"
+    , show (PP.pretty ty)
+    ]
 
 staticNotFoundErr :: Mir.DefId -> String
 staticNotFoundErr did =
@@ -241,6 +249,14 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupGlobalInitializer () name -> do
       static <- findStatic cs name
       pure $ static ^. Mir.sTy
+    MS.SetupSlice slice ->
+      case slice of
+        MirSetupSliceRaw{} ->
+          panic "typeOfSetupValue" ["MirSetupSliceRaw not yet implemented"]
+        MirSetupSlice arr ->
+          typeOfSliceFromArray arr
+        MirSetupSliceRange arr _ _ ->
+          typeOfSliceFromArray arr
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
@@ -249,6 +265,15 @@ typeOfSetupValue mcc env nameEnv val =
     MS.SetupUnion empty _ _           -> absurd empty
   where
     cs = mcc ^. mccRustModule . Mir.rmCS
+
+    typeOfSliceFromArray :: SetupValue -> m Mir.Ty
+    typeOfSliceFromArray arr = do
+      arrTy <- typeOfSetupValue mcc env nameEnv arr
+      case arrTy of
+        Mir.TyRef (Mir.TyArray ty _) mut ->
+          pure $ Mir.TyRef (Mir.TySlice ty) mut
+        _ ->
+          X.throwM $ MIRSliceNonArrayReference arrTy
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
@@ -266,6 +291,8 @@ resolveSetupVal ::
   SetupValue ->
   IO MIRVal
 resolveSetupVal mcc env tyenv nameEnv val =
+  mccWithBackend mcc $ \bak ->
+  let sym = backendGetSym bak in
   case val of
     MS.SetupVar i -> do
       Some ptr <- pure $ lookupAllocIndex env i
@@ -334,6 +361,28 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
       let tupleShp = TupleShape (Mir.TyTuple fldMirTys) fldMirTys fldShpAssn
       pure $ MIRVal tupleShp valAssn
+    MS.SetupSlice slice ->
+      case slice of
+        MirSetupSliceRaw{} ->
+          panic "resolveSetupVal" ["MirSetupSliceRaw not yet implemented"]
+        MirSetupSlice arrRef -> do
+          SetupSliceFromArray _elemTpr sliceShp refVal len <-
+            resolveSetupSliceFromArray bak arrRef
+          lenVal <- usizeBvLit sym len
+          pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal Ctx.:> RV lenVal)
+        MirSetupSliceRange arrRef start end -> do
+          unless (start <= end) $
+            fail $ "slice index starts at " ++ show start
+                ++ " but ends at " ++ show end
+          SetupSliceFromArray elemTpr sliceShp refVal0 len <-
+            resolveSetupSliceFromArray bak arrRef
+          unless (end <= len) $
+            fail $ "range end index " ++ show end
+                ++ " out of range for slice of length " ++ show len
+          startBV <- usizeBvLit sym start
+          refVal1 <- Mir.mirRef_offsetIO bak iTypes elemTpr refVal0 startBV
+          lenVal <- usizeBvLit sym $ end - start
+          pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal1 Ctx.:> RV lenVal)
     MS.SetupArray elemTy vs -> do
       vals <- V.mapM (resolveSetupVal mcc env tyenv nameEnv) (V.fromList vs)
 
@@ -367,9 +416,40 @@ resolveSetupVal mcc env tyenv nameEnv val =
       static <- findStatic cs name
       findStaticInitializer mcc static
   where
-    sym = mcc ^. mccSym
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
+    iTypes = Mir.mirIntrinsicTypes
+
+    usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
+    usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
+
+    -- Resolve parts of a slice that are shared in common between
+    -- 'MirSetupSlice' and 'MirSetupSliceRange'.
+    resolveSetupSliceFromArray ::
+      OnlineSolver solver =>
+      Backend solver ->
+      SetupValue ->
+      IO SetupSliceFromArray
+    resolveSetupSliceFromArray bak arrRef = do
+      let sym = backendGetSym bak
+      MIRVal arrRefShp arrRefVal <- resolveSetupVal mcc env tyenv nameEnv arrRef
+      case arrRefShp of
+        RefShape _ (Mir.TyArray elemTy len) mut (Mir.MirVectorRepr elemTpr) -> do
+          zeroBV <- usizeBvLit sym 0
+          refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV
+          let sliceShp = SliceShape (Mir.TySlice elemTy) elemTy mut elemTpr
+          pure $ SetupSliceFromArray elemTpr sliceShp refVal len
+        _ -> X.throwM $ MIRSliceNonArrayReference $ shapeMirTy arrRefShp
+
+-- | An intermediate data structure that is only used by
+-- 'resolveSetupSliceFromArray'.
+data SetupSliceFromArray where
+  SetupSliceFromArray ::
+    TypeRepr tp {- ^ The array's element type -} ->
+    TypeShape (Mir.MirSlice tp) {- ^ The overall shape of the slice -} ->
+    Mir.MirReferenceMux Sym tp {- ^ The reference to the array -} ->
+    Int {- ^ The array length -} ->
+    SetupSliceFromArray
 
 resolveTypedTerm ::
   MIRCrucibleContext ->
@@ -618,6 +698,13 @@ equalValsPred cc mv1 mv2 =
     goTy (RefShape _ _ _ _) ref1 ref2 =
       mccWithBackend cc $ \bak ->
         liftIO $ Mir.mirRef_eqIO bak ref1 ref2
+    goTy (SliceShape _ ty mut tpr)
+         (Ctx.Empty Ctx.:> RV ref1 Ctx.:> RV len1)
+         (Ctx.Empty Ctx.:> RV ref2 Ctx.:> RV len2) = do
+      let (refShp, lenShp) = sliceShapeParts ty mut tpr
+      refPred <- goTy refShp ref1 ref2
+      lenPred <- goTy lenShp len1 len2
+      liftIO $ W4.andPred sym refPred lenPred
     goTy (FnPtrShape _ _ _) _fh1 _fh2 =
       error "Function pointers not currently supported in overrides"
 

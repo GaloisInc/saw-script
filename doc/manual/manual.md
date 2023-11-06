@@ -2125,7 +2125,6 @@ implemented include the following:
 * MIR specifications that use overrides (i.e., the `[MIRSpec]` argument to
   `mir_verify` must always be the empty list at present)
 * The ability to construct MIR `enum` values in specifications
-* The ability to specify the layout of slice values
 
 The `String` supplied as an argument to `mir_verify` is expected to be a
 function _identifier_. An identifier is expected adhere to one of the following
@@ -2639,6 +2638,9 @@ construct compound values:
 * `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
   of the given type whose elements consist of the given values. Supplying the
   element type is necessary to support length-0 arrays.
+* `mir_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section below.
+* `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
+  "MIR slices" section below.
 * `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
   with the given list of values as elements. The `MIRAdt` argument determines
   what struct type to create.
@@ -2647,6 +2649,95 @@ construct compound values:
   to compute a `MIRAdt` value to pass to `mir_struct_value`.
 * `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
   list of values as elements.
+
+### MIR slices
+
+Slices are a unique form of compound type that is currently only used during
+MIR verification. Unlike other forms of compound values, such as arrays, it is
+not possible to directly construct a slice. Instead, one must take a slice of
+an existing reference value that points to the thing being sliced. The
+following commands are used to construct slices:
+
+* `mir_slice_value : MIRValue -> MIRValue`: the SAWScript expression
+  `mir_slice_value base` is equivalent to the Rust expression `&base[..]`,
+  i.e., a slice of the entirety of `base`. `base` must be a reference to an
+  array value (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
+  or `&mut [T]` (if `base` is a mutable reference).
+* `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the SAWScript
+  expression `mir_slice_range_value base start end` is equivalent to the Rust
+  expression `&base[start..end]`, i.e., a slice over a part of `base` which
+  ranges from `start` to `end`. `base` must be a reference to an array value
+  (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
+  or `&mut [T]` (if `base` is a mutable reference).
+
+  `start` and `end` are assumed to be zero-indexed. `start` must not exceed
+  `end`, and `end` must not exceed the length of the array that `base` points
+  to.
+
+As an example of how to use these functions, consider this Rust function, which
+accepts an arbitrary slice as an argument:
+
+~~~~ .rs
+pub fn f(s: &[u32]) -> u32 {
+    s[0] + s[1]
+}
+~~~~
+
+We can write a specification that passes a slice to the array `[1, 2, 3, 4, 5]`
+as an argument to `f`:
+
+~~~~
+let f_spec_1 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a (mir_term {{ [1, 2, 3, 4, 5] : [5][32] }});
+
+  mir_execute_func [mir_slice_value a];
+
+  mir_return (mir_term {{ 3 : [32] }});
+};
+~~~~
+
+Alternatively, we can write a specification that passes a part of this array
+over the range `[1..3]`, i.e., ranging from second element to the fourth.
+Because this is a half-open range, the resulting slice has length 2:
+
+~~~~
+let f_spec_2 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a (mir_term {{ [1, 2, 3, 4, 5] : [5][32] }});
+
+  mir_execute_func [mir_slice_range_value a 1 3];
+
+  mir_return (mir_term {{ 5 : [32] }});
+};
+~~~~
+
+Note that we are passing _references_ of arrays to `mir_slice_value` and
+`mir_slice_range_value`. It would be an error to pass a bare array to these
+functions, so the following specification would be invalid:
+
+~~~~
+let f_fail_spec_ = do {
+  let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
+
+  mir_execute_func [mir_slice_value arr]; // BAD: `arr` is not a reference
+
+  mir_return (mir_term {{ 3 : [32] }});
+};
+~~~~
+
+SAW's support for slices is currently limited:
+
+* SAW specifications cannot say anything about `&str` slice arguments or return
+  values at present.
+* The `mir_slice_range_value` function must accept bare `Int` arguments to
+  specify the lower and upper bounds of the range. A consequence of this design
+  is that it is not possible to create a slice with a symbolic length.
+
+If either of these limitations prevent you from using SAW, please file an issue
+[on GitHub](https://github.com/GaloisInc/saw-script/issues).
 
 ### Finding MIR alegraic data types
 

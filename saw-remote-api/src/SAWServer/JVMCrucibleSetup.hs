@@ -186,6 +186,10 @@ compileJVMContract fileReader bic cenv0 c =
       JVMSetupM $ fail "Struct setup values unsupported in JVM API."
     getSetupVal _ (TupleValue _) =
       JVMSetupM $ fail "Tuple setup values unsupported in JVM API."
+    getSetupVal _ (SliceValue _) =
+      JVMSetupM $ fail "Slice setup values unsupported in JVM API."
+    getSetupVal _ (SliceRangeValue _ _ _) =
+      JVMSetupM $ fail "Slice range setup values unsupported in JVM API."
     getSetupVal _ (FieldLValue _ _) =
       JVMSetupM $ fail "Field l-values unsupported in JVM API."
     getSetupVal _ (CastLValue _ _) =

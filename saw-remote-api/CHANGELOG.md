@@ -25,6 +25,9 @@
 * The API for `"struct"` `setup value`s now has a `"MIR ADT"` field. For
   MIR verification, this field is required. For LLVM and JVM verification,
   this field must be `null`, or else an error will be raised.
+* Add `"slice"` and `"slice range"` `setup value`s representing slices in MIR
+  verification. Attempting to use these in LLVM or JVM verification will raise
+  an error.
 
 ## 1.0.0 -- 2023-06-26
 

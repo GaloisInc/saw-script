@@ -1119,6 +1119,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         SetupVar i                 -> Set.singleton i
         SetupStruct _ xs           -> foldMap setupVars xs
         SetupTuple empty _         -> absurd empty
+        SetupSlice empty           -> absurd empty
         SetupArray _ xs            -> foldMap setupVars xs
         SetupElem _ x _            -> setupVars x
         SetupField _ x _           -> setupVars x
@@ -1301,6 +1302,8 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                               zs ]
 
     (_, _, SetupTuple empty _) ->
+      absurd empty
+    (_, _, SetupSlice empty) ->
       absurd empty
 
     (Crucible.LLVMValInt blk off, _, SetupElem () v i) | Crucible.isPointerMemType expectedTy ->
@@ -2486,6 +2489,7 @@ instantiateSetupValue sc s v =
     SetupGlobal{}            -> return v
     SetupGlobalInitializer{} -> return v
     SetupTuple empty _       -> absurd empty
+    SetupSlice empty         -> absurd empty
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 

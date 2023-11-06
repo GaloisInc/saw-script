@@ -24,6 +24,8 @@
   an error.
 * Add a `tuple_value()` function for constructing MIR tuples. Using this
   function with LLVM or JVM verification will raise an error.
+* Add `slice_value()` and `slice_range()` functions for constructing MIR slices.
+  Using these functions with LLVM or JVM verification will raise an error.
 * The `proclaim` function (which is the Python counterpart to to
   `{llvm,jvm,mir}_assert` in SAWScript) is no longer deprecated.
 * Add a `proclaim_f` function. This behaves like the `proclaim` function, except

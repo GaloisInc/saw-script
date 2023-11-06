@@ -453,6 +453,8 @@ typeOfSetupValue cc env nameEnv val =
 
     SetupTuple empty _ ->
       absurd empty
+    SetupSlice empty ->
+      absurd empty
 
     SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
     SetupArray () (v : vs) ->
@@ -631,6 +633,8 @@ resolveSetupVal cc mem env tyenv nameEnv val =
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
       absurd empty
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do
