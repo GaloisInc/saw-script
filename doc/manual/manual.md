@@ -4048,7 +4048,7 @@ of a circuit and a functional specification.  SAW enables these proofs with the
 experimental `prove_bisim` command:
 
 ~~~~
-prove_bisim : ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel ProofResult
+prove_bisim : ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel BisimTheorem
 ~~~~
 
 When invoking `prove_bisim strat theorems srel orel lhs rhs`, the arguments
@@ -4290,9 +4290,9 @@ The `STATE RELATION THEOREM` verifies that the output relation properly captures
 the guarantees of the state relation.  The `OUTPUT RELATION THEOREM` verifies
 that if `lhs` and `rhs` are executed with related states, then the result of
 that execution is also related.  These two theorems together guarantee that the
-terms simulate eachother.
+terms simulate each other.
 
-When using composition, the `prove_bisim` also generates and attempts to solve
+When using composition, `prove_bisim` also generates and attempts to solve
 the proof goal below for any successfully applied `BisimTheorem` in the
 `theorems` list:
 

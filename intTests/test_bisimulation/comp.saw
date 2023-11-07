@@ -4,7 +4,7 @@ import "Comp.cry";
 
 enable_experimental;
 
-// Prove 'andImp' and 'andSpec' simulate eachother
+// Prove 'andImp' and 'andSpec' simulate each other
 and_res <- prove_bisim z3
                        []
                        {{ andStateRel }}
@@ -12,7 +12,7 @@ and_res <- prove_bisim z3
                        {{ andImp }}
                        {{ andSpec }};
 
-// Prove 'nandImp' and 'nandSpec' simulate eachother, using 'and_res' in the
+// Prove 'nandImp' and 'nandSpec' simulate each other, using 'and_res' in the
 // process.
 nand_res <- prove_bisim (do {
     unfolding ["nandImp", "nandSpec"];
