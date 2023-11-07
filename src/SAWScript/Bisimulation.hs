@@ -50,16 +50,16 @@ of the outer terms must ensure that the inner terms' state relation holds.  As
 such, the prover generates and proves a side condition for each applied
 'BisimTheorem'.  Let @g_lhs_s@ and @g_rhs_s@ be the states for @g_lhs@ and
 @g_rhs@ respectively.  Additionally, let there be a function
-@extract_substate x x_s y@ that takes a super-term @x@, a super-state @x_s@,
-and sub-term @y@, and returns the sub-state of @x_s@ that @x@ passes to @y@.
-Lastly, let @g_srel@ be the state relation for the @g@ terms, and @f_srel@
-be the state relation for the @f@ terms.  The prover then checks:
+@extract_inner_state x x_s y@ that takes an outer term @x@, an outer state
+@x_s@, and an inner term @y@, and returns the inner state of @x_s@ that @x@
+passes to @y@.  Lastly, let @g_srel@ be the state relation for the @g@ terms,
+and @f_srel@ be the state relation for the @f@ terms.  The prover then checks:
   COMPOSITION SIDE CONDITION:
     forall g_lhs_s g_rhs_s.
       g_srel g_lhs_s g_rhs_s -> f_srel f_lhs_s f_rhs_s
       where
-        f_lhs_s = extract_substate g_lhs g_lhs_s f_lhs
-        f_rhs_s = extract_substate g_rhs g_rhs_s f_rhs
+        f_lhs_s = extract_inner_state g_lhs g_lhs_s f_lhs
+        f_rhs_s = extract_inner_state g_rhs g_rhs_s f_rhs
 
 The reason for all of this complexity around composition is ultimately to reduce
 the burden on the SMT solver by uninterpreting functions so that the SMT solver
