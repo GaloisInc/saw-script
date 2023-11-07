@@ -4200,6 +4200,12 @@ enable_experimental;
 and_bisim <- prove_bisim z3 [] {{ andStateRel }} {{ andOutputRel }} {{ andImp }} {{ andSpec }};
 ~~~~
 
+Upon running this script, SAW prints:
+
+~~~~
+Successfully proved bisimulation between andImp and andSpec
+~~~~
+
 ### Building a NAND gate
 
 We can make the example more interesting by reusing components to build a NAND
@@ -4260,6 +4266,12 @@ AND gate by including it in the `theorems` paramter for `prove_bisim`:
 
 ~~~~
 prove_bisim z3 [and_bisim] {{ nandStateRel }} {{ nandOutputRel }} {{ nandImp }} {{ nandSpec }};
+~~~~
+
+Upon running this script, SAW prints:
+
+~~~~
+Successfully proved bisimulation between nandImp and nandSpec
 ~~~~
 
 ## Understanding the proof goals

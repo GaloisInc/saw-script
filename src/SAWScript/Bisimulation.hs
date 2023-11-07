@@ -83,6 +83,7 @@ import qualified Cryptol.Utils.PP as C
 import SAWScript.Bisimulation.BisimTheorem
 import SAWScript.Builtins (unfold_term)
 import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType, ppTypedTerm)
+import SAWScript.Options (Verbosity(..))
 import SAWScript.Panic (panic)
 import SAWScript.Proof
 import SAWScript.Prover.Util (checkBooleanSchema)
@@ -533,8 +534,8 @@ proveBisimulation script bthms srel orel lhs rhs = do
   -- Typechecking
   (lhsStateType, rhsStateType, outputType) <- typecheckOutputRelation
   typecheckStateRelation lhsStateType rhsStateType
-  lhsInputType <- typecheckSide lhs lhsStateType outputType
-  rhsInputType <- typecheckSide rhs rhsStateType outputType
+  (lhsName, lhsInputType) <- typecheckSide lhs lhsStateType outputType
+  (rhsName, rhsInputType) <- typecheckSide rhs rhsStateType outputType
   unless (lhsInputType == rhsInputType) $
     fail $ unlines [ "Error: Mismatched input types in bisimulation terms."
                    , "  LHS input type: " ++ C.pretty lhsInputType
@@ -557,6 +558,12 @@ proveBisimulation script bthms srel orel lhs rhs = do
   outputTheorems <- buildOutputRelationTheorem bthms bc
   stateTheorem <- buildStateRelationTheorem bc
   proveAll script $ stateTheorem : outputTheorems
+
+  -- Proof succeeded!
+  printOutLnTop Info $ concat [ "Successfully proved bisimulation between "
+                              , Text.unpack lhsName
+                              , " and "
+                              , Text.unpack rhsName ]
 
   return $ BisimTheorem srel orel lhs rhs outputType lhsStateType rhsStateType
 
@@ -624,16 +631,14 @@ proveBisimulation script bthms srel orel lhs rhs = do
     -- is:
     -- @(stateType, inputType) -> (stateType, outputType)@
     --
-    -- If the term typechecks, this function returns @inputType@.  Otherwise,
-    -- this funciton invokes 'fail' with a description of the specific
-    -- typechecking error.
-    typecheckSide :: TypedTerm -> C.Type -> C.Type -> TopLevel C.Type
+    -- If the term typechecks, this function returns a pair containing the name
+    -- of the 'Constant' and @inputType@.  Otherwise, this function invokes
+    -- 'fail' with a description of the specific typechecking error.
+    typecheckSide
+      :: TypedTerm -> C.Type -> C.Type -> TopLevel (Text.Text, C.Type)
     typecheckSide side stateType outputType = do
       -- Check that 'side' is a 'Constant' (necessary for composition)
-      case unwrapTermF (ttTerm side) of
-        Constant {} -> return ()
-        _ -> fail $ "Error: Bisimulation term must be a named constant. Got: "
-                  ++ showTerm (ttTerm side)
+      name <- constantName $ unwrapTermF $ ttTerm side
 
       -- Check function arguments
       case ttType side of
@@ -660,7 +665,7 @@ proveBisimulation script bthms srel orel lhs rhs = do
             ,"  Expected: " ++ C.pretty outputType
             , "  Actual: " ++ C.pretty o ]
 
-          return i
+          return (name, i)
         _ ->
           let stStr = C.pretty stateType in
           fail $ unlines
