@@ -3931,6 +3931,15 @@ primitives = Map.fromList
     , "be found in the MIRModule, this will raise an error."
     ]
 
+  , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
+    (pureVal mir_fresh_expanded_value)
+    Experimental
+    [ "Create a MIR value entirely populated with fresh symbolic variables."
+    , "For compound types such as structs and arrays, this will explicitly set"
+    , "each field or element to contain a fresh symbolic variable. The String"
+    , "argument is used as a prefix in each of the symbolic variables."
+    ]
+
   , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
     (pureVal mir_fresh_var)
     Experimental

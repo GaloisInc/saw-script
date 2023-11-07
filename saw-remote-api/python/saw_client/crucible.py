@@ -213,6 +213,19 @@ class FieldVal(SetupVal):
         return {'setup value': 'field',
                 'base': self.base.to_json(), 'field': self.field_name}
 
+class FreshExpandedVal(SetupVal):
+    prefix: str
+    ty: Union['LLVMType', 'JVMType', 'MIRType']
+
+    def __init__(self, prefix : str, ty : Union['LLVMType', 'JVMType', 'MIRType']) -> None:
+        self.prefix = prefix
+        self.ty = ty
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'fresh expanded',
+                'prefix': self.prefix,
+                'type': self.ty.to_json()}
+
 class GlobalInitializerVal(SetupVal):
     name : str
 
@@ -762,6 +775,18 @@ def field(base : SetupVal, field_name : str) -> SetupVal:
     if not isinstance(field_name, str):
         raise ValueError('field expected a str, but got {field_name!r}')
     return FieldVal(base, field_name)
+
+def fresh_expanded(prefix: str, ty: Union['LLVMType', 'JVMType', 'MIRType']) -> SetupVal:
+    """Returns a value entirely populated with fresh symbolic variables (i.e.,
+    a ``FreshExpandedVal``). If ``ty`` is a compound type such as a struct or an
+    array, this will explicitly set each field or element to contain a fresh
+    symbolic variable. The ``prefix`` argument is used as a prefix in each of
+    the symbolic variables.
+
+    At present, this is only supported with LLVM and MIR verification. Using
+    this function with JVM verification will raise an error.
+    """
+    return FreshExpandedVal(prefix, ty)
 
 def global_initializer(name: str) -> SetupVal:
     """Returns the initializer value of a named global ``name`` (i.e., a ``GlobalInitializerVal``)."""
