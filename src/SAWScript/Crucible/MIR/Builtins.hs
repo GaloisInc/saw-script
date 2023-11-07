@@ -15,6 +15,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_assert
   , mir_execute_func
   , mir_find_adt
+  , mir_fresh_expanded_value
   , mir_fresh_var
   , mir_load_module
   , mir_points_to
@@ -70,6 +71,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (knownNat, natValue)
 import Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -218,6 +220,105 @@ mir_find_adt rm origName substs = do
       crateDisambigs = cs ^. Mir.crateHashesMap
   origDid <- findDefId crateDisambigs (Text.pack origName)
   findAdt col origDid (Mir.Substs substs)
+
+-- | Create a MIR value entirely populated with fresh symbolic variables.
+-- For compound types such as structs and arrays, this will explicitly set
+-- each field or element to contain a fresh symbolic variable. The Text
+-- argument is used as a prefix in each of the symbolic variables.
+mir_fresh_expanded_value ::
+  Text                 {- ^ Prefix to use in each symbolic variable -} ->
+  Mir.Ty               {- ^ value type -} ->
+  MIRSetupM SetupValue {- ^ elaborated setup value -}
+mir_fresh_expanded_value pfx ty =
+  MIRSetupM $
+  do sc <- lift $ lift getSharedContext
+     cc <- getMIRCrucibleContext
+     let col = cc ^. mccRustModule . Mir.rmCS . Mir.collection
+     Some shp <- pure $ tyToShape col ty
+     constructExpandedSetupValue cc sc pfx shp
+
+-- | See 'mir_fresh_expanded_val'.
+--
+-- This is the recursively-called worker function.
+constructExpandedSetupValue ::
+  MIRCrucibleContext ->
+  SharedContext ->
+  Text ->
+  TypeShape tp ->
+  CrucibleSetup MIR SetupValue
+constructExpandedSetupValue cc sc = go
+  where
+    col = cc ^. mccRustModule . Mir.rmCS . Mir.collection
+
+    go :: forall tp.
+          Text ->
+          TypeShape tp ->
+          CrucibleSetup MIR SetupValue
+    go pfx shp =
+      case shp of
+        UnitShape _ ->
+          pure $ MS.SetupTuple () []
+        PrimShape ty _ ->
+          case cryptolTypeOfActual ty of
+            Nothing ->
+              X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+            Just cty -> do
+              fv <- Setup.freshVariable sc pfx cty
+              pure $ MS.SetupTerm fv
+        TupleShape _ _ fldShps -> do
+          flds <- goFlds pfx fldShps
+          pure $ MS.SetupTuple () flds
+        ArrayShape ty elemTy elemShp ->
+          case ty of
+            Mir.TyArray _ n -> do
+              elems <-
+                traverse
+                  (\i -> go (pfx <> "." <> Text.pack (show i)) elemShp)
+                  [0..n-1]
+              pure $ MS.SetupArray elemTy elems
+            _ ->
+              panic "constructExpandedSetupValue"
+                    [ "ArrayShape with non-TyArray type:"
+                    , show (PP.pretty ty)
+                    ]
+        StructShape ty _ fldShps ->
+          case ty of
+            Mir.TyAdt adtName _ _ -> do
+              case col ^. Mir.adts . at adtName of
+                Just adt -> do
+                  flds <- goFlds pfx fldShps
+                  pure $ MS.SetupStruct adt flds
+                Nothing ->
+                  panic "constructExpandedSetupValue"
+                        [ "Could not find ADT in StructShape:"
+                        , show adtName
+                        ]
+            _ ->
+              panic "constructExpandedSetupValue"
+                    [ "StructShape with non-TyAdt type:"
+                    , show (PP.pretty ty)
+                    ]
+        TransparentShape _ shp' ->
+          go pfx shp'
+        RefShape ty _ _ _ ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+        SliceShape ty _ _ _ ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+        FnPtrShape ty _ _ ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+
+    goFlds :: forall ctx.
+              Text ->
+              Ctx.Assignment FieldShape ctx ->
+              CrucibleSetup MIR [SetupValue]
+    goFlds pfx fldShps = sequenceA $
+      FCI.itoListFC
+        (\idx fldShp ->
+          let pfx' = pfx <> "." <> Text.pack (show idx) in
+          case fldShp of
+            ReqField shp' -> go pfx' shp'
+            OptField shp' -> go pfx' shp')
+        fldShps
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
@@ -1234,6 +1335,7 @@ withImplicitParams opts k =
 
 data MIRSetupError
   = MIRFreshVarInvalidType Mir.Ty
+  | MIRFreshExpandedValueUnsupportedType Mir.Ty
   | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
@@ -1248,6 +1350,9 @@ instance Show MIRSetupError where
     case err of
       MIRFreshVarInvalidType jty ->
         "mir_fresh_var: Invalid type: " ++ show jty
+      MIRFreshExpandedValueUnsupportedType ty ->
+        "mir_fresh_expanded_value: " ++ show (PP.pretty ty) ++
+        " not supported"
       MIRArgTypeMismatch i expected found ->
         unlines
         [ "mir_execute_func: Argument type mismatch"

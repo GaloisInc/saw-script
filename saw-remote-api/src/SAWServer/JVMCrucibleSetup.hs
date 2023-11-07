@@ -202,6 +202,8 @@ compileJVMContract fileReader bic cenv0 c =
       JVMSetupM $ fail "Global initializers unsupported in JVM API."
     getSetupVal _ (GlobalLValue _) =
       JVMSetupM $ fail "Global l-values unsupported in JVM API."
+    getSetupVal _ (FreshExpandedValue _ _) =
+      JVMSetupM $ fail "Fresh expanded values unsupported in JVM API."
 
 data JVMLoadClassParams
   = JVMLoadClassParams ServerName String
