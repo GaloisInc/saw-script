@@ -101,17 +101,6 @@ import GHC.Stack
 import Debug.Trace
 
 
--- Type-check the Prelude, Cryptol, and CryptolM modules at compile time
-{-
-import Language.Haskell.TH
-import Verifier.SAW.Cryptol.Prelude
-
-$(runIO (mkSharedContext >>= \sc ->
-          scLoadPreludeModule sc >> scLoadCryptolModule sc >>
-          scLoadCryptolMModule sc >> return []))
--}
-
-
 ----------------------------------------------------------------------
 -- * Typing All Subterms
 ----------------------------------------------------------------------
@@ -1502,7 +1491,7 @@ ensureCryptolMLoaded :: SharedContext -> IO ()
 ensureCryptolMLoaded sc =
   scModuleIsLoaded sc (mkModuleName ["CryptolM"]) >>= \is_loaded ->
   if is_loaded then return () else
-    scLoadCryptolMModule sc
+    scLoadSpecMModule sc >> scLoadCryptolMModule sc
 
 -- | Monadify a type to its argument type and complete it to a 'Term',
 -- additionally quantifying over the event type and function stack if the

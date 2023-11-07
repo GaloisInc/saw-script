@@ -4,7 +4,8 @@
 module CryptolM where
 
 -- import Prelude;
-import Cryptol;
+-- import Cryptol;
+import SpecM;
 
 -- Alternate versions of gen and at to get around the behavior of the default prims
 genCryM : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
@@ -86,13 +87,6 @@ Num_rec_fin p f =
 
 --------------------------------------------------------------------------------
 -- Monadic Sequences
-
--- The type of monadified sequences, which are just vectors for finite length
--- but are sequences of computations for streams
-mseq : (E:EvType) -> Num -> sort 0 -> sort 0;
-mseq E num a =
-  Num_rec (\ (_:Num) -> sort 0) (\ (n:Nat) -> Vec n a)
-          (Stream (SpecM E a)) num;
 
 {-
 bvVecMapInvarBindM : (E:EvType) -> (stack:FunStack) ->

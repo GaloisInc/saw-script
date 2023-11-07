@@ -88,6 +88,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Name
 import Verifier.SAW.Module as Mod
 import Verifier.SAW.Prelude
+import Verifier.SAW.Cryptol.Monadify
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Typechecker
@@ -338,6 +339,7 @@ heapster_init_env_gen :: BuiltinContext -> Options -> DebugLevel ->
 heapster_init_env_gen _bic _opts dlevel mod_str llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
      sc <- getSharedContext
+     liftIO $ ensureCryptolMLoaded sc
      let saw_mod_name = mkModuleName [mod_str]
      mod_loaded <- liftIO $ scModuleIsLoaded sc saw_mod_name
      if mod_loaded then
@@ -352,6 +354,7 @@ heapster_init_env_gen _bic _opts dlevel mod_str llvm_filename =
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
   do sc <- getSharedContext
+     liftIO $ ensureCryptolMLoaded sc
      (saw_mod, _) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
 
@@ -372,6 +375,7 @@ heapster_init_env_from_file_gen :: BuiltinContext -> Options -> DebugLevel ->
 heapster_init_env_from_file_gen _bic _opts dlevel mod_filename llvm_filename =
   do llvm_mod <- llvm_load_module llvm_filename
      sc <- getSharedContext
+     liftIO $ ensureCryptolMLoaded sc
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
      mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
@@ -382,6 +386,7 @@ heapster_init_env_for_files_gen :: BuiltinContext -> Options -> DebugLevel ->
 heapster_init_env_for_files_gen _bic _opts dlevel mod_filename llvm_filenames =
   do llvm_mods <- mapM llvm_load_module llvm_filenames
      sc <- getSharedContext
+     liftIO $ ensureCryptolMLoaded sc
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
      mkHeapsterEnv dlevel saw_mod_name llvm_mods
