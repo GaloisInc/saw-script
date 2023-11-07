@@ -18,6 +18,7 @@ module SAWScript.Proof
   , splitConj
   , splitDisj
   , unfoldProp
+  , unfoldFixOnceProp
   , simplifyProp
   , hoistIfsInProp
   , evalProp
@@ -373,6 +374,13 @@ splitSequent sc sqt =
 unfoldProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 unfoldProp sc unints (Prop tm) =
   do tm' <- scUnfoldConstantSet sc True unints tm
+     return (Prop tm')
+
+-- | Unfold all the constants appearing in the proposition
+--   whose VarIndex is found in the given set.
+unfoldFixOnceProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
+unfoldFixOnceProp sc unints (Prop tm) =
+  do tm' <- scUnfoldOnceFixConstantSet sc True unints tm
      return (Prop tm')
 
 -- | Rewrite the proposition using the provided Simpset
@@ -1041,6 +1049,12 @@ data Evidence
     --   evidence is used to check the modified sequent.
   | UnfoldEvidence !(Set VarIndex) !Evidence
 
+    -- | This type of evidence is used to modify a sequent via unfolding fixpoint
+    --   constant definitions once.  The sequent is modified by unfolding
+    --   constants identified via the given set of @VarIndex@; then the provided
+    --   evidence is used to check the modified sequent.
+  | UnfoldFixOnceEvidence !(Set VarIndex) !Evidence
+
     -- | This type of evidence is used to modify a sequent via evaluation
     --   into the the What4 formula representation. During evaluation, the
     --   constants identified by the given set of @VarIndex@ are held
@@ -1640,6 +1654,10 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
 
       UnfoldEvidence vars e' ->
         do sqt' <- traverseSequentWithFocus (unfoldProp sc vars) sqt
+           check nenv e' sqt'
+
+      UnfoldFixOnceEvidence vars e' ->
+        do sqt' <- traverseSequentWithFocus (unfoldFixOnceProp sc vars) sqt
            check nenv e' sqt'
 
       NormalizePropEvidence opqueSet e' ->
