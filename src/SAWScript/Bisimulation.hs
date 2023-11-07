@@ -43,20 +43,23 @@ output relation.  Put another way, if @g_lhs@ contains some function @f_lhs@ and
 output relation @f_orel@, then in the proof of some OUTPUT RELATION THEOREM for
 @g_lhs@ and @g_rhs@, the prover can replace @f_lhs@ with an uninterpreted value
 @v_lhs@ and @f_rhs@ with an uninterpreted value @v_rhs@.  Lastly, the prover
-assumes @v_lhs@ and @v_rhs@ satisfy @f_orel@.  In order to make this assumption,
-the state relation of the outer terms must ensure that the inner terms' state
-relation holds.  As such, the prover generates and proves a side condition for
-each applied 'BisimTheorem'.  Let @g_lhs_s@ and @g_rhs_s@ be the states for
-@g_lhs@ and @g_rhs@ respectively.  Additionally, let @f_lhs_s@ be the state for
-@f_lhs@ expressed as a substate of @g_rhs_s@, and @f_rhs_s@ be the state for
-@f_rhs@ expressed as a substate of @g_rhs_s@ (the prover examines the call sites
-for @f_lhs@ and @f_rhs@ within @g_lhs@ and @g_rhs@ to extract these @f@ states
-in terms of the @g@ states).  Lastly, let @g_srel@ be the state relation for the
-@g@ functions, and @f_srel@ be the state relation for the @f@ functions.  The
-prover then checks:
+assumes @v_lhs@ and @v_rhs@ satisfy @f_orel@.
+
+In order to make this assumption about @v_lhs@ and @v_rhs@, the state relation
+of the outer terms must ensure that the inner terms' state relation holds.  As
+such, the prover generates and proves a side condition for each applied
+'BisimTheorem'.  Let @g_lhs_s@ and @g_rhs_s@ be the states for @g_lhs@ and
+@g_rhs@ respectively.  Additionally, let there be a function
+@extract_substate x x_s y@ that takes a super-term @x@, a super-state @x_s@,
+and sub-term @y@, and returns the sub-state of @x_s@ that @x@ passes to @y@.
+Lastly, let @g_srel@ be the state relation for the @g@ terms, and @f_srel@
+be the state relation for the @f@ terms.  The prover then checks:
   COMPOSITION SIDE CONDITION:
     forall g_lhs_s g_rhs_s.
       g_srel g_lhs_s g_rhs_s -> f_srel f_lhs_s f_rhs_s
+      where
+        f_lhs_s = extract_substate g_lhs g_lhs_s f_lhs
+        f_rhs_s = extract_substate g_rhs g_rhs_s f_rhs
 
 The reason for all of this complexity around composition is ultimately to reduce
 the burden on the SMT solver by uninterpreting functions so that the SMT solver
@@ -673,7 +676,9 @@ proveBisimulation script bthms srel orel lhs rhs = do
           , "  Expected: (" ++ stStr ++ ", inputType) -> (" ++ stStr ++ ", outputType)"
           , "  Actual: " ++ show (ppTypedTermType (ttType side)) ]
 
--- | Replace the invocation of a specific 'Constant' with an 'ExtCns'.  The function returns the resulting 'Term' and updates a 'ReplaceState' to hold the generated 'ExtCns' and the specific 'App' that was replaced.
+-- | Replace the invocation of a specific 'Constant' with an 'ExtCns'.  The
+-- function returns the resulting 'Term' and updates a 'ReplaceState' to hold
+-- the generated 'ExtCns' and the specific 'App' that was replaced.
 replaceConstantTerm :: TypedTerm
                     -- ^ 'Constant' to replace application of
                     -> C.Type

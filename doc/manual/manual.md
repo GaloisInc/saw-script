@@ -4312,16 +4312,25 @@ the proof goal below for any successfully applied `BisimTheorem` in the
 COMPOSITION SIDE CONDITION:
   forall g_lhs_s g_rhs_s.
     g_srel g_lhs_s g_rhs_s -> f_srel f_lhs_s f_rhs_s
+    where
+      f_lhs_s = extract_substate g_lhs g_lhs_s f_lhs
+      f_rhs_s = extract_substate g_rhs g_rhs_s f_rhs
 ~~~~
 
-where `g_lhs` contains a call to `f_lhs` and `g_rhs` contains a call to `f_rhs`, and the variables in `COMPOSITION SIDE CONDITION` are:
+where `g_lhs` contains a call to `f_lhs` and `g_rhs` contains a call to `f_rhs`,
+and the variables in `COMPOSITION SIDE CONDITION` are:
 
+* `extract_substate x x_s y`: A helper function that takes a super-term `x`, a
+  super-state `x_s`, and a sub-term `y`, and returns the sub-state of `x_s` that
+  `x` passes to `y`.
 * `g_lhs_s`: The state for `g_lhs`
 * `g_rhs_s`: The state for `g_rhs`
 * `g_srel`: The state relation for `g_lhs` and `g_rhs`
 * `f_srel`: The state relation for `f_lhs` and `f_rhs`
-* `f_lhs_s`: The state for `f_lhs`, as represented in `g_lhs_s`
-* `f_rhs_s`: The state for `f_rhs`, as represented in `g_rhs_s`
+* `f_lhs_s`: The state for `f_lhs`, as represented in `g_lhs_s` (extracted using
+  `extract_substate`).
+* `f_rhs_s`: The state for `f_rhs`, as represented in `g_rhs_s` (extracted using
+  `extract_substate`).
 
 The `COMPOSITION SIDE CONDITION` exists to verify that the terms in the
 bisimulation relation properly set up valid states for subterms they contain.
