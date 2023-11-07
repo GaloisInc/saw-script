@@ -109,20 +109,8 @@ data ReplaceState = ReplaceState {
 
 -- Components needed for a bisimulation proof.
 data BisimComponents = BisimComponents {
-    bcStateRelation :: TypedTerm
- -- ^ The relation between states
-  , bcOutputRelation :: TypedTerm
- -- ^ The relation between outputs
-  , bcLeftSide :: TypedTerm
- -- ^ Left hand side of the bisimulation
-  , bcRightSide :: TypedTerm
- -- ^ Right hand side of the bisimulation
-  , bcOutputType :: C.Type
- -- ^ Output type of the bisimilar functions
-  , bcLhsStateType :: C.Type
- -- ^ State type for 'bcLeftSide'
-  , bcRhsStateType :: C.Type
- -- ^ State type for 'bcRightSide'
+    bcTheorem :: BisimTheorem
+ -- ^ Bisimulation theorem capturing relations and outputs
   , bcInputType :: C.Type
  -- ^ Input type of the bisimilar functions
   }
@@ -181,8 +169,10 @@ buildCompositionSideCondition
   -> BisimTheorem
   -- ^ Bisimulation theorem concerning inner function
   -> TopLevel TypedTerm
-buildCompositionSideCondition bc bt = do
+buildCompositionSideCondition bc innerBt = do
   sc <- getSharedContext
+  let outerBt = bcTheorem bc
+
   lhsOuterState <- io $ scLocalVar sc 0        -- g_lhs_s
   rhsOuterState <- io $ scLocalVar sc 1        -- g_rhs_s
 
@@ -195,9 +185,9 @@ buildCompositionSideCondition bc bt = do
   -- Locate inner function calls on each side and replace their arguments with
   -- 'ExtCns's
   (lhsInnerEc, lhsInnerApp) <-
-    openConstantApp (bisimTheoremLhs bt) (bcLeftSide bc)
+    openConstantApp (bisimTheoremLhs innerBt) (bisimTheoremLhs outerBt)
   (rhsInnerEc, rhsInnerApp) <-
-    openConstantApp (bisimTheoremRhs bt) (bcRightSide bc)
+    openConstantApp (bisimTheoremRhs innerBt) (bisimTheoremRhs outerBt)
 
   -- Extract state accessors from each inner function
   lhsInnerState <- stateFromApp lhsInnerApp  -- f_lhs_s
@@ -205,12 +195,13 @@ buildCompositionSideCondition bc bt = do
 
   -- Outer state relation
   -- g_srel g_lhs_s g_rhs_s
-  outerRel <- scRelation (bcStateRelation bc) lhsOuterState rhsOuterState
+  outerRel <-
+    scRelation (bisimTheoremStateRelation outerBt) lhsOuterState rhsOuterState
 
   -- Inner state relation
   -- f_srel f_lhs_s f_rhs_s
   innerRel <-
-    scRelation (bisimTheoremStateRelation bt) lhsInnerState rhsInnerState
+    scRelation (bisimTheoremStateRelation innerBt) lhsInnerState rhsInnerState
 
   -- Replace extcns in inner relation with outer inputs
   lhsTuple <- io $ scTuple sc [lhsOuterState, input]  -- (f_lhs_s, in)
@@ -231,8 +222,8 @@ buildCompositionSideCondition bc bt = do
   args <- io $ mapM
     (\(name, t) -> (name,) <$> C.importType sc C.emptyEnv t)
     [ ("input", bcInputType bc)
-    , ("rhsState", bcRhsStateType bc)
-    , ("lhsState", bcLhsStateType bc) ]
+    , ("rhsState", bisimTheoremRhsStateType outerBt)
+    , ("lhsState", bisimTheoremLhsStateType outerBt) ]
   theorem <- io $ scLambdaList sc args implication
   io $ mkTypedTerm sc theorem
 
@@ -419,6 +410,8 @@ buildOutputRelationTheorem :: [BisimTheorem]
                            -> TopLevel [TypedTerm]
 buildOutputRelationTheorem bthms bc = do
   sc <- getSharedContext
+  let outerBt = bcTheorem bc
+
   -- Outer function inputs. See comments to the right of each line to see how
   -- they line up with the documentation at the top of this file.
   lhsState <- io $ scLocalVar sc 0        -- s1
@@ -430,16 +423,20 @@ buildOutputRelationTheorem bthms bc = do
   rhsTuple <- io $ scTuple sc [rhsState, input]  -- (s2, in)
 
   -- LHS/RHS outputs
-  lhsOutput <- io $ scApply sc (ttTerm (bcLeftSide bc)) lhsTuple  -- lhs (s1, in)
-  rhsOutput <- io $ scApply sc (ttTerm (bcRightSide bc)) rhsTuple  -- rhs (s2, in)
+  -- lhs (s1, in)
+  lhsOutput <- io $ scApply sc (ttTerm (bisimTheoremLhs outerBt)) lhsTuple
+  -- rhs (s2, in)
+  rhsOutput <- io $ scApply sc (ttTerm (bisimTheoremRhs outerBt)) rhsTuple
 
   -- Initial relation result
   -- srel s1 s2
-  initRelation <- scRelation (bcStateRelation bc) lhsState rhsState
+  initRelation <-
+    scRelation (bisimTheoremStateRelation outerBt) lhsState rhsState
 
   -- Relation over outputs
   -- orel (lhs (s1, in)) (rhs (s2, in))
-  relationRes <- scRelation (bcOutputRelation bc) lhsOutput rhsOutput
+  relationRes <-
+    scRelation (bisimTheoremOutputRelation outerBt) lhsOutput rhsOutput
 
   -- initRelation implies relationRes
   -- srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))
@@ -454,8 +451,8 @@ buildOutputRelationTheorem bthms bc = do
   args <- io $ mapM
     (\(name, t) -> (name,) <$> C.importType sc C.emptyEnv t)
     [ ("input", bcInputType bc)
-    , ("rhsState", bcRhsStateType bc)
-    , ("lhsState", bcLhsStateType bc) ]
+    , ("rhsState", bisimTheoremRhsStateType outerBt)
+    , ("lhsState", bisimTheoremLhsStateType outerBt) ]
   theorem <- io $ scLambdaList sc args implication'
 
   tt <- io $ mkTypedTerm sc theorem
@@ -467,6 +464,7 @@ buildOutputRelationTheorem bthms bc = do
 buildStateRelationTheorem :: BisimComponents -> TopLevel TypedTerm
 buildStateRelationTheorem bc = do
   sc <- getSharedContext
+  let outerBt = bcTheorem bc
 
   -- Outer function inputs. See comments to the right of each line to see how
   -- they line up with the documentation at the top of this file.
@@ -481,11 +479,13 @@ buildStateRelationTheorem bc = do
 
   -- LHS of implication
   -- orel (s1, out1) (s2, out2)
-  lhsRelation <- scRelation (bcOutputRelation bc) lhsTuple rhsTuple
+  lhsRelation <-
+    scRelation (bisimTheoremOutputRelation outerBt) lhsTuple rhsTuple
 
   -- RHS of implication
   -- srel s1 s2
-  rhsRelation <- scRelation (bcStateRelation bc) lhsState rhsState
+  rhsRelation <-
+    scRelation (bisimTheoremStateRelation outerBt) lhsState rhsState
 
   -- lhsRelation implies rhsRelation
   -- orel (s1, out1) (s2, out2) -> srel s1 s2
@@ -496,10 +496,10 @@ buildStateRelationTheorem bc = do
   --   orel (s1, out1) (s2, out2) -> srel s1 s2
   args <- io $ mapM
     (\(name, t) -> (name,) <$> C.importType sc C.emptyEnv t)
-    [ ("initRhsOutput", bcOutputType bc)
-    , ("initLhsOutput", bcOutputType bc)
-    , ("rhsState", bcRhsStateType bc)
-    , ("lhsState", bcLhsStateType bc) ]
+    [ ("initRhsOutput", bisimTheoremOutputType outerBt)
+    , ("initLhsOutput", bisimTheoremOutputType outerBt)
+    , ("rhsState", bisimTheoremRhsStateType outerBt)
+    , ("lhsState", bisimTheoremLhsStateType outerBt) ]
   theorem <- io $ scLambdaList sc args implication
 
   io $ mkTypedTerm sc theorem
@@ -540,14 +540,18 @@ proveBisimulation script bthms srel orel lhs rhs = do
                    , "  LHS input type: " ++ C.pretty lhsInputType
                    , "  RHS input type: " ++ C.pretty rhsInputType ]
 
+  let bt = BisimTheorem
+           { bisimTheoremStateRelation = srel
+           , bisimTheoremOutputRelation = orel
+           , bisimTheoremLhs = lhs
+           , bisimTheoremRhs = rhs
+           , bisimTheoremOutputType = outputType
+           , bisimTheoremLhsStateType = lhsStateType
+           , bisimTheoremRhsStateType = rhsStateType
+           }
+
   let bc = BisimComponents
-           { bcStateRelation = srel
-           , bcOutputRelation = orel
-           , bcLeftSide = lhs
-           , bcRightSide = rhs
-           , bcOutputType = outputType
-           , bcLhsStateType = lhsStateType
-           , bcRhsStateType = rhsStateType
+           { bcTheorem = bt
            , bcInputType = lhsInputType
            }
   outputTheorems <- buildOutputRelationTheorem bthms bc
