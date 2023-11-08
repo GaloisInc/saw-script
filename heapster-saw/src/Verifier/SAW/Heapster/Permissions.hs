@@ -907,7 +907,7 @@ evTypeTerm = globalOpenTerm . evTypeToIdent
 
 -- | The default event type uses the @Void@ type for events
 defaultSpecMEventType :: EventType
-defaultSpecMEventType = EventType $ fromString "Prelude.VoidEv"
+defaultSpecMEventType = EventType $ fromString "SpecM.VoidEv"
 
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
