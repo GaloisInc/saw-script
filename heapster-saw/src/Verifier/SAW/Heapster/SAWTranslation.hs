@@ -4769,11 +4769,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       do ttrans <- translateSimplImplOutHead mb_simpl
          let args_ctx = mbLift $ fmap namedShapeArgs nmsh'
          d <- substNamedIndTpDesc (mbLift mb_sh_id) args_ctx mb_args
+         ev <- infoEvType <$> ask
          withPermStackTopTermsM id
            (\ts (pctx :>: _) ->
              pctx :>:
              typeTransF ttrans [applyGlobalOpenTerm "SpecM.foldTpElem"
-                                [d, tupleOpenTerm' ts]])
+                                [evTypeTerm ev, d, tupleOpenTerm' ts]])
            m
 
   -- Intro for a defined named shape (the other case) is a no-op
@@ -4796,11 +4797,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       do ttrans <- translateSimplImplOutHead mb_simpl
          let args_ctx = mbLift $ fmap namedShapeArgs nmsh'
          d <- substNamedIndTpDesc (mbLift mb_sh_id) args_ctx mb_args
+         ev <- infoEvType <$> ask
          withPermStackTopTermsM id
            (\ts (pctx :>: _) ->
              pctx :>:
              typeTransF ttrans [applyGlobalOpenTerm "SpecM.unfoldTpElem"
-                                [d, tupleOpenTerm' ts]])
+                                [evTypeTerm ev, d, tupleOpenTerm' ts]])
            m
 
   -- Elim for a defined named shape (the other case) is a no-op
@@ -4927,11 +4929,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let args_ctx = mbLift $ fmap (namedPermNameArgs . recPermName) mb_rp
        let d_id = mbLift $ fmap recPermTransDesc mb_rp
        d <- substNamedIndTpDesc d_id args_ctx mb_args
+       ev <- infoEvType <$> ask
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
            pctx :>:
            typeTransF ttrans [applyGlobalOpenTerm "SpecM.foldTpElem"
-                              [d, tupleOpenTerm' ts]])
+                              [evTypeTerm ev, d, tupleOpenTerm' ts]])
          m
 
   [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Rec mb_rp) mb_args _ |] ->
@@ -4939,11 +4942,12 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let args_ctx = mbLift $ fmap (namedPermNameArgs . recPermName) mb_rp
        let d_id = mbLift $ fmap recPermTransDesc mb_rp
        d <- substNamedIndTpDesc d_id args_ctx mb_args
+       ev <- infoEvType <$> ask
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
            pctx :>:
            typeTransF ttrans [applyGlobalOpenTerm "SpecM.unfoldTpElem"
-                              [d, tupleOpenTerm' ts]])
+                              [evTypeTerm ev, d, tupleOpenTerm' ts]])
          m
 
   [nuMP| SImpl_FoldNamed _ (NamedPerm_Defined _) _ _ |] ->
@@ -6771,6 +6775,5 @@ translateIndTypeFun sc env ctx d =
   do args_tms <- transTerms <$> infoCtx <$> ask
      let ks = snd $ translateCruCtx ctx
      return $ applyGlobalOpenTerm "SpecM.tpElemEnv"
-       [evTypeTerm (permEnvEventType env),
-        tpEnvOpenTerm (zip ks args_tms),
-        ctorOpenTerm "SpecM.Tp_Ind" [d]]
+       [evTypeTerm (permEnvEventType env), tpEnvOpenTerm (zip ks args_tms),
+        ctorOpenTerm "SpecM.IsData" [], ctorOpenTerm "SpecM.Tp_Ind" [d]]
