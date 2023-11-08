@@ -366,9 +366,9 @@ substIndIdTpDescMulti :: Ident -> [OpenTerm] -> [OpenTerm] -> OpenTerm
 substIndIdTpDescMulti i = substTpDescMulti (indTpDesc (globalOpenTerm i))
 
 -- | Map from type description @T@ to the type @T@ describes
-tpElemTypeOpenTerm :: OpenTerm -> OpenTerm
-tpElemTypeOpenTerm d =
-  applyGlobalOpenTerm "SpecM.tpElem" [d]
+tpElemTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
+tpElemTypeOpenTerm ev d =
+  applyGlobalOpenTerm "SpecM.tpElem" [evTypeTerm ev, d]
 
 -- | Build the computation type @SpecM E A@
 specMTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
@@ -634,7 +634,7 @@ exprCtxToTerms :: ExprTransCtx tps -> [OpenTerm]
 exprCtxToTerms = transTerms
 
 -- | Map an 'ExprTrans' to its type translation
-exprTransType :: ExprTrans tp -> TypeTrans (ExprTrans tp)
+exprTransType :: (?ev :: EventType) => ExprTrans tp -> TypeTrans (ExprTrans tp)
 exprTransType ETrans_LLVM = mkTypeTrans0 ETrans_LLVM
 exprTransType ETrans_LLVMBlock = mkTypeTrans0 ETrans_LLVMBlock
 exprTransType ETrans_LLVMFrame = mkTypeTrans0 ETrans_LLVMFrame
@@ -646,15 +646,16 @@ exprTransType ETrans_Unit = mkTypeTrans0 ETrans_Unit
 exprTransType ETrans_AnyVector = mkTypeTrans0 ETrans_AnyVector
 exprTransType (ETrans_Shape _ _) =
   mkTypeTrans1 tpDescTypeOpenTerm (\d ->
-                                    ETrans_Shape [d] [tpElemTypeOpenTerm d])
+                                    ETrans_Shape [d] [tpElemTypeOpenTerm ?ev d])
 exprTransType (ETrans_Perm _ _) =
-  mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Perm [d] [tpElemTypeOpenTerm d])
+  mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Perm [d] [tpElemTypeOpenTerm ?ev d])
 exprTransType (ETrans_Term tp t) =
   mkTypeTrans1 (openTermType t) (ETrans_Term tp)
 
 -- | Map a context of expression translation to a list of the SAW core types of
 -- all the terms it contains
-exprCtxType :: ExprTransCtx ctx -> TypeTrans (ExprTransCtx ctx)
+exprCtxType :: (?ev :: EventType) => ExprTransCtx ctx ->
+               TypeTrans (ExprTransCtx ctx)
 exprCtxType MNil = mkTypeTrans0 MNil
 exprCtxType (ectx :>: e) = (:>:) <$> exprCtxType ectx <*> exprTransType e
 
@@ -662,7 +663,7 @@ exprCtxType (ectx :>: e) = (:>:) <$> exprCtxType ectx <*> exprTransType e
 -- | Convert an 'ExprTrans' to a list of SAW core terms of type @kindExpr K@,
 -- one for each kind description @K@ returned by 'translateType' for the type of
 -- the 'ExprTrans'
-exprTransDescs :: ExprTrans a -> [OpenTerm]
+exprTransDescs :: (?ev :: EventType) => ExprTrans a -> [OpenTerm]
 exprTransDescs ETrans_LLVM = []
 exprTransDescs ETrans_LLVMBlock = []
 exprTransDescs ETrans_LLVMFrame = []
@@ -1261,7 +1262,8 @@ mkTermType1Repr repr tp = mkTypeTrans1 tp (ETrans_Term repr)
 
 -- | Translate a permission expression type to a 'TypeTrans' and to a list of
 -- kind descriptions that describe the types in the 'TypeTrans'
-translateType :: TypeRepr a -> (TypeTrans (ExprTrans a), [OpenTerm])
+translateType :: (?ev :: EventType) => TypeRepr a ->
+                 (TypeTrans (ExprTrans a), [OpenTerm])
 translateType UnitRepr = (mkTypeTrans0 ETrans_Unit, [])
 translateType BoolRepr =
   (mkTermType1 (globalOpenTerm "Prelude.Bool"), [boolKindDesc])
@@ -1286,11 +1288,11 @@ translateType RWModalityRepr = (mkTypeTrans0 ETrans_RWModality, [])
 -- Permissions and LLVM shapes translate to type descriptions
 translateType (ValuePermRepr _) =
   (mkTypeTrans1 tpDescTypeOpenTerm (\d ->
-                                     ETrans_Perm [d] [tpElemTypeOpenTerm d]),
+                                     ETrans_Perm [d] [tpElemTypeOpenTerm ?ev d]),
    [tpKindDesc])
 translateType (LLVMShapeRepr _) =
   (mkTypeTrans1 tpDescTypeOpenTerm (\d ->
-                                     ETrans_Shape [d] [tpElemTypeOpenTerm d]),
+                                     ETrans_Shape [d] [tpElemTypeOpenTerm ?ev d]),
    [tpKindDesc])
 
 translateType tp@(FloatRepr _) =
@@ -1318,7 +1320,8 @@ translateType tp =
 
 -- | Translate a 'CruCtx' to a 'TypeTrans' and to a list of kind descriptions
 -- that describe the types in the 'TypeTrans'
-translateCruCtx :: CruCtx ctx -> (TypeTrans (ExprTransCtx ctx), [OpenTerm])
+translateCruCtx :: (?ev :: EventType) => CruCtx ctx ->
+                   (TypeTrans (ExprTransCtx ctx), [OpenTerm])
 translateCruCtx CruCtxNil = (mkTypeTrans0 MNil, [])
 translateCruCtx (CruCtxCons ctx tp) =
   let (ctx_trans, ds1) = translateCruCtx ctx
@@ -1326,7 +1329,7 @@ translateCruCtx (CruCtxCons ctx tp) =
   ((:>:) <$> ctx_trans <*> tp_trans, ds1 ++ ds2)
 
 -- | Translate a permission expression type to a list of kind descriptions
-translateKindDescs :: TypeRepr a -> [OpenTerm]
+translateKindDescs :: (?ev :: EventType) => TypeRepr a -> [OpenTerm]
 translateKindDescs = snd . translateType
 
 -- Translate an expression type to a 'TypeTrans', which both gives a list of 0
@@ -1334,11 +1337,15 @@ translateKindDescs = snd . translateType
 -- translation from SAW core terms of those types
 instance TransInfo info =>
          Translate info ctx (TypeRepr a) (TypeTrans (ExprTrans a)) where
-  translate = return . fst . translateType . mbLift
+  translate tp =
+    do ev <- infoEvType <$> ask
+       return $ fst $ let ?ev = ev in translateType $ mbLift tp
 
 instance TransInfo info =>
          Translate info ctx (CruCtx as) (TypeTrans (ExprTransCtx as)) where
-  translate = return . fst . translateCruCtx . mbLift
+  translate ctx =
+    do ev <- infoEvType <$> ask
+       return $ fst $ let ?ev = ev in translateCruCtx $ mbLift ctx
 
 -- | Translate all types in a Crucible context and lambda-abstract over them
 lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
@@ -1392,6 +1399,10 @@ data DescTransInfo ctx where
 dtiEnv :: DescTransInfo ctx -> PermEnv
 dtiEnv (DescTransInfo _ _ env _) = env
 
+-- | Extract the event type from a 'DescTransInfo'
+dtiEvType :: DescTransInfo ctx -> EventType
+dtiEvType = permEnvEventType . dtiEnv
+
 -- | Build a sequence of 'Proxy's for the context of a 'DescTransInfo'
 dtiProxies :: DescTransInfo ctx -> RAssign Proxy ctx
 dtiProxies (DescTransInfo ectx1 ctx2 _ _) =
@@ -1440,9 +1451,12 @@ inExtCtxDescTransM :: CruCtx ctx2 ->
                       ([OpenTerm] -> DescTransM (ctx1 :++: ctx2) a) ->
                       DescTransM ctx1 a
 inExtCtxDescTransM ctx m =
-  let kdesc_ctx = RL.map (Constant . translateKindDescs) $ cruCtxToTypes ctx
-      kdescs = concat $ RL.toList kdesc_ctx in
-  inExtDescTransMultiM kdesc_ctx $ m kdescs
+  do ev <- dtiEvType <$> ask
+     let kdesc_ctx =
+           let ?ev = ev in
+           RL.map (Constant . translateKindDescs) $ cruCtxToTypes ctx
+         kdescs = concat $ RL.toList kdesc_ctx
+     inExtDescTransMultiM kdesc_ctx $ m kdescs
 
 -- | Run a 'DescTransM' computation in an expression context that binds a
 -- context of deBruij indices.Pass the concatenated list of all the kind
@@ -1643,14 +1657,20 @@ instance TransInfo info =>
         [nuMP| DefinedShapeBody _ |] ->
           translate (mbMap2 unfoldNamedShape nmsh args)
         [nuMP| OpaqueShapeBody _ tp_id desc_id |] ->
-          do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
+          do ev <- infoEvType <$> ask
+             let (_, k_ds) =
+                   let ?ev = ev in
+                   translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
              args_terms <- transTerms <$> translate args
              args_ds <- descTransM $ translateDescs args
              return $
                ETrans_Shape [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
                [applyGlobalOpenTerm (mbLift tp_id) args_terms]
         [nuMP| RecShapeBody _ tp_id desc_id |] ->
-          do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
+          do ev <- infoEvType <$> ask
+             let (_, k_ds) =
+                   let ?ev = ev in
+                   translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
              args_terms <- transTerms <$> translate args
              args_ds <- descTransM $ translateDescs args
              return $
@@ -1683,7 +1703,8 @@ instance TransInfo info =>
     [nuMP| PExpr_ExShape mb_mb_sh |] ->
       do let tp_repr = mbLift $ fmap bindingType mb_mb_sh
          let mb_sh = mbCombine RL.typeCtxProxies mb_mb_sh
-         let (tptrans, _) = translateType tp_repr
+         ev <- infoEvType <$> ask
+         let (tptrans, _) = let ?ev = ev in translateType tp_repr
          d <- descTransM $
            inExtCtxDescTransM (singletonCruCtx tp_repr) $ \kdescs ->
            sigmaTpDescMulti kdescs <$> translateDesc mb_sh
@@ -1783,8 +1804,9 @@ translateBVDesc mb_e =
 -- translateDescs on a variable translates to a list of variable kind exprs
 instance TranslateDescs (ExprVar a) where
   translateDescs mb_x =
+    (dtiEvType <$> ask) >>= \ev ->
     translateVarDesc mb_x >>= \case
-    Left etrans -> return $ exprTransDescs etrans
+    Left etrans -> return $ let ?ev = ev in exprTransDescs etrans
     Right (ix, ds) -> return $ zipWith varKindExpr ds [ix..]
 
 -- translateDescs on permission expressions yield a list of SAW core terms of
@@ -1824,11 +1846,17 @@ instance TranslateDescs (PermExpr a) where
         [nuMP| DefinedShapeBody _ |] ->
           translateDescs (mbMap2 unfoldNamedShape nmsh args)
         [nuMP| OpaqueShapeBody _ _ desc_id |] ->
-          do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
+          do ev <- dtiEvType <$> ask
+             let (_, k_ds) =
+                   let ?ev = ev in
+                   translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
              args_ds <- translateDescs args
              return [substIdTpDescMulti (mbLift desc_id) k_ds args_ds]
         [nuMP| RecShapeBody _ _ desc_id |] ->
-          do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
+          do ev <- dtiEvType <$> ask
+             let (_, k_ds) =
+                   let ?ev = ev in
+                   translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
              args_ds <- translateDescs args
              return [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
     [nuMP| PExpr_EqShape _ _ |] -> return []
@@ -1872,7 +1900,8 @@ substNamedIndTpDesc :: TransInfo info => Ident ->
                        CruCtx tps -> Mb ctx (PermExprs tps) ->
                        TransM info ctx OpenTerm
 substNamedIndTpDesc d_id tps args =
-  do let ks = snd $ translateCruCtx tps
+  do ev <- infoEvType <$> ask
+     let ks = let ?ev = ev in snd $ translateCruCtx tps
      args_exprs <- descTransM $ translateDescs args
      return $ substEnvTpDesc 1 (zip ks args_exprs) (globalOpenTerm d_id)
 
@@ -3071,9 +3100,10 @@ instance TranslateDescs (ValuePerm a) where
       (:[]) <$> (sumTpDesc <$> translateDesc p1 <*> translateDesc p2)
     [nuMP| ValPerm_Exists mb_mb_p' |]
       | [nuP| ValPerm_Eq _ |] <- mbCombine RL.typeCtxProxies mb_mb_p' ->
-        let tp_repr = mbLift $ fmap bindingType mb_mb_p'
-            (_, k_ds) = translateType tp_repr in
-        return [tupleTpDesc $ map kindToTpDesc k_ds]
+        do ev <- dtiEvType <$> ask
+           let tp_repr = mbLift $ fmap bindingType mb_mb_p'
+               (_, k_ds) = let ?ev = ev in translateType tp_repr
+           return [tupleTpDesc $ map kindToTpDesc k_ds]
     [nuMP| ValPerm_Exists mb_mb_p' |] ->
       do let tp_repr = mbLift $ fmap bindingType mb_mb_p'
          let mb_p' = mbCombine RL.typeCtxProxies mb_mb_p'
@@ -3083,7 +3113,9 @@ instance TranslateDescs (ValuePerm a) where
       do let npn = mbLift mb_npn
          env <- dtiEnv <$> ask
          args_ds <- translateDescs args
-         let (_, k_ds) = translateCruCtx (namedPermNameArgs npn)
+         let (_, k_ds) =
+               let ?ev = permEnvEventType env in
+               translateCruCtx (namedPermNameArgs npn)
          case lookupNamedPerm env npn of
            Just (NamedPerm_Opaque op) ->
              return [substIdTpDescMulti (opaquePermTransDesc op) k_ds args_ds]
@@ -6726,8 +6758,9 @@ translateCompleteFunPerm sc env fun_perm =
 
 -- | Translate a 'TypeRepr' to the SAW core type it represents, raising an error
 -- if it translates to more than one type
-translateCompleteType :: SharedContext -> TypeRepr tp -> IO Term
-translateCompleteType sc tp =
+translateCompleteType :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
+translateCompleteType sc env tp =
+  let ?ev = permEnvEventType env in
   completeNormOpenTerm sc $ typeTransType1 $ fst $ translateType tp
 
 -- | Translate a 'TypeRepr' within the given context of type arguments to the
@@ -6735,6 +6768,7 @@ translateCompleteType sc tp =
 translateCompleteTypeInCtx :: SharedContext -> PermEnv ->
                               CruCtx args -> Mb args (TypeRepr a) -> IO Term
 translateCompleteTypeInCtx sc env args ret =
+  let ?ev = permEnvEventType env in
   completeNormOpenTerm sc $ runNilTypeTransM env noChecks $
   piExprCtx args (return $ typeTransType1 $ fst $ translateType $ mbLift ret)
 
@@ -6778,6 +6812,7 @@ translateExprTypeFunType sc env ctx =
 translateIndTypeFun :: SharedContext -> PermEnv -> CruCtx ctx -> OpenTerm ->
                        IO Term
 translateIndTypeFun sc env ctx d =
+  let ?ev = permEnvEventType env in
   liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
   lambdaExprCtx ctx $
   do args_tms <- transTerms <$> infoCtx <$> ask
