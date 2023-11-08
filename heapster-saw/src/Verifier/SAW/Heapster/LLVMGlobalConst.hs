@@ -105,10 +105,7 @@ translateLLVMValue w _ (L.ValSymbol sym) =
   do env <- llvmTransInfoEnv <$> ask
      -- (p, ts) <- lift (lookupGlobalSymbol env (GlobalSymbol sym) w)
      (p, ts) <- case lookupGlobalSymbol env (GlobalSymbol sym) w of
-       Just (p, GlobalTransTerms ts) -> return (p,ts)
-       Just (_, _) ->
-         traceAndZeroM ("Could not translate recursive function symbol: "
-                        ++ show sym)
+       Just (p, GlobalTrans ts) -> return (p, ts)
        Nothing -> traceAndZeroM ("Could not find symbol: " ++ show sym)
      return (PExpr_FieldShape (LLVMFieldShape p), ts)
 translateLLVMValue w _ (L.ValArray tp elems) =
@@ -307,4 +304,4 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
                take (length ts) [0 ..]
          return $ permEnvAddGlobalSyms env
            [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p
-            (GlobalTransTerms projs)]
+            (GlobalTrans projs)]

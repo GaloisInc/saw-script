@@ -860,19 +860,10 @@ data SomeNamedShape where
   SomeNamedShape :: (1 <= w, KnownNat w) => NamedShape b args w ->
                     SomeNamedShape
 
--- | The result of translating a global symbol to SAW core terms
-data GlobalTrans
-     -- | A translation to a list of terms, as defined in @SAWTranslation.hs@
-  = GlobalTransTerms [OpenTerm]
-    -- | A translation to a list of specification functions, i.e., to SAW core
-    -- terms of type @specFun E T@ for some type description @T@. This case is
-    -- here because this is different than the normal translation of a function,
-    -- which is to a SAW core term of type @FunIx T@. Accordingly, this is only
-    -- applicable to function permissions. The reason this is a list of terms
-    -- instead of just a single term is to support a single symbol having
-    -- multiple different function permissions, each with its own specification
-    -- function
-  | GlobalTransFuns [OpenTerm]
+-- | The result of translating a global symbol to SAW core terms, whose types
+-- should be the result of translating the permissions associated with the
+-- global symbol to SAW core types
+newtype GlobalTrans = GlobalTrans { globalTransTerms :: [OpenTerm] }
 
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
 -- a permission and a translation of that permission to either a list of terms
@@ -8286,7 +8277,7 @@ permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
 permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtr w fun_perm in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (GlobalTransFuns [t])
+          PermEnvGlobalEntry sym p (GlobalTrans [t])
           : permEnvGlobalSyms env }
 
 -- | Add a global symbol with 0 or more function permissions to a 'PermEnv'
@@ -8296,7 +8287,7 @@ permEnvAddGlobalSymFunMulti :: (1 <= w, KnownNat w) => PermEnv ->
 permEnvAddGlobalSymFunMulti env sym (w :: f w) ps_ts =
   let p = ValPerm_Conj1 $ mkPermLLVMFunPtrs w $ map fst ps_ts in
   env { permEnvGlobalSyms =
-          PermEnvGlobalEntry sym p (GlobalTransFuns $ map snd ps_ts)
+          PermEnvGlobalEntry sym p (GlobalTrans $ map snd ps_ts)
           : permEnvGlobalSyms env }
 
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
