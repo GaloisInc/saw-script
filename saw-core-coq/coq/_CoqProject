@@ -3,6 +3,7 @@
 
 generated/CryptolToCoq/SAWCorePrelude.v
 generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
+generated/CryptolToCoq/SpecMPrimitivesForSAWCore.v
 # generated/CryptolToCoq/CryptolMPrimitivesForSAWCore.v
 
 handwritten/CryptolToCoq/SpecM.v

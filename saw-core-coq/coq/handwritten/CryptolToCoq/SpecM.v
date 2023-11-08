@@ -12,6 +12,7 @@ From EnTree Require Import EnTreeSpecs TpDesc.
 Inductive TpExprUnOp : ExprKind -> ExprKind -> Type@{entree_u} :=
 | UnOp_BVToNat w : TpExprUnOp (Kind_bv w) Kind_nat
 | UnOp_NatToBV w : TpExprUnOp Kind_nat (Kind_bv w)
+| UnOp_NatToNum : TpExprUnOp Kind_nat Kind_num
 .
 
 Inductive TpExprBinOp : ExprKind -> ExprKind -> ExprKind -> Type@{entree_u} :=
@@ -33,6 +34,7 @@ Definition evalUnOp {EK1 EK2} (op: TpExprUnOp EK1 EK2) :
   match op in TpExprUnOp EK1 EK2 return exprKindElem EK1 -> exprKindElem EK2 with
   | UnOp_BVToNat w => bvToNat w
   | UnOp_NatToBV w => bvNat w
+  | UnOp_NatToNum => TCNum
   end.
 
 Definition evalBinOp {EK1 EK2 EK3} (op: TpExprBinOp EK1 EK2 EK3) :
@@ -60,6 +62,14 @@ Global Instance SAWTpExprOps : TpExprOps :=
  ** Now we re-export all of TpDesc using the above instance
  **)
 
+(* Num: note that the Num type has to be defined in the TpDesc module, so its
+type descriptions can refer to it, so we map the definition in Cryptol.sawcore
+to that definition *)
+Definition Num := TpDesc.Num.
+Definition Num_rect := TpDesc.Num_rect.
+Definition TCNum := TpDesc.TCNum.
+Definition TCInf := TpDesc.TCInf.
+
 (* EvType *)
 Definition EvType := FixTree.EvType.
 Definition Build_EvType := FixTree.Build_EvType.
@@ -72,6 +82,7 @@ Definition ExprKind_rect := ExprKind_rect.
 Definition Kind_unit := Kind_unit.
 Definition Kind_bool := Kind_bool.
 Definition Kind_nat := Kind_nat.
+Definition Kind_num := Kind_num.
 Definition Kind_bv := Kind_bv.
 
 (* KindDesc *)
@@ -98,7 +109,7 @@ Definition Tp_Kind := Tp_Kind.
 Definition Tp_Pair := Tp_Pair.
 Definition Tp_Sum := Tp_Sum.
 Definition Tp_Sigma := Tp_Sigma.
-Definition Tp_Vec := Tp_Vec.
+Definition Tp_Seq := Tp_Seq.
 Definition Tp_Void := Tp_Void.
 Definition Tp_Ind := Tp_Ind.
 Definition Tp_Var := Tp_Var.
@@ -106,16 +117,17 @@ Definition Tp_TpSubst := Tp_TpSubst.
 Definition Tp_ExprSubst := Tp_ExprSubst.
 
 (* tpElem and friends *)
+Definition FunFlag := FunFlag.
+Definition IsData := IsData.
+Definition IsFun := IsFun.
 Definition tpSubst := tpSubst.
 Definition elimTpEnvElem := elimTpEnvElem.
 Definition tpElemEnv := tpElemEnv.
 Definition indElem := indElem.
-Definition indElem_rect := indElem_rect.
-Definition indToTpElem := indToTpElem.
-Definition tpToIndElem := tpToIndElem.
+Definition foldTpElem := @foldTpElem.
+Definition unfoldTpElem := @unfoldTpElem.
 
 (* SpecM and its operations *)
-Definition FunIx := @FixTree.FunIx TpDesc.
 Definition SpecM := @SpecM.SpecM SAWTpExprOps.
 Definition retS := @SpecM.RetS SAWTpExprOps.
 Definition bindS := @SpecM.BindS SAWTpExprOps.
@@ -125,8 +137,6 @@ Definition forallS := @SpecM.ForallS SAWTpExprOps.
 Definition existsS := @SpecM.ExistsS SAWTpExprOps.
 Definition assumeS := @SpecM.AssumeS SAWTpExprOps.
 Definition assertS := @SpecM.AssertS SAWTpExprOps.
-Definition CallS := @SpecM.CallS SAWTpExprOps.
-Definition LambdaS := @SpecM.LambdaS SAWTpExprOps.
 Definition FixS := @SpecM.FixS SAWTpExprOps.
 Definition MultiFixS := @SpecM.MultiFixS SAWTpExprOps.
 Definition LetRecS := @SpecM.LetRecS SAWTpExprOps.

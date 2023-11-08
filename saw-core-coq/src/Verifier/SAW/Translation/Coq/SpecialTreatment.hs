@@ -200,9 +200,10 @@ sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 specMModule :: ModuleName
 specMModule = mkModuleName ["SpecM"]
 
--- FIXME: I don't think we are even importing PolyList any more...
+{-
 polyListModule :: ModuleName
 polyListModule = mkModuleName ["PolyList"]
+-}
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
@@ -214,19 +215,24 @@ cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCore"]
 preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
 
-cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
-cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
-
-  ++
-  [ ("Num_rec",               mapsTo cryptolPrimitivesModule "Num_rect") -- automatically defined
-  , ("unsafeAssert_same_Num", skip) -- unsafe and unused
-  ]
-
-specialTreatmentMap :: TranslationConfiguration -> Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
+specialTreatmentMap :: TranslationConfiguration ->
+                       Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
 specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
   , ("Prelude", sawCorePreludeSpecialTreatmentMap configuration)
+  , ("SpecM", specMSpecialTreatmentMap configuration)
+  ]
+
+cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
+cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
+
+  ++
+  [ ("Num",                   mapsTo specMModule "Num")
+  , ("TCNum",                 mapsTo specMModule "TCNum")
+  , ("TCInf",                 mapsTo specMModule "TCInf")
+  , ("Num_rec",               mapsTo specMModule "Num_rect")
+  , ("unsafeAssert_same_Num", skip) -- unsafe and unused
   ]
 
 -- NOTE: while I initially did the mapping from SAW core names to the
@@ -237,7 +243,8 @@ specialTreatmentMap configuration = Map.fromList $
 -- during this translation (it is sometimes impossible, for instance, `at` is a
 -- reserved keyword in Coq), so that primitives' and axioms' types can be
 -- copy-pasted as is on the Coq side.
-sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration -> Map.Map String IdentSpecialTreatment
+sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration ->
+                                     Map.Map String IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap configuration =
   let vectorsModule = sawVectorDefinitionsModule configuration in
   Map.fromList $
@@ -507,52 +514,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Right",       mapsToExpl datatypesModule "inr")
   ]
 
-  -- Type descriptions
-  ++
-  map (\str -> (str, mapsToExpl specMModule str))
-  [ "ExprKind", "Kind_unit", "Kind_bool", "Kind_nat", "Kind_bv"
-  , "TpExprUnOp", "UnOp_BVToNat", "UnOp_NatToBV"
-  , "TpExprBinOp", "BinOp_AddNat", "BinOp_MulNat", "BinOp_AddBV", "BinOp_MulBV"
-  , "KindDesc", "Kind_Expr", "Kind_Tp"
-  , "TpExpr", "TpExpr_Const", "TpExpr_Var", "TpExpr_UnOp", "TpExpr_BinOp"
-  , "TpDesc", "Tp_M", "Tp_Pi", "Tp_Arr", "Tp_Kind", "Tp_Pair", "Tp_Sum"
-  , "Tp_Sigma", "Tp_Vec", "Tp_Void", "Tp_Ind", "Tp_Var", "Tp_TpSubst"
-  , "Tp_ExprSubst"
-  , "tpSubst", "elimTpEnvElem", "tpElemEnv"
-  , "indElem", "indToTpElem", "tpToIndElem"
-  ]
-
-  -- The specification monad
-  ++
-  [ ("EvType",               mapsTo specMModule "EvType")
-  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
-  , ("FunIx",                mapsTo specMModule "FunIx")
-  , ("evTypeType",           mapsTo specMModule "evTypeType")
-  , ("evRetType",            mapsTo specMModule "evRetType")
-  , ("SpecM",                mapsTo specMModule "SpecM")
-  , ("retS",                 mapsToExpl specMModule "retS")
-  , ("bindS",                mapsToExpl specMModule "bindS")
-  , ("triggerS",             mapsToExpl specMModule "triggerS")
-  , ("errorS",               mapsToExpl specMModule "errorS")
-  , ("forallS",              mapsToExplInferArg "SpecM.forallS" 2)
-  , ("existsS",              mapsToExplInferArg "SpecM.existsS" 2)
-  , ("assumeS",              mapsToExpl specMModule "assumeS")
-  , ("assertS",              mapsToExpl specMModule "assertS")
-  , ("CallS",                mapsToExpl specMModule "CallS")
-  , ("LambdaS",              mapsToExpl specMModule "LambdaS")
-  , ("FixS",                 mapsToExpl specMModule "FixS")
-  , ("MultiFixS",            mapsToExpl specMModule "MultiFixS")
-  , ("LetRecS",              mapsToExpl specMModule "LetRecS")
-  , ("specFun",              mapsTo specMModule "specFun")
-    {-
-  , ("SpecPreRel",           mapsToExpl entreeSpecsModule "SpecPreRel")
-  , ("SpecPostRel",          mapsToExpl entreeSpecsModule "SpecPostRel")
-  , ("eqPreRel",             mapsToExpl entreeSpecsModule "eqPreRel")
-  , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel") -}
-  , ("refinesS",             skip)
-  , ("refinesS_eq",          skip)
-  ]
-
   -- Dependent pairs
   ++
   [ ("Sigma", replace (Coq.ExplVar "sigT"))
@@ -571,11 +532,62 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ]
 
   -- Lists at sort 1
+  {- FIXME: in order to support lists at a higher sort, we need a universe
+     polymorphic version of them
   ++
   [ ("List1", mapsToExpl polyListModule "plist")
   , ("Nil1", mapsToExpl polyListModule "pnil")
   , ("Cons1", mapsToExpl polyListModule "pcons")
   ]
+  -}
+
+specMSpecialTreatmentMap :: TranslationConfiguration ->
+                            Map.Map String IdentSpecialTreatment
+specMSpecialTreatmentMap _configuration =
+  Map.fromList $
+
+  -- Type descriptions
+  map (\str -> (str, mapsTo specMModule str))
+  [ "ExprKind", "Kind_unit", "Kind_bool", "Kind_nat", "Kind_bv"
+  , "TpExprUnOp", "UnOp_BVToNat", "UnOp_NatToBV"
+  , "TpExprBinOp", "BinOp_AddNat", "BinOp_MulNat", "BinOp_AddBV", "BinOp_MulBV"
+  , "KindDesc", "Kind_Expr", "Kind_Tp"
+  , "TpExpr", "TpExpr_Const", "TpExpr_Var", "TpExpr_UnOp", "TpExpr_BinOp"
+  , "TpDesc", "Tp_M", "Tp_Pi", "Tp_Arr", "Tp_Kind", "Tp_Pair", "Tp_Sum"
+  , "Tp_Sigma", "Tp_Seq", "Tp_Void", "Tp_Ind", "Tp_Var", "Tp_TpSubst"
+  , "Tp_ExprSubst"
+  , "tpSubst", "elimTpEnvElem", "tpElemEnv"
+  , "indElem", "indToTpElem", "tpToIndElem"
+  , "FunFlag", "IsFun", "IsData"
+  ]
+
+  -- The specification monad
+  ++
+  [ ("EvType",               mapsTo specMModule "EvType")
+  , ("Build_EvType",         mapsTo specMModule "Build_EvType")
+  , ("evTypeType",           mapsTo specMModule "evTypeType")
+  , ("evRetType",            mapsTo specMModule "evRetType")
+  , ("SpecM",                mapsTo specMModule "SpecM")
+  , ("retS",                 mapsToExpl specMModule "retS")
+  , ("bindS",                mapsToExpl specMModule "bindS")
+  , ("triggerS",             mapsToExpl specMModule "triggerS")
+  , ("errorS",               mapsToExpl specMModule "errorS")
+  , ("forallS",              mapsToExplInferArg "SpecM.forallS" 2)
+  , ("existsS",              mapsToExplInferArg "SpecM.existsS" 2)
+  , ("assumeS",              mapsToExpl specMModule "assumeS")
+  , ("assertS",              mapsToExpl specMModule "assertS")
+  , ("FixS",                 mapsToExpl specMModule "FixS")
+  , ("MultiFixS",            mapsToExpl specMModule "MultiFixS")
+  , ("LetRecS",              mapsToExpl specMModule "LetRecS")
+    {-
+  , ("SpecPreRel",           mapsToExpl entreeSpecsModule "SpecPreRel")
+  , ("SpecPostRel",          mapsToExpl entreeSpecsModule "SpecPostRel")
+  , ("eqPreRel",             mapsToExpl entreeSpecsModule "eqPreRel")
+  , ("eqPostRel",            mapsToExpl entreeSpecsModule "eqPostRel") -}
+  , ("refinesS",             skip)
+  , ("refinesS_eq",          skip)
+  ]
+
 
 
 escapeIdent :: String -> String

@@ -106,6 +106,7 @@ From Coq Require Import String.
 From Coq Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SpecM.
+From CryptolToCoq Require Import SpecMPrimitivesForSAWCore.
 From CryptolToCoq Require Import #{vectorModule}.
 Import VectorNotations.
 

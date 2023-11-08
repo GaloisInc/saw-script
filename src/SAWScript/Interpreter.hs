@@ -1595,18 +1595,18 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_primitives_for_sawcore"
-    "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    "String -> String -> String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqCryptolPrimitivesForSAWCore)
     Experimental
     [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore and "
     , "CryptolM.sawcore in Gallina syntax for Coq."
-    , "The first two arguments are the names of the output files for translating "
-    , "Cryptol.sawcore and CryptolM.sawcore, respectively."
+    , "The first three arguments are the names of the output files for translating "
+    , "Cryptol.sawcore, SpecM.sawcore, and CryptolM.sawcore, respectively."
     , "Use an empty string to output to standard output."
-    , "The third argument is a list of pairs of notation substitutions:"
+    , "The fourth argument is a list of pairs of notation substitutions:"
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
-    , "The fourth argument is a list of identifiers to skip translating."
+    , "The fifth argument is a list of identifiers to skip translating."
     ]
 
   , prim "offline_coq" "String -> ProofScript ()"
@@ -4345,7 +4345,7 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_recursive_perm)
     Experimental
-    [ "heapster_define_recursive_perm env nm arg_ctx tp p defined a recursive"
+    [ "heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive"
     , " Heapster permission named nm with arguments parsed from args_ctx and"
     , " type parsed from tp that translates to permissions p, which can"
     , " resurively use nm (with no arguments) in those permissions"
