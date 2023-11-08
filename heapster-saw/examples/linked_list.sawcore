@@ -1,53 +1,9 @@
 
 module linked_list where
 
-import Prelude;
+import SpecM;
 
-test : Nat -> Sigma Nat (\ (n:Nat) -> (m:Nat) -> IsLeNat n (Succ m) -> Nat);
-test x =
-  exists Nat (\ (n:Nat) -> (m:Nat) -> IsLeNat n (Succ m) -> Nat)
-         (addNat (Succ x) (Succ x))
-         (\ (m:Nat) (pf:IsLeNat (addNat (Succ x) (Succ x)) (Succ m)) -> m);
-
-List_def : (a:sort 0) -> sort 0;
-List_def a = List a;
-
--- The empty list of spec imports
-emptyImps : (E:EvType) -> List1 (SpecImp E);
-emptyImps E = Nil1 (SpecImp E);
-
--- The function stack for simpleSpecDef
-simpleSpecStack : (E:EvType) -> FunStack;
-simpleSpecStack E = defineSpecStack E emptyFunStack (emptyImps E);
-
--- Build a specification definition with no imports and no recursive functions
--- from its body
-simpleSpecDef : (E:EvType) -> (lrt:LetRecType) ->
-                ((stk':FunStack) -> SpecFun E stk' lrt) ->
-                SpecDef E lrt;
-simpleSpecDef E lrt bodyF =
-  defineSpec
-    E emptyFunStack lrt (Nil1 (SpecImp E))
-    (\ (stk':FunStack) (incl:stackIncl (simpleSpecStack E) stk') -> ())
-    (\ (stk':FunStack) (_:stackIncl (simpleSpecStack E) stk') -> bodyF stk');
-
-{-
-mallocSpec : (sz:Vec 64 Bool) -> SpecM VoidEv emptyFunStack (BVVec 64 sz #());
+mallocSpec : (sz:Vec 64 Bool) -> SpecM VoidEv (BVVec 64 sz #());
 mallocSpec sz =
-  retS VoidEv emptyFunStack (BVVec 64 sz #())
+  retS VoidEv (BVVec 64 sz #())
        (genBVVec 64 sz #() (\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()));
--}
-
--- Build a LetRecType for a dependent function type of 1 argument
-lrtFromPi1 : (A:sort 0) -> (B:A -> sort 0) -> LetRecType;
-lrtFromPi1 A B = LRT_FunDep A (\ (a:A) -> LRT_SpecM (LRT_Type (B a)));
-
-mallocLRT : LetRecType;
-mallocLRT = lrtFromPi1 (Vec 64 Bool) (\ (sz:Vec 64 Bool) -> BVVec 64 sz #());
-
-mallocSpec : SpecDef VoidEv mallocLRT;
-mallocSpec =
-  simpleSpecDef VoidEv mallocLRT
-    (\ (stk':FunStack) (sz:Vec 64 Bool) ->
-       retS VoidEv stk' (BVVec 64 sz #())
-         (genBVVec 64 sz #() (\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ())));
