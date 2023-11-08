@@ -4055,39 +4055,45 @@ N.B: The following commands must first be enabled using `enable_experimental`.
 
 SAW contains a bisimulation prover to prove that two terms simulate each other.
 This prover allows users to prove that two terms executing in lockstep satisfy
-some relation over the state of each circuit and their outputs.  This type of
+some relations over the state of each circuit and their outputs.  This type of
 proof is useful in demonstrating the eventual equivalence of two circuits, or
 of a circuit and a functional specification.  SAW enables these proofs with the
 experimental `prove_bisim` command:
 
 ~~~~
-prove_bisim : ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult
+prove_bisim : ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel BisimTheorem
 ~~~~
 
-When invoking `prove_bisim strat relation lhs rhs`, the arguments represent the
-following:
+When invoking `prove_bisim strat theorems srel orel lhs rhs`, the arguments
+represent the following:
 
 1. `strat`: A proof strategy to use during verification.
-2. `relation`: A relation between `lhs` and `rhs`.  This relation must have the
-   type `(lhsState, output) -> (rhsState, output) -> Bit`. The relation's first
-   argument is a pair consisting of `lhs`'s state and output following
+2. `theorems`: A list of already proven bisimulation theorems.
+3. `srel`: A state relation between `lhs` and `rhs`.  This relation must have
+   the type `lhsState -> rhsState -> Bit`. The relation's first argument is
+   `lhs`'s state prior to execution. The relation's second argument is `rhs`'s
+   state prior to execution. `srel` then returns a `Bit` indicating whether
+   the two arguments satisfy the bisimulation's state relation.
+4. `orel`: An output relation between `lhs` and `rhs`.  This relation must have
+   the type `(lhsState, output) -> (rhsState, output) -> Bit`. The relation's
+   first argument is a pair consisting of `lhs`'s state and output following
    execution. The relation's second argument is a pair consisting of `rhs`'s
-   state and output following execution. `relation` then then returns a `Bit`
-   indicating whether the two arguments satisfy the bisimulation relation. That
-   is, whether the terms simulate each other.
-3. `lhs`: A term that simulates `rhs`. `lhs` must have the type
+   state and output following execution. `orel` then returns a `Bit` indicating
+   whether the two arguments satisfy the bisimulation's output relation.
+5. `lhs`: A term that simulates `rhs`. `lhs` must have the type
    `(lhsState, input) -> (lhsState, output)`.  The first argument to `lhs` is a
    tuple containing the internal state of `lhs`, as well as the input to `lhs`.
    `lhs` returns a tuple containing its internal state after execution, as well
    as its output.
-4. `rhs`: A term that simulates `lhs`. `rhs` must have the type
+6. `rhs`: A term that simulates `lhs`. `rhs` must have the type
    `(rhsState, input) -> (rhsState, output)`.  The first argument to `rhs` is a
    tuple containing the internal state of `rhs`, as well as the input to `rhs`.
    `rhs` returns a tuple containing its internal state after execution, as well
    as its output.
 
-`prove_bisim` returns a `ProofResult` indicating whether `lhs` and `rhs` are
-bisimilar, given the relation `relation`.
+On success, `prove_bisim` returns a `BisimTheorem` that can be used in future
+bisimulation proofs to enable compositional bisimulation proofs.  On failure,
+`prove_bisim` will abort.
 
 ## Bisimulation Example
 
@@ -4155,22 +4161,38 @@ is the result of the function's computation.
 It computes the logical AND directly on the function's inputs using Cryptol's
 `(&&)` operator.
 
+Next, we define a state relation over `andImp` and `andSpec`:
+
+~~~~
+andStateRel : andState -> () -> Bit
+andStateRel _ () = True
+~~~~
+
+`andStateRel` takes two arguments:
+
+1. An `andState` for `andImp`.
+2. An empty state (`()`) for `andSpec`.
+
+`andStateRel` returns a `Bit` indicating whether the relation is satisified.  In
+this case, `andStateRel` always returns `True` because `andSpec` is stateless
+and therefore the state relation permits `andImp` to accept any state.
+
 Lastly, we define a relation over `andImp` and `andSpec`:
 
 ~~~~
-andRel : (andState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
-andRel (s, (impReady, impO)) ((), (_, specO)) =
+andOutputRel : (andState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+andOutputRel (s, (impReady, impO)) ((), (_, specO)) =
   if impReady then impO == specO else True
 ~~~~
 
-`andRel` takes two arguments:
+`andOutputRel` takes two arguments:
 
 1. A return value from `andImp`. Specifically, a pair consisting of an
    `andState` and a pair containing a ready bit and result of the logical AND.
 2. A return value from `andSpec`. Specifically, a pair consisting of an empty
    state `()` and a pair containing a ready bit and result of the logical AND.
 
-`andRel` returns a `Bit` indicating whether the relation is satisfied.  It
+`andOutputRel` returns a `Bit` indicating whether the relation is satisfied.  It
 considers the relation satisfied in two ways:
 
 1. If `andImp`'s ready bit is set, the relation is satisfied if the output
@@ -4188,12 +4210,14 @@ terms are bisimilar--by using `prove_bisim`:
 import "And.cry";
 enable_experimental;
 
-res <- prove_bisim z3 {{ andRel }} {{ andImp }} {{ andSpec }};
-print res;
+and_bisim <- prove_bisim z3 [] {{ andStateRel }} {{ andOutputRel }} {{ andImp }} {{ andSpec }};
 ~~~~
 
-Upon running this script, SAW prints `Valid` indicating that `andImp` and
-`andSpec` are bisimilar, given the relation `andRel`.
+Upon running this script, SAW prints:
+
+~~~~
+Successfully proved bisimulation between andImp and andSpec
+~~~~
 
 ### Building a NAND gate
 
@@ -4213,7 +4237,7 @@ result:
 nandImp : (nandState, (Bit, Bit)) -> (nandState, (Bit, Bit))
 nandImp x = (s, (andReady, ~andRes))
   where
-    (s ,(andReady, andRes)) = andImp x
+    (s, (andReady, andRes)) = andImp x
 ~~~~
 
 Note that `nandImp` is careful to preserve the ready status of `andImp`.
@@ -4230,41 +4254,110 @@ nandSpec (_, (x, y)) = ((), (True, ~ (andSpec ((), (x, y))).1.1))
 As with `andSpec`, `nandSpec` is pure and computes its result in a single
 cycle.
 
-Lastly, we define a relation indicating that `nandImp` and `nandSpec` produce
-equivalent results once `nandImp`'s ready bit is `1`:
+Next, we define a state relation over `nandImp` and `nandSpec`:
 
 ~~~~
-nandRel : (nandState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
-nandRel (s, (impReady, impO)) ((), (_, specO)) =
+nandStateRel : andState -> () -> Bit
+nandStateRel _ () = True
+~~~~
+
+As with `andStateRel`, this state relation is always `True` because `nandSpec`
+is stateless.
+
+Lastly, we define an output relation indicating that `nandImp` and `nandSpec`
+produce equivalent results once `nandImp`'s ready bit is `1`:
+
+~~~~
+nandOutputRel : (nandState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+nandOutputRel (s, (impReady, impO)) ((), (_, specO)) =
   if impReady then impO == specO else True
 ~~~~
 
 To prove that `nandImp` and `nandSpec` are bisimilar, we again use
-`prove_bisim`:
+`prove_bisim`. This time however, we can reuse the bisimulation proof for the
+AND gate by including it in the `theorems` paramter for `prove_bisim`:
 
 ~~~~
-res2 <- prove_bisim z3 {{ nandRel }} {{ nandImp }} {{ nandSpec }};
-print res2;
+prove_bisim z3 [and_bisim] {{ nandStateRel }} {{ nandOutputRel }} {{ nandImp }} {{ nandSpec }};
 ~~~~
 
-Upon running this portion of the script, SAW prints `Valid` confirming that the
-two terms are bisimilar, given the relation `nandRel`.
+Upon running this script, SAW prints:
 
-## Understanding the proof goal
+~~~~
+Successfully proved bisimulation between nandImp and nandSpec
+~~~~
+
+## Understanding the proof goals
 
 While not necessary for simple proofs, more advanced proofs may require
-inspecting the proof goal.  `prove_bisim` generates and attempts to solve the
-proof goal:
+inspecting proof goals.  `prove_bisim` generates and attempts to solve the
+following proof goals:
 
 ~~~~
-forall s1 s2 in out1 out2.
-    relation (s1, out1) (s2, out2) -> relation (lhs (s1, in)) (rhs (s2, in))
+OUTPUT RELATION THEOREM:
+  forall s1 s2 in.
+    srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))
+
+STATE RELATION THEOREM:
+  forall s1 s2 out1 out2.
+    orel (s1, out1) (s2, out2) -> srel s1 s2
 ~~~~
 
-where the variables in the `forall` are:
+where the variables in the `forall`s are:
 
 * `s1`: Initial state for `lhs`
 * `s2`: Initial state for `rhs`
 * `in`: Input value to `lhs` and `rhs`
 * `out1`: Initial output value for `lhs`
 * `out2`: Initial output value for `rhs`
+
+The `STATE RELATION THEOREM` verifies that the output relation properly captures
+the guarantees of the state relation.  The `OUTPUT RELATION THEOREM` verifies
+that if `lhs` and `rhs` are executed with related states, then the result of
+that execution is also related.  These two theorems together guarantee that the
+terms simulate each other.
+
+When using composition, `prove_bisim` also generates and attempts to solve
+the proof goal below for any successfully applied `BisimTheorem` in the
+`theorems` list:
+
+~~~~
+COMPOSITION SIDE CONDITION:
+  forall g_lhs_s g_rhs_s.
+    g_srel g_lhs_s g_rhs_s -> f_srel f_lhs_s f_rhs_s
+    where
+      f_lhs_s = extract_inner_state g_lhs g_lhs_s f_lhs
+      f_rhs_s = extract_inner_state g_rhs g_rhs_s f_rhs
+~~~~
+
+where `g_lhs` is an outer term containing a call to an inner term `f_lhs`
+represented by a `BisimTheorem` and `g_rhs` is an outer term containing a call
+to an inner term `f_rhs` represented by the same `BisimTheorem`. The variables
+in `COMPOSITION SIDE CONDITION` are:
+
+* `extract_inner_state x x_s y`: A helper function that takes an outer term `x`, an
+  outer state `x_s`, and an inner term `y`, and returns the inner state of `x_s`
+  that `x` passes to `y`.
+* `g_lhs_s`: The state for `g_lhs`
+* `g_rhs_s`: The state for `g_rhs`
+* `g_srel`: The state relation for `g_lhs` and `g_rhs`
+* `f_srel`: The state relation for `f_lhs` and `f_rhs`
+* `f_lhs_s`: The state for `f_lhs`, as represented in `g_lhs_s` (extracted using
+  `extract_inner_state`).
+* `f_rhs_s`: The state for `f_rhs`, as represented in `g_rhs_s` (extracted using
+  `extract_inner_state`).
+
+The `COMPOSITION SIDE CONDITION` exists to verify that the terms in the
+bisimulation relation properly set up valid states for subterms they contain.
+
+## Limitiations
+
+For now, the `prove_bisim` command has a couple limitations:
+
+* `lhs` and `rhs` must be named functions.  This is because `prove_bisim` uses
+  these names to perform substitution when making use of compositionality.
+* Each subterm present in the list of bisimulation theorems already
+  proven may be invoked at most once in `lhs` or `rhs`.  That is, if some
+  function `g_lhs` calls `f_lhs`, and `prove_bisim` is invoked with a
+  `BisimTheorem` proving that `f_lhs` is bisimilar to `f_rhs`, then `g_lhs` may
+  call `f_lhs` at most once.

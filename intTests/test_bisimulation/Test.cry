@@ -20,6 +20,10 @@ f2_bad_input_type (ctr, inp) = (ctr+1, (drop inp)+(drop ctr))
 f2_bad_output_type : (S2, [8]) -> (S2, [9])
 f2_bad_output_type (ctr, inp) = (ctr+1, zext (inp+(drop ctr)))
 
-// Bisimulation relation for f1 and f2
-rel : (S1, [8]) -> (S2, [8]) -> Bit
-rel (s1, o1) (s2, o2) = s1 == drop s2 /\ o1 == o2
+// Output bisimulation relation for f1 and f2
+orel : (S1, [8]) -> (S2, [8]) -> Bit
+orel (s1, o1) (s2, o2) = s1 == drop s2 /\ o1 == o2
+
+// State bisimulation relation for f1 and f2
+srel : S1 -> S2 -> Bit
+srel s1 s2 = s1 == drop s2
