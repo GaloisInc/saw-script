@@ -103,14 +103,14 @@ heapster_define_rust_type env "pub enum TrueEnum { Foo, Bar, Baz }";
 // Opaque type for Vec<T>
 heapster_define_opaque_llvmshape env "Vec" 64
   "T:llvmshape 64" "24"
-  "\\ (T:TpDesc) -> List (tpElem T)"
-  "ListDesc (Tp_Var 1)";
+  "\\ (T:TpDesc) -> ListDescType T"
+  "ListDesc";
 
 // Opaque type for HashMap<T,U>
 heapster_define_opaque_llvmshape env "HashMap" 64
   "T:llvmshape 64, U:llvmshape 64" "56"
-  "\\ (T:TpDesc) (U:TpDesc) -> List (tpElem T * tpElem U)"
-  "ListDesc (Tp_Pair (Tp_Var 2) (Tp_Var 1))";
+  "\\ (T:TpDesc) (U:TpDesc) -> ListDescType (Tp_Pair T U)"
+  "Tp_TpSubst ListDesc (Tp_Pair (Tp_Var 1) (Tp_Var 0))";
 
 // BinTree<X> type
 heapster_define_rust_type env
@@ -256,7 +256,7 @@ heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
   \ arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
   \ arg2:eq(llvmword(len)) -o \
   \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
-  "\\ (X:TpDesc) (len:Vec 64 Bool) (x:tpElem X) -> \
+  "\\ (X:TpDesc) (len:Vec 64 Bool) (x:tpElem VoidEv X) -> \
       \ retS VoidEv #() ()";
 
 // Box<List20<u64>>::clone
@@ -543,15 +543,13 @@ heapster_typecheck_fun_rename env elim_sum_u64_u64_sym "elim_sum_u64_u64"
 
 // MixedStruct::get_i1
 mixed_struct_get_i1 <- heapster_find_symbol env "11MixedStruct6get_i1";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env mixed_struct_get_i1 "MixedStruct_get_i1"
-//   "<'a> fn (m:&'a MixedStruct) -> u64";
+heapster_typecheck_fun_rename env mixed_struct_get_i1 "MixedStruct_get_i1"
+  "<'a> fn (m:&'a MixedStruct) -> u64";
 
 // MixedStruct::get_i2
 mixed_struct_get_i2 <- heapster_find_symbol env "11MixedStruct6get_i2";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env mixed_struct_get_i2 "MixedStruct_get_i2"
-//   "<'a> fn (m:&'a MixedStruct) -> u64";
+heapster_typecheck_fun_rename env mixed_struct_get_i2 "MixedStruct_get_i2"
+  "<'a> fn (m:&'a MixedStruct) -> u64";
 
 // MixedStruct::fmt
 mixed_struct_fmt <- heapster_find_trait_method_symbol env
@@ -567,32 +565,28 @@ cycle_true_enum_sym <- heapster_find_symbol env "15cycle_true_enum";
 
 TrueEnum__fmt_sym <- heapster_find_trait_method_symbol env
     "core::fmt::Display::fmt<TrueEnum>";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env TrueEnum__fmt_sym "TrueEnum__fmt"
-//   "<'a, 'b> fn (&'a TrueEnum, f: &'b mut fmt::Formatter) -> fmt::Result";
+heapster_typecheck_fun_rename env TrueEnum__fmt_sym "TrueEnum__fmt"
+  "<'a, 'b> fn (&'a TrueEnum, f: &'b mut fmt::Formatter) -> fmt::Result";
 
 // list_is_empty
 list_is_empty_sym <- heapster_find_symbol env "13list_is_empty";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty"
-//   "<'a> fn (l: &'a LList<u64>) -> bool";
+heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty"
+  "<'a> fn (l: &'a LList<u64>) -> bool";
 //heapster_typecheck_fun_rename env list_is_empty_sym "list_is_empty"
 //  "(rw:rwmodality).arg0:ListPerm<fieldsh(int64<>),8,rw,always> -o ret:int1<>";
 
 // list_head
 list_head_sym <- heapster_find_symbol env "9list_head";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list_head_sym "list_head"
-//   "<'a> fn (l: &'a LList<u64>) -> Box<Sum<u64,()>>";
+heapster_typecheck_fun_rename env list_head_sym "list_head"
+  "<'a> fn (l: &'a LList<u64>) -> Box<Sum<u64,()>>";
 //heapster_typecheck_fun_rename env list_head_sym "list_head"
 //  "(rw:rwmodality). arg0:LList<fieldsh(int64<>),8,rw,always> -o \
 //                  \ ret:memblock(W,0,16,Result<fieldsh(int64<>),emptysh>)";
 
 // list_head_impl
 list_head_impl_sym <- heapster_find_symbol env "14list_head_impl";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl"
-//   "<'a> fn (l: &'a LList<u64>) -> Result<u64,()>";
+heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl"
+  "<'a> fn (l: &'a LList<u64>) -> Result<u64,()>";
 //heapster_typecheck_fun_rename env list_head_impl_sym "list_head_impl"
 //  "(rw:rwmodality). arg0:LList<fieldsh(int64<>),8,rw,always> -o \
 //                  \ ret:(struct(eq(llvmword(0)), exists z:bv 64. eq(llvmword(z)))) or \
@@ -600,39 +594,34 @@ list_head_impl_sym <- heapster_find_symbol env "14list_head_impl";
 
 // list64_is_empty
 list64_is_empty_sym <- heapster_find_symbol env "15list64_is_empty";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list_is_empty_sym "list64_is_empty"
-//   "<'a> fn (l: &'a List64<>) -> bool";
+heapster_typecheck_fun_rename env list_is_empty_sym "list64_is_empty"
+  "<'a> fn (l: &'a List64<>) -> bool";
 
 // box_list64_clone
 box_list64_clone_sym <- heapster_find_symbol env "16box_list64_clone";
-// FIXME: Get this working again
-// heapster_assume_fun_rename_prim env box_list64_clone_sym "box_list64_clone"
-//   "<'a> fn(x:&'a Box<List64>) -> Box<List64>";
+heapster_assume_fun_rename_prim env box_list64_clone_sym "box_list64_clone"
+  "<'a> fn(x:&'a Box<List64>) -> Box<List64>";
 
 // list64_clone
 list64_clone_sym <- heapster_find_symbol env "12list64_clone";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list64_clone_sym "list64_clone"
-//   "<'a> fn (x:&'a List64) -> List64";
+heapster_typecheck_fun_rename env list64_clone_sym "list64_clone"
+  "<'a> fn (x:&'a List64) -> List64";
 
 // list64_tail
 list64_tail_sym <- heapster_find_symbol env "11list64_tail";
-// FIXME: Get this working again
+// FIXME: get this working again
 // heapster_typecheck_fun_rename env list64_tail_sym "list64_tail"
 //   "<> fn (l:List64) -> Option<List64>";
 
 // list64_head_mut
 list64_head_mut_sym <- heapster_find_symbol env "15list64_head_mut";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list64_head_mut_sym "list64_head_mut"
-//   "<'a> fn (l:&'a mut List64) -> Option<&'a mut u64>";
+heapster_typecheck_fun_rename env list64_head_mut_sym "list64_head_mut"
+  "<'a> fn (l:&'a mut List64) -> Option<&'a mut u64>";
 
 // list64_find_mut
 list64_find_mut_sym <- heapster_find_symbol env "15list64_find_mut";
-// FIXME: Get this working again
-// heapster_typecheck_fun_rename env list64_find_mut_sym "list64_find_mut"
-//   "<'a> fn (x:u64, l:&'a mut List64) -> Option<&'a mut u64>";
+heapster_typecheck_fun_rename env list64_find_mut_sym "list64_find_mut"
+  "<'a> fn (x:u64, l:&'a mut List64) -> Option<&'a mut u64>";
 
 /*
 hash_map_insert_gt_to_le_sym <- heapster_find_symbol env "hash_map_insert_gt_to_le";
