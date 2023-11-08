@@ -6196,7 +6196,8 @@ instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (TypedRet tops rets ps) OpenTerm where
   translate (mbMatch -> [nuMP| TypedRet Refl mb_rets mb_rets_ns mb_perms |]) =
-    do let perms =
+    do ev <- infoEvType <$> ask
+       let perms =
              mbMap2
              (\rets_ns ps -> varSubst (permVarSubstOfNames rets_ns) ps)
              mb_rets_ns mb_perms
@@ -6204,7 +6205,9 @@ instance PermCheckExtC ext exprExt =>
        rets_trans <- translate mb_rets
        let rets_prxs = cruCtxProxies $ mbLift mb_rets
        rets_ns_trans <- translate mb_rets_ns
-       sigmaTransM "r" rets_trans
+       ret_tp <- returnTypeM
+       retSOpenTerm ev ret_tp <$>
+         sigmaTransM "r" rets_trans
          (flip inExtMultiTransM $
           translate $ mbCombine rets_prxs mb_perms)
          rets_ns_trans (itiPermStack <$> ask)
@@ -6768,5 +6771,6 @@ translateIndTypeFun sc env ctx d =
   do args_tms <- transTerms <$> infoCtx <$> ask
      let ks = snd $ translateCruCtx ctx
      return $ applyGlobalOpenTerm "SpecM.tpElemEnv"
-       [tpEnvOpenTerm (zip ks args_tms),
+       [evTypeTerm (permEnvEventType env),
+        tpEnvOpenTerm (zip ks args_tms),
         ctorOpenTerm "SpecM.Tp_Ind" [d]]
