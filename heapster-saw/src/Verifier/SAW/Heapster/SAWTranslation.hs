@@ -3570,6 +3570,16 @@ inEmptyEnvImpTransM =
               ImpTransInfo { itiExprCtx = MNil, itiPermCtx = MNil,
                              itiPermStack = MNil, itiPermStackVars = MNil, .. })
 
+-- | Run an implication translation computation with no primary permissions on
+-- any of the variables
+withEmptyPermsImpTransM :: ImpTransM ext blocks tops rets ps ctx a ->
+                           ImpTransM ext blocks tops rets ps ctx a
+withEmptyPermsImpTransM =
+  withInfoM (\(ImpTransInfo {..}) ->
+              ImpTransInfo {
+                itiPermCtx = RL.map (const PTrans_True) itiExprCtx,
+                .. })
+
 -- | Get most recently bound variable
 getTopVarM :: ImpTransM ext blocks tops rets ps (ctx :> tp) (ExprTrans tp)
 getTopVarM = (\(_ :>: p) -> p) <$> itiExprCtx <$> ask
@@ -5972,12 +5982,8 @@ translateCallEntry nm entry_trans mb_tops mb_args mb_ghosts =
          -- Otherwise, continue translating with the target entrypoint, with all
          -- the current expressions free but with only those permissions on top
          -- of the stack
-         inEmptyEnvImpTransM $ inCtxTransM ectx $
-         do perms_trans <- translate $ typedEntryPermsIn entry
-            withPermStackM
-              (const $ RL.members ectx)
-              (const $ typeTransF perms_trans $ transTerms pctx)
-              (translate $ _mbBinding $ typedEntryBody entry)
+         withEmptyPermsImpTransM $ translate $
+         fmap (\s -> varSubst s $ _mbBinding $ typedEntryBody entry) mb_s
 
 instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
@@ -6300,11 +6306,11 @@ data SomeTypedEntry ext blocks tops rets =
   forall ghosts args.
   SomeTypedEntry (TypedEntry TransPhase ext blocks tops rets args ghosts)
 
--- | Get all entrypoints in a block map that will be translated to function
--- indices, which is all entrypoints with in-degree > 1
-typedBlockIxEntries :: TypedBlockMap TransPhase ext blocks tops rets ->
-                       [SomeTypedEntry ext blocks tops rets]
-typedBlockIxEntries =
+-- | Get all entrypoints in a block map that will be translated to recursive
+-- functions, which is all entrypoints with in-degree > 1
+typedBlockRecEntries :: TypedBlockMap TransPhase ext blocks tops rets ->
+                        [SomeTypedEntry ext blocks tops rets]
+typedBlockRecEntries =
   concat . RL.mapToList (map (\(Some entry) ->
                                SomeTypedEntry entry)
                          . filter (anyF typedEntryHasMultiInDegree)
@@ -6312,12 +6318,12 @@ typedBlockIxEntries =
 
 -- | Fold a function over each 'TypedEntry' in a 'TypedBlockMap' that
 -- corresponds to a letrec-bound variable
-foldBlockMapIx ::
+foldBlockMapRec ::
   (forall args ghosts.
    TypedEntry TransPhase ext blocks tops rets args ghosts -> b -> b) ->
   b -> TypedBlockMap TransPhase ext blocks tops rets -> b
-foldBlockMapIx f r =
-  foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockIxEntries
+foldBlockMapRec f r =
+  foldr (\(SomeTypedEntry entry) -> f entry) r . typedBlockRecEntries
 
 -- | Map a function over each 'TypedEntry' in a 'TypedBlockMap' that
 -- corresponds to a letrec-bound variable
@@ -6326,7 +6332,7 @@ mapBlockMapRecs ::
    TypedEntry TransPhase ext blocks tops rets args ghosts -> b) ->
   TypedBlockMap TransPhase ext blocks tops rets -> [b]
 mapBlockMapRecs f =
-  map (\(SomeTypedEntry entry) -> f entry) . typedBlockIxEntries
+  map (\(SomeTypedEntry entry) -> f entry) . typedBlockRecEntries
 
 -- | Build the type of the translation of a 'TypedEntry' to a function. This
 -- type will pi-abstract over the real and ghost arguments, but have the
