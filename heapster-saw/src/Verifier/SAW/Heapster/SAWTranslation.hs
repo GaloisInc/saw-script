@@ -336,6 +336,11 @@ varKindExpr d ix = applyGlobalOpenTerm "SpecM.varKindExpr" [d,natOpenTerm ix]
 constKindExpr :: OpenTerm -> OpenTerm -> OpenTerm
 constKindExpr d e = applyGlobalOpenTerm "SpecM.constKindExpr" [d,e]
 
+-- | Build the type description @Tp_Ind T@ that represents a recursively-defined
+-- inductive type that unfolds to @[Tp_Ind T/x]T@
+indTpDesc :: OpenTerm -> OpenTerm
+indTpDesc d = ctorOpenTerm "SpecM.Tp_Ind" [d]
+
 -- | Build the type description @Tp_Subst T K e@ that represents an explicit
 -- substitution of expression @e@ of kind @K@ into type description @T@
 substTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
@@ -350,9 +355,15 @@ substTpDescMulti _ _ _ =
   panic "substTpDescMulti" ["Mismatched number of kinds versus expressions"]
 
 -- | Build the type description that performs 0 or more explicit substitutions
--- from a type description given by an identifier
+-- into a type description given by an identifier
 substIdTpDescMulti :: Ident -> [OpenTerm] -> [OpenTerm] -> OpenTerm
 substIdTpDescMulti i = substTpDescMulti (globalOpenTerm i)
+
+-- | Build the type description that performs 0 or more explicit substitutions
+-- into an inductive type description @Tp_Ind T@ where the body @T@ is given by
+-- an identifier
+substIndIdTpDescMulti :: Ident -> [OpenTerm] -> [OpenTerm] -> OpenTerm
+substIndIdTpDescMulti i = substTpDescMulti (indTpDesc (globalOpenTerm i))
 
 -- | Map from type description @T@ to the type @T@ describes
 tpElemTypeOpenTerm :: OpenTerm -> OpenTerm
@@ -1636,7 +1647,7 @@ instance TransInfo info =>
              args_terms <- transTerms <$> translate args
              args_ds <- descTransM $ translateDescs args
              return $
-               ETrans_Shape [substIdTpDescMulti (mbLift desc_id) k_ds args_ds]
+               ETrans_Shape [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
                [applyGlobalOpenTerm (mbLift tp_id) args_terms]
         [nuMP| RecShapeBody _ tp_id desc_id |] ->
           do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
@@ -1819,7 +1830,7 @@ instance TranslateDescs (PermExpr a) where
         [nuMP| RecShapeBody _ _ desc_id |] ->
           do let (_, k_ds) = translateCruCtx (mbLift $ fmap namedShapeArgs nmsh)
              args_ds <- translateDescs args
-             return [substIdTpDescMulti (mbLift desc_id) k_ds args_ds]
+             return [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
     [nuMP| PExpr_EqShape _ _ |] -> return []
     [nuMP| PExpr_PtrShape _ _ sh |] -> translateDescs sh
     [nuMP| PExpr_FieldShape fsh |] -> translateDescs fsh
@@ -3077,7 +3088,7 @@ instance TranslateDescs (ValuePerm a) where
            Just (NamedPerm_Opaque op) ->
              return [substIdTpDescMulti (opaquePermTransDesc op) k_ds args_ds]
            Just (NamedPerm_Rec rp) ->
-             return [substIdTpDescMulti (recPermTransDesc rp) k_ds args_ds]
+             return [substIndIdTpDescMulti (recPermTransDesc rp) k_ds args_ds]
            Just (NamedPerm_Defined dp) ->
              translateDescs (mbMap2 (unfoldDefinedPerm dp) args off)
            Nothing -> panic "translate" ["Unknown permission name!"]
@@ -4770,12 +4781,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          let args_ctx = mbLift $ fmap namedShapeArgs nmsh'
          d <- substNamedIndTpDesc (mbLift mb_sh_id) args_ctx mb_args
          ev <- infoEvType <$> ask
-         withPermStackTopTermsM id
-           (\ts (pctx :>: _) ->
-             pctx :>:
-             typeTransF ttrans [applyGlobalOpenTerm "SpecM.foldTpElem"
-                                [evTypeTerm ev, d, tupleOpenTerm' ts]])
-           m
+         unfolded_ptrans <- getTopPermM
+         let folded_m = applyGlobalOpenTerm "SpecM.foldTpElem"
+               [evTypeTerm ev, d, transTupleTerm unfolded_ptrans]
+         bindTransM folded_m ttrans "ind_val" $ \ptrans ->
+           withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans) m
 
   -- Intro for a defined named shape (the other case) is a no-op
     | [nuMP| DefinedShapeBody _ |] <- mbMatch $ fmap namedShapeBody nmsh ->
@@ -4930,12 +4940,11 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let d_id = mbLift $ fmap recPermTransDesc mb_rp
        d <- substNamedIndTpDesc d_id args_ctx mb_args
        ev <- infoEvType <$> ask
-       withPermStackTopTermsM id
-         (\ts (pctx :>: _) ->
-           pctx :>:
-           typeTransF ttrans [applyGlobalOpenTerm "SpecM.foldTpElem"
-                              [evTypeTerm ev, d, tupleOpenTerm' ts]])
-         m
+       unfolded_ptrans <- getTopPermM
+       let folded_m = applyGlobalOpenTerm "SpecM.foldTpElem"
+             [evTypeTerm ev, d, transTupleTerm unfolded_ptrans]
+       bindTransM folded_m ttrans "ind_val" $ \ptrans ->
+         withPermStackM id (\(pctx :>: _) -> pctx :>: ptrans) m
 
   [nuMP| SImpl_UnfoldNamed _ (NamedPerm_Rec mb_rp) mb_args _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
@@ -6168,7 +6177,6 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
     withKnownNat ?ptrWidth $
     inExtTransM ETrans_LLVM $
     do env <- infoEnv <$> ask
-       ev <- infoEvType <$> ask
        let w :: NatRepr w = knownRepr
        case lookupGlobalSymbol env (mbLift gsym) w of
          Nothing ->
@@ -6776,4 +6784,4 @@ translateIndTypeFun sc env ctx d =
      let ks = snd $ translateCruCtx ctx
      return $ applyGlobalOpenTerm "SpecM.tpElemEnv"
        [evTypeTerm (permEnvEventType env), tpEnvOpenTerm (zip ks args_tms),
-        ctorOpenTerm "SpecM.IsData" [], ctorOpenTerm "SpecM.Tp_Ind" [d]]
+        ctorOpenTerm "SpecM.IsData" [], indTpDesc d]

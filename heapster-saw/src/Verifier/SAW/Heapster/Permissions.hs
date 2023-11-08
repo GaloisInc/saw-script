@@ -667,8 +667,9 @@ data NamedShapeBody b args w where
   -- | A recursive shape body has a one-step unfolding to a shape, which can
   -- refer to the shape itself via the last bound variable. It also has two
   -- identifiers, one for a function from translations of the @args@ to the type
-  -- to use as the translation of the shape applied to @args@ and one for
-  -- a type description with @args@ as free variables.
+  -- to use as the translation of the shape applied to @args@ and one for a type
+  -- description with @args@ plus a variable for the shape itself (for
+  -- recursively referring to itself) as free variables.
   RecShapeBody :: Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
                   Ident -> Ident -> NamedShapeBody 'True args w
 
