@@ -283,23 +283,42 @@ constructExpandedSetupValue cc sc = go
                     ]
         StructShape ty _ fldShps ->
           case ty of
+            Mir.TyAdt adtName _ _ ->
+              case col ^. Mir.adts . at adtName of
+                Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
+                  case kind of
+                    Mir.Struct -> do
+                      flds <- goFlds pfx fldShps
+                      pure $ MS.SetupStruct adt flds
+                    _ ->
+                      panic "constructExpandedSetupValue"
+                            [ "Expected struct, encountered " ++
+                              show kind
+                            ]
+                Nothing ->
+                  adt_not_found_panic "StructShape" adtName
+            _ ->
+              non_adt_type_panic "StructShape" ty
+        TransparentShape ty shp' ->
+          case ty of
             Mir.TyAdt adtName _ _ -> do
               case col ^. Mir.adts . at adtName of
-                Just adt -> do
-                  flds <- goFlds pfx fldShps
-                  pure $ MS.SetupStruct adt flds
+                Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
+                  case kind of
+                    Mir.Struct -> do
+                      val <- go pfx shp'
+                      pure $ MS.SetupStruct adt [val]
+                    Mir.Enum{} ->
+                      fail "`repr(transparent)` enums not currently supported"
+                    Mir.Union ->
+                      panic "constructExpandedSetupValue"
+                            [ "Unexpected `repr(transparent)` union:"
+                            , show adtName
+                            ]
                 Nothing ->
-                  panic "constructExpandedSetupValue"
-                        [ "Could not find ADT in StructShape:"
-                        , show adtName
-                        ]
+                  adt_not_found_panic "TransparentShape" adtName
             _ ->
-              panic "constructExpandedSetupValue"
-                    [ "StructShape with non-TyAdt type:"
-                    , show (PP.pretty ty)
-                    ]
-        TransparentShape _ shp' ->
-          go pfx shp'
+              non_adt_type_panic "TransparentShape" ty
         RefShape ty _ _ _ ->
           X.throwM $ MIRFreshExpandedValueUnsupportedType ty
         SliceShape ty _ _ _ ->
@@ -319,6 +338,20 @@ constructExpandedSetupValue cc sc = go
             ReqField shp' -> go pfx' shp'
             OptField shp' -> go pfx' shp')
         fldShps
+
+    adt_not_found_panic :: String -> Mir.DefId -> a
+    adt_not_found_panic shapeName adtName =
+      panic "constructExpandedSetupValue"
+            [ "Could not find ADT in " ++ shapeName ++ ":"
+            , show adtName
+            ]
+
+    non_adt_type_panic :: String -> Mir.Ty -> a
+    non_adt_type_panic shapeName ty =
+      panic "constructExpandedSetupValue"
+            [ shapeName ++ " with non-TyAdt type:"
+            , show (PP.pretty ty)
+            ]
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
