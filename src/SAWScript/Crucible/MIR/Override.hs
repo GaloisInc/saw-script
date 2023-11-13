@@ -980,10 +980,12 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
                  ]
      let innerShp = tyToShapeEq col referenceInnerMirTy referenceInnerTpr
      referentVal <- firstPointsToReferent referents
-     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes
+     v <- liftIO $ Mir.readMirRefIO bak globals iTypes
        referenceInnerTpr referenceVal
      matchArg opts sc cc spec prepost md (MIRVal innerShp v)
        referenceInnerMirTy referentVal
+  where
+    iTypes = cc ^. mccIntrinsicTypes
 
 -- | Process a "mir_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1173,6 +1175,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
   where
     colState = cc ^. mccRustModule . Mir.rmCS
     col      = colState ^. Mir.collection
+    iTypes   = cc ^. mccIntrinsicTypes
     tyenv    = MS.csAllocations cs
     nameEnv  = MS.csTypeNames cs
 
@@ -1180,9 +1183,6 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     fail_ = failure loc =<<
               mkStructuralMismatch opts cc sc cs actual expected expectedTy
     notEq = notEqual prepost opts loc cc sc cs expected actual
-
-    iTypes :: Crucible.IntrinsicTypes Sym
-    iTypes = Mir.mirIntrinsicTypes
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern

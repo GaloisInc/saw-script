@@ -1260,7 +1260,7 @@ setupCrucibleContext rm =
                             (Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $
                     Map.elems cfgMap
      let simctx0 = Crucible.initSimContext bak
-                     Mir.mirIntrinsicTypes halloc stdout
+                     intrinsics halloc stdout
                      bindings Mir.mirExtImpl
                      SAWCruciblePersonality
      let globals0 = Crucible.emptyGlobals

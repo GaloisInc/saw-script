@@ -422,7 +422,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
   where
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
-    iTypes = Mir.mirIntrinsicTypes
+    iTypes = mcc ^. mccIntrinsicTypes
 
     usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
     usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
@@ -967,7 +967,7 @@ doAlloc cc globals (Some ma) =
   do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
      let halloc = cc^.mccHandleAllocator
      let sym = backendGetSym bak
-     let iTypes = Mir.mirIntrinsicTypes
+     let iTypes = cc^.mccIntrinsicTypes
      Some tpr <- pure $ Mir.tyToRepr col (ma^.maMirType)
 
      -- Create an uninitialized `MirVector_PartialVector` of length 1 and
@@ -1026,8 +1026,9 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
                 , "Reference type: " ++ show referenceInnerTy
                 , "Referent type:  " ++ show (shapeType referentShp)
                 ]
-    Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes referenceVal referentVal
+    Mir.writeMirRefIO bak globals iTypes referenceVal referentVal
   where
+    iTypes = cc ^. mccIntrinsicTypes
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 

@@ -673,7 +673,13 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
-          let simctx = CJ.jvmSimContext bak halloc stdout jc verbosity SAWCruciblePersonality
+          -- TODO: Use crucible-jvm's jvmSimContext here (instead of manually
+          -- calling mkDelayedBindings/initSimContext), once
+          -- https://github.com/GaloisInc/crucible/issues/1128 has been fixed
+          -- upstream.
+          let bindings = CJ.mkDelayedBindings jc verbosity
+          let simctx = Crucible.initSimContext bak intrinsics halloc stdout
+                         bindings CJ.jvmExtensionImpl SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =

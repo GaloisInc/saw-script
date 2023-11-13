@@ -222,8 +222,10 @@ instance PPL.Pretty (LLVMPointsToValue arch) where
       MS.ppTypedTerm arr PPL.<+> PPL.pretty "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.pretty "]"
 
 --------------------------------------------------------------------------------
--- ** ???
+-- ** SAW LLVM intrinsics
 
+-- | The default LLVM intrinsics extended with the 'MS.GhostValue' intrinsic,
+-- which powers ghost state.
 intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
 intrinsics =
   MapF.insert
