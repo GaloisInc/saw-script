@@ -68,8 +68,21 @@ module Verifier.SAW.OpenTerm (
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm, identOpenTerm, extCnsOpenTerm,
   applyOpenTerm, applyOpenTermMulti, applyGlobalOpenTerm,
   applyPiOpenTerm, piArgOpenTerm, lambdaOpenTerm, lambdaOpenTermMulti,
-  piOpenTerm, piOpenTermMulti,
-  arrowOpenTerm, letOpenTerm, sawLetOpenTerm, list1OpenTerm,
+  piOpenTerm, piOpenTermMulti, arrowOpenTerm, letOpenTerm, sawLetOpenTerm,
+  bitvectorTypeOpenTerm, bvVecTypeOpenTerm, listOpenTerm, list1OpenTerm,
+  eitherTypeOpenTerm, sigmaTypeOpenTerm, sigmaTypeOpenTermMulti, sigmaOpenTerm,
+  sigmaOpenTermMulti, sigmaElimOpenTermMulti,
+  -- * Operations for building @SpecM@ computations
+  EventType (..), evTypeTerm, defaultSpecMEventType, unitKindDesc, bvExprKind,
+  tpDescTypeOpenTerm, kindToTpDesc, unitTpDesc, boolExprKind, boolKindDesc,
+  natExprKind, natKindDesc, bvKindDesc, tpKindDesc, pairTpDesc, tupleTpDesc,
+  sumTpDesc, bvVecTpDesc, constTpExpr, bvConstTpExpr, bvSumTpExprs,
+  bvMulTpExpr, sigmaTpDesc, sigmaTpDescMulti, arrowTpDesc, arrowTpDescMulti,
+  funTpDesc, piTpDesc, piTpDescMulti, voidTpDesc, varTpDesc, varTpExpr,
+  varKindExpr, constKindExpr, indTpDesc, substTpDesc, substTpDescMulti,
+  substIdTpDescMulti, substIndIdTpDescMulti, tpElemTypeOpenTerm,
+  substEnvTpDesc, tpEnvOpenTerm, specMTypeOpenTerm, retSOpenTerm,
+  bindSOpenTerm, errorSOpenTerm, letRecSOpenTerm, multiFixBodiesOpenTerm,
   -- * Monadic operations for building terms including 'IO' actions
   OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -84,7 +97,7 @@ module Verifier.SAW.OpenTerm (
   pairTermLike, pairTypeTermLike, pairLeftTermLike, pairRightTermLike,
   tupleTermLike, tupleTypeTermLike, projTupleTermLike,
   letTermLike, sawLetTermLike,
-  -- * Building SpecM computations
+  -- * Old approach to building SpecM computations
   SpecTerm(), defineSpecOpenTerm, lambdaPureSpecTerm, lambdaPureSpecTermMulti,
   lrtClosTypeSpecTerm, sawLetPureSpecTerm, lrtToTypeSpecTerm,
   mkBaseClosSpecTerm, mkFreshClosSpecTerm, callClosSpecTerm, applyClosSpecTerm,
@@ -476,6 +489,22 @@ sawLetOpenTerm x tp tp_ret rhs body_f =
   applyOpenTermMulti (globalOpenTerm "Prelude.sawLet")
   [tp, tp_ret, rhs, lambdaOpenTerm x tp body_f]
 
+-- | Build a bitvector type with the given length
+bitvectorTypeOpenTerm :: OpenTerm -> OpenTerm
+bitvectorTypeOpenTerm w =
+  applyGlobalOpenTerm "Prelude.Vec" [w, globalOpenTerm "Prelude.Bool"]
+
+-- | Build the SAW core type @BVVec n len d@
+bvVecTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
+bvVecTypeOpenTerm w_term len_term elem_tp =
+  applyGlobalOpenTerm "Prelude.BVVec" [w_term, len_term, elem_tp]
+
+-- | Build a SAW core term for a list with the given element type
+listOpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
+listOpenTerm tp elems =
+  foldr (\x l -> ctorOpenTerm "Prelude.Cons" [tp, x, l])
+  (ctorOpenTerm "Prelude.Nil" [tp]) elems
+
 -- | Build an 'OpenTerm' of type @List1 tp@ from 'OpenTerm's of type @tp@
 list1OpenTerm :: OpenTerm -> [OpenTerm] -> OpenTerm
 list1OpenTerm tp xs =
@@ -483,6 +512,307 @@ list1OpenTerm tp xs =
   (ctorOpenTerm "Prelude.Nil1" [tp])
   xs
 
+-- | Build the type @Either a b@ from types @a@ and @b@
+eitherTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+eitherTypeOpenTerm a b = dataTypeOpenTerm "Prelude.Either" [a,b]
+
+-- | Build the type @Sigma a (\ (x:a) -> b)@ from variable name @x@, type @a@,
+-- and type-level function @b@
+sigmaTypeOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+sigmaTypeOpenTerm x tp f =
+  dataTypeOpenTerm "Prelude.Sigma" [tp, lambdaOpenTerm x tp f]
+
+-- | Build the type @Sigma a1 (\ (x1:a1) -> Sigma a2 (\ (x2:a2) -> ...))@
+sigmaTypeOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
+                          OpenTerm
+sigmaTypeOpenTermMulti _ [] f = f []
+sigmaTypeOpenTermMulti x (tp:tps) f =
+  sigmaTypeOpenTerm x tp $ \ t ->
+  sigmaTypeOpenTermMulti x tps $ \ts -> f (t:ts)
+
+-- | Build the dependent pair @exists a (\ (x:a) -> b) x y@ whose type is given
+-- by 'sigmaTypeOpenTerm'
+sigmaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) ->
+                 OpenTerm -> OpenTerm -> OpenTerm
+sigmaOpenTerm x tp tp_f trm_l trm_r =
+  ctorOpenTerm "Prelude.exists" [tp, lambdaOpenTerm x tp tp_f, trm_l, trm_r]
+
+-- | Build the right-nested dependent pair @(x1, (x2, ...(xn, y)))@ whose type
+-- is given by 'sigmaTypeOpenTermMulti'
+sigmaOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
+                      [OpenTerm] -> OpenTerm -> OpenTerm
+sigmaOpenTermMulti _ [] _ [] trm = trm
+sigmaOpenTermMulti x (tp:tps) tp_f (trm_l:trms_l) trm_r =
+  sigmaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:))) trm_l $
+  sigmaOpenTermMulti x tps (tp_f . (trm_l:)) trms_l trm_r
+sigmaOpenTermMulti _ _ _ _ _ =
+  panic "sigmaOpenTermMulti" ["The number of types and arguments disagree"]
+
+-- | Take a nested dependent pair (of the type returned by
+-- 'sigmaTypeOpenTermMulti') and apply a function @f@ to all of its projections
+sigmaElimOpenTermMulti :: LocalName -> [OpenTerm] -> ([OpenTerm] -> OpenTerm) ->
+                          OpenTerm -> ([OpenTerm] -> OpenTerm) -> OpenTerm
+sigmaElimOpenTermMulti _ [] _ t f_elim = f_elim [t]
+sigmaElimOpenTermMulti x (tp:tps) tp_f sig f_elim =
+  let b_fun = lambdaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:)))
+      proj1 = applyGlobalOpenTerm "Prelude.Sigma_proj1" [tp, b_fun, sig]
+      proj2 = applyGlobalOpenTerm "Prelude.Sigma_proj2" [tp, b_fun, sig] in
+  sigmaElimOpenTermMulti x tps (tp_f . (proj1:)) proj2 (f_elim . (proj1:))
+
+
+--------------------------------------------------------------------------------
+-- Operations for building SpecM computations
+
+-- | A SAW core identifier that indicates an event type for the @SpecM@ monad
+newtype EventType = EventType { evTypeToIdent :: Ident }
+
+-- | Convert an 'EventType' to a SAW core term
+evTypeTerm :: EventType -> OpenTerm
+evTypeTerm = globalOpenTerm . evTypeToIdent
+
+-- | The default event type uses the @Void@ type for events
+defaultSpecMEventType :: EventType
+defaultSpecMEventType = EventType $ fromString "SpecM.VoidEv"
+
+-- | The kind description for the unit type
+unitKindDesc :: OpenTerm
+unitKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [ctorOpenTerm
+                                               "SpecM.Kind_unit" []]
+
+-- | The @ExprKind@ for the bitvector type with width @w@
+bvExprKind :: Natural -> OpenTerm
+bvExprKind w = ctorOpenTerm "SpecM.Kind_bv" [natOpenTerm w]
+
+-- | The type @TpDesc@ of type descriptions
+tpDescTypeOpenTerm :: OpenTerm
+tpDescTypeOpenTerm = dataTypeOpenTerm "SpecM.TpDesc" []
+
+-- | Convert a kind description to a type description with the @Tp_Kind@
+-- constructor
+kindToTpDesc :: OpenTerm -> OpenTerm
+kindToTpDesc d = ctorOpenTerm "SpecM.Tp_Kind" [d]
+
+-- | The type description for the unit type
+unitTpDesc :: OpenTerm
+unitTpDesc = ctorOpenTerm "SpecM.Tp_Kind" [unitKindDesc]
+
+-- | The expression kind for the Boolean type
+boolExprKind :: OpenTerm
+boolExprKind = ctorOpenTerm "SpecM.Kind_bool" []
+
+-- | The kind description for the Boolean type
+boolKindDesc :: OpenTerm
+boolKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [boolExprKind]
+
+-- | The expression kind for the Nat type
+natExprKind :: OpenTerm
+natExprKind = ctorOpenTerm "SpecM.Kind_nat" []
+
+-- | The kind description for the Nat type
+natKindDesc :: OpenTerm
+natKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [natExprKind]
+
+-- | The kind description for the type @bitvector w@
+bvKindDesc :: Natural -> OpenTerm
+bvKindDesc w = ctorOpenTerm "SpecM.Kind_Expr" [bvExprKind w]
+
+-- | The kind description for the type of type descriptions
+tpKindDesc :: OpenTerm
+tpKindDesc = ctorOpenTerm "SpecM.Kind_Tp" []
+
+-- | Build a pair type description from two type descriptions
+pairTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
+pairTpDesc d1 d2 = ctorOpenTerm "SpecM.Tp_Pair" [d1,d2]
+
+-- | Build a tuple type description from a list of type descriptions
+tupleTpDesc :: [OpenTerm] -> OpenTerm
+tupleTpDesc [] = unitTpDesc
+tupleTpDesc [d] = d
+tupleTpDesc (d : ds) = pairTpDesc d (tupleTpDesc ds)
+
+-- | Build a sum type description from two type descriptions
+sumTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
+sumTpDesc d1 d2 = ctorOpenTerm "SpecM.Tp_Sum" [d1,d2]
+
+-- | Build a type description for the type @BVVec n len d@ from a SAW core term
+-- @n@ of type @Nat@, a type expression @len@ for the length, and a type
+-- description @d@ for the element type
+bvVecTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
+bvVecTpDesc w_term len_term elem_d =
+  applyGlobalOpenTerm "SpecM.Tp_BVVec" [elem_d, w_term, len_term]
+
+-- | Build a type expression of type @TpExpr EK@ of kind description @EK@ from a
+-- type-level value of type @exprKindElem EK@
+constTpExpr :: OpenTerm -> OpenTerm -> OpenTerm
+constTpExpr k_d v = ctorOpenTerm "SpecM.TpExpr_Const" [k_d, v]
+
+-- | Build a type description expression from a bitvector value of a given width
+bvConstTpExpr :: Natural -> OpenTerm -> OpenTerm
+bvConstTpExpr w bv = constTpExpr (bvExprKind w) bv
+
+-- | Build a type expression for the bitvector sum of a list of type
+-- expressions, all of the given width
+bvSumTpExprs :: Natural -> [OpenTerm] -> OpenTerm
+bvSumTpExprs w [] = bvConstTpExpr w (natOpenTerm 0)
+bvSumTpExprs _ [bv] = bv
+bvSumTpExprs w (bv:bvs) =
+  ctorOpenTerm "SpecM.TpExpr_BinOp"
+  [bvExprKind w, bvExprKind w, bvExprKind w,
+   ctorOpenTerm "SpecM.BinOp_AddBV" [natOpenTerm w], bv, bvSumTpExprs w bvs]
+
+-- | Build a type expression for the bitvector product of two type expressions
+bvMulTpExpr :: Natural -> OpenTerm -> OpenTerm -> OpenTerm
+bvMulTpExpr w bv1 bv2 =
+  ctorOpenTerm "SpecM.TpExpr_BinOp"
+  [bvExprKind w, bvExprKind w, bvExprKind w,
+   ctorOpenTerm "SpecM.BinOp_MulBV" [natOpenTerm w], bv1, bv2]
+
+-- | Build a type description for a sigma type from a kind description for the
+-- first element and a type description with an additional free variable for the
+-- second
+sigmaTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
+sigmaTpDesc k d = ctorOpenTerm "SpecM.Tp_Sigma" [k,d]
+
+-- | Build a type description for 0 or more nested sigma types over a list of
+-- kind descriptions
+sigmaTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
+sigmaTpDescMulti [] d = d
+sigmaTpDescMulti (k:ks) d = sigmaTpDesc k $ sigmaTpDescMulti ks d
+
+-- | Build an arrow type description for left- and right-hand type descriptions
+arrowTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
+arrowTpDesc d_in d_out = ctorOpenTerm "SpecM.Tp_Arr" [d_in, d_out]
+
+-- | Build a multi-arity nested arrow type description
+arrowTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
+arrowTpDescMulti ds_in d_out = foldr arrowTpDesc d_out ds_in
+
+-- | Build the type description @Tp_Arr d1 (... (Tp_Arr dn (Tp_M d_ret)))@ for a
+-- monadic function that takes in the types described by @d1@ through @dn@ and
+-- returns the type described by @d_ret@
+funTpDesc :: [OpenTerm] -> OpenTerm -> OpenTerm
+funTpDesc ds_in d_ret =
+  arrowTpDescMulti ds_in (ctorOpenTerm "SpecM.Tp_M" [d_ret])
+
+-- | Build the type description for a pi-abstraction over a kind description
+piTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
+piTpDesc kd tpd = ctorOpenTerm "SpecM.Tp_Pi" [kd, tpd]
+
+-- | Build the type description for a multi-arity pi-abstraction over a sequence
+-- of kind descriptions, i.e., SAW core terms of type @KindDesc@
+piTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
+piTpDescMulti ks tp = foldr piTpDesc tp ks
+
+-- | The type description for the @Void@ type
+voidTpDesc :: OpenTerm
+voidTpDesc = ctorOpenTerm "SpecM.Tp_Void" []
+
+-- | Build a type description for a free deBruijn index
+varTpDesc :: Natural -> OpenTerm
+varTpDesc ix = ctorOpenTerm "SpecM.Tp_Var" [natOpenTerm ix]
+
+-- | Build a type-level expression with a given @ExprKind@ for a free variable
+varTpExpr :: OpenTerm -> Natural -> OpenTerm
+varTpExpr ek ix = ctorOpenTerm "SpecM.TpExpr_Var" [ek, natOpenTerm ix]
+
+-- | Build a kind expression of a given kind from a deBruijn index
+varKindExpr :: OpenTerm -> Natural -> OpenTerm
+varKindExpr d ix = applyGlobalOpenTerm "SpecM.varKindExpr" [d,natOpenTerm ix]
+
+-- | Build a kind expression of a given kind from an element of that kind
+constKindExpr :: OpenTerm -> OpenTerm -> OpenTerm
+constKindExpr d e = applyGlobalOpenTerm "SpecM.constKindExpr" [d,e]
+
+-- | Build the type description @Tp_Ind T@ that represents a recursively-defined
+-- inductive type that unfolds to @[Tp_Ind T/x]T@
+indTpDesc :: OpenTerm -> OpenTerm
+indTpDesc d = ctorOpenTerm "SpecM.Tp_Ind" [d]
+
+-- | Build the type description @Tp_Subst T K e@ that represents an explicit
+-- substitution of expression @e@ of kind @K@ into type description @T@
+substTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
+substTpDesc d k_d e = applyGlobalOpenTerm "SpecM.Tp_Subst" [d,k_d,e]
+
+-- | Build the type description that performs 0 or more explicit substitutions
+substTpDescMulti :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm
+substTpDescMulti d [] [] = d
+substTpDescMulti d (k_d:k_ds) (e:es) =
+  substTpDescMulti (substTpDesc d k_d e) k_ds es
+substTpDescMulti _ _ _ =
+  panic "substTpDescMulti" ["Mismatched number of kinds versus expressions"]
+
+-- | Build the type description that performs 0 or more explicit substitutions
+-- into a type description given by an identifier
+substIdTpDescMulti :: Ident -> [OpenTerm] -> [OpenTerm] -> OpenTerm
+substIdTpDescMulti i = substTpDescMulti (globalOpenTerm i)
+
+-- | Build the type description that performs 0 or more explicit substitutions
+-- into an inductive type description @Tp_Ind T@ where the body @T@ is given by
+-- an identifier
+substIndIdTpDescMulti :: Ident -> [OpenTerm] -> [OpenTerm] -> OpenTerm
+substIndIdTpDescMulti i = substTpDescMulti (indTpDesc (globalOpenTerm i))
+
+-- | Map from type description @T@ to the type @T@ describes
+tpElemTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
+tpElemTypeOpenTerm ev d =
+  applyGlobalOpenTerm "SpecM.tpElem" [evTypeTerm ev, d]
+
+-- | Apply the @tpSubst@ combinator to substitute a type-level environment
+-- (built by applying 'tpEnvOpenTerm' to the supplied list) at the supplied
+-- natural number lifting level to a type description
+substEnvTpDesc :: Natural -> [(OpenTerm,OpenTerm)] -> OpenTerm -> OpenTerm
+substEnvTpDesc n ks_elems d =
+  applyGlobalOpenTerm "SpecM.tpSubst" [natOpenTerm n,
+                                       tpEnvOpenTerm ks_elems, d]
+
+-- | Build a SAW core term for a type-level environment, i.e., a term of type
+-- @TpEnv@, from a list of kind descriptions and elements of those kind
+-- descriptions
+tpEnvOpenTerm :: [(OpenTerm,OpenTerm)] -> OpenTerm
+tpEnvOpenTerm =
+  foldr (\(k,v) env -> applyGlobalOpenTerm "SpecM.envConsElem" [k,v,env])
+  (ctorOpenTerm "Prelude.Nil" [globalOpenTerm "SpecM.TpEnvElem"])
+
+-- | Build the computation type @SpecM E A@
+specMTypeOpenTerm :: EventType -> OpenTerm -> OpenTerm
+specMTypeOpenTerm ev tp =
+  applyGlobalOpenTerm "SpecM.SpecM" [evTypeTerm ev, tp]
+
+-- | Build a @SpecM@ computation that returns a value
+retSOpenTerm :: EventType -> OpenTerm -> OpenTerm -> OpenTerm
+retSOpenTerm ev tp x =
+  applyGlobalOpenTerm "SpecM.retS" [evTypeTerm ev, tp, x]
+
+-- | Build a @SpecM@ computation using a bind
+bindSOpenTerm :: EventType -> OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm ->
+                 OpenTerm
+bindSOpenTerm ev a b m f =
+  applyGlobalOpenTerm "SpecM.bindS" [evTypeTerm ev, a, b, m, f]
+
+-- | Build a @SpecM@ error computation with the given error message
+errorSOpenTerm :: EventType -> OpenTerm -> String -> OpenTerm
+errorSOpenTerm ev ret_tp msg =
+  applyGlobalOpenTerm "SpecM.errorS"
+  [evTypeTerm ev, ret_tp, stringLitOpenTerm (pack msg)]
+
+-- | Build a @SpecM@ computation that uses @LetRecS@ to bind multiple
+-- corecursive functions in a body computation
+letRecSOpenTerm :: EventType -> [OpenTerm] -> OpenTerm -> OpenTerm ->
+                   OpenTerm -> OpenTerm
+letRecSOpenTerm ev ds ret_tp bodies body =
+  applyGlobalOpenTerm "SpecM.LetRecS"
+  [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds, ret_tp, bodies, body]
+
+-- | Build the type @MultiFixBodies E Ts@ from an event type and a list of type
+-- descriptions for @Ts@
+multiFixBodiesOpenTerm :: EventType -> [OpenTerm] -> OpenTerm
+multiFixBodiesOpenTerm ev ds =
+  applyGlobalOpenTerm "SpecM.MultiFixBodies"
+  [evTypeTerm ev, listOpenTerm tpDescTypeOpenTerm ds]
+
+
+--------------------------------------------------------------------------------
+-- Monadic operations for building terms including 'IO' actions
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this
@@ -742,7 +1072,7 @@ sawLetTermLike x tp tp_ret rhs body_f =
 
 
 --------------------------------------------------------------------------------
--- Building SpecM computations
+-- Building SpecM computations (old stuff; remove)
 
 -- | When creating a SAW core term of type @PolySpecFun@ or @PolyStackTuple@,
 -- the body or bodies are relative to: the current event type (or @EvType@); the

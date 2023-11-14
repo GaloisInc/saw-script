@@ -899,17 +899,6 @@ data BlockHint blocks init ret args where
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
--- | A SAW core identifier that indicates an event type for the @SpecM@ monad
-newtype EventType = EventType { evTypeToIdent :: Ident }
-
--- | Convert an 'EventType' to a SAW core term
-evTypeTerm :: EventType -> OpenTerm
-evTypeTerm = globalOpenTerm . evTypeToIdent
-
--- | The default event type uses the @Void@ type for events
-defaultSpecMEventType :: EventType
-defaultSpecMEventType = EventType $ fromString "SpecM.VoidEv"
-
 -- | A permission environment that maps function names, permission names, and
 -- 'GlobalSymbols' to their respective permission structures
 data PermEnv = PermEnv {
