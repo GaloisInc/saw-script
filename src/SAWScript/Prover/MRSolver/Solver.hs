@@ -1118,12 +1118,12 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
        zipWithM_ mrAssertProveEq args2'' args2
        recordUsedFunAssump fa >> mrRefinesFun tp1 k1 tp2 k2
 
-  -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
-  -- unfolds and is not recursive in itself, unfold f2 and recurse
-  (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
-    | Just (f2_body, False) <- maybe_f2_body ->
-    normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' ->
-    recordUsedFunAssump fa >> mrRefines m1 m2'
+  -- -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
+  -- -- unfolds and is not recursive in itself, unfold f2 and recurse
+  -- (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
+  --   | Just (f2_body, False) <- maybe_f2_body ->
+  --   normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' ->
+  --   recordUsedFunAssump fa >> mrRefines m1 m2'
 
   -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
   -- f1 args1' refines some f args where f /= f2 and f2 does not match the
@@ -1282,6 +1282,18 @@ mrRefinesFun tp1 f1 tp2 f2 =
 -- an accumulator of variables to introduce, innermost first.
 mrRefinesFunH :: (Term -> Term -> MRM t a) -> [Term] ->
                  Term -> Term -> Term -> Term -> MRM t a
+
+-- Ignore units on either side
+mrRefinesFunH k vars (asPi -> Just (_, asTupleType -> Just [], _)) t1 piTp2 t2 =
+  do u <- liftSC0 scUnitValue
+     t1' <- mrApplyAll t1 [u]
+     piTp1' <- mrTypeOf t1'
+     mrRefinesFunH k vars piTp1' t1' piTp2 t2
+mrRefinesFunH k vars piTp1 t1 (asPi -> Just (_, asTupleType -> Just [], _)) t2 =
+  do u <- liftSC0 scUnitValue
+     t2' <- mrApplyAll t2 [u]
+     piTp2' <- mrTypeOf t2'
+     mrRefinesFunH k vars piTp1 t1 piTp2' t2'
 
 -- Introduce equalities on either side as assumptions
 mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asEq -> Just (asBoolType -> Just (), b1, b2)), _)) t1 piTp2 t2 =

@@ -98,7 +98,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.PreludeM
 
 import GHC.Stack
-import Debug.Trace
+-- import Debug.Trace
 
 
 -- Type-check the Prelude, Cryptol, and CryptolM modules at compile time
