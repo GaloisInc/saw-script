@@ -17,6 +17,7 @@ Stability   : provisional
 module SAWScript.MGU
        ( checkDecl
        , checkDeclGroup
+       , instantiateType
        ) where
 
 import SAWScript.AST
@@ -264,8 +265,12 @@ bindPatternSchema pat s@(Forall vs t) m =
 
 bindTypedef :: LName -> Type -> TI a -> TI a
 bindTypedef n t m =
-  TI $ local (\ro -> ro { typedefEnv = M.insert (getVal n) t $ typedefEnv ro })
-  $ unTI m
+  TI $
+  local
+    (\ro ->
+      let t' = instantiateType (typedefEnv ro) t
+      in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
+    $ unTI m
 
 -- FIXME: This function may miss type variables that occur in the type
 -- of a binding that has been shadowed by another value with the same
@@ -382,10 +387,13 @@ instance Instantiate Type where
     TySkolemVar _ _ -> ty
     LType pos ty'   -> LType pos (instantiate nts ty')
 
+instantiateType :: Instantiate t => Map Name Type -> t -> t
+instantiateType tenv = instantiate (M.assocs tenv)
+
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
   s <- TI $ asks typedefEnv
-  return $ instantiate (M.assocs s) t
+  return $ instantiateType s t
 
 -- }}}
 
