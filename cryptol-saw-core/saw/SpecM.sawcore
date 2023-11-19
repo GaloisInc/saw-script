@@ -51,6 +51,8 @@ data TpExprBinOp : ExprKind -> ExprKind -> ExprKind -> sort 0 where {
   BinOp_MulNat : TpExprBinOp Kind_nat Kind_nat Kind_nat;
   BinOp_AddBV : (w:Nat) -> TpExprBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
   BinOp_MulBV : (w:Nat) -> TpExprBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w);
+  BinOp_AddNum : TpExprBinOp Kind_num Kind_num Kind_num;
+  BinOp_MulNum : TpExprBinOp Kind_num Kind_num Kind_num;
 }
 
 -- Evaluate a binary operation to a function on elements of its ExprKinds
@@ -59,7 +61,7 @@ evalBinOp : (EK1 EK2 EK3:ExprKind) -> TpExprBinOp EK1 EK2 EK3 ->
 evalBinOp EK1 EK2 EK3 op =
   TpExprBinOp#rec (\ (EK1 EK2 EK3:ExprKind) (_:TpExprBinOp EK1 EK2 EK3) ->
                     exprKindElem EK1 -> exprKindElem EK2 -> exprKindElem EK3)
-    addNat mulNat bvAdd bvMul
+    addNat mulNat bvAdd bvMul tcAdd tcMul
     EK1 EK2 EK3 op;
 
 

@@ -74,13 +74,15 @@ module Verifier.SAW.OpenTerm (
   sigmaOpenTermMulti, sigmaElimOpenTermMulti,
   -- * Operations for building @SpecM@ computations
   EventType (..), evTypeTerm, defaultSpecMEventType, unitKindDesc, bvExprKind,
-  tpDescTypeOpenTerm, kindToTpDesc, unitTpDesc, boolExprKind, boolKindDesc,
-  natExprKind, natKindDesc, bvKindDesc, tpKindDesc, pairTpDesc, tupleTpDesc,
-  sumTpDesc, bvVecTpDesc, constTpExpr, bvConstTpExpr, bvSumTpExprs,
-  bvMulTpExpr, sigmaTpDesc, sigmaTpDescMulti, arrowTpDesc, arrowTpDescMulti,
-  funTpDesc, piTpDesc, piTpDescMulti, voidTpDesc, varTpDesc, varTpExpr,
-  varKindExpr, constKindExpr, indTpDesc, substTpDesc, substTpDescMulti,
-  substIdTpDescMulti, substIndIdTpDescMulti, tpElemTypeOpenTerm,
+  tpDescTypeOpenTerm, kindToTpDesc, unitTpDesc,
+  boolExprKind, boolKindDesc, boolTpDesc, natExprKind, natKindDesc,
+  numExprKind, numKindDesc, bvKindDesc, tpKindDesc, pairTpDesc, tupleTpDesc,
+  sumTpDesc, bvVecTpDesc, constTpExpr, bvConstTpExpr, binOpTpExpr, bvSumTpExprs,
+  bvMulTpExpr, sigmaTpDesc, sigmaTpDescMulti, seqTpDesc, arrowTpDesc,
+  arrowTpDescMulti, mTpDesc, funTpDesc, piTpDesc, piTpDescMulti, voidTpDesc,
+  varTpDesc, varTpExpr, varKindExpr, constKindExpr, indTpDesc,
+  substTpDesc, substTpDescMulti, substIdTpDescMulti, substIndIdTpDescMulti,
+  tpElemTypeOpenTerm,
   substEnvTpDesc, tpEnvOpenTerm, specMTypeOpenTerm, retSOpenTerm,
   bindSOpenTerm, errorSOpenTerm, letRecSOpenTerm, multiFixBodiesOpenTerm,
   -- * Monadic operations for building terms including 'IO' actions
@@ -110,7 +112,7 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Numeric.Natural
 
 import Data.IntMap.Strict (IntMap)
@@ -572,7 +574,7 @@ evTypeTerm = globalOpenTerm . evTypeToIdent
 
 -- | The default event type uses the @Void@ type for events
 defaultSpecMEventType :: EventType
-defaultSpecMEventType = EventType $ fromString "SpecM.VoidEv"
+defaultSpecMEventType = EventType "SpecM.VoidEv"
 
 -- | The kind description for the unit type
 unitKindDesc :: OpenTerm
@@ -604,13 +606,25 @@ boolExprKind = ctorOpenTerm "SpecM.Kind_bool" []
 boolKindDesc :: OpenTerm
 boolKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [boolExprKind]
 
--- | The expression kind for the Nat type
+-- | The type description for the Boolean type
+boolTpDesc :: OpenTerm
+boolTpDesc = ctorOpenTerm "SpecM.Tp_Kind" [boolKindDesc]
+
+-- | The expression kind for the @Nat@ type
 natExprKind :: OpenTerm
 natExprKind = ctorOpenTerm "SpecM.Kind_nat" []
 
--- | The kind description for the Nat type
+-- | The expression kind for the @Num@ type
+numExprKind :: OpenTerm
+numExprKind = ctorOpenTerm "SpecM.Kind_num" []
+
+-- | The kind description for the @Nat@ type
 natKindDesc :: OpenTerm
 natKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [natExprKind]
+
+-- | The kind description for the @Num@ type
+numKindDesc :: OpenTerm
+numKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [numExprKind]
 
 -- | The kind description for the type @bitvector w@
 bvKindDesc :: Natural -> OpenTerm
@@ -650,6 +664,13 @@ constTpExpr k_d v = ctorOpenTerm "SpecM.TpExpr_Const" [k_d, v]
 bvConstTpExpr :: Natural -> OpenTerm -> OpenTerm
 bvConstTpExpr w bv = constTpExpr (bvExprKind w) bv
 
+-- | Build a type expression from a binary operation, the given input kinds and
+-- output kind, and the given expression arguments
+binOpTpExpr :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm ->
+               OpenTerm -> OpenTerm -> OpenTerm
+binOpTpExpr op k1 k2 k3 e1 e2 =
+  ctorOpenTerm "SpecM.TpExpr_BinOp" [k1, k2, k3, op, e1, e2]
+
 -- | Build a type expression for the bitvector sum of a list of type
 -- expressions, all of the given width
 bvSumTpExprs :: Natural -> [OpenTerm] -> OpenTerm
@@ -679,6 +700,10 @@ sigmaTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
 sigmaTpDescMulti [] d = d
 sigmaTpDescMulti (k:ks) d = sigmaTpDesc k $ sigmaTpDescMulti ks d
 
+-- | Build a type description for a sequence
+seqTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
+seqTpDesc n d = ctorOpenTerm "SpecM.Tp_Seq" [n, d]
+
 -- | Build an arrow type description for left- and right-hand type descriptions
 arrowTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
 arrowTpDesc d_in d_out = ctorOpenTerm "SpecM.Tp_Arr" [d_in, d_out]
@@ -687,12 +712,15 @@ arrowTpDesc d_in d_out = ctorOpenTerm "SpecM.Tp_Arr" [d_in, d_out]
 arrowTpDescMulti :: [OpenTerm] -> OpenTerm -> OpenTerm
 arrowTpDescMulti ds_in d_out = foldr arrowTpDesc d_out ds_in
 
+-- | Build a monadic type description, i.e., a nullary monadic function
+mTpDesc :: OpenTerm -> OpenTerm
+mTpDesc d = ctorOpenTerm "SpecM.Tp_M" [d]
+
 -- | Build the type description @Tp_Arr d1 (... (Tp_Arr dn (Tp_M d_ret)))@ for a
 -- monadic function that takes in the types described by @d1@ through @dn@ and
 -- returns the type described by @d_ret@
 funTpDesc :: [OpenTerm] -> OpenTerm -> OpenTerm
-funTpDesc ds_in d_ret =
-  arrowTpDescMulti ds_in (ctorOpenTerm "SpecM.Tp_M" [d_ret])
+funTpDesc ds_in d_ret = arrowTpDescMulti ds_in (mTpDesc d_ret)
 
 -- | Build the type description for a pi-abstraction over a kind description
 piTpDesc :: OpenTerm -> OpenTerm -> OpenTerm
