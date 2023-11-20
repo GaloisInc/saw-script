@@ -74,7 +74,10 @@ module SAWScript.Bisimulation
   ( BisimTheorem, proveBisimulation )
   where
 
-import Control.Monad.State.Strict as State
+import Control.Monad (foldM, forM_, unless)
+import Control.Monad.IO.Class (MonadIO(..))
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Foldable (foldl')
 import qualified Data.IntSet as IntSet
 import qualified Data.Map.Strict as Map

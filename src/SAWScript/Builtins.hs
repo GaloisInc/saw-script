@@ -27,8 +27,11 @@ import Data.Functor
 import Control.Applicative
 import Data.Monoid
 #endif
+import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.Except (MonadError(..))
-import Control.Monad.State
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.State (MonadState(..), gets, modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Control.Exception as Ex
 import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
@@ -471,7 +474,7 @@ print_goal_inline noInline =
   execTactic $ tacticId $ \goal ->
     do
       opts <- getTopLevelPPOpts
-      let opts' = opts { ppNoInlineMemo = sort noInline } 
+      let opts' = opts { ppNoInlineMemo = sort noInline }
       sc <- getSharedContext
       nenv <- io (scGetNamingEnv sc)
       let output = prettySequent opts' nenv (goalSequent goal)

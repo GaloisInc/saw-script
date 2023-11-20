@@ -30,10 +30,11 @@ Portability : portable
 module Verifier.SAW.Translation.Coq.Term where
 
 import           Control.Lens                                  (makeLenses, over, set, to, view)
+import           Control.Monad                                 (forM)
 import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
-import           Control.Monad.Reader                          hiding (fail, fix)
-import           Control.Monad.State                           hiding (fail, fix, state)
+import           Control.Monad.Reader                          (MonadReader(ask, local), asks)
+import           Control.Monad.State                           (MonadState(get), modify)
 import           Data.Char                                     (isDigit)
 import           Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict                            as IntMap

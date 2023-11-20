@@ -27,10 +27,13 @@ module SAWScript.Prover.MRSolver.Monad where
 import Data.List (find, findIndex, foldl')
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad (MonadPlus(..), foldM)
 import Control.Monad.Catch (MonadThrow, MonadCatch)
+import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.State (MonadState(..), StateT(..), modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import GHC.Generics
 
@@ -451,7 +454,7 @@ runMRM sc env timeout askSMT rs m =
 
 -- | Run an 'MRM' computation and return a result or an error, discarding the
 -- final state
-evalMRM :: 
+evalMRM ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
@@ -465,7 +468,7 @@ evalMRM sc env timeout askSMT rs =
 
 -- | Run an 'MRM' computation and return a final state or an error, discarding
 -- the result
-execMRM :: 
+execMRM ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->

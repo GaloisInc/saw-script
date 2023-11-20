@@ -36,16 +36,17 @@ import Data.Maybe
 import Numeric.Natural
 import Data.List hiding (inits)
 import Data.Text (pack)
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat, natVal)
 import Data.BitVector.Sized (BV)
 import qualified Data.BitVector.Sized as BV
 import Data.Functor.Compose
-import Control.Applicative
+import qualified Control.Applicative as App
 import Control.Lens hiding ((:>), Index, ix, op)
-import Control.Monad.Reader hiding (ap)
-import Control.Monad.Writer hiding (ap)
-import Control.Monad.State hiding (ap)
+import Control.Monad (MonadPlus(..), zipWithM)
+import Control.Monad.Reader (MonadReader(..), Reader, runReader, withReader)
+import Control.Monad.State (MonadState(..), StateT, evalStateT)
 import Control.Monad.Trans.Maybe
+import Control.Monad.Writer (MonadWriter(..), Writer, runWriter)
 import qualified Control.Monad.Fail as Fail
 
 import What4.ProgramLoc
@@ -212,7 +213,7 @@ strictTupleTypeTrans ttrans =
 -- | Build a type translation for a list of translations
 listTypeTrans :: [TypeTrans tr] -> TypeTrans [tr]
 listTypeTrans [] = pure []
-listTypeTrans (trans:transs) = liftA2 (:) trans $ listTypeTrans transs
+listTypeTrans (trans:transs) = App.liftA2 (:) trans $ listTypeTrans transs
 
 
 -- | The result of translating a 'PermExpr' at 'CrucibleType' @a@. This is a
@@ -879,7 +880,7 @@ instance TransInfo info =>
   translate mb_ctx = case mbMatch mb_ctx of
     [nuMP| CruCtxNil |] -> return $ mkTypeTrans0 MNil
     [nuMP| CruCtxCons ctx tp |] ->
-      liftA2 (:>:) <$> translate ctx <*> translate tp
+      App.liftA2 (:>:) <$> translate ctx <*> translate tp
 
 -- | Translate all types in a Crucible context and lambda-abstract over them
 lambdaExprCtx :: TransInfo info => CruCtx ctx -> TransM info ctx OpenTerm ->
@@ -1985,7 +1986,7 @@ instance TransInfo info =>
   translate mb_ps = case mbMatch mb_ps of
     [nuMP| ValPerms_Nil |] -> return $ mkTypeTrans0 MNil
     [nuMP| ValPerms_Cons ps p |] ->
-      liftA2 (:>:) <$> translate ps <*> translate p
+      App.liftA2 (:>:) <$> translate ps <*> translate p
 
 -- Translate a DistPerms by translating its corresponding ValuePerms
 instance TransInfo info =>

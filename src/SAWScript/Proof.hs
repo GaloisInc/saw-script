@@ -129,8 +129,11 @@ module SAWScript.Proof
   , predicateToSATQuery
   ) where
 
+import           Control.Monad (foldM, forM_, unless)
 import qualified Control.Monad.Fail as F
-import           Control.Monad.Except
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
 import           Data.List
 import           Data.Maybe (fromMaybe)

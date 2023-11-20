@@ -47,9 +47,11 @@ module Verifier.SAW.SCTypeCheck
   ) where
 
 import Control.Applicative
-import Control.Monad.Except
-import Control.Monad.State.Strict
-import Control.Monad.Reader
+import Control.Monad (foldM, forM, forM_, mapM, unless, void)
+import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
 import Data.Map (Map)
 import qualified Data.Map as Map

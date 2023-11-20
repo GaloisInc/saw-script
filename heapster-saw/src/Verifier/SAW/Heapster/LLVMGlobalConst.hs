@@ -12,8 +12,10 @@ module Verifier.SAW.Heapster.LLVMGlobalConst (
 
 import Data.Bits
 import Data.List
-import Control.Monad.Reader
-import GHC.TypeLits
+import Control.Monad (MonadPlus(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
+import GHC.TypeLits (KnownNat)
 import qualified Text.PrettyPrint.HughesPJ as PPHPJ
 
 import qualified Data.BitVector.Sized as BV

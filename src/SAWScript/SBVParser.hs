@@ -20,7 +20,9 @@ module SAWScript.SBVParser
 
 import Prelude hiding (mapM)
 
-import Control.Monad.State hiding (mapM)
+import Control.Monad (foldM, liftM, replicateM, unless)
+import Control.Monad.State (MonadState(..), StateT(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map

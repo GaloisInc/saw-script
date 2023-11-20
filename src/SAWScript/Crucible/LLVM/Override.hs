@@ -65,8 +65,9 @@ import           Control.Lens.Lens
 import           Control.Lens.Setter
 import           Control.Lens.TH
 import           Control.Exception as X
-import           Control.Monad
-import           Control.Monad.Except
+import           Control.Monad (filterM, foldM, forM, forM_, when, zipWithM)
+import           Control.Monad.Except (runExcept)
+import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
 import           Data.List

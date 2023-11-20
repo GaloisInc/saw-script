@@ -8,7 +8,8 @@ Portability : non-portable (language extensions)
 -}
 module Verifier.SAW.Simulator.MonadLazy where
 
-import Control.Monad.Identity
+import Control.Monad (liftM)
+import Control.Monad.Identity (Identity)
 import Control.Monad.IO.Class
 import Data.IORef
 

@@ -49,9 +49,12 @@ module SAWScript.Crucible.JVM.Builtins
 import           Control.Lens
 
 import qualified Control.Monad.Catch as X
-import           Control.Monad.State
+import           Control.Monad (foldM, forM, forM_, guard, unless, when)
+import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Reader (runReaderT)
+import           Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import qualified Control.Monad.State.Strict as Strict
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)

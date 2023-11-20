@@ -24,8 +24,10 @@ module SAWScript.Prover.MRSolver.SMT where
 
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Control.Monad.Except
+import Control.Monad (MonadPlus(..), (<=<), join, when, zipWithM)
 import Control.Monad.Catch (throwM, catch)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import Data.Foldable (foldrM, foldlM)
 import GHC.Generics
@@ -319,7 +321,7 @@ smtNormPrims sc = Map.fromList
                          Just n -> scNat sc n >>= \n' -> scBvNat sc n' ix'
                tm <- scApplyBeta sc f ix''
                tm' <- smtNorm sc tm
-               return $ VExtra $ VExtraTerm a tm') 
+               return $ VExtra $ VExtraTerm a tm')
     ),
     -- Don't normalize applications of @SpecM@ and its arguments
     ("Prelude.SpecM",
@@ -613,7 +615,7 @@ mrConvOfTerm _ = NoConv
 -- as large as possible, using information from the given terms (i.e. using
 -- 'mrConvOfTerm') where possible. In pictorial form, this function finds
 -- a @tp@, @c1@, and @c2@ which satisfy the following diagram:
--- 
+--
 -- >  tp1      tp2
 -- >   ^        ^
 -- > c1 \      / c2
@@ -655,10 +657,10 @@ findInjConvs tp1 t1 (asNatType -> Just ())
 -- add a 'BVToNat' conversion we have a BV on the other side, using the
 -- bit-width from the other side
 findInjConvs (asNatType -> Just ()) _ (asBitvectorType -> Just n) _ =
-  do bv_tp <- liftSC1 scBitvector n 
+  do bv_tp <- liftSC1 scBitvector n
      return $ Just (bv_tp, BVToNat n, NoConv)
 findInjConvs (asBitvectorType -> Just n) _ (asNatType -> Just ()) _ =
-  do bv_tp <- liftSC1 scBitvector n 
+  do bv_tp <- liftSC1 scBitvector n
      return $ Just (bv_tp, NoConv, BVToNat n)
 -- add a 'BVVecToVec' conversion if the (optional) given term has a
 -- 'BVVecToVec' conversion
@@ -882,7 +884,7 @@ mrProveRelH' _ _ _ _ (asNum -> Just (Left t1)) (asNum -> Just (Left t2)) =
   mrProveEqSimple (liftSC2 scEqualNat) t1 t2
 mrProveRelH' _ _ (asNatType -> Just _) (asNatType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scEqualNat) t1 t2
-mrProveRelH' _ _ tp1@(asVectorType -> Just (n1, asBoolType -> Just ())) 
+mrProveRelH' _ _ tp1@(asVectorType -> Just (n1, asBoolType -> Just ()))
                 tp2@(asVectorType -> Just (n2, asBoolType -> Just ())) t1 t2 =
   do ns_are_eq <- mrConvertible n1 n2
      if ns_are_eq then return () else

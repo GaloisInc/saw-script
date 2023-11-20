@@ -93,14 +93,18 @@ import Prelude hiding (fail)
 import qualified Control.Exception as X
 import           Control.Lens
 
+import           Control.Monad (foldM, forM, forM_, replicateM, unless, when)
 import           Control.Monad.Extra (findM, whenM)
-import           Control.Monad.State hiding (fail)
-import           Control.Monad.Reader (runReaderT)
 import           Control.Monad.Fail (MonadFail(..))
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Reader (runReaderT)
+import           Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, fold)
 import           Data.Function
+import           Data.Functor (void)
 import           Data.IORef
 import           Data.List
 import           Data.List.Extra (nubOrd)
