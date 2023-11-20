@@ -393,6 +393,11 @@ tpExprVal :: HasSpecMEvType => KindRepr k -> TpExpr k -> OpenTerm
 tpExprVal MKTypeRepr = toArgType
 tpExprVal MKNumRepr = numExprVal
 
+-- | Convert a 'SomeTpExpr' to either an argument type or a @Num@ term,
+-- depending on its kind
+someTpExprVal :: HasSpecMEvType => SomeTpExpr -> OpenTerm
+someTpExprVal (SomeTpExpr k e) = tpExprVal k e
+
 -- | Convert a 'MonKind' to the kind description it represents
 toKindDesc :: KindRepr k -> OpenTerm
 toKindDesc MKTypeRepr = tpKindDesc
@@ -503,40 +508,36 @@ monadifyTypeArgType ctx t = toArgType $ monadifyType ctx t
 monadifyNumBinOp :: Ident -> Maybe NumBinOp
 monadifyNumBinOp i = lookup i numBinOpMonMap
 
--- | Apply a monadified type to a type or term argument in the sense of
--- 'applyPiOpenTerm', meaning give the type of applying @f@ of a type to a
--- particular argument @arg@
-applyMonType :: HasCallStack => MonType -> Either SomeTpExpr ArgMonTerm ->
-                MonType
-applyMonType (MTyArrow _ tp_ret) (Right _) = tp_ret
-applyMonType (MTyForall _ k1 f) (Left (SomeTpExpr k2 t))
-  | Just Refl <- testEquality k1 k2 = f t
-applyMonType _ _ = error "applyMonType: application at incorrect type"
 
-
--- | Convert a SAW core 'Term' to a monadification type
-monadifyType :: (HasCallStack, HasSpecMEvType) => MonadifyTypeCtx -> Term ->
-                MonType
+-- | Convert a SAW core 'Term' to a type-level expression of some kind, or panic
+-- if this is not possible
+monadifyTpExpr :: (HasCallStack, HasSpecMEvType) => MonadifyTypeCtx -> Term ->
+                  SomeTpExpr
 {-
-monadifyType ctx t
-  | trace ("\nmonadifyType:\n" ++ ppTermInTypeCtx ctx t) False = undefined
+monadifyTpExpr ctx t
+  | trace ("\nmonadifyTpExpr:\n" ++ ppTermInTypeCtx ctx t) False = undefined
 -}
-monadifyType ctx (asPi -> Just (x, tp_in, tp_out))
-  | Just (SomeKindRepr k) <- monadifyKind tp_in
-  = MTyForall x k (\tp' ->
+
+-- Type cases
+monadifyTpExpr ctx (asPi -> Just (x, tp_in, tp_out))
+  | Just (SomeKindRepr k) <- monadifyKind tp_in =
+    SomeTpExpr MKTypeRepr $
+    MTyForall x k (\tp' ->
                     let ctx' = (x,tp_in,Just (SomeTpExpr k tp')):ctx in
                     monadifyType ctx' tp_out)
-monadifyType ctx tp@(asPi -> Just (_, _, tp_out))
+monadifyTpExpr ctx tp@(asPi -> Just (_, _, tp_out))
   | inBitSet 0 (looseVars tp_out) =
     -- FIXME: make this a failure instead of an error
     error ("monadifyType: " ++
            "dependent function type with non-kind argument type: " ++
            ppTermInTypeCtx ctx tp)
-monadifyType ctx tp@(asPi -> Just (x, tp_in, tp_out)) =
-  MTyArrow (monadifyType ctx tp_in)
-  (monadifyType ((x,tp,Nothing):ctx) tp_out)
-monadifyType _ (asTupleType -> Just []) = MTyUnit
-monadifyType ctx (asPairType -> Just (tp1, tp2)) =
+monadifyTpExpr ctx tp@(asPi -> Just (x, tp_in, tp_out)) =
+  SomeTpExpr MKTypeRepr $
+  MTyArrow (monadifyType ctx tp_in) (monadifyType ((x,tp,Nothing):ctx) tp_out)
+monadifyTpExpr _ (asTupleType -> Just []) =
+  SomeTpExpr MKTypeRepr $ MTyUnit
+monadifyTpExpr ctx (asPairType -> Just (tp1, tp2)) =
+  SomeTpExpr MKTypeRepr $
   MTyPair (monadifyType ctx tp1) (monadifyType ctx tp2)
 {-
 monadifyType ctx (asRecordType -> Just tps) =
@@ -550,25 +551,26 @@ monadifyType ctx (asDataType -> Just (eq_pn, [k_trm, tp1, tp2]))
     MTyIndesc $ dataTypeOpenTerm "Prelude.Eq" [monadifyTypeArgType ctx tp1,
                                                monadifyTypeArgType ctx tp2]
 -}
-monadifyType ctx (asDataType -> Just (pn, args)) =
+monadifyTpExpr ctx (asDataType -> Just (pn, args)) =
   -- NOTE: this case only recognizes data types whose arguments are all types
   -- and/or Nums
-  MTyIndesc $ dataTypeOpenTerm (primName pn) (map (toArgType .
-                                                   monadifyType ctx) args)
+  SomeTpExpr MKTypeRepr $
+  MTyIndesc $ dataTypeOpenTerm (primName pn) (map (someTpExprVal .
+                                                   monadifyTpExpr ctx) args)
 {- FIXME: if we need finite Vecs, then we need Nat tp exprs
 monadifyType ctx (asVectorType -> Just (len, tp)) =
   let lenOT = monadifyTypeNat ctx len in
   MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
 -}
-monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
+monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
   | seq_id == "Cryptol.seq" =
-    MTySeq (monadifyNum ctx n) (monadifyType ctx a)
-monadifyType ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
+    SomeTpExpr MKTypeRepr $ MTySeq (monadifyNum ctx n) (monadifyType ctx a)
+monadifyTpExpr ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
   | Just f_trans <- lookup f typeclassMonMap =
-    MTyIndesc $
+    SomeTpExpr MKTypeRepr $ MTyIndesc $
     applyOpenTerm (globalOpenTerm f_trans) $ monadifyTypeArgType ctx arg
-monadifyType _ (asGlobalDef -> Just bool_id)
-  | bool_id == "Prelude.Bool" = MTyBool
+monadifyTpExpr _ (asGlobalDef -> Just bool_id)
+  | bool_id == "Prelude.Bool" = SomeTpExpr MKTypeRepr $ MTyBool
 {-
 monadifyType ctx (asApplyAll -> (f, args))
   | Just glob <- asTypedGlobalDef f
@@ -578,31 +580,42 @@ monadifyType ctx (asApplyAll -> (f, args))
     MTyBase k_out (applyOpenTermMulti (globalDefOpenTerm glob) $
                    map toArgType margs)
 -}
-monadifyType ctx (asLocalVar -> Just i)
+
+-- Num cases
+monadifyTpExpr _ (asCtor -> Just (pn, []))
+  | primName pn == "Cryptol.TCInf"
+  = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCInf" []
+monadifyTpExpr _ (asCtor -> Just (pn, [asNat -> Just n]))
+  | primName pn == "Cryptol.TCNum"
+  = SomeTpExpr MKNumRepr $ NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
+monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just f), [arg1, arg2]))
+  | Just op <- monadifyNumBinOp f
+  = SomeTpExpr MKNumRepr $ NExpr_BinOp op (monadifyNum ctx arg1) (monadifyNum ctx arg2)
+monadifyTpExpr ctx (asLocalVar -> Just i)
   | i < length ctx
-  , (_,_,Just (SomeTpExpr MKTypeRepr tp)) <- ctx!!i = tp
-monadifyType ctx tp =
-  panic "monadifyType" ["not a valid type for monadification: "
-                        ++ ppTermInTypeCtx ctx tp]
+  , (_,_,Just (SomeTpExpr k e)) <- ctx!!i = SomeTpExpr k e
+monadifyTpExpr ctx tp =
+  panic "monadifyTpExpr"
+  ["not a valid type or numberic expression for monadification: "
+   ++ ppTermInTypeCtx ctx tp]
 
+-- | Convert a SAW core 'Term' to a monadification type, or panic if this is not
+-- possible
+monadifyType :: (HasCallStack, HasSpecMEvType) => MonadifyTypeCtx -> Term ->
+                MonType
+monadifyType ctx t
+  | SomeTpExpr MKTypeRepr tp <- monadifyTpExpr ctx t = tp
+monadifyType ctx t =
+  panic "monadifyType" ["Not a type: " ++ ppTermInTypeCtx ctx t]
 
+-- | Convert a SAW core 'Term' to a type-level numeric expression, or panic if
+-- this is not possible
 monadifyNum :: (HasCallStack, HasSpecMEvType) => MonadifyTypeCtx -> Term ->
                NumTpExpr
-monadifyNum _ (asCtor -> Just (pn, []))
-  | primName pn == "Cryptol.TCInf"
-  = NExpr_Const $ ctorOpenTerm "Cryptol.TCInf" []
-monadifyNum _ (asCtor -> Just (pn, [asNat -> Just n]))
-  | primName pn == "Cryptol.TCNum"
-  = NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
-monadifyNum ctx (asApplyAll -> ((asGlobalDef -> Just f), [arg1, arg2]))
-  | Just op <- monadifyNumBinOp f
-  = NExpr_BinOp op (monadifyNum ctx arg1) (monadifyNum ctx arg2)
-monadifyNum ctx (asLocalVar -> Just i)
-  | i < length ctx
-  , (_,_,Just (SomeTpExpr MKNumRepr tp)) <- ctx!!i = tp
+monadifyNum ctx t
+  | SomeTpExpr MKNumRepr e <- monadifyTpExpr ctx t = e
 monadifyNum ctx t =
-  panic "monadifyNum" ["not a valid numeric expression for monadification: "
-                        ++ ppTermInTypeCtx ctx t]
+  panic "monadifyNum" ["Not a numeric expression: " ++ ppTermInTypeCtx ctx t]
 
 
 ----------------------------------------------------------------------
@@ -625,6 +638,12 @@ data MonTerm
   = ArgMonTerm ArgMonTerm
   | CompMonTerm MonType OpenTerm
 
+-- | An argument to a 'MonTerm' of functional type
+data MonArg
+     -- | A type-level expression argument to a polymorphic function
+  = forall k. TpArg (KindRepr k) (TpExpr k)
+    -- | A term-level argument to a non-dependent function
+  | TrmArg ArgMonTerm
 
 -- | Get the monadification type of a monadification term
 class GetMonType a where
@@ -683,48 +702,41 @@ fromCompTerm :: HasSpecMEvType => MonType -> OpenTerm -> MonTerm
 fromCompTerm mtp t | isBaseType mtp = CompMonTerm mtp t
 fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
 
-
-{-
-FIXME HERE NOWNOW:
-- remove lrtFromMonType, add descFromMonType
-- how to generate deBruijn indices in TpDescs?
-  + option 1: leave it higher-order, but add a MTyVar ctor to track indices when
-    converting to TpDescs
-  + option 2: remove HOAS representation from types and MonTerms
-- MTyBase -> MTyIndesc
-- remove functional kinds
-- FIXME: what about type-level expressions that might have deBruijn indices?
-- FIXME: remove MTyRecord
-
 -- | Test if a monadification type @tp@ is pure, meaning @MT(tp)=tp@
 monTypeIsPure :: MonType -> Bool
-monTypeIsPure (MTyForall _ _ _) = False -- NOTE: this could potentially be true
+monTypeIsPure (MTyForall _ _ _) = False
 monTypeIsPure (MTyArrow _ _) = False
 monTypeIsPure (MTySeq _ _) = False
+monTypeIsPure MTyUnit = True
+monTypeIsPure MTyBool = True
 monTypeIsPure (MTyPair mtp1 mtp2) = monTypeIsPure mtp1 && monTypeIsPure mtp2
-monTypeIsPure (MTyRecord fld_mtps) = all (monTypeIsPure . snd) fld_mtps
-monTypeIsPure (MTyBase _ _) = True
-monTypeIsPure (MTyNum _) = True
+monTypeIsPure (MTySum mtp1 mtp2) = monTypeIsPure mtp1 && monTypeIsPure mtp2
+monTypeIsPure (MTyIndesc _) = True
+monTypeIsPure (MTyVarLvl _) =
+  panic "monTypeIsPure" ["Unexpected type variable"]
 
 -- | Test if a monadification type @tp@ is semi-pure, meaning @SemiP(tp) = tp@,
 -- where @SemiP@ is defined in the documentation for 'fromSemiPureTermFun' below
 monTypeIsSemiPure :: MonType -> Bool
 monTypeIsSemiPure (MTyForall _ k tp_f) =
-  monTypeIsSemiPure $ tp_f $ MTyBase k $
+  monTypeIsSemiPure $ tp_f $ kindIndesc k $
   -- This dummy OpenTerm should never be inspected by the recursive call
   error "monTypeIsSemiPure"
 monTypeIsSemiPure (MTyArrow tp_in tp_out) =
   monTypeIsPure tp_in && monTypeIsSemiPure tp_out
 monTypeIsSemiPure (MTySeq _ _) = False
+monTypeIsSemiPure MTyUnit = False
+monTypeIsSemiPure MTyBool = False
 monTypeIsSemiPure (MTyPair mtp1 mtp2) =
   -- NOTE: functions in pairs are not semi-pure; only pure types in pairs are
   -- semi-pure
   monTypeIsPure mtp1 && monTypeIsPure mtp2
-monTypeIsSemiPure (MTyRecord fld_mtps) =
-  -- Same as pairs, record types are only semi-pure if they are pure
-  all (monTypeIsPure . snd) fld_mtps
-monTypeIsSemiPure (MTyBase _ _) = True
-monTypeIsSemiPure (MTyNum _) = True
+monTypeIsSemiPure (MTySum mtp1 mtp2) =
+  -- NOTE: same as pairs
+  monTypeIsPure mtp1 && monTypeIsPure mtp2
+monTypeIsSemiPure (MTyIndesc _) = True
+monTypeIsSemiPure (MTyVarLvl _) =
+  panic "monTypeIsSemiPure" ["Unexpected type variable"]
 
 -- | Build a monadification term from a function on terms which, when viewed as
 -- a lambda, is a "semi-pure" function of the given monadification type, meaning
@@ -738,8 +750,8 @@ monTypeIsSemiPure (MTyNum _) = True
 fromSemiPureTermFun :: HasSpecMEvType => MonType -> ([OpenTerm] -> OpenTerm) ->
                        ArgMonTerm
 fromSemiPureTermFun (MTyForall x k body) f =
-  ForallMonTerm x k $ \tp ->
-  ArgMonTerm $ fromSemiPureTermFun (body tp) (f . (toArgType tp:))
+  ForallMonTerm x k $ \e ->
+  ArgMonTerm $ fromSemiPureTermFun (body e) (f . (tpExprVal k e:))
 fromSemiPureTermFun (MTyArrow t1 t2) f =
   FunMonTerm "_" t1 t2 $ \x ->
   ArgMonTerm $ fromSemiPureTermFun t2 (f . (toArgTerm x:))
@@ -751,28 +763,37 @@ fromSemiPureTerm mtp t = fromSemiPureTermFun mtp (applyOpenTermMulti t)
 
 -- | Build a 'MonTerm' that 'fail's when converted to a term
 failMonTerm :: HasSpecMEvType => OpenTerm -> String -> MonTerm
-failMonTerm tp str = BaseMonTerm (MTyIndesc tp) (failOpenTerm str)
+failMonTerm tp str = ArgMonTerm $ BaseMonTerm (MTyIndesc tp) (failOpenTerm str)
 
 -- | Build an 'ArgMonTerm' that 'fail's when converted to a term
 failArgMonTerm :: HasSpecMEvType => MonType -> String -> ArgMonTerm
 failArgMonTerm tp str = fromArgTerm tp (failOpenTerm str)
 
+-- | Apply a monadified type to a type or term argument in the sense of
+-- 'applyPiOpenTerm', meaning give the type of applying @f@ of a type to a
+-- particular argument @arg@
+applyMonType :: HasCallStack => MonType -> MonArg -> MonType
+applyMonType (MTyForall _ k1 f) (TpArg k2 t)
+  | Just Refl <- testEquality k1 k2 = f t
+applyMonType (MTyArrow _ tp_ret) (TrmArg _) = tp_ret
+applyMonType _ _ = error "applyMonType: application at incorrect type"
+
 -- | Apply a monadified term to a type or term argument
-applyMonTerm :: HasCallStack => MonTerm -> Either MonType ArgMonTerm -> MonTerm
-applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ f)) (Right arg) = f arg
-applyMonTerm (ArgMonTerm (ForallMonTerm _ _ f)) (Left mtp) = f mtp
-applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ _)) (Left _) =
-  error "applyMonTerm: application of term-level function to type-level argument"
-applyMonTerm (ArgMonTerm (ForallMonTerm _ _ _)) (Right _) =
-  error "applyMonTerm: application of type-level function to term-level argument"
+applyMonTerm :: HasCallStack => MonTerm -> MonArg -> MonTerm
+applyMonTerm (ArgMonTerm (ForallMonTerm _ k1 f)) (TpArg k2 e)
+  | Just Refl <- testEquality k1 k2 = f e
+applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ f)) (TrmArg arg) = f arg
+applyMonTerm (ArgMonTerm (ForallMonTerm _ _ _)) _ =
+  panic "applyMonTerm" ["Application of term at incorrect type"]
+applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ _)) _ =
+  panic "applyMonTerm" ["Application of term at incorrect type"]
 applyMonTerm (ArgMonTerm (BaseMonTerm _ _)) _ =
-  error "applyMonTerm: application of non-function base term"
+  panic "applyMonTerm" ["Application of non-functional pure term"]
 applyMonTerm (CompMonTerm _ _) _ =
-  error "applyMonTerm: application of computational term"
+  panic "applyMonTerm" ["Application of non-functional computational term"]
 
 -- | Apply a monadified term to 0 or more arguments
-applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
-                     MonTerm
+applyMonTermMulti :: HasCallStack => MonTerm -> [MonArg] -> MonTerm
 applyMonTermMulti = foldl applyMonTerm
 
 -- | Build a 'MonTerm' from a global of a given argument type, applying it to
@@ -802,6 +823,18 @@ mkCtorArgMonTerm pn
 mkCtorArgMonTerm pn =
   fromSemiPureTermFun (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
 
+
+{-
+FIXME HERE NOWNOW:
+- remove lrtFromMonType, add descFromMonType
+- how to generate deBruijn indices in TpDescs?
+  + option 1: leave it higher-order, but add a MTyVar ctor to track indices when
+    converting to TpDescs
+  + option 2: remove HOAS representation from types and MonTerms
+- MTyBase -> MTyIndesc
+- remove functional kinds
+- FIXME: what about type-level expressions that might have deBruijn indices?
+- FIXME: remove MTyRecord
 
 ----------------------------------------------------------------------
 -- * Monadification Environments and Contexts
@@ -870,7 +903,7 @@ monEnvAdd nmi macro env =
 -- in scope, both its original un-monadified type along with either a 'MonTerm'
 -- or 'MonType' for the translation of the variable to a local variable of
 -- monadified type or monadified kind
-type MonadifyCtx = [(LocalName,Term,Either MonType MonTerm)]
+type MonadifyCtx = [(LocalName,Term,MonArg)]
 
 -- | Convert a 'MonadifyCtx' to a 'MonadifyTypeCtx'
 ctxToTypeCtx :: MonadifyCtx -> MonadifyTypeCtx
