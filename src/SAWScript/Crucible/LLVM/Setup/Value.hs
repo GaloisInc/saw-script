@@ -120,6 +120,7 @@ data LLVM (arch :: CL.LLVMArch)
 type instance Setup.XSetupNull (LLVM _) = ()
 -- 'True' if this is an LLVM packed struct, 'False' otherwise.
 type instance Setup.XSetupStruct (LLVM _) = Bool
+type instance Setup.XSetupEnum (LLVM _) = Void
 type instance Setup.XSetupTuple (LLVM _) = Void
 type instance Setup.XSetupSlice (LLVM _) = Void
 type instance Setup.XSetupArray (LLVM _) = ()

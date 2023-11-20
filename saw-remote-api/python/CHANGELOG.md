@@ -38,6 +38,7 @@
   variable. This function is currently only supported with LLVM and MIR
   verification, and using this function with JVM verification will raise an
   error.
+* Add an `enum()` function for constructing MIR enum values.
 * The `create_ghost_variable()` and `ghost_value()` functions are now supported
   with JVM and MIR verification.
 

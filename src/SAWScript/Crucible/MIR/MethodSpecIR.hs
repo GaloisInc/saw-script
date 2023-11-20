@@ -48,6 +48,9 @@ module SAWScript.Crucible.MIR.MethodSpecIR
     -- * @MIRMethodSpec@
   , MIRMethodSpec
 
+    -- * @MirSetupEnum@
+  , MirSetupEnum(..)
+
     -- * @MirSetupSlice@
   , MirSetupSlice(..)
 

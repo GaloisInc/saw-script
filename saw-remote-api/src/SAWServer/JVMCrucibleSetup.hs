@@ -190,6 +190,8 @@ compileJVMContract fileReader bic ghostEnv cenv0 c =
       JVMSetupM $ fail "Array setup values unsupported in JVM API."
     getSetupVal _ (StructValue _ _) =
       JVMSetupM $ fail "Struct setup values unsupported in JVM API."
+    getSetupVal _ (EnumValue _ _ _) =
+      JVMSetupM $ fail "Enum setup values unsupported in JVM API."
     getSetupVal _ (TupleValue _) =
       JVMSetupM $ fail "Tuple setup values unsupported in JVM API."
     getSetupVal _ (SliceValue _) =

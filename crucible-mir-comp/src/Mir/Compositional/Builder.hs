@@ -629,6 +629,7 @@ substMethodSpec sc sm ms = do
         MS.SetupStruct b svs -> MS.SetupStruct b <$> mapM goSetupValue svs
         MS.SetupTuple b svs -> MS.SetupTuple b <$> mapM goSetupValue svs
         MS.SetupSlice slice -> MS.SetupSlice <$> goSetupSlice slice
+        MS.SetupEnum enum_ -> MS.SetupEnum <$> goSetupEnum enum_
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
@@ -643,6 +644,14 @@ substMethodSpec sc sm ms = do
         MS.SetupCond_Pred loc <$> goTypedTerm tt
     goSetupCondition (MS.SetupCond_Ghost loc gg tt) =
         MS.SetupCond_Ghost loc gg <$> goTypedTerm tt
+
+    goSetupEnum (MirSetupEnumVariant adt variant variantIdx svs) =
+      MirSetupEnumVariant adt variant variantIdx <$>
+      mapM goSetupValue svs
+    goSetupEnum (MirSetupEnumSymbolic adt discr variants) =
+      MirSetupEnumSymbolic adt <$>
+      goSetupValue discr <*>
+      mapM (mapM goSetupValue) variants
 
     goSetupSlice (MirSetupSliceRaw ref len) =
       MirSetupSliceRaw <$> goSetupValue ref <*> goSetupValue len
@@ -742,6 +751,8 @@ regToSetup bak p eval shp rv = go shp rv
         refSV <- go refShp refRV
         lenSV <- go lenShp lenRV
         pure $ MS.SetupSlice $ MirSetupSliceRaw refSV lenSV
+    go (EnumShape _ _ _ _ _) _ =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
 

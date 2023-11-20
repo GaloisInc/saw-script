@@ -2117,12 +2117,9 @@ mir_verify :
 
 ### Running a MIR-based verification
 
-`mir_verify` requires `enable_experimental` in order to be used.  Moreover,
-some parts of `mir_verify` are not currently implemented, so it is possible
-that using `mir_verify` on some programs will fail. Features that are not yet
-implemented include the following:
-
-* The ability to construct MIR `enum` values in specifications
+(Note: API functions involving MIR verification require `enable_experimental`
+in order to be used. As such, some parts of this API may change before being
+finalized.)
 
 The `String` supplied as an argument to `mir_verify` is expected to be a
 function _identifier_. An identifier is expected adhere to one of the following
@@ -2211,6 +2208,14 @@ variables with the same name, but SAW will distinguish between them
 internally. The second parameter is the LLVM, Java, or MIR type of the
 variable. The resulting `Term` can be used in various subsequent
 commands.
+
+Note that the second parameter to `{llvm,jvm,mir}_fresh_var` must be a type
+that has a counterpart in Cryptol. (For more information on this, refer to the
+"Cryptol type correspondence" section.) If the type does not have a Cryptol
+counterpart, the function will raise an error. If you do need to create a fresh
+value of a type that cannot be represented in Cryptol, consider using a
+function such as `llvm_fresh_expanded_val` (for LLVM verification) or
+`mir_fresh_expanded_value` (for MIR verification).
 
 LLVM types are built with this set of functions:
 
@@ -2305,6 +2310,86 @@ The `llvm_term`, `jvm_term`, and `mir_term` functions create a `SetupValue`,
 * `llvm_term : Term -> SetupValue`
 * `jvm_term : Term -> JVMValue`
 * `mir_term : Term -> MIRValue`
+
+The value that these functions return will have an LLVM, JVM, or MIR type
+corresponding to the Cryptol type of the `Term` argument. (For more information
+on this, refer to the "Cryptol type correspondence" section.) If the type does
+not have a Cryptol counterpart, the function will raise an error.
+
+### Cryptol type correspondence
+
+The `{llvm,jvm,mir}_fresh_var` functions take an LLVM, JVM, or MIR type as an
+argument and produces a `Term` variable of the corresponding Cryptol type as
+output. Similarly, the `{llvm,jvm,mir}_term` functions take a Cryptol `Term` as
+input and produce a value of the corresponding LLVM, JVM, or MIR type as
+output. This section describes precisely which types can be converted to
+Cryptol types (and vice versa) in this way.
+
+#### LLVM verification
+
+The following LLVM types correspond to Cryptol types:
+
+* `llvm_alias <name>`: Corresponds to the same Cryptol type as the type used
+  in the definition of `<name>`.
+* `llvm_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+  where `<cty>` is the Cryptol type corresponding to `<ty>`.
+* `llvm_int <n>`: Corresponds to the Cryptol word `[<n>]`.
+* `llvm_struct [<ty_1>, ..., <ty_n>]` and `llvm_packed_struct [<ty_1>, ..., <ty_n>]`:
+  Corresponds to the Cryptol tuple `(<cty_1>, ..., <cty_n>)`, where `<cty_i>`
+  is the Cryptol type corresponding to `<ty_i>` for each `i` ranging from `1`
+  to `n`.
+
+The following LLVM types do _not_ correspond to Cryptol types:
+
+* `llvm_double`
+* `llvm_float`
+* `llvm_pointer`
+
+#### JVM verification
+
+The following Java types correspond to Cryptol types:
+
+* `java_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+  where `<cty>` is the Cryptol type corresponding to `<ty>`.
+* `java_bool`: Corresponds to the Cryptol `Bit` type.
+* `java_byte`: Corresponds to the Cryptol `[8]` type.
+* `java_char`: Corresponds to the Cryptol `[16]` type.
+* `java_int`: Corresponds to the Cryptol `[32]` type.
+* `java_long`: Corresponds to the Cryptol `[64]` type.
+* `java_short`: Corresponds to the Cryptol `[16]` type.
+
+The following Java types do _not_ correspond to Cryptol types:
+
+* `java_class`
+* `java_double`
+* `java_float`
+
+#### MIR verification
+
+The following MIR types correspond to Cryptol types:
+
+* `mir_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+  where `<cty>` is the Cryptol type corresponding to `<ty>`.
+* `mir_bool`: Corresponds to the Cryptol `Bit` type.
+* `mir_char`: Corresponds to the Cryptol `[32]` type.
+* `mir_i8` and `mir_u8`: Corresponds to the Cryptol `[8]` type.
+* `mir_i16` and `mir_u16`: Corresponds to the Cryptol `[16]` type.
+* `mir_i32` and `mir_u32`: Corresponds to the Cryptol `[32]` type.
+* `mir_i64` and `mir_u64`: Corresponds to the Cryptol `[64]` type.
+* `mir_i128` and `mir_u128`: Corresponds to the Cryptol `[128]` type.
+* `mir_isize` and `mir_usize`: Corresponds to the Cryptol `[32]` type.
+* `mir_tuple [<ty_1>, ..., <ty_n>]`: Corresponds to the Cryptol tuple
+  `(<cty_1>, ..., <cty_n>)`, where `<cty_i>` is the Cryptol type corresponding
+  to `<ty_i>` for each `i` ranging from `1` to `n`.
+
+The following MIR types do _not_ correspond to Cryptol types:
+
+* `mir_adt`
+* `mir_f32`
+* `mir_f64`
+* `mir_ref` and `mir_ref_mut`
+* `mir_slice`
+* `mir_str`
 
 ## Executing
 
@@ -2926,6 +3011,15 @@ construct compound values:
 * `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
   of the given type whose elements consist of the given values. Supplying the
   element type is necessary to support length-0 arrays.
+* `mir_enum_value : MIRAdt -> String -> [MIRValue] -> MIRValue` constructs an
+  enum using a particular enum variant. The `MIRAdt` arguments determines what
+  enum type to create, the `String` value determines the name of the variant to
+  use, and the `[MIRValue]` list are the values to use as elements in the
+  variant.
+
+  See the "Finding MIR alegraic data types" section (as well as the "Enums"
+  subsection") for more information on how to compute a `MIRAdt` value to pass
+  to `mir_enum_value`.
 * `mir_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section below.
 * `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
   "MIR slices" section below.
@@ -3102,9 +3196,52 @@ s_8_16  <- mir_find_adt m "example::S" [mir_u8,  mir_u16];
 s_32_64 <- mir_find_adt m "example::S" [mir_u32, mir_u64];
 ~~~~
 
-The `mir_adt` command (for constructing a struct type) and `mir_struct_value`
-(for constructing a struct value) commands in turn take a `MIRAdt` as an
-argument.
+The `mir_adt` command (for constructing a struct type), `mir_struct_value` (for
+constructing a struct value), and `mir_enum_value` (for constructing an enum
+value) commands in turn take a `MIRAdt` as an argument.
+
+#### Enums
+
+In addition to taking a `MIRAdt` as an argument, `mir_enum_value` also takes a
+`String` representing the name of the variant to construct. The variant name
+should be a short name such as `"None"` or `"Some"`, and not a full identifier
+such as `"core::option::None"` or `"core::option::Some"`. This is because the
+`MIRAdt` already contains the full identifiers for all of an enum's variants,
+so SAW will use this information to look up a variant's identifier from a short
+name. Here is an example of using `mir_enum_value` in practice:
+
+~~~~ .rs
+pub fn n() -> Option<u32> {
+    None
+}
+
+pub fn s(x: u32) -> Option<u32> {
+    Some(x)
+}
+~~~~
+~~~~
+m <- mir_load_module "example.linked-mir.json";
+
+option_u32 <- mir_find_adt m "core::option::Option" [mir_u32];
+
+let n_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value option_u32 "None" []);
+};
+
+let s_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_enum_value option_u32 "Some" [mir_term x]);
+};
+~~~~
+
+Note that `mir_enum_value` can only be used to construct a specific variant. If
+you need to construct a symbolic enum value that can range over many potential
+variants, use `mir_fresh_expanded_value` instead.
 
 ### Bitfields
 
