@@ -1551,7 +1551,7 @@ parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
 parseFunPermFromRust env w args ret str =
   do get3SomeFunPerm <- parseSome3FunPermFromRust env w str
      un3SomeFunPerm args ret get3SomeFunPerm
-  
+
 
 -- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
 parseSome3FunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>

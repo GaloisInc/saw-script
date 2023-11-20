@@ -35,7 +35,7 @@ defined in the SAW core prelude:
 > (if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>= k
 > (either f1 f2 e) >>= k        = either (\x -> f1 x >>= k) (\x -> f2 x >>= k) e
 > (multiFixS funs body) >>= k   = multiFixS funs (\F1 ... Fn -> body F1 ... Fn >>= k)
-> 
+>
 > liftStackS (retS x)                = retS x
 > liftStackS (errorS str)            = errorS str
 > liftStackS (m >>= k)               = liftStackS m >>= \x -> liftStackS (k x)
@@ -74,65 +74,65 @@ The goal of the solver at any point is of the form @C |- m1 |= m2@, meaning that
 we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 
 > C |- retS e1 |= retS e2: prove C |- e1 = e2
-> 
+>
 > C |- errorS str1 |= errorS str2: vacuously true
-> 
+>
 > C |- if b then m1' else m1'' |= m2: prove C,b=true |- m1' |= m2 and
 > C,b=false |- m1'' |= m2, skipping either case where C,b=X is unsatisfiable;
-> 
+>
 > C |- m1 |= if b then m2' else m2'': similar to the above
-> 
+>
 > C |- either T U (SpecM V) f1 f2 e |= m: prove C,x:T,e=inl x |- f1 x |= m and
 > C,y:U,e=inl y |- f2 y |= m, again skippping any case with unsatisfiable context;
-> 
+>
 > C |- m |= either T U (SpecM V) f1 f2 e: similar to previous
-> 
+>
 > C |- m |= forallS f: make a new universal variable x and recurse
-> 
+>
 > C |- existsS f |= m: make a new universal variable x and recurse (existential
 > elimination uses universal variables and vice-versa)
-> 
+>
 > C |- m |= existsS f: make a new existential variable x and recurse
-> 
+>
 > C |- forallS f |= m: make a new existential variable x and recurse
-> 
+>
 > C |- m |= orS m1 m2: try to prove C |- m |= m1, and if that fails, backtrack and
 > prove C |- m |= m2
-> 
+>
 > C |- orS m1 m2 |= m: prove both C |- m1 |= m and C |- m2 |= m
-> 
+>
 > C |- multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) |= m: create
 > multiFixS-bound variables F1 through Fn in the context bound to their unfoldings
 > f1 through fn, respectively, and recurse on body |= m
-> 
+>
 > C |- m |= multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
 > previous case
-> 
+>
 > C |- F e1 ... en >>= k |= F e1' ... en' >>= k': prove C |- ei = ei' for each i
 > and then prove k x |= k' x for new universal variable x
-> 
+>
 > C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
-> 
+>
 > * If we have an assumption that forall x1 ... xj, F a1 ... an |= F' a1' .. am',
 >   prove ei = ai and ei' = ai' and then that C |- k x |= k' x for fresh uvar x
-> 
+>
 > * If we have an assumption that forall x1, ..., xn, F e1'' ... en'' |= m' for
 >   some ei'' and m', match the ei'' against the ei by instantiating the xj with
 >   fresh evars, and if this succeeds then recursively prove C |- m' >>= k |= RHS
-> 
+>
 > (We don't do this one right now)
 > * If we have an assumption that forall x1', ..., xn', m |= F e1'' ... en'' for
 >   some ei'' and m', match the ei'' against the ei by instantiating the xj with
 >   fresh evars, and if this succeeds then recursively prove C |- LHS |= m' >>= k'
-> 
+>
 > * If either side is a definition whose unfolding does not contain multiFixS, or
 >   any related operations, unfold it
-> 
+>
 > * If F and F' have the same return type, add an assumption forall uvars in scope
 >   that F e1 ... en |= F' e1' ... em' and unfold both sides, recursively proving
 >   that F_body e1 ... en |= F_body' e1' ... em'. Then also prove k x |= k' x for
 >   fresh uvar x.
-> 
+>
 > * Otherwise we don't know to "split" one of the sides into a bind whose
 >   components relate to the two components on the other side, so just fail
 

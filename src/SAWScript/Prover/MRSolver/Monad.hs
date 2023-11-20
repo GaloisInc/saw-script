@@ -451,7 +451,7 @@ runMRM sc env timeout askSMT rs m =
 
 -- | Run an 'MRM' computation and return a result or an error, discarding the
 -- final state
-evalMRM :: 
+evalMRM ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
@@ -465,7 +465,7 @@ evalMRM sc env timeout askSMT rs =
 
 -- | Run an 'MRM' computation and return a final state or an error, discarding
 -- the result
-execMRM :: 
+execMRM ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->
   Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->

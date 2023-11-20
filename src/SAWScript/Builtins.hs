@@ -471,7 +471,7 @@ print_goal_inline noInline =
   execTactic $ tacticId $ \goal ->
     do
       opts <- getTopLevelPPOpts
-      let opts' = opts { ppNoInlineMemo = sort noInline } 
+      let opts' = opts { ppNoInlineMemo = sort noInline }
       sc <- getSharedContext
       nenv <- io (scGetNamingEnv sc)
       let output = prettySequent opts' nenv (goalSequent goal)

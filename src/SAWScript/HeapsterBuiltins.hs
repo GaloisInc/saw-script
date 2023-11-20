@@ -645,7 +645,7 @@ heapster_define_reachability_perm _bic _opts henv
               _ -> Fail.fail "Incorrect type for last argument of reachability perm"
        let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
        let args = parsedCtxCtx args_ctx
-       trans_tp <- liftIO $ 
+       trans_tp <- liftIO $
          translateCompleteTypeInCtx sc env args $
          nus (cruCtxProxies args) $ const $ ValuePermRepr tp
        trans_tp_ident <- parseAndInsDef henv nm trans_tp trans_tp_str
@@ -1054,7 +1054,7 @@ heapster_translate_rust_type _bic _opts henv perms_string =
         Some3FunPerm fun_perm <-
           parseSome3FunPermFromRust env w64 perms_string
         liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
-        
+
 -- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
 -- associated with the supplied Heapster environment, and return its identifier
 insPrimitive :: HeapsterEnv -> String -> Term -> TopLevel Ident

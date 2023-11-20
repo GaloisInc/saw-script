@@ -849,7 +849,7 @@ emptyMemoTable = IntMap.empty
 data MonadifyROState = MonadifyROState {
   -- | The monadification environment
   monStEnv :: MonadifyEnv,
-  -- | The monadification context 
+  -- | The monadification context
   monStCtx :: MonadifyCtx,
   -- | The current @SpecM@ function stack
   monStStack :: OpenTerm,

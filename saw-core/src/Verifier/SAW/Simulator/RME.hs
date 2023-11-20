@@ -315,14 +315,14 @@ vSignedShiftR xs i
 
 toIntModOp :: RPrim
 toIntModOp =
-  Prims.natFun $ \n -> 
+  Prims.natFun $ \n ->
   Prims.intFun $ \x ->
     Prims.PrimValue (VIntMod n (x `mod` toInteger n))
 
 fromIntModOp :: RPrim
 fromIntModOp =
   Prims.constFun $
-  Prims.intModFun $ \x -> 
+  Prims.intModFun $ \x ->
     Prims.PrimValue (VInt x)
 
 intModEqOp :: RPrim

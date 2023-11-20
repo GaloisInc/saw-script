@@ -6,7 +6,7 @@
 -- Maintainer  : sweirich@galois.com
 -- Stability   : experimental
 -- Portability : non-portable (language extensions)
--- 
+--
 -- A runtime representation of positive nats
 ------------------------------------------------------------------------
 
@@ -36,7 +36,7 @@
 -- to allow implicitly provided nats
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
--- to allow 'WithKnownNat' 
+-- to allow 'WithKnownNat'
 {-# OPTIONS_GHC -Wno-warnings-deprecations #-}
 
 module Verifier.SAW.Simulator.What4.PosNat where
@@ -58,7 +58,7 @@ data PosNat (n :: Nat) where
 
 -- | Check whether an integer is a positive nat
 somePosNat :: Integral a => a -> Maybe (Some PosNat)
-somePosNat n 
+somePosNat n
   | Just (Some nr) <- someNat n,
     Just LeqProof  <- testLeq (knownNat @1) nr
   = withKnownNat nr $ Just (Some (PosNat nr))
@@ -79,7 +79,7 @@ addPosNat =
   let w1  = knownNat @w1
       w2  = knownNat @w2
       sm  = addNat w1 w2 in
-  case leqAddPos w1 w2 of 
+  case leqAddPos w1 w2 of
     LeqProof -> withKnownNat sm $ PosNat sm
 
 -- I would hope that the 'leqAddPos' call can be compiled away...
