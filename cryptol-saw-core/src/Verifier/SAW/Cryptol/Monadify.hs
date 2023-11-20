@@ -761,13 +761,13 @@ fromSemiPureTermFun tp f = BaseMonTerm tp (f [])
 fromSemiPureTerm :: HasSpecMEvType => MonType -> OpenTerm -> ArgMonTerm
 fromSemiPureTerm mtp t = fromSemiPureTermFun mtp (applyOpenTermMulti t)
 
--- | Build a 'MonTerm' that 'fail's when converted to a term
-failMonTerm :: HasSpecMEvType => OpenTerm -> String -> MonTerm
-failMonTerm tp str = ArgMonTerm $ BaseMonTerm (MTyIndesc tp) (failOpenTerm str)
-
 -- | Build an 'ArgMonTerm' that 'fail's when converted to a term
 failArgMonTerm :: HasSpecMEvType => MonType -> String -> ArgMonTerm
-failArgMonTerm tp str = fromArgTerm tp (failOpenTerm str)
+failArgMonTerm tp str = BaseMonTerm tp (failOpenTerm str)
+
+-- | Build a 'MonTerm' that 'fail's when converted to a term
+failMonTerm :: HasSpecMEvType => MonType -> String -> MonTerm
+failMonTerm tp str = ArgMonTerm $ failArgMonTerm tp str
 
 -- | Apply a monadified type to a type or term argument in the sense of
 -- 'applyPiOpenTerm', meaning give the type of applying @f@ of a type to a
@@ -823,18 +823,6 @@ mkCtorArgMonTerm pn
 mkCtorArgMonTerm pn =
   fromSemiPureTermFun (monadifyType [] $ primType pn) (ctorOpenTerm $ primName pn)
 
-
-{-
-FIXME HERE NOWNOW:
-- remove lrtFromMonType, add descFromMonType
-- how to generate deBruijn indices in TpDescs?
-  + option 1: leave it higher-order, but add a MTyVar ctor to track indices when
-    converting to TpDescs
-  + option 2: remove HOAS representation from types and MonTerms
-- MTyBase -> MTyIndesc
-- remove functional kinds
-- FIXME: what about type-level expressions that might have deBruijn indices?
-- FIXME: remove MTyRecord
 
 ----------------------------------------------------------------------
 -- * Monadification Environments and Contexts
@@ -909,8 +897,8 @@ type MonadifyCtx = [(LocalName,Term,MonArg)]
 ctxToTypeCtx :: MonadifyCtx -> MonadifyTypeCtx
 ctxToTypeCtx = map (\(x,tp,arg) ->
                      (x,tp,case arg of
-                         Left mtp -> Just mtp
-                         Right _ -> Nothing))
+                         TpArg k mtp -> Just (SomeTpExpr k mtp)
+                         TrmArg _ -> Nothing))
 
 -- | Pretty-print a 'Term' relative to a 'MonadifyCtx'
 ppTermInMonCtx :: MonadifyCtx -> Term -> String
@@ -938,8 +926,10 @@ data MonadifyROState = MonadifyROState {
   monStEnv :: MonadifyEnv,
   -- | The monadification context 
   monStCtx :: MonadifyCtx,
-  -- | The monadified return type of the top-level term being monadified
-  monStTopRetType :: OpenTerm
+  -- | The monadified return type of the top-level term being monadified; that
+  -- is, we are inside a call to 'monadifyTerm' applied to some function of SAW
+  -- core type @a1 -> ... -> an -> b@, and this is the type @b@
+  monStTopRetType :: MonType
 }
 
 -- | Get the monadification table from a 'MonadifyROState'
@@ -955,8 +945,8 @@ newtype MonadifyM a =
             MonadReader MonadifyROState, MonadState MonadifyMemoTable)
 
 -- | Get the current 'EventType' in a 'MonadifyM' computation
-askEvType :: MonadifyM EvType
-askEvType = monEnvEvType <$> ask
+askEvType :: MonadifyM EventType
+askEvType = monEnvEvType <$> monStEnv <$> ask
 
 -- | Run a 'MonadifyM' computation with the current 'EventType'
 usingEvType :: (HasSpecMEvType => MonadifyM a) -> MonadifyM a
@@ -979,20 +969,20 @@ shiftMonadifyM f = MonadifyM $ lift $ lift $ cont f
 
 -- | Locally run a 'MonadifyM' computation with an empty memoization table,
 -- making all binds be local to that computation, and return the result
-resetMonadifyM :: OpenTerm -> MonadifyM MonTerm -> MonadifyM MonTerm
+resetMonadifyM :: MonType -> MonadifyM MonTerm -> MonadifyM MonTerm
 resetMonadifyM ret_tp m =
   do ro_st <- ask
      return $ runMonadifyM (monStEnv ro_st) (monStCtx ro_st) ret_tp m
 
 -- | Get the monadified return type of the top-level term being monadified
-topRetType :: MonadifyM OpenTerm
+topRetType :: MonadifyM MonType
 topRetType = monStTopRetType <$> ask
 
 -- | Run a monadification computation
 --
 -- FIXME: document the arguments
-runMonadifyM :: MonadifyEnv -> MonadifyCtx ->
-                OpenTerm -> MonadifyM MonTerm -> MonTerm
+runMonadifyM :: MonadifyEnv -> MonadifyCtx -> MonType ->
+                MonadifyM MonTerm -> MonTerm
 runMonadifyM env ctx top_ret_tp m =
   let ro_st = MonadifyROState env ctx top_ret_tp in
   runCont (evalStateT (runReaderT (unMonadifyM m) ro_st) emptyMemoTable) id
@@ -1005,7 +995,7 @@ runCompleteMonadifyM :: MonadIO m => SharedContext -> MonadifyEnv ->
 runCompleteMonadifyM sc env top_ret_tp m =
   let ?specMEvType = monEnvEvType env in
   liftIO $ completeOpenTerm sc $ toCompTerm $
-  runMonadifyM env [] (toArgType $ monadifyType [] top_ret_tp) m
+  runMonadifyM env [] (monadifyType [] top_ret_tp) m
 
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
 memoMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
@@ -1047,21 +1037,32 @@ argifyMonTerm (CompMonTerm mtp trm) =
      top_ret_tp <- topRetType
      shiftMonadifyM $ \k ->
        CompMonTerm top_ret_tp $
-       bindSOpenTerm ?specMEvType tp top_ret_tp trm $
+       bindSOpenTerm ?specMEvType tp (toArgType top_ret_tp) trm $
        lambdaOpenTerm "x" tp (toCompTerm . k . fromArgTerm mtp)
 
 -- | Build a proof of @isFinite n@ by calling @assertFiniteS@ and binding the
 -- result to an 'ArgMonTerm'
-assertIsFinite :: HasSpecMEvType => MonType -> MonadifyM ArgMonTerm
-assertIsFinite (MTyNum n) =
+assertIsFinite :: HasSpecMEvType => NumTpExpr -> MonadifyM ArgMonTerm
+assertIsFinite e =
+  let n = numExprVal e in
   argifyMonTerm (CompMonTerm
                  (MTyIndesc (applyOpenTerm
                              (globalOpenTerm "CryptolM.isFinite") n))
                  (applyGlobalOpenTerm "CryptolM.assertFiniteS"
                   [evTypeTerm ?specMEvType, n]))
-assertIsFinite _ =
-  fail ("assertIsFinite applied to non-Num argument")
 
+
+{-
+FIXME HERE NOWNOW:
+- remove lrtFromMonType, add descFromMonType
+- how to generate deBruijn indices in TpDescs?
+  + option 1: leave it higher-order, but add a MTyVar ctor to track indices when
+    converting to TpDescs
+  + option 2: remove HOAS representation from types and MonTerms
+- MTyBase -> MTyIndesc
+- remove functional kinds
+- FIXME: what about type-level expressions that might have deBruijn indices?
+- FIXME: remove MTyRecord
 
 ----------------------------------------------------------------------
 -- * Monadification
@@ -1235,9 +1236,8 @@ monadifyEtaExpand env ctx top_mtp (MTyArrow tp_in tp_out) t args =
   monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [Right arg])
 monadifyEtaExpand env ctx top_mtp mtp t args =
   let ?specMEvType = monEnvEvType env in
-  applyMonTermMulti
-  (runMonadifyM env ctx (toArgType mtp) (monadifyTerm (Just top_mtp) t))
-  args
+  applyMonTermMulti (runMonadifyM env ctx mtp
+                     (monadifyTerm (Just top_mtp) t)) args
 
 
 ----------------------------------------------------------------------
