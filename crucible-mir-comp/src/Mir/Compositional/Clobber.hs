@@ -62,6 +62,8 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv = go shp rv
+    go (EnumShape _ _ _ _ _) _rv =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _rv =
         error "Function pointers not currently supported in overrides"
     go (RefShape _ _ _ _) _rv = error "clobberSymbolic: RefShape NYI"
@@ -120,6 +122,8 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
         ref' <- go refShp ref
         len' <- go lenShp len
         pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
+    go (EnumShape _ _ _ _ _) _rv =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _rv =
         error "Function pointers not currently supported in overrides"
 

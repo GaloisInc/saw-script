@@ -29,10 +29,16 @@ module SAWScript.Crucible.MIR.ResolveSetupValue
   , mirAdtToTy
   , findDefId
   , findDefIdEither
+    -- * Static items
   , findStatic
   , findStaticInitializer
   , findStaticVar
   , staticRefMux
+    -- * Enum discriminants
+  , getEnumVariantDiscr
+  , testDiscriminantIsBV
+  , variantIntIndex
+    -- * Types of errors
   , MIRTypeOfError(..)
   ) where
 
@@ -45,6 +51,7 @@ import qualified Data.BitVector.Sized as BV
 import qualified Data.Foldable as F
 import qualified Data.Functor.Product as Functor
 import           Data.Kind (Type)
+import qualified Data.List.Extra as List (firstJust)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -67,8 +74,10 @@ import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 import Lang.Crucible.Backend (IsSymInterface)
 import Lang.Crucible.Simulator
-  ( AnyValue(..), GlobalVar(..), RegValue, RegValue'(..), SymGlobalState )
-import Lang.Crucible.Types (MaybeType, TypeRepr(..))
+  ( AnyValue(..), GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
+  , VariantBranch(..), injectVariant
+  )
+import Lang.Crucible.Types (AnyType, MaybeType, TypeRepr(..))
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
@@ -115,7 +124,7 @@ ppMIRVal sym (MIRVal shp val) =
     PrimShape _ _ ->
       W4.printSymExpr val
     TupleShape _ _ fldShp ->
-      PP.parens $ prettyStructOrTuple fldShp val
+      PP.parens $ prettyAdtOrTuple fldShp val
     ArrayShape _ _ shp' ->
       case val of
         Mir.MirVector_Vector vec ->
@@ -130,10 +139,22 @@ ppMIRVal sym (MIRVal shp val) =
     StructShape _ _ fldShp
       |  AnyValue (StructRepr fldTpr) fldVals <- val
       ,  Just Refl <- W4.testEquality (FC.fmapFC fieldShapeType fldShp) fldTpr
-      -> PP.braces $ prettyStructOrTuple fldShp fldVals
+      -> PP.braces $ prettyAdtOrTuple fldShp fldVals
 
       | otherwise
       -> error "Malformed MIRVal struct"
+    EnumShape _ _ variantShps _ _
+      |  AnyValue (Mir.RustEnumRepr _ variantCtx)
+                  (Ctx.Empty Ctx.:> RV _ Ctx.:> RV variants) <- val
+      ,  Just Refl <- W4.testEquality (FC.fmapFC variantShapeType variantShps) variantCtx
+      -> case firstConcreteVariant variantShps variants of
+           Just (Some (Functor.Pair fldShps fldVals)) ->
+             PP.braces $ prettyAdtOrTuple fldShps fldVals
+           Nothing ->
+             "<symbolic enum>"
+
+      |  otherwise
+      -> error "Malformed MIRVal enum"
     TransparentShape _ shp' ->
       ppMIRVal sym $ MIRVal shp' val
     RefShape _ _ _ _  ->
@@ -147,12 +168,35 @@ ppMIRVal sym (MIRVal shp val) =
     commaList []     = PP.emptyDoc
     commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
 
-    prettyStructOrTuple ::
+    -- Return Just the first VariantBranch whose predicate is concretely equal
+    -- to True. If none of the VariantBranches satisfy this property, then
+    -- return Nothing.
+    firstConcreteVariant ::
+      Ctx.Assignment VariantShape ctx ->
+      Ctx.Assignment (VariantBranch Sym) ctx ->
+      Maybe (Some (Functor.Product
+        (Ctx.Assignment FieldShape)
+        (Ctx.Assignment (RegValue' Sym))))
+    firstConcreteVariant variantShapes variantBranches =
+      List.firstJust
+        (\(Some (Functor.Pair (VariantShape fldShps) (VB branch))) ->
+          case branch of
+            W4.PE fldPred fldVals
+              |  W4.asConstantPred fldPred == Just True
+              -> Just $ Some $ Functor.Pair fldShps fldVals
+              |  otherwise
+              -> Nothing
+            W4.Unassigned ->
+              Nothing) $
+      FC.toListFC Some $
+      Ctx.zipWith Functor.Pair variantShapes variantBranches
+
+    prettyAdtOrTuple ::
       forall ctx.
       Ctx.Assignment FieldShape ctx ->
       Ctx.Assignment (RegValue' Sym) ctx ->
       PP.Doc ann
-    prettyStructOrTuple fldShp fldVals =
+    prettyAdtOrTuple fldShp fldVals =
       commaList $
       map (\(Some (Functor.Pair shp' (RV v))) -> prettyField shp' v) $
       FC.toListFC Some $
@@ -245,6 +289,12 @@ typeOfSetupValue mcc env nameEnv val =
       pure $ Mir.TyArray elemTy (length vs)
     MS.SetupStruct adt _ ->
       pure $ mirAdtToTy adt
+    MS.SetupEnum enum_ ->
+      case enum_ of
+        MirSetupEnumVariant adt _ _ _ ->
+          pure $ mirAdtToTy adt
+        MirSetupEnumSymbolic adt _ _ ->
+          pure $ mirAdtToTy adt
     MS.SetupTuple () vals -> do
       tys <- traverse (typeOfSetupValue mcc env nameEnv) vals
       pure $ Mir.TyTuple tys
@@ -312,48 +362,206 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupStruct adt flds ->
       case adt of
         _ | adt ^. Mir.adtReprTransparent,
-            [fld] <- flds -> do
-          MIRVal shp fld' <- resolveSetupVal mcc env tyenv nameEnv fld
-          pure $ MIRVal (TransparentShape (mirAdtToTy adt) shp) fld'
-        Mir.Adt nm Mir.Struct [variant] _ _ _ _ -> do
+            [fld] <- flds ->
+          resolveTransparentSetupVal adt fld
+        Mir.Adt nm Mir.Struct variants _ _ _ _ -> do
+          -- First, retrieve the struct variant.
+          variant <-
+            case variants of
+              [variant] ->
+                pure variant
+              _ ->
+                panic "resolveSetupVal"
+                      [ "Encountered struct Adt with " ++
+                        show (length variants) ++
+                        " variants:"
+                      , show nm
+                      ]
+
+          -- Next, resolve the field values and check that they have the
+          -- expected types.
           flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
           let expectedFlds = variant ^. Mir.vfields
-          let expectedFldsNum = length expectedFlds
           let actualFldTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
-          let actualFldsNum = length actualFldTys
-          unless (expectedFldsNum == actualFldsNum) $
-            fail $ unlines
-              [ "Mismatch in number of struct fields"
-              , "Struct name: " ++ show nm
-              , "Expected number of fields: " ++ show expectedFldsNum
-              , "Actual number of fields:   " ++ show actualFldsNum
-              ]
-          zipWithM_
-            (\expectedFld actualFldTy ->
-              let expectedFldTy = expectedFld ^. Mir.fty in
-              let expectedFldName = expectedFld ^. Mir.fName in
-              unless (checkCompatibleTys expectedFldTy actualFldTy) $
-                fail $ unlines
-                  [ "Struct field type mismatch"
-                  , "Field name: " ++ show expectedFldName
-                  , "Expected type: " ++ show (PP.pretty expectedFldTy)
-                  , "Given type:    " ++ show (PP.pretty actualFldTy)
-                  ])
-            expectedFlds
-            actualFldTys
-          Some fldAssn <-
-            pure $ Ctx.fromList $
-            map (\(MIRVal shp v) ->
-                  if Mir.canInitialize col (shapeMirTy shp)
-                  then Some $ Functor.Pair (ReqField shp) (RV v)
-                  else Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
-                flds'
-          let (fldShpAssn, valAssn) = Ctx.unzip fldAssn
+          checkFields nm "Struct" "struct fields" expectedFlds actualFldTys
+
+          -- Finally, construct a MIRVal of the appropriate shape.
+          Some (Functor.Pair fldShpAssn valAssn) <-
+            pure $ variantFieldsToAssns sym flds'
           let structShp = StructShape (mirAdtToTy adt) actualFldTys fldShpAssn
           let structTpr = StructRepr (FC.fmapFC fieldShapeType fldShpAssn)
           pure $ MIRVal structShp (AnyValue structTpr valAssn)
-        Mir.Adt _ ak _ _ _ _ _ ->
-          panic "resolveSetupVal" ["AdtKind " ++ show ak ++ " not yet implemented"]
+        Mir.Adt nm (Mir.Enum _) _ _ _ _ _ ->
+          panic "resolveSetupVal"
+                [ "Expected struct type, received enum:"
+                , show nm
+                ]
+        Mir.Adt nm Mir.Union _ _ _ _ _ ->
+          panic "resolveSetupVal"
+                [ "Expected struct type, received union:"
+                , show nm
+                ]
+    MS.SetupEnum enum_ ->
+      case enum_ of
+        MirSetupEnumVariant adt variant variantIdxInt flds ->
+          case adt of
+            _ | adt ^. Mir.adtReprTransparent,
+                [fld] <- flds -> do
+              resolveTransparentSetupVal adt fld
+            Mir.Adt nm (Mir.Enum discrTp) variants _ _ _ _ -> do
+              -- Resolve the field values and check that they have the expected
+              -- types.
+              flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
+              let expectedFlds = variant ^. Mir.vfields
+              let actualFldTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+              checkFields
+                nm
+                "Enum"
+                ("fields in enum variant " ++ show (variant ^. Mir.vname))
+                expectedFlds
+                actualFldTys
+
+              -- Ensure that the discriminant has an integral type and build
+              -- a symbolic bitvector from it.
+              Some discrTpr <- pure $ Mir.tyToRepr col discrTp
+              let discrShp = tyToShapeEq col discrTp discrTpr
+              IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
+              let discr = getEnumVariantDiscr variant
+              discrVal <- W4.bvLit sym discrW $ BV.mkBV discrW discr
+
+              -- Construct an EnumShape and RustEnumRepr. This requires
+              -- processing /all/ variants, not just the particular variant that
+              -- we are building.
+              (enumShp, Some expectedVariantShps) <- pure $
+                enumShapes adt discrTp discrShp variants
+              let variantTprs =
+                    FC.fmapFC variantShapeType expectedVariantShps
+              let enumTpr = Mir.RustEnumRepr
+                              discrTpr
+                              variantTprs
+
+              -- Construct the VariantShape of the particular variant that we
+              -- are building.
+              Some variantIdx <- pure $
+                variantIntIndex nm variantIdxInt $
+                Ctx.size expectedVariantShps
+              VariantShape expectedFldAssn <-
+                pure $ expectedVariantShps Ctx.! variantIdx
+
+              -- Check that the actual field values match the expected types.
+              Some (Functor.Pair actualFldAssn actualValAssn) <-
+                pure $ variantFieldsToAssns sym flds'
+              Refl <-
+                case W4.testEquality expectedFldAssn actualFldAssn of
+                  Just r -> pure r
+                  Nothing ->
+                    panic "resolveSetupVal"
+                          [ "Enum field shape mismatch"
+                          , "Expected: " ++ show expectedFldAssn
+                          , "Actual: " ++ show actualFldAssn
+                          ]
+
+              -- Finally, construct a MIRVal.
+              let enumVal =
+                    Ctx.empty
+                      Ctx.:> RV discrVal
+                      Ctx.:> RV (injectVariant sym variantTprs variantIdx actualValAssn)
+              pure $ MIRVal enumShp $ AnyValue enumTpr enumVal
+            Mir.Adt nm Mir.Struct _ _ _ _ _ ->
+              panic "resolveSetupVal"
+                    [ "Expected enum type, received struct:"
+                    , show nm
+                    ]
+            Mir.Adt nm Mir.Union _ _ _ _ _ ->
+              panic "resolveSetupVal"
+                    [ "Expected enum type, received union:"
+                    , show nm
+                    ]
+        -- See Note [Symbolic enums] in SAWScript.Crucible.MIR.Setup.Value for
+        -- more information on the approach used to resolve symbolic enum
+        -- values.
+        MirSetupEnumSymbolic adt discr variantFlds ->
+          case adt of
+            _ | adt ^. Mir.adtReprTransparent ->
+              -- `repr(transparent)` enum values use MirSetupEnumVariant rather
+              -- than MirSetupEnumSymbolic. See the Haddocks for
+              -- MirSetupEnumSymbolic for an explanation.
+              panic "resolveSetupVal"
+                    [ "Symbolic enum of type " ++ show (adt ^. Mir.adtname)
+                    , "that uses MirSetupEnumSymbolic rather than MirSetupEnumVarianr"
+                    ]
+            Mir.Adt nm (Mir.Enum discrTp) variants _ _ _ _ -> do
+              -- Resolve the discriminant value and ensure that it has an
+              -- integral type.
+              MIRVal discrShp discrVal <- resolveSetupVal mcc env tyenv nameEnv discr
+              IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
+              let discrTpr = shapeType discrShp
+
+              -- Resolve the field values in each possible variant and check
+              -- that they have the expected types.
+              variantFlds' <-
+                zipWithM
+                  (\variant flds -> do
+                    let variantDiscr = getEnumVariantDiscr variant
+                    variantDiscrBV <- W4.bvLit sym discrW $ BV.mkBV discrW variantDiscr
+                    branch <- W4.bvEq sym variantDiscrBV discrVal
+                    flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
+                    let expectedFlds = variant ^. Mir.vfields
+                    let actualFldTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
+                    checkFields
+                      nm
+                      "Enum"
+                      ("fields in enum variant " ++ show (variant ^. Mir.vname))
+                      expectedFlds
+                      actualFldTys
+                    Some (Functor.Pair fldShpAssn valAssn) <-
+                      pure $ variantFieldsToAssns sym flds'
+                    pure $ Some
+                         $ Functor.Pair
+                             (VariantShape fldShpAssn)
+                             (VB (W4.PE branch valAssn)))
+                  variants
+                  variantFlds
+              Some variantBranchAssn <- pure $ Ctx.fromList variantFlds'
+              let (actualVariantShps, branchAssn) =
+                    Ctx.unzip variantBranchAssn
+
+              -- Construct an EnumShape and RustEnumRepr.
+              (enumShp, Some expectedVariantShps) <- pure $
+                enumShapes adt discrTp discrShp variants
+              let variantTprs =
+                    FC.fmapFC variantShapeType expectedVariantShps
+              let enumTpr = Mir.RustEnumRepr
+                              discrTpr
+                              variantTprs
+
+              -- Check that the actual variant types match the expected types.
+              Refl <-
+                case W4.testEquality expectedVariantShps actualVariantShps of
+                  Just r -> pure r
+                  Nothing ->
+                    panic "resolveSetupVal"
+                          [ "Enum variant shape mismatch"
+                          , "Expected: " ++ show expectedVariantShps
+                          , "Actual: " ++ show actualVariantShps
+                          ]
+
+              -- Finally, construct a MIRVal.
+              let enumVal =
+                    Ctx.empty
+                      Ctx.:> RV discrVal
+                      Ctx.:> RV branchAssn
+              pure $ MIRVal enumShp $ AnyValue enumTpr enumVal
+            Mir.Adt nm Mir.Struct _ _ _ _ _ ->
+              panic "resolveSetupVal"
+                    [ "Expected enum type, received struct:"
+                    , show nm
+                    ]
+            Mir.Adt nm Mir.Union _ _ _ _ _ ->
+              panic "resolveSetupVal"
+                    [ "Expected enum type, received union:"
+                    , show nm
+                    ]
     MS.SetupTuple () flds -> do
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
@@ -427,6 +635,72 @@ resolveSetupVal mcc env tyenv nameEnv val =
     usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
     usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
 
+    -- Perform a light amount of typechecking on the fields in a struct or enum
+    -- variant. This ensures that the variant receives the expected number of
+    -- types and that the types of each field match.
+    checkFields ::
+      Mir.DefId {- The struct or enum name. (Only used for error messages.) -} ->
+      String {- "Struct" or "Enum". (Only used for error messages.) -} ->
+      String {- What type of fields are we checking?
+                (Only used for error messages.) -} ->
+      [Mir.Field] {- The expected fields. -} ->
+      [Mir.Ty] {- The actual field types. -} ->
+      IO ()
+    checkFields adtNm what fieldDiscr expectedFlds actualFldTys = do
+      let expectedFldsNum = length expectedFlds
+      let actualFldsNum = length actualFldTys
+      unless (expectedFldsNum == actualFldsNum) $
+        fail $ unlines
+          [ "Mismatch in number of " ++ fieldDiscr
+          , what ++ " name: " ++ show adtNm
+          , "Expected number of fields: " ++ show expectedFldsNum
+          , "Actual number of fields:   " ++ show actualFldsNum
+          ]
+      zipWithM_
+        (\expectedFld actualFldTy ->
+          let expectedFldTy = expectedFld ^. Mir.fty in
+          let expectedFldName = expectedFld ^. Mir.fName in
+          unless (checkCompatibleTys expectedFldTy actualFldTy) $
+            fail $ unlines
+              [ what ++ " field type mismatch"
+              , "Field name: " ++ show expectedFldName
+              , "Expected type: " ++ show (PP.pretty expectedFldTy)
+              , "Given type:    " ++ show (PP.pretty actualFldTy)
+              ])
+        expectedFlds
+        actualFldTys
+
+    -- Construct the 'TypeShape' for an enum, along with the 'VariantShape's for
+    -- the enum's variants.
+    enumShapes ::
+      Mir.Adt {- The enum type -} ->
+      Mir.Ty {- The discriminant's MIR type -} ->
+      TypeShape discrShp {- The discriminant's TypeShape -} ->
+      [Mir.Variant] {- The enum's variants -} ->
+      (TypeShape AnyType, Some (Ctx.Assignment VariantShape))
+    enumShapes adt discrTp discrShp variants
+      | let variantTys =
+              map (\v -> v ^.. Mir.vfields . each . Mir.fty) variants
+      , Some variantShps <-
+          Ctx.fromList $
+          map (\fldTys ->
+                case Ctx.fromList $
+                     map
+                       (\ty ->
+                         case tyToShape col ty of
+                           Some shp ->
+                             if Mir.canInitialize col ty
+                             then Some $ ReqField shp
+                             else Some $ OptField shp)
+                       fldTys of
+                  Some fldAssn -> Some $ VariantShape fldAssn)
+              variantTys
+      , let enumShp =
+              EnumShape
+                (mirAdtToTy adt) variantTys
+                variantShps discrTp discrShp
+      = (enumShp, Some variantShps)
+
     -- Resolve parts of a slice that are shared in common between
     -- 'MirSetupSlice' and 'MirSetupSliceRange'.
     resolveSetupSliceFromArray ::
@@ -444,6 +718,36 @@ resolveSetupVal mcc env tyenv nameEnv val =
           let sliceShp = SliceShape (Mir.TySlice elemTy) elemTy mut elemTpr
           pure $ SetupSliceFromArray elemTpr sliceShp refVal len
         _ -> X.throwM $ MIRSliceNonArrayReference $ shapeMirTy arrRefShp
+
+    -- Resolve a transparent struct or enum value.
+    resolveTransparentSetupVal :: Mir.Adt -> SetupValue -> IO MIRVal
+    resolveTransparentSetupVal adt fld = do
+      MIRVal shp fld' <- resolveSetupVal mcc env tyenv nameEnv fld
+      pure $ MIRVal (TransparentShape (mirAdtToTy adt) shp) fld'
+
+    -- Given the list of fields in a struct or enum variant, construct two
+    -- Assignments, where the first Assignment consists of each field's type,
+    -- and the second assignment consists of each field's value.
+    variantFieldsToAssns ::
+      Sym ->
+      [MIRVal] ->
+      Some (Functor.Product
+             (Ctx.Assignment FieldShape)
+             (Ctx.Assignment (RegValue' Sym)))
+    variantFieldsToAssns sym flds
+      | Some fldValAssn <- someFldValAssn
+      , (fldAssn, valAssn) <- Ctx.unzip fldValAssn
+      = Some $ Functor.Pair fldAssn valAssn
+      where
+        someFldValAssn ::
+          Some (Ctx.Assignment (Functor.Product FieldShape (RegValue' Sym)))
+        someFldValAssn =
+          Ctx.fromList $
+          map (\(MIRVal shp v) ->
+                if Mir.canInitialize col (shapeMirTy shp)
+                then Some $ Functor.Pair (ReqField shp) (RV v)
+                else Some $ Functor.Pair (OptField shp) (RV (W4.justPartExpr sym v)))
+              flds
 
 -- | An intermediate data structure that is only used by
 -- 'resolveSetupSliceFromArray'.
@@ -697,6 +1001,21 @@ equalValsPred cc mv1 mv2 =
           goFldAssn fldShp fldAssn1 fldAssn2
         (_, _) ->
           pure $ W4.falsePred sym
+    goTy (EnumShape _ _ variantShp _ discrShp) any1 any2 =
+      case (any1, any2) of
+        (AnyValue (Mir.RustEnumRepr discrTpr1 variantCtx1)
+                  (Ctx.Empty Ctx.:> RV discr1 Ctx.:> RV variant1),
+         AnyValue (Mir.RustEnumRepr discrTpr2 variantCtx2)
+                  (Ctx.Empty Ctx.:> RV discr2 Ctx.:> RV variant2)) -> do
+           Refl <- testEquality discrTpr1 discrTpr2
+           Refl <- testEquality (shapeType discrShp) discrTpr1
+           Refl <- testEquality variantCtx1 variantCtx2
+           Refl <- testEquality (FC.fmapFC variantShapeType variantShp) variantCtx1
+           discrPred <- goTy discrShp discr1 discr2
+           variantPred <- goVariantAssn variantShp variant1 variant2
+           liftIO $ W4.andPred sym discrPred variantPred
+        (_, _) ->
+          pure $ W4.falsePred sym
     goTy (TransparentShape _ shp) v1 v2 =
       goTy shp v1 v2
     goTy (RefShape _ _ _ _) ref1 ref2 =
@@ -748,6 +1067,34 @@ equalValsPred cc mv1 mv2 =
           liftIO $ W4.andPred sym eq z)
         (W4.truePred sym)
         (Ctx.zipWith Functor.Pair fldAssn1 fldAssn2)
+
+    goVariantAssn :: Ctx.Assignment VariantShape ctx
+                  -> Ctx.Assignment (VariantBranch Sym) ctx
+                  -> Ctx.Assignment (VariantBranch Sym) ctx
+                  -> MaybeT IO (W4.Pred Sym)
+    goVariantAssn variantShp vbAssn1 vbAssn2 =
+      FCI.ifoldrMFC
+        (\idx (Functor.Pair (VB var1) (VB var2)) z -> do
+          VariantShape fldShp <- pure $ variantShp Ctx.! idx
+          varPred <- goVariantFlds fldShp var1 var2
+          liftIO $ W4.andPred sym varPred z)
+        (W4.truePred sym)
+        (Ctx.zipWith Functor.Pair vbAssn1 vbAssn2)
+
+    goVariantFlds :: Ctx.Assignment FieldShape ctx
+                  -> W4.PartExpr (W4.Pred Sym) (Ctx.Assignment (RegValue' Sym) ctx)
+                  -> W4.PartExpr (W4.Pred Sym) (Ctx.Assignment (RegValue' Sym) ctx)
+                  -> MaybeT IO (W4.Pred Sym)
+    goVariantFlds fldShp (W4.PE p1 fldAssn1) (W4.PE p2 fldAssn2) = do
+      pPred <- liftIO $ W4.eqPred sym p1 p2
+      fldPred <- goFldAssn fldShp fldAssn1 fldAssn2
+      liftIO $ W4.andPred sym pPred fldPred
+    goVariantFlds _ W4.Unassigned W4.Unassigned =
+      pure $ W4.truePred sym
+    goVariantFlds _ (W4.PE{}) W4.Unassigned =
+      pure $ W4.falsePred sym
+    goVariantFlds _ W4.Unassigned (W4.PE{}) =
+      pure $ W4.falsePred sym
 
     goFld :: FieldShape tp
           -> RegValue Sym tp
@@ -1164,3 +1511,48 @@ staticTyRef static =
   Mir.TyRef
     (static ^. Mir.sTy)
     (staticMutability static)
+
+-- | Retrieve the discriminant corresponding to an enum variant. This function
+-- will panic if the variant does not contain a discriminant.
+getEnumVariantDiscr :: Mir.Variant -> Integer
+getEnumVariantDiscr variant =
+  case variant ^. Mir.discrval of
+    Just discr ->
+      discr
+    Nothing ->
+      panic "getEnumVariantDiscr"
+            [ "discrval not set for variant:"
+            , show (variant ^. Mir.vname)
+            ]
+
+-- | An enum's discriminant should have an integral type such as @isize@ or
+-- @i8@, which this function checks. If this is not the case, this function will
+-- panic.
+testDiscriminantIsBV :: TypeShape shp -> IsBVShape shp
+testDiscriminantIsBV discrShp =
+  case testBVShape discrShp of
+    Just ibvs -> ibvs
+    Nothing ->
+      panic "testDiscriminantIsBV"
+            [ "Unexpected non-integral discriminant type:"
+            , show $ PP.pretty $ shapeMirTy discrShp
+            ]
+
+-- | Compute the index of a variant as an 'Ctx.Index'. If the index is out of
+-- range, this function will panic.
+variantIntIndex ::
+  Mir.DefId {-^ The enum identifier. (Only used for error messages.) -} ->
+  Int {-^ The index of the variant as an 'Int'. -} ->
+  Ctx.Size ctx {-^ The number of variants as a 'Ctx.Size'. -} ->
+  Some (Ctx.Index ctx)
+variantIntIndex adtNm variantIdx variantsSize =
+  case Ctx.intIndex variantIdx variantsSize of
+    Just someIdx ->
+      someIdx
+    Nothing ->
+      panic "variantIntIndex"
+            [ "Enum variant index out of range"
+            , "Enum: " ++ show adtNm
+            , "Index: " ++ show variantIdx
+            , "Number of variants: " ++ show variantsSize
+            ]

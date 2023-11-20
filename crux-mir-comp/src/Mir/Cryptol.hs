@@ -337,6 +337,8 @@ munge sym shp rv = do
                 AnyValue tpr <$> goFields flds rvs
             | otherwise = error $  "munge: StructShape AnyValue with NYI TypeRepr " ++ show tpr
         go (TransparentShape _ shp) rv = go shp rv
+        go (EnumShape _ _ _ _ _) _ =
+            error "Enums not currently supported in overrides"
         go (FnPtrShape _ _ _) _ =
             error "Function pointers not currently supported in overrides"
         -- TODO: RefShape
