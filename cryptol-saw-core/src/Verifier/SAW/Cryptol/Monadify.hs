@@ -427,34 +427,38 @@ numExprExpr _ (NExpr_Indesc trm) =
   bindPPOpenTerm trm $ \pp_trm ->
   failOpenTerm ("numExprExpr: indescribable numeric expression:\n" ++ pp_trm)
 
--- | Convert a 'MonType' to the type description it represents, assuming the
--- supplied number of bound deBruijn indices. The 'Bool' flag indicates whether
--- the 'MonType' should be treated like a function type, meaning that the @Tp_M@
--- constructor should be added if the type is not already a function type.
-toTpDesc :: Natural -> Bool -> MonType -> OpenTerm
-toTpDesc lvl _ (MTyForall _ k body) =
-  piTpDesc (toKindDesc k) $ toTpDesc (lvl+1) True $ body $ kindVar k lvl
-toTpDesc lvl _ (MTyArrow mtp1 mtp2) =
-  arrowTpDesc (toTpDesc lvl False mtp1) (toTpDesc lvl True mtp2)
-toTpDesc lvl True mtp =
+-- | Main implementation of 'toTpDesc'. Convert a 'MonType' to the type
+-- description it represents, assuming the supplied number of bound deBruijn
+-- indices. The 'Bool' flag indicates whether the 'MonType' should be treated
+-- like a function type, meaning that the @Tp_M@ constructor should be added if
+-- the type is not already a function type.
+toTpDescH :: Natural -> Bool -> MonType -> OpenTerm
+toTpDescH lvl _ (MTyForall _ k body) =
+  piTpDesc (toKindDesc k) $ toTpDescH (lvl+1) True $ body $ kindVar k lvl
+toTpDescH lvl _ (MTyArrow mtp1 mtp2) =
+  arrowTpDesc (toTpDescH lvl False mtp1) (toTpDescH lvl True mtp2)
+toTpDescH lvl True mtp =
   -- Convert a non-functional type to a functional one by making a nullary
   -- monadic function, i.e., applying the @SpecM@ type constructor
-  mTpDesc $ toTpDesc lvl False mtp
-toTpDesc lvl False (MTySeq n mtp) =
-  seqTpDesc (numExprExpr lvl n) (toTpDesc lvl False mtp)
-toTpDesc _ False MTyUnit = unitTpDesc
-toTpDesc _ False MTyBool = boolTpDesc
-toTpDesc lvl False (MTyPair mtp1 mtp2) =
-  pairTpDesc (toTpDesc lvl False mtp1) (toTpDesc lvl False mtp2)
-toTpDesc lvl False (MTySum mtp1 mtp2) =
-  sumTpDesc (toTpDesc lvl False mtp1) (toTpDesc lvl False mtp2)
-toTpDesc _ _ (MTyIndesc trm) =
+  mTpDesc $ toTpDescH lvl False mtp
+toTpDescH lvl False (MTySeq n mtp) =
+  seqTpDesc (numExprExpr lvl n) (toTpDescH lvl False mtp)
+toTpDescH _ False MTyUnit = unitTpDesc
+toTpDescH _ False MTyBool = boolTpDesc
+toTpDescH lvl False (MTyPair mtp1 mtp2) =
+  pairTpDesc (toTpDescH lvl False mtp1) (toTpDescH lvl False mtp2)
+toTpDescH lvl False (MTySum mtp1 mtp2) =
+  sumTpDesc (toTpDescH lvl False mtp1) (toTpDescH lvl False mtp2)
+toTpDescH _ _ (MTyIndesc trm) =
   bindPPOpenTerm trm $ \pp_trm ->
-  failOpenTerm ("toTpDesc: indescribable type:\n" ++ pp_trm)
-toTpDesc lvl False (MTyVarLvl l) =
+  failOpenTerm ("toTpDescH: indescribable type:\n" ++ pp_trm)
+toTpDescH lvl False (MTyVarLvl l) =
   -- Convert a deBruijn level to a deBruijn index; see comments in numExprExpr
   varTpDesc (lvl - l - 1)
 
+-- | Convert a 'MonType' to the type description it represents
+toTpDesc :: MonType -> OpenTerm
+toTpDesc = toTpDescH 0 False
 
 -- | The mapping for monadifying Cryptol typeclasses
 -- FIXME: this is no longer needed, as it is now the identity
@@ -644,6 +648,14 @@ data MonArg
   = forall k. TpArg (KindRepr k) (TpExpr k)
     -- | A term-level argument to a non-dependent function
   | TrmArg ArgMonTerm
+
+-- | Convert a 'SomeTpExpr' to a type-level 'MonArg' argument
+tpExprToArg :: SomeTpExpr -> MonArg
+tpExprToArg (SomeTpExpr k e) = TpArg k e
+
+-- | Convert a numeric expression to a type-level 'MonArg' argument
+numToArg :: NumTpExpr -> MonArg
+numToArg = TpArg MKNumRepr
 
 -- | Get the monadification type of a monadification term
 class GetMonType a where
@@ -1052,28 +1064,30 @@ assertIsFinite e =
                   [evTypeTerm ?specMEvType, n]))
 
 
-{-
-FIXME HERE NOWNOW:
-- remove lrtFromMonType, add descFromMonType
-- how to generate deBruijn indices in TpDescs?
-  + option 1: leave it higher-order, but add a MTyVar ctor to track indices when
-    converting to TpDescs
-  + option 2: remove HOAS representation from types and MonTerms
-- MTyBase -> MTyIndesc
-- remove functional kinds
-- FIXME: what about type-level expressions that might have deBruijn indices?
-- FIXME: remove MTyRecord
-
 ----------------------------------------------------------------------
 -- * Monadification
 ----------------------------------------------------------------------
 
--- | Monadify a type in the context of the 'MonadifyM' monad
-monadifyTypeM :: HasCallStack => Term -> MonadifyM MonType
-monadifyTypeM tp =
+-- | Apply a monadifying operation (like 'monadifyTpExpr') in a 'MonadifyM'
+monadifyOpM :: HasCallStack =>
+               (HasSpecMEvType => MonadifyTypeCtx -> Term -> a) ->
+               Term -> MonadifyM a
+monadifyOpM f tm =
   usingEvType $
   do ctx <- monStCtx <$> ask
-     return $ monadifyType (ctxToTypeCtx ctx) tp
+     return $ f (ctxToTypeCtx ctx) tm
+
+-- | Monadify a type-level expression in the context of the 'MonadifyM' monad
+monadifyTpExprM :: HasCallStack => Term -> MonadifyM SomeTpExpr
+monadifyTpExprM = monadifyOpM monadifyTpExpr
+
+-- | Monadify a type in the context of the 'MonadifyM' monad
+monadifyTypeM :: HasCallStack => Term -> MonadifyM MonType
+monadifyTypeM = monadifyOpM monadifyType
+
+-- | Monadify a numeric expression in the context of the 'MonadifyM' monad
+monadifyNumM :: HasCallStack => Term -> MonadifyM NumTpExpr
+monadifyNumM = monadifyOpM monadifyNum
 
 -- | Monadify a term to a monadified term of argument type
 monadifyArg :: HasCallStack => Maybe MonType -> Term -> MonadifyM ArgMonTerm
@@ -1128,12 +1142,14 @@ monadifyTerm' (Just mtp@(MTyPair mtp1 mtp2)) (asPairValue ->
   fromArgTerm mtp <$> (pairOpenTerm <$>
                        monadifyArgTerm (Just mtp1) trm1 <*>
                        monadifyArgTerm (Just mtp2) trm2)
+{-
 monadifyTerm' (Just mtp@(MTyRecord fs_mtps)) (asRecordValue -> Just trm_map)
   | length fs_mtps == Map.size trm_map
   , (fs,mtps) <- unzip fs_mtps
   , Just trms <- mapM (\f -> Map.lookup f trm_map) fs =
     fromArgTerm mtp <$> recordOpenTerm <$> zip fs <$>
     zipWithM monadifyArgTerm (map Just mtps) trms
+-}
 monadifyTerm' _ (asPairSelector -> Just (trm, False)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of
@@ -1146,7 +1162,7 @@ monadifyTerm' (Just mtp@(MTySeq n mtp_elem)) (asFTermF ->
   do trms' <- traverse (monadifyArgTerm $ Just mtp_elem) trms
      return $ fromArgTerm mtp $
        applyOpenTermMulti (globalOpenTerm "CryptolM.seqToMseq")
-       [evTypeTerm ?specMEvType, n, toArgType mtp_elem,
+       [evTypeTerm ?specMEvType, numExprVal n, toArgType mtp_elem,
         flatOpenTerm $ ArrayValue (toArgType mtp_elem) trms']
 monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
   do mtrm <- monadifyArg Nothing trm
@@ -1155,6 +1171,7 @@ monadifyTerm' _ (asPairSelector -> Just (trm, True)) =
        _ -> fail "Monadification failed: projection on term of non-pair type"
      return $ fromArgTerm mtp $
        pairRightOpenTerm $ toArgTerm mtrm
+{-
 monadifyTerm' _ (asRecordSelector -> Just (trm, fld)) =
   do mtrm <- monadifyArg Nothing trm
      mtp <- case getMonType mtrm of
@@ -1162,10 +1179,11 @@ monadifyTerm' _ (asRecordSelector -> Just (trm, fld)) =
        _ -> fail ("Monadification failed: " ++
                   "record projection on term of incorrect type")
      return $ fromArgTerm mtp $ projRecordOpenTerm (toArgTerm mtrm) fld
+-}
 monadifyTerm' _ (asLocalVar -> Just ix) =
   (monStCtx <$> ask) >>= \case
   ctx | ix >= length ctx -> fail "Monadification failed: vaiable out of scope!"
-  ctx | (_,_,Right mtrm) <- ctx !! ix -> return mtrm
+  ctx | (_,_,TrmArg mtrm) <- ctx !! ix -> return $ ArgMonTerm mtrm
   _ -> fail "Monadification failed: type variable used in term position!"
 monadifyTerm' _ (asTupleValue -> Just []) =
   return $ ArgMonTerm $ fromSemiPureTerm MTyUnit unitOpenTerm
@@ -1198,11 +1216,11 @@ monadifyApply :: HasCallStack => MonTerm -> [Term] -> MonadifyM MonTerm
 monadifyApply f (t : ts)
   | MTyArrow tp_in _ <- getMonType f =
     do mtrm <- monadifyArg (Just tp_in) t
-       monadifyApply (applyMonTerm f (Right mtrm)) ts
+       monadifyApply (applyMonTerm f (TrmArg mtrm)) ts
 monadifyApply f (t : ts)
   | MTyForall _ _ _ <- getMonType f =
-    do mtp <- monadifyTypeM t
-       monadifyApply (applyMonTerm f (Left mtp)) ts
+    do arg <- tpExprToArg <$> monadifyTpExprM t
+       monadifyApply (applyMonTerm f arg) ts
 monadifyApply _ (_:_) = fail "monadifyApply: application at incorrect type"
 monadifyApply f [] = return f
 
@@ -1215,25 +1233,24 @@ monadifyLambdas env ctx (MTyForall _ k tp_f) (asLambda ->
                                               Just (x, x_tp, body)) =
   -- FIXME: check that monadifyKind x_tp == k
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
-  monadifyLambdas env ((x,x_tp,Left mtp) : ctx) (tp_f mtp) body
+  monadifyLambdas env ((x,x_tp,TpArg k mtp) : ctx) (tp_f mtp) body
 monadifyLambdas env ctx (MTyArrow tp_in tp_out) (asLambda ->
                                                  Just (x, x_tp, body)) =
   -- FIXME: check that monadifyType x_tp == tp_in
   ArgMonTerm $ FunMonTerm x tp_in tp_out $ \arg ->
-  monadifyLambdas env ((x,x_tp,Right (ArgMonTerm arg)) : ctx) tp_out body
+  monadifyLambdas env ((x,x_tp,TrmArg arg) : ctx) tp_out body
 monadifyLambdas env ctx tp t =
   monadifyEtaExpand env ctx tp tp t []
 
 -- | FIXME: documentation
 monadifyEtaExpand :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
-                     MonType -> MonType -> Term ->
-                     [Either MonType ArgMonTerm] -> MonTerm
+                     MonType -> MonType -> Term -> [MonArg] -> MonTerm
 monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->
-  monadifyEtaExpand env ctx top_mtp (tp_f mtp) t (args ++ [Left mtp])
+  monadifyEtaExpand env ctx top_mtp (tp_f mtp) t (args ++ [TpArg k mtp])
 monadifyEtaExpand env ctx top_mtp (MTyArrow tp_in tp_out) t args =
   ArgMonTerm $ FunMonTerm "_" tp_in tp_out $ \arg ->
-  monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [Right arg])
+  monadifyEtaExpand env ctx top_mtp tp_out t (args ++ [TrmArg arg])
 monadifyEtaExpand env ctx top_mtp mtp t args =
   let ?specMEvType = monEnvEvType env in
   applyMonTermMulti (runMonadifyM env ctx mtp
@@ -1250,9 +1267,8 @@ unsafeAssertMacro :: MonMacro
 unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   usingEvType $
   let numFunType =
-        MTyForall "n" (MKType $ mkSort 0) $ \n ->
-        MTyForall "m" (MKType $ mkSort 0) $ \m ->
-        MTyBase (MKType $ mkSort 0) $
+        MTyForall "n" MKTypeRepr $ \n -> MTyForall "m" MKTypeRepr $ \m ->
+        MTyIndesc $
         dataTypeOpenTerm "Prelude.Eq"
         [dataTypeOpenTerm "Cryptol.Num" [],
          toArgType n, toArgType m] in
@@ -1274,8 +1290,8 @@ iteMacro = MonMacro 4 $ \_ args -> usingEvType $
              _ -> error "iteMacro: wrong number of arguments!"
      atrm_cond <- monadifyArg (Just MTyBool) cond
      mtp <- monadifyTypeM tp
-     mtrm1 <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) branch1
-     mtrm2 <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) branch2
+     mtrm1 <- resetMonadifyM mtp $ monadifyTerm (Just mtp) branch1
+     mtrm2 <- resetMonadifyM mtp $ monadifyTerm (Just mtp) branch2
      case (mtrm1, mtrm2) of
        (ArgMonTerm atrm1, ArgMonTerm atrm2) ->
          return $ fromArgTerm mtp $
@@ -1302,8 +1318,6 @@ eitherMacro = MonMacro 3 $ \_ args ->
      let eith_app = applyGlobalOpenTerm "Prelude.either" [toArgType mtp_a,
                                                           toArgType mtp_b,
                                                           toCompType mtp_c]
-     let tp_eith = dataTypeOpenTerm "Prelude.Either" [toArgType mtp_a,
-                                                      toArgType mtp_b]
      return $ fromCompTerm (MTyArrow (MTyArrow mtp_a mtp_c)
                             (MTyArrow (MTyArrow mtp_b mtp_c)
                              (MTyArrow (MTySum mtp_a mtp_b) mtp_c))) eith_app
@@ -1337,7 +1351,7 @@ invariantHintMacro = MonMacro 3 $ \_ args -> usingEvType $
              _ -> error "invariantHintMacro: wrong number of arguments!"
      atrm_cond <- monadifyArg (Just MTyBool) cond
      mtp <- monadifyTypeM tp
-     mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
+     mtrm <- resetMonadifyM mtp $ monadifyTerm (Just mtp) m
      return $ fromCompTerm mtp $
        applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
        [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
@@ -1355,7 +1369,7 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
              _ -> error "assertingOrAssumingMacro: wrong number of arguments!"
      atrm_cond <- monadifyArg (Just MTyBool) cond
      mtp <- monadifyTypeM tp
-     mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
+     mtrm <- resetMonadifyM mtp $ monadifyTerm (Just mtp) m
      ev <- askEvType
      let ident = if doAsserting then "Prelude.assertingS"
                                 else "Prelude.assumingS"
@@ -1376,22 +1390,24 @@ finMacro isSemiPure i j from to params_p =
        return ()
        else error ("Monadification macro for " ++ show from ++
                    " applied incorrectly")
-     let (init_args, fin_args) = splitAt i args
+     let (init_args_tms, fin_args_tms) = splitAt i args
      -- Monadify the first @i@ args
-     init_args_mtps <- mapM monadifyTypeM init_args
-     let init_args_m = map toArgType init_args_mtps
+     init_args <- mapM monadifyTpExprM init_args_tms
      -- Monadify the @i@th through @(i+j-1)@th args and build proofs that they are finite
-     fin_args_mtps <- mapM monadifyTypeM fin_args
-     let fin_args_m = map toArgType fin_args_mtps
-     fin_pfs <- mapM assertIsFinite fin_args_mtps
+     fin_args <- mapM monadifyNumM fin_args_tms
+     fin_pfs <- mapM assertIsFinite fin_args
      -- Apply the type of @glob@ to the monadified arguments and apply @to@ to the
      -- monadified arguments along with the proofs that the latter arguments are finite
      let glob_tp = monadifyType [] $ globalDefType glob
-     let glob_tp_app = foldl applyMonType glob_tp (map Left (init_args_mtps ++ fin_args_mtps))
+     let glob_args = map tpExprToArg init_args ++ map numToArg fin_args
+     let glob_tp_app = foldl applyMonType glob_tp glob_args
+     let to_args =
+           map someTpExprVal init_args ++
+           concatMap (\(n,pf) -> [numExprVal n,
+                                  toArgTerm pf]) (zip fin_args fin_pfs)
      let to_app =
            applyOpenTermMulti (globalOpenTerm to)
-           ((if params_p then (evTypeTerm ?specMEvType :) else id)
-            init_args_m ++ concatMap (\(n,pf) -> [n, toArgTerm pf]) (zip fin_args_m fin_pfs))
+           ((if params_p then (evTypeTerm ?specMEvType :) else id) to_args)
      -- Finally, return the result as semi-pure dependent on @isSemiPure@
      return $ if isSemiPure
               then ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
@@ -1403,13 +1419,13 @@ finMacro isSemiPure i j from to params_p =
 fixMacro :: MonMacro
 fixMacro = MonMacro 2 $ \_ args -> case args of
   [tp@(asPi -> Just _), f] ->
-    do orig_params <- askEvType
+    do ev <- askEvType
        mtp <- monadifyTypeM tp
        usingEvType $ do
          amtrm_f <- monadifyArg (Just $ MTyArrow mtp mtp) f
          return $ fromCompTerm mtp $
-           applyOpenTermMulti (globalOpenTerm "Prelude.multiArgFixS")
-           [specMEvType orig_params, lrtFromMonType mtp, toCompTerm amtrm_f]
+           applyOpenTermMulti (globalOpenTerm "SpecM.FixS")
+           [evTypeTerm ev, toTpDesc mtp, toCompTerm amtrm_f]
   [(asRecordType -> Just _), _] ->
     fail "Monadification failed: cannot yet handle mutual recursion"
   _ -> error "fixMacro: malformed arguments!"
@@ -1457,7 +1473,7 @@ mmCustom from_id macro = (ModuleIdentifier from_id, macro)
 -- | The default monadification environment
 defaultMonEnv :: MonadifyEnv
 defaultMonEnv = MonadifyEnv { monEnvMonTable = defaultMonTable,
-                              monEnvEvType = globalOpenTerm "Prelude.VoidEv" }
+                              monEnvEvType = defaultSpecMEventType }
 
 -- | The default primitive monadification table
 defaultMonTable :: Map NameInfo MonMacro
@@ -1580,10 +1596,10 @@ monadifyCompleteArgType sc env tp poly_p =
   if poly_p then
     -- Parameter polymorphism means pi-quantification over E
     (piOpenTerm "E" (dataTypeOpenTerm "Prelude.EvType" []) $ \e ->
-      let ?specMEvType = e in
-      -- NOTE: even though E and stack are free variables here, they are not
-      -- free in tp, which is a closed term, so we do not list them in the
-      -- MonadifyTypeCtx argument of monadifyTypeArgType
+      let ?specMEvType = error "FIXME HERE NOW: cannot handle event polymorphism yet" in
+      -- NOTE: even though E is a free variable here, it can not be free in tp,
+      -- which is a closed term, so we do not list it in the MonadifyTypeCtx
+      -- argument of monadifyTypeArgType
       monadifyTypeArgType [] tp)
   else
     let ?specMEvType = monEnvEvType env in monadifyTypeArgType [] tp
@@ -1680,4 +1696,3 @@ monadifyCryptolModule :: SharedContext -> Env -> MonadifyEnv ->
                          CryptolModule -> IO (CryptolModule, MonadifyEnv)
 monadifyCryptolModule sc cry_env top_env cry_mod =
   flip runStateT top_env $ monadifyCryptolModuleH sc cry_env cry_mod
--}
