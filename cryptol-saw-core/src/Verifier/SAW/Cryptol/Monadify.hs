@@ -1596,7 +1596,7 @@ monadifyCompleteArgType sc env tp poly_p =
   if poly_p then
     -- Parameter polymorphism means pi-quantification over E
     (piOpenTerm "E" (dataTypeOpenTerm "Prelude.EvType" []) $ \e ->
-      let ?specMEvType = error "FIXME HERE NOW: cannot handle event polymorphism yet" in
+      let ?specMEvType = EventType e in
       -- NOTE: even though E is a free variable here, it can not be free in tp,
       -- which is a closed term, so we do not list it in the MonadifyTypeCtx
       -- argument of monadifyTypeArgType

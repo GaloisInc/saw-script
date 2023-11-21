@@ -73,7 +73,7 @@ module Verifier.SAW.OpenTerm (
   eitherTypeOpenTerm, sigmaTypeOpenTerm, sigmaTypeOpenTermMulti, sigmaOpenTerm,
   sigmaOpenTermMulti, sigmaElimOpenTermMulti,
   -- * Operations for building @SpecM@ computations
-  EventType (..), evTypeTerm, defaultSpecMEventType, unitKindDesc, bvExprKind,
+  EventType (..), defaultSpecMEventType, unitKindDesc, bvExprKind,
   tpDescTypeOpenTerm, kindToTpDesc, unitTpDesc,
   boolExprKind, boolKindDesc, boolTpDesc, natExprKind, natKindDesc,
   numExprKind, numKindDesc, bvKindDesc, tpKindDesc, pairTpDesc, tupleTpDesc,
@@ -565,16 +565,12 @@ sigmaElimOpenTermMulti x (tp:tps) tp_f sig f_elim =
 --------------------------------------------------------------------------------
 -- Operations for building SpecM computations
 
--- | A SAW core identifier that indicates an event type for the @SpecM@ monad
-newtype EventType = EventType { evTypeToIdent :: Ident }
-
--- | Convert an 'EventType' to a SAW core term
-evTypeTerm :: EventType -> OpenTerm
-evTypeTerm = globalOpenTerm . evTypeToIdent
+-- | A SAW core term that indicates an event type for the @SpecM@ monad
+newtype EventType = EventType { evTypeTerm :: OpenTerm }
 
 -- | The default event type uses the @Void@ type for events
 defaultSpecMEventType :: EventType
-defaultSpecMEventType = EventType "SpecM.VoidEv"
+defaultSpecMEventType = EventType $ globalOpenTerm "SpecM.VoidEv"
 
 -- | The kind description for the unit type
 unitKindDesc :: OpenTerm
