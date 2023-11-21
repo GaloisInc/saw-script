@@ -809,15 +809,15 @@ applyMonTermMulti :: HasCallStack => MonTerm -> [MonArg] -> MonTerm
 applyMonTermMulti = foldl applyMonTerm
 
 -- | Build a 'MonTerm' from a global of a given argument type, applying it to
--- the current 'SpecMParams' if the 'Bool' flag is 'True'
+-- the current 'EventType' if the 'Bool' flag is 'True'
 mkGlobalArgMonTerm :: HasSpecMEvType => MonType -> Ident -> Bool -> ArgMonTerm
 mkGlobalArgMonTerm tp ident params_p =
   fromArgTerm tp (if params_p
                   then applyGlobalOpenTerm ident [evTypeTerm ?specMEvType]
                   else globalOpenTerm ident)
 
--- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type, applying it to
--- the current 'SpecMParams' if the 'Bool' flag is 'True'
+-- | Build a 'MonTerm' from a 'GlobalDef' of semi-pure type, applying it to the
+-- current 'EventType' if the 'Bool' flag is 'True'
 mkSemiPureGlobalDefTerm :: HasSpecMEvType => GlobalDef -> Bool -> ArgMonTerm
 mkSemiPureGlobalDefTerm glob params_p =
   fromSemiPureTerm (monadifyType [] $ globalDefType glob)
@@ -853,8 +853,8 @@ monMacro0 mtrm = MonMacro 0 $ \_ _ -> usingEvType $ return mtrm
 -- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
 -- (See 'fromSemiPureTermFun'.) Because we can't get access to the type of the
 -- global until we apply the macro, we monadify its type at macro application
--- time. The 'Bool' flag indicates whether the current 'SpecMParams' should also
--- be passed as the first two arguments to the "to" global.
+-- time. The 'Bool' flag indicates whether the current 'EventType' should also
+-- be passed as the first argument to the "to" global.
 semiPureGlobalMacro :: Ident -> Ident -> Bool -> MonMacro
 semiPureGlobalMacro from to params_p =
   MonMacro 0 $ \glob args -> usingEvType $
@@ -869,10 +869,8 @@ semiPureGlobalMacro from to params_p =
 -- | Make a 'MonMacro' that maps a named global to a global of argument type.
 -- Because we can't get access to the type of the global until we apply the
 -- macro, we monadify its type at macro application time. The 'Bool' flag
--- indicates whether the "to" global is polymorphic in the event type and
--- function stack; if so, the current 'SpecMParams' are passed as its first two
--- arguments, and otherwise the returned computation is lifted with
--- @liftStackS@ if the outer stack is non-empty.
+-- indicates whether the "to" global is polymorphic in the event type, in which
+-- case the current 'EventType' is passed as its first argument.
 argGlobalMacro :: NameInfo -> Ident -> Bool -> MonMacro
 argGlobalMacro from to params_p =
   MonMacro 0 $ \glob args -> usingEvType $
@@ -1391,7 +1389,7 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
 -- named global @to@, which is of semi-pure type if and only if @b@ is 'True',
 -- that takes an additional argument of type @isFinite n@ after each of the
 -- aforementioned @Num@ arguments. The @params_p@ flag indicates whether the
--- current 'SpecMParams' should be passed as the first two arguments to @to@.
+-- current 'EventType' should be passed as the first argument to @to@.
 finMacro :: Bool -> Int -> Int -> Ident -> Ident -> Bool -> MonMacro
 finMacro isSemiPure i j from to params_p =
   MonMacro (i+j) $ \glob args -> usingEvType $
