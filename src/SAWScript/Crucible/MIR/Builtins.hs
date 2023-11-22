@@ -15,6 +15,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_assert
   , mir_execute_func
   , mir_find_adt
+  , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
   , mir_fresh_var
   , mir_load_module
@@ -220,6 +221,22 @@ mir_find_adt rm origName substs = do
       crateDisambigs = cs ^. Mir.crateHashesMap
   origDid <- findDefId crateDisambigs (Text.pack origName)
   findAdt col origDid (Mir.Substs substs)
+
+-- | Generate a fresh term of the given Cryptol type. The name will be used when
+-- pretty-printing the variable in debug output.
+mir_fresh_cryptol_var ::
+  Text ->
+  Cryptol.Schema ->
+  MIRSetupM TypedTerm
+mir_fresh_cryptol_var name s =
+  MIRSetupM $
+  do loc <- getW4Position "mir_fresh_var"
+     case s of
+       Cryptol.Forall [] [] ty ->
+         do sc <- lift $ lift getSharedContext
+            Setup.freshVariable sc name ty
+       _ ->
+         throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
 
 -- | Create a MIR value entirely populated with fresh symbolic variables.
 -- For compound types such as structs and arrays, this will explicitly set

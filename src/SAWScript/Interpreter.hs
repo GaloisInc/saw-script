@@ -3938,6 +3938,15 @@ primitives = Map.fromList
     , "be found in the MIRModule, this will raise an error."
     ]
 
+  , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
+    (pureVal mir_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a MIR specification. The given name is used only for"
+    , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
+    , "there isn't an appropriate MIR type, such as the Cryptol Array type."
+    ]
+
   , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
     (pureVal mir_fresh_expanded_value)
     Experimental
