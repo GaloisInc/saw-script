@@ -247,7 +247,9 @@ addArg tpr argRef msb =
     sv <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
     void $ forNewRefs Pre $ \fr -> do
-        let len = fr ^. frAllocSpec . maLen
+        let allocSpec = fr ^. frAllocSpec
+        let len = allocSpec ^. maLen
+        let md = allocSpec ^. maConditionMetadata
         svPairs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
@@ -267,12 +269,6 @@ addArg tpr argRef msb =
             return (sv, sv')
 
         let (svs, svs') = unzip svPairs
-        let md = MS.ConditionMetadata
-                 { MS.conditionLoc = loc
-                 , MS.conditionTags = mempty
-                 , MS.conditionType = "add argument value"
-                 , MS.conditionContext = ""
-                 }
         msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
         msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs' :)
 
@@ -293,7 +289,6 @@ setReturn tpr argRef msb =
   ovrWithBackend $ \bak ->
   execBuilderT msb $ do
     let sym = backendGetSym bak
-    loc <- liftIO $ W4.getCurrentProgramLoc sym
     let ty = case msb ^. msbSpec . MS.csRet of
             Just x -> x
             Nothing -> M.TyTuple []
@@ -303,7 +298,9 @@ setReturn tpr argRef msb =
     sv <- regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
     void $ forNewRefs Post $ \fr -> do
-        let len = fr ^. frAllocSpec . maLen
+        let allocSpec = fr ^. frAllocSpec
+        let len = allocSpec ^. maLen
+        let md = allocSpec ^. maConditionMetadata
         svs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
@@ -312,12 +309,6 @@ setReturn tpr argRef msb =
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-        let md = MS.ConditionMetadata
-                 { MS.conditionLoc = loc
-                 , MS.conditionTags = mempty
-                 , MS.conditionType = "set return value"
-                 , MS.conditionContext = ""
-                 }
         msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
 
     msbSpec . MS.csRetValue .= Just sv
@@ -779,7 +770,15 @@ refToAlloc bak p mutbl ty tpr ref len = do
         Nothing -> do
             alloc <- use msbNextAlloc
             msbNextAlloc %= MS.nextAllocIndex
-            let fr = FoundRef alloc (MirAllocSpec tpr mutbl ty len) ref
+            let sym = backendGetSym bak
+            loc <- liftIO $ W4.getCurrentProgramLoc sym
+            let md = MS.ConditionMetadata
+                     { MS.conditionLoc = loc
+                     , MS.conditionTags = mempty
+                     , MS.conditionType = "reference-to-allocation conversion"
+                     , MS.conditionContext = ""
+                     }
+            let fr = FoundRef alloc (MirAllocSpec md tpr mutbl ty len) ref
             msbPrePost p . seRefs %= (Seq.|> Some fr)
             msbPrePost p . seNewRefs %= (Seq.|> Some fr)
             return alloc

@@ -13,6 +13,7 @@ Stability   : provisional
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -52,6 +53,15 @@ module SAWScript.Crucible.Common.Override
   , failure
   , getSymInterface
   , enforceCompleteSubstitution
+  , refreshTerms
+  , OverrideWithPreconditions(..)
+  , owpPreconditions
+  , owpMethodSpec
+  , partitionOWPsConcrete
+  , partitionBySymbolicPreds
+  , findFalsePreconditions
+  , unsatPreconditions
+  , ppConcreteFailure
   --
   , assignmentToList
   , MetadataMap
@@ -59,7 +69,7 @@ module SAWScript.Crucible.Common.Override
 
 import qualified Control.Exception as X
 import           Control.Lens
-import           Control.Monad (unless)
+import           Control.Monad (foldM, unless)
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
@@ -70,6 +80,8 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
 import qualified Data.Map as Map
 import           Data.Map (Map)
+import           Data.Maybe (fromMaybe)
+import           Data.Proxy (Proxy(..))
 import           Data.Set (Set)
 import           Data.Typeable (Typeable)
 import           Data.Void
@@ -81,8 +93,11 @@ import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
 import           Verifier.SAW.SharedTerm as SAWVerifier
+import           Verifier.SAW.TypedAST as SAWVerifier
 import           Verifier.SAW.TypedTerm as SAWVerifier
 
+import qualified Lang.Crucible.Backend as Crucible
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr, GlobalVar)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
@@ -93,9 +108,10 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
 import           SAWScript.Exceptions
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.Setup.Value as MS
+import           SAWScript.Utils (bullets)
 
 -- TODO, not sure this is the best place for this definition
 type MetadataMap =
@@ -396,6 +412,115 @@ enforceCompleteSubstitution loc ss =
          missing = filter isMissing (view MS.csFreshVars ss)
 
      unless (null missing) (failure loc (AmbiguousVars missing))
+
+-- | Allocate fresh variables for all of the "fresh" vars
+-- used in this phase and add them to the term substitution.
+refreshTerms ::
+  SharedContext    {- ^ shared context -} ->
+  MS.StateSpec ext {- ^ current phase spec -} ->
+  OverrideMatcher ext w ()
+refreshTerms sc ss =
+  do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
+     OM (termSub %= Map.union extension)
+  where
+    freshenTerm (TypedExtCns _cty ec) =
+      do ec' <- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)
+         new <- liftIO $ scExtCns sc ec'
+         return (ecVarIndex ec, new)
+
+-- | An override packaged together with its preconditions, labeled with some
+--   human-readable info about each condition.
+data OverrideWithPreconditions ext =
+  OverrideWithPreconditions
+    { _owpPreconditions :: [(MS.ConditionMetadata, LabeledPred Sym)]
+         -- ^ c.f. '_osAsserts'
+    , _owpMethodSpec :: MS.CrucibleMethodSpecIR ext
+    , owpState :: OverrideState ext
+    }
+  deriving (Generic)
+
+makeLenses ''OverrideWithPreconditions
+
+-- | Partition into three groups:
+--   * Preconditions concretely succeed
+--   * Preconditions concretely fail
+--   * Preconditions are symbolic
+partitionOWPsConcrete :: forall ext.
+  Sym ->
+  [OverrideWithPreconditions ext] ->
+  IO ([OverrideWithPreconditions ext], [OverrideWithPreconditions ext], [OverrideWithPreconditions ext])
+partitionOWPsConcrete sym =
+  let trav = owpPreconditions . each . _2 . W4.labeledPred
+  in W4.partitionByPredsM (Just sym) $
+       foldlMOf trav (W4.andPred sym) (W4.truePred sym)
+
+-- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
+--   concretized values.
+partitionBySymbolicPreds ::
+  (OnlineSolver solver, Foldable t) =>
+  Backend solver {- ^ solver connection -} ->
+  (a -> W4.Pred Sym) {- ^ how to extract predicates -} ->
+  t a ->
+  IO (Map Crucible.BranchResult [a])
+partitionBySymbolicPreds sym getPred =
+  let step mp a =
+        Crucible.considerSatisfiability sym Nothing (getPred a) <&> \k ->
+          Map.insertWith (++) k [a] mp
+  in foldM step Map.empty
+
+-- | Find individual preconditions that are symbolically false
+--
+-- We should probably be using unsat cores for this.
+findFalsePreconditions ::
+  OnlineSolver solver =>
+  Backend solver ->
+  OverrideWithPreconditions ext ->
+  IO [(MS.ConditionMetadata, LabeledPred Sym)]
+findFalsePreconditions bak owp =
+  fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
+    partitionBySymbolicPreds bak (view (_2 . W4.labeledPred)) (owp ^. owpPreconditions)
+
+-- | Is this group of predicates collectively unsatisfiable?
+unsatPreconditions ::
+  OnlineSolver solver =>
+  Backend solver {- ^ solver connection -} ->
+  Fold s (W4.Pred Sym) {- ^ how to extract predicates -} ->
+  s {- ^ a container full of predicates -}->
+  IO Bool
+unsatPreconditions bak container getPreds = do
+  let sym = Crucible.backendGetSym bak
+  conj <- W4.andAllOf sym container getPreds
+  Crucible.considerSatisfiability bak Nothing conj >>=
+    \case
+      Crucible.NoBranch False -> pure True
+      _ -> pure False
+
+-- | Print a message about failure of an override's preconditions
+ppFailure ::
+  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
+  OverrideWithPreconditions ext ->
+  [LabeledPred Sym] ->
+  PP.Doc ann
+ppFailure owp false =
+  PP.vcat
+  [ MS.ppMethodSpec (owp ^. owpMethodSpec)
+    -- TODO: remove viaShow when crucible switches to prettyprinter
+  , bullets '*' (map (PP.viaShow . Crucible.ppSimError)
+                  (false ^.. traverse . W4.labeledPredMsg))
+  ]
+
+-- | Print a message about concrete failure of an override's preconditions
+--
+-- Assumes that the override it's being passed does have concretely failing
+-- preconditions. Otherwise, the error won't make much sense.
+ppConcreteFailure ::
+  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
+  OverrideWithPreconditions ext ->
+  PP.Doc ann
+ppConcreteFailure owp =
+  let (_, false, _) =
+        W4.partitionLabeledPreds (Proxy :: Proxy Sym) (map snd (owp ^. owpPreconditions))
+  in ppFailure owp false
 
 ------------------------------------------------------------------------
 
