@@ -1360,7 +1360,7 @@ invariantHintMacro = MonMacro 3 $ \_ args -> usingEvType $
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM mtp $ monadifyTerm (Just mtp) m
      return $ fromCompTerm mtp $
-       applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
+       applyOpenTermMulti (globalOpenTerm "SpecM.invariantHint")
        [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
 
 -- | The macro for @asserting@ or @assuming@, which converts @asserting@ to
@@ -1378,8 +1378,8 @@ assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
      mtp <- monadifyTypeM tp
      mtrm <- resetMonadifyM mtp $ monadifyTerm (Just mtp) m
      ev <- askEvType
-     let ident = if doAsserting then "Prelude.assertingS"
-                                else "Prelude.assumingS"
+     let ident = if doAsserting then "SpecM.assertingS"
+                                else "SpecM.assumingS"
      return $ fromCompTerm mtp $
        applyOpenTermMulti (globalOpenTerm ident)
        [evTypeTerm ev, toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
@@ -1419,6 +1419,9 @@ finMacro isSemiPure i j from to params_p =
      return $ if isSemiPure
               then ArgMonTerm $ fromSemiPureTerm glob_tp_app to_app
               else ArgMonTerm $ fromArgTerm glob_tp_app to_app
+
+-- FIXME HERE NOW: add a case for a fix of a record type of functions, which
+-- should translate to MultiFixS
 
 -- | The macro for fix
 --
@@ -1493,9 +1496,9 @@ defaultMonTable =
   , mmCustom "Prelude.fix" fixMacro
   , mmCustom "Prelude.either" eitherMacro
   , mmCustom "Prelude.uncurry" uncurryMacro
-  , mmCustom "Prelude.invariantHint" invariantHintMacro
-  , mmCustom "Prelude.asserting" (assertingOrAssumingMacro True)
-  , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
+  , mmCustom "SpecM.invariantHint" invariantHintMacro
+  , mmCustom "SpecM.asserting" (assertingOrAssumingMacro True)
+  , mmCustom "SpecM.assuming" (assertingOrAssumingMacro False)
 
     -- Top-level sequence functions
   , mmArg "Cryptol.seqMap" "CryptolM.seqMapM" True
@@ -1599,10 +1602,11 @@ ensureCryptolMLoaded sc =
 monadifyCompleteArgType :: SharedContext -> MonadifyEnv -> Term -> Bool ->
                            IO Term
 monadifyCompleteArgType sc env tp poly_p =
+  (ensureCryptolMLoaded sc >>) $
   completeOpenTerm sc $
   if poly_p then
     -- Parameter polymorphism means pi-quantification over E
-    (piOpenTerm "E" (dataTypeOpenTerm "Prelude.EvType" []) $ \e ->
+    (piOpenTerm "E" (dataTypeOpenTerm "SpecM.EvType" []) $ \e ->
       let ?specMEvType = EventType e in
       -- NOTE: even though E is a free variable here, it can not be free in tp,
       -- which is a closed term, so we do not list it in the MonadifyTypeCtx
@@ -1615,6 +1619,7 @@ monadifyCompleteArgType sc env tp poly_p =
 -- 'MonTerm' to a SAW core 'Term', or 'fail' if this is not possible
 monadifyCompleteTerm :: SharedContext -> MonadifyEnv -> Term -> Term -> IO Term
 monadifyCompleteTerm sc env trm tp =
+  (ensureCryptolMLoaded sc >>) $
   runCompleteMonadifyM sc env tp $ usingEvType $
   monadifyTerm (Just $ monadifyType [] tp) trm
 
@@ -1655,6 +1660,7 @@ monadifyNamedTerm :: SharedContext -> MonadifyEnv ->
                      NameInfo -> Maybe Term -> Term ->
                      IO (MonTerm, MonadifyEnv)
 monadifyNamedTerm sc env nmi maybe_trm tp =
+  (ensureCryptolMLoaded sc >>) $
   flip runStateT env $ monadifyNamedTermH sc nmi maybe_trm tp
 
 -- | The implementation of 'monadifyTermInEnv' in the @StateT MonadifyEnv IO@ monad
