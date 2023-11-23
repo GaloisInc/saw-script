@@ -76,8 +76,9 @@ module Verifier.SAW.OpenTerm (
   EventType (..), defaultSpecMEventType, unitKindDesc, bvExprKind,
   tpDescTypeOpenTerm, kindToTpDesc, unitTpDesc,
   boolExprKind, boolKindDesc, boolTpDesc, natExprKind, natKindDesc,
-  numExprKind, numKindDesc, bvKindDesc, tpKindDesc, pairTpDesc, tupleTpDesc,
-  sumTpDesc, bvVecTpDesc, constTpExpr, bvConstTpExpr, binOpTpExpr, bvSumTpExprs,
+  numExprKind, numKindDesc, bvKindDesc, bvTpDesc, tpKindDesc,
+  pairTpDesc, tupleTpDesc, sumTpDesc, bvVecTpDesc,
+  constTpExpr, bvConstTpExpr, binOpTpExpr, bvSumTpExprs,
   bvMulTpExpr, sigmaTpDesc, sigmaTpDescMulti, seqTpDesc, arrowTpDesc,
   arrowTpDescMulti, mTpDesc, funTpDesc, piTpDesc, piTpDescMulti, voidTpDesc,
   varTpDesc, varTpExpr, varKindExpr, constKindExpr, indTpDesc,
@@ -625,6 +626,10 @@ numKindDesc = ctorOpenTerm "SpecM.Kind_Expr" [numExprKind]
 -- | The kind description for the type @bitvector w@
 bvKindDesc :: Natural -> OpenTerm
 bvKindDesc w = ctorOpenTerm "SpecM.Kind_Expr" [bvExprKind w]
+
+-- | The type description for thhe type @bitvector w@
+bvTpDesc :: Natural -> OpenTerm
+bvTpDesc w = applyGlobalOpenTerm "SpecM.Tp_bitvector" [natOpenTerm w]
 
 -- | The kind description for the type of type descriptions
 tpKindDesc :: OpenTerm

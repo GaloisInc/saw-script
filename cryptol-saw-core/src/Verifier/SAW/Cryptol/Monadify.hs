@@ -302,6 +302,7 @@ data MonType
   | MTySeq NumTpExpr MonType
   | MTyUnit
   | MTyBool
+  | MTyBV Natural
   | MTyPair MonType MonType
   | MTySum MonType MonType
     -- | A type with no type description, meaning it cannot be used in a
@@ -374,6 +375,7 @@ toArgType (MTySeq n t) =
   [evTypeTerm ?specMEvType, numExprVal n, toArgType t]
 toArgType MTyUnit = unitTypeOpenTerm
 toArgType MTyBool = boolTypeOpenTerm
+toArgType (MTyBV n) = bitvectorTypeOpenTerm $ natOpenTerm n
 toArgType (MTyPair mtp1 mtp2) =
   pairTypeOpenTerm (toArgType mtp1) (toArgType mtp2)
 toArgType (MTySum mtp1 mtp2) =
@@ -445,6 +447,7 @@ toTpDescH lvl False (MTySeq n mtp) =
   seqTpDesc (numExprExpr lvl n) (toTpDescH lvl False mtp)
 toTpDescH _ False MTyUnit = unitTpDesc
 toTpDescH _ False MTyBool = boolTpDesc
+toTpDescH _ False (MTyBV w) = bvTpDesc w
 toTpDescH lvl False (MTyPair mtp1 mtp2) =
   pairTpDesc (toTpDescH lvl False mtp1) (toTpDescH lvl False mtp2)
 toTpDescH lvl False (MTySum mtp1 mtp2) =
@@ -561,7 +564,9 @@ monadifyTpExpr ctx (asDataType -> Just (pn, args)) =
   SomeTpExpr MKTypeRepr $
   MTyIndesc $ dataTypeOpenTerm (primName pn) (map (someTpExprVal .
                                                    monadifyTpExpr ctx) args)
-{- FIXME: if we need finite Vecs, then we need Nat tp exprs
+monadifyTpExpr _ (asBitvectorType -> Just w) =
+  SomeTpExpr MKTypeRepr $ MTyBV w
+{- FIXME: if we need general finite Vecs, then we need Nat tp exprs
 monadifyType ctx (asVectorType -> Just (len, tp)) =
   let lenOT = monadifyTypeNat ctx len in
   MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
@@ -600,7 +605,7 @@ monadifyTpExpr ctx (asLocalVar -> Just i)
   , (_,_,Just (SomeTpExpr k e)) <- ctx!!i = SomeTpExpr k e
 monadifyTpExpr ctx tp =
   panic "monadifyTpExpr"
-  ["not a valid type or numberic expression for monadification: "
+  ["not a valid type or numeric expression for monadification: "
    ++ ppTermInTypeCtx ctx tp]
 
 -- | Convert a SAW core 'Term' to a monadification type, or panic if this is not
@@ -721,6 +726,7 @@ monTypeIsPure (MTyArrow _ _) = False
 monTypeIsPure (MTySeq _ _) = False
 monTypeIsPure MTyUnit = True
 monTypeIsPure MTyBool = True
+monTypeIsPure (MTyBV _) = True
 monTypeIsPure (MTyPair mtp1 mtp2) = monTypeIsPure mtp1 && monTypeIsPure mtp2
 monTypeIsPure (MTySum mtp1 mtp2) = monTypeIsPure mtp1 && monTypeIsPure mtp2
 monTypeIsPure (MTyIndesc _) = True
@@ -737,8 +743,9 @@ monTypeIsSemiPure (MTyForall _ k tp_f) =
 monTypeIsSemiPure (MTyArrow tp_in tp_out) =
   monTypeIsPure tp_in && monTypeIsSemiPure tp_out
 monTypeIsSemiPure (MTySeq _ _) = False
-monTypeIsSemiPure MTyUnit = False
-monTypeIsSemiPure MTyBool = False
+monTypeIsSemiPure MTyUnit = True
+monTypeIsSemiPure MTyBool = True
+monTypeIsSemiPure (MTyBV _) = True
 monTypeIsSemiPure (MTyPair mtp1 mtp2) =
   -- NOTE: functions in pairs are not semi-pure; only pure types in pairs are
   -- semi-pure
