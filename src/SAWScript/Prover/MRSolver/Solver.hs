@@ -20,9 +20,8 @@ Portability : non-portable (language extensions)
 
 This module implements a monadic-recursive solver, for proving that one monadic
 term refines another. The algorithm works on the "monadic normal form" of
-computations, which uses the following laws to simplify binds and calls to
-@liftStackS@ in computations, where @either@ is the sum elimination function
-defined in the SAW core prelude:
+computations, which uses the following laws to simplify binds, where @either@ is
+the sum elimination function defined in the SAW core prelude:
 
 > retS x >>= k                  = k x
 > errorS str >>= k              = errorM
@@ -34,33 +33,18 @@ defined in the SAW core prelude:
 > (orS m1 m2) >>= k             = orM (m1 >>= k) (m2 >>= k)
 > (if b then m1 else m2) >>= k  = if b then m1 >>= k else m2 >>= k
 > (either f1 f2 e) >>= k        = either (\x -> f1 x >>= k) (\x -> f2 x >>= k) e
-> (multiFixS funs body) >>= k   = multiFixS funs (\F1 ... Fn -> body F1 ... Fn >>= k)
-> 
-> liftStackS (retS x)                = retS x
-> liftStackS (errorS str)            = errorS str
-> liftStackS (m >>= k)               = liftStackS m >>= \x -> liftStackS (k x)
-> liftStackS (existsS f)             = existsM (\x -> liftStackS (f x))
-> liftStackS (forallS f)             = forallM (\x -> liftStackS (f x))
-> liftStackS (assumingS b m)         = assumingM b (liftStackS m)
-> liftStackS (assertingS b m)        = assertingM b (liftStackS m)
-> liftStackS (orS m1 m2)             = orM (liftStackS m1) (liftStackS m2)
-> liftStackS (if b then m1 else m2)  = if b then liftStackS m1 else liftStackS m2
-> liftStackS (either f1 f2 e)        = either (\x -> liftStackS f1 x) (\x -> liftStackS f2 x) e
-> liftStackS (multiFixS funs body)   = multiFixS funs (\F1 ... Fn -> liftStackS (body F1 ... Fn))
 
 The resulting computations are in one of the following forms:
 
 > returnM e  |  errorM str  |  existsM f  |  forallM f  |  assumingS b m  |
 > assertingS b m  |  orM m1 m2  |  if b then m1 else m2  |  either f1 f2 e  |
-> F e1 ... en  |  liftStackS (F e1 ... en)  |
-> F e1 ... en >>= k  | liftStackS (F e1 ... en) >>= k  |
-> multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> m)
+> F e1 ... en  | F e1 ... en >>= k
 
 The form @F e1 ... en@ refers to a recursively-defined function or a function
-variable that has been locally bound by a @multiFixS@. Either way, monadic
+variable that has been locally bound by a @FixS@. Either way, monadic
 normalization does not attempt to normalize these functions.
 
-The algorithm maintains a context of three sorts of variables: @multiFixS@-bound
+The algorithm maintains a context of three sorts of variables: @FixS@-bound
 variables, existential variables, and universal variables. Universal variables
 are represented as free SAW core variables, while the other two forms of
 variable are represented as SAW core 'ExtCns's terms, which are essentially
@@ -68,7 +52,7 @@ axioms that have been generated internally. These 'ExtCns's are Skolemized,
 meaning that they take in as arguments all universal variables that were in
 scope when they were created. The context also maintains a partial substitution
 for the existential variables, as they become instantiated with values, and it
-additionally remembers the bodies / unfoldings of the @multiFixS@-bound variables.
+additionally remembers the bodies / unfoldings of the @FixS@-bound variables.
 
 The goal of the solver at any point is of the form @C |- m1 |= m2@, meaning that
 we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
@@ -95,18 +79,17 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 > C |- m |= existsS f: make a new existential variable x and recurse
 > 
 > C |- forallS f |= m: make a new existential variable x and recurse
-> 
+>
 > C |- m |= orS m1 m2: try to prove C |- m |= m1, and if that fails, backtrack and
 > prove C |- m |= m2
-> 
+>
 > C |- orS m1 m2 |= m: prove both C |- m1 |= m and C |- m2 |= m
+>
+
+> C |- FixS fdef args |= m: create a FixS-bound variable F bound to (fdef F) and
+> recurse on fdef F args |= m
 > 
-> C |- multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body) |= m: create
-> multiFixS-bound variables F1 through Fn in the context bound to their unfoldings
-> f1 through fn, respectively, and recurse on body |= m
-> 
-> C |- m |= multiFixS (\F1 ... Fn -> (f1, ..., fn)) (\F1 ... Fn -> body): similar to
-> previous case
+> C |- m |= FixS fdef args: similar to previous case
 > 
 > C |- F e1 ... en >>= k |= F e1' ... en' >>= k': prove C |- ei = ei' for each i
 > and then prove k x |= k' x for new universal variable x
@@ -125,8 +108,8 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 >   some ei'' and m', match the ei'' against the ei by instantiating the xj with
 >   fresh evars, and if this succeeds then recursively prove C |- LHS |= m' >>= k'
 > 
-> * If either side is a definition whose unfolding does not contain multiFixS, or
->   any related operations, unfold it
+> * If either side is a definition whose unfolding does not contain FixS or any
+>   related operations, unfold it
 > 
 > * If F and F' have the same return type, add an assumption forall uvars in scope
 >   that F e1 ... en |= F' e1' ... em' and unfold both sides, recursively proving
@@ -135,11 +118,6 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 > 
 > * Otherwise we don't know to "split" one of the sides into a bind whose
 >   components relate to the two components on the other side, so just fail
-
-Note that if either side of the final case is wrapped in a @liftStackS@, the
-behavior is identical, just with a @liftStackS@ wrapped around the appropriate
-unfolded function body or bodies. The only exception is the second to final case,
-which also requires the both functions either be lifted or unlifted.
 -}
 
 module SAWScript.Prover.MRSolver.Solver where
@@ -176,6 +154,13 @@ import SAWScript.Prover.MRSolver.SMT
 -- * Normalizing and Matching on Terms
 ----------------------------------------------------------------------
 
+-- FIXME: move these to Recognizer.hs
+
+-- | Recognize an equality proposition over Booleans
+asBoolEq :: Recognizer Term (Term,Term)
+asBoolEq (asEq -> Just ((asBoolType -> Just ()), e1, e2)) = Just (e1, e2)
+asBoolEq _ = Nothing
+
 -- | Match a right-nested series of pairs. This is similar to 'asTupleValue'
 -- except that it expects a unit value to always be at the end.
 asNestedPairs :: Recognizer Term [Term]
@@ -183,80 +168,28 @@ asNestedPairs (asPairValue -> Just (x, asNestedPairs -> Just xs)) = Just (x:xs)
 asNestedPairs (asFTermF -> Just UnitValue) = Just []
 asNestedPairs _ = Nothing
 
--- | Recognize a term of the form @Cons1 _ x1 (Cons1 _ x2 (... (Nil1 _)))@
-asList1 :: Recognizer Term [Term]
-asList1 (asCtor -> Just (nm, [_]))
-  | primName nm == "Prelude.Nil1" = return []
-asList1 (asCtor -> Just (nm, [_, hd, tl]))
-  | primName nm == "Prelude.Cons1" = (hd:) <$> asList1 tl
-asList1 _ = Nothing
+-- | Recognize a term of the form @Cons _ x1 (Cons _ x2 (... (Nil _)))@
+asList :: Recognizer Term [Term]
+asList (asCtor -> Just (nm, [_]))
+  | primName nm == "Prelude.Nil" = return []
+asList (asCtor -> Just (nm, [_, hd, tl]))
+  | primName nm == "Prelude.Cons" = (hd:) <$> asList tl
+asList _ = Nothing
 
--- | Recognize a term of the form @mkFrameCall frame n arg1 ... argn@
-asMkFrameCall :: Recognizer Term (Term, Natural, [Term])
-asMkFrameCall (asApplyAll -> ((isGlobalDef "Prelude.mkFrameCall" -> Just ()),
-                              (frame : (asNat -> Just n) : args))) =
-  Just (frame, n, args)
-asMkFrameCall _ = Nothing
-
--- | Recognize a term of the form @CallS _ _ _ (mkFrameCall frame n args)@
-asCallS :: Recognizer Term (Term, Natural, [Term])
-asCallS (asApplyAll ->
-         ((isGlobalDef "Prelude.callS" -> Just ()),
-          [_, _, _,
-           (asMkFrameCall -> Just (frame, n, args))])) =
-  Just (frame, n, args)
-asCallS _ = Nothing
-
--- | Recursively traverse a 'Term' and replace each term of the form
+-- | Bind fresh function variables for a @MultiFixS@ with the first 'Term' as
+-- the event type, the second as a list of the type descriptions for the
+-- recursive functions being defined, and the third a function of the form
 --
--- > CallS _ _ _ (mkFrameCall _ i arg1 ... argn)
---
--- with the term @tmi arg1 ... argn@, where @tmi@ is the @i@th term in the list
---
--- FIXME: what we /actually/ want here is to only replace recursive calls as
--- they get normalized; that is, it would be more correct to only recurse inside
--- lambdas, to the left and right of binds, and into the computational subterms
--- of our variable monadic operations (including, e.g., if-then-else and the
--- either and maybe eliminators). But the implementation here should give the
--- correct result for any code we are actually going to see...
-mrReplaceCallsWithTerms :: [Term] -> Term -> MRM t Term
-mrReplaceCallsWithTerms top_tms top_t =
-  flip runReaderT top_tms $
-  flip memoFixTermFun top_t $ \recurse t -> case t of
-  (asCallS -> Just (_, i, args)) ->
-    -- Replace a CallS with its corresponding term
-    ask >>= \tms -> lift $ mrApplyAll (tms!!(fromIntegral i)) args
-  (asApplyAll ->
-   (isGlobalDef "Prelude.multiFixS" -> Just (), _)) ->
-    -- Don't recurse inside another multiFixS, since it binds new calls
-    return t
-  (asLambda -> Just (x, tp, body)) ->
-    -- Lift our terms when we recurse inside a binder; also, not that we don't
-    -- expect to lift types, so we leave tp alone
-    do tms <- ask
-       tms' <- liftTermLike 0 1 tms
-       body' <- local (const tms') $ recurse body
-       lift $ liftSC3 scLambda x tp body'
-  (asPi -> Just _) ->
-    -- We don't expect to lift types, so we leave them alone
-    return t
-  _ -> traverseSubterms recurse t
-
-
--- | Bind fresh function variables for a @multiFixS@ with the given list of
--- @LetRecType@s and tuple of definitions for the function bodies
-mrFreshCallVars :: Term -> Term -> Term -> Term -> MRM t [MRVar]
-mrFreshCallVars ev stack frame defs_tm =
+-- > \F1 F2 ... Fn -> (f1, (f2, ... (fn, ())))
+mrFreshCallVars :: Term -> Term -> Term -> MRM t [MRVar]
+mrFreshCallVars ev tp_ds_tm defs_tm =
   do
-    -- First, make fresh function constants for all the recursive functions,
-    -- noting that each constant must abstract out the current uvar context
-    -- (see mrFreshVar)
-    new_stack <- liftSC2 scGlobalApply "Prelude.pushFunStack" [frame, stack]
-    lrts <- liftSC1 scWhnf frame >>= \case
-       (asList1 -> Just lrts) -> return lrts
-       _ -> throwMRFailure (MalformedLetRecTypes frame)
-    fun_tps <- forM lrts $ \lrt ->
-      liftSC2 scGlobalApply "Prelude.LRTType" [ev, new_stack, lrt]
+    -- First compute the types of the recursive functions being bound by mapping
+    -- @tpElem@ to the type descriptions, and bind functions of those types
+    tpElem_fun <- mrGlobalTerm "SpecM.tpElem"
+    fun_tps <- case asList tp_ds_tm of
+      Just ds -> mapM (\d -> mrApplyAll tpElem_fun [ev, d]) ds
+      Nothing -> throwMRFailure (MalformedTpDescList tp_ds_tm)
     fun_vars <- mapM (mrFreshVar "F") fun_tps
 
     -- Next, match on the tuple of recursive function definitions and convert
@@ -265,9 +198,9 @@ mrFreshCallVars ev stack frame defs_tm =
     -- current uvars; see mrVarTerm) and then lambda-abstracting all the
     -- current uvars
     fun_tms <- mapM mrVarTerm fun_vars
-    defs_tm' <- liftSC1 scWhnf defs_tm
-    bodies <- case asNestedPairs defs_tm' of
-      Just defs -> mapM (mrReplaceCallsWithTerms fun_tms >=> lambdaUVarsM) defs
+    defs_app <- mrApplyAll defs_tm fun_tms
+    bodies <- case asNestedPairs defs_app of
+      Just defs -> mapM lambdaUVarsM defs
       Nothing -> throwMRFailure (MalformedDefs defs_tm)
 
     -- Remember the body associated with each fresh function constant
@@ -295,26 +228,24 @@ normComp (CompTerm t) =
   case asApplyAll t of
     (f@(asLambda -> Just _), args@(_:_)) ->
       mrApplyAll f args >>= normCompTerm
-    (isGlobalDef "Prelude.retS" -> Just (), [_, _, _, x]) ->
+    (isGlobalDef "SpecM.retS" -> Just (), [_, _, x]) ->
       return $ RetS x
-    (isGlobalDef "Prelude.bindS" -> Just (), [e, stack, _, _, m, f]) ->
+    (isGlobalDef "SpecM.bindS" -> Just (), [ev, _, _, m, f]) ->
       do norm <- normCompTerm m
-         normBind norm (CompFunTerm (SpecMParams e stack) f)
-    (isGlobalDef "Prelude.errorS" -> Just (), [_, _, _, str]) ->
+         normBind norm (CompFunTerm (EvTerm ev) f)
+    (isGlobalDef "SpecM.errorS" -> Just (), [_, _, str]) ->
       return (ErrorS str)
-    (isGlobalDef "Prelude.liftStackS" -> Just (), [ev, stk, _, t']) ->
-      normCompTerm t' >>= liftStackNormComp (SpecMParams ev stk)
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
     (isGlobalDef "Prelude.either" -> Just (),
-     [ltp, rtp, (asSpecM -> Just (params, _)), f, g, eith]) ->
-      return $ Eithers [(Type ltp, CompFunTerm params f),
-                        (Type rtp, CompFunTerm params g)] eith
+     [ltp, rtp, (asSpecM -> Just (ev, _)), f, g, eith]) ->
+      return $ Eithers [(Type ltp, CompFunTerm ev f),
+                        (Type rtp, CompFunTerm ev g)] eith
     (isGlobalDef "Prelude.eithers" -> Just (),
      [_, (matchEitherElims -> Just elims), eith]) ->
       return $ Eithers elims eith
     (isGlobalDef "Prelude.maybe" -> Just (),
-     [tp, (asSpecM -> Just (params, _)), m, f, mayb]) ->
+     [tp, (asSpecM -> Just (ev, _)), m, f, mayb]) ->
       do tp' <- case asApplyAll tp of
                   -- Always unfold: is_bvult, is_bvule
                   (tpf@(asGlobalDef -> Just ident), args)
@@ -322,40 +253,26 @@ normComp (CompTerm t) =
                     , Just (_, Just body) <- asConstant tpf ->
                       mrApplyAll body args
                   _ -> return tp
-         return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm params f) mayb
-    (isGlobalDef "Prelude.orS" -> Just (), [_, _, _, m1, m2]) ->
+         return $ MaybeElim (Type tp') (CompTerm m) (CompFunTerm ev f) mayb
+    (isGlobalDef "SpecM.orS" -> Just (), [_, _, m1, m2]) ->
       return $ OrS (CompTerm m1) (CompTerm m2)
-    (isGlobalDef "Prelude.assertBoolS" -> Just (), [ev, stack, cond]) ->
+    (isGlobalDef "SpecM.assertBoolS" -> Just (), [ev, cond]) ->
       do unit_tp <- mrUnitType
-         return $ AssertBoolBind cond (CompFunReturn
-                                       (SpecMParams ev stack) unit_tp)
-    (isGlobalDef "Prelude.assumeBoolS" -> Just (), [ev, stack, cond]) ->
+         return $ AssertBoolBind cond (CompFunReturn (EvTerm ev) unit_tp)
+    (isGlobalDef "SpecM.assumeBoolS" -> Just (), [ev, cond]) ->
       do unit_tp <- mrUnitType
-         return $ AssumeBoolBind cond (CompFunReturn
-                                       (SpecMParams ev stack) unit_tp)
-    (isGlobalDef "Prelude.existsS" -> Just (), [ev, stack, tp]) ->
+         return $ AssumeBoolBind cond (CompFunReturn (EvTerm ev) unit_tp)
+    (isGlobalDef "SpecM.existsS" -> Just (), [ev, tp]) ->
       do unit_tp <- mrUnitType
-         return $ ExistsBind (Type tp) (CompFunReturn
-                                        (SpecMParams ev stack) unit_tp)
-    (isGlobalDef "Prelude.forallS" -> Just (), [ev, stack, tp]) ->
+         return $ ExistsBind (Type tp) (CompFunReturn (EvTerm ev) unit_tp)
+    (isGlobalDef "SpecM.forallS" -> Just (), [ev, tp]) ->
       do unit_tp <- mrUnitType
-         return $ ForallBind (Type tp) (CompFunReturn
-                                        (SpecMParams ev stack) unit_tp)
-    (isGlobalDef "Prelude.multiFixS" -> Just (),
-     [ev, stack, frame, defs, (asMkFrameCall -> Just (_, i, args))]) ->
+         return $ ForallBind (Type tp) (CompFunReturn (EvTerm ev) unit_tp)
+    (isGlobalDef "SpecM.FixS" -> Just (), _ev:_tp_d:body:args) ->
       do
-        -- Bind fresh function vars for the new recursive functions
-        fun_vars <- mrFreshCallVars ev stack frame defs
-        -- Return the @i@th variable to args as a normalized computation, noting
-        -- that it must be applied to all of the uvars as well as the args
-        let var = CallSName (fun_vars !! (fromIntegral i))
-        all_args <- (++ args) <$> getAllUVarTerms
-        FunBind var all_args Unlifted <$> mkCompFunReturn <$>
-          mrFunOutType var all_args
-
-    (isGlobalDef "Prelude.multiArgFixS" -> Just (), _ev:_stack:_lrt:body:args) ->
-      do
-        -- Bind a fresh function var for the new recursive function
+        -- Bind a fresh function var for the new recursive function, getting the
+        -- type of the new function as the input type of body, which should have
+        -- type specFun E T -> specFun E T
         body_tp <- mrTypeOf body
         fun_tp <- case asPi body_tp of
           Just (_, tp_in, _) -> return tp_in
@@ -372,8 +289,23 @@ normComp (CompTerm t) =
         -- well as the args
         let var = CallSName fun_var
         all_args <- (++ args) <$> getAllUVarTerms
-        FunBind var all_args Unlifted <$> mkCompFunReturn <$>
+        FunBind var all_args <$> mkCompFunReturn <$>
           mrFunOutType var all_args
+
+{-
+FIXME HERE NOW: match a tuple projection of a MultiFixS
+
+    (isGlobalDef "Prelude.MultiFixS" -> Just (), ev:tp_ds:defs:args) ->
+      do
+        -- Bind fresh function vars for the new recursive functions
+        fun_vars <- mrFreshCallVars ev tp_ds defs
+        -- Return the @i@th variable to args as a normalized computation, noting
+        -- that it must be applied to all of the uvars as well as the args
+        let var = CallSName (fun_vars !! (fromIntegral i))
+        all_args <- (++ args) <$> getAllUVarTerms
+        FunBind var all_args <$> mkCompFunReturn <$>
+          mrFunOutType var all_args
+-}
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
@@ -388,19 +320,19 @@ normComp (CompTerm t) =
 
     -- Convert `atM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecAtM`
-    (asGlobalDef -> Just "CryptolM.atM", [ev, stack,
+    (asGlobalDef -> Just "CryptolM.atM", [ev,
                                           (asBvToNat -> Just (w1, n)), a, xs,
                                           (asBvToNat -> Just (w2, i))]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
-           mrApplyAll body [ev, stack, w1, n, a, xs, i] >>= normCompTerm
+           mrApplyAll body [ev, w1, n, a, xs, i] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
     -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.atM", [ev, stack,
+    (asGlobalDef -> Just "CryptolM.atM", [ev,
                                           n_tm@(asNat -> Just n), a, xs,
                                           (asBvToNat ->
                                              Just (w_tm@(asNat -> Just w),
@@ -409,24 +341,24 @@ normComp (CompTerm t) =
          if n < 1 `shiftL` fromIntegral w then do
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (atM)" w_tm n'
-           mrApplyAll body [ev, stack, w_tm, n', a, xs', i] >>= normCompTerm
+           mrApplyAll body [ev, w_tm, n', a, xs', i] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
     -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecUpdateM`
-    (asGlobalDef -> Just "CryptolM.updateM", [ev, stack,
+    (asGlobalDef -> Just "CryptolM.updateM", [ev,
                                               (asBvToNat -> Just (w1, n)), a, xs,
                                               (asBvToNat -> Just (w2, i)), x]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
-           mrApplyAll body [ev, stack, w1, n, a, xs, i, x] >>= normCompTerm
+           mrApplyAll body [ev, w1, n, a, xs, i, x] >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
     -- Convert `updateM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.updateM", [ev, stack,
+    (asGlobalDef -> Just "CryptolM.updateM", [ev,
                                               n_tm@(asNat -> Just n), a, xs,
                                               (asBvToNat ->
                                                  Just (w_tm@(asNat -> Just w),
@@ -436,7 +368,7 @@ normComp (CompTerm t) =
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (updateM)" w_tm n'
            err_tm <- mrErrorTerm a "normComp (updateM)"
-           mrApplyAll body [ev, stack, w_tm, n', a, xs', i, x, err_tm, n_tm]
+           mrApplyAll body [ev, w_tm, n', a, xs', i, x, err_tm, n_tm]
              >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
@@ -468,11 +400,11 @@ normComp (CompTerm t) =
     -- FIXME: substitute for evars if they have been instantiated
     ((asExtCns -> Just ec), args) ->
       do fun_name <- extCnsToFunName ec
-         FunBind fun_name args Unlifted <$> mkCompFunReturn <$>
+         FunBind fun_name args <$> mkCompFunReturn <$>
            mrFunOutType fun_name args
 
     ((asGlobalFunName -> Just f), args) ->
-      FunBind f args Unlifted <$> mkCompFunReturn <$> mrFunOutType f args
+      FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
 
     _ -> throwMRFailure (MalformedComp t)
 
@@ -495,7 +427,7 @@ normBind (AssumeBoolBind cond f) k =
   return $ AssumeBoolBind cond (compFunComp f k)
 normBind (ExistsBind tp f) k = return $ ExistsBind tp (compFunComp f k)
 normBind (ForallBind tp f) k = return $ ForallBind tp (compFunComp f k)
-normBind (FunBind f args isLifted k1) k2
+normBind (FunBind f args k1) k2
   -- Turn `bvVecMapInvarM ... >>= k` into `bvVecMapInvarBindM ... k`
   {-
   | GlobalName (globalDefString -> "CryptolM.bvVecMapInvarM") [] <- f
@@ -512,73 +444,11 @@ normBind (FunBind f args isLifted k1) k2
     do cont' <- compFunToTerm (compFunComp (compFunComp (CompFunTerm cont) k1) k2)
        c <- compFunReturnType k2
        return $ FunBind f (args_pre ++ [cont']) (CompFunReturn (Type c))
-  | otherwise -} = return $ FunBind f args isLifted (compFunComp k1 k2)
+  | otherwise -} = return $ FunBind f args (compFunComp k1 k2)
 
--- | Bind a computation in whnf with a function, normalize, and then call
--- 'liftStackNormComp' if the first argument is 'Lifted'. If the first argument
--- is 'Unlifted', this function is the same as 'normBind'.
-normBindLiftStack :: IsLifted -> NormComp -> CompFun -> MRM t NormComp
-normBindLiftStack Unlifted t f = normBind t f
-normBindLiftStack Lifted t f =
-  liftStackNormComp (compFunSpecMParams f) t >>= \t' -> normBind t' f
-
--- | Bind a 'Term' for a computation with with a function, normalize, and then
--- call 'liftStackNormComp' if the first argument is 'Lifted'. See:
--- 'normBindLiftStack'.
-normBindTermLiftStack :: IsLifted -> Term -> CompFun -> MRM t NormComp
-normBindTermLiftStack isLifted t f =
-  normCompTerm t >>= \m -> normBindLiftStack isLifted m f
-
-
--- | Apply @liftStackS@ to a computation in whnf, and normalize
-liftStackNormComp :: SpecMParams Term -> NormComp -> MRM t NormComp
-liftStackNormComp _ (RetS t) = return (RetS t)
-liftStackNormComp _ (ErrorS msg) = return (ErrorS msg)
-liftStackNormComp params (Ite cond comp1 comp2) =
-  Ite cond <$> liftStackComp params comp1 <*> liftStackComp params comp2
-liftStackNormComp params (Eithers elims t) =
-  Eithers <$> mapM (\(tp,f) -> (tp,) <$> liftStackCompFun params f) elims
-          <*> return t
-liftStackNormComp params (MaybeElim tp m f t) =
-  MaybeElim tp <$> liftStackComp params m
-               <*> liftStackCompFun params f <*> return t
-liftStackNormComp params (OrS comp1 comp2) =
-  OrS <$> liftStackComp params comp1 <*> liftStackComp params comp2
-liftStackNormComp params (AssertBoolBind cond f) =
-  AssertBoolBind cond <$> liftStackCompFun params f
-liftStackNormComp params (AssumeBoolBind cond f) =
-  AssumeBoolBind cond <$> liftStackCompFun params f
-liftStackNormComp params (ExistsBind tp f) =
-  ExistsBind tp <$> liftStackCompFun params f
-liftStackNormComp params (ForallBind tp f) =
-  ForallBind tp <$> liftStackCompFun params f
-liftStackNormComp params (FunBind f args _ k) =
-  FunBind f args Lifted <$> liftStackCompFun params k
-
--- | Apply @liftStackS@ to a computation
-liftStackComp :: SpecMParams Term -> Comp -> MRM t Comp
-liftStackComp (SpecMParams ev stk) (CompTerm t) = mrTypeOf t >>= \case
-  (asSpecM -> Just (_, tp)) ->
-    CompTerm <$> liftSC2 scGlobalApply "Prelude.liftStackS" [ev, stk, tp, t]
-  _ -> error "liftStackComp: type not of the form: SpecM a"
-liftStackComp _ (CompReturn t) = return $ CompReturn t
-liftStackComp params (CompBind c f) =
-  CompBind <$> liftStackComp params c <*> liftStackCompFun params f
-
--- | Apply @liftStackS@ to the bodies of a composition of functions
-liftStackCompFun :: SpecMParams Term -> CompFun -> MRM t CompFun
-liftStackCompFun params@(SpecMParams ev stk) (CompFunTerm _ f) = mrTypeOf f >>= \case
-  (asPi -> Just (_, _, asSpecM -> Just (_, tp))) ->
-    let nm = maybe "ret_val" id (asLambdaName f) in
-    CompFunTerm params <$>
-      mrLambdaLift1 (nm, tp) (ev, stk, tp, f) (\arg (ev', stk', tp', f') ->
-        do app <- mrApplyAll f' [arg]
-           liftSC2 scGlobalApply "Prelude.liftStackS" [ev', stk', tp', app])
-  _ -> error "liftStackCompFun: type not of the form: a -> SpecM b"
-liftStackCompFun params (CompFunReturn _ tp) = return $ CompFunReturn params tp
-liftStackCompFun params (CompFunComp f g) =
-  CompFunComp <$> liftStackCompFun params f <*> liftStackCompFun params g
-
+-- | Bind a 'Term' for a computation with a function and normalize
+normBindTerm :: Term -> CompFun -> MRM t NormComp
+normBindTerm t f = normCompTerm t >>= \m -> normBind m f
 
 {-
 -- | Get the return type of a 'CompFun'
@@ -607,19 +477,19 @@ compFunToTerm (CompFunComp f g) =
      f_tp <- mrTypeOf f'
      g_tp <- mrTypeOf g'
      case (f_tp, g_tp) of
-       (asPi -> Just (_, a, asSpecM -> Just (params, b)),
+       (asPi -> Just (_, a, asSpecM -> Just (ev, b)),
         asPi -> Just (_, _, asSpecM -> Just (_, c))) ->
          -- we explicitly unfold @Prelude.composeM@ here so @mrApplyAll@ will
          -- beta-reduce
          let nm = maybe "ret_val" id (compFunVarName f) in
          mrLambdaLift1 (nm, a) (b, c, f', g') $ \arg (b', c', f'', g'') ->
            do app <- mrApplyAll f'' [arg]
-              liftSC2 scGlobalApply "Prelude.bindS" (specMParamsArgs params ++
-                                                     [b', c', app, g''])
+              liftSC2 scGlobalApply "Prelude.bindS" [unEvTerm ev,
+                                                     b', c', app, g'']
        _ -> error "compFunToTerm: type(s) not of the form: a -> SpecM b"
-compFunToTerm (CompFunReturn params (Type a)) =
+compFunToTerm (CompFunReturn ev (Type a)) =
   mrLambdaLift1 ("ret_val", a) a $ \ret_val a' ->
-    liftSC2 scGlobalApply "Prelude.retS" (specMParamsArgs params ++ [a', ret_val])
+    liftSC2 scGlobalApply "Prelude.retS" [unEvTerm ev, a', ret_val]
 
 {-
 -- | Convert a 'Comp' into a 'Term'
@@ -646,7 +516,7 @@ applyNormCompFun f arg = applyCompFun f arg >>= normComp
 -- | Convert a 'FunAssumpRHS' to a 'NormComp'
 mrFunAssumpRHSAsNormComp :: FunAssumpRHS -> MRM t NormComp
 mrFunAssumpRHSAsNormComp (OpaqueFunAssump f args) =
-  FunBind f args Unlifted <$> mkCompFunReturn <$> mrFunOutType f args
+  FunBind f args <$> mkCompFunReturn <$> mrFunOutType f args
 mrFunAssumpRHSAsNormComp (RewriteFunAssump rhs) = normCompTerm rhs
 
 
@@ -655,8 +525,8 @@ matchEitherElims :: Term -> Maybe [EitherElim]
 matchEitherElims (asCtor ->
                   Just (primName -> "Prelude.FunsTo_Nil", [_])) = Just []
 matchEitherElims (asCtor -> Just (primName -> "Prelude.FunsTo_Cons",
-                                  [asSpecM -> Just (params, _), tp, f, rest])) =
-  ((Type tp, CompFunTerm params f):) <$>
+                                  [asSpecM -> Just (ev, _), tp, f, rest])) =
+  ((Type tp, CompFunTerm ev f):) <$>
   matchEitherElims rest
 matchEitherElims _ = Nothing
 
@@ -698,7 +568,7 @@ mrUnfoldFunBind f args mark g =
 -}
 
 {-
-FIXME HERE NOW: maybe each FunName should stipulate whether it is recursive or
+FIXME HERE: maybe each FunName should stipulate whether it is recursive or
 not, so that mrRefines can unfold the non-recursive ones early but wait on
 handling the recursive ones
 -}
@@ -1042,9 +912,9 @@ mrRefines' (OrS m1 m1') m2 =
 
 -- FIXME: the following cases don't work unless we either allow evars to be set
 -- to NormComps or we can turn NormComps back into terms
-mrRefines' m1@(FunBind (EVarFunName _) _ _ _) m2 =
+mrRefines' m1@(FunBind (EVarFunName _) _ _) m2 =
   throwMRFailure (CompsDoNotRefine m1 m2)
-mrRefines' m1 m2@(FunBind (EVarFunName _) _ _ _) =
+mrRefines' m1 m2@(FunBind (EVarFunName _) _ _) =
   throwMRFailure (CompsDoNotRefine m1 m2)
 {-
 mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
@@ -1055,15 +925,15 @@ mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
-mrRefines' (FunBind (CallSName f) args1 isLifted k1)
-           (FunBind (CallSName f') args2 isLifted' k2)
-  | f == f' && isLifted == isLifted' && length args1 == length args2 =
+mrRefines' (FunBind (CallSName f) args1 k1)
+           (FunBind (CallSName f') args2 k2)
+  | f == f' && length args1 == length args2 =
     zipWithM_ mrAssertProveEq args1 args2 >>
     mrFunOutType (CallSName f) args1 >>= \(_, tp) ->
     mrRefinesFun tp k1 tp k2
 
-mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
-           m2@(FunBind f2 args2 isLifted2 k2) =
+mrRefines' m1@(FunBind f1 args1 k1)
+           m2@(FunBind f2 args2 k2) =
   mrFunOutType f1 args1 >>= \(_, tp1) ->
   mrFunOutType f2 args2 >>= \(_, tp2) ->
   findInjConvs tp1 Nothing tp2 Nothing >>= \mb_convs ->
@@ -1102,7 +972,7 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- unfolds and is not recursive in itself, unfold f2 and recurse
   (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
     | Just (f2_body, False) <- maybe_f2_body ->
-    normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' ->
+    normBindTerm f2_body k2 >>= \m2' ->
     recordUsedFunAssump fa >> mrRefines m1 m2'
 
   -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
@@ -1124,27 +994,25 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBindLiftStack isLifted1 rhs'' k1
+       m1' <- normBind rhs'' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
   _ | Just (f1_body, False) <- maybe_f1_body ->
-      normBindTermLiftStack isLifted1 f1_body k1 >>= \m1' -> mrRefines m1' m2
+      normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
 
   -- If f2 unfolds and is not recursive in itself, unfold it and recurse
   _ | Just (f2_body, False) <- maybe_f2_body ->
-      normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' -> mrRefines m1 m2'
+      normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
-  -- assumption that f1 refines some specification, both are either lifted or
-  -- unlifted, and both f1 and f2 are recursive and have return types which are
-  -- heterogeneously related, then try to coinductively prove that
-  -- f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2, and
-  -- then try to prove that k1 |= k2
+  -- assumption that f1 refines some specification, and both f1 and f2 are
+  -- recursive and have return types which are heterogeneously related, then try
+  -- to coinductively prove that f1 args1 |= f2 args2 under the assumption that
+  -- f1 args1 |= f2 args2, and then try to prove that k1 |= k2
   _ | Just _ <- mb_convs
     , Just _ <- maybe_f1_body
-    , Just _ <- maybe_f2_body
-    , isLifted1 == isLifted2 ->
+    , Just _ <- maybe_f2_body ->
       mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
 
   -- If we cannot line up f1 and f2, then making progress here would require us
@@ -1153,12 +1021,10 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
   _ ->
-    do if isLifted1 /= isLifted2
-       then debugPrint 1 "mrRefines: isLifted cases do not match"
-       else mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2
+    do mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2
        throwMRFailure (CompsDoNotRefine m1 m2)
 
-mrRefines' m1@(FunBind f1 args1 isLifted1 k1) m2 =
+mrRefines' m1@(FunBind f1 args1 k1) m2 =
   mrGetFunAssump f1 >>= \case
 
   -- If we have an assumption that f1 args' refines some rhs, then prove that
@@ -1168,7 +1034,7 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1) m2 =
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBindLiftStack isLifted1 rhs'' k1
+       m1' <- normBind rhs'' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1
@@ -1177,19 +1043,19 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1) m2 =
 
     -- If f1 unfolds and is not recursive in itself, unfold it and recurse
     Just (f1_body, False) ->
-      normBindTermLiftStack isLifted1 f1_body k1 >>= \m1' -> mrRefines m1' m2
+      normBindTerm f1_body k1 >>= \m1' -> mrRefines m1' m2
 
     -- Otherwise we would have to somehow split m2 into some computation of the
     -- form m2' >>= k2 where f1 args1 |= m2' and k1 |= k2, but we don't know how
     -- to do this splitting, so give up
     _ -> mrRefines'' m1 m2
 
-mrRefines' m1 m2@(FunBind f2 args2 isLifted2 k2) =
+mrRefines' m1 m2@(FunBind f2 args2 k2) =
   mrFunBodyRecInfo f2 args2 >>= \case
 
   -- If f2 unfolds and is not recursive in itself, unfold it and recurse
   Just (f2_body, False) ->
-    normBindTermLiftStack isLifted2 f2_body k2 >>= \m2' -> mrRefines m1 m2'
+    normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If f2 unfolds but is recursive, and k2 is the trivial continuation, meaning
   -- m2 is just f2 args2, use the law of coinduction to prove m1 |= f2 args2 by
@@ -1252,19 +1118,31 @@ mrRefinesFun tp1 f1 tp2 f2 =
      piTp2 <- mrTypeOf f2''
      mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''
 
--- | The main loop of 'mrRefinesFun' and 'askMRSolver': given a continuation,
--- two terms of function type, and two equal-length lists representing the
--- argument types of the two terms, add a uvar for each corresponding pair of
--- types (assuming the types are either equal or are heterogeneously related,
--- as in 'HetRelated'), apply the terms to these uvars (modulo possibly some
--- wrapper functions determined by how the types are heterogeneously related),
--- and call the continuation on the resulting terms. The second argument is
--- an accumulator of variables to introduce, innermost first.
+
+-- | The main loop of 'mrRefinesFun' and 'askMRSolver': given a function that
+-- attempts to prove refinement between two computational terms, i.e., terms of
+-- type @SpecM a@ and @SpecM b@ for some types @a@ and @b@, attempt to prove
+-- refinement between two monadic functions. The list of 'Term's argument
+-- contains all the variables that have so far been abstracted by
+-- 'mrRefinesFunH', and the remaining 'Term's are the left-hand type, left-hand
+-- term of that type, right-hand type, and right-hand term of that type for the
+-- refinement we are trying to prove.
+--
+-- This function works by abstracting over arguments of the left- and right-hand
+-- sides, as determined by their types, and applying the functions to these
+-- variables until we get terms of non-functional monadic type, that are passed
+-- to the supplied helper function. Proposition arguments in the form of
+-- equality on Boolean values can occur on either side, and are added as
+-- assumptions to the refinement. Regular non-proof arguments must occur on both
+-- sides, and are added as a single variable that is passed to both sides. This
+-- means that these regular argument types must be either equal or
+-- heterogeneously related as in 'HetRelated'.
 mrRefinesFunH :: (Term -> Term -> MRM t a) -> [Term] ->
                  Term -> Term -> Term -> Term -> MRM t a
 
 -- Introduce equalities on either side as assumptions
-mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asEq -> Just (asBoolType -> Just (), b1, b2)), _)) t1 piTp2 t2 =
+mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asBoolEq ->
+                                              Just (b1, b2)), _)) t1 piTp2 t2 =
   liftSC2 scBoolEq b1 b2 >>= \eq ->
   withAssumption eq $
   let nm = maybe "_" id $ find ((/=) '_' . Text.head)
@@ -1273,7 +1151,8 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asEq -> Just (asBoolType -> Just (
   do t1'' <- mrApplyAll t1' [var]
      piTp1' <- mrTypeOf t1''
      mrRefinesFunH k (var : vars') piTp1' t1'' piTp2' t2'
-mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asEq -> Just (asBoolType -> Just (), b1, b2)), _)) t2 =
+mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asBoolEq ->
+                                                       Just (b1, b2)), _)) t2 =
   liftSC2 scBoolEq b1 b2 >>= \eq ->
   withAssumption eq $
   let nm = maybe "_" id $ find ((/=) '_' . Text.head)
@@ -1334,6 +1213,8 @@ mrRefinesFunH _ _ tp1@(asSpecM -> Nothing) _ _ _ =
 mrRefinesFunH _ _ _ _ tp2@(asSpecM -> Nothing) _ =
   throwMRFailure (NotCompFunType tp2)
 
+-- This case means we must be proving refinement on two SpecM computations, so
+-- call the helper function k
 mrRefinesFunH k _ _ t1 _ t2 = k t1 t2
 
 
@@ -1369,30 +1250,23 @@ askMRSolver sc env timeout askSMT rs args t1 t2 =
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
        mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
--- | The continuation passed to 'mrRefinesFunH' in 'refinementTerm' - returns
--- the 'Term' which is the refinement (@Prelude.refinesS@) of the given
--- 'Term's, after quantifying over all current 'mrUVars' with Pi types. Note
--- that this assumes both terms have the same event and stack types - if they
--- do not a saw-core typechecking error will be raised.
+-- | Helper function for 'refinementTerm': returns the proposition stating that
+-- one 'Term' refines another, after quantifying over all current 'mrUVars' with
+-- Pi types. Note that this assumes both terms have the same event types; if
+-- they do not a saw-core typechecking error will be raised.
 refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
-  do (SpecMParams _ev1 _stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
-     (SpecMParams  ev2  stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
-     rpre <- liftSC2 scGlobalApply "Prelude.eqPreRel" [ev2, stack2]
-     rpost <- liftSC2 scGlobalApply "Prelude.eqPostRel" [ev2, stack2]
-     rr <- liftSC2 scGlobalApply "Prelude.eqRR" [tp2]
-     -- NB: This will throw a type error if _ev1 /= ev2 or _stack1 /= stack2
-     ref_tm <- liftSC2 scGlobalApply "Prelude.refinesS"
-                       [ev2, ev2, stack2, stack2, rpre, rpost,
-                        tp1, tp2, rr, t1, t2]
+  do (EvTerm ev, tp) <- fromJust . asSpecM <$> mrTypeOf t1
+     rr <- liftSC2 scGlobalApply "Prelude.eqRR" [tp]
+     ref_tm <- liftSC2 scGlobalApply "Prelude.refinesS" [ev, tp, tp, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
      liftSC2 scPiList uvars ref_tm
 
--- | Return the 'Term' which is the refinement (@Prelude.refinesS@) of fully
--- applied versions of the given 'Term's, after quantifying over all the given
--- arguments as well as any additional arguments needed to fully apply the given
--- terms, and adding any calls to @assertS@ on the right hand side needed for
--- unifying the arguments generated when fully applying the given terms
+-- | Build the proposition stating that one function term refines another, after
+-- quantifying over all the given arguments as well as any additional arguments
+-- needed to fully apply the given terms, and adding any calls to @assertS@ on
+-- the right hand side needed for unifying the arguments generated when fully
+-- applying the given terms
 refinementTerm ::
   SharedContext ->
   MREnv {- ^ The Mr Solver environment -} ->

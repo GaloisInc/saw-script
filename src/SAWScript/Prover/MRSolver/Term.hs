@@ -47,6 +47,7 @@ import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer hiding ((:*:))
+import Verifier.SAW.OpenTerm
 import Verifier.SAW.Cryptol.Monadify
 
 
@@ -168,14 +169,6 @@ mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
 mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
 mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 
--- | Convert a 'SpecMParams' to a list of arguments
-specMParamsArgs :: SpecMParams Term -> [Term]
-specMParamsArgs (SpecMParams ev stack) = [ev, stack]
-
--- | A datatype indicating whether an application of a 'FunName' is wrapped in
--- a call to @liftStackS@ - used in the 'FunBind' constructor of 'NormComp'
-data IsLifted = Lifted | Unlifted deriving (Generic, Eq, Show)
-
 -- | A Haskell representation of a @SpecM@ in "monadic normal form"
 data NormComp
   = RetS Term -- ^ A term @retS _ _ a x@
@@ -188,7 +181,7 @@ data NormComp
   | AssumeBoolBind Term CompFun -- ^ the bind of an @assumeBoolS@ computation
   | ExistsBind Type CompFun -- ^ the bind of an @existsS@ computation
   | ForallBind Type CompFun -- ^ the bind of a @forallS@ computation
-  | FunBind FunName [Term] IsLifted CompFun
+  | FunBind FunName [Term] CompFun
     -- ^ Bind a monadic function with @N@ arguments, possibly wrapped in a call
     -- to @liftStackS@, in an @a -> SpecM b@ term
   deriving (Generic, Show)
@@ -197,19 +190,22 @@ data NormComp
 -- and a function from that type to the output type
 type EitherElim = (Type,CompFun)
 
+-- | A wrapper around 'Term' to designate it as a @SpecM@ event type
+newtype EvTerm = EvTerm { unEvTerm :: Term } deriving (Generic, Show)
+
 -- | A computation function of type @a -> SpecM b@ for some @a@ and @b@
 data CompFun
      -- | An arbitrary term
-  = CompFunTerm (SpecMParams Term) Term
+  = CompFunTerm EvTerm Term
     -- | A special case for the term @\ (x:a) -> returnM a x@
-  | CompFunReturn (SpecMParams Term) Type
+  | CompFunReturn EvTerm Type
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving (Generic, Show)
 
--- | Apply 'CompFunReturn' to a pair of a 'SpecMParams' and a 'Term'
-mkCompFunReturn :: (SpecMParams Term, Term) -> CompFun
-mkCompFunReturn (params, tp) = CompFunReturn params $ Type tp
+-- | Apply 'CompFunReturn' to a pair of an event type and a return type
+mkCompFunReturn :: (EvTerm, Term) -> CompFun
+mkCompFunReturn (ev, tp) = CompFunReturn ev $ Type tp
 
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
 compFunComp :: CompFun -> CompFun -> CompFun
@@ -232,23 +228,21 @@ compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType (CompFunReturn _ t) = Just t
 compFunInputType _ = Nothing
 
--- | Get the @SpecM@ non-type parameters from a 'CompFun'
-compFunSpecMParams :: CompFun -> SpecMParams Term
-compFunSpecMParams (CompFunTerm params _) = params
-compFunSpecMParams (CompFunReturn params _) = params
-compFunSpecMParams (CompFunComp f _) = compFunSpecMParams f
+-- | Get the @SpecM@ event type from a 'CompFun'
+compFunEventType :: CompFun -> EvTerm
+compFunEventType (CompFunTerm ev _) = ev
+compFunEventType (CompFunReturn ev _) = ev
+compFunEventType (CompFunComp f _) = compFunEventType f
 
 -- | A computation of type @SpecM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
           deriving (Generic, Show)
 
--- | Match a type as being of the form @SpecM E stack a@ for some @a@
-asSpecM :: Term -> Maybe (SpecMParams Term, Term)
-asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, stack, tp])) =
-  return (SpecMParams { specMEvType = ev, specMStack = stack }, tp)
-asSpecM (asApplyAll -> (isGlobalDef "Prelude.CompM" -> Just (), _)) =
-  error "CompM found instead of SpecM"
-asSpecM _ = fail "not a SpecM type!"
+-- | Match a type as being of the form @SpecM E a@ for some @E@ and @a@
+asSpecM :: Term -> Maybe (EvTerm, Term)
+asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, tp])) =
+  return (EvTerm ev, tp)
+asSpecM _ = fail "not a SpecM type, or event type is not closed!"
 
 -- | Test if a type normalizes to a monadic function type of 0 or more arguments
 isSpecFunType :: SharedContext -> Term -> IO Bool
@@ -425,8 +419,7 @@ instance TermLike Natural where
   substTermLike _ _ = return
 
 deriving anyclass instance TermLike Type
-deriving instance TermLike (SpecMParams Term)
-deriving instance TermLike IsLifted
+deriving instance TermLike EvTerm
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp
@@ -586,21 +579,18 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallBind tp k) =
     prettyAppList [return "forallS", return "_", return "_", prettyInCtx tp,
                    return ">>=", parens <$> prettyInCtx k]
-  prettyInCtx (FunBind f args isLifted (CompFunReturn _ _)) =
-    snd $ prettyInCtxFunBindH f args isLifted
-  prettyInCtx (FunBind f args isLifted k)
-    | (g, m) <- prettyInCtxFunBindH f args isLifted =
+  prettyInCtx (FunBind f args (CompFunReturn _ _)) =
+    snd $ prettyInCtxFunBindH f args
+  prettyInCtx (FunBind f args k)
+    | (g, m) <- prettyInCtxFunBindH f args =
     prettyAppList [g <$> m, return ">>=", prettyInCtx k]
 
 -- | A helper function for the 'FunBind' case of 'prettyInCtx'. Returns the
 -- string you would get if the associated 'CompFun' is 'CompFunReturn', as well
 -- as a 'SawDoc' function (which is either 'id' or 'parens') to apply in the
 -- case where the associated 'CompFun' is something else.
-prettyInCtxFunBindH :: FunName -> [Term] -> IsLifted ->
+prettyInCtxFunBindH :: FunName -> [Term] ->
                        (SawDoc -> SawDoc, PPInCtxM SawDoc)
-prettyInCtxFunBindH f [] Unlifted = (id, prettyInCtx f)
-prettyInCtxFunBindH f args Unlifted = (parens,) $
+prettyInCtxFunBindH f [] = (id, prettyInCtx f)
+prettyInCtxFunBindH f args = (parens,) $
   prettyTermApp (funNameTerm f) args
-prettyInCtxFunBindH f args Lifted = (parens,) $
-  prettyAppList [return "liftStackS", return "_", return "_", return "_",
-                 parens <$> prettyTermApp (funNameTerm f) args]

@@ -1128,7 +1128,7 @@ heapster_set_event_type _bic _opts henv term_string =
        liftIO $ completeOpenTerm sc $ dataTypeOpenTerm "Prelude.EvType" []
      ev_id <- parseAndInsDef henv "HeapsterEv" ev_tp term_string
      liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env ->
-       env { permEnvEventType = EventType ev_id }
+       env { permEnvEventType = EventType (globalOpenTerm ev_id) }
 
 -- | Fetch the SAW core definition associated with a name and print it
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->

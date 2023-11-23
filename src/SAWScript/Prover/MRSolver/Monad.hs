@@ -80,7 +80,7 @@ data MRFailure
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
-  | MalformedLetRecTypes Term
+  | MalformedTpDescList Term
   | MalformedDefs Term
   | MalformedComp Term
   | NotCompFunType Term
@@ -158,8 +158,8 @@ instance PrettyInCtx MRFailure where
     ppWithPrefix "Could not find definition for function:" nm
   prettyInCtx (RecursiveUnfold nm) =
     ppWithPrefix "Recursive unfolding of function inside its own body:" nm
-  prettyInCtx (MalformedLetRecTypes t) =
-    ppWithPrefix "Not a ground LetRecTypes list:" t
+  prettyInCtx (MalformedTpDescList t) =
+    ppWithPrefix "Not a list of type descriptions:" t
   prettyInCtx (MalformedDefs t) =
     ppWithPrefix "Cannot handle multiFixS recursive definitions term:" t
   prettyInCtx (MalformedComp t) =
@@ -655,11 +655,11 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 
 -- | Take a 'FunName' @f@ for a monadic function of type @vars -> SpecM a@ and
 -- compute the type @SpecM [args/vars]a@ of @f@ applied to @args@. Return the
--- type @[args/vars]a@ that @SpecM@ is applied to, along with its parameters.
-mrFunOutType :: FunName -> [Term] -> MRM t (SpecMParams Term, Term)
+-- type @[args/vars]a@ that @SpecM@ is applied to, along with its event type.
+mrFunOutType :: FunName -> [Term] -> MRM t (EvTerm, Term)
 mrFunOutType fname args =
   mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
-    (asSpecM -> Just (params, tp)) -> (params,) <$> liftSC1 scWhnf tp
+    (asSpecM -> Just (ev, tp)) -> (ev,) <$> liftSC1 scWhnf tp
     _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
             pp_fname <- mrPPInCtx fname
             debugPrint 0 "mrFunOutType: function does not have SpecM return type"
@@ -1090,7 +1090,7 @@ mrGetFunAssump nm = lookupFunAssump nm <$> mrRefnset
 withFunAssump :: FunName -> [Term] -> Term -> MRM t a -> MRM t a
 withFunAssump fname args rhs m =
   do k <- mkCompFunReturn <$> mrFunOutType fname args
-     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args Unlifted k)
+     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k)
                                      "|=" rhs
      ctx <- mrUVars
      rs <- mrRefnset
