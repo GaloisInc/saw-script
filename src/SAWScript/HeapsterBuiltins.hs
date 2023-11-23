@@ -1125,7 +1125,7 @@ heapster_set_event_type :: BuiltinContext -> Options -> HeapsterEnv ->
 heapster_set_event_type _bic _opts henv term_string =
   do sc <- getSharedContext
      ev_tp <-
-       liftIO $ completeOpenTerm sc $ dataTypeOpenTerm "Prelude.EvType" []
+       liftIO $ completeOpenTerm sc $ dataTypeOpenTerm "SpecM.EvType" []
      ev_id <- parseAndInsDef henv "HeapsterEv" ev_tp term_string
      liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env ->
        env { permEnvEventType = EventType (globalOpenTerm ev_id) }
