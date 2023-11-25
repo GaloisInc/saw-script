@@ -240,7 +240,7 @@ data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
 
 -- | Match a type as being of the form @SpecM E a@ for some @E@ and @a@
 asSpecM :: Term -> Maybe (EvTerm, Term)
-asSpecM (asApplyAll -> (isGlobalDef "Prelude.SpecM" -> Just (), [ev, tp])) =
+asSpecM (asApplyAll -> (isGlobalDef "SpecM.SpecM" -> Just (), [ev, tp])) =
   return (EvTerm ev, tp)
 asSpecM _ = fail "not a SpecM type, or event type is not closed!"
 

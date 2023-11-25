@@ -372,11 +372,10 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
              >>= normCompTerm
          else throwMRFailure (MalformedComp t)
 
-    -- Always unfold: sawLet, multiArgFixM, invariantHint, Num_rec
+    -- Always unfold: sawLet, invariantHint, Num_rec
     (f@(asGlobalDef -> Just ident), args)
-      | ident `elem` ["Prelude.sawLet", "Prelude.invariantHint",
-                      "Cryptol.Num_rec", "Prelude.multiArgFixS",
-                      "Prelude.lrtLambda"]
+      | ident `elem` ["Prelude.sawLet", "SpecM.invariantHint",
+                      "Cryptol.Num_rec"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 
@@ -484,12 +483,12 @@ compFunToTerm (CompFunComp f g) =
          let nm = maybe "ret_val" id (compFunVarName f) in
          mrLambdaLift1 (nm, a) (b, c, f', g') $ \arg (b', c', f'', g'') ->
            do app <- mrApplyAll f'' [arg]
-              liftSC2 scGlobalApply "Prelude.bindS" [unEvTerm ev,
-                                                     b', c', app, g'']
+              liftSC2 scGlobalApply "SpecM.bindS" [unEvTerm ev,
+                                                   b', c', app, g'']
        _ -> error "compFunToTerm: type(s) not of the form: a -> SpecM b"
 compFunToTerm (CompFunReturn ev (Type a)) =
   mrLambdaLift1 ("ret_val", a) a $ \ret_val a' ->
-    liftSC2 scGlobalApply "Prelude.retS" [unEvTerm ev, a', ret_val]
+    liftSC2 scGlobalApply "SpecM.retS" [unEvTerm ev, a', ret_val]
 
 {-
 -- | Convert a 'Comp' into a 'Term'
@@ -1257,8 +1256,8 @@ askMRSolver sc env timeout askSMT rs args t1 t2 =
 refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
   do (EvTerm ev, tp) <- fromJust . asSpecM <$> mrTypeOf t1
-     rr <- liftSC2 scGlobalApply "Prelude.eqRR" [tp]
-     ref_tm <- liftSC2 scGlobalApply "Prelude.refinesS" [ev, tp, tp, rr, t1, t2]
+     rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp]
+     ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp, tp, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
      liftSC2 scPiList uvars ref_tm
 

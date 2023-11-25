@@ -2274,11 +2274,10 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
   case sequentState (goalSequent goal) of
     Unfocused -> fail "mrsolver: focus required"
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
-    ConclFocus (Prover.asRefinesS . unProp -> Just (Prover.RefinesS args ev1 ev2
-                                                      stack1 stack2 rtp1 rtp2
-                                                      t1 t2)) _ ->
-      do tp1 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev1, stack1, rtp1]
-         tp2 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev2, stack2, rtp2]
+    ConclFocus (Prover.asRefinesS . unProp ->
+                Just (Prover.RefinesS args ev rtp1 rtp2 t1 t2)) _ ->
+      do tp1 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp1]
+         tp2 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp2]
          let tt1 = TypedTerm (TypedTermOther tp1) t1
              tt2 = TypedTerm (TypedTermOther tp2) t2
          (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2
@@ -2313,7 +2312,7 @@ mrSolverSetDebug dlvl =
 -- | Given a list of names and types representing variables over which to
 -- quantify as as well as two terms containing those variables, which may be
 -- terms or functions in the SpecM monad, construct the SAWCore term which is
--- the refinement (@Prelude.refinesS@) of the given terms, with the given
+-- the refinement (@SpecM.refinesS@) of the given terms, with the given
 -- variables generalized with a Pi type.
 refinesTerm :: [TypedTerm] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 refinesTerm vars tt1 tt2 =
