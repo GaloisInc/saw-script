@@ -534,50 +534,50 @@ instance PrettyInCtx Comp where
   prettyInCtx (CompBind c f) =
     prettyAppList [prettyInCtx c, return ">>=", prettyInCtx f]
   prettyInCtx (CompReturn t) =
-    prettyAppList [return "retS", return "_", return "_",
+    prettyAppList [return "retS", return "_",
                    parens <$> prettyInCtx t]
 
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm _ t) = prettyInCtx t
   prettyInCtx (CompFunReturn _ t) =
-    prettyAppList [return "retS", return "_", return "_",
+    prettyAppList [return "retS", return "_",
                    parens <$> prettyInCtx t]
   prettyInCtx (CompFunComp f g) =
     prettyAppList [prettyInCtx f, return ">=>", prettyInCtx g]
 
 instance PrettyInCtx NormComp where
   prettyInCtx (RetS t) =
-    prettyAppList [return "retS", return "_", return "_", return "_",
+    prettyAppList [return "retS", return "_", return "_",
                    parens <$> prettyInCtx t]
   prettyInCtx (ErrorS str) =
-    prettyAppList [return "errorS", return "_", return "_", return "_",
+    prettyAppList [return "errorS", return "_", return "_",
                    parens <$> prettyInCtx str]
   prettyInCtx (Ite cond t1 t2) =
     prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
   prettyInCtx (Eithers elims eith) =
-    prettyAppList [return "eithers", return (parens "SpecM _ _ _"),
+    prettyAppList [return "eithers", return (parens "SpecM _ _"),
                    prettyInCtx (map snd elims), parens <$> prettyInCtx eith]
   prettyInCtx (MaybeElim tp m f mayb) =
     prettyAppList [return "maybe", parens <$> prettyInCtx tp,
-                   return (parens "SpecM _ _ _"), parens <$> prettyInCtx m,
+                   return (parens "SpecM _ _"), parens <$> prettyInCtx m,
                    parens <$> prettyInCtx f, parens <$> prettyInCtx mayb]
   prettyInCtx (OrS t1 t2) =
-    prettyAppList [return "orS", return "_", return "_", return "_",
+    prettyAppList [return "orS", return "_", return "_",
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
   prettyInCtx (AssertBoolBind cond k) =
-    prettyAppList [return "assertBoolS", return "_", return "_",
+    prettyAppList [return "assertBoolS", return "_",
                    parens <$> prettyInCtx cond, return ">>=",
                    parens <$> prettyInCtx k]
   prettyInCtx (AssumeBoolBind cond k) =
-    prettyAppList [return "assumeBoolS", return "_", return "_",
+    prettyAppList [return "assumeBoolS", return "_",
                    parens <$> prettyInCtx cond, return ">>=",
                    parens <$> prettyInCtx k]
   prettyInCtx (ExistsBind tp k) =
-    prettyAppList [return "existsS", return "_", return "_", prettyInCtx tp,
+    prettyAppList [return "existsS", return "_", prettyInCtx tp,
                    return ">>=", parens <$> prettyInCtx k]
   prettyInCtx (ForallBind tp k) =
-    prettyAppList [return "forallS", return "_", return "_", prettyInCtx tp,
+    prettyAppList [return "forallS", return "_", prettyInCtx tp,
                    return ">>=", parens <$> prettyInCtx k]
   prettyInCtx (FunBind f args (CompFunReturn _ _)) =
     snd $ prettyInCtxFunBindH f args
