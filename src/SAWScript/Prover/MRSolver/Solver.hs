@@ -176,12 +176,17 @@ asList (asCtor -> Just (nm, [_, hd, tl]))
   | primName nm == "Prelude.Cons" = (hd:) <$> asList tl
 asList _ = Nothing
 
--- | Bind fresh function variables for a @MultiFixS@ with the first 'Term' as
--- the event type, the second as a list of the type descriptions for the
--- recursive functions being defined, and the third a function of the form
+-- | Bind fresh function variables for a @LetRecS@ or @MultiFixS@ with the first
+-- 'Term' as the event type, the second as a list of the type descriptions for
+-- the recursive functions being defined, and the third a function of the form
 --
 -- > \F1 F2 ... Fn -> (f1, (f2, ... (fn, ())))
+--
+-- that defines the bodies of those recursive functions.
 mrFreshCallVars :: Term -> Term -> Term -> MRM t [MRVar]
+mrFreshCallVars ev tp_ds_tm (asConstant -> Just (_, Just defs_tm)) =
+  -- If defs is a constant, unfold it
+  mrFreshCallVars ev tp_ds_tm defs_tm
 mrFreshCallVars ev tp_ds_tm defs_tm =
   do
     -- First compute the types of the recursive functions being bound by mapping
@@ -306,6 +311,16 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
         FunBind var all_args <$> mkCompFunReturn <$>
           mrFunOutType var all_args
 -}
+
+    (isGlobalDef "SpecM.LetRecS" -> Just (), [ev,tp_ds,_,defs,body]) ->
+      do
+        -- Bind fresh function vars for the new recursive functions
+        fun_vars <- mrFreshCallVars ev tp_ds defs
+        fun_tms <- mapM mrVarTerm fun_vars
+
+        -- Continue normalizing body applied to those fresh function vars
+        body_app <- mrApplyAll body fun_tms
+        normCompTerm body_app
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
