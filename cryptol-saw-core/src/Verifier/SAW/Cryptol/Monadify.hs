@@ -367,11 +367,11 @@ numExprVal (NExpr_Indesc n) = n
 -- i.e., one not containing 'MTyNum' or 'MTyVarLvl'
 toArgType :: HasSpecMEvType => MonType -> OpenTerm
 toArgType (MTyForall x k body) =
-  piOpenTerm x (sortOpenTerm $ mkSort 0) (\e -> toCompType (body $ kindIndesc k e))
+  piOpenTerm x (kindReprOpenTerm k) (\e -> toCompType (body $ kindIndesc k e))
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
-  applyOpenTermMulti (globalOpenTerm "CryptolM.mseq")
+  applyOpenTermMulti (globalOpenTerm "SpecM.mseq")
   [evTypeTerm ?specMEvType, numExprVal n, toArgType t]
 toArgType MTyUnit = unitTypeOpenTerm
 toArgType MTyBool = boolTypeOpenTerm
