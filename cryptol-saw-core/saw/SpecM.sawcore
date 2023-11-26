@@ -572,8 +572,9 @@ assumeBoolS E b = assumeS E (EqTrue b);
 
 -- The specification which assumes that the first argument is True and then
 -- runs the second argument
-assumingS : (E:EvType) -> (a : sort 0) -> Bool -> SpecM E a -> SpecM E a;
-assumingS E a cond m = bindS E #() a (assumeBoolS E cond) (\ (_:#()) -> m);
+assumingS : (E:EvType) -> (a : sort 0) -> Bool -> (#() -> SpecM E a) ->
+            SpecM E a;
+assumingS E a cond m = bindS E #() a (assumeBoolS E cond) m;
 
 -- Assert a proposition holds
 primitive assertS : (E:EvType) -> (p:Prop) -> SpecM E #();
@@ -584,8 +585,9 @@ assertBoolS E b = assertS E (EqTrue b);
 
 -- The specification which asserts that the first argument is True and then
 -- runs the second argument
-assertingS : (E:EvType) -> (a : sort 0) -> Bool -> SpecM E a -> SpecM E a;
-assertingS E a cond m = bindS E #() a (assertBoolS E cond) (\ (_:#()) -> m);
+assertingS : (E:EvType) -> (a : sort 0) -> Bool -> (#() -> SpecM E a) ->
+             SpecM E a;
+assertingS E a cond m = bindS E #() a (assertBoolS E cond) m;
 
 -- The computation that nondeterministically chooses one computation or another.
 -- As a specification, represents the disjunction of two specifications.

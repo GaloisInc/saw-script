@@ -7,7 +7,6 @@ prove_extcore mrsolver (refines [] contains0 contains0);
 noErrorsContains0 <- parse_core_mod "arrays" "noErrorsContains0";
 prove_extcore mrsolver (refines [] contains0 noErrorsContains0);
 
-
 include "specPrims.saw";
 import "arrays.cry";
 
