@@ -1125,8 +1125,8 @@ mrGetInvariantBody tm = case asApplyAll tm of
     do tm' <- mrApplyAll f args
        mrGetInvariantBody tm'
   -- go inside any top-level applications of of bindM ... (assertFiniteM ...)
-  (isGlobalDef "Prelude.bindM" -> Just (),
-   [_, _,
+  (isGlobalDef "SpecM.bindS" -> Just (),
+   [_, _, _,
     asApp -> Just (isGlobalDef "CryptolM.assertFiniteM" -> Just (),
                    asCtor -> Just (primName -> "Cryptol.TCNum", _)),
     k]) ->
@@ -1134,7 +1134,7 @@ mrGetInvariantBody tm = case asApplyAll tm of
        body <- mrApplyAll k [pf]
        mrGetInvariantBody body
   -- otherwise, return Just iff there is a top-level invariant hint
-  (isGlobalDef "Prelude.invariantHint" -> Just (),
+  (isGlobalDef "SpecM.invariantHint" -> Just (),
    [_, phi, _]) -> return $ Just phi
   _ -> return Nothing
 

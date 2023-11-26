@@ -85,7 +85,6 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 >
 > C |- orS m1 m2 |= m: prove both C |- m1 |= m and C |- m2 |= m
 >
-
 > C |- FixS fdef args |= m: create a FixS-bound variable F bound to (fdef F) and
 > recurse on fdef F args |= m
 > 
