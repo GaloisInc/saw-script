@@ -322,21 +322,16 @@ smtNormPrims sc = Map.fromList
                return $ VExtra $ VExtraTerm a tm') 
     ),
     -- Don't normalize applications of @SpecM@ and its arguments
-    ("Prelude.SpecM",
-     PrimStrict $ \ev -> PrimStrict $ \stack -> PrimStrict $ \tp ->
+    ("SpecM.SpecM",
+     PrimStrict $ \ev -> PrimStrict $ \tp ->
       Prim $
-      do ev_tp <- VTyTerm (mkSort 1) <$> scDataTypeApp sc "Prelude.EvType" []
+      do ev_tp <- VTyTerm (mkSort 1) <$> scDataTypeApp sc "SpecM.EvType" []
          ev_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc ev_tp ev
-         stack_tp <- VTyTerm (mkSort 1) <$> scGlobalDef sc "Prelude.FunStack"
-         stack_tm <-
-           readBackValueNoConfig "smtNormPrims (SpecM)" sc stack_tp stack
          tp_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc (VSort $
                                                                    mkSort 0) tp
-         ret_tm <- scGlobalApply sc "Prelude.SpecM" [ev_tm,stack_tm,tp_tm]
+         ret_tm <- scGlobalApply sc "SpecM.SpecM" [ev_tm,tp_tm]
          return $ TValue $ VTyTerm (mkSort 0) ret_tm),
-    ("Prelude.VoidEv", primGlobal sc "Prelude.VoidEv"),
-    ("Prelude.emptyFunStack", primGlobal sc "Prelude.emptyFunStack"),
-    ("Prelude.pushFunStack", primGlobal sc "Prelude.pushFunStack")
+    ("SpecM.VoidEv", primGlobal sc "SpecM.VoidEv")
   ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
