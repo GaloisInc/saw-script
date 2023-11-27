@@ -1105,7 +1105,7 @@ withFunAssump fname args rhs m =
 --
 -- If so, return @\ x1 ... xn -> phi@ as a term with the @xi@ variables free.
 -- Otherwise, return 'Nothing'. Note that this function will also look past
--- any initial @bindM ... (assertFiniteM ...)@ applications.
+-- any initial @bindS ... (assertFiniteS ...)@ applications.
 mrGetInvariant :: FunName -> MRM t (Maybe Term)
 mrGetInvariant nm =
   mrFunNameBody nm >>= \case
@@ -1124,11 +1124,11 @@ mrGetInvariantBody tm = case asApplyAll tm of
   (f@(asLambda -> Just _), args) ->
     do tm' <- mrApplyAll f args
        mrGetInvariantBody tm'
-  -- go inside any top-level applications of of bindM ... (assertFiniteM ...)
+  -- go inside any top-level applications of of bindS ... (assertFiniteS ...)
   (isGlobalDef "SpecM.bindS" -> Just (),
    [_, _, _,
-    asApp -> Just (isGlobalDef "CryptolM.assertFiniteM" -> Just (),
-                   asCtor -> Just (primName -> "Cryptol.TCNum", _)),
+    asApplyAll -> (isGlobalDef "CryptolM.assertFiniteS" -> Just (),
+                   [_, asCtor -> Just (primName -> "Cryptol.TCNum", _)]),
     k]) ->
     do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
        body <- mrApplyAll k [pf]
