@@ -123,7 +123,7 @@ data TpDesc : sort 0 where {
   Tp_Sigma : KindDesc -> TpDesc -> TpDesc;
 
   -- Sequence types
-  Tp_Seq : TpDesc -> TpExpr Kind_num -> TpDesc;
+  Tp_Seq : TpExpr Kind_num -> TpDesc -> TpDesc;
 
   -- The empty type
   Tp_Void : TpDesc;
@@ -160,7 +160,7 @@ Tp_bitvector w = Tp_Kind (Kind_Expr (Kind_bv w));
 
 -- The type description for a vector type
 Tp_Vec : TpDesc -> TpExpr Kind_nat -> TpDesc;
-Tp_Vec d n = Tp_Seq d (TpExpr_UnOp Kind_nat Kind_num UnOp_NatToNum n);
+Tp_Vec d n = Tp_Seq (TpExpr_UnOp Kind_nat Kind_num UnOp_NatToNum n) d;
 
 -- The type description for the type BVVec n len d
 Tp_BVVec : TpDesc -> (n:Nat) -> TpExpr (Kind_bv n) -> TpDesc;
@@ -481,9 +481,9 @@ tpSubst n_top env_top T_top =
        Tp_Sum (recA n env) (recB n env))
     (\ (K:KindDesc) (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
        Tp_Sigma K (rec (Succ n) env))
-    (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (len:TpExpr Kind_num)
+    (\ (len:TpExpr Kind_num) (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc)
        (n:Nat) (env:TpEnv) ->
-       Tp_Seq (rec n env) (substTpExpr n env Kind_num len))
+       Tp_Seq (substTpExpr n env Kind_num len) (rec n env))
     (\ (n:Nat) (env:TpEnv) -> Tp_Void)
     (\ (_:TpDesc) (rec:Nat -> TpEnv -> TpDesc) (n:Nat) (env:TpEnv) ->
        Tp_Ind (rec (Succ n) env))
@@ -647,7 +647,7 @@ tpElemEnv E env_top isf_top T_top =
        ifFun (sort 0) isf #()
          (Sigma (kindElem K) (\ (v:kindElem K) ->
                                 rec (envConsElem K v env) IsData)))
-    (\ (_:TpDesc) (rec:TpEnv -> FunFlag -> sort 0) (len:TpExpr Kind_num)
+    (\ (len:TpExpr Kind_num) (_:TpDesc) (rec:TpEnv -> FunFlag -> sort 0)
        (env:TpEnv) (isf:FunFlag) ->
        ifFun (sort 0) isf #() (mseq E (evalTpExpr env Kind_num len) (rec env IsData)))
     (\ (_:TpEnv) (isf:FunFlag) -> ifFun (sort 0) isf #() Void)
