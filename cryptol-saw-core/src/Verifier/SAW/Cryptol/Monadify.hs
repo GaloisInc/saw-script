@@ -289,8 +289,6 @@ data NumTpExpr
   | NExpr_Const OpenTerm
     -- | A binary operation on @Num@s
   | NExpr_BinOp NumBinOp NumTpExpr NumTpExpr
-    -- | A @Num@ expression that cannot be described as a @TpExpr@
-  | NExpr_Indesc OpenTerm
 
 -- | The internal (to monadification) representation of a SAW core type that is
 -- being monadified. Most of these constructors have corresponding constructors
@@ -328,10 +326,10 @@ kindVar :: KindRepr k -> Natural -> TpExpr k
 kindVar MKTypeRepr = MTyVarLvl
 kindVar MKNumRepr = NExpr_VarLvl
 
--- | Build an indescribable type-level expression of a given kind
-kindIndesc :: KindRepr k -> OpenTerm -> TpExpr k
-kindIndesc MKTypeRepr = MTyIndesc
-kindIndesc MKNumRepr = NExpr_Indesc
+-- | Build a type-level expression from a value of kind @k@
+kindOfVal :: KindRepr k -> OpenTerm -> TpExpr k
+kindOfVal MKTypeRepr = MTyIndesc
+kindOfVal MKNumRepr = NExpr_Const
 
 -- | Test if a monadification type @tp@ is considered a base type, meaning that
 -- @CompMT(tp) = CompM MT(tp)@
@@ -360,14 +358,13 @@ numExprVal (NExpr_VarLvl _) =
 numExprVal (NExpr_Const n) = n
 numExprVal (NExpr_BinOp op e1 e2) =
   applyOpenTermMulti (numBinOpOp op) [numExprVal e1, numExprVal e2]
-numExprVal (NExpr_Indesc n) = n
 
 -- | Convert a 'MonType' to the argument type @MT(tp)@ it represents; should
 -- only ever be applied to a 'MonType' that represents a valid SAW core type,
 -- i.e., one not containing 'MTyNum' or 'MTyVarLvl'
 toArgType :: HasSpecMEvType => MonType -> OpenTerm
 toArgType (MTyForall x k body) =
-  piOpenTerm x (kindReprOpenTerm k) (\e -> toCompType (body $ kindIndesc k e))
+  piOpenTerm x (kindReprOpenTerm k) (\e -> toCompType (body $ kindOfVal k e))
 toArgType (MTyArrow t1 t2) =
   arrowOpenTerm "_" (toArgType t1) (toCompType t2)
 toArgType (MTySeq n t) =
@@ -425,9 +422,6 @@ numExprExpr _ (NExpr_Const n) = constTpExpr numExprKind n
 numExprExpr lvl (NExpr_BinOp op e1 e2) =
   binOpTpExpr (numBinOpExpr op) numKindDesc numKindDesc numKindDesc
   (numExprExpr lvl e1) (numExprExpr lvl e2)
-numExprExpr _ (NExpr_Indesc trm) =
-  bindPPOpenTerm trm $ \pp_trm ->
-  failOpenTerm ("numExprExpr: indescribable numeric expression:\n" ++ pp_trm)
 
 -- | Main implementation of 'toTpDesc'. Convert a 'MonType' to the type
 -- description it represents, assuming the supplied number of bound deBruijn
@@ -686,7 +680,7 @@ instance ToCompTerm ArgMonTerm where
   toCompTerm (FunMonTerm x tp_in _ body) =
     lambdaOpenTerm x (toArgType tp_in) (toCompTerm . body . fromArgTerm tp_in)
   toCompTerm (ForallMonTerm x k body) =
-    lambdaOpenTerm x (kindReprOpenTerm k) (toCompTerm . body . kindIndesc k)
+    lambdaOpenTerm x (kindReprOpenTerm k) (toCompTerm . body . kindOfVal k)
 
 instance ToCompTerm MonTerm where
   toCompTerm (ArgMonTerm amtrm) = toCompTerm amtrm
@@ -737,7 +731,7 @@ monTypeIsPure (MTyVarLvl _) =
 -- where @SemiP@ is defined in the documentation for 'fromSemiPureTermFun' below
 monTypeIsSemiPure :: MonType -> Bool
 monTypeIsSemiPure (MTyForall _ k tp_f) =
-  monTypeIsSemiPure $ tp_f $ kindIndesc k $
+  monTypeIsSemiPure $ tp_f $ kindOfVal k $
   -- This dummy OpenTerm should never be inspected by the recursive call
   error "monTypeIsSemiPure"
 monTypeIsSemiPure (MTyArrow tp_in tp_out) =
