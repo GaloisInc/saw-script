@@ -64,7 +64,7 @@ import           Control.Lens.Getter
 import           Control.Lens.Lens
 import           Control.Lens.Setter
 import           Control.Exception as X
-import           Control.Monad (filterM, foldM, forM, forM_, when, zipWithM)
+import           Control.Monad (filterM, foldM, forM, forM_, zipWithM)
 import           Control.Monad.Except (runExcept)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Either (partitionEithers)
@@ -87,7 +87,6 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
-import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
@@ -117,9 +116,7 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
-import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
@@ -1073,29 +1070,6 @@ assignVar cc md var val =
 
 ------------------------------------------------------------------------
 
-
-assignTerm ::
-  SharedContext      {- ^ context for constructing SAW terms    -} ->
-  LLVMCrucibleContext arch   {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  PrePost                                                          ->
-  VarIndex {- ^ external constant index -} ->
-  Term     {- ^ value                   -} ->
-  OverrideMatcher (LLVM arch) md ()
-
-assignTerm sc cc md prepost var val =
-  do mb <- OM (use (termSub . at var))
-     case mb of
-       Nothing -> OM (termSub . at var ?= val)
-       Just old ->
-         matchTerm sc cc md prepost val old
-
---          do t <- liftIO $ scEq sc old val
---             p <- liftIO $ resolveSAWPred cc t
---             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ MS.stateCond prepost))
-
-------------------------------------------------------------------------
-
 diffMemTypes ::
   Crucible.HasPtrWidth wptr =>
   Crucible.MemType ->
@@ -1176,7 +1150,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
       , Right tval <- Cryptol.evalType mempty tyexpr
         -> do failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
               realTerm <- valueToSC sym md failMsg tval actual
-              instantiateExtMatchTerm sc cc md prepost realTerm (ttTerm expectedTT)
+              instantiateExtMatchTerm sc md prepost realTerm (ttTerm expectedTT)
 
     -- match arrays point-wise
     (Crucible.LLVMValArray _ xs, Crucible.ArrayType _len y, SetupArray () zs)
@@ -1348,50 +1322,6 @@ typeToSC sc t =
 
 ------------------------------------------------------------------------
 
--- | NOTE: The two 'Term' arguments must have the same type.
-instantiateExtMatchTerm ::
-  SharedContext   {- ^ context for constructing SAW terms    -} ->
-  LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  PrePost                                                       ->
-  Term            {- ^ exported concrete term                -} ->
-  Term            {- ^ expected specification term           -} ->
-  OverrideMatcher (LLVM arch) md ()
-instantiateExtMatchTerm sc cc md prepost actual expected = do
-  sub <- OM (use termSub)
-  matchTerm sc cc md prepost actual =<< liftIO (scInstantiateExt sc sub expected)
-
-matchTerm ::
-  SharedContext   {- ^ context for constructing SAW terms    -} ->
-  LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  PrePost                                                       ->
-  Term            {- ^ exported concrete term                -} ->
-  Term            {- ^ expected specification term           -} ->
-  OverrideMatcher (LLVM arch) md ()
-
-matchTerm _ _ _ _ real expect | real == expect = return ()
-matchTerm sc cc md prepost real expect =
-  do let loc = MS.conditionLoc md
-     free <- OM (use osFree)
-     case unwrapTermF expect of
-       FTermF (ExtCns ec)
-         | Set.member (ecVarIndex ec) free ->
-         do assignTerm sc cc md prepost (ecVarIndex ec) real
-
-       _ ->
-         do t <- liftIO $ scEq sc real expect
-            let msg = unlines $
-                  [ "Literal equality " ++ MS.stateCond prepost
---                  , "Expected term: " ++ prettyTerm expect
---                  , "Actual term:   " ++ prettyTerm real
-                  ]
-            addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
---  where prettyTerm = show . ppTermDepth 20
-
-
-------------------------------------------------------------------------
-
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
 learnSetupCondition ::
@@ -1405,36 +1335,10 @@ learnSetupCondition ::
   OverrideMatcher (LLVM arch) md ()
 learnSetupCondition opts sc cc spec prepost cond =
   case cond of
-    MS.SetupCond_Equal md val1 val2  -> learnEqual opts sc cc spec md prepost val1 val2
-    MS.SetupCond_Pred md tm          -> learnPred sc cc md prepost (ttTerm tm)
-    MS.SetupCond_Ghost () md var val -> learnGhost sc cc md prepost var val
+    MS.SetupCond_Equal md val1 val2 -> learnEqual opts sc cc spec md prepost val1 val2
+    MS.SetupCond_Pred md tm         -> learnPred sc cc md prepost (ttTerm tm)
+    MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
-
-------------------------------------------------------------------------
-
--- TODO(lb): make this language-independent!
-learnGhost ::
-  SharedContext                                          ->
-  LLVMCrucibleContext arch                                  ->
-  MS.ConditionMetadata                                   ->
-  PrePost                                                ->
-  MS.GhostGlobal                                            ->
-  TypedTerm                                              ->
-  OverrideMatcher (LLVM arch) md ()
-learnGhost sc cc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
-  do (sch,tm) <- readGlobal var
-     when (sch /= schEx) $ fail $ unlines $
-       [ "Ghost variable had the wrong type:"
-       , "- Expected: " ++ show (Cryptol.pp schEx)
-       , "- Actual:   " ++ show (Cryptol.pp sch)
-       ]
-     instantiateExtMatchTerm sc cc md prepost tm tmEx
-learnGhost _sc _cc _md _prepost _var (TypedTerm tp _)
-  = fail $ unlines
-      [ "Ghost variable expected value has improper type"
-      , "expected Cryptol schema type, but got"
-      , show (MS.ppTypedTermType tp)
-      ]
 
 ------------------------------------------------------------------------
 
@@ -1553,7 +1457,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                             off_tm -- src offset
                             instantiated_expected_sz_tm -- length
 
-                   instantiateExtMatchTerm sc cc md prepost arr_tm $ ttTerm expected_arr_tm
+                   instantiateExtMatchTerm sc md prepost arr_tm $ ttTerm expected_arr_tm
 
                    sz_tm <- liftIO $ toSC sym st sz
                    expected_end_off_tm <- liftIO $ scBvAdd sc ptr_width_tm off_tm $ ttTerm expected_sz_tm
@@ -1979,27 +1883,7 @@ executeSetupCondition opts sc cc spec =
     MS.SetupCond_Equal md val1 val2 ->
       executeEqual opts sc cc spec md val1 val2
     MS.SetupCond_Pred md tm -> executePred sc cc md tm
-    MS.SetupCond_Ghost () md var val -> executeGhost sc md var val
-
-------------------------------------------------------------------------
-
--- TODO(lb): make this language independent!
-executeGhost ::
-  SharedContext ->
-  MS.ConditionMetadata ->
-  MS.GhostGlobal ->
-  TypedTerm ->
-  OverrideMatcher (LLVM arch) RW ()
-executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =
-  do s <- OM (use termSub)
-     tm' <- liftIO (scInstantiateExt sc s tm)
-     writeGlobal var (sch,tm')
-executeGhost _sc _md _var (TypedTerm tp _) =
-  fail $ unlines
-    [ "executeGhost: improper value type"
-    , "expected Cryptol schema type, but got"
-    , show (MS.ppTypedTermType tp)
-    ]
+    MS.SetupCond_Ghost md var val -> executeGhost sc md var val
 
 ------------------------------------------------------------------------
 

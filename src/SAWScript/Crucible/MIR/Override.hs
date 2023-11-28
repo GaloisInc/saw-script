@@ -69,10 +69,8 @@ import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
-import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip (saw_ctx, toSC)
-import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 
 import SAWScript.Crucible.Common
@@ -119,22 +117,6 @@ assignVar cc md var sref@(Some ref) =
      F.for_ old $ \(Some ref') ->
        do p <- liftIO (equalRefsPred cc ref ref')
           addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased references" ""))
-
-assignTerm ::
-  SharedContext      {- ^ context for constructing SAW terms    -} ->
-  MIRCrucibleContext    {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  MS.PrePost                                                          ->
-  VarIndex {- ^ external constant index -} ->
-  Term     {- ^ value                   -} ->
-  OverrideMatcher MIR w ()
-
-assignTerm sc cc md prepost var val =
-  do mb <- OM (use (termSub . at var))
-     case mb of
-       Nothing -> OM (termSub . at var ?= val)
-       Just old ->
-         matchTerm sc cc md prepost val old
 
 -- | When a specification is used as a composition override, this function
 -- checks that the postconditions of the specification fully specify (via
@@ -607,7 +589,7 @@ executeCond ::
   MIRCrucibleContext ->
   CrucibleMethodSpecIR ->
   StateSpec ->
-  OverrideMatcher MIR w ()
+  OverrideMatcher MIR RW ()
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
      F.traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
@@ -654,10 +636,13 @@ executeSetupCondition ::
   MIRCrucibleContext         ->
   CrucibleMethodSpecIR       ->
   SetupCondition             ->
-  OverrideMatcher MIR w ()
-executeSetupCondition opts sc cc spec (MS.SetupCond_Equal md val1 val2) = executeEqual opts sc cc spec md val1 val2
-executeSetupCondition _    sc cc _    (MS.SetupCond_Pred md tm)         = executePred sc cc md tm
-executeSetupCondition _    _  _  _    (MS.SetupCond_Ghost empty _ _ _)  = absurd empty
+  OverrideMatcher MIR RW ()
+executeSetupCondition opts sc cc spec =
+  \case
+    MS.SetupCond_Equal md val1 val2 ->
+      executeEqual opts sc cc spec md val1 val2
+    MS.SetupCond_Pred md tm -> executePred sc cc md tm
+    MS.SetupCond_Ghost md var val -> executeGhost sc md var val
 
 handleSingleOverrideBranch :: forall rtp args ret.
   Options            {- ^ output/verbosity options                      -} ->
@@ -995,10 +980,12 @@ learnPointsTo opts sc cc spec prepost (MirPointsTo md reference referents) =
                  ]
      let innerShp = tyToShapeEq col referenceInnerMirTy referenceInnerTpr
      referentVal <- firstPointsToReferent referents
-     v <- liftIO $ Mir.readMirRefIO bak globals Mir.mirIntrinsicTypes
+     v <- liftIO $ Mir.readMirRefIO bak globals iTypes
        referenceInnerTpr referenceVal
      matchArg opts sc cc spec prepost md (MIRVal innerShp v)
        referenceInnerMirTy referentVal
+  where
+    iTypes = cc ^. mccIntrinsicTypes
 
 -- | Process a "mir_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1026,9 +1013,11 @@ learnSetupCondition ::
   MS.PrePost                 ->
   SetupCondition             ->
   OverrideMatcher MIR w ()
-learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal md val1 val2)  = learnEqual opts sc cc spec md prepost val1 val2
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred md tm)         = learnPred sc cc md prepost (ttTerm tm)
-learnSetupCondition _opts _ _ _ _ (MS.SetupCond_Ghost empty _ _ _) = absurd empty
+learnSetupCondition opts sc cc spec prepost cond =
+  case cond of
+    MS.SetupCond_Equal md val1 val2 -> learnEqual opts sc cc spec md prepost val1 val2
+    MS.SetupCond_Pred md tm         -> learnPred sc cc md prepost (ttTerm tm)
+    MS.SetupCond_Ghost md var val   -> learnGhost sc md prepost var val
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
@@ -1049,7 +1038,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected@(MS.SetupTerm expec
   = do sym <- Ov.getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
        realTerm <- valueToSC sym md failMsg tval actual
-       matchTerm sc cc md prepost realTerm (ttTerm expectedTT)
+       matchTerm sc md prepost realTerm (ttTerm expectedTT)
 
 matchArg opts sc cc cs prepost md actual expectedTy expected =
   mccWithBackend cc $ \bak -> do
@@ -1186,6 +1175,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
   where
     colState = cc ^. mccRustModule . Mir.rmCS
     col      = colState ^. Mir.collection
+    iTypes   = cc ^. mccIntrinsicTypes
     tyenv    = MS.csAllocations cs
     nameEnv  = MS.csTypeNames cs
 
@@ -1193,9 +1183,6 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     fail_ = failure loc =<<
               mkStructuralMismatch opts cc sc cs actual expected expectedTy
     notEq = notEqual prepost opts loc cc sc cs expected actual
-
-    iTypes :: Crucible.IntrinsicTypes Sym
-    iTypes = Mir.mirIntrinsicTypes
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern
@@ -1271,33 +1258,6 @@ matchPointsTos opts sc cc spec prepost = go False []
       setupVars arr
     setupSlice (MirSetupSliceRange arr _start _end) =
       setupVars arr
-
-matchTerm ::
-  SharedContext   {- ^ context for constructing SAW terms    -} ->
-  MIRCrucibleContext {- ^ context for interacting with Crucible -} ->
-  MS.ConditionMetadata ->
-  MS.PrePost                                                    ->
-  Term            {- ^ exported concrete term                -} ->
-  Term            {- ^ expected specification term           -} ->
-  OverrideMatcher MIR md ()
-
-matchTerm _ _ _ _ real expect | real == expect = return ()
-matchTerm sc cc md prepost real expect =
-  do let loc = MS.conditionLoc md
-     free <- OM (use osFree)
-     case unwrapTermF expect of
-       FTermF (ExtCns ec)
-         | Set.member (ecVarIndex ec) free ->
-         do assignTerm sc cc md prepost (ecVarIndex ec) real
-
-       _ ->
-         do t <- liftIO $ scEq sc real expect
-            let msg = unlines $
-                  [ "Literal equality " ++ MS.stateCond prepost
---                  , "Expected term: " ++ prettyTerm expect
---                  , "Actual term:   " ++ prettyTerm real
-                  ]
-            addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
@@ -1403,13 +1363,13 @@ methodSpecHandler opts sc cc mdMap css h =
 --   which involves writing values into memory, computing the return value,
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
-  forall ret w.
+  forall ret.
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   MIRCrucibleContext       {- ^ context for interacting with Crucible        -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
-  OverrideMatcher MIR w (Crucible.RegValue Sym ret)
+  OverrideMatcher MIR RW (Crucible.RegValue Sym ret)
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs ^. MS.csPostState)
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)

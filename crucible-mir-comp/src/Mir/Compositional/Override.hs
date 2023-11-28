@@ -581,7 +581,7 @@ condTerm sc (MS.SetupCond_Pred md tt) = do
     sub <- use MS.termSub
     t' <- liftIO $ SAW.scInstantiateExt sc sub $ SAW.ttTerm tt
     return (md, t')
-condTerm _ (MS.SetupCond_Ghost _ _ _ _) = do
+condTerm _ (MS.SetupCond_Ghost _ _ _) = do
     error $ "learnCond: SetupCond_Ghost is not supported"
 
 

@@ -53,9 +53,13 @@ module SAWScript.Crucible.JVM.MethodSpecIR
 
   , initialDefCrucibleMethodSpecIR
   , initialCrucibleSetupState
+
+  , intrinsics
   ) where
 
 import           Control.Lens
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.SymbolRepr (SymbolRepr, knownSymbol)
 import qualified Prettyprinter as PPL
 
 -- what4
@@ -63,6 +67,8 @@ import           What4.ProgramLoc (ProgramLoc)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
+import qualified Lang.Crucible.Simulator.Intrinsics as CS
+  (IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified Lang.JVM.Codebase as CB
 
 -- jvm-parser
@@ -184,6 +190,16 @@ initialCrucibleSetupState cc (cls, method) loc =
       (J.className cls)
       method
       loc
+--------------------------------------------------------------------------------
+
+-- | The default JVM intrinsics extended with the 'MS.GhostValue' intrinsic,
+-- which powers ghost state.
+intrinsics :: MapF.MapF SymbolRepr (CS.IntrinsicMuxFn Sym)
+intrinsics =
+  MapF.insert
+    (knownSymbol :: SymbolRepr MS.GhostValue)
+    CS.IntrinsicMuxFn
+    CJ.jvmIntrinsicTypes
 
 --------------------------------------------------------------------------------
 

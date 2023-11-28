@@ -3605,16 +3605,21 @@ primitives = Map.fromList
     ]
 
   -- Ghost state support
-  , prim "llvm_declare_ghost_state"
+  , prim "declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
+  , prim "llvm_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (pureVal declare_ghost_state)
+    Current
+    [ "Legacy alternative name for `declare_ghost_state`." ]
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
-    [ "Legacy alternative name for `llvm_declare_ghost_state`." ]
+    [ "Legacy alternative name for `declare_ghost_state`." ]
 
   , prim "llvm_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
@@ -3627,6 +3632,20 @@ primitives = Map.fromList
     (pureVal llvm_ghost_value)
     Current
     [ "Legacy alternative name for `llvm_ghost_value`."]
+
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (pureVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "mir_ghost_value"
+    "Ghost -> Term -> MIRSetup ()"
+    (pureVal mir_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)

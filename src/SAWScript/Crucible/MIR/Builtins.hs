@@ -18,6 +18,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
   , mir_fresh_var
+  , mir_ghost_value
   , mir_load_module
   , mir_points_to
   , mir_postcond
@@ -81,7 +82,6 @@ import Data.Text (Text)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
-import Data.Void (absurd)
 import qualified Prettyprinter as PP
 import System.IO (stdout)
 
@@ -116,6 +116,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import Verifier.SAW.TypedTerm
 
+import SAWScript.Builtins (ghost_value)
 import SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.Common.Override
@@ -394,6 +395,13 @@ mir_fresh_var name mty =
      case cryptolTypeOfActual mty of
        Nothing -> X.throwM $ MIRFreshVarInvalidType mty
        Just cty -> Setup.freshVariable sc name cty
+
+mir_ghost_value ::
+  MS.GhostGlobal ->
+  TypedTerm ->
+  MIRSetupM ()
+mir_ghost_value ghost val = MIRSetupM $
+  ghost_value ghost val
 
 -- | Load a MIR JSON file and return a handle to it.
 mir_load_module :: String -> TopLevel Mir.RustModule
@@ -757,32 +765,43 @@ setupPrePointsTos ::
 setupPrePointsTos mspec cc env pts mem0 =
   foldM (doPointsTo mspec cc env) mem0 pts
 
--- | Collects boolean terms that should be assumed to be true.
+-- | Sets up globals (ghost variable), and collects boolean terms
+-- that should be assumed to be true.
 setupPrestateConditions ::
   MethodSpec ->
   MIRCrucibleContext ->
   Map MS.AllocIndex (Some (MirPointer Sym)) ->
+  Crucible.SymGlobalState Sym ->
   [SetupCondition] ->
-  IO [Crucible.LabeledPred Term AssumptionReason]
+  IO ( Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term AssumptionReason]
+     )
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    aux acc [] = return acc
+    aux acc globals [] = return (globals, acc)
 
-    aux acc (MS.SetupCond_Equal loc val1 val2 : xs) =
+    aux acc globals (MS.SetupCond_Equal loc val1 val2 : xs) =
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (loc, "equality precondition")
-         aux (lp:acc) xs
+         aux (lp:acc) globals xs
 
-    aux acc (MS.SetupCond_Pred loc tm : xs) =
+    aux acc globals (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (loc, "precondition") in
-      aux (lp:acc) xs
+      aux (lp:acc) globals xs
 
-    aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
+    aux acc globals (MS.SetupCond_Ghost _md var val : xs) =
+      case val of
+        TypedTerm (TypedTermSchema sch) tm ->
+          aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
+        TypedTerm tp _ ->
+          fail $ unlines
+            [ "Setup term for global variable expected to have Cryptol schema type, but got"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 verifyObligations ::
   MIRCrucibleContext ->
@@ -962,7 +981,8 @@ verifyPrestate cc mspec globals0 =
        globals0
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
-     cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
+     (globals3, cs) <-
+       setupPrestateConditions mspec cc env globals2 (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
 
      -- Check the type of the return setup value
@@ -983,7 +1003,7 @@ verifyPrestate cc mspec globals0 =
               ]
        (Nothing, _) -> return ()
 
-     return (args, cs, env, globals2)
+     return (args, cs, env, globals3)
 
 -- | Simulate a MIR function with Crucible as part of a 'mir_verify' command,
 -- making sure to install any overrides that the user supplies.
@@ -1240,7 +1260,7 @@ setupCrucibleContext rm =
                             (Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $
                     Map.elems cfgMap
      let simctx0 = Crucible.initSimContext bak
-                     Mir.mirIntrinsicTypes halloc stdout
+                     intrinsics halloc stdout
                      bindings Mir.mirExtImpl
                      SAWCruciblePersonality
      let globals0 = Crucible.emptyGlobals

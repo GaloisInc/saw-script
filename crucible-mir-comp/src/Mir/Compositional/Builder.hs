@@ -641,8 +641,8 @@ substMethodSpec sc sm ms = do
         MS.SetupCond_Equal loc <$> goSetupValue sv1 <*> goSetupValue sv2
     goSetupCondition (MS.SetupCond_Pred loc tt) =
         MS.SetupCond_Pred loc <$> goTypedTerm tt
-    goSetupCondition (MS.SetupCond_Ghost b loc gg tt) =
-        MS.SetupCond_Ghost b loc gg <$> goTypedTerm tt
+    goSetupCondition (MS.SetupCond_Ghost loc gg tt) =
+        MS.SetupCond_Ghost loc gg <$> goTypedTerm tt
 
     goSetupSlice (MirSetupSliceRaw ref len) =
       MirSetupSliceRaw <$> goSetupValue ref <*> goSetupValue len
