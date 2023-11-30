@@ -88,148 +88,6 @@ Num_rec_fin p f =
 --------------------------------------------------------------------------------
 -- Monadic Sequences
 
-{-
-bvVecMapInvarBindM : (E:EvType) -> (stack:FunStack) ->
-                     (a b c : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
-                     (a -> SpecM E stack b) -> BVVec n len a ->
-                     Bool -> (BVVec n len b -> SpecM E stack c) ->
-                     SpecM E stack c;
-bvVecMapInvarBindM E stack a b c n len f xs invar cont =
-  bindS E stack (BVVec n len b) c
-    (existsS E stack (BVVec n len b)) (\ (ys0:BVVec n len b) ->
-    multiArgFixS
-      E stack
-      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
-       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
-       LRT_Ret c)))
-      (\ (rec : Vec n Bool -> BVVec n len b ->
-                SpecM E (pushFunStack
-                         (singletonFrame
-                          (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
-                           LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
-                           LRT_Ret c)))) stack) c)
-         (i:Vec n Bool) (ys:BVVec n len b) ->
-         invariantHint
-           (SpecM E (pushFunStack
-                     (singletonFrame
-                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
-                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
-                       LRT_Ret c)))) stack) c)
-           (and (bvule n i len) invar)
-           (maybe (is_bvult n i len)
-                  (SpecM E (pushFunStack
-                     (singletonFrame
-                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
-                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
-                       LRT_Ret c)))) stack) c)
-                  (cont ys)
-                  (\ (pf:is_bvult n i len) ->
-                     bindS E stack b c
-                           (f (atBVVec n len a xs i pf))
-                           (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
-                                           (updBVVec n len b ys i y)))
-                  (bvultWithProof n i len)))
-      (bvNat n 0) ys0);
-
-bvVecMapInvarM : (E:EvType) -> (stack:FunStack) ->
-                 (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
-                 (a -> SpecM E stack b) -> BVVec n len a ->
-                 Bool -> SpecM E stack (BVVec n len b);
-bvVecMapInvarM E stack a b n len f xs invar =
-  bvVecMapInvarBindM E stack a b (BVVec n len b) n len f xs invar
-                                                 (retS E stack (BVVec n len b));
-
-bvVecMapM : (E:EvType) -> (stack:FunStack) ->
-            (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
-            (a -> SpecM E stack b) -> BVVec n len a ->
-            SpecM E stack (BVVec n len b);
-bvVecMapM E stack a b n len f xs = bvVecMapInvarM E stack a b n len f xs True;
--}
-
-primitive
-vecMapInvarBindM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) ->
-                   (c : sort 0) -> (n : Nat) -> (Nat -> a -> SpecM E b) ->
-                   Vec n a -> Bool -> (Vec n b -> SpecM E c) ->
-                   SpecM E c;
-
--- FIXME: get the defined one to work!
-{-
-vecMapInvarBindM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) ->
-                   (c : sort 0) -> (n : Nat) -> (Nat -> a -> SpecM E b) ->
-                   Vec n a -> Bool -> (Vec n b -> SpecM E c) ->
-                   SpecM E c;
-vecMapInvarBindM E a b c n f xs invar cont =
-  bindS E (Vec n b) c
-    (existsS E (Vec n b)) (\ (ys0:Vec n b) ->
-    multiArgFixS E
-      (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))
-      (\ (rec : Nat -> Vec n b -> SpecM E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c))))) c)
-         (i:Nat) (ys:Vec n b) ->
-         invariantHint (SpecM E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c))))) c) (and (ltNat i (Succ n)) invar)
-           (maybe (IsLtNat i n) (SpecM E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c))))) c)
-                  (pushStackS E (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) c
-                              (cont ys))
-                  (\ (pf:IsLtNat i n) ->
-                     bindS E (pushFunStack (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c))))) b c
-                           (pushStackS E (singletonFrame (LRT_Fun Nat (\ (_:Nat) -> LRT_Fun (Vec n b) (\ (_:Vec n b) -> LRT_Ret c)))) b
-                                       (f i (atWithProof n a xs i pf)))
-                           (\ (y:b) -> rec (Succ i)
-                                           (updWithProof n b ys i y pf)))
-                  (proveLtNat i n)))
-      0 ys0);
--}
-
-vecMapInvarM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) ->
-               (n : Nat) -> (Nat -> a -> SpecM E b) ->
-               Vec n a -> Bool -> SpecM E (Vec n b);
-vecMapInvarM E a b n f xs invar =
-  vecMapInvarBindM E a b (Vec n b) n f xs invar (retS E (Vec n b));
-
-vecMapBindM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) -> (c : sort 0) ->
-              (n : Nat) -> (Nat -> a -> SpecM E b) ->
-              Vec n a -> (Vec n b -> SpecM E c) ->
-              SpecM E c;
-vecMapBindM E a b c n f xs = vecMapInvarBindM E a b c n f xs True;
-
-vecMapM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) ->
-          (n : Nat) -> (Nat -> a -> SpecM E b) ->
-          Vec n a -> SpecM E (Vec n b);
-vecMapM E a b n f xs = vecMapInvarM E a b n f xs True;
-
--- Computational version of seqMap
-seqMapM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) -> (n : Num) ->
-          (a -> SpecM E b) -> mseq E n a -> SpecM E (mseq E n b);
-seqMapM E a b n_top f =
-  Num_rec (\ (n:Num) -> mseq E n a -> SpecM E (mseq E n b))
-          (\ (n:Nat) -> vecMapM E a b n (\(i:Nat) -> f))
-          (\ (s:Stream (SpecM E a)) ->
-             retS E (Stream (SpecM E b))
-                  (streamMap (SpecM E a) (SpecM E b)
-                             (\ (m:SpecM E a) -> bindS E a b m f) s))
-          n_top;
-
-mseq_cong1 : (E:EvType) -> (m : Num) -> (n : Num) -> (a : sort 0) ->
-             Eq Num m n -> Eq (sort 0) (mseq E m a) (mseq E n a);
-mseq_cong1 E m n a eq_mn =
-  eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> mseq E x a);
-
--- Convert a seq to an mseq
-seqToMseq : (E:EvType) -> (n:Num) -> (a:sort 0) -> seq n a -> mseq E n a;
-seqToMseq E n_top a =
-  Num_rec (\ (n:Num) -> seq n a -> mseq E n a)
-          (\ (n:Nat) (v:Vec n a) -> v)
-          (streamMap a (SpecM E a) (retS E a))
-          n_top;
-
-vecSequenceM : (E:EvType) -> (a : qsort 0) -> (n : Nat) ->
-               Vec n (SpecM E a) -> SpecM E (Vec n a);
-vecSequenceM E a n =
-  vecMapM E (SpecM E a) a n (\(i:Nat) (x:SpecM E a) -> x);
-
-
---------------------------------------------------------------------------------
--- Auxiliary functions
-
 bvVecAtM : (E:EvType) -> (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a -> Vec n Bool -> SpecM E a;
 bvVecAtM E n len a xs i =
@@ -290,6 +148,122 @@ streamJoinM E a n s =
        (\ (xs:Vec (Succ n) a) -> at (Succ n) a xs (modNat i (Succ n)))
        (streamGet (SpecM E (Vec (Succ n) a)) s
                   (divNat i (Succ n))) );
+
+{-
+bvVecMapInvarBindM : (E:EvType) -> (stack:FunStack) ->
+                     (a b c : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                     (a -> SpecM E stack b) -> BVVec n len a ->
+                     Bool -> (BVVec n len b -> SpecM E stack c) ->
+                     SpecM E stack c;
+bvVecMapInvarBindM E stack a b c n len f xs invar cont =
+  bindS E stack (BVVec n len b) c
+    (existsS E stack (BVVec n len b)) (\ (ys0:BVVec n len b) ->
+    multiArgFixS
+      E stack
+      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+       LRT_Ret c)))
+      (\ (rec : Vec n Bool -> BVVec n len b ->
+                SpecM E (pushFunStack
+                         (singletonFrame
+                          (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                           LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                           LRT_Ret c)))) stack) c)
+         (i:Vec n Bool) (ys:BVVec n len b) ->
+         invariantHint
+           (SpecM E (pushFunStack
+                     (singletonFrame
+                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                       LRT_Ret c)))) stack) c)
+           (and (bvule n i len) invar)
+           (maybe (is_bvult n i len)
+                  (SpecM E (pushFunStack
+                     (singletonFrame
+                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                       LRT_Ret c)))) stack) c)
+                  (cont ys)
+                  (\ (pf:is_bvult n i len) ->
+                     bindS E stack b c
+                           (f (atBVVec n len a xs i pf))
+                           (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
+                                           (updBVVec n len b ys i y)))
+                  (bvultWithProof n i len)))
+      (bvNat n 0) ys0);
+
+bvVecMapInvarM : (E:EvType) -> (stack:FunStack) ->
+                 (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+                 (a -> SpecM E stack b) -> BVVec n len a ->
+                 Bool -> SpecM E stack (BVVec n len b);
+bvVecMapInvarM E stack a b n len f xs invar =
+  bvVecMapInvarBindM E stack a b (BVVec n len b) n len f xs invar
+                                                 (retS E stack (BVVec n len b));
+
+bvVecMapM : (E:EvType) -> (stack:FunStack) ->
+            (a b : isort 0) -> (n : Nat) -> (len : Vec n Bool) ->
+            (a -> SpecM E stack b) -> BVVec n len a ->
+            SpecM E stack (BVVec n len b);
+bvVecMapM E stack a b n len f xs = bvVecMapInvarM E stack a b n len f xs True;
+-}
+
+-- Map a function f over a vector and pass the resulting mapped vector to a
+-- monadic continuation. Do this by starting with an arbitrary initial output
+-- vector and iteratively updating each index of that initial vector with the
+-- result of applying f to that index in the input vector, sort of like this:
+--
+-- > existsS (Vec n b) >>= \ys0 ->
+-- >   letrec loop ys i =
+-- >     if i < n then loop (upd ys i (f i (ys@i))) (Succ i) else k ys in
+-- >     loop ys0 0
+vecMapBindM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) ->
+              (c : sort 0) -> (n : Nat) -> (Nat -> a -> SpecM E b) ->
+              Vec n a -> (Vec n b -> SpecM E c) ->
+              SpecM E c;
+vecMapBindM E a b c n f xs cont =
+  bindS E (Vec n b) c
+    (existsS E (Vec n b)) (\ (ys0:Vec n b) ->
+    forNatLtThenS E (Vec n b) c n
+      (\ (i:Nat) (ys:Vec n b) ->
+         bindS E a (Vec n b) (atM E n a xs i) (\ (x:a) ->
+         bindS E b (Vec n b) (f i x) (\ (y:b) ->
+         updateM E n b ys i y)))
+      cont ys0);
+
+vecMapM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) ->
+          (n : Nat) -> (Nat -> a -> SpecM E b) ->
+          Vec n a -> SpecM E (Vec n b);
+vecMapM E a b n f xs = vecMapBindM E a b (Vec n b) n f xs (retS E (Vec n b));
+
+-- Computational version of seqMap
+seqMapM : (E:EvType) -> (a : sort 0) -> (b : qsort 0) -> (n : Num) ->
+          (a -> SpecM E b) -> mseq E n a -> SpecM E (mseq E n b);
+seqMapM E a b n_top f =
+  Num_rec (\ (n:Num) -> mseq E n a -> SpecM E (mseq E n b))
+          (\ (n:Nat) -> vecMapM E a b n (\(i:Nat) -> f))
+          (\ (s:Stream (SpecM E a)) ->
+             retS E (Stream (SpecM E b))
+                  (streamMap (SpecM E a) (SpecM E b)
+                             (\ (m:SpecM E a) -> bindS E a b m f) s))
+          n_top;
+
+mseq_cong1 : (E:EvType) -> (m : Num) -> (n : Num) -> (a : sort 0) ->
+             Eq Num m n -> Eq (sort 0) (mseq E m a) (mseq E n a);
+mseq_cong1 E m n a eq_mn =
+  eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> mseq E x a);
+
+-- Convert a seq to an mseq
+seqToMseq : (E:EvType) -> (n:Num) -> (a:sort 0) -> seq n a -> mseq E n a;
+seqToMseq E n_top a =
+  Num_rec (\ (n:Num) -> seq n a -> mseq E n a)
+          (\ (n:Nat) (v:Vec n a) -> v)
+          (streamMap a (SpecM E a) (retS E a))
+          n_top;
+
+vecSequenceM : (E:EvType) -> (a : qsort 0) -> (n : Nat) ->
+               Vec n (SpecM E a) -> SpecM E (Vec n a);
+vecSequenceM E a n =
+  vecMapM E (SpecM E a) a n (\(i:Nat) (x:SpecM E a) -> x);
 
 
 --------------------------------------------------------------------------------

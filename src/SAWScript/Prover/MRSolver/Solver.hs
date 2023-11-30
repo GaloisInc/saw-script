@@ -135,6 +135,7 @@ import Data.Set (Set)
 
 import Prettyprinter
 
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
@@ -175,43 +176,60 @@ asList (asCtor -> Just (nm, [_, hd, tl]))
   | primName nm == "Prelude.Cons" = (hd:) <$> asList tl
 asList _ = Nothing
 
--- | Bind fresh function variables for a @LetRecS@ or @MultiFixS@ with the first
--- 'Term' as the event type, the second as a list of the type descriptions for
--- the recursive functions being defined, and the third a function of the form
+-- | Apply a SAW core term of type @MultiFixBodies@ to a list of monadic
+-- functions bound for the functions it is defining, and return the bodies for
+-- those definitions. That is, take a term of the form
 --
 -- > \F1 F2 ... Fn -> (f1, (f2, ... (fn, ())))
 --
--- that defines the bodies of those recursive functions.
-mrFreshCallVars :: Term -> Term -> Term -> MRM t [MRVar]
-mrFreshCallVars ev tp_ds_tm (asConstant -> Just (_, Just defs_tm)) =
+-- that defines corecursive functions @f1@ through @fn@ using function variables
+-- @F1@ through @Fn@ to represent recursive calls and apply that term to
+-- function variables for @F1@ throughh @Fn@, returning @f1@ through @fn@.
+mrApplyMFixBodies :: Term -> [Term] -> MRM t [Term]
+mrApplyMFixBodies (asConstant -> Just (_, Just defs_tm)) fun_tms =
   -- If defs is a constant, unfold it
-  mrFreshCallVars ev tp_ds_tm defs_tm
-mrFreshCallVars ev tp_ds_tm defs_tm =
-  do
-    -- First compute the types of the recursive functions being bound by mapping
-    -- @tpElem@ to the type descriptions, and bind functions of those types
-    tpElem_fun <- mrGlobalTerm "SpecM.tpElem"
-    fun_tps <- case asList tp_ds_tm of
-      Just ds -> mapM (\d -> mrApplyAll tpElem_fun [ev, d]) ds
-      Nothing -> throwMRFailure (MalformedTpDescList tp_ds_tm)
-    fun_vars <- mapM (mrFreshVar "F") fun_tps
+  mrApplyMFixBodies defs_tm fun_tms
+mrApplyMFixBodies defs_tm fun_tms =
+  do defs_app <- mrApplyAll defs_tm fun_tms
+     case asNestedPairs defs_app of
+       Just defs -> return defs
+       Nothing -> throwMRFailure (MalformedDefs defs_tm)
 
-    -- Next, match on the tuple of recursive function definitions and convert
-    -- each definition to a function body, by replacing all recursive calls in
-    -- each function body with our new variable terms (which are applied to the
-    -- current uvars; see mrVarTerm) and then lambda-abstracting all the
-    -- current uvars
+-- | Bind fresh function variables for a @LetRecS@ or @MultiFixS@ whose types
+-- are given in the supplied list (which should all be monadic function types)
+-- and whose bodies are monadic functions that can corecursively call those same
+-- fresh function variables. In order to represent this corecursion, the bodies
+-- are specified by a function that takes in SAW core terms for the newly bound
+-- functions and returns their bodies.
+mrFreshCallVars :: [Term] -> ([Term] -> MRM t [Term]) -> MRM t [MRVar]
+mrFreshCallVars fun_tps bodies_f =
+  do
+    -- Bind fresh function variables with the types given by fun_tps
+    fun_vars <- mapM (mrFreshVar "F") fun_tps
     fun_tms <- mapM mrVarTerm fun_vars
-    defs_app <- mrApplyAll defs_tm fun_tms
-    bodies <- case asNestedPairs defs_app of
-      Just defs -> mapM lambdaUVarsM defs
-      Nothing -> throwMRFailure (MalformedDefs defs_tm)
+
+    -- Pass the newly-bound functions to bodies_f to generate the corecursive
+    -- function bodies, and lift them out of the current uvars
+    bodies <- bodies_f fun_tms >>= mapM lambdaUVarsM
 
     -- Remember the body associated with each fresh function constant
     zipWithM_ (\f body -> mrSetVarInfo f (CallVarInfo body)) fun_vars bodies
 
     -- Finally, return the fresh function variables
     return fun_vars
+
+
+-- | Bind a single fresh function variable for a @FixS@ with a given type (which
+-- must be a monadic type) and a body that can be corecursive in the function
+-- variable itself
+mrFreshCallVar :: Term -> (Term -> MRM t Term) -> MRM t MRVar
+mrFreshCallVar fun_tp body_f =
+  mrFreshCallVars [fun_tp]
+  (\case
+      [v] -> (: []) <$> body_f v
+      _ -> panic "mrFreshCallVar" ["Expected one function variable"]) >>= \case
+  [ret] -> return ret
+  _ -> panic "mrFreshCallVar" ["Expected on return variable"]
 
 
 -- | Normalize a 'Term' of monadic type to monadic normal form
@@ -281,12 +299,7 @@ normComp (CompTerm t) =
         fun_tp <- case asPi body_tp of
           Just (_, tp_in, _) -> return tp_in
           Nothing -> throwMRFailure (MalformedDefs body)
-        fun_var <- mrFreshVar "F" fun_tp
-        fun_tm <- mrVarTerm fun_var
-
-        -- Set the new function var to have body applied to it
-        body_app <- mrApply body fun_tm >>= lambdaUVarsM
-        mrSetVarInfo fun_var (CallVarInfo body_app)
+        fun_var <- mrFreshCallVar fun_tp (mrApply body)
 
         -- Return the function variable applied to args as a normalized
         -- computation, noting that it must be applied to all of the uvars as
@@ -296,7 +309,7 @@ normComp (CompTerm t) =
         FunBind var all_args <$> mkCompFunReturn <$>
           mrFunOutType var all_args
 
-{-
+        {-
 FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     (isGlobalDef "Prelude.MultiFixS" -> Just (), ev:tp_ds:defs:args) ->
@@ -308,18 +321,53 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
         let var = CallSName (fun_vars !! (fromIntegral i))
         all_args <- (++ args) <$> getAllUVarTerms
         FunBind var all_args <$> mkCompFunReturn <$>
-          mrFunOutType var all_args
--}
+          mrFunOutType var all_args -}
 
     (isGlobalDef "SpecM.LetRecS" -> Just (), [ev,tp_ds,_,defs,body]) ->
       do
+        -- First compute the types of the recursive functions being bound by
+        -- mapping @tpElem@ to the type descriptions, and bind functions of
+        -- those types
+        tpElem_fun <- mrGlobalTerm "SpecM.tpElem"
+        fun_tps <- case asList tp_ds of
+          Just ds -> mapM (\d -> mrApplyAll tpElem_fun [ev, d]) ds
+          Nothing -> throwMRFailure (MalformedTpDescList tp_ds)
+
         -- Bind fresh function vars for the new recursive functions
-        fun_vars <- mrFreshCallVars ev tp_ds defs
+        fun_vars <- mrFreshCallVars fun_tps (mrApplyMFixBodies defs)
         fun_tms <- mapM mrVarTerm fun_vars
 
         -- Continue normalizing body applied to those fresh function vars
         body_app <- mrApplyAll body fun_tms
         normCompTerm body_app
+
+    -- Treat forNatLtThenS like FixS with a body of forNatLtThenSBody
+    (isGlobalDef "SpecM.forNatLtThenS" -> Just (), [ev,st,ret,n,f,k,s0]) ->
+      do
+        -- Bind a fresh function with type Nat -> st -> SpecM E ret
+        type_f <- mrGlobalTerm "SpecM.forNatLtThenSBodyType"
+        fun_tp <- mrApplyAll type_f [ev,st,ret]
+
+        -- Build the function for applying forNatLtThenSBody to its arguments to
+        -- define the body of the recursive definition, including the invariant
+        -- argument that is bound to the current assumptions
+        invar <- mrAssumptions
+        body_fun_tm <- mrGlobalTerm "SpecM.forNatLtThenSBody"
+        let body_f rec_fun =
+              mrApplyAll body_fun_tm [ev,st,ret,n,f,k,invar,rec_fun]
+
+        -- Bind a fresh function var for the new recursive function
+        fun_var <- mrFreshCallVar fun_tp body_f
+
+        -- Return the function variable applied to 0 and s0 as a normalized
+        -- computation, noting that it must be applied to all of the uvars as
+        -- well as the args
+        let var = CallSName fun_var
+        z <- liftSC1 scNat 0
+        all_args <- (++ [z,s0]) <$> getAllUVarTerms
+        FunBind var all_args <$> mkCompFunReturn <$>
+          mrFunOutType var all_args
+
 
     -- Convert `vecMapM (bvToNat ...)` into `bvVecMapInvarM`, with the
     -- invariant being the current set of assumptions
@@ -341,7 +389,7 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
            mrApplyAll body [ev, w1, n, a, xs, i] >>= normCompTerm
-         else throwMRFailure (MalformedComp t)
+           else throwMRFailure (MalformedComp t)
 
     -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
@@ -356,7 +404,7 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
            n' <- liftSC2 scBvLit w (toInteger n)
            xs' <- mrGenBVVecFromVec n_tm a xs "normComp (atM)" w_tm n'
            mrApplyAll body [ev, w_tm, n', a, xs', i] >>= normCompTerm
-         else throwMRFailure (MalformedComp t)
+           else throwMRFailure (MalformedComp t)
 
     -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecUpdateM`
@@ -367,7 +415,7 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
          ws_are_eq <- mrConvertible w1 w2
          if ws_are_eq then
            mrApplyAll body [ev, w1, n, a, xs, i, x] >>= normCompTerm
-         else throwMRFailure (MalformedComp t)
+           else throwMRFailure (MalformedComp t)
 
     -- Convert `updateM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
@@ -384,12 +432,15 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
            err_tm <- mrErrorTerm a "normComp (updateM)"
            mrApplyAll body [ev, w_tm, n', a, xs', i, x, err_tm, n_tm]
              >>= normCompTerm
-         else throwMRFailure (MalformedComp t)
+           else throwMRFailure (MalformedComp t)
 
-    -- Always unfold: sawLet, invariantHint, Num_rec
+    -- Always unfold: sawLet, invariantHint, Num_rec, vecMapM, vecMapBindM,
+    -- seqMapM, forNatLtThenSBody
     (f@(asGlobalDef -> Just ident), args)
-      | ident `elem` ["Prelude.sawLet", "SpecM.invariantHint",
-                      "Cryptol.Num_rec"]
+      | ident `elem`
+        ["Prelude.sawLet", "SpecM.invariantHint", "Cryptol.Num_rec",
+         "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM",
+         "SpecM.forNatLtThenSBody"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 

@@ -159,13 +159,13 @@ Tp_bitvector : Nat -> TpDesc;
 Tp_bitvector w = Tp_Kind (Kind_Expr (Kind_bv w));
 
 -- The type description for a vector type
-Tp_Vec : TpDesc -> TpExpr Kind_nat -> TpDesc;
-Tp_Vec d n = Tp_Seq (TpExpr_UnOp Kind_nat Kind_num UnOp_NatToNum n) d;
+Tp_Vec : TpExpr Kind_nat -> TpDesc -> TpDesc;
+Tp_Vec n d = Tp_Seq (TpExpr_UnOp Kind_nat Kind_num UnOp_NatToNum n) d;
 
 -- The type description for the type BVVec n len d
-Tp_BVVec : TpDesc -> (n:Nat) -> TpExpr (Kind_bv n) -> TpDesc;
-Tp_BVVec d n len =
-  Tp_Vec d (TpExpr_UnOp (Kind_bv n) Kind_nat (UnOp_BVToNat n) len);
+Tp_BVVec : (n:Nat) -> TpExpr (Kind_bv n) -> TpDesc -> TpDesc;
+Tp_BVVec n len d =
+  Tp_Vec (TpExpr_UnOp (Kind_bv n) Kind_nat (UnOp_BVToNat n) len) d;
 
 -- An expression (TpDesc or TpExpr) of a given kind
 kindExpr : KindDesc -> sort 0;
@@ -730,6 +730,45 @@ primitive LetRecS : (E:EvType) -> (Ts:List TpDesc) -> (a:sort 0) ->
 --
 -- Helper operations on SpecM
 --
+
+-- Perform a for loop from 0 through n-1, iterating a state value by applying
+-- the supplied one-step state update function f at indices 0 through n-1 and
+-- then calling the supplied continuation k. More formally, perform the
+-- following computation from some starting state value s0:
+--
+-- f 0 s0 >>= \s1 -> f 1 s1 >>= \s2 -> ... f (n-1) s(n-1) >>= \sn -> k sn
+forNatLtThenS : (E:EvType) -> (st ret : sort 0) -> Nat ->
+                (Nat -> st -> SpecM E st) -> (st -> SpecM E ret) ->
+                st -> SpecM E ret;
+forNatLtThenS E st ret n f k =
+  Nat__rec (\ (_:Nat) -> st -> SpecM E ret)
+    k
+    (\ (i:Nat) (rec:st -> SpecM E ret) (s:st) ->
+       bindS E st ret (f (subNat n (Succ i)) s) rec)
+    n;
+
+-- The type of the function returned by forNatLtThenSBody
+forNatLtThenSBodyType : (E:EvType) -> (st ret : sort 0) -> sort 0;
+forNatLtThenSBodyType E st ret = Nat -> st -> SpecM E ret;
+
+-- Intuitively, forNatLtThenS behaves like a FixS computation, though it is
+-- defined inductively on the Nat argument rather than coinductively via FixS.
+-- The reason it is defined this way is that FixS requires type descriptions for
+-- its types, whereas forNatLtThenS can work on arbitrary st and ret types. MR
+-- solver likes things to look like FixS, however, so forNatLtThenSBody is what
+-- the body (i.e., function argument to FixS) would be if it were defined in
+-- terms of FixS. The Boolean value supplies an invariant for this recursive
+-- function over any variables currently in scope.
+forNatLtThenSBody : (E:EvType) -> (st ret : sort 0) -> Nat ->
+                    (Nat -> st -> SpecM E st) -> (st -> SpecM E ret) ->
+                    Bool -> (Nat -> st -> SpecM E ret) ->
+                    Nat -> st -> SpecM E ret;
+forNatLtThenSBody E st ret n f k invar rec i s =
+  invariantHint (SpecM E ret)
+    (and (ltNat i (Succ n)) invar)
+    (ite (SpecM E ret) (ltNat i n)
+      (bindS E st ret (f i s) (rec (Succ i)))
+      (k s));
 
 -- Apply a pure function to the result of a computation
 fmapS : (E:EvType) -> (a b:sort 0) -> (a -> b) -> SpecM E a -> SpecM E b;
