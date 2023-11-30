@@ -654,7 +654,7 @@ sumTpDesc d1 d2 = ctorOpenTerm "SpecM.Tp_Sum" [d1,d2]
 -- description @d@ for the element type
 bvVecTpDesc :: OpenTerm -> OpenTerm -> OpenTerm -> OpenTerm
 bvVecTpDesc w_term len_term elem_d =
-  applyGlobalOpenTerm "SpecM.Tp_BVVec" [elem_d, w_term, len_term]
+  applyGlobalOpenTerm "SpecM.Tp_BVVec" [w_term, len_term, elem_d]
 
 -- | Build a type expression of type @TpExpr EK@ of kind description @EK@ from a
 -- type-level value of type @exprKindElem EK@
