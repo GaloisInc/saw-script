@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- This is to stop GHC 8.8.4's pattern match checker exceeding its limit when
 -- checking the pattern match in the 'CompTerm' case of 'normComp'
@@ -123,7 +124,6 @@ module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
 import Data.Either
-import Numeric.Natural (Natural)
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
@@ -139,7 +139,6 @@ import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
 import SAWScript.Proof (Sequent, SolveResult)
 import SAWScript.Value (TopLevel)
@@ -796,6 +795,73 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
 
 
 ----------------------------------------------------------------------
+-- * Decidable Propositions
+----------------------------------------------------------------------
+
+-- | A function for assuming a proposition or its negation, that also lifts a
+-- 'TermLike' argument in the sense of 'withUVarLift'
+newtype AssumpFun t = AssumpFun { appAssumpFun ::
+                                    forall tm a. TermLike tm =>
+                                    Bool -> tm -> (tm -> MRM t a) -> MRM t a }
+
+-- | Test if a 'Term' is a propostion that has a corresponding Boolean SAW core
+-- term that decides it; e.g., IsLtNat n m is a Prop that corresponds to the
+-- Boolean expression ltNat n m. If so, return the Boolean expression
+asBoolProp :: Term -> Maybe (MRM t Term)
+asBoolProp (asEq -> Just (tp,e1,e2)) = Just $ mrEq' tp e1 e2
+asBoolProp (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [n,m])) =
+  Just $ liftSC2 scLtNat n m
+asBoolProp _ = Nothing
+
+-- | Test if a 'Term' is a propostion that MR solver can decide, i.e., test if
+-- it or its negation holds. If so, return: a function to decide the propostion,
+-- that returns 'Just' of a Boolean iff the proposition definitely does or does
+-- not hold; and a function to assume the proposition or its negation in a
+-- sub-computation. This latter function also takes a 'TermLike' that it will
+-- lift in the sense of 'withUVarLift' in the sub-computation.
+asDecProp :: Term -> Maybe (MRM t (Maybe Bool, AssumpFun t))
+asDecProp (asBoolProp -> Just condM) =
+  Just $
+  do cond <- condM
+     not_cond <- liftSC1 scNot cond
+     let assumeM b tm m = withAssumption (if b then cond else not_cond) (m tm)
+     mrProvable cond >>= \case
+       True -> return (Just True, AssumpFun assumeM)
+       False ->
+         mrProvable not_cond >>= \case
+         True -> return (Just False, AssumpFun assumeM)
+         False -> return (Nothing, AssumpFun assumeM)
+asDecProp (asIsFinite -> Just n) =
+  Just $
+  do n_norm <- mrNormOpenTerm n
+     maybe_assump <- mrGetDataTypeAssump n_norm
+     -- The assumption function that requires b == req, in which case it is just
+     -- the identity, and otherwise panics
+     let requireIdAssumeM req b tm m =
+           if req == b then m tm else
+             panic "asDecProp" ["Unexpected inconsistent assumption"]
+     case (maybe_assump, asNum n_norm) of
+       (_, Just (Left _)) ->
+         return (Just True, AssumpFun (requireIdAssumeM True))
+       (_, Just (Right _)) ->
+         return (Just False, AssumpFun (requireIdAssumeM False))
+       (Just (IsNum _), _) ->
+         return (Just True, AssumpFun (requireIdAssumeM True))
+       (Just IsInf, _) ->
+         return (Just False, AssumpFun (requireIdAssumeM False))
+       _ ->
+         return (Nothing,
+                 AssumpFun $ \b tm m ->
+                  if b then
+                    (liftSC0 scNatType >>= \nat_tp ->
+                      (withUVarLift "n" (Type nat_tp) (n_norm, tm) $ \n_nat (n', tm') ->
+                        withDataTypeAssump n' (IsNum n_nat) (m tm')))
+                  else
+                    withDataTypeAssump n_norm IsInf (m tm))
+asDecProp _ = Nothing
+
+
+----------------------------------------------------------------------
 -- * Mr Solver Himself (He Identifies as Male)
 ----------------------------------------------------------------------
 
@@ -821,6 +887,10 @@ mrRefines t1 t2 =
      -- mrDebugPPPrefix 2 "in context:" $ ppCtx ctx
      withFailureCtx (FailCtxRefines m1 m2) $ mrRefines' m1 m2
 
+-- | Helper function that applies 'mrRefines' to a pair
+mrRefinesPair :: (ToNormComp a, ToNormComp b) => (a, b) -> MRM t ()
+mrRefinesPair (a,b) = mrRefines a b
+
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM t ()
 
@@ -829,63 +899,27 @@ mrRefines' (ErrorS _) (ErrorS _) = return ()
 mrRefines' (RetS e) (ErrorS _) = throwMRFailure (ReturnNotError e)
 mrRefines' (ErrorS _) (RetS e) = throwMRFailure (ReturnNotError e)
 
--- maybe elimination on equality types
-mrRefines' (MaybeElim (Type cond_tp@(asEq -> Just (tp,e1,e2))) m1 f1 _) m2 =
-  do cond <- mrEq' tp e1 e2
-     not_cond <- liftSC1 scNot cond
-     cond_pf <- mrDummyProof cond_tp
-     m1' <- applyNormCompFun f1 cond_pf
-     cond_holds <- mrProvable cond
-     not_cond_holds <- mrProvable not_cond
-     case (cond_holds, not_cond_holds) of
-       (True, _) -> mrRefines m1' m2
-       (_, True) -> mrRefines m1 m2
-       _ -> withAssumption cond (mrRefines m1' m2) >>
-            withAssumption not_cond (mrRefines m1 m2)
-mrRefines' m1 (MaybeElim (Type cond_tp@(asEq -> Just (tp,e1,e2))) m2 f2 _) =
-  do cond <- mrEq' tp e1 e2
-     not_cond <- liftSC1 scNot cond
-     cond_pf <- mrDummyProof cond_tp
-     m2' <- applyNormCompFun f2 cond_pf
-     cond_holds <- mrProvable cond
-     not_cond_holds <- mrProvable not_cond
-     case (cond_holds, not_cond_holds) of
-       (True, _) -> mrRefines m1 m2'
-       (_, True) -> mrRefines m1 m2
-       _ -> withAssumption cond (mrRefines m1 m2') >>
-            withAssumption not_cond (mrRefines m1 m2)
+mrRefines' (MaybeElim (Type prop_tp@(asDecProp -> Just decPropM)) m1 f1 _) m2 =
+  decPropM >>= \case
+  (Just True, AssumpFun assumeM) ->
+    do m1' <- mrDummyProof prop_tp >>= applyNormCompFun f1
+       assumeM True (m1',m2) mrRefinesPair
+  (Just False, AssumpFun assumeM) -> assumeM False (m1,m2) mrRefinesPair
+  (Nothing, AssumpFun assumeM) ->
+    do m1' <- mrDummyProof prop_tp >>= applyNormCompFun f1
+       assumeM True (m1',m2) mrRefinesPair
+       assumeM False (m1,m2) mrRefinesPair
 
--- maybe elimination on isFinite types
-mrRefines' (MaybeElim (Type fin_tp@(asIsFinite -> Just n1)) m1 f1 _) m2 =
-  do n1_norm <- mrNormOpenTerm n1
-     maybe_assump <- mrGetDataTypeAssump n1_norm
-     fin_pf <- mrDummyProof fin_tp
-     case (maybe_assump, asNum n1_norm) of
-       (_, Just (Left _)) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
-       (_, Just (Right _)) -> mrRefines m1 m2
-       (Just (IsNum _), _) -> applyNormCompFun f1 fin_pf >>= flip mrRefines m2
-       (Just IsInf, _) -> mrRefines m1 m2
-       _ ->
-         withDataTypeAssump n1_norm IsInf (mrRefines m1 m2) >>
-         liftSC0 scNatType >>= \nat_tp ->
-         (withUVarLift "n" (Type nat_tp) (n1_norm, f1, m2) $ \ n (n1', f1', m2') ->
-           withDataTypeAssump n1' (IsNum n)
-           (applyNormCompFun f1' n >>= flip mrRefines m2'))
-mrRefines' m1 (MaybeElim (Type fin_tp@(asIsFinite -> Just n2)) m2 f2 _) =
-  do n2_norm <- mrNormOpenTerm n2
-     maybe_assump <- mrGetDataTypeAssump n2_norm
-     fin_pf <- mrDummyProof fin_tp
-     case (maybe_assump, asNum n2_norm) of
-       (_, Just (Left _)) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
-       (_, Just (Right _)) -> mrRefines m1 m2
-       (Just (IsNum _), _) -> applyNormCompFun f2 fin_pf >>= mrRefines m1
-       (Just IsInf, _) -> mrRefines m1 m2
-       _ ->
-         withDataTypeAssump n2_norm IsInf (mrRefines m1 m2) >>
-         liftSC0 scNatType >>= \nat_tp ->
-         (withUVarLift "n" (Type nat_tp) (n2_norm, f2, m1) $ \ n (n2', f2', m1') ->
-           withDataTypeAssump n2' (IsNum n)
-           (applyNormCompFun f2' n >>= mrRefines m1'))
+mrRefines' m1 (MaybeElim (Type prop_tp@(asDecProp -> Just decPropM)) m2 f2 _) =
+  decPropM >>= \case
+  (Just True, AssumpFun assumeM) ->
+    do m2' <- mrDummyProof prop_tp >>= applyNormCompFun f2
+       assumeM True (m1,m2') mrRefinesPair
+  (Just False, AssumpFun assumeM) -> assumeM False (m1,m2) mrRefinesPair
+  (Nothing, AssumpFun assumeM) ->
+    do m2' <- mrDummyProof prop_tp >>= applyNormCompFun f2
+       assumeM True (m1,m2') mrRefinesPair
+       assumeM False (m1,m2) mrRefinesPair
 
 mrRefines' (Ite cond1 m1 m1') m2 =
   liftSC1 scNot cond1 >>= \not_cond1 ->
