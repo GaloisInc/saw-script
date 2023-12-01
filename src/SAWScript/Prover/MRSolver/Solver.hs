@@ -344,14 +344,14 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
     (isGlobalDef "SpecM.forNatLtThenS" -> Just (), [ev,st,ret,n,f,k,s0]) ->
       do
         -- Bind a fresh function with type Nat -> st -> SpecM E ret
-        type_f <- mrGlobalTerm "SpecM.forNatLtThenSBodyType"
+        type_f <- mrGlobalTermUnfold "SpecM.forNatLtThenSBodyType"
         fun_tp <- mrApplyAll type_f [ev,st,ret]
 
         -- Build the function for applying forNatLtThenSBody to its arguments to
         -- define the body of the recursive definition, including the invariant
         -- argument that is bound to the current assumptions
         invar <- mrAssumptions
-        body_fun_tm <- mrGlobalTerm "SpecM.forNatLtThenSBody"
+        body_fun_tm <- mrGlobalTermUnfold "SpecM.forNatLtThenSBody"
         let body_f rec_fun =
               mrApplyAll body_fun_tm [ev,st,ret,n,f,k,invar,rec_fun]
 

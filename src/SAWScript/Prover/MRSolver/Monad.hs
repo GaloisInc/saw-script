@@ -45,11 +45,13 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Module (Def(..))
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
@@ -622,6 +624,14 @@ mrCtorApp = liftSC2 scCtorApp
 mrGlobalTerm :: Ident -> MRM t Term
 mrGlobalTerm = liftSC1 scGlobalDef
 
+-- | Build a 'Term' for a global and unfold the global
+mrGlobalTermUnfold :: Ident -> MRM t Term
+mrGlobalTermUnfold ident =
+  (defBody <$> liftSC1 scRequireDef ident) >>= \case
+  Just body -> return body
+  Nothing -> panic "mrGlobalTermUnfold" ["Definition " ++ show ident ++
+                                         " does not have a body"]
+
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM t Term
@@ -1127,8 +1137,8 @@ mrGetInvariantBody tm = case asApplyAll tm of
   -- go inside any top-level applications of of bindS ... (assertFiniteS ...)
   (isGlobalDef "SpecM.bindS" -> Just (),
    [_, _, _,
-    asApplyAll -> (isGlobalDef "CryptolM.assertFiniteS" -> Just (),
-                   [_, asCtor -> Just (primName -> "Cryptol.TCNum", _)]),
+    (asApplyAll -> (isGlobalDef "CryptolM.assertFiniteS" -> Just (),
+                    [_, (asCtor -> Just (primName -> "Cryptol.TCNum", _))])),
     k]) ->
     do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
        body <- mrApplyAll k [pf]
