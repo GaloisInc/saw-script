@@ -358,9 +358,11 @@ assertTermEqualities ::
   JVMCrucibleContext ->
   OverrideMatcher CJ.JVM md ()
 assertTermEqualities sc cc = do
-  let assertTermEquality (t, md, e) = do
+  let sym = cc ^. jccSym
+  let assertTermEquality (cond, t, md, e) = do
         p <- instantiateExtResolveSAWPred sc cc t
-        addAssert p md e
+        p' <- liftIO $ W4.impliesPred sym cond p
+        addAssert p' md e
   traverse_ assertTermEquality =<< OM (use termEqs)
 
 

@@ -34,6 +34,10 @@ module SAWScript.Crucible.Common.Override
   , termSub
   , termEqs
   --
+  , OverrideEnv
+  , OverrideEnv'(..)
+  , oeConditionalPred
+  --
   , OverrideFailureReason(..)
   , ppOverrideFailureReason
   , OverrideFailure(..)
@@ -48,6 +52,7 @@ module SAWScript.Crucible.Common.Override
   , addTermEq
   , addAssert
   , addAssume
+  , withConditionalPred
   , readGlobal
   , writeGlobal
   , failure
@@ -75,6 +80,7 @@ module SAWScript.Crucible.Common.Override
 import qualified Control.Exception as X
 import           Control.Lens
 import           Control.Monad (foldM, unless, when)
+import           Control.Monad.Reader (MonadReader(..), ReaderT(..))
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
@@ -140,8 +146,19 @@ data OverrideState' sym ext = OverrideState
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
 
-    -- | Equalities of SAW Core terms
-  , _termEqs :: [(Term, ConditionMetadata, Crucible.SimError)]
+    -- | Equalities of SAW Core terms. The four elements of each tuple are:
+    --
+    -- * A 'W4.Pred' representing the path condition for the part of the
+    --   program in which the term equality occurs.
+    --   See @Note [oeConditionalPred]@.
+    --
+    -- * A 'Term' representing the term equality.
+    --
+    -- * A 'ConditionMetadata' value describing the term equality.
+    --
+    -- * A 'Crucible.SimError' to report in the event that the term equality
+    --   fails to hold.
+  , _termEqs :: [(W4.Pred sym, Term, ConditionMetadata, Crucible.SimError)]
 
     -- | Free variables available for unification
   , _osFree :: Set VarIndex
@@ -187,6 +204,76 @@ initialState sym globals allocs terms free loc = OverrideState
   , _setupValueSub   = allocs
   , _osLocation      = loc
   }
+
+--------------------------------------------------------------------------------
+-- ** OverrideEnv
+
+-- | The environment used in the reader portion of `OverrideMatcher'`.
+newtype OverrideEnv' sym = OverrideEnv
+  { _oeConditionalPred :: W4.Pred sym
+    -- ^ The predicate that is used to construct an implication for any
+    --   assumption or assertion as part of the specification.
+    --   See @Note [oeConditionalPred]@.
+  }
+
+-- | `OverrideEnv'` instantiated at type 'Sym'.
+type OverrideEnv = OverrideEnv' Sym
+
+makeLenses ''OverrideEnv'
+
+-- | The initial override matching environment starts with a trivial path
+-- condition of @True@ (i.e., 'W4.truePred). See @Note [oeConditionalPred]@.
+initialEnv ::
+  W4.IsExprBuilder sym =>
+  sym ->
+  OverrideEnv' sym
+initialEnv sym = OverrideEnv
+  { _oeConditionalPred = W4.truePred sym
+  }
+
+{-
+Note [oeConditionalPred]
+~~~~~~~~~~~~~~~~~~~~~~~~
+oeConditionalPred is a predicate that is used to construct an implication for
+any assumption or assertion used in a specification. That is, oeConditionalPred
+can be thought of as the path condition for the part of the specification where
+the assumption/assertion is created. By default, the oeConditionalPred is
+simply `True` (see `initialEnv`), so when an assertion is created, e.g.,
+
+  llvm_assert {{ x == 2*y }};
+
+Then the overall assertion would be `True ==> (x == 2*y)`. An implication with
+`True` as the premise is not very interesting, of course, but other parts of
+the program may add additional premises (see the `withConditionalPred`
+function).
+
+Currently, the only place in SAW where non-trivial `oeConditionalPred`s are
+added is when matching against an `llvm_conditional_points_to` statement. For
+instance, consider this spec (taken from #1945):
+
+  let test_spec = do {
+    p <- llvm_alloc (llvm_int 8);
+    x <- llvm_fresh_var "x" (llvm_int 8);
+    llvm_points_to p (llvm_term x);
+
+    llvm_execute_func [p];
+
+    llvm_conditional_points_to {{ x == 1 }} p (llvm_term {{ 1 : [8] }});
+  };
+
+The `llvm_conditional_points_to` statement in the postcondition generates an
+assertion that checks `x` (the value that `p` points to) against `1 : [8]`. But
+we only want to check this under the assumption that `x` already equals `1` due
+to the `x == 1` part of the `llvm_conditional_points_to` statement. To do this,
+the implementation of `llvm_conditional_points_to` will add `x == 1` to the
+oeConditionalPred. This way, the assertion that gets generated will be:
+
+  (x == 1 /\ True) ==> (x == 1)
+
+Here, leaving out the (x == 1) premise would be catastrophic, as that would
+result in the far more general assertion `True ==> (x == 1)`. (This was
+ultimately the cause of #1945.)
+-}
 
 --------------------------------------------------------------------------------
 -- ** OverrideFailureReason
@@ -313,18 +400,19 @@ data RW
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher' sym ext rorw m a =
-  OM (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m) a)
+  OM (ReaderT (OverrideEnv' sym) (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m)) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
 type OverrideMatcher ext rorw a = OverrideMatcher' Sym ext rorw IO a
 
 instance Wrapped (OverrideMatcher' sym ext rorw m a) where
 
+deriving instance Monad m => MonadReader (OverrideEnv' sym) (OverrideMatcher' sym ext rorw m)
 deriving instance Monad m => MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw m)
 deriving instance Monad m => MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw m)
 
 instance MonadTrans (OverrideMatcher' sym ext rorw) where
-    lift f = OM $ lift $ lift f
+    lift f = OM $ lift $ lift $ lift f
 
 throwOverrideMatcher :: Monad m => String -> OverrideMatcher' sym ext rorw m a
 throwOverrideMatcher msg = do
@@ -337,7 +425,7 @@ instance Monad m => Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
 -- | "Run" function for OverrideMatcher. The final result and state
 -- are returned. The state will contain the updated globals and substitutions
 runOverrideMatcher ::
-   Monad m =>
+   (Monad m, W4.IsExprBuilder sym) =>
    sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState sym {- ^ initial global variables        -} ->
    Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
@@ -347,31 +435,55 @@ runOverrideMatcher ::
    OverrideMatcher' sym ext md m a {- ^ matching action                 -} ->
    m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
 runOverrideMatcher sym g a t free loc (OM m) =
-  runExceptT (runStateT m (initialState sym g a t free loc))
+  runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))
 
 addTermEq ::
   Term {- ^ term equality -} ->
   ConditionMetadata ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher ext rorw ()
-addTermEq t md r =
-  OM (termEqs %= cons (t, md, r))
+addTermEq t md r = do
+  env <- ask
+  let cond = env ^. oeConditionalPred
+  OM (termEqs %= cons (cond, t, md, r))
 
 addAssert ::
-  Monad m =>
+  (MonadIO m, W4.IsExprBuilder sym) =>
   W4.Pred sym       {- ^ property -} ->
   ConditionMetadata ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher' sym ext rorw m ()
-addAssert p md r =
-  OM (osAsserts %= cons (md,W4.LabeledPred p r))
+addAssert p md r = do
+  sym <- getSymInterface
+  env <- ask
+  p' <- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p
+  OM (osAsserts %= cons (md,W4.LabeledPred p' r))
 
 addAssume ::
-  Monad m =>
+  (MonadIO m, W4.IsExprBuilder sym) =>
   W4.Pred sym       {- ^ property -} ->
   ConditionMetadata ->
   OverrideMatcher' sym ext rorw m ()
-addAssume p md = OM (osAssumes %= cons (md,p))
+addAssume p md = do
+  sym <- getSymInterface
+  env <- ask
+  p' <- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p
+  OM (osAssumes %= cons (md,p'))
+
+-- | Add an additional premise to the path condition when executing an
+-- `OverrideMatcher'` subcomputation. See @Note [oeConditionalPred]@ for an
+-- explanation of where this is used.
+withConditionalPred ::
+  (MonadIO m, W4.IsExprBuilder sym) =>
+  W4.Pred sym {- ^ The additional premise -} ->
+  OverrideMatcher' sym ext rorw m a {- ^ The subcomputation -} ->
+  OverrideMatcher' sym ext rorw m a
+withConditionalPred premise om = do
+  sym <- getSymInterface
+  env <- ask
+  premise' <- liftIO $ W4.andPred sym premise (env ^. oeConditionalPred)
+  let env' = env & oeConditionalPred .~ premise'
+  local (const env') om
 
 readGlobal ::
   Monad m =>
@@ -397,7 +509,7 @@ failure ::
   W4.ProgramLoc ->
   OverrideFailureReason ext ->
   OverrideMatcher' sym ext md m a
-failure loc e = OM (lift (throwE (OF loc e)))
+failure loc e = OM (lift (lift (throwE (OF loc e))))
 
 getSymInterface :: Monad m => OverrideMatcher' sym ext md m sym
 getSymInterface = OM (use syminterface)
