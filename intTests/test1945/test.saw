@@ -1,0 +1,17 @@
+// Test a use of `llvm_conditional_points_to` where the value that the pointer
+// points to will fail to match against the right-hand side value unless the
+// condition is properly incorporated into the path condition. This serves as
+// a regression test for https://github.com/GaloisInc/saw-script/issues/1945.
+
+let test_spec = do {
+  p <- llvm_alloc (llvm_int 8);
+  x <- llvm_fresh_var "x" (llvm_int 8);
+  llvm_points_to p (llvm_term x);
+
+  llvm_execute_func [p];
+
+  llvm_conditional_points_to {{ x == 1 }} p (llvm_term {{ 1 : [8] }});
+};
+
+m <- llvm_load_module "test.bc";
+llvm_verify m "test" [] false test_spec z3;

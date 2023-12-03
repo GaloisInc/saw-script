@@ -1410,14 +1410,28 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
             let badLoadSummary = summarizeBadLoad cc memTy prepost ptr
             case res of
               Crucible.NoErr pred_ res_val -> do
-                pred_' <- case maybe_cond of
-                  Just cond -> do
-                    cond' <- instantiateExtResolveSAWPred sc cc (ttTerm cond)
-                    liftIO $ W4.impliesPred sym cond' pred_
-                  Nothing -> return pred_
+                -- If dealing with an `llvm_conditional_points_to` statement,
+                -- convert the condition to a `Pred`. If dealing with an
+                -- ordinary `llvm_points_to` statement, this condition will
+                -- simply be `True`.
+                cond' <- case maybe_cond of
+                  Just cond ->
+                    instantiateExtResolveSAWPred sc cc (ttTerm cond)
+                  Nothing ->
+                    pure $ W4.truePred sym
+                -- Next, construct an implication involving the condition and
+                -- assert it.
+                pred_' <- liftIO $ W4.impliesPred sym cond' pred_
                 addAssert pred_' md $ Crucible.SimError loc $
                   Crucible.AssertFailureSimError (show $ PP.vcat badLoadSummary) ""
-                pure Nothing <* matchArg opts sc cc spec prepost md res_val memTy val'
+
+                -- Finally, match the value that the pointer points to against
+                -- the right-hand side value in the points_to statement. Make
+                -- sure to execute this match with an extended path condition
+                -- that takes the condition above into account. See also
+                -- Note [oeConditionalPred] in SAWScript.Crucible.Common.Override.
+                withConditionalPred cond' $
+                  pure Nothing <* matchArg opts sc cc spec prepost md res_val memTy val'
               _ -> do
                 pure $ Just $ describeConcreteMemoryLoadFailure mem badLoadSummary ptr
 
