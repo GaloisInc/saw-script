@@ -77,7 +77,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
-import SAWScript.MGU (instantiateType)
+import SAWScript.MGU (instantiate)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -506,7 +506,7 @@ extendLocal x mt md v env = LocalLet x mt md v : env
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = M.insert name ty' (rwTypedef rw) }
-  where ty' = instantiateType (rwTypedef rw) ty
+  where ty' = instantiate (rwTypedef rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
