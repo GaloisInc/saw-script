@@ -265,7 +265,7 @@ class SAWConnection:
         function.
         """
         self.most_recent_result = \
-            LLVMAssume(self, module, function, contract, lemma_name, timeout)
+            MIRAssume(self, module, function, contract, lemma_name, timeout)
         return self.most_recent_result
 
     def mir_find_adt(self,

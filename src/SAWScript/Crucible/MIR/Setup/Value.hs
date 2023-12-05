@@ -34,6 +34,7 @@ module SAWScript.Crucible.MIR.Setup.Value
 
     -- * @MirAllocSpec@
   , MirAllocSpec(..)
+  , maConditionMetadata
   , maType
   , maMutbl
   , maMirType
@@ -80,8 +81,6 @@ type instance MS.XSetupCast MIR = Void
 type instance MS.XSetupUnion MIR = Void
 type instance MS.XSetupGlobalInitializer MIR = ()
 
-type instance MS.XGhostState MIR = Void
-
 type instance MS.TypeName MIR = Text
 type instance MS.ExtType MIR = M.Ty
 
@@ -122,7 +121,8 @@ data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) [MS.Setu
     deriving (Show)
 
 data MirAllocSpec tp = MirAllocSpec
-    { _maType :: TypeRepr tp
+    { _maConditionMetadata :: MS.ConditionMetadata
+    , _maType :: TypeRepr tp
     , _maMutbl :: M.Mutability
     , _maMirType :: M.Ty
     , _maLen :: Int

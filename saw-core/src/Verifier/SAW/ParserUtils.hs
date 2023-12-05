@@ -27,7 +27,9 @@ module Verifier.SAW.ParserUtils
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad.State
+import Control.Monad (forM_)
+import Control.Monad.State (StateT, execStateT, modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString.Lazy as BL
 #if !MIN_VERSION_template_haskell(2,8,0)
 import qualified Data.ByteString.Lazy.UTF8 as UTF8

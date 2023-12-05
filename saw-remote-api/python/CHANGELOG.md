@@ -8,7 +8,8 @@
   * The `mir_verify` function performs verification of a MIR function.
   * The `mir_find_adt` function looks up an algebraic data type (ADT) name in a
     MIR module.
-
+  * The `mir_assume` function assumes a specification for a MIR function without
+    performing any verification.
   * The `saw_client.mir` module contains utility functions for constructing
     MIR types.
 
@@ -37,6 +38,8 @@
   variable. This function is currently only supported with LLVM and MIR
   verification, and using this function with JVM verification will raise an
   error.
+* The `create_ghost_variable()` and `ghost_value()` functions are now supported
+  with JVM and MIR verification.
 
 ## 1.0.1 -- YYYY-MM-DD
 

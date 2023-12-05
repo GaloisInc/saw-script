@@ -23,6 +23,9 @@ module SAWScript.Crucible.MIR.ResolveSetupValue
   , equalValsPred
   , checkCompatibleTys
   , readMaybeType
+  , doAlloc
+  , doPointsTo
+  , firstPointsToReferent
   , mirAdtToTy
   , findDefId
   , findDefIdEither
@@ -63,7 +66,8 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 import Lang.Crucible.Backend (IsSymInterface)
-import Lang.Crucible.Simulator (AnyValue(..), GlobalVar(..), RegValue, RegValue'(..))
+import Lang.Crucible.Simulator
+  ( AnyValue(..), GlobalVar(..), RegValue, RegValue'(..), SymGlobalState )
 import Lang.Crucible.Types (MaybeType, TypeRepr(..))
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
@@ -418,7 +422,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
   where
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
-    iTypes = Mir.mirIntrinsicTypes
+    iTypes = mcc ^. mccIntrinsicTypes
 
     usizeBvLit :: Sym -> Int -> IO (W4.SymBV Sym Mir.SizeBits)
     usizeBvLit sym = W4.bvLit sym W4.knownNat . BV.mkBV W4.knownNat . toInteger
@@ -951,6 +955,94 @@ readPartExprMaybe _sym W4.Unassigned = Nothing
 readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = Just v
   | otherwise = Nothing
+
+-- | Allocate memory for each 'mir_alloc' or 'mir_alloc_mut'.
+doAlloc ::
+     MIRCrucibleContext
+  -> SymGlobalState Sym
+  -> Some MirAllocSpec
+  -> IO (Some (MirPointer Sym), SymGlobalState Sym)
+doAlloc cc globals (Some ma) =
+  mccWithBackend cc $ \bak ->
+  do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
+     let halloc = cc^.mccHandleAllocator
+     let sym = backendGetSym bak
+     let iTypes = cc^.mccIntrinsicTypes
+     Some tpr <- pure $ Mir.tyToRepr col (ma^.maMirType)
+
+     -- Create an uninitialized `MirVector_PartialVector` of length 1 and
+     -- return a pointer to its element.
+     ref <- Mir.newMirRefIO sym halloc (Mir.MirVectorRepr tpr)
+
+     one <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1
+     vec <- Mir.mirVector_uninitIO bak one
+     globals' <- Mir.writeMirRefIO bak globals iTypes ref vec
+
+     zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
+     ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero
+     let mirPtr = Some MirPointer
+           { _mpType = tpr
+           , _mpMutbl = ma^.maMutbl
+           , _mpMirType = ma^.maMirType
+           , _mpRef = ptr
+           }
+
+     pure (mirPtr, globals')
+
+doPointsTo ::
+     MS.CrucibleMethodSpecIR MIR
+  -> MIRCrucibleContext
+  -> Map MS.AllocIndex (Some (MirPointer Sym))
+  -> SymGlobalState Sym
+  -> MirPointsTo
+  -> IO (SymGlobalState Sym)
+doPointsTo mspec cc env globals (MirPointsTo _ reference referents) =
+  mccWithBackend cc $ \bak -> do
+    MIRVal referenceShp referenceVal <-
+      resolveSetupVal cc env tyenv nameEnv reference
+    -- By the time we reach here, we have already checked (in mir_points_to)
+    -- that we are in fact dealing with a reference value, so the call to
+    -- `testRefShape` below should always succeed.
+    IsRefShape _ _ _ referenceInnerTy <-
+      case testRefShape referenceShp of
+        Just irs -> pure irs
+        Nothing ->
+          panic "doPointsTo"
+                [ "Unexpected non-reference type:"
+                , show $ PP.pretty $ shapeMirTy referenceShp
+                ]
+    referent <- firstPointsToReferent referents
+    MIRVal referentShp referentVal <-
+      resolveSetupVal cc env tyenv nameEnv referent
+    -- By the time we reach here, we have already checked (in mir_points_to)
+    -- that the type of the reference is compatible with the right-hand side
+    -- value, so the equality check below should never fail.
+    Refl <-
+      case W4.testEquality referenceInnerTy (shapeType referentShp) of
+        Just r -> pure r
+        Nothing ->
+          panic "doPointsTo"
+                [ "Unexpected type mismatch between reference and referent"
+                , "Reference type: " ++ show referenceInnerTy
+                , "Referent type:  " ++ show (shapeType referentShp)
+                ]
+    Mir.writeMirRefIO bak globals iTypes referenceVal referentVal
+  where
+    iTypes = cc ^. mccIntrinsicTypes
+    tyenv = MS.csAllocations mspec
+    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+
+-- | @mir_points_to@ always creates a 'MirPointsTo' value with exactly one
+-- referent on the right-hand side. As a result, this function should never
+-- fail.
+firstPointsToReferent ::
+  MonadFail m => [MS.SetupValue MIR] -> m (MS.SetupValue MIR)
+firstPointsToReferent referents =
+  case referents of
+    [referent] -> pure referent
+    _ -> fail $
+      "Unexpected mir_points_to statement with " ++ show (length referents) ++
+      " referent(s)"
 
 -- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
 mirAdtToTy :: Mir.Adt -> Mir.Ty

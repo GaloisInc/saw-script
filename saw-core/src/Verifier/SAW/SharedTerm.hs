@@ -283,8 +283,11 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
-import Control.Monad.State.Strict as State
-import Control.Monad.Reader
+import Control.Monad (foldM, forM, join, unless, when)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
 import Data.List (inits, find)
 import Data.Maybe
@@ -306,7 +309,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Prelude hiding (mapM, maximum)
+import Prelude hiding (maximum)
 import Text.URI
 
 import Verifier.SAW.Cache

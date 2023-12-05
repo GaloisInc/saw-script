@@ -77,9 +77,12 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Cont
+import Control.Monad ((>=>), foldM, forM_, zipWithM)
+import Control.Monad.Cont (Cont, cont, runCont)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
+import Control.Monad.Trans (MonadTrans(..))
 import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text as T
@@ -849,7 +852,7 @@ emptyMemoTable = IntMap.empty
 data MonadifyROState = MonadifyROState {
   -- | The monadification environment
   monStEnv :: MonadifyEnv,
-  -- | The monadification context 
+  -- | The monadification context
   monStCtx :: MonadifyCtx,
   -- | The current @SpecM@ function stack
   monStStack :: OpenTerm,

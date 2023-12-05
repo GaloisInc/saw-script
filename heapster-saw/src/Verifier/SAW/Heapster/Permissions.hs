@@ -46,17 +46,18 @@ import Data.Functor.Compose
 import qualified Data.BitVector.Sized as BV
 import Data.BitVector.Sized (BV)
 import Numeric.Natural
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat, natVal)
 import Data.Kind
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Applicative hiding (empty)
+import Control.Monad (MonadPlus(..))
 import Control.Monad.Extra (concatMapM)
-import Control.Monad.Identity hiding (ap)
-import Control.Monad.State hiding (ap)
-import Control.Monad.Reader hiding (ap)
+import Control.Monad.Identity ()
+import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+import Control.Monad.State (MonadState(..), State, evalState, modify)
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
 
 import Data.Binding.Hobbits hiding (sym)

@@ -1,5 +1,5 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 9.2.7
+# - Artifact uploads for binaries are from GHC 9.2.8
 # - Builds for Ubuntu happen on 22.04. We also include a single configuration
 #   for 20.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
@@ -78,7 +78,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-12, windows-2019]
         cabal: ["3.10.1.0"]
-        ghc: ["8.10.7", "9.2.7", "9.4.4"]
+        ghc: ["9.2.8", "9.4.8", "9.6.3"]
         run-tests: [true]
         hpc: [false]
         include:
@@ -86,28 +86,16 @@ jobs:
           # coverage of possible Linux configurations. Since we already run the
           # tests with the newest LTS release, we won't bother testing this one.
           - os: ubuntu-20.04
-            ghc: "9.2.7"
+            ghc: "9.2.8"
             cabal: "3.10.1.0"
             run-tests: false
             hpc: false
           # Include one job with HPC enabled
           - os: ubuntu-22.04
-            ghc: "9.4.4"
+            ghc: "9.4.8"
             cabal: "3.10.1.0"
             run-tests: true
             hpc: true
-        exclude:
-          # We exclude the GHC 8.10.7 job on Windows, as it is known to suffer
-          # from a hard-to-diagnose memory-related issue that does not affect
-          # later versions of GHC on Windows. (See
-          # https://github.com/GaloisInc/saw-script/issues/1961.) When we drop
-          # support for 8.10 entirely from SAW's support Window, we can remove
-          # this part of the matrix entirely.
-          - os: windows-2019
-            ghc: "8.10.7"
-            cabal: "3.10.1.0"
-            run-tests: true
-            hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -183,7 +171,7 @@ jobs:
           dest: dist-tests
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '9.2.7'"
+        if: "matrix.ghc == '9.2.8'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -200,14 +188,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '9.2.7' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.2.8' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '9.2.7' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.2.8' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
@@ -217,7 +205,7 @@ jobs:
       ##########################################################################
       # We upload an archive containing SAW, and also and archive containing SAW
       # and the set of possible SMT solvers, but only for our "primary"
-      # distribution (currently: GHC 9.2.7).  These archives are utilized in
+      # distribution (currently: GHC 9.2.8).  These archives are utilized in
       # subsequent CI jobs, but are also published for external users, and are
       # therefore signed.
       #
@@ -232,7 +220,7 @@ jobs:
       # In the next 3 steps we check that `matrix.hpc == false` so that if the
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
-      - if: matrix.ghc == '9.2.7' && matrix.hpc == false
+      - if: matrix.ghc == '9.2.8' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -240,7 +228,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.2.7' && matrix.hpc == false
+      - if: matrix.ghc == '9.2.8' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
@@ -248,7 +236,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.2.7' && matrix.run-tests && matrix.hpc == false
+      - if: matrix.ghc == '9.2.8' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -726,7 +714,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["9.2.7"]
+        ghc: ["9.2.8"]
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -779,7 +767,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        ghc: ["9.2.7"]
+        ghc: ["9.2.8"]
     steps:
       - uses: actions/checkout@v2
       - run: |

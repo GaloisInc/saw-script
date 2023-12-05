@@ -8,6 +8,8 @@
   * The `SAW/MIR/verify` command performs verification of a MIR function.
   * The `SAW/MIR/find ADT` command looks up an algebraic data type (ADT) name in
     a MIR module.
+  * The `SAW/MIR/assume` command assumes a specification for a MIR function
+    without performing any verification.
 
   See the [remote API
   documentation](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawmirload-module-command)
@@ -33,6 +35,8 @@
 * Add `"slice"` and `"slice range"` `setup value`s representing slices in MIR
   verification. Attempting to use these in LLVM or JVM verification will raise
   an error.
+* The `SAW/create ghost variable` command and the associated
+  `ghost variable value` value are now supported with JVM and MIR verification.
 
 ## 1.0.0 -- 2023-06-26
 

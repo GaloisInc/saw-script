@@ -25,7 +25,7 @@ Portability : portable
 module Verifier.SAW.Translation.Coq.SAWModule where
 
 import qualified Control.Monad.Except                          as Except
-import           Control.Monad.Reader                          hiding (fail)
+import           Control.Monad.Reader                          (asks)
 import           Prelude                                       hiding (fail)
 import           Prettyprinter                                 (Doc, pretty)
 

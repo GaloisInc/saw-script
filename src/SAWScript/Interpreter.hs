@@ -3605,16 +3605,21 @@ primitives = Map.fromList
     ]
 
   -- Ghost state support
-  , prim "llvm_declare_ghost_state"
+  , prim "declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
+  , prim "llvm_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (pureVal declare_ghost_state)
+    Current
+    [ "Legacy alternative name for `declare_ghost_state`." ]
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
-    [ "Legacy alternative name for `llvm_declare_ghost_state`." ]
+    [ "Legacy alternative name for `declare_ghost_state`." ]
 
   , prim "llvm_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
@@ -3627,6 +3632,20 @@ primitives = Map.fromList
     (pureVal llvm_ghost_value)
     Current
     [ "Legacy alternative name for `llvm_ghost_value`."]
+
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (pureVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "mir_ghost_value"
+    "Ghost -> Term -> MIRSetup ()"
+    (pureVal mir_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
@@ -3938,6 +3957,15 @@ primitives = Map.fromList
     , "be found in the MIRModule, this will raise an error."
     ]
 
+  , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
+    (pureVal mir_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a MIR specification. The given name is used only for"
+    , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
+    , "there isn't an appropriate MIR type, such as the Cryptol Array type."
+    ]
+
   , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
     (pureVal mir_fresh_expanded_value)
     Experimental
@@ -4044,6 +4072,14 @@ primitives = Map.fromList
     Experimental
     [ "Create a SetupValue representing a MIR tuple with the given list of"
     , "values as elements."
+    ]
+
+  , prim "mir_unsafe_assume_spec"
+    "MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec"
+    (pureVal mir_unsafe_assume_spec)
+    Experimental
+    [ "Return a MIRSpec corresponding to a MIRSetup block, as would be"
+    , "returned by mir_verify but without performing any verification."
     ]
 
   , prim "mir_verify"

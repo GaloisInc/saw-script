@@ -36,9 +36,11 @@ import GHC.TypeLits
 import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant
 import Data.Functor.Product
-import Control.Applicative
-import Control.Monad.Reader
-import Control.Monad.Except
+import qualified Control.Applicative as App
+import Control.Monad (MonadPlus(..))
+import Control.Monad.Except (Except, MonadError(..), runExcept)
+import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.Fail as Fail
 
@@ -1313,7 +1315,7 @@ data SomeMbWithPerms a where
 instance Functor SomeMbWithPerms where
   fmap f (SomeMbWithPerms ctx ps mb_a) = SomeMbWithPerms ctx ps (fmap f mb_a)
 
-instance Applicative SomeMbWithPerms where
+instance App.Applicative SomeMbWithPerms where
   pure a = SomeMbWithPerms CruCtxNil (emptyMb MNil) $ emptyMb a
   liftA2 f (SomeMbWithPerms ctx1 mb_ps1 mb_a1) (SomeMbWithPerms ctx2 mb_ps2 mb_a2) =
     SomeMbWithPerms (appendCruCtx ctx1 ctx2)
@@ -1551,7 +1553,7 @@ parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
 parseFunPermFromRust env w args ret str =
   do get3SomeFunPerm <- parseSome3FunPermFromRust env w str
      un3SomeFunPerm args ret get3SomeFunPerm
-  
+
 
 -- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
 parseSome3FunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
@@ -1585,10 +1587,7 @@ parseSome3FunPermFromRust _ _ str =
 parseNamedShapeFromRustDecl :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                                PermEnv -> prx w -> String ->
                                m (SomePartialNamedShape w)
-parseNamedShapeFromRustDecl env w str
-  | Right item <- parse @(Item Span) (inputStreamFromString str) =
-    runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item
-  | Left err <- parse @(Item Span) (inputStreamFromString str) =
-    fail ("Error parsing top-level item: " ++ show err)
-parseNamedShapeFromRustDecl _ _ str =
-  fail ("Malformed Rust type: " ++ str)
+parseNamedShapeFromRustDecl env w str =
+  case parse @(Item Span) (inputStreamFromString str) of
+   Right item -> runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item
+   Left err -> fail ("Error parsing top-level item: " ++ show err)

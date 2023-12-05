@@ -87,8 +87,6 @@ type instance MS.XSetupCast CJ.JVM = Void
 type instance MS.XSetupUnion CJ.JVM = Void
 type instance MS.XSetupGlobalInitializer CJ.JVM = Void
 
-type instance MS.XGhostState CJ.JVM = Void
-
 type JIdent = String -- FIXME(huffman): what to put here?
 
 type instance MS.TypeName CJ.JVM = JIdent

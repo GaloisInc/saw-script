@@ -34,9 +34,10 @@ module Verifier.SAW.Heapster.IRTTranslation (
 import Numeric.Natural
 import Data.Functor.Const
 import GHC.TypeLits
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad (zipWithM)
+import Control.Monad.Except (MonadError(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..), withReaderT)
+import Control.Monad.State (MonadState(..), State, evalState)
 
 import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits
@@ -209,7 +210,7 @@ irtTMbCombine x =
 -- | Create an @args :++: ext@ binding
 irtNus :: (RAssign Name args -> RAssign Name ext -> b) ->
           IRTTyVarsTransM args ext (Mb (args :++: ext) b)
-irtNus f = 
+irtNus f =
   do args <- irtTArgsCtx <$> ask
      ext  <- irtTExtCtx  <$> ask
      return $ mbCombine ext (nus (RL.map (\_->Proxy) args) (nus ext . f))
@@ -560,7 +561,7 @@ irtCtor c all_args =
 -- recursive permission/shape body given here, and an 'IRTVarIdxs' which is
 -- the second result of the same call to 'translateCompletePermIRTTyVars',
 -- translate the given recursive permission body to an IRT type description
-translateCompleteIRTDesc :: IRTDescs a => SharedContext -> PermEnv -> 
+translateCompleteIRTDesc :: IRTDescs a => SharedContext -> PermEnv ->
                             Ident -> CruCtx args ->
                             Mb args a -> IRTVarIdxs -> IO TypedTerm
 translateCompleteIRTDesc sc env tyVarsIdent args p ixs =
@@ -738,7 +739,7 @@ instance IRTDescs (RAssign ValuePerm ps) where
 -- of corresponding calls to 'translateCompleteIRTDesc' and
 -- 'translateCompletePermIRTTyVars' or 'translateCompleteShapeIRTTyVars',
 -- return a term which is @IRT@ applied to these identifiers
-translateCompleteIRTDef :: SharedContext -> PermEnv -> 
+translateCompleteIRTDef :: SharedContext -> PermEnv ->
                            Ident -> Ident -> CruCtx args ->
                            IO TypedTerm
 translateCompleteIRTDef sc env tyVarsIdent descIdent args =
@@ -751,7 +752,7 @@ translateCompleteIRTDef sc env tyVarsIdent descIdent args =
 -- 'translateCompleteIRTDesc', and 'translateCompletePermIRTTyVars' or
 -- 'translateCompleteShapeIRTTyVars', return a term which is @foldIRT@ applied
 -- to these identifiers
-translateCompleteIRTFoldFun :: SharedContext -> PermEnv -> 
+translateCompleteIRTFoldFun :: SharedContext -> PermEnv ->
                                Ident -> Ident -> Ident -> CruCtx args ->
                                IO Term
 translateCompleteIRTFoldFun sc env tyVarsIdent descIdent _ args =
@@ -764,7 +765,7 @@ translateCompleteIRTFoldFun sc env tyVarsIdent descIdent _ args =
 -- 'translateCompleteIRTDesc', and 'translateCompletePermIRTTyVars' or
 -- 'translateCompleteShapeIRTTyVars', return a term which is @unfoldIRT@
 -- applied to these identifiers
-translateCompleteIRTUnfoldFun :: SharedContext -> PermEnv -> 
+translateCompleteIRTUnfoldFun :: SharedContext -> PermEnv ->
                                  Ident -> Ident -> Ident -> CruCtx args ->
                                  IO Term
 translateCompleteIRTUnfoldFun sc env tyVarsIdent descIdent _ args =
@@ -775,7 +776,7 @@ translateCompleteIRTUnfoldFun sc env tyVarsIdent descIdent _ args =
 -- | Get the terms for the arguments to @IRT@, @foldIRT@, and @unfoldIRT@
 -- given the appropriate identifiers
 irtDefArgs :: Ident -> Ident -> TypeTransM args (OpenTerm, OpenTerm, OpenTerm)
-irtDefArgs tyVarsIdent descIdent = 
+irtDefArgs tyVarsIdent descIdent =
   do args <- askExprCtxTerms
      let tyVars = applyOpenTermMulti (globalOpenTerm tyVarsIdent) args
          substs = ctorOpenTerm "Prelude.IRTs_Nil" [tyVars]
@@ -783,18 +784,18 @@ irtDefArgs tyVarsIdent descIdent =
      return (tyVars, substs, desc)
 
 irtDefinition :: Ident -> Ident -> TypeTransM args OpenTerm
-irtDefinition tyVarsIdent descIdent = 
+irtDefinition tyVarsIdent descIdent =
   do (tyVars, substs, desc) <- irtDefArgs tyVarsIdent descIdent
      return $ dataTypeOpenTerm "Prelude.IRT" [tyVars, substs, desc]
 
 irtFoldFun :: Ident -> Ident -> TypeTransM args OpenTerm
-irtFoldFun tyVarsIdent descIdent = 
+irtFoldFun tyVarsIdent descIdent =
   do (tyVars, substs, desc) <- irtDefArgs tyVarsIdent descIdent
      return $ applyOpenTermMulti (globalOpenTerm "Prelude.foldIRT")
                                  [tyVars, substs, desc]
 
 irtUnfoldFun :: Ident -> Ident -> TypeTransM args OpenTerm
-irtUnfoldFun tyVarsIdent descIdent = 
+irtUnfoldFun tyVarsIdent descIdent =
   do (tyVars, substs, desc) <- irtDefArgs tyVarsIdent descIdent
      return $ applyOpenTermMulti (globalOpenTerm "Prelude.unfoldIRT")
                                  [tyVars, substs, desc]
