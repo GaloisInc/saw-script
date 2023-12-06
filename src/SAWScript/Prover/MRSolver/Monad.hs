@@ -76,6 +76,7 @@ data MRFailure
   = TermsNotRel Bool Term Term
   | TypesNotRel Bool Type Type
   | BindTypesNotEq Type Type
+  | ReturnTypesNotEq Type Type
   | FunNamesDoNotRefine FunName [Term] FunName [Term]
   | CompsDoNotRefine NormComp NormComp
   | ReturnNotError (Either Term Term) Term
@@ -152,6 +153,8 @@ instance PrettyInCtx MRFailure where
     prettyPrefixSep "Types not heterogeneously related:" tp1 "and" tp2
   prettyInCtx (BindTypesNotEq tp1 tp2) =
     prettyPrefixSep "Could not start co-induction because bind types are not equal:" tp1 "and" tp2
+  prettyInCtx (ReturnTypesNotEq tp1 tp2) =
+    prettyPrefixSep "Could not form refinement because return types are not equal:" tp1 "and" tp2
   prettyInCtx (FunNamesDoNotRefine f1 args1 f2 args2) =
     snd (prettyInCtxFunBindH f1 args1 Unlifted) >>= \d1 ->
     snd (prettyInCtxFunBindH f2 args2 Unlifted) >>= \d2 ->

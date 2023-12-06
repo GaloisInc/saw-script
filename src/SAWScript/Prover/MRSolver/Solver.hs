@@ -1408,6 +1408,8 @@ refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
   do (SpecMParams _ev1 _stack1, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
      (SpecMParams  ev2  stack2, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
+     tps_eq <- mrConvertible tp1 tp2
+     unless tps_eq $ throwMRFailure (ReturnTypesNotEq (Type tp1) (Type tp2))
      rpre <- liftSC2 scGlobalApply "Prelude.eqPreRel" [ev2, stack2]
      rpost <- liftSC2 scGlobalApply "Prelude.eqPostRel" [ev2, stack2]
      rr <- liftSC2 scGlobalApply "Prelude.eqRR" [tp2]
