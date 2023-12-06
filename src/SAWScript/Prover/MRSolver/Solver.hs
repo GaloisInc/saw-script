@@ -157,8 +157,6 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)
 
-import Prettyprinter
-
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
@@ -755,7 +753,8 @@ proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
          f2 = coIndHypRHSFun hyp
          args1 = coIndHypLHS hyp
          args2 = coIndHypRHS hyp
-     mrDebugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
+     mrDebugPPInCtxM 1 (prettyWithCtx emptyMRVarCtx $
+                        prettyPrefix "proveCoIndHyp" hyp)
      lhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f1 args1
      rhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f2 args2
      (invar1, invar2) <- applyCoIndHypInvariants hyp
@@ -1033,7 +1032,7 @@ mrRefines' m1 (AssumeBoolBind cond2 k2) =
        _ -> withAssumption cond2 $ mrRefines m1 m2
 mrRefines' (AssertBoolBind cond1 k1) m2 =
   do m1 <- liftSC0 scUnitValue >>= applyCompFun k1
-     cond1_str <- flip showInCtx cond1 <$> mrUVars
+     cond1_str <- mrShowInCtx cond1
      let err_txt = "mrRefines failed assertion: " <> T.pack cond1_str
      m1' <- ErrorS <$> liftSC1 scString err_txt
      not_cond1 <- liftSC1 scNot cond1
@@ -1106,7 +1105,7 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- If we have an opaque FunAssump that f1 args1' refines f2 args2', then
   -- prove that args1 = args1', args2 = args2', and then that k1 refines k2
   (_, Just fa@(FunAssump ctx _ args1' (OpaqueFunAssump f2' args2') _)) | f2 == f2' ->
-    do mrDebugPretty 2 $ flip runPPInCtxM ctx $
+    do mrDebugPPInCtxM 2 $ prettyWithCtx ctx $
          prettyAppList [return "mrRefines using opaque FunAssump:",
                         prettyInCtx ctx, return ".",
                         prettyTermApp (funNameTerm f1) args1',
@@ -1130,8 +1129,12 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- case above, treat either case like we have a rewrite FunAssump and prove
   -- that args1 = args1' and then that f args refines m2
   (_, Just fa@(FunAssump ctx _ args1' rhs _)) ->
-    do mrDebugPretty 2 $ flip runPPInCtxM ctx $
-         prettyAppList [return "mrRefines rewriting by FunAssump:",
+    do let fassump_tp_str = case fassumpRHS fa of
+                              OpaqueFunAssump _ _ -> "opaque"
+                              RewriteFunAssump _ -> "rewrite"
+       mrDebugPPInCtxM 2 $ prettyWithCtx ctx $
+         prettyAppList [return ("mrRefines rewriting by " <> fassump_tp_str
+                                                          <> " FunAssump:"),
                         prettyInCtx ctx, return ".",
                         prettyTermApp (funNameTerm f1) args1',
                         return "|=",

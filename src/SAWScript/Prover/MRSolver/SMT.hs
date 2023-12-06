@@ -135,7 +135,8 @@ primGenBVVecFilter sc n (asGenCryMTerm -> Just (asBvToNat -> Just (asNat -> Just
      body <- scApplyBeta sc f =<< scBvToNat sc n i_tm
      scLambda sc "i" i_tp body
 primGenBVVecFilter _ _ t =
-  error $ "primGenBVVec could not handle: " ++ showInCtx emptyMRVarCtx t
+  error $ "primGenBVVec could not handle: " ++
+          showInCtx defaultPPOpts emptyMRVarCtx t
 
 -- | An implementation of a primitive function that expects a term of the form
 -- @genCryM _ a _@, @genFromBVVec ... (genBVVec _ _ a _) ...@, or
@@ -361,7 +362,7 @@ smtNorm sc t =
 mrNormTerm :: Term -> MRM t Term
 mrNormTerm t =
   mrDebugPrint 2 "Normalizing term:" >>
-  mrDebugPrettyInCtx 2 t >>
+  mrDebugPPInCtx 2 t >>
   liftSC1 smtNorm t
 
 -- | Normalize an open term by wrapping it in lambdas, normalizing, and then
@@ -394,8 +395,9 @@ mrProvableRaw prop_term =
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      nenv <- liftIO (scGetNamingEnv sc)
+     opts <- mrPPOpts
      mrDebugPrint 2 ("Calling SMT solver with proposition: " ++
-                     prettyProp defaultPPOpts nenv prop)
+                     prettyProp opts nenv prop)
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
      -- execution
@@ -414,8 +416,8 @@ mrProvableRaw prop_term =
        Right (stats, SolveCounterexample cex) ->
          mrDebugPrint 2 "SMT solver response: not provable" >>
          mrDebugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
-           "\n - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
-           " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
+           "\n - " ++ renderSawDoc opts (ppTerm opts (Unshared (FTermF (ExtCns x)))) ++
+           " = " ++ renderSawDoc opts (ppFirstOrderValue opts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
        Right (stats, SolveSuccess _) ->
          mrDebugPrint 2 "SMT solver response: provable" >>

@@ -36,6 +36,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
@@ -181,12 +182,15 @@ listFunAssumps = concatMap Map.elems . HashMap.elems
 -- | A global MR Solver environment
 data MREnv = MREnv {
   -- | The debug level, which controls debug printing
-  mreDebugLevel :: Int
+  mreDebugLevel :: Int,
+  -- | The options for pretty-printing to be used by MRSolver in error messages
+  -- and debug printing
+  mrePPOpts :: PPOpts
 }
 
 -- | The empty 'MREnv'
 emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreDebugLevel = 0 }
+emptyMREnv = MREnv { mreDebugLevel = 0, mrePPOpts = defaultPPOpts }
 
 -- | Set the debug level of a Mr Solver environment
 mrEnvSetDebugLevel :: Int -> MREnv -> MREnv

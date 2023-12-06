@@ -325,10 +325,10 @@ showRefnset opts ss =
     ppFunAssump (MRSolver.FunAssump ctx f args rhs _) =
       PP.pretty '*' PP.<+>
       (PP.nest 2 $ PP.fillSep
-       [ ppTermAppInCtx ctx (funNameTerm f) args
+       [ ppTermAppInCtx opts' ctx (funNameTerm f) args
        , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
     ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
-      ppTermAppInCtx ctx (funNameTerm f) args
+      ppTermAppInCtx opts' ctx (funNameTerm f) args
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
       SAWCorePP.ppTermInCtx opts' (map fst $ mrVarCtxInnerToOuter ctx) rhs 
     opts' = sawPPOpts opts

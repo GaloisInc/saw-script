@@ -2255,11 +2255,11 @@ mrSolverGetResultOrFail ::
   TopLevel a
 mrSolverGetResultOrFail env errStr succStr res = case res of
   Left err | Prover.mreDebugLevel env == 0 ->
-    fail (Prover.showMRFailure err ++ "\n[MRSolver] " ++ errStr)
+    fail (Prover.showMRFailure env err ++ "\n[MRSolver] " ++ errStr)
   Left err ->
     -- we ignore the MRFailure context here since it will have already
     -- been printed by the debug trace
-    fail (Prover.showMRFailureNoCtx err ++ "\n[MRSolver] " ++ errStr)
+    fail (Prover.showMRFailureNoCtx env err ++ "\n[MRSolver] " ++ errStr)
   Right a | Just s <- succStr ->
     printOutLnTop Info s >> return a
   Right a -> return a

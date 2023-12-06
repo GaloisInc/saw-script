@@ -439,25 +439,34 @@ deriving instance TermLike Comp
 -- | The monad for pretty-printing in a context of SAW core variables. The
 -- context is in innermost-to-outermost order, i.e. from newest to oldest
 -- variable (see 'mrVarCtxInnerToOuter' for more detail on this ordering).
-newtype PPInCtxM a = PPInCtxM (Reader [LocalName] a)
+-- 
+-- NOTE: By convention, functions which return something of type 'PPInCtxM'
+-- have the prefix @pretty@ (e.g. 'prettyInCtx', 'prettyTermApp') and
+-- functions which return something of type 'SawDoc' have the prefix @pp@
+-- (e.g. 'ppInCtx', 'ppTermAppInCtx'). This latter convention is consistent with
+-- the rest of saw-script (e.g. 'ppTerm' defined in @Verifier.SAW.Term.Pretty@,
+-- 'ppFirstOrderValue' defined in @Verifier.SAW.FiniteValue@).
+newtype PPInCtxM a = PPInCtxM (Reader (PPOpts, [LocalName]) a)
                    deriving newtype (Functor, Applicative, Monad,
-                                     MonadReader [LocalName])
+                                     MonadReader (PPOpts, [LocalName]))
 
--- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context
-runPPInCtxM :: PPInCtxM a -> MRVarCtx -> a
-runPPInCtxM (PPInCtxM m) = runReader m . map fst . mrVarCtxInnerToOuter
+-- | Locally set the context of SAW core variables for a 'PPInCtxM' computation
+prettyWithCtx :: MRVarCtx -> PPInCtxM a -> PPInCtxM a
+prettyWithCtx ctx = local (fmap $ const $ map fst $ mrVarCtxInnerToOuter ctx)
 
--- | Pretty-print an object in a SAW core context
-ppInCtx :: PrettyInCtx a => MRVarCtx -> a -> SawDoc
-ppInCtx ctx a = runPPInCtxM (prettyInCtx a) ctx
+-- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context and 'PPOpts'
+runPPInCtxM :: PPInCtxM a -> PPOpts -> MRVarCtx -> a
+runPPInCtxM (PPInCtxM m) opts ctx =
+  runReader m (opts, map fst $ mrVarCtxInnerToOuter ctx)
 
--- | Pretty-print an object in a SAW core context and render to a 'String'
-showInCtx :: PrettyInCtx a => MRVarCtx -> a -> String
-showInCtx ctx a = renderSawDoc defaultPPOpts $ ppInCtx ctx a
+-- | Pretty-print an object in a SAW core context with the given 'PPOpts'
+ppInCtx :: PrettyInCtx a => PPOpts -> MRVarCtx -> a -> SawDoc
+ppInCtx opts ctx a = runPPInCtxM (prettyInCtx a) opts ctx
 
--- | Pretty-print an object in the empty SAW core context
-ppInEmptyCtx :: PrettyInCtx a => a -> SawDoc
-ppInEmptyCtx = ppInCtx emptyMRVarCtx
+-- | Pretty-print an object in a SAW core context and render to a 'String' with
+-- the given 'PPOpts'
+showInCtx :: PrettyInCtx a => PPOpts -> MRVarCtx -> a -> String
+showInCtx opts ctx a = renderSawDoc opts $ runPPInCtxM (prettyInCtx a) opts ctx
 
 -- | A generic function for pretty-printing an object in a SAW core context of
 -- locally-bound names
@@ -465,7 +474,8 @@ class PrettyInCtx a where
   prettyInCtx :: a -> PPInCtxM SawDoc
 
 instance PrettyInCtx Term where
-  prettyInCtx t = flip (ppTermInCtx defaultPPOpts) t <$> ask
+  prettyInCtx t = do (opts, ctx) <- ask
+                     return $ ppTermInCtx opts ctx t
 
 -- | Combine a list of pretty-printed documents like applications are combined
 prettyAppList :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
@@ -476,20 +486,24 @@ prettyTermApp :: Term -> [Term] -> PPInCtxM SawDoc
 prettyTermApp f_top args =
   prettyInCtx $ foldl (\f arg -> Unshared $ App f arg) f_top args
 
--- | Pretty-print the application of a 'Term' in a SAW core context
-ppTermAppInCtx :: MRVarCtx -> Term -> [Term] -> SawDoc
-ppTermAppInCtx ctx f_top args = runPPInCtxM (prettyTermApp f_top args) ctx
+-- | Pretty-print the application of a 'Term' in a SAW core context with the
+-- given 'PPOpts'
+ppTermAppInCtx :: PPOpts -> MRVarCtx -> Term -> [Term] -> SawDoc
+ppTermAppInCtx opts ctx f_top args =
+  runPPInCtxM (prettyTermApp f_top args) opts ctx
 
 instance PrettyInCtx MRVarCtx where
-  prettyInCtx = return . align . sep . helper [] . mrVarCtxOuterToInner where
-    helper :: [LocalName] -> [(LocalName,Term)] -> [SawDoc]
-    helper _ [] = []
-    helper ns [(n, tp)] =
-      [ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
-       ppTermInCtx defaultPPOpts ns tp]
-    helper ns ((n, tp):ctx) =
-      (ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
-       ppTermInCtx defaultPPOpts ns tp <> ",") : (helper (n:ns) ctx)
+  prettyInCtx ctx_top = do
+    (opts, _) <- ask
+    return $ align $ sep $ helper opts [] $ mrVarCtxOuterToInner ctx_top
+    where helper :: PPOpts -> [LocalName] -> [(LocalName,Term)] -> [SawDoc]
+          helper _ _ [] = []
+          helper opts ns [(n, tp)] =
+            [ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+             ppTermInCtx opts ns tp]
+          helper opts ns ((n, tp):ctx) =
+            (ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+             ppTermInCtx opts ns tp <> ",") : (helper opts (n:ns) ctx)
 
 instance PrettyInCtx SawDoc where
   prettyInCtx pp = return pp
