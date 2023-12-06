@@ -1074,11 +1074,10 @@ mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
-mrRefines' (FunBind (CallSName f) args1 isLifted k1)
-           (FunBind (CallSName f') args2 isLifted' k2)
-  | f == f' && isLifted == isLifted' && length args1 == length args2 =
+mrRefines' (FunBind f args1 _ k1) (FunBind f' args2 _ k2)
+  | f == f' && length args1 == length args2 =
     zipWithM_ mrAssertProveEq args1 args2 >>
-    mrFunOutType (CallSName f) args1 >>= \(_, tp) ->
+    mrFunOutType f args1 >>= \(_, tp) ->
     mrRefinesFun tp k1 tp k2
 
 mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
