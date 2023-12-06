@@ -919,8 +919,11 @@ mrFunBody f args = mrFunNameBody f >>= \case
 -- per 'mrCallsFun'
 mrFunBodyRecInfo :: FunName -> [Term] -> MRM t (Maybe (Term, Bool))
 mrFunBodyRecInfo f args =
-  mrFunBody f args >>= \case
-  Just f_body -> Just <$> (f_body,) <$> mrCallsFun f f_body
+  mrFunNameBody f >>= \case
+  Just body -> do
+    body_applied <- mrApplyAll body args
+    is_recursive <- mrCallsFun f body
+    return $ Just (body_applied, is_recursive)
   Nothing -> return Nothing
 
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
