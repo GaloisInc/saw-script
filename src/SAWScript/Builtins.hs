@@ -2310,6 +2310,13 @@ mrSolverSetDebug dlvl =
   modify (\rw -> rw { rwMRSolverEnv =
                         Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
 
+-- | Modify the 'PPOpts' of the current 'MREnv' to have a maximum printing depth
+mrSolverSetDebugDepth :: Int -> TopLevel ()
+mrSolverSetDebugDepth depth =
+  modify (\rw -> rw { rwMRSolverEnv = (rwMRSolverEnv rw) {
+                        Prover.mrePPOpts = (Prover.mrePPOpts (rwMRSolverEnv rw)) {
+                          ppMaxDepth = Just depth }}})
+
 -- | Given a list of names and types representing variables over which to
 -- quantify as as well as two terms containing those variables, which may be
 -- terms or functions in the SpecM monad, construct the SAWCore term which is

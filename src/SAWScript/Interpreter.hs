@@ -4198,6 +4198,12 @@ primitives = Map.fromList
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
 
+  , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
+    (pureVal mrSolverSetDebugDepth)
+    Experimental
+    [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
+    , "and debug output to a maximum depth" ]
+
   , prim "mrsolver" "ProofScript ()"
     (pureVal (mrSolver emptyRefnset))
     Experimental
