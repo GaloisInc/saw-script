@@ -75,6 +75,8 @@ data FailCtx
 data MRFailure
   = TermsNotRel Bool Term Term
   | TypesNotRel Bool Type Type
+  | BindTypesNotEq Type Type
+  | FunNamesDoNotRefine FunName [Term] FunName [Term]
   | CompsDoNotRefine NormComp NormComp
   | ReturnNotError (Either Term Term) Term
   | FunsNotEq FunName FunName
@@ -148,6 +150,17 @@ instance PrettyInCtx MRFailure where
     prettyPrefixSep "Types not equal:" tp1 "and" tp2
   prettyInCtx (TypesNotRel True tp1 tp2) =
     prettyPrefixSep "Types not heterogeneously related:" tp1 "and" tp2
+  prettyInCtx (BindTypesNotEq tp1 tp2) =
+    prettyPrefixSep "Could not start co-induction because bind types are not equal:" tp1 "and" tp2
+  prettyInCtx (FunNamesDoNotRefine f1 args1 f2 args2) =
+    snd (prettyInCtxFunBindH f1 args1 Unlifted) >>= \d1 ->
+    snd (prettyInCtxFunBindH f2 args2 Unlifted) >>= \d2 ->
+    let prefix = "Could not prove function refinement:" in
+    let postfix = ["because:",
+                   "- No matching assumptions could be found",
+                   "- At least one side cannot be unfolded without fix"] in
+    return $ group (prefix <> nest 2 (line <> d1) <> line <>
+                    "|=" <> nest 2 (line <> d2) <> line <> vsep postfix)
   prettyInCtx (CompsDoNotRefine m1 m2) =
     prettyPrefixSep "Could not prove refinement: " m1 "|=" m2
   prettyInCtx (ReturnNotError eith_terr t) =

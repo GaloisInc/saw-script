@@ -1163,22 +1163,18 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
   -- heterogeneously related, then try to coinductively prove that
   -- f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2, and
   -- then try to prove that k1 |= k2
-  _ | Just _ <- mb_convs
-    , Just _ <- maybe_f1_body
-    , Just _ <- maybe_f2_body
-    , isLifted1 == isLifted2 ->
-      mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
+  _ | Just _ <- maybe_f1_body
+    , Just _ <- maybe_f2_body ->
+      case mb_convs of
+        Just _ -> mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
+        _ -> throwMRFailure (BindTypesNotEq (Type tp1) (Type tp2))
 
   -- If we cannot line up f1 and f2, then making progress here would require us
   -- to somehow split either m1 or m2 into some bind m' >>= k' such that m' is
   -- related to the function call on the other side and k' is related to the
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
-  _ ->
-    do if isLifted1 /= isLifted2
-       then mrDebugPrint 1 "mrRefines: isLifted cases do not match"
-       else mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2
-       throwMRFailure (CompsDoNotRefine m1 m2)
+  _ -> throwMRFailure (FunNamesDoNotRefine f1 args1 f2 args2)
 
 mrRefines' m1@(FunBind f1 args1 isLifted1 k1) m2 =
   mrGetFunAssump f1 >>= \case
