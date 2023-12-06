@@ -1146,7 +1146,10 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1)
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBindLiftStack isLifted1 rhs'' k1
+       -- It's important to instantiate the evars here so that rhs is well-typed
+       -- when bound with k1
+       rhs''' <- mapTermLike mrSubstEVars rhs''
+       m1' <- normBindLiftStack isLifted1 rhs''' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
@@ -1186,7 +1189,10 @@ mrRefines' m1@(FunBind f1 args1 isLifted1 k1) m2 =
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBindLiftStack isLifted1 rhs'' k1
+       -- It's important to instantiate the evars here so that rhs is well-typed
+       -- when bound with k1
+       rhs''' <- mapTermLike mrSubstEVars rhs''
+       m1' <- normBindLiftStack isLifted1 rhs''' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1

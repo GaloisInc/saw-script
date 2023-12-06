@@ -350,57 +350,57 @@ memoFixTermFun f = memoFixTermFunAccum (f .) ()
 -- * Lifting MR Solver Terms
 ----------------------------------------------------------------------
 
--- | A term-like object is one that supports lifting and substitution. This
--- class can be derived using @DeriveAnyClass@.
-class TermLike a where
-  liftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
-  substTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> a -> m a
+-- | Apply 'liftTerm' to all component terms in a 'TermLike' object
+liftTermLike :: (TermLike a, MonadTerm m) =>
+                DeBruijnIndex -> DeBruijnIndex -> a -> m a
+liftTermLike i n = mapTermLike (liftTerm i n)
 
-  -- Default instances for @DeriveAnyClass@
-  default liftTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
-                          DeBruijnIndex -> DeBruijnIndex -> a -> m a
-  liftTermLike n i = fmap to . gLiftTermLike n i . from
-  default substTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
-                           DeBruijnIndex -> [Term] -> a -> m a
-  substTermLike n i = fmap to . gSubstTermLike n i . from
+-- | Apply 'substTerm' to all component terms in a 'TermLike' object
+substTermLike :: (TermLike a, MonadTerm m) =>
+                DeBruijnIndex -> [Term] -> a -> m a
+substTermLike i s = mapTermLike (substTerm i s)
+
+-- | A term-like object is one that supports monadically mapping over all
+-- component terms. This is mainly used for lifting and substitution - see
+-- @liftTermLike@ and @substTermLike@. This class can be derived using
+-- @DeriveAnyClass@.
+class TermLike a where
+  mapTermLike :: MonadTerm m => (Term -> m Term) -> a -> m a
+
+  -- Default instance for @DeriveAnyClass@
+  default mapTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
+                         (Term -> m Term) -> a -> m a
+  mapTermLike f = fmap to . gMapTermLike f . from
 
 -- | A generic version of 'TermLike' for @DeriveAnyClass@, based on:
 -- https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html#g:12
 class GTermLike f where
-  gLiftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> f p -> m (f p)
-  gSubstTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> f p -> m (f p)
+  gMapTermLike :: MonadTerm m => (Term -> m Term) -> f p -> m (f p)
 
 -- | 'TermLike' on empty types
 instance GTermLike V1 where
-  gLiftTermLike _ _ = \case {}
-  gSubstTermLike _ _ = \case {}
+  gMapTermLike _ = \case {}
 
 -- | 'TermLike' on unary types
 instance GTermLike U1 where
-  gLiftTermLike _ _ U1 = return U1
-  gSubstTermLike _ _ U1 = return U1
+  gMapTermLike _ U1 = return U1
 
 -- | 'TermLike' on sums
 instance (GTermLike f, GTermLike g) => GTermLike (f :+: g) where
-  gLiftTermLike n i (L1 a) = L1 <$> gLiftTermLike n i a
-  gLiftTermLike n i (R1 b) = R1 <$> gLiftTermLike n i b
-  gSubstTermLike n s (L1 a) = L1 <$> gSubstTermLike n s a
-  gSubstTermLike n s (R1 b) = R1 <$> gSubstTermLike n s b
+  gMapTermLike f (L1 a) = L1 <$> gMapTermLike f a
+  gMapTermLike f (R1 b) = R1 <$> gMapTermLike f b
 
 -- | 'TermLike' on products
 instance (GTermLike f, GTermLike g) => GTermLike (f :*: g) where
-  gLiftTermLike n i (a :*: b) = (:*:) <$> gLiftTermLike n i a <*> gLiftTermLike n i b
-  gSubstTermLike n s (a :*: b) = (:*:) <$> gSubstTermLike n s a <*> gSubstTermLike n s b
+  gMapTermLike f (a :*: b) = (:*:) <$> gMapTermLike f a <*> gMapTermLike f b
 
 -- | 'TermLike' on fields
 instance TermLike a => GTermLike (K1 i a) where
-  gLiftTermLike n i (K1 a) = K1 <$> liftTermLike n i a
-  gSubstTermLike n i (K1 a) = K1 <$> substTermLike n i a
+  gMapTermLike f (K1 a) = K1 <$> mapTermLike f a
 
 -- | 'GTermLike' ignores meta-information
 instance GTermLike a => GTermLike (M1 i c a) where
-  gLiftTermLike n i (M1 a) = M1 <$> gLiftTermLike n i a
-  gSubstTermLike n i (M1 a) = M1 <$> gSubstTermLike n i a
+  gMapTermLike f (M1 a) = M1 <$> gMapTermLike f a
 
 deriving instance _ => TermLike (a,b)
 deriving instance _ => TermLike (a,b,c)
@@ -411,18 +411,14 @@ deriving instance _ => TermLike (a,b,c,d,e,f,g)
 deriving instance _ => TermLike [a]
 
 instance TermLike Term where
-  liftTermLike = liftTerm
-  substTermLike = substTerm
+  mapTermLike f = f
 
 instance TermLike FunName where
-  liftTermLike _ _ = return
-  substTermLike _ _ = return
+  mapTermLike _ = return
 instance TermLike LocalName where
-  liftTermLike _ _ = return
-  substTermLike _ _ = return
+  mapTermLike _ = return
 instance TermLike Natural where
-  liftTermLike _ _ = return
-  substTermLike _ _ = return
+  mapTermLike _ = return
 
 deriving anyclass instance TermLike Type
 deriving instance TermLike (SpecMParams Term)
