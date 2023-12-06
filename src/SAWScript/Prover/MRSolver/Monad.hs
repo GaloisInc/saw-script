@@ -45,6 +45,7 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
@@ -749,6 +750,9 @@ uniquifyNames (nm:nms) nms_other =
 
 -- | Build a lambda term with the lifting (in the sense of 'incVars') of an
 -- MR Solver term
+-- NOTE: The types in the given context can have earlier variables in the
+-- context free. Thus, if passing a list of types all in the same context, later
+-- types should be lifted.
 mrLambdaLift :: TermLike tm => [(LocalName,Term)] -> tm ->
                 ([Term] -> tm -> MRM t Term) -> MRM t Term
 mrLambdaLift [] t f = f [] t
@@ -769,20 +773,23 @@ mrLambdaLift ctx t f =
 -- | Call 'mrLambdaLift' with exactly one 'Term' argument.
 mrLambdaLift1 :: TermLike tm => (LocalName,Term) -> tm ->
                  (Term -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift1 ctx t f =
-  mrLambdaLift [ctx] t $ \vars t' ->
+mrLambdaLift1 (nm,tp) t f =
+  mrLambdaLift [(nm,tp)] t $ \vars t' ->
     case vars of
       [v] -> f v t'
-      _   -> error "mrLambdaLift1: Expected exactly one Term argument"
+      _   -> panic "mrLambdaLift1" ["Expected exactly one Term argument"]
 
--- | Call 'mrLambdaLift' with exactly two 'Term' arguments.
+-- | Call 'mrLambdaLift' with exactly two 'Term' arguments which are both in the
+-- same context. (To create two lambdas where the type of the second variable
+-- depends on the value of the first, use 'mrLambdaLift' directly.)
 mrLambdaLift2 :: TermLike tm => (LocalName,Term) -> (LocalName,Term) -> tm ->
                  (Term -> Term -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift2 ctx1 ctx2 t f =
-  mrLambdaLift [ctx1, ctx2] t $ \vars t' ->
+mrLambdaLift2 (nm1,tp1) (nm2,tp2) t f =
+  liftTermLike 0 1 tp2 >>= \tp2' ->
+  mrLambdaLift [(nm1,tp1), (nm2,tp2')] t $ \vars t' ->
     case vars of
       [v1, v2] -> f v1 v2 t'
-      _        -> error "mrLambdaLift2: Expected exactly two Term arguments"
+      _        -> panic "mrLambdaLift2" ["Expected exactly two Term arguments"]
 
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
@@ -790,7 +797,7 @@ mrLambdaLift2 ctx1 ctx2 t f =
 withUVar :: LocalName -> Type -> (Term -> MRM t a) -> MRM t a
 withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) $ \case
   [v] -> m v
-  _   -> error "withUVar: impossible"
+  _   -> panic "withUVar" ["impossible"]
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
