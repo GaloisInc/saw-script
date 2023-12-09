@@ -26,6 +26,8 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_return
   , mir_unsafe_assume_spec
   , mir_verify
+    -- ** MIR enums
+  , mir_enum_value
     -- ** MIR slices
   , mir_slice_value
   , mir_slice_range_value
@@ -56,7 +58,7 @@ module SAWScript.Crucible.MIR.Builtins
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, forM_, unless, when)
+import Control.Monad (foldM, forM, forM_, unless, when, zipWithM)
 import qualified Control.Monad.Catch as X
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
@@ -64,8 +66,9 @@ import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
+import qualified Data.Foldable.WithIndex as FWI
 import Data.IORef
-import qualified Data.List as List (find)
+import qualified Data.List.Extra as List (find, unsnoc)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
@@ -75,6 +78,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (knownNat, natValue)
 import Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Set as Set
 import qualified Data.Text as Text
@@ -288,13 +292,9 @@ constructExpandedSetupValue cc sc = go
       case shp of
         UnitShape _ ->
           pure $ MS.SetupTuple () []
-        PrimShape ty _ ->
-          case cryptolTypeOfActual ty of
-            Nothing ->
-              X.throwM $ MIRFreshExpandedValueUnsupportedType ty
-            Just cty -> do
-              fv <- Setup.freshVariable sc pfx cty
-              pure $ MS.SetupTerm fv
+        PrimShape ty _ -> do
+          fv <- freshPrimVariable pfx ty
+          pure $ MS.SetupTerm fv
         TupleShape _ _ fldShps -> do
           flds <- goFlds pfx fldShps
           pure $ MS.SetupTuple () flds
@@ -303,7 +303,7 @@ constructExpandedSetupValue cc sc = go
             Mir.TyArray _ n -> do
               elems <-
                 traverse
-                  (\i -> go (pfx <> "." <> Text.pack (show i)) elemShp)
+                  (\i -> go (pfx <> "_" <> Text.pack (show i)) elemShp)
                   [0..n-1]
               pure $ MS.SetupArray elemTy elems
             _ ->
@@ -329,17 +329,45 @@ constructExpandedSetupValue cc sc = go
                   adt_not_found_panic "StructShape" adtName
             _ ->
               non_adt_type_panic "StructShape" ty
+        EnumShape ty _ variantShps _ discrShp ->
+          case ty of
+            Mir.TyAdt adtName _ _ ->
+              case col ^. Mir.adts . at adtName of
+                Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
+                  case kind of
+                    Mir.Enum _ ->
+                      MS.SetupEnum <$> goEnum pfx adt discrShp variantShps
+                    Mir.Struct ->
+                      panic "constructExpandedSetupValue"
+                            ["Expected enum, encountered struct"]
+                    Mir.Union ->
+                      panic "constructExpandedSetupValue"
+                            ["Expected enum, encountered union"]
+                Nothing ->
+                  adt_not_found_panic "EnumShape" adtName
+            _ ->
+              non_adt_type_panic "EnumShape" ty
         TransparentShape ty shp' ->
           case ty of
             Mir.TyAdt adtName _ _ -> do
               case col ^. Mir.adts . at adtName of
-                Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
+                Just adt@(Mir.Adt adtNm kind variants _ _ _ _) ->
                   case kind of
                     Mir.Struct -> do
                       val <- go pfx shp'
                       pure $ MS.SetupStruct adt [val]
-                    Mir.Enum{} ->
-                      fail "`repr(transparent)` enums not currently supported"
+                    Mir.Enum{}
+                      |  [variant] <- variants
+                      -> do val <- go pfx shp'
+                            pure $ MS.SetupEnum
+                                 $ MirSetupEnumVariant adt variant 0 [val]
+
+                      |  otherwise
+                      -> panic "constructExpandedSetupValue"
+                               [ "`repr(transparent)` enum that doesn't have exactly one variant"
+                               , "Enum: " ++ show adtNm
+                               , "Number of variants: " ++ show (length variants)
+                               ]
                     Mir.Union ->
                       panic "constructExpandedSetupValue"
                             [ "Unexpected `repr(transparent)` union:"
@@ -356,6 +384,64 @@ constructExpandedSetupValue cc sc = go
         FnPtrShape ty _ _ ->
           X.throwM $ MIRFreshExpandedValueUnsupportedType ty
 
+    -- Create a fresh symbolic enum value, as described in
+    -- Note [Symboliic enums] in SAWScript.Crucible.MIR.Setup.Value.
+    goEnum ::
+      forall discrShp variantCtx.
+      Text ->
+      Mir.Adt ->
+      TypeShape discrShp ->
+      Ctx.Assignment VariantShape variantCtx ->
+      CrucibleSetup MIR MirSetupEnum
+    goEnum pfx adt@(Mir.Adt _ _ variants _ _ _ _) discrShp variantShps =
+      mccWithBackend cc $ \bak ->
+      do -- First, create a symbolic discriminant value.
+         IsBVShape discrTy discrW <- pure $ testDiscriminantIsBV discrShp
+         let discrPfx = pfx <> "_discr"
+         discrVar <- freshPrimVariable discrPfx discrTy
+         let discrVal = MS.SetupTerm discrVar
+
+         -- Next, add Crucible assumptions that constraint the discriminant
+         -- to be equal to one of the possible variants' discriminant values.
+         -- This assumption will be of the form:
+         --
+         --   (discr == 0) \/ (discr == 1) \/ ...
+         discrWNat <- liftIO $ scNat sc $ natValue discrW
+         possibleDiscrTerms <- liftIO $
+           traverse (\discr -> do
+                      discrNat  <- scNat sc $ fromInteger discr
+                      scBvNat sc discrWNat discrNat)
+                    (map getEnumVariantDiscr variants)
+         scFalse <- liftIO $ scBool sc False
+         possibleDiscrPredTerm <- liftIO $
+           foldM
+             (\z possibleDiscrTerm -> do
+               p <- scBvEq sc discrWNat (ttTerm discrVar) possibleDiscrTerm
+               scOr sc p z)
+             scFalse
+             possibleDiscrTerms
+         possibleDiscrPred <- liftIO $ resolveSAWPred cc possibleDiscrPredTerm
+         loc <- SS.toW4Loc "mir_fresh_expanded_value" <$> lift (lift getPosition)
+         liftIO $ Crucible.addAssumption bak $
+           Crucible.GenericAssumption
+             loc "Symbolic enum discriminant constraints" possibleDiscrPred
+
+         -- Finally, create symbolic fields for each of the possible variants.
+         let variantAssns :: [Some (Ctx.Assignment FieldShape)]
+             variantAssns =
+               FC.toListFC
+                 (\(VariantShape fldShps) -> Some fldShps)
+                 variantShps
+         variantVals <-
+           zipWithM
+             (\variant (Some fldShps) ->
+               let variantPfx = pfx <> "_" <> getEnumVariantShortName variant in
+               goFlds variantPfx fldShps)
+             variants
+             variantAssns
+
+         pure $ MirSetupEnumSymbolic adt discrVal variantVals
+
     goFlds :: forall ctx.
               Text ->
               Ctx.Assignment FieldShape ctx ->
@@ -363,11 +449,24 @@ constructExpandedSetupValue cc sc = go
     goFlds pfx fldShps = sequenceA $
       FCI.itoListFC
         (\idx fldShp ->
-          let pfx' = pfx <> "." <> Text.pack (show idx) in
+          let pfx' = pfx <> "_" <> Text.pack (show idx) in
           case fldShp of
             ReqField shp' -> go pfx' shp'
             OptField shp' -> go pfx' shp')
         fldShps
+
+    -- Create a fresh variable of a primitive MIR type (where \"primitive\"
+    -- is defined by the @cryptolTypeOfActual@ function).
+    freshPrimVariable ::
+      Text ->
+      Mir.Ty ->
+      CrucibleSetup MIR TypedTerm
+    freshPrimVariable pfx ty =
+      case cryptolTypeOfActual ty of
+        Nothing ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+        Just cty ->
+          Setup.freshVariable sc pfx cty
 
     adt_not_found_panic :: String -> Mir.DefId -> a
     adt_not_found_panic shapeName adtName =
@@ -594,6 +693,45 @@ mir_verify rm nm lemmas checkSat setup tactic =
      let diff = diffUTCTime end start
      ps <- io (MS.mkProvedSpec MS.SpecProved methodSpec stats vcstats lemmaSet diff)
      returnProof ps
+
+-----
+-- MIR enums
+-----
+
+-- | Construct a specific enum variant. This does a light amount of validity
+-- checking, which is the only reason that this function is monadic.
+mir_enum_value ::
+  X.MonadThrow m =>
+  Mir.Adt ->
+  String ->
+  [MS.SetupValue MIR] ->
+  m (MS.SetupValue MIR)
+mir_enum_value adt variantNm vs =
+  case adt of
+    Mir.Adt adtNm (Mir.Enum _) variants _ _ _ _ -> do
+      (variantIdx, variant) <-
+        case FWI.ifind (\_ v -> variantDefIdMatches v) variants of
+          Just iv ->
+            pure iv
+          Nothing ->
+            X.throwM $ MIREnumValueVariantNotFound adtNm variantNm
+      pure $ MS.SetupEnum $ MirSetupEnumVariant adt variant variantIdx vs
+    Mir.Adt adtNm Mir.Struct _ _ _ _ _ ->
+      X.throwM $ MIREnumValueNonEnum adtNm "struct"
+    Mir.Adt adtNm Mir.Union _ _ _ _ _ ->
+      X.throwM $ MIREnumValueNonEnum adtNm "union"
+  where
+    variantNmText :: Text
+    variantNmText = Text.pack variantNm
+
+    -- Check if the user-supplied String argument matches the name of the given
+    -- variant's DefId. For instance, the variant DefId might be named
+    -- @core::option[0]::Option[0]::Some[0]@, but the user will simply write
+    -- @Some@, so we must strip off the other parts of the DefId before checking
+    -- if the two are the same.
+    variantDefIdMatches :: Mir.Variant -> Bool
+    variantDefIdMatches variant =
+      getEnumVariantShortName variant == variantNmText
 
 -----
 -- MIR slices
@@ -1161,6 +1299,20 @@ findFn rm nm = do
       Just x -> return x
       Nothing -> fail $ "Couldn't find MIR function named: " ++ nm
 
+-- | Given a full enum variant identifier (e.g.,
+-- @core::option[0]::Option[0]::Some[0]@, retrieve the part of the identifier
+-- that corresponds to the variant's shorthand name (e.g., @Some@).
+getEnumVariantShortName :: Mir.Variant -> Text
+getEnumVariantShortName variant
+  | Just (_, (variantNm, _)) <- List.unsnoc (variant ^. Mir.vname . Mir.didPath)
+  = variantNm
+
+  | otherwise
+  = panic "getEnumVariantShortName"
+          [ "Malformed enum variant identifier"
+          , show $ variant ^. Mir.vname
+          ]
+
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
 
@@ -1383,6 +1535,8 @@ data MIRSetupError
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
   | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
+  | MIREnumValueVariantNotFound Mir.DefId String
+  | MIREnumValueNonEnum Mir.DefId String -- The String is either \"struct\" or \"union\"
 
 instance X.Exception MIRSetupError where
   toException = topLevelExceptionToException
@@ -1419,4 +1573,14 @@ instance Show MIRSetupError where
         [ "mir_return: Return type mismatch"
         , "Expected type: " ++ show (PP.pretty expected)
         , "Given type:    " ++ show (PP.pretty found)
+        ]
+      MIREnumValueVariantNotFound adtNm variantNm ->
+        unlines
+        [ "mir_enum_value: Could not find a variant named `" ++ variantNm ++ "`"
+        , "in the enum " ++ show adtNm
+        ]
+      MIREnumValueNonEnum adtNm what ->
+        unlines
+        [ "mir_enum_value: Expected enum, received " ++ what
+        , show adtNm
         ]

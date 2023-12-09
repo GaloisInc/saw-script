@@ -154,6 +154,22 @@ class StructVal(SetupVal):
                 'elements': [fld.to_json() for fld in self.fields],
                 'MIR ADT server name': self.mir_adt.server_name if self.mir_adt is not None else None}
 
+class EnumVal(SetupVal):
+    adt : MIRAdt
+    variant_name : str
+    fields : List[SetupVal]
+
+    def __init__(self, adt : MIRAdt, variant_name : str, fields : List[SetupVal]) -> None:
+        self.adt = adt
+        self.variant_name = variant_name
+        self.fields = fields
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'enum',
+                'MIR ADT server name': self.adt.server_name,
+                'variant name': self.variant_name,
+                'elements': [fld.to_json() for fld in self.fields]}
+
 class TupleVal(SetupVal):
     fields : List[SetupVal]
 
@@ -765,6 +781,19 @@ def elem(base: SetupVal, index: int) -> SetupVal:
     if not isinstance(index, int):
         raise ValueError('elem expected an int, but got {index!r}')
     return ElemVal(base, index)
+
+def enum(adt : MIRAdt, variant_name : str, *fields : SetupVal) -> SetupVal:
+    """Returns a MIR enum value (i.e., an ``EnumVal``) whose type corresponds to
+    the given ``adt``, whose variant corresponds to the given ``variant_name``,
+    and whose field values correspond to the given ``fields``.
+
+    At present, this is only supported with MIR verification. Using this
+    function with LLVM or JVM verification will raise an error.
+    """
+    for field in fields:
+        if not isinstance(field, SetupVal):
+            raise ValueError('enum expected a SetupVal, but got {field!r}')
+    return EnumVal(adt, variant_name, list(fields))
 
 def field(base : SetupVal, field_name : str) -> SetupVal:
     """Returns the value of struct ``base``'s field ``field_name`` (i.e., a ``FieldVal``).

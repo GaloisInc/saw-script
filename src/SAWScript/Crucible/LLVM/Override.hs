@@ -708,9 +708,11 @@ assertTermEqualities ::
   LLVMCrucibleContext arch ->
   OverrideMatcher (LLVM arch) md ()
 assertTermEqualities sc cc = do
-  let assertTermEquality (t, md, e) = do
+  let sym = cc ^. ccSym
+  let assertTermEquality (cond, t, md, e) = do
         p <- instantiateExtResolveSAWPred sc cc t
-        addAssert p md e
+        p' <- liftIO $ W4.impliesPred sym cond p
+        addAssert p' md e
   traverse_ assertTermEquality =<< OM (use termEqs)
 
 
@@ -1007,6 +1009,7 @@ matchPointsTos opts sc cc spec prepost = go False []
       case v of
         SetupVar i                 -> Set.singleton i
         SetupStruct _ xs           -> foldMap setupVars xs
+        SetupEnum  empty           -> absurd empty
         SetupTuple empty _         -> absurd empty
         SetupSlice empty           -> absurd empty
         SetupArray _ xs            -> foldMap setupVars xs
@@ -1167,6 +1170,8 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                               (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                               zs ]
 
+    (_, _, SetupEnum empty) ->
+      absurd empty
     (_, _, SetupTuple empty _) ->
       absurd empty
     (_, _, SetupSlice empty) ->
@@ -2264,6 +2269,7 @@ instantiateSetupValue sc s v =
     SetupNull{}              -> return v
     SetupGlobal{}            -> return v
     SetupGlobalInitializer{} -> return v
+    SetupEnum  empty         -> absurd empty
     SetupTuple empty _       -> absurd empty
     SetupSlice empty         -> absurd empty
   where

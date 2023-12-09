@@ -3936,6 +3936,15 @@ primitives = Map.fromList
     , "it appears (i.e., before or after `mir_execute_func`)."
     ]
 
+  , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
+    (funVal3 mir_enum_value)
+    Experimental
+    [ "Create a MIRValue representing a variant of a MIR enum with the given"
+    , "list of values as elements. The MIRAdt argument determines what enum"
+    , "type to create; use `mir_find_adt` to retrieve a MIRAdt value. The"
+    , "String argument represents the variant name."
+    ]
+
   , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
     (pureVal mir_execute_func)
     Experimental
