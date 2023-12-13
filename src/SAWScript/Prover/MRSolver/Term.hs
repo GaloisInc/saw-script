@@ -261,12 +261,23 @@ asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
                           [n, x])) = Just (n, x)
 asBvToNat _ = Nothing
 
+-- | Recognize a 'Term' as an application of @bvToNat@ with a statically-known
+-- natural number bit width
+asBvToNatKnownW :: Recognizer Term (Natural, Term)
+asBvToNatKnownW (asBvToNat -> Just (asNat -> Just n, t)) = Just (n, t)
+asBvToNatKnownW _ = Nothing
+
 -- | Recognize a term as a @Left@ or @Right@
 asEither :: Recognizer Term (Either Term Term)
 asEither (asCtor -> Just (c, [_, _, x]))
   | primName c == "Prelude.Left"  = return $ Left x
   | primName c == "Prelude.Right" = return $ Right x
 asEither _ = Nothing
+
+-- | Recognize the @Num@ type
+asNumType :: Recognizer Term ()
+asNumType (asDataType -> Just (primName -> "Cryptol.Num", _)) = Just ()
+asNumType _ = Nothing
 
 -- | Recognize a term as a @TCNum n@ or @TCInf@
 asNum :: Recognizer Term (Either Term ())
@@ -403,6 +414,7 @@ deriving instance _ => TermLike (a,b,c,d,e)
 deriving instance _ => TermLike (a,b,c,d,e,f)
 deriving instance _ => TermLike (a,b,c,d,e,f,g)
 deriving instance _ => TermLike [a]
+deriving instance TermLike ()
 
 instance TermLike Term where
   liftTermLike = liftTerm

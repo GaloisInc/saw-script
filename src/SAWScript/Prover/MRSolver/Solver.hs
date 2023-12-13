@@ -714,84 +714,67 @@ matchCoIndHyp hyp args1 args2 =
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
      proveCoIndHypInvariant hyp
 
--- | Generalize some of the arguments of a coinductive hypothesis
+-- | Generalize a coinductive hypothesis of the form
+--
+-- > forall x1..xn. f args_l |= g args_r
+--
+-- by replacing some of the arguments with fresh variables that are added to the
+-- coinductive hypothesis, i.e., to the list @x1..xn@ of quantified variables.
+-- The arguments that need to be generalized are given by index on either the
+-- left- or right-hand list of arguments. Any of the arguments being generalized
+-- that are equivalent (in the sense of 'mrProveRel') get generalized to the
+-- same fresh variable, so we preserve as much equality as we can between
+-- arguments being generalized. Note that generalized arguments are not unified
+-- with non-generalized arguments, since they are being generalized because they
+-- didn't match the non-generalized arguments in some refinement call that the
+-- solver tried to make and couldn't.
 generalizeCoIndHyp :: CoIndHyp -> [Either Int Int] -> MRM t CoIndHyp
 generalizeCoIndHyp hyp [] = return hyp
 generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   withOnlyUVars (coIndHypCtx hyp) $ do
   withNoUVars $ mrDebugPPPrefixSep 2 "generalizeCoIndHyp with indices"
                                      all_specs "on" hyp
-  -- Get the arg and type associated with arg_spec
+  -- Get the arg and type associated with the first arg_spec and build an
+  -- injective representation for it, keeping track of the representation term
+  -- and type
   let arg_tm_0 = coIndHypArg hyp arg_spec_0
   arg_tp_0 <- mrTypeOf arg_tm_0
-  -- Partition @arg_specs@ into a left list (@eq_specs@) and a right list
-  -- (@uneq_specs@) where an @arg_spec_i@ is put in the left list if
-  -- 'findInjConvs' returns 'Just' and @arg_tm_0@ and @arg_tm_i@ are related
-  -- via 'mrProveRel' - i.e. if there exists a type @tp_i@ and 'InjConversion's
-  -- @c1_i@ and @c2_i@ such that @c1_i@ is an injective conversion from
-  -- 'tp_i' to 'arg_tp_0', @c2_i@ is an injective conversion from
-  -- 'tp_i' to 'arg_tp_i', and @arg_tm_0@ and @arg_tm_i@ are convertible when
-  -- the inverses of @c1_i@ and @c2_i@ are applied. In other words, @eq_specs@
-  -- contains all the specs which are equal to @arg_spec_0@ up to some
-  -- injective conversions.
-  (eq_specs, uneq_specs) <- fmap partitionEithers $ forM arg_specs $ \arg_spec_i ->
-    let arg_tm_i = coIndHypArg hyp arg_spec_i in
-    mrTypeOf arg_tm_i >>= \arg_tp_i ->
-    findInjConvs arg_tp_0 (Just arg_tm_0) arg_tp_i (Just arg_tm_i) >>= \case
-      Just cvs -> mrProveRel True arg_tm_0 arg_tm_i >>= \case
-        True -> return $ Left (arg_spec_i, cvs)
-        _ -> return $ Right arg_spec_i
-      _ -> return $ Right arg_spec_i
-  -- What want to do is generalize all the arg_specs in @eq_specs@ into a
-  -- single variable (with some appropriate conversions applied). So, what
-  -- we need to do is find a @tp@ (and appropriate conversions) such that the
-  -- following diagram holds for all @i@ and @j@ (using the names from the
-  -- previous comment):
-  --
-  -- > arg_tp_i  arg_tp_0  arg_tp_j
-  -- >      ^      ^  ^      ^
-  -- >       \    /    \    /
-  -- >        tp_i      tp_j
-  -- >           ^      ^
-  -- >            \    /
-  -- >              tp
-  --
-  -- To do this, we simply need to call 'findInjConvs' iteratively as we fold
-  -- through @eq_specs@, and compose the injective conversions appropriately.
-  -- Each step of this iteration is @cbnConvs@, which can be pictured as:
-  --
-  -- >      arg_tp_0    arg_tp_i
-  -- >      ^      ^       ^
-  -- >  c_0 |  c1_i \     / c2_i
-  -- >      |        \   /
-  -- >      tp        tp_i
-  -- >       ^        ^
-  -- >     c1 \      / c2
-  -- >         \    /
-  -- >           tp'
-  --
-  -- where @c1@, @c2@, and @tp'@ come from 'findInjConvs' on @tp@ and @tp_i@,
-  -- and the @tp@ and @c_0@ to use for the next (@i+1@th) iteration are @tp'@
-  -- and @c_0 <> c1@.
-  let cbnConvs :: (Term, InjConversion, [(a, InjConversion)]) ->
-                  (a, (Term, InjConversion, InjConversion)) ->
-                  MRM t (Term, InjConversion, [(a, InjConversion)])
-      cbnConvs (tp, c_0, cs) (arg_spec_i, (tp_i, _, c2_i)) =
-        findInjConvs tp Nothing tp_i Nothing >>= \case
-          Just (tp', c1, c2) ->
-            let cs' = fmap (\(spec_j, c_j) -> (spec_j, c_j <> c1)) cs in
-            return $ (tp', c_0 <> c1, (arg_spec_i, c2_i <> c2) : cs')
-          Nothing -> error "generalizeCoIndHyp: could not find mutual conversion"
-  (tp, c_0, eq_specs_cs) <- foldlM cbnConvs (arg_tp_0, NoConv, []) eq_specs
-  -- Finally we generalize: We add a new variable of type @tp@ and substitute
-  -- it for all of the arguments in @hyp@ given by @eq_specs@, applying the
-  -- appropriate conversions from @eq_specs_cs@
-  (hyp', var) <- coIndHypWithVar hyp "z" (Type tp)
-  hyp'' <- foldlM (\hyp_i (arg_spec_i, c_i) ->
-                    coIndHypSetArg hyp_i arg_spec_i <$> mrApplyConv c_i var)
-                  hyp' ((arg_spec_0, c_0) : eq_specs_cs)
+  (tp_r0, tm_r0, repr0) <- mkInjReprTerm arg_tp_0 arg_tm_0
+
+  -- Attempt to unify the representation of arg 0 with each of the arg_specs
+  -- being generalized using injUnifyRepr. When unification succeeds, this could
+  -- result in a more specific representation type, so use injReprRestrict to
+  -- update the representations of all the arguments that have already been
+  -- unified with arg 0
+  (tp_r, _, repr, eq_args, arg_reprs, uneq_args) <-
+    foldM
+    (\(tp_r, tm_r, repr, eq_args, arg_reprs, uneq_args) arg_spec ->
+      do let arg_tm = coIndHypArg hyp arg_spec
+         arg_tp <- mrTypeOf arg_tm
+         unify_res <- injUnifyRepr tp_r tm_r repr arg_tp arg_tm
+         case unify_res of
+           Just (tp_r',tm_r',repr',arg_repr) ->
+             -- If unification succeeds, add arg to the list of eq_args and add
+             -- its repr to the list of arg_reprs, and restrict the previous
+             -- arg_reprs to use the new representation type tp_r'
+             do arg_reprs' <- mapM (injReprRestrict tp_r' repr' tp_r) arg_reprs
+                return (tp_r', tm_r', repr',
+                        arg_spec:eq_args, arg_repr:arg_reprs', uneq_args)
+           Nothing ->
+             -- If unification fails, add arg_spec to the list of uneq_args
+             return (tp_r, tm_r, repr, eq_args, arg_reprs, arg_spec:uneq_args))
+    (tp_r0, tm_r0, repr0, [], [], [])
+    arg_specs
+
+  -- Now we generalize the arguments that unify with arg_spec0 by adding a new
+  -- variable z of type tp_r to hyp and setting each arg in eq_args to the
+  -- result of applying its corresponding repr to z
+  (hyp', var) <- coIndHypWithVar hyp "z" (Type tp_r)
+  hyp'' <- foldlM (\hyp_i (arg_spec_i, repr_i) ->
+                    coIndHypSetArg hyp_i arg_spec_i <$> mrApplyRepr repr_i var)
+                  hyp' ((arg_spec_0,repr) : zip eq_args arg_reprs)
   -- We finish by recursing on any remaining arg_specs
-  generalizeCoIndHyp hyp'' uneq_specs
+  generalizeCoIndHyp hyp'' uneq_args
 
 
 ----------------------------------------------------------------------
@@ -1034,7 +1017,7 @@ mrRefines' m1@(FunBind f1 args1 k1)
            m2@(FunBind f2 args2 k2) =
   mrFunOutType f1 args1 >>= \(_, tp1) ->
   mrFunOutType f2 args2 >>= \(_, tp2) ->
-  findInjConvs tp1 Nothing tp2 Nothing >>= \mb_convs ->
+  injUnifyTypes tp1 tp2 >>= \mb_convs ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
   mrGetCoIndHyp f1 f2 >>= \maybe_coIndHyp ->
@@ -1275,19 +1258,19 @@ mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1
 
 mrRefinesFunH k vars (asPi -> Just (nm1, tp1, _)) t1
                      (asPi -> Just (nm2, tp2, _)) t2 =
-  findInjConvs tp1 Nothing tp2 Nothing >>= \case
+  injUnifyTypes tp1 tp2 >>= \case
   -- If we can find injective conversions from from a type @tp@ to @tp1@ and
   -- @tp2@, introduce a variable of type @tp@, apply both conversions to it,
   -- and substitute the results on the left and right sides, respectively
-  Just (tp, c1, c2) ->
+  Just (tp, r1, r2) ->
     mrDebugPPPrefixSep 3 "mrRefinesFunH calling findInjConvs" tp1 "," tp2 >>
     mrDebugPPPrefix 3 "mrRefinesFunH got type" tp >>
     let nm = maybe "_" id $ find ((/=) '_' . Text.head)
                           $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
                                                     , asLambdaName t2 ] in
-    withUVarLift nm (Type tp) (vars,c1,c2,t1,t2) $ \var (vars',c1',c2',t1',t2') ->
-    do tm1 <- mrApplyConv c1' var
-       tm2 <- mrApplyConv c2' var
+    withUVarLift nm (Type tp) (vars,r1,r2,t1,t2) $ \var (vars',r1',r2',t1',t2') ->
+    do tm1 <- mrApplyRepr r1' var
+       tm2 <- mrApplyRepr r2' var
        t1'' <- mrApplyAll t1' [tm1]
        t2'' <- mrApplyAll t2' [tm2]
        piTp1' <- mrTypeOf t1'' >>= liftSC1 scWhnf

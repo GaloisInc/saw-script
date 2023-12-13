@@ -349,6 +349,11 @@ data MRState t = MRState {
 -- | The exception type for MR. Solver, which is either a 'MRFailure' or a
 -- widening request
 data MRExn = MRExnFailure MRFailure
+             -- | A widening request gives two recursive function names whose
+             -- coinductive assumption needs to be widened along with a list of
+             -- indices into the argument lists for these functions (in either
+             -- the arguments to the 'Left' or 'Right' function) that need to be
+             -- generalized
            | MRExnWiden FunName FunName [Either Int Int]
            deriving Show
 
@@ -631,6 +636,22 @@ mrGlobalTermUnfold ident =
   Just body -> return body
   Nothing -> panic "mrGlobalTermUnfold" ["Definition " ++ show ident ++
                                          " does not have a body"]
+
+-- | Apply a named global to a list of arguments and beta-reduce in Mr. Monad
+mrApplyGlobal :: Ident -> [Term] -> MRM t Term
+mrApplyGlobal f args = mrGlobalTerm f >>= \t -> mrApplyAll t args
+
+-- | Build an arrow type @a -> b@ using a return type @b@ that does not have an
+-- additional free deBruijn index for the input
+mrArrowType :: LocalName -> Term -> Term -> MRM t Term
+mrArrowType n tp_in tp_out =
+  liftSC3 scPi n tp_in =<< liftTermLike 0 1 tp_out
+
+-- | Build the bitvector type @Vec n Bool@ from natural number term @n@
+mrBvType :: Term -> MRM t Term
+mrBvType n =
+  do bool_tp <- liftSC0 scBoolType
+     liftSC2 scVecType n bool_tp
 
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal

@@ -7,6 +7,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {- |
 Module      : SAWScript.Prover.MRSolver.SMT
@@ -22,18 +29,22 @@ namely 'mrProvable' and 'mrProveEq'.
 
 module SAWScript.Prover.MRSolver.SMT where
 
+import Data.Maybe
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Control.Monad.Except
 import Control.Monad.Catch (throwM, catch)
 import Control.Monad.Trans.Maybe
-import Data.Foldable (foldrM, foldlM)
 import GHC.Generics
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import Data.Reflection
+import Data.Parameterized.BoolRepr
+
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
@@ -57,6 +68,11 @@ import SAWScript.Prover.MRSolver.Monad
 ----------------------------------------------------------------------
 -- * Various SMT-specific Functions on Terms
 ----------------------------------------------------------------------
+
+-- | Recognize a bitvector type with a potentially symbolic length
+asSymBVType :: Recognizer Term Term
+asSymBVType (asVectorType -> Just (n, asBoolType -> Just ())) = Just n
+asSymBVType _ = Nothing
 
 -- | Apply @genBVVec@ to arguments @n@, @len@, and @a@, along with a function of
 -- type @Vec n Bool -> a@
@@ -128,7 +144,8 @@ primGenBVVecFilter sc n (asGenBVVecTerm -> Just (asNat -> Just n', _, _, f)) | n
      i_tm <- scLocalVar sc 0
      body <- scApplyAllBeta sc f [i_tm, err_tm]
      scLambda sc "i" i_tp body
-primGenBVVecFilter sc n (asGenCryMTerm -> Just (asBvToNat -> Just (asNat -> Just n', _), _, f)) | n == n' = lift $
+primGenBVVecFilter sc n (asGenCryMTerm -> Just (asBvToNatKnownW ->
+                                                Just (n', _), _, f)) | n == n' = lift $
   do i_tp <- join $ scVecType sc <$> scNat sc n <*> scBoolType sc
      i_tm <- scLocalVar sc 0
      body <- scApplyBeta sc f =<< scBvToNat sc n i_tm
@@ -455,260 +472,369 @@ mrProvable bool_tm =
 
 
 ----------------------------------------------------------------------
--- * Finding injective conversions
+-- * SMT-Friendly Representations
 ----------------------------------------------------------------------
 
--- | An injection from @Nat@ to @Num@ ('NatToNum'), @Vec n Bool@ to @Nat@
--- ('BVToNat'), @BVVec n len a@ to @Vec m a@ ('BVVecToVec'), from one pair
--- type to another ('PairToPair'), or any composition of these using '(<>)'
--- (including the composition of none of them, the identity 'NoConv'). This
--- type is primarily used as one of the returns of 'findInjConvs'.
--- NOTE: Do not use the constructors of this type or 'SingleInjConversion'
--- directly, instead use the pattern synonyms mentioned above and '(<>)' to
--- create and compose 'InjConversion's. This ensures elements of this type
--- are always in a normal form w.r.t. 'PairToPair' injections.
-newtype InjConversion = ConvComp [SingleInjConversion]
-                      deriving (Generic, Show)
+-- | A representation of some subset of the elements of a type @tp@ as elements
+-- of some other type @tp_r@. The idea is that the type @tp_r@ is easier to
+-- represent in SMT solvers.
+--
+-- This is captured formally with a function @r@ from elements of the
+-- representation type @tp_r@ to the elements of type @tp@ that they represent
+-- along with an equivalence relation @eq_r@ on @tp_r@ such that @r@ is
+-- injective when viewed as a morphism from @eq_r@ to the natural equivalence
+-- relation @equiv@ of @tp@. In more detail, this means that @eq_r@ holds
+-- between two inputs to @r@ iff @equiv@ holds between their outputs. Note that
+-- an injective representation need not be surjective, meaning there could be
+-- elements of @tp@ that it cannot represent.
+data InjectiveRepr
+     -- | The identity representation of @(tp,equiv)@ by itself. Only applies to
+     -- non-vector types, as vectors should be represented by one of the vector
+     -- representations.
+  = InjReprId
+    -- | A representation of a numeric type (@Num@, @Nat@, or @Vec n Bool@) by
+    -- another numeric type defined as the composition of one or more injective
+    -- numeric representations. NOTE: we do not expect numeric representations
+    -- to occur inside other representations like those for pairs and vectors
+  | InjReprNum [InjNumRepr]
+    -- | A representation of the pair type @tp1 * tp2@ by @tp_r1 * tp_r2@ using
+    -- representations of @tp1@ and @tp2@
+  | InjReprPair InjectiveRepr InjectiveRepr
+    -- | A representation of the vector type @Vec len tp@ by the functional type
+    -- @tp_len -> tp_r@ from indices to elements of the representation type
+    -- @tp_r@ of @tp@, given a representation of @tp@ by @tp_r@, where the index
+    -- type @tp_len@ is determined by the 'VecLength'
+  | InjReprVec VecLength Term InjectiveRepr
+  deriving (Generic, Show)
 
--- | Used in the implementation of 'InjConversion'.
--- NOTE: Do not use the constructors of this type or 'InjConversion'
--- directly, instead use the pattern synonyms mentioned in the documentation of
--- 'InjConversion' and '(<>)' to create and compose 'InjConversion's. This
--- ensures elements of this type are always in a normal form w.r.t.
--- 'PairToPair' injections.
-data SingleInjConversion = SingleNatToNum
-                         | SingleBVToNat Natural
-                         | SingleBVVecToVec Term Term Term Term
-                         | SinglePairToPair InjConversion InjConversion
-                         deriving (Generic, Show)
 
-deriving instance TermLike SingleInjConversion
-deriving instance TermLike InjConversion
+-- | The length of a vector, given either as a bitvector 'Term' of a
+-- statically-known bitwidth or as a natural number 'Term'
+data VecLength = BVVecLen Natural Term | NatVecLen Term
+               deriving (Generic, Show)
 
--- | The identity 'InjConversion'
-pattern NoConv :: InjConversion
-pattern NoConv = ConvComp []
+-- | A representation of a numeric type (@Num@, @Nat@, or @Vec n Bool@) by
+-- another numeric type defined as an injective function
+data InjNumRepr
+     -- | The @TCNum@ constructor as a representation of @Num@ by @Nat@
+  = InjNatToNum
+    -- | The @bvToNat@ function as a representation of @Nat@ by @Vec n Bool@
+  | InjBVToNat Natural
+  deriving (Generic, Show)
 
--- | The injective conversion from @Nat@ to @Num@
-pattern NatToNum :: InjConversion
-pattern NatToNum = ConvComp [SingleNatToNum]
+deriving instance TermLike InjectiveRepr
+deriving instance TermLike InjNumRepr
+deriving instance TermLike VecLength
 
--- | The injective conversion from @Vec n Bool@ to @Nat@ for a given @n@
-pattern BVToNat :: Natural -> InjConversion
-pattern BVToNat n = ConvComp [SingleBVToNat n]
+-- | Convert a natural number expression to a 'VecLength'
+asVecLen :: Term -> VecLength
+asVecLen (asBvToNatKnownW -> Just (n, len)) = BVVecLen n len
+asVecLen n = NatVecLen n
 
--- | The injective conversion from @BVVec n len a@ to @Vec m a@ for given
--- @n@, @len@, @a@, and @m@ (in that order), assuming @m >= bvToNat n len@
-pattern BVVecToVec :: Term -> Term -> Term -> Term -> InjConversion
-pattern BVVecToVec n len a m = ConvComp [SingleBVVecToVec n len a m]
+-- | Convert a 'VecLength' to a natural number expression
+vecLenToNat :: VecLength -> MRM t Term
+vecLenToNat (BVVecLen n len) = liftSC2 scBvToNat n len
+vecLenToNat (NatVecLen n) = return n
 
--- | An injective conversion from one pair type to another, using the given
--- 'InjConversion's for the first and second projections, respectively
-pattern PairToPair :: InjConversion -> InjConversion -> InjConversion
-pattern PairToPair c1 c2 <- ConvComp [SinglePairToPair c1 c2]
-  where PairToPair NoConv NoConv = NoConv
-        PairToPair c1 c2 = ConvComp [SinglePairToPair c1 c2]
+-- | Get the type of an index bounded by a 'VecLength'
+vecLenIxType :: VecLength -> MRM t Term
+vecLenIxType (BVVecLen n _) = liftSC1 scBitvector n
+vecLenIxType (NatVecLen _) = liftSC0 scNatType
 
-instance Semigroup InjConversion where
-  (ConvComp cs1) <> (ConvComp cs2) = ConvComp (cbnPairs $ cs1 ++ cs2)
-    where cbnPairs :: [SingleInjConversion] -> [SingleInjConversion]
-          cbnPairs (SinglePairToPair cL1 cR1 : SinglePairToPair cL2 cR2 : cs) =
-            cbnPairs (SinglePairToPair (cL1 <> cL2) (cR1 <> cR2) : cs)
-          cbnPairs (s : cs) = s : cbnPairs cs
-          cbnPairs [] = []
+-- | Test if two vector lengths are equal, and if so, generalize them to use the
+-- same index type as returned by 'vecLenIxType'
+vecLenUnify :: VecLength -> VecLength -> MRM t (Maybe (VecLength, VecLength))
+vecLenUnify vlen1@(BVVecLen n1 len1) vlen2@(BVVecLen n2 len2)
+  | n1 == n2 =
+    do lens_eq <- mrProveEq len1 len2
+       if lens_eq then return (Just (vlen1,vlen2))
+         else return Nothing
+vecLenUnify (BVVecLen _ _) (BVVecLen _ _) = return Nothing
+vecLenUnify len1 len2 =
+  do n1 <- vecLenToNat len1
+     n2 <- vecLenToNat len2
+     mrProveEq n1 n2 >>= \case
+       True -> return $ Just (NatVecLen n1, NatVecLen n2)
+       False -> return Nothing
 
-instance Monoid InjConversion where
-  mempty = NoConv
+-- | Given a vector length, element type, vector of that length and type, and an
+-- index of type 'vecLenIxType', index into the vector
+vecLenIx :: VecLength -> Term -> Term -> Term -> MRM t Term
+vecLenIx (BVVecLen n len) tp v ix =
+  do n_tm <- liftSC1 scNat n
+     mrApplyGlobal "Prelude.atBVVecNoPf" [n_tm, len, tp, v, ix]
+vecLenIx (NatVecLen n) tp v ix = mrApplyGlobal "Prelude.at" [n, tp, v, ix]
 
--- | Return 'True' iff the given 'InjConversion' is not 'NoConv'
-nonTrivialConv :: InjConversion -> Bool
-nonTrivialConv (ConvComp cs) = not (null cs)
+-- | Smart constructor for pair representations, that combines a pair of
+-- identity representations into an identity representation on the pair type
+injReprPair :: InjectiveRepr -> InjectiveRepr -> InjectiveRepr
+injReprPair InjReprId InjReprId = InjReprId
+injReprPair repr1 repr2 = InjReprPair repr1 repr2
 
--- | Return 'True' iff the given 'InjConversion's are convertible, i.e. if
--- the two injective conversions are the compositions of the same constructors,
--- and the arguments to those constructors are convertible via 'mrConvertible'
-mrConvsConvertible :: InjConversion -> InjConversion -> MRM t Bool
-mrConvsConvertible (ConvComp cs1) (ConvComp cs2) =
-  if length cs1 /= length cs2 then return False
-  else and <$> zipWithM mrSingleConvsConvertible cs1 cs2
+-- | Test if there is a non-identity numeric representation from the first to
+-- the second type
+findNumRepr :: Term -> Term -> Maybe InjectiveRepr
+findNumRepr (asBitvectorType -> Just n) (asNumType -> Just ()) =
+  Just $ InjReprNum [InjBVToNat n, InjNatToNum]
+findNumRepr (asBitvectorType -> Just n) (asNatType -> Just ()) =
+  Just $ InjReprNum [InjBVToNat n]
+findNumRepr (asNatType -> Just ()) (asNumType -> Just ()) =
+  Just $ InjReprNum [InjNatToNum]
+findNumRepr _ _ = Nothing
 
--- | Used in the definition of 'mrConvsConvertible'
-mrSingleConvsConvertible :: SingleInjConversion -> SingleInjConversion -> MRM t Bool
-mrSingleConvsConvertible SingleNatToNum SingleNatToNum = return True
-mrSingleConvsConvertible (SingleBVToNat n1) (SingleBVToNat n2) = return $ n1 == n2
-mrSingleConvsConvertible (SingleBVVecToVec n1 len1 a1 m1)
-                         (SingleBVVecToVec n2 len2 a2 m2) =
-  do ns_are_eq <- mrConvertible n1 n2
-     lens_are_eq <- mrConvertible len1 len2
-     as_are_eq <- mrConvertible a1 a2
-     ms_are_eq <- mrConvertible m1 m2
-     return $ ns_are_eq && lens_are_eq && as_are_eq && ms_are_eq
-mrSingleConvsConvertible (SinglePairToPair cL1 cR1)
-                         (SinglePairToPair cL2 cR2) =
-  do cLs_are_eq <- mrConvsConvertible cL1 cL2
-     cRs_are_eq <- mrConvsConvertible cR1 cR2
-     return $ cLs_are_eq && cRs_are_eq
-mrSingleConvsConvertible _ _ = return False
+-- | Compose two injective representations, assuming that they do compose, i.e.,
+-- that the output type of the first equals the input type of the second
+injReprComp :: InjectiveRepr -> InjectiveRepr -> InjectiveRepr
+injReprComp InjReprId r = r
+injReprComp r InjReprId = r
+injReprComp (InjReprNum steps1) (InjReprNum steps2) =
+  InjReprNum (steps1 ++ steps2)
+injReprComp (InjReprPair r1_l r1_r) (InjReprPair r2_l r2_r) =
+  InjReprPair (injReprComp r1_l r2_l) (injReprComp r1_r r2_r)
+injReprComp r1 r2 =
+  panic "injReprComp" ["Representations do not compose: " ++
+                       show r1 ++ " and " ++ show r2]
 
--- | Apply the given 'InjConversion' to the given term, where compositions
--- @c1 <> c2 <> ... <> cn@ are applied from right to left as in function
--- composition (i.e. @mrApplyConv (c1 <> c2 <> ... <> cn) t@ is equivalent to
--- @mrApplyConv c1 (mrApplyConv c2 (... mrApplyConv cn t ...))@)
-mrApplyConv :: InjConversion -> Term -> MRM t Term
-mrApplyConv (ConvComp cs) = flip (foldrM go) cs
-  where go :: SingleInjConversion -> Term -> MRM t Term
-        go SingleNatToNum t = liftSC2 scCtorApp "Cryptol.TCNum" [t]
-        go (SingleBVToNat n) t = liftSC2 scBvToNat n t
-        go (SingleBVVecToVec n len a m) t = mrGenFromBVVec n len a t "mrApplyConv" m
-        go (SinglePairToPair c1 c2) t =
-          do t1 <- mrApplyConv c1 =<< doTermProj t TermProjLeft
-             t2 <- mrApplyConv c2 =<< doTermProj t TermProjRight
-             liftSC2 scPairValueReduced t1 t2
+-- | Apply a 'InjectiveRepr' to convert an element of the representation type
+-- @tp_r@ to the type @tp@ that it represents
+mrApplyRepr :: InjectiveRepr -> Term -> MRM t Term
+mrApplyRepr InjReprId t = return t
+mrApplyRepr (InjReprNum steps) t_top = foldM applyStep t_top steps where
+  applyStep t InjNatToNum = liftSC2 scCtorApp "Cryptol.TCNum" [t]
+  applyStep t (InjBVToNat n) = liftSC2 scBvToNat n t
+mrApplyRepr (InjReprPair repr1 repr2) t =
+  do t1 <- mrApplyRepr repr1 =<< doTermProj t TermProjLeft
+     t2 <- mrApplyRepr repr2 =<< doTermProj t TermProjRight
+     liftSC2 scPairValueReduced t1 t2
+mrApplyRepr (InjReprVec (NatVecLen n) tp repr) t =
+  do nat_tp <- liftSC0 scNatType
+     f <- mrLambdaLift1 ("ix", nat_tp) repr $ \x repr' ->
+       mrApplyRepr repr' =<< mrApply t x
+     mrApplyGlobal "Prelude.gen" [n, tp, f]
+mrApplyRepr (InjReprVec (BVVecLen n len) tp repr) t =
+  do bv_tp <- liftSC1 scBitvector n
+     f <- mrLambdaLift1 ("ix", bv_tp) repr $ \x repr' ->
+       mrApplyRepr repr' =<< mrApply t x
+     n_tm <- liftSC1 scNat n
+     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
 
--- | Try to apply the inverse of the given the conversion to the given term,
--- raising an error if this is not possible - see also 'mrApplyConv'
-mrApplyInvConv :: InjConversion -> Term -> MRM t Term
-mrApplyInvConv (ConvComp cs) = flip (foldlM go) cs
-  where go :: Term -> SingleInjConversion -> MRM t Term
-        go t SingleNatToNum = case asNum t of
-          Just (Left t') -> return t'
-          _ -> error "mrApplyInvConv: Num term does not normalize to TCNum constructor"
-        go t (SingleBVToNat n) = case asBvToNat t of
-          Just (asNat -> Just n', t') | n == n' -> return t'
-          _ -> do n_tm <- liftSC1 scNat n
-                  liftSC2 scGlobalApply "Prelude.bvNat" [n_tm, t]
-        go t c@(SingleBVVecToVec n len a m) = case asGenFromBVVecTerm t of
-          Just (n', len', a', t', _, m') ->
-            do eq <- mrSingleConvsConvertible c (SingleBVVecToVec n' len' a' m')
-               if eq then return t'
-               else mrGenBVVecFromVec m a t "mrApplyInvConv" n len
-          _ -> mrGenBVVecFromVec m a t "mrApplyInvConv" n len
-        go t (SinglePairToPair c1 c2) =
-          do t1 <- mrApplyInvConv c1 =<< doTermProj t TermProjLeft
-             t2 <- mrApplyInvConv c2 =<< doTermProj t TermProjRight
-             liftSC2 scPairValueReduced t1 t2
 
--- | If the given term can be expressed as @mrApplyInvConv c t@ for some @c@
--- and @t@, return @c@ - otherwise return @NoConv@
-mrConvOfTerm :: Term -> InjConversion
-mrConvOfTerm (asNum -> Just (Left t')) =
-  NatToNum <> mrConvOfTerm t'
-mrConvOfTerm (asBvToNat -> Just (asNat -> Just n, t')) =
-  BVToNat n <> mrConvOfTerm t'
-mrConvOfTerm (asGenFromBVVecTerm -> Just (n, len, a, v, _, m)) =
-  BVVecToVec n len a m <> mrConvOfTerm v
-mrConvOfTerm (asPairValue -> Just (t1, t2)) =
-  PairToPair (mrConvOfTerm t1) (mrConvOfTerm t2)
-mrConvOfTerm _ = NoConv
+newtype MaybeTerm b = MaybeTerm { unMaybeTerm :: If b Term () }
 
--- | For two types @tp1@ and @tp2@, and optionally two terms @t1 :: tp1@ and
--- @t2 :: tp2@, tries to find a type @tp@ and 'InjConversion's @c1@ and @c2@
--- such that @c1@ is an injective conversion from @tp@ to @tp1@ and @c2@ is a
--- injective conversion from @tp@ to @tp2@. This tries to make @c1@ and @c2@
--- as large as possible, using information from the given terms (i.e. using
--- 'mrConvOfTerm') where possible. In pictorial form, this function finds
--- a @tp@, @c1@, and @c2@ which satisfy the following diagram:
+-- | Apply a monadic 'Term' operation to a 'MaybeTerm'
+mapMaybeTermM :: Monad m => BoolRepr b -> (Term -> m Term) -> MaybeTerm b ->
+                 m (MaybeTerm b)
+mapMaybeTermM TrueRepr f (MaybeTerm t) = MaybeTerm <$> f t
+mapMaybeTermM FalseRepr _ _ = return $ MaybeTerm ()
+
+-- | Apply a binary monadic 'Term' operation to a 'MaybeTerm'
+map2MaybeTermM :: Monad m => BoolRepr b -> (Term -> Term -> m Term) ->
+                  MaybeTerm b -> MaybeTerm b -> m (MaybeTerm b)
+map2MaybeTermM TrueRepr f (MaybeTerm t1) (MaybeTerm t2) = MaybeTerm <$> f t1 t2
+map2MaybeTermM FalseRepr _ _ _ = return $ MaybeTerm ()
+
+instance Given (BoolRepr b) => TermLike (MaybeTerm b) where
+  liftTermLike n i = mapMaybeTermM given (liftTermLike n i)
+  substTermLike n s = mapMaybeTermM given (substTermLike n s)
+
+-- | Construct an injective representation for a type @tp@ and an optional term
+-- @tm@ of that type, returning the representation type @tp_r@, the optional
+-- term @tm_r@ that represents @tm@, and the representation itself. If there is
+-- a choice, choose the representation that works best for SMT solvers.
+mkInjRepr :: BoolRepr b -> Term -> MaybeTerm b ->
+             MRM t (Term, MaybeTerm b, InjectiveRepr)
+mkInjRepr TrueRepr _ (MaybeTerm (asNum -> Just (Left t))) =
+  do nat_tp <- liftSC0 scNatType
+     (tp_r, tm_r, r) <- mkInjRepr TrueRepr nat_tp (MaybeTerm t)
+     return (tp_r, tm_r, injReprComp r (InjReprNum [InjNatToNum]))
+mkInjRepr TrueRepr _ (MaybeTerm (asBvToNatKnownW -> Just (n, t))) =
+  do bv_tp <- liftSC1 scBitvector n
+     return (bv_tp, MaybeTerm t, InjReprNum [InjBVToNat n])
+mkInjRepr b (asPairType -> Just (tp1, tp2)) t =
+  do tm1 <- mapMaybeTermM b (flip doTermProj TermProjLeft) t
+     tm2 <- mapMaybeTermM b (flip doTermProj TermProjRight) t
+     (tp_r1, tm_r1, r1) <- mkInjRepr b tp1 tm1
+     (tp_r2, tm_r2, r2) <- mkInjRepr b tp2 tm2
+     tp_r <- liftSC2 scPairType tp_r1 tp_r2
+     tm_r <- map2MaybeTermM b (liftSC2 scPairValueReduced) tm_r1 tm_r2
+     return (tp_r, tm_r, InjReprPair r1 r2)
+
+mkInjRepr b (asVectorType -> Just (len, tp@(asBoolType -> Nothing))) tm =
+  do let vlen = asVecLen len
+     ix_tp <- vecLenIxType vlen
+     -- NOTE: these return values from mkInjRepr all have ix free
+     (tp_r', tm_r', r') <-
+       give b $
+       withUVarLift "ix" (Type ix_tp) (vlen,tp,tm) $ \ix (vlen',tp',tm') ->
+       do tm_elem <-
+            mapMaybeTermM b (\tm'' -> vecLenIx vlen' tp' tm'' ix) tm'
+          mkInjRepr b tp' tm_elem
+     -- r' should not have ix free, so it should be ok to substitute an error
+     -- term for ix...
+     r <- substTermLike 0 [error
+                           "mkInjRepr: unexpected free ix variable in repr"] r'
+     tp_r <- liftSC3 scPi "ix" ix_tp tp_r'
+     tm_r <- mapMaybeTermM b (liftSC3 scLambda "ix" ix_tp) tm_r'
+     return (tp_r, tm_r, InjReprVec vlen tp r)
+
+mkInjRepr _ tp tm = return (tp, tm, InjReprId)
+
+
+-- | Specialization of 'mkInjRepr' with no element of the represented type
+mkInjReprType :: Term -> MRM t (Term, InjectiveRepr)
+mkInjReprType tp =
+  (\(tp_r,_,repr) -> (tp_r,repr)) <$> mkInjRepr FalseRepr tp (MaybeTerm ())
+
+-- | Specialization of 'mkInjRepr' with an element of the represented type
+mkInjReprTerm :: Term -> Term -> MRM t (Term, Term, InjectiveRepr)
+mkInjReprTerm tp trm =
+  (\(tp_r, tm, repr) -> (tp_r, unMaybeTerm tm, repr)) <$>
+  mkInjRepr TrueRepr tp (MaybeTerm trm)
+
+
+-- | Given two representations @r1@ and @r2@ along with their representation
+-- types @tp_r1@ and @tp_r2, try to unify their representation types, yielding
+-- new versions of those representations. That is, try to find a common type
+-- @tp_r@ and representations @r1'@ and @r2'@ such that the following picture
+-- holds:
+--
+-- >   tp1      tp2
+-- >    ^        ^
+-- > r1 |        | r2
+-- >  tp_r1    tp_r2
+-- >    ^        ^
+-- > r1' \      / r2'
+-- >      \    /
+-- >       tp_r
+--
+injUnifyReprTypes :: Term -> InjectiveRepr -> Term -> InjectiveRepr ->
+                     MaybeT (MRM t) (Term, InjectiveRepr, InjectiveRepr)
+
+-- If there is a numeric coercion from one side to the other, use it to unify
+-- the two input representations
+injUnifyReprTypes tp1 r1 tp2 r2
+  | Just r2' <- findNumRepr tp1 tp2
+  = return (tp1, r1, injReprComp r2' r2)
+injUnifyReprTypes tp1 r1 tp2 r2
+  | Just r1' <- findNumRepr tp2 tp1
+  = return (tp2, injReprComp r1' r1, r2)
+
+-- If both representations are the identity, make sure the repr types are equal
+injUnifyReprTypes tp1 InjReprId tp2 InjReprId =
+  do tps_eq <- lift $ mrConvertible tp1 tp2
+     if tps_eq then return (tp1, InjReprId, InjReprId)
+       else mzero
+
+-- For pair representations, unify the two sides, treating an identity
+-- representation as a pair of identity representations
+injUnifyReprTypes tp1 (InjReprPair r1l r1r) tp2 (InjReprPair r2l r2r)
+  | Just (tp1l, tp1r) <- asPairType tp1
+  , Just (tp2l, tp2r) <- asPairType tp2 =
+    do (tp_r_l, r1l', r2l') <- injUnifyReprTypes tp1l r1l tp2l r2l
+       (tp_r_r, r1r', r2r') <- injUnifyReprTypes tp1r r1r tp2r r2r
+       tp_r <- lift $ liftSC2 scPairType tp_r_l tp_r_r
+       return (tp_r, InjReprPair r1l' r1r', InjReprPair r2l' r2r')
+injUnifyReprTypes tp1 InjReprId tp2 r2
+  | isJust (asPairType tp1)
+  = injUnifyReprTypes tp1 (InjReprPair InjReprId InjReprId) tp2 r2
+injUnifyReprTypes tp1 r1 tp2 InjReprId
+  | isJust (asPairType tp2)
+  = injUnifyReprTypes tp1 r1 tp2 (InjReprPair InjReprId InjReprId)
+
+-- For vector types, check that the lengths are equal and unify the element
+-- representations. Note that if either side uses a natural number length
+-- instead of a bitvector length, both sides will need to, since we don't
+-- currently have representation that can cast from a bitvector length to an
+-- equal natural number length
+injUnifyReprTypes _ (InjReprVec len1 tp1 r1) _ (InjReprVec len2 tp2 r2) =
+  do (len1', len2') <- MaybeT $ vecLenUnify len1 len2
+     ix_tp <- lift $ vecLenIxType len1'
+     (tp_r, r1', r2') <- injUnifyReprTypes tp1 r1 tp2 r2
+     tp_r_fun <- lift $ mrArrowType "ix" ix_tp tp_r
+     return (tp_r_fun, InjReprVec len1' tp1 r1', InjReprVec len2' tp2 r2')
+
+injUnifyReprTypes _ _ _ _ = mzero
+
+
+-- | Given two types @tp1@ and @tp2@, try to find a common type @tp@ that
+-- injectively represents both of them. Pictorially, the result looks like this:
 -- 
 -- >  tp1      tp2
 -- >   ^        ^
--- > c1 \      / c2
+-- > r1 \      / r2
 -- >     \    /
 -- >       tp
 --
--- Since adding a 'NatToNum' conversion does not require any choice (i.e.
--- unlike 'BVToNat', which requires choosing a bit width), if either @tp1@ or
--- @tp2@ is @Num@, a 'NatToNum' conversion will be included on the respective
--- side. Another subtlety worth noting is the difference between returning
--- @Just (tp, NoConv, NoConv)@ and @Nothing@ - the former indicates that the
--- types @tp1@ and @tp2@ are convertible, but the latter indicates that no
--- 'InjConversion' could be found.
-findInjConvs :: Term -> Maybe Term -> Term -> Maybe Term ->
-                MRM t (Maybe (Term, InjConversion, InjConversion))
--- always add 'NatToNum' conversions
-findInjConvs (asDataType -> Just (primName -> "Cryptol.Num", _)) t1 tp2 t2 =
-  do tp1' <- liftSC0 scNatType
-     t1' <- mapM (mrApplyInvConv NatToNum) t1
-     mb_cs <- findInjConvs tp1' t1' tp2 t2
-     return $ fmap (\(tp, c1, c2) -> (tp, NatToNum <> c1, c2)) mb_cs
-findInjConvs tp1 t1 (asDataType -> Just (primName -> "Cryptol.Num", _)) t2 =
-  do tp2' <- liftSC0 scNatType
-     t2' <- mapM (mrApplyInvConv NatToNum) t2
-     mb_cs <- findInjConvs tp1 t1 tp2' t2'
-     return $ fmap (\(tp, c1, c2) -> (tp, c1, NatToNum <> c2)) mb_cs
--- add a 'BVToNat' conversion if the (optional) given term has a 'BVToNat'
--- conversion
-findInjConvs (asNatType -> Just ())
-             (Just (asBvToNat -> Just (asNat -> Just n, t1'))) tp2 t2 =
-  do tp1' <- liftSC1 scBitvector n
-     mb_cs <- findInjConvs tp1' (Just t1') tp2 t2
-     return $ fmap (\(tp, c1, c2) -> (tp, BVToNat n <> c1, c2)) mb_cs
-findInjConvs tp1 t1 (asNatType -> Just ())
-                    (Just (asBvToNat -> Just (asNat -> Just n, t2'))) =
-  do tp2' <- liftSC1 scBitvector n
-     mb_cs <- findInjConvs tp1 t1 tp2' (Just t2')
-     return $ fmap (\(tp, c1, c2) -> (tp, c1, BVToNat n <> c2)) mb_cs
--- add a 'BVToNat' conversion we have a BV on the other side, using the
--- bit-width from the other side
-findInjConvs (asNatType -> Just ()) _ (asBitvectorType -> Just n) _ =
-  do bv_tp <- liftSC1 scBitvector n 
-     return $ Just (bv_tp, BVToNat n, NoConv)
-findInjConvs (asBitvectorType -> Just n) _ (asNatType -> Just ()) _ =
-  do bv_tp <- liftSC1 scBitvector n 
-     return $ Just (bv_tp, NoConv, BVToNat n)
--- add a 'BVVecToVec' conversion if the (optional) given term has a
--- 'BVVecToVec' conversion
-findInjConvs (asNonBVVecVectorType -> Just (m, _))
-             (Just (asGenFromBVVecTerm -> Just (n, len, a, t1', _, _))) tp2 t2 =
-  do len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     tp1' <- liftSC2 scVecType len' a
-     mb_cs <- findInjConvs tp1' (Just t1') tp2 t2
-     return $ fmap (\(tp, c1, c2) -> (tp, BVVecToVec n len a m <> c1, c2)) mb_cs
-findInjConvs tp1 t1 (asNonBVVecVectorType -> Just (m, _))
-                    (Just (asGenFromBVVecTerm -> Just (n, len, a, t2', _, _))) =
-  do len' <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     tp2' <- liftSC2 scVecType len' a
-     mb_cs <- findInjConvs tp1 t1 tp2' (Just t2')
-     return $ fmap (\(tp, c1, c2) -> (tp, c1, BVVecToVec n len a m <> c2)) mb_cs
--- add a 'BVVecToVec' conversion we have a BVVec on the other side, using the
--- bit-width from the other side
-findInjConvs (asNonBVVecVectorType -> Just (m, a')) _
-             (asBVVecType -> Just (n, len, a)) _ =
-  do len_nat <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     bvvec_tp <- liftSC2 scVecType len_nat a
-     lens_are_eq <- mrProveEq m len_nat
-     as_are_eq <- mrConvertible a a'
-     if lens_are_eq && as_are_eq
-     then return $ Just (bvvec_tp, BVVecToVec n len a m, NoConv)
-     else return $ Nothing
-findInjConvs (asBVVecType -> Just (n, len, a)) _
-             (asNonBVVecVectorType -> Just (m, a')) _ =
-  do len_nat <- liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
-     bvvec_tp <- liftSC2 scVecType len_nat a
-     lens_are_eq <- mrProveEq m len_nat
-     as_are_eq <- mrConvertible a a'
-     if lens_are_eq && as_are_eq
-     then return $ Just (bvvec_tp, NoConv, BVVecToVec n len a m)
-     else return $ Nothing
--- add a 'pairToPair' conversion if we have pair types on both sides
-findInjConvs (asPairType -> Just (tpL1, tpR1)) t1
-             (asPairType -> Just (tpL2, tpR2)) t2 =
-  do tL1 <- mapM (flip doTermProj TermProjLeft ) t1
-     tR1 <- mapM (flip doTermProj TermProjRight) t1
-     tL2 <- mapM (flip doTermProj TermProjLeft ) t2
-     tR2 <- mapM (flip doTermProj TermProjRight) t2
-     mb_cLs <- findInjConvs tpL1 tL1 tpL2 tL2
-     mb_cRs <- findInjConvs tpR1 tR1 tpR2 tR2
-     case (mb_cLs, mb_cRs) of
-       (Just (tpL, cL1, cL2), Just (tpR, cR1, cR2)) ->
-         do pair_tp <- liftSC2 scPairType tpL tpR
-            return $ Just (pair_tp, PairToPair cL1 cR1, PairToPair cL2 cR2)
-       _ -> return $ Nothing
--- otherwise, just check that the types are convertible
-findInjConvs tp1 _ tp2 _ =
-  do tps_are_eq <- mrConvertible tp1 tp2
-     if tps_are_eq
-     then return $ Just (tp1, NoConv, NoConv)
-     else return $ Nothing
+-- where @r1@ and @r2@ are injective representations. The representations should
+-- be maximal, meaning that they represent as much of @tp1@ and @tp2@ as
+-- possible. If there is such a @tp@, return it along with the representations
+-- @r1@ and @r2@. Otherwise, return 'Nothing', meaning the unification failed.
+injUnifyTypes :: Term -> Term ->
+                 MRM t (Maybe (Term, InjectiveRepr, InjectiveRepr))
+injUnifyTypes tp1 tp2 =
+  do (tp_r1, r1) <- mkInjReprType tp1
+     (tp_r2, r2) <- mkInjReprType tp2
+     runMaybeT $ injUnifyReprTypes tp_r1 r1 tp_r2 r2
+
+
+-- | Use one injective representations @r1@ to restrict the domain of another
+-- injective representation @r2@, yielding an injective representation with the
+-- same representation type as @r1@ and the same type being represented as @r2@.
+-- Pictorially this looks like this:
+--
+-- >  tp1           tp2
+-- >   ^            ^
+-- >    \          / r2
+-- > r1  \        /
+-- >      \    tpr2
+-- >       \    ^
+-- >        \  / r2''
+-- >        tpr1
+--
+-- The return value is the composition of @r2''@ and @r2@. It is an error if
+-- this diagram does not exist.
+injReprRestrict :: Term -> InjectiveRepr -> Term -> InjectiveRepr ->
+                   MRM t InjectiveRepr
+
+-- If tp1 and tp2 are numeric types with a representation from tp1 to tp2, we
+-- can pre-compose that representation with r2
+injReprRestrict tp1 _ tp2 r2
+  | Just r2'' <- findNumRepr tp1 tp2
+  = return $ injReprComp r2'' r2
+
+-- In all other cases, the only repr that pre-composes with r2 is the identity
+-- repr, so we just return r2
+injReprRestrict _ _ _ r2 = return r2
+
+
+-- | Take in a type @tp_r1@, a term @tm1@ of type @tp_r1@, an injective
+-- representation @r1@ with @tp_r1@ as its representation type, and a type @tp2@
+-- with an element @tm2@, and try to find a type @tp_r'@ and a term @tm'@ of
+-- type @tp_r'@ that represents both @r1 tm1@ and @tm2@ using representations
+-- @r1'@ and @r2'@, repsectively. That is, @r1'@ should represent @tp1@ and
+-- @r2'@ should represent @tp2@, both with the same representation type @tp_r'@,
+-- and should satisfy
+--
+-- > r1' tm' = r1 tm1    and    r2' tm' = tm2
+--
+-- In pictures the result should look like this:
+--
+-- >    r1 tm1      tm2::tp2
+-- >      ^            ^
+-- >   r1 |           /
+-- >      |          /
+-- >  tm1::tp_r1    / r2'
+-- >       ^       /
+-- >   r1'' \     /
+-- >         \   /
+-- >       tm'::tp_r'
+--
+-- where @r1'@ is the composition of @r1''@ and @r1@.
+injUnifyRepr :: Term -> Term -> InjectiveRepr -> Term -> Term ->
+                MRM t (Maybe (Term, Term, InjectiveRepr, InjectiveRepr))
+-- injUnifyRepr tp_r1 tm1 r1 tp2 tm2
+injUnifyRepr = error "FIXME HERE NOWNOW"
+
 
 
 ----------------------------------------------------------------------
@@ -730,9 +856,8 @@ mrEq' :: Term -> Term -> Term -> MRM t Term
 mrEq' (asNatType -> Just _) t1 t2 = liftSC2 scEqualNat t1 t2
 mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
 mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
-mrEq' (asVectorType -> Just (n, asBoolType -> Just ())) t1 t2 =
-  liftSC3 scBvEq n t1 t2
-mrEq' (asDataType -> Just (primName -> "Cryptol.Num", _)) t1 t2 =
+mrEq' (asSymBVType -> Just n) t1 t2 = liftSC3 scBvEq n t1 t2
+mrEq' (asNumType -> Just ()) t1 t2 =
   (,) <$> liftSC1 scWhnf t1 <*> liftSC1 scWhnf t2 >>= \case
     (asNum -> Just (Left t1'), asNum -> Just (Left t2')) ->
       liftSC0 scNatType >>= \nat_tp -> mrEq' nat_tp t1' t2'
@@ -821,9 +946,9 @@ mrAssertProveRel het t1 t2 =
        throwMRFailure (TermsNotRel het t1 t2)
 
 -- | The main workhorse for 'mrProveEq' and 'mrProveRel'. Build a Boolean term
--- expressing that the fourth and fifth arguments are related, heterogeneously
--- iff the first argument is true, whose types are given by the second and
--- third arguments, respectively
+-- over zero or more universally quantified variables expressing that the fourth
+-- and fifth arguments are related, heterogeneously iff the first argument is
+-- true, whose types are given by the second and third arguments, respectively
 mrProveRelH :: Bool -> Term -> Term -> Term -> Term -> MRM t TermInCtx
 mrProveRelH het tp1 tp2 t1 t2 =
   do varmap <- mrVars
@@ -872,13 +997,10 @@ mrProveRelH' var_map _ tp1 tp2 t1 (asEVarApp var_map -> Just (evar, args, Nothin
 mrProveRelH' _ _ (asTupleType -> Just []) (asTupleType -> Just []) _ _ =
   TermInCtx [] <$> liftSC1 scBool True
 
--- For Num, nat, bitvector, Boolean, and integer types, call mrProveEqSimple
-mrProveRelH' _ _ _ _ (asNum -> Just (Left t1)) (asNum -> Just (Left t2)) =
-  mrProveEqSimple (liftSC2 scEqualNat) t1 t2
+-- For nat, bitvector, Boolean, and integer types, call mrProveEqSimple
 mrProveRelH' _ _ (asNatType -> Just _) (asNatType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scEqualNat) t1 t2
-mrProveRelH' _ _ tp1@(asVectorType -> Just (n1, asBoolType -> Just ())) 
-                tp2@(asVectorType -> Just (n2, asBoolType -> Just ())) t1 t2 =
+mrProveRelH' _ _ tp1@(asSymBVType -> Just n1) tp2@(asSymBVType -> Just n2) t1 t2 =
   do ns_are_eq <- mrConvertible n1 n2
      if ns_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
@@ -887,6 +1009,20 @@ mrProveRelH' _ _ (asBoolType -> Just _) (asBoolType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scBoolEq) t1 t2
 mrProveRelH' _ _ (asIntegerType -> Just _) (asIntegerType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scIntEq) t1 t2
+
+-- If one side is a finite Num, treat it as a natural number
+mrProveRelH' _ het _ tp2 (asNum -> Just (Left t1)) t2 =
+  liftSC0 scNatType >>= \nat_tp -> mrProveRelH het nat_tp tp2 t1 t2
+mrProveRelH' _ het tp1 _ t1 (asNum -> Just (Left t2)) =
+  liftSC0 scNatType >>= \nat_tp -> mrProveRelH het tp1 nat_tp t1 t2
+
+-- If one side is a bvToNat term, treat it as a bitvector
+mrProveRelH' _ het _ tp2 (asBvToNat -> Just (n, t1)) t2 =
+  mrBvType n >>= \bv_tp -> mrProveRelH het bv_tp tp2 t1 t2
+mrProveRelH' _ het tp1 _ t1 (asBvToNat -> Just (n, t2)) =
+  mrBvType n >>= \bv_tp -> mrProveRelH het tp1 bv_tp t1 t2
+
+-- FIXME HERE NOWNOW: generalize Vec = Vec relation
 
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
@@ -923,22 +1059,12 @@ mrProveRelH' _ het (asPairType -> Just (tpL1, tpR1))
      condR <- mrProveRelH het tpR1 tpR2 t1R t2R
      liftTermInCtx2 scAnd condL condR
 
-mrProveRelH' _ het tp1 tp2 t1 t2 = findInjConvs tp1 (Just t1) tp2 (Just t2) >>= \case
-  -- If we are allowing heterogeneous equality and we can find non-trivial
-  -- injective conversions from a type @tp@ to @tp1@ and @tp2@, apply the
-  -- inverses of these conversions to @t1@ and @t2@ and continue checking
-  -- equality on the results
-  Just (tp, c1, c2) | nonTrivialConv c1 || nonTrivialConv c2 -> do
-    t1' <- mrApplyInvConv c1 t1
-    t2' <- mrApplyInvConv c2 t2
-    mrProveRelH True tp tp t1' t2'
-  -- Otherwise, just check convertibility
-  _ -> do
-    success <- mrConvertible t1 t2
-    tps_eq <- mrConvertible tp1 tp2
-    if success then return () else
-      if het || not tps_eq
-      then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
-           mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
-      else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
-    TermInCtx [] <$> liftSC1 scBool success
+mrProveRelH' _ _ tp1 tp2 t1 t2 =
+  do success <- mrConvertible t1 t2
+     if success then return () else
+       do tps_eq <- mrConvertible tp1 tp2
+          if not tps_eq
+            then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
+                 mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
+            else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
+     TermInCtx [] <$> liftSC1 scBool success
