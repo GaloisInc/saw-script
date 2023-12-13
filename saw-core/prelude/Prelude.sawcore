@@ -2031,6 +2031,13 @@ genBVVec n len a f =
     (\ (i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
        f (bvNat n i) (IsLtNat_to_bvult n len i pf));
 
+-- Generate a BVVec from a function from bitvector indices to elements, in a
+-- manner similar to genBVVec but where the function does not take proofs
+genBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+               (Vec n Bool -> a) -> BVVec n len a;
+genBVVecNoPf n len a f =
+  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) -> f i);
+
 -- Generate a BVVec from the elements of an existing vector, using a default
 -- value when we run out of the existing vector
 genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
@@ -2076,6 +2083,12 @@ atBVVec n len a x ix pf =
         (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
           (bvNat_bvToNat n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
         pf));
+
+-- Read the ixth element of a BVVec, assuming that ix < len but with no proof of
+-- that fact
+atBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+              BVVec n len a -> (ix : Vec n Bool) -> a;
+atBVVecNoPf n len a v ix = at (bvToNat n len) a v (bvToNat n ix);
 
 -- Indexing a generated BVVec just returns the generating function
 axiom at_gen_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
