@@ -673,12 +673,12 @@ mrRefinesCoInd f1 args1 f2 args2 =
      preF2 <- mrGetInvariant f2
      let hyp = CoIndHyp ctx f1 f2 args1 args2 preF1 preF2
      proveCoIndHypInvariant hyp
-     proveCoIndHyp hyp
+     proveCoIndHyp [] hyp
 
 -- | Prove the refinement represented by a 'CoIndHyp' coinductively. This is the
 -- main loop implementing 'mrRefinesCoInd'. See that function for documentation.
-proveCoIndHyp :: CoIndHyp -> MRM t ()
-proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
+proveCoIndHyp :: [[Either Int Int]] -> CoIndHyp -> MRM t ()
+proveCoIndHyp prev_specs hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
   do let f1 = coIndHypLHSFun hyp
          f2 = coIndHypRHSFun hyp
          args1 = coIndHypLHS hyp
@@ -691,12 +691,17 @@ proveCoIndHyp hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
      (withOnlyUVars (coIndHypCtx hyp) $ withOnlyAssumption invar $
       withCoIndHyp hyp $ mrRefines lhs rhs) `catchError` \case
        MRExnWiden nm1' nm2' new_vars
+         | f1 == nm1' && f2 == nm2' && elem new_vars prev_specs ->
+           -- This should never happen, since it means that generalizing
+           -- new_vars led to the exact same arguments not unifying, but at
+           -- least one more should unify when we generalize
+           panic "proveCoIndHyp" ["Generalization loop detected!"]
          | f1 == nm1' && f2 == nm2' ->
            -- NOTE: the state automatically gets reset here because we defined
            -- MRM t with ExceptT at a lower level than StateT
            do mrDebugPPPrefixSep 1 "Widening recursive assumption for" nm1' "|=" nm2'
               hyp' <- generalizeCoIndHyp hyp new_vars
-              proveCoIndHyp hyp'
+              proveCoIndHyp (new_vars:prev_specs) hyp'
        e -> throwError e
 
 -- | Test that a coinductive hypothesis for the given function names matches the
