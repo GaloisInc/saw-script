@@ -1153,24 +1153,18 @@ mrProveRelH' _ het tp1 _ t1 (asBvToNat -> Just (n, t2)) =
 
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
-mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
-                   tp2@(asBVVecType -> Just (n2, len2, tpA2)) t1 t2 =
-  mrConvertible n1 n2 >>= \ns_are_eq ->
+mrProveRelH' _ het tp1@(asBVVecType -> Just (asNat -> Just n1, len1, tpA1))
+                   tp2@(asBVVecType ->
+                        Just (asNat -> Just n2, len2, tpA2)) t1 t2 =
   mrConvertible len1 len2 >>= \lens_are_eq ->
-  (if ns_are_eq && lens_are_eq then return () else
+  (if n1 == n2 && lens_are_eq then return () else
      throwMRFailure (TypesNotEq (Type tp1) (Type tp2))) >>
   liftSC0 scBoolType >>= \bool_tp ->
   liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
-  withUVarLift "ix" (Type ix_tp) (n1,(len1,(tpA1,(tpA2,(t1,t2))))) $
-  \ix (n1',(len1',(tpA1',(tpA2',(t1',t2'))))) ->
-  do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
-     pf_tp <- liftSC1 scEqTrue ix_bound
-     pf <- mrErrorTerm pf_tp "FIXME" -- FIXME replace this with the below?
-     -- pf <- liftSC2 scGlobalApply "Prelude.unsafeAssertBVULt" [n1', ix, len1']
-     t1_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA1',
-                                                        t1', ix, pf]
-     t2_prj <- liftSC2 scGlobalApply "Prelude.atBVVec" [n1', len1', tpA2',
-                                                        t2', ix, pf]
+  withUVarLift "ix" (Type ix_tp) (len1,len2,tpA1,tpA2,t1,t2) $
+  \ix (len1',len2',tpA1',tpA2',t1',t2') ->
+  do t1_prj <- mrIndexBVVec n1 len1' tpA1' t1' ix
+     t2_prj <- mrIndexBVVec n2 len2' tpA2' t2' ix
      cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
      extTermInCtx [("ix",ix_tp)] <$>
        liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
