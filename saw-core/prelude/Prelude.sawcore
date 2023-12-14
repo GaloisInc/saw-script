@@ -2036,7 +2036,7 @@ genBVVec n len a f =
 genBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
                (Vec n Bool -> a) -> BVVec n len a;
 genBVVecNoPf n len a f =
-  genBVVec n len a (\ (i:Vec n Bool) (_:is_bvult n i len) -> f i);
+  gen (bvToNat n len) a (\ (i:Nat) -> f (bvNat n i));
 
 -- Generate a BVVec from the elements of an existing vector, using a default
 -- value when we run out of the existing vector
