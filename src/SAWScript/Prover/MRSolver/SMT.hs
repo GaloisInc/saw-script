@@ -532,6 +532,10 @@ mrProvable bool_tm =
         instUVar :: LocalName -> Term -> MRM t Term
         instUVar nm tp = mrDebugPPPrefix 3 "instUVar" (nm, tp) >>
                          liftSC1 scWhnf tp >>= \case
+          -- NOTE: we should no longer see uvars that are vectors or pairs,
+          -- since pairs should be curried when they are introduced and vectors
+          -- should be represented as functions from indices to elements
+          {-
           (asNonBVVecVectorType -> Just (m, a)) ->
              liftSC1 smtNorm m >>= \m' -> case asBvToNat m' of
                -- For variables of type Vec of length which normalizes to
@@ -561,7 +565,7 @@ mrProvable bool_tm =
           (asPairType -> Just (tp1, tp2)) -> do
             e1 <- instUVar nm tp1
             e2 <- instUVar nm tp2
-            liftSC2 scPairValue e1 e2
+            liftSC2 scPairValue e1 e2 -}
           -- Otherwise, create a global variable with the given name and type
           tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
 
