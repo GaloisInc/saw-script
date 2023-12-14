@@ -1002,8 +1002,10 @@ mrSetEVarClosed var val =
 -- need not be the case that @i=j@). Return whether this succeeded.
 mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM t Bool
 mrTrySetAppliedEVar evar args t =
-  -- Get the complete list of argument variables of the type of evar
-  let (evar_vars, _) = asPiList (mrVarType evar) in
+  -- Get the first N argument variables of the type of evar, where N is the
+  -- length of args; note that evar can have more than N arguments if t is a
+  -- higher-order term
+  let (take (length args) -> evar_vars, _) = asPiList (mrVarType evar) in
   -- Get all the free variables of t
   let free_vars = bitSetElems (looseVars t) in
   -- For each free var of t, find an arg equal to it
