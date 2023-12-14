@@ -770,10 +770,10 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- variable z of type tp_r to hyp and setting each arg in eq_args to the
   -- result of applying its corresponding repr to z
   (hyp', var) <- coIndHypWithVar hyp "z" (Type tp_r)
-  arg_reprs' <- liftTermLike 0 1 arg_reprs
+  arg_reprs' <- liftTermLike 0 1 (repr:arg_reprs)
   hyp'' <- foldlM (\hyp_i (arg_spec_i, repr_i) ->
                     coIndHypSetArg hyp_i arg_spec_i <$> mrApplyRepr repr_i var)
-                  hyp' ((arg_spec_0,repr) : zip eq_args arg_reprs')
+                  hyp' (zip (arg_spec_0:eq_args) arg_reprs')
   -- We finish by recursing on any remaining arg_specs
   generalizeCoIndHyp hyp'' uneq_args
 
