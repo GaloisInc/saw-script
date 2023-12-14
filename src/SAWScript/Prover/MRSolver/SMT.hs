@@ -608,13 +608,13 @@ mrApplyRepr (InjReprPair repr1 repr2) t =
      liftSC2 scPairValueReduced t1 t2
 mrApplyRepr (InjReprVec (NatVecLen n) tp repr) t =
   do nat_tp <- liftSC0 scNatType
-     f <- mrLambdaLift1 ("ix", nat_tp) repr $ \x repr' ->
-       mrApplyRepr repr' =<< mrApply t x
+     f <- mrLambdaLift1 ("ix", nat_tp) (repr, t) $ \x (repr', t') ->
+       mrApplyRepr repr' =<< mrApply t' x
      mrApplyGlobal "Prelude.gen" [n, tp, f]
 mrApplyRepr (InjReprVec (BVVecLen n len) tp repr) t =
   do bv_tp <- liftSC1 scBitvector n
-     f <- mrLambdaLift1 ("ix", bv_tp) repr $ \x repr' ->
-       mrApplyRepr repr' =<< mrApply t x
+     f <- mrLambdaLift1 ("ix", bv_tp) (repr, t) $ \x (repr', t') ->
+       mrApplyRepr repr' =<< mrApply t' x
      n_tm <- liftSC1 scNat n
      mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
 
