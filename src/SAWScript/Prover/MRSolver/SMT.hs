@@ -74,6 +74,27 @@ asSymBVType :: Recognizer Term Term
 asSymBVType (asVectorType -> Just (n, asBoolType -> Just ())) = Just n
 asSymBVType _ = Nothing
 
+-- | Match a term of the form @gen n a f@ or @genWithProof n a (\i _ -> e)@,
+-- where the latter case means that the function ignores its proof argument. In
+-- this latter case, return just the function @\i -> e@.
+asGenVecTerm :: SharedContext -> Recognizer Term (Term, Term, IO Term)
+asGenVecTerm _ (asApplyAll ->
+                (isGlobalDef "Prelude.gen" -> Just _, [n, a, f]))
+  = Just (n, a, return f)
+asGenVecTerm sc (asApplyAll ->
+                 (isGlobalDef "Prelude.genWithProof" -> Just _,
+                  [n, a, (asLambda -> Just (ix_nm, ix_tp,
+                                            asLambda -> Just (_, _, e)))]))
+  | not $ inBitSet 0 $ looseVars e
+  = Just (n, a,
+          do ix_var <- scLocalVar sc 0
+             -- Substitute an error term for the proof variable and ix_var for
+             -- ix in the body e of the lambda
+             let s = [error "asGenVecTerm: unexpected var occurrence", ix_var]
+             e' <- instantiateVarList sc 0 s e
+             scLambda sc ix_nm ix_tp e')
+asGenVecTerm _ _ = Nothing
+
 -- | Apply @genBVVec@ to arguments @n@, @len@, and @a@, along with a function of
 -- type @Vec n Bool -> a@
 genBVVecTerm :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
@@ -116,13 +137,48 @@ asGenFromBVVecTerm _ = Nothing
 
 type TmPrim = Prim TermModel
 
--- | Convert a Boolean value to a 'Term'; like 'readBackValue' but that function
--- requires a 'SimulatorConfig' which we cannot easily generate here...
+-- | A primitive function that expects a term of the form @gen n a f@ and the
+-- function argument @f@ to the supplied function
+primGenVec :: SharedContext -> (Term -> TmPrim) -> TmPrim
+primGenVec sc =
+  PrimFilterFun "primGenVec" $
+  \case
+    VExtra (VExtraTerm _ (asGenVecTerm sc -> Just (_, _, f_m))) -> lift f_m
+    _ -> mzero
+
+-- | Convert a Boolean value to a 'Term'
 boolValToTerm :: SharedContext -> Value TermModel -> IO Term
 boolValToTerm _ (VBool (Left tm)) = return tm
 boolValToTerm sc (VBool (Right b)) = scBool sc b
 boolValToTerm _ (VExtra (VExtraTerm _tp tm)) = return tm
 boolValToTerm _ v = error ("boolValToTerm: unexpected value: " ++ show v)
+
+-- | Convert a bitvector value to a 'Term'
+bvValToTerm :: SharedContext -> Value TermModel -> IO Term
+bvValToTerm _ (VWord (Left (_,tm))) = return tm
+bvValToTerm sc (VWord (Right bv)) =
+  scBvConst sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
+bvValToTerm sc (VVector vs) =
+  do vs' <- traverse (boolValToTerm sc <=< force) (V.toList vs)
+     bool_tp <- scBoolType sc
+     scVectorReduced sc bool_tp vs'
+bvValToTerm _ (VExtra (VExtraTerm _tp tm)) = return tm
+bvValToTerm _ v = error ("bvValToTerm: unexpected value: " ++ show v)
+
+-- | Convert a natural number value to a 'Term'
+natValToTerm :: SharedContext -> Value TermModel -> IO Term
+natValToTerm sc (VNat n) = scNat sc n
+natValToTerm sc (VBVToNat w bv_val) =
+  do bv_tm <- bvValToTerm sc bv_val
+     scBvToNat sc (fromIntegral w) bv_tm
+natValToTerm _ (VExtra (VExtraTerm _ n)) = return n
+natValToTerm _ v = error ("natValToTerm: unexpected value: " ++ show v)
+
+-- | A primitive function that expects a 'Term' of type @Nat@
+primNatTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
+primNatTermFun sc =
+  PrimFilterFun "primNatTermFun" $ \v -> lift (natValToTerm sc v)
+
 
 -- | An implementation of a primitive function that expects a term of the form
 -- @genBVVec n _ a _@ or @genCryM (bvToNat n _) a _@, where @n@ is the second
@@ -275,7 +331,44 @@ primGlobal sc glob =
 -- FIXME: eventually we need to add the current event type to this list
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
-  [ -- Don't unfold @genBVVec@ or @genCryM when normalizing
+  [
+    -- Override the usual behavior of gen so it is not evaluated or unfolded
+    ("Prelude.gen",
+     Prim (do tp <- scTypeOfGlobal sc "Prelude.gen"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "Prelude.gen")
+    ),
+
+    -- Also have genWithProof not be evaluated
+    ("Prelude.genWithProof",
+     Prim (do tp <- scTypeOfGlobal sc "Prelude.genWithProof"
+              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
+                scGlobalDef sc "Prelude.genWithProof")
+    ),
+
+    -- Normalize an application of @atwithDefault@ to a @gen@ term into an
+    -- application of the body of the gen term to the index. Note that this
+    -- implicitly assumes that the index is always in bounds, MR solver always
+    -- checks that before it creates an indexing term.
+    ("Prelude.atWithDefault",
+     PrimFun $ \_len -> tvalFun $ \a -> PrimFun $ \_errVal ->
+      primGenVec sc $ \f -> primNatTermFun sc $ \ix ->
+      Prim (do tm <- scApplyBeta sc f ix
+               tm' <- smtNorm sc tm
+               return $ VExtra $ VExtraTerm a tm')
+    ),
+
+    -- Normalize an application of @atWithProof@ to a @gen@ term by applying the
+    -- function of the @gen@ to the index
+    ("Prelude.atWithProof",
+     PrimFun $ \_len -> tvalFun $ \a -> primGenVec sc $ \f ->
+      primNatTermFun sc $ \ix -> PrimFun $ \_pf ->
+      Prim (do tm <- scApplyBeta sc f ix
+               tm' <- smtNorm sc tm
+               return $ VExtra $ VExtraTerm a tm')),
+
+    {-
+    -- Don't unfold @genBVVec@ or @genCryM when normalizing
     ("Prelude.genBVVec",
      Prim (do tp <- scTypeOfGlobal sc "Prelude.genBVVec"
               VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
@@ -337,7 +430,8 @@ smtNormPrims sc = Map.fromList
                tm <- scApplyBeta sc f ix''
                tm' <- smtNorm sc tm
                return $ VExtra $ VExtraTerm a tm') 
-    ),
+    ), -}
+
     -- Don't normalize applications of @SpecM@ and its arguments
     ("SpecM.SpecM",
      PrimStrict $ \ev -> PrimStrict $ \tp ->
@@ -352,7 +446,8 @@ smtNormPrims sc = Map.fromList
   ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
--- debug output
+-- debug output. This is used to re-enter the normalizer from inside the
+-- primitives.
 smtNorm :: SharedContext -> Term -> IO Term
 smtNorm sc t =
   scGetModuleMap sc >>= \modmap ->
