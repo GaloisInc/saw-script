@@ -832,9 +832,37 @@ injReprRestrict _ _ _ r2 = return r2
 -- where @r1'@ is the composition of @r1''@ and @r1@.
 injUnifyRepr :: Term -> Term -> InjectiveRepr -> Term -> Term ->
                 MRM t (Maybe (Term, Term, InjectiveRepr, InjectiveRepr))
--- injUnifyRepr tp_r1 tm1 r1 tp2 tm2
-injUnifyRepr = error "FIXME HERE NOWNOW"
 
+-- If there is a numeric repr r2 from tp_r1 to tp2, then that's our r2',
+-- assuming that r2 tm1 = tm2
+injUnifyRepr tp_r1 tm1 r1 tp2 tm2
+  | Just r2 <- findNumRepr tp_r1 tp2 =
+    do r2_tm1 <- mrApplyRepr r2 tm1
+       eq_p <- mrProveEq r2_tm1 tm2
+       if eq_p then
+         return (Just (tp_r1, tm1, r1, r2))
+         else return Nothing
+
+-- If there is a numeric repr r1'' from tp2 to tp_r1, then we pre-compose that
+-- with r1 and use the identity for r2', assuming r1'' tm2 = tm1
+injUnifyRepr tp_r1 tm1 r1 tp2 tm2
+  | Just r1'' <- findNumRepr tp2 tp_r1 =
+    do r1_tm2 <- mrApplyRepr r1'' tm2
+       eq_p <- mrProveEq tm1 r1_tm2
+       if eq_p then
+         return (Just (tp2, tm2, injReprComp r1'' r1, InjReprId))
+         else return Nothing
+
+-- Otherwise, build a representation r2 for tm2, check that its representation
+-- type equals tp_r1, and check that r1 tm1 is related to tm2
+injUnifyRepr tp_r1 tm1 r1 tp2 tm2 =
+  do (tp_r2, _, r2) <- mkInjReprTerm tp2 tm2
+     tps_eq <- mrConvertible tp_r1 tp_r2
+     if not tps_eq then return Nothing else
+       do r1_tm1 <- mrApplyRepr r1 tm1
+          rel <- mrProveRel True r1_tm1 tm2
+          if rel then return (Just (tp_r1, tm1, r1, r2)) else
+            return Nothing
 
 
 ----------------------------------------------------------------------
