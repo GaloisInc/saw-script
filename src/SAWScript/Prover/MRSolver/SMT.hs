@@ -510,7 +510,7 @@ mrProvableRaw prop_term =
        Right (stats, SolveCounterexample cex) ->
          debugPrint 2 "SMT solver response: not provable" >>
          debugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
-           "\n - " ++ renderSawDoc defaultPPOpts (ppTerm defaultPPOpts (Unshared (FTermF (ExtCns x)))) ++
+           "\n - " ++ show (ppName $ ecName x) ++
            " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
        Right (stats, SolveSuccess _) ->
@@ -525,7 +525,7 @@ mrProvable bool_tm =
   do mrUVars >>= mrDebugPPPrefix 3 "mrProvable uvars:"
      assumps <- mrAssumptions
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
-     prop_inst <- mrSubstEVars prop >>= instantiateUVarsM instUVar
+     prop_inst <- instantiateUVarsM instUVar prop >>= mrSubstLowerEVars
      mrNormTerm prop_inst >>= mrProvableRaw
   where -- | Given a UVar name and type, generate a 'Term' to be passed to
         -- SMT, with special cases for BVVec and pair types
@@ -1089,12 +1089,12 @@ mrProveRelH' :: Map MRVar MRVarInfo -> Bool ->
                 Term -> Term -> Term -> Term -> MRM t TermInCtx
 
 -- If t1 is an instantiated evar, substitute and recurse
-mrProveRelH' var_map het tp1 tp2 (asEVarApp var_map -> Just (_, args, Just f)) t2 =
+mrProveRelH' var_map het tp1 tp2 (asEVarApp var_map -> Just (_, _, args, Just f)) t2 =
   mrApplyAll f args >>= \t1' -> mrProveRelH het tp1 tp2 t1' t2
 
 -- If t1 is an uninstantiated evar, ensure the types are equal and instantiate
 -- it with t2
-mrProveRelH' var_map _ tp1 tp2 (asEVarApp var_map -> Just (evar, args, Nothing)) t2 =
+mrProveRelH' var_map _ tp1 tp2 (asEVarApp var_map -> Just (evar, _, args, Nothing)) t2 =
   do tps_are_eq <- mrConvertible tp1 tp2
      if tps_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
@@ -1105,12 +1105,12 @@ mrProveRelH' var_map _ tp1 tp2 (asEVarApp var_map -> Just (evar, args, Nothing))
      TermInCtx [] <$> liftSC1 scBool success
 
 -- If t2 is an instantiated evar, substitute and recurse
-mrProveRelH' var_map het tp1 tp2 t1 (asEVarApp var_map -> Just (_, args, Just f)) =
+mrProveRelH' var_map het tp1 tp2 t1 (asEVarApp var_map -> Just (_, _, args, Just f)) =
   mrApplyAll f args >>= \t2' -> mrProveRelH het tp1 tp2 t1 t2'
 
 -- If t2 is an uninstantiated evar, ensure the types are equal and instantiate
 -- it with t1
-mrProveRelH' var_map _ tp1 tp2 t1 (asEVarApp var_map -> Just (evar, args, Nothing)) =
+mrProveRelH' var_map _ tp1 tp2 t1 (asEVarApp var_map -> Just (evar, _, args, Nothing)) =
   do tps_are_eq <- mrConvertible tp1 tp2
      if tps_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp1) (Type tp2))

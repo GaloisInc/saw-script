@@ -24,7 +24,9 @@ monadic combinators for operating on terms.
 
 module SAWScript.Prover.MRSolver.Monad where
 
+import Data.Maybe
 import Data.List (find, findIndex, foldl')
+import Data.IORef
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
 import Control.Monad.Reader
@@ -201,13 +203,16 @@ showMRFailureNoCtx = showMRFailure . mrFailureWithoutCtx
 
 -- | Classification info for what sort of variable an 'MRVar' is
 data MRVarInfo
-     -- | An existential variable, that might be instantiated
-  = EVarInfo (Maybe Term)
+     -- | An existential variable, that might be instantiated and that tracks
+     -- how many uvars were in scope when it was created. An occurrence of an
+     -- existential variable should always be applied to these uvars; this is
+     -- ensured by only allowing evars to be created by 'mrFreshEVar'.
+  = EVarInfo Int (Maybe Term)
     -- | A recursive function bound by @multiFixS@, with its body
   | CallVarInfo Term
 
 instance PrettyInCtx MRVarInfo where
-  prettyInCtx (EVarInfo maybe_t) =
+  prettyInCtx (EVarInfo _ maybe_t) =
     prettyAppList [ return "EVar", parens <$> prettyInCtx maybe_t]
   prettyInCtx (CallVarInfo t) =
     prettyAppList [ return "CallVar", parens <$> prettyInCtx t]
@@ -222,11 +227,11 @@ asExtCnsApp (asApplyAll -> (asExtCns -> Just ec, args)) =
 asExtCnsApp _ = Nothing
 
 -- | Recognize an evar applied to 0 or more arguments relative to a 'MRVarMap'
--- along with its instantiation, if any
-asEVarApp :: MRVarMap -> Recognizer Term (MRVar, [Term], Maybe Term)
+-- along with its uvar context length and its instantiation, if any
+asEVarApp :: MRVarMap -> Recognizer Term (MRVar, Int, [Term], Maybe Term)
 asEVarApp var_map (asExtCnsApp -> Just (ec, args))
-  | Just (EVarInfo maybe_inst) <- Map.lookup (MRVar ec) var_map =
-    Just (MRVar ec, args, maybe_inst)
+  | Just (EVarInfo clen maybe_inst) <- Map.lookup (MRVar ec) var_map =
+    Just (MRVar ec, clen, args, maybe_inst)
 asEVarApp _ _ = Nothing
 
 -- | A co-inductive hypothesis of the form:
@@ -617,6 +622,13 @@ mrApplyAll f args = liftSC2 scApplyAllBeta f args
 mrApply :: Term -> Term -> MRM t Term
 mrApply f arg = mrApplyAll f [arg]
 
+-- | Substitue a list of @N@ arguments into the body of an @N@-ary pi type
+mrPiApplyAll :: Term -> [Term] -> MRM t Term
+mrPiApplyAll tp args
+  | Just (_, body) <- asPiListN (length args) tp
+  = substTermLike 0 args body
+mrPiApplyAll _ _ = panic "mrPiApplyAll" ["Too many arguments for pi type"]
+
 -- | Return the unit type as a 'Type'
 mrUnitType :: MRM t Type
 mrUnitType = Type <$> liftSC0 scUnitType
@@ -822,7 +834,8 @@ piUVarsM :: Term -> MRM t Term
 piUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scPiList ctx t
 
 -- | Instantiate all uvars in a term using the supplied function
-instantiateUVarsM :: forall a t. TermLike a => (LocalName -> Term -> MRM t Term) -> a -> MRM t a
+instantiateUVarsM :: forall a t. TermLike a =>
+                     (LocalName -> Term -> MRM t Term) -> a -> MRM t a
 instantiateUVarsM f a =
   do ctx <- mrUVarsOuterToInner
      -- Remember: the uvar context is outermost to innermost, so we bind
@@ -859,7 +872,7 @@ mrVarInfo var = Map.lookup var <$> mrVars
 -- | Convert an 'ExtCns' to a 'FunName'
 extCnsToFunName :: ExtCns Term -> MRM t FunName
 extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
-  Just (EVarInfo _) -> return $ EVarFunName var
+  Just (EVarInfo _ _) -> return $ EVarFunName var
   Just (CallVarInfo _) -> return $ CallSName var
   Nothing
     | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
@@ -950,7 +963,8 @@ mrSetVarInfo var info =
 mrFreshEVar :: LocalName -> Type -> MRM t Term
 mrFreshEVar nm (Type tp) =
   do var <- mrFreshVar nm tp
-     mrSetVarInfo var (EVarInfo Nothing)
+     ctx_len <- mrVarCtxLength <$> mrUVars
+     mrSetVarInfo var (EVarInfo ctx_len Nothing)
      mrVarTerm var
 
 -- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
@@ -989,8 +1003,8 @@ mrSetEVarClosed var val =
        st { mrsVars =
             Map.alter
             (\case
-                Just (EVarInfo Nothing) -> Just $ EVarInfo (Just val)
-                Just (EVarInfo (Just _)) ->
+                Just (EVarInfo clen Nothing) -> Just $ EVarInfo clen (Just val)
+                Just (EVarInfo _ (Just _)) ->
                   error "Setting existential variable: variable already set!"
                 _ -> error "Setting existential variable: not an evar!")
             var (mrsVars st) }
@@ -1048,10 +1062,52 @@ mrSubstEVars = memoFixTermFun $ \recurse t ->
   do var_map <- mrVars
      case t of
        -- If t is an instantiated evar, recurse on its instantiation
-       (asEVarApp var_map -> Just (_, args, Just t')) ->
+       (asEVarApp var_map -> Just (_, _, args, Just t')) ->
          mrApplyAll t' args >>= recurse
        -- If t is anything else, recurse on its immediate subterms
        _ -> traverseSubterms recurse t
+
+-- | Replace all evars in a 'Term' with their instantiations when they have one
+-- and "lower" those that do not. Lowering an evar in this context means
+-- replacing each occurrence @X x1 .. xn@ of an evar @X@ applied to its context
+-- of uvars with a fresh 'ExtCns' variable @Y@. This must be done after
+-- 'instantiateUVarsM' has replaced all uvars with fresh 'ExtCns' variables,
+-- which ensures that @X x1 .. xn@ is actually a closed, top-level term since
+-- each @xi@ is now an 'ExtCns'. This is necessary so @X x1 .. xn@ can be
+-- replaced by an 'ExtCns' @Y@, which is always closed. The idea of lowering is
+-- that @X@ should always occur applied to these same values, so really we can
+-- just treat the entire expression @X x1 .. xn@ as a single unknown value,
+-- rather than worrying about how @X@ depends on its inputs.
+mrSubstLowerEVars :: Term -> MRM t Term
+mrSubstLowerEVars t_top =
+  do var_map <- mrVars
+     lower_map <- liftIO $ newIORef Map.empty
+     flip memoFixTermFun t_top $ \recurse t ->
+       case t of
+         -- If t is an instantiated evar, recurse on its instantiation
+         (asEVarApp var_map -> Just (_, _, args, Just t')) ->
+           mrApplyAll t' args >>= recurse
+         -- If t is an uninstantiated evar, look up or create its lowering as a
+         -- variable, making sure it is applied to evars for its arguments
+         (asEVarApp var_map -> Just (evar, clen, args, Nothing)) ->
+           do let (cargs, args') = splitAt clen args
+              let my_panic :: () -> a
+                  my_panic () =
+                    panic "mrSubstLowerEVars"
+                    ["Unexpected evar application: " ++ show t]
+              let cargs_ec = fromMaybe (my_panic ()) $ mapM asExtCns cargs
+              t' <- (Map.lookup evar <$> liftIO (readIORef lower_map)) >>= \case
+                Just (y, cargs_expected) ->
+                  if cargs_ec == cargs_expected then return y else my_panic ()
+                Nothing ->
+                  do y_tp <- mrPiApplyAll (mrVarType evar) cargs
+                     y <- liftSC2 scFreshGlobal (T.pack $ showMRVar evar) y_tp
+                     liftIO $ modifyIORef' lower_map $
+                       Map.insert evar (y,cargs_ec)
+                     return y
+              mrApplyAll t' args' >>= recurse
+         -- If t is anything else, recurse on its immediate subterms
+         _ -> traverseSubterms recurse t
 
 -- | Replace all evars in a 'Term' with their instantiations, returning
 -- 'Nothing' if we hit an uninstantiated evar
@@ -1061,10 +1117,10 @@ mrSubstEVarsStrict top_t =
   do var_map <- lift mrVars
      case t of
        -- If t is an instantiated evar, recurse on its instantiation
-       (asEVarApp var_map -> Just (_, args, Just t')) ->
+       (asEVarApp var_map -> Just (_, _, args, Just t')) ->
          lift (mrApplyAll t' args) >>= recurse
        -- If t is an uninstantiated evar, return Nothing
-       (asEVarApp var_map -> Just (_, _, Nothing)) ->
+       (asEVarApp var_map -> Just (_, _, _, Nothing)) ->
          mzero
        -- If t is anything else, recurse on its immediate subterms
        _ -> traverseSubterms recurse t

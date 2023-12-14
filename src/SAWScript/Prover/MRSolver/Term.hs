@@ -55,6 +55,14 @@ import Verifier.SAW.Cryptol.Monadify
 -- * MR Solver Term Representation
 ----------------------------------------------------------------------
 
+-- | Recognize a nested pi type with at least @N@ arguments, returning the
+-- context of those first @N@ arguments and the body
+asPiListN :: Int -> Recognizer Term ([(LocalName,Term)], Term)
+asPiListN 0 tp = Just ([], tp)
+asPiListN i (asPi -> Just (x, tp, body)) =
+  fmap (\(ctx, body') -> ((x,tp):ctx, body')) $ asPiListN (i-1) body
+asPiListN _ _ = Nothing
+
 -- | A variable used by the MR solver
 newtype MRVar = MRVar { unMRVar :: ExtCns Term } deriving (Eq, Show, Ord)
 
