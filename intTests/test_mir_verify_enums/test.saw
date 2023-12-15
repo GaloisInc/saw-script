@@ -1,0 +1,78 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let option_u32_adt = mir_find_adt m "core::option::Option" [mir_u32];
+let i_adt = mir_find_adt m "test::I" [];
+
+let f_none_spec = do {
+  let x = mir_enum_value option_u32_adt "None" [];
+
+  mir_execute_func [x];
+
+  mir_return (mir_term {{ 27 : [32] }});
+};
+
+let f_some_spec = do {
+  let ret = mir_term {{ 42 : [32] }};
+  let x = mir_enum_value option_u32_adt "Some" [ret];
+
+  mir_execute_func [x];
+
+  mir_return ret;
+};
+
+let g_spec = do {
+  b <- mir_fresh_var "b" mir_bool;
+
+  mir_execute_func [mir_term b];
+
+  mir_return (mir_term {{ if b then 27 else 42 : [32] }});
+};
+
+let h_none_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value option_u32_adt "None" []);
+};
+
+let h_some_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_enum_value option_u32_adt "Some" [mir_term x]);
+};
+
+let i42_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value i_adt "I42" []);
+};
+
+let i43_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value i_adt "I43" []);
+};
+
+// `mir_enum_value` should error if it cannot find a variant name.
+let i43_bad_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value i_adt "I44" []);
+};
+
+f_none_ov <- mir_verify m "test::f" [] false f_none_spec z3;
+f_some_ov <- mir_verify m "test::f" [] false f_some_spec z3;
+
+mir_verify m "test::g" [f_none_ov, f_some_ov] false g_spec z3;
+
+mir_verify m "test::h_none" [] false h_none_spec z3;
+mir_verify m "test::h_some" [] false h_some_spec z3;
+
+mir_verify m "test::i42" [] false i42_spec z3;
+mir_verify m "test::i43" [] false i43_spec z3;
+fails (
+  mir_verify m "test::i43" [] false i43_bad_spec z3
+);

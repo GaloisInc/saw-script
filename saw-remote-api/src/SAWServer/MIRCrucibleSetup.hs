@@ -19,6 +19,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -30,6 +31,7 @@ import SAWScript.Crucible.MIR.Builtins
       mir_alloc_mut,
       mir_fresh_expanded_value,
       mir_fresh_var,
+      mir_enum_value,
       mir_execute_func,
       mir_ghost_value,
       mir_load_module,
@@ -194,14 +196,14 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
              return $ MS.SetupArray ty' (elt':eltss')
     getSetupVal _ (StructValue Nothing _) =
       MIRSetupM $ fail "MIR struct without a corresponding ADT."
-    getSetupVal env (StructValue (Just adtServerName) elts) =
-      -- First, we look up the MIR ADT from its ServerName. If we find it,
-      -- proceed to handle the struct field types. Otherwise, raise an error.
-      case getMIRAdtEither sawenv adtServerName of
-        Left ex -> throw ex
-        Right adt -> do
-          elts' <- mapM (getSetupVal env) elts
-          pure $ MS.SetupStruct adt elts'
+    getSetupVal env (StructValue (Just adtServerName) elts) = do
+      adt <- getMirAdt adtServerName
+      elts' <- mapM (getSetupVal env) elts
+      pure $ MS.SetupStruct adt elts'
+    getSetupVal env (EnumValue adtServerName variantName elts) = do
+      adt <- getMirAdt adtServerName
+      elts' <- mapM (getSetupVal env) elts
+      MIRSetupM $ mir_enum_value adt variantName elts'
     getSetupVal env (TupleValue elems) = do
       elems' <- mapM (getSetupVal env) elems
       pure $ MS.SetupTuple () elems'
@@ -226,6 +228,10 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
       MIRSetupM $ fail "Union l-values unsupported in the MIR API."
     getSetupVal _ (ElementLValue _ _) =
       MIRSetupM $ fail "Element l-values unsupported in the MIR API."
+
+    getMirAdt :: ServerName -> MIRSetupM Mir.Adt
+    getMirAdt adtServerName =
+      either throw pure $ getMIRAdtEither sawenv adtServerName
 
 data MIRLoadModuleParams
   = MIRLoadModuleParams ServerName FilePath

@@ -7,6 +7,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -67,6 +68,7 @@ import qualified Mir.TransTy as Mir
 import qualified What4.Expr as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
+import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.SharedTerm
@@ -892,6 +894,7 @@ instantiateSetupValue sc s v =
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
     MS.SetupArray elemTy vs           -> MS.SetupArray elemTy <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupStruct did vs             -> MS.SetupStruct did <$> mapM (instantiateSetupValue sc s) vs
+    MS.SetupEnum enum_                -> MS.SetupEnum <$> instantiateSetupEnum enum_
     MS.SetupTuple x vs                -> MS.SetupTuple x <$> mapM (instantiateSetupValue sc s) vs
     MS.SetupSlice slice               -> MS.SetupSlice <$> instantiateSetupSlice slice
     MS.SetupNull empty                -> absurd empty
@@ -903,6 +906,14 @@ instantiateSetupValue sc s v =
     MS.SetupGlobalInitializer _ _     -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
+
+    instantiateSetupEnum :: MirSetupEnum -> IO MirSetupEnum
+    instantiateSetupEnum (MirSetupEnumVariant adt variant variantIdx vs) =
+      MirSetupEnumVariant adt variant variantIdx <$>
+      mapM (instantiateSetupValue sc s) vs
+    instantiateSetupEnum (MirSetupEnumSymbolic adt discr variants) =
+      MirSetupEnumSymbolic adt discr <$>
+      mapM (mapM (instantiateSetupValue sc s)) variants
 
     instantiateSetupSlice :: MirSetupSlice -> IO MirSetupSlice
     instantiateSetupSlice (MirSetupSliceRaw ref len) =
@@ -1023,6 +1034,7 @@ learnSetupCondition opts sc cc spec prepost cond =
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
+  forall w.
   Options          {- ^ saw script print out opts -} ->
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   MIRCrucibleContext    {- ^ context for interacting with Crucible -} ->
@@ -1073,40 +1085,120 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     (MIRVal (StructShape _ _ xsFldShps) (Crucible.AnyValue tpr@(Crucible.StructRepr _) xs),
      Mir.TyAdt _ _ _,
      MS.SetupStruct adt zs)
-      | Ctx.sizeInt (Ctx.size xs) == length zs
-      , let xsTpr = Crucible.StructRepr (FC.fmapFC fieldShapeType xsFldShps)
-      , Just Refl <- W4.testEquality tpr xsTpr ->
-        case adt of
-          Mir.Adt _ Mir.Struct [v] _ _ _ _ ->
-            let ys = v ^.. Mir.vfields . each . Mir.fty in
-            sequence_
-              [ case xFldShp of
-                  ReqField shp ->
-                    matchArg opts sc cc cs prepost md (MIRVal shp x) y z
-                  OptField shp -> do
-                    let x' = readMaybeType sym "field" (shapeType shp) x
-                    matchArg opts sc cc cs prepost md (MIRVal shp x') y z
-              | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
-                  zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
-                       ys
-                       zs ]
-          Mir.Adt _ ak _ _ _ _ _ ->
-            panic "matchArg" ["AdtKind " ++ show ak ++ " not yet implemented"]
+      | let xsTpr = Crucible.StructRepr (FC.fmapFC fieldShapeType xsFldShps)
+      , Just Refl <- W4.testEquality tpr xsTpr -> do
+          let variants = adt ^. Mir.adtvariants
+          variant <-
+            case variants of
+              [variant] ->
+                pure variant
+              _ ->
+                panic "matchArg"
+                      [ "Encountered struct Adt with " ++
+                        show (length variants) ++
+                        " variants:"
+                      , show $ adt ^. Mir.adtname
+                      ]
+          let ys = variant ^.. Mir.vfields . each . Mir.fty
+          matchFields sym xsFldShps xs ys zs
+
+    -- In order to match an enum value, we first check to see if the expected
+    -- value is a specific enum variant or a symbolic enum...
+    (MIRVal (EnumShape _ _ variantShps _ discrShp)
+            (Crucible.AnyValue
+              (Mir.RustEnumRepr discrTpr variantCtx)
+              (Ctx.Empty
+                Ctx.:> Crucible.RV actualDiscr
+                Ctx.:> Crucible.RV variantAssn)),
+     _,
+     MS.SetupEnum enum_)
+      | Just Refl <- W4.testEquality (shapeType discrShp) discrTpr
+      , Just Refl <- W4.testEquality (FC.fmapFC variantShapeType variantShps) variantCtx ->
+        case enum_ of
+          -- ...if the expected value is a specific enum variant, then we must:
+          --
+          -- - Ensure that the discriminant values match
+          -- - Ensure that the predicate in the variant's VariantBranch holds.
+          --   This should always succeed if the discriminant values match.
+          -- - Match the fields of the VariantBranch's payload point-wise.
+          MirSetupEnumVariant adt variant variantIdxInt zs -> do
+            Some variantIdx <- pure $
+              variantIntIndex (adt ^. Mir.adtname) variantIdxInt (Ctx.size variantAssn)
+            VariantShape xsFldShps <- pure $ variantShps Ctx.! variantIdx
+            let Crucible.VB expectedVariant = variantAssn Ctx.! variantIdx
+            let ys = variant ^.. Mir.vfields . each . Mir.fty
+
+            -- Ensure that the discriminant values match.
+            IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
+            let discr = getEnumVariantDiscr variant
+            expectedDiscr <- liftIO $
+              W4.bvLit sym discrW $ BV.mkBV discrW discr
+            discrEq <- liftIO $
+              W4.bvEq sym expectedDiscr actualDiscr
+            addAssert discrEq md =<< notEq
+
+            case expectedVariant of
+              W4.PE xsPred xs -> do
+                -- Ensure that the variant is defined, i.e., that the predicate
+                -- in the underlying PartialExpr holds. Due to the way that we
+                -- construct specific enum values, this should always hold if
+                -- the discriminant values match, but we check it anyway to be
+                -- on the safe side.
+                addAssert xsPred md =<< notEq
+                -- Finally, ensure that the fields match point-wise.
+                matchFields sym xsFldShps xs ys zs
+              W4.Unassigned ->
+                -- If we see `Unassigned`, we immediately know that the variant
+                -- should not be defined. Because we know in advance that this
+                -- VariantBranch's predicate *should* hold, the overall match
+                -- will fail.
+                fail_
+
+          -- ...if the expected value is a symbolic enum (see
+          -- Note [Symbolic enums] in SAWScript.Crucible.MIR.Setup.Value), then
+          -- we employ a more general version of the `MirSetupEnumVariant` case
+          -- above:
+          --
+          -- - Ensure that the discriminant values match
+          -- - For each possible variant, match the fields of the
+          --   VariantBranch's payload point-wise under the assumption that
+          --   the VariantBranch's predicate holds.
+          --
+          -- The `MirSetupEnumVariant` case can be seen as a special case of
+          -- this approach where we already know that one specific
+          -- VariantBranch's predicate should hold, and the predicates in all
+          -- other VariantBranches should be false.
+          MirSetupEnumSymbolic adt expectedDiscr variantFlds -> do
+            -- Ensure that the discriminant values match.
+            let discrTp = shapeMirTy discrShp
+            matchArg opts sc cc cs prepost md (MIRVal discrShp actualDiscr) discrTp expectedDiscr
+
+            sequence_ @_ @_ @()
+              [ case xPE of
+                  W4.PE xsPred xs ->
+                    -- For each variant, check that the fields of the variant
+                    -- (xs) match point-wise under the assumption that the
+                    -- VariantBranch's predicate (xsPred) holds.
+                    withConditionalPred xsPred $
+                      matchFields sym xsFldShps xs ys zs
+                  W4.Unassigned ->
+                    -- If we see `Unassigned`, then we immediately know that the
+                    -- variant should not defined. We can skip checking anything
+                    -- in this case, since we know that the fields of the
+                    -- variant cannot match. (Note that we do not fail outright,
+                    -- as it is still possible that other variants might
+                    -- match.)
+                    pure ()
+              | (Some (Functor.Pair (VariantShape xsFldShps) (Crucible.VB xPE)), ys, zs) <-
+                  zip3
+                    (FC.toListFC Some (Ctx.zipWith Functor.Pair variantShps variantAssn))
+                    (map (\v -> v ^.. Mir.vfields . each . Mir.fty) (adt ^. Mir.adtvariants))
+                    variantFlds
+              ]
 
     -- match the fields of a tuple point-wise
     (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
-      sequence_
-        [ case xFldShp of
-            ReqField shp ->
-              matchArg opts sc cc cs prepost md (MIRVal shp x) y z
-            OptField shp -> do
-              let x' = readMaybeType sym "field" (shapeType shp) x
-              matchArg opts sc cc cs prepost md (MIRVal shp x') y z
-        | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
-            zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
-                 ys
-                 zs
-        ]
+      matchFields sym xsFldShps xs ys zs
 
     -- Match the parts of a slice point-wise
     (MIRVal (SliceShape _ actualElemTy actualMutbl actualElemTpr)
@@ -1182,8 +1274,36 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     nameEnv  = MS.csTypeNames cs
 
     loc   = MS.conditionLoc md
+
+    fail_ :: OverrideMatcher MIR w a
     fail_ = failure loc =<<
               mkStructuralMismatch opts cc sc cs actual expected expectedTy
+
+    -- Match the fields (point-wise) in a tuple, a struct, or enum variant.
+    matchFields ::
+      Sym ->
+      Ctx.Assignment FieldShape ctx ->
+      Ctx.Assignment (Crucible.RegValue' Sym) ctx ->
+      [Mir.Ty] ->
+      [SetupValue] ->
+      OverrideMatcher MIR w ()
+    matchFields sym xsFldShps xs ys zs = do
+      -- As a sanity check, first ensure that the number of fields matches
+      -- what is expected.
+      unless (Ctx.sizeInt (Ctx.size xs) == length zs) fail_
+      -- Then match the fields point-wise.
+      sequence_
+        [ case xFldShp of
+            ReqField shp ->
+              matchArg opts sc cc cs prepost md (MIRVal shp x) y z
+            OptField shp -> do
+              let x' = readMaybeType sym "field" (shapeType shp) x
+              matchArg opts sc cc cs prepost md (MIRVal shp x') y z
+        | (Some (Functor.Pair xFldShp (Crucible.RV x)), y, z) <-
+            zip3 (FC.toListFC Some (Ctx.zipWith Functor.Pair xsFldShps xs))
+                 ys
+                 zs ]
+
     notEq = notEqual prepost opts loc cc sc cs expected actual
 
 -- | For each points-to statement read the memory value through the
@@ -1240,6 +1360,7 @@ matchPointsTos opts sc cc spec prepost = go False []
       case v of
         MS.SetupVar i                     -> Set.singleton i
         MS.SetupStruct _ xs               -> foldMap setupVars xs
+        MS.SetupEnum enum_                -> setupEnum enum_
         MS.SetupTuple _ xs                -> foldMap setupVars xs
         MS.SetupSlice slice               -> setupSlice slice
         MS.SetupArray _ xs                -> foldMap setupVars xs
@@ -1251,6 +1372,13 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupCast empty _              -> absurd empty
         MS.SetupUnion empty _ _           -> absurd empty
         MS.SetupNull empty                -> absurd empty
+
+    -- Compute the set of variable identifiers in a 'MirSetupEnum'
+    setupEnum :: MirSetupEnum -> Set AllocIndex
+    setupEnum (MirSetupEnumVariant _ _ _ xs) =
+      foldMap setupVars xs
+    setupEnum (MirSetupEnumSymbolic _ _ variants) =
+      foldMap (foldMap setupVars) variants
 
     -- Compute the set of variable identifiers in a 'MirSetupSlice'
     setupSlice :: MirSetupSlice -> Set AllocIndex

@@ -149,7 +149,8 @@ import           SAWScript.Crucible.Common (Sym, sawCoreState)
 import           SAWScript.Crucible.Common.Setup.Value
 import           SAWScript.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWScript.Crucible.JVM.Setup.Value ()
-import           SAWScript.Crucible.MIR.Setup.Value (MirSetupSlice(..))
+import           SAWScript.Crucible.MIR.Setup.Value
+  (MirSetupEnum(..), MirSetupSlice(..))
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
@@ -203,6 +204,14 @@ ppSetupValue setupval = case setupval of
         absurd empty
       (MIRExt, _defId) ->
         ppSetupStructDefault vs
+  SetupEnum x ->
+    case (ext, x) of
+      (LLVMExt, empty) ->
+        absurd empty
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, enum_) ->
+        ppMirSetupEnum enum_
   SetupTuple x vs ->
     case (ext, x) of
       (LLVMExt, empty) ->
@@ -249,11 +258,17 @@ ppSetupValue setupval = case setupval of
       | packed    = PP.angles (ppSetupStructDefault vs)
       | otherwise = ppSetupStructDefault vs
 
-    ppSetupStructDefault :: [SetupValue ext] -> PP.Doc ann
+    ppSetupStructDefault :: forall ext'. IsExt ext' => [SetupValue ext'] -> PP.Doc ann
     ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))
 
     ppSetupTuple :: [SetupValue MIR] -> PP.Doc ann
     ppSetupTuple vs = PP.parens (commaList (map ppSetupValue vs))
+
+    ppMirSetupEnum :: MirSetupEnum -> PP.Doc ann
+    ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =
+      PP.pretty variantName PP.<+> ppSetupStructDefault fields
+    ppMirSetupEnum (MirSetupEnumSymbolic _defId _discr _variants) =
+      PP.pretty "<symbolic enum>"
 
     ppMirSetupSlice :: MirSetupSlice -> PP.Doc ann
     ppMirSetupSlice (MirSetupSliceRaw ref len) =

@@ -38,6 +38,7 @@ module SAWScript.Crucible.Common.Setup.Value
 
   , XSetupNull
   , XSetupStruct
+  , XSetupEnum
   , XSetupTuple
   , XSetupSlice
   , XSetupArray
@@ -121,6 +122,7 @@ type family ResolvedState ext :: Type
 
 type family XSetupNull ext
 type family XSetupStruct ext
+type family XSetupEnum ext
 type family XSetupTuple ext
 type family XSetupSlice ext
 type family XSetupArray ext
@@ -151,6 +153,9 @@ data SetupValue ext where
   -- | A slice value. At the moment, this is only ever used for MIR
   -- verification.
   SetupSlice :: XSetupSlice ext -> SetupValue ext
+  -- | An enumeration value. At the moment, this is only ever used for MIR
+  -- verification.
+  SetupEnum :: XSetupEnum ext -> SetupValue ext
 
   -- | A pointer to a global variable
   SetupGlobal :: XSetupGlobal ext -> String -> SetupValue ext
@@ -166,6 +171,7 @@ data SetupValue ext where
 type SetupValueHas (c :: Type -> Constraint) ext =
   ( c (XSetupNull ext)
   , c (XSetupStruct ext)
+  , c (XSetupEnum ext)
   , c (XSetupTuple ext)
   , c (XSetupSlice ext)
   , c (XSetupArray ext)

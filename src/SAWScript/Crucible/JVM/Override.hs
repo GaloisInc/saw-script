@@ -552,6 +552,7 @@ matchArg opts sc cc cs prepost md actual@(RVal ref) expectedTy setupval =
          addAssert p md (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ MS.stateCond prepost) ""))
 
     MS.SetupGlobal empty _ -> absurd empty
+    MS.SetupEnum   empty   -> absurd empty
     MS.SetupTuple  empty _ -> absurd empty
     MS.SetupSlice  empty   -> absurd empty
 
@@ -932,6 +933,7 @@ instantiateSetupValue sc s v =
     MS.SetupNull ()                   -> return v
     MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _            -> absurd empty
+    MS.SetupEnum empty                -> absurd empty
     MS.SetupTuple empty _             -> absurd empty
     MS.SetupSlice empty               -> absurd empty
     MS.SetupArray empty _             -> absurd empty
