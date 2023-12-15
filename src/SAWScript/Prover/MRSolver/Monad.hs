@@ -578,6 +578,43 @@ mrGenFromBVVec n len a v def_err_str m =
   do err_tm <- mrErrorTerm a def_err_str
      liftSC2 scGlobalApply "Prelude.genFromBVVec" [n, len, a, v, err_tm, m]
 
+-- | Match a lambda of the form @(\i _ -> f i)@ as @f@
+asIndexWithProofFnTerm :: Recognizer Term (SharedContext -> IO Term)
+asIndexWithProofFnTerm (asLambdaList -> ([(ix_nm, ix_tp), _], e))
+  | not $ inBitSet 0 $ looseVars e
+  = Just $ \sc ->
+    do ix_var <- scLocalVar sc 0
+       -- Substitute an error term for the proof variable and ix_var for ix in
+       -- the body e of the lambda
+       let s = [error "asGen(BV)VecTerm: unexpected var occurrence", ix_var]
+       e' <- instantiateVarList sc 0 s e
+       scLambda sc ix_nm ix_tp e'
+asIndexWithProofFnTerm _ = Nothing
+
+-- | Match a term of the form @gen n a f@ or @genWithProof n a (\i _ -> f i)@
+asGenVecTerm :: Recognizer Term (Term, Term, SharedContext -> IO Term)
+asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.gen" -> Just _,
+                             [n, a, f]))
+  = Just (n, a, const $ return f)
+asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.genWithProof" -> Just _,
+                             [n, a, asIndexWithProofFnTerm -> Just m_f]))
+  = Just (n, a, m_f)
+asGenVecTerm _ = Nothing
+
+-- | Match a term of the form @genBVVec n len a (\i _ -> f i)@
+asGenBVVecTerm :: Recognizer Term (Term, Term, Term, SharedContext -> IO Term)
+asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVec" -> Just _,
+                               [n, len, a, asIndexWithProofFnTerm -> Just m_f]))
+  = Just (n, len, a, m_f)
+asGenBVVecTerm _ = Nothing
+
+-- | ...
+mrAtBVVec :: Term -> Term -> Term -> Term -> Term -> MRM t Term
+mrAtBVVec _ _ _ (asGenBVVecTerm -> Just (_, _, _, m_f)) ix =
+  liftSC0 m_f >>= \f -> mrApply f ix
+mrAtBVVec n len a v ix =
+  liftSC2 scGlobalApply "Prelude.atBVVecNoPf" [n, len, a, v, ix]
+
 
 ----------------------------------------------------------------------
 -- * Monadic Operations on Terms

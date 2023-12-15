@@ -56,8 +56,6 @@ import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
-import Verifier.SAW.Module
-import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.FiniteValue
 import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
 
@@ -74,27 +72,6 @@ asSymBVType :: Recognizer Term Term
 asSymBVType (asVectorType -> Just (n, asBoolType -> Just ())) = Just n
 asSymBVType _ = Nothing
 
--- | Match a term of the form @gen n a f@ or @genWithProof n a (\i _ -> e)@,
--- where the latter case means that the function ignores its proof argument. In
--- this latter case, return just the function @\i -> e@.
-asGenVecTerm :: SharedContext -> Recognizer Term (Term, Term, IO Term)
-asGenVecTerm _ (asApplyAll ->
-                (isGlobalDef "Prelude.gen" -> Just _, [n, a, f]))
-  = Just (n, a, return f)
-asGenVecTerm sc (asApplyAll ->
-                 (isGlobalDef "Prelude.genWithProof" -> Just _,
-                  [n, a, (asLambda -> Just (ix_nm, ix_tp,
-                                            asLambda -> Just (_, _, e)))]))
-  | not $ inBitSet 0 $ looseVars e
-  = Just (n, a,
-          do ix_var <- scLocalVar sc 0
-             -- Substitute an error term for the proof variable and ix_var for
-             -- ix in the body e of the lambda
-             let s = [error "asGenVecTerm: unexpected var occurrence", ix_var]
-             e' <- instantiateVarList sc 0 s e
-             scLambda sc ix_nm ix_tp e')
-asGenVecTerm _ _ = Nothing
-
 -- | Apply @genBVVec@ to arguments @n@, @len@, and @a@, along with a function of
 -- type @Vec n Bool -> a@
 genBVVecTerm :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
@@ -109,16 +86,6 @@ genBVVecTerm sc n_tm len_tm a_tm f_tm =
    lambdaOpenTerm "i" (vectorTypeOpenTerm n boolTypeOpenTerm) $ \i ->
     lambdaOpenTerm "_" (applyGlobalOpenTerm "Prelude.is_bvult" [n, i, len]) $ \_ ->
     applyOpenTerm f i]
-
--- | Match a term of the form @genBVVec n len a (\ i _ -> e)@, i.e., where @e@
--- does not have the proof variable (the underscore) free
-asGenBVVecTerm :: Recognizer Term (Term, Term, Term, Term)
-asGenBVVecTerm (asApplyAll ->
-                   (isGlobalDef "Prelude.genBVVec" -> Just _,
-                    [n, len, a, f@(asLambdaList -> ([_,_], e))]))
-  | not $ inBitSet 0 $ looseVars e
-  = Just (n, len, a, f)
-asGenBVVecTerm _ = Nothing
 
 -- | Match a term of the form @genCryM n a f@
 asGenCryMTerm :: Recognizer Term (Term, Term, Term)
@@ -143,7 +110,7 @@ primGenVec :: SharedContext -> (Term -> TmPrim) -> TmPrim
 primGenVec sc =
   PrimFilterFun "primGenVec" $
   \case
-    VExtra (VExtraTerm _ (asGenVecTerm sc -> Just (_, _, f_m))) -> lift f_m
+    VExtra (VExtraTerm _ (asGenVecTerm -> Just (_, _, f_m))) -> lift $ f_m sc
     _ -> mzero
 
 -- | Convert a Boolean value to a 'Term'
@@ -179,7 +146,7 @@ primNatTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
 primNatTermFun sc =
   PrimFilterFun "primNatTermFun" $ \v -> lift (natValToTerm sc v)
 
-
+{-
 -- | An implementation of a primitive function that expects a term of the form
 -- @genBVVec n _ a _@ or @genCryM (bvToNat n _) a _@, where @n@ is the second
 -- argument, and passes to the continuation the associated function of type
@@ -298,6 +265,7 @@ bvVecBVVecFromVecArg sc n n' len a (BVVecLit vs) =
              cond <- scBvEq sc n' var1 i'
              body' <- mkBody (i+1) xs
              scIte sc a cond x body'
+-}
 
 -- | A version of 'readBackTValue' which uses 'error' as the simulator config
 -- Q: Is there every a case where this will actually error?
@@ -1153,18 +1121,19 @@ mrProveRelH' _ het tp1 _ t1 (asBvToNat -> Just (n, t2)) =
 
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
-mrProveRelH' _ het tp1@(asBVVecType -> Just (asNat -> Just n1, len1, tpA1))
-                   tp2@(asBVVecType ->
-                        Just (asNat -> Just n2, len2, tpA2)) t1 t2 =
+mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
+                   tp2@(asBVVecType -> Just (n2, len2, tpA2)) t1 t2 =
+  mrConvertible n1 n2 >>= \ns_are_eq ->
   mrConvertible len1 len2 >>= \lens_are_eq ->
-  (if n1 == n2 && lens_are_eq then return () else
+  (if ns_are_eq && lens_are_eq then return () else
      throwMRFailure (TypesNotEq (Type tp1) (Type tp2))) >>
   liftSC0 scBoolType >>= \bool_tp ->
   liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
-  withUVarLift "ix" (Type ix_tp) (len1,len2,tpA1,tpA2,t1,t2) $
-  \ix (len1',len2',tpA1',tpA2',t1',t2') ->
-  do t1_prj <- mrIndexBVVec n1 len1' tpA1' t1' ix
-     t2_prj <- mrIndexBVVec n2 len2' tpA2' t2' ix
+  withUVarLift "ix" (Type ix_tp) (n1,n2,len1,len2,tpA1,tpA2,t1,t2) $
+  \ix (n1',n2',len1',len2',tpA1',tpA2',t1',t2') ->
+  do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
+     t1_prj <- mrAtBVVec n1' len1' tpA1' t1' ix
+     t2_prj <- mrAtBVVec n2' len2' tpA2' t2' ix
      cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
      extTermInCtx [("ix",ix_tp)] <$>
        liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond

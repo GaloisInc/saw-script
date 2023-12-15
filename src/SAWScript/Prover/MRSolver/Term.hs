@@ -47,7 +47,6 @@ import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer hiding ((:*:))
-import Verifier.SAW.OpenTerm
 import Verifier.SAW.Cryptol.Monadify
 
 
@@ -421,6 +420,7 @@ deriving instance _ => TermLike (a,b,c,d)
 deriving instance _ => TermLike (a,b,c,d,e)
 deriving instance _ => TermLike (a,b,c,d,e,f)
 deriving instance _ => TermLike (a,b,c,d,e,f,g)
+deriving instance _ => TermLike (a,b,c,d,e,f,g,i)
 deriving instance _ => TermLike [a]
 deriving instance TermLike ()
 
@@ -439,7 +439,7 @@ instance TermLike Natural where
   substTermLike _ _ = return
 
 deriving anyclass instance TermLike Type
-deriving instance TermLike EvTerm
+deriving anyclass instance TermLike EvTerm
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp
