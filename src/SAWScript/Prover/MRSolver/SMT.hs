@@ -629,8 +629,8 @@ vecLenUnify len1 len2 =
 vecLenIx :: VecLength -> Term -> Term -> Term -> MRM t Term
 vecLenIx (BVVecLen n len) tp v ix =
   do n_tm <- liftSC1 scNat n
-     mrApplyGlobal "Prelude.atBVVecNoPf" [n_tm, len, tp, v, ix]
-vecLenIx (NatVecLen n) tp v ix = mrApplyGlobal "Prelude.at" [n, tp, v, ix]
+     mrAtBVVec n_tm len tp v ix
+vecLenIx (NatVecLen n) tp v ix = mrAtVec n tp v ix
 
 -- | Smart constructor for pair representations, that combines a pair of
 -- identity representations into an identity representation on the pair type

@@ -612,7 +612,18 @@ asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVec" -> Just _,
   = Just (n, len, a, m_f)
 asGenBVVecTerm _ = Nothing
 
--- | ...
+-- | Index into a vector using the @at@ accessor, taking in the same 'Term'
+-- arguments as that function, but simplify when the vector is a term
+-- constructed from @gen@ or @genWithProof@
+mrAtVec :: Term -> Term -> Term -> Term -> MRM t Term
+mrAtVec _ _ (asGenVecTerm -> Just (_, _, m_f)) ix =
+  liftSC0 m_f >>= \f -> mrApply f ix
+mrAtVec len a v ix =
+  liftSC2 scGlobalApply "Prelude.at" [len, a, v, ix]
+
+-- | Index into a vector using the @atBVVecNoPf@ accessor, taking in the same
+-- 'Term' arguments as that function, but simplify when the vector is a term
+-- constructed from @gen@ or @genWithProof@
 mrAtBVVec :: Term -> Term -> Term -> Term -> Term -> MRM t Term
 mrAtBVVec _ _ _ (asGenBVVecTerm -> Just (_, _, _, m_f)) ix =
   liftSC0 m_f >>= \f -> mrApply f ix
