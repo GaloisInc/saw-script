@@ -30,7 +30,6 @@ module Verifier.SAW.Heapster.Permissions where
 import Prelude hiding (pred)
 
 import Data.Char
-import qualified Data.Text as Text
 import Data.Word
 import Data.Maybe
 import Data.Either
@@ -86,8 +85,6 @@ import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
-import Verifier.SAW.Term.Functor (ModuleName)
-import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm hiding (Constant)
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Heapster.NamedMb
@@ -971,8 +968,8 @@ $(mkNuMatching [t| forall ctx. PermVarSubst ctx |])
 $(mkNuMatching [t| PermEnvFunEntry |])
 $(mkNuMatching [t| SomeNamedPerm |])
 $(mkNuMatching [t| SomeNamedShape |])
-$(mkNuMatching [t| PermEnvGlobalEntry |])
 $(mkNuMatching [t| GlobalTrans |])
+$(mkNuMatching [t| PermEnvGlobalEntry |])
 $(mkNuMatching [t| forall args. BlockHintSort args |])
 $(mkNuMatching [t| forall blocks init ret args.
                 BlockHint blocks init ret args |])

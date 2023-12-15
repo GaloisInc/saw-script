@@ -37,11 +37,9 @@ import Data.Maybe
 import Numeric.Natural
 import Data.List hiding (inits)
 import Data.Text (pack)
-import Data.Kind
 import GHC.TypeLits
 import Data.BitVector.Sized (BV)
 import qualified Data.BitVector.Sized as BV
-import Data.Functor.Compose
 import Data.Functor.Constant
 import Control.Applicative
 import Control.Lens hiding ((:>), Index, ix, op, getting)
@@ -49,7 +47,6 @@ import qualified Control.Monad as Monad
 import Control.Monad.Reader hiding (ap)
 import Control.Monad.Writer hiding (ap)
 import Control.Monad.State hiding (ap)
-import Control.Monad.Cont hiding (ap)
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.Fail as Fail
 
@@ -81,7 +78,6 @@ import Verifier.SAW.SharedTerm hiding (Constant)
 
 -- import Verifier.SAW.Heapster.GenMonad
 import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.Implication
 import Verifier.SAW.Heapster.TypedCrucible
@@ -3744,7 +3740,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        tp2 <- translate p2
        tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
-         (\ts (ps :>: p_top) ->
+         (\ts (ps :>: _p_top) ->
            ps :>: typeTransF tptrans [leftTrans tp1 tp2 (tupleOpenTerm' ts)])
          m
 
@@ -3753,7 +3749,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        tp2 <- translate p2
        tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
-         (\ts (ps :>: p_top) ->
+         (\ts (ps :>: _p_top) ->
            ps :>: typeTransF tptrans [rightTrans tp1 tp2 (tupleOpenTerm' ts)])
          m
 
@@ -4151,7 +4147,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                        ++ "unexpected form of output permission")
        (w_tm, len_tm, elem_tp, ap_tp_trans) <- translateLLVMArrayPerm mb_ap
        withPermStackTopTermsM id
-         (\ts (pctx :>: ptrans_cell) ->
+         (\ts (pctx :>: _ptrans_cell) ->
            let arr_term =
                  -- FIXME: this generates a BVVec of length (bvNat n 1), whereas
                  -- what we need is a BVVec of length [0,0,...,1]; the two are
@@ -4291,7 +4287,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\ (_ :>: ptrans_x :>: _ :>: _) -> ptrans_x)
          (\(ns :>: x :>: _ :>: l2) -> ns :>: x :>: l2)
          (\ts pctx_all -> case pctx_all of
-             (pctx :>: ptrans_x :>: _ :>:
+             (pctx :>: _ptrans_x :>: _ :>:
               PTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out t)
                ->
                pctx :>: typeTransF f_l2_args_trans ts :>:

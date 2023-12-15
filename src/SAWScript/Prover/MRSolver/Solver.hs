@@ -123,7 +123,6 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
-import Data.Either
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
