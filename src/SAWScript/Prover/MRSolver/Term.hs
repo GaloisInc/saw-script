@@ -118,7 +118,7 @@ funNameTerm (GlobalName gdef (TermProjRecord fname:projs)) =
   Unshared $ FTermF $ RecordProj (funNameTerm (GlobalName gdef projs)) fname
 
 -- | A term specifically known to be of type @sort i@ for some @i@
-newtype Type = Type Term deriving (Generic, Show)
+newtype Type = Type { typeTm :: Term } deriving (Generic, Show)
 
 -- | A context of variables, with names and types. To avoid confusion as to
 -- how variables are ordered, do not use this type's constructor directly.

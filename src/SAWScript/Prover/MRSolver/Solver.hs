@@ -982,13 +982,17 @@ mrRefines' (AssertBoolBind cond1 k1) m2 =
 
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
-  withUVarLift nm tp (m1,f2) $ \x (m1',f2') ->
-  applyNormCompFun f2' x >>= \m2' ->
+  mkInjReprType (typeTm tp) >>= \(tp', r) ->
+  withUVarLift nm (Type tp') (m1,f2) $ \x (m1',f2') ->
+  mrApplyRepr r x >>= \x' ->
+  applyNormCompFun f2' x' >>= \m2' ->
   mrRefines m1' m2'
 mrRefines' (ExistsBind tp f1) m2 =
   let nm = maybe "x" id (compFunVarName f1) in
-  withUVarLift nm tp (f1,m2) $ \x (f1',m2') ->
-  applyNormCompFun f1' x >>= \m1' ->
+  mkInjReprType (typeTm tp) >>= \(tp', r) ->
+  withUVarLift nm (Type tp') (f1,m2) $ \x (f1',m2') ->
+  mrApplyRepr r x >>= \x' ->
+  applyNormCompFun f1' x' >>= \m1' ->
   mrRefines m1' m2'
 
 mrRefines' m1 (OrS m2 m2') =
@@ -1177,13 +1181,17 @@ mrRefines'' (AssumeBoolBind cond1 k1) m2 =
 
 mrRefines'' m1 (ExistsBind tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
-     evar <- mrFreshEVar nm tp
-     m2' <- applyNormCompFun f2 evar
+     (tp', r) <- mkInjReprType (typeTm tp)
+     evar <- mrFreshEVar nm (Type tp')
+     evar' <- mrApplyRepr r evar
+     m2' <- applyNormCompFun f2 evar'
      mrRefines m1 m2'
 mrRefines'' (ForallBind tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
-     evar <- mrFreshEVar nm tp
-     m1' <- applyNormCompFun f1 evar
+     (tp', r) <- mkInjReprType (typeTm tp)
+     evar <- mrFreshEVar nm (Type tp')
+     evar' <- mrApplyRepr r evar
+     m1' <- applyNormCompFun f1 evar'
      mrRefines m1' m2
 
 -- If none of the above cases match, then fail
