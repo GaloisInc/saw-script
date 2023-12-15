@@ -96,9 +96,11 @@ assertTermEqualities ::
   MIRCrucibleContext ->
   OverrideMatcher MIR md ()
 assertTermEqualities sc cc = do
-  let assertTermEquality (t, md, e) = do
+  let sym = cc ^. mccSym
+  let assertTermEquality (cond, t, md, e) = do
         p <- instantiateExtResolveSAWPred sc cc t
-        addAssert p md e
+        p' <- liftIO $ W4.impliesPred sym cond p
+        addAssert p' md e
   F.traverse_ assertTermEquality =<< OM (use termEqs)
 
 -- | Assign the given reference value to the given allocation index in
