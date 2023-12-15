@@ -1129,8 +1129,8 @@ mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
      throwMRFailure (TypesNotEq (Type tp1) (Type tp2))) >>
   liftSC0 scBoolType >>= \bool_tp ->
   liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
-  withUVarLift "ix" (Type ix_tp) (n1,n2,len1,len2,tpA1,tpA2,t1,t2) $
-  \ix (n1',n2',len1',len2',tpA1',tpA2',t1',t2') ->
+  withUVarLift "ix" (Type ix_tp) ((n1,n2,len1,len2),(tpA1,tpA2,t1,t2)) $
+  \ix ((n1',n2',len1',len2'),(tpA1',tpA2',t1',t2')) ->
   do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
      t1_prj <- mrAtBVVec n1' len1' tpA1' t1' ix
      t2_prj <- mrAtBVVec n2' len2' tpA2' t2' ix

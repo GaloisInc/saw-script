@@ -420,7 +420,8 @@ deriving instance _ => TermLike (a,b,c,d)
 deriving instance _ => TermLike (a,b,c,d,e)
 deriving instance _ => TermLike (a,b,c,d,e,f)
 deriving instance _ => TermLike (a,b,c,d,e,f,g)
-deriving instance _ => TermLike (a,b,c,d,e,f,g,i)
+-- NOTE: longer tuple types not supported by GHC 8.10
+-- deriving instance _ => TermLike (a,b,c,d,e,f,g,i)
 deriving instance _ => TermLike [a]
 deriving instance TermLike ()
 
