@@ -601,8 +601,12 @@ asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.genWithProof" -> Just _,
   = Just (n, a, m_f)
 asGenVecTerm _ = Nothing
 
--- | Match a term of the form @genBVVec n len a (\i _ -> f i)@
+-- | Match a term of the form @genBVVecNoPf n len a f@ or
+-- @genBVVec n len a (\i _ -> f i)@
 asGenBVVecTerm :: Recognizer Term (Term, Term, Term, SharedContext -> IO Term)
+asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVecNoPf" -> Just _,
+                               [n, len, a, f]))
+  = Just (n, len, a, const $ return f)
 asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVec" -> Just _,
                                [n, len, a, asIndexWithProofFnTerm -> Just m_f]))
   = Just (n, len, a, m_f)
