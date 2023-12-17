@@ -76,6 +76,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
 import GHC.TypeLits
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Data.Binding.Hobbits hiding (sym)
 
@@ -90,6 +91,7 @@ import Verifier.SAW.Module as Mod
 import Verifier.SAW.Prelude
 import Verifier.SAW.Cryptol.Monadify
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Recognizer
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Typechecker
 import Verifier.SAW.SCTypeCheck
@@ -1045,7 +1047,7 @@ heapster_typecheck_mut_funs bic opts henv =
 heapster_typecheck_mut_funs_rename ::
   BuiltinContext -> Options -> HeapsterEnv ->
   [(String, String, String)] -> TopLevel ()
-heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
+heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
   do let (fst_nm, _, _) = head fn_names_and_perms
      Some lm <- failOnNothing ("Could not find symbol definition: " ++ fst_nm)
                               (lookupModDefiningSym henv fst_nm)
@@ -1090,6 +1092,26 @@ heapster_typecheck_mut_funs_rename _bic _opts henv fn_names_and_perms =
        some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
      liftIO $ modifyIORef (heapsterEnvTCFGs henv) (\old -> map Some tcfgs ++ old)
+     forM_ fn_names_and_perms $ \(_, nm_to, _) -> liftIO $
+       warnErrs nm_to =<< fmap (fromJust . defBody)
+                               (scRequireDef sc $ mkSafeIdent saw_modname nm_to)
+  where warnErrs :: String -> Term -> IO ()
+        warnErrs nm (asApplyAll -> (asGlobalDef -> Just "Prelude.errorS",
+                                 [_ev, _stk, _a, asStringLit -> Just msg]))
+          | Just msg_body <- stripPrefix implicationFailurePrefix (T.unpack msg)
+          = let pref = "WARNING: Heapster implication failure while typechecking "
+             in printOutLn opts Warn (pref ++ nm ++ ":\n" ++ msg_body ++ "\n")
+        warnErrs nm (asConstant -> Just (_, Just body)) = warnErrs nm body
+        warnErrs nm (asLambda -> Just (_, _, t)) = warnErrs nm t
+        warnErrs nm (asApp -> Just (f, arg)) = warnErrs nm arg >> warnErrs nm f
+        warnErrs nm (asCtor -> Just (_, args)) = mapM_ (warnErrs nm) args
+        warnErrs nm (asRecursorApp -> Just (_, _, ixs, arg)) = mapM_ (warnErrs nm) (arg:ixs)
+        warnErrs nm (asTupleValue -> Just ts) = mapM_ (warnErrs nm) ts
+        warnErrs nm (asTupleSelector -> Just (t, _)) = warnErrs nm t
+        warnErrs nm (asRecordValue -> Just ts) = mapM_ (warnErrs nm) ts
+        warnErrs nm (asRecordSelector -> Just (t, _)) = warnErrs nm t
+        warnErrs nm (asArrayValue -> Just (_, ts)) = mapM_ (warnErrs nm) ts
+        warnErrs _ _ = return ()
 
 
 -- | Type-check a single function against a function permission

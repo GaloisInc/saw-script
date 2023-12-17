@@ -262,12 +262,6 @@ isSpecFunType sc t = scWhnf sc t >>= \case
 -- * Useful 'Recognizer's for 'Term's
 ----------------------------------------------------------------------
 
--- | Recognize a 'Term' as an application of `bvToNat`
-asBvToNat :: Recognizer Term (Term, Term)
-asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
-                          [n, x])) = Just (n, x)
-asBvToNat _ = Nothing
-
 -- | Recognize a 'Term' as an application of @bvToNat@ with a statically-known
 -- natural number bit width
 asBvToNatKnownW :: Recognizer Term (Natural, Term)
@@ -299,6 +293,12 @@ asIsFinite :: Recognizer Term Term
 asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
   Just n
 asIsFinite _ = Nothing
+
+-- | Recognize a term as being of the form @IsLtNat m n@
+asIsLtNat :: Recognizer Term (Term, Term)
+asIsLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [m, n])) =
+  Just (m, n)
+asIsLtNat _ = Nothing
 
 -- | Test if a 'Term' is a 'BVVec' type, excluding bitvectors
 asBVVecType :: Recognizer Term (Term, Term, Term)
@@ -362,57 +362,57 @@ memoFixTermFun f = memoFixTermFunAccum (f .) ()
 -- * Lifting MR Solver Terms
 ----------------------------------------------------------------------
 
--- | A term-like object is one that supports lifting and substitution. This
--- class can be derived using @DeriveAnyClass@.
-class TermLike a where
-  liftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> a -> m a
-  substTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> a -> m a
+-- | Apply 'liftTerm' to all component terms in a 'TermLike' object
+liftTermLike :: (TermLike a, MonadTerm m) =>
+                DeBruijnIndex -> DeBruijnIndex -> a -> m a
+liftTermLike i n = mapTermLike (liftTerm i n)
 
-  -- Default instances for @DeriveAnyClass@
-  default liftTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
-                          DeBruijnIndex -> DeBruijnIndex -> a -> m a
-  liftTermLike n i = fmap to . gLiftTermLike n i . from
-  default substTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
-                           DeBruijnIndex -> [Term] -> a -> m a
-  substTermLike n i = fmap to . gSubstTermLike n i . from
+-- | Apply 'substTerm' to all component terms in a 'TermLike' object
+substTermLike :: (TermLike a, MonadTerm m) =>
+                DeBruijnIndex -> [Term] -> a -> m a
+substTermLike i s = mapTermLike (substTerm i s)
+
+-- | A term-like object is one that supports monadically mapping over all
+-- component terms. This is mainly used for lifting and substitution - see
+-- @liftTermLike@ and @substTermLike@. This class can be derived using
+-- @DeriveAnyClass@.
+class TermLike a where
+  mapTermLike :: MonadTerm m => (Term -> m Term) -> a -> m a
+
+  -- Default instance for @DeriveAnyClass@
+  default mapTermLike :: (Generic a, GTermLike (Rep a), MonadTerm m) =>
+                         (Term -> m Term) -> a -> m a
+  mapTermLike f = fmap to . gMapTermLike f . from
 
 -- | A generic version of 'TermLike' for @DeriveAnyClass@, based on:
 -- https://hackage.haskell.org/package/base-4.16.0.0/docs/GHC-Generics.html#g:12
 class GTermLike f where
-  gLiftTermLike :: MonadTerm m => DeBruijnIndex -> DeBruijnIndex -> f p -> m (f p)
-  gSubstTermLike :: MonadTerm m => DeBruijnIndex -> [Term] -> f p -> m (f p)
+  gMapTermLike :: MonadTerm m => (Term -> m Term) -> f p -> m (f p)
 
 -- | 'TermLike' on empty types
 instance GTermLike V1 where
-  gLiftTermLike _ _ = \case {}
-  gSubstTermLike _ _ = \case {}
+  gMapTermLike _ = \case {}
 
 -- | 'TermLike' on unary types
 instance GTermLike U1 where
-  gLiftTermLike _ _ U1 = return U1
-  gSubstTermLike _ _ U1 = return U1
+  gMapTermLike _ U1 = return U1
 
 -- | 'TermLike' on sums
 instance (GTermLike f, GTermLike g) => GTermLike (f :+: g) where
-  gLiftTermLike n i (L1 a) = L1 <$> gLiftTermLike n i a
-  gLiftTermLike n i (R1 b) = R1 <$> gLiftTermLike n i b
-  gSubstTermLike n s (L1 a) = L1 <$> gSubstTermLike n s a
-  gSubstTermLike n s (R1 b) = R1 <$> gSubstTermLike n s b
+  gMapTermLike f (L1 a) = L1 <$> gMapTermLike f a
+  gMapTermLike f (R1 b) = R1 <$> gMapTermLike f b
 
 -- | 'TermLike' on products
 instance (GTermLike f, GTermLike g) => GTermLike (f :*: g) where
-  gLiftTermLike n i (a :*: b) = (:*:) <$> gLiftTermLike n i a <*> gLiftTermLike n i b
-  gSubstTermLike n s (a :*: b) = (:*:) <$> gSubstTermLike n s a <*> gSubstTermLike n s b
+  gMapTermLike f (a :*: b) = (:*:) <$> gMapTermLike f a <*> gMapTermLike f b
 
 -- | 'TermLike' on fields
 instance TermLike a => GTermLike (K1 i a) where
-  gLiftTermLike n i (K1 a) = K1 <$> liftTermLike n i a
-  gSubstTermLike n i (K1 a) = K1 <$> substTermLike n i a
+  gMapTermLike f (K1 a) = K1 <$> mapTermLike f a
 
 -- | 'GTermLike' ignores meta-information
 instance GTermLike a => GTermLike (M1 i c a) where
-  gLiftTermLike n i (M1 a) = M1 <$> gLiftTermLike n i a
-  gSubstTermLike n i (M1 a) = M1 <$> gSubstTermLike n i a
+  gMapTermLike f (M1 a) = M1 <$> gMapTermLike f a
 
 deriving instance _ => TermLike (a,b)
 deriving instance _ => TermLike (a,b,c)
@@ -426,18 +426,14 @@ deriving instance _ => TermLike [a]
 deriving instance TermLike ()
 
 instance TermLike Term where
-  liftTermLike = liftTerm
-  substTermLike = substTerm
+  mapTermLike f = f
 
 instance TermLike FunName where
-  liftTermLike _ _ = return
-  substTermLike _ _ = return
+  mapTermLike _ = return
 instance TermLike LocalName where
-  liftTermLike _ _ = return
-  substTermLike _ _ = return
+  mapTermLike _ = return
 instance TermLike Natural where
-  liftTermLike _ _ = return
-  substTermLike _ _ = return
+  mapTermLike _ = return
 
 deriving anyclass instance TermLike Type
 deriving anyclass instance TermLike EvTerm
@@ -453,25 +449,34 @@ deriving instance TermLike Comp
 -- | The monad for pretty-printing in a context of SAW core variables. The
 -- context is in innermost-to-outermost order, i.e. from newest to oldest
 -- variable (see 'mrVarCtxInnerToOuter' for more detail on this ordering).
-newtype PPInCtxM a = PPInCtxM (Reader [LocalName] a)
+-- 
+-- NOTE: By convention, functions which return something of type 'PPInCtxM'
+-- have the prefix @pretty@ (e.g. 'prettyInCtx', 'prettyTermApp') and
+-- functions which return something of type 'SawDoc' have the prefix @pp@
+-- (e.g. 'ppInCtx', 'ppTermAppInCtx'). This latter convention is consistent with
+-- the rest of saw-script (e.g. 'ppTerm' defined in @Verifier.SAW.Term.Pretty@,
+-- 'ppFirstOrderValue' defined in @Verifier.SAW.FiniteValue@).
+newtype PPInCtxM a = PPInCtxM (Reader (PPOpts, [LocalName]) a)
                    deriving newtype (Functor, Applicative, Monad,
-                                     MonadReader [LocalName])
+                                     MonadReader (PPOpts, [LocalName]))
 
--- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context
-runPPInCtxM :: PPInCtxM a -> MRVarCtx -> a
-runPPInCtxM (PPInCtxM m) = runReader m . map fst . mrVarCtxInnerToOuter
+-- | Locally set the context of SAW core variables for a 'PPInCtxM' computation
+prettyWithCtx :: MRVarCtx -> PPInCtxM a -> PPInCtxM a
+prettyWithCtx ctx = local (fmap $ const $ map fst $ mrVarCtxInnerToOuter ctx)
 
--- | Pretty-print an object in a SAW core context
-ppInCtx :: PrettyInCtx a => MRVarCtx -> a -> SawDoc
-ppInCtx ctx a = runPPInCtxM (prettyInCtx a) ctx
+-- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context and 'PPOpts'
+runPPInCtxM :: PPInCtxM a -> PPOpts -> MRVarCtx -> a
+runPPInCtxM (PPInCtxM m) opts ctx =
+  runReader m (opts, map fst $ mrVarCtxInnerToOuter ctx)
 
--- | Pretty-print an object in a SAW core context and render to a 'String'
-showInCtx :: PrettyInCtx a => MRVarCtx -> a -> String
-showInCtx ctx a = renderSawDoc defaultPPOpts $ ppInCtx ctx a
+-- | Pretty-print an object in a SAW core context with the given 'PPOpts'
+ppInCtx :: PrettyInCtx a => PPOpts -> MRVarCtx -> a -> SawDoc
+ppInCtx opts ctx a = runPPInCtxM (prettyInCtx a) opts ctx
 
--- | Pretty-print an object in the empty SAW core context
-ppInEmptyCtx :: PrettyInCtx a => a -> SawDoc
-ppInEmptyCtx = ppInCtx emptyMRVarCtx
+-- | Pretty-print an object in a SAW core context and render to a 'String' with
+-- the given 'PPOpts'
+showInCtx :: PrettyInCtx a => PPOpts -> MRVarCtx -> a -> String
+showInCtx opts ctx a = renderSawDoc opts $ runPPInCtxM (prettyInCtx a) opts ctx
 
 -- | A generic function for pretty-printing an object in a SAW core context of
 -- locally-bound names
@@ -479,7 +484,8 @@ class PrettyInCtx a where
   prettyInCtx :: a -> PPInCtxM SawDoc
 
 instance PrettyInCtx Term where
-  prettyInCtx t = flip (ppTermInCtx defaultPPOpts) t <$> ask
+  prettyInCtx t = do (opts, ctx) <- ask
+                     return $ ppTermInCtx opts ctx t
 
 -- | Combine a list of pretty-printed documents like applications are combined
 prettyAppList :: [PPInCtxM SawDoc] -> PPInCtxM SawDoc
@@ -490,20 +496,24 @@ prettyTermApp :: Term -> [Term] -> PPInCtxM SawDoc
 prettyTermApp f_top args =
   prettyInCtx $ foldl (\f arg -> Unshared $ App f arg) f_top args
 
--- | Pretty-print the application of a 'Term' in a SAW core context
-ppTermAppInCtx :: MRVarCtx -> Term -> [Term] -> SawDoc
-ppTermAppInCtx ctx f_top args = runPPInCtxM (prettyTermApp f_top args) ctx
+-- | Pretty-print the application of a 'Term' in a SAW core context with the
+-- given 'PPOpts'
+ppTermAppInCtx :: PPOpts -> MRVarCtx -> Term -> [Term] -> SawDoc
+ppTermAppInCtx opts ctx f_top args =
+  runPPInCtxM (prettyTermApp f_top args) opts ctx
 
 instance PrettyInCtx MRVarCtx where
-  prettyInCtx = return . align . sep . helper [] . mrVarCtxOuterToInner where
-    helper :: [LocalName] -> [(LocalName,Term)] -> [SawDoc]
-    helper _ [] = []
-    helper ns [(n, tp)] =
-      [ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
-       ppTermInCtx defaultPPOpts ns tp]
-    helper ns ((n, tp):ctx) =
-      (ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
-       ppTermInCtx defaultPPOpts ns tp <> ",") : (helper (n:ns) ctx)
+  prettyInCtx ctx_top = do
+    (opts, _) <- ask
+    return $ align $ sep $ helper opts [] $ mrVarCtxOuterToInner ctx_top
+    where helper :: PPOpts -> [LocalName] -> [(LocalName,Term)] -> [SawDoc]
+          helper _ _ [] = []
+          helper opts ns [(n, tp)] =
+            [ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+             ppTermInCtx opts ns tp]
+          helper opts ns ((n, tp):ctx) =
+            (ppTermInCtx opts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+             ppTermInCtx opts ns tp <> ",") : (helper opts (n:ns) ctx)
 
 instance PrettyInCtx SawDoc where
   prettyInCtx pp = return pp

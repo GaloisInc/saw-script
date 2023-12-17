@@ -102,7 +102,6 @@ Mon(cnst) = cnst   otherwise
 module Verifier.SAW.Cryptol.Monadify where
 
 import Numeric.Natural
-import Data.Maybe
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
@@ -114,7 +113,6 @@ import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text as T
 import qualified Text.URI as URI
-import GHC.Generics (Generic)
 import Data.Type.Equality
 
 import Verifier.SAW.Utils
@@ -124,13 +122,12 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Cryptol (Env)
-import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 import Verifier.SAW.Cryptol.PreludeM
 
 import GHC.Stack
-import Debug.Trace
+-- import Debug.Trace
 
 
 -- FIXME: move to OpenTerm.hs
@@ -573,7 +570,11 @@ monadifyTpExpr ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
     SomeTpExpr MKTypeRepr $ MTyIndesc $
     applyOpenTerm (globalOpenTerm f_trans) $ monadifyTypeArgType ctx arg
 monadifyTpExpr _ (asGlobalDef -> Just bool_id)
-  | bool_id == "Prelude.Bool" = SomeTpExpr MKTypeRepr $ MTyBool
+  | bool_id == "Prelude.Bool" = 
+    SomeTpExpr MKTypeRepr $ MTyBool
+monadifyTpExpr _ (asGlobalDef -> Just integer_id)
+  | integer_id == "Prelude.Integer" =
+    SomeTpExpr MKTypeRepr $ MTyIndesc $ globalOpenTerm "Prelude.Integer"
 {-
 monadifyType ctx (asApplyAll -> (f, args))
   | Just glob <- asTypedGlobalDef f
@@ -1525,7 +1526,8 @@ defaultMonTable =
   , mmSemiPureFin 0 1 "Cryptol.PSignedCmpSeqBool" "CryptolM.PSignedCmpMSeqBool" True
 
     -- PZero constraints
-  , mmSemiPureFin 0 1 "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
+  , mmSemiPure "Cryptol.PZeroSeq" "CryptolM.PZeroMSeq" True
+  , mmSemiPureFin 0 1 "Cryptol.PZeroSeqBool" "CryptolM.PZeroMSeqBool" True
 
     -- PLogic constraints
   , mmSemiPure "Cryptol.PLogicSeq" "CryptolM.PLogicMSeq" True
@@ -1638,7 +1640,7 @@ monadifyName (ImportedName uri aliases) =
 monadifyNamedTermH :: SharedContext -> NameInfo -> Maybe Term -> Term ->
                       StateT MonadifyEnv IO MonTerm
 monadifyNamedTermH sc nmi maybe_trm tp =
-  trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
+  -- trace ("Monadifying " ++ T.unpack (toAbsoluteName nmi)) $
   get >>= \env -> let ?specMEvType = monEnvEvType env in
   do let mtp = monadifyType [] tp
      nmi' <- lift $ monadifyName nmi

@@ -2255,11 +2255,11 @@ mrSolverGetResultOrFail ::
   TopLevel a
 mrSolverGetResultOrFail env errStr succStr res = case res of
   Left err | Prover.mreDebugLevel env == 0 ->
-    fail (Prover.showMRFailure err ++ "\n[MRSolver] " ++ errStr)
+    fail (Prover.showMRFailure env err ++ "\n[MRSolver] " ++ errStr)
   Left err ->
     -- we ignore the MRFailure context here since it will have already
     -- been printed by the debug trace
-    fail (Prover.showMRFailureNoCtx err ++ "\n[MRSolver] " ++ errStr)
+    fail (Prover.showMRFailureNoCtx env err ++ "\n[MRSolver] " ++ errStr)
   Right a | Just s <- succStr ->
     printOutLnTop Info s >> return a
   Right a -> return a
@@ -2308,6 +2308,13 @@ mrSolverSetDebug :: Int -> TopLevel ()
 mrSolverSetDebug dlvl =
   modify (\rw -> rw { rwMRSolverEnv =
                         Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
+
+-- | Modify the 'PPOpts' of the current 'MREnv' to have a maximum printing depth
+mrSolverSetDebugDepth :: Int -> TopLevel ()
+mrSolverSetDebugDepth depth =
+  modify (\rw -> rw { rwMRSolverEnv = (rwMRSolverEnv rw) {
+                        Prover.mrePPOpts = (Prover.mrePPOpts (rwMRSolverEnv rw)) {
+                          ppMaxDepth = Just depth }}})
 
 -- | Given a list of names and types representing variables over which to
 -- quantify as as well as two terms containing those variables, which may be

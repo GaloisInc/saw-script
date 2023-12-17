@@ -123,6 +123,7 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 module SAWScript.Prover.MRSolver.Solver where
 
 import Data.Maybe
+import qualified Data.Text as T
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
@@ -131,8 +132,6 @@ import Control.Monad.Except
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)
-
-import Prettyprinter
 
 import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
@@ -380,20 +379,19 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     -- Convert `atM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecAtM`
-    (asGlobalDef -> Just "CryptolM.atM", [ev,
-                                          (asBvToNat -> Just (w1, n)), a, xs,
-                                          (asBvToNat -> Just (w2, i))]) ->
+    (asGlobalDef -> Just "CryptolM.atM", [ev, (asBvToNat -> Just (w, n)),
+                                          a, xs, i_nat]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecAtM"
-         ws_are_eq <- mrConvertible w1 w2
-         if ws_are_eq then
-           mrApplyAll body [ev, w1, n, a, xs, i] >>= normCompTerm
-           else throwMRFailure (MalformedComp t)
+         liftSC1 scWhnf i_nat >>= mrBvNatInRange w >>= \case
+           Just i -> mrApplyAll body [ev, w, n, a, xs, i]
+                       >>= normCompTerm
+           _ -> throwMRFailure (MalformedComp t)
 
     -- Convert `atM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecAtM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.atM", [ev,
-                                          n_tm@(asNat -> Just n), a, xs,
+    (asGlobalDef -> Just "CryptolM.atM", [ev, n_tm@(asNat -> Just n),
+                                          a@(asBoolType -> Nothing), xs,
                                           (asBvToNat ->
                                              Just (w_tm@(asNat -> Just w),
                                                    i))]) ->
@@ -406,20 +404,19 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
 
     -- Convert `updateM (bvToNat ...) ... (bvToNat ...)` into the unfolding of
     -- `bvVecUpdateM`
-    (asGlobalDef -> Just "CryptolM.updateM", [ev,
-                                              (asBvToNat -> Just (w1, n)), a, xs,
-                                              (asBvToNat -> Just (w2, i)), x]) ->
+    (asGlobalDef -> Just "CryptolM.updateM", [ev, (asBvToNat -> Just (w, n)),
+                                              a, xs, i_nat, x]) ->
       do body <- mrGlobalDefBody "CryptolM.bvVecUpdateM"
-         ws_are_eq <- mrConvertible w1 w2
-         if ws_are_eq then
-           mrApplyAll body [ev, w1, n, a, xs, i, x] >>= normCompTerm
-           else throwMRFailure (MalformedComp t)
+         liftSC1 scWhnf i_nat >>= mrBvNatInRange w >>= \case
+           Just i -> mrApplyAll body [ev, w, n, a, xs, i, x]
+                       >>= normCompTerm
+           _ -> throwMRFailure (MalformedComp t)
 
     -- Convert `updateM n ... xs (bvToNat ...)` for a constant `n` into the
     -- unfolding of `bvVecUpdateM` after converting `n` to a bitvector constant
     -- and applying `genBVVecFromVec` to `xs`
-    (asGlobalDef -> Just "CryptolM.updateM", [ev,
-                                              n_tm@(asNat -> Just n), a, xs,
+    (asGlobalDef -> Just "CryptolM.updateM", [ev, n_tm@(asNat -> Just n),
+                                              a@(asBoolType -> Nothing), xs,
                                               (asBvToNat ->
                                                  Just (w_tm@(asNat -> Just w),
                                                        i)), x]) ->
@@ -432,13 +429,13 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
              >>= normCompTerm
            else throwMRFailure (MalformedComp t)
 
-    -- Always unfold: sawLet, invariantHint, Num_rec, vecMapM, vecMapBindM,
-    -- seqMapM, forNatLtThenSBody
+    -- Always unfold: sawLet, Num_rec, invariantHint, assumingS, assertingS,
+    -- forNatLtThenSBody, vecMapM, vecMapBindM, seqMapM
     (f@(asGlobalDef -> Just ident), args)
       | ident `elem`
-        ["Prelude.sawLet", "SpecM.invariantHint", "Cryptol.Num_rec",
-         "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM",
-         "SpecM.forNatLtThenSBody"]
+        ["Prelude.sawLet", "Cryptol.Num_rec", "SpecM.invariantHint",
+         "SpecM.assumingS", "SpecM.assertingS", "SpecM.forNatLtThenSBody",
+         "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM"]
       , Just (_, Just body) <- asConstant f ->
         mrApplyAll body args >>= normCompTerm
 
@@ -682,7 +679,8 @@ proveCoIndHyp prev_specs hyp = withFailureCtx (FailCtxCoIndHyp hyp) $
          f2 = coIndHypRHSFun hyp
          args1 = coIndHypLHS hyp
          args2 = coIndHypRHS hyp
-     debugPretty 1 ("proveCoIndHyp" <+> ppInEmptyCtx hyp)
+     mrDebugPPInCtxM 1 (prettyWithCtx emptyMRVarCtx $
+                        prettyPrefix "proveCoIndHyp" hyp)
      lhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f1 args1
      rhs <- fromMaybe (error "proveCoIndHyp") <$> mrFunBody f2 args2
      (invar1, invar2) <- applyCoIndHypInvariants hyp
@@ -884,8 +882,8 @@ mrRefines' :: NormComp -> NormComp -> MRM t ()
 
 mrRefines' (RetS e1) (RetS e2) = mrAssertProveRel True e1 e2
 mrRefines' (ErrorS _) (ErrorS _) = return ()
-mrRefines' (RetS e) (ErrorS _) = throwMRFailure (ReturnNotError e)
-mrRefines' (ErrorS _) (RetS e) = throwMRFailure (ReturnNotError e)
+mrRefines' (RetS e) (ErrorS err) = throwMRFailure (ReturnNotError (Right err) e)
+mrRefines' (ErrorS err) (RetS e) = throwMRFailure (ReturnNotError (Left  err) e)
 
 mrRefines' (MaybeElim (Type prop_tp@(asDecProp -> Just decPropM)) m1 f1 _) m2 =
   decPropM >>= \case
@@ -975,10 +973,25 @@ mrRefines' m1 (Eithers ((tp,f2):elims) t2) =
 
 mrRefines' m1 (AssumeBoolBind cond2 k2) =
   do m2 <- liftSC0 scUnitValue >>= applyCompFun k2
-     withAssumption cond2 $ mrRefines m1 m2
+     not_cond2 <- liftSC1 scNot cond2
+     cond2_true_pv <- mrProvable cond2
+     cond2_false_pv <- mrProvable not_cond2
+     case (cond2_true_pv, cond2_false_pv) of
+       (True, _) -> mrRefines m1 m2
+       (_, True) -> return ()
+       _ -> withAssumption cond2 $ mrRefines m1 m2
 mrRefines' (AssertBoolBind cond1 k1) m2 =
   do m1 <- liftSC0 scUnitValue >>= applyCompFun k1
-     withAssumption cond1 $ mrRefines m1 m2
+     cond1_str <- mrShowInCtx cond1
+     let err_txt = "mrRefines failed assertion: " <> T.pack cond1_str
+     m1' <- ErrorS <$> liftSC1 scString err_txt
+     not_cond1 <- liftSC1 scNot cond1
+     cond1_true_pv <- mrProvable cond1
+     cond1_false_pv <- mrProvable not_cond1
+     case (cond1_true_pv, cond1_false_pv) of
+       (True, _) -> mrRefines m1 m2
+       (_, True) -> mrRefines m1' m2
+       _ -> withAssumption cond1 $ mrRefines m1 m2
 
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
@@ -1015,11 +1028,10 @@ mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
   Nothing -> mrTrySetAppliedEVar evar args m2
 -}
 
-mrRefines' (FunBind (CallSName f) args1 k1)
-           (FunBind (CallSName f') args2 k2)
+mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
   | f == f' && length args1 == length args2 =
     zipWithM_ mrAssertProveEq args1 args2 >>
-    mrFunOutType (CallSName f) args1 >>= \(_, tp) ->
+    mrFunOutType f args1 >>= \(_, tp) ->
     mrRefinesFun tp k1 tp k2
 
 mrRefines' m1@(FunBind f1 args1 k1)
@@ -1046,7 +1058,7 @@ mrRefines' m1@(FunBind f1 args1 k1)
   -- If we have an opaque FunAssump that f1 args1' refines f2 args2', then
   -- prove that args1 = args1', args2 = args2', and then that k1 refines k2
   (_, Just fa@(FunAssump ctx _ args1' (OpaqueFunAssump f2' args2') _)) | f2 == f2' ->
-    do debugPretty 2 $ flip runPPInCtxM ctx $
+    do mrDebugPPInCtxM 2 $ prettyWithCtx ctx $
          prettyAppList [return "mrRefines using opaque FunAssump:",
                         prettyInCtx ctx, return ".",
                         prettyTermApp (funNameTerm f1) args1',
@@ -1058,20 +1070,24 @@ mrRefines' m1@(FunBind f1 args1 k1)
        zipWithM_ mrAssertProveEq args2'' args2
        recordUsedFunAssump fa >> mrRefinesFun tp1 k1 tp2 k2
 
-  -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
-  -- unfolds and is not recursive in itself, unfold f2 and recurse
-  (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
-    | Just (f2_body, False) <- maybe_f2_body ->
-    normBindTerm f2_body k2 >>= \m2' ->
-    recordUsedFunAssump fa >> mrRefines m1 m2'
+  -- -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
+  -- -- unfolds and is not recursive in itself, unfold f2 and recurse
+  -- (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
+  --   | Just (f2_body, False) <- maybe_f2_body ->
+  --   normBindTerm f2_body k2 >>= \m2' ->
+  --   recordUsedFunAssump fa >> mrRefines m1 m2'
 
   -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
   -- f1 args1' refines some f args where f /= f2 and f2 does not match the
   -- case above, treat either case like we have a rewrite FunAssump and prove
   -- that args1 = args1' and then that f args refines m2
   (_, Just fa@(FunAssump ctx _ args1' rhs _)) ->
-    do debugPretty 2 $ flip runPPInCtxM ctx $
-         prettyAppList [return "mrRefines rewriting by FunAssump:",
+    do let fassump_tp_str = case fassumpRHS fa of
+                              OpaqueFunAssump _ _ -> "opaque"
+                              RewriteFunAssump _ -> "rewrite"
+       mrDebugPPInCtxM 2 $ prettyWithCtx ctx $
+         prettyAppList [return ("mrRefines rewriting by " <> fassump_tp_str
+                                                          <> " FunAssump:"),
                         prettyInCtx ctx, return ".",
                         prettyTermApp (funNameTerm f1) args1',
                         return "|=",
@@ -1084,7 +1100,10 @@ mrRefines' m1@(FunBind f1 args1 k1)
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBind rhs'' k1
+       -- It's important to instantiate the evars here so that rhs is well-typed
+       -- when bound with k1
+       rhs''' <- mapTermLike mrSubstEVars rhs''
+       m1' <- normBind rhs''' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- If f1 unfolds and is not recursive in itself, unfold it and recurse
@@ -1096,23 +1115,23 @@ mrRefines' m1@(FunBind f1 args1 k1)
       normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
-  -- assumption that f1 refines some specification, and both f1 and f2 are
-  -- recursive and have return types which are heterogeneously related, then try
-  -- to coinductively prove that f1 args1 |= f2 args2 under the assumption that
-  -- f1 args1 |= f2 args2, and then try to prove that k1 |= k2
-  _ | Just _ <- mb_convs
-    , Just _ <- maybe_f1_body
+  -- assumption that f1 refines some specification, both are either lifted or
+  -- unlifted, and both f1 and f2 are recursive and have return types which are
+  -- heterogeneously related, then try to coinductively prove that
+  -- f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2, and
+  -- then try to prove that k1 |= k2
+  _ | Just _ <- maybe_f1_body
     , Just _ <- maybe_f2_body ->
-      mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
+      case mb_convs of
+        Just _ -> mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
+        _ -> throwMRFailure (BindTypesNotEq (Type tp1) (Type tp2))
 
   -- If we cannot line up f1 and f2, then making progress here would require us
   -- to somehow split either m1 or m2 into some bind m' >>= k' such that m' is
   -- related to the function call on the other side and k' is related to the
   -- continuation on the other side, but we don't know how to do that, so give
   -- up
-  _ ->
-    do mrDebugPPPrefixSep 1 "mrRefines: bind types not equal:" tp1 "/=" tp2
-       throwMRFailure (CompsDoNotRefine m1 m2)
+  _ -> throwMRFailure (FunNamesDoNotRefine f1 args1 f2 args2)
 
 mrRefines' m1@(FunBind f1 args1 k1) m2 =
   mrGetFunAssump f1 >>= \case
@@ -1124,7 +1143,10 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
        zipWithM_ mrAssertProveEq args1'' args1
-       m1' <- normBind rhs'' k1
+       -- It's important to instantiate the evars here so that rhs is well-typed
+       -- when bound with k1
+       rhs''' <- mapTermLike mrSubstEVars rhs''
+       m1' <- normBind rhs''' k1
        recordUsedFunAssump fa >> mrRefines m1' m2
 
   -- Otherwise, see if we can unfold f1
@@ -1233,6 +1255,18 @@ mrRefinesFun tp1 f1 tp2 f2 =
 -- heterogeneously related as in 'HetRelated'.
 mrRefinesFunH :: (Term -> Term -> MRM t a) -> [Term] ->
                  Term -> Term -> Term -> Term -> MRM t a
+
+-- Ignore units on either side
+mrRefinesFunH k vars (asPi -> Just (_, asTupleType -> Just [], _)) t1 piTp2 t2 =
+  do u <- liftSC0 scUnitValue
+     t1' <- mrApplyAll t1 [u]
+     piTp1' <- mrTypeOf t1'
+     mrRefinesFunH k vars piTp1' t1' piTp2 t2
+mrRefinesFunH k vars piTp1 t1 (asPi -> Just (_, asTupleType -> Just [], _)) t2 =
+  do u <- liftSC0 scUnitValue
+     t2' <- mrApplyAll t2 [u]
+     piTp2' <- mrTypeOf t2'
+     mrRefinesFunH k vars piTp1 t1 piTp2' t2'
 
 -- Introduce equalities on either side as assumptions
 mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asBoolEq ->
@@ -1350,9 +1384,13 @@ askMRSolver sc env timeout askSMT rs args t1 t2 =
 -- they do not a saw-core typechecking error will be raised.
 refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
-  do (EvTerm ev, tp) <- fromJust . asSpecM <$> mrTypeOf t1
-     rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp]
-     ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp, tp, rr, t1, t2]
+  do (EvTerm ev, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
+     (EvTerm  _, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
+     tps_eq <- mrConvertible tp1 tp2
+     unless tps_eq $
+       throwMRFailure (ReturnTypesNotEq (Type tp1) (Type tp2))
+     rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp1]
+     ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
      liftSC2 scPiList uvars ref_tm
 

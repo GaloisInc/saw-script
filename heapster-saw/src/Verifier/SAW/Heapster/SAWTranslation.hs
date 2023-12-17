@@ -3464,16 +3464,22 @@ data ImplFailCont
     -- to build an @errorS@ spec term
   | ImplFailContMsg EventType String
 
+-- | The prefix used in error strings for implication failures
+implicationFailurePrefix :: String
+implicationFailurePrefix = "Heapster implication failure:\n"
+
 -- | Convert an 'ImplFailCont' to an error, which should have the given type
 implFailContTerm :: OpenTerm -> ImplFailCont -> OpenTerm
 implFailContTerm _ (ImplFailContTerm t) = t
-implFailContTerm tp (ImplFailContMsg ev msg) = errorSOpenTerm ev tp msg
+implFailContTerm tp (ImplFailContMsg ev msg) =
+  errorSOpenTerm ev tp $ implicationFailurePrefix ++ msg
 
 -- | Convert an 'ImplFailCont' to an error as in 'implFailContTerm', but use an
 -- alternate error message in the case of 'ImplFailContMsg'
 implFailAltContTerm :: OpenTerm -> String -> ImplFailCont -> OpenTerm
 implFailAltContTerm _ _ (ImplFailContTerm t) = t
-implFailAltContTerm tp msg (ImplFailContMsg ev _) = errorSOpenTerm ev tp msg
+implFailAltContTerm tp msg (ImplFailContMsg ev _) =
+  errorSOpenTerm ev tp $ "Failed to prove: " ++ msg
 
 -- | The type of terms use to translation permission implications, which can
 -- contain calls to the current failure continuation
@@ -5652,6 +5658,7 @@ translateCallEntry nm entry_trans mb_tops mb_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
   do let entry = typedEntryTransEntry entry_trans
      ectx_ag <- translate $ mbMap2 RL.append mb_args mb_ghosts
+     -- FIXME @Eddy: Is `ectx` not getting used here a bug?
      ectx <- translate (mbMap2 RL.append
                         (mbMap2 RL.append mb_tops mb_args) mb_ghosts)
      pctx <- itiPermStack <$> ask

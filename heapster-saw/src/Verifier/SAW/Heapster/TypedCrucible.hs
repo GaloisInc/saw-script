@@ -2504,9 +2504,20 @@ stmtRecombinePerms =
   pure ()
 
 -- | Helper function to pretty print "Could not prove ps" for permissions @ps@
-ppProofError :: PermPretty a => PPInfo -> a -> Doc ()
-ppProofError ppInfo mb_ps =
-  nest 2 $ sep [pretty "Could not prove", PP.group (permPretty ppInfo mb_ps)]
+ppProofError :: PermPretty a => PPInfo -> String -> a -> Doc ()
+ppProofError ppInfo f mb_ps =
+  nest 2 $ sep [ pretty f <> colon <+> pretty "Could not prove"
+               , PP.group (PP.align (permPretty ppInfo mb_ps)) ]
+
+-- | Helper function to pretty print "Could not prove ps1 -o ps2" for
+-- permissions @ps1@ and @ps2@
+ppImplProofError :: (PermPretty a, PermPretty b) => 
+                    PPInfo -> String -> a -> b -> Doc ()
+ppImplProofError ppInfo f mb_ps1 mb_ps2 =
+  nest 2 $ sep [ pretty f <> colon <+> pretty "Could not prove"
+               , PP.group (PP.align (permPretty ppInfo mb_ps1))
+               , pretty "-o"
+               , PP.group (PP.align (permPretty ppInfo mb_ps2)) ]
 
 -- | Prove a sequence of permissions over some existential variables and append
 -- them to the top of the stack
@@ -2516,7 +2527,7 @@ stmtProvePermsAppend :: PermCheckExtC ext exprExt =>
                         (ps_in :++: ps) ps_in (PermSubst vars)
 stmtProvePermsAppend vars ps =
   permGetPPInfo >>>= \ppInfo ->
-  let err = ppProofError ppInfo ps in
+  let err = ppProofError ppInfo "stmtProvePermsAppend" ps in
   fst <$> pcmEmbedImplWithErrM TypedImplStmt vars err (proveVarsImplAppend ps)
 
 -- | Prove a sequence of permissions over some existential variables in the
@@ -2527,7 +2538,7 @@ stmtProvePerms :: PermCheckExtC ext exprExt =>
                   ps RNil (PermSubst vars)
 stmtProvePerms vars ps =
   permGetPPInfo >>>= \ppInfo ->
-  let err = ppProofError ppInfo ps in
+  let err = ppProofError ppInfo "stmtProvePerms" ps in
   fst <$> pcmEmbedImplWithErrM TypedImplStmt vars err (proveVarsImpl ps)
 
 -- | Prove a sequence of permissions over some existential variables in the
@@ -2539,7 +2550,7 @@ stmtProvePermsFreshLs :: PermCheckExtC ext exprExt =>
                          ps RNil (PermSubst vars)
 stmtProvePermsFreshLs vars ps =
   permGetPPInfo >>>= \ppInfo ->
-  let err = ppProofError ppInfo ps in
+  let err = ppProofError ppInfo "stmtProvePermsFreshLs" ps in
   fst <$> pcmEmbedImplWithErrM TypedImplStmt vars err
             (instantiateLifetimeVars ps >>> proveVarsImpl ps)
 
@@ -2550,7 +2561,7 @@ stmtProvePerm :: (PermCheckExtC ext exprExt, KnownRepr CruCtx vars) =>
                  (ps :> a) ps (PermSubst vars)
 stmtProvePerm (TypedReg x) mb_p =
   permGetPPInfo >>>= \ppInfo ->
-  let err = ppProofError ppInfo (fmap (distPerms1 x) mb_p) in
+  let err = ppProofError ppInfo "stmtProvePerm" (fmap (distPerms1 x) mb_p) in
   fst <$> pcmEmbedImplWithErrM TypedImplStmt knownRepr err
             (proveVarImpl x mb_p)
 
@@ -4123,7 +4134,7 @@ tcTermStmt ctx (Return reg) =
       mb_req_perms =
         fmap (varSubst (singletonVarSubst ret_n)) $
         mbSeparate (MNil :>: Proxy) mb_ret_perms
-      err = ppProofError (stPPInfo st) mb_req_perms in
+      err = ppProofError (stPPInfo st) "Type-checking return statement" mb_req_perms in
   mapM (\(SomeName x) -> ppRelevantPerms $ TypedReg x) (NameSet.toList $
                                                         freeVars mb_req_perms)
   >>>= \pps_before ->
@@ -4234,8 +4245,7 @@ proveCallSiteImpl srcID destID args ghosts vars mb_perms_in mb_perms_out =
                pretty "-o" <> line <>
                indent 2 (permPretty i perms_out)) >>>
   permGetPPInfo >>>= \ppInfo ->
-  -- FIXME HERE NOW: add the input perms and call site to our error message
-  let err = ppProofError ppInfo perms_out in
+  let err = ppImplProofError ppInfo "proveCallSiteImpl" perms_in perms_out in
   pcmRunImplM ghosts err
     (CallSiteImplRet destID ghosts Refl tops_ns args_ns)
     (handleUnitVars ns >>>

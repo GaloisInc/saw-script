@@ -156,6 +156,7 @@ primGenBVVec sc n =
   PrimFilterFun "primGenBVVec" $
   \case
     VExtra (VExtraTerm _ t) -> primGenBVVecFilter sc n t
+    VWord (Left (_, t)) -> primGenBVVecFilter sc n t
     _ -> mzero
 
 -- | The filter function for 'primGenBVVec', and one case of 'primGenCryM'
@@ -174,7 +175,8 @@ primGenBVVecFilter sc n (asGenCryMTerm -> Just (asBvToNatKnownW ->
      body <- scApplyBeta sc f =<< scBvToNat sc n i_tm
      scLambda sc "i" i_tp body
 primGenBVVecFilter _ _ t =
-  error $ "primGenBVVec could not handle: " ++ showInCtx emptyMRVarCtx t
+  error $ "primGenBVVec could not handle: " ++
+          showInCtx defaultPPOpts emptyMRVarCtx t
 
 -- | An implementation of a primitive function that expects a term of the form
 -- @genCryM _ a _@, @genFromBVVec ... (genBVVec _ _ a _) ...@, or
@@ -188,8 +190,13 @@ primGenCryM sc =
   (\case
       VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, f))) ->
         return (Nothing, f)
+      VWord (Left (_, asGenCryMTerm -> Just (_, _, f))) ->
+        return (Nothing, f)
       VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
                                                         v, _, _))) ->
+        (Just n,) <$> primGenBVVecFilter sc n v
+      VWord (Left (_, asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
+                                                  v, _, _))) ->
         (Just n,) <$> primGenBVVecFilter sc n v
       _ -> mzero
   ) . uncurry
@@ -229,7 +236,12 @@ primBVVecFromVecArg sc a =
     VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
                                                       v, _, _))) ->
       return $ FromBVVec n len v
+    VWord (Left (_, asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
+                                                v, _, _))) ->
+      return $ FromBVVec n len v
     VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, body))) ->
+      return $ GenCryM body
+    VWord (Left (_, asGenCryMTerm -> Just (_, _, body))) ->
       return $ GenCryM body
     VVector vs ->
       lift $ BVVecLit <$>
@@ -424,8 +436,8 @@ smtNorm sc t =
 -- | Normalize a 'Term' using some Mr Solver specific primitives
 mrNormTerm :: Term -> MRM t Term
 mrNormTerm t =
-  debugPrint 2 "Normalizing term:" >>
-  debugPrettyInCtx 2 t >>
+  mrDebugPrint 2 "Normalizing term:" >>
+  mrDebugPPInCtx 2 t >>
   liftSC1 smtNorm t
 
 -- | Normalize an open term by wrapping it in lambdas, normalizing, and then
@@ -458,8 +470,9 @@ mrProvableRaw prop_term =
      prop <- liftSC1 termToProp prop_term
      unints <- Set.map ecVarIndex <$> getAllExtSet <$> liftSC1 propToTerm prop
      nenv <- liftIO (scGetNamingEnv sc)
-     debugPrint 2 ("Calling SMT solver with proposition: " ++
-                   prettyProp defaultPPOpts nenv prop)
+     opts <- mrPPOpts
+     mrDebugPrint 2 ("Calling SMT solver with proposition: " ++
+                     prettyProp opts nenv prop)
      -- If there are any saw-core `error`s in the term, this will throw a
      -- Haskell error - in this case we want to just return False, not stop
      -- execution
@@ -470,19 +483,19 @@ mrProvableRaw prop_term =
            e -> throwM e
      case smt_res of
        Left msg ->
-         debugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
+         mrDebugPrint 2 ("SMT solver encountered a saw-core error term: " ++ msg)
            >> return False
        Right (stats, SolveUnknown) ->
-          debugPrint 2 "SMT solver response: unknown" >>
+          mrDebugPrint 2 "SMT solver response: unknown" >>
           recordUsedSolver stats prop_term >> return False
        Right (stats, SolveCounterexample cex) ->
-         debugPrint 2 "SMT solver response: not provable" >>
-         debugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
+         mrDebugPrint 2 "SMT solver response: not provable" >>
+         mrDebugPrint 3 ("Counterexample:" ++ concatMap (\(x,v) ->
            "\n - " ++ show (ppName $ ecName x) ++
-           " = " ++ renderSawDoc defaultPPOpts (ppFirstOrderValue defaultPPOpts v)) cex) >>
+           " = " ++ renderSawDoc opts (ppFirstOrderValue opts v)) cex) >>
          recordUsedSolver stats prop_term >> return False
        Right (stats, SolveSuccess _) ->
-         debugPrint 2 "SMT solver response: provable" >>
+         mrDebugPrint 2 "SMT solver response: provable" >>
          recordUsedSolver stats prop_term >> return True
 
 -- | Test if a Boolean term over the current uvars is provable given the current
@@ -701,8 +714,7 @@ map2MaybeTermM TrueRepr f (MaybeTerm t1) (MaybeTerm t2) = MaybeTerm <$> f t1 t2
 map2MaybeTermM FalseRepr _ _ _ = return $ MaybeTerm ()
 
 instance Given (BoolRepr b) => TermLike (MaybeTerm b) where
-  liftTermLike n i = mapMaybeTermM given (liftTermLike n i)
-  substTermLike n s = mapMaybeTermM given (substTermLike n s)
+  mapTermLike = mapMaybeTermM given
 
 -- | Construct an injective representation for a type @tp@ and an optional term
 -- @tm@ of that type, returning the representation type @tp_r@, the optional
@@ -1026,9 +1038,11 @@ mrProveRel het t1 t2 =
      then do mrDebugPPPrefixSep 2 (nm ++ ": Failure, types not equal:")
                                   tp1 "and" tp2
              return False
-     else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
-             res <- withTermInCtx cond_in_ctx mrProvable
-             debugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
+     else do ts_eq <- mrConvertible t1 t2
+             res <- if ts_eq then return True
+                    else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
+                            withTermInCtx cond_in_ctx mrProvable
+             mrDebugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
              return res
 
 -- | Prove that two terms are related, heterogeneously iff the first argument,

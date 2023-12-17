@@ -6148,6 +6148,16 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
       substEqsWithProof e >>= \eqp ->
       setVarM memb (someEqProofRHS eqp) >>> pure eqp
 
+  -- If the RHS is an unset variable z plus an offset o, simplify e using any
+  -- available equality proofs to some e' and set z equal to e' minus o
+  (_, [nuMP| PExpr_LLVMOffset z mb_off |])
+    | Left memb <- mbNameBoundP z
+    , Nothing <- psubstLookup psubst memb
+    , Just off <- partialSubst psubst mb_off ->
+      -- implTraceM (\i -> pretty "proveEqH (unset var + offset):" <+> permPretty i e) >>>
+      substEqsWithProof e >>= \eqp ->
+      setVarM memb (someEqProofRHS eqp `addLLVMOffset` bvNegate off) >>> pure eqp
+
   -- If the RHS is a set variable, substitute for it and recurse
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z

@@ -15,6 +15,12 @@ atCryM = at;
 
 -- Alternate versions of Prelude functions, changed to use genCryM and atCryM
 
+takeCryM : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
+takeCryM a m n v = genCryM m a (\ (i : Nat) -> at (addNat m n) a v i);
+
+dropCryM : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec n a;
+dropCryM a m n v = genCryM n a (\ (i : Nat) -> at (addNat m n) a v (addNat m i));
+
 joinCryM : (m n : Nat) -> (a : isort 0) ->
            Vec m (Vec n a) -> Vec (mulNat m n) a;
 joinCryM m n a v =
@@ -98,10 +104,9 @@ bvVecAtM E n len a xs i =
 
 atM : (E:EvType) -> (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> SpecM E a;
 atM E n a xs i =
-  maybe (IsLtNat i n) (SpecM E a)
-        (errorS E a "atM: invalid sequence index")
-        (\ (pf:IsLtNat i n) -> retS E a (atWithProof n a xs i pf))
-        (proveLtNat i n);
+  ite (SpecM E a) (ltNat i n)
+      (retS E a (at n a xs i))
+      (errorS E a "atM: invalid sequence index");
 
 bvVecUpdateM : (E:EvType) -> (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
                BVVec n len a -> Vec n Bool -> a ->
@@ -127,10 +132,9 @@ fromBVVecUpdateM E n len a xs i x def m =
 updateM : (E:EvType) -> (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a ->
           SpecM E (Vec n a);
 updateM E n a xs i x =
-  maybe (IsLtNat i n) (SpecM E (Vec n a))
-        (errorS E (Vec n a) "updateM: invalid sequence index")
-        (\ (pf:IsLtNat i n) -> retS E (Vec n a) (updWithProof n a xs i x pf))
-        (proveLtNat i n);
+  ite (SpecM E (Vec n a)) (ltNat i n)
+      (retS E (Vec n a) (upd n a xs i x))
+      (errorS E (Vec n a) "updateM: invalid sequence index");
 
 eListSelM : (E:EvType) -> (a : sort 0) -> (n : Num) -> mseq E n a -> Nat ->
             SpecM E a;
@@ -475,6 +479,12 @@ PZeroMSeq E n_top a pa =
           (seqConst TCInf (SpecM E a) (retS E a pa))
           n_top;
 
+PZeroMSeqBool : (E:EvType) -> (n : Num) -> isFinite n ->
+                PZero (mseq E n Bool);
+PZeroMSeqBool E =
+  Num_rec_fin (\ (n:Num) -> PZero (mseq E n Bool))
+              (\ (n:Nat) -> bvNat n 0);
+
 -- PLogic
 PLogicSpecM : (E:EvType) -> (a : sort 0) -> PLogic a -> PLogic (SpecM E a);
 PLogicSpecM E a pa =
@@ -611,7 +621,7 @@ ecTakeM E =
             SpecM E (Vec m a))
          -- The case (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:qisort 0) -> \ (xs: Vec (addNat m n) a) ->
-            retS E (Vec m a) (take a m n xs))
+            retS E (Vec m a) (takeCryM a m n xs))
          -- The case (TCNum m, infinity)
          (\ (a:qisort 0) -> \ (xs: Stream (SpecM E a)) ->
             vecSequenceM E a m (streamTake (SpecM E a) m xs)))
@@ -634,7 +644,7 @@ ecDropM E =
        Num_rec
          (\ (n:Num) -> (a:isort 0) -> mseq E (tcAdd (TCNum m) n) a -> mseq E n a)
          -- The case (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> drop a m n)
+         (\ (n:Nat) -> \ (a:isort 0) -> dropCryM a m n)
          -- The case (TCNum m, infinity)
          (\ (a:isort 0) -> streamDrop (SpecM E a) m));
 
