@@ -88,7 +88,6 @@ import Data.Parameterized.TraversableFC
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Name
 import Verifier.SAW.Module as Mod
-import Verifier.SAW.Prelude
 import Verifier.SAW.Cryptol.Monadify
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
@@ -347,8 +346,9 @@ heapster_init_env_gen _bic _opts dlevel mod_str llvm_filename =
      if mod_loaded then
        fail ("SAW module with name " ++ show mod_str ++ " already defined!")
        else return ()
-     -- import Prelude by default
-     preludeMod <- liftIO $ scFindModule sc preludeModuleName
+     -- import SpecM by default
+     let specMModuleName = mkModuleName ["SpecM"]
+     preludeMod <- liftIO $ scFindModule sc specMModuleName
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
                                  emptyModule saw_mod_name)
      mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
@@ -363,24 +363,14 @@ load_sawcore_from_file _ _ mod_filename =
 heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
                                TopLevel HeapsterEnv
 heapster_init_env_from_file bic opts mod_filename llvm_filename =
-  heapster_init_env_from_file_gen
-  bic opts noDebugLevel mod_filename llvm_filename
+  heapster_init_env_for_files_gen
+  bic opts noDebugLevel mod_filename [llvm_filename]
 
 heapster_init_env_from_file_debug :: BuiltinContext -> Options ->
                                      String -> String -> TopLevel HeapsterEnv
 heapster_init_env_from_file_debug bic opts mod_filename llvm_filename =
-  heapster_init_env_from_file_gen
-  bic opts traceDebugLevel mod_filename llvm_filename
-
-heapster_init_env_from_file_gen :: BuiltinContext -> Options -> DebugLevel ->
-                                   String -> String -> TopLevel HeapsterEnv
-heapster_init_env_from_file_gen _bic _opts dlevel mod_filename llvm_filename =
-  do llvm_mod <- llvm_load_module llvm_filename
-     sc <- getSharedContext
-     liftIO $ ensureCryptolMLoaded sc
-     (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
-     liftIO $ tcInsertModule sc saw_mod
-     mkHeapsterEnv dlevel saw_mod_name [llvm_mod]
+  heapster_init_env_for_files_gen
+  bic opts traceDebugLevel mod_filename [llvm_filename]
 
 heapster_init_env_for_files_gen :: BuiltinContext -> Options -> DebugLevel ->
                                    String -> [String] ->
