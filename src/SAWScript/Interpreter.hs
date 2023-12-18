@@ -4361,12 +4361,13 @@ primitives = Map.fromList
     "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_reachability_perm)
     Experimental
-    [ "heapster_define_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
-    , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to he permission"
-    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    [ "heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun"
+    , " defines a recursive named Heapster permission named nm with arguments"
+    , " parsed from args_ctx and type parsed from value_type that unfolds to p,"
+    , " which should form a reachability permission, meaning that it should"
+    , " have the form eq(x) or q for some permission q, where x is the last"
+    , " argument argument in arg_ctx and q can contain nm with no arguments to"
+    , " refer to the entire permission recursively."
     ]
 
   , prim "heapster_define_recursive_shape"
