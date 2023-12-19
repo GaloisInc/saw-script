@@ -1,0 +1,24 @@
+enable_experimental;
+
+m <- mir_load_module "overrides-mut.linked-mir.json";
+
+let side_effect_spec = do {
+  a_ref <- mir_alloc_mut mir_u32;
+  a_val <- mir_fresh_var "a_val" mir_u32;
+  mir_points_to a_ref (mir_term a_val);
+  mir_execute_func [a_ref];
+
+  // This is new
+  mir_points_to a_ref (mir_term {{ 0 : [32] }});
+};
+
+let foo_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_execute_func [mir_term x];
+
+  // This is new
+  mir_return (mir_term {{ 0 : [32] }});
+};
+
+side_effect_ov <- mir_verify m "overrides_mut::side_effect" [] false side_effect_spec z3;
+mir_verify m "overrides_mut::foo" [side_effect_ov] false foo_spec z3;

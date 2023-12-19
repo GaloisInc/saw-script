@@ -65,7 +65,7 @@ The top-level repository directories are:
 
 * `saw` - Source for the `saw` executable interpreter for SAWScript.
 
-* `doc` - A tutorial and manual for SAWScript.
+* `doc` - A manual and tutorials for SAWScript.
 
 * `examples` - Various examples of using SAWScript.
 
