@@ -300,6 +300,11 @@ asIsLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [m, n])) =
   Just (m, n)
 asIsLtNat _ = Nothing
 
+-- | Recognize a bitvector type with a potentially symbolic length
+asSymBitvectorType :: Recognizer Term Term
+asSymBitvectorType (asVectorType -> Just (n, asBoolType -> Just ())) = Just n
+asSymBitvectorType _ = Nothing
+
 -- | Test if a 'Term' is a 'BVVec' type, excluding bitvectors
 asBVVecType :: Recognizer Term (Term, Term, Term)
 asBVVecType (asApplyAll ->
@@ -534,6 +539,9 @@ instance PrettyInCtx Text where
   prettyInCtx str = return $ fromString $ unpack str
 
 instance PrettyInCtx Int where
+  prettyInCtx i = return $ viaShow i
+
+instance PrettyInCtx Natural where
   prettyInCtx i = return $ viaShow i
 
 instance PrettyInCtx a => PrettyInCtx (Maybe a) where
