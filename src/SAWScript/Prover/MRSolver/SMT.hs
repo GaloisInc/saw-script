@@ -51,7 +51,7 @@ import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
-import Verifier.SAW.Prim (EvalError(..))
+import Verifier.SAW.Prim (widthNat, EvalError(..))
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
@@ -276,56 +276,130 @@ mrProvable bool_tm =
 -- * Unifying BVVec and Vec Lengths
 ----------------------------------------------------------------------
 
--- | The length of a vector, given either as a bitvector 'Term' of a
--- statically-known bitwidth or as a natural number 'Term'
-data VecLength = BVVecLen Natural Term | NatVecLen Term
+-- | The length of a vector, given as either ...
+data VecLength = ConstBVVecLen Natural Natural
+               | ConstNatVecLen Natural Natural
+               | SymBVVecLen Natural Term  
+               | SymNatVecLen Term
                deriving (Generic, Show, TermLike)
 
 instance PrettyInCtx VecLength where
-  prettyInCtx (BVVecLen n len) =
-    prettyAppList [return "BVVecLen", prettyInCtx n, parens <$> prettyInCtx len]
-  prettyInCtx (NatVecLen n) =
-    prettyAppList [return "NatVecLen", prettyInCtx n]
+  prettyInCtx (ConstBVVecLen n len) = 
+    prettyAppList [return "ConstBVVecLen", prettyInCtx n, prettyInCtx len]
+  prettyInCtx (ConstNatVecLen n len) = 
+    prettyAppList [return "ConstNatVecLen", prettyInCtx n, prettyInCtx len]
+  prettyInCtx (SymBVVecLen n len) =
+    prettyAppList [return "SymBVVecLen", prettyInCtx n, parens <$> prettyInCtx len]
+  prettyInCtx (SymNatVecLen len) =
+    prettyAppList [return "SymNatVecLen", parens <$> prettyInCtx len]
 
 -- | Convert a natural number expression to a 'VecLength'
 asVecLen :: Term -> VecLength
-asVecLen (asBvToNatKnownW -> Just (n, len)) = BVVecLen n len
-asVecLen n = NatVecLen n
+asVecLen (asBvToNatKnownW -> Just (n, len))
+  | Just len' <- asUnsignedConcreteBv len = ConstBVVecLen n len'
+  | otherwise = SymBVVecLen n len
+asVecLen (asUnsignedConcreteBvToNat -> Just len) =
+  ConstNatVecLen (widthNat len) len
+asVecLen len = SymNatVecLen len
 
--- | Convert a 'VecLength' to a natural number expression
-vecLenToNat :: VecLength -> MRM t Term
-vecLenToNat (BVVecLen n len) = liftSC2 scBvToNat n len
-vecLenToNat (NatVecLen n) = return n
+-- | Recognize a @BVVec@, @Vec@, or @mseq (TCNum ...)@ vector with length
+-- represented as a 'VecLength'
+asVecTypeWithLen :: Recognizer Term (VecLength, Term)
+asVecTypeWithLen (asApplyAll -> (isGlobalDef "Prelude.BVVec" -> Just (),
+                                 [asNat -> Just n, len, a]))
+  | Just len' <- asUnsignedConcreteBv len = Just (ConstBVVecLen n len', a)
+  | otherwise = Just (SymBVVecLen n len, a)
+asVecTypeWithLen (asVectorType -> Just (len, a)) = Just (asVecLen len, a)
+asVecTypeWithLen (asApplyAll -> (isGlobalDef "SpecM.mseq" -> Just (),
+                                 [_, asNum -> Just (Left len), a])) =
+  Just (asVecLen len, a)
+asVecTypeWithLen _ = Nothing
+
+-- | Convert a 'VecLength' into either a 'Term' of bitvector type with the given
+-- 'Natural' bit-width if the 'VecLength' has an associated bit-width, or into a
+-- 'Term' of nat type otherwise
+mrVecLenAsBVOrNatTerm :: VecLength -> MRM t (Either (Natural, Term) Term)
+mrVecLenAsBVOrNatTerm (ConstBVVecLen n len) =
+  (Left . (n,)) <$> liftSC2 scBvLit n (fromIntegral len)
+mrVecLenAsBVOrNatTerm (ConstNatVecLen n len) =
+  (Left . (n,)) <$> liftSC2 scBvLit n (fromIntegral len)
+mrVecLenAsBVOrNatTerm (SymBVVecLen n len) =
+  return $ Left (n, len)
+mrVecLenAsBVOrNatTerm (SymNatVecLen len) =
+  return $ Right len
 
 -- | Get the type of an index bounded by a 'VecLength'
-vecLenIxType :: VecLength -> MRM t Term
-vecLenIxType (BVVecLen n _) = liftSC1 scBitvector n
-vecLenIxType (NatVecLen _) = liftSC0 scNatType
+mrVecLenIxType :: VecLength -> MRM t Term
+mrVecLenIxType vlen = mrVecLenAsBVOrNatTerm vlen >>= \case
+  Left (n, _) -> liftSC1 scBitvector n
+  Right _ -> liftSC0 scNatType
+
+-- | Construct the proposition that the given 'Term' of type 'mrVecLenIxType'
+-- is less than the given 'VecLength'
+mrVecLenIxBound :: VecLength -> Term -> MRM t Term
+mrVecLenIxBound vlen ix = mrVecLenAsBVOrNatTerm vlen >>= \case
+  Left (n, len) -> liftSC1 scNat n >>= \n' ->
+                   liftSC2 scGlobalApply "Prelude.bvult" [n', ix, len]
+  Right len -> liftSC2 scGlobalApply "Prelude.ltNat" [ix, len]
 
 -- | Test if two vector lengths are equal, and if so, generalize them to use the
--- same index type as returned by 'vecLenIxType'
-vecLenUnify :: VecLength -> VecLength -> MRM t (Maybe (VecLength, VecLength))
-vecLenUnify vlen1@(BVVecLen n1 len1) vlen2@(BVVecLen n2 len2)
-  | n1 == n2 =
-    do lens_eq <- mrProveEq len1 len2
-       if lens_eq then return (Just (vlen1,vlen2))
-         else return Nothing
-vecLenUnify (BVVecLen _ _) (BVVecLen _ _) = return Nothing
-vecLenUnify len1 len2 =
-  do n1 <- vecLenToNat len1
-     n2 <- vecLenToNat len2
-     mrProveEq n1 n2 >>= \case
-       True -> return $ Just (NatVecLen n1, NatVecLen n2)
-       False -> return Nothing
+-- same index type as returned by 'mrVecLenIxType'
+mrVecLenUnify :: VecLength -> VecLength -> MRM t (Maybe (VecLength, VecLength))
+mrVecLenUnify (ConstBVVecLen n1 len1) (ConstBVVecLen n2 len2)
+  | n1 == n2 && len1 == len2
+  = return $ Just (ConstBVVecLen n1 len1, ConstBVVecLen n2 len2)
+mrVecLenUnify (ConstBVVecLen n1 len1) (ConstNatVecLen n2 len2)
+  | n2 < n1 && len1 == len2
+  = return $ Just (ConstBVVecLen n1 len1, ConstNatVecLen n1 len2)
+mrVecLenUnify (ConstNatVecLen n1 len1) (ConstBVVecLen n2 len2)
+  | n1 < n2 && len1 == len2
+  = return $ Just (ConstNatVecLen n2 len1, ConstBVVecLen n2 len2)
+mrVecLenUnify (ConstNatVecLen n1 len1) (ConstNatVecLen n2 len2)
+  | len1 == len2, nMax <- max n1 n2
+  = return $ Just (ConstNatVecLen nMax len1, ConstNatVecLen nMax len2)
+mrVecLenUnify vlen1@(SymBVVecLen n1 len1) vlen2@(SymBVVecLen n2 len2)
+  | n1 == n2
+  = mrProveEq len1 len2 >>= \case
+      True -> return $ Just (vlen1, vlen2)
+      False -> return Nothing
+mrVecLenUnify (SymNatVecLen len1) (SymNatVecLen len2) =
+  mrProveEq len1 len2 >>= \case
+    True -> return $ Just (SymNatVecLen len1, SymNatVecLen len2)
+    False -> return Nothing
+mrVecLenUnify _ _ = return Nothing
+
+-- | Given a vector length, element type, and generating function, return the
+-- associated vector formed using the appropritate @gen@ function 
+mrVecLenGen :: VecLength -> Term -> Term -> MRM t Term
+mrVecLenGen (ConstBVVecLen n len) tp f =
+  do n_tm <- liftSC1 scNat n
+     len_tm <- liftSC2 scBvLit n (fromIntegral len)
+     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len_tm, tp, f]
+mrVecLenGen (ConstNatVecLen _ len) tp f =
+  do len_tm <- liftSC1 scNat len
+     mrApplyGlobal "Prelude.gen" [len_tm, tp, f]
+mrVecLenGen (SymBVVecLen n len) tp f =
+  do n_tm <- liftSC1 scNat n
+     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
+mrVecLenGen (SymNatVecLen len) tp f =
+  do mrApplyGlobal "Prelude.gen" [len, tp, f]
 
 -- | Given a vector length, element type, vector of that length and type, and an
--- index of type 'vecLenIxType', index into the vector
-vecLenIx :: VecLength -> Term -> Term -> Term -> MRM t Term
-vecLenIx (BVVecLen n len) tp v ix =
+-- index of type 'mrVecLenIxType', index into the vector
+mrVecLenAt :: VecLength -> Term -> Term -> Term -> MRM t Term
+mrVecLenAt (ConstBVVecLen n len) tp v ix =
+  do n_tm <- liftSC1 scNat n
+     len_tm <- liftSC2 scBvLit n (fromIntegral len)
+     mrAtBVVec n_tm len_tm tp v ix
+mrVecLenAt (ConstNatVecLen n len) tp v ix =
+  do len_tm <- liftSC1 scNat len
+     ix' <- liftSC2 scBvToNat n ix
+     mrAtVec len_tm tp v ix'
+mrVecLenAt (SymBVVecLen n len) tp v ix =
   do n_tm <- liftSC1 scNat n
      mrAtBVVec n_tm len tp v ix
-vecLenIx (NatVecLen n) tp v ix = mrAtVec n tp v ix
-
+mrVecLenAt (SymNatVecLen len) tp v ix =
+  do mrAtVec len tp v ix
 
 
 ----------------------------------------------------------------------
@@ -431,18 +505,11 @@ mrApplyRepr (InjReprPair repr1 repr2) t =
   do t1 <- mrApplyRepr repr1 =<< doTermProj t TermProjLeft
      t2 <- mrApplyRepr repr2 =<< doTermProj t TermProjRight
      liftSC2 scPairValueReduced t1 t2
-mrApplyRepr (InjReprVec (NatVecLen n) tp repr) t =
-  do nat_tp <- liftSC0 scNatType
-     f <- mrLambdaLift1 ("ix", nat_tp) (repr, t) $ \x (repr', t') ->
+mrApplyRepr (InjReprVec vlen tp repr) t =
+  do ix_tp <- mrVecLenIxType vlen
+     f <- mrLambdaLift1 ("ix", ix_tp) (repr, t) $ \x (repr', t') ->
        mrApplyRepr repr' =<< mrApply t' x
-     mrApplyGlobal "Prelude.gen" [n, tp, f]
-mrApplyRepr (InjReprVec (BVVecLen n len) tp repr) t =
-  do bv_tp <- liftSC1 scBitvector n
-     f <- mrLambdaLift1 ("ix", bv_tp) (repr, t) $ \x (repr', t') ->
-       mrApplyRepr repr' =<< mrApply t' x
-     n_tm <- liftSC1 scNat n
-     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
-
+     mrVecLenGen vlen tp f
 
 newtype MaybeTerm b = MaybeTerm { unMaybeTerm :: If b Term () }
 
@@ -483,15 +550,14 @@ mkInjRepr b (asPairType -> Just (tp1, tp2)) t =
      tm_r <- map2MaybeTermM b (liftSC2 scPairValueReduced) tm_r1 tm_r2
      return (tp_r, tm_r, InjReprPair r1 r2)
 
-mkInjRepr b (asVectorType -> Just (len, tp@(asBoolType -> Nothing))) tm =
-  do let vlen = asVecLen len
-     ix_tp <- vecLenIxType vlen
+mkInjRepr b (asVecTypeWithLen -> Just (vlen, tp@(asBoolType -> Nothing))) tm =
+  do ix_tp <- mrVecLenIxType vlen
      -- NOTE: these return values from mkInjRepr all have ix free
      (tp_r', tm_r', r') <-
        give b $
        withUVarLift "ix" (Type ix_tp) (vlen,tp,tm) $ \ix (vlen',tp',tm') ->
        do tm_elem <-
-            mapMaybeTermM b (\tm'' -> vecLenIx vlen' tp' tm'' ix) tm'
+            mapMaybeTermM b (\tm'' -> mrVecLenAt vlen' tp' tm'' ix) tm'
           mkInjRepr b tp' tm_elem
      -- r' should not have ix free, so it should be ok to substitute an error
      -- term for ix...
@@ -571,8 +637,8 @@ injUnifyReprTypes tp1 r1 tp2 InjReprId
 -- currently have representation that can cast from a bitvector length to an
 -- equal natural number length
 injUnifyReprTypes _ (InjReprVec len1 tp1 r1) _ (InjReprVec len2 tp2 r2) =
-  do (len1', len2') <- MaybeT $ vecLenUnify len1 len2
-     ix_tp <- lift $ vecLenIxType len1'
+  do (len1', len2') <- MaybeT $ mrVecLenUnify len1 len2
+     ix_tp <- lift $ mrVecLenIxType len1'
      (tp_r, r1', r2') <- injUnifyReprTypes tp1 r1 tp2 r2
      tp_r_fun <- lift $ mrArrowType "ix" ix_tp tp_r
      return (tp_r_fun, InjReprVec len1' tp1 r1', InjReprVec len2' tp2 r2')
@@ -877,28 +943,31 @@ mrProveRelH' _ het _ tp2 (asBvToNat -> Just (n, t1)) t2 =
 mrProveRelH' _ het tp1 _ t1 (asBvToNat -> Just (n, t2)) =
   mrBvType n >>= \bv_tp -> mrProveRelH het tp1 bv_tp t1 t2
 
--- FIXME HERE NOWNOW: generalize Vec = Vec relation
-
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
-mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
-                   tp2@(asBVVecType -> Just (n2, len2, tpA2)) t1 t2 =
-  mrConvertible n1 n2 >>= \ns_are_eq ->
-  mrConvertible len1 len2 >>= \lens_are_eq ->
-  (if ns_are_eq && lens_are_eq then return () else
-     throwMRFailure (TypesNotEq (Type tp1) (Type tp2))) >>
-  liftSC0 scBoolType >>= \bool_tp ->
-  liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
-  withUVarLift "ix" (Type ix_tp) ((n1,n2,len1,len2),(tpA1,tpA2,t1,t2)) $
-  \ix ((n1',n2',len1',len2'),(tpA1',tpA2',t1',t2')) ->
-  do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
-     t1_prj <- mrAtBVVec n1' len1' tpA1' t1' ix
-     t2_prj <- mrAtBVVec n2' len2' tpA2' t2' ix
-     cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
-     extTermInCtx [("ix",ix_tp)] <$>
-       liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
+mrProveRelH' _ het tp1@(asVecTypeWithLen -> Just (vlen1, tpA1))
+                   tp2@(asVecTypeWithLen -> Just (vlen2, tpA2)) t1 t2 =
+  mrVecLenUnify vlen1 vlen2 >>= \case
+    Just (vlen1', vlen2') ->
+      mrVecLenIxType vlen1' >>= \ix_tp -> 
+      withUVarLift "ix" (Type ix_tp) (vlen1',vlen2',tpA1,tpA2,t1,t2) $
+      \ix (vlen1'',vlen2'',tpA1',tpA2',t1',t2') ->
+      do ix_bound <- mrVecLenIxBound vlen1'' ix
+         t1_prj <- mrVecLenAt vlen1'' tpA1' t1' ix
+         t2_prj <- mrVecLenAt vlen2'' tpA2' t2' ix
+         cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
+         extTermInCtx [("ix",ix_tp)] <$>
+           liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
+    Nothing -> throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 
 -- For pair types, prove both the left and right projections are related
+-- FIXME: Don't re-associate tuples
+mrProveRelH' _ het (asPairType -> Just (asPairType -> Just (tp1a, tp1b), tp1c)) tp2 t1 t2 =
+  do tp1' <- liftSC2 scPairType tp1a =<< liftSC2 scPairType tp1b tp1c
+     mrProveRelH het tp1' tp2 t1 t2
+mrProveRelH' _ het tp1 (asPairType -> Just (asPairType -> Just (tp2a, tp2b), tp2c)) t1 t2 =
+  do tp2' <- liftSC2 scPairType tp2a =<< liftSC2 scPairType tp2b tp2c
+     mrProveRelH het tp1 tp2' t1 t2
 mrProveRelH' _ het (asPairType -> Just (tpL1, tpR1))
                    (asPairType -> Just (tpL2, tpR2)) t1 t2 =
   do t1L <- liftSC1 scPairLeft t1
