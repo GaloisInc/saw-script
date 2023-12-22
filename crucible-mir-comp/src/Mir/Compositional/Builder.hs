@@ -656,11 +656,11 @@ substMethodSpec sc sm ms = do
 
     goSetupSlice (MirSetupSliceRaw ref len) =
       MirSetupSliceRaw <$> goSetupValue ref <*> goSetupValue len
-    goSetupSlice (MirSetupSlice arr) =
-      MirSetupSlice <$> goSetupValue arr
-    goSetupSlice (MirSetupSliceRange arr start end) = do
+    goSetupSlice (MirSetupSlice sliceInfo arr) =
+      MirSetupSlice sliceInfo <$> goSetupValue arr
+    goSetupSlice (MirSetupSliceRange sliceInfo arr start end) = do
       arr' <- goSetupValue arr
-      pure $ MirSetupSliceRange arr' start end
+      pure $ MirSetupSliceRange sliceInfo arr' start end
 
     goTypedTerm tt = do
         term' <- goTerm $ SAW.ttTerm tt

@@ -31,6 +31,8 @@ module SAWScript.Crucible.MIR.Builtins
     -- ** MIR slices
   , mir_slice_value
   , mir_slice_range_value
+  , mir_str_slice_value
+  , mir_str_slice_range_value
     -- ** MIR muxing
   , mir_mux_values
     -- ** MIR types
@@ -178,10 +180,15 @@ mir_alloc_internal mut mty =
        Mir.TySlice _ ->
          fail $ unlines
            [ "mir_alloc and mir_alloc_mut cannot be used to create slice references."
-           , "Use the mir_slice_value or mir_slice_range_value functions instead."
+           , "Use the mir_slice_value or mir_slice_range_value functions to take a"
+           , "slice of an array reference instead."
            ]
        Mir.TyStr ->
-         fail "mir_alloc and mir_alloc_mut cannot be used to create str references."
+         fail $ unlines
+           [ "mir_alloc and mir_alloc_mut cannot be used to create str references."
+           , "Use the mir_str_slice_value or mir_str_slice_range_value functions"
+           , "to take a slice of a `u8` array reference instead."
+           ]
        _ ->
          pure ()
 
@@ -752,13 +759,27 @@ mir_enum_value adt variantNm vs =
 -- MIR slices
 -----
 
+-- Array slices ([T])
+
 mir_slice_value :: MS.SetupValue MIR -> MS.SetupValue MIR
-mir_slice_value arrRef = MS.SetupSlice (MirSetupSlice arrRef)
+mir_slice_value arrRef =
+  MS.SetupSlice (MirSetupSlice MirArraySlice arrRef)
 
 mir_slice_range_value ::
   MS.SetupValue MIR -> Int -> Int -> MS.SetupValue MIR
 mir_slice_range_value arrRef start end =
-  MS.SetupSlice (MirSetupSliceRange arrRef start end)
+  MS.SetupSlice (MirSetupSliceRange MirArraySlice arrRef start end)
+
+-- String slices (str)
+
+mir_str_slice_value :: MS.SetupValue MIR -> MS.SetupValue MIR
+mir_str_slice_value arrRef =
+  MS.SetupSlice (MirSetupSlice MirStrSlice arrRef)
+
+mir_str_slice_range_value ::
+  MS.SetupValue MIR -> Int -> Int -> MS.SetupValue MIR
+mir_str_slice_range_value arrRef start end =
+  MS.SetupSlice (MirSetupSliceRange MirStrSlice arrRef start end)
 
 -----
 -- MIR muxing

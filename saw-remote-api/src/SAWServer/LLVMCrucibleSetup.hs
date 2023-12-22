@@ -188,12 +188,16 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
          LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
     getSetupVal _ (TupleValue _) =
       LLVMCrucibleSetupM $ fail "Tuple setup values unsupported in the LLVM API."
-    getSetupVal _ (SliceValue _) =
-      LLVMCrucibleSetupM $ fail "Slice setup values unsupported in the LLVM API."
     getSetupVal _ (EnumValue _ _ _) =
       LLVMCrucibleSetupM $ fail "Enum setup values unsupported in the LLVM API."
+    getSetupVal _ (SliceValue _) =
+      LLVMCrucibleSetupM $ fail "Slice setup values unsupported in the LLVM API."
     getSetupVal _ (SliceRangeValue _ _ _) =
       LLVMCrucibleSetupM $ fail "Slice range setup values unsupported in the LLVM API."
+    getSetupVal _ (StrSliceValue _) =
+      LLVMCrucibleSetupM $ fail "String slice setup values unsupported in the LLVM API."
+    getSetupVal _ (StrSliceRangeValue _ _ _) =
+      LLVMCrucibleSetupM $ fail "String slice range setup values unsupported in the LLVM API."
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld

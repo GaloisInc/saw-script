@@ -4114,18 +4114,39 @@ primitives = Map.fromList
   , prim "mir_slice_value" "MIRValue -> MIRValue"
     (pureVal mir_slice_value)
     Experimental
-    [ "Create a MIRValue representing a slice. The argument must be a"
-    , "reference to an array value."
+    [ "Create a MIRValue representing a slice of type &[T]. The argument must"
+    , "be a reference to an array value, whose overall type must be &[T; N]"
+    , "for some length N."
     ]
 
   , prim "mir_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
     (pureVal mir_slice_range_value)
     Experimental
-    [ "Create a MIRValue representing a slice over a given range. The first"
-    , "argument must be a reference to an array value. The second and third"
-    , "arguments represent the start and end of the range. The start must not"
-    , "exceed the end, and the end must not exceed the length of the"
-    , "reference's array."
+    [ "Create a MIRValue representing a slice of type &[T] over a given range."
+    , "The first argument must be a reference to an array value, whose overall"
+    , "type must be &[T; N] for some length N. The second and third arguments"
+    , "represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed N."
+    ]
+
+  , prim "mir_str_slice_value" "MIRValue -> MIRValue"
+    (pureVal mir_str_slice_value)
+    Experimental
+    [ "Create a MIRValue representing a slice of type &str. The argument must"
+    , "be a reference to an array value, whose overall type must be &[u8; N]"
+    , "for some length N. This array is expected to be a UTF-8-encoded sequence"
+    , "of bytes."
+    ]
+
+  , prim "mir_str_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
+    (pureVal mir_str_slice_range_value)
+    Experimental
+    [ "Create a MIRValue representing a slice of type &str over a given range."
+    , "The first argument must be a reference to an array value, whose overall"
+    , "type must be &[u8; N] for some length N. This array is expected to be a"
+    , "UTF-8-encoded sequence of bytes. The second and third arguments"
+    , "represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed N."
     ]
 
   , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"

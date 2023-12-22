@@ -40,7 +40,9 @@ import SAWScript.Crucible.MIR.Builtins
       mir_precond,
       mir_return,
       mir_slice_value,
-      mir_slice_range_value )
+      mir_slice_range_value,
+      mir_str_slice_value,
+      mir_str_slice_range_value )
 import SAWScript.Crucible.MIR.ResolveSetupValue (typeOfSetupValue)
 import SAWScript.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -220,6 +222,12 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
     getSetupVal env (SliceRangeValue base start end) = do
       base' <- getSetupVal env base
       pure $ mir_slice_range_value base' start end
+    getSetupVal env (StrSliceValue base) = do
+      base' <- getSetupVal env base
+      pure $ mir_str_slice_value base'
+    getSetupVal env (StrSliceRangeValue base start end) = do
+      base' <- getSetupVal env base
+      pure $ mir_str_slice_range_value base' start end
     getSetupVal _ (FieldLValue _ _) =
       MIRSetupM $ fail "Field l-values unsupported in the MIR API."
     getSetupVal _ (CastLValue _ _) =

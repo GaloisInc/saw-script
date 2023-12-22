@@ -18,6 +18,8 @@ data SetupValTag
   | TagTupleValue
   | TagSliceValue
   | TagSliceRangeValue
+  | TagStrSliceValue
+  | TagStrSliceRangeValue
   | TagFieldLValue
   | TagCastLValue
   | TagUnionLValue
@@ -39,6 +41,8 @@ instance FromJSON SetupValTag where
       "tuple" -> pure TagTupleValue
       "slice" -> pure TagSliceValue
       "slice range" -> pure TagSliceRangeValue
+      "str slice" -> pure TagStrSliceValue
+      "str slice range" -> pure TagStrSliceRangeValue
       "field" -> pure TagFieldLValue
       "cast"  -> pure TagCastLValue
       "union" -> pure TagUnionLValue
@@ -63,6 +67,8 @@ instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (CrucibleSetupVal ty cr
           TagTupleValue -> TupleValue <$> o .: "elements"
           TagSliceValue -> SliceValue <$> o .: "base"
           TagSliceRangeValue -> SliceRangeValue <$> o .: "base" <*> o .: "start" <*> o .: "end"
+          TagStrSliceValue -> StrSliceValue <$> o .: "base"
+          TagStrSliceRangeValue -> StrSliceRangeValue <$> o .: "base" <*> o .: "start" <*> o .: "end"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagCastLValue -> CastLValue <$> o .: "base" <*> o .: "type"
           TagUnionLValue -> UnionLValue <$> o .: "base" <*> o .: "field"

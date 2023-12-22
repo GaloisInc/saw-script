@@ -3024,6 +3024,10 @@ construct compound values:
 * `mir_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section below.
 * `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
   "MIR slices" section below.
+* `mir_str_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section
+  below.
+* `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
+  "MIR slices" section below.
 * `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
   with the given list of values as elements. The `MIRAdt` argument determines
   what struct type to create.
@@ -3051,8 +3055,13 @@ fields), which are not currently supported.
 Slices are a unique form of compound type that is currently only used during
 MIR verification. Unlike other forms of compound values, such as arrays, it is
 not possible to directly construct a slice. Instead, one must take a slice of
-an existing reference value that points to the thing being sliced. The
-following commands are used to construct slices:
+an existing reference value that points to the thing being sliced.
+
+SAW currently supports taking slices of arrays and strings.
+
+#### Array slices
+
+The following commands are used to construct slices of arrays:
 
 * `mir_slice_value : MIRValue -> MIRValue`: the SAWScript expression
   `mir_slice_value base` is equivalent to the Rust expression `&base[..]`,
@@ -3124,16 +3133,120 @@ let f_fail_spec_ = do {
 };
 ~~~~
 
-SAW's support for slices is currently limited:
+Note that The `mir_slice_range_value` function must accept bare `Int` arguments
+to specify the lower and upper bounds of the range. A consequence of this
+design is that it is not possible to create a slice with a symbolic length. If
+this limitation prevents you from using SAW, please file an issue [on
+GitHub](https://github.com/GaloisInc/saw-script/issues).
 
-* SAW specifications cannot say anything about `&str` slice arguments or return
-  values at present.
-* The `mir_slice_range_value` function must accept bare `Int` arguments to
-  specify the lower and upper bounds of the range. A consequence of this design
-  is that it is not possible to create a slice with a symbolic length.
+#### String slices
 
-If either of these limitations prevent you from using SAW, please file an issue
-[on GitHub](https://github.com/GaloisInc/saw-script/issues).
+In addition to slices of arrays (i.e., of type `&[T]`), SAW also supports
+slices of strings (i.e., of type `&str`) through the following commands:
+
+* `mir_str_slice_value : MIRValue -> MIRValue`: the SAWScript expression
+  `mir_str_slice_value base` is equivalent to the Rust expression `&base[..]`,
+  i.e., a slice of the entirety of `base`. `base` must be a reference to an
+  array of bytes (`&[u8; N]` or `&mut [u8; N]`), not an array itself. The type
+  of `mir_str_slice_value base` will be `&str` (if `base` is an immutable
+  reference) or `&mut str` (if `base` is a mutable reference).
+* `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the
+  SAWScript expression `mir_slice_range_value base start end` is equivalent to
+  the Rust expression `&base[start..end]`, i.e., a slice over a part of `base`
+  which ranges from `start` to `end`. `base` must be a reference to an array of
+  bytes (`&[u8; N]` or `&mut [u8; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&str` (if `base` is an immutable reference)
+  or `&mut str` (if `base` is a mutable reference).
+
+  `start` and `end` are assumed to be zero-indexed. `start` must not exceed
+  `end`, and `end` must not exceed the length of the array that `base` points
+  to.
+
+One unusual requirement about `mir_str_slice_value` and
+`mir_str_slice_range_value` is that they require the argument to be of type
+`&[u8; N]`, i.e., a reference to an array of bytes. This is an artifact of the
+way that strings are encoded in Cryptol. The following Cryptol expressions:
+
+* `"A"`
+* `"123"`
+* `"Hello World"`
+
+Have the following types:
+
+* `[1][8]`
+* `[3][8]`
+* `[11][8]`
+
+This is because Cryptol strings are syntactic shorthand for sequences of bytes.
+The following Cryptol expressions are wholly equivalent:
+
+* `[0x41]`
+* `[0x31, 0x32, 0x33]`
+* `[0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64]`
+
+These represent the strings in the extended ASCII character encoding. The
+Cryptol sequence type `[N][8]` is equivalent to the Rust type `[u8; N]`, so the
+requirement to have something of type `&[u8; N]` as an argument reflects this
+design choice.
+
+Note that `mir_str_slice_value <u8_array_ref>` is _not_ the same thing as
+`mir_slice_value <u8_array_ref>`, as the two commands represent different types
+of Rust values. While both commands take a `<u8_array_ref>` as an argument,
+`mir_str_slice_value` will return a value of Rust type `&str` (or `&mut str`),
+whereas `mir_slice_value` will return a value of Rust type `&[u8]` (or `&mut
+[u8]`). These Rust types are checked when you pass these values as arguments to
+Rust functions (using `mir_execute_func`) or when you return these values
+(using `mir_return`), and it is an error to supply a `&str` value in a place
+where a `&[u8]` value is expected (and vice versa).
+
+As an example of how to write specifications involving string slices,
+consider this Rust function:
+
+~~~ .rs
+pub fn my_len(s: &str) -> usize {
+    s.len()
+}
+~~~
+
+We can use `mir_str_slice_value` to write a specification for `my_len` when it
+is given the string `"hello"` as an argument:
+
+~~~
+let my_len_spec = do {
+  s <- mir_alloc (mir_array 5 mir_u8);
+  mir_points_to s (mir_term {{ "hello" }});
+
+  mir_execute_func [mir_str_slice_value s];
+
+  mir_return (mir_term {{ 5 : [32] }});
+};
+~~~
+
+Currently, Cryptol only supports characters that can be encoded in a single
+byte. As a result, it is not currently possible to take slices of strings with
+certain characters. For example, the string `"roșu"` cannot be used as a
+Cryptol expression, as the character `'ș'` would require 10 bits to represent
+instead of 8. The alternative is to use UTF-8 to encode such characters. For
+instance, the UTF-8 encoding of the string `"roșu"` is `"ro\200\153u"`, where
+`"\200\153"` is a sequence of two bytes that represents the `'ș'` character.
+
+SAW makes no attempt to ensure that string slices over a particular range
+aligns with UTF-8 character boundaries. For example, the following Rust code
+would panic:
+
+~~~ .rs
+    let rosu: &str = "roșu";
+    let s: &str = &rosu[0..3];
+    println!("{:?}", s);
+~~~
+~~~
+thread 'main' panicked at 'byte index 3 is not a char boundary; it is inside 'ș' (bytes 2..4) of `roșu`'
+~~~
+
+On the other hand, SAW will allow you define a slice of the form
+`mir_str_slice_range r 0 3`, where `r` is a reference to `"ro\200\153u"`. It is
+the responsibility of the SAW user to ensure that `mir_str_slice_range` indices
+align with character boundaries.
 
 ### Finding MIR algebraic data types
 
