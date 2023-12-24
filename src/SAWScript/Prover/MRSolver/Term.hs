@@ -300,24 +300,10 @@ asIsLtNat (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [m, n])) =
   Just (m, n)
 asIsLtNat _ = Nothing
 
--- | Test if a 'Term' is a 'BVVec' type, excluding bitvectors
-asBVVecType :: Recognizer Term (Term, Term, Term)
-asBVVecType (asApplyAll ->
-             (isGlobalDef "Prelude.Vec" -> Just _,
-              [(asApplyAll ->
-                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a]))
-  | Just _ <- asBoolType a = Nothing
-  | otherwise = Just (n, len, a)
-asBVVecType _ = Nothing
-
--- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns
--- 'Just' or if the given 'Term' is a bitvector type
-asNonBVVecVectorType :: Recognizer Term (Term, Term)
-asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
-asNonBVVecVectorType (asVectorType -> Just (n, a))
-  | Just _ <- asBoolType a = Nothing
-  | otherwise = Just (n, a)
-asNonBVVecVectorType _ = Nothing
+-- | Recognize a bitvector type with a potentially symbolic length
+asSymBitvectorType :: Recognizer Term Term
+asSymBitvectorType (asVectorType -> Just (n, asBoolType -> Just ())) = Just n
+asSymBitvectorType _ = Nothing
 
 -- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
 asLambdaName :: Recognizer Term LocalName
@@ -534,6 +520,9 @@ instance PrettyInCtx Text where
   prettyInCtx str = return $ fromString $ unpack str
 
 instance PrettyInCtx Int where
+  prettyInCtx i = return $ viaShow i
+
+instance PrettyInCtx Natural where
   prettyInCtx i = return $ viaShow i
 
 instance PrettyInCtx a => PrettyInCtx (Maybe a) where

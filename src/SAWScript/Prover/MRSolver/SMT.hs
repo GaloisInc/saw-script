@@ -41,6 +41,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import Prettyprinter
 import Data.Reflection
 import Data.Parameterized.BoolRepr
 
@@ -49,9 +50,8 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
-import Verifier.SAW.OpenTerm
 
-import Verifier.SAW.Prim (EvalError(..))
+import Verifier.SAW.Prim (widthNat, EvalError(..))
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
@@ -64,43 +64,8 @@ import SAWScript.Prover.MRSolver.Monad
 
 
 ----------------------------------------------------------------------
--- * Various SMT-specific Functions on Terms
+-- * Normalizing terms for SMT
 ----------------------------------------------------------------------
-
--- | Recognize a bitvector type with a potentially symbolic length
-asSymBVType :: Recognizer Term Term
-asSymBVType (asVectorType -> Just (n, asBoolType -> Just ())) = Just n
-asSymBVType _ = Nothing
-
--- | Apply @genBVVec@ to arguments @n@, @len@, and @a@, along with a function of
--- type @Vec n Bool -> a@
-genBVVecTerm :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-genBVVecTerm sc n_tm len_tm a_tm f_tm =
-  let n = closedOpenTerm n_tm
-      len = closedOpenTerm len_tm
-      a = closedOpenTerm a_tm
-      f = closedOpenTerm f_tm in
-  completeOpenTerm sc $
-  applyOpenTermMulti (globalOpenTerm "Prelude.genBVVec")
-  [n, len, a,
-   lambdaOpenTerm "i" (vectorTypeOpenTerm n boolTypeOpenTerm) $ \i ->
-    lambdaOpenTerm "_" (applyGlobalOpenTerm "Prelude.is_bvult" [n, i, len]) $ \_ ->
-    applyOpenTerm f i]
-
--- | Match a term of the form @genCryM n a f@
-asGenCryMTerm :: Recognizer Term (Term, Term, Term)
-asGenCryMTerm (asApplyAll -> (isGlobalDef "CryptolM.genCryM" -> Just _,
-                              [n, a, f]))
-  = Just (n, a, f)
-asGenCryMTerm _ = Nothing
-
--- | Match a term of the form @genFromBVVec n len a v def m@
-asGenFromBVVecTerm :: Recognizer Term (Term, Term, Term, Term, Term, Term)
-asGenFromBVVecTerm (asApplyAll ->
-                       (isGlobalDef "Prelude.genFromBVVec" -> Just _,
-                        [n, len, a, v, def, m]))
-  = Just (n, len, a, v, def, m)
-asGenFromBVVecTerm _ = Nothing
 
 type TmPrim = Prim TermModel
 
@@ -146,139 +111,6 @@ primNatTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
 primNatTermFun sc =
   PrimFilterFun "primNatTermFun" $ \v -> lift (natValToTerm sc v)
 
-{-
--- | An implementation of a primitive function that expects a term of the form
--- @genBVVec n _ a _@ or @genCryM (bvToNat n _) a _@, where @n@ is the second
--- argument, and passes to the continuation the associated function of type
--- @Vec n Bool -> a@
-primGenBVVec :: SharedContext -> Natural -> (Term -> TmPrim) -> TmPrim
-primGenBVVec sc n =
-  PrimFilterFun "primGenBVVec" $
-  \case
-    VExtra (VExtraTerm _ t) -> primGenBVVecFilter sc n t
-    VWord (Left (_, t)) -> primGenBVVecFilter sc n t
-    _ -> mzero
-
--- | The filter function for 'primGenBVVec', and one case of 'primGenCryM'
-primGenBVVecFilter :: SharedContext -> Natural ->
-                      Term -> MaybeT (EvalM TermModel) Term
-primGenBVVecFilter sc n (asGenBVVecTerm -> Just (asNat -> Just n', _, _, f)) | n == n' = lift $
-  do i_tp <- join $ scVecType sc <$> scNat sc n <*> scBoolType sc
-     let err_tm = error "primGenBVVec: unexpected variable occurrence"
-     i_tm <- scLocalVar sc 0
-     body <- scApplyAllBeta sc f [i_tm, err_tm]
-     scLambda sc "i" i_tp body
-primGenBVVecFilter sc n (asGenCryMTerm -> Just (asBvToNatKnownW ->
-                                                Just (n', _), _, f)) | n == n' = lift $
-  do i_tp <- join $ scVecType sc <$> scNat sc n <*> scBoolType sc
-     i_tm <- scLocalVar sc 0
-     body <- scApplyBeta sc f =<< scBvToNat sc n i_tm
-     scLambda sc "i" i_tp body
-primGenBVVecFilter _ _ t =
-  error $ "primGenBVVec could not handle: " ++
-          showInCtx defaultPPOpts emptyMRVarCtx t
-
--- | An implementation of a primitive function that expects a term of the form
--- @genCryM _ a _@, @genFromBVVec ... (genBVVec _ _ a _) ...@, or
--- @genFromBVVec ... (genCryM (bvToNat _ _) a _) ...@, and passes to the
--- continuation either @Just n@ and the associated function of type
--- @Vec n Bool -> a@, or @Nothing@ and the associated function of type
--- @Nat -> a@
-primGenCryM :: SharedContext -> (Maybe Natural -> Term -> TmPrim) -> TmPrim
-primGenCryM sc =
-  PrimFilterFun "primGenCryM"
-  (\case
-      VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, f))) ->
-        return (Nothing, f)
-      VWord (Left (_, asGenCryMTerm -> Just (_, _, f))) ->
-        return (Nothing, f)
-      VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
-                                                        v, _, _))) ->
-        (Just n,) <$> primGenBVVecFilter sc n v
-      VWord (Left (_, asGenFromBVVecTerm -> Just (asNat -> Just n, _, _,
-                                                  v, _, _))) ->
-        (Just n,) <$> primGenBVVecFilter sc n v
-      _ -> mzero
-  ) . uncurry
-
--- | An implementation of a primitive function that expects a bitvector term
-primBVTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
-primBVTermFun sc =
-  PrimFilterFun "primBVTermFun" $
-  \case
-    VExtra (VExtraTerm _ w_tm) -> return w_tm
-    VWord (Left (_,w_tm)) -> return w_tm
-    VWord (Right bv) ->
-      lift $ scBvLit sc (fromIntegral (Prim.width bv)) (Prim.unsigned bv)
-    VVector vs ->
-      lift $
-      do tms <- traverse (boolValToTerm sc <=< force) (V.toList vs)
-         tp <- scBoolType sc
-         scVectorReduced sc tp tms
-    v -> lift (putStrLn ("primBVTermFun: unhandled value: " ++ show v)) >> mzero
-
--- | A datatype representing the arguments to @genBVVecFromVec@ which can be
--- normalized: a @genFromBVVec n len _ v _ _@ term, a @genCryM _ _ body@ term,
--- or a vector literal, the lattermost being represented as a list of 'Term's
-data BVVecFromVecArg = FromBVVec { fromBVVec_n :: Natural
-                                 , fromBVVec_len :: Term
-                                 , fromBVVec_vec :: Term }
-                     | GenCryM Term
-                     | BVVecLit [Term]
-
--- | An implementation of a primitive function that expects a @genFromBVVec@
--- term, a @genCryM@ term, or a vector literal
-primBVVecFromVecArg :: SharedContext -> TValue TermModel ->
-                       (BVVecFromVecArg -> TmPrim) -> TmPrim
-primBVVecFromVecArg sc a =
-  PrimFilterFun "primFromBVVecOrLit" $
-  \case
-    VExtra (VExtraTerm _ (asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
-                                                      v, _, _))) ->
-      return $ FromBVVec n len v
-    VWord (Left (_, asGenFromBVVecTerm -> Just (asNat -> Just n, len, _,
-                                                v, _, _))) ->
-      return $ FromBVVec n len v
-    VExtra (VExtraTerm _ (asGenCryMTerm -> Just (_, _, body))) ->
-      return $ GenCryM body
-    VWord (Left (_, asGenCryMTerm -> Just (_, _, body))) ->
-      return $ GenCryM body
-    VVector vs ->
-      lift $ BVVecLit <$>
-        traverse (readBackValueNoConfig "primFromBVVecOrLit" sc a <=< force)
-                 (V.toList vs)
-    _ -> mzero
-
--- | Turn a 'BVVecFromVecArg' into a BVVec term, assuming it has the given
--- bit-width (given as both a 'Natural' and a 'Term'), length, and element type
--- FIXME: Properly handle empty vector literals
-bvVecBVVecFromVecArg :: SharedContext -> Natural -> Term -> Term -> Term ->
-                        BVVecFromVecArg -> IO Term
-bvVecBVVecFromVecArg sc n _ len _ (FromBVVec n' len' v) =
-  do len_cvt_len' <- scConvertible sc True len len'
-     if n == n' && len_cvt_len' then return v
-     else error "bvVecBVVecFromVecArg: genFromBVVec type mismatch"
-bvVecBVVecFromVecArg sc n _ len a (GenCryM body) =
-  do len' <- scBvToNat sc n len
-     scGlobalApply sc "CryptolM.genCryM" [len', a, body]
-bvVecBVVecFromVecArg sc n n' len a (BVVecLit vs) =
-  do body <- mkBody 0 vs
-     i_tp <- scBitvector sc n
-     var0 <- scLocalVar sc 0
-     pf_tp <- scGlobalApply sc "Prelude.is_bvult" [n', var0, len]
-     f <- scLambdaList sc [("i", i_tp), ("pf", pf_tp)] body
-     scGlobalApply sc "Prelude.genBVVec" [n', len, a, f]
-  where mkBody :: Integer -> [Term] -> IO Term
-        mkBody _ [] = error "bvVecBVVecFromVecArg: empty vector"
-        mkBody _ [x] = return $ x
-        mkBody i (x:xs) =
-          do var1 <- scLocalVar sc 1
-             i' <- scBvConst sc n i
-             cond <- scBvEq sc n' var1 i'
-             body' <- mkBody (i+1) xs
-             scIte sc a cond x body'
--}
-
 -- | A version of 'readBackTValue' which uses 'error' as the simulator config
 -- Q: Is there every a case where this will actually error?
 readBackTValueNoConfig :: String -> SharedContext ->
@@ -312,19 +144,11 @@ primGlobal sc glob =
 smtNormPrims :: SharedContext -> Map Ident TmPrim
 smtNormPrims sc = Map.fromList
   [
-    -- Override the usual behavior of gen so it is not evaluated or unfolded
-    ("Prelude.gen",
-     Prim (do tp <- scTypeOfGlobal sc "Prelude.gen"
-              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "Prelude.gen")
-    ),
-
-    -- Also have genWithProof not be evaluated
-    ("Prelude.genWithProof",
-     Prim (do tp <- scTypeOfGlobal sc "Prelude.genWithProof"
-              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "Prelude.genWithProof")
-    ),
+    -- Override the usual behavior of @gen@, @genWithProof@, and @VoidEv@ so
+    -- they are not evaluated or unfolded
+    ("Prelude.gen", primGlobal sc "Prelude.gen"),
+    ("Prelude.genWithProof", primGlobal sc "Prelude.genWithProof"),
+    ("SpecM.VoidEv", primGlobal sc "SpecM.VoidEv"),
 
     -- Normalize an application of @atwithDefault@ to a @gen@ term into an
     -- application of the body of the gen term to the index. Note that this
@@ -347,71 +171,6 @@ smtNormPrims sc = Map.fromList
                tm' <- smtNorm sc tm
                return $ VExtra $ VExtraTerm a tm')),
 
-    {-
-    -- Don't unfold @genBVVec@ or @genCryM when normalizing
-    ("Prelude.genBVVec",
-     Prim (do tp <- scTypeOfGlobal sc "Prelude.genBVVec"
-              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "Prelude.genBVVec")
-    ),
-    ("CryptolM.genCryM",
-     Prim (do tp <- scTypeOfGlobal sc "CryptolM.genCryM"
-              VExtra <$> VExtraTerm (VTyTerm (mkSort 1) tp) <$>
-                scGlobalDef sc "CryptolM.genCryM")
-    ),
-    -- Normalize applications of @genBVVecFromVec@ to a @genFromBVVec@ term
-    -- into the body of the @genFromBVVec@ term, a @genCryM@ term into a
-    -- @genCryM@ term of the new length, or vector literal into a sequence
-    -- of @ite@s defined by the literal
-    ("Prelude.genBVVecFromVec",
-     PrimFun $ \_m -> tvalFun $ \a -> primBVVecFromVecArg sc a $ \eith ->
-      PrimFun $ \_def -> natFun $ \n -> primBVTermFun sc $ \len ->
-      Prim (do n' <- scNat sc n
-               a' <- readBackTValueNoConfig "smtNormPrims (genBVVecFromVec)" sc a
-               tp <- scGlobalApply sc "Prelude.BVVec" [n', len, a']
-               VExtra <$> VExtraTerm (VTyTerm (mkSort 0) tp) <$>
-                 bvVecBVVecFromVecArg sc n n' len a' eith)
-    ),
-    -- Don't normalize applications of @genFromBVVec@
-    ("Prelude.genFromBVVec",
-     natFun $ \n -> PrimStrict $ \len -> tvalFun $ \a -> PrimStrict $ \v ->
-      PrimStrict $ \def -> natFun $ \m ->
-      Prim (do n' <- scNat sc n
-               let len_tp = VVecType n VBoolType
-               len' <- readBackValueNoConfig "smtNormPrims (genFromBVVec)" sc len_tp len
-               a' <- readBackTValueNoConfig "smtNormPrims (genFromBVVec)" sc a
-               bvToNat_len <- scGlobalApply sc "Prelude.bvToNat" [n', len']
-               v_tp <- VTyTerm (mkSort 0) <$> scVecType sc bvToNat_len a'
-               v' <- readBackValueNoConfig "smtNormPrims (genFromBVVec)" sc v_tp v
-               def' <- readBackValueNoConfig "smtNormPrims (genFromBVVec)" sc a def
-               m' <- scNat sc m
-               tm <- scGlobalApply sc "Prelude.genFromBVVec" [n', len', a', v', def', m']
-               return $ VExtra $ VExtraTerm (VVecType m a) tm)
-    ),
-    -- Normalize applications of @atBVVec@ or @atCryM@ to a @genBVVec@ or
-    -- @genCryM@ term into an application of the body of the term to the index
-    ("Prelude.atBVVec",
-     natFun $ \n -> PrimFun $ \_len -> tvalFun $ \a ->
-      primGenBVVec sc n $ \f -> primBVTermFun sc $ \ix -> PrimFun $ \_pf ->
-      Prim (do tm <- scApplyBeta sc f ix
-               tm' <- smtNorm sc tm
-               return $ VExtra $ VExtraTerm a tm')
-    ),
-    ("CryptolM.atCryM",
-     PrimFun $ \_n -> tvalFun $ \a ->
-      primGenCryM sc $ \nMb f -> PrimStrict $ \ix ->
-      Prim (do natDT <- scRequireDataType sc preludeNatIdent
-               let natPN = fmap (const $ VSort (mkSort 0)) (dtPrimName natDT)
-               let nat_tp = VDataType natPN [] []
-               ix' <- readBackValueNoConfig "smtNormPrims (atCryM)" sc nat_tp ix
-               ix'' <- case nMb of
-                         Nothing -> return ix'
-                         Just n -> scNat sc n >>= \n' -> scBvNat sc n' ix'
-               tm <- scApplyBeta sc f ix''
-               tm' <- smtNorm sc tm
-               return $ VExtra $ VExtraTerm a tm') 
-    ), -}
-
     -- Don't normalize applications of @SpecM@ and its arguments
     ("SpecM.SpecM",
      PrimStrict $ \ev -> PrimStrict $ \tp ->
@@ -421,8 +180,7 @@ smtNormPrims sc = Map.fromList
          tp_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc (VSort $
                                                                    mkSort 0) tp
          ret_tm <- scGlobalApply sc "SpecM.SpecM" [ev_tm,tp_tm]
-         return $ TValue $ VTyTerm (mkSort 0) ret_tm),
-    ("SpecM.VoidEv", primGlobal sc "SpecM.VoidEv")
+         return $ TValue $ VTyTerm (mkSort 0) ret_tm)
   ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
@@ -508,47 +266,140 @@ mrProvable bool_tm =
      prop <- liftSC2 scImplies assumps bool_tm >>= liftSC1 scEqTrue
      prop_inst <- instantiateUVarsM instUVar prop >>= mrSubstLowerEVars
      mrNormTerm prop_inst >>= mrProvableRaw
-  where -- | Given a UVar name and type, generate a 'Term' to be passed to
-        -- SMT, with special cases for BVVec and pair types
+  where -- | Create a new global variable of the given name and type
         instUVar :: LocalName -> Term -> MRM t Term
-        instUVar nm tp = mrDebugPPPrefix 3 "instUVar" (nm, tp) >>
-                         liftSC1 scWhnf tp >>= \case
-          -- NOTE: we should no longer see uvars that are vectors or pairs,
-          -- since pairs should be curried when they are introduced and vectors
-          -- should be represented as functions from indices to elements
-          {-
-          (asNonBVVecVectorType -> Just (m, a)) ->
-             liftSC1 smtNorm m >>= \m' -> case asBvToNat m' of
-               -- For variables of type Vec of length which normalizes to
-               -- a bvToNat term, recurse and wrap the result in genFromBVVec
-               Just (n, len) -> do
-                 tp' <- liftSC2 scVecType m' a
-                 tm' <- instUVar nm tp'
-                 mrGenFromBVVec n len a tm' "instUVar" m
-               -- Otherwise for variables of type Vec, create a @Nat -> a@
-               -- function as an ExtCns and apply genBVVec to it
-               Nothing -> do
-                 nat_tp <- liftSC0 scNatType
-                 tp' <- liftSC3 scPi "_" nat_tp =<< liftTermLike 0 1 a
-                 tm' <- instUVar nm tp'
-                 liftSC2 scGlobalApply "CryptolM.genCryM" [m, a, tm']
-          -- For variables of type BVVec, create a @Vec n Bool -> a@ function
-          -- as an ExtCns and apply genBVVec to it
-          (asBVVecType -> Just (n, len, a)) -> do
-             ec_tp <-
-               liftSC1 completeOpenTerm $
-               arrowOpenTerm "_" (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-                                  [closedOpenTerm n, boolTypeOpenTerm])
-               (closedOpenTerm a)
-             ec <- instUVar nm ec_tp
-             liftSC4 genBVVecTerm n len a ec
-          -- For pairs, recurse on both sides and combine the result as a pair
-          (asPairType -> Just (tp1, tp2)) -> do
-            e1 <- instUVar nm tp1
-            e2 <- instUVar nm tp2
-            liftSC2 scPairValue e1 e2 -}
-          -- Otherwise, create a global variable with the given name and type
-          tp' -> liftSC2 scFreshEC nm tp' >>= liftSC1 scExtCns
+        instUVar nm =
+          liftSC1 scWhnf >=> liftSC2 scFreshEC nm >=> liftSC1 scExtCns
+
+
+----------------------------------------------------------------------
+-- * Unifying BVVec and Vec Lengths
+----------------------------------------------------------------------
+
+-- | The length of a vector, given as either ...
+data VecLength = ConstBVVecLen Natural Natural
+               | ConstNatVecLen Natural Natural
+               | SymBVVecLen Natural Term  
+               | SymNatVecLen Term
+               deriving (Generic, Show, TermLike)
+
+instance PrettyInCtx VecLength where
+  prettyInCtx (ConstBVVecLen n len) = 
+    prettyAppList [return "ConstBVVecLen", prettyInCtx n, prettyInCtx len]
+  prettyInCtx (ConstNatVecLen n len) = 
+    prettyAppList [return "ConstNatVecLen", prettyInCtx n, prettyInCtx len]
+  prettyInCtx (SymBVVecLen n len) =
+    prettyAppList [return "SymBVVecLen", prettyInCtx n, parens <$> prettyInCtx len]
+  prettyInCtx (SymNatVecLen len) =
+    prettyAppList [return "SymNatVecLen", parens <$> prettyInCtx len]
+
+-- | Convert a natural number expression to a 'VecLength'
+asVecLen :: Term -> VecLength
+asVecLen (asBvToNatKnownW -> Just (n, len))
+  | Just len' <- asUnsignedConcreteBv len = ConstBVVecLen n len'
+  | otherwise = SymBVVecLen n len
+asVecLen (asUnsignedConcreteBvToNat -> Just len) =
+  ConstNatVecLen (widthNat len) len
+asVecLen len = SymNatVecLen len
+
+-- | Recognize a @BVVec@, @Vec@, or @mseq (TCNum ...)@ vector with length
+-- represented as a 'VecLength'
+asVecTypeWithLen :: Recognizer Term (VecLength, Term)
+asVecTypeWithLen (asApplyAll -> (isGlobalDef "Prelude.BVVec" -> Just (),
+                                 [asNat -> Just n, len, a]))
+  | Just len' <- asUnsignedConcreteBv len = Just (ConstBVVecLen n len', a)
+  | otherwise = Just (SymBVVecLen n len, a)
+asVecTypeWithLen (asVectorType -> Just (len, a)) = Just (asVecLen len, a)
+asVecTypeWithLen (asApplyAll -> (isGlobalDef "SpecM.mseq" -> Just (),
+                                 [_, asNum -> Just (Left len), a])) =
+  Just (asVecLen len, a)
+asVecTypeWithLen _ = Nothing
+
+-- | Convert a 'VecLength' into either a 'Term' of bitvector type with the given
+-- 'Natural' bit-width if the 'VecLength' has an associated bit-width, or into a
+-- 'Term' of nat type otherwise
+mrVecLenAsBVOrNatTerm :: VecLength -> MRM t (Either (Natural, Term) Term)
+mrVecLenAsBVOrNatTerm (ConstBVVecLen n len) =
+  (Left . (n,)) <$> liftSC2 scBvLit n (fromIntegral len)
+mrVecLenAsBVOrNatTerm (ConstNatVecLen n len) =
+  (Left . (n,)) <$> liftSC2 scBvLit n (fromIntegral len)
+mrVecLenAsBVOrNatTerm (SymBVVecLen n len) =
+  return $ Left (n, len)
+mrVecLenAsBVOrNatTerm (SymNatVecLen len) =
+  return $ Right len
+
+-- | Get the type of an index bounded by a 'VecLength'
+mrVecLenIxType :: VecLength -> MRM t Term
+mrVecLenIxType vlen = mrVecLenAsBVOrNatTerm vlen >>= \case
+  Left (n, _) -> liftSC1 scBitvector n
+  Right _ -> liftSC0 scNatType
+
+-- | Construct the proposition that the given 'Term' of type 'mrVecLenIxType'
+-- is less than the given 'VecLength'
+mrVecLenIxBound :: VecLength -> Term -> MRM t Term
+mrVecLenIxBound vlen ix = mrVecLenAsBVOrNatTerm vlen >>= \case
+  Left (n, len) -> liftSC1 scNat n >>= \n' ->
+                   liftSC2 scGlobalApply "Prelude.bvult" [n', ix, len]
+  Right len -> liftSC2 scGlobalApply "Prelude.ltNat" [ix, len]
+
+-- | Test if two vector lengths are equal, and if so, generalize them to use the
+-- same index type as returned by 'mrVecLenIxType'
+mrVecLenUnify :: VecLength -> VecLength -> MRM t (Maybe (VecLength, VecLength))
+mrVecLenUnify (ConstBVVecLen n1 len1) (ConstBVVecLen n2 len2)
+  | n1 == n2 && len1 == len2
+  = return $ Just (ConstBVVecLen n1 len1, ConstBVVecLen n2 len2)
+mrVecLenUnify (ConstBVVecLen n1 len1) (ConstNatVecLen n2 len2)
+  | n2 < n1 && len1 == len2
+  = return $ Just (ConstBVVecLen n1 len1, ConstNatVecLen n1 len2)
+mrVecLenUnify (ConstNatVecLen n1 len1) (ConstBVVecLen n2 len2)
+  | n1 < n2 && len1 == len2
+  = return $ Just (ConstNatVecLen n2 len1, ConstBVVecLen n2 len2)
+mrVecLenUnify (ConstNatVecLen n1 len1) (ConstNatVecLen n2 len2)
+  | len1 == len2, nMax <- max n1 n2
+  = return $ Just (ConstNatVecLen nMax len1, ConstNatVecLen nMax len2)
+mrVecLenUnify vlen1@(SymBVVecLen n1 len1) vlen2@(SymBVVecLen n2 len2)
+  | n1 == n2
+  = mrProveEq len1 len2 >>= \case
+      True -> return $ Just (vlen1, vlen2)
+      False -> return Nothing
+mrVecLenUnify (SymNatVecLen len1) (SymNatVecLen len2) =
+  mrProveEq len1 len2 >>= \case
+    True -> return $ Just (SymNatVecLen len1, SymNatVecLen len2)
+    False -> return Nothing
+mrVecLenUnify _ _ = return Nothing
+
+-- | Given a vector length, element type, and generating function, return the
+-- associated vector formed using the appropritate @gen@ function 
+mrVecLenGen :: VecLength -> Term -> Term -> MRM t Term
+mrVecLenGen (ConstBVVecLen n len) tp f =
+  do n_tm <- liftSC1 scNat n
+     len_tm <- liftSC2 scBvLit n (fromIntegral len)
+     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len_tm, tp, f]
+mrVecLenGen (ConstNatVecLen _ len) tp f =
+  do len_tm <- liftSC1 scNat len
+     mrApplyGlobal "Prelude.gen" [len_tm, tp, f]
+mrVecLenGen (SymBVVecLen n len) tp f =
+  do n_tm <- liftSC1 scNat n
+     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
+mrVecLenGen (SymNatVecLen len) tp f =
+  do mrApplyGlobal "Prelude.gen" [len, tp, f]
+
+-- | Given a vector length, element type, vector of that length and type, and an
+-- index of type 'mrVecLenIxType', index into the vector
+mrVecLenAt :: VecLength -> Term -> Term -> Term -> MRM t Term
+mrVecLenAt (ConstBVVecLen n len) tp v ix =
+  do n_tm <- liftSC1 scNat n
+     len_tm <- liftSC2 scBvLit n (fromIntegral len)
+     mrAtBVVec n_tm len_tm tp v ix
+mrVecLenAt (ConstNatVecLen n len) tp v ix =
+  do len_tm <- liftSC1 scNat len
+     ix' <- liftSC2 scBvToNat n ix
+     mrAtVec len_tm tp v ix'
+mrVecLenAt (SymBVVecLen n len) tp v ix =
+  do n_tm <- liftSC1 scNat n
+     mrAtBVVec n_tm len tp v ix
+mrVecLenAt (SymNatVecLen len) tp v ix =
+  do mrAtVec len tp v ix
 
 
 ----------------------------------------------------------------------
@@ -585,13 +436,7 @@ data InjectiveRepr
     -- @tp_r@ of @tp@, given a representation of @tp@ by @tp_r@, where the index
     -- type @tp_len@ is determined by the 'VecLength'
   | InjReprVec VecLength Term InjectiveRepr
-  deriving (Generic, Show)
-
-
--- | The length of a vector, given either as a bitvector 'Term' of a
--- statically-known bitwidth or as a natural number 'Term'
-data VecLength = BVVecLen Natural Term | NatVecLen Term
-               deriving (Generic, Show)
+  deriving (Generic, Show, TermLike)
 
 -- | A representation of a numeric type (@Num@, @Nat@, or @Vec n Bool@) by
 -- another numeric type defined as an injective function
@@ -600,50 +445,24 @@ data InjNumRepr
   = InjNatToNum
     -- | The @bvToNat@ function as a representation of @Nat@ by @Vec n Bool@
   | InjBVToNat Natural
-  deriving (Generic, Show)
+  deriving (Generic, Show, TermLike)
 
-deriving instance TermLike InjectiveRepr
-deriving instance TermLike InjNumRepr
-deriving instance TermLike VecLength
+instance PrettyInCtx InjectiveRepr where
+  prettyInCtx InjReprId = return "InjReprId"
+  prettyInCtx (InjReprNum steps) =
+    prettyAppList [return "InjReprNum", list <$> mapM prettyInCtx steps]
+  prettyInCtx (InjReprPair r1 r2) =
+    prettyAppList [return "InjReprPair", parens <$> prettyInCtx r1,
+                                         parens <$> prettyInCtx r2]
+  prettyInCtx (InjReprVec n tp repr) =
+    prettyAppList [return "InjReprVec", parens <$> prettyInCtx n,
+                                        parens <$> prettyInCtx tp,
+                                        parens <$> prettyInCtx repr]
 
--- | Convert a natural number expression to a 'VecLength'
-asVecLen :: Term -> VecLength
-asVecLen (asBvToNatKnownW -> Just (n, len)) = BVVecLen n len
-asVecLen n = NatVecLen n
-
--- | Convert a 'VecLength' to a natural number expression
-vecLenToNat :: VecLength -> MRM t Term
-vecLenToNat (BVVecLen n len) = liftSC2 scBvToNat n len
-vecLenToNat (NatVecLen n) = return n
-
--- | Get the type of an index bounded by a 'VecLength'
-vecLenIxType :: VecLength -> MRM t Term
-vecLenIxType (BVVecLen n _) = liftSC1 scBitvector n
-vecLenIxType (NatVecLen _) = liftSC0 scNatType
-
--- | Test if two vector lengths are equal, and if so, generalize them to use the
--- same index type as returned by 'vecLenIxType'
-vecLenUnify :: VecLength -> VecLength -> MRM t (Maybe (VecLength, VecLength))
-vecLenUnify vlen1@(BVVecLen n1 len1) vlen2@(BVVecLen n2 len2)
-  | n1 == n2 =
-    do lens_eq <- mrProveEq len1 len2
-       if lens_eq then return (Just (vlen1,vlen2))
-         else return Nothing
-vecLenUnify (BVVecLen _ _) (BVVecLen _ _) = return Nothing
-vecLenUnify len1 len2 =
-  do n1 <- vecLenToNat len1
-     n2 <- vecLenToNat len2
-     mrProveEq n1 n2 >>= \case
-       True -> return $ Just (NatVecLen n1, NatVecLen n2)
-       False -> return Nothing
-
--- | Given a vector length, element type, vector of that length and type, and an
--- index of type 'vecLenIxType', index into the vector
-vecLenIx :: VecLength -> Term -> Term -> Term -> MRM t Term
-vecLenIx (BVVecLen n len) tp v ix =
-  do n_tm <- liftSC1 scNat n
-     mrAtBVVec n_tm len tp v ix
-vecLenIx (NatVecLen n) tp v ix = mrAtVec n tp v ix
+instance PrettyInCtx InjNumRepr where
+  prettyInCtx InjNatToNum = return "InjNatToNum"
+  prettyInCtx (InjBVToNat n) =
+    prettyAppList [return "InjBVToNat", prettyInCtx n]
 
 -- | Smart constructor for pair representations, that combines a pair of
 -- identity representations into an identity representation on the pair type
@@ -686,18 +505,11 @@ mrApplyRepr (InjReprPair repr1 repr2) t =
   do t1 <- mrApplyRepr repr1 =<< doTermProj t TermProjLeft
      t2 <- mrApplyRepr repr2 =<< doTermProj t TermProjRight
      liftSC2 scPairValueReduced t1 t2
-mrApplyRepr (InjReprVec (NatVecLen n) tp repr) t =
-  do nat_tp <- liftSC0 scNatType
-     f <- mrLambdaLift1 ("ix", nat_tp) (repr, t) $ \x (repr', t') ->
+mrApplyRepr (InjReprVec vlen tp repr) t =
+  do ix_tp <- mrVecLenIxType vlen
+     f <- mrLambdaLift1 ("ix", ix_tp) (repr, t) $ \x (repr', t') ->
        mrApplyRepr repr' =<< mrApply t' x
-     mrApplyGlobal "Prelude.gen" [n, tp, f]
-mrApplyRepr (InjReprVec (BVVecLen n len) tp repr) t =
-  do bv_tp <- liftSC1 scBitvector n
-     f <- mrLambdaLift1 ("ix", bv_tp) (repr, t) $ \x (repr', t') ->
-       mrApplyRepr repr' =<< mrApply t' x
-     n_tm <- liftSC1 scNat n
-     mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
-
+     mrVecLenGen vlen tp f
 
 newtype MaybeTerm b = MaybeTerm { unMaybeTerm :: If b Term () }
 
@@ -738,15 +550,14 @@ mkInjRepr b (asPairType -> Just (tp1, tp2)) t =
      tm_r <- map2MaybeTermM b (liftSC2 scPairValueReduced) tm_r1 tm_r2
      return (tp_r, tm_r, InjReprPair r1 r2)
 
-mkInjRepr b (asVectorType -> Just (len, tp@(asBoolType -> Nothing))) tm =
-  do let vlen = asVecLen len
-     ix_tp <- vecLenIxType vlen
+mkInjRepr b (asVecTypeWithLen -> Just (vlen, tp@(asBoolType -> Nothing))) tm =
+  do ix_tp <- mrVecLenIxType vlen
      -- NOTE: these return values from mkInjRepr all have ix free
      (tp_r', tm_r', r') <-
        give b $
        withUVarLift "ix" (Type ix_tp) (vlen,tp,tm) $ \ix (vlen',tp',tm') ->
        do tm_elem <-
-            mapMaybeTermM b (\tm'' -> vecLenIx vlen' tp' tm'' ix) tm'
+            mapMaybeTermM b (\tm'' -> mrVecLenAt vlen' tp' tm'' ix) tm'
           mkInjRepr b tp' tm_elem
      -- r' should not have ix free, so it should be ok to substitute an error
      -- term for ix...
@@ -826,8 +637,8 @@ injUnifyReprTypes tp1 r1 tp2 InjReprId
 -- currently have representation that can cast from a bitvector length to an
 -- equal natural number length
 injUnifyReprTypes _ (InjReprVec len1 tp1 r1) _ (InjReprVec len2 tp2 r2) =
-  do (len1', len2') <- MaybeT $ vecLenUnify len1 len2
-     ix_tp <- lift $ vecLenIxType len1'
+  do (len1', len2') <- MaybeT $ mrVecLenUnify len1 len2
+     ix_tp <- lift $ mrVecLenIxType len1'
      (tp_r, r1', r2') <- injUnifyReprTypes tp1 r1 tp2 r2
      tp_r_fun <- lift $ mrArrowType "ix" ix_tp tp_r
      return (tp_r_fun, InjReprVec len1' tp1 r1', InjReprVec len2' tp2 r2')
@@ -963,7 +774,7 @@ mrEq' :: Term -> Term -> Term -> MRM t Term
 mrEq' (asNatType -> Just _) t1 t2 = liftSC2 scEqualNat t1 t2
 mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
 mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
-mrEq' (asSymBVType -> Just n) t1 t2 = liftSC3 scBvEq n t1 t2
+mrEq' (asSymBitvectorType -> Just n) t1 t2 = liftSC3 scBvEq n t1 t2
 mrEq' (asNumType -> Just ()) t1 t2 =
   (,) <$> liftSC1 scWhnf t1 <*> liftSC1 scWhnf t2 >>= \case
     (asNum -> Just (Left t1'), asNum -> Just (Left t2')) ->
@@ -1109,7 +920,8 @@ mrProveRelH' _ _ (asTupleType -> Just []) (asTupleType -> Just []) _ _ =
 -- For nat, bitvector, Boolean, and integer types, call mrProveEqSimple
 mrProveRelH' _ _ (asNatType -> Just _) (asNatType -> Just _) t1 t2 =
   mrProveEqSimple (liftSC2 scEqualNat) t1 t2
-mrProveRelH' _ _ tp1@(asSymBVType -> Just n1) tp2@(asSymBVType -> Just n2) t1 t2 =
+mrProveRelH' _ _ tp1@(asSymBitvectorType -> Just n1)
+                 tp2@(asSymBitvectorType -> Just n2) t1 t2 =
   do ns_are_eq <- mrConvertible n1 n2
      if ns_are_eq then return () else
        throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
@@ -1131,28 +943,31 @@ mrProveRelH' _ het _ tp2 (asBvToNat -> Just (n, t1)) t2 =
 mrProveRelH' _ het tp1 _ t1 (asBvToNat -> Just (n, t2)) =
   mrBvType n >>= \bv_tp -> mrProveRelH het tp1 bv_tp t1 t2
 
--- FIXME HERE NOWNOW: generalize Vec = Vec relation
-
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
-mrProveRelH' _ het tp1@(asBVVecType -> Just (n1, len1, tpA1))
-                   tp2@(asBVVecType -> Just (n2, len2, tpA2)) t1 t2 =
-  mrConvertible n1 n2 >>= \ns_are_eq ->
-  mrConvertible len1 len2 >>= \lens_are_eq ->
-  (if ns_are_eq && lens_are_eq then return () else
-     throwMRFailure (TypesNotEq (Type tp1) (Type tp2))) >>
-  liftSC0 scBoolType >>= \bool_tp ->
-  liftSC2 scVecType n1 bool_tp >>= \ix_tp ->
-  withUVarLift "ix" (Type ix_tp) ((n1,n2,len1,len2),(tpA1,tpA2,t1,t2)) $
-  \ix ((n1',n2',len1',len2'),(tpA1',tpA2',t1',t2')) ->
-  do ix_bound <- liftSC2 scGlobalApply "Prelude.bvult" [n1', ix, len1']
-     t1_prj <- mrAtBVVec n1' len1' tpA1' t1' ix
-     t2_prj <- mrAtBVVec n2' len2' tpA2' t2' ix
-     cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
-     extTermInCtx [("ix",ix_tp)] <$>
-       liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
+mrProveRelH' _ het tp1@(asVecTypeWithLen -> Just (vlen1, tpA1))
+                   tp2@(asVecTypeWithLen -> Just (vlen2, tpA2)) t1 t2 =
+  mrVecLenUnify vlen1 vlen2 >>= \case
+    Just (vlen1', vlen2') ->
+      mrVecLenIxType vlen1' >>= \ix_tp -> 
+      withUVarLift "ix" (Type ix_tp) (vlen1',vlen2',tpA1,tpA2,t1,t2) $
+      \ix (vlen1'',vlen2'',tpA1',tpA2',t1',t2') ->
+      do ix_bound <- mrVecLenIxBound vlen1'' ix
+         t1_prj <- mrVecLenAt vlen1'' tpA1' t1' ix
+         t2_prj <- mrVecLenAt vlen2'' tpA2' t2' ix
+         cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
+         extTermInCtx [("ix",ix_tp)] <$>
+           liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
+    Nothing -> throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 
 -- For pair types, prove both the left and right projections are related
+-- FIXME: Don't re-associate tuples
+mrProveRelH' _ het (asPairType -> Just (asPairType -> Just (tp1a, tp1b), tp1c)) tp2 t1 t2 =
+  do tp1' <- liftSC2 scPairType tp1a =<< liftSC2 scPairType tp1b tp1c
+     mrProveRelH het tp1' tp2 t1 t2
+mrProveRelH' _ het tp1 (asPairType -> Just (asPairType -> Just (tp2a, tp2b), tp2c)) t1 t2 =
+  do tp2' <- liftSC2 scPairType tp2a =<< liftSC2 scPairType tp2b tp2c
+     mrProveRelH het tp1 tp2' t1 t2
 mrProveRelH' _ het (asPairType -> Just (tpL1, tpR1))
                    (asPairType -> Just (tpL2, tpR2)) t1 t2 =
   do t1L <- liftSC1 scPairLeft t1

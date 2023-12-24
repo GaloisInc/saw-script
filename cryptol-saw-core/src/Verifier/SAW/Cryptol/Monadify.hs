@@ -557,11 +557,9 @@ monadifyTpExpr ctx (asDataType -> Just (pn, args)) =
                                                    monadifyTpExpr ctx) args)
 monadifyTpExpr _ (asBitvectorType -> Just w) =
   SomeTpExpr MKTypeRepr $ MTyBV w
-{- FIXME: if we need general finite Vecs, then we need Nat tp exprs
-monadifyType ctx (asVectorType -> Just (len, tp)) =
-  let lenOT = monadifyTypeNat ctx len in
-  MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
--}
+monadifyTpExpr ctx (asVectorType -> Just (asNat -> Just n, a)) =
+  let nM = NExpr_Const $ ctorOpenTerm "Cryptol.TCNum" [natOpenTerm n]
+   in SomeTpExpr MKTypeRepr $ MTySeq nM (monadifyType ctx a)
 monadifyTpExpr ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
   | seq_id == "Cryptol.seq" =
     SomeTpExpr MKTypeRepr $ MTySeq (monadifyNum ctx n) (monadifyType ctx a)

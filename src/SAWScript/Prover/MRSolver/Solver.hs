@@ -1293,6 +1293,7 @@ mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asBoolEq ->
 -- We always curry pair values before introducing them (NOTE: we do this even
 -- when the have the same types to ensure we never have to unify a projection
 -- of an evar with a non-projected value, e.g. evar.1 == val)
+-- FIXME: Only do this if we have corresponding pairs on both sides?
 mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1
                      (asPi -> Just (nm2, asPairType -> Just (tpL2, tpR2), _)) t2 =
   do t1'' <- mrLambdaLift2 (nm1, tpL1) (nm1, tpR1) t1 $ \prj1 prj2 t1' ->
@@ -1302,6 +1303,16 @@ mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1
      piTp1' <- mrTypeOf t1''
      piTp2' <- mrTypeOf t2''
      mrRefinesFunH k vars piTp1' t1'' piTp2' t2''
+mrRefinesFunH k vars (asPi -> Just (nm1, asPairType -> Just (tpL1, tpR1), _)) t1 tp2 t2 =
+  do t1'' <- mrLambdaLift2 (nm1, tpL1) (nm1, tpR1) t1 $ \prj1 prj2 t1' ->
+               liftSC2 scPairValue prj1 prj2 >>= mrApply t1'
+     piTp1' <- mrTypeOf t1''
+     mrRefinesFunH k vars piTp1' t1'' tp2 t2
+mrRefinesFunH k vars tp1 t1 (asPi -> Just (nm2, asPairType -> Just (tpL2, tpR2), _)) t2 =
+  do t2'' <- mrLambdaLift2 (nm2, tpL2) (nm2, tpR2) t2 $ \prj1 prj2 t2' ->
+               liftSC2 scPairValue prj1 prj2 >>= mrApply t2'
+     piTp2' <- mrTypeOf t2''
+     mrRefinesFunH k vars tp1 t1 piTp2' t2''
 
 mrRefinesFunH k vars (asPi -> Just (nm1, tp1, _)) t1
                      (asPi -> Just (nm2, tp2, _)) t2 =
@@ -1386,9 +1397,9 @@ refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
   do (EvTerm ev, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
      (EvTerm  _, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
-     tps_eq <- mrConvertible tp1 tp2
-     unless tps_eq $
-       throwMRFailure (ReturnTypesNotEq (Type tp1) (Type tp2))
+    --  tps_eq <- mrConvertible tp1 tp2
+    --  unless tps_eq $
+    --    throwMRFailure (ReturnTypesNotEq (Type tp1) (Type tp2))
      rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp1]
      ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
