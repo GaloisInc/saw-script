@@ -1070,12 +1070,12 @@ mrRefines' m1@(FunBind f1 args1 k1)
        zipWithM_ mrAssertProveEq args2'' args2
        recordUsedFunAssump fa >> mrRefinesFun tp1 k1 tp2 k2
 
-  -- -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
-  -- -- unfolds and is not recursive in itself, unfold f2 and recurse
-  -- (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
-  --   | Just (f2_body, False) <- maybe_f2_body ->
-  --   normBindTerm f2_body k2 >>= \m2' ->
-  --   recordUsedFunAssump fa >> mrRefines m1 m2'
+  -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
+  -- unfolds and is not recursive in itself, unfold f2 and recurse
+  (_, Just fa@(FunAssump _ _ _ (OpaqueFunAssump _ _) _))
+    | Just (f2_body, False) <- maybe_f2_body ->
+    normBindTerm f2_body k2 >>= \m2' ->
+    recordUsedFunAssump fa >> mrRefines m1 m2'
 
   -- If we have a rewrite FunAssump, or we have an opaque FunAssump that
   -- f1 args1' refines some f args where f /= f2 and f2 does not match the

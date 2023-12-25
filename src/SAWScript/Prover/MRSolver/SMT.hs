@@ -375,9 +375,13 @@ mrVecLenGen (ConstBVVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
      len_tm <- liftSC2 scBvLit n (fromIntegral len)
      mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len_tm, tp, f]
-mrVecLenGen (ConstNatVecLen _ len) tp f =
-  do len_tm <- liftSC1 scNat len
-     mrApplyGlobal "Prelude.gen" [len_tm, tp, f]
+mrVecLenGen (ConstNatVecLen n len) tp f =
+  do n_tm <- liftSC1 scNat n
+     len_tm <- liftSC1 scNat len
+     nat_tp <- liftSC0 scNatType
+     f' <- mrLambdaLift1 ("ix", nat_tp) f $ \x f' ->
+        liftSC2 scBvNat n_tm x >>= mrApply f'
+     mrApplyGlobal "Prelude.gen" [len_tm, tp, f']
 mrVecLenGen (SymBVVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
      mrApplyGlobal "Prelude.genBVVecNoPf" [n_tm, len, tp, f]
