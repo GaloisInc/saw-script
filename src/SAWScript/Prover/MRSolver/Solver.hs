@@ -1397,9 +1397,13 @@ refinementTermH :: Term -> Term -> MRM t Term
 refinementTermH t1 t2 =
   do (EvTerm ev, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
      (EvTerm  _, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
-    --  tps_eq <- mrConvertible tp1 tp2
-    --  unless tps_eq $
-    --    throwMRFailure (ReturnTypesNotEq (Type tp1) (Type tp2))
+     -- FIXME: Add a direct way to check that the types are related, instead of
+     -- calling 'mrProveRelH' on dummy variables and ignoring the result
+     withUVarLift "x" (Type tp1) (tp1,tp2) $ \x1 (tp1',tp2') ->
+       withUVarLift "x" (Type tp2') (tp1',tp2',x1) $ \x2 (tp1'',tp2'',x1') ->
+         do tp1''' <- mrSubstEVars tp1''
+            tp2''' <- mrSubstEVars tp2''
+            void $ mrProveRelH False tp1''' tp2''' x1' x2
      rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp1]
      ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
      uvars <- mrUVarsOuterToInner
