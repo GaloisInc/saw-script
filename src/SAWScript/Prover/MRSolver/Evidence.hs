@@ -116,7 +116,7 @@ data FunAssump t = FunAssump {
 -- or @RewriteFunAssump t2@ otherwise
 asFunAssump :: Maybe t -> Recognizer Term (FunAssump t)
 asFunAssump ann (asRefinesS -> Just (RefinesS args
-                                     (asGlobalDef -> Just "Prelude.VoidEv")
+                                     (asGlobalDef -> Just "SpecM.VoidEv")
                                      _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1))
                                      t2@(asApplyAll -> (asGlobalFunName -> mb_f2, args2)))) =
   let rhs = maybe (RewriteFunAssump t2) (\f2 -> OpaqueFunAssump f2 args2) mb_f2

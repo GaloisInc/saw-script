@@ -90,7 +90,7 @@ data MRFailure
   | MalformedTpDescList Term
   | MalformedDefs Term
   | MalformedComp Term
-  | NotCompFunType Term
+  | NotCompFunType Term Term
   | AssertionNotProvable Term
   | AssumptionNotProvable Term
   | InvariantNotProvable FunName FunName Term
@@ -186,8 +186,9 @@ instance PrettyInCtx MRFailure where
     prettyPrefix "Cannot handle multiFixS recursive definitions term:" t
   prettyInCtx (MalformedComp t) =
     prettyPrefix "Could not handle computation:" t
-  prettyInCtx (NotCompFunType tp) =
-    prettyPrefix "Not a computation or computational function type:" tp
+  prettyInCtx (NotCompFunType tp t) =
+    prettyPrefixSep "Not a computation or computational function type:" tp
+                    "for term:" t
   prettyInCtx (AssertionNotProvable cond) =
     prettyPrefix "Failed to prove assertion:" cond
   prettyInCtx (AssumptionNotProvable cond) =
@@ -825,13 +826,11 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 -- type @[args/vars]a@ that @SpecM@ is applied to, along with its event type.
 mrFunOutType :: FunName -> [Term] -> MRM t (EvTerm, Term)
 mrFunOutType fname args =
-  mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
-    (asSpecM -> Just (ev, tp)) -> (ev,) <$> liftSC1 scWhnf tp
-    _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
-            pp_fname <- mrPPInCtx fname
-            mrDebugPrint 0 "mrFunOutType: function does not have SpecM return type"
-            mrDebugPretty 0 ("Function:" <> pp_fname <> " with type: " <> pp_ftype)
-            error "mrFunOutType"
+  do app <- mrApplyAll (funNameTerm fname) args
+     r_tp <- mrTypeOf app >>= liftSC1 scWhnf
+     case asSpecM r_tp of
+       Just (ev, tp) -> return (ev, tp)
+       Nothing -> throwMRFailure (NotCompFunType r_tp app)
 
 -- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
 uniquifyName :: LocalName -> [LocalName] -> LocalName

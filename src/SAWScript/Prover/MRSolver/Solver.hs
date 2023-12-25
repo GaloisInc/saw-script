@@ -1347,10 +1347,10 @@ mrRefinesFunH _ _ (asPi -> Nothing) _ (asPi -> Just (_,tp2,_)) _ =
   throwMRFailure (TypesNotEq (Type utp) (Type tp2))
 
 -- Error if either side's return type is not SpecM
-mrRefinesFunH _ _ tp1@(asSpecM -> Nothing) _ _ _ =
-  throwMRFailure (NotCompFunType tp1)
-mrRefinesFunH _ _ _ _ tp2@(asSpecM -> Nothing) _ =
-  throwMRFailure (NotCompFunType tp2)
+mrRefinesFunH _ _ tp1@(asSpecM -> Nothing) t1 _ _ =
+  throwMRFailure (NotCompFunType tp1 t1)
+mrRefinesFunH _ _ _ _ tp2@(asSpecM -> Nothing) t2 =
+  throwMRFailure (NotCompFunType tp2 t2)
 
 -- This case means we must be proving refinement on two SpecM computations, so
 -- call the helper function k
