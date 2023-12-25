@@ -848,17 +848,12 @@ mrProveRel het t1 t2 =
      mrDebugPPPrefixSep 2 nm t1 (if het then "~=" else "==") t2
      tp1 <- mrTypeOf t1 >>= mrSubstEVars
      tp2 <- mrTypeOf t2 >>= mrSubstEVars
-     tps_eq <- mrConvertible tp1 tp2
-     if not het && not tps_eq
-     then do mrDebugPPPrefixSep 2 (nm ++ ": Failure, types not equal:")
-                                  tp1 "and" tp2
-             return False
-     else do ts_eq <- mrConvertible t1 t2
-             res <- if ts_eq then return True
-                    else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
-                            withTermInCtx cond_in_ctx mrProvable
-             mrDebugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
-             return res
+     ts_eq <- mrConvertible t1 t2
+     res <- if ts_eq then return True
+            else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
+                    withTermInCtx cond_in_ctx mrProvable
+     mrDebugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
+     return res
 
 -- | Prove that two terms are related, heterogeneously iff the first argument,
 -- is true, instantiating evars if necessary, or throwing an error if this is
