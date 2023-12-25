@@ -740,7 +740,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
   -- injective representation for it, keeping track of the representation term
   -- and type
   let arg_tm_0 = coIndHypArg hyp arg_spec_0
-  arg_tp_0 <- mrTypeOf arg_tm_0
+  arg_tp_0 <- mrTypeOf arg_tm_0 >>= mrNormOpenTerm
   (tp_r0, tm_r0, repr0) <- mkInjReprTerm arg_tp_0 arg_tm_0
 
   -- Attempt to unify the representation of arg 0 with each of the arg_specs
@@ -752,7 +752,7 @@ generalizeCoIndHyp hyp all_specs@(arg_spec_0:arg_specs) =
     foldM
     (\(tp_r, tm_r, repr, eq_args, arg_reprs, uneq_args) arg_spec ->
       do let arg_tm = coIndHypArg hyp arg_spec
-         arg_tp <- mrTypeOf arg_tm
+         arg_tp <- mrTypeOf arg_tm >>= mrNormOpenTerm
          unify_res <- injUnifyRepr tp_r tm_r repr arg_tp arg_tm
          case unify_res of
            Just (tp_r',tm_r',repr',arg_repr) ->
@@ -995,14 +995,14 @@ mrRefines' (AssertBoolBind cond1 k1) m2 =
 
 mrRefines' m1 (ForallBind tp f2) =
   let nm = maybe "x" id (compFunVarName f2) in
-  mkInjReprType (typeTm tp) >>= \(tp', r) ->
+  mrNormOpenTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
   withUVarLift nm (Type tp') (m1,f2) $ \x (m1',f2') ->
   mrApplyRepr r x >>= \x' ->
   applyNormCompFun f2' x' >>= \m2' ->
   mrRefines m1' m2'
 mrRefines' (ExistsBind tp f1) m2 =
   let nm = maybe "x" id (compFunVarName f1) in
-  mkInjReprType (typeTm tp) >>= \(tp', r) ->
+  mrNormOpenTerm (typeTm tp) >>= mkInjReprType >>= \(tp', r) ->
   withUVarLift nm (Type tp') (f1,m2) $ \x (f1',m2') ->
   mrApplyRepr r x >>= \x' ->
   applyNormCompFun f1' x' >>= \m1' ->
@@ -1036,8 +1036,8 @@ mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
 
 mrRefines' m1@(FunBind f1 args1 k1)
            m2@(FunBind f2 args2 k2) =
-  mrFunOutType f1 args1 >>= \(_, tp1) ->
-  mrFunOutType f2 args2 >>= \(_, tp2) ->
+  mrFunOutType f1 args1 >>= mapM mrNormOpenTerm >>= \(_, tp1) ->
+  mrFunOutType f2 args2 >>= mapM mrNormOpenTerm >>= \(_, tp2) ->
   injUnifyTypes tp1 tp2 >>= \mb_convs ->
   mrFunBodyRecInfo f1 args1 >>= \maybe_f1_body ->
   mrFunBodyRecInfo f2 args2 >>= \maybe_f2_body ->
@@ -1203,14 +1203,14 @@ mrRefines'' (AssumeBoolBind cond1 k1) m2 =
 
 mrRefines'' m1 (ExistsBind tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
-     (tp', r) <- mkInjReprType (typeTm tp)
+     (tp', r) <- mkInjReprType =<< mrNormOpenTerm (typeTm tp)
      evar <- mrFreshEVar nm (Type tp')
      evar' <- mrApplyRepr r evar
      m2' <- applyNormCompFun f2 evar'
      mrRefines m1 m2'
 mrRefines'' (ForallBind tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
-     (tp', r) <- mkInjReprType (typeTm tp)
+     (tp', r) <- mkInjReprType =<< mrNormOpenTerm (typeTm tp)
      evar <- mrFreshEVar nm (Type tp')
      evar' <- mrApplyRepr r evar
      m1' <- applyNormCompFun f1 evar'
@@ -1230,8 +1230,8 @@ mrRefinesFun tp1 f1 tp2 f2 =
          nm2 = maybe "call_ret_val" id (compFunVarName f2)
      f1'' <- mrLambdaLift1 (nm1, tp1) f1' $ flip mrApply
      f2'' <- mrLambdaLift1 (nm2, tp2) f2' $ flip mrApply
-     piTp1 <- mrTypeOf f1''
-     piTp2 <- mrTypeOf f2''
+     piTp1 <- mrTypeOf f1'' >>= mrNormOpenTerm
+     piTp2 <- mrTypeOf f2'' >>= mrNormOpenTerm
      mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''
 
 
@@ -1384,8 +1384,8 @@ askMRSolver ::
 askMRSolver sc env timeout askSMT rs args t1 t2 =
   execMRM sc env timeout askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
-    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
-       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
+    do tp1 <- liftSC1 scTypeOf t1 >>= mrNormOpenTerm
+       tp2 <- liftSC1 scTypeOf t2 >>= mrNormOpenTerm
        mrDebugPPPrefixSep 1 "mr_solver" t1 "|=" t2
        mrRefinesFunH (askMRSolverH mrRefines) [] tp1 t1 tp2 t2
 
@@ -1426,6 +1426,6 @@ refinementTerm ::
 refinementTerm sc env timeout askSMT rs args t1 t2 =
   evalMRM sc env timeout askSMT rs $
   withUVars (mrVarCtxFromOuterToInner args) $ \_ ->
-    do tp1 <- liftIO $ scTypeOf sc t1 >>= scWhnf sc
-       tp2 <- liftIO $ scTypeOf sc t2 >>= scWhnf sc
+    do tp1 <- liftSC1 scTypeOf t1 >>= mrNormOpenTerm
+       tp2 <- liftSC1 scTypeOf t2 >>= mrNormOpenTerm
        mrRefinesFunH refinementTermH [] tp1 t1 tp2 t2
