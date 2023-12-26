@@ -1086,8 +1086,8 @@ heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
        warnErrs nm_to =<< fmap (fromJust . defBody)
                                (scRequireDef sc $ mkSafeIdent saw_modname nm_to)
   where warnErrs :: String -> Term -> IO ()
-        warnErrs nm (asApplyAll -> (asGlobalDef -> Just "Prelude.errorS",
-                                 [_ev, _stk, _a, asStringLit -> Just msg]))
+        warnErrs nm (asApplyAll -> (asGlobalDef -> Just "SpecM.errorS",
+                                 [_ev, _a, asStringLit -> Just msg]))
           | Just msg_body <- stripPrefix implicationFailurePrefix (T.unpack msg)
           = let pref = "WARNING: Heapster implication failure while typechecking "
              in printOutLn opts Warn (pref ++ nm ++ ":\n" ++ msg_body ++ "\n")

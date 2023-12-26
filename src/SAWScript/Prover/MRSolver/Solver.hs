@@ -309,7 +309,7 @@ normComp (CompTerm t) =
         {-
 FIXME HERE NOW: match a tuple projection of a MultiFixS
 
-    (isGlobalDef "Prelude.MultiFixS" -> Just (), ev:tp_ds:defs:args) ->
+    (isGlobalDef "SpecM.MultiFixS" -> Just (), ev:tp_ds:defs:args) ->
       do
         -- Bind fresh function vars for the new recursive functions
         fun_vars <- mrFreshCallVars ev tp_ds defs
@@ -538,7 +538,7 @@ compFunToTerm (CompFunComp f g) =
      case (f_tp, g_tp) of
        (asPi -> Just (_, a, asSpecM -> Just (ev, b)),
         asPi -> Just (_, _, asSpecM -> Just (_, c))) ->
-         -- we explicitly unfold @Prelude.composeM@ here so @mrApplyAll@ will
+         -- we explicitly unfold @SpecM.composeS@ here so @mrApplyAll@ will
          -- beta-reduce
          let nm = maybe "ret_val" id (compFunVarName f) in
          mrLambdaLift1 (nm, a) (b, c, f', g') $ \arg (b', c', f'', g'') ->
@@ -556,14 +556,14 @@ compToTerm :: Comp -> MRM t Term
 compToTerm (CompTerm t) = return t
 compToTerm (CompReturn t) =
    do tp <- mrTypeOf t
-      liftSC2 scGlobalApply "Prelude.returnM" [tp, t]
+      liftSC2 scGlobalApply "SpecM.retS" [tp, t]
 compToTerm (CompBind m (CompFunReturn _)) = compToTerm m
 compToTerm (CompBind m f) =
   do m' <- compToTerm m
      f' <- compFunToTerm f
      mrTypeOf f' >>= \case
        (asPi -> Just (_, a, asSpecM -> Just b)) ->
-         liftSC2 scGlobalApply "Prelude.bindM" [a, b, m', f']
+         liftSC2 scGlobalApply "SpecM.bindS" [a, b, m', f']
        _ -> error "compToTerm: type not of the form: a -> SpecM b"
 -}
 

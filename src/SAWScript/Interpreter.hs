@@ -4254,7 +4254,7 @@ primitives = Map.fromList
     [ "Given a list of 'fresh_symbolic' variables over which to quantify"
     , " as as well as two terms containing those variables, which may be"
     , " either terms or functions in the SpecM monad, construct the"
-    , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
+    , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
     , " given terms, with the given variables generalized with a Pi type." ]
 
     ---------------------------------------------------------------------
