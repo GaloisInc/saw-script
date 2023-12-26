@@ -1082,16 +1082,14 @@ heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
        some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
      liftIO $ modifyIORef (heapsterEnvTCFGs henv) (\old -> map Some tcfgs ++ old)
-     forM_ fn_names_and_perms $ \(_, nm_to, _) -> liftIO $
-       warnErrs nm_to =<< fmap (fromJust . defBody)
-                               (scRequireDef sc $ mkSafeIdent saw_modname nm_to)
-  where warnErrs :: String -> Term -> IO ()
+     forM_ fn_names_and_perms $ \(_, nm_to, _) ->
+       warnErrs nm_to =<< heapsterFunTrans henv nm_to
+  where warnErrs :: String -> Term -> TopLevel ()
         warnErrs nm (asApplyAll -> (asGlobalDef -> Just "SpecM.errorS",
-                                 [_ev, _a, asStringLit -> Just msg]))
+                                    [_ev, _a, asStringLit -> Just msg]))
           | Just msg_body <- stripPrefix implicationFailurePrefix (T.unpack msg)
           = let pref = "WARNING: Heapster implication failure while typechecking "
-             in printOutLn opts Warn (pref ++ nm ++ ":\n" ++ msg_body ++ "\n")
-        warnErrs nm (asConstant -> Just (_, Just body)) = warnErrs nm body
+             in io $ printOutLn opts Warn (pref ++ nm ++ ":\n" ++ msg_body ++ "\n")
         warnErrs nm (asLambda -> Just (_, _, t)) = warnErrs nm t
         warnErrs nm (asApp -> Just (f, arg)) = warnErrs nm arg >> warnErrs nm f
         warnErrs nm (asCtor -> Just (_, args)) = mapM_ (warnErrs nm) args
@@ -1142,16 +1140,25 @@ heapster_set_event_type _bic _opts henv term_string =
      liftIO $ modifyIORef' (heapsterEnvPermEnvRef henv) $ \env ->
        env { permEnvEventType = EventType (globalOpenTerm ev_id) }
 
+-- | Fetch the SAW core definition associated with a name
+heapsterFunTrans :: HeapsterEnv -> String -> TopLevel Term
+heapsterFunTrans henv fn_name =
+  do sc <- getSharedContext
+     let saw_modname = heapsterEnvSAWModule henv
+     fun_term <-
+       fmap (fromJust . defBody) $
+       liftIO $ scRequireDef sc $ mkSafeIdent saw_modname fn_name
+     bodies <-
+       fmap (fmap fst) $
+       liftIO $ scResolveName sc $ T.pack $ fn_name ++ "__bodies"
+     liftIO $ scUnfoldConstants sc bodies fun_term
+
 -- | Fetch the SAW core definition associated with a name and print it
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()
 heapster_print_fun_trans _bic _opts henv fn_name =
   do pp_opts <- getTopLevelPPOpts
-     sc <- getSharedContext
-     let saw_modname = heapsterEnvSAWModule henv
-     fun_term <-
-       fmap (fromJust . defBody) $
-       liftIO $ scRequireDef sc $ mkSafeIdent saw_modname fn_name
+     fun_term <- heapsterFunTrans henv fn_name
      liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
 
 -- | Export all definitions in the SAW core module associated with a Heapster
