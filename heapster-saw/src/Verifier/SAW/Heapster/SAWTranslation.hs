@@ -203,6 +203,12 @@ listTypeTrans :: [TypeTrans tr] -> TypeTrans [tr]
 listTypeTrans [] = pure []
 listTypeTrans (trans:transs) = liftA2 (:) trans $ listTypeTrans transs
 
+-- | Tuple all the terms in a list into a single term, or return the empty list
+-- if the input list is empty
+tupleOpenTermList :: [OpenTerm] -> [OpenTerm]
+tupleOpenTermList [] = []
+tupleOpenTermList ts = [tupleOpenTerm' ts]
+
 
 ----------------------------------------------------------------------
 -- * Expression Translations
@@ -4532,6 +4538,22 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            pctx :>: typeTransF ttrans [arr_term])
          m
 
+  [nuMP| SImpl_IntroLLVMBlockTuple _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackTopTermsM id
+         (\ts (pctx :>: _) ->
+           pctx :>: typeTransF ttrans [tupleOpenTerm' ts])
+         m
+
+  [nuMP| SImpl_ElimLLVMBlockTuple _ mb_bp |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       shtrans <- unETransShape <$> translate (mbLLVMBlockShape mb_bp)
+       withPermStackTopTermsM id
+         (\ts (pctx :>: _) ->
+           let ts' = case shtrans of { Just _ -> ts ; Nothing -> [] } in
+           pctx :>: typeTransF ttrans ts')
+         m
+
   [nuMP| SImpl_IntroLLVMBlockSeqEmpty _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
@@ -4645,14 +4667,17 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
-           pctx :>: typeTransF ttrans ts)
+           pctx :>: typeTransF ttrans (tupleOpenTermList ts))
          m
 
   [nuMP| SImpl_ElimLLVMBlockField _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
-           pctx :>: typeTransF ttrans ts)
+           -- We tuple both ttrans and ts because ts is either an empty list or
+           -- a tuple of the terms we want to pass to ttrans; tupling ts makes
+           -- it into a list of length 1
+           pctx :>: typeTransF (tupleTypeTrans ttrans) [tupleOpenTerm' ts])
          m
 
   [nuMP| SImpl_IntroLLVMBlockArray _ _ |] ->
@@ -4669,21 +4694,29 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            pctx :>: typeTransF ttrans ts)
          m
 
--- FIXME HERE NOWNOW
-
   [nuMP| SImpl_IntroLLVMBlockSeq _ _ _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTermsM
          (\(_ :>: ptrans1 :>: ptrans2) -> (ptrans1,ptrans2))
          RL.tail
-         (\ts (pctx :>: _ :>: _) -> pctx :>: typeTransF ttrans ts)
+         (\ts (pctx :>: _ :>: _) ->
+           pctx :>: typeTransF ttrans (tupleOpenTermList ts))
          m
 
-  [nuMP| SImpl_ElimLLVMBlockSeq _ _ _ |] ->
+  [nuMP| SImpl_ElimLLVMBlockSeq _ mb_bp mb_sh2 |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
+       shtrans1 <- unETransShape <$> translate (mbLLVMBlockShape mb_bp)
+       shtrans2 <- unETransShape <$> translate mb_sh2
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
-           pctx :>: typeTransF ttrans ts)
+           -- NOTE: if both output shapes have translations, then this rule
+           -- takes in a pair and projects its two components; otherwise its
+           -- output uses the same list of 0 or 1 terms as the input
+           let ts' = if isJust shtrans1 && isJust shtrans2 then
+                       let t = termsExpect1 ts in [pairLeftOpenTerm t,
+                                                   pairRightOpenTerm t]
+                     else tupleOpenTermList ts in
+           pctx :>: typeTransF ttrans ts')
          m
 
   [nuMP| SImpl_IntroLLVMBlockOr _ _ _ |] ->
