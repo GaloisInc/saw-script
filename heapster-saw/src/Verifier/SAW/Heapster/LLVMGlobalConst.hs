@@ -290,6 +290,11 @@ permEnvAddGlobalConst :: (1 <= w, KnownNat w) => SharedContext -> ModuleName ->
 permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
   case translateLLVMValueTop dlevel endianness w env global of
     Nothing -> return env
+    Just (sh, []) ->
+      let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh in
+      return $ permEnvAddGlobalSyms env [PermEnvGlobalEntry (GlobalSymbol $
+                                                             L.globalSym global)
+                                         p (GlobalTrans [])]
     Just (sh, ts) ->
       do let (L.Symbol glob_str) = L.globalSym global
          ident <-
@@ -300,11 +305,6 @@ permEnvAddGlobalConst sc mod_name dlevel endianness w env global =
          complete_tp <- completeOpenTerm sc $ tupleTypeOpenTerm' tps
          scInsertDef sc mod_name ident complete_tp complete_t
          let p = ValPerm_LLVMBlock $ llvmReadBlockOfShape sh
-         let t_ident = globalOpenTerm ident
-         let tps_len = fromIntegral $ length tps
-         let projs =
-               map (\i -> projTupleOpenTerm' tps_len i t_ident) $
-               take (length ts) [0 ..]
          return $ permEnvAddGlobalSyms env
            [PermEnvGlobalEntry (GlobalSymbol $ L.globalSym global) p
-            (GlobalTrans projs)]
+            (GlobalTrans [globalOpenTerm ident])]
