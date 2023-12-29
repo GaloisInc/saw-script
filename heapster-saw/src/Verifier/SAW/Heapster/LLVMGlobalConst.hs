@@ -273,7 +273,10 @@ translateLLVMValueTop dlevel endianness w env global =
                              maybe "None" ppLLVMValue
                              (L.globalValue global)) $
   (\x -> case x of
-      Just _ -> debugTraceTraceLvl dlevel (sym ++ " translated") x
+      Just (sh,ts) ->
+        debugTraceTraceLvl dlevel (sym ++ " translated to " ++
+                                   show (length ts) ++ " terms for perm:\n" ++
+                                   permPrettyString emptyPPInfo sh) x
       Nothing -> debugTraceTraceLvl dlevel (sym ++ " not translated") x) $
   flip runLLVMTransM trans_info $
   do val <- lift $ L.globalValue global
