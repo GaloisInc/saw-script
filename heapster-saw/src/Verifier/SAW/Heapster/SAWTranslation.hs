@@ -209,6 +209,12 @@ tupleOpenTermList :: [OpenTerm] -> [OpenTerm]
 tupleOpenTermList [] = []
 tupleOpenTermList ts = [tupleOpenTerm' ts]
 
+-- | Tuple all the type descriptions in a list, or return the empty list if the
+-- input list is empty
+tupleTpDescList :: [OpenTerm] -> [OpenTerm]
+tupleTpDescList [] = []
+tupleTpDescList ds = [tupleTpDesc ds]
+
 
 ----------------------------------------------------------------------
 -- * Expression Translations
@@ -1585,10 +1591,7 @@ instance TranslateDescs (PermExpr a) where
              return [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
     [nuMP| PExpr_EqShape _ _ |] -> return []
     [nuMP| PExpr_PtrShape _ _ sh |] -> translateDescs sh
-    [nuMP| PExpr_FieldShape fsh |] ->
-      translateDescs fsh >>= \case
-      [] -> return []
-      ds -> return [tupleTpDesc ds]
+    [nuMP| PExpr_FieldShape fsh |] -> tupleTpDescList <$> translateDescs fsh
     [nuMP| PExpr_ArrayShape mb_len _ mb_sh |] ->
       do let w = natVal4 mb_len
          let w_term = natOpenTerm w
@@ -1603,7 +1606,7 @@ instance TranslateDescs (PermExpr a) where
          -- Since both ds1 and ds2 have length at most 1, the below is the same
          -- as choosing one list if the other is empty and pairing the two if
          -- they both have 1 element
-         return [tupleTpDesc (ds1 ++ ds2)]
+         return $ tupleTpDescList (ds1 ++ ds2)
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
       (\d -> [d]) <$> (sumTpDesc <$> translateDesc sh1 <*> translateDesc sh2)
     [nuMP| PExpr_ExShape mb_sh |] ->
