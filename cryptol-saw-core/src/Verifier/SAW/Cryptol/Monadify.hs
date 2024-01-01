@@ -1274,11 +1274,11 @@ unsafeAssertMacro :: MonMacro
 unsafeAssertMacro = MonMacro 1 $ \_ ts ->
   usingEvType $
   let numFunType =
-        MTyForall "n" MKTypeRepr $ \n -> MTyForall "m" MKTypeRepr $ \m ->
+        MTyForall "n" MKNumRepr $ \n -> MTyForall "m" MKNumRepr $ \m ->
         MTyIndesc $
         dataTypeOpenTerm "Prelude.Eq"
         [dataTypeOpenTerm "Cryptol.Num" [],
-         toArgType n, toArgType m] in
+         numExprVal n, numExprVal m] in
   case ts of
     [(asDataType -> Just (num, []))]
       | primName num == "Cryptol.Num" ->
