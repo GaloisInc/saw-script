@@ -30,6 +30,7 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWScript.Prover.MRSolver.SMT where
 
 import Data.Maybe
+import Data.List (foldl')
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Control.Monad.Except
@@ -51,8 +52,10 @@ import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
+import Verifier.SAW.Module
 import Verifier.SAW.Prim (widthNat, EvalError(..))
 import qualified Verifier.SAW.Prim as Prim
+import Verifier.SAW.Simulator (SimulatorConfig, evalSharedTerm)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
@@ -111,24 +114,6 @@ primNatTermFun :: SharedContext -> (Term -> TmPrim) -> TmPrim
 primNatTermFun sc =
   PrimFilterFun "primNatTermFun" $ \v -> lift (natValToTerm sc v)
 
--- | A version of 'readBackTValue' which uses 'error' as the simulator config
--- Q: Is there every a case where this will actually error?
-readBackTValueNoConfig :: String -> SharedContext ->
-                          TValue TermModel -> IO Term
-readBackTValueNoConfig err_str sc tv =
-  let ?recordEC = \_ec -> return () in
-  let cfg = error $ "FIXME: need the simulator config in " ++ err_str
-   in readBackTValue sc cfg tv
-
--- | A version of 'readBackValue' which uses 'error' as the simulator config
--- Q: Is there every a case where this will actually error?
-readBackValueNoConfig :: String -> SharedContext ->
-                         TValue TermModel -> Value TermModel -> IO Term
-readBackValueNoConfig err_str sc tv v =
-  let ?recordEC = \_ec -> return () in
-  let cfg = error $ "FIXME: need the simulator config in " ++ err_str
-   in readBackValue sc cfg tv v
-
 -- | A primitive that returns a global as a term
 primGlobal :: SharedContext -> Ident -> TmPrim
 primGlobal sc glob =
@@ -139,49 +124,56 @@ primGlobal sc glob =
               Nothing -> fail "primGlobal: expected sort"
             VExtra <$> VExtraTerm (VTyTerm s tp) <$> scGlobalDef sc glob
 
+-- | A primitive that unfolds a global
+primUnfold :: SharedContext -> SimulatorConfig TermModel -> Ident -> TmPrim
+primUnfold sc cfg glob =
+  Prim $ evalSharedTerm cfg =<< fmap (fromJust . defBody) (scRequireDef sc glob)
+
 -- | Implementations of primitives for normalizing Mr Solver terms
 -- FIXME: eventually we need to add the current event type to this list
-smtNormPrims :: SharedContext -> Map Ident TmPrim
-smtNormPrims sc = Map.fromList
+smtNormPrims :: SharedContext -> SimulatorConfig TermModel ->
+                Map Ident TmPrim -> Map Ident TmPrim
+smtNormPrims sc cfg prims = Map.union (Map.fromList
   [
     -- Override the usual behavior of @gen@, @genWithProof@, and @VoidEv@ so
     -- they are not evaluated or unfolded
     ("Prelude.gen", primGlobal sc "Prelude.gen"),
     ("Prelude.genWithProof", primGlobal sc "Prelude.genWithProof"),
     ("SpecM.VoidEv", primGlobal sc "SpecM.VoidEv"),
+    ("SpecM.SpecM", primGlobal sc "SpecM.SpecM"),
+
+    -- FIXME: remove these
+    ("Prelude.at", primUnfold sc cfg "Prelude.at"),
+    ("Prelude.take", primUnfold sc cfg "Prelude.take"),
+    ("Prelude.sliceBVVec", primGlobal sc "Prelude.sliceBVVec"),
+    ("Prelude.unsafeAssertBVULt", primGlobal sc "Prelude.unsafeAssertBVULt"),
+    ("Prelude.unsafeAssertBVULe", primGlobal sc "Prelude.unsafeAssertBVULe"),
 
     -- Normalize an application of @atwithDefault@ to a @gen@ term into an
     -- application of the body of the gen term to the index. Note that this
     -- implicitly assumes that the index is always in bounds, MR solver always
     -- checks that before it creates an indexing term.
     ("Prelude.atWithDefault",
-     PrimFun $ \_len -> tvalFun $ \a -> PrimFun $ \_errVal ->
+     PrimFun $ \_len -> PrimFun $ \_a -> PrimFun $ \_errVal ->
       primGenVec sc $ \f -> primNatTermFun sc $ \ix ->
-      Prim (do tm <- scApplyBeta sc f ix
-               tm' <- smtNorm sc tm
-               return $ VExtra $ VExtraTerm a tm')
+      Prim (evalSharedTerm cfg =<< scApplyBeta sc f ix)
     ),
 
     -- Normalize an application of @atWithProof@ to a @gen@ term by applying the
     -- function of the @gen@ to the index
     ("Prelude.atWithProof",
-     PrimFun $ \_len -> tvalFun $ \a -> primGenVec sc $ \f ->
+     PrimFun $ \_len -> PrimFun $ \_a -> primGenVec sc $ \f ->
       primNatTermFun sc $ \ix -> PrimFun $ \_pf ->
-      Prim (do tm <- scApplyBeta sc f ix
-               tm' <- smtNorm sc tm
-               return $ VExtra $ VExtraTerm a tm')),
+      Prim (evalSharedTerm cfg =<< scApplyBeta sc f ix)
+    )
 
-    -- Don't normalize applications of @SpecM@ and its arguments
-    ("SpecM.SpecM",
-     PrimStrict $ \ev -> PrimStrict $ \tp ->
-      Prim $
-      do ev_tp <- VTyTerm (mkSort 1) <$> scDataTypeApp sc "SpecM.EvType" []
-         ev_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc ev_tp ev
-         tp_tm <- readBackValueNoConfig "smtNormPrims (SpecM)" sc (VSort $
-                                                                   mkSort 0) tp
-         ret_tm <- scGlobalApply sc "SpecM.SpecM" [ev_tm,tp_tm]
-         return $ TValue $ VTyTerm (mkSort 0) ret_tm)
-  ]
+  ]) (foldl' (flip Map.delete) prims [
+    "Prelude.gen", "Prelude.atWithDefault", "Prelude.upd", "Prelude.take",
+    "Prelude.drop", "Prelude.append", "Prelude.join", "Prelude.split",
+    "Prelude.zip", "Prelude.foldr", "Prelude.foldl", "Prelude.scanl",
+    "Prelude.rotateL", "Prelude.rotateR", "Prelude.shiftL", "Prelude.shiftR",
+    "Prelude.EmptyVec"
+  ])
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
 -- debug output. This is used to re-enter the normalizer from inside the
@@ -189,7 +181,7 @@ smtNormPrims sc = Map.fromList
 smtNorm :: SharedContext -> Term -> IO Term
 smtNorm sc t =
   scGetModuleMap sc >>= \modmap ->
-  normalizeSharedTerm sc modmap (smtNormPrims sc) Map.empty Set.empty t
+  normalizeSharedTerm' sc modmap (smtNormPrims sc) Map.empty Set.empty t
 
 -- | Normalize a 'Term' using some Mr Solver specific primitives
 mrNormTerm :: Term -> MRM t Term

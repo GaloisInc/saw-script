@@ -18,7 +18,7 @@ module Verifier.SAW.Simulator.TermModel
        ( TmValue, TermModel, Value(..), TValue(..)
        , VExtra(..)
        , readBackValue, readBackTValue
-       , normalizeSharedTerm
+       , normalizeSharedTerm, normalizeSharedTerm'
        , extractUninterp
        ) where
 
@@ -135,9 +135,21 @@ normalizeSharedTerm ::
   Set VarIndex {- ^ opaque constants -} ->
   Term ->
   IO Term
-normalizeSharedTerm sc m addlPrims ecVals opaqueSet t =
+normalizeSharedTerm sc m addlPrims =
+  normalizeSharedTerm' sc m (const $ Map.union addlPrims)
+
+normalizeSharedTerm' ::
+  SharedContext ->
+  ModuleMap ->
+  (Sim.SimulatorConfig TermModel -> Map Ident TmPrim -> Map Ident TmPrim)
+    {- ^ function which adds additional primitives -} ->
+  Map VarIndex TmValue {- ^ ExtCns values -} ->
+  Set VarIndex {- ^ opaque constants -} ->
+  Term ->
+  IO Term
+normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
   do let ?recordEC = \_ec -> return ()
-     cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union addlPrims (constMap sc cfg))
+     cfg <- mfix (\cfg -> Sim.evalGlobal' m (primsFn cfg (constMap sc cfg))
                               (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t

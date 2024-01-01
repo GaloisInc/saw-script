@@ -7,48 +7,6 @@ module CryptolM where
 -- import Cryptol;
 import SpecM;
 
--- Alternate versions of gen and at to get around the behavior of the default prims
-genCryM : (n : Nat) -> (a : sort 0) -> (Nat -> a) -> Vec n a;
-genCryM = gen;
-atCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Nat -> a;
-atCryM = at;
-
--- Alternate versions of Prelude functions, changed to use genCryM and atCryM
-
-takeCryM : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
-takeCryM a m n v = genCryM m a (\ (i : Nat) -> at (addNat m n) a v i);
-
-dropCryM : (a : isort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec n a;
-dropCryM a m n v = genCryM n a (\ (i : Nat) -> at (addNat m n) a v (addNat m i));
-
-joinCryM : (m n : Nat) -> (a : isort 0) ->
-           Vec m (Vec n a) -> Vec (mulNat m n) a;
-joinCryM m n a v =
-  genCryM (mulNat m n) a (\ (i : Nat) ->
-    atCryM n a (at m (Vec n a) v (divNat i n)) (modNat i n));
-
-zipCryM : (a b : isort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
-zipCryM a b m n xs ys =
-  genCryM (minNat m n) (a * b) (\ (i:Nat) -> (atCryM m a xs i, atCryM n b ys i));
-
-splitCryM : (m n : Nat) -> (a : isort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
-splitCryM m n a v =
-  genCryM m (Vec n a) (\ (i : Nat) ->
-    genCryM n a (\ (j : Nat) ->
-      atCryM (mulNat m n) a v (addNat (mulNat i n) j)));
-
-zipSameCryM : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n (a * b);
-zipSameCryM a b n x y = genCryM n (a*b) (\ (i : Nat) -> (atCryM n a x i, atCryM n b y i));
-
-reverseCryM : (n : Nat) -> (a : isort 0) -> Vec n a -> Vec n a;
-reverseCryM n a xs = genCryM n a (\ (i : Nat) -> atCryM n a xs (subNat (subNat n 1) i));
-
-transposeCryM : (m n : Nat) -> (a : isort 0) -> Vec m (Vec n a) -> Vec n (Vec m a);
-transposeCryM m n a xss =
-  genCryM n (Vec m a) (\ (j : Nat) ->
-    genCryM m a (\ (i : Nat) -> atCryM n a (atCryM m (Vec n a) xss i) j));
-
-
 
 --------------------------------------------------------------------------------
 -- Monadic assertions
@@ -297,7 +255,7 @@ fromM E a b m n =
                      (map b (a * b) (\ (y : b) -> (x, y)) n) (k x))
                 xs (\ (kxs:Vec m (Vec n (a * b))) ->
                       retS E (Vec (mulNat m n) (a * b))
-                        (joinCryM m n (a * b) kxs)))
+                        (join m n (a * b) kxs)))
          -- Case 2: n = (TCNum m, TCInf)
          (natCase
             (\ (m':Nat) -> Vec m' a ->
@@ -390,7 +348,7 @@ seqZipM E a b m n =
                     -> SpecM E (mseq E (tcMin (TCNum m) n) (a * b)))
          (\ (n:Nat) ->
           \ (xs:Vec m a) -> \ (ys:Vec n b) ->
-            retS E (Vec (minNat m n) (a * b)) (zipCryM a b m n xs ys))
+            retS E (Vec (minNat m n) (a * b)) (zip a b m n xs ys))
          (\ (xs:Vec m a) -> \ (ys:Stream (SpecM E b)) ->
             vecMapM E a (a * b) m
               (\ (i : Nat) (x : a) ->
@@ -422,7 +380,7 @@ seqZipSameM : (E:EvType) -> (a b : isort 0) -> (n : Num) ->
 seqZipSameM E a b n =
   Num_rec
     (\ (n : Num) -> mseq E n a -> mseq E n b -> mseq E n (a * b))
-    (\ (n : Nat) -> zipSameCryM a b n)
+    (\ (n : Nat) -> zipSame a b n)
     (streamMap2 (SpecM E a) (SpecM E b) (SpecM E (a * b))
        (fmapS2 E a b (a * b) (\ (x:a) -> \ (y:b) -> (x,y))))
     n;
@@ -621,7 +579,7 @@ ecTakeM E =
             SpecM E (Vec m a))
          -- The case (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:qisort 0) -> \ (xs: Vec (addNat m n) a) ->
-            retS E (Vec m a) (takeCryM a m n xs))
+            retS E (Vec m a) (take a m n xs))
          -- The case (TCNum m, infinity)
          (\ (a:qisort 0) -> \ (xs: Stream (SpecM E a)) ->
             vecSequenceM E a m (streamTake (SpecM E a) m xs)))
@@ -644,7 +602,7 @@ ecDropM E =
        Num_rec
          (\ (n:Num) -> (a:isort 0) -> mseq E (tcAdd (TCNum m) n) a -> mseq E n a)
          -- The case (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> dropCryM a m n)
+         (\ (n:Nat) -> \ (a:isort 0) -> drop a m n)
          -- The case (TCNum m, infinity)
          (\ (a:isort 0) -> streamDrop (SpecM E a) m));
 
@@ -659,7 +617,7 @@ ecJoinM E =
          (\ (n:Num) -> (a:isort 0) -> Vec m (mseq E n a) ->
             mseq E (tcMul (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> joinCryM m n a))
+         (\ (n:Nat) -> \ (a:isort 0) -> join m n a))
          -- No case for (TCNum m, TCInf), shoudn't happen
     (Num_rec_fin
        (\ (n:Num) -> (a:isort 0) -> Stream (SpecM E (mseq E n a)) ->
@@ -686,7 +644,7 @@ ecSplitM E =
          (\ (n:Num) -> (a:qisort 0) -> mseq E (tcMul (TCNum m) n) a ->
             Vec m (mseq E n a))
          -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:qisort 0) -> splitCryM m n a))
+         (\ (n:Nat) -> \ (a:qisort 0) -> split m n a))
          -- No case for (TCNum m, TCInf), shouldn't happen
     (Num_rec_fin
        (\ (n:Num) -> (a:qisort 0) -> mseq E (tcMul TCInf n) a ->
@@ -711,7 +669,7 @@ ecReverseM : (E:EvType) -> (n : Num) -> isFinite n -> (a : isort 0) ->
              mseq E n a -> mseq E n a;
 ecReverseM E =
   Num_rec_fin (\ (n:Num) -> (a : isort 0) -> mseq E n a -> mseq E n a)
-              (\ (n:Nat) -> reverseCryM n);
+              (\ (n:Nat) -> reverse n);
 
 ecTransposeM : (E:EvType) -> (m n : Num) -> (a : qisort 0) ->
                mseq E m (mseq E n a) -> mseq E n (mseq E m a);
@@ -723,7 +681,7 @@ ecTransposeM E m n a =
       Num_rec
         (\ (n : Num) -> Vec m (mseq E n a) ->
            mseq E n (Vec m a))
-        (\ (n : Nat) -> transposeCryM m n a)
+        (\ (n : Nat) -> transpose m n a)
         (\ (xss : Vec m (Stream (SpecM E a))) ->
           MkStream (SpecM E (Vec m a)) (\ (i : Nat) ->
             vecMapM E (Stream (SpecM E a)) a m
@@ -736,10 +694,10 @@ ecTransposeM E m n a =
         (\ (n : Num) -> Stream (SpecM E (mseq E n a)) ->
            mseq E n (Stream (SpecM E a)))
         (\ (n : Nat) -> \ (xss : Stream (SpecM E (Vec n a))) ->
-          genCryM n (Stream (SpecM E a)) (\ (i : Nat) ->
+          gen n (Stream (SpecM E a)) (\ (i : Nat) ->
             MkStream (SpecM E a) (\ (j : Nat) ->
               fmapS E (Vec n a) a
-                (\ (xs:Vec n a) -> atCryM n a xs i)
+                (\ (xs:Vec n a) -> at n a xs i)
                 (streamGet (SpecM E (Vec n a)) xss j))))
         (\ (xss : Stream (SpecM E (Stream (SpecM E a)))) ->
           MkStream (SpecM E (Stream (SpecM E a))) (\ (i : Nat) ->
@@ -807,7 +765,7 @@ ecFromToM E =
          (\ (last:Num) -> (a : sort 0) -> PLiteral a ->
             mseq E (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
          (\ (last:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) ->
-            genCryM (addNat 1 (subNat last first)) a
+            gen (addNat 1 (subNat last first)) a
                     (\ (i : Nat) -> pa (addNat i first))));
 
 ecFromToLessThanM : (E:EvType) -> (first : Num) -> isFinite first ->
@@ -822,7 +780,7 @@ ecFromToLessThanM E first pf bound a =
          (\ (bound:Num) -> PLiteralLessThan a ->
             mseq E (tcSub bound (TCNum first)) a)
          (\ (bound:Nat) -> \ (pa : PLiteralLessThan a) ->
-            genCryM (subNat bound first) a
+            gen (subNat bound first) a
                     (\ (i : Nat) -> pa (addNat i first)))
          (\ (pa : PLiteralLessThan a) ->
             MkStream (SpecM E a)
@@ -837,7 +795,7 @@ ecFromThenToM E first next _ a =
   Num_rec_fin
     (\ (len:Num) -> PLiteral a -> PLiteral a -> PLiteral a -> mseq E len a)
     (\ (len:Nat) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) -> \ (_ : PLiteral a) ->
-       genCryM len a
+       gen len a
                (\ (i : Nat) ->
                   pa (subNat (addNat (getFinNat first)
                                      (mulNat i (getFinNat next)))
