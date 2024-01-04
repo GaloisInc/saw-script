@@ -55,10 +55,9 @@ Num_rec_fin p f =
 bvVecAtM : (E:EvType) -> (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
            BVVec n len a -> Vec n Bool -> SpecM E a;
 bvVecAtM E n len a xs i =
-  maybe (is_bvult n i len) (SpecM E a)
-        (errorS E a "bvVecAtM: invalid sequence index")
-        (\ (pf:is_bvult n i len) -> retS E a (atBVVec n len a xs i pf))
-        (bvultWithProof n i len);
+  ifWithProof (SpecM E a) (bvult n i len)
+    (errorS E a "bvVecAtM: invalid sequence index")
+    (\ (pf:is_bvult n i len) -> retS E a (atBVVec n len a xs i pf));
 
 atM : (E:EvType) -> (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> SpecM E a;
 atM E n a xs i =
@@ -70,22 +69,20 @@ bvVecUpdateM : (E:EvType) -> (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
                BVVec n len a -> Vec n Bool -> a ->
                SpecM E (BVVec n len a);
 bvVecUpdateM E n len a xs i x =
-  maybe (is_bvult n i len) (SpecM E (BVVec n len a))
-        (errorS E (BVVec n len a) "bvVecUpdateM: invalid sequence index")
-        (\ (_:is_bvult n i len) -> retS E (BVVec n len a)
-                                        (updBVVec n len a xs i x))
-        (bvultWithProof n i len);
+  ifWithProof (SpecM E (BVVec n len a)) (bvult n i len) 
+    (errorS E (BVVec n len a) "bvVecUpdateM: invalid sequence index")
+    (\ (_:is_bvult n i len) -> retS E (BVVec n len a)
+                                      (updBVVec n len a xs i x));
 
 fromBVVecUpdateM : (E:EvType) -> (n : Nat) -> (len : Vec n Bool) ->
                    (a : sort 0) -> BVVec n len a -> Vec n Bool -> a ->
                    a -> (m : Nat) -> SpecM E (Vec m a);
 fromBVVecUpdateM E n len a xs i x def m =
-  maybe (is_bvult n i len) (SpecM E (Vec m a))
-        (errorS E (Vec m a) "bvVecUpdateM: invalid sequence index")
-        (\ (_:is_bvult n i len) -> retS E (Vec m a)
-                                        (genFromBVVec n len a
-                                          (updBVVec n len a xs i x) def m))
-        (bvultWithProof n i len);
+  ifWithProof (SpecM E (Vec m a)) (bvult n i len)
+    (errorS E (Vec m a) "bvVecUpdateM: invalid sequence index")
+    (\ (_:is_bvult n i len) -> retS E (Vec m a)
+                                    (genFromBVVec n len a
+                                      (updBVVec n len a xs i x) def m));
 
 updateM : (E:EvType) -> (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a ->
           SpecM E (Vec n a);
@@ -139,19 +136,19 @@ bvVecMapInvarBindM E stack a b c n len f xs invar cont =
                        LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
                        LRT_Ret c)))) stack) c)
            (and (bvule n i len) invar)
-           (maybe (is_bvult n i len)
-                  (SpecM E (pushFunStack
-                     (singletonFrame
-                      (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
-                       LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
-                       LRT_Ret c)))) stack) c)
-                  (cont ys)
-                  (\ (pf:is_bvult n i len) ->
-                     bindS E stack b c
-                           (f (atBVVec n len a xs i pf))
-                           (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
-                                           (updBVVec n len b ys i y)))
-                  (bvultWithProof n i len)))
+           (ifWithProof
+              (SpecM E (pushFunStack
+                 (singletonFrame
+                  (LRT_Fun (Vec n Bool) (\ (_:Vec n Bool) ->
+                   LRT_Fun (BVVec n len b) (\ (_:BVVec n len b) ->
+                   LRT_Ret c)))) stack) c)
+              (bvult n i len)
+              (cont ys)
+              (\ (pf:is_bvult n i len) ->
+                 bindS E stack b c
+                       (f (atBVVec n len a xs i pf))
+                       (\ (y:b) -> rec (bvAdd n i (bvNat n 1))
+                                       (updBVVec n len b ys i y)))))
       (bvNat n 0) ys0);
 
 bvVecMapInvarM : (E:EvType) -> (stack:FunStack) ->

@@ -5103,15 +5103,14 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
+       applyGlobalTransM "Prelude.ifBvEqWithProof"
+         [ return ret_tp_m
+         , return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "eq_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)
-         , applyGlobalTransM "Prelude.bvEqWithProof"
-           [ return (natOpenTerm $ natVal2 prop) , translate1 e1, translate1 e2]]
+             popPImplTerm trans k)]
 
   -- If e1 and e2 are already unequal, short-circuit and do nothing
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) _ |], _)
@@ -5152,7 +5151,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (popPImplTerm trans k)
 
-  -- If we don't know e1 < e2 statically, translate to bvultWithProof
+  -- If we don't know e1 < e2 statically, translate to ifWithProof of bvult
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULt e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -5160,16 +5159,15 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
+       applyGlobalTransM "Prelude.ifWithProof"
+         [ return ret_tp_m
+         , applyGlobalTransM "Prelude.bvult" 
+           [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2 ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ult_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)
-         , applyGlobalTransM "Prelude.bvultWithProof"
-           [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2]
-         ]
+             popPImplTerm trans k)]
 
   -- If we know e1 <= e2 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) _ |],
@@ -5187,7 +5185,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (popPImplTerm trans k)
 
-  -- If we don't know e1 <= e2 statically, translate to bvuleWithProof
+  -- If we don't know e1 <= e2 statically, translate to ifWithProof of bvule
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -5195,16 +5193,15 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
+       applyGlobalTransM "Prelude.ifWithProof"
+         [ return ret_tp_m
+         , applyGlobalTransM "Prelude.bvule"
+           [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2 ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ule_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)
-         , applyGlobalTransM "Prelude.bvuleWithProof"
-           [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2]
-         ]
+             popPImplTerm trans k)]
 
   -- If we know e1 <= e2-e3 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) _ |],
@@ -5224,7 +5221,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
            (:>: bvPropPerm (BVPropTrans prop pf_tm))
            (popPImplTerm trans k)
 
-  -- If we don't know e1 <= e2-e3 statically, translate to bvuleWithProof
+  -- If we don't know e1 <= e2-e3 statically, translate to ifWithProof of bvule
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) prop_str |],
    [nuMP| MbPermImpls_Cons _ _ mb_impl' |]) ->
     translatePermImpl (mbCombine RL.typeCtxProxies mb_impl') >>= \trans ->
@@ -5232,18 +5229,16 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.maybe"
-         [ return (typeTransType1 prop_tp_trans), return ret_tp_m
+       applyGlobalTransM "Prelude.ifBvuleWithProof"
+         [ return (natOpenTerm $ natVal2 prop), translate1 e1
+         , applyGlobalTransM "Prelude.bvSub"
+           [return (natOpenTerm $ natVal2 prop), translate1 e2, translate1 e3]
+         , return ret_tp_m
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ule_diff_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)
-         , applyGlobalTransM "Prelude.bvuleWithProof"
-           [ return (natOpenTerm $ natVal2 prop), translate1 e1,
-             applyGlobalTransM "Prelude.bvSub"
-             [return (natOpenTerm $ natVal2 prop), translate1 e2, translate1 e3]]
-         ]
+             popPImplTerm trans k)]
 
   ([nuMP| Impl1_TryProveBVProp _ _ _ |], _) ->
     pimplFailM ("translatePermImpl1: Unhandled BVProp case")

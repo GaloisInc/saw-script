@@ -355,6 +355,17 @@ ite_false (a : sort 1) (x y : a) : Eq a (ite a False x y) y =
   trans a (ite a False x y) (iteDep (\ (b:Bool) -> a) False x y) y
         (ite_eq_iteDep a False x y) (iteDep_False (\ (_:Bool) -> a) x y);
 
+-- A version of ite that includes an Eq proof term in each branch
+iteWithProof : (a : sort 0) -> (b:Bool) -> (Eq Bool b True -> a) ->
+                                           (Eq Bool b False -> a) -> a;
+iteWithProof a b f1 f2 =
+  -- iteDep (\ (b1:Bool) -> Eq Bool b b1 -> a) b f1 f2 (Refl Bool b);
+  ite a b (f1 (unsafeAssert Bool b True)) (f2 (unsafeAssert Bool b False));
+
+-- A version of ite that includes an Eq proof term only in the True branch
+ifWithProof : (a : sort 0) -> (b:Bool) -> a -> (Eq Bool b True -> a) -> a;
+ifWithProof a b x f = iteWithProof a b f (\(_:Eq Bool b False) -> x);
+
 --
 -- Converting between Bools and Bits (cause why not?)
 --
@@ -963,6 +974,17 @@ equalNat x y =
             (\ (n':Nat) -> \ (eqN : Nat -> Bool) -> \ (m:Nat) ->
                Nat_cases Bool False
                          (\ (m':Nat) -> \ (b:Bool) -> eqN m') m) x y;
+
+-- Convert a equalNat equality to an equality of Nats
+-- FIXME: Implement this in the same way as proveEqNat
+primitive equalNatToEqNat : (m n : Nat) ->
+                            Eq Bool (equalNat m n) True -> eqNat m n;
+
+-- An ite on Nat equality with a proof term in the True branch
+ifEqNatWithProof : (a : sort 0) -> (m n : Nat) -> a -> (eqNat m n -> a) -> a;
+ifEqNatWithProof a m n x f =
+  ifWithProof a (equalNat m n) x
+    (\ (pf:Eq Bool (equalNat m n) True) -> f (equalNatToEqNat m n pf));
 
 ltNat : Nat -> Nat -> Bool;
 ltNat x y =
@@ -1929,25 +1951,16 @@ axiom unsafeAssertBVULt : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
 axiom unsafeAssertBVULe : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
                           Eq Bool (bvule n x y) True;
 
--- Decide equality on two bitvectors, returning a proof if they are equal
-primitive bvEqWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
-                          Maybe (Eq (Vec n Bool) v1 v2);
+-- Convert a bvEq equality to an equality of bitvectors
+primitive bvEqToEq : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                     Eq Bool (bvEq n v1 v2) True -> Eq (Vec n Bool) v1 v2;
 
--- Compare two bitvectors with bvult, returning a proof if bvult succeeds
-bvultWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
-                 Maybe (Eq Bool (bvult n v1 v2) True);
-bvultWithProof n v1 v2 =
-  iteDep (\ (b:Bool) -> Maybe (Eq Bool b True)) (bvult n v1 v2)
-         (Just (Eq Bool True True) (Refl Bool True))
-         (Nothing (Eq Bool False True));
-
--- Compare two bitvectors with bvule, returning a proof if bvule succeeds
-bvuleWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
-                 Maybe (Eq Bool (bvule n v1 v2) True);
-bvuleWithProof n v1 v2 =
-  iteDep (\ (b:Bool) -> Maybe (Eq Bool b True)) (bvule n v1 v2)
-         (Just (Eq Bool True True) (Refl Bool True))
-         (Nothing (Eq Bool False True));
+-- An ite on bitvector equality with a proof term in the True branch
+ifBvEqWithProof : (a : sort 0) -> (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                  a -> (Eq (Vec n Bool) v1 v2 -> a) -> a;
+ifBvEqWithProof a n v1 v2 x f =
+  ifWithProof a (bvEq n v1 v2) x
+    (\ (pf:Eq Bool (bvEq n v1 v2) True) -> f (bvEqToEq n v1 v2 pf));
 
 -- Convert a proof of bitvector equality to one of Nat equality
 primitive bvEqToEqNat : (n : Nat) -> (v1 v2 : Vec n Bool) ->
@@ -2155,11 +2168,10 @@ updSliceBVVec n len a v start' len' v_sub =
   genBVVec n len a
     (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
        ite a (bvule n start' i)
-           (maybe (is_bvult n (bvSub n i start') len') a
+           (ifWithProof a (bvult n (bvSub n i start') len')
               (atBVVec n len a v i pf)
               (\ (pf_sub:is_bvult n (bvSub n i start') len') ->
-                 atBVVec n len' a v_sub (bvSub n i start') pf_sub)
-              (bvultWithProof n (bvSub n i start') len'))
+                 atBVVec n len' a v_sub (bvSub n i start') pf_sub))
            (atBVVec n len a v i pf));
 
 -- Append two BVVecs
@@ -2168,14 +2180,11 @@ appendBVVec : (n : Nat) -> (len1 len2 : Vec n Bool) -> (a : sort 0) ->
 appendBVVec n len1 len2 a v1 v2 =
   genBVVec n (bvAdd n len1 len2) a
     (\ (i:Vec n Bool) (pf12:is_bvult n i (bvAdd n len1 len2)) ->
-       iteDep
-         (\ (b:Bool) -> Eq Bool (bvult n i len1) b -> a)
-         (bvult n i len1)
+       iteWithProof a (bvult n i len1)
          (\ (pf1:is_bvult n i len1) -> atBVVec n len1 a v1 i pf1)
          (\ (not_pf1:Eq Bool (bvult n i len1) False) ->
             atBVVec n len2 a v2 (bvSub n i len1)
-                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1))
-         (Refl Bool (bvult n i len1)));
+                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1)));
 
 
 -- | The complete induction principle on bitvectors

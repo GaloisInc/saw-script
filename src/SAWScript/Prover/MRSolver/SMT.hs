@@ -72,13 +72,24 @@ import SAWScript.Prover.MRSolver.Monad
 
 type TmPrim = Prim TermModel
 
+-- | Convert a vec value to a 'Term'
+vecValToTerm :: SharedContext -> SimulatorConfig TermModel ->
+                TValue TermModel -> Value TermModel -> IO (Maybe Term)
+vecValToTerm sc cfg tp (VVector vs) =
+  do let ?recordEC = \_ec -> return ()
+     tp' <- readBackTValue sc cfg tp
+     vs' <- traverse (readBackValue sc cfg tp <=< force) (V.toList vs)
+     Just <$> scVectorReduced sc tp' vs'
+vecValToTerm _ _ _ (VExtra (VExtraTerm _tp tm)) = return $ Just tm
+vecValToTerm _ _ _ v = return $ Nothing
+
 -- | A primitive function that expects a term of the form @gen n a f@ and the
 -- function argument @f@ to the supplied function
-primGenVec :: SharedContext -> (Term -> TmPrim) -> TmPrim
-primGenVec sc =
-  PrimFilterFun "primGenVec" $
-  \case
-    VExtra (VExtraTerm _ (asGenVecTerm -> Just (_, _, f_m))) -> lift $ f_m sc
+primGenVec :: SharedContext -> SimulatorConfig TermModel ->
+              TValue TermModel -> (Term -> TmPrim) -> TmPrim
+primGenVec sc cfg tp =
+  PrimFilterFun "primGenVec" $ \v -> lift (vecValToTerm sc cfg tp v) >>= \case
+    (Just (asGenVecTerm -> Just (_, _, f_m))) -> lift $ f_m sc
     _ -> mzero
 
 -- | Convert a Boolean value to a 'Term'
@@ -133,7 +144,7 @@ primUnfold sc cfg glob =
 -- FIXME: eventually we need to add the current event type to this list
 smtNormPrims :: SharedContext -> SimulatorConfig TermModel ->
                 Map Ident TmPrim -> Map Ident TmPrim
-smtNormPrims sc cfg prims = Map.union (Map.fromList
+smtNormPrims sc cfg = Map.union $ Map.fromList
   [
     -- Override the usual behavior of @gen@, @genWithProof@, and @VoidEv@ so
     -- they are not evaluated or unfolded
@@ -142,38 +153,28 @@ smtNormPrims sc cfg prims = Map.union (Map.fromList
     ("SpecM.VoidEv", primGlobal sc "SpecM.VoidEv"),
     ("SpecM.SpecM", primGlobal sc "SpecM.SpecM"),
 
-    -- FIXME: remove these
-    ("Prelude.at", primUnfold sc cfg "Prelude.at"),
-    ("Prelude.take", primUnfold sc cfg "Prelude.take"),
-    ("Prelude.sliceBVVec", primGlobal sc "Prelude.sliceBVVec"),
-    ("Prelude.unsafeAssertBVULt", primGlobal sc "Prelude.unsafeAssertBVULt"),
-    ("Prelude.unsafeAssertBVULe", primGlobal sc "Prelude.unsafeAssertBVULe"),
-
     -- Normalize an application of @atwithDefault@ to a @gen@ term into an
     -- application of the body of the gen term to the index. Note that this
     -- implicitly assumes that the index is always in bounds, MR solver always
     -- checks that before it creates an indexing term.
     ("Prelude.atWithDefault",
-     PrimFun $ \_len -> PrimFun $ \_a -> PrimFun $ \_errVal ->
-      primGenVec sc $ \f -> primNatTermFun sc $ \ix ->
-      Prim (evalSharedTerm cfg =<< scApplyBeta sc f ix)
+     PrimFun $ \_len -> tvalFun $ \a -> PrimFun $ \_errVal ->
+      primGenVec sc cfg a $ \f -> primNatTermFun sc $ \ix ->
+      Prim (do tm <- scApplyBeta sc f ix
+               tm' <- smtNorm sc tm
+               return $ VExtra $ VExtraTerm a tm')
     ),
 
     -- Normalize an application of @atWithProof@ to a @gen@ term by applying the
     -- function of the @gen@ to the index
     ("Prelude.atWithProof",
-     PrimFun $ \_len -> PrimFun $ \_a -> primGenVec sc $ \f ->
+     PrimFun $ \_len -> tvalFun $ \a -> primGenVec sc cfg a $ \f ->
       primNatTermFun sc $ \ix -> PrimFun $ \_pf ->
-      Prim (evalSharedTerm cfg =<< scApplyBeta sc f ix)
+      Prim (do tm <- scApplyBeta sc f ix
+               tm' <- smtNorm sc tm
+               return $ VExtra $ VExtraTerm a tm')
     )
-
-  ]) (foldl' (flip Map.delete) prims [
-    "Prelude.gen", "Prelude.atWithDefault", "Prelude.upd", "Prelude.take",
-    "Prelude.drop", "Prelude.append", "Prelude.join", "Prelude.split",
-    "Prelude.zip", "Prelude.foldr", "Prelude.foldl", "Prelude.scanl",
-    "Prelude.rotateL", "Prelude.rotateR", "Prelude.shiftL", "Prelude.shiftR",
-    "Prelude.EmptyVec"
-  ])
+  ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
 -- debug output. This is used to re-enter the normalizer from inside the

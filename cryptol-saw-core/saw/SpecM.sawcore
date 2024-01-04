@@ -862,16 +862,14 @@ mapBVVecS E a b f n len = mapS E a b f (bvToNat n len);
 castVecS : (E:EvType) -> (a : sort 0) -> (n1 : Nat) -> (n2 : Nat) ->
            Vec n1 a -> SpecM E (Vec n2 a);
 castVecS E a n1 n2 v =
-  maybe
-    (Eq Nat n1 n2) (SpecM E (Vec n2 a))
+  ifEqNatWithProof (SpecM E (Vec n2 a)) n1 n2
     (errorS E (Vec n2 a) "Could not cast Vec")
     (\ (pf:Eq Nat n1 n2) ->
        retS
          E (Vec n2 a)
          (coerce (Vec n1 a) (Vec n2 a)
                  (eq_cong Nat n1 n2 pf (sort 0) (\ (n:Nat) -> Vec n a))
-                 v))
-    (proveEqNat n1 n2);
+                 v));
 
 -- Append two BVVecs and cast the resulting size, if possible
 appendCastBVVecS : (E:EvType) -> (n : Nat) ->
@@ -879,8 +877,7 @@ appendCastBVVecS : (E:EvType) -> (n : Nat) ->
                    BVVec n len1 a -> BVVec n len2 a ->
                    SpecM E (BVVec n len3 a);
 appendCastBVVecS E n len1 len2 len3 a v1 v2 =
-  maybe
-    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (SpecM E (BVVec n len3 a))
+  ifBvEqWithProof (SpecM E (BVVec n len3 a)) n (bvAdd n len1 len2) len3
     (errorS E (BVVec n len3 a) "Could not cast BVVec")
     (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
        retS
@@ -888,8 +885,7 @@ appendCastBVVecS E n len1 len2 len3 a v1 v2 =
          (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
                  (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
                           (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
-                 (appendBVVec n len1 len2 a v1 v2)))
-    (bvEqWithProof n (bvAdd n len1 len2) len3);
+                 (appendBVVec n len1 len2 a v1 v2)));
 
 
 --
