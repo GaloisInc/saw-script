@@ -776,6 +776,8 @@ moduleCmdResult (res, ws) = do
     Right (a, me) -> return (a, me)
     Left err      -> fail $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
   where
+    -- If all warnings are about type defaults, pretend there are no warnings at
+    -- all to avoid displaying an empty warning container.
     suppressDefaulting :: MM.ModuleWarning -> [MM.ModuleWarning]
     suppressDefaulting w =
       case w of
