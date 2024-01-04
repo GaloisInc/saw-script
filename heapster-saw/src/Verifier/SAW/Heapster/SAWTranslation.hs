@@ -335,7 +335,7 @@ instance IsTermTrans (ExprTrans tp) where
   transTerms ETrans_Unit = []
   transTerms ETrans_AnyVector = []
   transTerms (ETrans_Shape (Just (d, _))) = [d]
-  transTerms (ETrans_Shape Nothing) = []
+  transTerms (ETrans_Shape Nothing) = [unitTpDesc]
   transTerms (ETrans_Perm ds _) = [tupleTpDesc ds]
   transTerms (ETrans_Term _ t) = [t]
 
