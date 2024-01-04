@@ -572,9 +572,13 @@ assumeBoolS E b = assumeS E (EqTrue b);
 
 -- The specification which assumes that the first argument is True and then
 -- runs the second argument
-assumingS : (E:EvType) -> (a : sort 0) -> Bool -> (#() -> SpecM E a) ->
-            SpecM E a;
-assumingS E a cond m = bindS E #() a (assumeBoolS E cond) m;
+assumingS : (E:EvType) -> (a : sort 0) -> Bool -> SpecM E a -> SpecM E a;
+assumingS E a cond m = bindS E #() a (assumeBoolS E cond) (\(_:#()) -> m);
+
+-- The version of assumingS which appears in un-monadified Cryptol (this gets
+-- converted to assumingS during monadification, see assertingOrAssumingMacro)
+assuming : (a : isort 0) -> Bool -> a -> a;
+assuming a b x = ite a b x (error a "Assuming failed");
 
 -- Assert a proposition holds
 primitive assertS : (E:EvType) -> (p:Prop) -> SpecM E #();
@@ -585,9 +589,13 @@ assertBoolS E b = assertS E (EqTrue b);
 
 -- The specification which asserts that the first argument is True and then
 -- runs the second argument
-assertingS : (E:EvType) -> (a : sort 0) -> Bool -> (#() -> SpecM E a) ->
-             SpecM E a;
-assertingS E a cond m = bindS E #() a (assertBoolS E cond) m;
+assertingS : (E:EvType) -> (a : sort 0) -> Bool -> SpecM E a -> SpecM E a;
+assertingS E a cond m = bindS E #() a (assertBoolS E cond) (\(_:#()) -> m);
+
+-- The version of assertingS which appears in un-monadified Cryptol (this gets
+-- converted to assertingS during monadification, see assertingOrAssumingMacro)
+asserting : (a : isort 0) -> Bool -> a -> a;
+asserting a b x = ite a b x (error a "Assertion failed");
 
 -- The computation that nondeterministically chooses one computation or another.
 -- As a specification, represents the disjunction of two specifications.

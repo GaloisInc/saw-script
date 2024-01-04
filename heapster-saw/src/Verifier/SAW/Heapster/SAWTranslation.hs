@@ -5186,7 +5186,8 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          , lambdaTransM "eq_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)]
+             popPImplTerm trans k)
+         ]
 
   -- If e1 and e2 are already unequal, short-circuit and do nothing
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_Neq e1 e2) _ |], _)
@@ -5243,7 +5244,8 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          , lambdaTransM "ult_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)]
+             popPImplTerm trans k)
+         ]
 
   -- If we know e1 <= e2 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq e1 e2) _ |],
@@ -5277,7 +5279,8 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
          , lambdaTransM "ule_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)]
+             popPImplTerm trans k)
+         ]
 
   -- If we know e1 <= e2-e3 statically, translate to unsafeAssert
   ([nuMP| Impl1_TryProveBVProp x prop@(BVProp_ULeq_Diff e1 e2 e3) _ |],
@@ -5305,16 +5308,19 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
     do prop_tp_trans <- translate prop
        ret_tp_m <- compReturnTypeM
        ret_tp <- returnTypeM
-       applyGlobalTransM "Prelude.ifBvuleWithProof"
-         [ return (natOpenTerm $ natVal2 prop), translate1 e1
-         , applyGlobalTransM "Prelude.bvSub"
-           [return (natOpenTerm $ natVal2 prop), translate1 e2, translate1 e3]
-         , return ret_tp_m
+       applyGlobalTransM "Prelude.ifWithProof"
+         [ return ret_tp_m
+         , applyGlobalTransM "Prelude.bvule"
+           [ return (natOpenTerm $ natVal2 prop), translate1 e1
+           , applyGlobalTransM "Prelude.bvSub"
+             [return (natOpenTerm $ natVal2 prop), translate1 e2, translate1 e3]
+           ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ule_diff_pf" prop_tp_trans
            (\prop_trans ->
              withPermStackM (:>: translateVar x) (:>: bvPropPerm prop_trans) $
-             popPImplTerm trans k)]
+             popPImplTerm trans k)
+         ]
 
   ([nuMP| Impl1_TryProveBVProp _ _ _ |], _) ->
     pimplFailM ("translatePermImpl1: Unhandled BVProp case")
