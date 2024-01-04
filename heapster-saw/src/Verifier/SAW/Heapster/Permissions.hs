@@ -259,6 +259,9 @@ data PermExpr (a :: CrucibleType) where
                       PermExpr (LLVMShapeType w) ->
                       PermExpr (LLVMShapeType w)
 
+  -- | The explicit tupling of the translation of a shape into a tuple type
+  PExpr_TupShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+
   -- | A sequence of two shapes
   PExpr_SeqShape :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w) ->
                     PermExpr (LLVMShapeType w)
@@ -1683,6 +1686,9 @@ instance Eq (PermExpr a) where
     len1 == len2 && s1 == s2 && sh1 == sh2
   (PExpr_ArrayShape _ _ _) == _ = False
 
+  (PExpr_TupShape sh1) == (PExpr_TupShape sh2) = sh1 == sh2
+  (PExpr_TupShape _) == _ = False
+
   (PExpr_SeqShape sh1 sh1') == (PExpr_SeqShape sh2 sh2') =
     sh1 == sh2 && sh1' == sh2'
   (PExpr_SeqShape _ _) == _ = False
@@ -1764,6 +1770,9 @@ instance PermPretty (PermExpr a) where
        return (pretty "arraysh" <>
                ppEncList True [pretty "<" <> len_pp,
                                pretty "*" <> stride_pp, sh_pp])
+  permPrettyM (PExpr_TupShape sh) =
+    do pp <- permPrettyM sh
+       return $ nest 2 $ sep [pretty "tuplesh" <+> parens pp]
   permPrettyM (PExpr_SeqShape sh1 sh2) =
     do pp1 <- permPrettyM sh1
        pp2 <- permPrettyM sh2
@@ -4298,6 +4307,7 @@ llvmPermContainsArray (Perm_LLVMBlock bp) =
   shapeContainsArray (PExpr_ArrayShape _ _ _) = True
   shapeContainsArray (PExpr_SeqShape sh1 sh2) =
     shapeContainsArray sh1 || shapeContainsArray sh2
+  shapeContainsArray (PExpr_TupShape sh) = shapeContainsArray sh
   shapeContainsArray _ = False
 llvmPermContainsArray _ = False
 
@@ -4364,6 +4374,7 @@ findEqVarFieldsInShapeH (PExpr_FieldShape (LLVMFieldShape
   return $ NameSet.singleton y
 findEqVarFieldsInShapeH (PExpr_FieldShape _) = return $ NameSet.empty
 findEqVarFieldsInShapeH (PExpr_ArrayShape _ _ sh) = findEqVarFieldsInShapeH sh
+findEqVarFieldsInShapeH (PExpr_TupShape sh) = findEqVarFieldsInShapeH sh
 findEqVarFieldsInShapeH (PExpr_SeqShape sh1 sh2) =
   NameSet.union <$> findEqVarFieldsInShapeH sh1 <*> findEqVarFieldsInShapeH sh2
 findEqVarFieldsInShapeH (PExpr_OrShape sh1 sh2) =
@@ -4396,6 +4407,7 @@ llvmShapeLength (PExpr_PtrShape _ _ sh)
 llvmShapeLength (PExpr_FieldShape fsh) =
   Just $ bvInt $ llvmFieldShapeLength fsh
 llvmShapeLength (PExpr_ArrayShape len stride _) = Just $ bvMult stride len
+llvmShapeLength (PExpr_TupShape sh) = llvmShapeLength sh
 llvmShapeLength (PExpr_SeqShape sh1 sh2) =
   liftA2 bvAdd (llvmShapeLength sh1) (llvmShapeLength sh2)
 llvmShapeLength (PExpr_OrShape sh1 sh2) =
@@ -4547,6 +4559,7 @@ instance Modalize (PermExpr (LLVMShapeType w)) where
     Just $ PExpr_PtrShape (rw' <|> rw) (l' <|> l) sh
   modalize _ _ sh@(PExpr_FieldShape _) = Just sh
   modalize _ _ sh@(PExpr_ArrayShape _ _ _) = Just sh
+  modalize rw l (PExpr_TupShape sh) = PExpr_TupShape <$> modalize rw l sh
   modalize rw l (PExpr_SeqShape sh1 sh2) =
     PExpr_SeqShape <$> modalize rw l sh1 <*> modalize rw l sh2
   modalize rw l (PExpr_OrShape sh1 sh2) =
@@ -4844,6 +4857,8 @@ splitLLVMBlockPerm _ off bp@(llvmBlockShape -> PExpr_ArrayShape len stride sh)
           bp { llvmBlockOffset = off,
                llvmBlockLen = bvSub (llvmBlockLen bp) off_diff,
                llvmBlockShape = PExpr_ArrayShape (bvSub len ix) stride sh })
+splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_TupShape sh) =
+  splitLLVMBlockPerm blsubst off (bp { llvmBlockShape = sh })
 splitLLVMBlockPerm blsubst off bp@(llvmBlockShape -> PExpr_SeqShape sh1 sh2)
   | Just sh1_len <- llvmShapeLength sh1
   , off_diff <- bvSub off (llvmBlockOffset bp)
@@ -4985,11 +5000,13 @@ shapeToTag _ = Nothing
 -- return that bitvector value
 getShapeBVTag :: PermExpr (LLVMShapeType w) -> Maybe SomeBV
 getShapeBVTag sh | Just some_bv <- shapeToTag sh = Just some_bv
+getShapeBVTag (PExpr_TupShape sh) = getShapeBVTag sh
 getShapeBVTag (PExpr_SeqShape sh1 _) = getShapeBVTag sh1
 getShapeBVTag _ = Nothing
 
 -- | Remove the leading tag from a shape where 'getShapeBVTag' succeeded
 shapeRemoveTag :: PermExpr (LLVMShapeType w) -> PermExpr (LLVMShapeType w)
+shapeRemoveTag (PExpr_TupShape sh) = shapeRemoveTag sh
 shapeRemoveTag (PExpr_SeqShape sh1 sh2) | isJust (shapeToTag sh1) = sh2
 shapeRemoveTag (PExpr_SeqShape sh1 sh2) =
   PExpr_SeqShape (shapeRemoveTag sh1) sh2
@@ -6130,6 +6147,7 @@ shapeIsCopyable rw (PExpr_PtrShape maybe_rw' _ sh) =
   rw' == PExpr_Read && shapeIsCopyable rw' sh
 shapeIsCopyable _ (PExpr_FieldShape (LLVMFieldShape p)) = permIsCopyable p
 shapeIsCopyable rw (PExpr_ArrayShape _ _ sh) = shapeIsCopyable rw sh
+shapeIsCopyable rw (PExpr_TupShape sh) = shapeIsCopyable rw sh
 shapeIsCopyable rw (PExpr_SeqShape sh1 sh2) =
   shapeIsCopyable rw sh1 && shapeIsCopyable rw sh2
 shapeIsCopyable rw (PExpr_OrShape sh1 sh2) =
@@ -6390,6 +6408,7 @@ instance FreeVars (PermExpr a) where
   freeVars (PExpr_FieldShape fld) = freeVars fld
   freeVars (PExpr_ArrayShape len _ sh) =
     NameSet.union (freeVars len) (freeVars sh)
+  freeVars (PExpr_TupShape sh) = freeVars sh
   freeVars (PExpr_SeqShape sh1 sh2) =
     NameSet.union (freeVars sh1) (freeVars sh2)
   freeVars (PExpr_OrShape sh1 sh2) =
@@ -6552,6 +6571,7 @@ instance ContainedEqVars (PermExpr (LLVMShapeType w)) where
   containedEqVars (PExpr_PtrShape _ _ sh) = containedEqVars sh
   containedEqVars (PExpr_FieldShape (LLVMFieldShape p)) = containedEqVars p
   containedEqVars (PExpr_ArrayShape _ _ sh) = containedEqVars sh
+  containedEqVars (PExpr_TupShape sh) = containedEqVars sh
   containedEqVars (PExpr_SeqShape sh1 sh2) =
     NameSet.union (containedEqVars sh1) (containedEqVars sh2)
   containedEqVars (PExpr_OrShape sh1 sh2) =
@@ -6663,6 +6683,7 @@ readOnlyShape (PExpr_PtrShape _ Nothing sh) =
 readOnlyShape e@(PExpr_FieldShape _) = e
 readOnlyShape (PExpr_ArrayShape len stride sh) =
   PExpr_ArrayShape len stride $ readOnlyShape sh
+readOnlyShape (PExpr_TupShape sh) = PExpr_TupShape (readOnlyShape sh)
 readOnlyShape (PExpr_SeqShape sh1 sh2) =
   PExpr_SeqShape (readOnlyShape sh1) (readOnlyShape sh2)
 readOnlyShape (PExpr_OrShape sh1 sh2) =
@@ -6880,6 +6901,7 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     [nuMP| PExpr_ArrayShape len stride sh |] ->
       PExpr_ArrayShape <$> genSubst s len <*> return (mbLift stride)
                        <*> genSubst s sh
+    [nuMP| PExpr_TupShape sh |] -> PExpr_TupShape <$> genSubst s sh
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
       PExpr_SeqShape <$> genSubst s sh1 <*> genSubst s sh2
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
@@ -7651,6 +7673,9 @@ instance AbstractVars (PermExpr a) where
                            `clApply` toClosed stride)
     `clMbMbApplyM` abstractPEVars ns1 ns2 len
     `clMbMbApplyM` abstractPEVars ns1 ns2 sh
+  abstractPEVars ns1 ns2 (PExpr_TupShape sh) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_TupShape |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 sh
   abstractPEVars ns1 ns2 (PExpr_SeqShape sh1 sh2) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_SeqShape |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 sh1
@@ -8008,6 +8033,7 @@ instance AbstractNamedShape w (PermExpr a) where
   abstractNSM (PExpr_FieldShape fsh) = fmap PExpr_FieldShape <$> abstractNSM fsh
   abstractNSM (PExpr_ArrayShape len s sh) =
     mbMap3 PExpr_ArrayShape <$> abstractNSM len <*> pureBindingM s <*> abstractNSM sh
+  abstractNSM (PExpr_TupShape sh) = fmap PExpr_TupShape <$> abstractNSM sh
   abstractNSM (PExpr_SeqShape sh1 sh2) =
     mbMap2 PExpr_SeqShape <$> abstractNSM sh1 <*> abstractNSM sh2
   abstractNSM (PExpr_OrShape sh1 sh2) =
@@ -8597,6 +8623,7 @@ getShapeDetVarsClauses (PExpr_PtrShape _ _ sh) =
 getShapeDetVarsClauses (PExpr_FieldShape fldsh) = getDetVarsClauses fldsh
 getShapeDetVarsClauses (PExpr_ArrayShape len _ sh) =
   map (detVarsClauseAddLHS (freeVars len)) <$> getDetVarsClauses sh
+getShapeDetVarsClauses (PExpr_TupShape sh) = getShapeDetVarsClauses sh
 getShapeDetVarsClauses (PExpr_SeqShape sh1 sh2)
   | isJust $ llvmShapeLength sh1 =
     (++) <$> getDetVarsClauses sh1 <*> getDetVarsClauses sh2

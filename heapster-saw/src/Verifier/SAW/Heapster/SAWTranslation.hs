@@ -203,6 +203,18 @@ listTypeTrans :: [TypeTrans tr] -> TypeTrans [tr]
 listTypeTrans [] = pure []
 listTypeTrans (trans:transs) = liftA2 (:) trans $ listTypeTrans transs
 
+-- | Tuple all the terms in a list into a single term, or return the empty list
+-- if the input list is empty
+tupleOpenTermList :: [OpenTerm] -> [OpenTerm]
+tupleOpenTermList [] = []
+tupleOpenTermList ts = [tupleOpenTerm' ts]
+
+-- | Tuple all the type descriptions in a list, or return the empty list if the
+-- input list is empty
+tupleTpDescList :: [OpenTerm] -> [OpenTerm]
+tupleTpDescList [] = []
+tupleTpDescList ds = [tupleTpDesc ds]
+
 
 ----------------------------------------------------------------------
 -- * Expression Translations
@@ -240,9 +252,10 @@ data ExprTrans (a :: CrucibleType) where
   -- | The translation of Vectors of the Crucible any type have no content
   ETrans_AnyVector :: ExprTrans (VectorType AnyType)
 
-  -- | The translation of a shape is a list of 0 or more type descriptions along
-  -- with the translations to the types they represent, in that order
-  ETrans_Shape :: [OpenTerm] -> [OpenTerm] -> ExprTrans (LLVMShapeType w)
+  -- | The translation of a shape is an optional pair of a type description
+  -- along with the type it represents, where 'Nothing' represents a shape with
+  -- no computational content in its translation
+  ETrans_Shape :: Maybe (OpenTerm, OpenTerm) -> ExprTrans (LLVMShapeType w)
 
   -- | The translation of a permission is a list of 0 or more type descriptions
   -- along with the translations to the types they represent, in that order
@@ -256,12 +269,18 @@ data ExprTrans (a :: CrucibleType) where
 type ExprTransCtx = RAssign ExprTrans
 
 
--- | Destruct an 'ExprTrans' of shape type to a list of type descriptions and
--- the types they represent, in that order
-unETransShape :: ExprTrans (LLVMShapeType w) -> ([OpenTerm], [OpenTerm])
-unETransShape (ETrans_Shape ds tps) = (ds, tps)
+-- | Destruct an 'ExprTrans' of shape type to the optional type description and
+-- type it represents, in that order
+unETransShape :: ExprTrans (LLVMShapeType w) -> Maybe (OpenTerm, OpenTerm)
+unETransShape (ETrans_Shape maybe_d_tp) = maybe_d_tp
 unETransShape (ETrans_Term _ _) =
   panic "unETransShape" ["Incorrect translation of a shape expression"]
+
+-- | Destruct an 'ExprTrans' of shape type to a type description type and type
+-- it represents, using the unit type in place of a 'Nothing'
+unETransShapeTuple :: ExprTrans (LLVMShapeType w) -> (OpenTerm, OpenTerm)
+unETransShapeTuple =
+  fromMaybe (unitTpDesc, unitTypeOpenTerm) . unETransShape
 
 -- | Destruct an 'ExprTrans' of permission type to a list of type descriptions
 -- and the types they represent, in that order
@@ -315,7 +334,8 @@ instance IsTermTrans (ExprTrans tp) where
   transTerms ETrans_Fun = []
   transTerms ETrans_Unit = []
   transTerms ETrans_AnyVector = []
-  transTerms (ETrans_Shape ds _) = [tupleTpDesc ds]
+  transTerms (ETrans_Shape (Just (d, _))) = [d]
+  transTerms (ETrans_Shape Nothing) = []
   transTerms (ETrans_Perm ds _) = [tupleTpDesc ds]
   transTerms (ETrans_Term _ t) = [t]
 
@@ -338,11 +358,12 @@ exprTransType (ETrans_Struct etranss) = ETrans_Struct <$> exprCtxType etranss
 exprTransType ETrans_Fun = mkTypeTrans0 ETrans_Fun
 exprTransType ETrans_Unit = mkTypeTrans0 ETrans_Unit
 exprTransType ETrans_AnyVector = mkTypeTrans0 ETrans_AnyVector
-exprTransType (ETrans_Shape _ _) =
-  mkTypeTrans1 tpDescTypeOpenTerm (\d ->
-                                    ETrans_Shape [d] [tpElemTypeOpenTerm ?ev d])
+exprTransType (ETrans_Shape _) =
+  mkTypeTrans1 tpDescTypeOpenTerm $ \d ->
+  ETrans_Shape (Just (d, tpElemTypeOpenTerm ?ev d))
 exprTransType (ETrans_Perm _ _) =
-  mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Perm [d] [tpElemTypeOpenTerm ?ev d])
+  mkTypeTrans1 tpDescTypeOpenTerm $ \d ->
+  ETrans_Perm [d] [tpElemTypeOpenTerm ?ev d]
 exprTransType (ETrans_Term tp t) =
   mkTypeTrans1 (openTermType t) (ETrans_Term tp)
 
@@ -368,7 +389,8 @@ exprTransDescs (ETrans_Struct etranss) =
 exprTransDescs ETrans_Fun = []
 exprTransDescs ETrans_Unit = []
 exprTransDescs ETrans_AnyVector = []
-exprTransDescs (ETrans_Shape ds _) = ds
+exprTransDescs (ETrans_Shape (Just (d, _))) = [d]
+exprTransDescs (ETrans_Shape Nothing) = []
 exprTransDescs (ETrans_Perm ds _) = ds
 exprTransDescs (ETrans_Term tp t) =
   case translateKindDescs tp of
@@ -985,8 +1007,8 @@ translateType (ValuePermRepr _) =
                                      ETrans_Perm [d] [tpElemTypeOpenTerm ?ev d]),
    [tpKindDesc])
 translateType (LLVMShapeRepr _) =
-  (mkTypeTrans1 tpDescTypeOpenTerm (\d ->
-                                     ETrans_Shape [d] [tpElemTypeOpenTerm ?ev d]),
+  (mkTypeTrans1 tpDescTypeOpenTerm (\d -> ETrans_Shape
+                                          (Just (d, tpElemTypeOpenTerm ?ev d))),
    [tpKindDesc])
 
 translateType tp@(FloatRepr _) =
@@ -1345,7 +1367,7 @@ instance TransInfo info =>
 
     -- LLVM shapes are translated to type descriptions by translateDescs
     [nuMP| PExpr_EmptyShape |] ->
-      return $ ETrans_Shape [] []
+      return $ ETrans_Shape Nothing
     [nuMP| PExpr_NamedShape _ _ nmsh args |] ->
       case mbMatch $ fmap namedShapeBody nmsh of
         [nuMP| DefinedShapeBody _ |] ->
@@ -1358,8 +1380,9 @@ instance TransInfo info =>
              args_terms <- transTerms <$> translate args
              args_ds <- descTransM $ translateDescs args
              return $
-               ETrans_Shape [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
-               [applyGlobalOpenTerm (mbLift tp_id) args_terms]
+               ETrans_Shape
+               (Just (substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds,
+                      applyGlobalOpenTerm (mbLift tp_id) args_terms))
         [nuMP| RecShapeBody _ tp_id desc_id |] ->
           do ev <- infoEvType <$> ask
              let (_, k_ds) =
@@ -1368,32 +1391,42 @@ instance TransInfo info =>
              args_terms <- transTerms <$> translate args
              args_ds <- descTransM $ translateDescs args
              return $
-               ETrans_Shape [substIdTpDescMulti (mbLift desc_id) k_ds args_ds]
-               [applyGlobalOpenTerm (mbLift tp_id) args_terms]
-    [nuMP| PExpr_EqShape _ _ |] -> return $ ETrans_Shape [] []
+               ETrans_Shape
+               (Just (substIdTpDescMulti (mbLift desc_id) k_ds args_ds,
+                      applyGlobalOpenTerm (mbLift tp_id) args_terms))
+    [nuMP| PExpr_EqShape _ _ |] -> return $ ETrans_Shape Nothing
     [nuMP| PExpr_PtrShape _ _ sh |] -> translate sh
     [nuMP| PExpr_FieldShape fsh |] ->
-      ETrans_Shape <$> descTransM (translateDescs fsh) <*> translate fsh
+      do ds <- descTransM (translateDescs fsh)
+         tps <- translate fsh
+         return $ case (ds, tps) of
+           ([], []) -> ETrans_Shape Nothing
+           _ -> ETrans_Shape $ Just (tupleTpDesc ds, tupleTypeOpenTerm' tps)
     [nuMP| PExpr_ArrayShape mb_len _ mb_sh |] ->
       do let w = natVal4 mb_len
          let w_term = natOpenTerm w
          len_d <- descTransM $ translateBVDesc mb_len
          len_term <- translate1 mb_len
-         (elem_ds, elem_tps) <- unETransShape <$> translate mb_sh
+         (elem_d, elem_tp) <- unETransShapeTuple <$> translate mb_sh
          return $
-           ETrans_Shape [bvVecTpDesc w_term len_d (tupleTpDesc elem_ds)]
-           [bvVecTypeOpenTerm w_term len_term (tupleTypeOpenTerm' elem_tps)]
+           ETrans_Shape
+           (Just (bvVecTpDesc w_term len_d elem_d,
+                  bvVecTypeOpenTerm w_term len_term elem_tp))
+    [nuMP| PExpr_TupShape sh |] ->
+      ETrans_Shape <$> Just <$> unETransShapeTuple <$> translate sh
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
-      do (ds1, tps1) <- unETransShape <$> translate sh1
-         (ds2, tps2) <- unETransShape <$> translate sh2
-         return $ ETrans_Shape (ds1 ++ ds2) (tps1 ++ tps2)
+      do shtr1 <- unETransShape <$> translate sh1
+         shtr2 <- unETransShape <$> translate sh2
+         return $ ETrans_Shape $ case (shtr1, shtr2) of
+           (Nothing, _) -> shtr2
+           (_, Nothing) -> shtr1
+           (Just (d1,tp1), Just (d2,tp2)) ->
+             Just (pairTpDesc d1 d2, pairTypeOpenTerm tp1 tp2)
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
-      do (ds1, tps1) <- unETransShape <$> translate sh1
-         (ds2, tps2) <- unETransShape <$> translate sh2
+      do (d1, tp1) <- unETransShapeTuple <$> translate sh1
+         (d2, tp2) <- unETransShapeTuple <$> translate sh2
          return $
-           ETrans_Shape [sumTpDesc (tupleTpDesc ds1) (tupleTpDesc ds2)]
-           [eitherTypeOpenTerm
-            (tupleTypeOpenTerm' tps1) (tupleTypeOpenTerm' tps2)]
+           ETrans_Shape (Just (sumTpDesc d1 d2, eitherTypeOpenTerm tp1 tp2))
     [nuMP| PExpr_ExShape mb_mb_sh |] ->
       do let tp_repr = mbLift $ fmap bindingType mb_mb_sh
          let mb_sh = mbCombine RL.typeCtxProxies mb_mb_sh
@@ -1410,12 +1443,12 @@ instance TransInfo info =>
          -- whereas the description of the sigma type requires binding deBruijn
          -- index for that sigma type variable
          tp <- sigmaTypeTransM "x_exsh" tptrans $ \e ->
-           inExtTransM e (openTermsTypeTrans <$> snd <$>
-                          unETransShape <$> translate mb_sh)
-         return $ ETrans_Shape [d] [tp]
+           inExtTransM e (openTermTypeTrans <$> snd <$>
+                          unETransShapeTuple <$> translate mb_sh)
+         return $ ETrans_Shape $ Just (d, tp)
     [nuMP| PExpr_FalseShape |] ->
       return $
-      ETrans_Shape [voidTpDesc] [dataTypeOpenTerm "Prelude.Void" []]
+      ETrans_Shape $ Just (voidTpDesc, dataTypeOpenTerm "Prelude.Void" [])
 
     [nuMP| PExpr_ValPerm p |] ->
       ETrans_Perm <$> descTransM (translateDescs p) <*> (typeTransTypes <$>
@@ -1533,7 +1566,10 @@ instance TranslateDescs (PermExpr a) where
     -- those in the Translate instance for PermExpr. The difference is that
     -- these cases can handle some of the expression context being deBruijn
     -- indices instead of ExprTranss, by virtue of the fact that here we only
-    -- return the type descriptions and not the types
+    -- return the type descriptions and not the types.
+    --
+    -- Also note that shapes translate to 0 or 1 types and type descriptions, so
+    -- translateDescs will always return an empty or one-element list for shpaes
     [nuMP| PExpr_EmptyShape |] -> return []
     [nuMP| PExpr_NamedShape _ _ nmsh args |] ->
       case mbMatch $ fmap namedShapeBody nmsh of
@@ -1555,17 +1591,22 @@ instance TranslateDescs (PermExpr a) where
              return [substIndIdTpDescMulti (mbLift desc_id) k_ds args_ds]
     [nuMP| PExpr_EqShape _ _ |] -> return []
     [nuMP| PExpr_PtrShape _ _ sh |] -> translateDescs sh
-    [nuMP| PExpr_FieldShape fsh |] -> translateDescs fsh
+    [nuMP| PExpr_FieldShape fsh |] -> tupleTpDescList <$> translateDescs fsh
     [nuMP| PExpr_ArrayShape mb_len _ mb_sh |] ->
       do let w = natVal4 mb_len
          let w_term = natOpenTerm w
          len_term <- translateBVDesc mb_len
          elem_d <- translateDesc mb_sh
          return [bvVecTpDesc w_term len_term elem_d]
+    [nuMP| PExpr_TupShape sh |] ->
+      (:[]) <$> tupleTpDesc <$> translateDescs sh
     [nuMP| PExpr_SeqShape sh1 sh2 |] ->
       do ds1 <- translateDescs sh1
          ds2 <- translateDescs sh2
-         return (ds1 ++ ds2)
+         -- Since both ds1 and ds2 have length at most 1, the below is the same
+         -- as choosing one list if the other is empty and pairing the two if
+         -- they both have 1 element
+         return $ tupleTpDescList (ds1 ++ ds2)
     [nuMP| PExpr_OrShape sh1 sh2 |] ->
       (\d -> [d]) <$> (sumTpDesc <$> translateDesc sh1 <*> translateDesc sh2)
     [nuMP| PExpr_ExShape mb_sh |] ->
@@ -1647,10 +1688,11 @@ data AtomicPermTrans ctx a where
                        LLVMArrayPermTrans ctx w ->
                        AtomicPermTrans ctx (LLVMPointerType w)
 
-  -- | The translation of an LLVM block permission is a sequence of elements of
-  -- the translations of its shapes to types
+  -- | The translation of an LLVM block permission is an element of the
+  -- translation of its shape to a type or 'Nothing' if the shape translates to
+  -- no types
   APTrans_LLVMBlock :: (1 <= w, KnownNat w) =>
-                       Mb ctx (LLVMBlockPerm w) -> [OpenTerm] ->
+                       Mb ctx (LLVMBlockPerm w) -> Maybe OpenTerm ->
                        AtomicPermTrans ctx (LLVMPointerType w)
 
   -- | LLVM free permissions have no computational content
@@ -1669,10 +1711,12 @@ data AtomicPermTrans ctx a where
   APTrans_IsLLVMPtr :: (1 <= w, KnownNat w) =>
                        AtomicPermTrans ctx (LLVMPointerType w)
 
-  -- | The translation of an LLVMBlockShape permission is a sequence of elements
-  -- of the translations of its shape to types
+  -- | The translation of an LLVMBlockShape permission is an element of the
+  -- translation of its shape to a type or 'Nothing' if the shape translates to
+  -- no types
   APTrans_LLVMBlockShape :: (1 <= w, KnownNat w) =>
-                            Mb ctx (PermExpr (LLVMShapeType w)) -> [OpenTerm] ->
+                            Mb ctx (PermExpr (LLVMShapeType w)) ->
+                            Maybe OpenTerm ->
                             AtomicPermTrans ctx (LLVMBlockType w)
 
   -- | Perm_NamedConj permissions are a permission + a term
@@ -1886,11 +1930,11 @@ instance IsTermTrans (PermTransCtx ctx ps) where
 instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_LLVMField _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMArray arr_trans) = transTerms arr_trans
-  transTerms (APTrans_LLVMBlock _ ts) = ts
+  transTerms (APTrans_LLVMBlock _ ts) = maybeToList ts
   transTerms (APTrans_LLVMFree _) = []
   transTerms (APTrans_LLVMFunPtr _ trans) = transTerms trans
   transTerms APTrans_IsLLVMPtr = []
-  transTerms (APTrans_LLVMBlockShape _ ts) = ts
+  transTerms (APTrans_LLVMBlockShape _ ts) = maybeToList ts
   transTerms (APTrans_NamedConj _ _ _ t) = [t]
   transTerms (APTrans_DefinedNamedConj _ _ _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMFrame _) = []
@@ -2834,9 +2878,10 @@ instance TransInfo info =>
       fmap APTrans_LLVMArray <$> translate ap
 
     [nuMP| Perm_LLVMBlock bp |] ->
-      do (_, tps) <- unETransShape <$> translate (fmap llvmBlockShape bp)
-         return $ TypeTrans tps (APTrans_LLVMBlock bp)
-
+      do shtrans <- unETransShape <$> translate (fmap llvmBlockShape bp)
+         return $ case shtrans of
+           Just (_, tp) -> mkTypeTrans1 tp (APTrans_LLVMBlock bp . Just)
+           Nothing -> mkTypeTrans0 (APTrans_LLVMBlock bp Nothing)
     [nuMP| Perm_LLVMFree e |] ->
       return $ mkTypeTrans0 $ APTrans_LLVMFree e
     [nuMP| Perm_LLVMFunPtr tp p |] ->
@@ -2845,8 +2890,10 @@ instance TransInfo info =>
     [nuMP| Perm_IsLLVMPtr |] ->
       return $ mkTypeTrans0 APTrans_IsLLVMPtr
     [nuMP| Perm_LLVMBlockShape sh |] ->
-      do (_, tps) <- unETransShape <$> translate sh
-         return $ TypeTrans tps (APTrans_LLVMBlockShape sh)
+      do shtrans <- unETransShape <$> translate sh
+         return $ case shtrans of
+           Just (_, tp) -> mkTypeTrans1 tp (APTrans_LLVMBlockShape sh . Just)
+           Nothing -> mkTypeTrans0 (APTrans_LLVMBlockShape sh Nothing)
     [nuMP| Perm_NamedConj npn args off |]
       | [nuMP| DefinedSortRepr _ |] <- mbMatch $ fmap namedPermNameSort npn ->
         -- To translate P<args>@off as an atomic permission, we translate it as a
@@ -4494,6 +4541,22 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            pctx :>: typeTransF ttrans [arr_term])
          m
 
+  [nuMP| SImpl_IntroLLVMBlockTuple _ _ |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       withPermStackTopTermsM id
+         (\ts (pctx :>: _) ->
+           pctx :>: typeTransF ttrans [tupleOpenTerm' ts])
+         m
+
+  [nuMP| SImpl_ElimLLVMBlockTuple _ mb_bp |] ->
+    do ttrans <- translateSimplImplOutHead mb_simpl
+       shtrans <- unETransShape <$> translate (mbLLVMBlockShape mb_bp)
+       withPermStackTopTermsM id
+         (\ts (pctx :>: _) ->
+           let ts' = case shtrans of { Just _ -> ts ; Nothing -> [] } in
+           pctx :>: typeTransF ttrans ts')
+         m
+
   [nuMP| SImpl_IntroLLVMBlockSeqEmpty _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
@@ -4607,14 +4670,17 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
-           pctx :>: typeTransF ttrans ts)
+           pctx :>: typeTransF ttrans (tupleOpenTermList ts))
          m
 
   [nuMP| SImpl_ElimLLVMBlockField _ _ |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
-           pctx :>: typeTransF ttrans ts)
+           -- We tuple both ttrans and ts because ts is either an empty list or
+           -- a tuple of the terms we want to pass to ttrans; tupling ts makes
+           -- it into a list of length 1
+           pctx :>: typeTransF (tupleTypeTrans ttrans) [tupleOpenTerm' ts])
          m
 
   [nuMP| SImpl_IntroLLVMBlockArray _ _ |] ->
@@ -4636,14 +4702,24 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        withPermStackTermsM
          (\(_ :>: ptrans1 :>: ptrans2) -> (ptrans1,ptrans2))
          RL.tail
-         (\ts (pctx :>: _ :>: _) -> pctx :>: typeTransF ttrans ts)
+         (\ts (pctx :>: _ :>: _) ->
+           pctx :>: typeTransF ttrans (tupleOpenTermList ts))
          m
 
-  [nuMP| SImpl_ElimLLVMBlockSeq _ _ _ |] ->
+  [nuMP| SImpl_ElimLLVMBlockSeq _ mb_bp mb_sh2 |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
+       shtrans1 <- unETransShape <$> translate (mbLLVMBlockShape mb_bp)
+       shtrans2 <- unETransShape <$> translate mb_sh2
        withPermStackTopTermsM id
          (\ts (pctx :>: _) ->
-           pctx :>: typeTransF ttrans ts)
+           -- NOTE: if both output shapes have translations, then this rule
+           -- takes in a pair and projects its two components; otherwise its
+           -- output uses the same list of 0 or 1 terms as the input
+           let ts' = if isJust shtrans1 && isJust shtrans2 then
+                       let t = termsExpect1 ts in [pairLeftOpenTerm t,
+                                                   pairRightOpenTerm t]
+                     else tupleOpenTermList ts in
+           pctx :>: typeTransF ttrans ts')
          m
 
   [nuMP| SImpl_IntroLLVMBlockOr _ _ _ |] ->
@@ -5653,9 +5729,6 @@ translateCallEntry nm entry_trans mb_tops mb_args mb_ghosts =
   -- First test that the stack == the required perms for entryID
   do let entry = typedEntryTransEntry entry_trans
      ectx_ag <- translate $ mbMap2 RL.append mb_args mb_ghosts
-     -- FIXME @Eddy: Is `ectx` not getting used here a bug?
-     ectx <- translate (mbMap2 RL.append
-                        (mbMap2 RL.append mb_tops mb_args) mb_ghosts)
      pctx <- itiPermStack <$> ask
      let mb_tops_args = mbMap2 RL.append mb_tops mb_args
      let mb_s =

@@ -61,6 +61,7 @@ import Verifier.SAW.Term.Functor (Ident)
 import Lang.Crucible.LLVM.Bytes
 
 import Data.Binding.Hobbits
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
@@ -1117,6 +1118,20 @@ data SimplImpl ps_in ps_out where
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
+  -- | Add a tuple shape around the shape of a @memblock@ permission
+  --
+  -- > x:memblock(rw,l,off,len,sh) -o x:memblock(rw,l,off,len,tuplesh(sh))
+  SImpl_IntroLLVMBlockTuple ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Eliminate a tuple shape in a @memblock@ permission
+  --
+  -- > x:memblock(rw,l,off,len,tuplesh(sh)) -o x:memblock(rw,l,off,len,sh)
+  SImpl_ElimLLVMBlockTuple ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
   -- | Convert a memblock permission of shape @sh@ to one of shape @sh;emptysh@:
   --
   -- > x:memblock(rw,l,off,len,sh) -o x:memblock(rw,l,off,len,sh;emptysh)
@@ -2161,6 +2176,11 @@ simplImplIn (SImpl_CoerceLLVMBlockEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_ElimLLVMBlockToBytes x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplIn (SImpl_IntroLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplIn (SImpl_ElimLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
+                bp { llvmBlockShape = PExpr_TupShape (llvmBlockShape bp) })
 simplImplIn (SImpl_IntroLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_ElimLLVMBlockSeqEmpty x bp) =
@@ -2538,6 +2558,11 @@ simplImplOut (SImpl_CoerceLLVMBlockEmpty x bp) =
 simplImplOut (SImpl_ElimLLVMBlockToBytes x (LLVMBlockPerm {..})) =
   distPerms1 x (llvmByteArrayPerm llvmBlockOffset llvmBlockLen
                 llvmBlockRW llvmBlockLifetime)
+simplImplOut (SImpl_IntroLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
+                bp { llvmBlockShape = PExpr_TupShape (llvmBlockShape bp) })
+simplImplOut (SImpl_ElimLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplOut (SImpl_IntroLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp { llvmBlockShape =
@@ -3163,6 +3188,10 @@ instance m ~ Identity =>
       SImpl_CoerceLLVMBlockEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockToBytes x bp |] ->
       SImpl_ElimLLVMBlockToBytes <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_IntroLLVMBlockTuple x bp |] ->
+      SImpl_IntroLLVMBlockTuple <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_ElimLLVMBlockTuple x bp |] ->
+      SImpl_ElimLLVMBlockTuple <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_IntroLLVMBlockSeqEmpty x bp |] ->
       SImpl_IntroLLVMBlockSeqEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockSeqEmpty x bp |] ->
@@ -5519,6 +5548,10 @@ implElimLLVMBlock x bp
 --
 -- implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
 --                                           PExpr_ArrayShape _ _ _ }) =
+
+-- For a tuple shape, eliminate the tuple
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_TupShape sh }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockTuple x (bp { llvmBlockShape = sh }))
 
 -- Special case: for shape sh1;emptysh where the natural length of sh1 is the
 -- same as the length of the block permission, eliminate the emptysh, converting
@@ -7987,6 +8020,35 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
         implSwapInsertConjM x (Perm_LLVMBlock $ fromJust $
                                llvmArrayPermToBlock ap) ps' 0
       _ -> error "proveVarLLVMBlocks2: expected array permission"
+
+-- If proving a tuple shape, prove the contents of the tuple and add the tuple
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_TupShape _ |] <- mb_sh =
+
+    -- Recursively call proveVarLLVMBlocks with sh in place of tuplesh(sh)
+    let mb_bp' = mbMapCl $(mkClosed
+                           [| \bp ->
+                             case llvmBlockShape bp of
+                               PExpr_TupShape sh ->
+                                 bp { llvmBlockShape = sh }
+                               _ -> error "proveVarLLVMBlocks2: expected tuple shape"
+                            |]) mb_bp in
+    proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
+
+    -- Extract the sh permission from the top of the stack and tuple it
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
+    implExtractSwapConjM x ps' 0 >>>
+    let (ps_hd', ps'') = expectLengthAtLeastOne ps'
+        bp = case ps_hd' of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> panic "proveVarLLVMBlocks2" ["expected block permission"]
+        sh = llvmBlockShape bp in
+    implSimplM Proxy (SImpl_IntroLLVMBlockTuple x bp) >>>
+
+    -- Finally, put the new tuplesh(sh) permission back in place
+    implSwapInsertConjM x (Perm_LLVMBlock
+                           (bp { llvmBlockShape = PExpr_TupShape sh }))
+                        ps'' 0
 
 -- If proving a sequence shape with an unneeded empty shape, i.e., of the form
 -- sh1;emptysh where the length of sh1 equals the entire length of the required
