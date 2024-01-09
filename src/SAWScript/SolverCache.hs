@@ -162,7 +162,7 @@ data SolverBackend = What4
                    -- External solvers supported by SBV (copied from SBV.Solver)
                    | ABC
                    | Boolector
-                   | Bitwuzla -- NOTE: Not currently supported by SAW
+                   | Bitwuzla
                    | CVC4
                    | CVC5
                    | DReal -- NOTE: Not currently supported by SAW
@@ -259,7 +259,7 @@ showBackendVersionsWithOptions sep vs opts =
 -- 'mkSolverCacheKey') along with optional solver version information used only
 -- for pretty-printing.
 data SolverCacheKey =
-  SolverCacheKey 
+  SolverCacheKey
   { solverCacheKeyVersions :: SolverBackendVersions
   , solverCacheKeyOptions  :: [SolverBackendOption]
   , solverCacheKeyHash     :: ByteString
@@ -273,7 +273,7 @@ instance Show SolverCacheKey where
     if M.null vs && null opts then ""
     else " (" ++ showBackendVersionsWithOptions ", " vs opts ++ ")"
 
--- | Make a 'SolverCacheKey' with no version information 
+-- | Make a 'SolverCacheKey' with no version information
 solverCacheKeyFromHash :: ByteString -> SolverCacheKey
 solverCacheKeyFromHash = SolverCacheKey M.empty []
 
@@ -452,7 +452,7 @@ tryTransaction :: (LMDB.Mode tmode, LMDB.SubMode LMDB.ReadWrite tmode) =>
                   IO (Either String a, SolverCache)
 tryTransaction cache@SolverCache{..} t =
   tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache) >>= \case
-    Right (env, db, cache') -> 
+    Right (env, db, cache') ->
       (,cache') <$> tryWithTimeout solverCacheTimeout
                                    (LMDB.transaction env (t db))
     Left err ->

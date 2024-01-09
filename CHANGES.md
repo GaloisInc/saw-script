@@ -24,6 +24,8 @@
   * Add `jvm_ghost_value` and `mir_ghost_value` commands in addition to the
     existing `llvm_ghost_value` command.
 
+* Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features

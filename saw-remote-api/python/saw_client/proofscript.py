@@ -21,6 +21,14 @@ class ABC_SBV(Prover):
   def to_json(self) -> Any:
     return { "name": "sbv-abc" }
 
+class Bitwuzla(Prover):
+  def to_json(self) -> Any:
+    return { "name": "bitwuzla" }
+
+class Bitwuzla_SBV(Prover):
+  def to_json(self) -> Any:
+    return { "name": "sbv-bitwuzla" }
+
 class Boolector(Prover):
   def to_json(self) -> Any:
     return { "name": "boolector" }
@@ -124,6 +132,7 @@ abc = UseProver(ABC())
 abc_smtlib = UseProver(ABC_SMTLib())
 abc_verilog = UseProver(ABC_Verilog())
 rme = UseProver(RME())
+bitwuzla = UseProver(Bitwuzla())
 boolector = UseProver(Boolector())
 
 def cvc4(unints : List[str]) -> ProofTactic:

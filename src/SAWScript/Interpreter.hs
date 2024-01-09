@@ -2044,6 +2044,12 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+
+  , prim "bitwuzla"            "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
+
   , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
     Current
@@ -2101,6 +2107,11 @@ primitives = Map.fromList
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
+
+  , prim "sbv_bitwuzla"        "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
 
   , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)

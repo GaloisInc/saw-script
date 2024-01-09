@@ -17,7 +17,7 @@ SolverBackend = Union[
   # External solvers supported by SBV (adapted from SBV.Solver)
   Literal["ABC"],
   Literal["Boolector"],
-  Literal["Bitwuzla"], # NOTE: Not currently supported by SAW
+  Literal["Bitwuzla"],
   Literal["CVC4"],
   Literal["CVC5"],
   Literal["DReal"], # NOTE: Not currently supported by SAW
@@ -52,7 +52,7 @@ class SolverCacheEntry:
 
 def load_solver_cache_entry(enc):
   obj = cbor2.loads(enc)
-  opts = obj['opts'] if 'opts' in obj else [] 
+  opts = obj['opts'] if 'opts' in obj else []
   t = dateutil.parser.isoparse(obj['t'])
   return SolverCacheEntry(obj.get('cexs'), obj['nm'], obj['vs'], opts, t)
 
@@ -88,7 +88,7 @@ class SolverCache(MutableMapping):
   def __len__(self):
     with self.env.begin() as txn:
       return txn.stat()['entries']
-  
+
   def __getitem__(self, k : bytes):
     if not isinstance(k, bytes) or len(k) != 32:
       raise ValueError("solver cache key must be a 256-bit `bytes` value")
@@ -96,7 +96,7 @@ class SolverCache(MutableMapping):
       v = txn.get(cbor2.dumps(k))
       if v is None: raise KeyError
       return load_solver_cache_entry(v)
-  
+
   def __setitem__(self, k : bytes, v : SolverCacheEntry):
     if not isinstance(k, bytes) or len(k) != 32:
       raise ValueError("solver cache key must be a 256-bit `bytes` value")
@@ -104,19 +104,19 @@ class SolverCache(MutableMapping):
       raise ValueError("solver cache value must be a `SolverCacheEntry` object")
     with self.env.begin(write = True) as txn:
       txn.put(cbor2.dumps(k), cbor2.dumps(v, default=solver_cache_entry_encoder), overwrite=True)
-  
+
   def __delitem__(self, k : bytes):
     if not isinstance(k, bytes) or len(k) != 32:
       raise ValueError("solver cache key must be a 256-bit `bytes` value")
     with self.env.begin(write = True) as txn:
       txn.delete(cbor2.dumps(k))
-  
+
   def _iter(self, keys, values, fn):
     with self.env.begin() as txn:
       with txn.cursor() as curs:
         for v in curs.iternext(keys, values):
           yield fn(v)
-  
+
   def __iter__(self): yield from self._iter(True,  False, cbor2.loads)
   def keys    (self): yield from self._iter(True,  False, cbor2.loads)
   def values  (self): yield from self._iter(False, True,  load_solver_cache_entry)

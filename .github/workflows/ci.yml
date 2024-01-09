@@ -33,6 +33,8 @@ env:
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
+  #
+  # TODO RGS: Update me
   SOLVER_PKG_VERSION: "snapshot-20221212"
 
   OCAML_VERSION: 4.09.x

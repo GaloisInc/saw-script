@@ -1154,10 +1154,10 @@ sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
 
-In addition to these, the `boolector`, `cvc4`, `cvc5`, `mathsat`, and `yices`
-provers are available. The internal decision procedure `rme`, short for
-Reed-Muller Expansion, is an automated prover that works particularly
-well on the Galois field operations that show up, for example, in AES.
+In addition to these, the `bitwuzal`, `boolector`, `cvc4`, `cvc5`, `mathsat`,
+and `yices` provers are available. The internal decision procedure `rme`, short
+for Reed-Muller Expansion, is an automated prover that works particularly well
+on the Galois field operations that show up, for example, in AES.
 
 In more complex cases, some pre-processing can be helpful or necessary
 before handing the problem off to an automated prover. The
