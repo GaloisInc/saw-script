@@ -1051,6 +1051,9 @@ wrapW4ProveExporter f unints path ext = do
 proveABC_SBV :: ProofScript ()
 proveABC_SBV = proveSBV SBV.abc
 
+proveBitwuzla :: ProofScript ()
+proveBitwuzla = proveSBV SBV.bitwuzla
+
 proveBoolector :: ProofScript ()
 proveBoolector = proveSBV SBV.boolector
 
@@ -1068,6 +1071,9 @@ proveMathSAT = proveSBV SBV.mathSAT
 
 proveYices :: ProofScript ()
 proveYices = proveSBV SBV.yices
+
+proveUnintBitwuzla :: [String] -> ProofScript ()
+proveUnintBitwuzla = proveUnintSBV SBV.bitwuzla
 
 proveUnintBoolector :: [String] -> ProofScript ()
 proveUnintBoolector = proveUnintSBV SBV.boolector
@@ -1092,6 +1098,9 @@ proveUnintYices = proveUnintSBV SBV.yices
 w4_abc_smtlib2 :: ProofScript ()
 w4_abc_smtlib2 = wrapW4Prover ABC [W4_SMTLib2] Prover.proveWhat4_abc []
 
+w4_bitwuzla :: ProofScript ()
+w4_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla []
+
 w4_boolector :: ProofScript ()
 w4_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector []
 
@@ -1106,6 +1115,9 @@ w4_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5 []
 
 w4_yices :: ProofScript ()
 w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
+
+w4_unint_bitwuzla :: [String] -> ProofScript ()
+w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla
 
 w4_unint_boolector :: [String] -> ProofScript ()
 w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
@@ -1124,6 +1136,10 @@ w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5
 
 w4_unint_yices :: [String] -> ProofScript ()
 w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices
+
+offline_w4_unint_bitwuzla :: [String] -> String -> ProofScript ()
+offline_w4_unint_bitwuzla unints path =
+     wrapW4ProveExporter Prover.proveExportWhat4_bitwuzla unints path ".smt2"
 
 offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
 offline_w4_unint_z3 unints path =

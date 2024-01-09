@@ -162,7 +162,7 @@ data SolverBackend = What4
                    -- External solvers supported by SBV (copied from SBV.Solver)
                    | ABC
                    | Boolector
-                   | Bitwuzla -- NOTE: Not currently supported by SAW
+                   | Bitwuzla
                    | CVC4
                    | CVC5
                    | DReal -- NOTE: Not currently supported by SAW

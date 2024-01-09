@@ -2234,6 +2234,11 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+  , prim "bitwuzla"            "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
+
   , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
     Current
@@ -2264,6 +2269,13 @@ primitives = Map.fromList
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
+  , prim "unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal proveUnintBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "unint_z3"            "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
     Current
@@ -2291,6 +2303,11 @@ primitives = Map.fromList
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
+
+  , prim "sbv_bitwuzla"        "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
 
   , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)
@@ -2321,6 +2338,13 @@ primitives = Map.fromList
     (pureVal proveYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
+
+  , prim "sbv_unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal proveUnintBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
 
   , prim "sbv_unint_z3"        "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
@@ -2438,6 +2462,13 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
+  , prim "w4_unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal w4_unint_bitwuzla)
+    Current
+    [ "Prove the current goal using What4 (Bitwuzla backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "w4_unint_z3"         "[String] -> ProofScript ()"
     (pureVal w4_unint_z3)
     Current
@@ -2495,6 +2526,13 @@ primitives = Map.fromList
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format, generated"
     , "using the What4 backend."
+    ]
+
+  , prim "offline_w4_unint_bitwuzla" "[String] -> String -> ProofScript ()"
+    (pureVal offline_w4_unint_bitwuzla)
+    Current
+    [ "Write the current goal to the given file using What4 (Bitwuzla backend)"
+    , " in SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript ()"

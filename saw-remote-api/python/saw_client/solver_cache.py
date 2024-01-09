@@ -17,7 +17,7 @@ SolverBackend = Union[
   # External solvers supported by SBV (adapted from SBV.Solver)
   Literal["ABC"],
   Literal["Boolector"],
-  Literal["Bitwuzla"], # NOTE: Not currently supported by SAW
+  Literal["Bitwuzla"],
   Literal["CVC4"],
   Literal["CVC5"],
   Literal["DReal"], # NOTE: Not currently supported by SAW
