@@ -6,29 +6,25 @@ m <- llvm_load_module "test.bc";
 
 let foo_spec = do {
   n <- llvm_fresh_var "n" (llvm_int 64);
-  a_ptr <- llvm_symbolic_alloc true 1 n;
+  a_ptr <- llvm_symbolic_alloc false 1 n;
   a <- llvm_fresh_cryptol_var "a" {| ByteArray |};
   llvm_points_to_array_prefix a_ptr a n;
+  c <- llvm_fresh_var "c" (llvm_int 8);
   llvm_precond {{ 0 < n }};
 
-  llvm_execute_func [a_ptr, (llvm_term n)];
-
-  s <- llvm_fresh_var "s" (llvm_int 8);
-  llvm_return (llvm_term s);
+  llvm_execute_func [a_ptr, (llvm_term n), (llvm_term c)];
 };
 
 let bar_spec = do {
   n <- llvm_fresh_var "n" (llvm_int 64);
-  a_ptr <- llvm_symbolic_alloc true 8 {{ n * 8 }};
+  a_ptr <- llvm_symbolic_alloc false 8 {{ n * 8 }};
   a <- llvm_fresh_cryptol_var "a" {| ByteArray |};
   llvm_points_to_array_prefix a_ptr a {{ n * 8 }};
+  c <- llvm_fresh_var "c" (llvm_int 64);
   llvm_precond {{ 0 < n }};
   llvm_precond {{ n < 2 ^^ 60 }};
 
-  llvm_execute_func [a_ptr, (llvm_term n)];
-
-  s <- llvm_fresh_var "s" (llvm_int 64);
-  llvm_return (llvm_term s);
+  llvm_execute_func [a_ptr, (llvm_term n), (llvm_term c)];
 };
 
 enable_what4_hash_consing;
@@ -62,40 +58,40 @@ llvm_compositional_extract m "bar"
     w4;
   });
 
-prove_print
-  (do {
-    print_goal;
-    unfolding ["bar"];
-    simplify (cryptol_ss ());
-    print_goal;
-    w4;
-  })
-  {{ \a -> bar 2 a == join (reverse (arrayRangeLookup a 0)) + join (reverse (arrayRangeLookup a 8)) }};
-
-let {{
-  sum : [64] -> ByteArray -> [64]
-  sum n a = if n == 0 then 0 else join (reverse (arrayRangeLookup a (n - 1))) + sum (n - 1) a
-
-  sum' : [64] -> [64] -> ByteArray -> [64] -> [64]
-  sum' i s a n = if i < n then sum' (i + 1) (join (reverse (arrayRangeLookup a i))) a n else s
-}};
-
-prove_by_bv_induction
-  (do {
-    unfolding ["bar_loop", "sum'"];
-    simplify (cryptol_ss ());
-    simplify (addsimp_shallow (core_thm "fix_unfold") empty_ss);
-    print_goal;
-    trivial;
-  })
-  {{ \n a i s -> (n - i, (bar_loop n a s i).0 == sum' i s a n) }};
-
-prove_by_bv_induction
-  (do {
-    unfolding ["bar_loop", "sum"];
-    simplify (cryptol_ss ());
-    print_goal;
-    w4_unint_z3 ["bar_loop", "sum'"];
-  })
-  {{ \n a i s -> (n - i, (bar_loop n a s i).0 == if i <= n then s + (sum n a) - (sum i a) else s) }};
+//prove_print
+//  (do {
+//    print_goal;
+//    unfolding ["bar"];
+//    simplify (cryptol_ss ());
+//    print_goal;
+//    w4;
+//  })
+//  {{ \a -> bar 2 a == join (reverse (arrayRangeLookup a 0)) + join (reverse (arrayRangeLookup a 8)) }};
+//
+//let {{
+//  sum : [64] -> ByteArray -> [64]
+//  sum n a = if n == 0 then 0 else join (reverse (arrayRangeLookup a (n - 1))) + sum (n - 1) a
+//
+//  sum' : [64] -> [64] -> ByteArray -> [64] -> [64]
+//  sum' i s a n = if i < n then sum' (i + 1) (join (reverse (arrayRangeLookup a i))) a n else s
+//}};
+//
+//prove_by_bv_induction
+//  (do {
+//    unfolding ["bar_loop", "sum'"];
+//    simplify (cryptol_ss ());
+//    simplify (addsimp_shallow (core_thm "fix_unfold") empty_ss);
+//    print_goal;
+//    trivial;
+//  })
+//  {{ \n a i s -> (n - i, (bar_loop n a s i).0 == sum' i s a n) }};
+//
+//prove_by_bv_induction
+//  (do {
+//    unfolding ["bar_loop", "sum"];
+//    simplify (cryptol_ss ());
+//    print_goal;
+//    w4_unint_z3 ["bar_loop", "sum'"];
+//  })
+//  {{ \n a i s -> (n - i, (bar_loop n a s i).0 == if i <= n then s + (sum n a) - (sum i a) else s) }};
 

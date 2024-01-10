@@ -420,7 +420,7 @@ readBackValue sc cfg = loop
          vs' <- Map.fromList <$> traverse build vs
          scRecord sc vs'
 
-    loop tv _v = panic "readBackValue" ["type mismatch", show tv]
+    loop tv v = panic "readBackValue" ["type mismatch", show tv ++ show v]
 
     readBackCtorArgs cnm (VPiType _nm tv body) (v:vs) =
       do v' <- force v

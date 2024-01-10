@@ -270,6 +270,7 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
   , scUnfoldOnceFixConstantSet
+  , scAbstractConstantApplication
   , scSharedSize
   , scSharedSizeAux
   , scSharedSizeMany
@@ -2670,6 +2671,30 @@ scUnfoldConstantSet' sc b names t0 = do
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
 
+scAbstractConstantApplication :: SharedContext
+                              -> Set VarIndex -- ^ Set of constant names
+                              -> Term
+                              -> IO Term
+scAbstractConstantApplication sc names t0 = do
+  cache <- newCache
+  let go :: Term -> IO Term
+      go t@(Unshared tf) =
+        case asApplyAll t of
+          (asConstant -> Just (ec, _), _)
+            | Set.member (ecVarIndex ec) names ->
+              scFreshGlobal sc (toShortName (ecName ec)) =<< scTypeOf sc t
+          _ -> Unshared <$> traverse go tf
+      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
+        case asApplyAll t of
+          (asConstant -> Just (ec, _), _)
+            | Set.member (ecVarIndex ec) names ->
+              scFreshGlobal sc (toShortName (ecName ec)) =<< scTypeOf sc t
+          (fn, args)
+            | length args > 0  -> do
+              putStrLn $ "scApply of " ++ (showTerm fn)
+              scTermF sc =<< traverse go tf
+          _ -> scTermF sc =<< traverse go tf
+  go t0
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer

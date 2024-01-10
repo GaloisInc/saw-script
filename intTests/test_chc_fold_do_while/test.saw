@@ -43,7 +43,17 @@ llvm_verify m "foo"
     w4;
   });
 
-llvm_verify m "bar"
+//llvm_verify m "bar"
+//  []
+//  false
+//  bar_spec
+//  (do {
+//    print_goal;
+//    w4;
+//  });
+
+llvm_compositional_extract m "bar"
+  "bar"
   []
   false
   bar_spec
@@ -52,23 +62,40 @@ llvm_verify m "bar"
     w4;
   });
 
-//llvm_compositional_extract m "bar"
-//  "bar"
-//  []
-//  false
-//  bar_spec
-//  (do {
-//    print_goal;
-//    w4;
-//  });
-//
-//prove_print
-//  (do {
-//    print_goal;
-//    unfolding ["bar"];
-//    simplify (cryptol_ss ());
-//    print_goal;
-//    w4;
-//  })
-//  {{ \a -> bar 2 a == join (reverse (arrayRangeLookup a 0)) + join (reverse (arrayRangeLookup a 8)) }};
+prove_print
+  (do {
+    print_goal;
+    unfolding ["bar"];
+    simplify (cryptol_ss ());
+    print_goal;
+    w4;
+  })
+  {{ \a -> bar 2 a == join (reverse (arrayRangeLookup a 0)) + join (reverse (arrayRangeLookup a 8)) }};
+
+let {{
+  sum : [64] -> ByteArray -> [64]
+  sum n a = if n == 0 then 0 else join (reverse (arrayRangeLookup a (n - 1))) + sum (n - 1) a
+
+  sum' : [64] -> [64] -> ByteArray -> [64] -> [64]
+  sum' i s a n = if i < n then sum' (i + 1) (join (reverse (arrayRangeLookup a i))) a n else s
+}};
+
+prove_by_bv_induction
+  (do {
+    unfolding ["bar_loop", "sum'"];
+    simplify (cryptol_ss ());
+    simplify (addsimp_shallow (core_thm "fix_unfold") empty_ss);
+    print_goal;
+    trivial;
+  })
+  {{ \n a i s -> (n - i, (bar_loop n a s i).0 == sum' i s a n) }};
+
+prove_by_bv_induction
+  (do {
+    unfolding ["bar_loop", "sum"];
+    simplify (cryptol_ss ());
+    print_goal;
+    w4_unint_z3 ["bar_loop", "sum'"];
+  })
+  {{ \n a i s -> (n - i, (bar_loop n a s i).0 == if i <= n then s + (sum n a) - (sum i a) else s) }};
 

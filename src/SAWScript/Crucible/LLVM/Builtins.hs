@@ -89,6 +89,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , getPoststateObligations
     , withCfgAndBlockId
     , registerOverride
+    , simpleLoopFixpointFunction
     ) where
 
 import Prelude hiding (fail)
@@ -1482,18 +1483,18 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
        (neGroupOn (view csName) invLemmas)
 
      rw_ref <- newIORef rw
-     (simpleLoopFixpointFeature, fixpoint_state_ref) <- do
-       let ?ptrWidth = knownNat @64
-       Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) $
-         Just $ simpleLoopFixpointFunction sc sym rw_ref $ mspec ^. csName
-    --  (simpleLoopFixpointFeature, fixpoint_state_ref) <-
-    --    Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) Nothing
+    --  (simpleLoopFixpointFeature, fixpoint_state_ref) <- do
+    --    let ?ptrWidth = knownNat @64
+    --    Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) $
+    --      Just $ simpleLoopFixpointFunction sc sym rw_ref $ mspec ^. csName
+    -- --  (simpleLoopFixpointFeature, fixpoint_state_ref) <-
+    -- --    Crucible.simpleLoopFixpoint sym cfg (Crucible.llvmMemVar $ ccLLVMContext cc) Nothing
 
      additionalFeatures <-
        mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
 
      let execFeatures =
-           [simpleLoopFixpointFeature] ++
+          --  [simpleLoopFixpointFeature] ++
            invariantExecFeatures ++
            map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
            additionalFeatures
@@ -1527,10 +1528,11 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                             (Crucible.regValue retval)
                      return (Just (ret_mt, v))
 
-            Some (Crucible.AfterFixpoint _ uninterp_inv_fn) <- readIORef fixpoint_state_ref
-            invSubst <- Crucible.runCHC bak [uninterp_inv_fn]
+            -- uninterp_inv_fns <- Crucible.executionFeatureContextInvPreds <$> readIORef fixpoint_state_ref
+            -- invSubst <- Crucible.runCHC bak uninterp_inv_fns
             rw' <- readIORef rw_ref
-            return ((retval', globals1, invSubst), rw')
+            -- return ((retval', globals1, invSubst), rw')
+            return ((retval', globals1, MapF.empty), rw')
 
        Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 

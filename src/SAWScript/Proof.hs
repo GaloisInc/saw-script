@@ -21,6 +21,7 @@ module SAWScript.Proof
   , unfoldFixOnceProp
   , simplifyProp
   , hoistIfsInProp
+  , abstractConstantApplicationProp
   , evalProp
   , betaReduceProp
   , falseProp
@@ -396,6 +397,11 @@ simplifyProps sc ss (p:ps) =
   do (a, p')  <- simplifyProp sc ss p
      (b, ps') <- simplifyProps sc ss ps
      return (Set.union a b, p' : ps')
+
+abstractConstantApplicationProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
+abstractConstantApplicationProp sc unints (Prop tm) =
+  do tm' <- scAbstractConstantApplication sc unints tm
+     return (Prop tm')
 
 -- | Add hypotheses from the given sequent as rewrite rules
 --   to the given simpset.
@@ -1062,6 +1068,8 @@ data Evidence
     --   evidence is use to check the modified sequent.
   | EvalEvidence !(Set VarIndex) !Evidence
 
+  | AbstractConstantApplicationEvidence !(Set VarIndex) !Evidence
+
     -- | This type of evidence is used to modify a focused part of the sequent.
     --   The modified sequent should be equivalent up to conversion.
   | ConversionEvidence !Sequent !Evidence
@@ -1677,6 +1685,10 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
 
       EvalEvidence vars e' ->
         do sqt' <- traverseSequentWithFocus (evalProp sc vars) sqt
+           check nenv e' sqt'
+
+      AbstractConstantApplicationEvidence vars e' ->
+        do sqt' <- traverseSequentWithFocus (abstractConstantApplicationProp sc vars) sqt
            check nenv e' sqt'
 
       ConversionEvidence sqt' e' ->

@@ -673,6 +673,14 @@ simplifyGoalWithLocals hs ss =
                (\p -> snd <$> io (simplifyProp sc ss' p)) (goalSequent goal)
      return (sqt', RewriteEvidence hs ss)
 
+abstractConstantApplication :: [String] -> ProofScript ()
+abstractConstantApplication unints =
+  execTactic $ tacticChange $ \goal ->
+  do sc <- getSharedContext
+     unints' <- resolveNames unints
+     sqt' <- traverseSequentWithFocus (io . abstractConstantApplicationProp sc unints') (goalSequent goal)
+     return (sqt', AbstractConstantApplicationEvidence unints')
+
 hoistIfsInGoalPrim :: ProofScript ()
 hoistIfsInGoalPrim =
   execTactic $ tacticChange $ \goal ->

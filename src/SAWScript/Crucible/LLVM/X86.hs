@@ -283,6 +283,8 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
         ok <- W4.orPred sym is_valid
           =<< W4.andPred sym is_negative_offset is_not_overflow
         return (ptr_as_bv, ok)
+        -- is_valid <- Macaw.isValidPtr sym mem w ptr
+        -- return (llvmPointerOffset ptr, is_valid)
   both_bits <- W4.andPred sym xBits yBits
   both_ptrs <- W4.andPred sym xPtr yPtr
   same_region <- W4.natEq sym (llvmPointerBlock x) (llvmPointerBlock y)
@@ -293,9 +295,16 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
     =<< W4.andPred sym ok_x ok_y
   res_both_bits <- f sym (llvmPointerOffset x) (llvmPointerOffset y)
   res_both_ptrs <- f sym x_ptr_as_bv y_ptr_as_bv
-  undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
-  W4.itePred sym both_bits res_both_bits
-    =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+
+  if| Just True <- W4.asConstantPred both_bits ->
+      return res_both_bits
+    | Just True <- W4.asConstantPred both_ptrs -> do
+      C.assert bak ok_both_ptrs $ C.AssertFailureSimError "" ""
+      return res_both_ptrs
+    | otherwise -> do
+      undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
+      W4.itePred sym both_bits res_both_bits
+        =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
 
 -------------------------------------------------------------------------------
 -- ** Entrypoint
@@ -522,6 +531,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             forM_ assumes $ \(C.LabeledPred p (md, reason)) ->
               do expr <- resolveSAWPred cc p
                  let loc = MS.conditionLoc md
+                 putStrLn $ "resolveSAWPred: " ++ show expr
                  C.addAssumption bak
                    (C.GenericAssumption loc reason expr)
           C.regValue <$>
@@ -536,12 +546,16 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
          else
            pure []
 
+      -- rw_ref <- liftIO . newIORef =<< getTopLevelRW
       (simpleLoopFixpointFeature, maybe_ref) <-
         case fixpointSelect of
           NoFixpoint -> return ([], Nothing)
           SimpleFixpoint func ->
             do let ?ptrWidth = knownNat @64
-               (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar Nothing
+              --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar Nothing
+              --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $
+              --    Just $ simpleLoopFixpointFunction sc sym rw_ref $ methodSpec ^. csName
+               (f, ref) <- liftIO $ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func
                return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
@@ -583,18 +597,22 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                          ]
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      invSubst <- case maybe_ref of
+      (invSubst, loopFunEquivConds) <- liftIO $ case maybe_ref of
         Just fixpoint_state_ref -> do
-          Some (Crucible.LLVM.Fixpoint.AfterFixpoint _ uninterp_inv_fn) <- liftIO $ readIORef fixpoint_state_ref
-          C.runCHC bak [uninterp_inv_fn]
-        Nothing -> return MapF.empty
+          uninterp_inv_fns <- Crucible.LLVM.Fixpoint.executionFeatureContextInvPreds <$> readIORef fixpoint_state_ref
+          subst <- C.runCHC bak uninterp_inv_fns
+          loop_fun_equiv_conds <- Crucible.LLVM.Fixpoint.executionFeatureContextLoopFunEquivConds <$> readIORef fixpoint_state_ref
+          return (subst, loop_fun_equiv_conds)
+        Nothing -> return (MapF.empty, [])
 
       liftIO $ printOutLn opts Info
         "Examining specification to determine postconditions"
       liftIO $ void $ runX86Sim finalState $
         assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
-      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap invSubst
+      (stats,vcstats) <- checkGoals bak opts nm (methodSpec ^. MS.csLoc) sc tactic mdMap invSubst loopFunEquivConds
+
+      -- putTopLevelRW =<< liftIO (readIORef rw_ref)
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -618,7 +636,7 @@ setupSimpleLoopFixpointFeature ::
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm ->
-  IO (C.ExecutionFeature p sym ext rtp, IORef (Some (Crucible.LLVM.Fixpoint.FixpointState sym 64 blocks)))
+  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.Fixpoint.ExecutionFeatureContext sym 64 ext))
 
 setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
   let ?ptrWidth = knownNat @64
@@ -627,23 +645,28 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
  where
   fixpoint_func fixpoint_substitution condition =
     do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+       let header_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.headerValue) (MapF.elems fixpoint_substitution)
        let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.bodyValue) (MapF.elems fixpoint_substitution)
        let uninterpreted_constants = foldMap
              (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
-             (Some condition : body_exprs)
+             (Some condition : body_exprs ++ header_exprs)
        let filtered_uninterpreted_constants = Set.toList $ Set.filter
              (\(Some variable) ->
-               not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+               not (List.isPrefixOf "cindex_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
              uninterpreted_constants
-       body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
-       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+       tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms
+
+       putStrLn $ "implicit_parameters: " ++ show (map showTerm implicit_parameters)
 
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
-       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
+       arguments_tuple <- scTuple sc arguments
+       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]
        applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
          scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
        result_substitution <- MapF.fromList <$> zipWithM
@@ -654,22 +677,21 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
 
        explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
          toSC sym sawst variable
+       explicit_parameters_tuple <- scTuple sc explicit_parameters
 
        inner_func <- case asConstant (ttTerm func) of
          Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
            return inner_func
          _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
        func_body <- betaNormalize sc
-         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
+         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
 
        step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
-       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
-       explicit_parameters_tuple <- scTuple sc explicit_parameters
-       let lhs = Prelude.last step_arguments
-       w <- scNat sc 64
-       rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
-       loop_condition <- scBvULt sc w lhs rhs
+       step_arguments_tuple <- scTuple sc step_arguments
+       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]
+
+       loop_condition <- toSC sym sawst condition
        output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
        loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
 
@@ -988,6 +1010,8 @@ setupMemory globsyms balign = do
 
   setArgs env tyenv nameEnv . fmap snd . Map.elems $ ms ^. MS.csArgBindings
 
+  pushFreshReturnAddress
+
   pure env
 
 -- | Given an alist of symbol names and sizes (in bytes), allocate space and copy
@@ -1021,8 +1045,7 @@ setupGlobals globsyms = do
   mem' <- liftIO $ foldlM writeGlobal mem globs
   x86Mem .= mem'
 
--- | Allocate memory for the stack, and pushes a fresh pointer as the return
--- address.
+-- | Allocate memory for the stack.
 allocateStack ::
   X86Constraints =>
   Integer {- ^ Stack size in bytes -} ->
@@ -1034,16 +1057,32 @@ allocateStack szInt balign = do
   mem <- use x86Mem
   regs <- use x86Regs
   sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
-  (base, mem') <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  (base, finalMem) <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak finalMem base sz
+  x86Mem .= finalMem
+  finalRegs <- setReg Macaw.RSP ptr regs
+  x86Regs .= finalRegs
+
+-- | Push a fresh pointer as the return address.
+pushFreshReturnAddress ::
+  X86Constraints =>
+  X86Sim ()
+pushFreshReturnAddress = do
+  SomeOnlineBackend bak <- use x86Backend
+  sym <- use x86Sym
+  mem <- use x86Mem
+  regs <- use x86Regs
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
-  writeAlign <- integerToAlignment defaultStackBaseAlign
-  finalMem <- liftIO $ C.LLVM.doStore bak mem' ptr
+  rsp <- getReg Macaw.RSP regs
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
+  -- writeAlign <- integerToAlignment defaultStackBaseAlign
+  let writeAlign = C.LLVM.noAlignment
+  finalMem <- liftIO $ C.LLVM.doStore bak mem ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
     (C.LLVM.bitvectorType 8) writeAlign fresh
   x86Mem .= finalMem
@@ -1165,36 +1204,57 @@ setArgs ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   [MS.SetupValue LLVM] {- ^ Arguments passed to llvm_execute_func -} ->
   X86Sim ()
-setArgs env tyenv nameEnv args
-  | length args > length argRegs = throwX86 "More arguments than would fit into general-purpose registers"
-  | otherwise = do
-      sym <- use x86Sym
-      cc <- use x86CrucibleContext
-      mem <- use x86Mem
-      let
-        setRegSetupValue rs (reg, sval) =
-          exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
-            C.LLVM.PtrType _ -> do
+setArgs env tyenv nameEnv args = do
+  SomeOnlineBackend bak <- use x86Backend
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  let
+    setRegSetupValue rs (reg, sval) =
+      exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+        C.LLVM.PtrType _ -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType 64 -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType _ -> do
+          C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
+          case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
+            Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
+            Just LeqProof -> do
+              off' <- W4.bvZext sym (knownNat @64) off
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                =<< resolveSetupVal cc mem env tyenv nameEnv sval
+                $ C.LLVM.LLVMValInt base off'
               setReg reg val rs
-            C.LLVM.IntType 64 -> do
-              val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                =<< resolveSetupVal cc mem env tyenv nameEnv sval
-              setReg reg val rs
-            C.LLVM.IntType _ -> do
-              C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
-              case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
-                Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
-                Just LeqProof -> do
-                  off' <- W4.bvZext sym (knownNat @64) off
-                  val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                    $ C.LLVM.LLVMValInt base off'
-                  setReg reg val rs
-            _ -> fail "Argument does not fit into a single general-purpose register"
-      regs <- use x86Regs
-      newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
-      x86Regs .= newRegs
+        _ -> fail "Argument does not fit into a single general-purpose register"
+  regs <- use x86Regs
+  newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
+  x86Regs .= newRegs
+
+  let stackArgs = reverse $ Prelude.drop (length argRegs) args
+  forM_ stackArgs $ \sval -> do
+    liftIO $ exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+      C.LLVM.PtrType _ -> pure ()
+      C.LLVM.IntType 64 -> pure ()
+      _ -> fail "Stack argument is not a 64 bit integer."
+
+    regs' <- use x86Regs
+    rsp <- getReg Macaw.RSP regs'
+    rsp' <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
+    newRegs' <- setReg Macaw.RSP rsp' regs'
+    x86Regs .= newRegs'
+
+    val <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+      =<< resolveSetupVal cc mem env tyenv nameEnv sval
+
+    mem' <- use x86Mem
+    mem'' <- liftIO $
+      C.LLVM.doStore bak mem' rsp' (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment val
+    x86Mem .= mem''
+
   where argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 
 --------------------------------------------------------------------------------
@@ -1341,13 +1401,28 @@ checkGoals ::
   bak ->
   Options ->
   String ->
+  W4.ProgramLoc ->
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
   MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
+  [W4.Pred Sym] ->
   TopLevel (SolverStats, [MS.VCStats])
-checkGoals bak opts nm sc tactic mdMap invSubst = do
-  gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
+checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
+  poststate_gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
+  loop_gs <- liftIO $ forM loopFunEquivConds $ \cond -> do
+    let sym = C.backendGetSym bak
+    st <- Common.sawCoreState sym
+    condTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst cond
+    let defaultMd = MS.ConditionMetadata
+          { MS.conditionLoc = loc
+          , MS.conditionTags = mempty
+          , MS.conditionType = "loop function equivalence"
+          , MS.conditionContext = ""
+          }
+    return ("", defaultMd, condTerm)
+  let gs = poststate_gs ++ loop_gs
+
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs

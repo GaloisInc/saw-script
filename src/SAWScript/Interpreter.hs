@@ -1702,6 +1702,11 @@ primitives = Map.fromList
     Experimental
     [ "Remove the numbered conclusions from the current sequent." ]
 
+  , prim "abstract_constant_application" "[String] -> ProofScript ()"
+    (pureVal abstractConstantApplication)
+    Current
+    [ "Abstract the named subterm(s) within the current goal." ]
+
   , prim "hoist_ifs_in_goal"            "ProofScript ()"
     (pureVal hoistIfsInGoalPrim)
     Experimental

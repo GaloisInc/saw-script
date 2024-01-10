@@ -35,7 +35,7 @@ import           Lang.Crucible.Simulator.Profiling
 import           Lang.Crucible.Backend
                    (AbortExecReason(..), ppAbortExecReason, IsSymInterface, IsSymBackend(..),
                     HasSymInterface(..), SomeBackend(..))
-import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
+import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend, solverInteractionFile)
 import qualified Data.Parameterized.Nonce as Nonce
 import           What4.Protocol.Online (OnlineSolver(..))
 import qualified What4.Solver.CVC5 as CVC5
@@ -49,6 +49,7 @@ import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
 import Control.Lens ( (^.) )
+import qualified Data.Text as Text
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import qualified Prettyprinter as PP
@@ -95,6 +96,10 @@ newSAWCoreBackendWithTimeout PathSat_Yices sym timeout =
      W4.extendConfig CVC5.cvc5Options (W4.getConfiguration sym)
      yicesTimeoutSetting <- W4.getOptionSetting Yices.yicesGoalTimeout (W4.getConfiguration sym)
      _ <- W4.setOpt yicesTimeoutSetting timeout
+
+     auxOutSetting <- W4.getOptionSetting solverInteractionFile (W4.getConfiguration sym)
+     _ <- W4.setOpt auxOutSetting $ Text.pack "foo.smt2" 
+
      return (SomeOnlineBackend (bak :: Backend Yices.Connection))
 
 newSAWCoreBackendWithTimeout PathSat_Z3 sym timeout =
