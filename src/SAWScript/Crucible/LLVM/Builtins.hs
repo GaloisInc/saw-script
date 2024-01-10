@@ -1313,8 +1313,9 @@ registerOverride opts cc sim_ctx _top_loc mdMap cs =
                 $ methodSpecHandler opts sc cc mdMap cs h
               mem <- Crucible.readGlobal mvar
               let bindPtr m decl =
-                    do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
-                       Crucible.bindLLVMFunPtr bak decl h m
+                    do let declName = L.decName decl
+                       printOutLn opts Info $ "  variant `" ++ show declName ++ "`"
+                       Crucible.bindLLVMFunPtr bak declName h m
               mem' <- liftIO $ foldM bindPtr mem (d:ds)
               Crucible.writeGlobal mvar mem'
               return (Crucible.SomeHandle h)
