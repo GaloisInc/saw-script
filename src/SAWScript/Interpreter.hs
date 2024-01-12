@@ -4168,6 +4168,11 @@ primitives = Map.fromList
     Experimental
     [ "The type of MIR double-precision floating-point values." ]
 
+  , prim "mir_lifetime" "MIRType"
+    (pureVal mir_lifetime)
+    Experimental
+    [ "The type of MIR lifetimes." ]
+
   , prim "mir_ref" "MIRType -> MIRType"
     (pureVal mir_ref)
     Experimental

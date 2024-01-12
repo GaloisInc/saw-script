@@ -2254,6 +2254,7 @@ MIR types are built up using the following functions:
 * `mir_isize : MIRType`
 * `mir_f32 : MIRType`
 * `mir_f64 : MIRType`
+* `mir_lifetime : MIRType`
 * `mir_ref : MIRType -> MIRType`
 * `mir_ref_mut : MIRType -> MIRType`
 * `mir_slice : MIRType -> MIRType`
@@ -3243,6 +3244,40 @@ let s_spec = do {
 Note that `mir_enum_value` can only be used to construct a specific variant. If
 you need to construct a symbolic enum value that can range over many potential
 variants, use `mir_fresh_expanded_value` instead.
+
+#### Lifetimes
+
+Rust ADTs can have both type parameters as well as _lifetime_ parameters. The
+following Rust code declares a lifetime parameter `'a` on the struct `S`, as
+well on the function `f` that computes an `S` value:
+
+~~~~ .rs
+pub struct S<'a> {
+    pub x: &'a u32,
+}
+
+pub fn f<'a>(y: &'a u32) -> S<'a> {
+    S { x: y }
+}
+~~~~
+
+When `mir-json` compiles a piece of Rust code that contains lifetime
+parameters, it will instantiate all of the lifetime parameters with a
+placeholder MIR type that is simply called `lifetime`. This is important to
+keep in mind when looking up ADTs with `mir_find_adt`, as you will also need to
+indicate to SAW that the lifetime parameter is instantiated with `lifetime`. In
+order to do so, use `mir_lifetime`. For example, here is how to look up `S`
+with `'a` instantiated to `lifetime`:
+
+~~~~
+s_adt = mir_find_adt m "example::S" [mir_lifetime]
+~~~~
+
+Note that this part of SAW's design is subject to change in the future.
+Ideally, users would not have to care about lifetimes at all at the MIR level;
+see [this issue](https://github.com/GaloisInc/mir-json/issues/58) for further
+discussion on this point. If that issue is fixed, then we will likely remove
+`mir_lifetime`, as it will no longer be necessary.
 
 ### Bitfields
 
