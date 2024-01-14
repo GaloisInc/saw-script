@@ -1732,6 +1732,11 @@ primitives = Map.fromList
     Current
     [ "Unfold the named subterm(s) within the current goal." ]
 
+  , prim "unfolding_fix_once" "[String] -> ProofScript ()"
+    (pureVal unfoldFixOnceGoal)
+    Current
+    [ "Unfold the fixpoint constant definitions once within the current goal." ]
+
   , prim "simplify"            "Simpset -> ProofScript ()"
     (pureVal simplifyGoal)
     Current

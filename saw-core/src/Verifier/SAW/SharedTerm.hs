@@ -270,6 +270,7 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstants'
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
+  , scUnfoldOnceFixConstantSet
   , scSharedSize
   , scSharedSizeAux
   , scSharedSizeMany
@@ -2622,6 +2623,31 @@ scUnfoldConstantSet sc b names t0 = do
           _ -> scTermF sc =<< traverse go tf
   go t0
 
+scUnfoldOnceFixConstantSet :: SharedContext
+                           -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+                           -> Set VarIndex -- ^ Set of constant names
+                           -> Term
+                           -> IO Term
+scUnfoldOnceFixConstantSet sc b names t0 = do
+  cache <- newCache
+  let go :: Term -> IO Term
+      go t@(Unshared tf) =
+        case tf of
+          Constant (EC idx _ _) (Just rhs)
+            | Set.member idx names == b
+            , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs ->
+              betaNormalize sc =<< scApply sc f t
+            | otherwise -> return t
+          _ -> Unshared <$> traverse go tf
+      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
+        case tf of
+          Constant (EC ecidx _ _) (Just rhs)
+            | Set.member ecidx names == b
+            , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs ->
+              betaNormalize sc =<< scApply sc f t
+            | otherwise -> return t
+          _ -> scTermF sc =<< traverse go tf
+  go t0
 
 -- | TODO: test whether this version is slower or faster.
 scUnfoldConstantSet' :: SharedContext
