@@ -936,7 +936,7 @@ hoistIfs sc t = do
    let ss :: Simpset () = addRules rules emptySimpset
 
    (t', conds) <- doHoistIfs sc ss cache itePat . snd =<< rewriteSharedTerm sc ss t
-   splitConds sc ss (map fst conds) t'
+   splitConds sc ss (Set.toList $ Set.fromList $ map fst conds) t'
 
 
 splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
