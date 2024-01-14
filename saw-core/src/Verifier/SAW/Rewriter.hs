@@ -325,6 +325,9 @@ boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
 vecEqIdent :: Ident
 vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 
+pairEqIdent :: Ident
+pairEqIdent = mkIdent (mkModuleName ["Prelude"]) "pairEq"
+
 arrayEqIdent :: Ident
 arrayEqIdent = mkIdent (mkModuleName ["Prelude"]) "arrayEq"
 
@@ -393,6 +396,7 @@ ruleOfProp sc term ann =
     (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef pairEqIdent -> Just (), [_, _, _, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
