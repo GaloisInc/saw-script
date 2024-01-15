@@ -25,6 +25,7 @@ data MIRTypeTag
   | TagIsize
   | TagF32
   | TagF64
+  | TagLifetime
   | TagRef
   | TagRefMut
   | TagSlice
@@ -53,6 +54,7 @@ instance JSON.FromJSON MIRTypeTag where
       "isize" -> pure TagIsize
       "f32" -> pure TagF32
       "f64" -> pure TagF64
+      "lifetime" -> pure TagLifetime
       "ref" -> pure TagRef
       "ref mut" -> pure TagRefMut
       "slice" -> pure TagSlice
@@ -83,6 +85,7 @@ data JSONMIRType
   | JSONTyChar
   | JSONTyFloat !Mir.FloatKind
   | JSONTyInt !Mir.BaseSize
+  | JSONTyLifetime
   | JSONTyRef !JSONMIRType !Mir.Mutability
   | JSONTySlice !JSONMIRType
   | JSONTyStr
@@ -110,6 +113,7 @@ instance JSON.FromJSON JSONMIRType where
           TagIsize -> pure $ JSONTyInt Mir.USize
           TagF32 -> pure $ JSONTyFloat Mir.F32
           TagF64 -> pure $ JSONTyFloat Mir.F64
+          TagLifetime -> pure JSONTyLifetime
           TagRef -> JSONTyRef <$> o .: "referent type" <*> pure Mir.Immut
           TagRefMut -> JSONTyRef <$> o .: "referent type" <*> pure Mir.Mut
           TagSlice -> JSONTySlice <$> o .: "slice type"
@@ -141,6 +145,7 @@ mirType sawenv = go
     go JSONTyChar = Mir.TyChar
     go (JSONTyFloat fk) = Mir.TyFloat fk
     go (JSONTyInt bs) = Mir.TyInt bs
+    go JSONTyLifetime = Mir.TyLifetime
     go (JSONTyRef ty mut) = Mir.TyRef (go ty) mut
     go (JSONTySlice ty) = Mir.TySlice (go ty)
     go JSONTyStr = Mir.TyStr
