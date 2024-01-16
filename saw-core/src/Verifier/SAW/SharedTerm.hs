@@ -270,6 +270,7 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstants'
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
+  , scUnfoldOnceFixConstantSet
   , scSharedSize
   , scSharedSizeAux
   , scSharedSizeMany
@@ -2622,6 +2623,34 @@ scUnfoldConstantSet sc b names t0 = do
           _ -> scTermF sc =<< traverse go tf
   go t0
 
+-- | Unfold one time fixpoint constants.
+--
+-- Specifically, if @c = fix a f@, then replace @c@ with @f c@, that is replace
+-- @(fix a f)@ with @f (fix a f)@ while preserving the constant name.  The
+-- signature of @fix@ is @primitive fix : (a : sort 1) -> (a -> a) -> a;@.
+scUnfoldOnceFixConstantSet :: SharedContext
+                           -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+                           -> Set VarIndex -- ^ Set of constant names
+                           -> Term
+                           -> IO Term
+scUnfoldOnceFixConstantSet sc b names t0 = do
+  cache <- newCache
+  let unfold t idx rhs
+        | Set.member idx names == b
+        , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs =
+          betaNormalize sc =<< scApply sc f t
+        | otherwise =
+          return t
+  let go :: Term -> IO Term
+      go t@(Unshared tf) =
+        case tf of
+          Constant (EC idx _ _) (Just rhs) -> unfold t idx rhs
+          _ -> Unshared <$> traverse go tf
+      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
+        case tf of
+          Constant (EC ecidx _ _) (Just rhs) -> unfold t ecidx rhs
+          _ -> scTermF sc =<< traverse go tf
+  go t0
 
 -- | TODO: test whether this version is slower or faster.
 scUnfoldConstantSet' :: SharedContext
