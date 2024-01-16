@@ -83,6 +83,7 @@ module SAWScript.Crucible.LLVM.Setup.Value
 import           Control.Lens
 import           Data.Map ( Map )
 import qualified Data.Map as Map
+import           Data.Maybe
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import           Data.Void (Void)
@@ -100,6 +101,7 @@ import           What4.ProgramLoc (ProgramLoc)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
+import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
 import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.Setup.Value as Setup
@@ -236,19 +238,19 @@ showLLVMModule :: LLVMModule arch -> String
 showLLVMModule (LLVMModule name m _) =
   unlines [ "Module: " ++ name
           , "Types:"
-          , showParts L.ppTypeDecl (L.modTypes m)
+          , showParts (Crucible.LLVM.ppLLVMLatest L.ppTypeDecl) (L.modTypes m)
           , "Globals:"
-          , showParts ppGlobal' (L.modGlobals m)
+          , showParts (Crucible.LLVM.ppLLVMLatest ppGlobal') (L.modGlobals m)
           , "External references:"
-          , showParts L.ppDeclare (L.modDeclares m)
+          , showParts Crucible.LLVM.ppDeclare (L.modDeclares m)
           , "Definitions:"
-          , showParts ppDefine' (L.modDefines m)
+          , showParts (Crucible.LLVM.ppLLVMLatest ppDefine') (L.modDefines m)
           ]
   where
     showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
     ppGlobal' g =
       L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
-      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
+      L.ppGlobalAttrs (isJust $ L.globalValue g) (L.globalAttrs g) PP.<+>
       L.ppType (L.globalType g)
     ppDefine' d =
       L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>

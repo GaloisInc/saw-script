@@ -30,6 +30,7 @@ import Data.Parameterized.Some
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
+import Lang.Crucible.LLVM.PrettyPrint
 
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor (ModuleName)
@@ -86,12 +87,12 @@ traceAndZeroM msg =
 -- | Helper function to pretty-print the value of a global
 ppLLVMValue :: L.Value -> String
 ppLLVMValue val =
-  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppValue val)
+  ppLLVMLatest (show $ PPHPJ.nest 2 $ L.ppValue val)
 
 -- | Helper function to pretty-print an LLVM constant expression
 ppLLVMConstExpr :: L.ConstExpr -> String
 ppLLVMConstExpr ce =
-  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
+  ppLLVMLatest (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
 
 -- | Translate a typed LLVM 'L.Value' to a Heapster shape + an element of the
 -- translation of that shape to a SAW core type
@@ -182,7 +183,7 @@ translateLLVMType _ (L.PrimType (L.Integer n))
             (bvTypeOpenTerm n))
 translateLLVMType _ tp =
   traceAndZeroM ("translateLLVMType does not yet handle:\n"
-                 ++ show (L.ppType tp))
+                 ++ show (ppType tp))
 
 -- | Helper function for 'translateLLVMValue' applied to a constant expression
 translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
@@ -251,7 +252,7 @@ translateZeroInit w (L.PackedStruct tps) =
 
 translateZeroInit _ tp =
   traceAndZeroM ("translateZeroInit cannot handle type:\n"
-                 ++ show (L.ppType tp))
+                 ++ show (ppType tp))
 
 -- | Top-level call to 'translateLLVMValue', running the 'LLVMTransM' monad
 translateLLVMValueTop :: (1 <= w, KnownNat w) => DebugLevel -> EndianForm ->

@@ -124,7 +124,6 @@ import qualified Data.Vector as V
 import           Prettyprinter
 import           System.IO
 import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.URI
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
@@ -167,6 +166,7 @@ import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
+import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible
 import           Lang.Crucible.LLVM.QQ( llvmOvr )
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
@@ -231,13 +231,13 @@ displayVerifExceptionOpts opts (DefNotFound (L.Symbol nm) nms) =
   [ "Could not find definition for function named `" ++ nm ++ "`."
   ] ++ if simVerbose opts < 3
        then [ "Run SAW with --sim-verbose=3 to see all function names" ]
-       else "Available function names:" : map (("  " ++) . show . L.ppSymbol) nms
+       else "Available function names:" : map (("  " ++) . show . Crucible.ppSymbol) nms
 displayVerifExceptionOpts opts (DeclNotFound (L.Symbol nm) nms) =
   unlines $
   [ "Could not find declaration for function named `" ++ nm ++ "`."
   ] ++ if simVerbose opts < 3
        then [ "Run SAW with --sim-verbose=3 to see all function names" ]
-       else "Available function names:" : map (("  " ++) . show . L.ppSymbol) nms
+       else "Available function names:" : map (("  " ++) . show . Crucible.ppSymbol) nms
 displayVerifExceptionOpts _ (SetupError e) =
   "Error during simulation setup: " ++ show (ppSetupError e)
 
@@ -1825,7 +1825,7 @@ handleTranslationWarning :: Options -> Crucible.LLVMTranslationWarning -> IO ()
 handleTranslationWarning opts (Crucible.LLVMTranslationWarning s p msg) =
   printOutLn opts Warn $ unwords
     [ "LLVM bitcode translation warning"
-    , show (L.ppSymbol s)
+    , show (Crucible.ppSymbol s)
     , show p
     , Text.unpack msg
     ]
@@ -2163,7 +2163,7 @@ llvm_fresh_var name lty =
      sc <- lift $ lift getSharedContext
      let dl = Crucible.llvmDataLayout (ccTypeCtx cctx)
      case cryptolTypeOfActual dl lty' of
-       Nothing -> throwCrucibleSetup loc $ "Unsupported type in llvm_fresh_var: " ++ show (L.ppType lty)
+       Nothing -> throwCrucibleSetup loc $ "Unsupported type in llvm_fresh_var: " ++ show (Crucible.ppType lty)
        Just cty -> Setup.freshVariable sc name cty
 
 llvm_fresh_cryptol_var ::
@@ -2261,7 +2261,7 @@ memTypeForLLVMType loc lty =
   case Crucible.liftMemType lty of
     Right m -> return m
     Left err -> throwCrucibleSetup loc $ unlines
-      [ "unsupported type: " ++ show (L.ppType lty)
+      [ "unsupported type: " ++ show (Crucible.ppType lty)
       , "Details:"
       , err
       ]
@@ -2277,7 +2277,7 @@ llvm_sizeof (Some lm) lty =
      case Crucible.liftMemType lty of
        Right mty -> pure (Crucible.bytesToInteger (Crucible.memTypeSize dl mty))
        Left err -> fail $ unlines
-         [ "llvm_sizeof: Unsupported type: " ++ show (L.ppType lty)
+         [ "llvm_sizeof: Unsupported type: " ++ show (Crucible.ppType lty)
          , "Details:"
          , err
          ]
