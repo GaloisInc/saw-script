@@ -2,6 +2,8 @@ enable_experimental;
 
 m <- llvm_load_module "test.bc";
 
+// Test a function with more than 6 arguments to ensure that the remaining
+// arguments are spilled to the stack on x86-64.
 let test_spec = do {
   x <- llvm_fresh_var "x" (llvm_int 64);
   llvm_execute_func
