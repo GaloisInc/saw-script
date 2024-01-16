@@ -379,8 +379,8 @@ unfoldProp sc unints (Prop tm) =
   do tm' <- scUnfoldConstantSet sc True unints tm
      return (Prop tm')
 
--- | Unfold all the constants appearing in the proposition
---   whose VarIndex is found in the given set.
+-- | Unfold one time all the fixpoint constants appearing in the proposition
+-- whose VarIndex is found in the given set.
 unfoldFixOnceProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
 unfoldFixOnceProp sc unints (Prop tm) =
   do tm' <- scUnfoldOnceFixConstantSet sc True unints tm

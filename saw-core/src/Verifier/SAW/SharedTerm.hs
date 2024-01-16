@@ -2623,6 +2623,11 @@ scUnfoldConstantSet sc b names t0 = do
           _ -> scTermF sc =<< traverse go tf
   go t0
 
+-- | Unfold one time fixpoint constants.
+--
+-- Specifically, if 'c = fix a f', then replace 'c' with 'f c', that is replace
+-- '(fix a f)' with 'f (fix a f)' while preserving the constant name.  The
+-- signature of 'fix' if 'primitive fix : (a : sort 1) -> (a -> a) -> a;'.
 scUnfoldOnceFixConstantSet :: SharedContext
                            -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
                            -> Set VarIndex -- ^ Set of constant names
