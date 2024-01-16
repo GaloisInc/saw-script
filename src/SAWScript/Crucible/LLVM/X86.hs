@@ -78,6 +78,7 @@ import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Panic (panic)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -960,10 +961,13 @@ setupMemory ::
 setupMemory globsyms balign = do
   setupGlobals globsyms
 
-  -- Allocate a reasonable amount of stack (4 KiB + 0b10000 for least valid alignment + 1 qword for IP)
-  allocateStack (4096 + 16) balign
-
   ms <- use x86MethodSpec
+
+  -- Allocate a reasonable amount of stack (4 KiB + 1 qword for the previous
+  -- %rbp value + 1 qword for the return address + 1 qword for each stack
+  -- argument)
+  let argsStackSize = fromIntegral $ 8 * (length $ Prelude.drop (length argRegs) $ Map.elems $ ms ^. MS.csArgBindings)
+  allocateStack (4096 + 16 + argsStackSize) balign
 
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
@@ -974,6 +978,8 @@ setupMemory globsyms balign = do
   mapM_ (assumePointsTo env tyenv nameEnv) $ ms ^. MS.csPreState . MS.csPointsTos
 
   setArgs env tyenv nameEnv . fmap snd . Map.elems $ ms ^. MS.csArgBindings
+
+  pushFreshReturnAddress
 
   pure env
 
@@ -1008,8 +1014,7 @@ setupGlobals globsyms = do
   mem' <- liftIO $ foldlM writeGlobal mem globs
   x86Mem .= mem'
 
--- | Allocate memory for the stack, and pushes a fresh pointer as the return
--- address.
+-- | Allocate memory for the stack.
 allocateStack ::
   X86Constraints =>
   Integer {- ^ Stack size in bytes -} ->
@@ -1020,17 +1025,44 @@ allocateStack szInt balign = do
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
-  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
-  (base, mem') <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt
+  (base, finalMem) <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak finalMem base sz
+  x86Mem .= finalMem
+  finalRegs <- setReg Macaw.RSP ptr regs
+  x86Regs .= finalRegs
+
+-- | Push a fresh pointer as the return address.
+pushFreshReturnAddress ::
+  X86Constraints =>
+  X86Sim ()
+pushFreshReturnAddress = do
+  SomeOnlineBackend bak <- use x86Backend
+  sym <- use x86Sym
+  mem <- use x86Mem
+  regs <- use x86Regs
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
-  writeAlign <- integerToAlignment defaultStackBaseAlign
-  finalMem <- liftIO $ C.LLVM.doStore bak mem' ptr
+  rsp <- getReg Macaw.RSP regs
+
+  -- x86-64 System V ABI specifies that: "In other words, the stack needs to be
+  -- 16 (32 or 64) byte aligned immediately before the call instruction is
+  -- executed. Once control has been transferred to the function entry point,
+  -- i.e. immediately after the return address has been pushed, %rsp points to
+  -- the return address, and the value of (%rsp + 8) is a multiple of 16 (32 or
+  -- 64)."
+  stackAlign <- integerToAlignment defaultStackBaseAlign
+  is_aligned <- liftIO $ C.LLVM.isAligned sym (knownNat @64) rsp stackAlign
+  when (W4.asConstantPred is_aligned /= Just True) $
+    panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["%rsp is not 16 byte aligned before the call instruction is executed."]
+
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
+  let writeAlign = C.LLVM.noAlignment
+  finalMem <- liftIO $ C.LLVM.doStore bak mem ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
     (C.LLVM.bitvectorType 8) writeAlign fresh
   x86Mem .= finalMem
@@ -1152,37 +1184,62 @@ setArgs ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   [MS.SetupValue LLVM] {- ^ Arguments passed to llvm_execute_func -} ->
   X86Sim ()
-setArgs env tyenv nameEnv args
-  | length args > length argRegs = throwX86 "More arguments than would fit into general-purpose registers"
-  | otherwise = do
-      sym <- use x86Sym
-      cc <- use x86CrucibleContext
-      mem <- use x86Mem
-      let
-        setRegSetupValue rs (reg, sval) =
-          exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
-            ty | C.LLVM.isPointerMemType ty -> do
+setArgs env tyenv nameEnv args = do
+  SomeOnlineBackend bak <- use x86Backend
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  let
+    setRegSetupValue rs (reg, sval) =
+      exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+        ty | C.LLVM.isPointerMemType ty -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType 64 -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType _ -> do
+          C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
+          case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
+            Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
+            Just LeqProof -> do
+              off' <- W4.bvZext sym (knownNat @64) off
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                =<< resolveSetupVal cc mem env tyenv nameEnv sval
+                $ C.LLVM.LLVMValInt base off'
               setReg reg val rs
-            C.LLVM.IntType 64 -> do
-              val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                =<< resolveSetupVal cc mem env tyenv nameEnv sval
-              setReg reg val rs
-            C.LLVM.IntType _ -> do
-              C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
-              case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
-                Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
-                Just LeqProof -> do
-                  off' <- W4.bvZext sym (knownNat @64) off
-                  val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                    $ C.LLVM.LLVMValInt base off'
-                  setReg reg val rs
-            _ -> fail "Argument does not fit into a single general-purpose register"
-      regs <- use x86Regs
-      newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
-      x86Regs .= newRegs
-  where argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
+        _ -> fail "Argument does not fit into a single general-purpose register"
+  regs <- use x86Regs
+  newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
+  x86Regs .= newRegs
+
+  -- x86-64 System V ABI specifies that: "Once registers are assigned, the
+  -- arguments passed in memory are pushed on the stack in reversed
+  -- (right-to-left21) order."
+  let stackArgs = reverse $ Prelude.drop (length argRegs) args
+  forM_ stackArgs $ \sval -> do
+    liftIO $ exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+      C.LLVM.PtrType _ -> pure ()
+      C.LLVM.IntType 64 -> pure ()
+      _ -> fail "Stack argument is not a 64 bit integer."
+
+    regs' <- use x86Regs
+    rsp <- getReg Macaw.RSP regs'
+    rsp' <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
+    newRegs' <- setReg Macaw.RSP rsp' regs'
+    x86Regs .= newRegs'
+
+    val <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+      =<< resolveSetupVal cc mem env tyenv nameEnv sval
+
+    mem' <- use x86Mem
+    mem'' <- liftIO $
+      C.LLVM.doStore bak mem' rsp' (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment val
+    x86Mem .= mem''
+
+argRegs :: [Macaw.X86Reg (Macaw.BVType 64)]
+argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 
 --------------------------------------------------------------------------------
 -- ** Postcondition
