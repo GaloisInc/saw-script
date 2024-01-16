@@ -78,6 +78,7 @@ import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Panic (panic)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -960,10 +961,13 @@ setupMemory ::
 setupMemory globsyms balign = do
   setupGlobals globsyms
 
-  -- Allocate a reasonable amount of stack (4 KiB + 0b10000 for least valid alignment + 1 qword for IP)
-  allocateStack (4096 + 16) balign
-
   ms <- use x86MethodSpec
+
+  -- Allocate a reasonable amount of stack (4 KiB + 1 qword for the previous
+  -- %rbp value + 1 qword for the return address + 1 qword for each stack
+  -- argument)
+  let argsStackSize = fromIntegral $ 8 * (length $ Prelude.drop (length argRegs) $ Map.elems $ ms ^. MS.csArgBindings)
+  allocateStack (4096 + 16 + argsStackSize) balign
 
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
@@ -1021,7 +1025,7 @@ allocateStack szInt balign = do
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
-  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
+  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt
   (base, finalMem) <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
   ptr <- liftIO $ C.LLVM.doPtrAddOffset bak finalMem base sz
   x86Mem .= finalMem
@@ -1044,6 +1048,18 @@ pushFreshReturnAddress = do
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
   rsp <- getReg Macaw.RSP regs
+
+  -- x86-64 System V ABI specifies that: "In other words, the stack needs to be
+  -- 16 (32 or 64) byte aligned immediately before the call instruction is
+  -- executed. Once control has been transferred to the function entry point,
+  -- i.e. immediately after the return address has been pushed, %rsp points to
+  -- the return address, and the value of (%rsp + 8) is a multiple of 16 (32 or
+  -- 64)."
+  stackAlign <- integerToAlignment defaultStackBaseAlign
+  is_aligned <- liftIO $ C.LLVM.isAligned sym (knownNat @64) rsp stackAlign
+  when (W4.asConstantPred is_aligned /= Just True) $
+    panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["%rsp is not 16 byte aligned before the call instruction is executed."]
+
   ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
   let writeAlign = C.LLVM.noAlignment
   finalMem <- liftIO $ C.LLVM.doStore bak mem ptr
@@ -1198,6 +1214,9 @@ setArgs env tyenv nameEnv args = do
   newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
   x86Regs .= newRegs
 
+  -- x86-64 System V ABI specifies that: "Once registers are assigned, the
+  -- arguments passed in memory are pushed on the stack in reversed
+  -- (right-to-left21) order."
   let stackArgs = reverse $ Prelude.drop (length argRegs) args
   forM_ stackArgs $ \sval -> do
     liftIO $ exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
@@ -1219,7 +1238,8 @@ setArgs env tyenv nameEnv args = do
       C.LLVM.doStore bak mem' rsp' (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment val
     x86Mem .= mem''
 
-  where argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
+argRegs :: [Macaw.X86Reg (Macaw.BVType 64)]
+argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 
 --------------------------------------------------------------------------------
 -- ** Postcondition
