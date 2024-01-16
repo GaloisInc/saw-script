@@ -51,7 +51,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Applicative hiding (empty)
-import Control.Monad (MonadPlus(..))
+import Control.Monad (MonadPlus(..), (>=>))
 import Control.Monad.Extra (concatMapM)
 import Control.Monad.Identity ()
 import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)

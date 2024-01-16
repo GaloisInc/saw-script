@@ -106,7 +106,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Control.Monad ((>=>), foldM, forM_, zipWithM)
+import Control.Monad (forM_)
 import Control.Monad.Cont (Cont, cont, runCont)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), ReaderT(..))
