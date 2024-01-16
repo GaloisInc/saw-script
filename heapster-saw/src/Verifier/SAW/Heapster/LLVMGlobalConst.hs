@@ -87,7 +87,7 @@ traceAndZeroM msg =
 -- | Helper function to pretty-print the value of a global
 ppLLVMValue :: L.Value -> String
 ppLLVMValue val =
-  ppLLVMLatest (show $ PPHPJ.nest 2 $ L.ppValue val)
+  show $ PPHPJ.nest 2 $ ppValue val
 
 -- | Helper function to pretty-print an LLVM constant expression
 ppLLVMConstExpr :: L.ConstExpr -> String
