@@ -12,4 +12,4 @@ zero_array_loop_spec ys = loop 0 ys
 
 zero_array_spec : {n} Literal n [64] => [n][64] -> [n][64]
 zero_array_spec xs = assuming (`n <= 0x0fffffffffffffff)
-                              (\ _ -> [ 0 | _ <- xs ])
+                              [ 0 | _ <- xs ]

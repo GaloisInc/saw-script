@@ -127,7 +127,7 @@ import qualified Data.Text as T
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
-import Control.Monad (void, foldM, zipWithM, zipWithM_)
+import Control.Monad (void, foldM, forM, zipWithM, zipWithM_)
 import Control.Monad.Except (MonadError(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -433,7 +433,8 @@ FIXME HERE NOW: match a tuple projection of a MultiFixS
     -- forNatLtThenSBody, vecMapM, vecMapBindM, seqMapM
     (f@(asGlobalDef -> Just ident), args)
       | ident `elem`
-        ["Prelude.sawLet", "Cryptol.Num_rec", "SpecM.invariantHint",
+        ["Prelude.sawLet", "Prelude.ifWithProof", "Prelude.iteWithProof",
+         "Cryptol.Num_rec", "SpecM.invariantHint",
          "SpecM.assumingS", "SpecM.assertingS", "SpecM.forNatLtThenSBody",
          "CryptolM.vecMapM", "CryptolM.vecMapBindM", "CryptolM.seqMapM"]
       , Just (_, Just body) <- asConstant f ->
@@ -1203,17 +1204,21 @@ mrRefines'' (AssumeBoolBind cond1 k1) m2 =
 
 mrRefines'' m1 (ExistsBind tp f2) =
   do let nm = maybe "x" id (compFunVarName f2)
-     (tp', r) <- mkInjReprType =<< mrNormOpenTerm (typeTm tp)
-     evar <- mrFreshEVar nm (Type tp')
-     evar' <- mrApplyRepr r evar
-     m2' <- applyNormCompFun f2 evar'
+     tp' <- mrNormOpenTerm (typeTm tp)
+     evars <- forM (fromMaybe [tp'] (asTupleType tp')) $ \tp_i ->
+       mkInjReprType tp_i >>= \(tp_i', r) ->
+       mrFreshEVar nm (Type tp_i') >>= mrApplyRepr r
+     x <- liftSC1 scTuple evars 
+     m2' <- applyNormCompFun f2 x
      mrRefines m1 m2'
 mrRefines'' (ForallBind tp f1) m2 =
   do let nm = maybe "x" id (compFunVarName f1)
-     (tp', r) <- mkInjReprType =<< mrNormOpenTerm (typeTm tp)
-     evar <- mrFreshEVar nm (Type tp')
-     evar' <- mrApplyRepr r evar
-     m1' <- applyNormCompFun f1 evar'
+     tp' <- mrNormOpenTerm (typeTm tp)
+     evars <- forM (fromMaybe [tp'] (asTupleType tp')) $ \tp_i ->
+       mkInjReprType tp_i >>= \(tp_i', r) ->
+       mrFreshEVar nm (Type tp_i') >>= mrApplyRepr r
+     x <- liftSC1 scTuple evars 
+     m1' <- applyNormCompFun f1 x
      mrRefines m1' m2
 
 -- If none of the above cases match, then fail

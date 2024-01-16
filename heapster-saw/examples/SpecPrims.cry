@@ -16,13 +16,13 @@ noErrors = exists
 
 // The specification which asserts that the first argument is True and then
 // returns the second argument
-asserting : {a} Bit -> (() -> a) -> a
-asserting b x = if b then x () else error "Assertion failed"
+asserting : {a} Bit -> a -> a
+asserting b x = if b then x else error "Assertion failed"
 
 // The specification which assumes that the first argument is True and then
 // returns the second argument
-assuming : {a} Bit -> (() -> a) -> a
-assuming _ x = x ()
+assuming : {a} Bit -> a -> a
+assuming _ x = x
 
 // A hint to Mr Solver that a recursive function has the given loop invariant
 invariantHint : {a} Bit -> a -> a
