@@ -44,6 +44,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_isize
   , mir_f32
   , mir_f64
+  , mir_lifetime
   , mir_ref
   , mir_ref_mut
   , mir_slice
@@ -796,6 +797,9 @@ mir_f32 = Mir.TyFloat Mir.F32
 
 mir_f64 :: Mir.Ty
 mir_f64 = Mir.TyFloat Mir.F64
+
+mir_lifetime :: Mir.Ty
+mir_lifetime = Mir.TyLifetime
 
 mir_ref :: Mir.Ty -> Mir.Ty
 mir_ref ty = Mir.TyRef ty Mir.Immut

@@ -42,6 +42,9 @@ f32 = MIRF32Type()
 f64 = MIRF64Type()
 """A MIR double-precision floating-point type."""
 
+lifetime = MIRLifetimeType()
+"""A MIR lifetime type."""
+
 u8 = MIRU8Type()
 """A MIR 8-bit unsigned integer type."""
 
