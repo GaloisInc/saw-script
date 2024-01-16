@@ -17,6 +17,13 @@
   generating LLVM setup scripts for Cryptol FFI functions with the
   `llvm_ffi_setup` command. For more information, see the [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#verifying-cryptol-ffi-functions).
 
+* Ghost state is now supported with the JVM and MIR language backends:
+  * The `llvm_declare_ghost_state` command is now deprecated in favor of the
+    new `declare_ghost_state` command, as nothing about this command is
+    LLVM-specific.
+  * Add `jvm_ghost_value` and `mir_ghost_value` commands in addition to the
+    existing `llvm_ghost_value` command.
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features

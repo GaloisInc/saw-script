@@ -451,7 +451,11 @@ typeOfSetupValue cc env nameEnv val =
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
 
+    SetupEnum empty ->
+      absurd empty
     SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
       absurd empty
 
     SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
@@ -630,7 +634,11 @@ resolveSetupVal cc mem env tyenv nameEnv val =
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
+    SetupEnum empty ->
+      absurd empty
     SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
       absurd empty
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do

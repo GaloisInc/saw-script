@@ -4,17 +4,22 @@ import "Test.cry";
 
 enable_experimental;
 
-res <- prove_bisim z3 {{ rel }} {{ f1 }} {{ f2 }};
-print res;
+res <- prove_bisim z3 [] {{ srel }} {{ orel }} {{ f1 }} {{ f2 }};
+
+// Test non-named constant in bisimulation term
+fails (prove_bisim z3 [] {{ srel }} {{ orel }} {{ f1 }} {{ \x -> f2 x }});
 
 // Test incompatable input types
-fails (prove_bisim z3 {{ rel }} {{ f1 }} {{ f2_bad_input_type }});
+fails (prove_bisim z3 [] {{ srel }} {{ orel }} {{ f1 }} {{ f2_bad_input_type }});
 
 // Test incompatable output types
-fails (prove_bisim z3 {{ rel }} {{ f1 }} {{ f2_bad_output_type }});
+fails (prove_bisim z3 [] {{ srel }} {{ orel }} {{ f1 }} {{ f2_bad_output_type }});
 
-// Test bad relation type
-fails (prove_bisim z3 {{ True }} {{ f1 }} {{ f2 }});
+// Test bad output relation type
+fails (prove_bisim z3 [] {{ srel }} {{ True }} {{ f1 }} {{ f2 }});
+
+// Test bad state relation type
+fails (prove_bisim z3 [] {{ True }} {{ orel }} {{ f1 }} {{ f2 }});
 
 // Test wrong state type
-fails (prove_bisim z3 {{ rel }} {{ f2 }} {{ f2 }});
+fails (prove_bisim z3 [] {{ srel }} {{ orel }} {{ f2 }} {{ f2 }});

@@ -23,7 +23,7 @@ library
   default-language: Haskell2010
   build-depends:
       base >= 4.9
-    , aeson >= 2.0 && < 2.2
+    , aeson >= 2.0 && < 2.3
     , aig
     , array
     , binary
@@ -54,6 +54,7 @@ library
     , haskeline
     , heapster-saw
     , hobbits >= 1.3.1
+    , indexed-traversable
     , galois-dwarf >= 0.2.2
     , IfElse
     , jvm-parser
@@ -84,7 +85,7 @@ library
     , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
-    , sbv >= 9.1 && < 9.3
+    , sbv >= 9.1 && < 10.3
     , serialise
     , split
     , temporary
@@ -114,6 +115,7 @@ library
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
     SAWScript.Bisimulation
+    SAWScript.Bisimulation.BisimTheorem
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Exceptions

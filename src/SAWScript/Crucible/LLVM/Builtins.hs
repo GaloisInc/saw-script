@@ -43,7 +43,6 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_spec_size
     , llvm_spec_solvers
     , llvm_ghost_value
-    , llvm_declare_ghost_state
     , llvm_equal
     , llvm_points_to
     , llvm_conditional_points_to
@@ -93,14 +92,18 @@ import Prelude hiding (fail)
 import qualified Control.Exception as X
 import           Control.Lens
 
+import           Control.Monad (foldM, forM, forM_, replicateM, unless, when)
 import           Control.Monad.Extra (findM, whenM)
-import           Control.Monad.State hiding (fail)
-import           Control.Monad.Reader (runReaderT)
 import           Control.Monad.Fail (MonadFail(..))
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Reader (runReaderT)
+import           Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, fold)
 import           Data.Function
+import           Data.Functor (void)
 import           Data.IORef
 import           Data.List
 import           Data.List.Extra (nubOrd)
@@ -185,6 +188,7 @@ import Verifier.SAW.TypedTerm
 
 -- saw-script
 import SAWScript.AST (Located(..))
+import SAWScript.Builtins (ghost_value)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Versions
@@ -1202,7 +1206,7 @@ setupPrestateConditions mspec cc mem env = aux []
       let lp = Crucible.LabeledPred (ttTerm tm) (md, "precondition") in
       aux (lp:acc) globals xs
 
-    aux acc globals (MS.SetupCond_Ghost () _md var val : xs) =
+    aux acc globals (MS.SetupCond_Ghost _md var val : xs) =
       case val of
         TypedTerm (TypedTermSchema sch) tm ->
           aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
@@ -1309,8 +1313,9 @@ registerOverride opts cc sim_ctx _top_loc mdMap cs =
                 $ methodSpecHandler opts sc cc mdMap cs h
               mem <- Crucible.readGlobal mvar
               let bindPtr m decl =
-                    do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
-                       Crucible.bindLLVMFunPtr bak decl h m
+                    do let declName = L.decName decl
+                       printOutLn opts Info $ "  variant `" ++ show declName ++ "`"
+                       Crucible.bindLLVMFunPtr bak declName h m
               mem' <- liftIO $ foldM bindPtr mem (d:ds)
               Crucible.writeGlobal mvar mem'
               return (Crucible.SomeHandle h)
@@ -2791,28 +2796,12 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
               }
      Setup.addCondition (MS.SetupCond_Equal md val1 val2)
 
-llvm_declare_ghost_state ::
-  String         ->
-  TopLevel Value
-llvm_declare_ghost_state name =
-  do allocator <- getHandleAlloc
-     global <- liftIO (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr)
-     return (VGhostVar global)
-
 llvm_ghost_value ::
   MS.GhostGlobal ->
   TypedTerm ->
   LLVMCrucibleSetupM ()
 llvm_ghost_value ghost val = LLVMCrucibleSetupM $
-  do loc <- getW4Position "llvm_ghost_value"
-     tags <- view Setup.croTags
-     let md = MS.ConditionMetadata
-              { MS.conditionLoc = loc
-              , MS.conditionTags = tags
-              , MS.conditionType = "ghost value"
-              , MS.conditionContext = ""
-              }
-     Setup.addCondition (MS.SetupCond_Ghost () md ghost val)
+  ghost_value ghost val
 
 llvm_spec_solvers :: SomeLLVM MS.ProvedSpec -> [String]
 llvm_spec_solvers (SomeLLVM ps) =

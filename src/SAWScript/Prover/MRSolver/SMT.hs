@@ -30,11 +30,12 @@ namely 'mrProvable' and 'mrProveEq'.
 module SAWScript.Prover.MRSolver.SMT where
 
 import Data.Maybe
-import Data.List (foldl')
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Control.Monad.Except
+import Control.Monad (MonadPlus(..), (>=>), (<=<), when, foldM)
 import Control.Monad.Catch (throwM, catch)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import GHC.Generics
 
@@ -81,7 +82,7 @@ vecValToTerm sc cfg tp (VVector vs) =
      vs' <- traverse (readBackValue sc cfg tp <=< force) (V.toList vs)
      Just <$> scVectorReduced sc tp' vs'
 vecValToTerm _ _ _ (VExtra (VExtraTerm _tp tm)) = return $ Just tm
-vecValToTerm _ _ _ v = return $ Nothing
+vecValToTerm _ _ _ _ = return $ Nothing
 
 -- | A primitive function that expects a term of the form @gen n a f@ and the
 -- function argument @f@ to the supplied function
@@ -272,14 +273,14 @@ mrProvable bool_tm =
 -- | The length of a vector, given as either ...
 data VecLength = ConstBVVecLen Natural Natural
                | ConstNatVecLen Natural Natural
-               | SymBVVecLen Natural Term  
+               | SymBVVecLen Natural Term
                | SymNatVecLen Term
                deriving (Generic, Show, TermLike)
 
 instance PrettyInCtx VecLength where
-  prettyInCtx (ConstBVVecLen n len) = 
+  prettyInCtx (ConstBVVecLen n len) =
     prettyAppList [return "ConstBVVecLen", prettyInCtx n, prettyInCtx len]
-  prettyInCtx (ConstNatVecLen n len) = 
+  prettyInCtx (ConstNatVecLen n len) =
     prettyAppList [return "ConstNatVecLen", prettyInCtx n, prettyInCtx len]
   prettyInCtx (SymBVVecLen n len) =
     prettyAppList [return "SymBVVecLen", prettyInCtx n, parens <$> prettyInCtx len]
@@ -362,7 +363,7 @@ mrVecLenUnify (SymNatVecLen len1) (SymNatVecLen len2) =
 mrVecLenUnify _ _ = return Nothing
 
 -- | Given a vector length, element type, and generating function, return the
--- associated vector formed using the appropritate @gen@ function 
+-- associated vector formed using the appropritate @gen@ function
 mrVecLenGen :: VecLength -> Term -> Term -> MRM t Term
 mrVecLenGen (ConstBVVecLen n len) tp f =
   do n_tm <- liftSC1 scNat n
@@ -645,7 +646,7 @@ injUnifyReprTypes _ _ _ _ = mzero
 
 -- | Given two types @tp1@ and @tp2@, try to find a common type @tp@ that
 -- injectively represents both of them. Pictorially, the result looks like this:
--- 
+--
 -- >  tp1      tp2
 -- >   ^        ^
 -- > r1 \      / r2
@@ -941,7 +942,7 @@ mrProveRelH' _ het tp1@(asVecTypeWithLen -> Just (vlen1, tpA1))
                    tp2@(asVecTypeWithLen -> Just (vlen2, tpA2)) t1 t2 =
   mrVecLenUnify vlen1 vlen2 >>= \case
     Just (vlen1', vlen2') ->
-      mrVecLenIxType vlen1' >>= \ix_tp -> 
+      mrVecLenIxType vlen1' >>= \ix_tp ->
       withUVarLift "ix" (Type ix_tp) (vlen1',vlen2',tpA1,tpA2,t1,t2) $
       \ix (vlen1'',vlen2'',tpA1',tpA2',t1',t2') ->
       do ix_bound <- mrVecLenIxBound vlen1'' ix

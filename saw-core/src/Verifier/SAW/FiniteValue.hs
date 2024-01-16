@@ -17,7 +17,7 @@ import Data.Traversable
 #endif
 
 import GHC.Generics (Generic)
-import Control.Monad (mzero)
+import Control.Monad (replicateM, mzero)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.State as S
@@ -355,7 +355,7 @@ readFiniteValue' en ft =
                      case bs of
                        []      -> S.lift Nothing
                        b : bs' -> S.put bs' >> return (FVBit b)
-    FTVec n t  -> (fvVec t . fixup) <$> S.replicateM (fromIntegral n) (readFiniteValue' en t)
+    FTVec n t  -> (fvVec t . fixup) <$> replicateM (fromIntegral n) (readFiniteValue' en t)
                     where fixup = case (t, en) of
                                     (FTBit, LittleEndian) -> reverse
                                     _ -> id

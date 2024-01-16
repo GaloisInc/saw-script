@@ -24,7 +24,7 @@ module Verifier.SAW.Change
   , flatten
   ) where
 
-import Control.Applicative (liftA2)
+import qualified Control.Applicative as App (liftA2)
 import Control.Monad (liftM)
 import Control.Monad.Trans
 
@@ -110,7 +110,7 @@ instance Functor m => Functor (ChangeT m) where
 
 instance Applicative m => Applicative (ChangeT m) where
   pure x = ChangeT (pure (Original x))
-  ChangeT m1 <*> ChangeT m2 = ChangeT (liftA2 (<*>) m1 m2)
+  ChangeT m1 <*> ChangeT m2 = ChangeT (App.liftA2 (<*>) m1 m2)
 
 instance Monad m => Monad (ChangeT m) where
   return = pure

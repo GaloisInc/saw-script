@@ -1665,22 +1665,29 @@ primitives = Map.fromList
     , "successful, and aborts if unsuccessful."
     ]
 
-  , prim "prove_bisim"         "ProofScript () -> Term -> Term -> Term -> TopLevel ProofResult"
+  , prim "prove_bisim"         "ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel BisimTheorem"
     (pureVal proveBisimulation)
     Experimental
-    [ "Use bisimulation to prove that two terms simulate each other.  The first"
-    , "argument is the proof strategy to use.  The second argument is a"
-    , "relation over the states and outputs for the third and fourth"
-    , "arguments. The relation must have the type"
-    , "'(lhsState, output) -> (rhsState, output) -> Bit'. The third and fourth"
-    , "arguments are the two terms to prove bisimilar. They must have the types"
-    , "'(lhsState, input) -> (lhsState, output)' and"
-    , "'(rhsState, input) -> (rhsState, output)' respectively."
+    [ "Use bisimulation to prove that two terms simulate each other.  The "
+    , "command takes the following arguments: "
+    , "1. The proof strategy to use"
+    , "2. A list of already proven bisimulation theorems"
+    , "3. A state relation `srel : lhsState -> rhsState -> Bit`"
+    , "4. An output relation `orel : (lhsState, output) -> (rhsState, output) -> Bit`"
+    , "5. A term `lhs : (lhsState, input) -> (lhsState, output)`"
+    , "6. A term `rhs : (rhsState, input) -> (rhsState, output)`"
+    , "and considers `lhs` and `rhs` bisimilar when the following two theorems hold:"
+    , "* OUTPUT RELATION THEOREM:"
+    , "   forall s1 s2 in."
+    , "     srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))"
+    , "* STATE RELATION THEOREM:"
+    , "   forall s1 s2 out1 out2."
+    , "     orel (s1, out1) (s2, out2) -> srel s1 s2"
     , ""
-    , "Let the second argument be called 'rel', the third 'lhs', and the"
-    , "fourth 'rhs'. The prover considers 'lhs' and 'rhs' bisimilar when:"
-    , "  forall s1 s2 in out1 out2."
-    , "    rel (s1, out1) (s2, out2) -> rel (lhs (s1, in)) (rhs (s2, in))"
+    , "LIMITATIONS: For now, the prove_bisim command has a couple limitations:"
+    , "* `lhs` and `rhs` (arguments 5 and 6) must be named functions."
+    , "* Each subterm present in the list of bisimulation theorems already"
+    , "  proven (argument 2) may be invoked at most once in `lhs` or `rhs`."
     ]
 
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
@@ -3598,16 +3605,21 @@ primitives = Map.fromList
     ]
 
   -- Ghost state support
-  , prim "llvm_declare_ghost_state"
+  , prim "declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
+  , prim "llvm_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (pureVal declare_ghost_state)
+    Current
+    [ "Legacy alternative name for `declare_ghost_state`." ]
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
-    [ "Legacy alternative name for `llvm_declare_ghost_state`." ]
+    [ "Legacy alternative name for `declare_ghost_state`." ]
 
   , prim "llvm_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
@@ -3620,6 +3632,20 @@ primitives = Map.fromList
     (pureVal llvm_ghost_value)
     Current
     [ "Legacy alternative name for `llvm_ghost_value`."]
+
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (pureVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "mir_ghost_value"
+    "Ghost -> Term -> MIRSetup ()"
+    (pureVal mir_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
@@ -3875,6 +3901,10 @@ primitives = Map.fromList
     , "the function expects the object to be allocated before it runs."
     , "After `mir_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
     ]
 
   , prim "mir_alloc_mut" "MIRType -> MIRSetup MIRValue"
@@ -3885,6 +3915,10 @@ primitives = Map.fromList
     , "the function expects the object to be allocated before it runs."
     , "After `mir_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
     ]
 
   , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
@@ -3900,6 +3934,15 @@ primitives = Map.fromList
     [ "State that the given predicate must hold.  Acts as `mir_precond`"
     , "or `mir_postcond` depending on the phase of specification in which"
     , "it appears (i.e., before or after `mir_execute_func`)."
+    ]
+
+  , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
+    (funVal3 mir_enum_value)
+    Experimental
+    [ "Create a MIRValue representing a variant of a MIR enum with the given"
+    , "list of values as elements. The MIRAdt argument determines what enum"
+    , "type to create; use `mir_find_adt` to retrieve a MIRAdt value. The"
+    , "String argument represents the variant name."
     ]
 
   , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
@@ -3921,6 +3964,24 @@ primitives = Map.fromList
     , "with the given String as an identifier and the given MIRTypes as the"
     , "types used to instantiate the type parameters. If such a MIRAdt cannot"
     , "be found in the MIRModule, this will raise an error."
+    ]
+
+  , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
+    (pureVal mir_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a MIR specification. The given name is used only for"
+    , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
+    , "there isn't an appropriate MIR type, such as the Cryptol Array type."
+    ]
+
+  , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
+    (pureVal mir_fresh_expanded_value)
+    Experimental
+    [ "Create a MIR value entirely populated with fresh symbolic variables."
+    , "For compound types such as structs and arrays, this will explicitly set"
+    , "each field or element to contain a fresh symbolic variable. The String"
+    , "argument is used as a prefix in each of the symbolic variables."
     ]
 
   , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
@@ -3968,6 +4029,23 @@ primitives = Map.fromList
     , "mir_return statement is required if and only if the method"
     , "has a non-() return type." ]
 
+  , prim "mir_slice_value" "MIRValue -> MIRValue"
+    (pureVal mir_slice_value)
+    Experimental
+    [ "Create a MIRValue representing a slice. The argument must be a"
+    , "reference to an array value."
+    ]
+
+  , prim "mir_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
+    (pureVal mir_slice_range_value)
+    Experimental
+    [ "Create a MIRValue representing a slice over a given range. The first"
+    , "argument must be a reference to an array value. The second and third"
+    , "arguments represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed the length of the"
+    , "reference's array."
+    ]
+
   , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
     (pureVal (CMS.SetupStruct :: Mir.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
     Experimental
@@ -4003,6 +4081,14 @@ primitives = Map.fromList
     Experimental
     [ "Create a SetupValue representing a MIR tuple with the given list of"
     , "values as elements."
+    ]
+
+  , prim "mir_unsafe_assume_spec"
+    "MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec"
+    (pureVal mir_unsafe_assume_spec)
+    Experimental
+    [ "Return a MIRSpec corresponding to a MIRSetup block, as would be"
+    , "returned by mir_verify but without performing any verification."
     ]
 
   , prim "mir_verify"
@@ -4081,6 +4167,11 @@ primitives = Map.fromList
     (pureVal mir_f64)
     Experimental
     [ "The type of MIR double-precision floating-point values." ]
+
+  , prim "mir_lifetime" "MIRType"
+    (pureVal mir_lifetime)
+    Experimental
+    [ "The type of MIR lifetimes." ]
 
   , prim "mir_ref" "MIRType -> MIRType"
     (pureVal mir_ref)

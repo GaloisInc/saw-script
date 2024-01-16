@@ -6,20 +6,26 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 -- | The 'TypeShape' data type and related utilities.
 module SAWScript.Crucible.MIR.TypeShape
   ( TypeShape(..)
   , FieldShape(..)
+  , VariantShape(..)
   , tyToShape
   , tyToShapeEq
   , shapeType
   , fieldShapeType
+  , variantShapeType
   , shapeMirTy
   , fieldShapeMirTy
   , shapeToTerm
+  , IsBVShape(..)
+  , testBVShape
   , IsRefShape(..)
   , testRefShape
+  , sliceShapeParts
   ) where
 
 import Control.Lens ((^.), (^..), each)
@@ -74,6 +80,41 @@ data TypeShape (tp :: CrucibleType) where
              -> TypeRepr tp
              -- ^ The Crucible representation of the pointee type
              -> TypeShape (MirReferenceType tp)
+    -- | A shape for a slice reference (e.g., @&[T]@), which is represented in
+    -- @crucible-mir@ as a 'MirSlice', i.e., a 'StructType' where the first type
+    -- in the struct is a reference to @T@, and the second type in the struct is
+    -- the length of the slice. The @crucible-mir@ representations for tuples
+    -- and slices are almost, but not quite, the same, as tuples can wrap their
+    -- fields in 'MaybeType's (see 'FieldShape') but slices never do this.
+    -- Nevertheless, many places in the code effectively treat tuples and slices
+    -- identically (modulo 'MaybeType's).
+    --
+    -- To make it easier to recurse on the 'TypeShape's for the slice's
+    -- reference and length types, we provide the 'sliceShapeParts' function.
+    SliceShape :: M.Ty
+               -- ^ The type of @&[T]@.
+               -> M.Ty
+               -- ^ The type of @T@.
+               -> M.Mutability
+               -- ^ Is the reference mutable or immutable?
+               -> TypeRepr tp
+               -- ^ The Crucible representation of @T@.
+               -> TypeShape (MirSlice tp)
+    -- | A shape for an enum type. Like 'StructShape', this is indexed by
+    -- 'AnyType', so code that matches on 'EnumShape' may need to further match
+    -- on the 'VariantShape's in order to bring additional type information into
+    -- scope.
+    EnumShape :: M.Ty
+              -- ^ The overall enum type.
+              -> [[M.Ty]]
+              -- ^ The field types in each of the enum's variants.
+              -> Assignment VariantShape ctx
+              -- ^ The shapes of the enum type's variants.
+              -> M.Ty
+              -- ^ The discriminant type.
+              -> TypeShape discrTp
+              -- ^ The shape of the discriminant type.
+              -> TypeShape AnyType
     -- | Note that 'FnPtrShape' contains only 'TypeRepr's for the argument and
     -- result types, not 'TypeShape's, as none of our operations need to recurse
     -- inside them.
@@ -100,6 +141,25 @@ instance PP.Pretty (FieldShape tp) where
 deriving instance Show (FieldShape tp)
 instance ShowF FieldShape
 
+-- | The 'TypeShape' of an enum variant, which consists of some number of field
+-- types.
+--
+-- This is indexed by a 'StructType', but that is simply an artifact of the
+-- particular way that @crucible-mir@ encodes enum types. Despite the use of
+-- 'StructType' as a type index, we only use 'VariantShape' for enums, not
+-- structs.
+data VariantShape (tp :: CrucibleType) where
+    VariantShape :: Assignment FieldShape ctx
+                 -- ^ The shapes of the variant's field types.
+                 -> VariantShape (StructType ctx)
+
+-- TODO: Improve?
+instance PP.Pretty (VariantShape tp) where
+  pretty = PP.viaShow
+
+deriving instance Show (VariantShape tp)
+instance ShowF VariantShape
+
 -- | Return the `TypeShape` of `ty`.
 --
 -- It is guaranteed that the `tp :: CrucibleType` index of the resulting
@@ -121,8 +181,16 @@ tyToShape col = go
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
                 mapSome (TransparentShape ty) $ go ty'
-            Just (M.Adt _ M.Struct [v] _ _ _ _) -> goStruct ty (v ^.. M.vfields . each . M.fty)
-            Just (M.Adt _ ak _ _ _ _ _) -> error $ "tyToShape: AdtKind " ++ show ak ++ " NYI"
+            Just (M.Adt _ kind vs _ _ _ _) ->
+              case kind of
+                M.Struct
+                  |  [v] <- vs
+                  -> goStruct ty (variantFieldTys v)
+                  |  otherwise
+                  -> error $ "tyToShape: Unexpected struct with multiple variants: "
+                          ++ show (PP.pretty vs)
+                M.Enum discrTy -> goEnum ty discrTy vs
+                M.Union -> error "tyToShape: Union types NYI"
             Nothing -> error $ "tyToShape: bad adt: " ++ show ty
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
         M.TyRawPtr ty' mutbl -> goRef ty ty' mutbl
@@ -146,7 +214,38 @@ tyToShape col = go
         loop (ty':tys') flds | Some fld <- go ty' = loop tys' (flds :> OptField fld)
 
     goStruct :: M.Ty -> [M.Ty] -> Some TypeShape
-    goStruct ty tys | Some flds <- loop tys Empty = Some $ StructShape ty tys flds
+    goStruct ty tys | Some flds <- goFields tys = Some $ StructShape ty tys flds
+
+    -- The first Ty is the overall enum type, and the second Ty is the
+    -- discriminant type.
+    goEnum :: M.Ty -> M.Ty -> [M.Variant] -> Some TypeShape
+    goEnum ty discrTy vs
+        | Some discrShp <- go discrTy
+        , Some variants <- loop vs Empty
+        = Some $ EnumShape ty variantTys variants discrTy discrShp
+      where
+        variantTys = map variantFieldTys vs
+
+        loop ::
+          forall ctx.
+          [M.Variant] ->
+          Assignment VariantShape ctx ->
+          Some (Assignment VariantShape)
+        loop [] variants = Some variants
+        loop (v':vs') variants
+          | Some variant <- goVariant v'
+          = loop vs' (variants :> variant)
+
+    -- Process a single Variant in an enum type.
+    goVariant :: M.Variant -> Some VariantShape
+    goVariant v
+        | Some flds <- goFields tys
+        = Some $ VariantShape flds
+      where
+        tys = variantFieldTys v
+
+    goFields :: [M.Ty] -> Some (Assignment FieldShape)
+    goFields tys = loop tys Empty
       where
         loop :: forall ctx. [M.Ty] -> Assignment FieldShape ctx -> Some (Assignment FieldShape)
         loop [] flds = Some flds
@@ -161,22 +260,9 @@ tyToShape col = go
     goRef ty ty' mutbl
       | M.TySlice slicedTy <- ty'
       , Some tpr <- tyToRepr col slicedTy
-      = Some $
-         TupleShape ty [refTy, usizeTy]
-             (Empty
-                :> ReqField (RefShape refTy slicedTy mutbl tpr)
-                :> ReqField (PrimShape usizeTy BaseUsizeRepr))
+      = Some $ SliceShape ty slicedTy mutbl tpr
       | M.TyStr <- ty'
-      = Some $
-        TupleShape ty [refTy, usizeTy]
-            (Empty
-                :> ReqField (RefShape refTy (M.TyUint M.B8) mutbl (BVRepr (knownNat @8)))
-                :> ReqField (PrimShape usizeTy BaseUsizeRepr))
-      where
-        -- We use a ref (of the same mutability as `ty`) when possible, to
-        -- avoid unnecessary clobbering.
-        refTy = M.TyRef ty' mutbl
-        usizeTy = M.TyUint M.USize
+      = Some $ SliceShape ty (M.TyUint M.B8) mutbl (BVRepr (knownNat @8))
     goRef ty ty' _ | isUnsized ty' = error $
         "tyToShape: fat pointer " ++ show ty ++ " NYI"
     goRef ty ty' mutbl | Some tpr <- tyToRepr col ty' = Some $ RefShape ty ty' mutbl tpr
@@ -186,6 +272,11 @@ tyToShape col = go
         tyListToCtx col args $ \argsr  ->
         tyToReprCont col ret $ \retr ->
            Some (FnPtrShape ty argsr retr)
+
+    -- Retrieve the field types in a variant. This used for both struct and enum
+    -- variants.
+    variantFieldTys :: M.Variant -> [M.Ty]
+    variantFieldTys v = v ^.. M.vfields . each . M.fty
 
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
 -- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
@@ -207,13 +298,19 @@ shapeType = go
     go (TupleShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
     go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp
     go (StructShape _ _ _flds) = AnyRepr
+    go (EnumShape _ _ _ _ _variants) = AnyRepr
     go (TransparentShape _ shp) = go shp
     go (RefShape _ _ _ tpr) = MirReferenceRepr tpr
+    go (SliceShape _ _ _ tpr) = MirSliceRepr tpr
     go (FnPtrShape _ args ret) = FunctionHandleRepr args ret
 
 fieldShapeType :: FieldShape tp -> TypeRepr tp
 fieldShapeType (ReqField shp) = shapeType shp
 fieldShapeType (OptField shp) = MaybeRepr $ shapeType shp
+
+variantShapeType :: VariantShape tp -> TypeRepr tp
+variantShapeType (VariantShape flds) =
+  StructRepr $ fmapFC fieldShapeType flds
 
 shapeMirTy :: TypeShape tp -> M.Ty
 shapeMirTy (UnitShape ty) = ty
@@ -221,8 +318,10 @@ shapeMirTy (PrimShape ty _) = ty
 shapeMirTy (TupleShape ty _ _) = ty
 shapeMirTy (ArrayShape ty _ _) = ty
 shapeMirTy (StructShape ty _ _) = ty
+shapeMirTy (EnumShape ty _ _ _ _) = ty
 shapeMirTy (TransparentShape ty _) = ty
 shapeMirTy (RefShape ty _ _ _) = ty
+shapeMirTy (SliceShape ty _ _ _) = ty
 shapeMirTy (FnPtrShape ty _ _) = ty
 
 fieldShapeMirTy :: FieldShape tp -> M.Ty
@@ -253,6 +352,24 @@ shapeToTerm sc = go
     goField (OptField shp) = go shp
     goField (ReqField shp) = go shp
 
+-- | A witness that a 'TypeShape' is equal to a 'PrimShape' that characterizes
+-- a bitvector.
+data IsBVShape (tp :: CrucibleType) where
+  IsBVShape :: (1 <= w)
+            => M.Ty
+            -> NatRepr w
+            -> IsBVShape (BVType w)
+
+-- | Check that a 'TypeShape' is equal to a 'PrimShape' that characterizes a
+-- bitvector. If so, return 'Just' a witness of that equality. Otherwise, return
+-- 'Nothing'.
+testBVShape :: TypeShape tp -> Maybe (IsBVShape tp)
+testBVShape shp =
+  case shp of
+    PrimShape ty (BaseBVRepr w)
+      -> Just $ IsBVShape ty w
+    _ -> Nothing
+
 -- | A witness that a 'TypeShape' is equal to a 'RefShape'.
 data IsRefShape (tp :: CrucibleType) where
   IsRefShape :: M.Ty
@@ -274,6 +391,22 @@ testRefShape shp =
       -> Just $ IsRefShape ty ty' mut shp'
     _ -> Nothing
 
+-- | Construct the 'TypeShape's for a slice's reference and length types.
+sliceShapeParts ::
+    M.Ty ->
+    M.Mutability ->
+    TypeRepr tp ->
+    (TypeShape (MirReferenceType tp), TypeShape UsizeType)
+sliceShapeParts referentTy refMutbl referentTpr =
+    ( RefShape refTy referentTy refMutbl referentTpr
+    , PrimShape usizeTy BaseUsizeRepr
+    )
+  where
+    -- We use a ref (of the same mutability as `ty`) when possible, to
+    -- avoid unnecessary clobbering.
+    refTy = M.TyRef referentTy refMutbl
+    usizeTy = M.TyUint M.USize
+
 $(pure [])
 
 instance TestEquality TypeShape where
@@ -285,6 +418,13 @@ instance TestEquality TypeShape where
         , (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])
         , (TypeApp (ConType [t|TypeRepr|]) AnyType, [|testEquality|])
         , (TypeApp (ConType [t|CtxRepr|]) AnyType, [|testEquality|])
+        ])
+
+instance TestEquality VariantShape where
+  testEquality =
+    $(structuralTypeEquality
+        [t|VariantShape|]
+        [ (TypeApp (TypeApp (ConType [t|Assignment|]) AnyType) AnyType, [|testEquality|])
         ])
 
 instance TestEquality FieldShape where

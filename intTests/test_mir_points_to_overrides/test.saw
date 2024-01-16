@@ -1,0 +1,26 @@
+enable_experimental;
+
+impl_mir <- mir_load_module "test.linked-mir.json";
+
+let inner_spec = do {
+    x <- mir_fresh_var "x" mir_u32;
+    r <- mir_alloc_mut mir_u32;
+    mir_points_to r (mir_term x);
+
+    mir_execute_func [r];
+
+    mir_points_to r (mir_term x);
+};
+
+let outer_spec = do {
+    x <- mir_fresh_var "x" mir_u32;
+    r <- mir_alloc_mut mir_u32;
+    mir_points_to r (mir_term x);
+
+    mir_execute_func [r];
+
+    mir_points_to r (mir_term x);
+};
+
+inner_ov <- mir_verify impl_mir "test::inner" []         false inner_spec z3;
+outer_ov <- mir_verify impl_mir "test::outer" [inner_ov] false outer_spec z3;

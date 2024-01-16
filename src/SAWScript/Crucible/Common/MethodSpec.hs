@@ -13,8 +13,10 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -22,6 +24,7 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.Common.MethodSpec
   ( AllocIndex(..)
@@ -41,6 +44,7 @@ module SAWScript.Crucible.Common.MethodSpec
   , XSetupNull
   , XSetupStruct
   , XSetupTuple
+  , XSetupSlice
   , XSetupArray
   , XSetupElem
   , XSetupField
@@ -61,7 +65,6 @@ module SAWScript.Crucible.Common.MethodSpec
   , setupToTypedTerm
   , setupToTerm
 
-  , XGhostState
   , GhostValue
   , GhostType
   , GhostGlobal
@@ -117,6 +120,7 @@ import           Data.Set (Set)
 import           Data.Time.Clock
 import           Data.Void (absurd)
 
+import           Control.Monad (when)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
@@ -131,17 +135,22 @@ import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import           Mir.Intrinsics (MIR)
 
+import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
 import           Verifier.SAW.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
+import           Verifier.SAW.Simulator.What4.ReturnTrip as SAWVerifier
 
+import           SAWScript.Crucible.Common (Sym, sawCoreState)
 import           SAWScript.Crucible.Common.Setup.Value
 import           SAWScript.Crucible.LLVM.Setup.Value (LLVM)
 import           SAWScript.Crucible.JVM.Setup.Value ()
-import           SAWScript.Crucible.MIR.Setup.Value ()
+import           SAWScript.Crucible.MIR.Setup.Value
+  (MirSetupEnum(..), MirSetupSlice(..))
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
@@ -195,6 +204,14 @@ ppSetupValue setupval = case setupval of
         absurd empty
       (MIRExt, _defId) ->
         ppSetupStructDefault vs
+  SetupEnum x ->
+    case (ext, x) of
+      (LLVMExt, empty) ->
+        absurd empty
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, enum_) ->
+        ppMirSetupEnum enum_
   SetupTuple x vs ->
     case (ext, x) of
       (LLVMExt, empty) ->
@@ -202,7 +219,15 @@ ppSetupValue setupval = case setupval of
       (JVMExt, empty) ->
         absurd empty
       (MIRExt, ()) ->
-        PP.parens (commaList (map ppSetupValue vs))
+        ppSetupTuple vs
+  SetupSlice x ->
+    case (ext, x) of
+      (LLVMExt, empty) ->
+        absurd empty
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, slice) ->
+        ppMirSetupSlice slice
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
@@ -233,8 +258,26 @@ ppSetupValue setupval = case setupval of
       | packed    = PP.angles (ppSetupStructDefault vs)
       | otherwise = ppSetupStructDefault vs
 
-    ppSetupStructDefault :: [SetupValue ext] -> PP.Doc ann
+    ppSetupStructDefault :: forall ext'. IsExt ext' => [SetupValue ext'] -> PP.Doc ann
     ppSetupStructDefault vs = PP.braces (commaList (map ppSetupValue vs))
+
+    ppSetupTuple :: [SetupValue MIR] -> PP.Doc ann
+    ppSetupTuple vs = PP.parens (commaList (map ppSetupValue vs))
+
+    ppMirSetupEnum :: MirSetupEnum -> PP.Doc ann
+    ppMirSetupEnum (MirSetupEnumVariant _defId variantName _varIdx fields) =
+      PP.pretty variantName PP.<+> ppSetupStructDefault fields
+    ppMirSetupEnum (MirSetupEnumSymbolic _defId _discr _variants) =
+      PP.pretty "<symbolic enum>"
+
+    ppMirSetupSlice :: MirSetupSlice -> PP.Doc ann
+    ppMirSetupSlice (MirSetupSliceRaw ref len) =
+      PP.pretty "SliceRaw" <> ppSetupTuple [ref, len]
+    ppMirSetupSlice (MirSetupSlice arr) =
+      ppSetupValue arr <> PP.pretty "[..]"
+    ppMirSetupSlice (MirSetupSliceRange arr start end) =
+      ppSetupValue arr <> PP.pretty "[" <> PP.pretty start <>
+      PP.pretty ".." <> PP.pretty end <> PP.pretty "]"
 
 ppAllocIndex :: AllocIndex -> PP.Doc ann
 ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
@@ -323,21 +366,33 @@ type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
 type GhostGlobal = Crucible.GlobalVar GhostType
 
+instance Crucible.IntrinsicClass Sym GhostValue where
+  type Intrinsic Sym GhostValue ctx = (Cryptol.Schema, Term)
+  muxIntrinsic sym _ _namerep _ctx prd (thnSch,thn) (elsSch,els) =
+    do when (thnSch /= elsSch) $ fail $ unlines $
+         [ "Attempted to mux ghost variables of different types:"
+         , show (Cryptol.pp thnSch)
+         , show (Cryptol.pp elsSch)
+         ]
+       st <- sawCoreState sym
+       let sc  = saw_ctx st
+       prd' <- toSC sym st prd
+       typ  <- scTypeOf sc thn
+       res  <- scIte sc typ prd' thn els
+       return (thnSch, res)
+
 --------------------------------------------------------------------------------
 -- *** StateSpec
 
 data SetupCondition ext where
   SetupCond_Equal    :: ConditionMetadata -> SetupValue ext -> SetupValue ext -> SetupCondition ext
   SetupCond_Pred     :: ConditionMetadata -> TypedTerm -> SetupCondition ext
-  SetupCond_Ghost    :: XGhostState ext ->
-                        ConditionMetadata ->
+  SetupCond_Ghost    :: ConditionMetadata ->
                         GhostGlobal ->
                         TypedTerm ->
                         SetupCondition ext
 
-deriving instance ( SetupValueHas Show ext
-                  , Show (XGhostState ext)
-                  ) => Show (SetupCondition ext)
+deriving instance SetupValueHas Show ext => Show (SetupCondition ext)
 
 -- | Verification state (either pre- or post-) specification
 data StateSpec ext = StateSpec

@@ -18,7 +18,8 @@ module Verifier.SAW.Heapster.GenMonad (
   ) where
 
 import Data.Binding.Hobbits ( nuMulti, nuMultiWithElim1, Mb, Name, RAssign )
-import Control.Monad.State ( ap, MonadState(get, put) )
+import Control.Monad ( ap )
+import Control.Monad.State ( MonadState(get, put) )
 import Control.Monad.Trans.Class ( MonadTrans(lift) )
 import Control.Monad.Trans.Reader
 import Data.Proxy

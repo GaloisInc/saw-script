@@ -17,6 +17,7 @@ Stability   : provisional
 module SAWScript.MGU
        ( checkDecl
        , checkDeclGroup
+       , instantiate
        ) where
 
 import SAWScript.AST
@@ -264,8 +265,12 @@ bindPatternSchema pat s@(Forall vs t) m =
 
 bindTypedef :: LName -> Type -> TI a -> TI a
 bindTypedef n t m =
-  TI $ local (\ro -> ro { typedefEnv = M.insert (getVal n) t $ typedefEnv ro })
-  $ unTI m
+  TI $
+  local
+    (\ro ->
+      let t' = instantiate (typedefEnv ro) t
+      in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
+    $ unTI m
 
 -- FIXME: This function may miss type variables that occur in the type
 -- of a binding that has been shadowed by another value with the same
@@ -365,7 +370,8 @@ instance AppSubst Decl where
 -- Instantiate {{{
 
 class Instantiate t where
-  instantiate :: [(Name, Type)] -> t -> t
+  -- | @instantiate m x@ applies the map @m@ to type variables in @x@.
+  instantiate :: Map Name Type -> t -> t
 
 instance (Instantiate a) => Instantiate (Maybe a) where
   instantiate nts = fmap (instantiate nts)
@@ -377,7 +383,7 @@ instance Instantiate Type where
   instantiate nts ty = case ty of
     TyCon tc ts     -> TyCon tc (instantiate nts ts)
     TyRecord fs     -> TyRecord (fmap (instantiate nts) fs)
-    TyVar n         -> maybe ty id (lookup n nts)
+    TyVar n         -> M.findWithDefault ty n nts
     TyUnifyVar _    -> ty
     TySkolemVar _ _ -> ty
     LType pos ty'   -> LType pos (instantiate nts ty')
@@ -385,7 +391,7 @@ instance Instantiate Type where
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
   s <- TI $ asks typedefEnv
-  return $ instantiate (M.assocs s) t
+  return $ instantiate s t
 
 -- }}}
 
@@ -484,7 +490,7 @@ inferE (ln, expr) = case expr of
            return (Var x, t)
          Just (Forall as t) -> do
            ts <- mapM (const newType) as
-           return (Var x, instantiate (zip as ts) t)
+           return (Var x, instantiate (M.fromList (zip as ts)) t)
 
   Function pat body ->
     do (pt, pat') <- newTypePattern pat

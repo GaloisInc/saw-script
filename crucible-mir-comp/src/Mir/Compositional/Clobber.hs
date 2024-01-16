@@ -8,7 +8,8 @@ module Mir.Compositional.Clobber
 where
 
 import Control.Lens ((^.), (^?), ix)
-import Control.Monad.Except
+import Control.Monad (forM_)
+import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
@@ -61,9 +62,16 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv = go shp rv
+    go (EnumShape _ _ _ _ _) _rv =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _rv =
         error "Function pointers not currently supported in overrides"
-    go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
+    go (RefShape _ _ _ _) _rv = error "clobberSymbolic: RefShape NYI"
+    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        ref' <- go refShp ref
+        len' <- go lenShp len
+        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
@@ -109,6 +117,13 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
     go (RefShape _ _ _ _tpr) rv = return rv
+    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        ref' <- go refShp ref
+        len' <- go lenShp len
+        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
+    go (EnumShape _ _ _ _ _) _rv =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _rv =
         error "Function pointers not currently supported in overrides"
 

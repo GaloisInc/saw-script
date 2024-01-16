@@ -32,7 +32,7 @@ import Numeric
 import Numeric.Natural
 import qualified Data.BitVector.Sized as BV
 import System.FilePath
-import GHC.TypeNats
+import GHC.TypeNats (KnownNat, natVal)
 import Data.Functor.Product
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
 import qualified Control.Monad.Fail as Fail

@@ -8,7 +8,8 @@
   * The `mir_verify` function performs verification of a MIR function.
   * The `mir_find_adt` function looks up an algebraic data type (ADT) name in a
     MIR module.
-
+  * The `mir_assume` function assumes a specification for a MIR function without
+    performing any verification.
   * The `saw_client.mir` module contains utility functions for constructing
     MIR types.
 
@@ -24,11 +25,22 @@
   an error.
 * Add a `tuple_value()` function for constructing MIR tuples. Using this
   function with LLVM or JVM verification will raise an error.
+* Add `slice_value()` and `slice_range()` functions for constructing MIR slices.
+  Using these functions with LLVM or JVM verification will raise an error.
 * The `proclaim` function (which is the Python counterpart to to
   `{llvm,jvm,mir}_assert` in SAWScript) is no longer deprecated.
 * Add a `proclaim_f` function. This behaves like the `proclaim` function, except
   that it takes a `cry_f`-style format string as an argument. That is,
   `proclaim_f(...)` is equivalent to `proclaim(cry_f(...))`.
+* Add a `fresh_expanded` function that creates a value entirely populated by
+  fresh symbolic variables. For compound types such as structs or arrays, this
+  will explicitly set each field or element to contain a fresh symbolic
+  variable. This function is currently only supported with LLVM and MIR
+  verification, and using this function with JVM verification will raise an
+  error.
+* Add an `enum()` function for constructing MIR enum values.
+* The `create_ghost_variable()` and `ghost_value()` functions are now supported
+  with JVM and MIR verification.
 
 ## 1.0.1 -- YYYY-MM-DD
 

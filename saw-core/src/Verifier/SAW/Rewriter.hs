@@ -62,8 +62,8 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Monad.Identity
-import Control.Monad.State
+import Control.Monad (MonadPlus(..), (>=>), guard, join, unless)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import Data.IORef
 import qualified Data.Foldable as Foldable

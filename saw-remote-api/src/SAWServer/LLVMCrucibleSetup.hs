@@ -38,6 +38,7 @@ import SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_readonly
     , llvm_alloc_readonly_aligned
     , llvm_execute_func
+    , llvm_fresh_expanded_val
     , llvm_fresh_var
     , llvm_points_to_internal
     , llvm_points_to_bitfield
@@ -187,6 +188,12 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
          LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
     getSetupVal _ (TupleValue _) =
       LLVMCrucibleSetupM $ fail "Tuple setup values unsupported in the LLVM API."
+    getSetupVal _ (SliceValue _) =
+      LLVMCrucibleSetupM $ fail "Slice setup values unsupported in the LLVM API."
+    getSetupVal _ (EnumValue _ _ _) =
+      LLVMCrucibleSetupM $ fail "Enum setup values unsupported in the LLVM API."
+    getSetupVal _ (SliceRangeValue _ _ _) =
+      LLVMCrucibleSetupM $ fail "Slice range setup values unsupported in the LLVM API."
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld
@@ -207,6 +214,9 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       resolve env n >>= \case Val x -> return x
     getSetupVal (_, cenv) (CryptolExpr expr) =
       CMS.anySetupTerm <$> getTypedTerm cenv expr
+    getSetupVal _ (FreshExpandedValue _ ty) =
+      let ty' = llvmType ty in
+      llvm_fresh_expanded_val ty'
 
 data LLVMLoadModuleParams
   = LLVMLoadModuleParams ServerName FilePath

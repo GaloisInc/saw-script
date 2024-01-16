@@ -38,15 +38,18 @@ import Data.Type.Equality
 import Data.Kind
 import Data.Reflection
 import qualified Data.BitVector.Sized as BV
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat)
 
 import What4.ProgramLoc
 import What4.FunctionName
 import What4.Interface (StringLiteral(..))
 
 import Control.Lens hiding ((:>), Index, ix)
-import Control.Monad.State.Strict hiding (ap)
-import Control.Monad.Reader hiding (ap)
+import Control.Monad ((>=>), foldM, forM, forM_)
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.State.Strict (MonadState(..), State, evalState, execState,
+                                   gets, modify, runState)
+import Control.Monad.Trans.Class (MonadTrans(..))
 
 import Prettyprinter as PP
 

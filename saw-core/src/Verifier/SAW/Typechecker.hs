@@ -33,7 +33,8 @@ module Verifier.SAW.Typechecker
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad.State
+import Control.Monad (forM, forM_, void)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (findIndex)
 import Data.Text (Text)
 import qualified Data.Vector as V

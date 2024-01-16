@@ -154,6 +154,22 @@ class StructVal(SetupVal):
                 'elements': [fld.to_json() for fld in self.fields],
                 'MIR ADT server name': self.mir_adt.server_name if self.mir_adt is not None else None}
 
+class EnumVal(SetupVal):
+    adt : MIRAdt
+    variant_name : str
+    fields : List[SetupVal]
+
+    def __init__(self, adt : MIRAdt, variant_name : str, fields : List[SetupVal]) -> None:
+        self.adt = adt
+        self.variant_name = variant_name
+        self.fields = fields
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'enum',
+                'MIR ADT server name': self.adt.server_name,
+                'variant name': self.variant_name,
+                'elements': [fld.to_json() for fld in self.fields]}
+
 class TupleVal(SetupVal):
     fields : List[SetupVal]
 
@@ -162,6 +178,32 @@ class TupleVal(SetupVal):
 
     def to_json(self) -> JSON:
         return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
+
+class SliceVal(SetupVal):
+    base : SetupVal
+
+    def __init__(self, base : SetupVal) -> None:
+        self.base = base
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'slice',
+                'base': self.base.to_json()}
+
+class SliceRangeVal(SetupVal):
+    base : SetupVal
+    start : int
+    end : int
+
+    def __init__(self, base : SetupVal, start : int, end : int) -> None:
+        self.base = base
+        self.start = start
+        self.end = end
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'slice range',
+                'base': self.base.to_json(),
+                'start': self.start,
+                'end': self.end}
 
 class ElemVal(SetupVal):
     base : SetupVal
@@ -186,6 +228,19 @@ class FieldVal(SetupVal):
     def to_json(self) -> JSON:
         return {'setup value': 'field',
                 'base': self.base.to_json(), 'field': self.field_name}
+
+class FreshExpandedVal(SetupVal):
+    prefix: str
+    ty: Union['LLVMType', 'JVMType', 'MIRType']
+
+    def __init__(self, prefix : str, ty : Union['LLVMType', 'JVMType', 'MIRType']) -> None:
+        self.prefix = prefix
+        self.ty = ty
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'fresh expanded',
+                'prefix': self.prefix,
+                'type': self.ty.to_json()}
 
 class GlobalInitializerVal(SetupVal):
     name : str
@@ -727,6 +782,19 @@ def elem(base: SetupVal, index: int) -> SetupVal:
         raise ValueError('elem expected an int, but got {index!r}')
     return ElemVal(base, index)
 
+def enum(adt : MIRAdt, variant_name : str, *fields : SetupVal) -> SetupVal:
+    """Returns a MIR enum value (i.e., an ``EnumVal``) whose type corresponds to
+    the given ``adt``, whose variant corresponds to the given ``variant_name``,
+    and whose field values correspond to the given ``fields``.
+
+    At present, this is only supported with MIR verification. Using this
+    function with LLVM or JVM verification will raise an error.
+    """
+    for field in fields:
+        if not isinstance(field, SetupVal):
+            raise ValueError('enum expected a SetupVal, but got {field!r}')
+    return EnumVal(adt, variant_name, list(fields))
+
 def field(base : SetupVal, field_name : str) -> SetupVal:
     """Returns the value of struct ``base``'s field ``field_name`` (i.e., a ``FieldVal``).
 
@@ -737,6 +805,18 @@ def field(base : SetupVal, field_name : str) -> SetupVal:
         raise ValueError('field expected a str, but got {field_name!r}')
     return FieldVal(base, field_name)
 
+def fresh_expanded(prefix: str, ty: Union['LLVMType', 'JVMType', 'MIRType']) -> SetupVal:
+    """Returns a value entirely populated with fresh symbolic variables (i.e.,
+    a ``FreshExpandedVal``). If ``ty`` is a compound type such as a struct or an
+    array, this will explicitly set each field or element to contain a fresh
+    symbolic variable. The ``prefix`` argument is used as a prefix in each of
+    the symbolic variables.
+
+    At present, this is only supported with LLVM and MIR verification. Using
+    this function with JVM verification will raise an error.
+    """
+    return FreshExpandedVal(prefix, ty)
+
 def global_initializer(name: str) -> SetupVal:
     """Returns the initializer value of a named global ``name`` (i.e., a ``GlobalInitializerVal``)."""
     if not isinstance(name, str):
@@ -746,6 +826,24 @@ def global_initializer(name: str) -> SetupVal:
 def null() -> SetupVal:
     """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
+
+def slice_value(base : SetupVal) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base``, where ``base``
+    must be a reference to an array. Using this function with LLVM or JVM
+    verification will raise an error.
+
+    Unlike most other functions in saw_client.crucible, this has a ``_value``
+    suffix so as not to clash with the built-in ``slice()`` function in Python.
+    """
+    return SliceVal(base)
+
+def slice_range(base : SetupVal, start : int, end : int) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base`` over a given range,
+    where ``base`` must be a reference to an array, and ``start`` and ``end``
+    delimit the range of values in the slice. Using this function with LLVM or
+    JVM verification will raise an error.
+    """
+    return SliceRangeVal(base, start, end)
 
 def struct(*fields : SetupVal, mir_adt : Optional[MIRAdt] = None) -> SetupVal:
     """Returns a structure value with the given ``fields`` (i.e., a ``StructVal``).

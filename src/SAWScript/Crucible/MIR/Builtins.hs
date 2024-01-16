@@ -15,13 +15,22 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_assert
   , mir_execute_func
   , mir_find_adt
+  , mir_fresh_cryptol_var
+  , mir_fresh_expanded_value
   , mir_fresh_var
+  , mir_ghost_value
   , mir_load_module
   , mir_points_to
   , mir_postcond
   , mir_precond
   , mir_return
+  , mir_unsafe_assume_spec
   , mir_verify
+    -- ** MIR enums
+  , mir_enum_value
+    -- ** MIR slices
+  , mir_slice_value
+  , mir_slice_range_value
     -- ** MIR types
   , mir_adt
   , mir_array
@@ -35,6 +44,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_isize
   , mir_f32
   , mir_f64
+  , mir_lifetime
   , mir_ref
   , mir_ref_mut
   , mir_slice
@@ -49,17 +59,19 @@ module SAWScript.Crucible.MIR.Builtins
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, forM_, unless, when)
+import Control.Monad (foldM, forM, forM_, unless, when, zipWithM)
 import qualified Control.Monad.Catch as X
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
-import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
+import qualified Data.Foldable.WithIndex as FWI
 import Data.IORef
-import qualified Data.List.Extra as List (find, groupOn)
+import qualified Data.List.Extra as List (find, unsnoc)
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
@@ -67,13 +79,14 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (knownNat, natValue)
 import Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
-import Data.Void (absurd)
 import qualified Prettyprinter as PP
 import System.IO (stdout)
 
@@ -108,6 +121,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import Verifier.SAW.TypedTerm
 
+import SAWScript.Builtins (ghost_value)
 import SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.Common.Override
@@ -123,6 +137,7 @@ import SAWScript.Panic
 import qualified SAWScript.Position as SS
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Utils (neGroupOn)
 import SAWScript.Value
 
 type AssumptionReason = (MS.ConditionMetadata, String)
@@ -153,10 +168,34 @@ mir_alloc_internal mut mty =
   do st <- get
      let mcc = st ^. Setup.csCrucibleContext
      let col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
+
+     -- We disallow creating slice references (e.g., &[u8] or &str) using
+     -- mir_alloc, as it is unclear what length to give the resulting slice
+     -- value.
+     case mty of
+       Mir.TySlice _ ->
+         fail $ unlines
+           [ "mir_alloc and mir_alloc_mut cannot be used to create slice references."
+           , "Use the mir_slice_value or mir_slice_range_value functions instead."
+           ]
+       Mir.TyStr ->
+         fail "mir_alloc and mir_alloc_mut cannot be used to create str references."
+       _ ->
+         pure ()
+
+     loc <- getW4Position "mir_alloc"
      Some tpr <- pure $ Mir.tyToRepr col mty
      n <- Setup.csVarCounter <<%= MS.nextAllocIndex
+     tags <- view Setup.croTags
+     let md = MS.ConditionMetadata
+              { MS.conditionLoc = loc
+              , MS.conditionTags = tags
+              , MS.conditionType = "fresh allocation"
+              , MS.conditionContext = ""
+              }
      Setup.currentState . MS.csAllocs . at n ?=
-       Some (MirAllocSpec { _maType = tpr
+       Some (MirAllocSpec { _maConditionMetadata = md
+                          , _maType = tpr
                           , _maMutbl = mut
                           , _maMirType = mty
                           , _maLen = 1
@@ -201,6 +240,261 @@ mir_find_adt rm origName substs = do
   origDid <- findDefId crateDisambigs (Text.pack origName)
   findAdt col origDid (Mir.Substs substs)
 
+-- | Generate a fresh term of the given Cryptol type. The name will be used when
+-- pretty-printing the variable in debug output.
+mir_fresh_cryptol_var ::
+  Text ->
+  Cryptol.Schema ->
+  MIRSetupM TypedTerm
+mir_fresh_cryptol_var name s =
+  MIRSetupM $
+  do loc <- getW4Position "mir_fresh_var"
+     case s of
+       Cryptol.Forall [] [] ty ->
+         do sc <- lift $ lift getSharedContext
+            Setup.freshVariable sc name ty
+       _ ->
+         throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
+
+-- | Create a MIR value entirely populated with fresh symbolic variables.
+-- For compound types such as structs and arrays, this will explicitly set
+-- each field or element to contain a fresh symbolic variable. The Text
+-- argument is used as a prefix in each of the symbolic variables.
+mir_fresh_expanded_value ::
+  Text                 {- ^ Prefix to use in each symbolic variable -} ->
+  Mir.Ty               {- ^ value type -} ->
+  MIRSetupM SetupValue {- ^ elaborated setup value -}
+mir_fresh_expanded_value pfx ty =
+  MIRSetupM $
+  do sc <- lift $ lift getSharedContext
+     cc <- getMIRCrucibleContext
+     let col = cc ^. mccRustModule . Mir.rmCS . Mir.collection
+     Some shp <- pure $ tyToShape col ty
+     constructExpandedSetupValue cc sc pfx shp
+
+-- | See 'mir_fresh_expanded_val'.
+--
+-- This is the recursively-called worker function.
+constructExpandedSetupValue ::
+  MIRCrucibleContext ->
+  SharedContext ->
+  Text ->
+  TypeShape tp ->
+  CrucibleSetup MIR SetupValue
+constructExpandedSetupValue cc sc = go
+  where
+    col = cc ^. mccRustModule . Mir.rmCS . Mir.collection
+
+    go :: forall tp.
+          Text ->
+          TypeShape tp ->
+          CrucibleSetup MIR SetupValue
+    go pfx shp =
+      case shp of
+        UnitShape _ ->
+          pure $ MS.SetupTuple () []
+        PrimShape ty _ -> do
+          fv <- freshPrimVariable pfx ty
+          pure $ MS.SetupTerm fv
+        TupleShape _ _ fldShps -> do
+          flds <- goFlds pfx fldShps
+          pure $ MS.SetupTuple () flds
+        ArrayShape ty elemTy elemShp ->
+          case ty of
+            Mir.TyArray _ n -> do
+              elems <-
+                traverse
+                  (\i -> go (pfx <> "_" <> Text.pack (show i)) elemShp)
+                  [0..n-1]
+              pure $ MS.SetupArray elemTy elems
+            _ ->
+              panic "constructExpandedSetupValue"
+                    [ "ArrayShape with non-TyArray type:"
+                    , show (PP.pretty ty)
+                    ]
+        StructShape ty _ fldShps ->
+          case ty of
+            Mir.TyAdt adtName _ _ ->
+              case col ^. Mir.adts . at adtName of
+                Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
+                  case kind of
+                    Mir.Struct -> do
+                      flds <- goFlds pfx fldShps
+                      pure $ MS.SetupStruct adt flds
+                    _ ->
+                      panic "constructExpandedSetupValue"
+                            [ "Expected struct, encountered " ++
+                              show kind
+                            ]
+                Nothing ->
+                  adt_not_found_panic "StructShape" adtName
+            _ ->
+              non_adt_type_panic "StructShape" ty
+        EnumShape ty _ variantShps _ discrShp ->
+          case ty of
+            Mir.TyAdt adtName _ _ ->
+              case col ^. Mir.adts . at adtName of
+                Just adt@(Mir.Adt _ kind _ _ _ _ _) ->
+                  case kind of
+                    Mir.Enum _ ->
+                      MS.SetupEnum <$> goEnum pfx adt discrShp variantShps
+                    Mir.Struct ->
+                      panic "constructExpandedSetupValue"
+                            ["Expected enum, encountered struct"]
+                    Mir.Union ->
+                      panic "constructExpandedSetupValue"
+                            ["Expected enum, encountered union"]
+                Nothing ->
+                  adt_not_found_panic "EnumShape" adtName
+            _ ->
+              non_adt_type_panic "EnumShape" ty
+        TransparentShape ty shp' ->
+          case ty of
+            Mir.TyAdt adtName _ _ -> do
+              case col ^. Mir.adts . at adtName of
+                Just adt@(Mir.Adt adtNm kind variants _ _ _ _) ->
+                  case kind of
+                    Mir.Struct -> do
+                      val <- go pfx shp'
+                      pure $ MS.SetupStruct adt [val]
+                    Mir.Enum{}
+                      -- `repr(transparent)` enum values use MirSetupEnumVariant
+                      -- rather than MirSetupEnumSymbolic. See the Haddocks for
+                      -- MirSetupEnumSymbolic for an explanation.
+                      |  [variant] <- variants
+                      -> do val <- go pfx shp'
+                            pure $ MS.SetupEnum
+                                 $ MirSetupEnumVariant adt variant 0 [val]
+
+                      |  otherwise
+                      -> panic "constructExpandedSetupValue"
+                               [ "`repr(transparent)` enum that doesn't have exactly one variant"
+                               , "Enum: " ++ show adtNm
+                               , "Number of variants: " ++ show (length variants)
+                               ]
+                    Mir.Union ->
+                      panic "constructExpandedSetupValue"
+                            [ "Unexpected `repr(transparent)` union:"
+                            , show adtName
+                            ]
+                Nothing ->
+                  adt_not_found_panic "TransparentShape" adtName
+            _ ->
+              non_adt_type_panic "TransparentShape" ty
+        RefShape ty _ _ _ ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+        SliceShape ty _ _ _ ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+        FnPtrShape ty _ _ ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+
+    -- Create a fresh symbolic enum value, as described in
+    -- Note [Symbolic enums] in SAWScript.Crucible.MIR.Setup.Value.
+    goEnum ::
+      forall discrShp variantCtx.
+      Text ->
+      Mir.Adt ->
+      TypeShape discrShp ->
+      Ctx.Assignment VariantShape variantCtx ->
+      CrucibleSetup MIR MirSetupEnum
+    goEnum pfx adt@(Mir.Adt _ _ variants _ _ _ _) discrShp variantShps =
+      mccWithBackend cc $ \bak ->
+      do -- First, create a symbolic discriminant value.
+         IsBVShape discrTy discrW <- pure $ testDiscriminantIsBV discrShp
+         let discrPfx = pfx <> "_discr"
+         discrVar <- freshPrimVariable discrPfx discrTy
+         let discrVal = MS.SetupTerm discrVar
+
+         -- Next, add Crucible assumptions that constraint the discriminant
+         -- to be equal to one of the possible variants' discriminant values.
+         -- This assumption will be of the form:
+         --
+         --   (discr == 0) \/ (discr == 1) \/ ...
+         --
+         -- It's tempting to simplify this assumption to just
+         -- `discr < num_variants`, but this will not work in the event that
+         -- the enum uses explicit discriminants for some variants, e.g.,
+         --
+         --   enum E {
+         --       E0 = 42,
+         --       E1,
+         --   }
+         discrWNat <- liftIO $ scNat sc $ natValue discrW
+         possibleDiscrTerms <- liftIO $
+           traverse (\discr -> do
+                      discrNat  <- scNat sc $ fromInteger discr
+                      scBvNat sc discrWNat discrNat)
+                    (map getEnumVariantDiscr variants)
+         scFalse <- liftIO $ scBool sc False
+         possibleDiscrPredTerm <- liftIO $
+           foldM
+             (\z possibleDiscrTerm -> do
+               p <- scBvEq sc discrWNat (ttTerm discrVar) possibleDiscrTerm
+               scOr sc p z)
+             scFalse
+             possibleDiscrTerms
+         possibleDiscrPred <- liftIO $ resolveSAWPred cc possibleDiscrPredTerm
+         loc <- SS.toW4Loc "mir_fresh_expanded_value" <$> lift (lift getPosition)
+         liftIO $ Crucible.addAssumption bak $
+           Crucible.GenericAssumption
+             loc "Symbolic enum discriminant constraints" possibleDiscrPred
+
+         -- Finally, create symbolic fields for each of the possible variants.
+         let variantAssns :: [Some (Ctx.Assignment FieldShape)]
+             variantAssns =
+               FC.toListFC
+                 (\(VariantShape fldShps) -> Some fldShps)
+                 variantShps
+         variantVals <-
+           zipWithM
+             (\variant (Some fldShps) ->
+               let variantPfx = pfx <> "_" <> getEnumVariantShortName variant in
+               goFlds variantPfx fldShps)
+             variants
+             variantAssns
+
+         pure $ MirSetupEnumSymbolic adt discrVal variantVals
+
+    goFlds :: forall ctx.
+              Text ->
+              Ctx.Assignment FieldShape ctx ->
+              CrucibleSetup MIR [SetupValue]
+    goFlds pfx fldShps = sequenceA $
+      FCI.itoListFC
+        (\idx fldShp ->
+          let pfx' = pfx <> "_" <> Text.pack (show idx) in
+          case fldShp of
+            ReqField shp' -> go pfx' shp'
+            OptField shp' -> go pfx' shp')
+        fldShps
+
+    -- Create a fresh variable of a primitive MIR type (where \"primitive\"
+    -- is defined by the @cryptolTypeOfActual@ function).
+    freshPrimVariable ::
+      Text ->
+      Mir.Ty ->
+      CrucibleSetup MIR TypedTerm
+    freshPrimVariable pfx ty =
+      case cryptolTypeOfActual ty of
+        Nothing ->
+          X.throwM $ MIRFreshExpandedValueUnsupportedType ty
+        Just cty ->
+          Setup.freshVariable sc pfx cty
+
+    adt_not_found_panic :: String -> Mir.DefId -> a
+    adt_not_found_panic shapeName adtName =
+      panic "constructExpandedSetupValue"
+            [ "Could not find ADT in " ++ shapeName ++ ":"
+            , show adtName
+            ]
+
+    non_adt_type_panic :: String -> Mir.Ty -> a
+    non_adt_type_panic shapeName ty =
+      panic "constructExpandedSetupValue"
+            [ shapeName ++ " with non-TyAdt type:"
+            , show (PP.pretty ty)
+            ]
+
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
 mir_fresh_var ::
@@ -213,6 +507,13 @@ mir_fresh_var name mty =
      case cryptolTypeOfActual mty of
        Nothing -> X.throwM $ MIRFreshVarInvalidType mty
        Just cty -> Setup.freshVariable sc name cty
+
+mir_ghost_value ::
+  MS.GhostGlobal ->
+  TypedTerm ->
+  MIRSetupM ()
+mir_ghost_value ghost val = MIRSetupM $
+  ghost_value ghost val
 
 -- | Load a MIR JSON file and return a handle to it.
 mir_load_module :: String -> TopLevel Mir.RustModule
@@ -316,6 +617,22 @@ mir_points_to_check_lhs_validity ref loc =
        _ -> throwCrucibleSetup loc $ "lhs not a reference type: "
                                   ++ show (PP.pretty refTy)
 
+mir_unsafe_assume_spec ::
+  Mir.RustModule ->
+  String       {- ^ Name of the function -} ->
+  MIRSetupM () {- ^ Boundary specification -} ->
+  TopLevel Lemma
+mir_unsafe_assume_spec rm nm setup =
+  do cc <- setupCrucibleContext rm
+     pos <- getPosition
+     let loc = SS.toW4Loc "_SAW_assume_spec" pos
+     fn <- findFn rm nm
+     let st0 = initialCrucibleSetupState cc fn loc
+     ms <- (view Setup.csMethodSpec) <$>
+             execStateT (runReaderT (runMIRSetupM setup) Setup.makeCrucibleSetupRO) st0
+     ps <- io (MS.mkProvedSpec MS.SpecAdmitted ms mempty mempty mempty 0)
+     returnProof ps
+
 mir_verify ::
   Mir.RustModule ->
   String {- ^ method name -} ->
@@ -336,19 +653,16 @@ mir_verify rm nm lemmas checkSat setup tactic =
      let sym = cc^.mccSym
      let globals0 = cc^.mccSymGlobalState
 
+     sosp <- rwSingleOverrideSpecialCase <$> getTopLevelRW
+     let ?singleOverrideSpecialCase = sosp
+
      pos <- getPosition
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "mir_verify" profFile
 
-     let cs = rm ^. Mir.rmCS
-         col = cs ^. Mir.collection
-         crateDisambigs = cs ^. Mir.crateHashesMap
-     did <- findDefId crateDisambigs (Text.pack nm)
-     fn <- case Map.lookup did (col ^. Mir.functions) of
-         Just x -> return x
-         Nothing -> fail $ "Couldn't find MIR function named: " ++ nm
+     fn <- findFn rm nm
      let st0 = initialCrucibleSetupState cc fn loc
 
      -- execute commands of the method spec
@@ -394,6 +708,57 @@ mir_verify rm nm lemmas checkSat setup tactic =
      returnProof ps
 
 -----
+-- MIR enums
+-----
+
+-- | Construct a specific enum variant. This does a light amount of validity
+-- checking, which is the only reason that this function is monadic.
+mir_enum_value ::
+  X.MonadThrow m =>
+  Mir.Adt ->
+  String ->
+  [MS.SetupValue MIR] ->
+  m (MS.SetupValue MIR)
+mir_enum_value adt variantNm vs =
+  case adt of
+    Mir.Adt adtNm (Mir.Enum _) variants _ _ _ _ -> do
+      (variantIdx, variant) <-
+        case FWI.ifind (\_ v -> variantDefIdMatches v) variants of
+          Just iv ->
+            pure iv
+          Nothing ->
+            X.throwM $ MIREnumValueVariantNotFound adtNm variantNm
+      pure $ MS.SetupEnum $ MirSetupEnumVariant adt variant variantIdx vs
+    Mir.Adt adtNm Mir.Struct _ _ _ _ _ ->
+      X.throwM $ MIREnumValueNonEnum adtNm "struct"
+    Mir.Adt adtNm Mir.Union _ _ _ _ _ ->
+      X.throwM $ MIREnumValueNonEnum adtNm "union"
+  where
+    variantNmText :: Text
+    variantNmText = Text.pack variantNm
+
+    -- Check if the user-supplied String argument matches the name of the given
+    -- variant's DefId. For instance, the variant DefId might be named
+    -- @core::option[0]::Option[0]::Some[0]@, but the user will simply write
+    -- @Some@, so we must strip off the other parts of the DefId before checking
+    -- if the two are the same.
+    variantDefIdMatches :: Mir.Variant -> Bool
+    variantDefIdMatches variant =
+      getEnumVariantShortName variant == variantNmText
+
+-----
+-- MIR slices
+-----
+
+mir_slice_value :: MS.SetupValue MIR -> MS.SetupValue MIR
+mir_slice_value arrRef = MS.SetupSlice (MirSetupSlice arrRef)
+
+mir_slice_range_value ::
+  MS.SetupValue MIR -> Int -> Int -> MS.SetupValue MIR
+mir_slice_range_value arrRef start end =
+  MS.SetupSlice (MirSetupSliceRange arrRef start end)
+
+-----
 -- Mir.Types
 -----
 
@@ -432,6 +797,9 @@ mir_f32 = Mir.TyFloat Mir.F32
 
 mir_f64 :: Mir.Ty
 mir_f64 = Mir.TyFloat Mir.F64
+
+mir_lifetime :: Mir.Ty
+mir_lifetime = Mir.TyLifetime
 
 mir_ref :: Mir.Ty -> Mir.Ty
 mir_ref ty = Mir.TyRef ty Mir.Immut
@@ -482,17 +850,21 @@ assertEqualVals cc v1 v2 =
      toSC sym st =<< equalValsPred cc v1 v2
 
 registerOverride ::
+  (?singleOverrideSpecialCase :: Bool) =>
   Options ->
   MIRCrucibleContext ->
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym MIR ->
   W4.ProgramLoc ->
   IORef MetadataMap {- ^ metadata map -} ->
-  [MethodSpec] ->
+  NonEmpty MethodSpec ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym MIR rtp args ret ()
-registerOverride _opts cc _ctx _top_loc _mdMap cs =
-  do let c0 = head cs
+registerOverride opts cc _ctx _top_loc mdMap cs =
+  do let sym = cc^.mccSym
+     let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
      let rm = cc^.mccRustModule
+
+     sc <- saw_ctx <$> liftIO (sawCoreState sym)
 
      Crucible.AnyCFG cfg <- lookupDefIdCFG rm method
      let h = Crucible.cfgHandle cfg
@@ -503,7 +875,7 @@ registerOverride _opts cc _ctx _top_loc _mdMap cs =
        $ Crucible.mkOverride'
            (Crucible.handleName h)
            retTy
-           (panic "registerOverride.methodSpecHandler" ["not yet implemented"])
+           (methodSpecHandler opts sc cc mdMap cs h)
 
 resolveArguments ::
   MIRCrucibleContext ->
@@ -544,73 +916,46 @@ setupPrePointsTos ::
   [MirPointsTo] ->
   Crucible.SymGlobalState Sym ->
   IO (Crucible.SymGlobalState Sym)
-setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
-  where
-    tyenv = MS.csAllocations mspec
-    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+setupPrePointsTos mspec cc env pts mem0 =
+  foldM (doPointsTo mspec cc env) mem0 pts
 
-    doPointsTo ::
-         Crucible.SymGlobalState Sym
-      -> MirPointsTo
-      -> IO (Crucible.SymGlobalState Sym)
-    doPointsTo globals (MirPointsTo _ reference referents) =
-      mccWithBackend cc $ \bak -> do
-        MIRVal referenceShp referenceVal <-
-          resolveSetupVal cc env tyenv nameEnv reference
-        -- By the time we reach here, we have already checked (in mir_points_to)
-        -- that we are in fact dealing with a reference value, so the call to
-        -- `testRefShape` below should always succeed.
-        IsRefShape _ _ _ referenceInnerTy <-
-          case testRefShape referenceShp of
-            Just irs -> pure irs
-            Nothing ->
-              panic "setupPrePointsTos"
-                    [ "Unexpected non-reference type:"
-                    , show $ PP.pretty $ shapeMirTy referenceShp
-                    ]
-        referent <- firstPointsToReferent referents
-        MIRVal referentShp referentVal <-
-          resolveSetupVal cc env tyenv nameEnv referent
-        -- By the time we reach here, we have already checked (in mir_points_to)
-        -- that the type of the reference is compatible with the right-hand side
-        -- value, so the equality check below should never fail.
-        Refl <-
-          case W4.testEquality referenceInnerTy (shapeType referentShp) of
-            Just r -> pure r
-            Nothing ->
-              panic "setupPrePointsTos"
-                    [ "Unexpected type mismatch between reference and referent"
-                    , "Reference type: " ++ show referenceInnerTy
-                    , "Referent type:  " ++ show (shapeType referentShp)
-                    ]
-        Mir.writeMirRefIO bak globals Mir.mirIntrinsicTypes referenceVal referentVal
-
--- | Collects boolean terms that should be assumed to be true.
+-- | Sets up globals (ghost variable), and collects boolean terms
+-- that should be assumed to be true.
 setupPrestateConditions ::
   MethodSpec ->
   MIRCrucibleContext ->
   Map MS.AllocIndex (Some (MirPointer Sym)) ->
+  Crucible.SymGlobalState Sym ->
   [SetupCondition] ->
-  IO [Crucible.LabeledPred Term AssumptionReason]
+  IO ( Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term AssumptionReason]
+     )
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    aux acc [] = return acc
+    aux acc globals [] = return (globals, acc)
 
-    aux acc (MS.SetupCond_Equal loc val1 val2 : xs) =
+    aux acc globals (MS.SetupCond_Equal loc val1 val2 : xs) =
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (loc, "equality precondition")
-         aux (lp:acc) xs
+         aux (lp:acc) globals xs
 
-    aux acc (MS.SetupCond_Pred loc tm : xs) =
+    aux acc globals (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (loc, "precondition") in
-      aux (lp:acc) xs
+      aux (lp:acc) globals xs
 
-    aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
+    aux acc globals (MS.SetupCond_Ghost _md var val : xs) =
+      case val of
+        TypedTerm (TypedTermSchema sch) tm ->
+          aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
+        TypedTerm tp _ ->
+          fail $ unlines
+            [ "Setup term for global variable expected to have Cryptol schema type, but got"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 verifyObligations ::
   MIRCrucibleContext ->
@@ -784,11 +1129,14 @@ verifyPrestate cc mspec globals0 =
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      (env, globals1) <- runStateT
-       (traverse (doAlloc cc) (mspec ^. MS.csPreState . MS.csAllocs))
+       (traverse
+         (\alloc -> StateT (\globals -> doAlloc cc globals alloc))
+         (mspec ^. MS.csPreState . MS.csAllocs))
        globals0
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
-     cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
+     (globals3, cs) <-
+       setupPrestateConditions mspec cc env globals2 (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
 
      -- Check the type of the return setup value
@@ -809,11 +1157,12 @@ verifyPrestate cc mspec globals0 =
               ]
        (Nothing, _) -> return ()
 
-     return (args, cs, env, globals2)
+     return (args, cs, env, globals3)
 
 -- | Simulate a MIR function with Crucible as part of a 'mir_verify' command,
 -- making sure to install any overrides that the user supplies.
 verifySimulate ::
+  (?singleOverrideSpecialCase :: Bool) =>
   Options ->
   MIRCrucibleContext ->
   [Crucible.GenericExecutionFeature Sym] ->
@@ -850,7 +1199,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
           let fnCall = Crucible.regValue <$> Crucible.callCFG methodCfg regmap
           let overrideSim =
                 do mapM_ (registerOverride opts cc simctx top_loc mdMap)
-                           (List.groupOn (view MS.csMethod) (map (view MS.psSpec) lemmas))
+                           (neGroupOn (view MS.csMethod) (map (view MS.psSpec) lemmas))
                    liftIO $
                      for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
                        do expr <- resolveSAWPred cc p
@@ -940,41 +1289,6 @@ cryptolTypeOfActual mty =
     baseSizeType Mir.B128  = Just $ Cryptol.tWord $ Cryptol.tNum (128 :: Integer)
     baseSizeType Mir.USize = Just $ Cryptol.tWord $ Cryptol.tNum $ natValue $ knownNat @Mir.SizeBits
 
--- | Allocate memory for each 'mir_alloc' or 'mir_alloc_mut'.
-doAlloc ::
-     MIRCrucibleContext
-  -> Some MirAllocSpec
-  -> StateT (Crucible.SymGlobalState Sym) IO (Some (MirPointer Sym))
-doAlloc cc (Some ma) =
-  mccWithBackend cc $ \bak ->
-  do let col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
-     let halloc = cc^.mccHandleAllocator
-     let sym = backendGetSym bak
-     let iTypes = Mir.mirIntrinsicTypes
-     Some tpr <- pure $ Mir.tyToRepr col (ma^.maMirType)
-
-     -- Create an uninitialized `MirVector_PartialVector` of length 1 and
-     -- return a pointer to its element.
-     ref <- liftIO $
-       Mir.newMirRefIO sym halloc (Mir.MirVectorRepr tpr)
-
-     globals <- get
-     globals' <- liftIO $ do
-       one <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 1
-       vec <- Mir.mirVector_uninitIO bak one
-       Mir.writeMirRefIO bak globals iTypes ref vec
-     put globals'
-
-     ptr <- liftIO $ do
-       zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
-       Mir.subindexMirRefIO bak iTypes tpr ref zero
-     pure $ Some MirPointer
-       { _mpType = tpr
-       , _mpMutbl = ma^.maMutbl
-       , _mpMirType = ma^.maMirType
-       , _mpRef = ptr
-       }
-
 -- Find the ADT definition that is monomorphized from `origName` with `substs`.
 -- This should only be used on types that are known to be present in the crate
 -- after dead code elimination - for example, because the type appears in the
@@ -986,6 +1300,34 @@ findAdt col origName substs =
         Nothing -> fail $ "Unknown ADT: " ++ show (origName, substs)
   where
     insts = col ^. Mir.adtsOrig . at origName . to (fromMaybe [])
+
+-- | Find the 'Mir.Fn' corresponding to the given function name (supplied as a
+-- 'String'). If none can be found or if there are multiple functions
+-- corresponding to that name (see the Haddocks for 'findDefId'), then this will
+-- fail.
+findFn :: Mir.RustModule -> String -> TopLevel Mir.Fn
+findFn rm nm = do
+  let cs = rm ^. Mir.rmCS
+      col = cs ^. Mir.collection
+      crateDisambigs = cs ^. Mir.crateHashesMap
+  did <- findDefId crateDisambigs (Text.pack nm)
+  case Map.lookup did (col ^. Mir.functions) of
+      Just x -> return x
+      Nothing -> fail $ "Couldn't find MIR function named: " ++ nm
+
+-- | Given a full enum variant identifier (e.g.,
+-- @core::option[0]::Option[0]::Some[0]@, retrieve the part of the identifier
+-- that corresponds to the variant's shorthand name (e.g., @Some@).
+getEnumVariantShortName :: Mir.Variant -> Text
+getEnumVariantShortName variant
+  | Just (_, (variantNm, _)) <- List.unsnoc (variant ^. Mir.vname . Mir.didPath)
+  = variantNm
+
+  | otherwise
+  = panic "getEnumVariantShortName"
+          [ "Malformed enum variant identifier"
+          , show $ variant ^. Mir.vname
+          ]
 
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
@@ -1086,7 +1428,7 @@ setupCrucibleContext rm =
                             (Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $
                     Map.elems cfgMap
      let simctx0 = Crucible.initSimContext bak
-                     Mir.mirIntrinsicTypes halloc stdout
+                     intrinsics halloc stdout
                      bindings Mir.mirExtImpl
                      SAWCruciblePersonality
      let globals0 = Crucible.emptyGlobals
@@ -1204,10 +1546,13 @@ withImplicitParams opts k =
 
 data MIRSetupError
   = MIRFreshVarInvalidType Mir.Ty
+  | MIRFreshExpandedValueUnsupportedType Mir.Ty
   | MIRArgTypeMismatch Int Mir.Ty Mir.Ty -- argument position, expected, found
   | MIRArgNumberWrong Int Int -- number expected, number found
   | MIRReturnUnexpected Mir.Ty -- found
   | MIRReturnTypeMismatch Mir.Ty Mir.Ty -- expected, found
+  | MIREnumValueVariantNotFound Mir.DefId String
+  | MIREnumValueNonEnum Mir.DefId String -- The String is either \"struct\" or \"union\"
 
 instance X.Exception MIRSetupError where
   toException = topLevelExceptionToException
@@ -1218,6 +1563,9 @@ instance Show MIRSetupError where
     case err of
       MIRFreshVarInvalidType jty ->
         "mir_fresh_var: Invalid type: " ++ show jty
+      MIRFreshExpandedValueUnsupportedType ty ->
+        "mir_fresh_expanded_value: " ++ show (PP.pretty ty) ++
+        " not supported"
       MIRArgTypeMismatch i expected found ->
         unlines
         [ "mir_execute_func: Argument type mismatch"
@@ -1241,4 +1589,14 @@ instance Show MIRSetupError where
         [ "mir_return: Return type mismatch"
         , "Expected type: " ++ show (PP.pretty expected)
         , "Given type:    " ++ show (PP.pretty found)
+        ]
+      MIREnumValueVariantNotFound adtNm variantNm ->
+        unlines
+        [ "mir_enum_value: Could not find a variant named `" ++ variantNm ++ "`"
+        , "in the enum " ++ show adtNm
+        ]
+      MIREnumValueNonEnum adtNm what ->
+        unlines
+        [ "mir_enum_value: Expected enum, received " ++ what
+        , show adtNm
         ]

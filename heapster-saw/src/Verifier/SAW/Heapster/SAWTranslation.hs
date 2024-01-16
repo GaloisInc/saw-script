@@ -37,17 +37,21 @@ import Data.Maybe
 import Numeric.Natural
 import Data.List hiding (inits)
 import Data.Text (pack)
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat, natVal)
 import Data.BitVector.Sized (BV)
 import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant
-import Control.Applicative
+import qualified Control.Applicative as App
 import Control.Lens hiding ((:>), Index, ix, op, getting)
 import qualified Control.Monad as Monad
-import Control.Monad.Reader hiding (ap)
-import Control.Monad.Writer hiding (ap)
-import Control.Monad.State hiding (ap)
+import Control.Monad (MonadPlus(..), zipWithM)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), Reader, runReader, withReader,
+                             ReaderT(..), mapReaderT, ask)
+import Control.Monad.State (MonadState(..), StateT(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
+import Control.Monad.Writer (MonadWriter(..), WriterT(..))
 import qualified Control.Monad.Fail as Fail
 
 import What4.ProgramLoc
@@ -201,7 +205,7 @@ tupleTypeTrans ttrans =
 -- | Build a type translation for a list of translations
 listTypeTrans :: [TypeTrans tr] -> TypeTrans [tr]
 listTypeTrans [] = pure []
-listTypeTrans (trans:transs) = liftA2 (:) trans $ listTypeTrans transs
+listTypeTrans (trans:transs) = App.liftA2 (:) trans $ listTypeTrans transs
 
 -- | Tuple all the terms in a list into a single term, or return the empty list
 -- if the input list is empty
@@ -1235,7 +1239,7 @@ instance Functor DescTypeTrans where
 instance Applicative DescTypeTrans where
   pure x = DescTypeTrans (mkTypeTrans0 x) []
   liftA2 f (DescTypeTrans tr1 ds1) (DescTypeTrans tr2 ds2) =
-    DescTypeTrans (liftA2 f tr1 tr2) (ds1 ++ ds2)
+    DescTypeTrans (App.liftA2 f tr1 tr2) (ds1 ++ ds2)
 
 -- | Apply the 'typeTransFun' of a 'TypeTrans' in a 'DescTypeTrans'
 descTypeTransF :: HasCallStack => DescTypeTrans tr -> [OpenTerm] -> tr
@@ -1903,7 +1907,7 @@ type DescPermsTpTrans ctx ps = DescTypeTrans (PermTransCtx ctx ps)
 -- | Prepand an empty list of permissions to a 'DescPermsTpTrans'
 preNilDescPermsTpTrans :: DescPermsTpTrans ctx ps ->
                           DescPermsTpTrans ctx (RNil :++: ps)
-preNilDescPermsTpTrans = liftA2 RL.append (pure MNil)
+preNilDescPermsTpTrans = App.liftA2 RL.append (pure MNil)
 
 -- | Build a permission translation context with just @true@ permissions
 truePermTransCtx :: CruCtx ps -> PermTransCtx ctx ps
@@ -2674,8 +2678,8 @@ weakenLOwnedTrans ::
   LOwnedTrans ctx ps_extra ps_in ps_out ->
   LOwnedTrans ctx ps_extra (ps_in :> tp) (ps_out :> tp)
 weakenLOwnedTrans tp_in tp_out (LOwnedTrans {..}) =
-  LOwnedTrans { lotrTpTransIn = liftA2 (:>:) lotrTpTransIn tp_in,
-                lotrTpTransOut = liftA2 (:>:) lotrTpTransOut tp_out,
+  LOwnedTrans { lotrTpTransIn = App.liftA2 (:>:) lotrTpTransIn tp_in,
+                lotrTpTransOut = App.liftA2 (:>:) lotrTpTransOut tp_out,
                 lotrTerm = weakenLOwnedTransTerm tp_out lotrTerm, .. }
 
 -- | Convert an 'LOwnedTrans' to a monadic function from @ps_in@ to @ps_out@ by
@@ -2713,7 +2717,7 @@ mapLtLOwnedTrans pctx1 vars1 dtr1 pctx2 vars2 dtr2
   , lotrVarsExtra = RL.append (RL.append vars1 lotrVarsExtra) vars2
   , lotrTpTransIn = dtr_in' , lotrTpTransOut = dtr_out'
   , lotrTpTransExtra =
-      liftA2 RL.append (liftA2 RL.append dtr1 lotrTpTransExtra) dtr2
+      App.liftA2 RL.append (App.liftA2 RL.append dtr1 lotrTpTransExtra) dtr2
   , lotrTerm =
       mapLtLOwnedTransTerm (RL.append pctx1 lotrPsExtra) pctx2 prx_in'
       (mapLtLOwnedTransTerm pctx1 lotrPsExtra prx_in' t1 lotrTerm)
@@ -3041,7 +3045,7 @@ instance TransInfo info =>
   translate mb_ps = case mbMatch mb_ps of
     [nuMP| ValPerms_Nil |] -> return $ mkTypeTrans0 MNil
     [nuMP| ValPerms_Cons ps p |] ->
-      liftA2 (:>:) <$> translate ps <*> translate p
+      App.liftA2 (:>:) <$> translate ps <*> translate p
 
 instance TranslateDescs (ValuePerms ps) where
   translateDescs mb_ps = case mbMatch mb_ps of
@@ -5238,7 +5242,7 @@ translatePermImpl1 mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impls) o
        ret_tp <- returnTypeM
        applyGlobalTransM "Prelude.ifWithProof"
          [ return ret_tp_m
-         , applyGlobalTransM "Prelude.bvult" 
+         , applyGlobalTransM "Prelude.bvult"
            [ return (natOpenTerm $ natVal2 prop), translate1 e1, translate1 e2 ]
          , return (implFailAltContTerm ret_tp (mbLift prop_str) k)
          , lambdaTransM "ult_pf" prop_tp_trans

@@ -21,7 +21,6 @@ module Verifier.SAW.Translation.Coq (
   translateSAWModule,
   ) where
 
-import           Control.Monad.Reader                          hiding (fail)
 import           Data.String.Interpolate                       (i)
 import           Prelude                                       hiding (fail)
 import           Prettyprinter

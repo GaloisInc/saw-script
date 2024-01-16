@@ -12,11 +12,9 @@ Stability   : provisional
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -119,15 +117,11 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   ) where
 
 import           Control.Lens
-import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import qualified Data.Map as Map
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
-
-import qualified Cryptol.TypeCheck.AST as Cryptol
-import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import           Data.Parameterized.All (All(All))
 import           Data.Parameterized.Some (Some(Some))
@@ -137,7 +131,7 @@ import           What4.ProgramLoc (ProgramLoc)
 
 import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
+  (IntrinsicMuxFn(IntrinsicMuxFn))
 
 import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -146,9 +140,6 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import           SAWScript.Crucible.LLVM.Setup.Value
 
-import           Verifier.SAW.Simulator.What4.ReturnTrip ( toSC, saw_ctx )
-
-import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
 
@@ -176,24 +167,6 @@ mutIso =
 
 isMut :: Lens' LLVMAllocSpec Bool
 isMut = allocSpecMut . mutIso
-
---------------------------------------------------------------------------------
--- ** Ghost state
-
-instance Crucible.IntrinsicClass Sym MS.GhostValue where
-  type Intrinsic Sym MS.GhostValue ctx = (Cryptol.Schema, Term)
-  muxIntrinsic sym _ _namerep _ctx prd (thnSch,thn) (elsSch,els) =
-    do when (thnSch /= elsSch) $ fail $ unlines $
-         [ "Attempted to mux ghost variables of different types:"
-         , show (Cryptol.pp thnSch)
-         , show (Cryptol.pp elsSch)
-         ]
-       st <- sawCoreState sym
-       let sc  = saw_ctx st
-       prd' <- toSC sym st prd
-       typ  <- scTypeOf sc thn
-       res  <- scIte sc typ prd' thn els
-       return (thnSch, res)
 
 --------------------------------------------------------------------------------
 -- ** CrucibleContext
@@ -249,8 +222,10 @@ instance PPL.Pretty (LLVMPointsToValue arch) where
       MS.ppTypedTerm arr PPL.<+> PPL.pretty "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.pretty "]"
 
 --------------------------------------------------------------------------------
--- ** ???
+-- ** SAW LLVM intrinsics
 
+-- | The default LLVM intrinsics extended with the 'MS.GhostValue' intrinsic,
+-- which powers ghost state.
 intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
 intrinsics =
   MapF.insert

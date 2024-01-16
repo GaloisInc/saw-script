@@ -1,0 +1,28 @@
+enable_experimental;
+
+let next_spec counter = do {
+  n <- mir_fresh_var "n" mir_u32;
+  mir_ghost_value counter n;
+
+  mir_execute_func [];
+
+  mir_ghost_value counter {{n+1}};
+  mir_return (mir_term {{n}});
+};
+
+let example_spec counter = do {
+  n <- mir_fresh_var "nm" mir_u32;
+  mir_precond {{n < 2}};
+  mir_ghost_value counter n;
+
+  mir_execute_func [];
+
+  mir_ghost_value counter {{n+3}};
+  mir_return (mir_term {{n+2}});
+};
+
+counter <- declare_ghost_state "ctr";
+m <- mir_load_module "test.linked-mir.json";
+
+next <- mir_unsafe_assume_spec m "test::next" (next_spec counter);
+mir_verify m "test::example" [next] false (example_spec counter) z3;

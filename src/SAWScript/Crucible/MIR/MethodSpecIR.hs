@@ -1,4 +1,5 @@
 {-# Language DataKinds #-}
+{-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
 {-# Language RankNTypes #-}
 {-# Language TemplateHaskell #-}
@@ -16,6 +17,7 @@ module SAWScript.Crucible.MIR.MethodSpecIR
   , mccSymGlobalState
   , mccStaticInitializerMap
   , mccHandleAllocator
+  , mccIntrinsicTypes
   , mccWithBackend
   , mccSym
 
@@ -27,10 +29,14 @@ module SAWScript.Crucible.MIR.MethodSpecIR
 
     -- * @MirAllocSpec@
   , MirAllocSpec(..)
+  , maConditionMetadata
   , maType
   , maMutbl
   , maMirType
   , maLen
+
+  , mutIso
+  , isMut
 
     -- * @MirPointer@
   , MirPointer(..)
@@ -42,16 +48,29 @@ module SAWScript.Crucible.MIR.MethodSpecIR
     -- * @MIRMethodSpec@
   , MIRMethodSpec
 
+    -- * @MirSetupEnum@
+  , MirSetupEnum(..)
+
+    -- * @MirSetupSlice@
+  , MirSetupSlice(..)
+
     -- * Initial CrucibleSetupMethodSpec
   , initialDefCrucibleMethodSpecIR
   , initialCrucibleSetupState
+
+    -- * Intrinsics
+  , intrinsics
   ) where
 
-import Control.Lens (Getter, (^.), to)
+import Control.Lens (Getter, Iso', Lens', (^.), iso, to)
+import qualified Data.Parameterized.Map as MapF
+import Data.Parameterized.SymbolRepr (SymbolRepr, knownSymbol)
 import qualified Prettyprinter as PP
 
 import Lang.Crucible.FunctionHandle (HandleAllocator)
 import Lang.Crucible.Simulator (SimContext(..))
+import Lang.Crucible.Simulator.Intrinsics
+  (IntrinsicMuxFn(IntrinsicMuxFn), IntrinsicTypes)
 import Mir.Generator
 import Mir.Intrinsics
 import qualified Mir.Mir as M
@@ -64,6 +83,9 @@ import           SAWScript.Crucible.MIR.Setup.Value
 
 mccHandleAllocator :: Getter MIRCrucibleContext HandleAllocator
 mccHandleAllocator = mccSimContext . to simHandleAllocator
+
+mccIntrinsicTypes :: Getter MIRCrucibleContext (IntrinsicTypes Sym)
+mccIntrinsicTypes = mccSimContext . to ctxIntrinsicTypes
 
 mccWithBackend ::
   MIRCrucibleContext ->
@@ -78,6 +100,19 @@ mccSym = to (\mcc -> mccWithBackend mcc backendGetSym)
 instance PP.Pretty MirPointsTo where
     pretty (MirPointsTo _md ref sv) = PP.parens $
         MS.ppSetupValue ref PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
+
+mutIso :: Iso' M.Mutability Bool
+mutIso =
+  iso
+    (\case
+      M.Mut -> True
+      M.Immut -> False)
+    (\case
+      True -> M.Mut
+      False -> M.Immut)
+
+isMut :: Lens' (MirAllocSpec tp) Bool
+isMut = maMutbl . mutIso
 
 type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
 
@@ -106,3 +141,12 @@ initialCrucibleSetupState cc fn loc =
       (cc ^. mccRustModule ^. rmCS)
       fn
       loc
+
+-- | The default MIR intrinsics extended with the 'MS.GhostValue' intrinsic,
+-- which powers ghost state.
+intrinsics :: MapF.MapF SymbolRepr (IntrinsicMuxFn Sym)
+intrinsics =
+  MapF.insert
+    (knownSymbol :: SymbolRepr MS.GhostValue)
+    IntrinsicMuxFn
+    mirIntrinsicTypes

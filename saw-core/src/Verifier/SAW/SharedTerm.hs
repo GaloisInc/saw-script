@@ -254,6 +254,7 @@ module Verifier.SAW.SharedTerm
 --  , scFalse
    , scOpenTerm
    , scCloseTerm
+   , scLambdaBody
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
@@ -283,8 +284,11 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
-import Control.Monad.State.Strict as State
-import Control.Monad.Reader
+import Control.Monad (foldM, forM, join, unless, when)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
 import Data.List (inits, find)
 import Data.Maybe
@@ -306,7 +310,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Prelude hiding (mapM, maximum)
+import Prelude hiding (maximum)
 import Text.URI
 
 import Verifier.SAW.Cache
@@ -2601,7 +2605,6 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
 
-
 scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
 
@@ -2720,3 +2723,14 @@ scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (Map.insert (ecVarIndex ec) lv Map.empty) =<< incVars sc 0 1 body
     close sc (toShortName (ecName ec)) (ecType ec) body'
+
+-- | Compute the body of 0 or more nested lambda-abstractions by applying the
+-- lambdas to fresh 'ExtCns's. Note that we do this lambda-by-lambda, rather
+-- than generating all of the 'ExtCns's at the same time, because later
+-- variables could have types that depend on earlier variables, and so the
+-- substitution of earlier 'ExtCns's has to happen before we generate later
+-- ones.
+scLambdaBody :: SharedContext -> Term -> IO Term
+scLambdaBody sc (asLambda -> Just (nm, tp, body)) =
+  scOpenTerm sc nm tp 0 body >>= scLambdaBody sc . snd
+scLambdaBody _sc t = return t

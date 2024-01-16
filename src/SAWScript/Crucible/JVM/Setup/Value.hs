@@ -78,15 +78,15 @@ import qualified SAWScript.Crucible.Common.Setup.Value as MS
 type instance MS.XSetupNull CJ.JVM = ()
 type instance MS.XSetupGlobal CJ.JVM = Void
 type instance MS.XSetupStruct CJ.JVM = Void
+type instance MS.XSetupEnum CJ.JVM = Void
 type instance MS.XSetupTuple CJ.JVM = Void
+type instance MS.XSetupSlice CJ.JVM = Void
 type instance MS.XSetupArray CJ.JVM = Void
 type instance MS.XSetupElem CJ.JVM = Void
 type instance MS.XSetupField CJ.JVM = Void
 type instance MS.XSetupCast CJ.JVM = Void
 type instance MS.XSetupUnion CJ.JVM = Void
 type instance MS.XSetupGlobalInitializer CJ.JVM = Void
-
-type instance MS.XGhostState CJ.JVM = Void
 
 type JIdent = String -- FIXME(huffman): what to put here?
 

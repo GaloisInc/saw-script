@@ -1,3 +1,4 @@
+{-# Language CPP #-}
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
 {-# Language NamedFieldPuns #-}
@@ -300,8 +301,12 @@ write_smtlib2_w4 f (TypedTerm schema t) = do
 writeSMTLib2 :: FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
   do (_, _, l) <- SBV.sbvSATQuery sc mempty satq
+#if MIN_VERSION_sbv(10,0,0)
+     txt <- SBV.generateSMTBenchmarkSat l
+#else
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
+#endif
      writeFile f txt
 
 -- | Write a SAT query an SMT-Lib version 2 file.

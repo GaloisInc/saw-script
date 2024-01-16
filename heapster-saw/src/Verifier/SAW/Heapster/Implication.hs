@@ -7,7 +7,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -34,11 +33,13 @@ import Data.List
 import Data.Functor.Compose
 import Data.Reflection
 import qualified Data.BitVector.Sized as BV
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat)
 import Control.Lens hiding ((:>), ix)
-import Control.Applicative
+import qualified Control.Applicative as App
+import Control.Monad (forM_)
 import Control.Monad.Extra (concatMapM)
-import Control.Monad.State.Strict hiding (ap)
+import Control.Monad.State.Strict (MonadState(..), State, StateT, evalState, execStateT)
+import Control.Monad.Trans.Class (MonadTrans(..))
 
 import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits.MonadBind
@@ -317,7 +318,7 @@ instance Applicative SomeEqProof where
   liftA2 f (SomeEqProofRefl a) some_eqp = fmap (f a) some_eqp
   liftA2 f some_eqp (SomeEqProofRefl b) = fmap (flip f b) some_eqp
   liftA2 f (SomeEqProofCons eqp1 step1) (SomeEqProofCons eqp2 step2) =
-    SomeEqProofCons (liftA2 f eqp1 eqp2) (eqProofStepLiftA2 f step1 step2)
+    SomeEqProofCons (App.liftA2 f eqp1 eqp2) (eqProofStepLiftA2 f step1 step2)
 
 -- | An 'EqProofStep' with an existentially quantified list of permissions
 data SomeEqProofStep a = forall ps. SomeEqProofStep (EqProofStep ps a)
@@ -6125,7 +6126,7 @@ instance ProveEq (LLVMFramePerm w) where
     | mbLift mb_i == i =
       do eqp1 <- proveEq e mb_e
          eqp2 <- proveEq fperms mb_fperms
-         pure (liftA2 (\x y -> (x,i):y) eqp1 eqp2)
+         pure (App.liftA2 (\x y -> (x,i):y) eqp1 eqp2)
   proveEq perms mb =
     use implStatePPInfo >>>= \ppinfo ->
       implFailM $ EqualityProofError

@@ -120,7 +120,9 @@ data LLVM (arch :: CL.LLVMArch)
 type instance Setup.XSetupNull (LLVM _) = ()
 -- 'True' if this is an LLVM packed struct, 'False' otherwise.
 type instance Setup.XSetupStruct (LLVM _) = Bool
+type instance Setup.XSetupEnum (LLVM _) = Void
 type instance Setup.XSetupTuple (LLVM _) = Void
+type instance Setup.XSetupSlice (LLVM _) = Void
 type instance Setup.XSetupArray (LLVM _) = ()
 type instance Setup.XSetupElem (LLVM _) = ()
 type instance Setup.XSetupField (LLVM _) = ()
@@ -128,8 +130,6 @@ type instance Setup.XSetupCast (LLVM _) = L.Type
 type instance Setup.XSetupUnion (LLVM _) = ()
 type instance Setup.XSetupGlobal (LLVM _) = ()
 type instance Setup.XSetupGlobalInitializer (LLVM _) = ()
-
-type instance Setup.XGhostState (LLVM _) = ()
 
 type instance Setup.TypeName (LLVM arch) = CL.Ident
 type instance Setup.ExtType (LLVM arch) = CL.MemType

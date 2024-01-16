@@ -74,7 +74,6 @@ import qualified Control.Monad.Fail as Fail
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
-import GHC.TypeLits
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -927,7 +926,6 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
                                            fun_perm
                                            (globalOpenTerm term_ident)
         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env''
-
 
 -- | Create a new SAW core primitive named @nm@ with type @tp@ in the module
 -- associated with the supplied Heapster environment, and return its identifier

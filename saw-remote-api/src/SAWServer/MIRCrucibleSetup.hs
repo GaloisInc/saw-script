@@ -19,6 +19,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
@@ -28,13 +29,18 @@ import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
 import SAWScript.Crucible.MIR.Builtins
     ( mir_alloc,
       mir_alloc_mut,
+      mir_fresh_expanded_value,
       mir_fresh_var,
+      mir_enum_value,
       mir_execute_func,
+      mir_ghost_value,
       mir_load_module,
       mir_points_to,
       mir_postcond,
       mir_precond,
-      mir_return )
+      mir_return,
+      mir_slice_value,
+      mir_slice_range_value )
 import SAWScript.Crucible.MIR.ResolveSetupValue (typeOfSetupValue)
 import SAWScript.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -55,10 +61,11 @@ import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCE
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
       PointsToBitfield,
+      GhostValue(GhostValue),
       Allocated(Allocated),
       ContractVar(ContractVar),
-      Contract(preVars, preConds, preAllocated, prePointsTos, prePointsToBitfields,
-               argumentVals, postVars, postConds, postAllocated, postPointsTos, postPointsToBitfields,
+      Contract(preVars, preConds, preAllocated, preGhostValues, prePointsTos, prePointsToBitfields,
+               argumentVals, postVars, postConds, postAllocated, postGhostValues, postPointsTos, postPointsToBitfields,
                returnVal) )
 import SAWServer.Data.MIRType (JSONMIRType, mirType)
 import SAWServer.Exceptions ( notAtTopLevel )
@@ -71,24 +78,25 @@ newtype ServerSetupVal = Val (MS.SetupValue MIR)
 compileMIRContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
+  Map ServerName MS.GhostGlobal ->
   CryptolEnv ->
   SAWEnv ->
   Contract JSONMIRType (P.Expr P.PName) ->
   MIRSetupM ()
-compileMIRContract fileReader bic cenv0 sawenv c =
+compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
   do allocsPre <- mapM setupAlloc (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= mir_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
      mapM_ setupPointsToBitfields (prePointsToBitfields c)
-     --mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
+     mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= mir_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
      (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= mir_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
      mapM_ setupPointsToBitfields (postPointsToBitfields c)
-     --mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
+     mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
      case returnVal c of
        Just v -> getSetupVal (envPost, cenvPost) v >>= mir_return
        Nothing -> return ()
@@ -133,7 +141,10 @@ compileMIRContract fileReader bic cenv0 sawenv c =
     setupPointsToBitfields _ =
       MIRSetupM $ fail "Points-to-bitfield not supported in the MIR API."
 
-    --setupGhostValue _ _ _ = fail "Ghost values not supported yet in the MIR API."
+    setupGhostValue genv cenv (GhostValue serverName e) =
+      do g <- resolve genv serverName
+         t <- getTypedTerm cenv e
+         mir_ghost_value g t
 
     resolve :: Map ServerName a -> ServerName -> MIRSetupM a
     resolve env name =
@@ -185,14 +196,14 @@ compileMIRContract fileReader bic cenv0 sawenv c =
              return $ MS.SetupArray ty' (elt':eltss')
     getSetupVal _ (StructValue Nothing _) =
       MIRSetupM $ fail "MIR struct without a corresponding ADT."
-    getSetupVal env (StructValue (Just adtServerName) elts) =
-      -- First, we look up the MIR ADT from its ServerName. If we find it,
-      -- proceed to handle the struct field types. Otherwise, raise an error.
-      case getMIRAdtEither sawenv adtServerName of
-        Left ex -> throw ex
-        Right adt -> do
-          elts' <- mapM (getSetupVal env) elts
-          pure $ MS.SetupStruct adt elts'
+    getSetupVal env (StructValue (Just adtServerName) elts) = do
+      adt <- getMirAdt adtServerName
+      elts' <- mapM (getSetupVal env) elts
+      pure $ MS.SetupStruct adt elts'
+    getSetupVal env (EnumValue adtServerName variantName elts) = do
+      adt <- getMirAdt adtServerName
+      elts' <- mapM (getSetupVal env) elts
+      MIRSetupM $ mir_enum_value adt variantName elts'
     getSetupVal env (TupleValue elems) = do
       elems' <- mapM (getSetupVal env) elems
       pure $ MS.SetupTuple () elems'
@@ -200,6 +211,15 @@ compileMIRContract fileReader bic cenv0 sawenv c =
       pure $ MS.SetupGlobalInitializer () name
     getSetupVal _ (GlobalLValue name) =
       pure $ MS.SetupGlobal () name
+    getSetupVal _ (FreshExpandedValue pfx ty) =
+      let ty' = mirType sawenv ty in
+      mir_fresh_expanded_value pfx ty'
+    getSetupVal env (SliceValue base) = do
+      base' <- getSetupVal env base
+      pure $ mir_slice_value base'
+    getSetupVal env (SliceRangeValue base start end) = do
+      base' <- getSetupVal env base
+      pure $ mir_slice_range_value base' start end
     getSetupVal _ (FieldLValue _ _) =
       MIRSetupM $ fail "Field l-values unsupported in the MIR API."
     getSetupVal _ (CastLValue _ _) =
@@ -208,6 +228,10 @@ compileMIRContract fileReader bic cenv0 sawenv c =
       MIRSetupM $ fail "Union l-values unsupported in the MIR API."
     getSetupVal _ (ElementLValue _ _) =
       MIRSetupM $ fail "Element l-values unsupported in the MIR API."
+
+    getMirAdt :: ServerName -> MIRSetupM Mir.Adt
+    getMirAdt adtServerName =
+      either throw pure $ getMIRAdtEither sawenv adtServerName
 
 data MIRLoadModuleParams
   = MIRLoadModuleParams ServerName FilePath

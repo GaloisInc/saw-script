@@ -62,6 +62,7 @@ import qualified Prettyprinter as PP
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.Crucible.Common as Common
@@ -76,6 +77,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
+import SAWScript.MGU (instantiate)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -148,6 +150,7 @@ data Value
   | VSimpset SAWSimpset
   | VRefnset SAWRefnset
   | VTheorem Theorem
+  | VBisimTheorem BisimTheorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
@@ -361,6 +364,7 @@ showsPrecValue opts nenv p v =
     VTheorem thm ->
       showString "Theorem " .
       showParen True (showString (prettyProp opts' nenv (thmProp thm)))
+    VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
@@ -501,7 +505,8 @@ extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv 
 extendLocal x mt md v env = LocalLet x mt md v : env
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw = rw { rwTypedef = M.insert name ty (rwTypedef rw) }
+addTypedef name ty rw = rw { rwTypedef = M.insert name ty' (rwTypedef rw) }
+  where ty' = instantiate (rwTypedef rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
@@ -1262,6 +1267,13 @@ instance IsValue Theorem where
 instance FromValue Theorem where
     fromValue (VTheorem t) = t
     fromValue _ = error "fromValue Theorem"
+
+instance IsValue BisimTheorem where
+    toValue = VBisimTheorem
+
+instance FromValue BisimTheorem where
+    fromValue (VBisimTheorem t) = t
+    fromValue _ = error "fromValue BisimTheorem"
 
 instance IsValue JavaType where
     toValue t = VJavaType t

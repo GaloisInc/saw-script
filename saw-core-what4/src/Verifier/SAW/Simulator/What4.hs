@@ -79,7 +79,9 @@ import Data.Traversable as T
 import Control.Applicative
 #endif
 import qualified Control.Exception as X
-import Control.Monad.State as ST
+import Control.Monad ((<=<), foldM, unless)
+import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Numeric.Natural (Natural)
 
 -- saw-core

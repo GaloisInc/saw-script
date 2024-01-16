@@ -409,6 +409,11 @@ matchArg sym sc eval allocSpecs md shp rv sv = go shp rv sv
         goRef refTy pointeeTy mutbl tpr ref alloc 0
     go (RefShape refTy pointeeTy mutbl tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
         goRef refTy pointeeTy mutbl tpr ref alloc idx
+    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len)
+                                   (MS.SetupSlice (MirSetupSliceRaw refSV lenSV)) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        go refShp ref refSV
+        go lenShp len lenSV
     go (FnPtrShape _ _ _) _ _ =
         error "Function pointers not currently supported in overrides"
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
@@ -534,6 +539,13 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
             Nothing -> error $ "setupToReg: type error: bad reference type for " ++ show alloc ++
                 ": got " ++ show (ptr ^. mpType) ++ " but expected " ++ show tpr
         Nothing -> error $ "setupToReg: no definition for " ++ show alloc
+    go (SliceShape _ ty mutbl tpr) (MS.SetupSlice (MirSetupSliceRaw refSV lenSV)) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        refRV <- go refShp refSV
+        lenRV <- go lenShp lenSV
+        pure $ Ctx.Empty Ctx.:> RV refRV Ctx.:> RV lenRV
+    go (EnumShape _ _ _ _ _) _ =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
     go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
@@ -571,7 +583,7 @@ condTerm sc (MS.SetupCond_Pred md tt) = do
     sub <- use MS.termSub
     t' <- liftIO $ SAW.scInstantiateExt sc sub $ SAW.ttTerm tt
     return (md, t')
-condTerm _ (MS.SetupCond_Ghost _ _ _ _) = do
+condTerm _ (MS.SetupCond_Ghost _ _ _) = do
     error $ "learnCond: SetupCond_Ghost is not supported"
 
 

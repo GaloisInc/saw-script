@@ -8,6 +8,8 @@
   * The `SAW/MIR/verify` command performs verification of a MIR function.
   * The `SAW/MIR/find ADT` command looks up an algebraic data type (ADT) name in
     a MIR module.
+  * The `SAW/MIR/assume` command assumes a specification for a MIR function
+    without performing any verification.
 
   See the [remote API
   documentation](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawmirload-module-command)
@@ -25,6 +27,17 @@
 * The API for `"struct"` `setup value`s now has a `"MIR ADT"` field. For
   MIR verification, this field is required. For LLVM and JVM verification,
   this field must be `null`, or else an error will be raised.
+* Add a `"fresh expanded"` `setup value` that denotes a value entirely
+  populated by fresh symbolic variables. For compound types such as structs or
+  arrays, this will explicitly set each field or element to contain a fresh
+  symbolic variable. This is currently only supported with LLVM and MIR
+  verification, and using this with JVM verification will raise an error.
+* Add `"slice"` and `"slice range"` `setup value`s representing slices in MIR
+  verification. Attempting to use these in LLVM or JVM verification will raise
+  an error.
+* Add `"enum"` `setup value`s representing enums in MIR verification.
+* The `SAW/create ghost variable` command and the associated
+  `ghost variable value` value are now supported with JVM and MIR verification.
 
 ## 1.0.0 -- 2023-06-26
 

@@ -38,7 +38,9 @@ module SAWScript.Crucible.Common.Setup.Value
 
   , XSetupNull
   , XSetupStruct
+  , XSetupEnum
   , XSetupTuple
+  , XSetupSlice
   , XSetupArray
   , XSetupElem
   , XSetupField
@@ -49,8 +51,6 @@ module SAWScript.Crucible.Common.Setup.Value
 
   , SetupValue(..)
   , SetupValueHas
-
-  , XGhostState
 
   , ConditionMetadata(..)
 
@@ -122,7 +122,9 @@ type family ResolvedState ext :: Type
 
 type family XSetupNull ext
 type family XSetupStruct ext
+type family XSetupEnum ext
 type family XSetupTuple ext
+type family XSetupSlice ext
 type family XSetupArray ext
 type family XSetupElem ext
 type family XSetupField ext
@@ -139,12 +141,21 @@ data SetupValue ext where
   SetupTerm   :: TypedTerm -> SetupValue ext
   SetupNull   :: XSetupNull ext -> SetupValue ext
   SetupStruct :: XSetupStruct ext -> [SetupValue ext] -> SetupValue ext
-  SetupTuple  :: XSetupTuple ext -> [SetupValue ext] -> SetupValue ext
   SetupArray  :: XSetupArray ext -> [SetupValue ext] -> SetupValue ext
   SetupElem   :: XSetupElem ext -> SetupValue ext -> Int -> SetupValue ext
   SetupField  :: XSetupField ext -> SetupValue ext -> String -> SetupValue ext
   SetupCast   :: XSetupCast ext -> SetupValue ext -> SetupValue ext
   SetupUnion  :: XSetupUnion ext -> SetupValue ext -> String -> SetupValue ext
+
+  -- | A tuple value. At the moment, this is only ever used for MIR
+  -- verification.
+  SetupTuple :: XSetupTuple ext -> [SetupValue ext] -> SetupValue ext
+  -- | A slice value. At the moment, this is only ever used for MIR
+  -- verification.
+  SetupSlice :: XSetupSlice ext -> SetupValue ext
+  -- | An enumeration value. At the moment, this is only ever used for MIR
+  -- verification.
+  SetupEnum :: XSetupEnum ext -> SetupValue ext
 
   -- | A pointer to a global variable
   SetupGlobal :: XSetupGlobal ext -> String -> SetupValue ext
@@ -160,7 +171,9 @@ data SetupValue ext where
 type SetupValueHas (c :: Type -> Constraint) ext =
   ( c (XSetupNull ext)
   , c (XSetupStruct ext)
+  , c (XSetupEnum ext)
   , c (XSetupTuple ext)
+  , c (XSetupSlice ext)
   , c (XSetupArray ext)
   , c (XSetupElem ext)
   , c (XSetupField ext)
@@ -175,15 +188,6 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 -- TypedTerm is neither Eq nor Ord
 -- deriving instance (SetupValueHas Eq ext) => Eq (SetupValue ext)
 -- deriving instance (SetupValueHas Ord ext) => Ord (SetupValue ext)
-
---------------------------------------------------------------------------------
--- ** Ghost state
-
--- | This extension field controls whether ghost state is enabled for a
--- particular language backend. At the moment, ghost state is only enabled for
--- the LLVM backend, but we want to expand this to cover other language backends
--- in the future. See <https://github.com/GaloisInc/saw-script/issues/1929>.
-type family XGhostState ext
 
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions

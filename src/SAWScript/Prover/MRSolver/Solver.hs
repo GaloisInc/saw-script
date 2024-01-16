@@ -59,26 +59,26 @@ The goal of the solver at any point is of the form @C |- m1 |= m2@, meaning that
 we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 
 > C |- retS e1 |= retS e2: prove C |- e1 = e2
-> 
+>
 > C |- errorS str1 |= errorS str2: vacuously true
-> 
+>
 > C |- if b then m1' else m1'' |= m2: prove C,b=true |- m1' |= m2 and
 > C,b=false |- m1'' |= m2, skipping either case where C,b=X is unsatisfiable;
-> 
+>
 > C |- m1 |= if b then m2' else m2'': similar to the above
-> 
+>
 > C |- either T U (SpecM V) f1 f2 e |= m: prove C,x:T,e=inl x |- f1 x |= m and
 > C,y:U,e=inl y |- f2 y |= m, again skippping any case with unsatisfiable context;
-> 
+>
 > C |- m |= either T U (SpecM V) f1 f2 e: similar to previous
-> 
+>
 > C |- m |= forallS f: make a new universal variable x and recurse
-> 
+>
 > C |- existsS f |= m: make a new universal variable x and recurse (existential
 > elimination uses universal variables and vice-versa)
-> 
+>
 > C |- m |= existsS f: make a new existential variable x and recurse
-> 
+>
 > C |- forallS f |= m: make a new existential variable x and recurse
 >
 > C |- m |= orS m1 m2: try to prove C |- m |= m1, and if that fails, backtrack and
@@ -88,34 +88,34 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 >
 > C |- FixS fdef args |= m: create a FixS-bound variable F bound to (fdef F) and
 > recurse on fdef F args |= m
-> 
+>
 > C |- m |= FixS fdef args: similar to previous case
-> 
+>
 > C |- F e1 ... en >>= k |= F e1' ... en' >>= k': prove C |- ei = ei' for each i
 > and then prove k x |= k' x for new universal variable x
-> 
+>
 > C |- F e1 ... en >>= k |= F' e1' ... em' >>= k':
-> 
+>
 > * If we have an assumption that forall x1 ... xj, F a1 ... an |= F' a1' .. am',
 >   prove ei = ai and ei' = ai' and then that C |- k x |= k' x for fresh uvar x
-> 
+>
 > * If we have an assumption that forall x1, ..., xn, F e1'' ... en'' |= m' for
 >   some ei'' and m', match the ei'' against the ei by instantiating the xj with
 >   fresh evars, and if this succeeds then recursively prove C |- m' >>= k |= RHS
-> 
+>
 > (We don't do this one right now)
 > * If we have an assumption that forall x1', ..., xn', m |= F e1'' ... en'' for
 >   some ei'' and m', match the ei'' against the ei by instantiating the xj with
 >   fresh evars, and if this succeeds then recursively prove C |- LHS |= m' >>= k'
-> 
+>
 > * If either side is a definition whose unfolding does not contain FixS or any
 >   related operations, unfold it
-> 
+>
 > * If F and F' have the same return type, add an assumption forall uvars in scope
 >   that F e1 ... en |= F' e1' ... em' and unfold both sides, recursively proving
 >   that F_body e1 ... en |= F_body' e1' ... em'. Then also prove k x |= k' x for
 >   fresh uvar x.
-> 
+>
 > * Otherwise we don't know to "split" one of the sides into a bind whose
 >   components relate to the two components on the other side, so just fail
 -}
@@ -127,8 +127,8 @@ import qualified Data.Text as T
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
-import Control.Monad.Reader
-import Control.Monad.Except
+import Control.Monad (void, foldM, zipWithM, zipWithM_)
+import Control.Monad.Except (MonadError(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)

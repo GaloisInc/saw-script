@@ -69,6 +69,10 @@ class MIRIsizeType(MIRType):
     def to_json(self) -> Any:
         return { 'type': 'isize' }
 
+class MIRLifetimeType(MIRType):
+    def to_json(self) -> Any:
+        return { 'type': 'lifetime' }
+
 class MIRRefType(MIRType):
     def __init__(self, referent_type : 'MIRType') -> None:
         self.referent_type = referent_type
