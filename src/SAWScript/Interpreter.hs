@@ -1735,7 +1735,10 @@ primitives = Map.fromList
   , prim "unfolding_fix_once" "[String] -> ProofScript ()"
     (pureVal unfoldFixOnceGoal)
     Current
-    [ "Unfold the fixpoint constant definitions once within the current goal." ]
+    [ "Unfold the named recursive constants once within the current goal."
+    , "Like `unfolding`, except that the recursive constants are unfolded"
+    , "only once, avoiding possible infinite evaluation."
+    ]
 
   , prim "simplify"            "Simpset -> ProofScript ()"
     (pureVal simplifyGoal)
