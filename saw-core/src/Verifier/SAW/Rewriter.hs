@@ -69,6 +69,7 @@ import Data.IORef
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
+import Data.List.Extra (nubOrd)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -936,7 +937,10 @@ hoistIfs sc t = do
    let ss :: Simpset () = addRules rules emptySimpset
 
    (t', conds) <- doHoistIfs sc ss cache itePat . snd =<< rewriteSharedTerm sc ss t
-   splitConds sc ss (Set.toList $ Set.fromList $ map fst conds) t'
+
+   -- remove duplicate conditions from the list, as muxing in SAW can result in
+   -- many copies of the same condition, which cause a performance issue
+   splitConds sc ss (nubOrd $ map fst conds) t'
 
 
 splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
