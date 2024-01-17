@@ -1,3 +1,4 @@
+import "../../deps/cryptol-specs/Common/GF28.cry";
 import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Block/AES.cry";
 
 print "Proving encrypt_lemma...";

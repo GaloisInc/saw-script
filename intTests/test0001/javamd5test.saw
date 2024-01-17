@@ -1,4 +1,4 @@
-import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
+import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.md";
 
 let md5_spec = do {
     msgref <- jvm_alloc_array 16 java_byte;
