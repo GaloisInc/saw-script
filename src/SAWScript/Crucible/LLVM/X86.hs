@@ -527,19 +527,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  let loc = MS.conditionLoc md
                  C.addAssumption bak
                    (C.GenericAssumption loc reason expr)
-          r <- C.callCFG cfg . C.RegMap . singleton . C.RegEntry macawStructRepr $ preState ^. x86Regs
-          globals' <- C.readGlobals
-          mem' <- C.readGlobal mvar
-          let finalState = preState
-                { _x86Mem = mem'
-                , _x86Regs = C.regValue r
-                , _x86CrucibleContext = cc & ccLLVMGlobals .~ globals'
-                }
-          liftIO $ printOutLn opts Info
-            "Examining specification to determine postconditions"
-          liftIO . void . runX86Sim finalState $
-            assertPost globals' env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
-          pure $ C.regValue r
+          C.regValue <$>
+            (C.callCFG cfg . C.RegMap . singleton . C.RegEntry macawStructRepr $ preState ^. x86Regs)
 
       liftIO $ printOutLn opts Info "Simulating function"
 
@@ -571,18 +560,35 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
-      liftIO $ C.executeCrucible execFeatures initial >>= \case
-        C.FinishedResult{} -> pure ()
+      finalState <- liftIO $ C.executeCrucible execFeatures initial >>= \case
+        C.FinishedResult _ pr -> do
+          gp <- getGlobalPair opts pr
+          mem' <- maybe
+            (fail "internal error: LLVM Memory global not found")
+            return
+            (C.lookupGlobal mvar $ gp ^. C.gpGlobals)
+          return $ preState
+            { _x86Mem = mem'
+            , _x86Regs = C.regValue $ gp ^. C.gpValue
+            , _x86CrucibleContext = cc & ccLLVMGlobals .~ (gp ^. C.gpGlobals)
+            }
         C.AbortedResult _ ar -> do
-          printOutLn opts Warn "Warning: function never returns"
-          print $ Common.ppAbortedResult
-            ( \gp ->
-                case C.lookupGlobal mvar $ gp ^. C.gpGlobals of
-                  Nothing -> "LLVM memory global variable not initialized"
-                  Just mem -> C.LLVM.ppMem $ C.LLVM.memImplHeap mem
-            )
-            ar
+          let resultDoc = Common.ppAbortedResult
+                ( \gp ->
+                    case C.lookupGlobal mvar $ gp ^. C.gpGlobals of
+                      Nothing -> "LLVM memory global variable not initialized"
+                      Just mem -> C.LLVM.ppMem $ C.LLVM.memImplHeap mem
+                )
+                ar
+          fail $ unlines [ "Execution failed: function never returns."
+                         , show resultDoc
+                         ]
         C.TimeoutResult{} -> fail "Execution timed out"
+
+      liftIO $ printOutLn opts Info
+        "Examining specification to determine postconditions"
+      liftIO $ void $ runX86Sim finalState $
+        assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
       (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
 
@@ -1247,13 +1253,12 @@ argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
   X86Constraints =>
-  C.SymGlobalState Sym ->
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
   IORef MetadataMap {- ^ metadata map -} ->
   X86Sim ()
-assertPost globals env premem preregs mdMap = do
+assertPost env premem preregs mdMap = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   opts <- use x86Options
@@ -1264,6 +1269,7 @@ assertPost globals env premem preregs mdMap = do
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
     nameEnv = MS.csTypeNames ms
+    globals = cc ^. ccLLVMGlobals
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad bak premem prersp (C.LLVM.bitvectorType 8)
@@ -1390,15 +1396,14 @@ checkGoals ::
   IORef MetadataMap {- ^ metadata map -} ->
   TopLevel (SolverStats, [MS.VCStats])
 checkGoals bak opts nm sc tactic mdMap = do
-  gs <- liftIO $ getGoals (SomeBackend bak) mdMap
+  gs <- liftIO $ getPoststateObligations sc bak mdMap
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
     , " goals"
     ]
-  outs <- forM (zip [0..] gs) $ \(n, g) -> do
-    term <- liftIO $ gGoal sc g
-    let md = gMd g
+  outs <- forM (zip [0..] gs) $ \(n, (msg, md, term)) -> do
+    g <- liftIO $ boolToProp sc [] term
     let ploc = MS.conditionLoc md
     let gloc = (unwords [show (W4.plSourceLoc ploc)
                        ,"in"
@@ -1410,24 +1415,24 @@ checkGoals bak opts nm sc tactic mdMap = do
                     , goalType = MS.conditionType md
                     , goalName = nm
                     , goalLoc  = gloc
-                    , goalDesc = show $ gMessage g
-                    , goalSequent = propToSequent term
+                    , goalDesc = msg
+                    , goalSequent = propToSequent g
                     , goalTags = MS.conditionTags md
                     }
-    res <- runProofScript tactic term proofgoal (Just (gLoc g))
+    res <- runProofScript tactic g proofgoal (Just ploc)
              (Text.unwords
-              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
+              ["X86 verification condition", Text.pack (show n), Text.pack msg])
              False -- do not record this theorem in the database
              False -- TODO! useSequentGoals
     case res of
       ValidProof stats thm ->
         return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
       UnfinishedProof pst -> do
-        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info $ unwords ["Subgoal failed:", msg]
         printOutLnTop Info (show (psStats pst))
         throwTopLevel $ "Proof failed: " ++ show (length (psGoals pst)) ++ " goals remaining."
       InvalidProof stats vals _pst -> do
-        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info $ unwords ["Subgoal failed:", msg]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW
