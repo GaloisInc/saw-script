@@ -121,7 +121,6 @@ import           Data.Functor.Compose (Compose(..))
 import qualified Data.Map as Map
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L
 
 import           Data.Parameterized.All (All(All))
 import           Data.Parameterized.Some (Some(Some))
@@ -132,6 +131,7 @@ import           What4.ProgramLoc (ProgramLoc)
 import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicMuxFn(IntrinsicMuxFn))
+import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
 import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -243,11 +243,11 @@ data SetupError
 ppSetupError :: SetupError -> PPL.Doc ann
 ppSetupError (InvalidReturnType t) =
   PPL.pretty "Can't lift return type" PPL.<+>
-  PPL.viaShow (L.ppType t) PPL.<+>
+  PPL.viaShow (Crucible.LLVM.ppType t) PPL.<+>
   PPL.pretty "to a Crucible type."
 ppSetupError (InvalidArgTypes ts) =
   PPL.pretty "Can't lift argument types " PPL.<+>
-  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . L.ppType) ts) PPL.<+>
+  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . Crucible.LLVM.ppType) ts) PPL.<+>
   PPL.pretty "to Crucible types."
 
 resolveArgs ::
