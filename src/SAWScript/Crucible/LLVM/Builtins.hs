@@ -83,8 +83,10 @@ module SAWScript.Crucible.LLVM.Builtins
     , checkSpecReturnType
     , verifyPrestate
     , verifyPoststate
+    , getPoststateObligations
     , withCfgAndBlockId
     , registerOverride
+    , lookupMemGlobal
     ) where
 
 import Prelude hiding (fail)
@@ -616,10 +618,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     mem0 <-
-       case Crucible.lookupGlobal mvar globals of
-         Nothing   -> fail "internal error: LLVM Memory global not found"
-         Just mem0 -> return mem0
+     let mem0 = lookupMemGlobal mvar globals
      -- push a memory stack frame if starting from a breakpoint
      let mem = case methodSpec^.csParentName of
                Just parent -> mem0
@@ -727,10 +726,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
      -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     mem <-
-       case Crucible.lookupGlobal mvar globals of
-         Nothing   -> fail "internal error: LLVM Memory global not found"
-         Just mem0 -> return mem0
+     let mem = lookupMemGlobal mvar globals
 
      let globals1 = Crucible.llvmGlobals mvar mem
 
@@ -947,10 +943,7 @@ verifyPrestate opts cc mspec globals =
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     mem <-
-       case Crucible.lookupGlobal lvar globals of
-         Nothing  -> fail "internal error: LLVM Memory global not found"
-         Just mem -> pure mem
+     let mem = lookupMemGlobal lvar globals
 
      -- Allocate LLVM memory for each 'llvm_alloc'
      (env, mem') <- runStateT
@@ -1253,6 +1246,12 @@ doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz md fresh initialization)
 
 --------------------------------------------------------------------------------
 
+lookupMemGlobal :: Crucible.GlobalVar tp -> Crucible.SymGlobalState sym -> Crucible.RegValue sym tp
+lookupMemGlobal mvar globals =
+  fromMaybe
+    (panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["LLVM Memory global not found"])
+    (Crucible.lookupGlobal mvar globals)
+
 ppAbortedResult :: LLVMCrucibleContext arch
                 -> Crucible.AbortedResult Sym a
                 -> Doc ann
@@ -1264,9 +1263,7 @@ ppGlobalPair :: LLVMCrucibleContext arch
 ppGlobalPair cc gp =
   let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
       globals = gp ^. Crucible.gpGlobals in
-  case Crucible.lookupGlobal mvar globals of
-    Nothing -> "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem (Crucible.memImplHeap mem)
+  Crucible.ppMem $ Crucible.memImplHeap $ lookupMemGlobal mvar globals
 
 
 --------------------------------------------------------------------------------
@@ -1673,33 +1670,11 @@ verifyPoststate cc mspec env0 globals ret mdMap =
           modifyIORef mdMap (Map.insert ann md)
           Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
-     obligations <- io $
-       do obls <- Crucible.getProofObligations bak
-          Crucible.clearProofObligations bak
-          return (maybe [] Crucible.goalsToList obls)
-
-     finalMdMap <- io $ readIORef mdMap
-     sc_obligations <- io $ mapM (verifyObligation sc finalMdMap) obligations
+     sc_obligations <- io $ getPoststateObligations sc bak mdMap
      return (sc_obligations, st)
 
   where
     sym = cc^.ccSym
-
-    verifyObligation sc finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
-      do st <- Common.sawCoreState sym
-         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
-         conclTerm  <- toSC sym st concl
-         obligation <- scImplies sc hypTerm conclTerm
-         let defaultMd = MS.ConditionMetadata
-                         { MS.conditionLoc = loc
-                         , MS.conditionTags = mempty
-                         , MS.conditionType = "safety assertion"
-                         , MS.conditionContext = ""
-                         }
-         let md = fromMaybe defaultMd $
-                    do ann <- W4.getAnnotation sym concl
-                       Map.lookup ann finalMdMap
-         return (show err, md, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
@@ -1714,6 +1689,41 @@ verifyPoststate cc mspec env0 globals ret mdMap =
         (Nothing     , Just _ )     ->
           fail "verifyPoststate: unexpected llvm_return specification"
         _ -> return ()
+
+-- | Translate the proof obligations from the Crucible backend into SAWCore
+-- terms. For each proof oblication, return a triple consisting of the error
+-- message, the metadata, and the SAWCore.
+getPoststateObligations ::
+  Crucible.IsSymBackend Sym bak =>
+  SharedContext ->
+  bak ->
+  IORef MetadataMap ->
+  IO [(String, MS.ConditionMetadata, Term)]
+getPoststateObligations sc bak mdMap =
+  do obligations <- maybe [] Crucible.goalsToList <$> Crucible.getProofObligations bak
+     Crucible.clearProofObligations bak
+
+     finalMdMap <- readIORef mdMap
+     mapM (verifyObligation finalMdMap) obligations
+
+  where
+    sym = Crucible.backendGetSym bak
+
+    verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
+      do st <- Common.sawCoreState sym
+         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
+         conclTerm <- toSC sym st concl
+         obligation <- scImplies sc hypTerm conclTerm
+         let defaultMd = MS.ConditionMetadata
+                         { MS.conditionLoc = loc
+                         , MS.conditionTags = mempty
+                         , MS.conditionType = "safety assertion"
+                         , MS.conditionContext = ""
+                         }
+         let md = fromMaybe defaultMd $
+                    do ann <- W4.getAnnotation sym concl
+                       Map.lookup ann finalMdMap
+         return (show err, md, obligation)
 
 --------------------------------------------------------------------------------
 
