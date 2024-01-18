@@ -86,6 +86,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , getPoststateObligations
     , withCfgAndBlockId
     , registerOverride
+    , lookupMemGlobal
     ) where
 
 import Prelude hiding (fail)
@@ -617,10 +618,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     mem0 <-
-       case Crucible.lookupGlobal mvar globals of
-         Nothing   -> fail "internal error: LLVM Memory global not found"
-         Just mem0 -> return mem0
+     let mem0 = lookupMemGlobal mvar globals
      -- push a memory stack frame if starting from a breakpoint
      let mem = case methodSpec^.csParentName of
                Just parent -> mem0
@@ -728,10 +726,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
      -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     mem <-
-       case Crucible.lookupGlobal mvar globals of
-         Nothing   -> fail "internal error: LLVM Memory global not found"
-         Just mem0 -> return mem0
+     let mem = lookupMemGlobal mvar globals
 
      let globals1 = Crucible.llvmGlobals mvar mem
 
@@ -948,10 +943,7 @@ verifyPrestate opts cc mspec globals =
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     mem <-
-       case Crucible.lookupGlobal lvar globals of
-         Nothing  -> fail "internal error: LLVM Memory global not found"
-         Just mem -> pure mem
+     let mem = lookupMemGlobal lvar globals
 
      -- Allocate LLVM memory for each 'llvm_alloc'
      (env, mem') <- runStateT
@@ -1254,6 +1246,12 @@ doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz md fresh initialization)
 
 --------------------------------------------------------------------------------
 
+lookupMemGlobal :: Crucible.GlobalVar tp -> Crucible.SymGlobalState sym -> Crucible.RegValue sym tp
+lookupMemGlobal mvar globals =
+  fromMaybe
+    (panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["LLVM Memory global not found"])
+    (Crucible.lookupGlobal mvar globals)
+
 ppAbortedResult :: LLVMCrucibleContext arch
                 -> Crucible.AbortedResult Sym a
                 -> Doc ann
@@ -1265,9 +1263,7 @@ ppGlobalPair :: LLVMCrucibleContext arch
 ppGlobalPair cc gp =
   let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
       globals = gp ^. Crucible.gpGlobals in
-  case Crucible.lookupGlobal mvar globals of
-    Nothing -> "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem (Crucible.memImplHeap mem)
+  Crucible.ppMem $ Crucible.memImplHeap $ lookupMemGlobal mvar globals
 
 
 --------------------------------------------------------------------------------
@@ -1694,6 +1690,9 @@ verifyPoststate cc mspec env0 globals ret mdMap =
           fail "verifyPoststate: unexpected llvm_return specification"
         _ -> return ()
 
+-- | Translate the proof obligations from the Crucible backend into SAWCore
+-- terms. For each proof oblication, return a triple consisting of the error
+-- message, the metadata, and the SAWCore.
 getPoststateObligations ::
   Crucible.IsSymBackend Sym bak =>
   SharedContext ->

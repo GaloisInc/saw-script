@@ -563,10 +563,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       finalState <- liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult _ pr -> do
           gp <- getGlobalPair opts pr
-          mem' <- maybe
-            (fail "internal error: LLVM Memory global not found")
-            return
-            (C.lookupGlobal mvar $ gp ^. C.gpGlobals)
+          let mem' = lookupMemGlobal mvar $ gp ^. C.gpGlobals
           return $ preState
             { _x86Mem = mem'
             , _x86Regs = C.regValue $ gp ^. C.gpValue
@@ -574,11 +571,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             }
         C.AbortedResult _ ar -> do
           let resultDoc = Common.ppAbortedResult
-                ( \gp ->
-                    case C.lookupGlobal mvar $ gp ^. C.gpGlobals of
-                      Nothing -> "LLVM memory global variable not initialized"
-                      Just mem -> C.LLVM.ppMem $ C.LLVM.memImplHeap mem
-                )
+                (\gp ->  C.LLVM.ppMem $ C.LLVM.memImplHeap $ lookupMemGlobal mvar $ gp ^. C.gpGlobals)
                 ar
           fail $ unlines [ "Execution failed: function never returns."
                          , show resultDoc
