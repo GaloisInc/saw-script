@@ -131,6 +131,8 @@ import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
+import           Data.Parameterized.Map (MapF)
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
@@ -645,14 +647,15 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      printOutLnTop Info $
        unwords ["Simulating", (methodSpec ^. csName) , "..."]
      top_loc <- toW4Loc "llvm_verify" <$> getPosition
-     (ret, globals3) <-
-       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
+     (ret, globals3, invSubst) <-
+       verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp mdMap
 
      -- collect the proof obligations
      (asserts, post_override_state) <-
        verifyPoststate cc
        methodSpec env globals3 ret
        mdMap
+       invSubst
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
@@ -752,6 +755,7 @@ refineMethodSpec cc methodSpec lemmas tactic =
        verifyPoststate cc
        methodSpec env globals3 ret
        mdMap
+       MapF.empty
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame bak frameIdent
@@ -1431,11 +1435,11 @@ verifySimulate ::
   Bool ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IORef MetadataMap ->
-  IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
-  withCfgAndBlockId opts cc mspec $ \cfg entryId ->
-  ccWithBackend cc $ \bak ->
-  do let sym = cc^.ccSym
+  TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap = do
+  sc <- getSharedContext
+  io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
+     let sym = cc^.ccSym
      let argTys = Crucible.blockInputs $
            Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
      let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
@@ -1503,7 +1507,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                             (Crucible.regType  retval)
                             (Crucible.regValue retval)
                      return (Just (ret_mt, v))
-            return (retval', globals1)
+            return (retval', globals1, MapF.empty)
 
        Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 
@@ -1627,9 +1631,10 @@ verifyPoststate ::
   Crucible.SymGlobalState Sym {- ^ global variables -} ->
   Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value -} ->
   IORef MetadataMap {- ^ metadata map -} ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) {- ^ invariant substitution -} ->
   TopLevel ([(String, MS.ConditionMetadata, Term)], OverrideState (LLVM arch))
     {- ^ generated labels and verification conditions -}
-verifyPoststate cc mspec env0 globals ret mdMap =
+verifyPoststate cc mspec env0 globals ret mdMap invSubst =
   ccWithBackend cc $ \bak ->
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
      sc <- getSharedContext
@@ -1670,7 +1675,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
           modifyIORef mdMap (Map.insert ann md)
           Crucible.addAssertion bak (Crucible.LabeledPred p' r)
 
-     sc_obligations <- io $ getPoststateObligations sc bak mdMap
+     sc_obligations <- io $ getPoststateObligations sc bak mdMap invSubst
      return (sc_obligations, st)
 
   where
@@ -1692,14 +1697,16 @@ verifyPoststate cc mspec env0 globals ret mdMap =
 
 -- | Translate the proof obligations from the Crucible backend into SAWCore
 -- terms. For each proof oblication, return a triple consisting of the error
--- message, the metadata, and the SAWCore.
+-- message, the metadata, and the SAWCore. For each proof obligation, substitute
+-- the uninterpreted invaiants with their definitions.
 getPoststateObligations ::
   Crucible.IsSymBackend Sym bak =>
   SharedContext ->
   bak ->
   IORef MetadataMap ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) {- ^ invariant substitution -} ->
   IO [(String, MS.ConditionMetadata, Term)]
-getPoststateObligations sc bak mdMap =
+getPoststateObligations sc bak mdMap invSubst =
   do obligations <- maybe [] Crucible.goalsToList <$> Crucible.getProofObligations bak
      Crucible.clearProofObligations bak
 
@@ -1711,8 +1718,8 @@ getPoststateObligations sc bak mdMap =
 
     verifyObligation finalMdMap (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err@(Crucible.SimError loc _))) =
       do st <- Common.sawCoreState sym
-         hypTerm <- toSC sym st =<< Crucible.assumptionsPred sym hyps
-         conclTerm <- toSC sym st concl
+         hypTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst =<< Crucible.assumptionsPred sym hyps
+         conclTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst concl
          obligation <- scImplies sc hypTerm conclTerm
          let defaultMd = MS.ConditionMetadata
                          { MS.conditionLoc = loc

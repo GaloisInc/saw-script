@@ -62,6 +62,7 @@ import Data.Maybe
 import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some
+import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
@@ -583,7 +584,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       liftIO $ void $ runX86Sim finalState $
         assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
-      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
+      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap MapF.empty
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -1387,9 +1388,10 @@ checkGoals ::
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
   TopLevel (SolverStats, [MS.VCStats])
-checkGoals bak opts nm sc tactic mdMap = do
-  gs <- liftIO $ getPoststateObligations sc bak mdMap
+checkGoals bak opts nm sc tactic mdMap invSubst = do
+  gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
