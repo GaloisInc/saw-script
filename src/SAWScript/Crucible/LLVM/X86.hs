@@ -33,7 +33,7 @@ module SAWScript.Crucible.LLVM.X86
 
 import Control.Lens.TH (makeLenses)
 
-import System.IO (stdout)
+import System.IO
 import Control.Exception (throw)
 import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
 import Control.Monad (forM, forM_, unless, when, zipWithM)
@@ -287,6 +287,8 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
         ok <- W4.orPred sym is_valid
           =<< W4.andPred sym is_negative_offset is_not_overflow
         return (ptr_as_bv, ok)
+        -- is_valid <- Macaw.isValidPtr sym mem w ptr
+        -- return (llvmPointerOffset ptr, is_valid)
   both_bits <- W4.andPred sym xBits yBits
   both_ptrs <- W4.andPred sym xPtr yPtr
   same_region <- W4.natEq sym (llvmPointerBlock x) (llvmPointerBlock y)
@@ -297,9 +299,16 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
     =<< W4.andPred sym ok_x ok_y
   res_both_bits <- f sym (llvmPointerOffset x) (llvmPointerOffset y)
   res_both_ptrs <- f sym x_ptr_as_bv y_ptr_as_bv
-  undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
-  W4.itePred sym both_bits res_both_bits
-    =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+
+  if| Just True <- W4.asConstantPred both_bits ->
+      return res_both_bits
+    | Just True <- W4.asConstantPred both_ptrs -> do
+      C.assert bak ok_both_ptrs $ C.AssertFailureSimError "" ""
+      return res_both_ptrs
+    | otherwise -> do
+      undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
+      W4.itePred sym both_bits res_both_bits
+        =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
 
 -------------------------------------------------------------------------------
 -- ** Entrypoint
@@ -526,6 +535,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             forM_ assumes $ \(C.LabeledPred p (md, reason)) ->
               do expr <- resolveSAWPred cc p
                  let loc = MS.conditionLoc md
+                 putStrLn $ "resolveSAWPred: " ++ show expr
                  C.addAssumption bak
                    (C.GenericAssumption loc reason expr)
           C.regValue <$>
@@ -540,12 +550,17 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
          else
            pure []
 
-      simpleLoopFixpointFeature <-
+      -- rw_ref <- liftIO . newIORef =<< getTopLevelRW
+      (simpleLoopFixpointFeature, maybe_ref) <-
         case fixpointSelect of
-          NoFixpoint -> return []
+          NoFixpoint -> return ([], Nothing)
           SimpleFixpoint func ->
-            do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
-               return [f]
+            do let ?ptrWidth = knownNat @64
+              --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar Nothing
+              --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $
+              --    Just $ simpleLoopFixpointFunction sc sym rw_ref $ methodSpec ^. csName
+               (f, ref) <- liftIO $ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func
+               return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
                  case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
@@ -557,7 +572,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                    do let printFn = printOutLn opts Info
                       f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
                                                                    sc sawst mdMap loopcfg mvar func)
-                      return [f]
+                      return ([f], Nothing)
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
@@ -579,12 +594,22 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                          ]
         C.TimeoutResult{} -> fail "Execution timed out"
 
+      (invSubst, loopFunEquivConds) <- liftIO $ case maybe_ref of
+        Just fixpoint_state_ref -> do
+          uninterp_inv_fns <- Crucible.LLVM.Fixpoint.executionFeatureContextInvPreds <$> readIORef fixpoint_state_ref
+          subst <- C.runCHC bak uninterp_inv_fns
+          loop_fun_equiv_conds <- Crucible.LLVM.Fixpoint.executionFeatureContextLoopFunEquivConds <$> readIORef fixpoint_state_ref
+          return (subst, loop_fun_equiv_conds)
+        Nothing -> return (MapF.empty, [])
+
       liftIO $ printOutLn opts Info
         "Examining specification to determine postconditions"
       liftIO $ void $ runX86Sim finalState $
         assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
-      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap MapF.empty
+      (stats,vcstats) <- checkGoals bak opts nm (methodSpec ^. MS.csLoc) sc tactic mdMap invSubst loopFunEquivConds
+
+      -- putTopLevelRW =<< liftIO (readIORef rw_ref)
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -608,31 +633,37 @@ setupSimpleLoopFixpointFeature ::
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm ->
-  IO (C.ExecutionFeature p sym ext rtp)
+  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.Fixpoint.ExecutionFeatureContext sym 64 ext))
 
-setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
-  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar fixpoint_func
+setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
+  let ?ptrWidth = knownNat @64
+  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
 
  where
   fixpoint_func fixpoint_substitution condition =
     do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+       let header_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.headerValue) (MapF.elems fixpoint_substitution)
        let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.bodyValue) (MapF.elems fixpoint_substitution)
        let uninterpreted_constants = foldMap
              (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
-             (Some condition : body_exprs)
+             (Some condition : body_exprs ++ header_exprs)
        let filtered_uninterpreted_constants = Set.toList $ Set.filter
              (\(Some variable) ->
-               not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+               not (List.isPrefixOf "cindex_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
                && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
              uninterpreted_constants
-       body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
-       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+       tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms
+
+       putStrLn $ "implicit_parameters: " ++ show (map showTerm implicit_parameters)
 
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
-       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
+       arguments_tuple <- scTuple sc arguments
+       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]
        applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
          scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
        result_substitution <- MapF.fromList <$> zipWithM
@@ -643,28 +674,28 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
 
        explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
          toSC sym sawst variable
+       explicit_parameters_tuple <- scTuple sc explicit_parameters
+
        inner_func <- case asConstant (ttTerm func) of
          Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
            return inner_func
          _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
        func_body <- betaNormalize sc
-         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
+         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
 
        step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
-       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
-       explicit_parameters_tuple <- scTuple sc explicit_parameters
-       let lhs = Prelude.last step_arguments
-       w <- scNat sc 64
-       rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
-       loop_condition <- scBvULt sc w lhs rhs
+       step_arguments_tuple <- scTuple sc step_arguments
+       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]
+
+       loop_condition <- toSC sym sawst condition
        output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
        loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
 
        induction_step_condition <- scEq sc loop_body func_body
        result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
 
-       return (result_substitution, result_condition)
+       return (result_substitution, Just result_condition)
 
 
 -- | This procedure sets up the simple loop fixpoint feature.
@@ -1385,13 +1416,28 @@ checkGoals ::
   bak ->
   Options ->
   String ->
+  W4.ProgramLoc ->
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
   MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
+  [W4.Pred Sym] ->
   TopLevel (SolverStats, [MS.VCStats])
-checkGoals bak opts nm sc tactic mdMap invSubst = do
-  gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
+checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
+  poststate_gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
+  loop_gs <- liftIO $ forM loopFunEquivConds $ \cond -> do
+    let sym = C.backendGetSym bak
+    st <- Common.sawCoreState sym
+    condTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst cond
+    let defaultMd = MS.ConditionMetadata
+          { MS.conditionLoc = loc
+          , MS.conditionTags = mempty
+          , MS.conditionType = "loop function equivalence"
+          , MS.conditionContext = ""
+          }
+    return ("", defaultMd, condTerm)
+  let gs = poststate_gs ++ loop_gs
+
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
