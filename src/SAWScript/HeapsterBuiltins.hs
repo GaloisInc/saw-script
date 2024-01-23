@@ -1149,7 +1149,8 @@ heapsterFunTrans henv fn_name =
      bodies <-
        fmap (fmap fst) $
        liftIO $ scResolveName sc $ T.pack $ fn_name ++ "__bodies"
-     liftIO $ scUnfoldConstants sc bodies fun_term
+     liftIO $ scUnfoldConstants sc bodies fun_term >>=
+              sawLetMinimize sc >>= betaNormalize sc
 
 -- | Fetch the SAW core definition associated with a name and print it
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->

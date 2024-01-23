@@ -99,7 +99,9 @@ module Verifier.SAW.OpenTerm (
   arrayValueTermLike, bvLitTermLike, vectorTypeTermLike, bvTypeTermLike,
   pairTermLike, pairTypeTermLike, pairLeftTermLike, pairRightTermLike,
   tupleTermLike, tupleTypeTermLike, projTupleTermLike,
-  letTermLike, sawLetTermLike
+  letTermLike, sawLetTermLike,
+  -- * Other exported helper functions
+  sawLetMinimize
   ) where
 
 import qualified Data.Vector as V
