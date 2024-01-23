@@ -32,7 +32,7 @@ module SAWScript.Prover.MRSolver.SMT where
 import Data.Maybe
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Control.Monad (MonadPlus(..), (>=>), (<=<), when, foldM)
+import Control.Monad (MonadPlus(..), (>=>), (<=<), when, unless, foldM)
 import Control.Monad.Catch (throwM, catch)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (MonadTrans(..))
@@ -748,7 +748,7 @@ injUnifyRepr tp_r1 tm1 r1 tp2 tm2 =
      tps_eq <- mrConvertible tp_r1 tp_r2
      if not tps_eq then return Nothing else
        do r1_tm1 <- mrApplyRepr r1 tm1
-          rel <- mrProveRel True r1_tm1 tm2
+          rel <- mrProveEq r1_tm1 tm2
           if rel then return (Just (tp_r1, tm1, r1, r2)) else
             return Nothing
 
@@ -760,25 +760,20 @@ injUnifyRepr tp_r1 tm1 r1 tp2 tm2 =
 -- | Build a Boolean 'Term' stating that two 'Term's are equal. This is like
 -- 'scEq' except that it works on open terms.
 mrEq :: Term -> Term -> MRM t Term
-mrEq t1 t2 = mrTypeOf t1 >>= \tp -> mrEq' tp t1 t2
+mrEq t1 t2 = mrTypeOf t1 >>= \case
+  (asSimpleEq -> Just eqf) -> liftSC2 eqf t1 t2
+  _ -> error "mrEq: unsupported type"
 
--- | Build a Boolean 'Term' stating that the second and third 'Term' arguments
--- are equal, where the first 'Term' gives their type (which we assume is the
--- same for both). This is like 'scEq' except that it works on open terms.
-mrEq' :: Term -> Term -> Term -> MRM t Term
--- FIXME: For this Nat case, the definition of 'equalNat' in @Prims.hs@ means
--- that if both sides do not have immediately clear bit-widths (e.g. either
--- side is is an application of @mulNat@) this will 'error'...
-mrEq' (asNatType -> Just _) t1 t2 = liftSC2 scEqualNat t1 t2
-mrEq' (asBoolType -> Just _) t1 t2 = liftSC2 scBoolEq t1 t2
-mrEq' (asIntegerType -> Just _) t1 t2 = liftSC2 scIntEq t1 t2
-mrEq' (asSymBitvectorType -> Just n) t1 t2 = liftSC3 scBvEq n t1 t2
-mrEq' (asNumType -> Just ()) t1 t2 =
-  (,) <$> liftSC1 scWhnf t1 <*> liftSC1 scWhnf t2 >>= \case
-    (asNum -> Just (Left t1'), asNum -> Just (Left t2')) ->
-      liftSC0 scNatType >>= \nat_tp -> mrEq' nat_tp t1' t2'
-    _ -> error "mrEq': Num terms do not normalize to TCNum constructors"
-mrEq' _ _ _ = error "mrEq': unsupported type"
+-- | Recognize a nat, bool, integer, bitvector, or num type as the function
+-- which builds a boolean 'Term' stating that two terms of that type are equal 
+asSimpleEq :: Recognizer Term (SharedContext -> Term -> Term -> IO Term)
+asSimpleEq (asNatType -> Just _) = Just $ scEqualNat
+asSimpleEq (asBoolType -> Just _) = Just $ scBoolEq
+asSimpleEq (asIntegerType -> Just _) = Just $ scIntEq
+asSimpleEq (asSymBitvectorType -> Just n) = Just $ flip scBvEq n
+asSimpleEq (asNumType -> Just ()) = Just $ \sc t1 t2 ->
+  scGlobalApply sc "Cryptol.tcEqual" [t1, t2]
+asSimpleEq _ = Nothing
 
 -- | A 'Term' in an extended context of universal variables, which are listed
 -- "outside in", meaning the highest deBruijn index comes first
@@ -810,136 +805,110 @@ withTermInCtx (TermInCtx [] tm) f = f tm
 withTermInCtx (TermInCtx ((nm,tp):ctx) tm) f =
   withUVar nm (Type tp) $ const $ withTermInCtx (TermInCtx ctx tm) f
 
--- | A "simple" strategy for proving equality between two terms, which we assume
--- are of the same type, which builds an equality proposition by applying the
--- supplied function to both sides and passes this proposition to an SMT solver.
-mrProveEqSimple :: (Term -> Term -> MRM t Term) -> Term -> Term ->
-                   MRM t TermInCtx
--- NOTE: The use of mrSubstEVars instead of mrSubstEVarsStrict means that we
--- allow evars in the terms we send to the SMT solver, but we treat them as
--- uvars.
-mrProveEqSimple eqf t1 t2 =
-  do t1' <- mrSubstEVars t1
-     t2' <- mrSubstEVars t2
-     TermInCtx [] <$> eqf t1' t2'
-
--- | Prove that two terms are equal, instantiating evars if necessary,
--- returning true on success - the same as @mrProveRel False@
+-- | Prove that two terms are equal, returning true on success and instantiating
+-- evars if necessary - the same as @mrProveRel Nothing@
 mrProveEq :: Term -> Term -> MRM t Bool
-mrProveEq = mrProveRel False
+mrProveEq = mrProveRel Nothing
 
--- | Prove that two terms are equal, instantiating evars if necessary, or
--- throwing an error if this is not possible - the same as
--- @mrAssertProveRel False@
+-- | Prove that two terms are equal, throwing an error if this is not possible
+-- and instantiating evars if necessary - the same as @mrAssertProveRel Nothing@
 mrAssertProveEq :: Term -> Term -> MRM t ()
-mrAssertProveEq = mrAssertProveRel False
+mrAssertProveEq = mrAssertProveRel Nothing
 
--- | Prove that two terms are related, heterogeneously iff the first argument
--- is true, instantiating evars if necessary, returning true on success
-mrProveRel :: Bool -> Term -> Term -> MRM t Bool
-mrProveRel het t1 t2 =
-  do let nm = if het then "mrProveRel" else "mrProveEq"
-     mrDebugPPPrefixSep 2 nm t1 (if het then "~=" else "==") t2
+-- | A relation over two terms, the second and fourth arguments, and their
+-- respective types, the first and third arguments
+type MRRel t a = Term -> Term -> Term -> Term -> MRM t a
+
+-- | Prove that two terms are related via a relation, if given, on terms of
+-- SpecFun type (as in 'isSpecFunType') or via equality otherwise, returning
+-- false if this is not possible and instantiating evars if necessary
+mrProveRel :: Maybe (MRRel t ()) -> Term -> Term -> MRM t Bool
+mrProveRel piRel t1 t2 = mrProveRelH piRel t1 t2 >>= \case
+  Left err -> mrDebugPPPrefix 2 "mrProveRel Failure:" err >> return False
+  Right res -> do
+    mrDebugPrint 2 $ "mrProveRel: " ++ if res then "Success" else "Failure"
+    return res
+
+-- | Prove that two terms are related via a relation, if given, on terms of
+-- SpecFun type (as in 'isSpecFunType') or via equality otherwise, throwing an
+-- error if this is not possible and instantiating evars if necessary
+mrAssertProveRel :: Maybe (MRRel t ()) -> Term -> Term -> MRM t ()
+mrAssertProveRel piRel t1 t2 = mrProveRelH piRel t1 t2 >>= \case
+  Left err -> throwMRFailure (MRFailureCtx (FailCtxProveRel t1 t2) err)
+  Right success -> unless success $ throwMRFailure (TermsNotEq t1 t2)
+
+-- | The implementation of 'mrProveRel' and 'mrAssertProveRel'
+mrProveRelH :: Maybe (MRRel t ()) -> Term -> Term -> MRM t (Either MRFailure Bool)
+mrProveRelH piRel t1 t2 =
+  do mrDebugPPPrefixSep 2 "mrProveRel" t1 "~=" t2
      tp1 <- mrTypeOf t1 >>= mrSubstEVars
      tp2 <- mrTypeOf t2 >>= mrSubstEVars
      ts_eq <- mrConvertible t1 t2
-     res <- if ts_eq then return True
-            else do cond_in_ctx <- mrProveRelH het tp1 tp2 t1 t2
-                    withTermInCtx cond_in_ctx mrProvable
-     mrDebugPrint 2 $ nm ++ ": " ++ if res then "Success" else "Failure"
-     return res
+     if ts_eq then return $ Right True
+     else mrRelTerm piRel tp1 t1 tp2 t2 >>=
+          mapM (\cond_in_ctx -> withTermInCtx cond_in_ctx mrProvable)
 
--- | Prove that two terms are related, heterogeneously iff the first argument,
--- is true, instantiating evars if necessary, or throwing an error if this is
--- not possible
-mrAssertProveRel :: Bool -> Term -> Term -> MRM t ()
-mrAssertProveRel het t1 t2 =
-  do success <- mrProveRel het t1 t2
-     if success then return () else
-       throwMRFailure (TermsNotRel het t1 t2)
-
--- | The main workhorse for 'mrProveEq' and 'mrProveRel'. Build a Boolean term
--- over zero or more universally quantified variables expressing that the fourth
--- and fifth arguments are related, heterogeneously iff the first argument is
--- true, whose types are given by the second and third arguments, respectively
-mrProveRelH :: Bool -> Term -> Term -> Term -> Term -> MRM t TermInCtx
-mrProveRelH het tp1 tp2 t1 t2 =
+-- | The main workhorse for 'mrProveRel' and 'mrProveRel': build a Boolean term
+-- over zero or more universally quantified variables expressing that the two
+-- given terms of the two given types are related
+mrRelTerm :: Maybe (MRRel t ()) -> MRRel t (Either MRFailure TermInCtx)
+mrRelTerm piRel tp1 t1 tp2 t2 =
   do varmap <- mrVars
      tp1' <- liftSC1 scWhnf tp1
      tp2' <- liftSC1 scWhnf tp2
-     mrProveRelH' varmap het tp1' tp2' t1 t2
+     mrRelTerm' varmap piRel tp1' t1 tp2' t2
 
--- | The body of 'mrProveRelH'
--- NOTE: Don't call this function recursively, call 'mrProveRelH'
-mrProveRelH' :: Map MRVar MRVarInfo -> Bool ->
-                Term -> Term -> Term -> Term -> MRM t TermInCtx
+-- | The body of 'mrRelTerm'
+-- NOTE: Don't call this function recursively, call 'mrRelTerm'
+mrRelTerm' :: Map MRVar MRVarInfo -> Maybe (MRRel t ()) ->
+              MRRel t (Either MRFailure TermInCtx)
 
 -- If t1 is an instantiated evar, substitute and recurse
-mrProveRelH' var_map het tp1 tp2 (asEVarApp var_map -> Just (_, _, args, Just f)) t2 =
-  mrApplyAll f args >>= \t1' -> mrProveRelH het tp1 tp2 t1' t2
+mrRelTerm' var_map piRel tp1 (asEVarApp var_map -> Just (_, _, args, Just f)) tp2 t2 =
+  mrApplyAll f args >>= \t1' -> mrRelTerm piRel tp1 t1' tp2 t2
 
 -- If t1 is an uninstantiated evar, ensure the types are equal and instantiate
 -- it with t2
-mrProveRelH' var_map _ tp1 tp2 (asEVarApp var_map -> Just (evar, _, args, Nothing)) t2 =
+mrRelTerm' var_map _ tp1 (asEVarApp var_map -> Just (evar, _, args, Nothing)) tp2 t2 =
   do tps_are_eq <- mrConvertible tp1 tp2
-     if tps_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
      t2' <- mrSubstEVars t2
      success <- mrTrySetAppliedEVar evar args t2'
      when success $
        mrDebugPPPrefixSep 1 "setting evar" evar "to" t2
-     TermInCtx [] <$> liftSC1 scBool success
+     Right <$> TermInCtx [] <$> liftSC1 scBool success
 
 -- If t2 is an instantiated evar, substitute and recurse
-mrProveRelH' var_map het tp1 tp2 t1 (asEVarApp var_map -> Just (_, _, args, Just f)) =
-  mrApplyAll f args >>= \t2' -> mrProveRelH het tp1 tp2 t1 t2'
+mrRelTerm' var_map piRel tp1 t1 tp2 (asEVarApp var_map -> Just (_, _, args, Just f)) =
+  mrApplyAll f args >>= \t2' -> mrRelTerm piRel tp1 t1 tp2 t2'
 
 -- If t2 is an uninstantiated evar, ensure the types are equal and instantiate
 -- it with t1
-mrProveRelH' var_map _ tp1 tp2 t1 (asEVarApp var_map -> Just (evar, _, args, Nothing)) =
+mrRelTerm' var_map _ tp1 t1 tp2 (asEVarApp var_map -> Just (evar, _, args, Nothing)) =
   do tps_are_eq <- mrConvertible tp1 tp2
-     if tps_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
      t1' <- mrSubstEVars t1
      success <- mrTrySetAppliedEVar evar args t1'
      when success $
        mrDebugPPPrefixSep 1 "setting evar" evar "to" t1
-     TermInCtx [] <$> liftSC1 scBool success
+     Right <$> TermInCtx [] <$> liftSC1 scBool success
 
 -- For unit types, always return true
-mrProveRelH' _ _ (asTupleType -> Just []) (asTupleType -> Just []) _ _ =
-  TermInCtx [] <$> liftSC1 scBool True
+mrRelTerm' _ _ (asTupleType -> Just []) _ (asTupleType -> Just []) _ =
+  Right <$> TermInCtx [] <$> liftSC1 scBool True
 
--- For nat, bitvector, Boolean, and integer types, call mrProveEqSimple
-mrProveRelH' _ _ (asNatType -> Just _) (asNatType -> Just _) t1 t2 =
-  mrProveEqSimple (liftSC2 scEqualNat) t1 t2
-mrProveRelH' _ _ tp1@(asSymBitvectorType -> Just n1)
-                 tp2@(asSymBitvectorType -> Just n2) t1 t2 =
-  do ns_are_eq <- mrConvertible n1 n2
-     if ns_are_eq then return () else
-       throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
-     mrProveEqSimple (liftSC3 scBvEq n1) t1 t2
-mrProveRelH' _ _ (asBoolType -> Just _) (asBoolType -> Just _) t1 t2 =
-  mrProveEqSimple (liftSC2 scBoolEq) t1 t2
-mrProveRelH' _ _ (asIntegerType -> Just _) (asIntegerType -> Just _) t1 t2 =
-  mrProveEqSimple (liftSC2 scIntEq) t1 t2
-
--- If one side is a finite Num, treat it as a natural number
-mrProveRelH' _ het _ tp2 (asNum -> Just (Left t1)) t2 =
-  liftSC0 scNatType >>= \nat_tp -> mrProveRelH het nat_tp tp2 t1 t2
-mrProveRelH' _ het tp1 _ t1 (asNum -> Just (Left t2)) =
-  liftSC0 scNatType >>= \nat_tp -> mrProveRelH het tp1 nat_tp t1 t2
-
--- If one side is a bvToNat term, treat it as a bitvector
-mrProveRelH' _ het _ tp2 (asBvToNat -> Just (n, t1)) t2 =
-  mrBvType n >>= \bv_tp -> mrProveRelH het bv_tp tp2 t1 t2
-mrProveRelH' _ het tp1 _ t1 (asBvToNat -> Just (n, t2)) =
-  mrBvType n >>= \bv_tp -> mrProveRelH het tp1 bv_tp t1 t2
+-- For nat, bool, integer, bitvector, or num type types, use asSimpleEq
+mrRelTerm' _ _ tp1@(asSimpleEq -> Just eqf) t1 tp2 t2 =
+  do tps_are_eq <- mrConvertible tp1 tp2
+     unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+     t1' <- mrSubstEVars t1
+     t2' <- mrSubstEVars t2
+     Right <$> TermInCtx [] <$> liftSC2 eqf t1' t2'
 
 -- For BVVec types, prove all projections are related by quantifying over an
 -- index variable and proving the projections at that index are related
-mrProveRelH' _ het tp1@(asVecTypeWithLen -> Just (vlen1, tpA1))
-                   tp2@(asVecTypeWithLen -> Just (vlen2, tpA2)) t1 t2 =
+mrRelTerm' _ piRel tp1@(asVecTypeWithLen -> Just (vlen1, tpA1)) t1
+                   tp2@(asVecTypeWithLen -> Just (vlen2, tpA2)) t2 =
   mrVecLenUnify vlen1 vlen2 >>= \case
     Just (vlen1', vlen2') ->
       mrVecLenIxType vlen1' >>= \ix_tp ->
@@ -948,35 +917,45 @@ mrProveRelH' _ het tp1@(asVecTypeWithLen -> Just (vlen1, tpA1))
       do ix_bound <- mrVecLenIxBound vlen1'' ix
          t1_prj <- mrVecLenAt vlen1'' tpA1' t1' ix
          t2_prj <- mrVecLenAt vlen2'' tpA2' t2' ix
-         cond <- mrProveRelH het tpA1' tpA2' t1_prj t2_prj
-         extTermInCtx [("ix",ix_tp)] <$>
-           liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond
+         mrRelTerm piRel tpA1' t1_prj tpA2' t2_prj >>= mapM (\cond ->
+          extTermInCtx [("ix",ix_tp)] <$>
+            liftTermInCtx2 scImplies (TermInCtx [] ix_bound) cond)
     Nothing -> throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
 
 -- For pair types, prove both the left and right projections are related
 -- FIXME: Don't re-associate tuples
-mrProveRelH' _ het (asPairType -> Just (asPairType -> Just (tp1a, tp1b), tp1c)) tp2 t1 t2 =
+mrRelTerm' _ piRel (asPairType -> Just (asPairType -> Just (tp1a, tp1b), tp1c)) t1
+                   tp2 t2 =
   do tp1' <- liftSC2 scPairType tp1a =<< liftSC2 scPairType tp1b tp1c
-     mrProveRelH het tp1' tp2 t1 t2
-mrProveRelH' _ het tp1 (asPairType -> Just (asPairType -> Just (tp2a, tp2b), tp2c)) t1 t2 =
+     mrRelTerm piRel tp1' t1 tp2 t2
+mrRelTerm' _ piRel tp1 t1
+                   (asPairType -> Just (asPairType -> Just (tp2a, tp2b), tp2c)) t2 =
   do tp2' <- liftSC2 scPairType tp2a =<< liftSC2 scPairType tp2b tp2c
-     mrProveRelH het tp1 tp2' t1 t2
-mrProveRelH' _ het (asPairType -> Just (tpL1, tpR1))
-                   (asPairType -> Just (tpL2, tpR2)) t1 t2 =
+     mrRelTerm piRel tp1 t1 tp2' t2
+mrRelTerm' _ piRel (asPairType -> Just (tpL1, tpR1)) t1
+                   (asPairType -> Just (tpL2, tpR2)) t2 =
   do t1L <- liftSC1 scPairLeft t1
      t2L <- liftSC1 scPairLeft t2
      t1R <- liftSC1 scPairRight t1
      t2R <- liftSC1 scPairRight t2
-     condL <- mrProveRelH het tpL1 tpL2 t1L t2L
-     condR <- mrProveRelH het tpR1 tpR2 t1R t2R
-     liftTermInCtx2 scAnd condL condR
+     mb_condL <- mrRelTerm piRel tpL1 t1L tpL2 t2L
+     mb_condR <- mrRelTerm piRel tpR1 t1R tpR2 t2R
+     sequence $ liftTermInCtx2 scAnd <$> mb_condL <*> mb_condR
 
-mrProveRelH' _ _ tp1 tp2 t1 t2 =
-  do success <- mrConvertible t1 t2
-     if success then return () else
-       do tps_eq <- mrConvertible tp1 tp2
-          if not tps_eq
-            then mrDebugPPPrefixSep 2 "mrProveRelH' could not match types: " tp1 "and" tp2 >>
-                 mrDebugPPPrefixSep 2 "and could not prove convertible: " t1 "and" t2
-            else mrDebugPPPrefixSep 2 "mrProveEq could not prove convertible: " t1 "and" t2
-     TermInCtx [] <$> liftSC1 scBool success
+mrRelTerm' _ piRel tp1 t1 tp2 t2 =
+  mrSC >>= \sc ->
+  liftIO (isSpecFunType sc tp1) >>= \tp1_is_specFun ->
+  liftIO (isSpecFunType sc tp2) >>= \tp2_is_specFun ->
+  case piRel of
+    -- If given a relation, on terms of SpecFun type return True iff the
+    -- relation returns without raising a 'MRFailure'
+    Just piRel' | tp1_is_specFun, tp2_is_specFun ->
+      (piRel' tp1 t1 tp2 t2 >> Right <$> TermInCtx [] <$> liftSC1 scBool True)
+        `catchFailure` \err -> return $ Left err
+    -- Otherwise, return True iff the terms are convertible
+    _ -> do
+      tps_are_eq <- mrConvertible tp1 tp2
+      unless tps_are_eq $ throwMRFailure (TypesNotEq (Type tp1) (Type tp2))
+      tms_are_eq <- mrConvertible t1 t2
+      if tms_are_eq then Right <$> TermInCtx [] <$> liftSC1 scBool True
+                    else return $ Left $ TermsNotEq t1 t2

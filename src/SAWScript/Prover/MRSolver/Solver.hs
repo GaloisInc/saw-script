@@ -710,8 +710,8 @@ matchCoIndHyp hyp args1 args2 =
      (args1', args2') <- instantiateCoIndHyp hyp
      mrDebugPPPrefixSep 3 "matchCoIndHyp args" args1 "," args2
      mrDebugPPPrefixSep 3 "matchCoIndHyp args'" args1' "," args2'
-     eqs1 <- zipWithM mrProveEq args1' args1
-     eqs2 <- zipWithM mrProveEq args2' args2
+     eqs1 <- zipWithM mrProveEqBiRef args1' args1
+     eqs2 <- zipWithM mrProveEqBiRef args2' args2
      if and (eqs1 ++ eqs2) then return () else
        throwError $ MRExnWiden (coIndHypLHSFun hyp) (coIndHypRHSFun hyp)
        (map Left (findIndices not eqs1) ++ map Right (findIndices not eqs2))
@@ -795,7 +795,8 @@ newtype AssumpFun t = AssumpFun { appAssumpFun ::
 -- term that decides it; e.g., IsLtNat n m is a Prop that corresponds to the
 -- Boolean expression ltNat n m. If so, return the Boolean expression
 asBoolProp :: Term -> Maybe (MRM t Term)
-asBoolProp (asEq -> Just (tp,e1,e2)) = Just $ mrEq' tp e1 e2
+asBoolProp (asEq -> Just (asSimpleEq -> Just eqf, e1, e2)) =
+  Just $ liftSC2 eqf e1 e2
 asBoolProp (asApplyAll -> (isGlobalDef "Prelude.IsLtNat" -> Just (), [n,m])) =
   Just $ liftSC2 scLtNat n m
 asBoolProp _ = Nothing
@@ -881,7 +882,7 @@ mrRefinesPair (a,b) = mrRefines a b
 -- | The main implementation of 'mrRefines'
 mrRefines' :: NormComp -> NormComp -> MRM t ()
 
-mrRefines' (RetS e1) (RetS e2) = mrAssertProveRel True e1 e2
+mrRefines' (RetS e1) (RetS e2) = mrAssertProveEqBiRef e1 e2
 mrRefines' (ErrorS _) (ErrorS _) = return ()
 mrRefines' (RetS e) (ErrorS err) = throwMRFailure (ReturnNotError (Right err) e)
 mrRefines' (ErrorS err) (RetS e) = throwMRFailure (ReturnNotError (Left  err) e)
@@ -1031,7 +1032,7 @@ mrRefines' (FunBind (EVarFunName evar) args (CompFunReturn _)) m2 =
 
 mrRefines' (FunBind f args1 k1) (FunBind f' args2 k2)
   | f == f' && length args1 == length args2 =
-    zipWithM_ mrAssertProveEq args1 args2 >>
+    zipWithM_ mrAssertProveEqBiRef args1 args2 >>
     mrFunOutType f args1 >>= \(_, tp) ->
     mrRefinesFun tp k1 tp k2
 
@@ -1067,8 +1068,8 @@ mrRefines' m1@(FunBind f1 args1 k1)
                         prettyTermApp (funNameTerm f2) args2']
        evars <- mrFreshEVars ctx
        (args1'', args2'') <- substTermLike 0 evars (args1', args2')
-       zipWithM_ mrAssertProveEq args1'' args1
-       zipWithM_ mrAssertProveEq args2'' args2
+       zipWithM_ mrAssertProveEqBiRef args1'' args1
+       zipWithM_ mrAssertProveEqBiRef args2'' args2
        recordUsedFunAssump fa >> mrRefinesFun tp1 k1 tp2 k2
 
   -- If we have an opaque FunAssump that f1 refines some f /= f2, and f2
@@ -1100,7 +1101,7 @@ mrRefines' m1@(FunBind f1 args1 k1)
        rhs' <- mrFunAssumpRHSAsNormComp rhs
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
-       zipWithM_ mrAssertProveEq args1'' args1
+       zipWithM_ mrAssertProveEqBiRef args1'' args1
        -- It's important to instantiate the evars here so that rhs is well-typed
        -- when bound with k1
        rhs''' <- mapTermLike mrSubstEVars rhs''
@@ -1116,16 +1117,15 @@ mrRefines' m1@(FunBind f1 args1 k1)
       normBindTerm f2_body k2 >>= \m2' -> mrRefines m1 m2'
 
   -- If we don't have a co-inducitve hypothesis for f1 and f2, don't have an
-  -- assumption that f1 refines some specification, both are either lifted or
-  -- unlifted, and both f1 and f2 are recursive and have return types which are
-  -- heterogeneously related, then try to coinductively prove that
-  -- f1 args1 |= f2 args2 under the assumption that f1 args1 |= f2 args2, and
-  -- then try to prove that k1 |= k2
+  -- assumption that f1 refines some specification, both f1 and f2 are recursive
+  -- and have return types which can be injectively unified, then try to
+  -- coinductively prove that f1 args1 |= f2 args2 under the assumption that
+  -- f1 args1 |= f2 args2, and then try to prove that k1 |= k2
   _ | Just _ <- maybe_f1_body
     , Just _ <- maybe_f2_body ->
       case mb_convs of
         Just _ -> mrRefinesCoInd f1 args1 f2 args2 >> mrRefinesFun tp1 k1 tp2 k2
-        _ -> throwMRFailure (BindTypesNotEq (Type tp1) (Type tp2))
+        _ -> throwMRFailure (BindTypesNotUnifiable (Type tp1) (Type tp2))
 
   -- If we cannot line up f1 and f2, then making progress here would require us
   -- to somehow split either m1 or m2 into some bind m' >>= k' such that m' is
@@ -1143,7 +1143,7 @@ mrRefines' m1@(FunBind f1 args1 k1) m2 =
     do rhs' <- mrFunAssumpRHSAsNormComp rhs
        evars <- mrFreshEVars ctx
        (args1'', rhs'') <- substTermLike 0 evars (args1', rhs')
-       zipWithM_ mrAssertProveEq args1'' args1
+       zipWithM_ mrAssertProveEqBiRef args1'' args1
        -- It's important to instantiate the evars here so that rhs is well-typed
        -- when bound with k1
        rhs''' <- mapTermLike mrSubstEVars rhs''
@@ -1239,8 +1239,29 @@ mrRefinesFun tp1 f1 tp2 f2 =
      piTp2 <- mrTypeOf f2'' >>= mrNormOpenTerm
      mrRefinesFunH mrRefines [] piTp1 f1'' piTp2 f2''
 
+-- | Prove that two functions both refine another for all inputs
+mrBiRefinesFuns :: MRRel t ()
+mrBiRefinesFuns piTp1 f1 piTp2 f2 =
+  mrDebugPPPrefixSep 1 "mrBiRefinesFuns" f1 "=|=" f2 >>
+  mrNormOpenTerm piTp1 >>= \piTp1' ->
+  mrNormOpenTerm piTp2 >>= \piTp2' ->
+  mrRefinesFunH mrRefines [] piTp1' f1 piTp2' f2 >>
+  mrRefinesFunH mrRefines [] piTp2' f2 piTp1' f1
 
--- | The main loop of 'mrRefinesFun' and 'askMRSolver': given a function that
+-- | Prove that two terms are related via bi-refinement on terms of SpecFun
+-- type (as in 'isSpecFunType') or via equality otherwise, returning false if
+-- this is not possible and instantiating evars if necessary
+mrProveEqBiRef :: Term -> Term -> MRM t Bool
+mrProveEqBiRef = mrProveRel (Just mrBiRefinesFuns)
+
+-- | Prove that two terms are related via bi-refinement on terms of SpecFun
+-- type (as in 'isSpecFunType') or via equality otherwise, throwing an error if
+-- this is not possible and instantiating evars if necessary
+mrAssertProveEqBiRef :: Term -> Term -> MRM t ()
+mrAssertProveEqBiRef = mrAssertProveRel (Just mrBiRefinesFuns)
+
+
+-- | The main loop of 'mrRefinesFun', 'askMRSolver': given a function that
 -- attempts to prove refinement between two computational terms, i.e., terms of
 -- type @SpecM a@ and @SpecM b@ for some types @a@ and @b@, attempt to prove
 -- refinement between two monadic functions. The list of 'Term's argument
@@ -1257,9 +1278,8 @@ mrRefinesFun tp1 f1 tp2 f2 =
 -- assumptions to the refinement. Regular non-proof arguments must occur on both
 -- sides, and are added as a single variable that is passed to both sides. This
 -- means that these regular argument types must be either equal or
--- heterogeneously related as in 'HetRelated'.
-mrRefinesFunH :: (Term -> Term -> MRM t a) -> [Term] ->
-                 Term -> Term -> Term -> Term -> MRM t a
+-- injectively unifiable with 'injUnifyTypes'.
+mrRefinesFunH :: (Term -> Term -> MRM t a) -> [Term] -> MRRel t a
 
 -- Ignore units on either side
 mrRefinesFunH k vars (asPi -> Just (_, asTupleType -> Just [], _)) t1 piTp2 t2 =
@@ -1278,7 +1298,7 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1@(asBoolEq ->
                                               Just (b1, b2)), _)) t1 piTp2 t2 =
   liftSC2 scBoolEq b1 b2 >>= \eq ->
   withAssumption eq $
-  let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+  let nm = maybe "p" id $ find ((/=) '_' . Text.head)
                         $ [nm1] ++ catMaybes [ asLambdaName t1 ] in
   withUVarLift nm (Type tp1) (vars,t1,piTp2,t2) $ \var (vars',t1',piTp2',t2') ->
   do t1'' <- mrApplyAll t1' [var]
@@ -1288,7 +1308,7 @@ mrRefinesFunH k vars piTp1 t1 (asPi -> Just (nm2, tp2@(asBoolEq ->
                                                        Just (b1, b2)), _)) t2 =
   liftSC2 scBoolEq b1 b2 >>= \eq ->
   withAssumption eq $
-  let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+  let nm = maybe "p" id $ find ((/=) '_' . Text.head)
                         $ [nm2] ++ catMaybes [ asLambdaName t2 ] in
   withUVarLift nm (Type tp2) (vars,piTp1,t1,t2) $ \var (vars',piTp1',t1',t2') ->
   do t2'' <- mrApplyAll t2' [var]
@@ -1328,7 +1348,7 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1, _)) t1
   Just (tp, r1, r2) ->
     mrDebugPPPrefixSep 3 "mrRefinesFunH calling findInjConvs" tp1 "," tp2 >>
     mrDebugPPPrefix 3 "mrRefinesFunH got type" tp >>
-    let nm = maybe "_" id $ find ((/=) '_' . Text.head)
+    let nm = maybe "x" id $ find ((/=) '_' . Text.head)
                           $ [nm1, nm2] ++ catMaybes [ asLambdaName t1
                                                     , asLambdaName t2 ] in
     withUVarLift nm (Type tp) (vars,r1,r2,t1,t2) $ \var (vars',r1',r2',t1',t2') ->
@@ -1340,7 +1360,7 @@ mrRefinesFunH k vars (asPi -> Just (nm1, tp1, _)) t1
        piTp2' <- mrTypeOf t2'' >>= liftSC1 scWhnf
        mrRefinesFunH k (var : vars') piTp1' t1'' piTp2' t2''
   -- Otherwise, error
-  Nothing -> throwMRFailure (TypesNotRel True (Type tp1) (Type tp2))
+  Nothing -> throwMRFailure (TypesNotUnifiable (Type tp1) (Type tp2))
 
 -- Error if we don't have the same number of arguments on both sides
 -- FIXME: Add a specific error for this case
@@ -1403,12 +1423,12 @@ refinementTermH t1 t2 =
   do (EvTerm ev, tp1) <- fromJust . asSpecM <$> mrTypeOf t1
      (EvTerm  _, tp2) <- fromJust . asSpecM <$> mrTypeOf t2
      -- FIXME: Add a direct way to check that the types are related, instead of
-     -- calling 'mrProveRelH' on dummy variables and ignoring the result
-     withUVarLift "x" (Type tp1) (tp1,tp2) $ \x1 (tp1',tp2') ->
-       withUVarLift "x" (Type tp2') (tp1',tp2',x1) $ \x2 (tp1'',tp2'',x1') ->
+     -- calling 'mrRelTerm' on dummy variables and ignoring the result
+     withUVarLift "ret_val" (Type tp1) (tp1,tp2) $ \x1 (tp1',tp2') ->
+       withUVarLift "ret_val" (Type tp2') (tp1',tp2',x1) $ \x2 (tp1'',tp2'',x1') ->
          do tp1''' <- mrSubstEVars tp1''
             tp2''' <- mrSubstEVars tp2''
-            void $ mrProveRelH False tp1''' tp2''' x1' x2
+            void $ mrRelTerm Nothing tp1''' x1' tp2''' x2
      rr <- liftSC2 scGlobalApply "SpecM.eqRR" [tp1]
      ref_tm <- liftSC2 scGlobalApply "SpecM.refinesS" [ev, tp1, tp1, rr, t1, t2]
      uvars <- mrUVarsOuterToInner

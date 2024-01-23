@@ -76,13 +76,15 @@ data FailCtx
   = FailCtxRefines NormComp NormComp
   | FailCtxCoIndHyp CoIndHyp
   | FailCtxMNF Term
+  | FailCtxProveRel Term Term
   deriving Show
 
 -- | That's MR. Failure to you
 data MRFailure
-  = TermsNotRel Bool Term Term
-  | TypesNotRel Bool Type Type
-  | BindTypesNotEq Type Type
+  = TermsNotEq Term Term
+  | TypesNotEq Type Type
+  | TypesNotUnifiable Type Type
+  | BindTypesNotUnifiable Type Type
   | ReturnTypesNotEq Type Type
   | FunNamesDoNotRefine FunName [Term] FunName [Term]
   | CompsDoNotRefine NormComp NormComp
@@ -104,12 +106,6 @@ data MRFailure
     -- | Records a disjunctive branch we took, where both cases failed
   | MRFailureDisj MRFailure MRFailure
   deriving Show
-
-pattern TermsNotEq :: Term -> Term -> MRFailure
-pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
-
-pattern TypesNotEq :: Type -> Type -> MRFailure
-pattern TypesNotEq t1 t2 = TypesNotRel False t1 t2
 
 -- | Remove the context from a 'MRFailure', i.e. remove all applications of the
 -- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
@@ -148,18 +144,19 @@ instance PrettyInCtx FailCtx where
   prettyInCtx (FailCtxMNF t) =
     group <$> nest 2 <$> vsepM [return "When normalizing computation:",
                                 prettyInCtx t]
+  prettyInCtx (FailCtxProveRel t1 t2) =
+    group <$> nest 2 <$> vsepM [return "When proving terms equal:",
+                                prettyInCtx t1, prettyInCtx t2]
 
 instance PrettyInCtx MRFailure where
-  prettyInCtx (TermsNotRel False t1 t2) =
+  prettyInCtx (TermsNotEq t1 t2) =
     prettyPrefixSep "Could not prove terms equal:" t1 "and" t2
-  prettyInCtx (TermsNotRel True t1 t2) =
-    prettyPrefixSep "Could not prove terms heterogeneously related:" t1 "and" t2
-  prettyInCtx (TypesNotRel False tp1 tp2) =
+  prettyInCtx (TypesNotEq tp1 tp2) =
     prettyPrefixSep "Types not equal:" tp1 "and" tp2
-  prettyInCtx (TypesNotRel True tp1 tp2) =
-    prettyPrefixSep "Types not heterogeneously related:" tp1 "and" tp2
-  prettyInCtx (BindTypesNotEq tp1 tp2) =
-    prettyPrefixSep "Could not start co-induction because bind types are not equal:" tp1 "and" tp2
+  prettyInCtx (TypesNotUnifiable tp1 tp2) =
+    prettyPrefixSep "Types cannot be unified:" tp1 "and" tp2
+  prettyInCtx (BindTypesNotUnifiable tp1 tp2) =
+    prettyPrefixSep "Could not start co-induction because bind types cannot be unified:" tp1 "and" tp2
   prettyInCtx (ReturnTypesNotEq tp1 tp2) =
     prettyPrefixSep "Could not form refinement because return types are not equal:" tp1 "and" tp2
   prettyInCtx (FunNamesDoNotRefine f1 args1 f2 args2) =
