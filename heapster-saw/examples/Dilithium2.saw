@@ -2,6 +2,18 @@ enable_experimental;
 
 import "Dilithium2.cry";
 
+// The required `dilithium2.bc` file is to be built by:
+// 1. Cloning the `standard` branch of the official Dilithium reference
+//    implementation (https://github.com/pq-crystals/dilithium)
+// 2. Applying the `dilithium.patch` file provided in this directory
+// 3. Running `LLVM_COMPILER=clang make bitcode` in the `ref` directory of the
+//    patched repo
+// 4. Copying the `libpqcrystals_dilithium2_ref.so.bc` file generated in the
+//    `ref` directory of the patched repo into this directory as `dilithium2.bc`
+// Run `make Dilithium2.bc` to perform these steps automatically, or see the
+// `Makefile` in this directory for more detail. Note that these steps have only
+// been tested on a Ubuntu machine and with the `standard` branch commit:
+// `918af1a6eaedcedf9fdd8aaaca6c1fccd5a7a51f`.
 env <- heapster_init_env "Dilithium2" "dilithium2.bc";
 
 
