@@ -1697,7 +1697,7 @@ verifyPoststate cc mspec env0 globals ret mdMap invSubst =
 -- | Translate the proof obligations from the Crucible backend into SAWCore
 -- terms. For each proof oblication, return a triple consisting of the error
 -- message, the metadata, and the SAWCore. For each proof obligation, substitute
--- the uninterpreted invaiants with their definitions.
+-- the uninterpreted invariants with their definitions.
 getPoststateObligations ::
   Crucible.IsSymBackend Sym bak =>
   SharedContext ->
