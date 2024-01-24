@@ -39,6 +39,8 @@ ifeq ($(CI),)
   dilithium: dilithium.patch
 	rm -rf dilithium
 	git clone https://github.com/pq-crystals/dilithium.git
+	# NB: If you update this commit hash be sure to also update the commit hash
+	#     in the top-level comment in `heapster-saw/examples/Dilithium2.saw`
 	cd dilithium && git checkout 918af1a6eaedcedf9fdd8aaaca6c1fccd5a7a51f
 	patch -p0 < dilithium.patch
 
