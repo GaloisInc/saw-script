@@ -35,18 +35,34 @@ ifeq ($(CI),)
 
   rust_lifetimes.bc: rust_lifetimes.rs
 	rustc --crate-type=lib --emit=llvm-bc rust_lifetimes.rs
+
+  dilithium: dilithium.patch
+	rm -rf dilithium
+	git clone https://github.com/pq-crystals/dilithium.git
+	cd dilithium && git checkout standard
+	patch -p0 < dilithium.patch
+
+  # NB: So far we've only been able to get this step to work on a Ubuntu VM,
+  # so building dilithium2.bc, etc. locally on a non-Ubuntu machine is likely
+  # not possible without significant effort to configure clang appropriately
+  dilithium%.bc: dilithium
+	cd dilithium/ref && LLVM_COMPILER=clang make bitcode
+	cp dilithium/ref/libpqcrystals_dilithium$*_ref.so.bc dilithium$*.bc
 endif
 
 %_gen.v: %.saw %.bc
 	$(SAW) $<
 
-# Lists all the Mr Solver tests, without their ".saw" suffix
+# Lists all the Mr Solver tests without their ".saw" suffix, except Dilithium2
 # FIXME: Get linked_list and sha512 working with type descriptions
 MR_SOLVER_TESTS = higher_order_mr_solver exp_explosion_mr_solver \
                   arrays_mr_solver # linked_list_mr_solver sha512_mr_solver
 
-.PHONY: mr-solver-tests $(MR_SOLVER_TESTS)
-mr-solver-tests: $(MR_SOLVER_TESTS)
+.PHONY: mr-solver-tests $(MR_SOLVER_TESTS) Dilithium2
+mr-solver-tests: $(MR_SOLVER_TESTS) Dilithium2
 
 $(MR_SOLVER_TESTS):
 	$(SAW) $@.saw
+
+Dilithium2: dilithium2.bc
+	$(SAW) Dilithium2.saw
