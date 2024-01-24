@@ -65,7 +65,7 @@ instance (s1 ~ s2, r1 ~ r2) => MonadTrans (GenStateContT s1 r1 s2 r2) where
 gcaptureCC :: ((a -> m r1) -> m r2) -> GenStateContT s r1 s r2 m a
 gcaptureCC f = GenStateContT \s k -> f (k s)
 
--- | Run two generalized monad computations "in parallel" and combine their
+-- | Run two generalized monad computations \"in parallel\" and combine their
 -- results
 gparallel ::
   (m r1 -> m r2 -> m r3) ->

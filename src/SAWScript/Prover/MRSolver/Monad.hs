@@ -800,13 +800,13 @@ mrBvCastInRange w1_t w2_t bv =
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
--- the order as seen "from the outside"
+-- the order as seen \"from the outside\"
 mrUVarsOuterToInner :: MRM t [(LocalName,Term)]
 mrUVarsOuterToInner = mrVarCtxOuterToInner <$> mrUVars
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the most recently bound uvar first, i.e., in
--- the order as seen "from the inside"
+-- the order as seen \"from the inside\"
 mrUVarsInnerToOuter :: MRM t [(LocalName,Term)]
 mrUVarsInnerToOuter = mrVarCtxInnerToOuter <$> mrUVars
 
@@ -1202,7 +1202,7 @@ mrSubstEVars = memoFixTermFun $ \recurse t ->
        _ -> traverseSubterms recurse t
 
 -- | Replace all evars in a 'Term' with their instantiations when they have one
--- and "lower" those that do not. Lowering an evar in this context means
+-- and \"lower\" those that do not. Lowering an evar in this context means
 -- replacing each occurrence @X x1 .. xn@ of an evar @X@ applied to its context
 -- of uvars with a fresh 'ExtCns' variable @Y@. This must be done after
 -- 'instantiateUVarsM' has replaced all uvars with fresh 'ExtCns' variables,

@@ -211,8 +211,8 @@ mrNormOpenTerm body =
 -- * Checking Provability with SMT
 ----------------------------------------------------------------------
 
--- | Test if a closed Boolean term is "provable", i.e., its negation is
--- unsatisfiable, using an SMT solver. By "closed" we mean that it contains no
+-- | Test if a closed Boolean term is \"provable\", i.e., its negation is
+-- unsatisfiable, using an SMT solver. By \"closed\" we mean that it contains no
 -- uvars or 'MRVar's.
 --
 -- FIXME: use the timeout!
@@ -776,7 +776,7 @@ asSimpleEq (asNumType -> Just ()) = Just $ \sc t1 t2 ->
 asSimpleEq _ = Nothing
 
 -- | A 'Term' in an extended context of universal variables, which are listed
--- "outside in", meaning the highest deBruijn index comes first
+-- \"outside in\", meaning the highest deBruijn index comes first
 data TermInCtx = TermInCtx [(LocalName,Term)] Term
 
 -- | Lift a binary operation on 'Term's to one on 'TermInCtx's
@@ -794,7 +794,7 @@ liftTermInCtx2 op (TermInCtx ctx1 t1) (TermInCtx ctx2 t2) =
     TermInCtx (ctx1++ctx2) <$> liftSC2 op t1' t2'
 
 -- | Extend the context of a 'TermInCtx' with additional universal variables
--- bound "outside" the 'TermInCtx'
+-- bound \"outside\" the 'TermInCtx'
 extTermInCtx :: [(LocalName,Term)] -> TermInCtx -> TermInCtx
 extTermInCtx ctx (TermInCtx ctx' t) = TermInCtx (ctx++ctx') t
 

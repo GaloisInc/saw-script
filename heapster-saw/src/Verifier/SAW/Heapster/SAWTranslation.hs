@@ -401,7 +401,7 @@ exprTransDescs (ETrans_Term tp t) =
     [d] -> [constKindExpr d t]
     _ -> panic "exprTransDescs" ["ETrans_Term type has incorrect number of kinds"]
 
--- | A "proof" that @ctx2@ is an extension of @ctx1@, i.e., that @ctx2@ equals
+-- | A \"proof\" that @ctx2@ is an extension of @ctx1@, i.e., that @ctx2@ equals
 -- @ctx1 :++: ctx3@ for some @ctx3@
 data CtxExt ctx1 ctx2 where
   CtxExt :: RAssign Proxy ctx3 -> CtxExt ctx1 (ctx1 :++: ctx3)
@@ -472,7 +472,7 @@ extExprTransCtx :: ExprCtxExt ctx1 ctx2 -> ExprTransCtx ctx1 ->
                    ExprTransCtx ctx2
 extExprTransCtx (ExprCtxExt ectx2) ectx1 = RL.append ectx1 ectx2
 
--- | Use an 'ExprCtxExt' to "un-extend" an 'ExprTransCtx'
+-- | Use an 'ExprCtxExt' to \"un-extend\" an 'ExprTransCtx'
 unextExprTransCtx :: ExprCtxExt ctx1 ctx2 -> ExprTransCtx ctx2 ->
                      ExprTransCtx ctx1
 unextExprTransCtx ((ExprCtxExt ectx3) :: ExprCtxExt ctx1 ctx2) ectx2 =
@@ -500,7 +500,7 @@ class TransInfo info => TransInfoM info where
 infoEvType :: TransInfo info => info ctx -> EventType
 infoEvType = permEnvEventType . infoEnv
 
--- | A "translation monad" is a 'Reader' monad with some info type that is
+-- | A \"translation monad\" is a 'Reader' monad with some info type that is
 -- parameterized by a translation context
 newtype TransM info (ctx :: RList CrucibleType) a =
   TransM { unTransM :: Reader (info ctx) a }
@@ -740,8 +740,8 @@ sigmaTypeTransM x tptrans tp_f =
   return (sigmaTypeOpenTermMulti x (typeTransTypes tptrans)
           (typeTransTupleType . flip runTransM info . tp_f . typeTransF tptrans))
 
--- | Like 'sigmaTypeTransM', but translates 'exists x.eq(y)' into the tuple of
--- types of 'x', omitting the right-hand projection type
+-- | Like 'sigmaTypeTransM', but translates @exists x.eq(y)@ into the tuple of
+-- types of @x@, omitting the right-hand projection type
 sigmaTypePermTransM :: TransInfo info => LocalName ->
                        TypeTrans (ExprTrans trL) ->
                        Mb (ctx :> trL) (ValuePerm trR) ->
@@ -896,7 +896,7 @@ translate1 a = translate a >>= \tr -> case transTerms tr of
   ts -> error ("translate1: expected 1 term, found " ++ show (length ts)
                ++ nlPrettyCallStack callStack)
 
--- | Translate a "closed" term, that is not in a binding
+-- | Translate a \"closed\" term, that is not in a binding
 translateClosed :: (TransInfo info, Translate info ctx a tr) =>
                    a -> TransM info ctx tr
 translateClosed a = nuMultiTransM (const a) >>= translate
@@ -1179,7 +1179,7 @@ inExtCtxDescTransM ctx m =
      inExtDescTransMultiM kdesc_ctx $ m kdescs
 
 -- | Run a 'DescTransM' computation in an expression context that binds a
--- context of deBruij indices.Pass the concatenated list of all the kind
+-- context of deBruijn indices. Pass the concatenated list of all the kind
 -- descriptions of those variables to the sub-computation.
 inCtxDescTransM :: CruCtx ctx -> ([OpenTerm] -> DescTransM ctx a) ->
                    DescTransM RNil a
@@ -1472,7 +1472,7 @@ instance TranslateDescs (LLVMFieldShape w) where
   translateDescs (mbMatch -> [nuMP| LLVMFieldShape p |]) =
     translateDescs p
 
--- A sequence of expressions translates to an ExprTransctx
+-- A sequence of expressions translates to an ExprTransCtx
 instance TransInfo info =>
          Translate info ctx (PermExprs as) (ExprTransCtx as) where
   translate mb_exprs = case mbMatch mb_exprs of
@@ -1649,7 +1649,7 @@ substNamedIndTpDesc d_id tps args =
 -- * Permission Translations
 ----------------------------------------------------------------------
 
--- | The result of translating a "proof element" of a permission of type
+-- | The result of translating a \"proof element\" of a permission of type
 -- @'ValuePerm' a@. The idea here is that, for a permission implication or typed
 -- statement that consumes or emits permission @p@, the translation consumes or
 -- emits an element of the SAW type @'translate' p@.
@@ -2342,8 +2342,8 @@ setLLVMArrayTransSlice arr_trans sub_arr_trans off_tm =
 -- * Translations of Lifetime Ownership Permissions
 ----------------------------------------------------------------------
 
--- | An 'LOwnedInfo' is essentially a set of translations of "proof objects" of
--- permission list @ps@, in a variable context @ctx@, along with additional
+-- | An 'LOwnedInfo' is essentially a set of translations of \"proof objects\"
+-- of permission list @ps@, in a variable context @ctx@, along with additional
 -- information (the @SpecM@ event type and the eventual return type of the
 -- overall computation) required to apply @bindS@
 data LOwnedInfo ps ctx =
@@ -3306,8 +3306,8 @@ emptyBlocksImpTransM =
   withInfoM (\(ImpTransInfo {..}) ->
               ImpTransInfo { itiBlockMapTrans = emptyTypedBlockMapTrans, .. })
 
--- | Run an implication translation computation in an "empty" environment, where
--- there are no variables in scope and no permissions held anywhere
+-- | Run an implication translation computation in an \"empty\" environment,
+-- where there are no variables in scope and no permissions held anywhere
 inEmptyEnvImpTransM :: ImpTransM ext blocks tops rets RNil RNil a ->
                        ImpTransM ext blocks tops rets ps ctx a
 inEmptyEnvImpTransM =
@@ -3564,8 +3564,8 @@ failPImplTermAlt msg = PImplTerm $ \k ->
                                   ImplFailContMsg ev _ -> ImplFailContMsg ev msg
                                   _ -> k))
 
--- | "Force" an optional 'PImplTerm' to a 'PImplTerm' by converting a 'Nothing'
--- to the 'failPImplTerm'
+-- | \"Force\" an optional 'PImplTerm' to a 'PImplTerm' by converting a
+-- 'Nothing' to the 'failPImplTerm'
 forcePImplTerm :: Maybe (PImplTerm ext blocks tops rets ps ctx) ->
                   PImplTerm ext blocks tops rets ps ctx
 forcePImplTerm (Just t) = t
@@ -6375,7 +6375,7 @@ someTypedCFGFunEntry some_cfg@(SomeTypedCFG sym _ _) f =
 -- | Build a lambda-abstraction that takes in function indexes for all the CFGs
 -- in a list and then run the supplied computation with a 'PermEnv' that
 -- includes translations of the symbols for these CFGs to their corresponding
--- lambda-bound xfunction indexes in this lambda-abstraction
+-- lambda-bound function indexes in this lambda-abstraction
 lambdaCFGPermEnv :: HasPtrWidth w => [SomeTypedCFG LLVM] ->
                     TypeTransM ctx OpenTerm -> TypeTransM ctx OpenTerm
 lambdaCFGPermEnv some_cfgs m =

@@ -48,7 +48,7 @@ and the `ocaml` base system installed on your machine and it can be fixed as exp
 
 Currently, the Coq support libraries for `saw-core-coq` requires Coq 8.15.
 Note that the `entree-specs` dependency does not currently build with Coq 8.16
-(see [this issue](https://github.com/GaloisInc//issues/1)).
+(see [this issue](https://github.com/GaloisInc/entree-specs/issues/1)).
 
 ## Building the and Using the Coq Support Libraries
 

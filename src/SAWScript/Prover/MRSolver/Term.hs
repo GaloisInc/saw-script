@@ -178,7 +178,7 @@ mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
 mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
 mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
 
--- | A Haskell representation of a @SpecM@ in "monadic normal form"
+-- | A Haskell representation of a @SpecM@ in \"monadic normal form\"
 data NormComp
   = RetS Term -- ^ A term @retS _ _ a x@
   | ErrorS Term -- ^ A term @errorS _ _ a str@

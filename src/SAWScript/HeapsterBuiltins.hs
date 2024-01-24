@@ -873,7 +873,7 @@ heapster_find_symbol_commands _bic _opts henv str =
 
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
 -- corresponds to the supplied string, which should be of the form:
--- "trait::method<type>". Fails if there is not exactly one such symbol.
+-- @"trait::method<type>"@. Fails if there is not exactly one such symbol.
 heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
                                      HeapsterEnv -> String -> TopLevel String
 heapster_find_trait_method_symbol bic opts henv str =

@@ -386,8 +386,8 @@ substVar n_top env_top K var_top =
        (n:Nat) (env:TpEnv) ->
        Nat__rec (\ (_:Nat) -> Either (kindElem K) Nat)
 
-         -- If the lifting level = 0, recursively substitue the tail of env into
-         -- var'; this intuitively decrements var' and the size of env
+         -- If the lifting level = 0, recursively substitute the tail of env
+         -- into var'; this intuitively decrements var' and the size of env
          (rec 0 (tailTpEnv env))
 
          -- If the lifting level = S n', recursively substitute with the

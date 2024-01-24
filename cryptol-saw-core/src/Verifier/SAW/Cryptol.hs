@@ -93,7 +93,7 @@ import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 import GHC.Stack
 
 
--- Type-check the Prelude, Cryptol, and CryptolM modules at compile time
+-- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
 import Verifier.SAW.Cryptol.Prelude
 import Verifier.SAW.Cryptol.PreludeM

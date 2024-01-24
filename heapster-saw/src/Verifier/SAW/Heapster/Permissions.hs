@@ -108,7 +108,7 @@ concatSomeRAssign = foldl apSomeRAssign (Some MNil)
 -- foldl is intentional, appending RAssign matches on the second argument
 
 -- | Map a monadic function over an 'RAssign' list from left to right while
--- maintaining an "accumulator" that is threaded through the mapping
+-- maintaining an \"accumulator\" that is threaded through the mapping
 rlMapMWithAccum :: Monad m => (forall a. accum -> f a -> m (g a, accum)) ->
                    accum -> RAssign f tps -> m (RAssign g tps, accum)
 rlMapMWithAccum _ accum MNil = return (MNil, accum)
@@ -163,7 +163,7 @@ type LLVMShapeType w = IntrinsicType "LLVMShape" (EmptyCtx ::> BVType w)
 -- | Crucible type for LLVM memory blocks
 type LLVMBlockType w = IntrinsicType "LLVMBlock" (EmptyCtx ::> BVType w)
 
--- | Expressions that are considered "pure" for use in permissions. Note that
+-- | Expressions that are considered \"pure\" for use in permissions. Note that
 -- these are in a normal form, that makes them easier to analyze.
 data PermExpr (a :: CrucibleType) where
   -- | A variable of any type
@@ -251,10 +251,10 @@ data PermExpr (a :: CrucibleType) where
   PExpr_FieldShape :: (1 <= w, KnownNat w) => LLVMFieldShape w ->
                       PermExpr (LLVMShapeType w)
 
-  -- | A shape for an array of @len@ individual regions of memory, called "array
-  -- cells"; the size of each cell in bytes is given by the array stride, which
-  -- must be known statically, and each cell has shape given by the supplied
-  -- LLVM shape, also called the cell shape
+  -- | A shape for an array of @len@ individual regions of memory, called
+  -- \"array cells\"; the size of each cell in bytes is given by the array
+  -- stride, which must be known statically, and each cell has shape given by
+  -- the supplied LLVM shape, also called the cell shape
   PExpr_ArrayShape :: (1 <= w, KnownNat w) =>
                       PermExpr (BVType w) -> Bytes ->
                       PermExpr (LLVMShapeType w) ->
@@ -405,13 +405,13 @@ data AtomicPerm (a :: CrucibleType) where
 
   -- | Ownership permission for a lifetime, including an assertion that it is
   -- still current and permission to end that lifetime. A lifetime also
-  -- represents a permission "borrow" of some sub-permissions out of some larger
-  -- permissions. For example, we might borrow a portion of an array, or a
-  -- portion of a larger data structure. When the lifetime is ended, you have to
-  -- give back to sub-permissions to get back the larger permissions. Together,
-  -- these are a form of permission implication, so we write lifetime ownership
-  -- permissions as @lowned(Pin -o Pout)@. Intuitively, @Pin@ must be given back
-  -- before the lifetime is ended, and @Pout@ is returned afterwards.
+  -- represents a permission \"borrow\" of some sub-permissions out of some
+  -- larger permissions. For example, we might borrow a portion of an array, or
+  -- a portion of a larger data structure. When the lifetime is ended, you have
+  -- to give back to sub-permissions to get back the larger permissions.
+  -- Together, these are a form of permission implication, so we write lifetime
+  -- ownership permissions as @lowned(Pin -o Pout)@. Intuitively, @Pin@ must be
+  -- given back before the lifetime is ended, and @Pout@ is returned afterwards.
   -- Additionally, a lifetime may contain some other lifetimes, meaning the all
   -- must end before the current one can be ended.
   Perm_LOwned :: [PermExpr LifetimeType] ->
@@ -456,8 +456,8 @@ data AtomicPerm (a :: CrucibleType) where
 
 -- | A value permission is a permission to do something with a value, such as
 -- use it as a pointer. This also includes a limited set of predicates on values
--- (you can think about this as "permission to assume the value satisfies this
--- predicate" if you like).
+-- (you can think about this as \"permission to assume the value satisfies this
+-- predicate\" if you like).
 data ValuePerm (a :: CrucibleType) where
 
   -- | Says that a value is equal to a known static expression
@@ -522,7 +522,7 @@ data LLVMArrayIndex w =
                    llvmArrayIndexOffset :: BV w }
 
 -- | A permission to an array of @len@ individual regions of memory, called
--- "array cells". The size of each cell in bytes is given by the array /stride/,
+-- \"array cells\". The size of each cell in bytes is given by the array /stride/,
 -- which must be known statically, and each cell has shape given by the supplied
 -- LLVM shape, also called the cell shape.
 data LLVMArrayPerm w =
@@ -721,7 +721,7 @@ data ReachMethods reach args a where
   NoReachMethods :: ReachMethods args a 'False
 
 -- | A recursive permission is a permission that can recursively refer to
--- itself. This is represented as a "body" of the recursive permission that has
+-- itself. This is represented as a \"body\" of the recursive permission that has
 -- free variables for a list of arguments along with an extra free variable to
 -- recursively refer to the permission. The @b@ flag indicates whether this
 -- recursive permission can be used as an atomic permission, which should be
@@ -755,7 +755,7 @@ data DefinedPerm b args a = DefinedPerm {
 -- make certain typeclass instances (like pretty-printing) specific to it
 data VarAndPerm a = VarAndPerm (ExprVar a) (ValuePerm a)
 
--- | A list of "distinguished" permissions to named variables
+-- | A list of \"distinguished\" permissions to named variables
 -- FIXME: just call these VarsAndPerms or something like that...
 type DistPerms = RAssign VarAndPerm
 
@@ -896,7 +896,7 @@ data BlockHint blocks init ret args where
                BlockID blocks args -> BlockHintSort args ->
                BlockHint blocks init ret args
 
--- | A "hint" from the user for type-checking
+-- | A \"hint\" from the user for type-checking
 data Hint where
   Hint_Block :: BlockHint blocks init ret args -> Hint
 
@@ -1154,8 +1154,8 @@ typeBaseName _ = "x"
 
 -- | A 'PPInfo' maps bound 'Name's to strings used for printing, with the
 -- invariant that each 'Name' is mapped to a different string. This invariant is
--- maintained by always assigning each 'Name' to a "base string", which is often
--- determined by the Crucible type of the 'Name', followed by a unique
+-- maintained by always assigning each 'Name' to a \"base string\", which is
+-- often determined by the Crucible type of the 'Name', followed by a unique
 -- integer. Note that this means no base name should end with an integer. To
 -- ensure the uniqueness of these integers, the 'PPInfo' structure tracks the
 -- next integer to be used for each base string.
@@ -1829,7 +1829,7 @@ pattern PExpr_Write = PExpr_RWModality Write
 pattern PExpr_Read :: PermExpr RWModalityType
 pattern PExpr_Read = PExpr_RWModality Read
 
--- | Build a "default" expression for a given type
+-- | Build a \"default\" expression for a given type
 zeroOfType :: TypeRepr tp -> PermExpr tp
 zeroOfType (BVRepr w) = withKnownNat w $ PExpr_BV [] $ BV.mkBV w 0
 zeroOfType LifetimeRepr = PExpr_Always
@@ -1938,8 +1938,8 @@ bvZeroable (PExpr_BV _ _) =
 
 -- | Test whether two bitvector expressions are potentially unifiable, i.e.,
 -- whether some substitution to the variables could make them equal. This is an
--- overapproximation, meaning that some expressions are marked as "could" equal
--- when they actually cannot.
+-- overapproximation, meaning that some expressions are marked as \"could\"
+-- equal when they actually cannot.
 bvCouldEqual :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvCouldEqual e1@(PExpr_BV _ _) e2 =
   -- NOTE: we can only call bvSub when at least one side matches PExpr_BV
@@ -1949,10 +1949,10 @@ bvCouldEqual _ _ = True
 
 -- | Test whether a bitvector expression could potentially be less than another,
 -- for some substitution to the free variables. The comparison is unsigned. This
--- is an overapproximation, meaning that some expressions are marked as "could"
--- be less than when they actually cannot. The current algorithm returns 'False'
--- when the right-hand side is 0 and 'True' in all other cases except constant
--- expressions @k1 >= k2@.
+-- is an overapproximation, meaning that some expressions are marked as
+-- \"could\" be less than when they actually cannot. The current algorithm
+-- returns 'False' when the right-hand side is 0 and 'True' in all other cases
+-- except constant expressions @k1 >= k2@.
 bvCouldBeLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvCouldBeLt _ (PExpr_BV [] (BV.BV 0)) = False
 bvCouldBeLt e1 e2 | bvEq e1 e2 = False
@@ -1961,9 +1961,9 @@ bvCouldBeLt _ _ = True
 
 -- | Test whether a bitvector expression could potentially be less than another,
 -- for some substitution to the free variables. The comparison is signed. This
--- is an overapproximation, meaning that some expressions are marked as "could"
--- be less than when they actually cannot. The current algorithm returns 'True'
--- in all cases except constant expressions @k1 >= k2@.
+-- is an overapproximation, meaning that some expressions are marked as
+-- \"could\" be less than when they actually cannot. The current algorithm
+-- returns 'True' in all cases except constant expressions @k1 >= k2@.
 bvCouldBeSLt :: (1 <= w, KnownNat w) =>
                 PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvCouldBeSLt (bvMatchConst -> Just i1) (bvMatchConst -> Just i2) =
@@ -1981,7 +1981,7 @@ bvLeq e1 e2 = not (bvCouldBeLt e2 e1)
 
 -- | Test whether a bitvector expression @e@ is in a 'BVRange' for all
 -- substitutions to the free variables. This is an overapproximation, meaning
--- that some expressions are marked as "could" be in the range when they
+-- that some expressions are marked as \"could\" be in the range when they
 -- actually cannot. The current algorithm tests if @e - off < len@ using the
 -- unsigned comparison 'bvCouldBeLt', where @off@ and @len@ are the offset and
 -- length of the 'BVRange'.
@@ -1999,9 +1999,9 @@ bvPropHolds (BVProp_ULeq e1 e2) = bvLeq e1 e2
 bvPropHolds (BVProp_ULeq_Diff e1 e2 e3) =
   not (bvCouldBeLt (bvSub e2 e3) e1)
 
--- | Test whether a 'BVProp' "could" hold for all substitutions of the free
+-- | Test whether a 'BVProp' \"could\" hold for all substitutions of the free
 -- variables. This is an overapproximation, meaning that some propositions are
--- marked as "could" hold when they actually cannot.
+-- marked as \"could\" hold when they actually cannot.
 bvPropCouldHold :: (1 <= w, KnownNat w) => BVProp w -> Bool
 bvPropCouldHold (BVProp_Eq e1 e2) = bvCouldEqual e1 e2
 bvPropCouldHold (BVProp_Neq e1 e2) = not (bvEq e1 e2)
@@ -2199,7 +2199,7 @@ offsetMbRangeForType (LLVMPermOffset off) (MbRangeForLLVMType
                                            vars mb_rw mb_l mb_rng) =
   MbRangeForLLVMType vars mb_rw mb_l $ fmap (offsetBVRange off) mb_rng
 
--- | Test if the first read/write modality in a binding "covers" the second,
+-- | Test if the first read/write modality in a binding \"covers\" the second,
 -- meaning a permission relative to the first implies or can be coerced to a
 -- similar permission relative to the second, possibly by instantiating evars on
 -- the right
@@ -2213,7 +2213,7 @@ mbRWModCovers _ [nuP| PExpr_Var mb_x |]
 mbRWModCovers mb_rw2 mb_rw1 =
   fromMaybe False ((==) <$> tryLift mb_rw1 <*> tryLift mb_rw2)
 
--- | Test if the first lifetime in a binding "covers" the second, meaning a
+-- | Test if the first lifetime in a binding \"covers\" the second, meaning a
 -- permission relative to the second implies or can be coerced to a similar
 -- permission relative to the first, possibly by instantiating evars on the
 -- right
@@ -3265,7 +3265,7 @@ trueDistPerms :: RAssign Name ps -> DistPerms ps
 trueDistPerms MNil = DistPermsNil
 trueDistPerms (ns :>: n) = DistPermsCons (trueDistPerms ns) n ValPerm_True
 
--- | A list of "distinguished" permissions with types
+-- | A list of \"distinguished\" permissions with types
 type TypedDistPerms = RAssign (Typed VarAndPerm)
 
 -- | Get the 'CruCtx' for a 'TypedDistPerms'
@@ -3381,7 +3381,7 @@ ltFuncApply (LTFunctorArray off len stride sh bs) (MNil :>: rw) l =
 ltFuncApply (LTFunctorBlock off len sh) (MNil :>: rw) l =
   ValPerm_LLVMBlock $ LLVMBlockPerm rw l off len sh
 
--- | Apply a functor to a lifetime and the "minimal" rwmodalities, i.e., with
+-- | Apply a functor to a lifetime and the \"minimal\" rwmodalities, i.e., with
 -- all read permissions
 ltFuncMinApply :: LifetimeFunctor args a -> PermExpr LifetimeType -> ValuePerm a
 ltFuncMinApply (LTFunctorField off p) l =
@@ -4909,7 +4909,7 @@ remLLVMBlockPermRange rng bp =
   do (bps_l, bp') <-
        -- If the beginning of rng lies inside the range of bp, split bp into
        -- block permissions before and after the beginning of rng; otherwise,
-       -- lump all of bp into the "after" bucket. The call to splitLLVMBlockPerm
+       -- lump all of bp into the \"after\" bucket. The call to splitLLVMBlockPerm
        -- uses an empty substitution because remLLVMBlockPermRange itself is
        -- assuming an empty substitution
        if bvInRange (bvRangeOffset rng) (llvmBlockRange bp) then
@@ -5109,7 +5109,7 @@ llvmArrayCellToOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
 llvmArrayCellToOffset ap cell =
   bvMult (bytesToInteger $ llvmArrayStride ap) cell
 
--- | Convert an array cell number @cell@ to the "absolute" byte offset for that
+-- | Convert an array cell number @cell@ to the \"absolute\" byte offset for that
 -- cell, given by @off + stride * cell@, where @off@ is the offset of the
 -- supplied array permission
 llvmArrayCellToAbsOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
@@ -5137,7 +5137,7 @@ llvmArrayAbsOffsetsToCells _ _ = Nothing
 llvmArrayCells :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayCells ap = BVRange (bvInt 0) (llvmArrayLen ap)
 
--- | Build the 'BVRange' of "absolute" offsets @[off,off+len_bytes)@
+-- | Build the 'BVRange' of \"absolute\" offsets @[off,off+len_bytes)@
 llvmArrayAbsOffsets :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayAbsOffsets ap =
   BVRange (llvmArrayOffset ap) (llvmArrayCellToOffset ap $ llvmArrayLen ap)
@@ -5214,7 +5214,7 @@ llvmArrayBorrowRange :: (1 <= w, KnownNat w) =>
 llvmArrayBorrowRange ap borrow =
   llvmArrayCellsToOffsets ap (llvmArrayBorrowCells borrow)
 
--- | Get the "absolute" range of offsets spanned by a borrow relative to the
+-- | Get the \"absolute\" range of offsets spanned by a borrow relative to the
 -- pointer with this array permission
 llvmArrayAbsBorrowRange :: (1 <= w, KnownNat w) =>
                            LLVMArrayPerm w -> LLVMArrayBorrow w -> BVRange w
@@ -5393,7 +5393,7 @@ matchLLVMArrayCell ap off
 matchLLVMArrayCell _ _ = Nothing
 
 -- | Return a list 'BVProp' stating that the cell(s) represented by an array
--- borrow are in the "base" set of cells in an array, before the borrows are
+-- borrow are in the \"base\" set of cells in an array, before the borrows are
 -- considered
 llvmArrayBorrowInArrayBase :: (1 <= w, KnownNat w) =>
                               LLVMArrayPerm w -> LLVMArrayBorrow w ->
@@ -7955,7 +7955,7 @@ instance AbstractVars (NamedPermName ns args a) where
 ----------------------------------------------------------------------
 
 -- | An existentially quantified LLVM shape with a name, but that is considered
--- "partial" because it has not been added to the environment yet
+-- \"partial\" because it has not been added to the environment yet
 data SomePartialNamedShape w where
   NonRecShape :: String -> CruCtx args -> Mb args (PermExpr (LLVMShapeType w))
               -> SomePartialNamedShape w
@@ -8449,7 +8449,7 @@ lookupBlockJoinPointHint env h blocks blkID =
 -- longer need
 
 -- | A permission set associates permissions with expression variables, and also
--- has a stack of "distinguished permissions" that are used for intro rules
+-- has a stack of \"distinguished permissions\" that are used for intro rules
 data PermSet ps = PermSet { _varPermMap :: NameMap ValuePerm,
                             _distPerms :: DistPerms ps }
 

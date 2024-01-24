@@ -20,10 +20,3 @@ module Verifier.SAW
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Prelude
 import Verifier.SAW.ExternalFormat
-
--- The following type-checks the Prelude at compile time, as a sanity check
--- NOTE: this is now done in Verifier.SAW.Cryptol, which also type-checks the
--- Cryptol-related SAW core modules as well
---
--- import Language.Haskell.TH
--- $(runIO (mkSharedContext >>= \sc -> scLoadPreludeModule sc >> return []))

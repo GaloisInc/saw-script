@@ -206,7 +206,7 @@ regWithValExpr (RegNoVal (TypedReg x)) = PExpr_Var x
 data TypedExpr ext tp =
   TypedExpr !(App ext RegWithVal tp) !(Maybe (PermExpr tp))
 
--- | A "typed" function handle is a normal function handle along with contexts
+-- | A \"typed\" function handle is a normal function handle along with contexts
 -- of ghost input and output variables
 data TypedFnHandle ghosts args gouts ret where
   TypedFnHandle :: !(CruCtx ghosts) -> !(CruCtx gouts) ->
@@ -269,7 +269,7 @@ indexToTypedBlockID sz ix =
   TypedBlockID (indexCtxToMember sz ix) (Ctx.indexVal ix)
 
 -- | All of our blocks have multiple entry points, for different inferred types,
--- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
+-- so a \"typed\" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
 -- into the @blocks@ context of contexts) plus an 'Int' specifying which entry
 -- point to that block
 data TypedEntryID (blocks :: RList (RList CrucibleType)) (args :: RList CrucibleType) =
@@ -1053,7 +1053,7 @@ data TypedEntryInDegree
     -- one of which is a back edge
   | EntryInDegree_Loop
 
--- | "Add" two in-degrees
+-- | \"Add\" two in-degrees
 addInDegrees :: TypedEntryInDegree -> TypedEntryInDegree -> TypedEntryInDegree
 addInDegrees EntryInDegree_Loop _ = EntryInDegree_Loop
 addInDegrees _ EntryInDegree_Loop = EntryInDegree_Loop
@@ -1188,9 +1188,9 @@ typedCallSiteArgVarPerms (TypedCallSite {..}) =
   ArgVarPerms (callSiteVars typedCallSiteID) typedCallSitePerms
 
 -- | A single, typed entrypoint to a Crucible block. Note that our blocks
--- implicitly take extra "ghost" arguments, that are needed to express the input
--- and output permissions. The first of these ghost arguments are the top-level
--- inputs to the entire function.
+-- implicitly take extra \"ghost\" arguments, that are needed to express the
+-- input and output permissions. The first of these ghost arguments are the
+-- top-level inputs to the entire function.
 data TypedEntry phase ext blocks tops rets args ghosts =
   TypedEntry
   {
@@ -1822,8 +1822,8 @@ applyDeltasToTopState :: [TypedBlockMapDelta blocks tops rets] ->
 applyDeltasToTopState deltas top_st =
   foldl (flip applyTypedBlockMapDelta) top_st deltas
 
--- | The state that can be modified by "inner" computations = a list of changes
--- / "deltas" to the current 'TypedBlockMap'
+-- | The state that can be modified by \"inner\" computations = a list of
+-- changes / \"deltas\" to the current 'TypedBlockMap'
 data InnerPermCheckState blocks tops rets =
   InnerPermCheckState
   {
@@ -1835,7 +1835,7 @@ clEmptyInnerPermCheckState :: Closed (InnerPermCheckState blocks tops rets)
 clEmptyInnerPermCheckState = $(mkClosed [| InnerPermCheckState [] |])
 
 
--- | The "inner" monad that runs inside 'PermCheckM' continuations. It can see
+-- | The \"inner\" monad that runs inside 'PermCheckM' continuations. It can see
 -- but not modify the top-level state, but it can add 'TypedBlockMapDelta's to
 -- be applied later to the top-level state.
 type InnerPermCheckM ext cblocks blocks tops rets =
@@ -2135,7 +2135,7 @@ getRegPerm :: TypedReg a ->
 getRegPerm (TypedReg x) = getVarPerm x
 
 -- | Eliminate any disjunctions, existentials, or recursive permissions for a
--- register and then return the resulting "simple" permission, leaving it on the
+-- register and then return the resulting \"simple\" permission, leaving it on the
 -- top of the stack
 getPushSimpleRegPerm :: PermCheckExtC ext exprExt => TypedReg a ->
                         StmtPermCheckM ext cblocks blocks tops rets
@@ -2148,7 +2148,7 @@ getPushSimpleRegPerm r =
   pure p_ret
 
 -- | Eliminate any disjunctions, existentials, or recursive permissions for a
--- register and then return the resulting "simple" permission
+-- register and then return the resulting \"simple\" permission
 getSimpleRegPerm :: PermCheckExtC ext exprExt => TypedReg a ->
                     StmtPermCheckM ext cblocks blocks tops rets ps ps
                     (ValuePerm a)
@@ -2331,7 +2331,7 @@ setVarTypes (ns :>: n) (CruCtxCons ts t) =
      setVarType n t
 
 allocateDebugNames ::
-  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
+  Maybe String -> -- ^ The base name of the variable (e.g., \"top\", \"arg\", etc.)
   RAssign (Constant (Maybe String)) tps ->
   CruCtx tps ->
   PPInfo ->
@@ -2351,7 +2351,7 @@ allocateDebugNames base (ds :>: Constant dbg) (CruCtxCons ts tp) ppi =
 
 
 allocateDebugNamesM ::
-  Maybe String -> -- ^ The base name of the variable (e.g., "top", "arg", etc.)
+  Maybe String -> -- ^ The base name of the variable (e.g., \"top\", \"arg\", etc.)
   RAssign (Constant (Maybe String)) tps ->
   CruCtx tps ->
   PermCheckM ext cblocks blocks tops ret r ps r ps
@@ -2506,13 +2506,13 @@ stmtRecombinePerms =
   pcmEmbedImplM TypedImplStmt emptyCruCtx (recombinePerms dist_perms) >>>
   pure ()
 
--- | Helper function to pretty print "Could not prove ps" for permissions @ps@
+-- | Helper function to pretty print \"Could not prove ps\" for permissions @ps@
 ppProofError :: PermPretty a => PPInfo -> String -> a -> Doc ()
 ppProofError ppInfo f mb_ps =
   nest 2 $ sep [ pretty f <> colon <+> pretty "Could not prove"
                , PP.group (PP.align (permPretty ppInfo mb_ps)) ]
 
--- | Helper function to pretty print "Could not prove ps1 -o ps2" for
+-- | Helper function to pretty print \"Could not prove ps1 -o ps2\" for
 -- permissions @ps1@ and @ps2@
 ppImplProofError :: (PermPretty a, PermPretty b) => 
                     PPInfo -> String -> a -> b -> Doc ()
@@ -2771,7 +2771,7 @@ tcRegs _ctx (viewAssign -> AssignEmpty) = TypedRegsNil
 tcRegs ctx (viewAssign -> AssignExtend regs reg) =
   TypedRegsCons (tcRegs ctx regs) (tcReg ctx reg)
 
--- | Pretty-print the permissions that are "relevant" to a register, which
+-- | Pretty-print the permissions that are \"relevant\" to a register, which
 -- includes its permissions and all those relevant to any register it is equal
 -- to, possibly plus some offset
 ppRelevantPerms :: TypedReg tp ->
@@ -4306,8 +4306,8 @@ widenEntry dlevel env (TypedEntry {..}) =
 -- permissions of the entrypoint, and then type-checking the body of the block
 -- with those input permissions, if it has not been type-checked already.
 --
--- If any of the call site implications fail, and the input "can widen" flag is
--- 'True', recompute the entrypoint input permissions using widening.
+-- If any of the call site implications fail, and the input \"can widen\" flag
+-- is 'True', recompute the entrypoint input permissions using widening.
 visitEntry ::
   (PermCheckExtC ext exprExt, CtxToRList cargs ~ args, KnownRepr ExtRepr ext) =>
   [Maybe String] ->

@@ -1656,7 +1656,7 @@ type OrList ps a = RAssign (OrListDisj ps a)
 -- disjunct on the right of the judgment corresponds to a different leaf in the
 -- tree, while each @Gammai@ denotes the variables that are bound on the path
 -- from the root to that leaf. The @ps@ argument captures the form of the
--- "distinguished" left-hand side permissions @Pl@.
+-- \"distinguished\" left-hand side permissions @Pl@.
 --
 -- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
 -- top of the stack
@@ -1686,7 +1686,7 @@ data MbPermImpls r bs_pss where
 newtype LocalPermImpl ps_in ps_out =
   LocalPermImpl (PermImpl (LocalImplRet ps_out) ps_in)
 
--- | The "success" condition of a 'LocalPermImpl', which essentially is just a
+-- | The \"success\" condition of a 'LocalPermImpl', which essentially is just a
 -- type equality stating that the output permissions are as expected
 newtype LocalImplRet ps ps' = LocalImplRet (ps :~: ps')
 
@@ -1866,8 +1866,8 @@ permImplCatch pimpl1 pimpl2 =
 -}
 
 
--- | Test if a 'PermImpl' "succeeds", meaning there is at least one non-failing
--- branch. If it does succeed, return a heuristic number for how "well" it
+-- | Test if a 'PermImpl' \"succeeds\", meaning there is at least one non-failing
+-- branch. If it does succeed, return a heuristic number for how \"well\" it
 -- succeeds; e.g., rate a 'PermImpl' higher if all disjunctive branches succeed,
 -- that is, if both children of every 'Impl1_ElimOr' succeed. Return 0 if the
 -- 'PermImpl' does not succeed at all.
@@ -4053,9 +4053,9 @@ implCatchM f p m1 m2 =
                                       <> line <> permPretty i p) >>>
                     m2))
 
--- | "Push" all of the permissions in the permission set for a variable, which
+-- | \"Push\" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
--- from the input permission set. This is like a simple "proof" of @x:p@.
+-- from the input permission set. This is like a simple \"proof\" of @x:p@.
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
@@ -4491,7 +4491,7 @@ elimOrsExistsNamesM x =
     p -> pure p
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or defined
--- permissions for a variable and then return the resulting "simple" permission
+-- permissions for a variable and then return the resulting \"simple\" permission
 getSimpleVarPerm :: NuMatchingAny1 r => ExprVar a ->
                     ImplM vars s r ps ps (ValuePerm a)
 getSimpleVarPerm x =
@@ -4781,7 +4781,7 @@ introOrRM x p1 p2 = implSimplM Proxy (SImpl_IntroOrR x p1 p2)
 -- | Apply existential introduction to the top of the permission stack, changing
 -- it from @[e/x]p@ to @exists (x:tp).p@
 --
--- FIXME: is there some way we could "type-check" this, to ensure that the
+-- FIXME: is there some way we could \"type-check\" this, to ensure that the
 -- permission on the top of the stack really equals @[e/x]p@?
 introExistsM :: (KnownRepr TypeRepr tp, NuMatchingAny1 r) =>
                 ExprVar a -> PermExpr tp -> Binding tp (ValuePerm a) ->
@@ -5489,7 +5489,7 @@ implElimLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_EmptyShape }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockToBytes x bp)
 
--- If the "natural" length of the shape of a memblock permission is smaller than
+-- If the \"natural\" length of the shape of a memblock permission is smaller than
 -- its actual length, sequence with the empty shape and then eliminate
 implElimLLVMBlock x bp
   | Just sh_len <- llvmShapeLength $ llvmBlockShape bp
@@ -5672,9 +5672,9 @@ permIndicesForProvingOffset ps imprecise_p off =
 -- it as the return value, and recombine any other permissions that are yielded
 -- by this elimination.
 --
--- The notion of "contains" is determined by the supplied @imprecise_p@ flag: a
--- 'True' makes this mean "could contain" in the sense of 'bvPropCouldHold',
--- while 'False' makes this mean "definitely contains" in the sense of
+-- The notion of \"contains\" is determined by the supplied @imprecise_p@ flag: a
+-- 'True' makes this mean \"could contain\" in the sense of 'bvPropCouldHold',
+-- while 'False' makes this mean \"definitely contains\" in the sense of
 -- 'bvPropHolds'.
 --
 -- If there are multiple ways to eliminate @p@ to a @p'@ that contains @off@
@@ -6633,7 +6633,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' _) (ps_r' :>: _) =
 
 -- | Determine what additional permissions from the current set of variable
 -- permissions, if any, would be needed to prove one list of permissions implies
--- another. This is just a "best guess", so just do nothing and return if
+-- another. This is just a \"best guess\", so just do nothing and return if
 -- nothing can be done.
 --
 -- At a high level, this algorithm currently works as follows. It starts by
@@ -7041,8 +7041,8 @@ proveVarLLVMArray x ps mb_ap =
 --
 -- 4. By eliminating a @memblock@ permission with array shape.
 --
--- NOTE: these "ways" do *not* line up with the cases of the function, labeled
--- as "case 1", "case 2", etc. outputs in the code below.
+-- NOTE: these \"ways\" do *not* line up with the cases of the function, labeled
+-- as \"case 1\", \"case 2\", etc. outputs in the code below.
 --
 -- To determine which way to use, the algorithm searches for a permission
 -- currently held on the left that is either an array permission with exactly
@@ -8881,7 +8881,7 @@ proveVarConjImpl x ps_lhs mb_ps =
 ----------------------------------------------------------------------
 
 -- | Prove @x:p'@, where @p@ may have existentially-quantified variables in
--- it. The "@Int@" suffix indicates that this call is internal to the
+-- it. The \"@Int@\" suffix indicates that this call is internal to the
 -- implication prover, similar to 'proveVarsImplAppendInt', meaning that this
 -- version will not end lifetimes, which must be done at the top level.
 proveVarImplInt :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
@@ -9225,7 +9225,7 @@ funPermExDistIns fun_perm args =
   fmap (varSubst (permVarSubstOfNames args)) $ mbSeparate args $
   mbValuePermsToDistPerms $ funPermIns fun_perm
 
--- | Make a "base case" 'DistPermsSplit' where the split is at the end
+-- | Make a \"base case\" 'DistPermsSplit' where the split is at the end
 baseDistPermsSplit :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                       DistPermsSplit (ps :> a)
 baseDistPermsSplit ps x p =

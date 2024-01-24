@@ -127,18 +127,19 @@ import Verifier.SAW.Utils
 -- SAW core term and its type
 newtype OpenTerm = OpenTerm { unOpenTerm :: TCM TypedTerm }
 
--- | "Complete" an 'OpenTerm' to a closed term or 'fail' on type-checking error
+-- | \"Complete\" an 'OpenTerm' to a closed term or 'fail' on type-checking
+-- error
 completeOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (typedVal <$> termM) sc Nothing []
 
--- | "Complete" an 'OpenTerm' to a closed term and 'betaNormalize' the result
+-- | \"Complete\" an 'OpenTerm' to a closed term and 'betaNormalize' the result
 completeNormOpenTerm :: SharedContext -> OpenTerm -> IO Term
 completeNormOpenTerm sc m =
   completeOpenTerm sc m >>= sawLetMinimize sc >>= betaNormalize sc
 
--- | "Complete" an 'OpenTerm' to a closed term for its type
+-- | \"Complete\" an 'OpenTerm' to a closed term for its type
 completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
 completeOpenTermType sc (OpenTerm termM) =
   either (fail . show) return =<<
@@ -164,7 +165,7 @@ failOpenTerm :: String -> OpenTerm
 failOpenTerm str = OpenTerm $ fail str
 
 -- | Bind the result of a type-checking computation in building an 'OpenTerm'.
--- NOTE: this operation should be considered "unsafe" because it can create
+-- NOTE: this operation should be considered \"unsafe\" because it can create
 -- malformed 'OpenTerm's if the result of the 'TCM' computation is used as part
 -- of the resulting 'OpenTerm'. For instance, @a@ should not be 'OpenTerm'.
 bindTCMOpenTerm :: TCM a -> (a -> OpenTerm) -> OpenTerm
@@ -848,17 +849,17 @@ newtype OpenTermM a = OpenTermM { unOpenTermM :: TCM a }
 instance MonadIO OpenTermM where
   liftIO = OpenTermM . liftIO
 
--- | "Run" an 'OpenTermM' computation to produce an 'OpenTerm'
+-- | \"Run\" an 'OpenTermM' computation to produce an 'OpenTerm'
 runOpenTermM :: OpenTermM OpenTerm -> OpenTerm
 runOpenTermM (OpenTermM m) =
   OpenTerm $ join $ fmap unOpenTerm m
 
--- | "Complete" an 'OpenTerm' build in 'OpenTermM' to a closed term, or 'fail'
+-- | \"Complete\" an 'OpenTerm' build in 'OpenTermM' to a closed term, or 'fail'
 -- on a type-checking error
 completeOpenTermM :: SharedContext -> OpenTermM OpenTerm -> IO Term
 completeOpenTermM sc m = completeOpenTerm sc (runOpenTermM m)
 
--- | "De-duplicate" an open term, so that duplicating the returned 'OpenTerm'
+-- | \"De-duplicate\" an open term, so that duplicating the returned 'OpenTerm'
 -- does not lead to duplicated WHNF work
 dedupOpenTermM :: OpenTerm -> OpenTermM OpenTerm
 dedupOpenTermM (OpenTerm trmM) =

@@ -777,7 +777,7 @@ congruence_for tt =
 --   represents a congruence law for that term.
 --   This term will be a Curry-Howard style theorem statement
 --   that can be dispatched to solvers, and should have
---   type "Prop".
+--   type \"Prop\".
 --
 --   This will only work for terms that represent non-dependent
 --   functions.
