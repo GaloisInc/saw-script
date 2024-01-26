@@ -1945,7 +1945,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm (TypedTermSchema schema) trm)
         C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
         C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
         C.TVar x       -> C.apSubst s (C.TVar x)
-        C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
+        C.TNominal nt ts -> C.TNominal nt (fmap (plainSubst s) ts)
 
 defaultTypedTerm _opts _sc _cfg tt = return tt
 

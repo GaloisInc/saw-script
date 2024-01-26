@@ -868,10 +868,8 @@ resolveSAWTerm mcc tp tm =
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
       fail "resolveSAWTerm: unsupported function type"
-    Cryptol.TVAbstract _ _ ->
-      fail "resolveSAWTerm: unsupported abstract type"
-    Cryptol.TVNewtype{} ->
-      fail "resolveSAWTerm: unsupported newtype"
+    Cryptol.TVNominal {} ->
+      fail "resolveSAWTerm: unsupported nominal type"
   where
     sym = mcc ^. mccSym
     col = mcc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
@@ -942,8 +940,7 @@ toMIRType tp =
       Right $ Mir.TyTuple tps'
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
-    Cryptol.TVAbstract _ _ -> Left (Impossible "abstract")
-    Cryptol.TVNewtype{} -> Left (Impossible "newtype")
+    Cryptol.TVNominal {} -> Left (Impossible "nominal")
 
 -- | Check if two MIR references are equal.
 equalRefsPred ::
