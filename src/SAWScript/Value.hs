@@ -74,7 +74,6 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
 import qualified SAWScript.Crucible.MIR.MethodSpecIR ()
 import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
-import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.MGU (instantiate)
@@ -118,6 +117,7 @@ import qualified Lang.Crucible.JVM as CJ
 
 import           Lang.Crucible.Utils.StateContT
 import           Lang.Crucible.LLVM.ArraySizeProfile
+import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
 import           Mir.Generator
 import           Mir.Intrinsics (MIR)
@@ -373,7 +373,7 @@ showsPrecValue opts nenv p v =
     VLLVMSkeletonState _ -> showString "<<Skeleton state>>"
     VLLVMFunctionProfile _ -> showString "<<Array sizes for function>>"
     VJavaType {} -> showString "<<Java type>>"
-    VLLVMType t -> showString (show (LLVM.ppType t))
+    VLLVMType t -> showString (show (Crucible.LLVM.ppType t))
     VMIRType t -> showString (show (PP.pretty t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
