@@ -14,13 +14,15 @@ import SAWScript.AutoMatch.Util
 import Data.Map   (Map)
 import Data.Set   (Set)
 
-import Control.Monad
+import Control.Monad (forM_, when)
+import Control.Monad.Fix (fix)
 import Control.Monad.Free
-import Control.Monad.Trans
-import Control.Monad.Writer
-import Control.Monad.State
-import Control.Monad.Reader
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (ReaderT(..))
+import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
+import Control.Monad.Trans (MonadTrans(..))
 import Control.Monad.Trans.Maybe
+import Control.Monad.Writer (MonadWriter(..), WriterT(..))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif

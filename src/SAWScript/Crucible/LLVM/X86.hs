@@ -36,12 +36,15 @@ import Control.Lens.TH (makeLenses)
 import System.IO (stdout)
 import Control.Exception (throw)
 import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
-import Control.Monad.State
-import Control.Monad.Reader (runReaderT)
+import Control.Monad (forM, forM_, unless, when, zipWithM)
 import Control.Monad.Catch (MonadThrow)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.State (MonadState, StateT(..), execStateT, gets)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
+import Data.Functor (void)
 import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
@@ -75,6 +78,7 @@ import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Panic (panic)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -524,19 +528,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  let loc = MS.conditionLoc md
                  C.addAssumption bak
                    (C.GenericAssumption loc reason expr)
-          r <- C.callCFG cfg . C.RegMap . singleton . C.RegEntry macawStructRepr $ preState ^. x86Regs
-          globals' <- C.readGlobals
-          mem' <- C.readGlobal mvar
-          let finalState = preState
-                { _x86Mem = mem'
-                , _x86Regs = C.regValue r
-                , _x86CrucibleContext = cc & ccLLVMGlobals .~ globals'
-                }
-          liftIO $ printOutLn opts Info
-            "Examining specification to determine postconditions"
-          liftIO . void . runX86Sim finalState $
-            assertPost globals' env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
-          pure $ C.regValue r
+          C.regValue <$>
+            (C.callCFG cfg . C.RegMap . singleton . C.RegEntry macawStructRepr $ preState ^. x86Regs)
 
       liftIO $ printOutLn opts Info "Simulating function"
 
@@ -568,18 +561,28 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
-      liftIO $ C.executeCrucible execFeatures initial >>= \case
-        C.FinishedResult{} -> pure ()
+      finalState <- liftIO $ C.executeCrucible execFeatures initial >>= \case
+        C.FinishedResult _ pr -> do
+          gp <- getGlobalPair opts pr
+          let mem' = lookupMemGlobal mvar $ gp ^. C.gpGlobals
+          return $ preState
+            { _x86Mem = mem'
+            , _x86Regs = C.regValue $ gp ^. C.gpValue
+            , _x86CrucibleContext = cc & ccLLVMGlobals .~ (gp ^. C.gpGlobals)
+            }
         C.AbortedResult _ ar -> do
-          printOutLn opts Warn "Warning: function never returns"
-          print $ Common.ppAbortedResult
-            ( \gp ->
-                case C.lookupGlobal mvar $ gp ^. C.gpGlobals of
-                  Nothing -> "LLVM memory global variable not initialized"
-                  Just mem -> C.LLVM.ppMem $ C.LLVM.memImplHeap mem
-            )
-            ar
+          let resultDoc = Common.ppAbortedResult
+                (\gp ->  C.LLVM.ppMem $ C.LLVM.memImplHeap $ lookupMemGlobal mvar $ gp ^. C.gpGlobals)
+                ar
+          fail $ unlines [ "Execution failed: function never returns."
+                         , show resultDoc
+                         ]
         C.TimeoutResult{} -> fail "Execution timed out"
+
+      liftIO $ printOutLn opts Info
+        "Examining specification to determine postconditions"
+      liftIO $ void $ runX86Sim finalState $
+        assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
       (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
 
@@ -958,10 +961,13 @@ setupMemory ::
 setupMemory globsyms balign = do
   setupGlobals globsyms
 
-  -- Allocate a reasonable amount of stack (4 KiB + 0b10000 for least valid alignment + 1 qword for IP)
-  allocateStack (4096 + 16) balign
-
   ms <- use x86MethodSpec
+
+  -- Allocate a reasonable amount of stack (4 KiB + 1 qword for the previous
+  -- %rbp value + 1 qword for the return address + 1 qword for each stack
+  -- argument)
+  let argsStackSize = fromIntegral $ 8 * (length $ Prelude.drop (length argRegs) $ Map.elems $ ms ^. MS.csArgBindings)
+  allocateStack (4096 + 16 + argsStackSize) balign
 
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
@@ -972,6 +978,8 @@ setupMemory globsyms balign = do
   mapM_ (assumePointsTo env tyenv nameEnv) $ ms ^. MS.csPreState . MS.csPointsTos
 
   setArgs env tyenv nameEnv . fmap snd . Map.elems $ ms ^. MS.csArgBindings
+
+  pushFreshReturnAddress
 
   pure env
 
@@ -1006,8 +1014,7 @@ setupGlobals globsyms = do
   mem' <- liftIO $ foldlM writeGlobal mem globs
   x86Mem .= mem'
 
--- | Allocate memory for the stack, and pushes a fresh pointer as the return
--- address.
+-- | Allocate memory for the stack.
 allocateStack ::
   X86Constraints =>
   Integer {- ^ Stack size in bytes -} ->
@@ -1018,17 +1025,44 @@ allocateStack szInt balign = do
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
-  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
-  (base, mem') <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt
+  (base, finalMem) <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak finalMem base sz
+  x86Mem .= finalMem
+  finalRegs <- setReg Macaw.RSP ptr regs
+  x86Regs .= finalRegs
+
+-- | Push a fresh pointer as the return address.
+pushFreshReturnAddress ::
+  X86Constraints =>
+  X86Sim ()
+pushFreshReturnAddress = do
+  SomeOnlineBackend bak <- use x86Backend
+  sym <- use x86Sym
+  mem <- use x86Mem
+  regs <- use x86Regs
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
-  writeAlign <- integerToAlignment defaultStackBaseAlign
-  finalMem <- liftIO $ C.LLVM.doStore bak mem' ptr
+  rsp <- getReg Macaw.RSP regs
+
+  -- x86-64 System V ABI specifies that: "In other words, the stack needs to be
+  -- 16 (32 or 64) byte aligned immediately before the call instruction is
+  -- executed. Once control has been transferred to the function entry point,
+  -- i.e. immediately after the return address has been pushed, %rsp points to
+  -- the return address, and the value of (%rsp + 8) is a multiple of 16 (32 or
+  -- 64)."
+  stackAlign <- integerToAlignment defaultStackBaseAlign
+  is_aligned <- liftIO $ C.LLVM.isAligned sym (knownNat @64) rsp stackAlign
+  when (W4.asConstantPred is_aligned /= Just True) $
+    panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["%rsp is not 16 byte aligned before the call instruction is executed."]
+
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
+  let writeAlign = C.LLVM.noAlignment
+  finalMem <- liftIO $ C.LLVM.doStore bak mem ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
     (C.LLVM.bitvectorType 8) writeAlign fresh
   x86Mem .= finalMem
@@ -1150,37 +1184,62 @@ setArgs ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   [MS.SetupValue LLVM] {- ^ Arguments passed to llvm_execute_func -} ->
   X86Sim ()
-setArgs env tyenv nameEnv args
-  | length args > length argRegs = throwX86 "More arguments than would fit into general-purpose registers"
-  | otherwise = do
-      sym <- use x86Sym
-      cc <- use x86CrucibleContext
-      mem <- use x86Mem
-      let
-        setRegSetupValue rs (reg, sval) =
-          exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
-            ty | C.LLVM.isPointerMemType ty -> do
+setArgs env tyenv nameEnv args = do
+  SomeOnlineBackend bak <- use x86Backend
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  let
+    setRegSetupValue rs (reg, sval) =
+      exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+        ty | C.LLVM.isPointerMemType ty -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType 64 -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType _ -> do
+          C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
+          case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
+            Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
+            Just LeqProof -> do
+              off' <- W4.bvZext sym (knownNat @64) off
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                =<< resolveSetupVal cc mem env tyenv nameEnv sval
+                $ C.LLVM.LLVMValInt base off'
               setReg reg val rs
-            C.LLVM.IntType 64 -> do
-              val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                =<< resolveSetupVal cc mem env tyenv nameEnv sval
-              setReg reg val rs
-            C.LLVM.IntType _ -> do
-              C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
-              case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
-                Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
-                Just LeqProof -> do
-                  off' <- W4.bvZext sym (knownNat @64) off
-                  val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-                    $ C.LLVM.LLVMValInt base off'
-                  setReg reg val rs
-            _ -> fail "Argument does not fit into a single general-purpose register"
-      regs <- use x86Regs
-      newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
-      x86Regs .= newRegs
-  where argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
+        _ -> fail "Argument does not fit into a single general-purpose register"
+  regs <- use x86Regs
+  newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
+  x86Regs .= newRegs
+
+  -- x86-64 System V ABI specifies that: "Once registers are assigned, the
+  -- arguments passed in memory are pushed on the stack in reversed
+  -- (right-to-left21) order."
+  let stackArgs = reverse $ Prelude.drop (length argRegs) args
+  forM_ stackArgs $ \sval -> do
+    liftIO $ exceptToFail (typeOfSetupValue cc tyenv nameEnv sval) >>= \case
+      C.LLVM.PtrType _ -> pure ()
+      C.LLVM.IntType 64 -> pure ()
+      _ -> fail "Stack argument is not a 64 bit integer."
+
+    regs' <- use x86Regs
+    rsp <- getReg Macaw.RSP regs'
+    rsp' <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
+    newRegs' <- setReg Macaw.RSP rsp' regs'
+    x86Regs .= newRegs'
+
+    val <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+      =<< resolveSetupVal cc mem env tyenv nameEnv sval
+
+    mem' <- use x86Mem
+    mem'' <- liftIO $
+      C.LLVM.doStore bak mem' rsp' (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment val
+    x86Mem .= mem''
+
+argRegs :: [Macaw.X86Reg (Macaw.BVType 64)]
+argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 
 --------------------------------------------------------------------------------
 -- ** Postcondition
@@ -1188,13 +1247,12 @@ setArgs env tyenv nameEnv args
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
   X86Constraints =>
-  C.SymGlobalState Sym ->
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
   IORef MetadataMap {- ^ metadata map -} ->
   X86Sim ()
-assertPost globals env premem preregs mdMap = do
+assertPost env premem preregs mdMap = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   opts <- use x86Options
@@ -1205,6 +1263,7 @@ assertPost globals env premem preregs mdMap = do
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
     nameEnv = MS.csTypeNames ms
+    globals = cc ^. ccLLVMGlobals
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad bak premem prersp (C.LLVM.bitvectorType 8)
@@ -1331,15 +1390,14 @@ checkGoals ::
   IORef MetadataMap {- ^ metadata map -} ->
   TopLevel (SolverStats, [MS.VCStats])
 checkGoals bak opts nm sc tactic mdMap = do
-  gs <- liftIO $ getGoals (SomeBackend bak) mdMap
+  gs <- liftIO $ getPoststateObligations sc bak mdMap
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
     , " goals"
     ]
-  outs <- forM (zip [0..] gs) $ \(n, g) -> do
-    term <- liftIO $ gGoal sc g
-    let md = gMd g
+  outs <- forM (zip [0..] gs) $ \(n, (msg, md, term)) -> do
+    g <- liftIO $ boolToProp sc [] term
     let ploc = MS.conditionLoc md
     let gloc = (unwords [show (W4.plSourceLoc ploc)
                        ,"in"
@@ -1351,24 +1409,24 @@ checkGoals bak opts nm sc tactic mdMap = do
                     , goalType = MS.conditionType md
                     , goalName = nm
                     , goalLoc  = gloc
-                    , goalDesc = show $ gMessage g
-                    , goalSequent = propToSequent term
+                    , goalDesc = msg
+                    , goalSequent = propToSequent g
                     , goalTags = MS.conditionTags md
                     }
-    res <- runProofScript tactic term proofgoal (Just (gLoc g))
+    res <- runProofScript tactic g proofgoal (Just ploc)
              (Text.unwords
-              ["X86 verification condition", Text.pack (show n), Text.pack (show (gMessage g))])
+              ["X86 verification condition", Text.pack (show n), Text.pack msg])
              False -- do not record this theorem in the database
              False -- TODO! useSequentGoals
     case res of
       ValidProof stats thm ->
         return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
       UnfinishedProof pst -> do
-        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info $ unwords ["Subgoal failed:", msg]
         printOutLnTop Info (show (psStats pst))
         throwTopLevel $ "Proof failed: " ++ show (length (psGoals pst)) ++ " goals remaining."
       InvalidProof stats vals _pst -> do
-        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info $ unwords ["Subgoal failed:", msg]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW

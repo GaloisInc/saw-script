@@ -52,6 +52,8 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import SAWScript.Crucible.MIR.MethodSpecIR
+import SAWScript.Crucible.MIR.TypeShape
 
 import Mir.DefId
 import Mir.Generator (CollectionState, collection)
@@ -61,7 +63,6 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
-import Mir.Compositional.MethodSpec
 import Mir.Compositional.Override (MethodSpec(..))
 
 
@@ -246,7 +247,9 @@ addArg tpr argRef msb =
     sv <- regToSetup bak Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
     void $ forNewRefs Pre $ \fr -> do
-        let len = fr ^. frAllocSpec . maLen
+        let allocSpec = fr ^. frAllocSpec
+        let len = allocSpec ^. maLen
+        let md = allocSpec ^. maConditionMetadata
         svPairs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
@@ -266,8 +269,8 @@ addArg tpr argRef msb =
             return (sv, sv')
 
         let (svs, svs') = unzip svPairs
-        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs :)
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs' :)
+        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs' :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
   where
@@ -295,7 +298,9 @@ setReturn tpr argRef msb =
     sv <- regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
     void $ forNewRefs Post $ \fr -> do
-        let len = fr ^. frAllocSpec . maLen
+        let allocSpec = fr ^. frAllocSpec
+        let len = allocSpec ^. maLen
+        let md = allocSpec ^. maConditionMetadata
         svs <- forM [0 .. len - 1] $ \i -> do
             -- Record a points-to entry
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
@@ -304,7 +309,7 @@ setReturn tpr argRef msb =
             let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
             regToSetup bak Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo md (MS.SetupVar (fr ^. frAlloc)) svs :)
 
     msbSpec . MS.csRetValue .= Just sv
   where
@@ -615,17 +620,20 @@ substMethodSpec sc sm ms = do
         sv' <- goSetupValue sv
         return (ty, sv')
 
-    goPointsTo (MirPointsTo alloc svs) = MirPointsTo alloc <$> mapM goSetupValue svs
+    goPointsTo (MirPointsTo md alloc svs) = MirPointsTo md alloc <$> mapM goSetupValue svs
 
     goSetupValue sv = case sv of
         MS.SetupVar _ -> return sv
         MS.SetupTerm tt -> MS.SetupTerm <$> goTypedTerm tt
         MS.SetupNull _ -> return sv
-        MS.SetupStruct b packed svs -> MS.SetupStruct b packed <$> mapM goSetupValue svs
+        MS.SetupStruct b svs -> MS.SetupStruct b <$> mapM goSetupValue svs
+        MS.SetupTuple b svs -> MS.SetupTuple b <$> mapM goSetupValue svs
+        MS.SetupSlice slice -> MS.SetupSlice <$> goSetupSlice slice
+        MS.SetupEnum enum_ -> MS.SetupEnum <$> goSetupEnum enum_
         MS.SetupArray b svs -> MS.SetupArray b <$> mapM goSetupValue svs
         MS.SetupElem b sv idx -> MS.SetupElem b <$> goSetupValue sv <*> pure idx
         MS.SetupField b sv name -> MS.SetupField b <$> goSetupValue sv <*> pure name
-        MS.SetupCast v _ _ -> case v of {}
+        MS.SetupCast v _ -> case v of {}
         MS.SetupUnion v _ _ -> case v of {}
         MS.SetupGlobal _ _ -> return sv
         MS.SetupGlobalInitializer _ _ -> return sv
@@ -634,8 +642,24 @@ substMethodSpec sc sm ms = do
         MS.SetupCond_Equal loc <$> goSetupValue sv1 <*> goSetupValue sv2
     goSetupCondition (MS.SetupCond_Pred loc tt) =
         MS.SetupCond_Pred loc <$> goTypedTerm tt
-    goSetupCondition (MS.SetupCond_Ghost b loc gg tt) =
-        MS.SetupCond_Ghost b loc gg <$> goTypedTerm tt
+    goSetupCondition (MS.SetupCond_Ghost loc gg tt) =
+        MS.SetupCond_Ghost loc gg <$> goTypedTerm tt
+
+    goSetupEnum (MirSetupEnumVariant adt variant variantIdx svs) =
+      MirSetupEnumVariant adt variant variantIdx <$>
+      mapM goSetupValue svs
+    goSetupEnum (MirSetupEnumSymbolic adt discr variants) =
+      MirSetupEnumSymbolic adt <$>
+      goSetupValue discr <*>
+      mapM (mapM goSetupValue) variants
+
+    goSetupSlice (MirSetupSliceRaw ref len) =
+      MirSetupSliceRaw <$> goSetupValue ref <*> goSetupValue len
+    goSetupSlice (MirSetupSlice arr) =
+      MirSetupSlice <$> goSetupValue arr
+    goSetupSlice (MirSetupSliceRange arr start end) = do
+      arr' <- goSetupValue arr
+      pure $ MirSetupSliceRange arr' start end
 
     goTypedTerm tt = do
         term' <- goTerm $ SAW.ttTerm tt
@@ -663,30 +687,38 @@ regToSetup bak p eval shp rv = go shp rv
 
     go :: forall tp. TypeShape tp -> RegValue sym tp ->
         BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
-    go (UnitShape _) () = return $ MS.SetupStruct () False []
+    go (UnitShape _) () = return $ MS.SetupTuple () []
     go (PrimShape _ btpr) expr = do
         -- Record all vars used in `expr`
         cache <- use msbVisitCache
         visitExprVars cache expr $ \var -> do
             msbPrePost p . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ _ flds) rvs = MS.SetupStruct () False <$> goFields flds rvs
-    go (ArrayShape _ _ shp) vec = do
+    go (TupleShape _ _ flds) rvs = MS.SetupTuple () <$> goFields flds rvs
+    go (ArrayShape _ elemTy shp) vec = do
         svs <- case vec of
             MirVector_Vector v -> mapM (go shp) (toList v)
             MirVector_PartialVector v -> forM (toList v) $ \p -> do
                 rv <- liftIO $ readMaybeType sym "vector element" (shapeType shp) p
                 go shp rv
             MirVector_Array _ -> error $ "regToSetup: MirVector_Array NYI"
-        return $ MS.SetupArray () svs
-    go (StructShape _ _ flds) (AnyValue tpr rvs)
+        return $ MS.SetupArray elemTy svs
+    go (StructShape tyAdt _ flds) (AnyValue tpr rvs)
       | Just Refl <- testEquality tpr shpTpr =
-        MS.SetupStruct () False <$> goFields flds rvs
+        case tyAdt of
+          M.TyAdt adtName _ _ -> do
+            mbAdt <- use $ msbCollection . M.adts . at adtName
+            case mbAdt of
+              Just adt -> MS.SetupStruct adt <$> goFields flds rvs
+              Nothing -> error $ "regToSetup: Could not find ADT named: "
+                              ++ show adtName
+          _ -> error $ "regToSetup: Found non-ADT type for struct: "
+                    ++ show (PP.pretty tyAdt)
       | otherwise = error $ "regToSetup: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv = go shp rv
-    go (RefShape refTy ty' tpr) ref = do
+    go (RefShape refTy ty' _ tpr) ref = do
         partIdxLen <- lift $ mirRef_indexAndLenSim ref
         optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
         let (optIdx, optLen) =
@@ -714,6 +746,13 @@ regToSetup bak p eval shp rv = go shp rv
         alloc <- refToAlloc bak p mutbl ty' tpr startRef len
         let offsetSv idx sv = if idx == 0 then sv else MS.SetupElem () sv idx
         return $ offsetSv idx $ MS.SetupVar alloc
+    go (SliceShape _ ty mutbl tpr) (Empty :> RV refRV :> RV lenRV) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        refSV <- go refShp refRV
+        lenSV <- go lenShp lenRV
+        pure $ MS.SetupSlice $ MirSetupSliceRaw refSV lenSV
+    go (EnumShape _ _ _ _ _) _ =
+      error "Enums not currently supported in overrides"
     go (FnPtrShape _ _ _) _ =
         error "Function pointers not currently supported in overrides"
 
@@ -742,7 +781,15 @@ refToAlloc bak p mutbl ty tpr ref len = do
         Nothing -> do
             alloc <- use msbNextAlloc
             msbNextAlloc %= MS.nextAllocIndex
-            let fr = FoundRef alloc (MirAllocSpec tpr mutbl ty len) ref
+            let sym = backendGetSym bak
+            loc <- liftIO $ W4.getCurrentProgramLoc sym
+            let md = MS.ConditionMetadata
+                     { MS.conditionLoc = loc
+                     , MS.conditionTags = mempty
+                     , MS.conditionType = "reference-to-allocation conversion"
+                     , MS.conditionContext = ""
+                     }
+            let fr = FoundRef alloc (MirAllocSpec md tpr mutbl ty len) ref
             msbPrePost p . seRefs %= (Seq.|> Some fr)
             msbPrePost p . seNewRefs %= (Seq.|> Some fr)
             return alloc

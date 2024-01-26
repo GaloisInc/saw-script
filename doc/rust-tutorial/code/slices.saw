@@ -1,0 +1,45 @@
+enable_experimental;
+
+m <- mir_load_module "slices.linked-mir.json";
+
+let sum_of_prefix_spec1 = do {
+  a_ref <- mir_alloc (mir_array 2 mir_u32);
+  a_val <- mir_fresh_var "a" (mir_array 2 mir_u32);
+  mir_points_to a_ref (mir_term a_val);
+
+  let s = mir_slice_value a_ref;
+
+  mir_execute_func [s];
+
+  mir_return (mir_term {{ (a_val @ 0) + (a_val @ 1) }});
+};
+
+mir_verify m "slices::sum_of_prefix" [] false sum_of_prefix_spec1 z3;
+
+let sum_of_prefix_spec2 = do {
+  a_ref <- mir_alloc (mir_array 5 mir_u32);
+  a_val <- mir_fresh_var "a" (mir_array 5 mir_u32);
+  mir_points_to a_ref (mir_term a_val);
+
+  let s = mir_slice_value a_ref;
+
+  mir_execute_func [s];
+
+  mir_return (mir_term {{ (a_val @ 0) + (a_val @ 1) }});
+};
+
+mir_verify m "slices::sum_of_prefix" [] false sum_of_prefix_spec2 z3;
+
+let sum_of_prefix_spec3 = do {
+  a_ref <- mir_alloc (mir_array 5 mir_u32);
+  a_val <- mir_fresh_var "a" (mir_array 5 mir_u32);
+  mir_points_to a_ref (mir_term a_val);
+
+  let s = mir_slice_range_value a_ref 0 2;
+
+  mir_execute_func [s];
+
+  mir_return (mir_term {{ (a_val @ 0) + (a_val @ 1) }});
+};
+
+mir_verify m "slices::sum_of_prefix" [] false sum_of_prefix_spec3 z3;

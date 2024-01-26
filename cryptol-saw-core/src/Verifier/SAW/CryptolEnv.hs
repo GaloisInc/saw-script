@@ -58,7 +58,10 @@ import System.Environment (lookupEnv)
 import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
-import Verifier.SAW.SharedTerm (SharedContext, Term, incVars)
+import Verifier.SAW.Cryptol.Panic
+import Verifier.SAW.Name (ecName)
+import Verifier.SAW.Recognizer (asConstant)
+import Verifier.SAW.SharedTerm (NameInfo, SharedContext, Term, incVars)
 
 import qualified Verifier.SAW.Cryptol as C
 
@@ -68,6 +71,7 @@ import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
+import qualified Cryptol.TypeCheck.FFI.FFIType as T
 import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Kind as TK
@@ -131,6 +135,8 @@ data CryptolEnv = CryptolEnv
   , eTermEnv    :: Map T.Name Term      -- ^ SAWCore terms for *all* names in scope
   , ePrims      :: Map C.PrimIdent Term -- ^ SAWCore terms for primitives
   , ePrimTypes  :: Map C.PrimIdent Term -- ^ SAWCore terms for primitive type names
+  , eFFITypes   :: Map NameInfo T.FFIFunType
+    -- ^ FFI info for SAWCore names of Cryptol foreign functions
   }
 
 
@@ -230,6 +236,7 @@ initCryptolEnv sc = do
     , eTermEnv    = termEnv
     , ePrims      = Map.empty
     , ePrimTypes  = Map.empty
+    , eFFITypes   = Map.empty
     }
 
 -- Parse -----------------------------------------------------------------------
@@ -424,9 +431,10 @@ loadCryptolModule sc primOpts env path = do
                 types
                 newTermEnv
 
-  let env' = env { eModuleEnv = modEnv''
-                 , eTermEnv = newTermEnv
-                 }
+  let env' = updateFFITypes m
+               env { eModuleEnv = modEnv''
+                   , eTermEnv = newTermEnv
+                   }
 
   let sm' = Map.filterWithKey
               (\k _ -> Set.member k (MEx.exported C.NSType (T.mExports m)))
@@ -434,7 +442,22 @@ loadCryptolModule sc primOpts env path = do
 
   return (CryptolModule sm' tm', env')
 
-
+updateFFITypes :: T.Module -> CryptolEnv -> CryptolEnv
+updateFFITypes m env = env { eFFITypes = eFFITypes' }
+  where
+  eFFITypes' = foldr
+    (\(nm, ty) -> Map.insert (getNameInfo nm) ty)
+    (eFFITypes env)
+    (T.findForeignDecls m)
+  getNameInfo nm =
+    case Map.lookup nm (eTermEnv env) of
+      Just tm ->
+        case asConstant tm of
+          Just (ec, _) -> ecName ec
+          Nothing -> panic "updateFFITypes"
+            ["SAWCore term of Cryptol name is not Constant", show nm, show tm]
+      Nothing -> panic "updateFFITypes"
+        ["Cannot find foreign function in term env", show nm]
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
@@ -503,12 +526,13 @@ importModule sc env src as vis imps = do
                                                             cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
-  return
-    env { eImports   = (vis, P.Import (T.mName m) as imps Nothing)
-                     : eImports env
-        , eModuleEnv = modEnv'
-        , eTermEnv   = newTermEnv
-        }
+  return $
+    updateFFITypes m
+      env { eImports   = (vis, P.Import (T.mName m) as imps Nothing)
+                       : eImports env
+          , eModuleEnv = modEnv'
+          , eTermEnv   = newTermEnv
+          }
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
@@ -645,6 +669,7 @@ parseDecls sc env input = do
     -- Create a Module to contain the declarations
     let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
                            , P.mDef  = P.NormalModule rdecls
+                           , P.mInScope = mempty
                            }
 
     -- Infer types
@@ -746,16 +771,21 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
-  mapM_ (print . pp) (map suppressDefaulting ws)
+  mapM_ (print . pp) (concatMap suppressDefaulting ws)
   case res of
     Right (a, me) -> return (a, me)
     Left err      -> fail $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
   where
-    suppressDefaulting :: MM.ModuleWarning -> MM.ModuleWarning
+    -- If all warnings are about type defaults, pretend there are no warnings at
+    -- all to avoid displaying an empty warning container.
+    suppressDefaulting :: MM.ModuleWarning -> [MM.ModuleWarning]
     suppressDefaulting w =
       case w of
-        MM.TypeCheckWarnings nm xs -> MM.TypeCheckWarnings nm (filter (notDefaulting . snd) xs)
-        MM.RenamerWarnings xs -> MM.RenamerWarnings xs
+        MM.RenamerWarnings xs -> [MM.RenamerWarnings xs]
+        MM.TypeCheckWarnings nm xs ->
+          case filter (notDefaulting . snd) xs of
+            [] -> []
+            xs' -> [MM.TypeCheckWarnings nm xs']
 
     notDefaulting :: TE.Warning -> Bool
     notDefaulting (TE.DefaultingTo {}) = False

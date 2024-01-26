@@ -30,12 +30,14 @@ Portability : portable
 module Verifier.SAW.Translation.Coq.Term where
 
 import           Control.Lens                                  (makeLenses, over, set, to, view)
+import           Control.Monad                                 (forM)
 import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
-import           Control.Monad.Reader                          hiding (fail, fix)
-import           Control.Monad.State                           hiding (fail, fix, state)
+import           Control.Monad.Reader                          (MonadReader(ask, local), asks)
+import           Control.Monad.State                           (MonadState(get), modify)
 import           Data.Char                                     (isDigit)
-import qualified Data.IntMap                                   as IntMap
+import           Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict                            as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Map                                      as Map
@@ -63,8 +65,34 @@ traceTerm :: String -> Term -> a -> a
 traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 -}
 
-newtype TranslationReader = TranslationReader
+-- | A Coq identifier used for sharing subterms through let-bindings, annotated
+-- with a 'Bool' flag indicating whether the shared subterm is closed, i.e., has
+-- no free variables
+data SharedName = SharedName { sharedNameIdent :: Coq.Ident,
+                               sharedNameIsClosed :: Bool }
+                deriving Show
+
+-- | The read-only state for translating terms
+data TranslationReader = TranslationReader
   { _currentModule  :: Maybe ModuleName
+    -- ^ The current Coq module for the translation
+
+  , _localEnvironment  :: [Coq.Ident]
+    -- ^ The list of Coq identifiers associated with the current SAW core
+    -- Bruijn-indexed local variables in scope, innermost (index 0) first
+
+  , _unavailableIdents :: Set.Set Coq.Ident
+    -- ^ The set of Coq identifiers that are either reserved or already in use.
+    -- To avoid shadowing, fresh identifiers should be chosen to be disjoint
+    -- from this set.
+
+  , _sharedNames :: IntMap SharedName
+    -- ^ Index of identifiers for repeated subterms that have been lifted out
+    -- into a let expression
+
+  , _nextSharedName :: Coq.Ident
+    -- ^ The next available name to be used for a let-bound shared
+    -- sub-expression
   }
   deriving (Show)
 
@@ -73,43 +101,114 @@ makeLenses ''TranslationReader
 data TranslationState = TranslationState
 
   { _globalDeclarations :: [String]
-  -- ^ Some Cryptol terms seem to capture the name and body of some functions
-  -- they use (whether from the Cryptol prelude, or previously defined in the
-  -- same file).  We want to translate those exactly once, so we need to keep
-  -- track of which ones have already been translated.
+    -- ^ Some Cryptol terms seem to capture the name and body of some functions
+    -- they use (whether from the Cryptol prelude, or previously defined in the
+    -- same file). We want to translate those exactly once, so we need to keep
+    -- track of which ones have already been translated.
 
   , _topLevelDeclarations :: [Coq.Decl]
-  -- ^ Because some terms capture their dependencies, translating one term may
-  -- result in multiple declarations: one for the term itself, but also zero or
-  -- many for its dependencies.  We store all of those in this, so that a caller
-  -- of the translation may retrieve all the declarations needed to translate
-  -- the term.  The translation function itself will return only the declaration
-  -- for the term being translated.
-
-  , _localEnvironment  :: [Coq.Ident]
-  -- ^ The list of Coq identifiers for de Bruijn-indexed local
-  -- variables, innermost (index 0) first.
-
-  , _unavailableIdents :: Set.Set Coq.Ident
-  -- ^ The set of Coq identifiers that are either reserved or already
-  -- in use. To avoid shadowing, fresh identifiers should be chosen to
-  -- be disjoint from this set.
-
-  , _sharedNames :: IntMap.IntMap Coq.Ident
-  -- ^ Index of identifiers for repeated subterms that have been
-  -- lifted out into a let expression.
-
-  , _nextSharedName :: Coq.Ident
-  -- ^ The next available name to be used for a let-bound shared
-  -- sub-expression.
+    -- ^ Because some terms capture their dependencies, translating one term may
+    -- result in multiple declarations: one for the term itself, but also zero
+    -- or many for its dependencies. We store all of those in this, so that a
+    -- caller of the translation may retrieve all the declarations needed to
+    -- translate the term. The translation function itself will return only the
+    -- declaration for the term being translated.
 
   }
   deriving (Show)
 
 makeLenses ''TranslationState
 
+-- | The constraint stating that 'm' can be used for term translation. This
+-- requires that it have reader effects for 'TranslationReader' and state
+-- effects for 'TranslationState'.
 type TermTranslationMonad m =
   TranslationMonad TranslationReader TranslationState m
+
+-- | Get just the 'TranslationReader' component of the reader value
+askTR :: TermTranslationMonad m => m TranslationReader
+askTR = otherConfiguration <$> ask
+
+-- | Modify just the 'TranslationReader' component of the reader value
+localTR :: TermTranslationMonad m =>
+            (TranslationReader -> TranslationReader) -> m a -> m a
+localTR f =
+  local (\r -> r { otherConfiguration = f (otherConfiguration r) })
+
+-- | Take a Coq identifier that ends in a number (i.e., a sequence of digits)
+-- and add 1 to that number, viewing an identifier with no trailing number as
+-- ending in 0
+nextVariant :: Coq.Ident -> Coq.Ident
+nextVariant = reverse . go . reverse
+  where
+    go :: String -> String
+    go (c : cs)
+      | c == '9'  = '0' : go cs
+      | isDigit c = succ c : cs
+    go cs = '1' : cs
+
+-- | Find an fresh, as-yet-unused variant of the given Coq identifier
+freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident
+freshVariant x =
+  do used <- view unavailableIdents <$> askTR
+     let ident0 = x
+     let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
+     return $ findVariant ident0
+
+-- | Locally mark a Coq identifier as being used in the translation during a
+-- translation computation, so that computation does not shadow it
+withUsedCoqIdent :: TermTranslationMonad m => Coq.Ident -> m a -> m a
+withUsedCoqIdent ident m =
+  localTR (over unavailableIdents (Set.insert ident)) m
+
+-- | Translate a local name from a saw-core binder into a fresh Coq identifier
+translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
+translateLocalIdent x = freshVariant (escapeIdent (Text.unpack x))
+
+-- | Generate a fresh, unused Coq identifier from a SAW core name and mark it as
+-- unavailable in the supplied translation computation
+withFreshIdent :: TermTranslationMonad m => LocalName -> (Coq.Ident -> m a) ->
+                  m a
+withFreshIdent n f =
+  do n_coq <- translateLocalIdent n
+     withUsedCoqIdent n_coq $ f n_coq
+
+-- | Invalidate all shared subterms that are not closed in a translation
+invalidateOpenSharing :: TermTranslationMonad m => m a -> m a
+invalidateOpenSharing =
+  localTR (over sharedNames $ IntMap.filter sharedNameIsClosed)
+
+-- | Run a translation in a context with one more SAW core variable with the
+-- given name. Pass the corresponding Coq identifier used for this SAW core
+-- variable to the computation in which it is bound. This invalidates all shared
+-- terms that are not closed, since these shared terms now correspond to
+-- different terms (with greater deBruijn indices) that have different
+-- 'TermIndex'es.
+withSAWVar :: TermTranslationMonad m => LocalName -> (Coq.Ident -> m a) -> m a
+withSAWVar n m =
+  invalidateOpenSharing $ withFreshIdent n $ \n_coq ->
+  localTR (over localEnvironment (n_coq :)) $ m n_coq
+
+-- | Find a fresh name generated from 'nextSharedName' to use in place of the
+-- supplied 'Term' with the supplied index, and associate that index with the
+-- fresh name in the 'sharedNames' sharing map. Pass the name that was generated
+-- to the computation.
+withSharedTerm :: TermTranslationMonad m => TermIndex -> Term ->
+                  (Coq.Ident -> m a) -> m a
+withSharedTerm idx t f =
+  do ident <- (view nextSharedName <$> askTR) >>= freshVariant
+     let sh_nm = SharedName ident $ termIsClosed t
+     localTR (set nextSharedName (nextVariant ident) .
+              over sharedNames (IntMap.insert idx sh_nm)) $
+       withUsedCoqIdent ident $ f ident
+
+-- | Use 'withSharedTerm' to mark a list of terms as being shared
+withSharedTerms :: TermTranslationMonad m => [(TermIndex,Term)] ->
+                   ([Coq.Ident] -> m a) -> m a
+withSharedTerms [] f = f []
+withSharedTerms ((idx,t):ts) f =
+  withSharedTerm idx t $ \n -> withSharedTerms ts $ \ns -> f (n:ns)
+
 
 -- | The set of reserved identifiers in Coq, obtained from section
 -- "Gallina Specification Language" of the Coq reference manual.
@@ -149,23 +248,27 @@ getNamesOfAllDeclarations = view allDeclarations <$> get
     allDeclarations =
       to (\ (TranslationState {..}) -> namedDecls _topLevelDeclarations ++ _globalDeclarations)
 
+-- | Run a term translation computation
 runTermTranslationMonad ::
   TranslationConfiguration ->
-  TranslationReader ->
+  Maybe ModuleName ->
   [String] ->
   [Coq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
-runTermTranslationMonad configuration r globalDecls localEnv =
-  runTranslationMonad configuration r
+runTermTranslationMonad configuration mname globalDecls localEnv =
+  runTranslationMonad configuration
+  (TranslationReader {
+      _currentModule = mname
+      , _localEnvironment = localEnv
+      , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
+      , _sharedNames        = IntMap.empty
+      , _nextSharedName     = "var__0" })
   (TranslationState { _globalDeclarations = globalDecls
                     , _topLevelDeclarations  = []
-                    , _localEnvironment   = localEnv
-                    , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
-                    , _sharedNames        = IntMap.empty
-                    , _nextSharedName     = "var__0"
                     })
 
+-- | Return a Coq term for an error computation with the given string message
 errorTermM :: TermTranslationMonad m => String -> m Coq.Term
 errorTermM str = return $ Coq.App (Coq.Var "error") [Coq.StringLit str]
 
@@ -294,13 +397,10 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       --      (ix1 : _) -> ... -> (ixn : _) -> d ps ixs -> sort
       -- to get the type of the recursor, we compute
       --      (ix1 : _) -> ... -> (ixn : _) -> (x:d ps ixs) -> motive ixs x
-      do let (bs, _srt) = asPiList motiveTy
-         (varsT,bindersT) <- unzip <$>
-           (forM bs $ \ (b, bType) -> do
-             bTypeT <- translateTerm bType
-             b' <- freshenAndBindName b
-             return (Coq.Var b', Coq.PiBinder (Just b') bTypeT))
-
+      let (bs, _srt) = asPiList motiveTy in
+      translateBinders bs $ \bndrs ->
+      do let varsT = map (Coq.Var . bindTransIdent) bndrs
+         let bindersT = concat $ map bindTransToPiBinder bndrs
          motiveT <- translateTerm motive
          let bodyT = Coq.App motiveT varsT
          return $ Coq.Pi bindersT bodyT
@@ -388,45 +488,17 @@ asApplyAllRecognizer :: Recognizer Term (Term, [Term])
 asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
--- | Run a translation, but keep some changes to the translation state local to
--- that computation, restoring parts of the original translation state before
--- returning.
-withLocalTranslationState :: TermTranslationMonad m => m a -> m a
-withLocalTranslationState action = do
-  before <- get
-  result <- action
-  after <- get
-  put (TranslationState
-    -- globalDeclarations is **not** restored, because we want to translate each
-    -- global declaration exactly once!
-    { _globalDeclarations = view globalDeclarations after
-    -- topLevelDeclarations is **not** restored, because it accumulates the
-    -- declarations witnessed in a given module so that we can extract it.
-    , _topLevelDeclarations = view topLevelDeclarations after
-    -- localEnvironment **is** restored, because the identifiers added to it
-    -- during translation are local to the term that was being translated.
-    , _localEnvironment = view localEnvironment before
-    -- unavailableIdents **is** restored, because the extra identifiers
-    -- unavailable in the term that was translated are local to it.
-    , _unavailableIdents = view unavailableIdents before
-    -- sharedNames **is** restored, because we are leaving the scope of the
-    -- locally shared names.
-    , _sharedNames = view sharedNames before
-    -- nextSharedName **is** restored, because we are leaving the scope of the
-    -- last names used.
-    , _nextSharedName = view nextSharedName before
-    })
-  return result
-
--- | Run a translation in the top-level translation state
+-- | Run a translation in the top-level translation state with no free SAW
+-- variables and no bound Coq identifiers
 withTopTranslationState :: TermTranslationMonad m => m a -> m a
 withTopTranslationState m =
-  withLocalTranslationState $
-  do modify $ set localEnvironment []
-     modify $ set unavailableIdents reservedIdents
-     modify $ set sharedNames IntMap.empty
-     modify $ set nextSharedName "var__0"
-     m
+  localTR (\r ->
+            TranslationReader {
+              _currentModule     = view currentModule r,
+              _localEnvironment  = [],
+              _unavailableIdents = reservedIdents,
+              _sharedNames       = IntMap.empty,
+              _nextSharedName    = "var__0" }) m
 
 -- | Generate a Coq @Definition@ with a given name, body, and type, using the
 -- lambda-bound variable names for the variables if they are available
@@ -443,85 +515,66 @@ mkDefinition name (Coq.Lambda bs t) (Coq.Pi bs' tp)
     Coq.Definition name bs (Just tp) t
 mkDefinition name t tp = Coq.Definition name [] (Just tp) t
 
--- | Make sure a name is not used in the current environment, adding
--- or incrementing a numeric suffix until we find an unused name. When
--- we get one, add it to the current environment and return it.
-freshenAndBindName :: TermTranslationMonad m => LocalName -> m Coq.Ident
-freshenAndBindName n =
-  do n' <- translateLocalIdent n
-     modify $ over localEnvironment (n' :)
-     pure n'
-
 mkLet :: (Coq.Ident, Coq.Term) -> Coq.Term -> Coq.Term
 mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
 
--- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
--- return a list of explicit 'Binder's, for use representing the bound
--- variables in 'Lambda's, 'Let's, etc.
-translateParams ::
-  TermTranslationMonad m =>
-  [(LocalName, Term)] -> m [Coq.Binder]
-translateParams bs = concat <$> mapM translateParam bs
+-- | The result of translating a SAW core variable binding to Coq, including the
+-- Coq identifier for the variable, the Coq translation of its type, and 0 or
+-- more implicit Coq arguments that apply to the variable
+data BindTrans = BindTrans { bindTransIdent :: Coq.Ident,
+                             bindTransType :: Coq.Type,
+                             bindTransImps :: [(Coq.Ident,Coq.Type)] }
 
--- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
--- 'Binder', for use representing a bound variable in a 'Lambda',
--- 'Let', etc.
-translateParam ::
-  TermTranslationMonad m =>
-  (LocalName, Term) -> m [Coq.Binder]
-translateParam (n, ty) =
-  translateBinder n ty >>= \(n',ty',nhs) ->
-    return $ Coq.Binder n' (Just ty') :
-             map (\(nh,nhty) -> Coq.ImplicitBinder nh (Just nhty)) nhs
+-- | Convert a 'BindTrans' to a list of Coq term-level binders
+bindTransToBinder :: BindTrans -> [Coq.Binder]
+bindTransToBinder (BindTrans {..}) =
+  Coq.Binder bindTransIdent (Just bindTransType) :
+  map (\(n,ty) -> Coq.ImplicitBinder n (Just ty)) bindTransImps
 
--- | Given a list of 'LocalName's and their corresponding types (as 'Term's)
--- representing argument types and a 'Term' representing the return type,
--- return the resulting 'Pi', with additional implicit arguments added after
--- each instance of @isort@, @qsort@, etc.
-translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
-translatePi binders body = withLocalTranslationState $ do
-  bindersT <- concat <$> mapM translatePiBinder binders
-  bodyT <- translateTermLet body
-  return $ Coq.Pi bindersT bodyT
+-- | Convert a 'BindTrans' to a list of Coq type-level pi-abstraction binders
+bindTransToPiBinder :: BindTrans -> [Coq.PiBinder]
+bindTransToPiBinder (BindTrans { .. }) =
+  case bindTransImps of
+    [] | bindTransIdent == "_" -> [Coq.PiBinder Nothing bindTransType]
+    [] -> [Coq.PiBinder (Just bindTransIdent) bindTransType]
+    _ ->
+      Coq.PiBinder (Just bindTransIdent) bindTransType :
+      map (\(n,ty) -> Coq.PiImplicitBinder (Just n) ty) bindTransImps
 
--- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
--- 'PiBinder' followed by zero or more implicit 'PiBinder's representing
--- additonal implicit typeclass arguments, added if the given type is @isort@,
--- @qsort@, etc.
-translatePiBinder ::
-  TermTranslationMonad m => (LocalName, Term) -> m [Coq.PiBinder]
-translatePiBinder (n, ty) =
-  translateBinder n ty >>= \case
-    (n',ty',[])
-      | n == "_"  -> return [Coq.PiBinder Nothing ty']
-      | otherwise -> return [Coq.PiBinder (Just n') ty']
-    (n',ty',nhs) ->
-      return $ Coq.PiBinder (Just n') ty' :
-               map (\(nh,nhty) -> Coq.PiImplicitBinder (Just nh) nhty) nhs
-
--- | Given a 'LocalName' and its type (as a 'Term'), return the translation of
--- the 'LocalName' as an 'Ident', the translation of the type as a 'Type',
--- and zero or more additional 'Ident's and 'Type's representing additonal
--- implicit typeclass arguments, added if the given type is @isort@, etc.
-translateBinder ::
-  TermTranslationMonad m =>
-  LocalName ->
-  Term ->
-  m (Coq.Ident,Coq.Type,[(Coq.Ident,Coq.Type)])
-translateBinder n ty@(asPiList -> (args, asSortWithFlags -> mb_sort)) =
+-- | Given a 'LocalName' and its type (as a 'Term'), translate the 'LocalName'
+-- to a Coq identifier, translate the type to a Coq term, and generate zero or
+-- more additional 'Ident's and 'Type's representing additonal implicit
+-- typeclass arguments, added if the given type is @isort@, etc. Pass all of
+-- this information to the supplied computation, in which the SAW core variable
+-- is bound to its Coq identifier.
+translateBinder :: TermTranslationMonad m => LocalName -> Term ->
+                   (BindTrans -> m a) -> m a
+translateBinder n ty@(asPiList -> (args, pi_body)) f =
   do ty' <- translateTerm ty
-     n' <- freshenAndBindName n
-     let flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
+     let mb_sort = asSortWithFlags pi_body
+         flagValues = sortFlagsToList $ maybe noFlags snd mb_sort
          flagLocalNames = [("Inh", "SAWCoreScaffolding.Inhabited"),
                            ("QT", "QuantType")]
-     nhs <- forM (zip flagValues flagLocalNames) $ \(fi,(prefix,tc)) ->
-       if not fi then return []
-       else do nhty <- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')
-               nh <- translateLocalIdent (prefix <> "_" <> n)
-               return [(nh,nhty)]
-     return (n',ty',concat nhs)
+     withSAWVar n $ \n' ->
+       helper n' (zip flagValues flagLocalNames) (\imps ->
+                                                   f $ BindTrans n' ty' imps)
+       where
+         helper _ [] g = g []
+         helper n' ((True,(prefix,tc)):rest) g =
+           do nhty <- translateImplicitHyp (Coq.Var tc) args (Coq.Var n')
+              withFreshIdent (prefix <> "_" <> n) $ \nh ->
+                helper n' rest (g . ((nh,nhty) :))
+         helper n' ((False,_):rest) g = helper n' rest g
 
--- | Given a typeclass (as a 'Term'), a list of 'LocalName's and their
+-- | Call 'translateBinder' on a list of SAW core bindings
+translateBinders :: TermTranslationMonad m => [(LocalName,Term)] ->
+                    ([BindTrans] -> m a) -> m a
+translateBinders [] f = f []
+translateBinders ((n,ty):ns_tys) f =
+  translateBinder n ty $ \bnd ->
+  translateBinders ns_tys $ \bnds -> f (bnd : bnds)
+
+-- | Given a typeclass (as a Coq term), a list of 'LocalName's and their
 -- corresponding types (as 'Term's), and a type-level function with argument
 -- types given by the prior list, return a 'Pi' of the given arguments, inside
 -- of which is an 'App' of the typeclass to the fully-applied type-level
@@ -530,92 +583,94 @@ translateImplicitHyp ::
   TermTranslationMonad m =>
   Coq.Term -> [(LocalName, Term)] -> Coq.Term -> m Coq.Term
 translateImplicitHyp tc [] tm = return (Coq.App tc [tm])
-translateImplicitHyp tc args tm = withLocalTranslationState $
-  do args' <- mapM (uncurry translateBinder) args
-     return $ Coq.Pi (concatMap mkPi args')
-                (Coq.App tc [Coq.App tm (map mkArg args')])
- where
-  mkPi (nm,ty,nhs) =
-    Coq.PiBinder (Just nm) ty :
-    map (\(nh,nhty) -> Coq.PiImplicitBinder (Just nh) nhty) nhs
-  mkArg (nm,_,_) = Coq.Var nm
-
--- | Translate a local name from a saw-core binder into a fresh Coq identifier.
-translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
-translateLocalIdent x = freshVariant (escapeIdent (Text.unpack x))
-
--- | Find an fresh, as-yet-unused variant of the given Coq identifier.
-freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident
-freshVariant x =
-  do used <- view unavailableIdents <$> get
-     let ident0 = x
-     let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
-     let ident = findVariant ident0
-     modify $ over unavailableIdents (Set.insert ident)
-     return ident
-
-nextVariant :: Coq.Ident -> Coq.Ident
-nextVariant = reverse . go . reverse
+translateImplicitHyp tc args tm =
+  translateBinders args $ \args' ->
+  return $ Coq.Pi (concatMap mkPi args') (Coq.App tc [Coq.App tm (map mkArg args')])
   where
-    go :: String -> String
-    go (c : cs)
-      | c == '9'  = '0' : go cs
-      | isDigit c = succ c : cs
-    go cs = '1' : cs
+    mkPi (BindTrans nm ty nhs) =
+      Coq.PiBinder (Just nm) ty :
+      map (\(nh,nhty) -> Coq.PiImplicitBinder (Just nh) nhty) nhs
+    mkArg b = Coq.Var $ bindTransIdent b
 
+-- | Given a list of 'LocalName's and their corresponding types (as 'Term's),
+-- return a list of explicit 'Binder's, for use representing the bound variables
+-- in 'Lambda's, 'Let's, etc.
+translateParams :: TermTranslationMonad m => [(LocalName, Term)] ->
+                   ([Coq.Binder] -> m a) -> m a
+translateParams bs m =
+  translateBinders bs (m . concat . map bindTransToBinder)
+
+-- | Given a list of 'LocalName's and their corresponding types (as 'Term's)
+-- representing argument types and a 'Term' representing the return type,
+-- return the resulting 'Pi', with additional implicit arguments added after
+-- each instance of @isort@, @qsort@, etc.
+translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
+translatePi binders body =
+  translatePiBinders binders $ \bindersT ->
+  do bodyT <- translateTermLet body
+     return $ Coq.Pi bindersT bodyT
+
+-- | Given a 'LocalName' and its type (as a 'Term'), return an explicit
+-- 'PiBinder' followed by zero or more implicit 'PiBinder's representing
+-- additonal implicit typeclass arguments, added if the given type is @isort@,
+-- @qsort@, etc.
+translatePiBinders :: TermTranslationMonad m => [(LocalName, Term)] ->
+                      ([Coq.PiBinder] -> m a) -> m a
+translatePiBinders bs m =
+  translateBinders bs (m . concat . map bindTransToPiBinder)
+
+-- | Find all subterms of a SAW core term that should be shared, and generate
+-- let-bindings in Coq to bind them to local variables. Translate SAW core term
+-- using those let-bindings for the shared subterms.
 translateTermLet :: TermTranslationMonad m => Term -> m Coq.Term
 translateTermLet t =
-  withLocalTranslationState $
-  do let counts = scTermCount False t
-     let locals = fmap fst $ IntMap.filter keep counts
-     names <- traverse (const nextName) locals
-     modify $ set sharedNames names
-     defs <- traverse translateTermUnshared locals
+  let occ_map = scTermCount False t
+      shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occ_map
+      share_tms = map snd shares in
+  -- NOTE: larger terms always have later stAppIndices than their subterms, so
+  -- IntMap.assocs above is guaranteed to return subterms before superterms;
+  -- this ensures that the right-hand sides in our nested let-bindings below
+  -- only refer to variables bound earlier, not later
+  withSharedTerms shares $ \names ->
+  do defs <- traverse translateTermUnshared share_tms
      body <- translateTerm t
-     -- NOTE: Larger terms always have later IDs than their subterms,
-     -- so ordering by VarIndex is a valid dependency order.
-     let binds = IntMap.elems (IntMap.intersectionWith (,) names defs)
-     pure (foldr mkLet body binds)
+     pure (foldr mkLet body $ zip names defs)
   where
     keep (t', n) = n > 1 && shouldMemoizeTerm t'
-    nextName =
-      do x <- view nextSharedName <$> get
-         x' <- freshVariant x
-         modify $ set nextSharedName (nextVariant x')
-         pure x'
 
+-- | Translate a SAW core 'Term' to Coq, using let-bound Coq names when they are
+-- associated with the given term for sharing
 translateTerm :: TermTranslationMonad m => Term -> m Coq.Term
 translateTerm t =
   case t of
     Unshared {} -> translateTermUnshared t
     STApp { stAppIndex = i } ->
-      do shared <- view sharedNames <$> get
+      do shared <- view sharedNames <$> askTR
          case IntMap.lookup i shared of
            Nothing -> translateTermUnshared t
-           Just x -> pure (Coq.Var x)
+           Just sh -> pure (Coq.Var $ sharedNameIdent sh)
 
+-- | Translate a SAW core 'Term' to Coq without using sharing
 translateTermUnshared :: TermTranslationMonad m => Term -> m Coq.Term
-translateTermUnshared t = withLocalTranslationState $ do
+translateTermUnshared t = do
   -- traceTerm "translateTerm" t $
   -- NOTE: env is in innermost-first order
-  env <- view localEnvironment <$> get
+  env <- view localEnvironment <$> askTR
   -- let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
   -- case t' of
   case unwrapTermF t of
 
     FTermF ftf -> flatTermFToExpr ftf
 
-    Pi {} -> translatePi params e
-      where
-        (params, e) = asPiList t
+    Pi {} ->
+      let (params, e) = asPiList t in
+      translatePi params e
 
-    Lambda {} -> do
-      paramTerms <- translateParams params
-      e' <- translateTermLet e
-      pure (Coq.Lambda paramTerms e')
-        where
-          -- params are in normal, outermost first, order
-          (params, e) = asLambdaList t
+    Lambda {} ->
+      let (params, e) = asLambdaList t in
+      translateParams params $ \paramTerms ->
+        do e' <- translateTermLet e
+           return (Coq.Lambda paramTerms e')
 
     App {} ->
       -- asApplyAll: innermost argument first
@@ -701,7 +756,7 @@ defaultTermForType typ = do
 -- type, and pass the results to the supplied function
 translateTermToDocWith ::
   TranslationConfiguration ->
-  TranslationReader ->
+  Maybe ModuleName ->
   [String] -> -- ^ globals that have already been translated
   [String] -> -- ^ string names of local variables in scope
   (Coq.Term -> Coq.Term -> Doc ann) ->
@@ -723,7 +778,7 @@ translateTermToDocWith configuration r globalDecls localEnv f t tp_trm = do
 -- definition with the supplied name
 translateDefDoc ::
   TranslationConfiguration ->
-  TranslationReader ->
+  Maybe ModuleName ->
   [String] ->
   Coq.Ident -> Term -> Term ->
   Either (TranslationError Term) (Doc ann)

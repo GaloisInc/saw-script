@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/GaloisInc/saw-script/workflows/Nightly%20Builds/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
+[![Build Status](https://github.com/GaloisInc/saw-script/workflows/SAWScript/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
 
 # SAWScript
 
@@ -11,10 +11,17 @@ incomplete support for the Rust language.
 
 ## Documentation
 
-The [SAWScript tutorial](https://saw.galois.com/tutorial.html) gives an
-introduction to using the SAWScript interpreter. A longer
+There are two SAWScript tutorials that give an introduction to using the
+SAWScript interpreter:
+
+* [This tutorial](https://saw.galois.com/tutorial.html) gives an
+  introduction to verifying C code (using LLVM) and Java code (using JVM).
+* [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/rust-tutorial/rust-tutorial.md)
+  gives an introduction to verifying Rust code (using MIR).
+
+There is also a longer
 [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md)
-describes the breadth of SAWScript's features.
+that describes the breadth of SAWScript's features.
 
 ## Precompiled Binaries
 
@@ -43,7 +50,10 @@ To build SAWScript and related utilities from source:
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
     to install them: <https://www.haskell.org/ghcup/>. We recommend
-    Cabal 3.4 or newer, and GHC 8.10, 9.2, or 9.4.
+    Cabal 3.10 or newer, and GHC 9.2, 9.4, or 9.6.
+
+    (If you are using the GHC 9.2 series, make sure to use 9.2.6 or later
+    to avoid [this bug](https://gitlab.haskell.org/ghc/ghc/-/issues/22491).)
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most

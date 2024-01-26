@@ -12,8 +12,10 @@ module Verifier.SAW.Heapster.LLVMGlobalConst (
 
 import Data.Bits
 import Data.List
-import Control.Monad.Reader
-import GHC.TypeLits
+import Control.Monad (MonadPlus(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
+import GHC.TypeLits (KnownNat)
 import qualified Text.PrettyPrint.HughesPJ as PPHPJ
 
 import qualified Data.BitVector.Sized as BV
@@ -28,6 +30,7 @@ import Data.Parameterized.Some
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
+import Lang.Crucible.LLVM.PrettyPrint
 
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor (ModuleName)
@@ -54,6 +57,14 @@ bvVecValueOpenTerm w tp ts def_tm =
    def_tm, natOpenTerm (natValue w),
    bvLitOfIntOpenTerm (intValue w) (fromIntegral $ length ts)]
 
+-- | Helper function to build a SAW core term of type @BVVec w len a@, i.e., a
+-- bitvector-indexed vector, containing a single repeated value
+repeatBVVecOpenTerm :: NatRepr w -> OpenTerm -> OpenTerm -> OpenTerm ->
+                       OpenTerm
+repeatBVVecOpenTerm w len tp t =
+  applyOpenTermMulti (globalOpenTerm "Prelude.repeatBVVec")
+  [natOpenTerm (natValue w), len, tp, t]
+
 -- | The information needed to translate an LLVM global to Heapster
 data LLVMTransInfo = LLVMTransInfo {
   llvmTransInfoEnv :: PermEnv,
@@ -76,12 +87,12 @@ traceAndZeroM msg =
 -- | Helper function to pretty-print the value of a global
 ppLLVMValue :: L.Value -> String
 ppLLVMValue val =
-  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppValue val)
+  show $ PPHPJ.nest 2 $ ppValue val
 
 -- | Helper function to pretty-print an LLVM constant expression
 ppLLVMConstExpr :: L.ConstExpr -> String
 ppLLVMConstExpr ce =
-  L.withConfig (L.Config True True True) (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
+  ppLLVMLatest (show $ PPHPJ.nest 2 $ L.ppConstExpr ce)
 
 -- | Translate a typed LLVM 'L.Value' to a Heapster shape + an element of the
 -- translation of that shape to a SAW core type
@@ -111,8 +122,7 @@ translateLLVMValue w _ (L.ValArray tp elems) =
 
     -- Generate a default element of type tp using the zero initializer; this is
     -- currently needed by bvVecValueOpenTerm
-    def_v <- llvmZeroInitValue tp
-    (_,def_tm) <- translateLLVMValue w tp def_v
+    (_,def_tm) <- translateZeroInit w tp
 
     -- Finally, build our array shape and SAW core value
     return (PExpr_ArrayShape (bvInt $ fromIntegral $ length elems) sh_len sh,
@@ -150,7 +160,7 @@ translateLLVMValue w tp (L.ValString bytes) =
 translateLLVMValue w _ (L.ValConstExpr ce) =
   translateLLVMConstExpr w ce
 translateLLVMValue w tp L.ValZeroInit =
-  llvmZeroInitValue tp >>= translateLLVMValue w tp
+  translateZeroInit w tp
 translateLLVMValue _ _ v =
   traceAndZeroM ("translateLLVMValue does not yet handle:\n" ++ ppLLVMValue v)
 
@@ -173,7 +183,7 @@ translateLLVMType _ (L.PrimType (L.Integer n))
             (bvTypeOpenTerm n))
 translateLLVMType _ tp =
   traceAndZeroM ("translateLLVMType does not yet handle:\n"
-                 ++ show (L.ppType tp))
+                 ++ show (ppType tp))
 
 -- | Helper function for 'translateLLVMValue' applied to a constant expression
 translateLLVMConstExpr :: (1 <= w, KnownNat w) => NatRepr w -> L.ConstExpr ->
@@ -218,15 +228,31 @@ translateLLVMGEP _ tp vtrans ixs
     isZeroIdx _                = False
 
 -- | Build an LLVM value for a @zeroinitializer@ field of the supplied type
-llvmZeroInitValue :: L.Type -> LLVMTransM (L.Value)
-llvmZeroInitValue (L.PrimType (L.Integer _)) = return $ L.ValInteger 0
-llvmZeroInitValue (L.Array len tp) =
-  L.ValArray tp <$> replicate (fromIntegral len) <$> llvmZeroInitValue tp
-llvmZeroInitValue (L.PackedStruct tps) =
-  L.ValPackedStruct <$> zipWith L.Typed tps <$> mapM llvmZeroInitValue tps
-llvmZeroInitValue tp =
-  traceAndZeroM ("llvmZeroInitValue cannot handle type:\n"
-                 ++ show (L.ppType tp))
+translateZeroInit :: (1 <= w, KnownNat w) => NatRepr w -> L.Type ->
+                     LLVMTransM (PermExpr (LLVMShapeType w), OpenTerm)
+translateZeroInit w tp@(L.PrimType (L.Integer _)) =
+   translateLLVMValue w tp (L.ValInteger 0)
+translateZeroInit w (L.Array len tp) =
+  -- First, translate the zero element and its type
+  do (sh, elem_tm) <- translateZeroInit w tp
+     (_, saw_tp) <- translateLLVMType w tp
+
+     -- Compute the array stride as the length of the element shape
+     sh_len_expr <- lift $ llvmShapeLength sh
+     sh_len <- fromInteger <$> lift (bvMatchConstInt sh_len_expr)
+
+     let arr_len = bvInt $ fromIntegral len
+     let saw_len = bvLitOfIntOpenTerm (intValue w) (fromIntegral len)
+     return (PExpr_ArrayShape arr_len sh_len sh,
+             repeatBVVecOpenTerm w saw_len saw_tp elem_tm)
+
+translateZeroInit w (L.PackedStruct tps) =
+  mapM (translateZeroInit w) tps >>= \(unzip -> (shs,ts)) ->
+  return (foldr PExpr_SeqShape PExpr_EmptyShape shs, tupleOpenTerm ts)
+
+translateZeroInit _ tp =
+  traceAndZeroM ("translateZeroInit cannot handle type:\n"
+                 ++ show (ppType tp))
 
 -- | Top-level call to 'translateLLVMValue', running the 'LLVMTransM' monad
 translateLLVMValueTop :: (1 <= w, KnownNat w) => DebugLevel -> EndianForm ->

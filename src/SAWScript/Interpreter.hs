@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
@@ -49,11 +50,13 @@ import Data.Set ( Set )
 import qualified Data.Text as Text
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
+import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
+import SAWScript.Bisimulation
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
@@ -67,10 +70,12 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.SolverCache
+import SAWScript.SolverVersions
 import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
-import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
@@ -88,6 +93,8 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
+import           Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
@@ -97,6 +104,7 @@ import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
+import           SAWScript.Crucible.LLVM.FFI
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -453,6 +461,9 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
+       mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
+         Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+         _ -> return Nothing
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roJavaCodebase = jcb
@@ -487,6 +498,7 @@ buildTopLevelEnv proxy opts =
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
+                   , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
@@ -636,6 +648,24 @@ disable_lax_loads_and_stores :: TopLevel ()
 disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
+
+set_solver_cache_path :: FilePath -> TopLevel ()
+set_solver_cache_path path = do
+  rw <- getTopLevelRW
+  case rwSolverCache rw of
+    Just _ -> onSolverCache (setSolverCachePath path)
+    Nothing -> do cache <- io $ openSolverCache path
+                  putTopLevelRW rw { rwSolverCache = Just cache }
+
+clean_mismatched_versions_solver_cache :: TopLevel ()
+clean_mismatched_versions_solver_cache = do
+  vs <- io $ getSolverBackendVersions allBackends
+  onSolverCache (cleanMismatchedVersionsSolverCache vs)
+
+test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
+                           Integer -> TopLevel ()
+test_solver_cache_stats sz ls ls_f is is_f =
+  onSolverCache (testSolverCacheStats sz ls ls_f is is_f)
 
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
@@ -1056,6 +1086,55 @@ primitives = Map.fromList
     [ "Set the path satisfiablity solver to use.  Accepted values"
     , "currently are 'z3' and 'yices'."
     ]
+
+  , prim "set_solver_cache_path" "String -> TopLevel ()"
+    (pureVal set_solver_cache_path)
+    Current
+    [ "Create a solver result cache at the given path, add to that cache all results"
+    , "in the currently used solver result cache, if there is one, then use the newly"
+    , "created cache as the solver result cache going forward. Note that if the"
+    , "SAW_SOLVER_CACHE_PATH environment variable was set at startup but solver"
+    , "caching has yet to actually be used, then the value of the environment"
+    , "variable is ignored."
+    ]
+
+  , prim "clean_mismatched_versions_solver_cache" "TopLevel ()"
+    (pureVal clean_mismatched_versions_solver_cache)
+    Current
+    [ "Remove all entries in the solver result cache which were created"
+    , "using solver backend versions which do not match the versions"
+    , "in the current environment."
+    ]
+
+  , prim "print_solver_cache" "String -> TopLevel ()"
+    (pureVal (onSolverCache . printSolverCacheByHex))
+    Current
+    [ "Print all entries in the solver result cache whose SHA256 hash"
+    , "keys start with the given hex string. Providing an empty string"
+    , "results in all entries in the cache being printed."
+    ]
+
+  , prim "print_solver_cache_stats" "TopLevel ()"
+    (pureVal (onSolverCache printSolverCacheStats))
+    Current
+    [ "Print out statistics about how the solver cache has been used, namely:"
+    , "1. How many entries are in the cache (and where the cache is stored)"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session." ]
+
+  , prim "test_solver_cache_stats" "Int -> Int -> Int -> Int -> Int -> TopLevel ()"
+    (pureVal test_solver_cache_stats)
+    Current
+    [ "Test whether the values of the statistics printed out by"
+    , "print_solver_cache_stats are equal to those given, failing if this does not"
+    , "hold. Specifically, the arguments represent:"
+    , "1. How many entries are in the cache"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session" ]
 
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
@@ -1586,6 +1665,31 @@ primitives = Map.fromList
     , "successful, and aborts if unsuccessful."
     ]
 
+  , prim "prove_bisim"         "ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel BisimTheorem"
+    (pureVal proveBisimulation)
+    Experimental
+    [ "Use bisimulation to prove that two terms simulate each other.  The "
+    , "command takes the following arguments: "
+    , "1. The proof strategy to use"
+    , "2. A list of already proven bisimulation theorems"
+    , "3. A state relation `srel : lhsState -> rhsState -> Bit`"
+    , "4. An output relation `orel : (lhsState, output) -> (rhsState, output) -> Bit`"
+    , "5. A term `lhs : (lhsState, input) -> (lhsState, output)`"
+    , "6. A term `rhs : (rhsState, input) -> (rhsState, output)`"
+    , "and considers `lhs` and `rhs` bisimilar when the following two theorems hold:"
+    , "* OUTPUT RELATION THEOREM:"
+    , "   forall s1 s2 in."
+    , "     srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))"
+    , "* STATE RELATION THEOREM:"
+    , "   forall s1 s2 out1 out2."
+    , "     orel (s1, out1) (s2, out2) -> srel s1 s2"
+    , ""
+    , "LIMITATIONS: For now, the prove_bisim command has a couple limitations:"
+    , "* `lhs` and `rhs` (arguments 5 and 6) must be named functions."
+    , "* Each subterm present in the list of bisimulation theorems already"
+    , "  proven (argument 2) may be invoked at most once in `lhs` or `rhs`."
+    ]
+
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
@@ -1627,6 +1731,14 @@ primitives = Map.fromList
     (pureVal unfoldGoal)
     Current
     [ "Unfold the named subterm(s) within the current goal." ]
+
+  , prim "unfolding_fix_once" "[String] -> ProofScript ()"
+    (pureVal unfoldFixOnceGoal)
+    Current
+    [ "Unfold the named recursive constants once within the current goal."
+    , "Like `unfolding`, except that the recursive constants are unfolded"
+    , "only once, avoiding possible infinite evaluation."
+    ]
 
   , prim "simplify"            "Simpset -> ProofScript ()"
     (pureVal simplifyGoal)
@@ -3120,7 +3232,7 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate must hold.  Acts as `llvm_precond`"
     , "or `llvm_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `llvm_execute_func`."
+    , "it appears (i.e., before or after `llvm_execute_func`)."
     ]
 
   , prim "llvm_setup_with_tag" "String -> LLVMSetup () -> LLVMSetup ()"
@@ -3501,16 +3613,21 @@ primitives = Map.fromList
     ]
 
   -- Ghost state support
-  , prim "llvm_declare_ghost_state"
+  , prim "declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
+  , prim "llvm_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (pureVal declare_ghost_state)
+    Current
+    [ "Legacy alternative name for `declare_ghost_state`." ]
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
-    [ "Legacy alternative name for `llvm_declare_ghost_state`." ]
+    [ "Legacy alternative name for `declare_ghost_state`." ]
 
   , prim "llvm_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
@@ -3523,6 +3640,20 @@ primitives = Map.fromList
     (pureVal llvm_ghost_value)
     Current
     [ "Legacy alternative name for `llvm_ghost_value`."]
+
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (pureVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "mir_ghost_value"
+    "Ghost -> Term -> MIRSetup ()"
+    (pureVal mir_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
@@ -3544,6 +3675,15 @@ primitives = Map.fromList
     (\_ _ -> toValue llvm_spec_size)
     Current
     [ "Legacy alternative name for `llvm_spec_size`." ]
+
+  , prim "llvm_ffi_setup"  "Term -> LLVMSetup ()"
+    (pureVal llvm_ffi_setup)
+    Experimental
+    [ "Generate a @LLVMSetup@ spec that can be used to verify that the given"
+    , "monomorphic Cryptol term, consisting of a Cryptol foreign function"
+    , "fully applied to any type arguments, has a correct foreign (LLVM)"
+    , "implementation with respect to its Cryptol implementation."
+    ]
 
     ---------------------------------------------------------------------
     -- Crucible/JVM commands
@@ -3688,7 +3828,7 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate must hold.  Acts as `jvm_precond`"
     , "or `jvm_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `jvm_execute_func`."
+    , "it appears (i.e., before or after `jvm_execute_func`)."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
@@ -3761,10 +3901,343 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
     -- Crucible/MIR commands
 
+  , prim "mir_alloc" "MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc)
+    Experimental
+    [ "Declare that an immutable reference to the given type should be allocated"
+    , "in a MIR specification. Before `mir_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `mir_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
+    ]
+
+  , prim "mir_alloc_mut" "MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc_mut)
+    Experimental
+    [ "Declare that a mutable reference to the given type should be allocated"
+    , "in a MIR specification. Before `mir_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `mir_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
+    ]
+
+  , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupArray :: Mir.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing an array of the given type, with the"
+    , "given list of values as elements."
+    ]
+
+  , prim "mir_assert" "Term -> MIRSetup ()"
+    (pureVal mir_assert)
+    Experimental
+    [ "State that the given predicate must hold.  Acts as `mir_precond`"
+    , "or `mir_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `mir_execute_func`)."
+    ]
+
+  , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
+    (funVal3 mir_enum_value)
+    Experimental
+    [ "Create a MIRValue representing a variant of a MIR enum with the given"
+    , "list of values as elements. The MIRAdt argument determines what enum"
+    , "type to create; use `mir_find_adt` to retrieve a MIRAdt value. The"
+    , "String argument represents the variant name."
+    ]
+
+  , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
+    (pureVal mir_execute_func)
+    Experimental
+    [ "Specify the given list of values as the arguments of the method."
+    ,  ""
+    , "The mir_execute_func statement also serves to separate the pre-state"
+    , "section of the spec (before mir_execute_func) from the post-state"
+    , "section (after mir_execute_func). The effects of some MIRSetup"
+    , "statements depend on whether they occur in the pre-state or post-state"
+    , "section."
+    ]
+
+  , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"
+    (funVal3 mir_find_adt)
+    Experimental
+    [ "Consult the given MIRModule to find an algebraic data type (MIRAdt)"
+    , "with the given String as an identifier and the given MIRTypes as the"
+    , "types used to instantiate the type parameters. If such a MIRAdt cannot"
+    , "be found in the MIRModule, this will raise an error."
+    ]
+
+  , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
+    (pureVal mir_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a MIR specification. The given name is used only for"
+    , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
+    , "there isn't an appropriate MIR type, such as the Cryptol Array type."
+    ]
+
+  , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
+    (pureVal mir_fresh_expanded_value)
+    Experimental
+    [ "Create a MIR value entirely populated with fresh symbolic variables."
+    , "For compound types such as structs and arrays, this will explicitly set"
+    , "each field or element to contain a fresh symbolic variable. The String"
+    , "argument is used as a prefix in each of the symbolic variables."
+    ]
+
+  , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
+    (pureVal mir_fresh_var)
+    Experimental
+    [ "Create a fresh symbolic variable for use within a MIR"
+    , "specification. The name is used only for pretty-printing."
+    ]
+
   , prim "mir_load_module" "String -> TopLevel MIRModule"
     (pureVal mir_load_module)
     Experimental
     [ "Load a MIR JSON file and return a handle to it." ]
+
+  , prim "mir_points_to" "MIRValue -> MIRValue -> MIRSetup ()"
+    (pureVal mir_points_to)
+    Experimental
+    [ "Declare that the memory location indicated by the given reference (first"
+    , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before `mir_execute_func`) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after `mir_execute_func`), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "mir_postcond" "Term -> MIRSetup ()"
+    (pureVal mir_postcond)
+    Experimental
+    [ "State that the given predicate is a post-condition of execution of the"
+    , "method being verified."
+    ]
+
+  , prim "mir_precond" "Term -> MIRSetup ()"
+    (pureVal mir_precond)
+    Experimental
+    [ "State that the given predicate is a pre-condition on execution of the"
+    , "method being verified."
+    ]
+
+  , prim "mir_return" "MIRValue -> MIRSetup ()"
+    (pureVal mir_return)
+    Experimental
+    [ "Specify the given value as the return value of the method. A"
+    , "mir_return statement is required if and only if the method"
+    , "has a non-() return type." ]
+
+  , prim "mir_slice_value" "MIRValue -> MIRValue"
+    (pureVal mir_slice_value)
+    Experimental
+    [ "Create a MIRValue representing a slice. The argument must be a"
+    , "reference to an array value."
+    ]
+
+  , prim "mir_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
+    (pureVal mir_slice_range_value)
+    Experimental
+    [ "Create a MIRValue representing a slice over a given range. The first"
+    , "argument must be a reference to an array value. The second and third"
+    , "arguments represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed the length of the"
+    , "reference's array."
+    ]
+
+  , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupStruct :: Mir.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR struct with the given list of"
+    , "values as elements. The MIRAdt argument determines what struct type to"
+    , "create; use `mir_find_adt` to retrieve a MIRAdt value."
+    ]
+
+  , prim "mir_static"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing a reference to the named static."
+    , "The String should be the name of a static value."
+    ]
+
+  , prim "mir_static_initializer"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobalInitializer () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing the value of the initializer of a named"
+    , "static. The String should be the name of a static value."
+    ]
+
+  , prim "mir_term"
+    "Term -> MIRValue"
+    (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue MIR))
+    Experimental
+    [ "Construct a `MIRValue` from a `Term`." ]
+
+  , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR tuple with the given list of"
+    , "values as elements."
+    ]
+
+  , prim "mir_unsafe_assume_spec"
+    "MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec"
+    (pureVal mir_unsafe_assume_spec)
+    Experimental
+    [ "Return a MIRSpec corresponding to a MIRSetup block, as would be"
+    , "returned by mir_verify but without performing any verification."
+    ]
+
+  , prim "mir_verify"
+    "MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec"
+    (pureVal mir_verify)
+    Experimental
+    [ "Verify the MIR function named by the second parameter in the module"
+    , "specified by the first. The third parameter lists the MIRSpec"
+    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    , "parameter enables or disables path satisfiability checking. The fifth"
+    , "describes how to set up the symbolic execution engine before verification."
+    , "And the last gives the script to use to prove the validity of the resulting"
+    , "verification conditions."
+    ]
+
+  , prim "mir_adt" "MIRAdt -> MIRType"
+    (pureVal mir_adt)
+    Experimental
+    [ "The type of a MIR algebraic data type (ADT), i.e., a struct or enum,"
+    , "corresponding to the given MIRAdt. Use the `mir_find_adt` command to"
+    , "retrieve a MIRAdt value."
+    ]
+
+  , prim "mir_array" "Int -> MIRType -> MIRType"
+    (pureVal mir_array)
+    Experimental
+    [ "The type of MIR arrays with the given number of elements of the"
+    , "given type." ]
+
+  , prim "mir_bool" "MIRType"
+    (pureVal mir_bool)
+    Experimental
+    [ "The type of MIR booleans." ]
+
+  , prim "mir_char" "MIRType"
+    (pureVal mir_char)
+    Experimental
+    [ "The type of MIR characters." ]
+
+  , prim "mir_i8" "MIRType"
+    (pureVal mir_i8)
+    Experimental
+    [ "The type of MIR 8-bit signed integers." ]
+
+  , prim "mir_i16" "MIRType"
+    (pureVal mir_i16)
+    Experimental
+    [ "The type of MIR 16-bit signed integers." ]
+
+  , prim "mir_i32" "MIRType"
+    (pureVal mir_i32)
+    Experimental
+    [ "The type of MIR 32-bit signed integers." ]
+
+  , prim "mir_i64" "MIRType"
+    (pureVal mir_i64)
+    Experimental
+    [ "The type of MIR 64-bit signed integers." ]
+
+  , prim "mir_i128" "MIRType"
+    (pureVal mir_i128)
+    Experimental
+    [ "The type of MIR 128-bit signed integers." ]
+
+  , prim "mir_isize" "MIRType"
+    (pureVal mir_isize)
+    Experimental
+    [ "The type of MIR pointer-sized signed integers." ]
+
+  , prim "mir_f32" "MIRType"
+    (pureVal mir_f32)
+    Experimental
+    [ "The type of MIR single-precision floating-point values." ]
+
+  , prim "mir_f64" "MIRType"
+    (pureVal mir_f64)
+    Experimental
+    [ "The type of MIR double-precision floating-point values." ]
+
+  , prim "mir_lifetime" "MIRType"
+    (pureVal mir_lifetime)
+    Experimental
+    [ "The type of MIR lifetimes." ]
+
+  , prim "mir_ref" "MIRType -> MIRType"
+    (pureVal mir_ref)
+    Experimental
+    [ "The type of MIR immutable references." ]
+
+  , prim "mir_ref_mut" "MIRType -> MIRType"
+    (pureVal mir_ref_mut)
+    Experimental
+    [ "The type of MIR mutable references." ]
+
+  , prim "mir_slice" "MIRType -> MIRType"
+    (pureVal mir_slice)
+    Experimental
+    [ "The type of MIR slices, i.e., dynamically sized views into a"
+    , "contiguous sequence of the given type. Currently, SAW can only"
+    , "handle references to slices (&[T])." ]
+
+  , prim "mir_str" "MIRType"
+    (pureVal mir_str)
+    Experimental
+    [ "The type of MIR strings, which are a particular kind of slice."
+    , "Currently, SAW can only handle references to strings (&str)." ]
+
+  , prim "mir_tuple" "[MIRType] -> MIRType"
+    (pureVal mir_tuple)
+    Experimental
+    [ "The type of MIR tuples of the given types." ]
+
+  , prim "mir_u8" "MIRType"
+    (pureVal mir_u8)
+    Experimental
+    [ "The type of MIR 8-bit unsigned integers." ]
+
+  , prim "mir_u16" "MIRType"
+    (pureVal mir_u16)
+    Experimental
+    [ "The type of MIR 16-bit unsigned integers." ]
+
+  , prim "mir_u32" "MIRType"
+    (pureVal mir_u32)
+    Experimental
+    [ "The type of MIR 32-bit unsigned integers." ]
+
+  , prim "mir_u64" "MIRType"
+    (pureVal mir_u64)
+    Experimental
+    [ "The type of MIR 64-bit unsigned integers." ]
+
+  , prim "mir_u128" "MIRType"
+    (pureVal mir_u128)
+    Experimental
+    [ "The type of MIR 128-bit unsigned integers." ]
+
+  , prim "mir_usize" "MIRType"
+    (pureVal mir_usize)
+    Experimental
+    [ "The type of MIR pointer-sized unsigned integers." ]
 
     ---------------------------------------------------------------------
 
@@ -3833,41 +4306,7 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve True))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this can"
-    , " be done, this refinement will be used in future calls to"
-    , " Mr. Solver, and if it cannot, the script will exit. See also:"
-    , " mr_solver_test, mr_solver_query." ]
-
-  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve False))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this cannot"
-    , " be done, the script will exit. See also: mr_solver_prove,"
-    , " mr_solver_query - unlike the former, this refinement will not"
-    , " be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverQuery)
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another, returning"
-    , " true iff this can be done. See also: mr_solver_prove,"
-    , " mr_solver_test - unlike the former, this refinement will not"
-    , " be considered in future calls to Mr. Solver, and unlike both,"
-    , " this command will never fail." ]
-
-  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverAssume)
-    Experimental
-    [ "Add the refinement of the two given expressions as an assumption"
-    , " which will be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
@@ -3875,10 +4314,41 @@ primitives = Map.fromList
     , " 3 = all debug output" ]
 
   , prim "mrsolver" "ProofScript ()"
-    (scVal mrSolverTactic)
+    (pureVal (mrSolver emptyRefnset))
     Experimental
-    [ "Use MRSolver to prove a current goal of the form:"
-    , "(a1:A1) -> ... -> (an:A1) -> refinesS_eq ..." ]
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
+
+  , prim "empty_rs"            "Refnset"
+    (pureVal (emptyRefnset :: SAWRefnset))
+    Experimental
+    [ "The empty refinement set, containing no refinements." ]
+
+  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
+    (funVal2 addrefn)
+    Experimental
+    [ "Add a proved refinement theorem to a given refinement set." ]
+
+  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
+    (funVal2 addrefns)
+    Experimental
+    [ "Add proved refinement theorems to a given refinement set." ]
+
+  , prim "mrsolver_with" "Refnset -> ProofScript ()"
+    (pureVal mrSolver)
+    Experimental
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
+    , " the given set of refinements taken as assumptions" ]
+
+  , prim "refines" "[Term] -> Term -> Term -> Term"
+    (funVal3 refinesTerm)
+    Experimental
+    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
+    , " as as well as two terms containing those variables, which may be"
+    , " either terms or functions in the SpecM monad, construct the"
+    , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
+    , " given terms, with the given variables generalized with a Pi type." ]
 
     ---------------------------------------------------------------------
 
@@ -4253,6 +4723,14 @@ primitives = Map.fromList
     [ "Tell Heapster whether to perform its translation-time checks of the "
     , "well-formedness of type-checking proofs" ]
 
+  , prim "heapster_trans_rust_type"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_translate_rust_type)
+    Experimental
+    [ "Parse a Rust function type and print the equivalent Heapser type. "
+    , "Ideal for learning how Rust types are translated into Heapster. "
+    ]
+
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
@@ -4333,6 +4811,11 @@ primitives = Map.fromList
                -> Options -> BuiltinContext -> Value
     funVal2 f _ _ = VLambda $ \a -> return $ VLambda $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
+
+    funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
+               -> Options -> BuiltinContext -> Value
+    funVal3 f _ _ = VLambda $ \a -> return $ VLambda $ \b -> return $ VLambda $ \c ->
+      fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
 
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Options -> BuiltinContext -> Value

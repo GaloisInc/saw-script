@@ -1,0 +1,29 @@
+module Test where
+
+// State types
+type S1 = [8]
+type S2 = [16]
+
+// f1 and f2 both take a counter as state, as well as an input. They return a
+// pair containing the incremented counter and the sum of the input and counter.
+// f1 and f2 differ only their state types.
+f1 : (S1, [8]) -> (S1, [8])
+f1 (ctr, inp) = (ctr+1, inp+ctr)
+f2 : (S2, [8]) -> (S2, [8])
+f2 (ctr, inp) = (ctr+1, inp+(drop ctr))
+
+// A version of f2 with an input type that differs from f1
+f2_bad_input_type : (S2, [9]) -> (S2, [8])
+f2_bad_input_type (ctr, inp) = (ctr+1, (drop inp)+(drop ctr))
+
+// A version of f2 with an output type that differs from f1
+f2_bad_output_type : (S2, [8]) -> (S2, [9])
+f2_bad_output_type (ctr, inp) = (ctr+1, zext (inp+(drop ctr)))
+
+// Output bisimulation relation for f1 and f2
+orel : (S1, [8]) -> (S2, [8]) -> Bit
+orel (s1, o1) (s2, o2) = s1 == drop s2 /\ o1 == o2
+
+// State bisimulation relation for f1 and f2
+srel : S1 -> S2 -> Bit
+srel s1 s2 = s1 == drop s2

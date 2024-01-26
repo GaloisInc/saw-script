@@ -1,3 +1,29 @@
+# Nightly -- ????-??-??
+
+## New Features
+* SAW now supports loading and reasoning about Cryptol declarations that make use of numeric constraint guards.  For more information on numeric constraint guards, see the [relavent section of the Cryptol reference manual](https://galoisinc.github.io/cryptol/master/BasicSyntax.html#numeric-constraint-guards).
+
+* Add an experimental `mir_verify` command, along with related utilities for
+  constructing specifications for MIR/Rust programs. For more information, see
+  the `mir_*` commands documented in the [SAW
+  manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
+* SAW now supports importing Cryptol modules containing [`foreign`
+  declarations](https://galoisinc.github.io/cryptol/master/FFI.html). For more
+  information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#cryptol-and-its-role-in-saw).
+
+* Building on the above feature, SAW now supports automatically
+  generating LLVM setup scripts for Cryptol FFI functions with the
+  `llvm_ffi_setup` command. For more information, see the [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#verifying-cryptol-ffi-functions).
+
+* Ghost state is now supported with the JVM and MIR language backends:
+  * The `llvm_declare_ghost_state` command is now deprecated in favor of the
+    new `declare_ghost_state` command, as nothing about this command is
+    LLVM-specific.
+  * Add `jvm_ghost_value` and `mir_ghost_value` commands in addition to the
+    existing `llvm_ghost_value` command.
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features

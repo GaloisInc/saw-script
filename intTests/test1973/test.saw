@@ -1,0 +1,17 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+s_adt <- mir_find_adt m "test::S" [];
+
+let f_spec = do {
+  s_ref <- mir_alloc (mir_adt s_adt);
+  s <- mir_fresh_expanded_value "s" (mir_adt s_adt);
+  mir_points_to s_ref s;
+
+  mir_execute_func [s_ref];
+
+  mir_return s_ref;
+};
+
+mir_verify m "test::f" [] false f_spec z3;

@@ -1,0 +1,163 @@
+module HT where
+
+type Entry =   
+    { key    : [64]
+    , value  : [32]
+    , next   : [32]
+    }
+
+type EntryTuple = ([64],[32],[32])
+
+entryToTuple : Entry -> EntryTuple
+entryToTuple e = (e.key, e.value, e.next)
+
+tupleToEntry : EntryTuple -> Entry
+tupleToEntry (key_t, value_t, next_t) = {key = key_t, value = value_t, next = next_t}
+
+type NUMBUCKETS = 2
+
+type POOLSIZE = 5
+
+NULL : [32]
+NULL = 0xffffffff
+
+CAP : [32]
+CAP = 5
+
+type PooledHashTable =   
+    { buckets    : [NUMBUCKETS][32]
+    , cur_entry  : [32]
+    }
+
+type PooledHashTableTuple = ([NUMBUCKETS][32],[32])
+
+pooledHashTableToTuple : PooledHashTable -> PooledHashTableTuple
+pooledHashTableToTuple pt = (pt.buckets, pt.cur_entry)
+
+tupleToPooledHashTable : PooledHashTableTuple -> PooledHashTable
+tupleToPooledHashTable (bucket_tuple,cur_entry_tuple) = {buckets = bucket_tuple, cur_entry = cur_entry_tuple}
+
+type EntryPool = [POOLSIZE] Entry
+
+type EntryPoolTuple = [POOLSIZE]([64], [32], [32])
+
+entryPoolToTuple : EntryPool -> EntryPoolTuple
+entryPoolToTuple ep = map entryToTuple ep
+
+tupleToEntryPool : EntryPoolTuple -> EntryPool
+tupleToEntryPool ep = map tupleToEntry ep
+
+initTable : PooledHashTable
+initTable = {cur_entry = 0, buckets = repeat NULL}
+
+initEntry : Entry
+initEntry = {key = 0, value = 0, next = NULL}
+
+initEntryPool : EntryPool
+initEntryPool = zero
+
+hash : [64] -> [32]
+hash v = foldr (\c h -> 33 * h + (0 # c)) 5381 ((split v):[8][8])
+
+getBucket : [64] -> [32]
+getBucket key = hash(key) % `NUMBUCKETS
+
+type State = { ep : EntryPool
+             , pht : PooledHashTable
+             }
+
+errorState : State
+errorState = zero:State
+
+stateToTuple : State -> ([POOLSIZE]([64], [32], [32]), ([NUMBUCKETS][32], [32]))
+stateToTuple state = (entryPoolToTuple state.ep, pooledHashTableToTuple state.pht)
+
+tupleToState : ([POOLSIZE]([64], [32], [32]), ([NUMBUCKETS][32], [32])) -> State
+tupleToState (entryPoolTuple, phtTuple) = {ep = tupleToEntryPool entryPoolTuple, pht = tupleToPooledHashTable phtTuple}
+
+initState : State
+initState = {ep = initEntryPool, pht = initTable}
+
+type IncrementValueRet = { value : [32]
+                         , slot : [32]
+                         , state : State
+                         }
+
+is_valid_index : [32] -> [32] -> Bool
+is_valid_index n i = i < n \/ i == NULL
+
+// Entry Pool and Pooled Hash Table
+is_valid_state : State -> Bool
+is_valid_state state =
+  state.pht.cur_entry <= `POOLSIZE
+  // All of the buckets are <= cur_entry or NULL
+  /\ all (is_valid_index state.pht.cur_entry) state.pht.buckets
+  // for all entries at index i, next <= cur_entry or NULL, i < next, value <= cap.
+  /\ all (\(i, e) -> i < state.pht.cur_entry ==> ((is_valid_index state.pht.cur_entry e.next) /\ i < e.next /\ e.value <= CAP)) (zip (take [0 ...]) state.ep)
+
+updatePrev : EntryPool -> [32] -> [32] -> EntryPool
+updatePrev epIn cur_index prev_index = ret where
+    prevEntry = epIn@prev_index
+    ret = update epIn prev_index {key = prevEntry.key, value = prevEntry.value, next = cur_index }
+
+incrementNextValue1 : [64] -> [32] -> [32] -> State -> IncrementValueRet
+incrementNextValue1 key prev_index bucket state = ret where
+    cur_index = state.pht.cur_entry
+    newEp = update state.ep cur_index {key = key, value = 1, next = NULL}
+    ret = if(prev_index != NULL) 
+        then 
+            { value = 1
+            , slot = cur_index 
+            , state = 
+              { ep = updatePrev newEp cur_index prev_index 
+              , pht = {cur_entry = cur_index + 1, buckets = state.pht.buckets}
+              }
+            }
+        else 
+            { value = 1
+            , slot = cur_index
+            , state = 
+              { ep = newEp
+              , pht = {cur_entry = cur_index + 1, buckets = update state.pht.buckets bucket cur_index}
+              }
+            }
+
+incrementNextValue : [64] -> [32] -> [32] -> State -> IncrementValueRet
+incrementNextValue key prev_index bucket state = 
+    if (state.pht.cur_entry < `POOLSIZE) 
+        then incrementNextValue1 key prev_index bucket state
+        else {value = 0, slot = NULL, state = state}
+
+
+incrementValueLoop : [64] -> [64] -> [32] -> [32] -> State -> (Bool, [32], [32], ([32], State))
+incrementValueLoop count key cur_index prev_index state = 
+    // Need something obviously terminating errorState is never reached as it is not a valid_state. 
+    if (count <= 0) then (False, NULL, NULL, (0, errorState))
+    else 
+        if (cur_index == NULL)
+            then (True, cur_index, prev_index, (0, state))
+            else checkCurEntry count key cur_index prev_index state
+
+checkCurEntry : [64] -> [64] -> [32] -> [32] -> State -> (Bool, [32], [32], ([32], State))
+checkCurEntry count key cur_index prev_index state = ret where
+    cur_entry = state.ep@cur_index
+    ret = if(cur_entry.key == key)
+        then keyHit key cur_index prev_index cur_entry state
+        else incrementValueLoop (count - 1) key cur_entry.next cur_index state
+
+keyHit : [64] -> [32] -> [32] -> Entry -> State -> (Bool, [32], [32], ([32], State))
+keyHit key cur_index prev_index cur_entry state = ret where
+    curValue = cur_entry.value
+    ret = if (curValue < CAP) 
+        then (False, cur_index, prev_index, (curValue + 1, {ep = (update state.ep cur_index {key = cur_entry.key, value = curValue + 1, next = cur_entry.next}), pht = state.pht}))
+        else (False, cur_index, prev_index, (curValue, state))
+     
+incrementValueFull : [64] -> State -> IncrementValueRet
+incrementValueFull key state = ret where
+    bucket = getBucket(key)
+    cur_index = state.pht.buckets@bucket
+    prev_index = NULL
+    (continue, n_cur_index, n_prev_index, (value, nstate)) = incrementValueLoop (`POOLSIZE + 1) key cur_index prev_index state
+    ret = if continue then incrementNextValue key n_prev_index bucket nstate else {value = value, slot = n_cur_index, state = nstate}
+    
+

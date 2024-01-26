@@ -253,6 +253,7 @@ module Verifier.SAW.SharedTerm
 --  , scFalse
    , scOpenTerm
    , scCloseTerm
+   , scLambdaBody
     -- ** Variable substitution
   , instantiateVar
   , instantiateVarList
@@ -269,6 +270,7 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstants'
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
+  , scUnfoldOnceFixConstantSet
   , scSharedSize
   , scSharedSizeAux
   , scSharedSizeMany
@@ -282,8 +284,11 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
-import Control.Monad.State.Strict as State
-import Control.Monad.Reader
+import Control.Monad (foldM, forM, join, unless, when)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Bits
 import Data.List (inits, find)
 import Data.Maybe
@@ -305,7 +310,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
-import Prelude hiding (mapM, maximum)
+import Prelude hiding (maximum)
 import Text.URI
 
 import Verifier.SAW.Cache
@@ -1186,8 +1191,8 @@ instantiateLocalVars sc f initialLevel t0 =
     go l t =
       case t of
         Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppFreeVars = fv, stAppTermF = tf}
-          | fv == emptyBitSet -> return t -- closed terms map to themselves
+        STApp{ stAppIndex = tidx, stAppFreeVars = _, stAppTermF = tf}
+          | termIsClosed t -> return t -- closed terms map to themselves
           | otherwise -> useCache ?cache (tidx, l) (go' l tf)
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
@@ -1547,7 +1552,7 @@ scConstant :: SharedContext
            -> Term   -- ^ The type
            -> IO Term
 scConstant sc name rhs ty =
-  do unless (looseVars rhs == emptyBitSet) $
+  do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
@@ -1568,7 +1573,7 @@ scConstant' :: SharedContext
            -> Term   -- ^ The type
            -> IO Term
 scConstant' sc nmi rhs ty =
-  do unless (looseVars rhs == emptyBitSet) $
+  do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
@@ -2589,7 +2594,6 @@ scGeneralizeExts sc exts x = loop (zip (inits exts) exts)
     -- base case, convert all the exts in the body of x into deBruijn variables
     loop [] = scExtsToLocals sc exts x
 
-
 scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
 
@@ -2619,6 +2623,34 @@ scUnfoldConstantSet sc b names t0 = do
           _ -> scTermF sc =<< traverse go tf
   go t0
 
+-- | Unfold one time fixpoint constants.
+--
+-- Specifically, if @c = fix a f@, then replace @c@ with @f c@, that is replace
+-- @(fix a f)@ with @f (fix a f)@ while preserving the constant name.  The
+-- signature of @fix@ is @primitive fix : (a : sort 1) -> (a -> a) -> a;@.
+scUnfoldOnceFixConstantSet :: SharedContext
+                           -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
+                           -> Set VarIndex -- ^ Set of constant names
+                           -> Term
+                           -> IO Term
+scUnfoldOnceFixConstantSet sc b names t0 = do
+  cache <- newCache
+  let unfold t idx rhs
+        | Set.member idx names == b
+        , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs =
+          betaNormalize sc =<< scApply sc f t
+        | otherwise =
+          return t
+  let go :: Term -> IO Term
+      go t@(Unshared tf) =
+        case tf of
+          Constant (EC idx _ _) (Just rhs) -> unfold t idx rhs
+          _ -> Unshared <$> traverse go tf
+      go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
+        case tf of
+          Constant (EC ecidx _ _) (Just rhs) -> unfold t ecidx rhs
+          _ -> scTermF sc =<< traverse go tf
+  go t0
 
 -- | TODO: test whether this version is slower or faster.
 scUnfoldConstantSet' :: SharedContext
@@ -2708,3 +2740,14 @@ scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (Map.insert (ecVarIndex ec) lv Map.empty) =<< incVars sc 0 1 body
     close sc (toShortName (ecName ec)) (ecType ec) body'
+
+-- | Compute the body of 0 or more nested lambda-abstractions by applying the
+-- lambdas to fresh 'ExtCns's. Note that we do this lambda-by-lambda, rather
+-- than generating all of the 'ExtCns's at the same time, because later
+-- variables could have types that depend on earlier variables, and so the
+-- substitution of earlier 'ExtCns's has to happen before we generate later
+-- ones.
+scLambdaBody :: SharedContext -> Term -> IO Term
+scLambdaBody sc (asLambda -> Just (nm, tp, body)) =
+  scOpenTerm sc nm tp 0 body >>= scLambdaBody sc . snd
+scLambdaBody _sc t = return t

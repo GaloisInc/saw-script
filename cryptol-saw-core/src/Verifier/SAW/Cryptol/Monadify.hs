@@ -77,9 +77,12 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Cont
+import Control.Monad ((>=>), foldM, forM_, zipWithM)
+import Control.Monad.Cont (Cont, cont, runCont)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), ReaderT(..))
+import Control.Monad.State (MonadState(..), StateT(..), evalStateT, modify)
+import Control.Monad.Trans (MonadTrans(..))
 import qualified Control.Monad.Fail as Fail
 -- import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text as T
@@ -92,7 +95,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Cryptol (Env)
--- import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 import Verifier.SAW.Cryptol.PreludeM
@@ -608,7 +611,9 @@ fromCompTerm mtp t = ArgMonTerm $ fromArgTerm mtp t
 
 -- | Take a function of type @A1 -> ... -> An -> SpecM E emptyFunStack B@ and
 -- lift the stack of the output type to an arbitrary @stack@ parameter using
--- @liftStackS@
+-- @liftStackS@. Note that @liftStackS@ is only added if the stack of the
+-- output type is non-empty, i.e. not @emptyFunStack@. Otherwise, this operation
+-- leaves the function unchanged.
 class LiftCompStack a where
   liftCompStack :: HasSpecMParams => a -> a
 
@@ -623,10 +628,14 @@ instance LiftCompStack ArgMonTerm where
 
 instance LiftCompStack MonTerm where
   liftCompStack (ArgMonTerm amtrm) = ArgMonTerm $ liftCompStack amtrm
-  liftCompStack (CompMonTerm mtp trm) =
-    CompMonTerm mtp $
-    applyGlobalOpenTerm "Prelude.liftStackS"
-    [specMEvType ?specMParams, specMStack ?specMParams, toArgType mtp, trm]
+  liftCompStack (CompMonTerm mtp trm) = CompMonTerm mtp $ OpenTerm $ do
+    -- Only add @liftStackS@ when the stack is not @emptyFunStack@
+    empty_stk <- typedVal <$> unOpenTerm emptyStackOpenTerm
+    curr_stk  <- typedVal <$> unOpenTerm (specMStack ?specMParams)
+    curr_stk_empty <- liftTCM scConvertible False empty_stk curr_stk
+    unOpenTerm $ if curr_stk_empty then trm else
+      applyGlobalOpenTerm "Prelude.liftStackS"
+      [specMEvType ?specMParams, specMStack ?specMParams, toArgType mtp, trm]
 
 -- | Test if a monadification type @tp@ is pure, meaning @MT(tp)=tp@
 monTypeIsPure :: MonType -> Bool
@@ -708,8 +717,8 @@ applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
 applyMonTermMulti = foldl applyMonTerm
 
 -- | Build a 'MonTerm' from a global of a given argument type, applying it to
--- the current 'SpecMParams' if the 'Bool' flag is 'True' and lifting it using
--- @liftStackS@ if it is 'False'
+-- the current 'SpecMParams' if the 'Bool' flag is 'True' or lifting it using
+-- @liftStackS@ if it is 'False' and the stack is non-empty
 mkGlobalArgMonTerm :: HasSpecMParams => MonType -> Ident -> Bool -> ArgMonTerm
 mkGlobalArgMonTerm tp ident params_p =
   (if params_p then id else liftCompStack) $
@@ -747,9 +756,11 @@ data MonMacro = MonMacro {
   macroNumArgs :: Int,
   macroApply :: GlobalDef -> [Term] -> MonadifyM MonTerm }
 
--- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term
+-- | Make a simple 'MonMacro' that inspects 0 arguments and just returns a term,
+-- lifted with @liftStackS@ if the outer stack is non-empty
 monMacro0 :: MonTerm -> MonMacro
-monMacro0 mtrm = MonMacro 0 (\_ _ -> return mtrm)
+monMacro0 mtrm = MonMacro 0 $ \_ _ -> usingSpecMParams $
+  return $ liftCompStack mtrm
 
 -- | Make a 'MonMacro' that maps a named global to a global of semi-pure type.
 -- (See 'fromSemiPureTermFun'.) Because we can't get access to the type of the
@@ -773,7 +784,7 @@ semiPureGlobalMacro from to params_p =
 -- indicates whether the "to" global is polymorphic in the event type and
 -- function stack; if so, the current 'SpecMParams' are passed as its first two
 -- arguments, and otherwise the returned computation is lifted with
--- @liftStackS@.
+-- @liftStackS@ if the outer stack is non-empty.
 argGlobalMacro :: NameInfo -> Ident -> Bool -> MonMacro
 argGlobalMacro from to params_p =
   MonMacro 0 $ \glob args -> usingSpecMParams $
@@ -841,7 +852,7 @@ emptyMemoTable = IntMap.empty
 data MonadifyROState = MonadifyROState {
   -- | The monadification environment
   monStEnv :: MonadifyEnv,
-  -- | The monadification context 
+  -- | The monadification context
   monStCtx :: MonadifyCtx,
   -- | The current @SpecM@ function stack
   monStStack :: OpenTerm,

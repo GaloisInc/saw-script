@@ -12,6 +12,7 @@ import uuid
 
 from .llvm_type import *
 from .jvm_type import *
+from .mir_type import *
 
 JSON = Union[None, bool, int, float, str, Dict, Tuple, List]
 
@@ -89,7 +90,7 @@ class CryptolTerm(SetupVal):
 class FreshVar(NamedSetupVal):
     __name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType'], suggested_name : Optional[str] = None) -> None:
+    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType', 'MIRType'], suggested_name : Optional[str] = None) -> None:
         self.__name = suggested_name
         self.spec = spec
         self.type = type
@@ -119,7 +120,7 @@ class FreshVar(NamedSetupVal):
 class Allocated(NamedSetupVal):
     name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : Union['LLVMType','JVMType'], *,
+    def __init__(self, spec : 'Contract', type : Union['LLVMType', 'JVMType', 'MIRType'], *,
                  mutable : bool = True, alignment : Optional[int] = None) -> None:
         self.name = None
         self.spec = spec
@@ -142,12 +143,67 @@ class Allocated(NamedSetupVal):
 
 class StructVal(SetupVal):
     fields : List[SetupVal]
+    mir_adt : Optional[MIRAdt]
+
+    def __init__(self, fields : List[SetupVal], mir_adt : Optional[MIRAdt] = None) -> None:
+        self.fields = fields
+        self.mir_adt = mir_adt
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'struct',
+                'elements': [fld.to_json() for fld in self.fields],
+                'MIR ADT server name': self.mir_adt.server_name if self.mir_adt is not None else None}
+
+class EnumVal(SetupVal):
+    adt : MIRAdt
+    variant_name : str
+    fields : List[SetupVal]
+
+    def __init__(self, adt : MIRAdt, variant_name : str, fields : List[SetupVal]) -> None:
+        self.adt = adt
+        self.variant_name = variant_name
+        self.fields = fields
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'enum',
+                'MIR ADT server name': self.adt.server_name,
+                'variant name': self.variant_name,
+                'elements': [fld.to_json() for fld in self.fields]}
+
+class TupleVal(SetupVal):
+    fields : List[SetupVal]
 
     def __init__(self, fields : List[SetupVal]) -> None:
         self.fields = fields
 
     def to_json(self) -> JSON:
         return {'setup value': 'tuple', 'elements': [fld.to_json() for fld in self.fields]}
+
+class SliceVal(SetupVal):
+    base : SetupVal
+
+    def __init__(self, base : SetupVal) -> None:
+        self.base = base
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'slice',
+                'base': self.base.to_json()}
+
+class SliceRangeVal(SetupVal):
+    base : SetupVal
+    start : int
+    end : int
+
+    def __init__(self, base : SetupVal, start : int, end : int) -> None:
+        self.base = base
+        self.start = start
+        self.end = end
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'slice range',
+                'base': self.base.to_json(),
+                'start': self.start,
+                'end': self.end}
 
 class ElemVal(SetupVal):
     base : SetupVal
@@ -173,6 +229,19 @@ class FieldVal(SetupVal):
         return {'setup value': 'field',
                 'base': self.base.to_json(), 'field': self.field_name}
 
+class FreshExpandedVal(SetupVal):
+    prefix: str
+    ty: Union['LLVMType', 'JVMType', 'MIRType']
+
+    def __init__(self, prefix : str, ty : Union['LLVMType', 'JVMType', 'MIRType']) -> None:
+        self.prefix = prefix
+        self.ty = ty
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'fresh expanded',
+                'prefix': self.prefix,
+                'type': self.ty.to_json()}
+
 class GlobalInitializerVal(SetupVal):
     name : str
 
@@ -196,13 +265,23 @@ class NullVal(SetupVal):
         return {'setup value': 'null'}
 
 class ArrayVal(SetupVal):
+    element_type : Union['LLVMType', 'JVMType', 'MIRType', None]
     elements : List[SetupVal]
 
-    def __init__(self, elements : List[SetupVal]) -> None:
+    def __init__(self,
+                 element_type : Union['LLVMType', 'JVMType', 'MIRType', None],
+                 elements : List[SetupVal]) -> None:
+        self.element_type = element_type
         self.elements = elements
 
     def to_json(self) -> JSON:
+        element_type_json: Optional[Any]
+        if self.element_type is None:
+            element_type_json = None
+        else:
+            element_type_json = self.element_type.to_json()
         return {'setup value': 'array',
+                'element type' : element_type_json,
                 'elements': [element.to_json() for element in self.elements]}
 
 name_regexp = re.compile('^(?P<prefix>.*[^0-9])?(?P<number>[0-9]+)?$')
@@ -247,7 +326,7 @@ class PointsTo:
     """The workhorse for ``points_to``.
     """
     def __init__(self, pointer : SetupVal, target : SetupVal, *,
-                 check_target_type : Union[PointerType, 'LLVMType', 'JVMType', None] = PointerType(),
+                 check_target_type : Union[PointerType, 'LLVMType', 'JVMType', 'MIRType', None] = PointerType(),
                  condition : Optional[Condition] = None) -> None:
         self.pointer = pointer
         self.target = target
@@ -398,7 +477,7 @@ class Contract:
         self.__used_names.add(new_name)
         return new_name
 
-    def fresh_var(self, type : Union['LLVMType','JVMType'], suggested_name : Optional[str] = None) -> FreshVar:
+    def fresh_var(self, type : Union['LLVMType','JVMType', 'MIRType'], suggested_name : Optional[str] = None) -> FreshVar:
         """Declares a fresh variable of type ``type`` (with name ``suggested_name`` if provided and available)."""
         fresh_name = self.get_fresh_name('x' if suggested_name is None else self.get_fresh_name(suggested_name))
         v = FreshVar(self, type, fresh_name)
@@ -410,7 +489,7 @@ class Contract:
             raise Exception("wrong state")
         return v
 
-    def alloc(self, type : Union['LLVMType', 'JVMType'], *, read_only : bool = False,
+    def alloc(self, type : Union['LLVMType', 'JVMType', 'MIRType'], *, read_only : bool = False,
                                         alignment : Optional[int] = None,
                                         points_to : Optional[SetupVal] = None) -> SetupVal:
         """Allocates a pointer of type ``type``.
@@ -439,7 +518,7 @@ class Contract:
         return a
 
     def points_to(self, pointer : SetupVal, target : SetupVal, *,
-                  check_target_type : Union[PointerType, 'LLVMType', 'JVMType', None] = PointerType(),
+                  check_target_type : Union[PointerType, 'LLVMType', 'JVMType', 'MIRType', None] = PointerType(),
                   condition : Optional[Condition] = None) -> None:
         """Declare that the memory location indicated by the ``pointer``
         contains the ``target``.
@@ -469,7 +548,7 @@ class Contract:
         contains the ``target``.
 
         Currently, this function only supports LLVM verification. Attempting to
-        use this function for JVM verification will result in an error.
+        use this function for JVM or MIR verification will result in an error.
         """
         pt = PointsToBitfield(pointer, field_name, target)
         if self.__state == 'pre':
@@ -492,10 +571,15 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    @deprecated
     def proclaim(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
-        """DEPRECATED: Use ``precondition`` or ``postcondition`` instead. This method will
-        eventually be removed."""
+        """Asserts ``proposition`` for the function ``Contract`` being
+        specified.
+
+        Usable either before or after ``execute_func`` in the contract
+        specification. If this is used before ``execute_func``, then
+        ``proposition`` is asserted as a precondition. If this is used after
+        ``execute_func``, then ``proposition`` is asserted as a postcondition.
+        """
         if not isinstance(proposition, CryptolTerm):
             condition = Condition(CryptolTerm(proposition))
         else:
@@ -506,6 +590,12 @@ class Contract:
             self.__post_state.conditions.append(condition)
         else:
             raise Exception("wrong state")
+
+    def proclaim_f(self, s : str) -> None:
+        """Proclaims an assertion using a ``cry_f``-style format string, i.e.
+        ``proclaim_f(...)`` is equivalent to ``proclaim(cry_f(...))``"""
+        expression = to_cryptol_str_customf(s, frames=1, filename="<proclaim_f>")
+        return self.proclaim(expression)
 
     def precondition(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
         """Establishes ``proposition`` as a precondition for the function ```Contract```
@@ -548,6 +638,8 @@ class Contract:
         return self.postcondition(expression)
 
     def returns(self, val : Union[Void,SetupVal]) -> None:
+        """Declare the return value for the function ``Contract`` being
+        specified."""
         if self.__state == 'post':
             if self.__returns is None:
                 self.__returns = val
@@ -651,7 +743,7 @@ def cry_f(s : str) -> CryptolTerm:
        ``cry_f('{ {"x": 5, "y": 4} }')`` equals ``cry('{x = 5, y = 4}')``
        but ``f'{ {"x": 5, "y": 4} }'`` equals ``'{"x": 5, "y": 4}'``. Only
        the former is valid Cryptol syntax for a record.
-       
+
        Note that any conversion or format specifier will always result in the
        argument being rendered as a Cryptol string literal with the conversion
        and/or formating applied. For example, `cry('f {5}')` is equal to
@@ -667,16 +759,18 @@ def cry_f(s : str) -> CryptolTerm:
     """
     return CryptolTerm(to_cryptol_str_customf(s, frames=1))
 
-def array(*elements: SetupVal) -> SetupVal:
+def array(*elements: SetupVal, element_type: Union['LLVMType', 'JVMType', 'MIRType', None] = None) -> SetupVal:
     """Returns an array with the provided ``elements`` (i.e., an ``ArrayVal``).
+    If returning an empty MIR array, you are required to explicitly supply
+    an ``element_type``; otherwise, the ``element_type`` argument is optional.
 
-    N.B., one or more ``elements`` must be provided.""" # FIXME why? document this here when we figure it out.
-    if len(elements) == 0:
-        raise ValueError('An array must be constructed with one or more elements')
+    If returning an LLVM array, then one or more ``elements`` must be provided.""" # FIXME why? document this here when we figure it out.
+    if isinstance(element_type, LLVMType) and len(elements) == 0:
+        raise ValueError('An LLVM array must be constructed with one or more elements')
     for e in elements:
         if not isinstance(e, SetupVal):
             raise ValueError('array expected a SetupVal, but got {e!r}')
-    return ArrayVal(list(elements))
+    return ArrayVal(element_type, list(elements))
 
 def elem(base: SetupVal, index: int) -> SetupVal:
     """Returns the value of the array element at position ``index`` in ``base`` (i.e., an ``ElemVal``).
@@ -688,6 +782,19 @@ def elem(base: SetupVal, index: int) -> SetupVal:
         raise ValueError('elem expected an int, but got {index!r}')
     return ElemVal(base, index)
 
+def enum(adt : MIRAdt, variant_name : str, *fields : SetupVal) -> SetupVal:
+    """Returns a MIR enum value (i.e., an ``EnumVal``) whose type corresponds to
+    the given ``adt``, whose variant corresponds to the given ``variant_name``,
+    and whose field values correspond to the given ``fields``.
+
+    At present, this is only supported with MIR verification. Using this
+    function with LLVM or JVM verification will raise an error.
+    """
+    for field in fields:
+        if not isinstance(field, SetupVal):
+            raise ValueError('enum expected a SetupVal, but got {field!r}')
+    return EnumVal(adt, variant_name, list(fields))
+
 def field(base : SetupVal, field_name : str) -> SetupVal:
     """Returns the value of struct ``base``'s field ``field_name`` (i.e., a ``FieldVal``).
 
@@ -697,6 +804,18 @@ def field(base : SetupVal, field_name : str) -> SetupVal:
     if not isinstance(field_name, str):
         raise ValueError('field expected a str, but got {field_name!r}')
     return FieldVal(base, field_name)
+
+def fresh_expanded(prefix: str, ty: Union['LLVMType', 'JVMType', 'MIRType']) -> SetupVal:
+    """Returns a value entirely populated with fresh symbolic variables (i.e.,
+    a ``FreshExpandedVal``). If ``ty`` is a compound type such as a struct or an
+    array, this will explicitly set each field or element to contain a fresh
+    symbolic variable. The ``prefix`` argument is used as a prefix in each of
+    the symbolic variables.
+
+    At present, this is only supported with LLVM and MIR verification. Using
+    this function with JVM verification will raise an error.
+    """
+    return FreshExpandedVal(prefix, ty)
 
 def global_initializer(name: str) -> SetupVal:
     """Returns the initializer value of a named global ``name`` (i.e., a ``GlobalInitializerVal``)."""
@@ -708,9 +827,43 @@ def null() -> SetupVal:
     """Returns a null pointer value (i.e., a ``NullVal``)."""
     return NullVal()
 
-def struct(*fields : SetupVal) -> SetupVal:
-    """Returns an LLVM structure value with the given ``fields`` (i.e., a ``StructVal``)."""
+def slice_value(base : SetupVal) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base``, where ``base``
+    must be a reference to an array. Using this function with LLVM or JVM
+    verification will raise an error.
+
+    Unlike most other functions in saw_client.crucible, this has a ``_value``
+    suffix so as not to clash with the built-in ``slice()`` function in Python.
+    """
+    return SliceVal(base)
+
+def slice_range(base : SetupVal, start : int, end : int) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base`` over a given range,
+    where ``base`` must be a reference to an array, and ``start`` and ``end``
+    delimit the range of values in the slice. Using this function with LLVM or
+    JVM verification will raise an error.
+    """
+    return SliceRangeVal(base, start, end)
+
+def struct(*fields : SetupVal, mir_adt : Optional[MIRAdt] = None) -> SetupVal:
+    """Returns a structure value with the given ``fields`` (i.e., a ``StructVal``).
+    For MIR structures, it is required to also pass a ``mir_adt`` representing
+    the type of struct being constructed. Passing ``mir_adt`` for LLVM for JVM
+    verification will raise an error.
+    """
     for field in fields:
         if not isinstance(field, SetupVal):
             raise ValueError('struct expected a SetupVal, but got {field!r}')
-    return StructVal(list(fields))
+    return StructVal(list(fields), mir_adt)
+
+def tuple_value(*fields : SetupVal) -> SetupVal:
+    """Returns a MIR tuple value with the given ``fields`` (i.e., a ``TupleVal``).
+    Using this function with LLVM or JVM verification will raise an error.
+
+    Unlike most other functions in saw_client.crucible, this has a ``_value``
+    suffix so as not to clash with the built-in ``tuple()`` function in Python.
+    """
+    for field in fields:
+        if not isinstance(field, SetupVal):
+            raise ValueError('tuple expected a SetupVal, but got {field!r}')
+    return TupleVal(list(fields))

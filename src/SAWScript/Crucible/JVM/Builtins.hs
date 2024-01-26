@@ -44,14 +44,18 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_alloc_object
     , jvm_alloc_array
     , jvm_setup_with_tag
+    , jvm_ghost_value
     ) where
 
 import           Control.Lens
 
 import qualified Control.Monad.Catch as X
-import           Control.Monad.State
+import           Control.Monad (foldM, forM, forM_, guard, unless, when)
+import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Reader (runReaderT)
+import           Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import qualified Control.Monad.State.Strict as Strict
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
@@ -67,7 +71,6 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector as V
-import           Data.Void (absurd)
 import           Prettyprinter
 import           System.IO
 
@@ -109,6 +112,7 @@ import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Builtins (ghost_value)
 import SAWScript.Exceptions
 import SAWScript.Panic
 import SAWScript.Proof
@@ -412,7 +416,8 @@ verifyPrestate cc mspec globals0 =
      (env, globals1) <- runStateT (Map.traverseWithKey doAlloc preallocs) globals0'
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
-     cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
+     (globals3, cs) <-
+       setupPrestateConditions mspec cc env globals2 (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
 
      -- Check the type of the return setup value
@@ -432,7 +437,7 @@ verifyPrestate cc mspec globals0 =
               ]
        (Nothing, _) -> return ()
 
-     return (args, cs, env, globals2)
+     return (args, cs, env, globals3)
 
 -- | Check two Types for register compatibility.
 registerCompatible :: J.Type -> J.Type -> Bool
@@ -537,32 +542,43 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
         _ ->
           panic "setupPrePointsTo" ["invalid invariant", "jvm_modifies in pre-state"]
 
--- | Collects boolean terms that should be assumed to be true.
+-- | Sets up globals (ghost variable), and collects boolean terms
+-- that should be assumed to be true.
 setupPrestateConditions ::
   MethodSpec ->
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
+  Crucible.SymGlobalState Sym ->
   [SetupCondition] ->
-  IO [Crucible.LabeledPred Term AssumptionReason]
+  IO ( Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term AssumptionReason]
+     )
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    aux acc [] = return acc
+    aux acc globals [] = return (globals, acc)
 
-    aux acc (MS.SetupCond_Equal loc val1 val2 : xs) =
+    aux acc globals (MS.SetupCond_Equal loc val1 val2 : xs) =
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (loc, "equality precondition")
-         aux (lp:acc) xs
+         aux (lp:acc) globals xs
 
-    aux acc (MS.SetupCond_Pred loc tm : xs) =
+    aux acc globals (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (loc, "precondition") in
-      aux (lp:acc) xs
+      aux (lp:acc) globals xs
 
-    aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
+    aux acc globals (MS.SetupCond_Ghost _md var val : xs) =
+      case val of
+        TypedTerm (TypedTermSchema sch) tm ->
+          aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
+        TypedTerm tp _ ->
+          fail $ unlines
+            [ "Setup term for global variable expected to have Cryptol schema type, but got"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 --------------------------------------------------------------------------------
 
@@ -620,6 +636,8 @@ registerOverride opts cc _ctx top_loc mdMap cs =
 
 --------------------------------------------------------------------------------
 
+-- | Simulate a JVM function with Crucible as part of a 'jvm_verify' command,
+-- making sure to install any overrides that the user supplies.
 verifySimulate ::
   Options ->
   JVMCrucibleContext ->
@@ -655,7 +673,13 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
-          let simctx = CJ.jvmSimContext bak halloc stdout jc verbosity SAWCruciblePersonality
+          -- TODO: Use crucible-jvm's jvmSimContext here (instead of manually
+          -- calling mkDelayedBindings/initSimContext), once
+          -- https://github.com/GaloisInc/crucible/issues/1128 has been fixed
+          -- upstream.
+          let bindings = CJ.mkDelayedBindings jc verbosity
+          let simctx = Crucible.initSimContext bak intrinsics halloc stdout
+                         bindings CJ.jvmExtensionImpl SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
@@ -1415,6 +1439,13 @@ jvm_setup_with_tag ::
   JVMSetupM ()
 jvm_setup_with_tag tag m =
   JVMSetupM (Setup.setupWithTag tag (runJVMSetupM m))
+
+jvm_ghost_value ::
+  MS.GhostGlobal ->
+  TypedTerm ->
+  JVMSetupM ()
+jvm_ghost_value ghost val = JVMSetupM $
+  ghost_value ghost val
 
 --------------------------------------------------------------------------------
 

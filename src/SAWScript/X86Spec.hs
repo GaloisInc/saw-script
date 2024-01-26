@@ -70,7 +70,8 @@ import Data.Proxy(Proxy(..))
 import qualified Data.Map as Map
 import Data.IORef(newIORef,atomicModifyIORef')
 import Data.String
-import Control.Monad.Reader
+import Control.Monad (MonadPlus(..), foldM, join, zipWithM)
+import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes

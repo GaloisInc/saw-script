@@ -46,8 +46,9 @@ module Verifier.SAW.Term.Pretty
 
 import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
-import Control.Monad.Reader
-import Control.Monad.State.Strict as State
+import Control.Monad (forM)
+import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
+import Control.Monad.State.Strict (MonadState(..), State, execState)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
@@ -311,9 +312,9 @@ withMemoVar global_p idx f =
       -- "pretend" we memoized by calling `updateMemoVar`, so that non-inlined
       -- memoization identifiers are kept constant between two
       -- otherwise-identical terms with differing inline strategies.
-      (skip:skips) 
+      (skip:skips)
         | skip == memoVar -> local (updateMemoVar . addIdxSkip . setMemoSkips skips) (f Nothing)
-      _ 
+      _
         | idx `Set.member` idxSkips -> f Nothing
         | otherwise -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
   where
@@ -669,7 +670,7 @@ filterOccurenceMap min_occs global_p =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
-        (if global_p then looseVars t == emptyBitSet else True))
+        (if global_p then termIsClosed t else True))
 
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
@@ -693,7 +694,7 @@ ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
      if isBound then ppLets global_p idxs bindings baseDoc else
        do doc_rhs <- ppTerm' PrecTerm t_rhs
           withMemoVar global_p idx $ \memoVarM ->
-            let bindings' = case memoVarM of 
+            let bindings' = case memoVarM of
                   Just memoVar -> (memoVar, doc_rhs):bindings
                   Nothing -> bindings
             in  ppLets global_p idxs bindings' baseDoc
@@ -730,7 +731,7 @@ ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 
 -- | Pretty-print a term, but only to a maximum depth
 ppTermDepth :: Int -> Term -> SawDoc
-ppTermDepth depth t = ppTerm (depthPPOpts depth) t
+ppTermDepth depth = ppTerm (depthPPOpts depth)
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context

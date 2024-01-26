@@ -1,0 +1,35 @@
+enable_experimental;
+
+m <- mir_load_module "enums.linked-mir.json";
+
+option_u32 <- mir_find_adt m "core::option::Option" [mir_u32];
+
+let i_found_something_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  let ret = mir_enum_value option_u32 "Some" [mir_term x];
+  mir_return ret;
+};
+
+mir_verify m "enums::i_found_something" [] false i_found_something_spec z3;
+
+let i_got_nothing_spec = do {
+  mir_execute_func [];
+
+  let ret = mir_enum_value option_u32 "None" [];
+  mir_return ret;
+};
+
+mir_verify m "enums::i_got_nothing" [] false i_got_nothing_spec z3;
+
+let do_stuff_with_option_spec = do {
+  o <- mir_fresh_expanded_value "o" (mir_adt option_u32);
+
+  mir_execute_func [o];
+
+  // ...
+};
+
+mir_verify m "enums::do_stuff_with_option" [] false do_stuff_with_option_spec z3;

@@ -6,6 +6,7 @@ Maintainer  : langston
 Stability   : provisional
 -}
 
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ParallelListComp #-}
 
 module SAWScript.Crucible.Common.Setup.Builtins where
@@ -83,3 +84,19 @@ crucible_execute_func args = do
                                                   | a <- args
                                                   | t <- tps
                                                   ]
+
+--------------------------------------------------------------------------------
+-- ** Shared data types
+
+-- | When invoking a points-to command, against what should SAW check the type
+-- of the RHS value?
+data CheckPointsToType ty
+  = CheckAgainstPointerType
+    -- ^ Check the type of the RHS value against the type that the LHS points to.
+    --   Used by commands such as @llvm_{conditional_}points_to@ and
+    --   @mir_points_to@.
+  | CheckAgainstCastedType ty
+    -- ^ Check the type of the RHS value against the provided @ty@, which
+    --   the LHS pointer is casted to.
+    --   This is currently used by @llvm_{conditional_}points_to_at_type@ only.
+  deriving (Functor, Foldable, Traversable)

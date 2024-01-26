@@ -1,3 +1,4 @@
+{-# Language CPP #-}
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
 {-# Language NamedFieldPuns #-}
@@ -299,8 +300,12 @@ write_smtlib2_w4 f (TypedTerm schema t) = do
 writeSMTLib2 :: FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
   do (_, _, l) <- SBV.sbvSATQuery sc mempty satq
+#if MIN_VERSION_sbv(10,0,0)
+     txt <- SBV.generateSMTBenchmarkSat l
+#else
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
+#endif
      writeFile f txt
 
 -- | Write a SAT query an SMT-Lib version 2 file.
@@ -478,19 +483,18 @@ writeCoqProp name notations skips path t =
      tm <- io (propToTerm sc t)
      writeCoqTerm name notations skips path tm
 
--- | Write out a representation of a Cryptol module in Gallina syntax for Coq,
--- using the monadified version of the given module iff the first argument is
--- 'True'. The first argument is the file containing the module to export. The
--- second argument is the name of the file to output into, use an empty string
--- to output to standard output. The third argument is a list of pairs of
--- notation substitutions: the operator on the left will be replaced with the
--- identifier on the right, as we do not support notations on the Coq side.
--- The fourth argument is a list of identifiers to skip translating.
+-- | Write out a representation of a Cryptol module in Gallina syntax for Coq.
 writeCoqCryptolModule ::
+  -- | Translate the "monadified" version of the module when 'True'
   Bool ->
+  -- | Path to module to export
   FilePath ->
+  -- | Path for output Coq file
   FilePath ->
+  -- | Pairs of notation substitutions: operator on the left will be replaced
+  -- with the identifier on the right
   [(String, String)] ->
+  -- | List of identifiers to skip during translation
   [String] ->
   TopLevel ()
 writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do

@@ -42,7 +42,10 @@
 	url = https://github.com/galoisinc/argo
 [submodule "deps/language-rust"]
 	path = deps/language-rust
-	url = https://github.com/harpocrates/language-rust.git
+	url = https://github.com/GaloisInc/language-rust.git
 [submodule "deps/language-sally"]
 	path = deps/language-sally
 	url = https://github.com/GaloisInc/language-sally
+[submodule "deps/lmdb"]
+	path = deps/lmdb
+	url = https://github.com/GaloisInc/lmdb.git

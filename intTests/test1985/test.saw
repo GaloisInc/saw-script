@@ -1,0 +1,12 @@
+// Test top level typedefs
+typedef Foo = Int;
+typedef Bar = Foo;
+let thing : Bar = 2;
+
+// Test local typedefs
+let local = do {
+  typedef LocalFoo = Bar;
+  typedef LocalBar = LocalFoo;
+  let local_thing : LocalBar = 3;
+  return ();
+};

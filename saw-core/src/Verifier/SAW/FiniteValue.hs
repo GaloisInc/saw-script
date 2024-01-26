@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 {- |
 Module      : Verifier.SAW.FiniteValue
@@ -15,7 +16,8 @@ import Control.Applicative
 import Data.Traversable
 #endif
 
-import Control.Monad (mzero)
+import GHC.Generics (Generic)
+import Control.Monad (replicateM, mzero)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.State as S
@@ -26,6 +28,9 @@ import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
 import Prettyprinter hiding (Doc)
+
+import Data.Aeson ( FromJSON(..), ToJSON(..) )
+import qualified Data.Aeson as JSON
 
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
@@ -50,6 +55,9 @@ data FiniteValue
   deriving Eq
 
 -- | First-order types that can be encoded in an SMT solver.
+-- NB: The JSON encoding of this type, used for saw-script solver result caching,
+-- assumes constructor names and argument orders will not change (though the
+-- order and number of constructors may change) - see 'firstOrderJSONOptions'
 data FirstOrderType
   = FOTBit
   | FOTInt
@@ -58,9 +66,12 @@ data FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 -- | Values inhabiting those first-order types.
+-- NB: The JSON encoding of this type, used for saw-script solver result caching,
+-- assumes constructor names and argument orders will not change (though the
+-- order and number of constructors may change) - see 'firstOrderJSONOptions'
 data FirstOrderValue
   = FOVBit Bool
   | FOVInt Integer
@@ -70,7 +81,7 @@ data FirstOrderValue
   | FOVArray FirstOrderType FirstOrderType
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
-  deriving Eq
+  deriving (Eq, Generic)
 
 toFirstOrderType :: FiniteType -> FirstOrderType
 toFirstOrderType ft =
@@ -135,6 +146,30 @@ ppFirstOrderValue opts = loop
    FOVTuple xs   -> parens (sep (punctuate comma (map loop xs)))
    FOVRec xs     -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
       where ppField (f,x) = pretty f <+> pretty '=' <+> loop x
+
+-- | The options for JSON-serializing 'FirstOrderType's and 'FirstOrderValue's:
+-- remove the @FOT@/@FOV@ prefixes and encode the different constructors as
+-- two-element arrays. Thus, this encoding assumes constructor names and
+-- argument orders will not change (though the order and number of constructors
+-- may change).
+firstOrderJSONOptions :: JSON.Options
+firstOrderJSONOptions =
+  JSON.defaultOptions { JSON.sumEncoding = JSON.TwoElemArray
+                      , JSON.constructorTagModifier = dropFO }
+  where dropFO ('F':'O':tv:cs) | tv `elem` ['T', 'V'] = cs
+        dropFO cs = cs
+
+instance FromJSON FirstOrderType where
+  parseJSON = JSON.genericParseJSON firstOrderJSONOptions
+instance FromJSON FirstOrderValue where
+  parseJSON = JSON.genericParseJSON firstOrderJSONOptions
+
+instance ToJSON FirstOrderType where
+  toJSON = JSON.genericToJSON firstOrderJSONOptions
+  toEncoding = JSON.genericToEncoding firstOrderJSONOptions
+instance ToJSON FirstOrderValue where
+  toJSON = JSON.genericToJSON firstOrderJSONOptions
+  toEncoding = JSON.genericToEncoding firstOrderJSONOptions
 
 
 -- | Smart constructor
@@ -320,7 +355,7 @@ readFiniteValue' en ft =
                      case bs of
                        []      -> S.lift Nothing
                        b : bs' -> S.put bs' >> return (FVBit b)
-    FTVec n t  -> (fvVec t . fixup) <$> S.replicateM (fromIntegral n) (readFiniteValue' en t)
+    FTVec n t  -> (fvVec t . fixup) <$> replicateM (fromIntegral n) (readFiniteValue' en t)
                     where fixup = case (t, en) of
                                     (FTBit, LittleEndian) -> reverse
                                     _ -> id

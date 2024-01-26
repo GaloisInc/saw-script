@@ -49,6 +49,7 @@ import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.IORef
 import Data.Foldable(foldrM)
 import Data.List ( intersperse )
+import Data.List.Extra ( dropEnd )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
@@ -61,6 +62,7 @@ import qualified Prettyprinter as PP
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.Crucible.Common as Common
@@ -69,15 +71,18 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
+import qualified SAWScript.Crucible.MIR.MethodSpecIR ()
 import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
-import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
+import SAWScript.MGU (instantiate)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.MRSolver.Term as MRSolver
+import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
+import SAWScript.Prover.MRSolver.Evidence as MRSolver
+import SAWScript.SolverCache
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWScript.Yosys.IR
@@ -112,8 +117,11 @@ import qualified Lang.Crucible.JVM as CJ
 
 import           Lang.Crucible.Utils.StateContT
 import           Lang.Crucible.LLVM.ArraySizeProfile
+import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
 import           Mir.Generator
+import           Mir.Intrinsics (MIR)
+import qualified Mir.Mir as MIR
 
 import           What4.ProgramLoc (ProgramLoc(..))
 
@@ -140,7 +148,9 @@ data Value
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
   | VSimpset SAWSimpset
+  | VRefnset SAWRefnset
   | VTheorem Theorem
+  | VBisimTheorem BisimTheorem
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
@@ -150,6 +160,10 @@ data Value
   | VJVMMethodSpec !(CMS.ProvedSpec CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
+  | VMIRSetup !(MIRSetupM Value)
+  | VMIRMethodSpec !(CMS.ProvedSpec MIR)
+  | VMIRSetupValue !(CMS.SetupValue MIR)
+  -----
   | VLLVMModuleSkeleton ModuleSkeleton
   | VLLVMFunctionSkeleton FunctionSkeleton
   | VLLVMSkeletonState SkeletonState
@@ -157,10 +171,12 @@ data Value
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
+  | VMIRType MIR.Ty
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule (Some CMSLLVM.LLVMModule)
   | VMIRModule RustModule
+  | VMIRAdt MIR.Adt
   | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
@@ -174,6 +190,7 @@ data Value
   | VYosysTheorem YosysTheorem
 
 type SAWSimpset = Simpset TheoremNonce
+type SAWRefnset = MRSolver.Refnset TheoremNonce
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -276,7 +293,6 @@ showsProofResult opts r =
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
-
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
@@ -303,6 +319,23 @@ showSimpset opts ss =
     ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
+-- | Pretty-print a 'Refnset' to a 'String'
+showRefnset :: PPOpts -> MRSolver.Refnset a -> String
+showRefnset opts ss =
+  unlines ("Refinements" : "=============" : map (show . ppFunAssump)
+                                                 (MRSolver.listFunAssumps ss))
+  where
+    ppFunAssump (MRSolver.FunAssump ctx f args rhs _) =
+      PP.pretty '*' PP.<+>
+      (PP.nest 2 $ PP.fillSep
+       [ ppTermAppInCtx ctx (funNameTerm f) args
+       , PP.pretty ("|=" :: String) PP.<+> ppFunAssumpRHS ctx rhs ])
+    ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
+      ppTermAppInCtx ctx (funNameTerm f) args
+    ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
+      SAWCorePP.ppTermInCtx opts' (map fst $ mrVarCtxInnerToOuter ctx) rhs 
+    opts' = sawPPOpts opts
+
 showsPrecValue :: PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
 showsPrecValue opts nenv p v =
   case v of
@@ -326,10 +359,12 @@ showsPrecValue opts nenv p v =
     VBind {} -> showString "<<monadic>>"
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
+    VRefnset ss -> showString (showRefnset opts ss)
     VProofScript {} -> showString "<<proof script>>"
     VTheorem thm ->
       showString "Theorem " .
       showParen True (showString (prettyProp opts' nenv (thmProp thm)))
+    VBisimTheorem _ -> showString "<<Bisimulation theorem>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
@@ -338,10 +373,12 @@ showsPrecValue opts nenv p v =
     VLLVMSkeletonState _ -> showString "<<Skeleton state>>"
     VLLVMFunctionProfile _ -> showString "<<Array sizes for function>>"
     VJavaType {} -> showString "<<Java type>>"
-    VLLVMType t -> showString (show (LLVM.ppType t))
+    VLLVMType t -> showString (show (Crucible.LLVM.ppType t))
+    VMIRType t -> showString (show (PP.pretty t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
     VMIRModule m -> shows (PP.pretty (m^.rmCS^.collection))
+    VMIRAdt adt -> shows (PP.pretty adt)
     VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
@@ -359,6 +396,9 @@ showsPrecValue opts nenv p v =
     VJVMSetup _      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
+    VMIRSetup{} -> showString "<<MIR Setup>>"
+    VMIRMethodSpec{} -> showString "<<MIR MethodSpec>>"
+    VMIRSetupValue x -> shows x
   where
     opts' = sawPPOpts opts
 
@@ -465,7 +505,8 @@ extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv 
 extendLocal x mt md v env = LocalLet x mt md v : env
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw = rw { rwTypedef = M.insert name ty (rwTypedef rw) }
+addTypedef name ty rw = rw { rwTypedef = M.insert name ty' (rwTypedef rw) }
+  where ty' = instantiate (rwTypedef rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
@@ -520,6 +561,7 @@ data TopLevelRW =
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   , rwSharedContext :: SharedContext
+  , rwSolverCache :: Maybe SolverCache
   , rwTheoremDB :: TheoremDB
 
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
@@ -602,7 +644,7 @@ io f = (TopLevel_ (liftIO f))
     handleIO e
       | IOError.isUserError e =
           do pos <- getPosition
-             rethrow (SS.TopLevelException pos (init . drop 12 $ show e))
+             rethrow (SS.TopLevelException pos (dropEnd 1 . drop 12 $ show e))
       | otherwise = rethrow e
 
     handleX86Unsupported (X86Unsupported s) =
@@ -742,6 +784,21 @@ recordProof v =
   do rw <- getTopLevelRW
      putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
 
+-- | Perform an operation on the 'SolverCache', returning a default value or
+-- failing (depending on the first element of the 'SolverCacheOp') if there
+-- is no enabled 'SolverCache'
+onSolverCache :: SolverCacheOp a -> TopLevel a
+onSolverCache cacheOp =
+  do opts <- getOptions
+     rw <- getTopLevelRW
+     case rwSolverCache rw of
+       Just cache -> do (a, cache') <- io $ solverCacheOp cacheOp opts cache
+                        putTopLevelRW rw { rwSolverCache = Just cache' }
+                        return a
+       Nothing -> case solverCacheOpDefault cacheOp of
+        Just a -> return a
+        Nothing -> fail "Solver result cache not enabled!"
+
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel CJ.JVMContext
 getJVMTrans = gets rwJVMTrans
@@ -847,6 +904,11 @@ throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
 throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
 
+throwLLVMFun :: Text -> String -> LLVMCrucibleSetupM a
+throwLLVMFun nm msg = do
+  loc <- LLVMCrucibleSetupM $ getW4Position nm
+  throwLLVM loc msg
+
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
@@ -857,6 +919,13 @@ getW4Position s = SS.toW4Loc s <$> lift (asks roPosition)
 type JVMSetup = CrucibleSetup CJ.JVM
 
 newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
+  deriving (Applicative, Functor, Monad)
+
+--
+
+type MIRSetup = CrucibleSetup MIR
+
+newtype MIRSetupM a = MIRSetupM { runMIRSetupM :: MIRSetup a }
   deriving (Applicative, Functor, Monad)
 
 --
@@ -977,7 +1046,7 @@ instance FromValue a => FromValue (TopLevel a) where
       v1 <- withPosition pos (fromValue m1)
       m2 <- applyValue v2 v1
       fromValue m2
-    fromValue _ = error "fromValue TopLevel"
+    fromValue v = error $ "fromValue TopLevel:" <> show v
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue m = VProofScript (fmap toValue m)
@@ -1023,6 +1092,19 @@ instance FromValue a => FromValue (JVMSetupM a) where
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
+instance IsValue a => IsValue (MIRSetupM a) where
+    toValue m = VMIRSetup (fmap toValue m)
+
+instance FromValue a => FromValue (MIRSetupM a) where
+    fromValue (VMIRSetup m) = fmap fromValue m
+    fromValue (VReturn v) = return (fromValue v)
+    fromValue (VBind pos m1 v2) = MIRSetupM $ do
+      v1 <- underReaderT (underStateT (withPosition pos))
+              (runMIRSetupM (fromValue m1))
+      m2 <- lift $ lift $ applyValue v2 v1
+      runMIRSetupM (fromValue m2)
+    fromValue _ = error "fromValue MIRSetup"
+
 instance IsValue (CMSLLVM.AllLLVM CMS.SetupValue) where
   toValue = VLLVMCrucibleSetupValue
 
@@ -1035,6 +1117,13 @@ instance IsValue (CMS.SetupValue CJ.JVM) where
 
 instance FromValue (CMS.SetupValue CJ.JVM) where
   fromValue (VJVMSetupValue v) = v
+  fromValue _ = error "fromValue Crucible.SetupValue"
+
+instance IsValue (CMS.SetupValue MIR) where
+  toValue v = VMIRSetupValue v
+
+instance FromValue (CMS.SetupValue MIR) where
+  fromValue (VMIRSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue SAW_CFG where
@@ -1057,6 +1146,13 @@ instance IsValue (CMS.ProvedSpec CJ.JVM) where
 instance FromValue (CMS.ProvedSpec CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
     fromValue _ = error "fromValue ProvedSpec JVM"
+
+instance IsValue (CMS.ProvedSpec MIR) where
+    toValue t = VMIRMethodSpec t
+
+instance FromValue (CMS.ProvedSpec MIR) where
+    fromValue (VMIRMethodSpec t) = t
+    fromValue _ = error "fromValue ProvedSpec MIR"
 
 instance IsValue ModuleSkeleton where
     toValue s = VLLVMModuleSkeleton s
@@ -1158,12 +1254,26 @@ instance FromValue SAWSimpset where
     fromValue (VSimpset ss) = ss
     fromValue _ = error "fromValue Simpset"
 
+instance IsValue SAWRefnset where
+    toValue rs = VRefnset rs
+
+instance FromValue SAWRefnset where
+    fromValue (VRefnset rs) = rs
+    fromValue _ = error "fromValue Refnset"
+
 instance IsValue Theorem where
     toValue t = VTheorem t
 
 instance FromValue Theorem where
     fromValue (VTheorem t) = t
     fromValue _ = error "fromValue Theorem"
+
+instance IsValue BisimTheorem where
+    toValue = VBisimTheorem
+
+instance FromValue BisimTheorem where
+    fromValue (VBisimTheorem t) = t
+    fromValue _ = error "fromValue BisimTheorem"
 
 instance IsValue JavaType where
     toValue t = VJavaType t
@@ -1178,6 +1288,13 @@ instance IsValue LLVM.Type where
 instance FromValue LLVM.Type where
     fromValue (VLLVMType t) = t
     fromValue _ = error "fromValue LLVMType"
+
+instance IsValue MIR.Ty where
+    toValue t = VMIRType t
+
+instance FromValue MIR.Ty where
+    fromValue (VMIRType t) = t
+    fromValue _ = error "fromValue MIRType"
 
 instance IsValue Uninterp where
     toValue me = VUninterp me
@@ -1216,6 +1333,13 @@ instance IsValue RustModule where
 instance FromValue RustModule where
     fromValue (VMIRModule m) = m
     fromValue _ = error "fromValue RustModule"
+
+instance IsValue MIR.Adt where
+    toValue adt = VMIRAdt adt
+
+instance FromValue MIR.Adt where
+    fromValue (VMIRAdt adt) = adt
+    fromValue _ = error "fromValue Adt"
 
 instance IsValue HeapsterEnv where
     toValue m = VHeapsterEnv m

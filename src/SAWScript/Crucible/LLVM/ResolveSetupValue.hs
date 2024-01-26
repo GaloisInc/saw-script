@@ -41,6 +41,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, fromJust)
+import Data.Void (absurd)
 
 import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
@@ -84,11 +85,11 @@ import           SAWScript.Crucible.Common (Sym, sawCoreState, HasSymInterface(.
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Crucible.LLVM.Setup.Value (LLVMPtr)
 import qualified SAWScript.Proof as SP
 
 
 type LLVMVal = Crucible.LLVMVal Sym
-type LLVMPtr wptr = Crucible.LLVMPtr Sym wptr
 
 
 
@@ -120,7 +121,7 @@ resolveSetupValueInfo cc env nameEnv v =
            -- TODO? is this a panic situation?
            throwError $ "Type information for local allocation value not found: " ++ show i
 
-    SetupCast () _ (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
+    SetupCast (L.Alias alias) _ -> pure (L.guessAliasInfo mdMap alias)
 
     SetupField () a n ->
       do i <- resolveSetupValueInfo cc env nameEnv a
@@ -445,10 +446,17 @@ typeOfSetupValue cc env nameEnv val =
                 , show (ppTypedTermType tp)
                 ]
 
-    SetupStruct () packed vs ->
+    SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
+
+    SetupEnum empty ->
+      absurd empty
+    SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
+      absurd empty
 
     SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
     SetupArray () (v : vs) ->
@@ -469,9 +477,9 @@ typeOfSetupValue cc env nameEnv val =
                         [ "Could not determine LLVM type from computed debug type information:"
                         , show info
                         ]
-           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast () v ltp)
+           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast ltp v)
 
-    SetupCast () v ltp ->
+    SetupCast ltp v ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          if Crucible.isPointerMemType memTy
            then
@@ -498,7 +506,7 @@ typeOfSetupValue cc env nameEnv val =
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
                      | otherwise -> throwError $ unwords $
                          [ "typeOfSetupValue: array type index out of bounds"
                          , "(index: " ++ show i ++ ")"
@@ -570,7 +578,7 @@ resolveSetupElemOffset cc env nameEnv v i = do
            Right memTy' ->
              case memTy' of
                Crucible.ArrayType n memTy''
-                 | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                 | fromIntegral i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
                Crucible.StructType si ->
                  case Crucible.siFieldOffset si i of
                    Just d -> return d
@@ -614,11 +622,11 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     SetupTerm tm -> resolveTypedTerm cc tm
     -- NB, SetupCast values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
-    SetupCast () v _lty -> resolveSetupVal cc mem env tyenv nameEnv v
+    SetupCast _lty v -> resolveSetupVal cc mem env tyenv nameEnv v
     -- NB, SetupUnion values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
     SetupUnion () v _n -> resolveSetupVal cc mem env tyenv nameEnv v
-    SetupStruct () packed vs -> do
+    SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals
       let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
@@ -626,6 +634,12 @@ resolveSetupVal cc mem env tyenv nameEnv val =
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
+    SetupEnum empty ->
+      absurd empty
+    SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
+      absurd empty
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do
       vals <- V.mapM (resolveSetupVal cc mem env tyenv nameEnv) (V.fromList vs)

@@ -61,6 +61,8 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.TypedTerm as SAW
 
+import SAWScript.Crucible.MIR.TypeShape
+
 import Mir.Compositional.Convert
 import Mir.Compositional.DefId (hasInstPrefix)
 
@@ -335,9 +337,16 @@ munge sym shp rv = do
                 AnyValue tpr <$> goFields flds rvs
             | otherwise = error $  "munge: StructShape AnyValue with NYI TypeRepr " ++ show tpr
         go (TransparentShape _ shp) rv = go shp rv
+        go (EnumShape _ _ _ _ _) _ =
+            error "Enums not currently supported in overrides"
         go (FnPtrShape _ _ _) _ =
             error "Function pointers not currently supported in overrides"
         -- TODO: RefShape
+        go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+            let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+            ref' <- go refShp ref
+            len' <- go lenShp len
+            pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
         go shp _ = error $ "munge: " ++ show (shapeType shp) ++ " NYI"
 
         goFields :: forall ctx.
