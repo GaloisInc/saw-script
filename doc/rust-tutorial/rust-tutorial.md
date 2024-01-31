@@ -1077,10 +1077,10 @@ As an example, a much shorter way to write the spec above using
 $include 42-48 code/structs.saw
 ```
 
-That's it! Note that the string `"z"` is used as a prefix for all fresh names
+That's it! Note that the string `"b"` is used as a prefix for all fresh names
 that `mir_fresh_expanded_value` generates, so if SAW produces a counterexample
 involving this symbolic struct value, one can expect to see names such as
-`z_0`, `z_1`, etc. for the fields of the struct.
+`b_0`, `b_1`, etc. for the fields of the struct.
 
 ### Enum types
 
