@@ -1082,6 +1082,12 @@ that `mir_fresh_expanded_value` generates, so if SAW produces a counterexample
 involving this symbolic struct value, one can expect to see names such as
 `b_0`, `b_1`, etc. for the fields of the struct.
 
+`mir_fresh_expanded_value` makes it easier to construct large, compound values
+that consist of many smaller, inner values. The drawback is that you can't
+refer to these inner values in the postconditions of a spec. As a result, there
+are some functions for which `mir_fresh_expanded_value` isn't suitable, so keep
+this in mind before reaching for it.
+
 ### Enum types
 
 Besides structs, another form of ADT that Rust supports are enums. Each enum
