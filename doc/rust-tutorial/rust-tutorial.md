@@ -1376,7 +1376,7 @@ $include 5-13 code/overrides.saw
 ```
 
 There's nothing that different about this particular proof from the proofs
-we've seen before. The only notable different is that we bind the result of
+we've seen before. The only notable difference is that we bind the result of
 calling `mir_verify` to a `MIRSpec` value that we name `g_ov` (short for "`g`
 override"). This part is important, as we will need to use `g_ov` shortly.
 
