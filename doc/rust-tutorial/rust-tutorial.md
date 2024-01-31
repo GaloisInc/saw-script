@@ -1245,7 +1245,7 @@ different lengths. Here is a slight modification to this spec that declares it
 to take a slice of length 5 rather than a slice of length 2:
 
 ```
-$include 9-19 code/slices.saw
+$include 19-29 code/slices.saw
 ```
 
 Both of these examples declare a slice whose length matches the length of the
@@ -1659,7 +1659,7 @@ For example, here is how one can unsafely assume `g_spec` and use it in a
 compositional proof of `f_spec`:
 
 ```
-$include 21-22 code/overrides-fail.saw
+$include 21-22 code/overrides-unsafe.saw
 ```
 
 It should be emphasized that when we say "`unsafe`", we really mean it.
@@ -1706,8 +1706,8 @@ String -> MIRValue
 In this case, `mir_static_initializer "statics::ANSWER"` is equivalent to
 writing `mir_term {{ 42 : [32] }}`, so this spec is also valid:
 
-``` {.rs}
-$include 14-18 code/statics.rs
+```
+$include 14-18 code/statics.saw
 ```
 
 Like `mir_verify`, the `mir_static_initializer` function expects a full
