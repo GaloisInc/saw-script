@@ -119,6 +119,20 @@ lookupStateFor sc states inpst cnm = do
   let fieldnm = cellIdentifier cnm
   cryptolRecordSelect sc (Map.mapKeys cellIdentifier states) inpst fieldnm
 
+-- | Call 'lookupStateFor' on a 'Maybe' state term
+lookupMaybeStateFor ::
+  forall m.
+  MonadIO m =>
+  SC.SharedContext ->
+  Map CellName CellStateInfo {- ^ State type info for each cell -} ->
+  Maybe SC.Term {- ^ Record term mapping (zenc-ed) cell names to cell states -} ->
+  CellName {- ^ Cell state to lookup -} ->
+  m (Maybe SC.Term)
+lookupMaybeStateFor sc states (Just inpst) cnm =
+  Just <$> lookupStateFor sc states inpst cnm
+lookupMaybeStateFor _ _ Nothing _ = return Nothing
+
+
 -- | Apply the function for a submodule to an optional state term and a map from
 -- input fields to terms, returning the optional output state term and output
 -- record term of all the output values
@@ -185,7 +199,8 @@ buildPatternMap sc mods states inp m = do
       CellTypeUserType submoduleName ->
         case Map.lookup submoduleName mods of
           Just subm -> pure $ \inps -> do
-            (_, outsRec) <- liftIO $ applySubmodule sc subm minpst inps
+            subinpst <- lookupMaybeStateFor sc states minpst cnm
+            (_, outsRec) <- liftIO $ applySubmodule sc subm subinpst inps
             fmap (Just . Map.fromList) . forM (Map.toList outPatterns) $ \(onm, _opat) -> do
               (onm,) <$> cryptolRecordSelect sc outPatterns outsRec onm
           Nothing -> pure $ \_ -> pure Nothing
@@ -356,7 +371,8 @@ translateModule sc mods m = do
               -- lookup the term for each input to the cell
               inps <- fmap Map.fromList . forM (Map.toList inpPatterns) $ \(inm, pat) ->
                 (inm,) <$> translatePattern sc ctx (YosysBitvecConsumerCell cnm inm) pat
-              liftIO (applySubmodule sc subm minpst inps) >>= \case
+              subinpst <- lookupMaybeStateFor sc states minpst cnm
+              liftIO (applySubmodule sc subm subinpst inps) >>= \case
                 (Just st_out, _) -> return (cellIdentifier cnm, st_out)
                 _ -> panic "translateModule" ["expected output state from submodule"]
         _ -> panic "translateModule" ["Malformed stateful cell type"]
