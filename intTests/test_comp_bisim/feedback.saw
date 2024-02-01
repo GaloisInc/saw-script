@@ -1,6 +1,6 @@
 enable_experimental;
-import "cryptol/Feedback.cry";
-import "cryptol/Spec.cry";
+import "cryptol/feedback.cry";
+import "cryptol/spec.cry";
 /*
 yosys_add10 <- yosys_import "add10.json";
 yosys_pow4 <- yosys_import "pow4.json";
