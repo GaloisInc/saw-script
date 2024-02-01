@@ -19,7 +19,6 @@ import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (Exception, throw)
 import Control.Monad.Catch (MonadThrow)
-import Control.Monad.Except
 
 import Data.Bifunctor (bimap)
 import qualified Data.List as List
