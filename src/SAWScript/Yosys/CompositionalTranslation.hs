@@ -403,4 +403,9 @@ translateModule sc mods m = do
   -- the same type as a Cryptol type
   let _translatedModuleCryptolType = C.tFun domainCryType codomainCryType
 
+  -- Double-check that we created a term of the correct type
+  validateTermAtType sc
+    (Text.pack "type-checking the SAW core translation of a module")
+    _translatedModuleTerm _translatedModuleType
+
   pure TranslatedModule{..}

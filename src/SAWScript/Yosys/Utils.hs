@@ -19,6 +19,7 @@ import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (Exception, throw)
 import Control.Monad.Catch (MonadThrow)
+import Control.Monad.Except
 
 import Data.Bifunctor (bimap)
 import qualified Data.List as List
@@ -148,6 +149,20 @@ reverseTopSort =
 validateTerm :: MonadIO m => SC.SharedContext -> Text -> SC.Term -> m SC.Term
 validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
   Right _ -> pure t
+  Left err ->
+    throw
+    . YosysErrorTypeError msg
+    . Text.pack
+    . unlines
+    $ SC.TC.prettyTCError err
+
+-- | Check that a SAWCore term is well-typed and has a specific type
+validateTermAtType :: MonadIO m => SC.SharedContext -> Text ->
+                      SC.Term -> SC.Term -> m ()
+validateTermAtType sc msg trm tp =
+  liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm >>= \tp_trm ->
+                         SC.TC.checkSubtype tp_trm tp) sc Nothing []) >>= \case
+  Right _ -> return ()
   Left err ->
     throw
     . YosysErrorTypeError msg
