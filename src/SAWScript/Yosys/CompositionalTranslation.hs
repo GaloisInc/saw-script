@@ -85,7 +85,8 @@ data TranslationContext m = TranslationContext
   }
 makeLenses ''TranslationContext
 
--- | Given a module and the context of previously-translated modules, construct a mapping from cell names to state information
+-- | Given a module and the context of previously-translated modules, construct
+-- a mapping from cell names to state information
 buildTranslationContextStateTypes ::
   MonadIO m =>
   SC.SharedContext ->
@@ -377,9 +378,12 @@ translateModule sc mods m = do
                 _ -> panic "translateModule" ["expected output state from submodule"]
         _ -> panic "translateModule" ["Malformed stateful cell type"]
 
-  -- build a record for the new value of the state
-  outst <- cryptolRecord sc outstMap
-          
+  -- build a record for the new value of the state; note that the record fields
+  -- must be mapped to valid identifiers by cellIdentifier so that converting
+  -- the record to SAW will put the fields in the same order as when stateFields
+  -- is converted to a record type
+  outst <- cryptolRecord sc $ Map.mapKeys cellIdentifier outstMap
+
   -- for each module output, collect a term for the output
   let outputPorts = moduleOutputPorts m
   outs <- fmap Map.fromList . forM (Map.toList outputPorts) $ \(onm, pat) ->
