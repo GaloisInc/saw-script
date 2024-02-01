@@ -38,6 +38,9 @@
 * Extend `llvm_verify_x86` in order to handle x86 functions that spill arguments
   to the stack.
 
+* Fix a bug in which SAW failed to expand type synonyms used in the definition
+  of another type synonym.
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features
