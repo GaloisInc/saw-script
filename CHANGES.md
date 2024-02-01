@@ -35,6 +35,9 @@
   For more information, see the
   [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#analyzing-hardware-circuits-using-yosys).
 
+* Extend `llvm_verify_x86` in order to handle x86 functions that spill arguments
+  to the stack.
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features
