@@ -24,6 +24,12 @@
   * Add `jvm_ghost_value` and `mir_ghost_value` commands in addition to the
     existing `llvm_ghost_value` command.
 
+* SAW now includes an experimental `set_solver_cache_path` command, which
+  caches the results of tactics which call out to automated provers. This can
+  save a considerable amount of time when repeatedly running proof scripts. For
+  more information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#caching-solver-results).
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features
