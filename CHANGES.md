@@ -30,6 +30,11 @@
   more information, see the
   [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#caching-solver-results).
 
+* Add experimental support for verifying hardware circuits via VHDL and Yosys.
+  There is now a family of experimental `yosys_*` commands that support this.
+  For more information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#analyzing-hardware-circuits-using-yosys).
+
 # Version 1.0 -- 2023-06-26
 
 ## New Features
