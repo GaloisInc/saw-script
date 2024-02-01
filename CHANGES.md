@@ -38,8 +38,13 @@
 * Extend `llvm_verify_x86` in order to handle x86 functions that spill arguments
   to the stack.
 
+## Bug fixes
+
 * Fix a bug in which SAW failed to expand type synonyms used in the definition
   of another type synonym.
+
+* Fix a bug in which SAW would fail to load LLVM bitcode files produced by Apple
+  Clang on macOS.
 
 # Version 1.0 -- 2023-06-26
 
