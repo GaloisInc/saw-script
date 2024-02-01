@@ -1,6 +1,6 @@
 # Revision history for saw-remote-api
 
-## next -- TBA
+## 1.1.0 -- TBA
 
 * Add remote API support for SAW's experimental MIR verification support:
 

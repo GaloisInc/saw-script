@@ -1,4 +1,4 @@
-# Nightly -- ????-??-??
+# Version 1.1 -- ????-??-??
 
 ## New Features
 * SAW now supports loading and reasoning about Cryptol declarations that make use of numeric constraint guards.  For more information on numeric constraint guards, see the [relavent section of the Cryptol reference manual](https://galoisinc.github.io/cryptol/master/BasicSyntax.html#numeric-constraint-guards).

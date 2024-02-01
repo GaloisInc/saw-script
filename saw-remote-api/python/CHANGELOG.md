@@ -1,6 +1,6 @@
 # Revision history for saw-client
 
-## next -- TBA
+## 1.1.0 -- TBA
 
 * Add Python bindings for SAW's experimental MIR verification support:
 
