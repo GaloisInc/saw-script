@@ -1,3 +1,3 @@
 set -e
 
-$SAW Feedback.saw
+$SAW feedback.saw
