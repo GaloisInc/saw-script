@@ -804,6 +804,7 @@ jobs:
       - heapster-tests
       - saw-remote-api-tests
       - cabal-test
+      - coverage
       - s2n-tests
       - exercises
     steps:
