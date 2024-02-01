@@ -1,0 +1,94 @@
+enable_experimental;
+import "cryptol/Feedback.cry";
+import "cryptol/Spec.cry";
+/*
+yosys_add10 <- yosys_import "add10.json";
+yosys_pow4 <- yosys_import "pow4.json";
+*/
+impls <- yosys_import "comp.json";
+
+
+let {{
+type add10_impl_state = {zr104 : [8], zr105 : [16]}
+
+add10_impl : (add10_impl_state, input) -> (add10_impl_state, output)
+add10_impl = impls.add10
+
+add10_srel : add10_impl_state -> add10_state -> Bit
+add10_srel impl_state spec_state =
+  (spec_state.counter <= 11) &&
+  (impl_state == ([zero] # iterate f impl_state_init) @ spec_state.counter)
+  where f s = (add10_impl (s, {clk = 1, enable = 0, x = zero })).0
+        impl_state_init = (add10_impl (zero, {clk = 1, enable = 1, x = spec_state.buff})).0
+
+
+add10_orel : (add10_impl_state, output) -> (add10_state, output) -> Bit
+add10_orel (impl_state, impl_output) (spec_state, spec_output) =
+  add10_srel impl_state spec_state &&
+  (impl_output.busy == spec_output.busy) &&
+  (impl_output.ready == spec_output.ready) &&
+  (impl_output.ready @ 0 ==> impl_output.y == spec_output.y)
+
+}};
+
+add10_thm <- prove_bisim z3 [] {{add10_srel}} {{add10_orel}} {{add10_impl}} {{add10_spec}};
+
+
+let
+{{
+type pow4_impl_state = {zr63 : [8], zr64 : [16]}
+
+pow4_impl : (pow4_impl_state, input) -> (pow4_impl_state, output)
+pow4_impl = impls.pow4
+}};
+
+let pow4_srel = {{
+\ impl_state spec_state ->
+  (spec_state.counter <= 3) &&
+  (impl_state == ([zero] # iterate f (impl_state_init spec_state)) @ spec_state.counter)
+  where f impl_state = (pow4_impl (impl_state, {clk = 1, enable = 0, x = zero })).0
+  	impl_state_init (spec_state:pow4_state) = (pow4_impl (zero, {clk = 1, enable = 1, x = spec_state.buff})).0
+}};
+
+let pow4_orel = {{
+\ (impl_state, (impl_output:output)) (spec_state, (spec_output:output)) ->
+  pow4_srel impl_state spec_state &&
+  (impl_output.busy == spec_output.busy) &&
+  (impl_output.ready == spec_output.ready) &&
+  (impl_output.ready @ 0 ==> impl_output.y == spec_output.y)
+}};
+
+pow4_thm <- prove_bisim z3 [] {{pow4_srel}} {{pow4_orel}} {{pow4_impl}} {{pow4_spec}};
+
+
+
+let
+{{
+
+type comp_state = { a : add10_state, b : pow4_state, blocked : [1] }
+type comp_impl_state = {a : {zr63 : [8], zr64 : [16]},
+                        b : {zr104 : [8], zr105 : [16]}, zr21 : [1]}
+
+comp_impl : (comp_impl_state, input) -> (comp_impl_state, output)
+comp_impl = impls.comp
+
+}};
+
+
+let comp_srel = {{
+\ impl_state spec_state ->
+  (spec_state.counter <= 14) &&
+  (impl_state == ([zero] # iterate f (impl_state_init spec_state)) @ spec_state.counter)
+  where f impl_state = (comp_impl (impl_state, {clk = 1, enable = 0, x = zero })).0
+  	impl_state_init (spec_state:comp_spec_state) = (comp_impl (zero, {clk = 1, enable = 1, x = spec_state.buff})).0
+}};
+
+let comp_orel = {{
+\ (impl_state, (impl_output:output)) (spec_state, (spec_output:output)) ->
+  comp_srel impl_state spec_state &&
+  (impl_output.busy == spec_output.busy) &&
+  (impl_output.ready == spec_output.ready) &&
+  (impl_output.ready @ 0 ==> impl_output.y == spec_output.y)
+}};
+
+comp_thm <- prove_bisim z3 [add10_thm, pow4_thm] {{comp_srel}} {{comp_orel}} {{comp_impl}} {{comp_spec}};
