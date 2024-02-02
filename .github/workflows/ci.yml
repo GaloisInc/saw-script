@@ -519,6 +519,11 @@ jobs:
         with:
           submodules: true
 
+      - uses: haskell/actions/setup@v2
+        id: setup-haskell
+        with:
+          ghc-version: "9.4.8"
+
       - name: Install system dependencies
         shell: bash
         run: .github/ci.sh install_system_deps
@@ -572,6 +577,8 @@ jobs:
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/integration_tests
+        env:
+          ENABLE_HPC: true
 
       - name: Compute coverage
         shell: bash
@@ -804,6 +811,7 @@ jobs:
       - heapster-tests
       - saw-remote-api-tests
       - cabal-test
+      - coverage
       - s2n-tests
       - exercises
     steps:

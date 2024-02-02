@@ -672,6 +672,14 @@ unfoldGoal unints =
      sqt' <- traverseSequentWithFocus (io . unfoldProp sc unints') (goalSequent goal)
      return (sqt', UnfoldEvidence unints')
 
+unfoldFixOnceGoal :: [String] -> ProofScript ()
+unfoldFixOnceGoal unints =
+  execTactic $ tacticChange $ \goal ->
+  do sc <- getSharedContext
+     unints' <- resolveNames unints
+     sqt' <- traverseSequentWithFocus (io . unfoldFixOnceProp sc unints') (goalSequent goal)
+     return (sqt', UnfoldFixOnceEvidence unints')
+
 simplifyGoal :: SV.SAWSimpset -> ProofScript ()
 simplifyGoal ss =
   execTactic $ tacticChange $ \goal ->

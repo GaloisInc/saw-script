@@ -69,6 +69,7 @@ import Data.IORef
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
+import Data.List.Extra (nubOrd)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -325,6 +326,9 @@ boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
 vecEqIdent :: Ident
 vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 
+pairEqIdent :: Ident
+pairEqIdent = mkIdent (mkModuleName ["Prelude"]) "pairEq"
+
 arrayEqIdent :: Ident
 arrayEqIdent = mkIdent (mkModuleName ["Prelude"]) "arrayEq"
 
@@ -393,6 +397,7 @@ ruleOfProp sc term ann =
     (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef pairEqIdent -> Just (), [_, _, _, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
@@ -936,7 +941,10 @@ hoistIfs sc t = do
    let ss :: Simpset () = addRules rules emptySimpset
 
    (t', conds) <- doHoistIfs sc ss cache itePat . snd =<< rewriteSharedTerm sc ss t
-   splitConds sc ss (map fst conds) t'
+
+   -- remove duplicate conditions from the list, as muxing in SAW can result in
+   -- many copies of the same condition, which cause a performance issue
+   splitConds sc ss (nubOrd $ map fst conds) t'
 
 
 splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term

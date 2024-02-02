@@ -1,0 +1,7 @@
+# Tests that are not run when running the `coverage` CI job, which builds SAW
+# with HPC code coverage enabled. Unfortunately, Haskell executables compiled
+# with coverage enabled have a tendency to use greater amounts of memory, and
+# when running these test cases, the difference in memory is enough to exceed
+# the maximum memory requirements imposed by GitHub Actions CI runners.
+
+test_comp_bisim

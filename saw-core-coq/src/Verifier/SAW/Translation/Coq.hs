@@ -38,56 +38,6 @@ import           Verifier.SAW.Translation.Coq.SpecialTreatment
 import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
 import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.Cryptol (Env)
---import Verifier.SAW.Term.Pretty
--- import qualified Verifier.SAW.UntypedAST as Un
-
---import Debug.Trace
-
--- showFTermF :: FlatTermF Term -> String
--- showFTermF = show . Unshared . FTermF
-
--- mkCoqIdent :: String -> String -> Ident
--- mkCoqIdent coqModule coqIdent = mkIdent (mkModuleName [coqModule]) coqIdent
-
-{-
-traceFTermF :: String -> FlatTermF Term -> a -> a
-traceFTermF ctx tf = traceTerm ctx (Unshared $ FTermF tf)
-
-traceTerm :: String -> Term -> a -> a
-traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
--}
-
--- translateBinder ::
---   TermTranslationMonad m =>
---   (Ident, Term) -> m (Coq.Ident, Coq.Term)
--- translateBinder (ident, term) =
---   (,)
---   <$> pure (translateIdent ident)
---   <*> translateTerm term
-
--- dropModuleName :: String -> String
--- dropModuleName s =
---   case elemIndices '.' s of
---   [] -> s
---   indices ->
---     let lastIndex = last indices in
---     drop (lastIndex + 1) s
-
--- unqualifyTypeWithinConstructor :: Coq.Term -> Coq.Term
--- unqualifyTypeWithinConstructor = go
---   where
---     go (Coq.Pi bs t)  = Coq.Pi bs (go t)
---     go (Coq.App t as) = Coq.App (go t) as
---     go (Coq.Var v)    = Coq.Var (dropModuleName v)
---     go t              = error $ "Unexpected term in constructor: " ++ show t
-
--- | This is a convenient helper for when you want to add some bindings before
--- translating a term.
--- translateTermLocallyBinding :: ModuleTranslationMonad m => [String] -> Term -> m Coq.Term
--- translateTermLocallyBinding bindings term =
---   withLocalEnvironment $ do
---   modify $ over environment (bindings ++)
---   translateTerm term
 
 text :: String -> Doc ann
 text = pretty
@@ -150,9 +100,9 @@ translateCryptolModule ::
   [String] ->
   CryptolModule ->
   IO (Either (TranslationError Term) (Doc ann))
-translateCryptolModule sc env nm configuration globalDecls m =
-  fmap (fmap (Coq.ppDecl . Coq.Section nm)) $
-  CMT.translateCryptolModule sc env configuration globalDecls m
+translateCryptolModule sc env nm configuration globalDecls m = do
+  translated <- CMT.translateCryptolModule sc env configuration globalDecls m
+  return $ Coq.ppDecl . Coq.Section (escapeIdent nm) <$> translated
 
 -- | Extract out the 'String' name of a declaration in a SAW core module
 moduleDeclName :: ModuleDecl -> Maybe String

@@ -101,6 +101,7 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.LLVM.Extension
 import Lang.Crucible.LLVM.MemModel
+import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 import Lang.Crucible.LLVM.Translation
 -- import Lang.Crucible.LLVM.Translation.Types
 import Lang.Crucible.LLVM.TypeContext
@@ -108,7 +109,6 @@ import Lang.Crucible.LLVM.DataLayout
 
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.Parser as L
-import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as L (render)
 
 import SAWScript.TopLevel
@@ -857,7 +857,7 @@ heapster_find_symbol_commands _bic _opts henv str =
   return $
   concatMap (\tp ->
               "heapster_find_symbol_with_type env\n  \"" ++ str ++ "\"\n  " ++
-              print_as_saw_script_string (L.render $ L.ppType tp) ++ ";\n") $
+              print_as_saw_script_string (L.render $ Crucible.LLVM.ppType tp) ++ ";\n") $
   concatMap (\(Some lm) ->
               mapMaybe (\decl ->
                          if isInfixOf str (symString $ L.decName decl)

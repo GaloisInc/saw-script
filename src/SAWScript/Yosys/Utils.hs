@@ -155,6 +155,20 @@ validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
     . unlines
     $ SC.TC.prettyTCError err
 
+-- | Check that a SAWCore term is well-typed and has a specific type
+validateTermAtType :: MonadIO m => SC.SharedContext -> Text ->
+                      SC.Term -> SC.Term -> m ()
+validateTermAtType sc msg trm tp =
+  liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm >>= \tp_trm ->
+                         SC.TC.checkSubtype tp_trm tp) sc Nothing []) >>= \case
+  Right _ -> return ()
+  Left err ->
+    throw
+    . YosysErrorTypeError msg
+    . Text.pack
+    . unlines
+    $ SC.TC.prettyTCError err
+
 -- | Produce a SAWCore tuple type corresponding to a Cryptol record type with the given fields.
 cryptolRecordType ::
   MonadIO m =>
