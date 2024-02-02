@@ -22,8 +22,15 @@ import Test.Tasty.HUnit ( testCase, (@=?), assertBool )
 import Test.Tasty.ExpectedFailure ( ignoreTest )
 
 
--- | Reads from DISABLED_TESTS env var or disabled_tests.txt file
--- (preference is given to the former) and returns the list of tests.
+-- | Compute the list of tests to disable in this run of the test suite. This
+-- reads from the following locations:
+--
+-- * The @DISABLED_TESTS@ environment variable, or if that is not defined, the
+--   @disabled_tests.txt@ file (preference given to the former).
+--
+-- * If the @ENABLE_HPC@ environment variable is defined, the
+--   @disabled_tests_hpc.txt@ file.
+--
 -- Shell-style comments are removed, and test names are assumed to be
 -- a single word without whitespace.  The input can separate testnames
 -- with any type of whitespace (space, tab, newline).
@@ -32,13 +39,19 @@ import Test.Tasty.ExpectedFailure ( ignoreTest )
 getDisabledTestList :: FilePath -> IO [String]
 getDisabledTestList testdir = do
   let dtfile = testdir </> "disabled_tests.txt"
+  let dtHpcFile = testdir </> "disabled_tests_hpc.txt"
   dset <- lookupEnv "DISABLED_TESTS" >>= \case
     Just d -> return d
     Nothing -> readFile dtfile
+  dsetHpc <- lookupEnv "ENABLE_HPC" >>= \case
+    Just _ -> readFile dtHpcFile
+    Nothing -> return ""
   let removeComment = takeWhile ((/=) '#')
       stripWhitespace = words
       processInput = join . map (stripWhitespace . removeComment) . lines
-  return $ processInput dset
+  let tests1 = processInput dsetHpc
+  let tests2 = processInput dset
+  return $ tests1 ++ tests2
 
 
 -- | Gets the list of tests (subdirectories) to run given the base

@@ -572,6 +572,8 @@ jobs:
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/integration_tests
+        env:
+          ENABLE_HPC: true
 
       - name: Compute coverage
         shell: bash
