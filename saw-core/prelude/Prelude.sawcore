@@ -359,8 +359,12 @@ ite_false (a : sort 1) (x y : a) : Eq a (ite a False x y) y =
 iteWithProof : (a : sort 0) -> (b:Bool) -> (Eq Bool b True -> a) ->
                                            (Eq Bool b False -> a) -> a;
 iteWithProof a b f1 f2 =
-  -- iteDep (\ (b1:Bool) -> Eq Bool b b1 -> a) b f1 f2 (Refl Bool b);
-  ite a b (f1 (unsafeAssert Bool b True)) (f2 (unsafeAssert Bool b False));
+  iteDep (\ (b1:Bool) -> Eq Bool b b1 -> a) b f1 f2 (Refl Bool b);
+  -- NOTE: we cannot use unsafeAssert in the Prelude, because the translation
+  -- for it into Coq is currently defined in CryptolPrimitivesForSAWCoreExtra.v,
+  -- which is defined *after* the Prelude
+  --
+  -- ite a b (f1 (unsafeAssert Bool b True)) (f2 (unsafeAssert Bool b False));
 
 -- A version of ite that includes an Eq proof term only in the True branch
 ifWithProof : (a : sort 0) -> (b:Bool) -> a -> (Eq Bool b True -> a) -> a;
