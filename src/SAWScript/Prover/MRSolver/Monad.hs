@@ -757,6 +757,10 @@ mrBvType n =
   do bool_tp <- liftSC0 scBoolType
      liftSC2 scVecType n bool_tp
 
+-- | Build the equality proposition @Eq a t1 t2@
+mrEqProp :: Term -> Term -> Term -> MRM t Term
+mrEqProp tp t1 t2 = liftSC2 scDataTypeApp "Prelude.Eq" [tp,t1,t2]
+
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM t Term

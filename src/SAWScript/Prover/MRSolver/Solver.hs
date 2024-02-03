@@ -127,7 +127,7 @@ import qualified Data.Text as T
 import Data.List (find, findIndices)
 import Data.Foldable (foldlM)
 import Data.Bits (shiftL)
-import Control.Monad (void, foldM, forM, zipWithM, zipWithM_)
+import Control.Monad (void, foldM, forM, zipWithM, zipWithM_, (>=>))
 import Control.Monad.Except (MonadError(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -256,6 +256,15 @@ normComp (CompTerm t) =
       return (ErrorS str)
     (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
       return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
+    (isGlobalDef "Prelude.iteWithProof" -> Just (), [_, cond, then_f, else_f]) ->
+      do bool_tp <- liftSC0 scBoolType
+         then_tm <-
+           (liftSC1 scBool >=> mrEqProp bool_tp cond >=> mrDummyProof >=>
+            liftSC2 scApply then_f) True
+         else_tm <-
+           (liftSC1 scBool >=> mrEqProp bool_tp cond >=> mrDummyProof >=>
+            liftSC2 scApply else_f) False
+         return $ Ite cond (CompTerm then_tm) (CompTerm else_tm)
     (isGlobalDef "Prelude.either" -> Just (),
      [ltp, rtp, (asSpecM -> Just (ev, _)), f, g, eith]) ->
       return $ Eithers [(Type ltp, CompFunTerm ev f),
