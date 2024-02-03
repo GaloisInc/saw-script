@@ -6583,8 +6583,21 @@ translateCompletePureFunType sc env ctx ps_in p_out =
 -- of a type-level function over those arguments
 translateExprTypeFunType :: SharedContext -> PermEnv -> CruCtx ctx -> IO Term
 translateExprTypeFunType sc env ctx =
-  liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
+  completeOpenTerm sc $ runNilTypeTransM env noChecks $
   piExprCtx ctx $ return $ sortOpenTerm $ mkSort 0
+
+-- | Translate a context of Crucible types @(tp1,...,tpn)@ that translates to a
+-- sequence @(k1,...,km)@ of kind descriptions plus a type description @d@ with
+-- those arguments free (as type description @Tp_Var@ deBruijn variables, not as
+-- SAW core free variables) into the pi type that @d@ describes, which is:
+--
+-- > tpElem ev (Tp_Pi k1 (Tp_Pi k2 (... Tp_Pi kn d)))
+translateDescTypeFunType :: SharedContext -> PermEnv -> CruCtx ctx ->
+                            OpenTerm -> IO Term
+translateDescTypeFunType sc env ctx d =
+  let ?ev = permEnvEventType env in
+  completeNormOpenTerm sc $ tpElemTypeOpenTerm ?ev $
+  piTpDescMulti (snd $ translateCruCtx ctx) d
 
 -- | Translate a context of arguments plus a type description @T@ that describes
 -- the body of an inductive type over those arguments -- meaning that it uses
@@ -6598,7 +6611,7 @@ translateIndTypeFun :: SharedContext -> PermEnv -> CruCtx ctx -> OpenTerm ->
                        IO Term
 translateIndTypeFun sc env ctx d =
   let ?ev = permEnvEventType env in
-  liftIO $ completeOpenTerm sc $ runNilTypeTransM env noChecks $
+  completeOpenTerm sc $ runNilTypeTransM env noChecks $
   lambdaExprCtx ctx $
   do args_tms <- transTerms <$> infoCtx <$> ask
      let ks = snd $ translateCruCtx ctx

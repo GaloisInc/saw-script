@@ -119,6 +119,7 @@ import SAWScript.Builtins
 import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.HintExtract
 import Verifier.SAW.Heapster.Permissions
@@ -137,6 +138,16 @@ import Prettyprinter
 tpDescTypeM :: MonadIO m => SharedContext -> m Term
 tpDescTypeM sc = liftIO $ completeOpenTerm sc tpDescTypeOpenTerm
 
+-- | Check that a type equals the type described by a type description in a ctx
+checkTypeAgreesWithDesc :: SharedContext -> PermEnv -> String -> Ident ->
+                           CruCtx args -> Ident -> IO ()
+checkTypeAgreesWithDesc sc env nm tp_ident ctx d_ident =
+  do d_tp <- translateDescTypeFunType sc env ctx $ identOpenTerm d_ident
+     tp <- scGlobalDef sc tp_ident
+     ok <- scConvertibleEval sc scTypeCheckWHNF True tp d_tp
+     if ok then return () else
+       fail ("Type description for " ++ nm ++
+             " does not match user-supplied type")
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
@@ -405,7 +416,8 @@ heapster_get_cfg _ _ henv nm =
 
 
 -- | Define a new opaque named permission with the given name, arguments, and
--- type, that translates to the given named SAW core definition
+-- Crucible type that translates to the given SAW core type with the supplied
+-- type description
 heapster_define_opaque_perm :: BuiltinContext -> Options -> HeapsterEnv ->
                                String -> String -> String -> String ->
                                String -> TopLevel ()
@@ -418,6 +430,7 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_str d_str =
      term_ident <- parseAndInsDef henv nm term_tp term_str
      d_tp <- tpDescTypeM sc
      d_ident <- parseAndInsDef henv (nm ++ "__desc") d_tp d_str
+     liftIO $ checkTypeAgreesWithDesc sc env nm term_ident args d_ident
      let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident d_ident
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
@@ -633,6 +646,7 @@ heapster_define_opaque_llvmshape _bic _opts henv nm w_int args_str len_str tp_st
      d_id <- parseAndInsDef henv (nm ++ "__desc") d_tp d_str
      tp_tp <- liftIO $ translateExprTypeFunType sc env args
      tp_id <- parseAndInsDef henv nm tp_tp tp_str
+     liftIO $ checkTypeAgreesWithDesc sc env nm tp_id args d_id
      let env' =
            withKnownNat w $ permEnvAddOpaqueShape env nm args mb_len tp_id d_id
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -1050,7 +1064,7 @@ heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
        Right _ -> fail "LLVM arch width is < 16!"
      LeqProof <- case decideLeq (knownNat @1) w of
        Left pf -> return pf
-       Right _ -> fail "PANIC: 1 > 16!"
+       Right _ -> panic "heapster_typecheck_mut_funs_rename" ["1 > 16!"]
      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        do AnyCFG cfg <-
             failOnNothing ("Could not find symbol definition: " ++ nm) =<<
