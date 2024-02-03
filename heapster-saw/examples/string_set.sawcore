@@ -1,7 +1,7 @@
 
 module string_set where
 
-import Prelude;
+import SpecM;
 
 listInsertM : (a : sort 0) -> List a -> a ->
               SpecM VoidEv emptyFunStack (List a);

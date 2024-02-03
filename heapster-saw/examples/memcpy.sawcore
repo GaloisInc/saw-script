@@ -1,7 +1,7 @@
 
 module memcpy where
 
-import Prelude;
+import SpecM;
 
 mallocSpec : (sz:Vec 64 Bool) ->
              SpecM VoidEv emptyFunStack (BVVec 64 sz #());

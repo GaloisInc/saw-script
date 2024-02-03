@@ -1,6 +1,6 @@
 module GlobalVar where
 
-import Prelude;
+import SpecM;
 
 acquireLockM : Vec 64 Bool ->
                SpecM VoidEv emptyFunStack (Vec 64 Bool * Vec 64 Bool);

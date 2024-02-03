@@ -1,7 +1,7 @@
 
 module io where
 
-import Prelude;
+import SpecM;
 
 bitvector : Nat -> sort 0;
 bitvector n = Vec n Bool;

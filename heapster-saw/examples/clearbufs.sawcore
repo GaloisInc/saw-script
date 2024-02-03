@@ -1,7 +1,7 @@
 
 module clearbufs where
 
-import Prelude;
+import SpecM;
 
 V64 : sort 0;
 V64 = Vec 64 Bool;
