@@ -120,6 +120,7 @@ import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
 import Verifier.SAW.Utils (panic)
+import qualified Verifier.SAW.Term.Pretty as Pretty
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.HintExtract
 import Verifier.SAW.Heapster.Permissions
@@ -146,8 +147,14 @@ checkTypeAgreesWithDesc sc env nm tp_ident ctx d_ident =
      tp <- scGlobalDef sc tp_ident
      ok <- scConvertibleEval sc scTypeCheckWHNF True tp d_tp
      if ok then return () else
-       fail ("Type description for " ++ nm ++
-             " does not match user-supplied type")
+       do tp_norm <- scTypeCheckWHNF sc tp
+          d_tp_norm <- scTypeCheckWHNF sc d_tp
+          fail ("Type description for " ++ nm ++
+                " does not match user-supplied type\n" ++
+                "Type for description:\n" ++
+                scPrettyTermInCtx Pretty.defaultPPOpts [] d_tp_norm ++ "\n" ++
+                "User-supplied type:\n" ++
+                scPrettyTermInCtx Pretty.defaultPPOpts [] tp_norm)
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
 -- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
