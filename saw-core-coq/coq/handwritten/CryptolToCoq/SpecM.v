@@ -1,6 +1,8 @@
 
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
+Import CryptolPrimitivesForSAWCore.
 
 From EnTree Require Import EnTreeSpecs TpDesc.
 
@@ -8,23 +10,6 @@ From EnTree Require Import EnTreeSpecs TpDesc.
 (**
  ** Defining the TpExprOps instance for SAW
  **)
-
-(* NOTE: We must define any operations used in Cryptol types before evalBinOp,
-which in turn is defined before the translation of the Cryptol SAW core module,
-so we define these operations by hand here rather than automatically translating
-them from the Cryptol SAW core module *)
-
-Definition tcAdd (n m: Num) : Num :=
-  match n, m with
-  | TCNum x, TCNum y => TCNum (addNat x y)
-  | _, _ => TCInf
-  end.
-
-Definition tcMul (n m: Num) : Num :=
-  match n, m with
-  | TCNum x, TCNum y => TCNum (mulNat x y)
-  | _, _ => TCInf
-  end.
 
 Inductive TpExprUnOp : ExprKind -> ExprKind -> Type@{entree_u} :=
 | UnOp_BVToNat w : TpExprUnOp (Kind_bv w) Kind_nat
@@ -82,14 +67,6 @@ Global Instance SAWTpExprOps : TpExprOps :=
 (**
  ** Now we re-export all of TpDesc using the above instance
  **)
-
-(* Num: note that the Num type has to be defined in the TpDesc module, so its
-type descriptions can refer to it, so we map the definition in Cryptol.sawcore
-to that definition *)
-Definition Num := TpDesc.Num.
-Definition Num_rect := TpDesc.Num_rect.
-Definition TCNum := TpDesc.TCNum.
-Definition TCInf := TpDesc.TCInf.
 
 (* EvType *)
 Definition EvType := FixTree.EvType.

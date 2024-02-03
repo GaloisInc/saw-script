@@ -200,6 +200,9 @@ sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 specMModule :: ModuleName
 specMModule = mkModuleName ["SpecM"]
 
+tpDescModule :: ModuleName
+tpDescModule = mkModuleName ["TpDesc"]
+
 {-
 polyListModule :: ModuleName
 polyListModule = mkModuleName ["PolyList"]
@@ -231,13 +234,11 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   -- defined *before* type descriptions, so we have to map Num and some of its
   -- operations to that library
   ++
-  [ ("Num",                   mapsTo specMModule "Num")
-  , ("TCNum",                 mapsTo specMModule "TCNum")
-  , ("TCInf",                 mapsTo specMModule "TCInf")
-  , ("Num_rec",               mapsTo specMModule "Num_rect")
+  [ ("Num",                   mapsTo tpDescModule "Num")
+  , ("TCNum",                 mapsTo tpDescModule "TCNum")
+  , ("TCInf",                 mapsTo tpDescModule "TCInf")
+  , ("Num_rec",               mapsTo tpDescModule "Num_rect")
   , ("unsafeAssert_same_Num", skip) -- unsafe and unused
-  , ("tcAdd",                 mapsTo specMModule "tcAdd")
-  , ("tcMul",                 mapsTo specMModule "tcMul")
   ]
 
 -- NOTE: while I initially did the mapping from SAW core names to the

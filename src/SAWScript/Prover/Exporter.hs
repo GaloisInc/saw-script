@@ -442,6 +442,14 @@ withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq
    ]
   }
 
+withImportSpecM ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSpecM config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SpecM."
+   ]
+  }
+
 withImportSpecMPrimitivesForSAWCore ::
   Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
 withImportSpecMPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
@@ -571,7 +579,8 @@ writeCoqCryptolPrimitivesForSAWCore cryFile specMFile cryMFile notations skips =
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let configuration_spec =
-        withImportCryptolPrimitivesForSAWCore configuration
+        withImportCryptolPrimitivesForSAWCore $
+        withImportSpecM configuration
   let configuration_mon =
         withImportSpecMPrimitivesForSAWCore configuration
   let doc = Coq.translateSAWModule configuration m
