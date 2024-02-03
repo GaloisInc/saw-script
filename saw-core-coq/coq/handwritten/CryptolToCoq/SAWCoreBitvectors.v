@@ -82,7 +82,7 @@ Ltac compute_bv_funs_tac H t compute_bv_binrel compute_bv_binop
     end
   end.
 
-Ltac unfold_bv_funs := unfold bvNat, bvultWithProof, bvuleWithProof,
+Ltac unfold_bv_funs := unfold bvNat,
                               bvsge, bvsgt, bvuge, bvugt, bvSCarry, bvSBorrow,
                               xorb.
 
