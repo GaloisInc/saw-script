@@ -9,6 +9,23 @@ From EnTree Require Import EnTreeSpecs TpDesc.
  ** Defining the TpExprOps instance for SAW
  **)
 
+(* NOTE: We must define any operations used in Cryptol types before evalBinOp,
+which in turn is defined before the translation of the Cryptol SAW core module,
+so we define these operations by hand here rather than automatically translating
+them from the Cryptol SAW core module *)
+
+Definition tcAdd (n m: Num) : Num :=
+  match n, m with
+  | TCNum x, TCNum y => TCNum (addNat x y)
+  | _, _ => TCInf
+  end.
+
+Definition tcMul (n m: Num) : Num :=
+  match n, m with
+  | TCNum x, TCNum y => TCNum (mulNat x y)
+  | _, _ => TCInf
+  end.
+
 Inductive TpExprUnOp : ExprKind -> ExprKind -> Type@{entree_u} :=
 | UnOp_BVToNat w : TpExprUnOp (Kind_bv w) Kind_nat
 | UnOp_NatToBV w : TpExprUnOp Kind_nat (Kind_bv w)
@@ -20,6 +37,8 @@ Inductive TpExprBinOp : ExprKind -> ExprKind -> ExprKind -> Type@{entree_u} :=
 | BinOp_MulNat : TpExprBinOp Kind_nat Kind_nat Kind_nat
 | BinOp_AddBV w : TpExprBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w)
 | BinOp_MulBV w : TpExprBinOp (Kind_bv w) (Kind_bv w) (Kind_bv w)
+| BinOp_AddNum : TpExprBinOp Kind_num Kind_num Kind_num
+| BinOp_MulNum : TpExprBinOp Kind_num Kind_num Kind_num
 .
 
 Lemma dec_eq_UnOp {EK1 EK2} (op1 op2 : TpExprUnOp EK1 EK2) : {op1=op2} + {~op1=op2}.
@@ -45,6 +64,8 @@ Definition evalBinOp {EK1 EK2 EK3} (op: TpExprBinOp EK1 EK2 EK3) :
   | BinOp_MulNat => mulNat
   | BinOp_AddBV w => bvAdd w
   | BinOp_MulBV w => bvMul w
+  | BinOp_AddNum => tcAdd
+  | BinOp_MulNum => tcMul
   end.
 
 Global Instance SAWTpExprOps : TpExprOps :=
