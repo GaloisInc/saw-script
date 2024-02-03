@@ -35,11 +35,11 @@ module Verifier.SAW.Cryptol
   , importSchema
 
   , defaultPrimitiveOptions
-  , genNewtypeConstructors
+  , genNominalConstructors
   , exportValueWithSchema
   ) where
 
-import Control.Monad (foldM, join, unless)
+import Control.Monad (foldM, join, unless,forM)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -76,7 +76,7 @@ import qualified Cryptol.Utils.Ident as C
   , modNameChunksText
   )
 import qualified Cryptol.Utils.RecordMap as C
-import Cryptol.TypeCheck.Type as C (Newtype(..))
+import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
@@ -266,10 +266,17 @@ importType sc env ty =
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
-    C.TNewtype nt ts ->
+    C.TNominal nt ts ->
       do let s = C.listSubst (zip (map C.TVBound (C.ntParams nt)) ts)
-         let t = plainSubst s (C.TRec (C.ntFields nt))
-         go t
+         let n = C.ntName nt
+         case ntDef nt of
+           C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
+           C.Enum {} -> error "importType: `enum` is not yet supported"
+           C.Abstract
+             | Just prim <- C.asPrim n
+             , Just t <- Map.lookup prim (envPrimTypes env) ->
+               scApplyAllBeta sc t =<< traverse go ts
+             | True -> panic ("importType: unknown primitive type: " ++ show n) []
 
     C.TCon tcon tyargs ->
       case tcon of
@@ -290,11 +297,6 @@ importType sc env ty =
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCAbstract (C.UserTC n _)
-              | Just prim <- C.asPrim n
-              , Just t <- Map.lookup prim (envPrimTypes env) ->
-                scApplyAllBeta sc t =<< traverse go tyargs
-              | True -> panic ("importType: unknown primitive type: " ++ show n) []
         C.PC pc ->
           case pc of
             C.PLiteral -> -- we omit first argument to class Literal
@@ -1008,8 +1010,13 @@ importExpr sc env expr =
                       ("Expected filed " ++ show x ++ " in normal RecordSel")
                       (elemIndex x (map fst (C.canonicalFields fm)))
                     scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
-               C.TNewtype nt _args ->
-                 do let fs = C.ntFields nt
+               C.TNominal nt _args ->
+                 do let fs = case C.ntDef nt of
+                               C.Struct s -> C.ntFields s
+                               C.Enum {} ->
+                                 panic "importExpr" ["Select from enum"]
+                               C.Abstract ->
+                                 panic "importExpr" ["Select from abstract type"]
                     i <- the ("Expected field " ++ show x ++ " in Newtype Record Sel")
                           (elemIndex x (map fst (C.canonicalFields fs)))
                     scTupleSelector sc e' (i+1) (length (C.canonicalFields fs))
@@ -1134,6 +1141,9 @@ importExpr sc env expr =
       -- generated if-then-else
       Fold.foldrM (propGuardToIte typ') err arms
 
+    C.ECase {} -> panic "importExpr"
+                    ["`case` expressions are not yet supported"]
+
   where
     the :: String -> Maybe a -> IO a
     the what = maybe (panic "importExpr" ["internal type error", what]) return
@@ -1240,6 +1250,8 @@ importExpr' sc env schema expr =
     C.ELocated _ e ->
       importExpr' sc env schema e
 
+    C.ECase {} -> panic "importExpr" ["`case` is not yet supported"]
+
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
     C.ESet      {} -> fallback
@@ -1285,7 +1297,7 @@ plainSubst s ty =
     C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
     C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
     C.TVar x       -> C.apSubst s (C.TVar x)
-    C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
+    C.TNominal nt ts -> C.TNominal nt (fmap (plainSubst s) ts)
 
 
 -- | Generate a URI representing a cryptol name from a sequence of
@@ -1632,14 +1644,26 @@ proveEq sc env t1 t2
       (C.tIsRec -> Just tm1, C.tIsRec -> Just tm2)
         | map fst (C.canonicalFields tm1) == map fst (C.canonicalFields tm2) ->
           proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
+
+      -- XXX: add a case for `enum`
+      -- 1. Match constructors by names, and prove fields as tuples
+      -- 2. We need some way to combine the proofs of equality of
+      -- the fields, into a proof for equality of the whole type
+      -- for sums
+
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
+
 
 -- | Resolve user types (type aliases and newtypes) to their simpler SAW-compatible forms.
 tNoUser :: C.Type -> C.Type
 tNoUser initialTy =
   case C.tNoUser initialTy of
-    C.TNewtype nt _ -> C.TRec $ C.ntFields nt
+    C.TNominal nt params
+      | C.Struct fs <- C.ntDef nt ->
+        if null params then C.TRec (C.ntFields fs)
+                       else panic "tNoUser" ["Nominal type with parameters"]
+                        -- XXX: We should instantiate, see #2019
     t -> t
 
 
@@ -1898,13 +1922,12 @@ exportValue ty v = case ty of
   TV.TVFun _aty _bty ->
     pure $ V.VFun mempty (error "exportValue: TODO functions")
 
-  -- abstract types
-  TV.TVAbstract{} ->
-    error "exportValue: TODO abstract types"
-
-  -- newtypes
-  TV.TVNewtype _ _ fields ->
-    exportValue (TV.TVRec fields) v
+  -- nominal types
+  TV.TVNominal _ _ fields ->
+    case fields of
+      TV.TVStruct fs   -> exportValue (TV.TVRec fs) v
+      TV.TVEnum {}     -> error "exportValue: TODO enum"
+      TV.TVAbstract {} -> error "exportValue: TODO abstract types"
 
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
@@ -1980,30 +2003,38 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
     _ -> panic "importFirstOrderValue"
                 ["Expected finite value of type:", show t, "but got", show v]
 
--- | Generate functions to construct newtypes in the term environment.
--- (I.e., make identity functions that take the record the newtype wraps.)
-genNewtypeConstructors :: SharedContext -> Map C.Name Newtype -> Env -> IO Env
-genNewtypeConstructors sc newtypes env0 =
-  foldM genConstr env0 newtypes
+-- | Generate functions to construct nominal values in the term environment.
+-- For structs, make identity functions that take the record the newtype wraps.
+-- Abstract types do not produce any functions.
+genNominalConstructors :: SharedContext -> Map C.Name NominalType -> Env -> IO Env
+genNominalConstructors sc nominal env0 =
+  foldM genConstr env0 nominal
   where
-    genConstr :: Env -> Newtype -> IO Env
+    genConstr :: Env -> NominalType -> IO Env
     genConstr env nt = do
-      constr <- importExpr sc env (newtypeConstr nt)
-      let env' = env { envE = Map.insert (ntConName nt) (constr, 0) (envE env)
-                     , envC = Map.insert (ntConName nt) (newtypeSchema nt) (envC env)
+      let conTs = C.nominalTypeConTypes nt
+      constrs <- forM (nominalConstrs nt) $ \(x,e) ->
+        do e' <- importExpr sc env e
+           pure (x,(e',0))
+      let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
+                     , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
       return env'
-    newtypeConstr :: Newtype -> C.Expr
-    newtypeConstr nt = foldr tFn fn (C.ntParams nt)
-      where
-        paramName = C.asLocal C.NSValue (ntConName nt)
 
-        recTy = C.TRec $ ntFields nt
-        fn = C.EAbs paramName recTy (C.EVar paramName) -- EAbs Name Type Expr -- ETAbs TParam Expr
+    nominalConstrs :: NominalType -> [(C.Name,C.Expr)]
+    nominalConstrs nt =
+      case C.ntDef nt of
+        C.Struct fs ->
+          let recTy = C.TRec (C.ntFields fs)
+              fn    = C.EAbs paramName recTy (C.EVar paramName)
+              con   = C.ntConName fs
+              paramName = C.asLocal C.NSValue con
+           in [(con, foldr tFn fn (C.ntParams nt))]
+        C.Abstract -> []
+        C.Enum {} -> error "genNominalConstrurctors: `enum` is not yet supported"
+      where
+
         tFn tp body =
           if elem (C.tpKind tp) [C.KType, C.KNum]
             then C.ETAbs tp body
-            else panic "genNewtypeConstructors" ["illegal newtype parameter kind", show (C.tpKind tp)]
-    newtypeSchema :: Newtype -> C.Schema
-    newtypeSchema nt = C.Forall (ntParams nt) (ntConstraints nt)
-                       $ C.TRec (ntFields nt) `C.tFun` C.TRec (ntFields nt)
+            else panic "genNominalConstructors" ["illegal nominal type parameter kind", show (C.tpKind tp)]

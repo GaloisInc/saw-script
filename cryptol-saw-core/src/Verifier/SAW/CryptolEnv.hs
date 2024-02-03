@@ -313,8 +313,9 @@ mkCryEnv env =
           -- noIfaceParams because we don't support translating functors yet
           infInp <- MB.genInferInput P.emptyRange prims NoParams ifaceDecls
           let newtypeCons = Map.fromList
-                              [ (T.ntConName nt, T.newtypeConType nt)
-                              | nt <- Map.elems (TM.inpNewtypes infInp)
+                              [ con
+                              | nt <- Map.elems (TM.inpNominalTypes infInp)
+                              , con <- T.nominalTypeConTypes nt
                               ]
           pure (newtypeCons `Map.union` TM.inpVars infInp)
      let types' = Map.union (eExtraTypes env) types
@@ -415,11 +416,11 @@ loadCryptolModule sc primOpts env path = do
                   $ ME.meLoadedModules modEnv''
 
   let newDeclGroups = concatMap T.mDecls newModules
-  let newNewtypes   = Map.difference (ME.loadedNewtypes modEnv')
-                                     (ME.loadedNewtypes modEnv)
+  let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
+                                     (ME.loadedNominalTypes modEnv)
 
   newTermEnv <-
-    do cEnv <- C.genNewtypeConstructors sc newNewtypes oldCryEnv
+    do cEnv <- C.genNominalConstructors sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
@@ -517,11 +518,11 @@ importModule sc env src as vis imps = do
                     $ ME.lmLoadedModules
                     $ ME.meLoadedModules modEnv'
   let newDeclGroups = concatMap T.mDecls newModules
-  let newNewtypes   = Map.difference (ME.loadedNewtypes modEnv')
-                                     (ME.loadedNewtypes modEnv)
+  let newNominal    = Map.difference (ME.loadedNominalTypes modEnv')
+                                     (ME.loadedNominalTypes modEnv)
 
   newTermEnv <-
-    do cEnv      <- C.genNewtypeConstructors sc newNewtypes oldCryEnv
+    do cEnv      <- C.genNominalConstructors sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions
                                                             cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
@@ -751,7 +752,7 @@ typeNoUser t =
     T.TVar {}      -> t
     T.TUser _ _ ty -> typeNoUser ty
     T.TRec fields  -> T.TRec (fmap typeNoUser fields)
-    T.TNewtype nt ts -> T.TNewtype nt (fmap typeNoUser ts)
+    T.TNominal nt ts -> T.TNominal nt (fmap typeNoUser ts)
 
 schemaNoUser :: T.Schema -> T.Schema
 schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)

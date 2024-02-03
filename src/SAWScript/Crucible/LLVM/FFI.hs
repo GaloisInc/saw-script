@@ -75,7 +75,7 @@ import           Verifier.SAW.CryptolEnv
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Prelude
 import           Verifier.SAW.Recognizer
-import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.SharedTerm as Term
 import           Verifier.SAW.TypedTerm
 
 -- | Commonly used things that need to be passed around.
@@ -142,7 +142,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   cryEnv <- lll $ rwCryptol <$> getMergedEnv
   case asConstant funTerm of
     Just (ec, funDef)
-      | Just FFIFunType {..} <- Map.lookup (ecName ec) (eFFITypes cryEnv) -> do
+      | Just FFIFunType {..} <- Map.lookup (Term.ecName ec) (eFFITypes cryEnv) -> do
         when (isNothing funDef) do
           throwFFISetup
             "Cannot verify foreign function with no Cryptol implementation"
