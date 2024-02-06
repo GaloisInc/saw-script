@@ -11,4 +11,4 @@ ListDesc = Tp_Ind (Tp_Sum Tp_Unit (Tp_Pair (Tp_Var 1) (Tp_Var 0)));
 -- Convert ListDesc applied to a type argument given by type description to a
 -- type
 ListDescType : TpDesc -> sort 0;
-ListDescType T = tpElem VoidEv (Tp_TpSubst ListDesc T);
+ListDescType T = indElem (Tp_Sum Tp_Unit (Tp_Pair T (Tp_Ind (Tp_Sum Tp_Unit (Tp_Pair T (Tp_Var 0))))));
