@@ -143,7 +143,7 @@ tpDescTypeM sc = liftIO $ completeOpenTerm sc tpDescTypeOpenTerm
 checkTypeAgreesWithDesc :: SharedContext -> PermEnv -> String -> Ident ->
                            CruCtx args -> Ident -> IO ()
 checkTypeAgreesWithDesc sc env nm tp_ident ctx d_ident =
-  do d_tp <- translateDescTypeFunType sc env ctx $ identOpenTerm d_ident
+  do d_tp <- translateDescTypeFun sc env ctx $ identOpenTerm d_ident
      tp <- scGlobalDef sc tp_ident
      ok <- scConvertibleEval sc scTypeCheckWHNF True tp d_tp
      if ok then return () else

@@ -679,6 +679,35 @@ tpElemEnv E env_top isf_top T_top =
 tpElem : EvType -> TpDesc -> sort 0;
 tpElem E = tpElemEnv E nilTpEnv IsData;
 
+-- Build the type of the pure type-level function from elements of a list of
+-- kind descriptions to the type described by a type description over deBruijn
+-- indices for those elements, i.e., return the type
+--
+-- (x1:kindElem k1) ... (xn:kindElem k2) -> sort 0
+pureTpElemTypeFunType : List KindDesc -> sort 1;
+pureTpElemTypeFunType ks_top =
+  List#rec KindDesc (\ (_:List KindDesc) -> sort 1)
+    (sort 0)
+    (\ (k:KindDesc) (ks:List KindDesc) (rec:sort 1) -> kindElem k -> rec)
+    ks_top;
+
+-- Build the pure type-level function from elements of a list of kind
+-- descriptions to the type described by a type description over deBruijn
+-- indices for those elements, i.e., return the type
+--
+-- \ (x1:kindElem k1) ... (xn:kindElem k2) -> tpElemEnv ev [x1,...,xn] d
+pureTpElemTypeFun : (ev:EvType) -> (ks:List KindDesc) -> TpDesc ->
+                    pureTpElemTypeFunType ks;
+pureTpElemTypeFun ev ks_top d =
+  List__rec KindDesc
+    (\ (ks:List KindDesc) -> TpEnv -> pureTpElemTypeFunType ks)
+    (\ (env:TpEnv) -> tpElemEnv ev env IsData d)
+    (\ (k:KindDesc) (ks:List KindDesc) (rec:TpEnv -> pureTpElemTypeFunType ks)
+       (env:TpEnv) (elem:kindElem k) ->
+       rec (envConsElem k elem env))
+    ks_top
+    nilTpEnv;
+
 -- Specification functions of a type description
 specFun : EvType -> TpDesc -> sort 0;
 specFun E = tpElemEnv E nilTpEnv IsFun;
