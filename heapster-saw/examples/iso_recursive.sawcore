@@ -1,4 +1,0 @@
-
-module iso_recursive where
-
-import SpecM;
