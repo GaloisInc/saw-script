@@ -141,6 +141,39 @@ primUnfold :: SharedContext -> SimulatorConfig TermModel -> Ident -> TmPrim
 primUnfold sc cfg glob =
   Prim $ evalSharedTerm cfg =<< fmap (fromJust . defBody) (scRequireDef sc glob)
 
+mkReflProof :: SharedContext -> Bool -> IO TmValue
+mkReflProof sc b =
+  do b_trm <- scBool sc b
+     bool_tp <- scBoolType sc
+     refl_trm <- scCtorApp sc "Prelude.Refl" [bool_tp, b_trm]
+     eq_tp <- scDataTypeApp sc "Prelude.Eq" [bool_tp, b_trm, b_trm]
+     return $ VExtra $ VExtraTerm (VTyTerm propSort eq_tp) refl_trm
+
+mkDummyProofValue :: String -> IO (Thunk TermModel)
+mkDummyProofValue op =
+  delay $ return $ panic op ["Unexpected evaluation of proof object"]
+
+iteWithProofOp :: SharedContext -> SimulatorConfig TermModel -> TmPrim
+iteWithProofOp sc cfg =
+  tvalFun $ \tp ->
+  boolFun $ \b_val ->
+  strictFun $ \x_fun ->
+  strictFun $ \y_fun ->
+  Prim $
+  case b_val of
+    Right b -> mkReflProof sc b >>= apply x_fun . ready
+    Left b_trm ->
+      do let ?recordEC = \_ec -> return ()
+         eq_true <- mkDummyProofValue "iteWithProofOp"
+         x <- apply x_fun eq_true
+         x_trm <- readBackValue sc cfg tp x
+         eq_false <- mkDummyProofValue "iteWithProofOp"
+         y <- apply y_fun eq_false
+         y_trm <- readBackValue sc cfg tp y
+         tp_trm <- readBackTValue sc cfg tp
+         ite_trm <- scIte sc tp_trm b_trm x_trm y_trm
+         return $ VExtra $ VExtraTerm tp ite_trm
+
 -- | Implementations of primitives for normalizing Mr Solver terms
 -- FIXME: eventually we need to add the current event type to this list
 smtNormPrims :: SharedContext -> SimulatorConfig TermModel ->
@@ -174,7 +207,10 @@ smtNormPrims sc cfg = Map.union $ Map.fromList
       Prim (do tm <- scApplyBeta sc f ix
                tm' <- smtNorm sc tm
                return $ VExtra $ VExtraTerm a tm')
-    )
+    ),
+
+    -- Override iteWithProof so it unfolds to a normal ite with dummy proof objects
+    ("Prelude.iteWithProof", iteWithProofOp sc cfg)
   ]
 
 -- | A version of 'mrNormTerm' in the 'IO' monad, and which does not add any
