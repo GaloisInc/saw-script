@@ -139,6 +139,16 @@ import Prettyprinter
 tpDescTypeM :: MonadIO m => SharedContext -> m Term
 tpDescTypeM sc = liftIO $ completeOpenTerm sc tpDescTypeOpenTerm
 
+-- | Pretty-print a SAW core term with a 'String' prefix to 'stderr' if the
+-- current debug level in the supplied 'HeapsterEnv' is above the supplied one
+debugPrettyTermWithPrefix :: HeapsterEnv -> DebugLevel -> String -> Term ->
+                             TopLevel ()
+debugPrettyTermWithPrefix henv req_dlevel prefix trm =
+  do dlevel <- liftIO $ readIORef $ heapsterEnvDebugLevel henv
+     pp_opts <- getTopLevelPPOpts
+     debugTrace req_dlevel dlevel (prefix ++
+                                   scPrettyTerm pp_opts trm) (return ())
+
 -- | Check that a type equals the type described by a type description in a ctx
 checkTypeAgreesWithDesc :: SharedContext -> PermEnv -> String -> Ident ->
                            CruCtx args -> Ident -> IO ()
@@ -287,6 +297,16 @@ findUnusedIdent m str =
   map (mkSafeIdent (moduleName m)) $
   (str : map ((str ++) . show) [(0::Int) ..])
 
+-- | Insert a SAW core definition into the SAW core module associated with a
+-- 'HeapsterEnv', printing out the definition if the debug level is at least 2
+heapsterInsertDef :: HeapsterEnv -> Ident -> Term -> Term -> TopLevel ()
+heapsterInsertDef henv trm_ident trm_tp trm =
+  do debugPrettyTermWithPrefix henv verboseDebugLevel
+       ("Inserting def " ++ show trm_ident ++ " =\n") trm
+     sc <- getSharedContext
+     let mnm = heapsterEnvSAWModule henv
+     liftIO $ scInsertDef sc mnm trm_ident trm_tp trm
+
 -- | Parse the second given string as a term, check that it has the given type,
 -- and, if the parsed term is not already an identifier, add it as a definition
 -- in the current module using the first given string. If that first string is
@@ -305,7 +325,7 @@ parseAndInsDef henv nm term_tp term_string =
        term -> do
          m <- liftIO $ scFindModule sc mnm
          let term_ident = findUnusedIdent m nm
-         liftIO $ scInsertDef sc mnm term_ident term_tp term
+         heapsterInsertDef henv term_ident term_tp term
          return term_ident
 
 -- | Build a 'HeapsterEnv' associated with the given SAW core module and the
@@ -464,7 +484,7 @@ heapster_define_recursive_perm _bic _opts henv nm args_str tp_str p_str =
      d_tp <- tpDescTypeM sc
      let d_ident = mkSafeIdent mnm (nm ++ "__desc")
      d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_p
-     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
+     heapsterInsertDef henv d_ident d_tp d_trm
 
      -- Generate the function \args -> tpElemEnv args (Ind d) from the
      -- arguments to the type of the translation of the permission as the term
@@ -472,7 +492,7 @@ heapster_define_recursive_perm _bic _opts henv nm args_str tp_str p_str =
      transf_tp <- liftIO $ translateExprTypeFunType sc env args
      transf_trm <-
        liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
-     liftIO $ scInsertDef sc mnm transf_ident transf_tp transf_trm
+     heapsterInsertDef henv transf_ident transf_tp transf_trm
 
      -- Add the recursive perm to the environment and update henv
      env' <-
@@ -520,7 +540,7 @@ heapster_define_reachability_perm _bic _opts henv nm args_str tp_str p_str trans
      d_tp <- tpDescTypeM sc
      let d_ident = mkSafeIdent mnm (nm ++ "__desc")
      d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_p
-     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
+     heapsterInsertDef henv d_ident d_tp d_trm
 
      -- Generate the function \args -> tpElemEnv args (Ind d) from the
      -- arguments to the type of the translation of the permission as the term
@@ -528,7 +548,7 @@ heapster_define_reachability_perm _bic _opts henv nm args_str tp_str p_str trans
      transf_tp <- liftIO $ translateExprTypeFunType sc env args
      transf_trm <-
        liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
-     liftIO $ scInsertDef sc mnm transf_ident transf_tp transf_trm
+     heapsterInsertDef henv transf_ident transf_tp transf_trm
 
      -- Add the recursive perm to the environment and update henv
      env' <-
@@ -554,17 +574,20 @@ heapster_define_reachability_perm _bic _opts henv nm args_str tp_str p_str trans
 
 -- | Helper function to add a recursive named shape to a 'PermEnv', adding all
 -- the required identifiers to the given SAW core module
-addRecNamedShape :: 1 <= w => SharedContext -> PermEnv ->
-                    ModuleName -> String -> CruCtx args -> NatRepr w ->
+addRecNamedShape :: 1 <= w => HeapsterEnv -> String ->
+                    CruCtx args -> NatRepr w ->
                     Mb (args :> LLVMShapeType w) (PermExpr (LLVMShapeType w)) ->
                     TopLevel PermEnv
-addRecNamedShape sc env mnm nm args w mb_sh =
+addRecNamedShape henv nm args w mb_sh =
   -- Generate the type description for the body of the recursive shape
-  do d_tp <- tpDescTypeM sc
+  do sc <- getSharedContext
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     let mnm = heapsterEnvSAWModule henv
+     d_tp <- tpDescTypeM sc
      let d_ident = mkSafeIdent mnm (nm ++ "__desc")
          args_p = CruCtxCons args (LLVMShapeRepr w)
      d_trm <- liftIO $ translateCompleteDescInCtx sc env args_p mb_sh
-     liftIO $ scInsertDef sc mnm d_ident d_tp d_trm
+     heapsterInsertDef henv d_ident d_tp d_trm
 
      -- Generate the function \args -> tpElemEnv args (Ind d) from the
      -- arguments to the type of the translation of the permission as the term
@@ -572,7 +595,7 @@ addRecNamedShape sc env mnm nm args w mb_sh =
      transf_tp <- liftIO $ translateExprTypeFunType sc env args
      transf_trm <-
        liftIO $ translateIndTypeFun sc env args (globalOpenTerm d_ident)
-     liftIO $ scInsertDef sc mnm transf_ident transf_tp transf_trm
+     heapsterInsertDef henv transf_ident transf_tp transf_trm
 
      -- Add the recursive shape to the environment and update henv
      let nmsh = NamedShape nm args $ RecShapeBody mb_sh transf_ident d_ident
@@ -586,8 +609,6 @@ heapster_define_recursive_shape :: BuiltinContext -> Options -> HeapsterEnv ->
                                    TopLevel ()
 heapster_define_recursive_shape _bic _opts henv nm w_int args_str body_str =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     let mnm = heapsterEnvSAWModule henv
-     sc <- getSharedContext
 
      -- Parse the bit width, arguments, and the body
      SomeKnownNatGeq1 w <-
@@ -598,7 +619,7 @@ heapster_define_recursive_shape _bic _opts henv nm w_int args_str body_str =
        (consParsedCtx nm (LLVMShapeRepr w) args_ctx) body_str
 
      -- Add the shape to the current environment
-     env' <- addRecNamedShape sc env mnm nm args w mb_sh
+     env' <- addRecNamedShape henv nm args w mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
@@ -687,10 +708,8 @@ heapster_define_rust_type_qual_opt _bic _opts henv maybe_crate str =
                      env' = permEnvAddNamedShape env nsh
                  liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
             RecShape nm ctx mb_sh ->
-              do sc <- getSharedContext
-                 let mnm = heapsterEnvSAWModule henv
-                     nm' = crated_nm nm
-                 env' <- addRecNamedShape sc env mnm nm' ctx w mb_sh
+              do let nm' = crated_nm nm
+                 env' <- addRecNamedShape henv nm' ctx w mb_sh
                  liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
