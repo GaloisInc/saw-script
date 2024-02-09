@@ -785,7 +785,7 @@ congruence_for tt =
 --   represents a congruence law for that term.
 --   This term will be a Curry-Howard style theorem statement
 --   that can be dispatched to solvers, and should have
---   type "Prop".
+--   type \"Prop\".
 --
 --   This will only work for terms that represent non-dependent
 --   functions.
@@ -2272,11 +2272,11 @@ mrSolverGetResultOrFail ::
   TopLevel a
 mrSolverGetResultOrFail env errStr succStr res = case res of
   Left err | Prover.mreDebugLevel env == 0 ->
-    fail (Prover.showMRFailure err ++ "\n[MRSolver] " ++ errStr)
+    fail (Prover.showMRFailure env err ++ "\n[MRSolver] " ++ errStr)
   Left err ->
     -- we ignore the MRFailure context here since it will have already
     -- been printed by the debug trace
-    fail (Prover.showMRFailureNoCtx err ++ "\n[MRSolver] " ++ errStr)
+    fail (Prover.showMRFailureNoCtx env err ++ "\n[MRSolver] " ++ errStr)
   Right a | Just s <- succStr ->
     printOutLnTop Info s >> return a
   Right a -> return a
@@ -2291,11 +2291,10 @@ mrSolver rs = execTactic $ Tactic $ \goal -> lift $
   case sequentState (goalSequent goal) of
     Unfocused -> fail "mrsolver: focus required"
     HypFocus _ _ -> fail "mrsolver: cannot apply mrsolver in a hypothesis"
-    ConclFocus (Prover.asRefinesS . unProp -> Just (Prover.RefinesS args ev1 ev2
-                                                      stack1 stack2 rtp1 rtp2
-                                                      t1 t2)) _ ->
-      do tp1 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev1, stack1, rtp1]
-         tp2 <- liftIO $ scGlobalApply sc "Prelude.SpecM" [ev2, stack2, rtp2]
+    ConclFocus (Prover.asRefinesS . unProp ->
+                Just (Prover.RefinesS args ev rtp1 rtp2 t1 t2)) _ ->
+      do tp1 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp1]
+         tp2 <- liftIO $ scGlobalApply sc "SpecM.SpecM" [ev, rtp2]
          let tt1 = TypedTerm (TypedTermOther tp1) t1
              tt2 = TypedTerm (TypedTermOther tp2) t2
          (m1, m2) <- mrSolverNormalizeAndPrintArgs sc (Just $ "Tactic call") tt1 tt2
@@ -2327,10 +2326,17 @@ mrSolverSetDebug dlvl =
   modify (\rw -> rw { rwMRSolverEnv =
                         Prover.mrEnvSetDebugLevel dlvl (rwMRSolverEnv rw) })
 
+-- | Modify the 'PPOpts' of the current 'MREnv' to have a maximum printing depth
+mrSolverSetDebugDepth :: Int -> TopLevel ()
+mrSolverSetDebugDepth depth =
+  modify (\rw -> rw { rwMRSolverEnv = (rwMRSolverEnv rw) {
+                        Prover.mrePPOpts = (Prover.mrePPOpts (rwMRSolverEnv rw)) {
+                          ppMaxDepth = Just depth }}})
+
 -- | Given a list of names and types representing variables over which to
 -- quantify as as well as two terms containing those variables, which may be
 -- terms or functions in the SpecM monad, construct the SAWCore term which is
--- the refinement (@Prelude.refinesS@) of the given terms, with the given
+-- the refinement (@SpecM.refinesS@) of the given terms, with the given
 -- variables generalized with a Pi type.
 refinesTerm :: [TypedTerm] -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 refinesTerm vars tt1 tt2 =

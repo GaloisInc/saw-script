@@ -24,7 +24,9 @@ monadic combinators for operating on terms.
 
 module SAWScript.Prover.MRSolver.Monad where
 
+import Data.Maybe
 import Data.List (find, findIndex, foldl')
+import Data.IORef
 import qualified Data.Text as T
 import System.IO (hPutStrLn, stderr)
 import Control.Monad (MonadPlus(..), foldM)
@@ -48,11 +50,13 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Module (Def(..))
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
@@ -72,21 +76,26 @@ data FailCtx
   = FailCtxRefines NormComp NormComp
   | FailCtxCoIndHyp CoIndHyp
   | FailCtxMNF Term
+  | FailCtxProveRel Term Term
   deriving Show
 
 -- | That's MR. Failure to you
 data MRFailure
-  = TermsNotRel Bool Term Term
-  | TypesNotRel Bool Type Type
+  = TermsNotEq Term Term
+  | TypesNotEq Type Type
+  | TypesNotUnifiable Type Type
+  | BindTypesNotUnifiable Type Type
+  | ReturnTypesNotEq Type Type
+  | FunNamesDoNotRefine FunName [Term] FunName [Term]
   | CompsDoNotRefine NormComp NormComp
-  | ReturnNotError Term
+  | ReturnNotError (Either Term Term) Term
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
-  | MalformedLetRecTypes Term
+  | MalformedTpDescList Term
   | MalformedDefs Term
   | MalformedComp Term
-  | NotCompFunType Term
+  | NotCompFunType Term Term
   | AssertionNotProvable Term
   | AssumptionNotProvable Term
   | InvariantNotProvable FunName FunName Term
@@ -97,12 +106,6 @@ data MRFailure
     -- | Records a disjunctive branch we took, where both cases failed
   | MRFailureDisj MRFailure MRFailure
   deriving Show
-
-pattern TermsNotEq :: Term -> Term -> MRFailure
-pattern TermsNotEq t1 t2 = TermsNotRel False t1 t2
-
-pattern TypesNotEq :: Type -> Type -> MRFailure
-pattern TypesNotEq t1 t2 = TypesNotRel False t1 t2
 
 -- | Remove the context from a 'MRFailure', i.e. remove all applications of the
 -- 'MRFailureLocalVar' and 'MRFailureCtx' constructors
@@ -115,13 +118,14 @@ mrFailureWithoutCtx (MRFailureDisj err1 err2) =
 mrFailureWithoutCtx err = err
 
 -- | Pretty-print an object prefixed with a 'String' that describes it
-ppWithPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
-ppWithPrefix str a = (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
+prettyPrefix :: PrettyInCtx a => String -> a -> PPInCtxM SawDoc
+prettyPrefix str a =
+  (pretty str <>) <$> nest 2 <$> (line <>) <$> prettyInCtx a
 
 -- | Pretty-print two objects, prefixed with a 'String' and with a separator
-ppWithPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
+prettyPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
                    String -> a -> String -> b -> PPInCtxM SawDoc
-ppWithPrefixSep d1 t2 d3 t4 =
+prettyPrefixSep d1 t2 d3 t4 =
   prettyInCtx t2 >>= \d2 -> prettyInCtx t4 >>= \d4 ->
   return $ group (pretty d1 <> nest 2 (line <> d2) <> line <>
                   pretty d3 <> nest 2 (line <> d4))
@@ -133,67 +137,83 @@ vsepM = fmap vsep . sequence
 instance PrettyInCtx FailCtx where
   prettyInCtx (FailCtxRefines m1 m2) =
     group <$> nest 2 <$>
-    ppWithPrefixSep "When proving refinement:" m1 "|=" m2
+    prettyPrefixSep "When proving refinement:" m1 "|=" m2
   prettyInCtx (FailCtxCoIndHyp hyp) =
     group <$> nest 2 <$>
-    ppWithPrefix "When doing co-induction with hypothesis:" hyp
+    prettyPrefix "When doing co-induction with hypothesis:" hyp
   prettyInCtx (FailCtxMNF t) =
     group <$> nest 2 <$> vsepM [return "When normalizing computation:",
                                 prettyInCtx t]
+  prettyInCtx (FailCtxProveRel t1 t2) =
+    group <$> nest 2 <$> vsepM [return "When proving terms equal:",
+                                prettyInCtx t1, prettyInCtx t2]
 
 instance PrettyInCtx MRFailure where
-  prettyInCtx (TermsNotRel False t1 t2) =
-    ppWithPrefixSep "Could not prove terms equal:" t1 "and" t2
-  prettyInCtx (TermsNotRel True t1 t2) =
-    ppWithPrefixSep "Could not prove terms heterogeneously related:" t1 "and" t2
-  prettyInCtx (TypesNotRel False tp1 tp2) =
-    ppWithPrefixSep "Types not equal:" tp1 "and" tp2
-  prettyInCtx (TypesNotRel True tp1 tp2) =
-    ppWithPrefixSep "Types not heterogeneously related:" tp1 "and" tp2
+  prettyInCtx (TermsNotEq t1 t2) =
+    prettyPrefixSep "Could not prove terms equal:" t1 "and" t2
+  prettyInCtx (TypesNotEq tp1 tp2) =
+    prettyPrefixSep "Types not equal:" tp1 "and" tp2
+  prettyInCtx (TypesNotUnifiable tp1 tp2) =
+    prettyPrefixSep "Types cannot be unified:" tp1 "and" tp2
+  prettyInCtx (BindTypesNotUnifiable tp1 tp2) =
+    prettyPrefixSep "Could not start co-induction because bind types cannot be unified:" tp1 "and" tp2
+  prettyInCtx (ReturnTypesNotEq tp1 tp2) =
+    prettyPrefixSep "Could not form refinement because return types are not equal:" tp1 "and" tp2
+  prettyInCtx (FunNamesDoNotRefine f1 args1 f2 args2) =
+    snd (prettyInCtxFunBindH f1 args1) >>= \d1 ->
+    snd (prettyInCtxFunBindH f2 args2) >>= \d2 ->
+    let prefix = "Could not prove function refinement:" in
+    let postfix = ["because:",
+                   "- No matching assumptions could be found",
+                   "- At least one side cannot be unfolded without fix"] in
+    return $ group (prefix <> nest 2 (line <> d1) <> line <>
+                    "|=" <> nest 2 (line <> d2) <> line <> vsep postfix)
   prettyInCtx (CompsDoNotRefine m1 m2) =
-    ppWithPrefixSep "Could not prove refinement: " m1 "|=" m2
-  prettyInCtx (ReturnNotError t) =
-    ppWithPrefix "errorS computation not equal to:" (RetS t)
+    prettyPrefixSep "Could not prove refinement: " m1 "|=" m2
+  prettyInCtx (ReturnNotError eith_terr t) =
+    let (lr_s, terr) = either ("left",) ("right",) eith_terr in
+    prettyPrefixSep "errorS:" terr (" on the " ++ lr_s ++ " does not match retS:") t
   prettyInCtx (FunsNotEq nm1 nm2) =
     vsepM [return "Named functions not equal:",
            prettyInCtx nm1, prettyInCtx nm2]
   prettyInCtx (CannotLookupFunDef nm) =
-    ppWithPrefix "Could not find definition for function:" nm
+    prettyPrefix "Could not find definition for function:" nm
   prettyInCtx (RecursiveUnfold nm) =
-    ppWithPrefix "Recursive unfolding of function inside its own body:" nm
-  prettyInCtx (MalformedLetRecTypes t) =
-    ppWithPrefix "Not a ground LetRecTypes list:" t
+    prettyPrefix "Recursive unfolding of function inside its own body:" nm
+  prettyInCtx (MalformedTpDescList t) =
+    prettyPrefix "Not a list of type descriptions:" t
   prettyInCtx (MalformedDefs t) =
-    ppWithPrefix "Cannot handle multiFixS recursive definitions term:" t
+    prettyPrefix "Cannot handle multiFixS recursive definitions term:" t
   prettyInCtx (MalformedComp t) =
-    ppWithPrefix "Could not handle computation:" t
-  prettyInCtx (NotCompFunType tp) =
-    ppWithPrefix "Not a computation or computational function type:" tp
+    prettyPrefix "Could not handle computation:" t
+  prettyInCtx (NotCompFunType tp t) =
+    prettyPrefixSep "Not a computation or computational function type:" tp
+                    "for term:" t
   prettyInCtx (AssertionNotProvable cond) =
-    ppWithPrefix "Failed to prove assertion:" cond
+    prettyPrefix "Failed to prove assertion:" cond
   prettyInCtx (AssumptionNotProvable cond) =
-    ppWithPrefix "Failed to prove condition for `assuming`:" cond
+    prettyPrefix "Failed to prove condition for `assuming`:" cond
   prettyInCtx (InvariantNotProvable f g pre) =
     prettyAppList [return "Could not prove loop invariant for functions",
                    prettyInCtx f, return "and", prettyInCtx g,
                    return ":", prettyInCtx pre]
   prettyInCtx (MRFailureLocalVar x err) =
-    local (x:) $ prettyInCtx err
+    local (fmap (x:)) $ prettyInCtx err
   prettyInCtx (MRFailureCtx ctx err) =
     do pp1 <- prettyInCtx ctx
        pp2 <- prettyInCtx err
        return (pp1 <> line <> pp2)
   prettyInCtx (MRFailureDisj err1 err2) =
-    ppWithPrefixSep "Tried two comparisons:" err1 "Backtracking..." err2
+    prettyPrefixSep "Tried two comparisons:" err1 "Backtracking..." err2
 
 -- | Render a 'MRFailure' to a 'String'
-showMRFailure :: MRFailure -> String
-showMRFailure = showInCtx emptyMRVarCtx
+showMRFailure :: MREnv -> MRFailure -> String
+showMRFailure env = showInCtx (mrePPOpts env) emptyMRVarCtx
 
 -- | Render a 'MRFailure' to a 'String' without its context (see
 -- 'mrFailureWithoutCtx')
-showMRFailureNoCtx :: MRFailure -> String
-showMRFailureNoCtx = showMRFailure . mrFailureWithoutCtx
+showMRFailureNoCtx :: MREnv -> MRFailure -> String
+showMRFailureNoCtx env = showMRFailure env . mrFailureWithoutCtx
 
 
 ----------------------------------------------------------------------
@@ -202,13 +222,16 @@ showMRFailureNoCtx = showMRFailure . mrFailureWithoutCtx
 
 -- | Classification info for what sort of variable an 'MRVar' is
 data MRVarInfo
-     -- | An existential variable, that might be instantiated
-  = EVarInfo (Maybe Term)
+     -- | An existential variable, that might be instantiated and that tracks
+     -- how many uvars were in scope when it was created. An occurrence of an
+     -- existential variable should always be applied to these uvars; this is
+     -- ensured by only allowing evars to be created by 'mrFreshEVar'.
+  = EVarInfo Int (Maybe Term)
     -- | A recursive function bound by @multiFixS@, with its body
   | CallVarInfo Term
 
 instance PrettyInCtx MRVarInfo where
-  prettyInCtx (EVarInfo maybe_t) =
+  prettyInCtx (EVarInfo _ maybe_t) =
     prettyAppList [ return "EVar", parens <$> prettyInCtx maybe_t]
   prettyInCtx (CallVarInfo t) =
     prettyAppList [ return "CallVar", parens <$> prettyInCtx t]
@@ -223,11 +246,11 @@ asExtCnsApp (asApplyAll -> (asExtCns -> Just ec, args)) =
 asExtCnsApp _ = Nothing
 
 -- | Recognize an evar applied to 0 or more arguments relative to a 'MRVarMap'
--- along with its instantiation, if any
-asEVarApp :: MRVarMap -> Recognizer Term (MRVar, [Term], Maybe Term)
+-- along with its uvar context length and its instantiation, if any
+asEVarApp :: MRVarMap -> Recognizer Term (MRVar, Int, [Term], Maybe Term)
 asEVarApp var_map (asExtCnsApp -> Just (ec, args))
-  | Just (EVarInfo maybe_inst) <- Map.lookup (MRVar ec) var_map =
-    Just (MRVar ec, args, maybe_inst)
+  | Just (EVarInfo clen maybe_inst) <- Map.lookup (MRVar ec) var_map =
+    Just (MRVar ec, clen, args, maybe_inst)
 asEVarApp _ _ = Nothing
 
 -- | A co-inductive hypothesis of the form:
@@ -284,8 +307,7 @@ type CoIndHyps = Map (FunName, FunName) CoIndHyp
 
 instance PrettyInCtx CoIndHyp where
   prettyInCtx (CoIndHyp ctx f1 f2 args1 args2 invar1 invar2) =
-    -- ignore whatever context we're in and use `ctx` instead
-    return $ flip runPPInCtxM ctx $
+    prettyWithCtx ctx $ -- ignore whatever context we're in and use `ctx` instead
     prettyAppList [prettyInCtx ctx, return ".",
                    (case invar1 of
                        Just f -> prettyTermApp f args1
@@ -304,9 +326,9 @@ data DataTypeAssump
   deriving (Generic, Show, TermLike)
 
 instance PrettyInCtx DataTypeAssump where
-  prettyInCtx (IsLeft  x) = prettyInCtx x >>= ppWithPrefix "Left _ _"
-  prettyInCtx (IsRight x) = prettyInCtx x >>= ppWithPrefix "Right _ _"
-  prettyInCtx (IsNum   x) = prettyInCtx x >>= ppWithPrefix "TCNum"
+  prettyInCtx (IsLeft  x) = prettyInCtx x >>= prettyPrefix "Left _ _"
+  prettyInCtx (IsRight x) = prettyInCtx x >>= prettyPrefix "Right _ _"
+  prettyInCtx (IsNum   x) = prettyInCtx x >>= prettyPrefix "TCNum"
   prettyInCtx IsInf = return "TCInf"
 
 -- | A map from 'Term's to 'DataTypeAssump's over that term
@@ -350,6 +372,11 @@ data MRState t = MRState {
 -- | The exception type for MR. Solver, which is either a 'MRFailure' or a
 -- widening request
 data MRExn = MRExnFailure MRFailure
+             -- | A widening request gives two recursive function names whose
+             -- coinductive assumption needs to be widened along with a list of
+             -- indices into the argument lists for these functions (in either
+             -- the arguments to the 'Left' or 'Right' function) that need to be
+             -- generalized
            | MRExnWiden FunName FunName [Either Int Int]
            deriving Show
 
@@ -407,6 +434,10 @@ mrAskSMT unints goal = do
 mrDebugLevel :: MRM t Int
 mrDebugLevel = mreDebugLevel <$> mriEnv <$> ask
 
+-- | Get the current pretty-printing options
+mrPPOpts :: MRM t PPOpts
+mrPPOpts = mrePPOpts <$> mriEnv <$> ask
+
 -- | Get the current value of 'mriEnv'
 mrEnv :: MRM t MREnv
 mrEnv = mriEnv <$> ask
@@ -422,6 +453,24 @@ mrEvidence = mrsEvidence <$> get
 -- | Get the current value of 'mrsVars'
 mrVars :: MRM t MRVarMap
 mrVars = mrsVars <$> get
+
+-- | Run a 'PPInCtxM' computation in the current context and with the current
+-- 'PPOpts'
+mrPPInCtxM :: PPInCtxM a -> MRM t a
+mrPPInCtxM m = mrPPOpts >>= \opts -> mrUVars >>= \ctx ->
+  return $ runPPInCtxM m opts ctx
+
+-- | Pretty-print an object in the current context and with the current 'PPOpts'
+mrPPInCtx :: PrettyInCtx a => a -> MRM t SawDoc
+mrPPInCtx a = mrPPOpts >>= \opts -> mrUVars >>= \ctx ->
+  return $ ppInCtx opts ctx a
+
+-- | Pretty-print an object in the current context and render to a 'String' with
+-- the current 'PPOpts'
+mrShowInCtx :: PrettyInCtx a => a -> MRM t String
+mrShowInCtx a = mrPPOpts >>= \opts -> mrUVars >>= \ctx ->
+  return $ showInCtx opts ctx a
+
 
 -- | Run an 'MRM' computation and return a result or an error, including the
 -- final state of 'mrsSolverStats' and 'mrsEvidence'
@@ -569,6 +618,58 @@ mrGenFromBVVec n len a v def_err_str m =
   do err_tm <- mrErrorTerm a def_err_str
      liftSC2 scGlobalApply "Prelude.genFromBVVec" [n, len, a, v, err_tm, m]
 
+-- | Match a lambda of the form @(\i _ -> f i)@ as @f@
+asIndexWithProofFnTerm :: Recognizer Term (SharedContext -> IO Term)
+asIndexWithProofFnTerm (asLambdaList -> ([(ix_nm, ix_tp), _], e))
+  | not $ inBitSet 0 $ looseVars e
+  = Just $ \sc ->
+    do ix_var <- scLocalVar sc 0
+       -- Substitute an error term for the proof variable and ix_var for ix in
+       -- the body e of the lambda
+       let s = [error "asGen(BV)VecTerm: unexpected var occurrence", ix_var]
+       e' <- instantiateVarList sc 0 s e
+       scLambda sc ix_nm ix_tp e'
+asIndexWithProofFnTerm _ = Nothing
+
+-- | Match a term of the form @gen n a f@ or @genWithProof n a (\i _ -> f i)@
+asGenVecTerm :: Recognizer Term (Term, Term, SharedContext -> IO Term)
+asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.gen" -> Just _,
+                             [n, a, f]))
+  = Just (n, a, const $ return f)
+asGenVecTerm (asApplyAll -> (isGlobalDef "Prelude.genWithProof" -> Just _,
+                             [n, a, asIndexWithProofFnTerm -> Just m_f]))
+  = Just (n, a, m_f)
+asGenVecTerm _ = Nothing
+
+-- | Match a term of the form @genBVVecNoPf n len a f@ or
+-- @genBVVec n len a (\i _ -> f i)@
+asGenBVVecTerm :: Recognizer Term (Term, Term, Term, SharedContext -> IO Term)
+asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVecNoPf" -> Just _,
+                               [n, len, a, f]))
+  = Just (n, len, a, const $ return f)
+asGenBVVecTerm (asApplyAll -> (isGlobalDef "Prelude.genBVVec" -> Just _,
+                               [n, len, a, asIndexWithProofFnTerm -> Just m_f]))
+  = Just (n, len, a, m_f)
+asGenBVVecTerm _ = Nothing
+
+-- | Index into a vector using the @at@ accessor, taking in the same 'Term'
+-- arguments as that function, but simplify when the vector is a term
+-- constructed from @gen@ or @genWithProof@
+mrAtVec :: Term -> Term -> Term -> Term -> MRM t Term
+mrAtVec _ _ (asGenVecTerm -> Just (_, _, m_f)) ix =
+  liftSC0 m_f >>= \f -> mrApply f ix
+mrAtVec len a v ix =
+  liftSC2 scGlobalApply "Prelude.at" [len, a, v, ix]
+
+-- | Index into a vector using the @atBVVecNoPf@ accessor, taking in the same
+-- 'Term' arguments as that function, but simplify when the vector is a term
+-- constructed from @gen@ or @genWithProof@
+mrAtBVVec :: Term -> Term -> Term -> Term -> Term -> MRM t Term
+mrAtBVVec _ _ _ (asGenBVVecTerm -> Just (_, _, _, m_f)) ix =
+  liftSC0 m_f >>= \f -> mrApply f ix
+mrAtBVVec n len a v ix =
+  liftSC2 scGlobalApply "Prelude.atBVVecNoPf" [n, len, a, v, ix]
+
 
 ----------------------------------------------------------------------
 -- * Monadic Operations on Terms
@@ -613,6 +714,13 @@ mrApplyAll f args = liftSC2 scApplyAllBeta f args
 mrApply :: Term -> Term -> MRM t Term
 mrApply f arg = mrApplyAll f [arg]
 
+-- | Substitue a list of @N@ arguments into the body of an @N@-ary pi type
+mrPiApplyAll :: Term -> [Term] -> MRM t Term
+mrPiApplyAll tp args
+  | Just (_, body) <- asPiListN (length args) tp
+  = substTermLike 0 args body
+mrPiApplyAll _ _ = panic "mrPiApplyAll" ["Too many arguments for pi type"]
+
 -- | Return the unit type as a 'Type'
 mrUnitType :: MRM t Type
 mrUnitType = Type <$> liftSC0 scUnitType
@@ -625,6 +733,34 @@ mrCtorApp = liftSC2 scCtorApp
 mrGlobalTerm :: Ident -> MRM t Term
 mrGlobalTerm = liftSC1 scGlobalDef
 
+-- | Build a 'Term' for a global and unfold the global
+mrGlobalTermUnfold :: Ident -> MRM t Term
+mrGlobalTermUnfold ident =
+  (defBody <$> liftSC1 scRequireDef ident) >>= \case
+  Just body -> return body
+  Nothing -> panic "mrGlobalTermUnfold" ["Definition " ++ show ident ++
+                                         " does not have a body"]
+
+-- | Apply a named global to a list of arguments and beta-reduce in Mr. Monad
+mrApplyGlobal :: Ident -> [Term] -> MRM t Term
+mrApplyGlobal f args = mrGlobalTerm f >>= \t -> mrApplyAll t args
+
+-- | Build an arrow type @a -> b@ using a return type @b@ that does not have an
+-- additional free deBruijn index for the input
+mrArrowType :: LocalName -> Term -> Term -> MRM t Term
+mrArrowType n tp_in tp_out =
+  liftSC3 scPi n tp_in =<< liftTermLike 0 1 tp_out
+
+-- | Build the bitvector type @Vec n Bool@ from natural number term @n@
+mrBvType :: Term -> MRM t Term
+mrBvType n =
+  do bool_tp <- liftSC0 scBoolType
+     liftSC2 scVecType n bool_tp
+
+-- | Build the equality proposition @Eq a t1 t2@
+mrEqProp :: Term -> Term -> Term -> MRM t Term
+mrEqProp tp t1 t2 = liftSC2 scDataTypeApp "Prelude.Eq" [tp,t1,t2]
+
 -- | Like 'scBvConst', but if given a bitvector literal it is converted to a
 -- natural number literal
 mrBvToNat :: Term -> Term -> MRM t Term
@@ -633,15 +769,48 @@ mrBvToNat _ (asArrayValue -> Just (asBoolType -> Just _,
   liftSC1 scNat $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
 mrBvToNat n len = liftSC2 scGlobalApply "Prelude.bvToNat" [n, len]
 
+-- | Given a bit-width 'Term' and a natural number 'Term', return a bitvector
+-- 'Term' of the given bit-width only if we can can do so without truncation
+-- (i.e. only if we can ensure the given natural is in range)
+mrBvNatInRange :: Term -> Term -> MRM t (Maybe Term)
+mrBvNatInRange (asNat -> Just w) (asUnsignedConcreteBvToNat -> Just v)
+  | v < 2 ^ w = Just <$> liftSC2 scBvLit w (toInteger v)
+mrBvNatInRange w (asBvToNat -> Just (w', bv)) =
+  mrBvCastInRange w w' bv
+mrBvNatInRange w (asApplyAll -> (asGlobalDef -> Just "Prelude.intToNat",
+                                 [i])) = case i of
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+    mrBvNatInRange w v
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [w', bv])) ->
+    mrBvCastInRange w w' bv
+  _ -> return Nothing
+mrBvNatInRange _ _ = return Nothing
+
+-- | Given two bit-width 'Term's and a bitvector 'Term' of the second bit-width,
+-- return a bitvector 'Term' of the first bit-width only if we can can do so
+-- without truncation (i.e. only if we can ensure the given bitvector is in
+-- range)
+mrBvCastInRange :: Term -> Term -> Term -> MRM t (Maybe Term)
+mrBvCastInRange w1_t w2_t bv =
+  do w1_w2_cvt <- mrConvertible w1_t w2_t
+     if w1_w2_cvt then return $ Just bv
+     else case (asNat w1_t, asNat w1_t, asUnsignedConcreteBv bv) of
+       (Just w1, _, Just v) | v < 2 ^ w1 ->
+         Just <$> liftSC2 scBvLit w1 (toInteger v)
+       (Just w1, Just w2, _) | w1 > w2 -> 
+         do w1_sub_w2_t <- liftSC1 scNat (w1 - w2)
+            Just <$> liftSC3 scBvUExt w2_t w1_sub_w2_t bv
+       _ -> return Nothing
+
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the least recently bound uvar first, i.e., in
--- the order as seen "from the outside"
+-- the order as seen \"from the outside\"
 mrUVarsOuterToInner :: MRM t [(LocalName,Term)]
 mrUVarsOuterToInner = mrVarCtxOuterToInner <$> mrUVars
 
 -- | Get the current context of uvars as a list of variable names and their
 -- types as SAW core 'Term's, with the most recently bound uvar first, i.e., in
--- the order as seen "from the inside"
+-- the order as seen \"from the inside\"
 mrUVarsInnerToOuter :: MRM t [(LocalName,Term)]
 mrUVarsInnerToOuter = mrVarCtxInnerToOuter <$> mrUVars
 
@@ -658,16 +827,14 @@ mrConvertible = liftSC4 scConvertibleEval scTypeCheckWHNF True
 
 -- | Take a 'FunName' @f@ for a monadic function of type @vars -> SpecM a@ and
 -- compute the type @SpecM [args/vars]a@ of @f@ applied to @args@. Return the
--- type @[args/vars]a@ that @SpecM@ is applied to, along with its parameters.
-mrFunOutType :: FunName -> [Term] -> MRM t (SpecMParams Term, Term)
+-- type @[args/vars]a@ that @SpecM@ is applied to, along with its event type.
+mrFunOutType :: FunName -> [Term] -> MRM t (EvTerm, Term)
 mrFunOutType fname args =
-  mrApplyAll (funNameTerm fname) args >>= mrTypeOf >>= \case
-    (asSpecM -> Just (params, tp)) -> (params,) <$> liftSC1 scWhnf tp
-    _ -> do pp_ftype <- funNameType fname >>= mrPPInCtx
-            pp_fname <- mrPPInCtx fname
-            debugPrint 0 "mrFunOutType: function does not have SpecM return type"
-            debugPretty 0 ("Function:" <> pp_fname <> " with type: " <> pp_ftype)
-            error "mrFunOutType"
+  do app <- mrApplyAll (funNameTerm fname) args
+     r_tp <- mrTypeOf app >>= liftSC1 scWhnf
+     case asSpecM r_tp of
+       Just (ev, tp) -> return (ev, tp)
+       Nothing -> throwMRFailure (NotCompFunType r_tp app)
 
 -- | Turn a 'LocalName' into one not in a list, adding a suffix if necessary
 uniquifyName :: LocalName -> [LocalName] -> LocalName
@@ -688,6 +855,9 @@ uniquifyNames (nm:nms) nms_other =
 
 -- | Build a lambda term with the lifting (in the sense of 'incVars') of an
 -- MR Solver term
+-- NOTE: The types in the given context can have earlier variables in the
+-- context free. Thus, if passing a list of types all in the same context, later
+-- types should be lifted.
 mrLambdaLift :: TermLike tm => [(LocalName,Term)] -> tm ->
                 ([Term] -> tm -> MRM t Term) -> MRM t Term
 mrLambdaLift [] t f = f [] t
@@ -708,20 +878,23 @@ mrLambdaLift ctx t f =
 -- | Call 'mrLambdaLift' with exactly one 'Term' argument.
 mrLambdaLift1 :: TermLike tm => (LocalName,Term) -> tm ->
                  (Term -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift1 ctx t f =
-  mrLambdaLift [ctx] t $ \vars t' ->
+mrLambdaLift1 (nm,tp) t f =
+  mrLambdaLift [(nm,tp)] t $ \vars t' ->
     case vars of
       [v] -> f v t'
-      _   -> error "mrLambdaLift1: Expected exactly one Term argument"
+      _   -> panic "mrLambdaLift1" ["Expected exactly one Term argument"]
 
--- | Call 'mrLambdaLift' with exactly two 'Term' arguments.
+-- | Call 'mrLambdaLift' with exactly two 'Term' arguments which are both in the
+-- same context. (To create two lambdas where the type of the second variable
+-- depends on the value of the first, use 'mrLambdaLift' directly.)
 mrLambdaLift2 :: TermLike tm => (LocalName,Term) -> (LocalName,Term) -> tm ->
                  (Term -> Term -> tm -> MRM t Term) -> MRM t Term
-mrLambdaLift2 ctx1 ctx2 t f =
-  mrLambdaLift [ctx1, ctx2] t $ \vars t' ->
+mrLambdaLift2 (nm1,tp1) (nm2,tp2) t f =
+  liftTermLike 0 1 tp2 >>= \tp2' ->
+  mrLambdaLift [(nm1,tp1), (nm2,tp2')] t $ \vars t' ->
     case vars of
       [v1, v2] -> f v1 v2 t'
-      _        -> error "mrLambdaLift2: Expected exactly two Term arguments"
+      _        -> panic "mrLambdaLift2" ["Expected exactly two Term arguments"]
 
 -- | Run a MR Solver computation in a context extended with a universal
 -- variable, which is passed as a 'Term' to the sub-computation. Note that any
@@ -729,7 +902,7 @@ mrLambdaLift2 ctx1 ctx2 t f =
 withUVar :: LocalName -> Type -> (Term -> MRM t a) -> MRM t a
 withUVar nm tp m = withUVars (singletonMRVarCtx nm tp) $ \case
   [v] -> m v
-  _   -> error "withUVar: impossible"
+  _   -> panic "withUVar" ["impossible"]
 
 -- | Run a MR Solver computation in a context extended with a universal variable
 -- and pass it the lifting (in the sense of 'incVars') of an MR Solver term
@@ -761,7 +934,8 @@ withUVars ctx f =
      local (\info -> info { mriUVars = mrVarCtxAppend ctx_u (mriUVars info),
                             mriAssumptions = assumps',
                             mriDataTypeAssumps = dataTypeAssumps' }) $
-       mrDebugPPPrefix 3 "withUVars:" ctx_u >>
+       mapM (\t -> (t,) <$> mrTypeOf t) vars >>= \vars_with_types ->
+       mrDebugPPPrefix 3 "withUVars:" vars_with_types >>
        foldr (\nm m -> mapMRFailure (MRFailureLocalVar nm) m) (f vars) nms
 
 -- | Run a MR Solver in a top-level context, i.e., with no uvars or assumptions
@@ -794,7 +968,8 @@ piUVarsM :: Term -> MRM t Term
 piUVarsM t = mrUVarsOuterToInner >>= \ctx -> liftSC2 scPiList ctx t
 
 -- | Instantiate all uvars in a term using the supplied function
-instantiateUVarsM :: forall a t. TermLike a => (LocalName -> Term -> MRM t Term) -> a -> MRM t a
+instantiateUVarsM :: forall a t. TermLike a =>
+                     (LocalName -> Term -> MRM t Term) -> a -> MRM t a
 instantiateUVarsM f a =
   do ctx <- mrUVarsOuterToInner
      -- Remember: the uvar context is outermost to innermost, so we bind
@@ -831,7 +1006,7 @@ mrVarInfo var = Map.lookup var <$> mrVars
 -- | Convert an 'ExtCns' to a 'FunName'
 extCnsToFunName :: ExtCns Term -> MRM t FunName
 extCnsToFunName ec = let var = MRVar ec in mrVarInfo var >>= \case
-  Just (EVarInfo _) -> return $ EVarFunName var
+  Just (EVarInfo _ _) -> return $ EVarFunName var
   Just (CallVarInfo _) -> return $ CallSName var
   Nothing
     | Just glob <- asTypedGlobalDef (Unshared $ FTermF $ ExtCns ec) ->
@@ -873,8 +1048,11 @@ mrFunBody f args = mrFunNameBody f >>= \case
 -- per 'mrCallsFun'
 mrFunBodyRecInfo :: FunName -> [Term] -> MRM t (Maybe (Term, Bool))
 mrFunBodyRecInfo f args =
-  mrFunBody f args >>= \case
-  Just f_body -> Just <$> (f_body,) <$> mrCallsFun f f_body
+  mrFunNameBody f >>= \case
+  Just body -> do
+    body_applied <- mrApplyAll body args
+    is_recursive <- mrCallsFun f body
+    return $ Just (body_applied, is_recursive)
   Nothing -> return Nothing
 
 -- | Test if a 'Term' contains, after possibly unfolding some functions, a call
@@ -909,7 +1087,8 @@ mrFreshVar nm tp = piUVarsM tp >>= mrFreshVarCl nm
 -- | Set the info associated with an 'MRVar', assuming it has not been set
 mrSetVarInfo :: MRVar -> MRVarInfo -> MRM t ()
 mrSetVarInfo var info =
-  debugPretty 3 ("mrSetVarInfo" <+> ppInEmptyCtx var <+> "=" <+> ppInEmptyCtx info) >>
+  mrDebugPPInCtxM 3 (prettyWithCtx emptyMRVarCtx $
+                     prettyPrefixSep "mrSetVarInfo" var "=" info) >>
   (modify $ \st ->
    st { mrsVars =
           Map.alter (\case
@@ -922,7 +1101,8 @@ mrSetVarInfo var info =
 mrFreshEVar :: LocalName -> Type -> MRM t Term
 mrFreshEVar nm (Type tp) =
   do var <- mrFreshVar nm tp
-     mrSetVarInfo var (EVarInfo Nothing)
+     ctx_len <- mrVarCtxLength <$> mrUVars
+     mrSetVarInfo var (EVarInfo ctx_len Nothing)
      mrVarTerm var
 
 -- | Return a fresh sequence of existential variables from a 'MRVarCtx'.
@@ -961,8 +1141,8 @@ mrSetEVarClosed var val =
        st { mrsVars =
             Map.alter
             (\case
-                Just (EVarInfo Nothing) -> Just $ EVarInfo (Just val)
-                Just (EVarInfo (Just _)) ->
+                Just (EVarInfo clen Nothing) -> Just $ EVarInfo clen (Just val)
+                Just (EVarInfo _ (Just _)) ->
                   error "Setting existential variable: variable already set!"
                 _ -> error "Setting existential variable: not an evar!")
             var (mrsVars st) }
@@ -974,8 +1154,10 @@ mrSetEVarClosed var val =
 -- need not be the case that @i=j@). Return whether this succeeded.
 mrTrySetAppliedEVar :: MRVar -> [Term] -> Term -> MRM t Bool
 mrTrySetAppliedEVar evar args t =
-  -- Get the complete list of argument variables of the type of evar
-  let (evar_vars, _) = asPiList (mrVarType evar) in
+  -- Get the first N argument variables of the type of evar, where N is the
+  -- length of args; note that evar can have more than N arguments if t is a
+  -- higher-order term
+  let (take (length args) -> evar_vars, _) = asPiList (mrVarType evar) in
   -- Get all the free variables of t
   let free_vars = bitSetElems (looseVars t) in
   -- For each free var of t, find an arg equal to it
@@ -1018,10 +1200,52 @@ mrSubstEVars = memoFixTermFun $ \recurse t ->
   do var_map <- mrVars
      case t of
        -- If t is an instantiated evar, recurse on its instantiation
-       (asEVarApp var_map -> Just (_, args, Just t')) ->
+       (asEVarApp var_map -> Just (_, _, args, Just t')) ->
          mrApplyAll t' args >>= recurse
        -- If t is anything else, recurse on its immediate subterms
        _ -> traverseSubterms recurse t
+
+-- | Replace all evars in a 'Term' with their instantiations when they have one
+-- and \"lower\" those that do not. Lowering an evar in this context means
+-- replacing each occurrence @X x1 .. xn@ of an evar @X@ applied to its context
+-- of uvars with a fresh 'ExtCns' variable @Y@. This must be done after
+-- 'instantiateUVarsM' has replaced all uvars with fresh 'ExtCns' variables,
+-- which ensures that @X x1 .. xn@ is actually a closed, top-level term since
+-- each @xi@ is now an 'ExtCns'. This is necessary so @X x1 .. xn@ can be
+-- replaced by an 'ExtCns' @Y@, which is always closed. The idea of lowering is
+-- that @X@ should always occur applied to these same values, so really we can
+-- just treat the entire expression @X x1 .. xn@ as a single unknown value,
+-- rather than worrying about how @X@ depends on its inputs.
+mrSubstLowerEVars :: Term -> MRM t Term
+mrSubstLowerEVars t_top =
+  do var_map <- mrVars
+     lower_map <- liftIO $ newIORef Map.empty
+     flip memoFixTermFun t_top $ \recurse t ->
+       case t of
+         -- If t is an instantiated evar, recurse on its instantiation
+         (asEVarApp var_map -> Just (_, _, args, Just t')) ->
+           mrApplyAll t' args >>= recurse
+         -- If t is an uninstantiated evar, look up or create its lowering as a
+         -- variable, making sure it is applied to evars for its arguments
+         (asEVarApp var_map -> Just (evar, clen, args, Nothing)) ->
+           do let (cargs, args') = splitAt clen args
+              let my_panic :: () -> a
+                  my_panic () =
+                    panic "mrSubstLowerEVars"
+                    ["Unexpected evar application: " ++ show t]
+              let cargs_ec = fromMaybe (my_panic ()) $ mapM asExtCns cargs
+              t' <- (Map.lookup evar <$> liftIO (readIORef lower_map)) >>= \case
+                Just (y, cargs_expected) ->
+                  if cargs_ec == cargs_expected then return y else my_panic ()
+                Nothing ->
+                  do y_tp <- mrPiApplyAll (mrVarType evar) cargs
+                     y <- liftSC2 scFreshGlobal (T.pack $ showMRVar evar) y_tp
+                     liftIO $ modifyIORef' lower_map $
+                       Map.insert evar (y,cargs_ec)
+                     return y
+              mrApplyAll t' args' >>= recurse
+         -- If t is anything else, recurse on its immediate subterms
+         _ -> traverseSubterms recurse t
 
 -- | Replace all evars in a 'Term' with their instantiations, returning
 -- 'Nothing' if we hit an uninstantiated evar
@@ -1031,10 +1255,10 @@ mrSubstEVarsStrict top_t =
   do var_map <- lift mrVars
      case t of
        -- If t is an instantiated evar, recurse on its instantiation
-       (asEVarApp var_map -> Just (_, args, Just t')) ->
+       (asEVarApp var_map -> Just (_, _, args, Just t')) ->
          lift (mrApplyAll t' args) >>= recurse
        -- If t is an uninstantiated evar, return Nothing
-       (asEVarApp var_map -> Just (_, _, Nothing)) ->
+       (asEVarApp var_map -> Just (_, _, _, Nothing)) ->
          mzero
        -- If t is anything else, recurse on its immediate subterms
        _ -> traverseSubterms recurse t
@@ -1050,7 +1274,8 @@ mrGetCoIndHyp nm1 nm2 = Map.lookup (nm1, nm2) <$> mrCoIndHyps
 -- | Run a compuation under an additional co-inductive assumption
 withCoIndHyp :: CoIndHyp -> MRM t a -> MRM t a
 withCoIndHyp hyp m =
-  do debugPretty 2 ("withCoIndHyp" <+> ppInEmptyCtx hyp)
+  do mrDebugPPInCtxM 2 (prettyWithCtx emptyMRVarCtx $
+                        prettyPrefix "withCoIndHyp" hyp)
      hyps' <- Map.insert (coIndHypLHSFun hyp,
                           coIndHypRHSFun hyp) hyp <$> mrCoIndHyps
      local (\info -> info { mriCoIndHyps = hyps' }) m
@@ -1093,7 +1318,7 @@ mrGetFunAssump nm = lookupFunAssump nm <$> mrRefnset
 withFunAssump :: FunName -> [Term] -> Term -> MRM t a -> MRM t a
 withFunAssump fname args rhs m =
   do k <- mkCompFunReturn <$> mrFunOutType fname args
-     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args Unlifted k)
+     mrDebugPPPrefixSep 1 "withFunAssump" (FunBind fname args k)
                                      "|=" rhs
      ctx <- mrUVars
      rs <- mrRefnset
@@ -1108,7 +1333,7 @@ withFunAssump fname args rhs m =
 --
 -- If so, return @\ x1 ... xn -> phi@ as a term with the @xi@ variables free.
 -- Otherwise, return 'Nothing'. Note that this function will also look past
--- any initial @bindM ... (assertFiniteM ...)@ applications.
+-- any initial @bindS ... (assertFiniteS ...)@ applications.
 mrGetInvariant :: FunName -> MRM t (Maybe Term)
 mrGetInvariant nm =
   mrFunNameBody nm >>= \case
@@ -1127,17 +1352,17 @@ mrGetInvariantBody tm = case asApplyAll tm of
   (f@(asLambda -> Just _), args) ->
     do tm' <- mrApplyAll f args
        mrGetInvariantBody tm'
-  -- go inside any top-level applications of of bindM ... (assertFiniteM ...)
-  (isGlobalDef "Prelude.bindM" -> Just (),
-   [_, _,
-    asApp -> Just (isGlobalDef "CryptolM.assertFiniteM" -> Just (),
-                   asCtor -> Just (primName -> "Cryptol.TCNum", _)),
+  -- go inside any top-level applications of of bindS ... (assertFiniteS ...)
+  (isGlobalDef "SpecM.bindS" -> Just (),
+   [_, _, _,
+    (asApplyAll -> (isGlobalDef "CryptolM.assertFiniteS" -> Just (),
+                    [_, (asCtor -> Just (primName -> "Cryptol.TCNum", _))])),
     k]) ->
     do pf <- liftSC1 scGlobalDef "Prelude.TrueI"
        body <- mrApplyAll k [pf]
        mrGetInvariantBody body
   -- otherwise, return Just iff there is a top-level invariant hint
-  (isGlobalDef "Prelude.invariantHint" -> Just (),
+  (isGlobalDef "SpecM.invariantHint" -> Just (),
    [_, phi, _]) -> return $ Just phi
   _ -> return Nothing
 
@@ -1185,38 +1410,42 @@ recordUsedFunAssump _ = return ()
 -- * Functions for Debug Output
 ----------------------------------------------------------------------
 
--- | Print a 'String' if the debug level is at least the supplied 'Int'
-debugPrint :: Int -> String -> MRM t ()
-debugPrint i str =
+-- | Print a 'String' to 'stderr' if the debug level is at least the supplied
+-- 'Int'
+mrDebugPrint :: Int -> String -> MRM t ()
+mrDebugPrint i str =
   mrDebugLevel >>= \lvl ->
   if lvl >= i then liftIO (hPutStrLn stderr str) else return ()
 
--- | Print a document if the debug level is at least the supplied 'Int'
-debugPretty :: Int -> SawDoc -> MRM t ()
-debugPretty i pp = debugPrint i $ renderSawDoc defaultPPOpts pp
+-- | Print a document to 'stderr' if the debug level is at least the supplied
+-- 'Int'
+mrDebugPretty :: Int -> SawDoc -> MRM t ()
+mrDebugPretty i pp =
+  mrPPOpts >>= \opts ->
+  mrDebugPrint i (renderSawDoc opts pp)
 
--- | Pretty-print an object in the current context if the current debug level is
+-- | Print to 'stderr' the result of running a 'PPInCtxM' computation in the
+-- current context and with the current 'PPOpts' if the current debug level is
 -- at least the supplied 'Int'
-debugPrettyInCtx :: PrettyInCtx a => Int -> a -> MRM t ()
-debugPrettyInCtx i a = mrUVars >>= \ctx -> debugPrint i (showInCtx ctx a)
+mrDebugPPInCtxM :: Int -> PPInCtxM SawDoc -> MRM t ()
+mrDebugPPInCtxM i m = mrDebugPretty i =<< mrPPInCtxM m
 
--- | Pretty-print an object relative to the current context
-mrPPInCtx :: PrettyInCtx a => a -> MRM t SawDoc
-mrPPInCtx a = runPPInCtxM (prettyInCtx a) <$> mrUVars
+-- | Pretty-print an object to 'stderr' in the current context and with the
+-- current 'PPOpts' if the current debug level is at least the supplied 'Int'
+mrDebugPPInCtx :: PrettyInCtx a => Int -> a -> MRM t ()
+mrDebugPPInCtx i a = mrDebugPretty i =<< mrPPInCtx a
 
--- | Pretty-print the result of 'ppWithPrefix' relative to the current uvar
--- context to 'stderr' if the debug level is at least the 'Int' provided
+-- | Pretty-print the result of 'prettyPrefix' to 'stderr' in the
+-- current context and with the current 'PPOpts' if the debug level is at least
+-- the 'Int' provided
 mrDebugPPPrefix :: PrettyInCtx a => Int -> String -> a -> MRM t ()
 mrDebugPPPrefix i pre a =
-  mrUVars >>= \ctx ->
-  debugPretty i $
-  runPPInCtxM (group <$> nest 2 <$> ppWithPrefix pre a) ctx
+  mrDebugPPInCtxM i $ group <$> nest 2 <$> prettyPrefix pre a
 
--- | Pretty-print the result of 'ppWithPrefixSep' relative to the current uvar
--- context to 'stderr' if the debug level is at least the 'Int' provided
+-- | Pretty-print the result of 'prettyPrefixSep' to 'stderr' in the current
+-- context and with the current 'PPOpts' if the debug level is at least the
+-- 'Int' provided
 mrDebugPPPrefixSep :: (PrettyInCtx a, PrettyInCtx b) =>
                       Int -> String -> a -> String -> b -> MRM t ()
 mrDebugPPPrefixSep i pre a1 sp a2 =
-  mrUVars >>= \ctx ->
-  debugPretty i $
-  runPPInCtxM (group <$> nest 2 <$> ppWithPrefixSep pre a1 sp a2) ctx
+  mrDebugPPInCtxM i $ group <$> nest 2 <$> prettyPrefixSep pre a1 sp a2

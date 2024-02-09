@@ -10,6 +10,7 @@ From CryptolToCoq Require Import SAWCorePrelude.
 Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToCoq Require Import SpecM.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 Import CryptolPrimitivesForSAWCore.
 
@@ -18,7 +19,7 @@ Import ListNotations.
 (** It is annoying to have to wrap natural numbers into [TCNum] to use them at
 type [Num], so these coercions will do it for us.
  *)
-Coercion TCNum : nat >-> Num.
+Coercion TCNum : nat >-> TpDesc.Num.
 Definition natToNat (n : nat) : Nat := n.
 Coercion natToNat : nat >-> Nat.
 
@@ -81,7 +82,7 @@ Fixpoint iterNat {a : Type} (n : nat) (f : a -> a) : a -> a :=
 
 Definition iter {a : Type} (n : Num) (f : a -> a) : a -> a :=
     match n with
-    | TCNum n => fun xs => iterNat n f xs
-    | TCInf   => fun xs => xs
+    | TpDesc.TCNum n => fun xs => iterNat n f xs
+    | TpDesc.TCInf   => fun xs => xs
     end
 .

@@ -282,7 +282,7 @@ setupOutArg tenv = go "out"
         (outArgss, posts) <- unzip <$> setupTupleArgs go name ffiTypes
         let len = fromIntegral $ length ffiTypes
             post ret = zipWithM_
-              (\i p -> p (projTupleOpenTerm' i len ret))
+              (\i p -> p (projTupleOpenTerm' len i ret))
               [0..]
               posts
         pure (concat outArgss, post)
@@ -299,7 +299,7 @@ setupOutArg tenv = go "out"
                         Just i -> i
                         Nothing -> panic "setupOutArg"
                           ["Bad record field access"]
-                p (projTupleOpenTerm' ix len ret))
+                p (projTupleOpenTerm' len ix ret))
               (displayOrder ffiTypeMap)
               posts
         pure (concat outArgss, post)

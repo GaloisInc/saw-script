@@ -65,6 +65,7 @@ data Token
   | TPtrSh              -- ^ keyword @ptrsh@
   | TFieldSh            -- ^ keyword @fieldsh@
   | TArraySh            -- ^ keyword @arraysh@
+  | TTupleSh            -- ^ keyword @tuplesh@
   | TExSh               -- ^ keyword @exsh@
   | TOrSh               -- ^ keyword @orsh@
   | TMemBlock           -- ^ keyword @memblock@
@@ -149,6 +150,7 @@ describeToken t =
     TPtrSh              -> "keyword 'ptrsh'"
     TFieldSh            -> "keyword 'fieldsh'"
     TArraySh            -> "keyword 'arraysh'"
+    TTupleSh            -> "keyword 'tuplesh'"
     TExSh               -> "keyword 'exsh'"
     TOrSh               -> "keyword 'orsh'"
     TMemBlock           -> "keyword 'memblock'"

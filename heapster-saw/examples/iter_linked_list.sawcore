@@ -1,7 +1,7 @@
 
 module iter_linked_list where
 
-import Prelude;
+import SpecM;
 
 List_def : (a:sort 0) -> sort 0;
 List_def a = List a;

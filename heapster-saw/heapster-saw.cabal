@@ -52,7 +52,6 @@ library
     Verifier.SAW.Heapster.IDESupport
     Verifier.SAW.Heapster.HintExtract
     Verifier.SAW.Heapster.Implication
-    Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer
     Verifier.SAW.Heapster.LLVMGlobalConst
     Verifier.SAW.Heapster.Located

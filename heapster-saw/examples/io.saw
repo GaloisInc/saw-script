@@ -17,7 +17,7 @@ heapster_assume_fun env "\01_write"
   "(len:bv 64). \
    \ arg0:int32<>, arg1:int8array<R,len>, arg2:eq(llvmword(len)) -o ret:int64<>"
   "\\ (len:Vec 64 Bool) (fd:Vec 32 Bool) (buf:buffer len) -> \
-    \ triggerS ioEv emptyFunStack (writeEv fd len buf)";
+    \ triggerS ioEv (writeEv fd len buf)";
 
 
 ///

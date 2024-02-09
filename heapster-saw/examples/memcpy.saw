@@ -5,13 +5,12 @@ env <- heapster_init_env_from_file "memcpy.sawcore" "memcpy.bc";
 heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
 
 heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
-  "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, \
+  "(rw:rwmodality, l1:lifetime, l2:lifetime, \
    \ b:llvmblock 64, len:bv 64). \
-  \ arg0:[l1]memblock(W,0,len,sh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
+  \ arg0:[l1]memblock(W,0,len,emptysh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
   \ arg2:eq(llvmword(len)) -o \
   \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
-  "\\ (X:sort 0) (len:Vec 64 Bool) (x:X) (_:#()) -> \
-      \ retS VoidEv emptyFunStack (#() * #()) ((),())";
+  "\\ (len:Vec 64 Bool) -> retS VoidEv #() ()";
 
 
 heapster_typecheck_fun env "copy_int"
