@@ -251,13 +251,12 @@ heapster_assume_fun env "llvm.expect.i1"
 
 // memcpy
 heapster_assume_fun env "llvm.memcpy.p0i8.p0i8.i64"
-  "(rw:rwmodality, l1:lifetime, l2:lifetime, sh:llvmshape 64, \
+  "(rw:rwmodality, l1:lifetime, l2:lifetime, \
    \ b:llvmblock 64, len:bv 64). \
-  \ arg0:[l1]memblock(W,0,len,tuplesh(sh)), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
+  \ arg0:[l1]memblock(W,0,len,emptysh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
   \ arg2:eq(llvmword(len)) -o \
   \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
-  "\\ (X:TpDesc) (len:Vec 64 Bool) (x:tpElem VoidEv X) -> \
-      \ retS VoidEv #() ()";
+  "\\ (len:Vec 64 Bool) -> retS VoidEv #() ()";
 
 // Box<List20<u64>>::clone
 box_list20_u64_clone_sym <- heapster_find_symbol_with_type env
