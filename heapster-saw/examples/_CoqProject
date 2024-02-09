@@ -17,8 +17,6 @@ loops_gen.v
 #loops_proofs.v
 iter_linked_list_gen.v
 #iter_linked_list_proofs.v
-iso_recursive_gen.v
-#iso_recursive_proofs.v
 memcpy_gen.v
 #memcpy_proofs.v
 rust_data_gen.v
