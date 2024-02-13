@@ -76,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12, windows-2019]
+        os: [ubuntu-22.04]
         cabal: ["3.10.1.0"]
         ghc: ["9.2.8", "9.4.8", "9.6.3"]
         run-tests: [true]
@@ -96,6 +96,22 @@ jobs:
             cabal: "3.10.1.0"
             run-tests: true
             hpc: true
+          # Windows and macOS CI runners are more expensive than Linux runners,
+          # so we only build one particular GHC version to test them on. We
+          # include both an x86-64 macOS runner (macos-12) as well as an AArch64
+          # macOS runner (macos-14).
+          - os: windows-2019
+            ghc: 9.2.8
+            run-tests: true
+            hpc: false
+          - os: macos-12
+            ghc: 9.2.8
+            run-tests: true
+            hpc: false
+          - os: macos-14
+            ghc: 9.2.8
+            run-tests: true
+            hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -107,9 +123,9 @@ jobs:
       - id: config
         shell: bash
         run: |
-          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64"
+          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
           .github/ci.sh output name $NAME
-          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64" >> $GITHUB_ENV
+          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
 
       - uses: haskell/actions/setup@v2
         id: setup-haskell
@@ -241,7 +257,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
-          name: ${{ runner.os }}-bins
+          name: ${{ matrix.os }}-bins
 
       - if: matrix.hpc == true
         shell: bash
@@ -251,7 +267,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           path: hpc.tar.gz
-          name: ${{ runner.os }}-hpc.tar.gz
+          name: ${{ matrix.os }}-hpc.tar.gz
 
       - uses: actions/cache/save@v3
         name: Save cabal store cache
@@ -267,7 +283,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12]
+        os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -282,7 +298,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - name: Update PATH to include SAW
@@ -302,7 +318,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12]
+        os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -317,7 +333,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - name: Update PATH to include SAW
@@ -367,7 +383,7 @@ jobs:
               poetry install
               poetry run mypy --install-types --non-interactive saw_client/ || true
               poetry run mypy --install-types --non-interactive saw_client/
-            os: macos-12
+            os: macos-14
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-22.04
@@ -384,7 +400,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - uses: actions/setup-python@v2
@@ -419,7 +435,7 @@ jobs:
         continue-on-error: [false]
         include:
           - suite: integration_tests
-            os: macos-12
+            os: macos-14
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
             os: windows-2019
@@ -427,7 +443,7 @@ jobs:
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
           - suite: integration_tests
-            os: macos-12
+            os: macos-14
             continue-on-error: false
           - suite: integration_tests
             os: windows-2019
@@ -445,7 +461,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - shell: bash
@@ -543,7 +559,7 @@ jobs:
 
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-hpc.tar.gz"
+          name: "${{ matrix.os }}-hpc.tar.gz"
 
       - name: Setup test environment
         shell: bash
@@ -714,7 +730,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 150
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -727,6 +743,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
+        os: [ubuntu-22.04]
         ghc: ["9.2.8"]
     steps:
       - uses: actions/checkout@v2
@@ -736,7 +753,7 @@ jobs:
       - name: Download previously-built SAW
         uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: ./s2nTests/bin
 
       - shell: bash
@@ -777,9 +794,10 @@ jobs:
   exercises:
     name: "Test SAW exercises"
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-22.04]
         ghc: ["9.2.8"]
     steps:
       - uses: actions/checkout@v2
@@ -789,7 +807,7 @@ jobs:
       - name: Download previously-built SAW
         uses: actions/download-artifact@v2
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: ./exercises/bin
 
       - shell: bash
