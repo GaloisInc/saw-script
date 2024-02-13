@@ -33,7 +33,7 @@ env:
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20221212"
+  SOLVER_PKG_VERSION: "snapshot-20240212"
 
   OCAML_VERSION: 4.09.x
 
@@ -129,6 +129,7 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - uses: actions/cache/restore@v3
         name: Restore cabal store cache
@@ -277,6 +278,7 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -311,6 +313,7 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -377,6 +380,7 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -437,6 +441,7 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - uses: actions/download-artifact@v2
         with:
@@ -529,6 +534,7 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - uses: actions/download-artifact@v2
         with:
