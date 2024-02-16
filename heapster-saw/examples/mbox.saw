@@ -28,7 +28,6 @@ heapster_define_perm env "aes_sw_ctx"
   "array(rw1, 0, <240, *1, fieldsh (int64<>)) * ptr((rw2, 1920) |-> int64<>)";
 
 // FIXME: get reachability perms working again!
-/*
 heapster_define_reachability_perm env "mbox"
   "rw:rwmodality, x:llvmptr 64"
   "llvmptr 64"
@@ -275,7 +274,7 @@ heapster_typecheck_fun env "mbox_randomize"
 heapster_typecheck_fun env "mbox_drop"
   "(). arg0:mbox<W,llvmword(0)>, arg1:int64<> -o \
      \ arg0:mbox<W,llvmword(0)>, arg1:true";
-*/
+
 
 //------------------------------------------------------------------------------
 // Export to coq for verification
