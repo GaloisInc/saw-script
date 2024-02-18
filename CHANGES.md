@@ -1,4 +1,4 @@
-# Nightly -- ????-??-??
+# Version 1.1 -- 2024-02-05
 
 ## New Features
 * SAW now supports loading and reasoning about Cryptol declarations that make use of numeric constraint guards.  For more information on numeric constraint guards, see the [relavent section of the Cryptol reference manual](https://galoisinc.github.io/cryptol/master/BasicSyntax.html#numeric-constraint-guards).
@@ -23,6 +23,42 @@
     LLVM-specific.
   * Add `jvm_ghost_value` and `mir_ghost_value` commands in addition to the
     existing `llvm_ghost_value` command.
+
+* SAW now includes an experimental `set_solver_cache_path` command, which
+  caches the results of tactics which call out to automated provers. This can
+  save a considerable amount of time when repeatedly running proof scripts. For
+  more information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#caching-solver-results).
+
+* Add experimental support for verifying hardware circuits via VHDL and Yosys.
+  There is now a family of experimental `yosys_*` commands that support this.
+  For more information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#analyzing-hardware-circuits-using-yosys).
+
+* Extend `llvm_verify_x86` in order to handle x86 functions that spill arguments
+  to the stack.
+
+## Bug fixes
+
+* Fix a bug in which SAW failed to expand type synonyms used in the definition
+  of another type synonym.
+
+* Fix a bug in which SAW would fail to load LLVM bitcode files produced by Apple
+  Clang on macOS.
+
+* Overall, closed issues #1818, #1822, #1824, #1828, #1834, #1839, #1842,
+  #1843, #1847, #1852, #1854, #1856, 1857, #1859, #1864, #1870, #1875, #1883,
+  #1884, #1888, #1892, #1894, #1897, #1900, #1909, #1914, #1917, #1923, #1927,
+  #1929, #1932, #1938, #1942, #1945, #1961, #1968, #1970, #1973, #1985, #2003,
+  and #2005.
+
+* Overall, merged pull requests #1882, #1885, #1889, #1890, #1891, #1893,
+  #1898, #1899, #1904, #1905, #1907, #1908, #1911, #1913, #1915, #1916, #1919,
+  #1920, #1921, #1922, #1924, #1925, #1928, #1930, #1931, #1933, #1934, #1935,
+  #1936, #1937, #1939, #1940, #1941, #1943, #1947, #1948, #1949, #1950, #1951,
+  #1952, #1955, #1958, #1959, #1962, #1963, #1969, #1971, #1972, #1974, #1986,
+  #1986, #1987, #1991, #1992, #1993, #2001, #2004, #2006, #2007, #2008, #2009,
+  #2010, #2011, #2012, #2013, #2014, #2015, #2020, #2021, #2022, and #2024.
 
 # Version 1.0 -- 2023-06-26
 

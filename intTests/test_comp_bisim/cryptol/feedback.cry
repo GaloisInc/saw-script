@@ -1,0 +1,51 @@
+module Feedback where
+
+///////////////////////////////
+// -- SEQUENTIAL CIRCUITS -- //
+///////////////////////////////
+
+// Run a circuit for a pre-specified number of steps.
+run : {s, i, o, n} (Zero o) => ((s, i) -> (s, o)) // mealy machine transition function
+                            -> (s, [n]i)          // initial state and list of inputs
+			    -> [n](s, o)          // list of n (state, output) pairs
+run circuit (state, inputs) = take (drop`{1} steps)
+  where steps = [(state, zero)] # [ circuit (state', input) | (state', _) <- steps | input <- inputs ]
+
+/////////////////////////////
+// -- FEEDBACK CIRCUITS -- //
+/////////////////////////////
+
+// A ``feedback'' circuit is a special type of sequential circuit that
+// takes an input on the first clock cycle, then performs some
+// iterative operation on that input for some fixed number of cycles,
+// then produces an output. We use an enable bit on the input, and a
+// ready bit on the output to determine when the computation is
+// completed.
+
+type feedback_input w = { clk : [1], enable : [1], x : [w] }
+
+type feedback_output w = { busy : [1], ready : [1], y : [w] }
+
+// // A counter for n iterations. Needs to be wide enough to store the
+// // value n+1.
+// type counter n = [width (n+2)]
+
+// s is the ``buffer'' state type, n is the number of iterations.
+type feedback_state w c = { buff : [w], counter : [c] }
+
+feedback_spec : {w, n, c} (fin w, fin n, fin c, n >= 1, c >= width (n+2)) =>
+                ([w] -> [w]) -> // specification function
+		(feedback_state w c, feedback_input w) ->
+		(feedback_state w c, feedback_output w)
+feedback_spec f (state, input) = (state', output)
+  where
+    state' =
+      if state.counter == 0
+        then if input.enable @ 0
+	  then { counter = 1, buff = input.x }
+	  else state
+	| state.counter <= `(n)
+	  then { counter = state.counter + 1, buff = state.buff }
+	else { counter = 0, buff = 0 }
+    ready = [state.counter == `(n) + 1]
+    output = { busy = [state.counter > 0], ready = ready, y = reverse (f (reverse state.buff)) }

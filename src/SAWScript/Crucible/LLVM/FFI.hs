@@ -75,7 +75,7 @@ import           Verifier.SAW.CryptolEnv
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Prelude
 import           Verifier.SAW.Recognizer
-import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.SharedTerm as Term
 import           Verifier.SAW.TypedTerm
 
 -- | Commonly used things that need to be passed around.
@@ -142,7 +142,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   cryEnv <- lll $ rwCryptol <$> getMergedEnv
   case asConstant funTerm of
     Just (ec, funDef)
-      | Just FFIFunType {..} <- Map.lookup (ecName ec) (eFFITypes cryEnv) -> do
+      | Just FFIFunType {..} <- Map.lookup (Term.ecName ec) (eFFITypes cryEnv) -> do
         when (isNothing funDef) do
           throwFFISetup
             "Cannot verify foreign function with no Cryptol implementation"
@@ -282,7 +282,7 @@ setupOutArg tenv = go "out"
         (outArgss, posts) <- unzip <$> setupTupleArgs go name ffiTypes
         let len = fromIntegral $ length ffiTypes
             post ret = zipWithM_
-              (\i p -> p (projTupleOpenTerm' i len ret))
+              (\i p -> p (projTupleOpenTerm' len i ret))
               [0..]
               posts
         pure (concat outArgss, post)
@@ -299,7 +299,7 @@ setupOutArg tenv = go "out"
                         Just i -> i
                         Nothing -> panic "setupOutArg"
                           ["Bad record field access"]
-                p (projTupleOpenTerm' ix len ret))
+                p (projTupleOpenTerm' len ix ret))
               (displayOrder ffiTypeMap)
               posts
         pure (concat outArgss, post)

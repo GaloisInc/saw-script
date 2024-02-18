@@ -15,6 +15,7 @@ Description:
 
 extra-source-files:
     saw/Cryptol.sawcore
+    saw/SpecM.sawcore
     saw/CryptolM.sawcore
 
 library
@@ -39,6 +40,7 @@ library
     sbv,
     vector,
     text,
+    template-haskell,
     executable-path,
     filepath
   hs-source-dirs: src

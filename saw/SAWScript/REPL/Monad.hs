@@ -35,7 +35,7 @@ module SAWScript.REPL.Monad (
     -- ** Environment
   , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
   , getModuleEnv, setModuleEnv
-  , getTSyns, getNewtypes, getVars
+  , getTSyns, getNominalTypes, getVars
   , getExprNames
   , getTypeNames
   , getPropertyNames
@@ -397,11 +397,11 @@ getTSyns  = do
   let decls = getAllIfaceDecls me
   return (M.ifTySyns decls)
 
-getNewtypes :: REPL (Map.Map T.Name T.Newtype)
-getNewtypes = do
+getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
+getNominalTypes = do
   me <- getModuleEnv
   let decls = getAllIfaceDecls me
-  return (M.ifNewtypes decls)
+  return (M.ifNominalTypes decls)
 
 -- | Get visible variable names.
 getExprNames :: REPL [String]

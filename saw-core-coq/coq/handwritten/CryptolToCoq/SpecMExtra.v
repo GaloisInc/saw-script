@@ -9,7 +9,7 @@ From CryptolToCoq Require Import SAWCoreBitvectors.
 From EnTree Require Export
      Basics.HeterogeneousRelations
      Basics.QuantType
-     Ref.SpecM
+     Ref.SpecM.
      Automation.
 Import SAWCorePrelude.
 

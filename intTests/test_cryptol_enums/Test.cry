@@ -1,0 +1,3 @@
+module Test where
+
+enum Foo a b = Bar a | Baz b
