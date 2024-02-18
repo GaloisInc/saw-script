@@ -1436,8 +1436,7 @@ verifySimulate ::
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IORef MetadataMap ->
   TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap = do
-  sc <- getSharedContext
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
   io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
      let sym = cc^.ccSym
      let argTys = Crucible.blockInputs $
