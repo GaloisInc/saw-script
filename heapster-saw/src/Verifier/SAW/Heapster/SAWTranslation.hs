@@ -801,7 +801,7 @@ sigmaElimTransM x tp_l tp_r_mF _tp_ret_m f sigma =
        sigma
        (\ts -> let (ts_l, ts_r) = splitAt (length (typeTransTypes tp_l)) ts
                    trL = typeTransF tp_l ts_l
-                   tp_r = tp_r_f ts_l in
+                   tp_r = tupleTypeTrans $ tp_r_f ts_l in
                flip runTransM info $ f trL (typeTransF tp_r ts_r))
 
 
