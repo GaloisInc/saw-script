@@ -3,7 +3,8 @@ module iter_linked_list where
 
 import SpecM;
 
--- Type description for the Mbox type, which is equivalent to Mbox_Ind
+-- Type description for the List type over a single free variable for a type
+-- description that describes the elements
 ListDesc : TpDesc;
 ListDesc =
     (Tp_Sum
@@ -18,6 +19,7 @@ ListTpF T = indElem (unfoldIndTpDesc (envConsElem Kind_Tp T nilTpEnv) ListDesc);
 
 primitive appendList : (T:TpDesc) -> ListTpF T -> ListTpF T -> ListTpF T;
 
+-- FIXME: get the following definitions working
 {-
 List_def : (a:sort 0) -> sort 0;
 List_def a = List a;
