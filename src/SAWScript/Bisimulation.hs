@@ -101,6 +101,8 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Recognizer
 
+import Debug.Trace (trace, traceM)
+
 -- State used to facilitate the replacement of a 'Constant' application in a
 -- 'Term' with an 'ExtCns'.  Used in 'replaceConstantTerm' and
 -- 'replaceConstantTermF'
@@ -393,7 +395,7 @@ applyAllTheorems :: [BisimTheorem]
                  -> Term
                  -- ^ Term to simplify
                  -> TopLevel (Term, [TypedTerm])
-applyAllTheorems bthms bc term = foldM go (term, []) bthms
+applyAllTheorems bthms bc term = trace "applyAllTheorems" $ foldM go (term, []) bthms
   where
     go :: (Term, [TypedTerm]) -> BisimTheorem -> TopLevel (Term, [TypedTerm])
     go (curTerm, sides) bt = do
@@ -401,6 +403,7 @@ applyAllTheorems bthms bc term = foldM go (term, []) bthms
       case mSideCondition of
         Nothing ->
           -- Application failed
+          trace ("Application failed:\n\n" ++ show nextTerm ++ "\n\n") $
           pure (nextTerm, sides)
         Just sideCondition -> pure (nextTerm, sideCondition : sides)
 
