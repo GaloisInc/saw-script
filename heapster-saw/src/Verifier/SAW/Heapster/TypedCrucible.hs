@@ -2789,6 +2789,13 @@ ppRelevantPerms r =
       ((pp_r <> comma) <+>) <$> ppRelevantPerms (TypedReg x)
     _ -> pure pp_r
 
+-- | Pretty-print a Crucible 'Reg' and what 'TypedReg' it is equal to
+ppCruReg :: CtxTrans ctx -> Reg ctx a ->
+            PermCheckM ext cblocks blocks tops rets r ps r ps (Doc ())
+ppCruReg ctx r =
+  permGetPPInfo >>>= \ppInfo ->
+  pure (PP.group (pretty r <+> pretty '=' <+> permPretty ppInfo (tcReg ctx r)))
+
 -- | Pretty-print a Crucible 'Reg' and what 'TypedReg' it is equal to, along
 -- with the relevant permissions for that 'TypedReg'
 ppCruRegAndPerms :: CtxTrans ctx -> Reg ctx a ->
@@ -3983,6 +3990,7 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   get >>= \st ->
   gets (permCheckExtStateNames . stExtState) >>= \(Some ext_ns) ->
   tcBlockID blkID >>>= \tpBlkID ->
+  traverseAndCollect (\_ r -> (:[]) <$> ppCruReg ctx r) args >>= \args_pps ->
 
   -- Step 0: run all of the following steps inside a local ImplM computation,
   -- which we run in order to get out an AnnotPermImpl. This ensures that any
@@ -4013,6 +4021,8 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   implTraceM (\i ->
                pretty ("tcJumpTarget " ++ show blkID) <>
                {- (if gen_perms_hint then pretty "(gen)" else emptyDoc) <> -}
+               line <>
+               pretty "Args:" <> softline <> ppCommaSep args_pps <>
                line <>
                (case permSetAllVarPerms orig_cur_perms of
                    Some all_perms ->
