@@ -536,7 +536,6 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
             forM_ assumes $ \(C.LabeledPred p (md, reason)) ->
               do expr <- resolveSAWPred cc p
                  let loc = MS.conditionLoc md
-                 putStrLn $ "resolveSAWPred: " ++ show expr
                  C.addAssumption bak
                    (C.GenericAssumption loc reason expr)
           C.regValue <$>
@@ -658,9 +657,6 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
              uninterpreted_constants
        tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
        implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms
-
-       putStrLn $ "implicit_parameters: " ++ show (map showTerm implicit_parameters)
-
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
          toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
        arguments_tuple <- scTuple sc arguments
