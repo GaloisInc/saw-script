@@ -28,13 +28,13 @@ ifeq ($(CI),)
 	clang -emit-llvm -g -c $<
 
   xor_swap_rust.bc: xor_swap_rust.rs
-	rustc --crate-type=lib --emit=llvm-bc xor_swap_rust.rs
+	rustc --crate-type=lib --emit=llvm-bc -g xor_swap_rust.rs
 
   rust_data.bc: rust_data.rs
-	rustc --crate-type=lib --emit=llvm-bc rust_data.rs
+	rustc --crate-type=lib --emit=llvm-bc -g rust_data.rs
 
   rust_lifetimes.bc: rust_lifetimes.rs
-	rustc --crate-type=lib --emit=llvm-bc rust_lifetimes.rs
+	rustc --crate-type=lib --emit=llvm-bc -g rust_lifetimes.rs
 
   dilithium: dilithium.patch
 	rm -rf dilithium
