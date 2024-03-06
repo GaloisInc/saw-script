@@ -87,6 +87,7 @@ type instance MS.XSetupField MIR = ()
 type instance MS.XSetupCast MIR = Void
 type instance MS.XSetupUnion MIR = Void
 type instance MS.XSetupGlobalInitializer MIR = ()
+type instance MS.XSetupMux MIR = ()
 
 type instance MS.TypeName MIR = Text
 type instance MS.ExtType MIR = M.Ty

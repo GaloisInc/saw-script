@@ -904,6 +904,10 @@ instantiateSetupValue sc s v =
     MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer _ _     -> return v
+    MS.SetupMux x c t f               -> MS.SetupMux x
+                                           <$> doTerm c
+                                           <*> instantiateSetupValue sc s t
+                                           <*> instantiateSetupValue sc s f
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 
@@ -1260,6 +1264,13 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
       staticInitMirVal <- findStaticInitializer cc static
       pred_ <- liftIO $ equalValsPred cc staticInitMirVal actual
       addAssert pred_ md =<< notEq
+    (_, _, MS.SetupMux () c t f) -> do
+      cPred <- liftIO $ resolveBoolTerm sym (ttTerm c)
+      withConditionalPred cPred $
+        matchArg opts sc cc cs prepost md actual expectedTy t
+      cNegPred <- liftIO $ W4.notPred sym cPred
+      withConditionalPred cNegPred $
+        matchArg opts sc cc cs prepost md actual expectedTy f
 
     (_, _, MS.SetupNull empty)                -> absurd empty
     (_, _, MS.SetupCast empty _)              -> absurd empty
@@ -1372,6 +1383,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupCast empty _              -> absurd empty
         MS.SetupUnion empty _ _           -> absurd empty
         MS.SetupNull empty                -> absurd empty
+        MS.SetupMux _ _ t f               -> setupVars t <> setupVars f
 
     -- Compute the set of variable identifiers in a 'MirSetupEnum'
     setupEnum :: MirSetupEnum -> Set AllocIndex

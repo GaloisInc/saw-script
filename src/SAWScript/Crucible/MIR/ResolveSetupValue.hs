@@ -77,6 +77,7 @@ import Lang.Crucible.Simulator
   ( AnyValue(..), GlobalVar(..), RegValue, RegValue'(..), SymGlobalState
   , VariantBranch(..), injectVariant
   )
+import Lang.Crucible.Simulator.RegMap (muxRegForType)
 import Lang.Crucible.Types (AnyType, MaybeType, TypeRepr(..))
 import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
@@ -224,6 +225,8 @@ data MIRTypeOfError
   | MIRInvalidIdentifier String
   | MIRStaticNotFound Mir.DefId
   | MIRSliceNonArrayReference Mir.Ty
+  | MIRMuxNonBoolCondition Mir.Ty
+  | MIRMuxDifferentBranchTypes Mir.Ty Mir.Ty
 
 instance Show MIRTypeOfError where
   show (MIRPolymorphicType s) =
@@ -252,6 +255,17 @@ instance Show MIRTypeOfError where
     [ "Expected a reference to an array, but got"
     , show (PP.pretty ty)
     ]
+  show (MIRMuxNonBoolCondition ty) =
+    unlines
+    [ "Expected a bool-typed condition in a mux, but got"
+    , show (PP.pretty ty)
+    ]
+  show (MIRMuxDifferentBranchTypes tTy fTy) =
+    unlines
+    [ "Mismatch in mux branch types:"
+    , "True  branch type: " ++ show (PP.pretty tTy)
+    , "False branch type: " ++ show (PP.pretty fTy)
+    ]
 
 staticNotFoundErr :: Mir.DefId -> String
 staticNotFoundErr did =
@@ -278,13 +292,7 @@ typeOfSetupValue mcc env nameEnv val =
         Just (Some alloc) ->
           return $ Mir.TyRef (alloc^.maMirType) (alloc^.maMutbl)
     MS.SetupTerm tt ->
-      case ttType tt of
-        TypedTermSchema (Cryptol.Forall [] [] ty) ->
-          case toMIRType (Cryptol.evalValType mempty ty) of
-            Left err -> X.throwM (MIRNonRepresentableType ty err)
-            Right mirTy -> return mirTy
-        TypedTermSchema s -> X.throwM (MIRPolymorphicType s)
-        tp -> X.throwM (MIRInvalidTypedTerm tp)
+      typeOfTypedTerm tt
     MS.SetupArray elemTy vs ->
       pure $ Mir.TyArray elemTy (length vs)
     MS.SetupStruct adt _ ->
@@ -311,6 +319,15 @@ typeOfSetupValue mcc env nameEnv val =
           typeOfSliceFromArray arr
         MirSetupSliceRange arr _ _ ->
           typeOfSliceFromArray arr
+    MS.SetupMux () c t f -> do
+      cTy <- typeOfTypedTerm c
+      unless (cTy == Mir.TyBool) $
+        X.throwM $ MIRMuxNonBoolCondition cTy
+      tTy <- typeOfSetupValue mcc env nameEnv t
+      fTy <- typeOfSetupValue mcc env nameEnv f
+      unless (checkCompatibleTys tTy fTy) $
+        X.throwM $ MIRMuxDifferentBranchTypes tTy fTy
+      pure tTy
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupElem _ _ _                -> panic "typeOfSetupValue" ["elems not yet implemented"]
@@ -328,6 +345,16 @@ typeOfSetupValue mcc env nameEnv val =
           pure $ Mir.TyRef (Mir.TySlice ty) mut
         _ ->
           X.throwM $ MIRSliceNonArrayReference arrTy
+
+    typeOfTypedTerm :: TypedTerm -> m Mir.Ty
+    typeOfTypedTerm tt =
+      case ttType tt of
+        TypedTermSchema (Cryptol.Forall [] [] ty) ->
+          case toMIRType (Cryptol.evalValType mempty ty) of
+            Left err -> X.throwM (MIRNonRepresentableType ty err)
+            Right mirTy -> return mirTy
+        TypedTermSchema s -> X.throwM (MIRPolymorphicType s)
+        tp -> X.throwM (MIRInvalidTypedTerm tp)
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
@@ -627,6 +654,30 @@ resolveSetupVal mcc env tyenv nameEnv val =
     MS.SetupGlobalInitializer () name -> do
       static <- findStatic cs name
       findStaticInitializer mcc static
+    MS.SetupMux () c t f -> do
+      MIRVal cShp cVal <- resolveTypedTerm mcc c
+      let cTy = shapeMirTy cShp
+      let cTpr = shapeType cShp
+      Refl <-
+        case W4.testEquality cTpr BoolRepr of
+          Just r -> pure r
+          Nothing -> X.throwM $ MIRMuxNonBoolCondition cTy
+
+      MIRVal tShp tVal <- resolveSetupVal mcc env tyenv nameEnv t
+      let tTy = shapeMirTy tShp
+      let tTpr = shapeType tShp
+      MIRVal fShp fVal <- resolveSetupVal mcc env tyenv nameEnv f
+      let fTy = shapeMirTy fShp
+      let fTpr = shapeType fShp
+      Refl <-
+        case W4.testEquality tTpr fTpr of
+          Just r -> pure r
+          Nothing -> X.throwM $ MIRMuxDifferentBranchTypes tTy fTy
+
+      let muxShp = tShp
+      let muxTpr = tTpr
+      muxVal <- muxRegForType sym iTypes muxTpr cVal tVal fVal
+      pure $ MIRVal muxShp muxVal
   where
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
