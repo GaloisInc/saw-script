@@ -381,11 +381,12 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
       laxLoadsAndStores <- gets rwLaxLoadsAndStores
+      noSatisfyingWriteFreshConstant <- gets rwNoSatisfyingWriteFreshConstant
       pathSatSolver <- gets rwPathSatSolver
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
                        { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
-                       , C.LLVM.noSatisfyingWriteFreshConstant = False
+                       , C.LLVM.noSatisfyingWriteFreshConstant = noSatisfyingWriteFreshConstant
                        }
       let ?recordLLVMAnnotation = \_ _ _ -> return ()
       sc <- getSharedContext
@@ -396,15 +397,18 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       mdMap <- liftIO $ newIORef mempty
       SomeOnlineBackend bak <- liftIO $
         newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw
-      cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
+      let config = W4.getConfiguration sym
+      cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms config
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
+      pushMuxOpsSetting <- liftIO $ W4.getOptionSetting W4.B.pushMuxOpsOption config
+      _ <- liftIO $ W4.setOpt pushMuxOpsSetting $ rwWhat4PushMuxOps rw
       liftIO $ W4.extendConfig
         [ W4.opt
             LO.enableSMTArrayMemoryModel
             (W4.ConcreteBool $ rwSMTArrayMemoryModel rw)
             ("Enable SMT array memory model" :: Text)
         ]
-        (W4.getConfiguration sym)
+        config
       let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc

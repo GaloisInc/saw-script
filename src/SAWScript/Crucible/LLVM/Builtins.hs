@@ -1750,8 +1750,10 @@ setupLLVMCrucibleContext pathSat lm action =
      smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
      crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
      what4HashConsing <- gets rwWhat4HashConsing
+     what4PushMuxOps <- gets rwWhat4PushMuxOps
      laxPointerOrdering <- gets rwLaxPointerOrdering
      laxLoadsAndStores <- gets rwLaxLoadsAndStores
+     noSatisfyingWriteFreshConstant <- gets rwNoSatisfyingWriteFreshConstant
      pathSatSolver <- gets rwPathSatSolver
      what4Eval <- gets rwWhat4Eval
      allocSymInitCheck <- gets rwAllocSymInitCheck
@@ -1762,7 +1764,7 @@ setupLLVMCrucibleContext pathSat lm action =
           let ?memOpts = Crucible.defaultMemOptions
                           { Crucible.laxPointerOrdering = laxPointerOrdering
                           , Crucible.laxLoadsAndStores = laxLoadsAndStores
-                          , Crucible.noSatisfyingWriteFreshConstant = False
+                          , Crucible.noSatisfyingWriteFreshConstant = noSatisfyingWriteFreshConstant
                           }
           let ?intrinsicsOpts = Crucible.defaultIntrinsicsOptions
           let ?recordLLVMAnnotation = \_ _ _ -> return ()
@@ -1781,6 +1783,9 @@ setupLLVMCrucibleContext pathSat lm action =
 
                cacheTermsSetting <- W4.getOptionSetting W4.cacheTerms cfg
                _ <- W4.setOpt cacheTermsSetting what4HashConsing
+
+               pushMuxOpsSetting <- W4.getOptionSetting W4.pushMuxOpsOption cfg
+               _ <- W4.setOpt pushMuxOpsSetting what4PushMuxOps
 
                -- enable online solver interactions if path sat checking is on
                enableOnlineSetting <- W4.getOptionSetting Crucible.enableOnlineBackend cfg

@@ -515,6 +515,8 @@ buildTopLevelEnv proxy opts =
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
+                   , rwWhat4PushMuxOps = False
+                   , rwNoSatisfyingWriteFreshConstant = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
@@ -736,6 +738,26 @@ disable_alloc_sym_init_check :: TopLevel ()
 disable_alloc_sym_init_check = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwAllocSymInitCheck = False }
+
+enable_no_satisfying_write_fresh_constant :: TopLevel ()
+enable_no_satisfying_write_fresh_constant = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwNoSatisfyingWriteFreshConstant = True }
+
+disable_no_satisfying_write_fresh_constant :: TopLevel ()
+disable_no_satisfying_write_fresh_constant = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwNoSatisfyingWriteFreshConstant = False }
+
+enable_what4_push_mux_ops :: TopLevel ()
+enable_what4_push_mux_ops = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4PushMuxOps = True }
+
+disable_what4_push_mux_ops :: TopLevel ()
+disable_what4_push_mux_ops = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4PushMuxOps = False }
 
 set_crucible_timeout :: Integer -> TopLevel ()
 set_crucible_timeout t = do
@@ -3464,6 +3486,37 @@ primitives = Map.fromList
     , "Disabling this check allows an override to apply when the memory region specified by the alloc_sym_init command"
     , "in the override specification is not written to in the calling context."
     , "This makes the implicit assumption that there is some unspecified byte at any valid memory address."
+    ]
+
+  , prim "enable_no_satisfying_write_fresh_constant" "TopLevel ()"
+    (pureVal enable_no_satisfying_write_fresh_constant)
+    Experimental
+    [ "When simulating LLVM code that performs an invalid write, make a fresh"
+    , "constant as a proof obligation. This constant will always fail, but it"
+    , "will also not be constant-folded away."
+    ]
+
+  , prim "disable_no_satisfying_write_fresh_constant" "TopLevel ()"
+    (pureVal disable_no_satisfying_write_fresh_constant)
+    Experimental
+    [ "When simulating LLVM code that performs an invalid write, return 'false'"
+    , "as a proof obligation."
+    ]
+
+  , prim "enable_what4_push_mux_ops" "TopLevel ()"
+    (pureVal enable_what4_push_mux_ops)
+    Experimental
+    [ "Push certain What4 operations (e.g., 'zext') down to the branches of"
+    , "'ite' expressions as much as possible. In some (but not all) circumstances,"
+    , "this can result in operations that are easier for SMT solvers to reason"
+    , "about."
+    ]
+
+  , prim "disable_what4_push_mux_ops" "TopLevel ()"
+    (pureVal disable_what4_push_mux_ops)
+    Experimental
+    [ "Do not push certain What4 operations (e.g., 'zext') down to the branches"
+    , "of 'ite' expressions as much as possible."
     ]
 
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
