@@ -27,6 +27,7 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
   , llvm_verify_fixpoint_x86
+  , llvm_verify_fixpoint_chc_x86
   , llvm_verify_x86_with_invariant
   , defaultStackBaseAlign
   ) where
@@ -131,6 +132,7 @@ import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
 import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpointCHC as Crucible.LLVM.FixpointCHC
 import qualified Lang.Crucible.LLVM.SimpleLoopInvariant as SimpleInvariant
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
@@ -347,6 +349,26 @@ llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
+--
+-- This differs from 'llvm_verify_fixpoint_x86' in that it leverages Z3's
+-- constrained horn-clause (CHC) functionality to synthesize some of the loop's
+-- properties.
+llvm_verify_fixpoint_chc_x86 ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  TypedTerm {- ^ Function specifying the loop -} ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_fixpoint_chc_x86 llvmModule path nm globsyms checkSat f =
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat (SimpleFixpointCHC f)
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
 llvm_verify_x86_with_invariant ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
@@ -364,6 +386,7 @@ llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,lo
 data FixpointSelect
  = NoFixpoint
  | SimpleFixpoint TypedTerm
+ | SimpleFixpointCHC TypedTerm
  | SimpleInvariant String Integer TypedTerm
 
 llvm_verify_x86_common ::
@@ -559,11 +582,14 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
         case fixpointSelect of
           NoFixpoint -> return ([], Nothing)
           SimpleFixpoint func ->
+            do f <- liftIO $ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func
+               return ([f], Nothing)
+          SimpleFixpointCHC func ->
             do let ?ptrWidth = knownNat @64
               --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar Nothing
               --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $
               --    Just $ simpleLoopFixpointFunction sc sym rw_ref $ methodSpec ^. csName
-               (f, ref) <- liftIO $ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func
+               (f, ref) <- liftIO $ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func
                return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
@@ -600,9 +626,9 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
       (invSubst, loopFunEquivConds) <- liftIO $ case maybe_ref of
         Just fixpoint_state_ref -> do
-          uninterp_inv_fns <- Crucible.LLVM.Fixpoint.executionFeatureContextInvPreds <$> readIORef fixpoint_state_ref
+          uninterp_inv_fns <- Crucible.LLVM.FixpointCHC.executionFeatureContextInvPreds <$> readIORef fixpoint_state_ref
           subst <- C.runCHC bak uninterp_inv_fns
-          loop_fun_equiv_conds <- Crucible.LLVM.Fixpoint.executionFeatureContextLoopFunEquivConds <$> readIORef fixpoint_state_ref
+          loop_fun_equiv_conds <- Crucible.LLVM.FixpointCHC.executionFeatureContextLoopFunEquivConds <$> readIORef fixpoint_state_ref
           return (subst, loop_fun_equiv_conds)
         Nothing -> return (MapF.empty, [])
 
@@ -622,8 +648,6 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
   | otherwise = fail "LLVM module must be 64-bit"
 
-
-
 setupSimpleLoopFixpointFeature ::
   ( sym ~ W4.B.ExprBuilder n st fs
   , C.IsSymInterface sym
@@ -637,17 +661,88 @@ setupSimpleLoopFixpointFeature ::
   C.CFG ext blocks init ret ->
   C.GlobalVar C.LLVM.Mem ->
   TypedTerm ->
-  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.Fixpoint.ExecutionFeatureContext sym 64 ext))
+  IO (C.ExecutionFeature p sym ext rtp)
 
-setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
-  let ?ptrWidth = knownNat @64
-  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
+setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
+  Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar fixpoint_func
 
  where
   fixpoint_func fixpoint_substitution condition =
     do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
-       let header_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.headerValue) (MapF.elems fixpoint_substitution)
        let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.bodyValue) (MapF.elems fixpoint_substitution)
+       let uninterpreted_constants = foldMap
+             (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
+             (Some condition : body_exprs)
+       let filtered_uninterpreted_constants = Set.toList $ Set.filter
+             (\(Some variable) ->
+               not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
+             uninterpreted_constants
+       body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet body_tms
+
+       arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+         toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
+       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
+       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
+         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+       result_substitution <- MapF.fromList <$> zipWithM
+         (\(MapF.Pair variable _) applied_func_selector ->
+           MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+         fixpoint_substitution_as_list
+         applied_func_selectors
+
+       explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+         toSC sym sawst variable
+       inner_func <- case asConstant (ttTerm func) of
+         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
+           return inner_func
+         _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+       func_body <- betaNormalize sc
+         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
+
+       step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+         toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
+       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
+       explicit_parameters_tuple <- scTuple sc explicit_parameters
+       let lhs = Prelude.last step_arguments
+       w <- scNat sc 64
+       rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
+       loop_condition <- scBvULt sc w lhs rhs
+       output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+       loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
+
+       induction_step_condition <- scEq sc loop_body func_body
+       result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
+
+       return (result_substitution, result_condition)
+
+setupSimpleLoopFixpointCHCFeature ::
+  ( sym ~ W4.B.ExprBuilder n st fs
+  , C.IsSymInterface sym
+  , ?memOpts::C.LLVM.MemOptions
+  , C.LLVM.HasLLVMAnn sym
+  , C.IsSyntaxExtension ext
+  ) =>
+  sym ->
+  SharedContext ->
+  SAWCoreState n ->
+  C.CFG ext blocks init ret ->
+  C.GlobalVar C.LLVM.Mem ->
+  TypedTerm ->
+  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.FixpointCHC.ExecutionFeatureContext sym 64 ext))
+
+setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
+  let ?ptrWidth = knownNat @64
+  Crucible.LLVM.FixpointCHC.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
+
+ where
+  fixpoint_func fixpoint_substitution condition =
+    do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+       let header_exprs = map (mapSome $ Crucible.LLVM.FixpointCHC.headerValue) (MapF.elems fixpoint_substitution)
+       let body_exprs = map (mapSome $ Crucible.LLVM.FixpointCHC.bodyValue) (MapF.elems fixpoint_substitution)
        let uninterpreted_constants = foldMap
              (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
              (Some condition : body_exprs ++ header_exprs)
@@ -662,7 +757,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
        tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
        implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms
        arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
-         toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
+         toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry
        arguments_tuple <- scTuple sc arguments
        applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]
        applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
@@ -685,7 +780,7 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func = do
          =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
 
        step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
-         toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
+         toSC sym sawst $ Crucible.LLVM.FixpointCHC.bodyValue fixpoint_entry
        step_arguments_tuple <- scTuple sc step_arguments
        tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]
 

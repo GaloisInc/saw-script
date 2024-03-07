@@ -3399,6 +3399,19 @@ primitives = Map.fromList
     , "the live variables in the loop evolve as the loop computes."
     ]
 
+  , prim "llvm_verify_fixpoint_chc_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_fixpoint_chc_x86)
+    Experimental
+    [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
+    , "involving simple loops with the help of a user-provided term that describes how"
+    , "the live variables in the loop evolve as the loop computes."
+    , ""
+    , "This differs from 'llvm_verify_fixpoint_x86' in that it leverages Z3's"
+    , "constrained horn-clause (CHC) functionality to synthesize some of the"
+    , "loop's properties."
+    ]
+
   , prim "llvm_verify_x86_with_invariant"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify_x86_with_invariant)
