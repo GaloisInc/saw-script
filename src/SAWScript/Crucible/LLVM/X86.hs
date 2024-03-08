@@ -275,9 +275,10 @@ llvmPointerOffset = snd . C.LLVM.llvmPointerView
 -- the unsigned comparison between pointer1 and pointer2 is equivalent with the
 -- unsigned comparison between offset1 + 4096 and offset2 + 4096.
 doPtrCmp ::
+  FixpointSelect ->
   (sym -> W4.SymBV sym w -> W4.SymBV sym w -> IO (W4.Pred sym)) ->
   Macaw.PtrOp sym w (C.RegValue sym C.BoolType)
-doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
+doPtrCmp fixpointSelect f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
   let sym = backendGetSym bak
   let ptr_as_bv_for_cmp ptr = do
         page_size <- W4.bvLit sym (W4.bvWidth $ llvmPointerOffset ptr) $
@@ -301,16 +302,20 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
     =<< W4.andPred sym ok_x ok_y
   res_both_bits <- f sym (llvmPointerOffset x) (llvmPointerOffset y)
   res_both_ptrs <- f sym x_ptr_as_bv y_ptr_as_bv
-
-  if| Just True <- W4.asConstantPred both_bits ->
-      return res_both_bits
-    | Just True <- W4.asConstantPred both_ptrs -> do
-      C.assert bak ok_both_ptrs $ C.AssertFailureSimError "" ""
-      return res_both_ptrs
-    | otherwise -> do
-      undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
-      W4.itePred sym both_bits res_both_bits
-        =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+  let ptrCmpDefault = do
+        undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
+        W4.itePred sym both_bits res_both_bits
+          =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+  case fixpointSelect of
+    SimpleFixpointCHC{} ->
+      if | Just True <- W4.asConstantPred both_bits ->
+           return res_both_bits
+         | Just True <- W4.asConstantPred both_ptrs -> do
+           C.assert bak ok_both_ptrs $ C.AssertFailureSimError "" ""
+           return res_both_ptrs
+         | otherwise ->
+           ptrCmpDefault
+    _ -> ptrCmpDefault
 
 -------------------------------------------------------------------------------
 -- ** Entrypoint
@@ -531,8 +536,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           archEvalFns mvar mmConf
         sawMacawExtensions = defaultMacawExtensions_x86_64
           { C.extensionExec = \s0 st -> case s0 of
-              Macaw.PtrLt w x y -> doPtrCmp W4.bvUlt st mvar w x y
-              Macaw.PtrLeq w x y -> doPtrCmp W4.bvUle st mvar w x y
+              Macaw.PtrLt w x y -> doPtrCmp fixpointSelect W4.bvUlt st mvar w x y
+              Macaw.PtrLeq w x y -> doPtrCmp fixpointSelect W4.bvUle st mvar w x y
               _ -> (C.extensionExec defaultMacawExtensions_x86_64) s0 st
           }
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
