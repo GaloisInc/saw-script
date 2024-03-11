@@ -355,6 +355,21 @@ ite_false (a : sort 1) (x y : a) : Eq a (ite a False x y) y =
   trans a (ite a False x y) (iteDep (\ (b:Bool) -> a) False x y) y
         (ite_eq_iteDep a False x y) (iteDep_False (\ (_:Bool) -> a) x y);
 
+-- A version of ite that includes an Eq proof term in each branch
+iteWithProof : (a : sort 0) -> (b:Bool) -> (Eq Bool b True -> a) ->
+                                           (Eq Bool b False -> a) -> a;
+iteWithProof a b f1 f2 =
+  iteDep (\ (b1:Bool) -> Eq Bool b b1 -> a) b f1 f2 (Refl Bool b);
+  -- NOTE: we cannot use unsafeAssert in the Prelude, because the translation
+  -- for it into Coq is currently defined in CryptolPrimitivesForSAWCoreExtra.v,
+  -- which is defined *after* the Prelude
+  --
+  -- ite a b (f1 (unsafeAssert Bool b True)) (f2 (unsafeAssert Bool b False));
+
+-- A version of ite that includes an Eq proof term only in the True branch
+ifWithProof : (a : sort 0) -> (b:Bool) -> a -> (Eq Bool b True -> a) -> a;
+ifWithProof a b x f = iteWithProof a b f (\(_:Eq Bool b False) -> x);
+
 --
 -- Converting between Bools and Bits (cause why not?)
 --
@@ -840,7 +855,7 @@ Nat_cases2 a f1 f2 f3 n m =
              Nat__rec (\ (m':Nat) -> a) (f2 n)
                       (\ (m':Nat) -> \ (frec':a) -> f3 n m' (f_rec m')) m) n m;
 
-eqNat : Nat -> Nat -> sort 1;
+eqNat : Nat -> Nat -> Prop;
 eqNat x y = Eq Nat x y;
 
 eqNatSucc : (x y : Nat) -> eqNat x y -> eqNat (Succ x) (Succ y);
@@ -879,7 +894,21 @@ primitive natCompareLe : (m n : Nat) -> Either (IsLtNat m n) (IsLeNat n m);
 
 -- | Test if m = n
 -- FIXME: implement this!
-primitive proveEqNat : (m n : Nat) -> Maybe (Eq Nat m n);
+proveEqNat : (m n : Nat) -> Maybe (Eq Nat m n);
+proveEqNat =
+  Nat__rec (\ (m:Nat) -> (n:Nat) -> Maybe (Eq Nat m n))
+    (Nat__rec (\ (n:Nat) -> Maybe (Eq Nat 0 n))
+       (Just (Eq Nat 0 0) (Refl Nat 0))
+       (\ (n:Nat) (_:Maybe (Eq Nat 0 n)) -> Nothing (Eq Nat 0 (Succ n))))
+    (\ (m:Nat) (rec: (n:Nat) -> Maybe (Eq Nat m n)) ->
+       Nat__rec (\ (n:Nat) -> Maybe (Eq Nat (Succ m) n))
+         (Nothing (Eq Nat (Succ m) 0))
+         (\ (n:Nat) (_:Maybe (Eq Nat (Succ m) n)) ->
+            maybe (Eq Nat m n) (Maybe (Eq Nat (Succ m) (Succ n)))
+              (Nothing (Eq Nat (Succ m) (Succ n)))
+              (\ (e:Eq Nat m n) ->
+                 Just (Eq Nat (Succ m) (Succ n)) (eqNatSucc m n e))
+              (rec n)));
 
 -- | Try to prove x <= y (FIXME: implement this from natCompareLe!)
 primitive proveLeNat : (x y : Nat) -> Maybe (IsLeNat x y);
@@ -949,6 +978,17 @@ equalNat x y =
             (\ (n':Nat) -> \ (eqN : Nat -> Bool) -> \ (m:Nat) ->
                Nat_cases Bool False
                          (\ (m':Nat) -> \ (b:Bool) -> eqN m') m) x y;
+
+-- Convert a equalNat equality to an equality of Nats
+-- FIXME: Implement this in the same way as proveEqNat
+primitive equalNatToEqNat : (m n : Nat) ->
+                            Eq Bool (equalNat m n) True -> eqNat m n;
+
+-- An ite on Nat equality with a proof term in the True branch
+ifEqNatWithProof : (a : sort 0) -> (m n : Nat) -> a -> (eqNat m n -> a) -> a;
+ifEqNatWithProof a m n x f =
+  ifWithProof a (equalNat m n) x
+    (\ (pf:Eq Bool (equalNat m n) True) -> f (equalNatToEqNat m n pf));
 
 ltNat : Nat -> Nat -> Bool;
 ltNat x y =
@@ -1700,7 +1740,7 @@ data List (a : sort 0) : sort 0
   }
 
 List__rec :
-  (a : sort 0) -> (P : List a -> sort 0) -> P (Nil a) ->
+  (a : sort 0) -> (P : List a -> sort 1) -> P (Nil a) ->
   ((x : a) -> (l : List a) -> P l -> P (Cons a x l)) ->
   (l : List a) -> P l;
 List__rec a P f1 f2 l = List#rec a P f1 f2 l;
@@ -1844,6 +1884,34 @@ eithers a =
 
 
 --------------------------------------------------------------------------------
+-- Nested Sigma types
+
+-- FIXME: Sigmas isn't used yet, but is here in case we need it later
+
+-- Form the multiple arrow type a1 -> ... -> an -> b
+arrowsType : ListSort -> sort 0 -> sort 0;
+arrowsType as b =
+  ListSort__rec (\ (_:ListSort) -> sort 0) b
+    (\ (a:sort 0) (_:ListSort) (rec:sort 0) -> a -> rec)
+    as;
+
+-- Form the type a1 -> ... -> an -> sort 0 of a type-level function over the as
+arrowsSort : ListSort -> sort 1;
+arrowsSort as =
+  ListSort#rec (\ (_:ListSort) -> sort 1) (sort 0)
+    (\ (a:sort 0) (_:ListSort) (rec:sort 1) -> a -> rec)
+    as;
+
+-- The right-nested sigma type Sigma a1 (\ x1 -> Sigma a2 (\ x2 -> ... (b x1 ... xn)))
+Sigmas : (as:ListSort) -> arrowsSort as -> sort 0;
+Sigmas =
+  ListSort__rec (\ (as:ListSort) -> arrowsSort as -> sort 0)
+    (\ (b:sort 0) -> b)
+    (\ (a:sort 0) (as:ListSort) (rec:arrowsSort as -> sort 0)
+       (b:a -> arrowsSort as) -> Sigma a (\ (x:a) -> rec (b x)));
+
+
+--------------------------------------------------------------------------------
 -- Lists of 64-bit words (for testing Heapster)
 
 data W64List : sort 0 where {
@@ -1887,25 +1955,16 @@ axiom unsafeAssertBVULt : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
 axiom unsafeAssertBVULe : (n : Nat) -> (x : Vec n Bool) -> (y : Vec n Bool) ->
                           Eq Bool (bvule n x y) True;
 
--- Decide equality on two bitvectors, returning a proof if they are equal
-primitive bvEqWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
-                          Maybe (Eq (Vec n Bool) v1 v2);
+-- Convert a bvEq equality to an equality of bitvectors
+primitive bvEqToEq : (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                     Eq Bool (bvEq n v1 v2) True -> Eq (Vec n Bool) v1 v2;
 
--- Compare two bitvectors with bvult, returning a proof if bvult succeeds
-bvultWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
-                 Maybe (Eq Bool (bvult n v1 v2) True);
-bvultWithProof n v1 v2 =
-  iteDep (\ (b:Bool) -> Maybe (Eq Bool b True)) (bvult n v1 v2)
-         (Just (Eq Bool True True) (Refl Bool True))
-         (Nothing (Eq Bool False True));
-
--- Compare two bitvectors with bvule, returning a proof if bvule succeeds
-bvuleWithProof : (n : Nat) -> (v1 v2 : Vec n Bool) ->
-                 Maybe (Eq Bool (bvule n v1 v2) True);
-bvuleWithProof n v1 v2 =
-  iteDep (\ (b:Bool) -> Maybe (Eq Bool b True)) (bvule n v1 v2)
-         (Just (Eq Bool True True) (Refl Bool True))
-         (Nothing (Eq Bool False True));
+-- An ite on bitvector equality with a proof term in the True branch
+ifBvEqWithProof : (a : sort 0) -> (n : Nat) -> (v1 v2 : Vec n Bool) ->
+                  a -> (Eq (Vec n Bool) v1 v2 -> a) -> a;
+ifBvEqWithProof a n v1 v2 x f =
+  ifWithProof a (bvEq n v1 v2) x
+    (\ (pf:Eq Bool (bvEq n v1 v2) True) -> f (bvEqToEq n v1 v2 pf));
 
 -- Convert a proof of bitvector equality to one of Nat equality
 primitive bvEqToEqNat : (n : Nat) -> (v1 v2 : Vec n Bool) ->
@@ -1989,6 +2048,13 @@ genBVVec n len a f =
     (\ (i:Nat) (pf:IsLtNat i (bvToNat n len)) ->
        f (bvNat n i) (IsLtNat_to_bvult n len i pf));
 
+-- Generate a BVVec from a function from bitvector indices to elements, in a
+-- manner similar to genBVVec but where the function does not take proofs
+genBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
+               (Vec n Bool -> a) -> BVVec n len a;
+genBVVecNoPf n len a f =
+  gen (bvToNat n len) a (\ (i:Nat) -> f (bvNat n i));
+
 -- Generate a BVVec from the elements of an existing vector, using a default
 -- value when we run out of the existing vector
 genBVVecFromVec : (m : Nat) -> (a : sort 0) -> Vec m a -> a ->
@@ -2034,6 +2100,12 @@ atBVVec n len a x ix pf =
         (eq_cong (Vec n Bool) (bvNat n (bvToNat n ix)) ix
           (bvNat_bvToNat n ix) Bool (\ (y:Vec n Bool) -> bvult n y len))
         pf));
+
+-- Read the ixth element of a BVVec, assuming that ix < len but with no proof of
+-- that fact
+atBVVecNoPf : (n : Nat) -> (len : Vec n Bool) -> (a : isort 0) ->
+              BVVec n len a -> (ix : Vec n Bool) -> a;
+atBVVecNoPf n len a v ix = at (bvToNat n len) a v (bvToNat n ix);
 
 -- Indexing a generated BVVec just returns the generating function
 axiom at_gen_BVVec : (n : Nat) -> (len : Vec n Bool) -> (a : sort 0) ->
@@ -2100,11 +2172,10 @@ updSliceBVVec n len a v start' len' v_sub =
   genBVVec n len a
     (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
        ite a (bvule n start' i)
-           (maybe (is_bvult n (bvSub n i start') len') a
+           (ifWithProof a (bvult n (bvSub n i start') len')
               (atBVVec n len a v i pf)
               (\ (pf_sub:is_bvult n (bvSub n i start') len') ->
-                 atBVVec n len' a v_sub (bvSub n i start') pf_sub)
-              (bvultWithProof n (bvSub n i start') len'))
+                 atBVVec n len' a v_sub (bvSub n i start') pf_sub))
            (atBVVec n len a v i pf));
 
 -- Append two BVVecs
@@ -2113,14 +2184,11 @@ appendBVVec : (n : Nat) -> (len1 len2 : Vec n Bool) -> (a : sort 0) ->
 appendBVVec n len1 len2 a v1 v2 =
   genBVVec n (bvAdd n len1 len2) a
     (\ (i:Vec n Bool) (pf12:is_bvult n i (bvAdd n len1 len2)) ->
-       iteDep
-         (\ (b:Bool) -> Eq Bool (bvult n i len1) b -> a)
-         (bvult n i len1)
+       iteWithProof a (bvult n i len1)
          (\ (pf1:is_bvult n i len1) -> atBVVec n len1 a v1 i pf1)
          (\ (not_pf1:Eq Bool (bvult n i len1) False) ->
             atBVVec n len2 a v2 (bvSub n i len1)
-                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1))
-         (Refl Bool (bvult n i len1)));
+                    (bvult_sum_bvult_sub n i len1 len2 pf12 not_pf1)));
 
 
 -- | The complete induction principle on bitvectors
@@ -2147,1198 +2215,49 @@ BV_complete_induction w p f x0 =
 
 
 --------------------------------------------------------------------------------
--- Iso-recursive types
-
-data IRTDesc (As:ListSort) : sort 0 where {
-  IRT_varD   : Nat -> IRTDesc As; -- an IRTDesc var
-  IRT_mu     : IRTDesc As -> IRTDesc As; -- binds a varD
-  IRT_Either : IRTDesc As -> IRTDesc As -> IRTDesc As;
-  IRT_prod   : IRTDesc As -> IRTDesc As -> IRTDesc As;
-  IRT_sigT   : (i:Nat) -> (listSortGet As i -> IRTDesc As) -> IRTDesc As;
-  IRT_BVVec  : (n:Nat) -> Vec n Bool -> (D:IRTDesc As) -> IRTDesc As;
-  IRT_unit   : IRTDesc As;
-  IRT_empty  : IRTDesc As;
-  IRT_varT   : (i:Nat) -> IRTDesc As; -- a sort var, i.e. an index into `As`
-}
-
-IRTDesc__rec : (As:ListSort) -> (P : IRTDesc As -> sort 1) ->
-               ((i:Nat) -> P (IRT_varD As i)) ->
-               ((D:IRTDesc As) -> P D -> P (IRT_mu As D)) ->
-               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
-                  P (IRT_Either As Dl Dr)) ->
-               ((Dl:IRTDesc As) -> P Dl -> (Dr:IRTDesc As) -> P Dr ->
-                  P (IRT_prod As Dl Dr)) ->
-               ((i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-                  ((a:listSortGet As i) -> P (Df a)) -> P (IRT_sigT As i Df)) ->
-               ((n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) -> P D ->
-                  P (IRT_BVVec As n len D)) ->
-               P (IRT_unit As) -> P (IRT_empty As) ->
-               ((i:Nat) -> P (IRT_varT As i)) ->
-               (D:IRTDesc As) -> P D;
-IRTDesc__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D = IRTDesc#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 D;
-
--- A list of substitutions for a context of iso-recursive type descriptions
-data IRTSubsts (As:ListSort) : sort 0 where {
-  IRTs_Nil : IRTSubsts As;
-  IRTs_Cons : IRTDesc As -> IRTSubsts As -> IRTSubsts As;
-}
-
-IRTSubsts__rec : (As:ListSort) -> (P : IRTSubsts As -> sort 1) -> P (IRTs_Nil As) ->
-                 ((D:IRTDesc As) -> (Ds:IRTSubsts As) -> P Ds -> P (IRTs_Cons As D Ds)) ->
-                 (Ds:IRTSubsts As) -> P Ds;
-IRTSubsts__rec As P f1 f2 Ds = IRTSubsts#rec As P f1 f2 Ds;
-
--- The IRTDesc at the given index in an IRTSubsts or IRT_empty if the
--- index is out of bounds
-atIRTs : (As:ListSort) -> IRTSubsts As -> Nat -> IRTDesc As;
-atIRTs As = IRTSubsts__rec As (\ (_:IRTSubsts As) -> Nat -> IRTDesc As)
-  (\ (_:Nat) -> IRT_empty As)
-  (\ (D:IRTDesc As) (_:IRTSubsts As) (rec : Nat -> IRTDesc As) ->
-     Nat_cases (IRTDesc As) D (\ (n:Nat) (_:IRTDesc As) -> rec n));
-
--- A IRTSubsts with the first n (or all, if n > length) entries removed
-dropIRTs : (As:ListSort) -> IRTSubsts As -> Nat -> IRTSubsts As;
-dropIRTs As = IRTSubsts__rec As (\ (_:IRTSubsts As) -> Nat -> IRTSubsts As)
-  (\ (_:Nat) -> IRTs_Nil As)
-  (\ (_:IRTDesc As) (Ds:IRTSubsts As) (rec : Nat -> IRTSubsts As) ->
-     Nat_cases (IRTSubsts As) Ds (\ (n:Nat) (_ : IRTSubsts As) -> rec n));
-
--- The type corresponding to an iso-recursive type description
-data IRT (As:ListSort) : IRTSubsts As -> IRTDesc As -> sort 0 where {
-  IRT_elemD    : (Ds:IRTSubsts As) -> (i:Nat) ->
-                 IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) ->
-                 IRT As Ds (IRT_varD As i);
-  IRT_fold     : (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-                 IRT As (IRTs_Cons As (IRT_mu As D) Ds) D -> IRT As Ds (IRT_mu As D);
-  IRT_Left     : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dl -> IRT As Ds (IRT_Either As Dl Dr);
-  IRT_Right    : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dr -> IRT As Ds (IRT_Either As Dl Dr);
-  IRT_pair     : (Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-                 IRT As Ds Dl -> IRT As Ds Dr -> IRT As Ds (IRT_prod As Dl Dr);
-  IRT_existT   : (Ds:IRTSubsts As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-                 (a:listSortGet As i) -> IRT As Ds (Df a) -> IRT As Ds (IRT_sigT As i Df);
-  IRT_genBVVec : (Ds:IRTSubsts As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
-                 ((i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) -> IRT As Ds (IRT_BVVec As n len D);
-  IRT_tt       : (Ds:IRTSubsts As) -> IRT As Ds (IRT_unit As);
-  IRT_elemT    : (Ds:IRTSubsts As) -> (i:Nat) ->
-                 listSortGet As i -> IRT As Ds (IRT_varT As i);
-}
-
-IRT__rec : (As:ListSort) -> (P : (Ds:IRTSubsts As) -> (D:IRTDesc As) -> IRT As Ds D -> sort 1) ->
-           ((Ds:IRTSubsts As) -> (i:Nat) ->
-              (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
-              P (dropIRTs As Ds (Succ i)) (atIRTs As Ds i) x ->
-              P Ds (IRT_varD As i) (IRT_elemD As Ds i x)) ->
-           ((Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-              (x:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
-              P (IRTs_Cons As (IRT_mu As D) Ds) D x ->
-              P Ds (IRT_mu As D) (IRT_fold As Ds D x)) ->
-           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xl:IRT As Ds Dl) ->
-              P Ds Dl xl -> P Ds (IRT_Either As Dl Dr) (IRT_Left As Ds Dl Dr xl)) ->
-           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) -> (xr:IRT As Ds Dr) ->
-              P Ds Dr xr -> P Ds (IRT_Either As Dl Dr) (IRT_Right As Ds Dl Dr xr)) ->
-           ((Ds:IRTSubsts As) -> (Dl:IRTDesc As) -> (Dr:IRTDesc As) ->
-              (xl:IRT As Ds Dl) -> P Ds Dl xl ->
-              (xr:IRT As Ds Dr) -> P Ds Dr xr ->
-              P Ds (IRT_prod As Dl Dr) (IRT_pair As Ds Dl Dr xl xr)) ->
-           ((Ds:IRTSubsts As) -> (i:Nat) -> (Df : listSortGet As i -> IRTDesc As) ->
-              (a:listSortGet As i) -> (xf:IRT As Ds (Df a)) -> P Ds (Df a) xf ->
-              P Ds (IRT_sigT As i Df) (IRT_existT As Ds i Df a xf)) ->
-           ((Ds:IRTSubsts As) -> (n:Nat) -> (len:Vec n Bool) -> (D:IRTDesc As) ->
-              (xg : (i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D) ->
-              ((i:Vec n Bool) -> (pf:is_bvult n i len) -> P Ds D (xg i pf)) ->
-              P Ds (IRT_BVVec As n len D) (IRT_genBVVec As Ds n len D xg)) ->
-           ((Ds:IRTSubsts As) -> P Ds (IRT_unit As) (IRT_tt As Ds)) ->
-           ((Ds:IRTSubsts As) -> (i:Nat) -> (a:listSortGet As i) ->
-              P Ds (IRT_varT As i) (IRT_elemT As Ds i a)) ->
-           (Ds:IRTSubsts As) -> (D:IRTDesc As) -> (x:IRT As Ds D) -> P Ds D x;
-IRT__rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 Ds D x = IRT#rec As P f1 f2 f3 f4 f5 f6 f7 f8 f9 Ds D x;
-
--- The type of a once-unfolded iso-recursive type
-UnfoldedIRT : (As:ListSort) -> IRTSubsts As -> IRTDesc As -> sort 0;
-UnfoldedIRT As Ds D = IRTDesc__rec As (\ (_:IRTDesc As) -> IRTSubsts As -> sort 0)
-  (\ (i:Nat) (Ds:IRTSubsts As) ->
-      IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
-  (\ (D:IRTDesc As) (rec : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      rec (IRTs_Cons As (IRT_mu As D) Ds))
-  (\ (_:IRTDesc As) (recl : IRTSubsts As -> sort 0)
-     (_:IRTDesc As) (recr : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      Either (recl Ds) (recr Ds))
-  (\ (_:IRTDesc As) (recl : IRTSubsts As -> sort 0)
-     (_:IRTDesc As) (recr : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      recl Ds * recr Ds)
-  (\ (i:Nat) (_ : listSortGet As i -> IRTDesc As)
-     (recf : listSortGet As i -> IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      Sigma (listSortGet As i) (\ (a:listSortGet As i) -> recf a Ds))
-  (\ (n:Nat) (len:Vec n Bool) (_:IRTDesc As)
-     (rec : IRTSubsts As -> sort 0) (Ds:IRTSubsts As) ->
-      BVVec n len (rec Ds))
-  (\ (_:IRTSubsts As) -> #())
-  (\ (_:IRTSubsts As) -> Eq Bool True False)
-  (\ (i:Nat) (_:IRTSubsts As) -> listSortGet As i) D Ds;
-
--- `fold` and `unfold` for IRTs
-
-unfoldIRT : (As:ListSort) -> (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-            IRT As Ds D -> UnfoldedIRT As Ds D;
-unfoldIRT As = IRT__rec As (\ (Ds:IRTSubsts As) (D:IRTDesc As) (_:IRT As Ds D) -> UnfoldedIRT As Ds D)
-  (\ (Ds:IRTSubsts As) (i:Nat) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i))
-     (_:UnfoldedIRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) -> x)
-  (\ (Ds:IRTSubsts As) (D:IRTDesc As) (_:IRT As (IRTs_Cons As (IRT_mu As D) Ds) D)
-     (rec: UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) -> rec)
-  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
-     (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl) ->
-      Left (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recl)
-  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
-     (_:IRT As Ds Dr) (recr:UnfoldedIRT As Ds Dr) ->
-      Right (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) recr)
-  (\ (Ds:IRTSubsts As) (Dl:IRTDesc As) (Dr:IRTDesc As)
-     (_:IRT As Ds Dl) (recl:UnfoldedIRT As Ds Dl)
-     (_:IRT As Ds Dr) (recr:UnfoldedIRT As Ds Dr) ->
-      (recl, recr))
-  (\ (Ds:IRTSubsts As) (i:Nat) (Df : listSortGet As i -> IRTDesc As) (a:listSortGet As i)
-     (_:IRT As Ds (Df a)) (recf:UnfoldedIRT As Ds (Df a)) ->
-      exists (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a)) a recf)
-  (\ (Ds:IRTSubsts As) (n:Nat) (len:Vec n Bool) (D:IRTDesc As)
-     (_ : (i:Vec n Bool) -> is_bvult n i len -> IRT As Ds D)
-     (recg : (i:Vec n Bool) -> is_bvult n i len -> UnfoldedIRT As Ds D) ->
-      genBVVec n len (UnfoldedIRT As Ds D) recg)
-  (\ (Ds:IRTSubsts As) -> ())
-  (\ (Ds:IRTSubsts As) (i:Nat) (a:listSortGet As i) -> a);
-
-foldIRT : (As:ListSort) -> (Ds:IRTSubsts As) -> (D:IRTDesc As) ->
-          UnfoldedIRT As Ds D -> IRT As Ds D;
-foldIRT As Ds D = IRTDesc__rec As (\ (D:IRTDesc As) -> (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-  (\ (i:Nat) (Ds:IRTSubsts As) (x:IRT As (dropIRTs As Ds (Succ i)) (atIRTs As Ds i)) ->
-      IRT_elemD As Ds i x)
-  (\ (D:IRTDesc As) (rec : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-     (Ds:IRTSubsts As) (x:UnfoldedIRT As (IRTs_Cons As (IRT_mu As D) Ds) D) ->
-      IRT_fold As Ds D (rec (IRTs_Cons As (IRT_mu As D) Ds) x))
-  (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
-     (Dr:IRTDesc As) (recr : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
-     (Ds:IRTSubsts As) (x:Either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr)) ->
-      either (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) (IRT As Ds (IRT_Either As Dl Dr))
-             (\ (xl:UnfoldedIRT As Ds Dl) -> IRT_Left  As Ds Dl Dr (recl Ds xl))
-             (\ (xr:UnfoldedIRT As Ds Dr) -> IRT_Right As Ds Dl Dr (recr Ds xr)) x)
-  (\ (Dl:IRTDesc As) (recl : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dl -> IRT As Ds Dl)
-     (Dr:IRTDesc As) (recr : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds Dr -> IRT As Ds Dr)
-     (Ds:IRTSubsts As) (x:UnfoldedIRT As Ds Dl * UnfoldedIRT As Ds Dr) ->
-      uncurry (UnfoldedIRT As Ds Dl) (UnfoldedIRT As Ds Dr) (IRT As Ds (IRT_prod As Dl Dr))
-              (\ (xl:UnfoldedIRT As Ds Dl) (xr:UnfoldedIRT As Ds Dr) ->
-                  IRT_pair As Ds Dl Dr (recl Ds xl) (recr Ds xr)) x)
-  (\ (i:Nat) (Df : listSortGet As i -> IRTDesc As)
-     (recf : (a:listSortGet As i) -> (Ds:IRTSubsts As) -> UnfoldedIRT As Ds (Df a) -> IRT As Ds (Df a))
-     (Ds:IRTSubsts As) (x:Sigma (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a))) ->
-      uncurrySigma (listSortGet As i) (\ (a:listSortGet As i) -> UnfoldedIRT As Ds (Df a)) (IRT As Ds (IRT_sigT As i Df))
-                   (\ (a:listSortGet As i) (xf:UnfoldedIRT As Ds (Df a)) ->
-                       IRT_existT As Ds i Df a (recf a Ds xf)) x)
-  (\ (n:Nat) (len:Vec n Bool) (D:IRTDesc As) (recg : (Ds:IRTSubsts As) -> UnfoldedIRT As Ds D -> IRT As Ds D)
-     (Ds:IRTSubsts As) (x : BVVec n len (UnfoldedIRT As Ds D)) ->
-      IRT_genBVVec As Ds n len D (\ (i:Vec n Bool) (pf:is_bvult n i len) ->
-                                     recg Ds (atBVVec n len (UnfoldedIRT As Ds D) x i pf)))
-  (\ (Ds:IRTSubsts As) (x:#()) -> IRT_tt As Ds)
-  (\ (Ds:IRTSubsts As) (x:Eq Bool True False) -> efq (IRT As Ds (IRT_empty As)) x)
-  (\ (i:Nat) (Ds:IRTSubsts As) (x:listSortGet As i) -> IRT_elemT As Ds i x) D Ds;
-
-
---------------------------------------------------------------------------------
--- Computation monad
-
-primitive CompM : sort 0 -> sort 0;
-
-primitive returnM : (a:sort 0) -> a -> CompM a;
-primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
-
--- Raise an error in the computation monad
-primitive errorM : (a:sort 0) -> String -> CompM a;
-
--- Apply a pure function to a computation
-fmapM : (a b: sort 0) -> (a -> b) -> CompM a -> CompM b;
-fmapM a b f m = bindM a b m (\ (x:a) -> returnM b (f x));
-
--- Apply a computation of a function to a computation of an argument
-applyM : (a b: sort 0) -> CompM (a -> b) -> CompM a -> CompM b;
-applyM a b f m =
-  bindM (a -> b) b f (\ (f:a->b) -> bindM a b m (\ (x:a) -> returnM b (f x)));
-
--- Apply a binary pure function to a computation
-fmapM2 : (a b c: sort 0) -> (a -> b -> c) -> CompM a -> CompM b -> CompM c;
-fmapM2 a b c f m1 m2 = applyM b c (fmapM a (b -> c) f m1) m2;
-
--- Apply a trinary pure function to a computation
-fmapM3 : (a b c d: sort 0) -> (a -> b -> c -> d) ->
-         CompM a -> CompM b -> CompM c -> CompM d;
-fmapM3 a b c d f m1 m2 m3 = applyM c d (fmapM2 a b (c -> d) f m1 m2) m3;
-
--- Bind two values and pass them to a binary function
-bindM2 : (a b c: sort 0) -> CompM a -> CompM b -> (a -> b -> CompM c) -> CompM c;
-bindM2 a b c m1 m2 f = bindM a c m1 (\ (x:a) -> bindM b c m2 (f x));
-
--- Bind three values and pass them to a trinary function
-bindM3 : (a b c d: sort 0) -> CompM a -> CompM b -> CompM c ->
-         (a -> b -> c -> CompM d) -> CompM d;
-bindM3 a b c d m1 m2 m3 f = bindM a d m1 (\ (x:a) -> bindM2 b c d m2 m3 (f x));
-
--- A version of bind that takes the function first
-bindApplyM : (a b : sort 0) -> (a -> CompM b) -> CompM a -> CompM b;
-bindApplyM a b f m = bindM a b m f;
-
--- A version of bindM2 that takes the function first
-bindApplyM2 : (a b c: sort 0) -> (a -> b -> CompM c) -> CompM a -> CompM b -> CompM c;
-bindApplyM2 a b c f m1 m2 = bindM a c m1 (\ (x:a) -> bindM b c m2 (f x));
-
--- A version of bindM3 that takes the function first
-bindApplyM3 : (a b c d: sort 0) -> (a -> b -> c -> CompM d) ->
-              CompM a -> CompM b -> CompM c -> CompM d;
-bindApplyM3 a b c d f m1 m2 m3 = bindM3 a b c d m1 m2 m3 f;
-
--- Compose two monadic functions
-composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
-composeM a b c f g x = bindM b c (f x) g;
-
--- Tuple a type onto the input and output types of a monadic function
-tupleCompMFunBoth : (a b c: sort 0) -> (a -> CompM b) -> (c * a -> CompM (c * b));
-tupleCompMFunBoth a b c f =
-  \ (x:c * a) ->
-    bindM b (c * b) (f x.(2)) (\ (y:b) -> returnM (c*b) (x.(1), y));
-
--- Tuple a valu onto the output of a monadic function
-tupleCompMFunOut : (a b c: sort 0) -> c -> (a -> CompM b) -> (a -> CompM (c * b));
-tupleCompMFunOut a b c x f =
-  \ (y:a) -> bindM b (c*b) (f y) (\ (z:b) -> returnM (c*b) (x,z));
-
--- Map a monadic function across a vector
-mapM : (a :sort 0) -> (b : isort 0) -> (a -> CompM b) -> (n : Nat) -> Vec n a -> CompM (Vec n b);
-mapM a b f =
-  Nat__rec
-    (\ (n:Nat) -> Vec n a -> CompM (Vec n b))
-    (\ (_:Vec 0 a) -> returnM (Vec 0 b) (EmptyVec b))
-    (\ (n:Nat) (rec_f:Vec n a -> CompM (Vec n b)) (v:Vec (Succ n) a) ->
-       fmapM2 b (Vec n b) (Vec (Succ n) b)
-              (\ (hd:b) (tl:Vec n b) -> ConsVec b hd n tl)
-              (f (head n a v))
-              (rec_f (tail n a v)));
-
--- Map a monadic function across a BVVec
-mapBVVecM : (a : sort 0) -> (b : isort 0) -> (a -> CompM b) ->
-            (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
-            CompM (BVVec n len b);
-mapBVVecM a b f n len = mapM a b f (bvToNat n len);
-
--- Append two BVVecs and cast the resulting size, if possible
-appendCastBVVecM : (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
-                   BVVec n len1 a -> BVVec n len2 a ->
-                   CompM (BVVec n len3 a);
-appendCastBVVecM n len1 len2 len3 a v1 v2 =
-  maybe
-    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (CompM (BVVec n len3 a))
-    (errorM (BVVec n len3 a) "Could not cast BVVec")
-    (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
-       returnM
-         (BVVec n len3 a)
-         (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
-                 (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
-                          (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
-                 (appendBVVec n len1 len2 a v1 v2)))
-    (bvEqWithProof n (bvAdd n len1 len2) len3);
-
--- Run the first computation, and, if it raises an error, catch the error and
--- run the second computation
--- primitive catchM : (a:sort 0) -> CompM a -> CompM a -> CompM a;
-
--- The computation that nondeterministically chooses a value of type a and
--- passes it to the supplied function f to get a computation of type b. As a
--- specification, this is the union of computations f x.
-primitive existsM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
-
--- The computation that nondeterministically chooses one computation or another.
--- As a specification, represents the disjunction of two specifications.
-orM : (a : sort 0) -> CompM a -> CompM a -> CompM a;
-orM a m1 m2 = existsM Bool a (\ (b:Bool) -> ite (CompM a) b m1 m2);
-
--- The specification that matches any computation
-anySpec : (a : sort 0) -> CompM a;
-anySpec a = existsM (CompM a) a (\ (m:CompM a) -> m);
-
--- The specification formed from the intersection of all computations f x for
--- all possible inputs x. Computationally, this is sort of like running f for
--- all possible inputs x at the same time and then raising an error if any of
--- those computations diverge from each other.
-primitive forallM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
-
--- The specification which asserts that the first argument is True and then
--- runs the second argument
-assertingM : (a : sort 0) -> Bool -> CompM a -> CompM a;
-assertingM a b m = ite (CompM a) b m (errorM a "Assertion failed");
-
--- The specification which assumes that the first argument is True and then
--- runs the second argument
-assumingM : (a : sort 0) -> Bool -> CompM a -> CompM a;
-assumingM a b m = ite (CompM a) b m (anySpec a);
-
--- A hint to Mr Solver that a recursive function has the given loop invariant
-invariantHint : (a : sort 0) -> Bool -> a -> a;
-invariantHint _ _ a = a;
-
--- The version of assertingM which appears in un-monadified Cryptol (this gets
--- converted to assertingM during monadification, see assertingOrAssumingMacro)
-asserting : (a : isort 0) -> Bool -> a -> a;
-asserting a b x = ite a b x (error a "Assertion failed");
-
--- The version of assumingM which appears in un-monadified Cryptol (this gets
--- converted to assumingM during monadification, see assertingOrAssumingMacro)
-assuming : (a : isort 0) -> Bool -> a -> a;
-assuming a b x = ite a b x (error a "Assuming failed");
-
--- NOTE: for the simplicity and efficiency of MR solver, we define all
--- fixed-point computations in CompM via a primitive multiFixM, defined below.
--- Thus, even though fixM is really the primitive operation, we write this file
--- as if multiFixM is, but I am leaving this version of fixM commented out here
--- to keep this decision explicitly documented and to make it easier to switch
--- back to having fixM be primitive if we decide to do so later.
---
-{-
-primitive fixM : (a:sort 0) -> (b:a -> sort 0) ->
-                 (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
-                 (x:a) -> CompM (b x);
--}
-
--- A representation of the type (x1:A1) -> ... -> (xn:An) -> CompM (B x1 ... xn)
-data LetRecType : sort 1 where {
-  LRT_Ret : sort 0 -> LetRecType;
-  LRT_Fun : (a:sort 0) -> (a -> LetRecType) -> LetRecType;
-}
-
--- Convert a LetRecType to the type it represents
-lrtToType : LetRecType -> sort 0;
-lrtToType lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> sort 0)
-  (\ (b:sort 0) -> CompM b)
-  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> (x:a) -> b x)
-  lrt;
-
--- NOTE: the following are needed to define multiFixM instead of making it a
--- primitive, which we are keeping commented here in case that is needed
-{-
--- Convert the argument types of a LetRecType to their "flat" version of the
--- form { x1:A1 & { x2:A2 & ... { xn:An & unit } ... }}
-lrtToFlatArgs : LetRecType -> sort 0;
-lrtToFlatArgs lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> sort 0)
-  (\ (_:sort 0) -> #())
-  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> Sigma a b)
-  lrt;
-
--- Get the dependent return type fun (args:lrtToFlatArgs) => B x.1 ... of a
--- LetRecType in terms of the flat arguments
-lrtToFlatRet : (lrt:LetRecType) -> lrtToFlatArgs lrt -> sort 0;
-lrtToFlatRet lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> lrtToFlatArgs lrt -> sort 0)
-  (\ (a:sort 0) (_:#()) -> a)
-  (\ (a:sort 0) (lrtF: a -> LetRecType)
-      (retF: (x:a) -> lrtToFlatArgs (lrtF x) -> sort 0)
-      (args: Sigma a (\ (x:a) -> lrtToFlatArgs (lrtF x))) ->
-      retF (Sigma_proj1 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args)
-           (Sigma_proj2 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args))
-  lrt;
-
--- Extract out the "flat" version of a LetRecType
-lrtToFlatType : LetRecType -> sort 0;
-lrtToFlatType lrt = (args:lrtToFlatArgs lrt) -> CompM (lrtToFlatRet lrt args);
-
-
--- "Flatten" a function described by a LetRecType
-flattenLRTFun : (lrt:LetRecType) -> lrtToType lrt -> lrtToFlatType lrt;
-flattenLRTFun lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> lrtToType lrt -> lrtToFlatType lrt)
-  (\ (b:sort 0) (f:CompM b) (_:#()) -> f)
-  (\ (a:sort 0) (lrtF: a -> LetRecType)
-     (restF: (x:a) -> lrtToType (lrtF x) -> lrtToFlatType (lrtF x))
-     (f: lrtToType (LRT_Fun a lrtF)) (args:lrtToFlatArgs (LRT_Fun a lrtF)) ->
-     restF (Sigma_proj1 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args)
-           (f (Sigma_proj1 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args))
-           (Sigma_proj2 a (\ (x:a) -> lrtToFlatArgs (lrtF x)) args))
-  lrt;
-
--- "Unflatten" a function described by a LetRecType
-unflattenLRTFun : (lrt:LetRecType) -> lrtToFlatType lrt -> lrtToType lrt;
-unflattenLRTFun lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> lrtToFlatType lrt -> lrtToType lrt)
-  (\ (b:sort 0) (f:#() -> CompM b) -> f ())
-  (\ (a:sort 0) (lrtF: a -> LetRecType)
-     (restF: (x:a) -> lrtToFlatType (lrtF x) -> lrtToType (lrtF x))
-     (f: lrtToFlatType (LRT_Fun a lrtF)) (x:a) ->
-     restF x (\ (args:lrtToFlatArgs (lrtF x)) ->
-                f (exists a (\ (y:a) -> lrtToFlatArgs (lrtF y)) x args)))
-  lrt;
--}
-
--- A list of 0 or more LetRecTypes
-data LetRecTypes : sort 1 where {
-  LRT_Nil : LetRecTypes;
-  LRT_Cons : LetRecType -> LetRecTypes -> LetRecTypes;
-}
-
--- Build the function type lrtToType lrt1 -> ... -> lrtToType lrtn -> b from the
--- LetRecTypes list [lrt1, ..., lrtn]
-lrtPi : LetRecTypes -> sort 0 -> sort 0;
-lrtPi lrts b =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> sort 0)
-  b
-  (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> lrtToType lrt -> rest)
-  lrts;
-
--- Build the product type (lrtToType lrt1, ..., lrtToType lrtn) from the
--- LetRecTypes list [lrt1, ..., lrtn]
-lrtTupleType : LetRecTypes -> sort 0;
-lrtTupleType lrts =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> sort 0)
-  #()
-  (\ (lrt:LetRecType) (_:LetRecTypes) (rest:sort 0) -> #(lrtToType lrt, rest))
-  lrts;
-
--- NOTE: the following are needed to define letRecM instead of making it a
--- primitive, which we are keeping commented here in case that is needed
-{-
--- Apply a multi-arity function of type lrtPi lrts B to an lrtTupleType lrts
-lrtApply : (lrts:LetRecTypes) -> (B:sort 0) -> lrtPi lrts B -> lrtTupleType lrts -> B;
-lrtApply top_lrts B =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> lrtPi lrts B -> lrtTupleType lrts -> B)
-  (\ (F:B) (_:#()) -> F)
-  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rest:lrtPi lrts B -> lrtTupleType lrts -> B)
-      (F:lrtPi (LRT_Cons lrt lrts) B) (fs:lrtTupleType (LRT_Cons lrt lrts)) ->
-    rest (F fs.(1)) fs.(2))
-  top_lrts;
-
--- Construct a multi-arity function of type lrtPi lrts B from one of type
--- lrtTupleType lrts -> B
-lrtLambda : (lrts:LetRecTypes) -> (B:sort 0) -> (lrtTupleType lrts -> B) -> lrtPi lrts B;
-lrtLambda top_lrts B =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> (lrtTupleType lrts -> B) -> lrtPi lrts B)
-  (\ (F:#() -> B) -> F ())
-  (\ (lrt:LetRecType) (lrts:LetRecTypes)
-     (rest:(lrtTupleType lrts -> B) -> lrtPi lrts B)
-     (F:lrtTupleType (LRT_Cons lrt lrts) -> B) (f:lrtToType lrt) ->
-    rest (\ (fs:lrtTupleType lrts) -> F (f, fs)))
-  top_lrts;
-
--- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
-multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
-               lrtToType lrt;
-multiArgFixM lrt F =
-  unflattenLRTFun
-    lrt
-    (fixM (lrtToFlatArgs lrt) (lrtToFlatRet lrt)
-          (\ (f:lrtToFlatType lrt) ->
-             flattenLRTFun lrt (F (unflattenLRTFun lrt f))));
-
--- Construct a mutual fixed-point over tuples of LRT functions
-multiTupleFixM : (lrts:LetRecTypes) -> (lrtTupleType lrts -> lrtTupleType lrts) ->
-                 lrtTupleType lrts;
-multiTupleFixM top_lrts =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> (lrtTupleType lrts -> lrtTupleType lrts) -> lrtTupleType lrts)
-  (\ (_:#() -> #()) -> ())
-  (\ (lrt:LetRecType) (lrts:LetRecTypes)
-     (restF: (lrtTupleType lrts -> lrtTupleType lrts) -> lrtTupleType lrts)
-     (F:lrtTupleType (LRT_Cons lrt lrts) -> lrtTupleType (LRT_Cons lrt lrts)) ->
-     (multiArgFixM lrt (\ (f:lrtToType lrt) ->
-                          (F (f, restF (\ (fs:lrtTupleType lrts) ->
-                                          (F (f, fs)).(2)))).(1)),
-      restF (\ (fs:lrtTupleType lrts) ->
-               (F (multiArgFixM lrt
-                     (\ (f:lrtToType lrt) ->
-                        (F (f, restF (\ (fs:lrtTupleType lrts) ->
-                                        (F (f, fs)).(2)))).(1)),
-                   fs)).(2))))
-  top_lrts;
-
--- A nicer version of multiTupleFixM that abstracts the functions one at a time
-multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
-            lrtTupleType lrts;
-multiFixM lrts F =
-  multiTupleFixM lrts (\ (fs:lrtTupleType lrts) -> lrtApply lrts (lrtTupleType lrts) F fs);
--}
-
--- This is like let rec in ML: letRecM defs body defines N recursive functions
--- in terms of themselves using defs, and then passes them to body. We use this
--- instead of the more standard fixM because it offers a more compact
--- representation, and because fixM messes with functional extensionality by
--- introducing an irreducible term at function type.
-primitive letRecM : (lrts : LetRecTypes) -> (B:sort 0) ->
-                    lrtPi lrts (lrtTupleType lrts) ->
-                    lrtPi lrts (CompM B) -> CompM B;
--- letRecM lrts B F body = lrtApply lrts (CompM B) body (multiFixM lrts F);
-
--- This is let rec with exactly one binding
-letRecM1 : (a b c : sort 0) -> ((a -> CompM b) -> (a -> CompM b)) ->
-           ((a -> CompM b) -> CompM c) -> CompM c;
-letRecM1 a b c fn body =
-  letRecM
-    (LRT_Cons (LRT_Fun a (\ (_:a) -> LRT_Ret b)) LRT_Nil) c
-    (\ (f:a -> CompM b) -> (fn f, ()))
-    (\ (f:a -> CompM b) -> body f);
-
--- A single-argument fixed-point function
-fixM : (a:sort 0) -> (b:a -> sort 0) ->
-       (((x:a) -> CompM (b x)) -> ((x:a) -> CompM (b x))) ->
-       (x:a) -> CompM (b x);
-fixM a b f x =
-  letRecM (LRT_Cons (LRT_Fun a (\ (y:a) -> LRT_Ret (b y))) LRT_Nil)
-          (b x)
-          (\ (g: (y:a) -> CompM (b y)) -> (f g, ()))
-          (\ (g: (y:a) -> CompM (b y)) -> g x);
-
-
--- The following commented block allows multiFixM to be defined in terms of and
--- to reduce to letRecM, which is useful if we want to define all our automated
--- reasoning in terms of letRecM instead of multiFixM
-
--- Apply a function the the body of a multi-arity lrtPi function
-{-
-lrtPiMap : (a b : sort 0) -> (f : a -> b) -> (lrts : LetRecTypes) ->
-           lrtPi lrts a -> lrtPi lrts b;
-lrtPiMap a b f lrts_top =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> lrtPi lrts a -> lrtPi lrts b)
-  (\ (x:a) -> f x)
-  (\ (lrt:LetRecType) (lrts:LetRecTypes) (rec:lrtPi lrts a -> lrtPi lrts b)
-     (f:lrtToType lrt -> lrtPi lrts a) (g:lrtToType lrt) ->
-     rec (f g))
-  lrts_top;
-
--- Convert a multi-arity lrtPi that returns a pair to a pair of lrtPi functions
--- that return the individual arguments
-lrtPiPair : (a b:sort 0) -> (lrts : LetRecTypes) -> lrtPi lrts #(a,b) ->
-            #(lrtPi lrts a, lrtPi lrts b);
-lrtPiPair a b lrts f =
-  (lrtPiMap #(a,b) a (\ (tup:#(a,b)) -> tup.(1)) lrts f,
-   lrtPiMap #(a,b) b (\ (tup:#(a,b)) -> tup.(2)) lrts f);
-
--- Build a monadic function that takes in its arguments and then calls letRecM.
--- That is, build a function
---
--- \x1 ... xn -> letRecM lrts F (\f1 ... fm -> body f1 ... fm x1 ... xn)
---
--- where F recursively defines the fi functions and body defines the computation
--- for the function we are defining in terms of the fi and the xj arguments.
-letRecFun : (lrts : LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
-            (lrt : LetRecType) -> lrtPi lrts (lrtToType lrt) -> lrtToType lrt;
-letRecFun lrts F lrt_top =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> lrtPi lrts (lrtToType lrt) -> lrtToType lrt)
-  (\ (b:sort 0) (body:lrtPi lrts (CompM b)) ->
-     letRecM lrts b F body)
-  (\ (a:sort 0) (lrtF: a -> LetRecType)
-     (rec: (x:a) -> lrtPi lrts (lrtToType (lrtF x)) -> lrtToType (lrtF x))
-     (body:lrtPi lrts ((x:a) -> lrtToType (lrtF x)))
-     (x:a) ->
-     rec x (lrtPiMap ((y:a) -> lrtToType (lrtF y))
-                     (lrtToType (lrtF x))
-                     (\ (g:(y:a) -> lrtToType (lrtF y)) -> g x)
-                     lrts
-                     body))
-  lrt_top;
-
--- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
-multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
-               lrtToType lrt;
-multiArgFixM lrt F =
-  letRecFun (LRT_Cons lrt LRT_Nil)
-            (\ (f:lrtToType lrt) -> (F f, ()))
-            lrt
-            (\ (f:lrtToType lrt) -> f);
-
--- Construct a fixed-point for a tuple of mutually-recursive functions
-multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
-            lrtTupleType lrts;
-multiFixM lrts_top F_top =
-  LetRecTypes#rec
-  (\ (lrts:LetRecTypes) -> lrtPi lrts_top (lrtTupleType lrts) ->
-     lrtTupleType lrts)
-  (\ (_:lrtPi lrts_top #()) -> ())
-  (\ (lrt:LetRecType) (lrts:LetRecTypes)
-     (rec: lrtPi lrts_top (lrtTupleType lrts) -> lrtTupleType lrts)
-     (F: lrtPi lrts_top #(lrtToType lrt, lrtTupleType lrts)) ->
-     (letRecFun
-        lrts_top F_top lrt
-        (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(1)
-      ,
-      rec (lrtPiPair (lrtToType lrt) (lrtTupleType lrts) lrts_top F).(2)))
-  lrts_top
-  F_top;
--}
-
--- Construct a fixed-point for a tuple of mutually-recursive functions
---
--- NOTE: Currently, Mr Solver actually works better with a primitive multiFixM,
--- so that's what we are going to do for now...
-primitive
-multiFixM : (lrts:LetRecTypes) -> lrtPi lrts (lrtTupleType lrts) ->
-            lrtTupleType lrts;
-
--- Build a multi-argument fixed-point of type A1 -> ... -> An -> CompM B
-multiArgFixM : (lrt:LetRecType) -> (lrtToType lrt -> lrtToType lrt) ->
-               lrtToType lrt;
-multiArgFixM lrt F =
-  (multiFixM (LRT_Cons lrt LRT_Nil) (\ (f:lrtToType lrt) -> (F f, ()))).(1);
-
-
---------------------------------------------------------------------------------
--- ITree Specification monad
-
 -- Lists at sort 1
+
+-- The type List1 itself
 data List1 (a:sort 1) : sort 1 where {
   Nil1 : List1 a;
   Cons1 : a -> List1 a -> List1 a;
 }
 
--- An event type is a type of events plus a mapping from events to their return
--- types
-data EvType : sort 1 where {
-   Build_EvType : (E:sort 0) -> (E -> sort 0) -> EvType;
-}
+-- The length of a List1
+length1 : (a:sort 1) -> List1 a -> Nat;
+length1 a l =
+  List1#rec a (\ (_:List1 a) -> Nat) 0
+            (\ (_:a) (_:List1 a) (rec:Nat) -> Succ rec) l;
 
--- Get the type for an EvType
-evTypeType : EvType -> sort 0;
-evTypeType e =
-  EvType#rec (\ (_:EvType) -> sort 0) (\ (E:sort 0) (_:E -> sort 0) -> E) e;
+-- Append two List1s
+app1 : (a:sort 1) -> List1 a -> List1 a -> List1 a;
+app1 a l1 l2 =
+  List1#rec a (\ (_:List1 a) -> List1 a) l2
+              (\ (x:a) (_:List1 a) (rec:List1 a) -> Cons1 a x rec) l1;
 
--- Get the return type for an event
-evRetType : (E:EvType) -> evTypeType E -> sort 0;
-evRetType e =
-  EvType#rec (\ (E:EvType) -> evTypeType E -> sort 0)
-             (\ (E:sort 0) (evTypeEnc:E -> sort 0) -> evTypeEnc) e;
+-- Concatenate a List1 of List1s
+concat1 : (a:sort 1) -> List1 (List1 a) -> List1 a;
+concat1 a ls =
+  List1#rec (List1 a) (\ (_:List1 (List1 a)) -> List1 a)
+            (Nil1 a)
+            (\ (xs:List1 a) (_:List1 (List1 a)) (rec:List1 a) -> app1 a xs rec)
+            ls;
 
--- The EvType with Void as the event type
-VoidEv : EvType;
-VoidEv = Build_EvType Void (elimVoid (sort 0));
-
--- Build the dependent type { a1:A1 & { a2:A2 & ... { an:An & unit } ... }} of
--- inputs to the LetRecType (LRT_Fun A1 (\ a1 -> ...))
-LRTInput : LetRecType -> sort 0;
-LRTInput lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> sort 0)
-  (\ (_:sort 0) -> #())
-  (\ (a:sort 0) (_: a -> LetRecType) (b: a -> sort 0) -> Sigma a b)
-  lrt;
-
--- Build the output type (R a1 ... an) of the application of a LetRecType
--- (LRT_Fun A1 (\ a1 -> ... (LRT_Fun An (\ an -> LRT_Ret R a1 ... an))))
--- function to the arguments a1 ... an in an LRTInput
-LRTOutput : (lrt:LetRecType) -> LRTInput lrt -> sort 0;
-LRTOutput lrt =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> LRTInput lrt -> sort 0)
-  (\ (R:sort 0) (_:LRTInput (LRT_Ret R)) -> R)
-  (\ (a:sort 0) (lrtF : a -> LetRecType)
-     (rec : (x:a) -> LRTInput (lrtF x) -> sort 0)
-     (args: Sigma a (\ (x:a) -> LRTInput (lrtF x))) ->
-     rec (Sigma_proj1 a (\ (x:a) -> LRTInput (lrtF x)) args)
-         (Sigma_proj2 a (\ (x:a) -> LRTInput (lrtF x)) args))
-  lrt;
-
--- Build the function type (a1:A1) -> ... -> (an:An) -> B from the LetRecType
--- (LRT_Fun A1 (\ a1 -> ...))
-lrt1Pi : (lrt:LetRecType) -> (LRTInput lrt -> sort 0) -> sort 0;
-lrt1Pi lrt_top =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> (LRTInput lrt -> sort 0) -> sort 0)
-  (\ (_:sort 0) (F:#() -> sort 0) -> F ())
-  (\ (a:sort 0) (lrtF: a -> LetRecType)
-     (rec: (x:a) -> (LRTInput (lrtF x) -> sort 0) -> sort 0)
-     (F : LRTInput (LRT_Fun a lrtF) -> sort 0) ->
-     (x:a) -> rec x (\ (args : LRTInput (lrtF x)) ->
-                       F (exists a (\ (y:a) -> LRTInput (lrtF y)) x args)))
-  lrt_top;
-
--- Build an lrtPi function from a unary function on an LRTInput
-lrtLambda : (lrt:LetRecType) -> (F: LRTInput lrt -> sort 0) ->
-            ((args: LRTInput lrt) -> F args) -> lrt1Pi lrt F;
-lrtLambda lrt_top =
-  LetRecType#rec
-  (\ (lrt:LetRecType) -> (F: LRTInput lrt -> sort 0) ->
-                         ((args: LRTInput lrt) -> F args) -> lrt1Pi lrt F)
-  (\ (_:sort 0) -> \ (F: #() -> sort 0) (f : (args:#()) -> F args) -> f ())
-  (\ (a:sort 0) (lrtF: a -> LetRecType)
-     (rec: (x:a) -> (F: LRTInput (lrtF x) -> sort 0) ->
-                    ((args: LRTInput (lrtF x)) -> F args) -> lrt1Pi (lrtF x) F)
-     (F: LRTInput (LRT_Fun a lrtF) -> sort 0)
-     (f : (args: LRTInput (LRT_Fun a lrtF)) -> F args) (x:a) ->
-     rec x (\ (args:LRTInput (lrtF x)) ->
-              F (exists a (\ (y:a) -> LRTInput (lrtF y)) x args))
-           (\ (args:LRTInput (lrtF x)) ->
-              f (exists a (\ (y:a) -> LRTInput (lrtF y)) x args)))
-  lrt_top;
-
--- A recursive frame is a list of types for recursive functions all bound
--- same time
-RecFrame : sort 1;
-RecFrame = (List1 LetRecType);
-
--- Get the nth element of a RecFrame, or void -> void if n is too big
-nthLRT : List1 LetRecType -> Nat -> LetRecType;
-nthLRT lrts =
+-- Map a function across a List1
+map1 : (a b:sort 1) -> (f : a -> b) -> List1 a -> List1 b;
+map1 a b f l =
   List1#rec
-  LetRecType
-  (\ (lrts:List1 LetRecType) -> Nat -> LetRecType)
-  (\ (_:Nat) -> LRT_Fun Void (\ (_:Void) -> LRT_Ret Void))
-  (\ (lrt:LetRecType) (_:List1 LetRecType) (rec:Nat -> LetRecType) (n:Nat) ->
-     Nat#rec (\ (_:Nat) -> LetRecType) lrt (\ (m:Nat) (_:LetRecType) -> rec m) n)
-  lrts;
+    a (\ (_:List1 a) -> List1 b) (Nil1 b)
+    (\ (x:a) (_:List1 a) (rec:List1 b) -> Cons1 b (f x) rec) l;
 
--- A recursive call to one of the functions in a RecFrame
-data FrameCall (frame : RecFrame) : sort 0 where {
-  FrameCallOfArgs : (n:Nat) -> LRTInput (nthLRT frame n) -> FrameCall frame;
-}
-
--- Make a recursive call from its individual arguments
-mkFrameCall : (frame:RecFrame) -> (n:Nat) ->
-              lrt1Pi (nthLRT frame n) (\ (_:LRTInput (nthLRT frame n)) ->
-                                         FrameCall frame);
-mkFrameCall frame n =
-  lrtLambda (nthLRT frame n) (\ (_:LRTInput (nthLRT frame n)) -> FrameCall frame)
-            (\ (args:LRTInput (nthLRT frame n)) -> FrameCallOfArgs frame n args);
-
--- The return type for calling a recursive function in a RecFrame
-FrameCallRet : (frame:RecFrame) -> FrameCall frame -> sort 0;
-FrameCallRet frame call =
-  FrameCall#rec
-  frame
-  (\ (_:FrameCall frame) -> sort 0)
-  (\ (n:Nat) (args:LRTInput (nthLRT frame n)) -> LRTOutput (nthLRT frame n) args)
-  call;
-
--- A function stack is a list of values of type LetRecTypes, which intuitively
--- represents a stack of bindings of mutually recursive functions
-FunStack : sort 1;
-FunStack = List1 (List1 LetRecType);
-
--- The empty FunStack
-emptyFunStack : FunStack;
-emptyFunStack = Nil1 (List1 LetRecType);
-
--- Push a frame, represented by a LetRecTypes list, onto the top of a FunStack
-pushFunStack : List1 LetRecType -> FunStack -> FunStack;
-pushFunStack frame stack = Cons1 (List1 LetRecType) frame stack;
-
--- The type of FunStackE E stack: either an error (represented as a String),
--- an E, or a FrameCall from stack
-FunStackE_type : (E:EvType) -> FunStack -> sort 0;
-FunStackE_type E stack =
-  List1#rec
-  (List1 LetRecType)
-  (\ (_:FunStack) -> sort 0)
-  (Either String (evTypeType E))
-  (\ (frame:List1 LetRecType) -> \ (_:FunStack) -> \ (E':sort 0) ->
-     Either (FrameCall frame) E')
-  stack;
-
--- The encoding of FunStackE E stack: Void if the event is an error, the
--- encoding of E if the event is an E, or the return type of the FrameCall
--- if the event is a FrameCall
-FunStackE_enc : (E:EvType) -> (stack:FunStack) -> FunStackE_type E stack -> sort 0;
-FunStackE_enc E stack =
-  List1#rec
-  (List1 LetRecType)
-  (\ (stack:FunStack) -> FunStackE_type E stack -> sort 0)
-  (\ (e:Either String (evTypeType E)) ->
-     Either#rec String (evTypeType E) (\ (_:Either String (evTypeType E)) -> sort 0)
-       (\ (_:String) -> Void) (evRetType E) e)
-  (\ (frame:List1 LetRecType) -> \ (stack:FunStack) -> \ (rec:FunStackE_type E stack -> sort 0) ->
-   \ (e:Either (FrameCall frame) (FunStackE_type E stack)) ->
-     Either#rec (FrameCall frame) (FunStackE_type E stack) (\ (_:Either (FrameCall frame) (FunStackE_type E stack)) -> sort 0)
-       (FrameCallRet frame) rec e)
-  stack;
-
--- The event type corresponding to a FunStack: either an error (represented as
--- a String and encoded as Void), an E, or a FrameCall from stack (encoded as
--- the return type of the FrameCall)
-FunStackE : (E:EvType) -> FunStack -> EvType;
-FunStackE E stack = Build_EvType (FunStackE_type E stack) (FunStackE_enc E stack);
-
-
--- The monad for specifications (FIXME: document this!)
-primitive SpecM : (E:EvType) -> FunStack -> sort 0 -> sort 0;
-
-
--- SpecPreRel E1 E2 stack1 stack2 is a relation on FunStackE E1 stack1 and
--- FunStackE E2 stack2. This is the type of the postcondition needed for
--- refinesS.
-SpecPreRel : (E1:EvType) -> (E2:EvType) ->
-             (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
-SpecPreRel E1 E2 stack1 stack2 =
-  FunStackE_type E1 stack1 -> FunStackE_type E2 stack2 -> Prop;
-
--- SpecPreRel E1 E2 stack1 stack2 is a relation on the encodings of e1 and e2,
--- for all e1 of type FunStackE E1 stack1 and e2 of type FunStackE E2 stack2.
--- This is the type of the postcondition needed for refinesS.
-SpecPostRel : (E1:EvType) -> (E2:EvType) ->
-              (stack1:FunStack) -> (stack2:FunStack) -> sort 0;
-SpecPostRel E1 E2 stack1 stack2 =
-  (e1:FunStackE_type E1 stack1) -> (e2:FunStackE_type E2 stack2) ->
-  FunStackE_enc E1 stack1 e1 -> FunStackE_enc E2 stack2 e2 -> Prop;
-
--- SpecRetRel R1 R2 is a relation on R1 and R2. This is the type of the return
--- relation needed for refinesS.
-SpecRetRel : (R1:sort 0) -> (R1:sort 0) -> sort 0;
-SpecRetRel R1 R2 = R1 -> R2 -> Prop;
-
--- The precondition requiring that errors, events, and FrameCalls match up and
--- are equal on both sides
-eqPreRel : (E:EvType) -> (stack:FunStack) -> SpecPreRel E E stack stack;
-eqPreRel E stack e1 e2 =
-  Eq (FunStackE_type E stack) e1 e2;
-
--- The postcondition stating that errors, event encodings, and return values
--- of FrameCalls match up and are equal on both sides
-eqPostRel : (E:EvType) -> (stack:FunStack) -> SpecPostRel E E stack stack;
-eqPostRel E stack e1 e2 a1 a2 =
-  EqDep (FunStackE_type E stack) (FunStackE_enc E stack) e1 a1 e2 a2;
-
--- The return relation requiring the returned values on both sides to be equal
-eqRR : (R:sort 0) -> SpecRetRel R R;
-eqRR R r1 r2 = Eq R r1 r2;
-
--- Refinement of SpecM computations
-primitive refinesS : (E1:EvType) -> (E2:EvType) ->
-                     (stack1:FunStack) -> (stack2:FunStack) ->
-                     (RPre:SpecPreRel E1 E2 stack1 stack2) ->
-                     (RPost:SpecPostRel E1 E2 stack1 stack2) ->
-                     (R1:sort 0) -> (R2:sort 0) -> (RR:SpecRetRel R1 R2) ->
-                     SpecM E1 stack1 R1 -> SpecM E2 stack2 R2 -> Prop;
-
--- Homogeneous refinement of SpecM computations - i.e. refinesS with eqPreRel for
--- the precondition, eqPostRel for the postcondition, and eqRR for the return relation
-refinesS_eq : (E:EvType) -> (stack:FunStack) -> (R:sort 0) ->
-              SpecM E stack R -> SpecM E stack R -> Prop;
-refinesS_eq E stack R =
-  refinesS E E stack stack (eqPreRel E stack) (eqPostRel E stack) R R (eqRR R);
-
-
--- Return for SpecM
-primitive retS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> a ->
-                 SpecM E stack a;
-
--- Bind for SpecM
-primitive bindS : (E:EvType) -> (stack:FunStack) ->
-                  (a b:sort 0) -> SpecM E stack a ->
-                  (a -> SpecM E stack b) -> SpecM E stack b;
-
--- Trigger an event in type E, returning its return type
-primitive triggerS : (E:EvType) -> (stack:FunStack) -> (e:evTypeType E) ->
-                     SpecM E stack (evRetType E e);
-
--- Signal an error in SpecM
-primitive errorS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> String ->
-                   SpecM E stack a;
-
--- The spec that universally quantifies over all return values of type a
-primitive forallS : (E:EvType) -> (stack:FunStack) -> (a:qsort 0) ->
-                    SpecM E stack a;
-
--- The spec that existentially quantifies over all return values of type a
-primitive existsS : (E:EvType) -> (stack:FunStack) -> (a:qsort 0) ->
-                    SpecM E stack a;
-
--- Assume a proposition holds
-primitive assumeS : (E:EvType) -> (stack:FunStack) ->
-                    (p:Prop) -> SpecM E stack #();
-
--- Assume a Boolean value is true
-assumeBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
-assumeBoolS E stack b = assumeS E stack (EqTrue b);
-
--- The specification which assumes that the first argument is True and then
--- runs the second argument
-assumingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
-            SpecM E stack a -> SpecM E stack a;
-assumingS E stack a cond m =
-  bindS E stack #() a (assumeBoolS E stack cond) (\ (_:#()) -> m);
-
--- Assert a proposition holds
-primitive assertS : (E:EvType) -> (stack:FunStack) ->
-                    (p:Prop) -> SpecM E stack #();
-
--- Assert a Boolean value is true
-assertBoolS : (E:EvType) -> (stack:FunStack) -> Bool -> SpecM E stack #();
-assertBoolS E stack b = assertS E stack (EqTrue b);
-
--- The specification which asserts that the first argument is True and then
--- runs the second argument
-assertingS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) -> Bool ->
-            SpecM E stack a -> SpecM E stack a;
-assertingS E stack a cond m =
-  bindS E stack #() a (assertBoolS E stack cond) (\ (_:#()) -> m);
-
--- Lift a computation into a stack with an additional frame
-primitive pushStackS : (E:EvType) -> (frame:List1 LetRecType) ->
-                       (stack:FunStack) -> (A:sort 0) ->
-                       SpecM E stack A -> SpecM E (pushFunStack frame stack) A;
-
--- Lift a computation in the empty stack to an arbitrary stack
-liftStackS : (E:EvType) -> (stack:FunStack) -> (A:sort 0) ->
-             SpecM E emptyFunStack A -> SpecM E stack A;
-liftStackS E stack A m0 =
-  List1#rec
-  (List1 LetRecType)
-  (\ (stack:FunStack) -> SpecM E stack A)
-  m0
-  (\ (frame:List1 LetRecType) (stack:FunStack) (m:SpecM E stack A) ->
-     pushStackS E frame stack A m)
-  stack;
-
--- The computation that nondeterministically chooses one computation or another.
--- As a specification, represents the disjunction of two specifications.
-orS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) ->
-      SpecM E stack a -> SpecM E stack a -> SpecM E stack a;
-orS E stack a m1 m2 =
-  bindS E stack Bool a (existsS E stack Bool)
-        (\ (b:Bool) -> ite (SpecM E stack a) b m1 m2);
-
--- Return the type represented by a LetRecType
-LRTType : (E:EvType) -> FunStack -> LetRecType -> sort 0;
-LRTType E stack lrt =
-  lrt1Pi lrt (\ (args:LRTInput lrt) -> SpecM E stack (LRTOutput lrt args));
-
--- Build the right-nested tuple type (T1 * (T2 * ... (Tn * #()))) where each Ti
--- is the result of calling LRTType on the ith LetRecType in a list
-FrameTuple : (E:EvType) -> FunStack -> List1 LetRecType -> sort 0;
-FrameTuple E stack lrts =
-  List1#rec
-  LetRecType
-  (\ (_:List1 LetRecType) -> sort 0)
-  #()
-  (\ (lrt:LetRecType) (_:List1 LetRecType) (rest:sort 0) ->
-     (LRTType E stack lrt) * rest)
-  lrts;
-
--- A recursive call to a function in the top frame of a function stack
-primitive callS :
-  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
-  (call : FrameCall frame) ->
-  SpecM E (pushFunStack frame stack) (FrameCallRet frame call);
-
--- Bind a collection of recursive functions whose types are given by a frame of
--- LetRecTypes and whose bodies are given by an FrameTuple, and call the nth one
-primitive multiFixS :
-  (E:EvType) -> (stack:FunStack) -> (frame:List1 LetRecType) ->
-  FrameTuple E (pushFunStack frame stack) frame ->
-  (call : FrameCall frame) ->
-  SpecM E stack (FrameCallRet frame call);
-
--- Build a frame with a single function
-singletonFrame : LetRecType -> List1 LetRecType;
-singletonFrame lrt = Cons1 LetRecType lrt (Nil1 LetRecType);
-
--- Build a frame with a single function of a single input type
-fixSFrame : (a:sort 0) -> (b:a -> sort 0) -> List1 LetRecType;
-fixSFrame a b = singletonFrame (LRT_Fun a (\ (x:a) -> LRT_Ret (b x)));
-
--- Build a stack with a single fixS frame
-fixSStack : (a:sort 0) -> (b:a -> sort 0) -> FunStack;
-fixSStack a b = pushFunStack (fixSFrame a b) emptyFunStack;
-
--- Helper type for fixS
-fixSFun : (E:EvType) -> (stack:FunStack) ->
-          (a:sort 0) -> (b:a -> sort 0) -> sort 0;
-fixSFun E stack a b =
-  (x:a) -> SpecM E (pushFunStack (fixSFrame a b) stack) (b x);
-
--- Bind a single recursive function with a single input and pass it the given
--- input argument
-fixS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) -> (b:a -> sort 0) ->
-       (fixSFun E stack a b -> fixSFun E stack a b) ->
-       (x:a) -> SpecM E stack (b x);
-fixS E stack a b body_f x_top =
-  multiFixS
-    E stack (fixSFrame a b)
-    (body_f (\ (x:a) ->
-               callS E stack (fixSFrame a b)
-                     (mkFrameCall (fixSFrame a b) 0 x)), ())
-    (mkFrameCall (fixSFrame a b) 0 x_top);
-
--- Build a multi-argument fixed-point of type A1 -> ... -> An -> SpecM B
-multiArgFixS : (E:EvType) -> (stack:FunStack) -> (lrt:LetRecType) ->
-               (LRTType E (pushFunStack (singletonFrame lrt) stack) lrt ->
-                LRTType E (pushFunStack (singletonFrame lrt) stack) lrt) ->
-               LRTType E stack lrt;
-multiArgFixS E stack lrt body_f =
-  lrtLambda
-    lrt (\ (args:LRTInput lrt) -> SpecM E stack (LRTOutput lrt args))
-    (\ (top_args:LRTInput lrt) ->
-       multiFixS
-         E stack (singletonFrame lrt)
-         (body_f
-            (lrtLambda
-               lrt (\ (args:LRTInput lrt) ->
-                      SpecM E (pushFunStack (singletonFrame lrt) stack)
-                            (LRTOutput lrt args))
-               (\ (args:LRTInput lrt) ->
-                  callS E stack (singletonFrame lrt)
-                        (FrameCallOfArgs (singletonFrame lrt) 0 args))), ())
-         (FrameCallOfArgs (singletonFrame lrt) 0 top_args));
-
--- Apply a pure function to the result of a computation
-fmapS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) -> (a -> b) ->
-        SpecM E stack a ->
-        SpecM E stack b;
-fmapS E stack a b f m =
-      bindS E stack a b m (\ (x:a) -> retS E stack b (f x));
-
--- Apply a computation of a function to a computation of an argument
-applyS : (E:EvType) -> (stack:FunStack) -> (a b:sort 0) ->
-         SpecM E stack (a -> b) ->
-         SpecM E stack a -> SpecM E stack b;
-applyS E stack a b fm m =
-  bindS E stack (a -> b) b fm (\ (f:a -> b) ->
-    bindS E stack a b m (\ (x:a) -> retS E stack b (f x)));
-
--- Apply a binary pure function to a computation
-fmapS2 : (E:EvType) -> (stack:FunStack) -> (a b c:sort 0) -> (a -> b -> c) ->
-         SpecM E stack a -> SpecM E stack b ->
-         SpecM E stack c;
-fmapS2 E stack a b c f m1 m2 =
-  applyS E stack b c (fmapS E stack a (b -> c) f m1) m2;
-
--- Apply a trinary pure function to a computation
-fmapS3 : (E:EvType) -> (stack:FunStack) ->
-         (a b c d:sort 0) -> (a -> b -> c -> d) ->
-         SpecM E stack a -> SpecM E stack b ->
-         SpecM E stack c -> SpecM E stack d;
-fmapS3 E stack a b c d f m1 m2 m3 =
-  applyS E stack c d (fmapS2 E stack a b (c -> d) f m1 m2) m3;
-
--- Bind two values and pass them to a binary function
-bindS2 : (E:EvType) -> (stack:FunStack) -> (a b c:sort 0) ->
-         SpecM E stack a ->
-         SpecM E stack b -> (a -> b -> SpecM E stack c) ->
-         SpecM E stack c;
-bindS2 E stack a b c m1 m2 k =
-  bindS E stack a c m1
-  (\ (x:a) -> bindS E stack b c m2 (\ (y:b) -> k x y));
-
--- Bind three values and pass them to a trinary function
-bindS3 : (E:EvType) -> (stack:FunStack) ->
-         (a b c d:sort 0) -> SpecM E stack a ->
-         SpecM E stack b -> SpecM E stack c ->
-         (a -> b -> c -> SpecM E stack d) -> SpecM E stack d;
-bindS3 E stack a b c d m1 m2 m3 k =
-  bindS E stack a d m1
-        (\ (x:a) -> bindS2 E stack b c d m2 m3 (k x));
-
--- A version of bind that takes the function first
-bindApplyS : (E:EvType) -> (stack:FunStack) ->
-             (a b:sort 0) -> (a -> SpecM E stack b) ->
-             SpecM E stack a -> SpecM E stack b;
-bindApplyS E stack a b k m =
-  bindS E stack a b m k;
-
--- A version of bindS2 that takes the function first
-bindApplyS2 : (E:EvType) -> (stack:FunStack) ->
-              (a b c:sort 0) -> (a -> b -> SpecM E stack c) ->
-              SpecM E stack a -> SpecM E stack b ->
-              SpecM E stack c;
-bindApplyS2 E stack a b c k m1 m2 =
-  bindS2 E stack a b c m1 m2 k;
-
--- A version of bindS3 that takes the function first
-bindApplyS3 : (E:EvType) -> (stack:FunStack) ->
-              (a b c d:sort 0) -> (a -> b -> c -> SpecM E stack d) ->
-              SpecM E stack a -> SpecM E stack b ->
-              SpecM E stack c -> SpecM E stack d;
-bindApplyS3 E stack a b c d k m1 m2 m3 =
-  bindS3 E stack a b c d m1 m2 m3 k;
-
--- Compose two monadic functions
-composeS : (E:EvType) -> (stack:FunStack) ->
-           (a b c:sort 0) -> (a -> SpecM E stack b) ->
-           (b -> SpecM E stack c) -> a -> SpecM E stack c;
-composeS E stack a b c k1 k2 x =
-  bindS E stack b c (k1 x) k2;
-
--- Tuple a type onto the input and output types of a monadic function
-tupleSpecMFunBoth : (E:EvType) -> (stack:FunStack) ->
-                    (a b c:sort 0) -> (a -> SpecM E stack b) ->
-                    (c * a -> SpecM E stack (c * b));
-tupleSpecMFunBoth E stack a b c k =
-  \ (x: c * a) ->
-    bindS E stack b (c * b) (k x.(2))
-          (\ (y:b) -> retS E stack (c*b) (x.(1), y));
-
--- Tuple a value onto the output of a monadic function
-tupleSpecMFunOut : (E:EvType) -> (stack:FunStack) -> (a b c:sort 0) ->
-  c -> (a -> SpecM E stack b) -> (a -> SpecM E stack (c*b));
-tupleSpecMFunOut E stack a b c x f =
-  \ (y:a) -> bindS E stack b (c*b) (f y)
-             (\ (z:b) -> retS E stack (c*b) (x,z));
-
--- Map a monadic function across a vector
-mapS : (E:EvType) -> (stack:FunStack) -> (a:sort 0) ->
-       (b:isort 0) -> (a -> SpecM E stack b) -> (n:Nat) -> Vec n a ->
-       SpecM E stack (Vec n b);
-mapS E stack a b f =
-  Nat__rec
-    (\ (n:Nat) -> Vec n a -> SpecM E stack (Vec n b))
-    (\ (_:Vec 0 a) -> retS E stack (Vec 0 b) (EmptyVec b))
-    (\ (n:Nat) (rec_f:Vec n a -> SpecM E stack (Vec n b))
-       (v:Vec (Succ n) a) ->
-      fmapS2 E stack b (Vec n b) (Vec (Succ n) b)
-        (\ (hd:b) (tl:Vec n b) -> ConsVec b hd n tl)
-        (f (head n a v))
-        (rec_f (tail n a v)));
-
--- Map a monadic function across a BVVec
-mapBVVecS : (E:EvType) -> (stack:FunStack) ->
-            (a : sort 0) -> (b : isort 0) -> (a -> SpecM E stack b) ->
-            (n : Nat) -> (len : Vec n Bool) -> BVVec n len a ->
-            SpecM E stack (BVVec n len b);
-mapBVVecS E stack a b f n len = mapS E stack a b f (bvToNat n len);
-
--- Cast a vector between lengths, testing that those lengths are equal
-castVecS : (E:EvType) -> (stack:FunStack) -> (a : sort 0) ->
-           (n1 : Nat) -> (n2 : Nat) -> Vec n1 a ->
-           SpecM E stack (Vec n2 a);
-castVecS E stack a n1 n2 v =
-  maybe
-    (Eq Nat n1 n2) (SpecM E stack (Vec n2 a))
-    (errorS E stack (Vec n2 a) "Could not cast Vec")
-    (\ (pf:Eq Nat n1 n2) ->
-       retS
-         E stack (Vec n2 a)
-         (coerce (Vec n1 a) (Vec n2 a)
-                 (eq_cong Nat n1 n2 pf (sort 0) (\ (n:Nat) -> Vec n a))
-                 v))
-    (proveEqNat n1 n2);
-
--- Append two BVVecs and cast the resulting size, if possible
-appendCastBVVecS : (E:EvType) -> (stack:FunStack) ->
-                   (n : Nat) -> (len1 len2 len3 : Vec n Bool) -> (a : sort 0) ->
-                   BVVec n len1 a -> BVVec n len2 a ->
-                   SpecM E stack (BVVec n len3 a);
-appendCastBVVecS E stack n len1 len2 len3 a v1 v2 =
-  maybe
-    (Eq (Vec n Bool) (bvAdd n len1 len2) len3) (SpecM E stack (BVVec n len3 a))
-    (errorS E stack (BVVec n len3 a) "Could not cast BVVec")
-    (\ (pf:Eq (Vec n Bool) (bvAdd n len1 len2) len3) ->
-       retS
-         E stack (BVVec n len3 a)
-         (coerce (BVVec n (bvAdd n len1 len2) a) (BVVec n len3 a)
-                 (eq_cong (Vec n Bool) (bvAdd n len1 len2) len3 pf
-                          (sort 0) (\ (l:Vec n Bool) -> BVVec n l a))
-                 (appendBVVec n len1 len2 a v1 v2)))
-    (bvEqWithProof n (bvAdd n len1 len2) len3);
+-- Return the nth element of a List1, or a default value if n is too big
+nth_default1 : (a:sort 1) -> a -> List1 a -> Nat -> a;
+nth_default1 a d l =
+  List1#rec a (\ (_:List1 a) -> Nat -> a)
+    (\ (_:Nat) -> d)
+    (\ (x:a) (_:List1 a) (rec:Nat -> a) (n:Nat) ->
+       Nat_cases a x (\ (m:Nat) (_:a) -> rec m) n)
+    l;
 
 
 --------------------------------------------------------------------------------

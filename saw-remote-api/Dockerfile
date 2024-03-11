@@ -28,7 +28,10 @@ RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal v2-exec which saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
 WORKDIR /home/saw//rootfs/usr/local/bin
-RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20221212/ubuntu-22.04-bin.zip"
+# The URL here is based on the same logic used to specify BUILD_TARGET_OS and
+# BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to x86-64
+# Ubuntu.
+RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20240212/ubuntu-22.04-X64-bin.zip"
 RUN unzip solvers.zip && rm solvers.zip && chmod +x *
 USER root
 RUN chown -R root:root /home/saw/rootfs

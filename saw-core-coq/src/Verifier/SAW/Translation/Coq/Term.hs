@@ -211,7 +211,7 @@ withSharedTerms ((idx,t):ts) f =
 
 
 -- | The set of reserved identifiers in Coq, obtained from section
--- "Gallina Specification Language" of the Coq reference manual.
+-- \"Gallina Specification Language\" of the Coq reference manual.
 -- <https://coq.inria.fr/refman/language/gallina-specification-language.html>
 reservedIdents :: Set.Set Coq.Ident
 reservedIdents =
@@ -476,7 +476,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       r_trans <- translateTerm r
       return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit (Text.unpack f)])
 
--- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
+-- | Recognizes an @App (App "Cryptol.seq" n) x@ and returns @(n, x)@.
 asSeq :: Recognizer Term (Term, Term)
 asSeq t = do (f, args) <- asApplyAllRecognizer t
              fid <- asGlobalDef f
@@ -719,7 +719,7 @@ translateTermUnshared t = do
     badTerm          = Except.throwError $ BadTerm t
 
 -- | In order to turn fixpoint computations into iterative computations, we need
--- to be able to create "dummy" values at the type of the computation.
+-- to be able to create \"dummy\" values at the type of the computation.
 defaultTermForType ::
   TermTranslationMonad m =>
   Term -> m Coq.Term

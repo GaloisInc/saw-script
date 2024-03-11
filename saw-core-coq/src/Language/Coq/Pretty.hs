@@ -22,7 +22,7 @@ import Prelude hiding ((<$>), (<>))
 -- @""@, i.e., two copies of it, as this is how Coq escapes double quote
 -- characters.
 escapeStringLit :: String -> String
-escapeStringLit = concat . map (\c -> if c == '"' then "\"\"" else [c])
+escapeStringLit = concatMap (\c -> if c == '"' then "\"\"" else [c])
 
 text :: String -> Doc ann
 text = pretty
@@ -99,11 +99,11 @@ ppTerm p e =
   case e of
     Lambda bs t ->
       parensIf (p > PrecLambda) $
-      (text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm PrecLambda t)
+      text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm PrecLambda t
     Fix ident binders returnType body ->
       parensIf (p > PrecLambda) $
-      (text "fix" <+> text ident <+> ppBinders binders <+> text ":"
-             <+> ppTerm PrecNone returnType <+> text ":=" <+> ppTerm PrecLambda body)
+      text "fix" <+> text ident <+> ppBinders binders <+> text ":"
+        <+> ppTerm PrecNone returnType <+> text ":=" <+> ppTerm PrecLambda body
     Pi bs t ->
       parensIf (p > PrecLambda) $
       ppPi bs <+> ppTerm PrecLambda t
@@ -156,24 +156,28 @@ ppTerm p e =
 ppDecl :: Decl -> Doc ann
 ppDecl decl = case decl of
   Axiom nm ty ->
-    (nest 2 $
-     hsep ([text "Axiom", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+    nest 2 (
+      hsep [text "Axiom", text nm, text ":", ppTerm PrecNone ty, period]
+    ) <> hardline
   Parameter nm ty ->
-    (nest 2 $
-     hsep ([text "Parameter", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+    nest 2 (
+     hsep [text "Parameter", text nm, text ":", ppTerm PrecNone ty, period]
+    ) <> hardline
   Variable nm ty ->
-    (nest 2 $
-     hsep ([text "Variable", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
+    nest 2 (
+      hsep [text "Variable", text nm, text ":", ppTerm PrecNone ty, period]
+    ) <> hardline
   Comment s ->
     text "(*" <+> text s <+> text "*)" <> hardline
   Definition nm bs mty body ->
-    (nest 2 $
-     vsep
-     [ hsep ([text "Definition", text nm] ++
-            map ppBinder bs ++
-            [ppMaybeTy mty, text ":="])
-     , ppTerm PrecNone body <> period
-     ]) <> hardline
+    nest 2 (
+      vsep
+      [ hsep ([text "Definition", text nm] ++
+             map ppBinder bs ++
+             [ppMaybeTy mty, text ":="])
+      , ppTerm PrecNone body <> period
+      ]
+    ) <> hardline
   InductiveDecl ind -> ppInductive ind
   Section nm ds ->
     vsep $ concat
@@ -186,12 +190,11 @@ ppDecl decl = case decl of
 ppConstructor :: Constructor -> Doc ann
 ppConstructor (Constructor {..}) =
   nest 2 $
-  hsep ([ text "|"
-        , text constructorName
-        , text ":"
-        , ppTerm PrecNone constructorType
-        ]
-       )
+  hsep [ text "|"
+       , text constructorName
+       , text ":"
+       , ppTerm PrecNone constructorType
+       ]
 
 ppInductive :: Inductive -> Doc ann
 ppInductive (Inductive {..}) =

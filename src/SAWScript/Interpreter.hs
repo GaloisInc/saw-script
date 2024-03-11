@@ -1595,18 +1595,18 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_primitives_for_sawcore"
-    "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    "String -> String -> String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqCryptolPrimitivesForSAWCore)
     Experimental
     [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore and "
     , "CryptolM.sawcore in Gallina syntax for Coq."
-    , "The first two arguments are the names of the output files for translating "
-    , "Cryptol.sawcore and CryptolM.sawcore, respectively."
+    , "The first three arguments are the names of the output files for translating "
+    , "Cryptol.sawcore, SpecM.sawcore, and CryptolM.sawcore, respectively."
     , "Use an empty string to output to standard output."
-    , "The third argument is a list of pairs of notation substitutions:"
+    , "The fourth argument is a list of pairs of notation substitutions:"
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
-    , "The fourth argument is a list of identifiers to skip translating."
+    , "The fifth argument is a list of identifiers to skip translating."
     ]
 
   , prim "offline_coq" "String -> ProofScript ()"
@@ -4313,6 +4313,12 @@ primitives = Map.fromList
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
 
+  , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
+    (pureVal mrSolverSetDebugDepth)
+    Experimental
+    [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
+    , "and debug output to a maximum depth" ]
+
   , prim "mrsolver" "ProofScript ()"
     (pureVal (mrSolver emptyRefnset))
     Experimental
@@ -4347,7 +4353,7 @@ primitives = Map.fromList
     [ "Given a list of 'fresh_symbolic' variables over which to quantify"
     , " as as well as two terms containing those variables, which may be"
     , " either terms or functions in the SpecM monad, construct the"
-    , " SAWCore term which is the refinement (`Prelude.refinesS`) of the"
+    , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
     , " given terms, with the given variables generalized with a Pi type." ]
 
     ---------------------------------------------------------------------
@@ -4432,59 +4438,45 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_perm)
     Experimental
-    [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
+    [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
     , " Heapster permission named nm with arguments parsed from args and type"
-    , " parsed from tp that translates to the named type trans"
+    , " tp that translates to the SAW core type trans with type description d"
     ]
 
   , prim "heapster_define_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> [String] -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_recursive_perm)
     Experimental
-    [ "heapster_define_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    [ "heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive"
     , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to the permission"
-    , " p1 \\/ ... \\/ pn, where the pi can contain name."
-    ]
-
-  , prim "heapster_define_irt_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal heapster_define_irt_recursive_perm)
-    Experimental
-    [ "heapster_define_irt_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
-    , " nm with arguments parsed from args_ctx and type parsed from value_type"
-    , " that translates to the appropriate IRT type. The resulting permission"
-    , " is equivalent to the permission p1 \\/ ... \\/ pn, where the pi can"
-    , " contain name."
-    ]
-
-  , prim "heapster_define_irt_recursive_shape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_define_irt_recursive_shape)
-    Experimental
-    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
-    , " defines a recursive named Heapser shape named nm with arguments"
-    , " parsed from args_ctx and width w that translates to the appropriate"
-    , " IRT type. The resulting shape is equivalent to the shape body_sh,"
-    , " where body_sh can contain name."
+    , " type parsed from tp that translates to permissions p, which can"
+    , " resurively use nm (with no arguments) in those permissions"
     ]
 
   , prim "heapster_define_reachability_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_reachability_perm)
     Experimental
-    [ "heapster_define_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
-    , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to he permission"
-    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    [ "heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun"
+    , " defines a recursive named Heapster permission named nm with arguments"
+    , " parsed from args_ctx and type parsed from value_type that unfolds to p,"
+    , " which should form a reachability permission, meaning that it should"
+    , " have the form eq(x) or q for some permission q, where x is the last"
+    , " argument argument in arg_ctx and q can contain nm with no arguments to"
+    , " refer to the entire permission recursively."
+    ]
+
+  , prim "heapster_define_recursive_shape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_recursive_shape)
+    Experimental
+    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
+    , " defines a recursive named Heapser shape named nm with arguments"
+    , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
+    , " whichx can contain name for recursive occurrences of the shape"
     ]
 
   , prim "heapster_define_perm"
@@ -4506,10 +4498,10 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_llvmshape)
     Experimental
-    [ "heapster_define_opaque_llvmshape henv nm w args len tp defines a Heapster"
+    [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
     , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
     , " Heapster does not know or care about the contents of memory of this shape"
     , " but instead treats that memory as an opaque object, defined only by its"
@@ -4518,8 +4510,9 @@ primitives = Map.fromList
     , " The henv argument is the Heapster environment this new shape is added to,"
     , " nm is its name, args is a context of argument variables for this shape,"
     , " len is an expression for the length of the shape in terms of the arguments,"
-    , " and tp gives the translation of the shape as a SAW core type over the"
-    , " translation of the arguments to SAW core variables."
+    , " tp gives the translation of the shape as a SAW core type over the"
+    , " translation of the arguments to SAW core variables, and d is a SAW core"
+    , " term of type TpDesc that describes the SAW core type."
     ]
 
   , prim "heapster_define_rust_type"

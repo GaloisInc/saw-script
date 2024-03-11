@@ -62,6 +62,7 @@ import Verifier.SAW.Term.Functor (Ident)
 import Lang.Crucible.LLVM.Bytes
 
 import Data.Binding.Hobbits
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
@@ -972,7 +973,7 @@ data SimplImpl ps_in ps_out where
   -- current lifetime and part that is saved in the lifetime for later:
   --
   -- > x:F<l,rws> * l:[l2]lcurrent * l2:lowned[ls] (ps_in -o ps_out)
-  -- >   -o x:F<l2,rws> * l2:lowned[ls](x:F<l2,Rs>, ps_in -o x:F<l,rws>, ps_out)
+  -- >   -o x:F<l2,rws> * l2:lowned[ls](ps_in, x:F<l2,Rs> -o ps_out, x:F<l,rws>)
   --
   -- Note that this rule also supports @l=always@, in which case the
   -- @l:[l2]lcurrent@ permission is replaced by @l2:true@ (as a hack, because it
@@ -1115,6 +1116,20 @@ data SimplImpl ps_in ps_out where
   -- > x:memblock(rw,l,off,len,emptysh)
   -- >   -o x:[l]array(rw,off,<len,*1,fieldsh(true),[])
   SImpl_ElimLLVMBlockToBytes ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Add a tuple shape around the shape of a @memblock@ permission
+  --
+  -- > x:memblock(rw,l,off,len,sh) -o x:memblock(rw,l,off,len,tuplesh(sh))
+  SImpl_IntroLLVMBlockTuple ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Eliminate a tuple shape in a @memblock@ permission
+  --
+  -- > x:memblock(rw,l,off,len,tuplesh(sh)) -o x:memblock(rw,l,off,len,sh)
+  SImpl_ElimLLVMBlockTuple ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
@@ -1465,7 +1480,9 @@ data PermImpl1 ps_in ps_outs where
   -- same input permissions to both branches:
   --
   -- > ps -o ps \/ ps
-  Impl1_Catch :: PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
+  --
+  -- The 'String' gives debug info about why the algorithm inserted the catch.
+  Impl1_Catch :: String -> PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
 
   -- | Push the primary permission for variable @x@ onto the stack:
   --
@@ -1484,7 +1501,11 @@ data PermImpl1 ps_in ps_outs where
   --
   -- > ps * x:(p1 \/ (p2 \/ (... \/ pn)))
   -- >   -o (ps * x:p1) \/ ... \/ (ps * x:pn)
-  Impl1_ElimOrs :: ExprVar a -> OrList ps a disjs -> PermImpl1 (ps :> a) disjs
+  --
+  -- The 'String' is contains the printed version of the @x:(p1 \/ ...)@
+  -- permission that is being eliminated, for debug info.
+  Impl1_ElimOrs :: String -> ExprVar a -> OrList ps a disjs ->
+                   PermImpl1 (ps :> a) disjs
 
   -- | Eliminate an existential on the top of the stack:
   --
@@ -1635,7 +1656,7 @@ type OrList ps a = RAssign (OrListDisj ps a)
 -- disjunct on the right of the judgment corresponds to a different leaf in the
 -- tree, while each @Gammai@ denotes the variables that are bound on the path
 -- from the root to that leaf. The @ps@ argument captures the form of the
--- "distinguished" left-hand side permissions @Pl@.
+-- \"distinguished\" left-hand side permissions @Pl@.
 --
 -- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
 -- top of the stack
@@ -1665,7 +1686,7 @@ data MbPermImpls r bs_pss where
 newtype LocalPermImpl ps_in ps_out =
   LocalPermImpl (PermImpl (LocalImplRet ps_out) ps_in)
 
--- | The "success" condition of a 'LocalPermImpl', which essentially is just a
+-- | The \"success\" condition of a 'LocalPermImpl', which essentially is just a
 -- type equality stating that the output permissions are as expected
 newtype LocalImplRet ps ps' = LocalImplRet (ps :~: ps')
 
@@ -1845,15 +1866,15 @@ permImplCatch pimpl1 pimpl2 =
 -}
 
 
--- | Test if a 'PermImpl' "succeeds", meaning there is at least one non-failing
--- branch. If it does succeed, return a heuristic number for how "well" it
+-- | Test if a 'PermImpl' \"succeeds\", meaning there is at least one non-failing
+-- branch. If it does succeed, return a heuristic number for how \"well\" it
 -- succeeds; e.g., rate a 'PermImpl' higher if all disjunctive branches succeed,
 -- that is, if both children of every 'Impl1_ElimOr' succeed. Return 0 if the
 -- 'PermImpl' does not succeed at all.
 permImplSucceeds :: PermImpl r ps -> Int
 permImplSucceeds (PermImpl_Done _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Fail _) _) = 0
-permImplSucceeds (PermImpl_Step Impl1_Catch
+permImplSucceeds (PermImpl_Step (Impl1_Catch _)
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
   max (mbLift $ fmap permImplSucceeds mb_impl1)
   (mbLift $ fmap permImplSucceeds mb_impl2)
@@ -1861,7 +1882,7 @@ permImplSucceeds (PermImpl_Step (Impl1_Push _ _) (MbPermImpls_Cons _ _ mb_impl))
   mbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Pop _ _) (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
-permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ ) mb_impls) =
+permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ _) mb_impls) =
   mbImplsSucc mb_impls where
   mbImplsSucc :: MbPermImpls r ps_outs -> Int
   mbImplsSucc MbPermImpls_Nil = 0
@@ -2156,6 +2177,11 @@ simplImplIn (SImpl_CoerceLLVMBlockEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_ElimLLVMBlockToBytes x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplIn (SImpl_IntroLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplIn (SImpl_ElimLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
+                bp { llvmBlockShape = PExpr_TupShape (llvmBlockShape bp) })
 simplImplIn (SImpl_IntroLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_ElimLLVMBlockSeqEmpty x bp) =
@@ -2478,14 +2504,10 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls tps_in tps_out ps_in ps_out) =
   distPerms2 x (ltFuncApply f args $ PExpr_Var l2)
   l2 (ValPerm_LOwned sub_ls
-      (appendCruCtx (singletonCruCtx $ exprType x) tps_in)
-      (appendCruCtx (singletonCruCtx $ exprType x) tps_out)
-      (RL.append (MNil :>:
-                  ExprAndPerm (PExpr_Var x)
-                  (ltFuncMinApply f (PExpr_Var l2))) ps_in)
-      (RL.append (MNil :>:
-                  ExprAndPerm (PExpr_Var x)
-                  (ltFuncApply f args l)) ps_out))
+      (CruCtxCons tps_in $ exprType x)
+      (CruCtxCons tps_out $ exprType x)
+      (ps_in :>: ExprAndPerm (PExpr_Var x) (ltFuncMinApply f (PExpr_Var l2)))
+      (ps_out :>: ExprAndPerm (PExpr_Var x) (ltFuncApply f args l)))
 simplImplOut (SImpl_SubsumeLifetime l ls tps_in tps_out ps_in ps_out l2) =
   distPerms1 l (ValPerm_LOwned (l2:ls) tps_in tps_out ps_in ps_out)
 simplImplOut (SImpl_ContainedLifetimeCurrent l ls tps_in tps_out ps_in ps_out l2) =
@@ -2537,6 +2559,11 @@ simplImplOut (SImpl_CoerceLLVMBlockEmpty x bp) =
 simplImplOut (SImpl_ElimLLVMBlockToBytes x (LLVMBlockPerm {..})) =
   distPerms1 x (llvmByteArrayPerm llvmBlockOffset llvmBlockLen
                 llvmBlockRW llvmBlockLifetime)
+simplImplOut (SImpl_IntroLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
+                bp { llvmBlockShape = PExpr_TupShape (llvmBlockShape bp) })
+simplImplOut (SImpl_ElimLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplOut (SImpl_IntroLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp { llvmBlockShape =
@@ -2766,7 +2793,7 @@ mbOrListPermImpls
 applyImpl1 :: HasCallStack => PPInfo -> PermImpl1 ps_in ps_outs ->
               PermSet ps_in -> MbPermSets ps_outs
 applyImpl1 _ (Impl1_Fail _) _ = MbPermSets_Nil
-applyImpl1 _ Impl1_Catch ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
+applyImpl1 _ (Impl1_Catch _) ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
 applyImpl1 pp_info (Impl1_Push x p) ps =
   if ps ^. varPerm x == p then
     mbPermSets1 $ emptyMb $ pushPerm x p $ set (varPerm x) ValPerm_True ps
@@ -2790,7 +2817,7 @@ applyImpl1 pp_info (Impl1_Pop x p) ps =
       vsep [pretty "applyImpl1: Impl1_Pop: non-empty permissions for variable"
             <+> permPretty pp_info x <> pretty ":",
             permPretty pp_info (ps ^. varPerm x)]
-applyImpl1 _ (Impl1_ElimOrs x or_list) ps =
+applyImpl1 _ (Impl1_ElimOrs _ x or_list) ps =
   if ps ^. topDistPerm x == orListPerm or_list then
     orListMbPermSets ps x or_list
   else
@@ -3162,6 +3189,10 @@ instance m ~ Identity =>
       SImpl_CoerceLLVMBlockEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockToBytes x bp |] ->
       SImpl_ElimLLVMBlockToBytes <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_IntroLLVMBlockTuple x bp |] ->
+      SImpl_IntroLLVMBlockTuple <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_ElimLLVMBlockTuple x bp |] ->
+      SImpl_ElimLLVMBlockTuple <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_IntroLLVMBlockSeqEmpty x bp |] ->
       SImpl_IntroLLVMBlockSeqEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockSeqEmpty x bp |] ->
@@ -3256,13 +3287,13 @@ instance m ~ Identity =>
          Substable PermVarSubst (PermImpl1 ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
     [nuMP| Impl1_Fail err |] -> Impl1_Fail <$> genSubst s err
-    [nuMP| Impl1_Catch |] -> return Impl1_Catch
+    [nuMP| Impl1_Catch str |] -> return $ Impl1_Catch $ mbLift str
     [nuMP| Impl1_Push x p |] ->
       Impl1_Push <$> genSubst s x <*> genSubst s p
     [nuMP| Impl1_Pop x p |] ->
       Impl1_Pop <$> genSubst s x <*> genSubst s p
-    [nuMP| Impl1_ElimOrs x or_list |] ->
-      Impl1_ElimOrs <$> genSubst s x <*> genSubst s or_list
+    [nuMP| Impl1_ElimOrs str x or_list |] ->
+      Impl1_ElimOrs (mbLift str) <$> genSubst s x <*> genSubst s or_list
     [nuMP| Impl1_ElimExists x p_body |] ->
       Impl1_ElimExists <$> genSubst s x <*> genSubst s p_body
     [nuMP| Impl1_ElimFalse x |] ->
@@ -3964,6 +3995,11 @@ implDebugM reqlvl f =
      let str = renderDoc doc
      debugTrace reqlvl dlevel str (return str)
 
+-- | Pretty-print an object using the current pretty-printing info
+implPrettyM :: NuMatchingAny1 r => PermPretty p => p ->
+               ImplM vars s r ps ps (PP.Doc ann)
+implPrettyM p = uses implStatePPInfo $ \pp_info -> permPretty pp_info p
+
 -- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
 -- is at least 'traceDebugLevel'
 implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
@@ -4001,10 +4037,10 @@ implCatchM :: NuMatchingAny1 r => PermPretty p => String -> p ->
               ImplM vars s r ps1 ps2 a -> ImplM vars s r ps1 ps2 a ->
               ImplM vars s r ps1 ps2 a
 implCatchM f p m1 m2 =
-  implTraceM (\i -> pretty ("Inserting catch in " ++ f ++ " for proving:")
-                    <> line <> permPretty i p) >>>
+  implTraceM (\i -> pretty ("Catch in " ++ f ++ " for proving:")
+                    <> line <> permPretty i p) >>>= \catch_str ->
   implApplyImpl1
-    Impl1_Catch
+    (Impl1_Catch catch_str)
     (MNil
      :>: Impl1Cont (const $
                     implTraceM (\i -> pretty ("Case 1 of catch in " ++ f
@@ -4017,9 +4053,9 @@ implCatchM f p m1 m2 =
                                       <> line <> permPretty i p) >>>
                     m2))
 
--- | "Push" all of the permissions in the permission set for a variable, which
+-- | \"Push\" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
--- from the input permission set. This is like a simple "proof" of @x:p@.
+-- from the input permission set. This is like a simple \"proof\" of @x:p@.
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
@@ -4071,8 +4107,8 @@ implElimOrsM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                 ImplM vars s r (ps :> a) (ps :> a) ()
 implElimOrsM x p@(matchOrList -> Just (Some or_list)) =
   implTraceM (\pp_info -> pretty "Eliminating or:" <+>
-                          permPretty pp_info p) >>>
-  implApplyImpl1 (Impl1_ElimOrs x or_list)
+                          permPretty pp_info (ColonPair x p)) >>>= \xp_pp ->
+  implApplyImpl1 (Impl1_ElimOrs xp_pp x or_list)
   (RL.map (\(OrListDisj _) -> Impl1Cont (const $ pure ())) or_list)
 implElimOrsM _ _ = error "implElimOrsM: malformed input permission"
 
@@ -4455,7 +4491,7 @@ elimOrsExistsNamesM x =
     p -> pure p
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or defined
--- permissions for a variable and then return the resulting "simple" permission
+-- permissions for a variable and then return the resulting \"simple\" permission
 getSimpleVarPerm :: NuMatchingAny1 r => ExprVar a ->
                     ImplM vars s r ps ps (ValuePerm a)
 getSimpleVarPerm x =
@@ -4745,7 +4781,7 @@ introOrRM x p1 p2 = implSimplM Proxy (SImpl_IntroOrR x p1 p2)
 -- | Apply existential introduction to the top of the permission stack, changing
 -- it from @[e/x]p@ to @exists (x:tp).p@
 --
--- FIXME: is there some way we could "type-check" this, to ensure that the
+-- FIXME: is there some way we could \"type-check\" this, to ensure that the
 -- permission on the top of the stack really equals @[e/x]p@?
 introExistsM :: (KnownRepr TypeRepr tp, NuMatchingAny1 r) =>
                 ExprVar a -> PermExpr tp -> Binding tp (ValuePerm a) ->
@@ -5453,7 +5489,7 @@ implElimLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_EmptyShape }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockToBytes x bp)
 
--- If the "natural" length of the shape of a memblock permission is smaller than
+-- If the \"natural\" length of the shape of a memblock permission is smaller than
 -- its actual length, sequence with the empty shape and then eliminate
 implElimLLVMBlock x bp
   | Just sh_len <- llvmShapeLength $ llvmBlockShape bp
@@ -5513,6 +5549,10 @@ implElimLLVMBlock x bp
 --
 -- implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
 --                                           PExpr_ArrayShape _ _ _ }) =
+
+-- For a tuple shape, eliminate the tuple
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_TupShape sh }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockTuple x (bp { llvmBlockShape = sh }))
 
 -- Special case: for shape sh1;emptysh where the natural length of sh1 is the
 -- same as the length of the block permission, eliminate the emptysh, converting
@@ -5632,9 +5672,9 @@ permIndicesForProvingOffset ps imprecise_p off =
 -- it as the return value, and recombine any other permissions that are yielded
 -- by this elimination.
 --
--- The notion of "contains" is determined by the supplied @imprecise_p@ flag: a
--- 'True' makes this mean "could contain" in the sense of 'bvPropCouldHold',
--- while 'False' makes this mean "definitely contains" in the sense of
+-- The notion of \"contains\" is determined by the supplied @imprecise_p@ flag: a
+-- 'True' makes this mean \"could contain\" in the sense of 'bvPropCouldHold',
+-- while 'False' makes this mean \"definitely contains\" in the sense of
 -- 'bvPropHolds'.
 --
 -- If there are multiple ways to eliminate @p@ to a @p'@ that contains @off@
@@ -6142,6 +6182,16 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
       substEqsWithProof e >>= \eqp ->
       setVarM memb (someEqProofRHS eqp) >>> pure eqp
 
+  -- If the RHS is an unset variable z plus an offset o, simplify e using any
+  -- available equality proofs to some e' and set z equal to e' minus o
+  (_, [nuMP| PExpr_LLVMOffset z mb_off |])
+    | Left memb <- mbNameBoundP z
+    , Nothing <- psubstLookup psubst memb
+    , Just off <- partialSubst psubst mb_off ->
+      -- implTraceM (\i -> pretty "proveEqH (unset var + offset):" <+> permPretty i e) >>>
+      substEqsWithProof e >>= \eqp ->
+      setVarM memb (someEqProofRHS eqp `addLLVMOffset` bvNegate off) >>> pure eqp
+
   -- If the RHS is a set variable, substitute for it and recurse
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z
@@ -6583,7 +6633,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' _) (ps_r' :>: _) =
 
 -- | Determine what additional permissions from the current set of variable
 -- permissions, if any, would be needed to prove one list of permissions implies
--- another. This is just a "best guess", so just do nothing and return if
+-- another. This is just a \"best guess\", so just do nothing and return if
 -- nothing can be done.
 --
 -- At a high level, this algorithm currently works as follows. It starts by
@@ -6991,8 +7041,8 @@ proveVarLLVMArray x ps mb_ap =
 --
 -- 4. By eliminating a @memblock@ permission with array shape.
 --
--- NOTE: these "ways" do *not* line up with the cases of the function, labeled
--- as "case 1", "case 2", etc. outputs in the code below.
+-- NOTE: these \"ways\" do *not* line up with the cases of the function, labeled
+-- as \"case 1\", \"case 2\", etc. outputs in the code below.
 --
 -- To determine which way to use, the algorithm searches for a permission
 -- currently held on the left that is either an array permission with exactly
@@ -7972,6 +8022,35 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
                                llvmArrayPermToBlock ap) ps' 0
       _ -> error "proveVarLLVMBlocks2: expected array permission"
 
+-- If proving a tuple shape, prove the contents of the tuple and add the tuple
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_TupShape _ |] <- mb_sh =
+
+    -- Recursively call proveVarLLVMBlocks with sh in place of tuplesh(sh)
+    let mb_bp' = mbMapCl $(mkClosed
+                           [| \bp ->
+                             case llvmBlockShape bp of
+                               PExpr_TupShape sh ->
+                                 bp { llvmBlockShape = sh }
+                               _ -> error "proveVarLLVMBlocks2: expected tuple shape"
+                            |]) mb_bp in
+    proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
+
+    -- Extract the sh permission from the top of the stack and tuple it
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
+    implExtractSwapConjM x ps' 0 >>>
+    let (ps_hd', ps'') = expectLengthAtLeastOne ps'
+        bp = case ps_hd' of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> panic "proveVarLLVMBlocks2" ["expected block permission"]
+        sh = llvmBlockShape bp in
+    implSimplM Proxy (SImpl_IntroLLVMBlockTuple x bp) >>>
+
+    -- Finally, put the new tuplesh(sh) permission back in place
+    implSwapInsertConjM x (Perm_LLVMBlock
+                           (bp { llvmBlockShape = PExpr_TupShape sh }))
+                        ps'' 0
+
 -- If proving a sequence shape with an unneeded empty shape, i.e., of the form
 -- sh1;emptysh where the length of sh1 equals the entire length of the required
 -- memblock permission, then prove sh1 by itself and then add the empty shape
@@ -8802,7 +8881,7 @@ proveVarConjImpl x ps_lhs mb_ps =
 ----------------------------------------------------------------------
 
 -- | Prove @x:p'@, where @p@ may have existentially-quantified variables in
--- it. The "@Int@" suffix indicates that this call is internal to the
+-- it. The \"@Int@\" suffix indicates that this call is internal to the
 -- implication prover, similar to 'proveVarsImplAppendInt', meaning that this
 -- version will not end lifetimes, which must be done at the top level.
 proveVarImplInt :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
@@ -9146,7 +9225,7 @@ funPermExDistIns fun_perm args =
   fmap (varSubst (permVarSubstOfNames args)) $ mbSeparate args $
   mbValuePermsToDistPerms $ funPermIns fun_perm
 
--- | Make a "base case" 'DistPermsSplit' where the split is at the end
+-- | Make a \"base case\" 'DistPermsSplit' where the split is at the end
 baseDistPermsSplit :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                       DistPermsSplit (ps :> a)
 baseDistPermsSplit ps x p =

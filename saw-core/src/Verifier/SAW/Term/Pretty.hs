@@ -731,7 +731,7 @@ ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 
 -- | Pretty-print a term, but only to a maximum depth
 ppTermDepth :: Int -> Term -> SawDoc
-ppTermDepth depth t = ppTerm (depthPPOpts depth) t
+ppTermDepth depth = ppTerm (depthPPOpts depth)
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context

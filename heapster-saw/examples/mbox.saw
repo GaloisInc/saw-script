@@ -27,12 +27,13 @@ heapster_define_perm env "aes_sw_ctx"
   "llvmptr 64"
   "array(rw1, 0, <240, *1, fieldsh (int64<>)) * ptr((rw2, 1920) |-> int64<>)";
 
+// FIXME: get reachability perms working again!
 heapster_define_reachability_perm env "mbox"
   "rw:rwmodality, x:llvmptr 64"
   "llvmptr 64"
-  "ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> int64<>) * ptr((rw,16) |-> mbox<rw,x>) * \
-  \ array(W, 24, <128, *1, fieldsh(8,int8<>))"
-  "Mbox_def" "foldMbox" "unfoldMbox" "transMbox";
+  "eq(x) or (ptr((rw,0) |-> int64<>) * ptr((rw,8) |-> int64<>) * \
+           \ ptr((rw,16) |-> mbox) * array(W, 24, <128, *1, fieldsh(8,int8<>)))"
+  "transMbox";
 
 // heapster_define_perm env "mbox_nonnull"
 //   "rw:rwmodality, p:perm (llvmptr 64)"
@@ -68,13 +69,13 @@ heapster_define_perm env "boolean" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x)
 //     \ returnM (BVVec 64 len (Vec 8 Bool) * (BVVec 64 len (Vec 8 Bool) * #())) (y, (y, ()))";
 
 heapster_assume_fun env "llvm.objectsize.i64.p0i8" "().empty -o empty"
-                    "retS VoidEv emptyFunStack #() ()";
+                    "retS VoidEv #() ()";
 
 heapster_assume_fun env "__memcpy_chk"
   "(len:bv 64). arg0:byte_array<W,len>, arg1:byte_array<W,len>, arg2:eq(llvmword (len)) -o \
               \ arg0:byte_array<W,len>, arg1:byte_array<W,len>"
   "\\ (len:Vec 64 Bool) (_ src : BVVec 64 len (Vec 8 Bool)) -> \
-    \ retS VoidEv emptyFunStack \
+    \ retS VoidEv \
          \ (BVVec 64 len (Vec 8 Bool) * BVVec 64 len (Vec 8 Bool)) (src, src)";
 
 
