@@ -4016,7 +4016,7 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   let orig_cur_perms = stCurPerms st
       det_vars =
         namesToNamesList tops_args_ext_ns ++
-        determinedVars orig_cur_perms tops_args_ext_ns in
+        determinedVars (stVarTypes st) orig_cur_perms tops_args_ext_ns in
 
   implTraceM (\i ->
                pretty ("tcJumpTarget " ++ show blkID) <>
@@ -4047,7 +4047,8 @@ tcJumpTarget ctx (JumpTarget blkID args_tps args) =
   -- arguments after our above simplifications, adding in the extension-specific
   -- variables as well
   getPerms >>>= \cur_perms ->
-  case namesListToNames $ determinedVars cur_perms tops_args_ext_ns of
+  gets _implStateNameTypes >>>= \varTypes ->
+  case namesListToNames $ determinedVars varTypes cur_perms tops_args_ext_ns of
     SomeRAssign ghosts_ns' ->
       localImplM $
       let ghosts_ns = RL.append ext_ns ghosts_ns'

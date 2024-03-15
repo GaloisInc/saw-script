@@ -8496,12 +8496,18 @@ permSetAllVarPerms perm_set =
   foldr (\(NameAndElem x p) (Some perms) -> Some (DistPermsCons perms x p))
   (Some DistPermsNil) (NameMap.assocs $ _varPermMap perm_set)
 
+-- | A 'Name' with existentially quantified 'CrucibleType'
+data SomeTypedName where
+  SomeTypedName :: TypeRepr a -> Name a -> SomeTypedName
+
+instance Eq SomeTypedName where
+  (SomeTypedName _ n1) == (SomeTypedName _ n2) = isJust $ cmpName n1 n2
+
 -- | A determined vars clause says that the variable on the right-hand side is
 -- determined (as in the description of 'determinedVars') if all those on the
 -- left-hand side are. Note that this is an if and not an iff, as there may be
 -- other ways to mark that RHS variable determined.
-data DetVarsClause =
-  DetVarsClause (NameSet CrucibleType) (SomeName CrucibleType)
+data DetVarsClause = DetVarsClause (NameSet CrucibleType) SomeTypedName
 
 -- | Union a 'NameSet' to the left-hand side of a 'DetVarsClause'
 detVarsClauseAddLHS :: NameSet CrucibleType -> DetVarsClause -> DetVarsClause
@@ -8513,17 +8519,58 @@ detVarsClauseAddLHSVar :: ExprVar a -> DetVarsClause -> DetVarsClause
 detVarsClauseAddLHSVar n (DetVarsClause lhs rhs) =
   DetVarsClause (NameSet.insert n lhs) rhs
 
+-- | Test if a 'DetVarsClause' is for a lifetime variable
+detVarsClauseIsLt :: DetVarsClause -> Bool
+detVarsClauseIsLt (DetVarsClause _ (SomeTypedName LifetimeRepr _)) = True
+detVarsClauseIsLt _ = False
+
+-- | Intersect a single 'DetVarsClause' with a list of them; see
+-- 'detVarsClausesIntersect'
+detVarsClausesIntersect1 :: DetVarsClause -> [DetVarsClause] -> [DetVarsClause]
+detVarsClausesIntersect1 clause@(DetVarsClause lhs1 n1) (DetVarsClause lhs2 n2
+                                                         : clauses)
+  | n1 == n2 =
+    DetVarsClause (NameSet.union lhs1 lhs2) n1 :
+    detVarsClausesIntersect1 clause clauses
+detVarsClausesIntersect1 clause (_ : clauses) =
+  detVarsClausesIntersect1 clause clauses
+detVarsClausesIntersect1 _ [] = []
+
+-- | Intersect to lists of determined variable clauses by taking each pair of a
+-- clause from each list with the same right-hand side name and unioning their
+-- left-hand sides, meaning that the right-hand side name must be determined by
+-- both lists in order to be determined by their intersection. A key exception
+-- is lifetime variables, which only need to be determined by one side.
+detVarsClausesIntersect :: [DetVarsClause] -> [DetVarsClause] -> [DetVarsClause]
+detVarsClausesIntersect (clause : clausesL) clausesR
+  | detVarsClauseIsLt clause = clause : detVarsClausesIntersect clausesL clausesR
+detVarsClausesIntersect (clause : clausesL) clausesR =
+  detVarsClausesIntersect1 clause clausesR ++
+  detVarsClausesIntersect clausesL clausesR
+detVarsClausesIntersect [] clausesR = filter detVarsClauseIsLt clausesR
+
+-- | A list of 'DetVarsClause's for a name of type @tp@ that has already been
+-- visited by 'getDetVarsClauses'
 newtype SeenDetVarsClauses :: CrucibleType -> Type where
   SeenDetVarsClauses :: [DetVarsClause] -> SeenDetVarsClauses tp
 
 -- | Generic function to compute the 'DetVarsClause's for a permission
 class GetDetVarsClauses a where
   getDetVarsClauses ::
-    a -> ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses))
-                              [DetVarsClause]
+    a ->
+    ReaderT (NameMap TypeRepr, PermSet ps)
+    (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
 
 instance GetDetVarsClauses a => GetDetVarsClauses [a] where
   getDetVarsClauses l = concat <$> mapM getDetVarsClauses l
+
+instance GetDetVarsClauses a => GetDetVarsClauses (Mb ctx a) where
+  -- FIXME: check that the bound names are all determined by the body, and if
+  -- so, lift the DetVarsClauses and the SeenDetVarsClauses out of the binding,
+  -- removing bound names from the LHS of DetVarsClauses (since we have already
+  -- guaranteed that they are determined) and dropping DetVarsClauses with a
+  -- bound name on the RHS (also since we already know they are determined)
+  getDetVarsClauses _ = return []
 
 instance GetDetVarsClauses (ExprVar a) where
   -- If x has not been visited yet, then return a clause stating that x is
@@ -8531,14 +8578,18 @@ instance GetDetVarsClauses (ExprVar a) where
   -- current permissions on x
   getDetVarsClauses x =
     do seen_vars <- get
-       perms <- ask
+       (types, perms) <- ask
        perm_clauses <- case NameMap.lookup x seen_vars of
          Just (SeenDetVarsClauses perm_clauses) -> return perm_clauses
          Nothing -> do perm_clauses <- getDetVarsClauses (perms ^. varPerm x)
                        modify (NameMap.insert x (SeenDetVarsClauses perm_clauses))
                        return perm_clauses
-       return (DetVarsClause NameSet.empty (SomeName x) :
-               map (detVarsClauseAddLHSVar x) perm_clauses)
+       case NameMap.lookup x types of
+         Just tp ->
+           return (DetVarsClause NameSet.empty (SomeTypedName tp x) :
+                   map (detVarsClauseAddLHSVar x) perm_clauses)
+         Nothing ->
+           panic "getDetVarsClauses" ["Unknown type for variable!"]
 
 instance GetDetVarsClauses (PermExpr a) where
   getDetVarsClauses e
@@ -8555,6 +8606,9 @@ instance GetDetVarsClauses (PermExprs as) where
 
 instance GetDetVarsClauses (ValuePerm a) where
   getDetVarsClauses (ValPerm_Eq e) = getDetVarsClauses e
+  getDetVarsClauses (ValPerm_Or p1 p2) =
+    detVarsClausesIntersect <$> getDetVarsClauses p1 <*> getDetVarsClauses p2
+  getDetVarsClauses (ValPerm_Exists mb_p) = getDetVarsClauses mb_p
   getDetVarsClauses (ValPerm_Conj ps) = concat <$> mapM getDetVarsClauses ps
   -- FIXME: For named perms, we currently require the offset to have no free
   -- vars, as a simplification, but this could maybe be loosened...?
@@ -8610,7 +8664,8 @@ instance GetDetVarsClauses (LLVMFieldShape w) where
 -- | Compute the 'DetVarsClause's for a block permission with the given shape
 getShapeDetVarsClauses ::
   (1 <= w, KnownNat w) => PermExpr (LLVMShapeType w) ->
-  ReaderT (PermSet ps) (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
+  ReaderT (NameMap TypeRepr, PermSet ps)
+  (State (NameMap SeenDetVarsClauses)) [DetVarsClause]
 getShapeDetVarsClauses (PExpr_Var x) =
   getDetVarsClauses x
 getShapeDetVarsClauses (PExpr_NamedShape _ _ _ args) =
@@ -8628,6 +8683,9 @@ getShapeDetVarsClauses (PExpr_TupShape sh) = getShapeDetVarsClauses sh
 getShapeDetVarsClauses (PExpr_SeqShape sh1 sh2)
   | isJust $ llvmShapeLength sh1 =
     (++) <$> getDetVarsClauses sh1 <*> getDetVarsClauses sh2
+getShapeDetVarsClauses (PExpr_OrShape sh1 sh2) =
+  detVarsClausesIntersect <$> getDetVarsClauses sh1 <*> getDetVarsClauses sh2
+getShapeDetVarsClauses (PExpr_ExShape mb_sh) = getDetVarsClauses mb_sh
 getShapeDetVarsClauses _ = return []
 
 
@@ -8635,15 +8693,16 @@ getShapeDetVarsClauses _ = return []
 -- on the given input variables, other than those variables themselves. The
 -- intuitive idea is that permission @x:p@ determines the value of @y@ iff there
 -- is always a uniquely determined value of @y@ for any proof of @exists y.x:p@.
-determinedVars :: PermSet ps -> RAssign ExprVar ns -> [SomeName CrucibleType]
-determinedVars top_perms vars =
+determinedVars :: NameMap TypeRepr -> PermSet ps -> RAssign ExprVar ns ->
+                  [SomeName CrucibleType]
+determinedVars types top_perms vars =
   let vars_map = NameMap.fromList $
         mapToList (\v -> NameAndElem v (SeenDetVarsClauses [])) vars
       vars_set = NameSet.fromList $ mapToList SomeName vars
       multigraph =
         evalState (runReaderT (getDetVarsClauses (distPermsToValuePerms $
                                                   varPermsMulti vars top_perms))
-                   top_perms)
+                   (types, top_perms))
         vars_map in
   evalState (determinedVarsForGraph multigraph) vars_set
   where
@@ -8664,7 +8723,7 @@ determinedVars top_perms vars =
     determinedVarsForClause :: DetVarsClause ->
                                State (NameSet CrucibleType)
                                      [SomeName CrucibleType]
-    determinedVarsForClause (DetVarsClause lhs_vars (SomeName rhs_var)) =
+    determinedVarsForClause (DetVarsClause lhs_vars (SomeTypedName _ rhs_var)) =
       do det_vars <- get
          if not (NameSet.member rhs_var det_vars) &&
             nameSetIsSubsetOf lhs_vars det_vars

@@ -45,7 +45,7 @@ import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits.MonadBind
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
-import Data.Binding.Hobbits.NameSet (NameSet)
+import Data.Binding.Hobbits.NameSet (NameSet, SomeName(..))
 import qualified Data.Binding.Hobbits.NameSet as NameSet
 
 import Prettyprinter as PP
@@ -3834,34 +3834,6 @@ implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
      handleUnitVar tp n
      implSetNameTypes ns tps
 
--- | TODO: Move this in to Hobbits
-nameMapFind
-  :: (forall tp. f tp -> Bool)
-  -> NameMap f
-  -> Maybe (Some (Product Name f))
-nameMapFind predicate nm =
-  case find (\(NameAndElem _ f) -> predicate f) $ NameMap.assocs nm of
-    Just (NameAndElem name f) -> Just $ Some $ Pair name f
-    Nothing -> Nothing
-
--- | Traverse a permissions to determine whether it refers to a particular variable.
-permContainsVar :: ExprVar a -> ValuePerm b -> Bool
-permContainsVar x p = NameSet.member x (freeVars p)
-
--- | Build a 'DistPerms' sequence of a permission @y1:p1@ we currently hold such
--- that @p1@ contains @x@, a permission @y2:p2@ we currently hold such that @p2@
--- contains @p1@, etc.
---
--- FIXME: what is the purpose of this? Don't we want all permissions recursively
--- containing @x@?
-findPermsContainingVar :: ExprVar tp -> ImplM vars s r ps ps (Some DistPerms)
-findPermsContainingVar x =
-  getPerms >>>= \perms ->
-    case nameMapFind (permContainsVar x) (view varPermMap perms) of
-      Just (Some (Pair y p)) -> findPermsContainingVar y >>>= \(Some dps) ->
-        return $ Some $ DistPermsCons dps y p
-      Nothing -> return $ Some DistPermsNil
-
 -- | When adding a new existential unit-typed variable, instantiate it with the
 -- underlying global unit if available; if not, update the global unit variable
 -- with a fresh variable
@@ -5018,7 +4990,7 @@ getContainedEqVarsExcept excl x =
       new_excl = NameSet.union excl p_eq_vars
       new_vars = NameSet.difference p_eq_vars excl in
   NameSet.unions <$> (new_vars :) <$>
-  mapM (\(NameSet.SomeName y) ->
+  mapM (\(SomeName y) ->
          getContainedEqVarsExcept new_excl y) (NameSet.toList new_vars)
 
 -- | Find all lifetimes that we currently own which could, if ended, help prove
@@ -5043,7 +5015,7 @@ lifetimesThatCouldProve mb_ps =
      -- of e is contained in a permission we currently hold on x
      containedVars <-
        NameSet.unions <$>
-       mapM (\(NameSet.SomeName n) ->
+       mapM (\(SomeName n) ->
               getContainedEqVars n) (mbExprPermsVarsList mb_ps')
      -- Make sure we don't end any lifetimes that we still need in mb_ps
      let needed_ls = lownedsInMbExprPerms mb_ps'
@@ -9332,6 +9304,8 @@ proveVarsImplAppendInt :: NuMatchingAny1 r => ExDistPerms vars ps ->
                           ImplM vars s r (ps_in :++: ps) ps_in ()
 proveVarsImplAppendInt (mbMatch -> [nuMP| DistPermsNil |]) = return ()
 proveVarsImplAppendInt mb_ps =
+  implVerbTraceM (\i -> sep [pretty "proveVarsImplAppendInt:",
+                             permPretty i mb_ps]) >>>
   getPSubst >>>= \psubst ->
   use implStatePerms >>>= \cur_perms ->
   case mbMatch $
@@ -9549,7 +9523,7 @@ implFailVarM :: NuMatchingAny1 r => String -> ExprVar tp -> ValuePerm tp ->
 implFailVarM f x p mb_p =
   use implStatePPInfo >>>= \ppinfo ->
   use implStateVars >>>= \ctx ->
-  findPermsContainingVar x >>>= \case
+  (getAllPerms <$> getPerms) >>>= \case
     (Some distperms) ->
       implFailM $ ImplVariableError
                     (ppImpl ppinfo x p mb_p)
