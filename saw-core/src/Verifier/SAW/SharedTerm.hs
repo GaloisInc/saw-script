@@ -87,6 +87,7 @@ module Verifier.SAW.SharedTerm
   , scLoadModule
   , scUnloadModule
   , scModifyModule
+  , scInsertDef
   , scModuleIsLoaded
   , scFindModule
   , scFindDef
@@ -580,6 +581,17 @@ scModifyModule sc mnm f =
   let err_msg = "scModifyModule: module " ++ show mnm ++ " not found!" in
   modifyIORef' (scModuleMap sc) $
   HMap.alter (\case { Just m -> Just (f m); _ -> error err_msg }) mnm
+
+-- | Insert a definition into a SAW core module
+scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
+scInsertDef sc mnm ident def_tp def_tm =
+  do t <- scConstant' sc (ModuleIdentifier ident) def_tm def_tp
+     scRegisterGlobal sc ident t
+     scModifyModule sc mnm $ \m ->
+       insDef m $ Def { defIdent = ident,
+                        defQualifier = NoQualifier,
+                        defType = def_tp,
+                        defBody = Just def_tm }
 
 -- | Look up a module by name, raising an error if it is not loaded
 scFindModule :: SharedContext -> ModuleName -> IO Module

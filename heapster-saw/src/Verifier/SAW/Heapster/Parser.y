@@ -82,6 +82,7 @@ import Verifier.SAW.Heapster.UntypedAST
 'ptrsh'         { Located $$ TPtrSh                     }
 'fieldsh'       { Located $$ TFieldSh                   }
 'arraysh'       { Located $$ TArraySh                   }
+'tuplesh'       { Located $$ TTupleSh                   }
 'exsh'          { Located $$ TExSh                      }
 'orsh'          { Located $$ TOrSh                      }
 'memblock'      { Located $$ TMemBlock                  }
@@ -173,6 +174,7 @@ expr ::                                         { AstExpr }
   | 'fieldsh' '('          expr ')'             { ExFieldSh (pos $1) Nothing $3 }
   | 'arraysh' '(' '<' expr ',' '*' expr ',' expr ')'
                                                 { ExArraySh (pos $1) $4 $7 $9 }
+  | 'tuplesh' '(' expr ')'                      { ExTupleSh (pos $1) $3 }
   | 'exsh' IDENT ':' type '.' expr              { ExExSh (pos $1) (locThing $2) $4 $6 }
 
 -- Value Permissions

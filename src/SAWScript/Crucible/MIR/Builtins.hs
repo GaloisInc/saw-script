@@ -33,6 +33,8 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_slice_range_value
   , mir_str_slice_value
   , mir_str_slice_range_value
+    -- ** MIR muxing
+  , mir_mux_values
     -- ** MIR types
   , mir_adt
   , mir_array
@@ -776,6 +778,17 @@ mir_str_slice_range_value ::
   MS.SetupValue MIR -> Int -> Int -> MS.SetupValue MIR
 mir_str_slice_range_value arrRef start end =
   MS.SetupSlice (MirSetupSliceRange MirStrSlice arrRef start end)
+
+-----
+-- MIR muxing
+-----
+
+mir_mux_values ::
+  TypedTerm ->
+  MS.SetupValue MIR ->
+  MS.SetupValue MIR ->
+  MS.SetupValue MIR
+mir_mux_values = MS.SetupMux ()
 
 -----
 -- Mir.Types

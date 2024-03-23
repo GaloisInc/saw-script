@@ -36,6 +36,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWScript.Prover.SolverStats
@@ -47,20 +48,14 @@ import SAWScript.Prover.MRSolver.Term
 -- * Function Refinement Assumptions
 ----------------------------------------------------------------------
 
--- | A representation of a term of the form:
--- @(a1:A1) -> ... -> (an:An) -> refinesS ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
+-- | A representation of a refinement proof goal, i.e., a term of the form:
+-- > (a1:A1) -> ... -> (an:An) -> refinesS ev rtp1 rtp2 t1 t2
 data RefinesS = RefinesS {
   -- | The context of the refinement, i.e. @[(a1,A1), ..., (an,An)]@
   -- from the term above
   refnCtx :: [(LocalName, Term)],
-  -- | The LHS event type of the refinement, i.e. @ev1@ above
-  refnEv1 :: Term,
-  -- | The RHS event type of the refinement, i.e. @ev2@ above
-  refnEv2 :: Term,
-  -- | The LHS stack type of the refinement, i.e. @stack1@ above
-  refnStack1 :: Term,
-  -- | The RHS stack type of the refinement, i.e. @stack2@ above
-  refnStack2 :: Term,
+  -- | The event type of the refinement, i.e. @ev@ above
+  refnEv :: Term,
   -- | The LHS return type of the refinement, i.e. @rtp1@ above
   refnRType1 :: Term,
   -- | The RHS return type of the refinement, i.e. @rtp2@ above
@@ -77,20 +72,13 @@ data RefinesS = RefinesS {
 -- @RefinesS [(a1,A1), ..., (an,An)] ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2@
 asRefinesS :: Recognizer Term RefinesS
 asRefinesS (asPiList -> (args, asApplyAll ->
-                         (asGlobalDef -> Just "Prelude.refinesS",
-                          [ev1, ev2, stack1, stack2,
-                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqPreRel", _),
-                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqPostRel", _),
-                           rtp1, rtp2,
-                           asApplyAll -> (asGlobalDef -> Just "Prelude.eqRR", _),
+                         (asGlobalDef -> Just "SpecM.refinesS",
+                          [ev, rtp1, rtp2,
+                           asApplyAll -> (asGlobalDef -> Just "SpecM.eqRR", _),
                            t1, t2]))) =
-  Just $ RefinesS args ev1 ev2 stack1 stack2 rtp1 rtp2 t1 t2
-asRefinesS (asPiList -> (args, asApplyAll ->
-                         (asGlobalDef -> Just "Prelude.refinesS_eq",
-                          [ev, stack, rtp, t1, t2]))) =
-  Just $ RefinesS args ev ev stack stack rtp rtp t1 t2
-asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "Prelude.refinesS", _))) =
-  error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial RPre/RPost/RR"
+  Just $ RefinesS args ev rtp1 rtp2 t1 t2
+asRefinesS (asPiList -> (_, asApplyAll -> (asGlobalDef -> Just "SpecM.refinesS", _))) =
+  error "FIXME: MRSolver does not yet accept refinesS goals with non-trivial return relation"
 asRefinesS _ = Nothing
 
 -- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
@@ -121,17 +109,14 @@ data FunAssump t = FunAssump {
 }
 
 -- | Recognizes a term of the form:
--- @(a1:A1) -> ... -> (an:An) -> refinesS_eq ev stack rtp (f b1 ... bm) t2@,
+-- @(a1:A1) -> ... -> (an:An) -> refinesS ev rtp rtp eqRR (f b1 ... bm) t2@,
 -- and returns: @FunAssump f [a1,...,an] [b1,...,bm] rhs ann@,
 -- where @ann@ is the given argument and @rhs@ is either
 -- @OpaqueFunAssump g [c1,...,cl]@ if @t2@ is @g c1 ... cl@,
 -- or @RewriteFunAssump t2@ otherwise
 asFunAssump :: Maybe t -> Recognizer Term (FunAssump t)
 asFunAssump ann (asRefinesS -> Just (RefinesS args
-                                     (asGlobalDef -> Just "Prelude.VoidEv")
-                                     (asGlobalDef -> Just "Prelude.VoidEv")
-                                     (asGlobalDef -> Just "Prelude.emptyFunStack")
-                                     (asGlobalDef -> Just "Prelude.emptyFunStack")
+                                     (asGlobalDef -> Just "SpecM.VoidEv")
                                      _ _ (asApplyAll -> (asGlobalFunName -> Just f1, args1))
                                      t2@(asApplyAll -> (asGlobalFunName -> mb_f2, args2)))) =
   let rhs = maybe (RewriteFunAssump t2) (\f2 -> OpaqueFunAssump f2 args2) mb_f2
@@ -181,12 +166,15 @@ listFunAssumps = concatMap Map.elems . HashMap.elems
 -- | A global MR Solver environment
 data MREnv = MREnv {
   -- | The debug level, which controls debug printing
-  mreDebugLevel :: Int
+  mreDebugLevel :: Int,
+  -- | The options for pretty-printing to be used by MRSolver in error messages
+  -- and debug printing
+  mrePPOpts :: PPOpts
 }
 
 -- | The empty 'MREnv'
 emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreDebugLevel = 0 }
+emptyMREnv = MREnv { mreDebugLevel = 0, mrePPOpts = defaultPPOpts }
 
 -- | Set the debug level of a Mr Solver environment
 mrEnvSetDebugLevel :: Int -> MREnv -> MREnv

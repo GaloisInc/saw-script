@@ -4,12 +4,13 @@ env <- heapster_init_env_from_file "clearbufs.sawcore" "clearbufs.bc";
 // Integer types
 heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
 
+// FIXME: get reachability perms working again!
 heapster_define_reachability_perm env "Bufs"
   "x:llvmptr 64" "llvmptr 64"
-  "exists len:(bv 64).ptr((W,0) |-> Bufs<x>) * \
+  "eq(x) or exists len:(bv 64).ptr((W,0) |-> Bufs) * \
   \ ptr((W,8) |-> eq(llvmword(len))) * \
   \ array(W, 16, <len, *8, fieldsh(int64<>))"
-  "Mbox_def" "foldMbox" "unfoldMbox" "transMbox";
+  "\\ (x y : Bufs) -> transMbox x y";
 
 heapster_block_entry_hint env "clearbufs" 3
   "top1:llvmptr 64"

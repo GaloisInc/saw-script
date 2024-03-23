@@ -548,7 +548,7 @@ natSize val = fromMaybe (panic $ "natSize: expected Nat, got: " ++ show val)
 -- 'Value', if 'natSizeMaybe' returns 'Just'
 natSizeFun :: (HasCallStack, VMonad l) =>
               (Either (Natural, Value l) Natural -> Prim l) -> Prim l
-natSizeFun = PrimFilterFun "expected Nat" r
+natSizeFun = PrimFilterFun "expected Nat with a known size" r
   where r (VNat n) = pure (Right n)
         r (VCtorApp (primName -> "Prelude.Zero") [] []) = pure (Right 0)
         r v@(VCtorApp (primName -> "Prelude.Succ") [] [x]) =

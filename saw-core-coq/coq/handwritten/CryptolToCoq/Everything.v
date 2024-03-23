@@ -6,8 +6,6 @@ From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 From CryptolToCoq Require Import SAWCorePrelude.
 
 (* handwritten *)
-From CryptolToCoq Require Import CompM.
-From CryptolToCoq Require Import CompMExtra.
 From CryptolToCoq Require Import CoqVectorsExtra.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
 From CryptolToCoq Require Import SAWCoreBitvectors.
@@ -15,4 +13,4 @@ From CryptolToCoq Require Import SAWCorePrelude_proofs.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From CryptolToCoq Require Import SpecMExtra.
+(* From CryptolToCoq Require Import SpecMExtra. *)

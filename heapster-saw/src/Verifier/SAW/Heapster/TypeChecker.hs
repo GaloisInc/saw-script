@@ -454,6 +454,7 @@ tcLLVMShape (ExArraySh _ len stride sh) =
   <$> tcKExpr len
   <*> (Bytes . fromIntegral <$> tcNatural stride)
   <*> tcKExpr sh
+tcLLVMShape (ExTupleSh _ sh) = PExpr_TupShape <$> tcKExpr sh
 tcLLVMShape (ExFalseSh _) = pure PExpr_FalseShape
 tcLLVMShape e = tcError (pos e) "Expected shape"
 

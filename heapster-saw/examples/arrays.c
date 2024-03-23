@@ -134,3 +134,22 @@ uint64_t alloc_sum_array_test (void) {
   */
   return sum_inc_ptr_64 (X, 8);
 }
+
+/* A dummy function used as a hint for Heapster that arr is initialized up
+   through index i */
+void array_init_hint (uint64_t len, uint64_t i, uint64_t *arr) { return; }
+
+/* Test out an initialization loop for a locally-allocated array, using a
+   function that initializes an array X to X[i]=i for each i and then sums the
+   resulting array by calling sum_inc_ptr_64. This is similar to
+   alloc_sum_array_test, except that it initializes the array in a loop. */
+uint64_t array_init_loop_test (void) {
+  uint64_t X[8];
+  uint64_t i = 0;
+
+  array_init_hint (8, i, X);
+  for (; i < 8; ++i) {
+    X[i] = i;
+  }
+  return sum_inc_ptr_64 (X, 8);
+}

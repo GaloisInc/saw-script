@@ -1,7 +1,7 @@
 
 module rust_lifetimes where
 
-import Prelude;
+import SpecM;
 
 unfoldListPermH : (a:sort 0) -> List a -> Either #() (#() * a * List a);
 unfoldListPermH a l =

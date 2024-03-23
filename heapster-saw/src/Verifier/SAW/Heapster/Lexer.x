@@ -69,6 +69,7 @@ $white+                         ;
 "ptrsh"                         { token_ TPtrSh         }
 "fieldsh"                       { token_ TFieldSh       }
 "arraysh"                       { token_ TArraySh       }
+"tuplesh"                       { token_ TTupleSh       }
 "exsh"                          { token_ TExSh          }
 "orsh"                          { token_ TOrSh          }
 "memblock"                      { token_ TMemBlock      }

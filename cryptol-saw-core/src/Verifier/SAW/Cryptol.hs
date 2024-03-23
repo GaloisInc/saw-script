@@ -6,6 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 {- |
 Module      : Verifier.SAW.Cryptol
@@ -90,6 +91,17 @@ import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
 import GHC.Stack
+
+
+-- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
+import Language.Haskell.TH
+import Verifier.SAW.Cryptol.Prelude
+import Verifier.SAW.Cryptol.PreludeM
+
+$(runIO (mkSharedContext >>= \sc ->
+          scLoadPreludeModule sc >> scLoadCryptolModule sc >>
+          scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
+
 
 --------------------------------------------------------------------------------
 -- Type Environments

@@ -275,7 +275,7 @@ instance Closable ProgramLoc where
 instance Liftable ProgramLoc where
   mbLift = unClosed . mbLift . fmap toClosed
 
--- | Pretty-print a 'Position' with a "short" filename, without the path
+-- | Pretty-print a 'Position' with a \"short\" filename, without the path
 ppShortFileName :: Position -> PP.Doc ann
 ppShortFileName (SourcePos path l c) =
   PP.pretty (takeFileName $ Text.unpack path)
@@ -428,7 +428,7 @@ instance Closable (BadBehavior e) where
 -- instance NuMatchingAny1 e => Liftable (BadBehavior e) where
   -- mbLift = unClosed . mbLift . fmap toClosed
 
--- NOTE: Crucible objects can never contain any Hobbits names, but "proving"
+-- NOTE: Crucible objects can never contain any Hobbits names, but \"proving\"
 -- that would require introspection of opaque types like 'Index' and 'Nonce',
 -- and would also be inefficient, so we just use 'unsafeClose'
 

@@ -48,6 +48,7 @@ module SAWScript.Crucible.Common.Setup.Value
   , XSetupCast
   , XSetupUnion
   , XSetupGlobalInitializer
+  , XSetupMux
 
   , SetupValue(..)
   , SetupValueHas
@@ -132,6 +133,7 @@ type family XSetupGlobal ext
 type family XSetupCast ext
 type family XSetupUnion ext
 type family XSetupGlobalInitializer ext
+type family XSetupMux ext
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
 -- during symbolic execution, which includes both 'Term' values, pointers, and
@@ -162,6 +164,16 @@ data SetupValue ext where
   -- | This represents the value of a global's initializer.
   SetupGlobalInitializer ::
     XSetupGlobalInitializer ext -> String -> SetupValue ext
+  -- | A mux of two 'SetupValue's based on a boolean-typed 'TypedTerm'.
+  SetupMux ::
+    XSetupMux ext ->
+    TypedTerm
+      {- ^ The conditional expression. Must be of Cryptol type @Bit@. -} ->
+    SetupValue ext
+      {- ^ The value to use if the conditional expression is true. -} ->
+    SetupValue ext
+      {- ^ The value to use if the conditional expression is false. -} ->
+    SetupValue ext
 
 -- | This constraint can be solved for any ext so long as '()', 'Void', and any
 --   other types used in the right-hand sides of extension field
@@ -181,6 +193,7 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   , c (XSetupUnion ext)
   , c (XSetupGlobal ext)
   , c (XSetupGlobalInitializer ext)
+  , c (XSetupMux ext)
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)

@@ -12,6 +12,16 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 Import SAWCorePrelude.
 
+(* NOTE: the Num type has to be defined in the TpDesc module in entree-specs
+because it must be defined *before* type descriptions so type descriptions can
+refer to it. Thus we map the definition in Cryptol.sawcore to that definition,
+and we re-export it here. *)
+Definition Num := TpDesc.Num.
+Definition Num_rect := TpDesc.Num_rect.
+Definition TCNum := TpDesc.TCNum.
+Definition TCInf := TpDesc.TCInf.
+
+
 Fixpoint Nat_cases2_match a f1 f2 f3 (x y : nat) : a :=
   match (x, y) with
   | (O,   _)   => f1 y
@@ -35,9 +45,10 @@ Proof.
   induction x; induction y; simpl; auto.
 Defined.
 
+(* NOTE: addNat is now defined as Coq plus, so this is trivial *)
 Theorem addNat_add : forall x y, addNat x y = x + y.
 Proof.
-  induction x; simpl; auto.
+  reflexivity.
 Defined.
 
 Theorem subNat_sub : forall x y, subNat x y = x - y.
@@ -45,11 +56,10 @@ Proof.
   induction x; induction y; simpl; auto.
 Defined.
 
+(* NOTE: mulNat is now defined as Coq mult, so this is trivial *)
 Theorem mulNat_mul : forall x y, mulNat x y = x * y.
 Proof.
-  induction x; simpl; intros; auto.
-  rewrite IHx.
-  apply addNat_add.
+  reflexivity.
 Defined.
 
 Definition streamScanl (a b : sort 0) (f : b -> a -> b) (z:b) (xs:Stream a) : Stream b :=
@@ -125,29 +135,4 @@ Proof.
   rewrite X. intros pf2.
   rewrite (le_unique _ _ pf2 pf).
   reflexivity.
-Qed.
-
-
-Theorem fold_unfold_IRT As Ds D : forall x, foldIRT As Ds D (unfoldIRT As Ds D x) = x.
-Proof.
-  induction x; simpl; unfold uncurry; f_equal; try easy.
-  (* All that remains is the IRT_BVVec case, which requires functional extensionality
-     and the fact that genBVVec and atBVVec define an isomorphism *)
-  repeat (apply functional_extensionality_dep; intro).
-  rewrite at_gen_BVVec; eauto.
-Qed.
-
-Theorem unfold_fold_IRT As Ds D : forall u, unfoldIRT As Ds D (foldIRT As Ds D u) = u.
-Proof.
-  revert Ds; induction D; intros; try destruct u; simpl(*; f_equal; try easy*).
-  (* For some reason using `f_equal` above generates universe constraints like
-     `prod.u0 < eq.u0` which cause problems later on when it is assumed that
-     `eq.u0 = Coq.Relations.Relation_Definitions.1 <= prod.u0` by
-     `returnM_injective`. The easiest solution is just to not use `f_equal`
-     here, and rewrite by the relevant induction hypotheses instead. *)
-  all: try rewrite IHD; try rewrite IHD1; try rewrite IHD2; try rewrite H; try easy.
-  (* All that remains is the IRT_BVVec case, which requires functional extensionality
-     and the fact that genBVVec and atBVVec define an isomorphism *)
-  etransitivity; [ | apply gen_at_BVVec ].
-  f_equal; repeat (apply functional_extensionality_dep; intro); eauto.
 Qed.

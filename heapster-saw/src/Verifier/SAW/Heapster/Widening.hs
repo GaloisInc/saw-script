@@ -81,7 +81,7 @@ newtype ExtVarPermsFun vars =
                      RAssign Name vars -> ExtVarPerms vars }
 
 -- | A map from free variables to their permissions and whether they have been
--- "visited" yet
+-- \"visited\" yet
 type WidNameMap = NameMap (Product ValuePerm (Constant Bool))
 
 -- | Modify the entry in a 'WidNameMap' associated with a particular free

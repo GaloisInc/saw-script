@@ -64,4 +64,18 @@ heapster_typecheck_fun env "even_odd_sums_diff"
 
 heapster_typecheck_fun env "alloc_sum_array_test" "(). empty -o ret:int64<>";
 
+// This is a dummy function, used as a hint to Heapster that the second argument
+// is initialized up through the index given by the first
+heapster_typecheck_fun env "array_init_hint"
+  "(len:bv 64, i: bv 64). \
+  \ arg0:eq(llvmword(len)), arg1:eq(llvmword(i)), \
+  \ arg2:array(W,0,<i,*8,fieldsh(64,int64<>)) * memblock(W, 8*i, len + (-8)*i, emptysh) \
+  \ -o \
+  \ arg2:array(W,0,<i,*8,fieldsh(64,int64<>)) * memblock(W, 8*i, len + (-8)*i, emptysh)";
+
+//heapster_set_debug_level env 1;
+/*
+heapster_typecheck_fun env "array_init_loop_test" "(). empty -o ret:int64<>";
+*/
+
 heapster_export_coq env "arrays_gen.v";

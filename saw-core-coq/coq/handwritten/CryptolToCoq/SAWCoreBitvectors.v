@@ -6,11 +6,12 @@ From Coq Require Import Program.Basics.
 From Coq Require        Program.Equality.
 From Coq Require Import Vectors.Vector.
 From Coq Require Import Logic.Eqdep.
+From Coq Require Import Classes.RelationClasses.
+From Coq Require Import Classes.Morphisms.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From CryptolToCoq Require Import CompMExtra.
 
 Import SAWCorePrelude.
 Import VectorNotations.
@@ -81,7 +82,7 @@ Ltac compute_bv_funs_tac H t compute_bv_binrel compute_bv_binop
     end
   end.
 
-Ltac unfold_bv_funs := unfold bvNat, bvultWithProof, bvuleWithProof,
+Ltac unfold_bv_funs := unfold bvNat,
                               bvsge, bvsgt, bvuge, bvugt, bvSCarry, bvSBorrow,
                               xorb.
 
@@ -105,13 +106,13 @@ Tactic Notation "compute_bv_funs" "in" ident(H) :=
 
 Definition bvsmax w : bitvector w :=
   match w with
-  | O => nil _
-  | S w => cons _ false _ (gen w _ (fun _ => true))
+  | O => Vector.nil _
+  | S w => Vector.cons _ false _ (gen w _ (fun _ => true))
   end.
 Definition bvsmin w : bitvector w :=
   match w with
-  | O => nil _
-  | S w => cons _ true _ (gen w _ (fun _ => false))
+  | O => Vector.nil _
+  | S w => Vector.cons _ true _ (gen w _ (fun _ => false))
   end.
 
 Definition bvumax w : bitvector w := gen w _ (fun _ => true).
@@ -490,6 +491,9 @@ Qed.
 
 (** Proof automation - computing and rewriting bv funs **)
 
+(* FIXME: update to include support for the new refinement automation whenever
+that is defined... *)
+(*
 Hint Extern 1 (StartAutomation _) => progress compute_bv_funs: refinesFun.
 
 Ltac FreshIntroArg_bv_eq T :=
@@ -784,6 +788,7 @@ Hint Extern 3 (IntroArg _ (@eq bool ?x ?y) _) =>
     | msb _ _ => simple apply IntroArg_msb_false_iff_bvsle
     end
   end : refinesFun.
+*)
 
 
 (* Tactics for solving bitvector inequalities *)

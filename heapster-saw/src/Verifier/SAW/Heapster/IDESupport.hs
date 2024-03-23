@@ -30,6 +30,7 @@ import Data.Binding.Hobbits
     unsafeMbTypeRepr,
     Name,
   )
+import Data.Kind (Type)
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
 import Data.Parameterized.Some (Some (..))
 import qualified Data.Text as T
@@ -143,8 +144,8 @@ instance (PermCheckExtC ext extExpr)
     let insertNames ::
           RL.RAssign Name (x :: RList CrucibleType) ->
           RL.RAssign StringF x ->
-          NameMap (StringF :: CrucibleType -> *)->
-          NameMap (StringF :: CrucibleType -> *)
+          NameMap (StringF :: CrucibleType -> Type)->
+          NameMap (StringF :: CrucibleType -> Type)
         insertNames RL.MNil RL.MNil m = m
         insertNames (ns RL.:>: n) (xs RL.:>: StringF name) m =
           insertNames ns xs (NameMap.insert n (StringF name) m)

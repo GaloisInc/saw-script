@@ -52,6 +52,7 @@ module SAWScript.Crucible.Common.MethodSpec
   , XSetupCast
   , XSetupUnion
   , XSetupGlobalInitializer
+  , XSetupMux
 
   , SetupValue(..)
   , SetupValueHas
@@ -242,6 +243,15 @@ ppSetupValue setupval = case setupval of
         absurd empty
   SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
   SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")
+  SetupMux x c t f ->
+    case (ext, x) of
+      (LLVMExt, empty) ->
+        absurd empty
+      (JVMExt, empty) ->
+        absurd empty
+      (MIRExt, ()) ->
+        PP.pretty "mux" <>
+        PP.parens (ppTypedTerm c <> PP.comma PP.<+> ppSetupValue t <> PP.comma PP.<+> ppSetupValue f)
   where
     ext :: SAWExt ext
     ext = sawExt @ext
