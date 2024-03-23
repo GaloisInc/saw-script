@@ -1,3 +1,11 @@
+# next -- TBA
+
+## New Features
+
+* Add `mir_str_slice_value` and `mir_str_slice_range_value` functions, which
+  allow taking `&str` slices. For more information, see the documentation in the
+  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#string-slices).
+
 # Version 1.1 -- 2024-02-05
 
 ## New Features

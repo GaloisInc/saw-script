@@ -198,6 +198,10 @@ compileJVMContract fileReader bic ghostEnv cenv0 c =
       JVMSetupM $ fail "Slice setup values unsupported in JVM API."
     getSetupVal _ (SliceRangeValue _ _ _) =
       JVMSetupM $ fail "Slice range setup values unsupported in JVM API."
+    getSetupVal _ (StrSliceValue _) =
+      JVMSetupM $ fail "String slice setup values unsupported in JVM API."
+    getSetupVal _ (StrSliceRangeValue _ _ _) =
+      JVMSetupM $ fail "String slice range setup values unsupported in JVM API."
     getSetupVal _ (FieldLValue _ _) =
       JVMSetupM $ fail "Field l-values unsupported in JVM API."
     getSetupVal _ (CastLValue _ _) =

@@ -924,11 +924,11 @@ instantiateSetupValue sc s v =
       MirSetupSliceRaw
         <$> instantiateSetupValue sc s ref
         <*> instantiateSetupValue sc s len
-    instantiateSetupSlice (MirSetupSlice arr) =
-      MirSetupSlice <$> instantiateSetupValue sc s arr
-    instantiateSetupSlice (MirSetupSliceRange arr start end) = do
+    instantiateSetupSlice (MirSetupSlice sliceInfo arr) =
+      MirSetupSlice sliceInfo <$> instantiateSetupValue sc s arr
+    instantiateSetupSlice (MirSetupSliceRange sliceInfo arr start end) = do
       arr' <- instantiateSetupValue sc s arr
-      pure $ MirSetupSliceRange arr' start end
+      pure $ MirSetupSliceRange sliceInfo arr' start end
 
 -- learn pre/post condition
 learnCond ::
@@ -1205,17 +1205,20 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
       matchFields sym xsFldShps xs ys zs
 
     -- Match the parts of a slice point-wise
-    (MIRVal (SliceShape _ actualElemTy actualMutbl actualElemTpr)
+    (MIRVal (SliceShape actualSliceRefTy actualElemTy actualMutbl actualElemTpr)
             (Ctx.Empty Ctx.:> Crucible.RV actualRef Ctx.:> Crucible.RV actualLen),
-     Mir.TyRef (Mir.TySlice expectedElemTy) expectedMutbl,
-     MS.SetupSlice slice) ->
+     Mir.TyRef expectedSliceTy expectedMutbl,
+     MS.SetupSlice slice) -> do
+      expectedElemTy <- sliceElemTy expectedSliceTy
+      actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
       case slice of
         MirSetupSliceRaw{} ->
           panic "matchArg" ["SliceRaw not yet implemented"]
 
-        MirSetupSlice expectedRef -> do
-          actualRefTy <- typeOfSetupValue cc tyenv nameEnv expectedRef
-          case actualRefTy of
+        MirSetupSlice expectedSliceInfo expectedRef -> do
+          matchSliceInfos expectedSliceInfo actualSliceInfo
+          expectedRefTy <- typeOfSetupValue cc tyenv nameEnv expectedRef
+          case expectedRefTy of
             Mir.TyRef (Mir.TyArray _ expectedLen) _
               |  Just actualLenBV <- W4.asBV actualLen
               ,  BV.asUnsigned actualLenBV == toInteger expectedLen
@@ -1228,10 +1231,11 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
 
             _ -> fail_
 
-        MirSetupSliceRange expectedRef expectedStart expectedEnd
+        MirSetupSliceRange expectedSliceInfo expectedRef expectedStart expectedEnd
           |  Just actualLenBV <- W4.asBV actualLen
           ,  BV.asUnsigned actualLenBV == toInteger (expectedEnd - expectedStart)
-          -> do startBV <- liftIO $
+          -> do matchSliceInfos expectedSliceInfo actualSliceInfo
+                startBV <- liftIO $
                   W4.bvLit sym W4.knownNat $
                   BV.mkBV W4.knownNat $
                   toInteger expectedStart
@@ -1315,6 +1319,13 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                  ys
                  zs ]
 
+    -- Check that both the expected and actual values are the same sort of
+    -- slice. We don't want to accidentally mix up a &[u8] value with a &str
+    -- value, as both have the same crucible-mir representation.
+    matchSliceInfos :: MirSliceInfo -> MirSliceInfo -> OverrideMatcher MIR w ()
+    matchSliceInfos expectedSliceInfo actualSliceInfo =
+      unless (expectedSliceInfo == actualSliceInfo) fail_
+
     notEq = notEqual prepost opts loc cc sc cs expected actual
 
 -- | For each points-to statement read the memory value through the
@@ -1396,9 +1407,9 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupSlice :: MirSetupSlice -> Set AllocIndex
     setupSlice (MirSetupSliceRaw ref len) =
       setupVars ref <> setupVars len
-    setupSlice (MirSetupSlice arr) =
+    setupSlice (MirSetupSlice _sliceInfo arr) =
       setupVars arr
-    setupSlice (MirSetupSliceRange arr _start _end) =
+    setupSlice (MirSetupSliceRange _sliceInfo arr _start _end) =
       setupVars arr
 
 -- | This function is responsible for implementing the \"override\" behavior

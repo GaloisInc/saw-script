@@ -55,6 +55,7 @@ module SAWScript.Crucible.MIR.Setup.Value
 
     -- * @MirSetupSlice@
   , MirSetupSlice(..)
+  , MirSliceInfo(..)
   ) where
 
 import Control.Lens (makeLenses)
@@ -217,21 +218,29 @@ data MirSetupEnum where
     -> MirSetupEnum
   deriving Show
 
--- | A slice-related MIR 'SetupValue'.
+-- | A slice-related MIR 'SetupValue'. This is used to power the @mir_slice_*@
+-- and @mir_str_slice_*@ family of SAWScript functions.
 data MirSetupSlice
   = MirSetupSliceRaw (MS.SetupValue MIR) (MS.SetupValue MIR)
     -- ^ A \"raw\" slice constructed directly from a pointer and a length.
     -- Currently, this is only used by @crucible-mir-comp@. SAWScript offers no
     -- way to use this, although we may consider doing so in the future.
-  | MirSetupSlice (MS.SetupValue MIR)
+  | MirSetupSlice MirSliceInfo (MS.SetupValue MIR)
     -- ^ A slice of a reference to a contiguous sequence 'SetupValue'.
-    -- Currently, this only supports references to arrays.
-  | MirSetupSliceRange (MS.SetupValue MIR) Int Int
+  | MirSetupSliceRange MirSliceInfo (MS.SetupValue MIR) Int Int
     -- ^ A slice of a reference to a contiguous sequence 'SetupValue', where the
     -- slice only covers the range specified by the given start and end values
-    -- (the first and second 'Int', respectively). Currently, this only
-    -- supports references to arrays, and it only supports concrete ranges.
+    -- (the first and second 'Int', respectively). Currently, this only supports
+    -- concrete ranges.
   deriving Show
+
+-- | Are we dealing with an array slice (@[T]@) or a string slice (@str@)?
+data MirSliceInfo
+  = -- | @[T]@ (for some type @T@)
+    MirArraySlice
+  | -- | @str@
+    MirStrSlice
+  deriving (Eq, Show)
 
 makeLenses ''MIRCrucibleContext
 makeLenses ''MirAllocSpec

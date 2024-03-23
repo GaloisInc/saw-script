@@ -283,9 +283,9 @@ ppSetupValue setupval = case setupval of
     ppMirSetupSlice :: MirSetupSlice -> PP.Doc ann
     ppMirSetupSlice (MirSetupSliceRaw ref len) =
       PP.pretty "SliceRaw" <> ppSetupTuple [ref, len]
-    ppMirSetupSlice (MirSetupSlice arr) =
+    ppMirSetupSlice (MirSetupSlice _ arr) =
       ppSetupValue arr <> PP.pretty "[..]"
-    ppMirSetupSlice (MirSetupSliceRange arr start end) =
+    ppMirSetupSlice (MirSetupSliceRange _ arr start end) =
       ppSetupValue arr <> PP.pretty "[" <> PP.pretty start <>
       PP.pretty ".." <> PP.pretty end <> PP.pretty "]"
 

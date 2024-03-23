@@ -205,6 +205,32 @@ class SliceRangeVal(SetupVal):
                 'start': self.start,
                 'end': self.end}
 
+class StrSliceVal(SetupVal):
+    base : SetupVal
+
+    def __init__(self, base : SetupVal) -> None:
+        self.base = base
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'str slice',
+                'base': self.base.to_json()}
+
+class StrSliceRangeVal(SetupVal):
+    base : SetupVal
+    start : int
+    end : int
+
+    def __init__(self, base : SetupVal, start : int, end : int) -> None:
+        self.base = base
+        self.start = start
+        self.end = end
+
+    def to_json(self) -> JSON:
+        return {'setup value': 'str slice range',
+                'base': self.base.to_json(),
+                'start': self.start,
+                'end': self.end}
+
 class ElemVal(SetupVal):
     base : SetupVal
     index : int
@@ -844,6 +870,23 @@ def slice_range(base : SetupVal, start : int, end : int) -> SetupVal:
     JVM verification will raise an error.
     """
     return SliceRangeVal(base, start, end)
+
+def str_slice(base : SetupVal) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base``, where ``base``
+    must be a reference to an array value, whose overall type must be &[u8; N]
+    for some length N. Using this function with LLVM or JVM verification will
+    raise an error.
+    """
+    return StrSliceVal(base)
+
+def str_slice_range(base : SetupVal, start : int, end : int) -> SetupVal:
+    """Returns a MIR value representing a slice of ``base`` over a given range,
+    where ``base`` must be a reference to an array value, whose overall type
+    must be &[u8; N] for some length N, and ``start`` and ``end`` delimit the
+    range of values in the slice. Using this function with LLVM or JVM
+    verification will raise an error.
+    """
+    return StrSliceRangeVal(base, start, end)
 
 def struct(*fields : SetupVal, mir_adt : Optional[MIRAdt] = None) -> SetupVal:
     """Returns a structure value with the given ``fields`` (i.e., a ``StructVal``).

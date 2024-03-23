@@ -80,25 +80,31 @@ data TypeShape (tp :: CrucibleType) where
              -> TypeRepr tp
              -- ^ The Crucible representation of the pointee type
              -> TypeShape (MirReferenceType tp)
-    -- | A shape for a slice reference (e.g., @&[T]@), which is represented in
-    -- @crucible-mir@ as a 'MirSlice', i.e., a 'StructType' where the first type
-    -- in the struct is a reference to @T@, and the second type in the struct is
-    -- the length of the slice. The @crucible-mir@ representations for tuples
-    -- and slices are almost, but not quite, the same, as tuples can wrap their
-    -- fields in 'MaybeType's (see 'FieldShape') but slices never do this.
-    -- Nevertheless, many places in the code effectively treat tuples and slices
-    -- identically (modulo 'MaybeType's).
+    -- | A shape for a slice reference of type @&[T]@ or @&str@, which is
+    -- represented in @crucible-mir@ as a 'MirSlice', i.e., a 'StructType'
+    -- where:
+    --
+    -- * The first type in the struct is a reference to the element type.
+    --   If the slice reference has type @&[T]@, then the element type is @T@.
+    --   If the slice reference has type @&str@, then the element type is @u8@.
+    --
+    -- * The second type in the struct is the length of the slice.
+    --
+    -- The @crucible-mir@ representations for tuples and slices are almost, but
+    -- not quite, the same, as tuples can wrap their fields in 'MaybeType's (see
+    -- 'FieldShape') but slices never do this. Nevertheless, many places in the
+    -- code effectively treat tuples and slices identically (modulo 'MaybeType's).
     --
     -- To make it easier to recurse on the 'TypeShape's for the slice's
     -- reference and length types, we provide the 'sliceShapeParts' function.
     SliceShape :: M.Ty
-               -- ^ The type of @&[T]@.
+               -- ^ The type of the slice reference (either @&[T]@ or @&str@).
                -> M.Ty
-               -- ^ The type of @T@.
+               -- ^ The element type (either @T@ or @u8@).
                -> M.Mutability
                -- ^ Is the reference mutable or immutable?
                -> TypeRepr tp
-               -- ^ The Crucible representation of @T@.
+               -- ^ The Crucible representation of the element type.
                -> TypeShape (MirSlice tp)
     -- | A shape for an enum type. Like 'StructShape', this is indexed by
     -- 'AnyType', so code that matches on 'EnumShape' may need to further match

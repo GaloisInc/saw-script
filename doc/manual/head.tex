@@ -1,5 +1,4 @@
 \usepackage{listings}
-\usepackage{float}
 \usepackage{xspace}
 \usepackage{color}
 \usepackage{tikz}
@@ -32,7 +31,8 @@
          framexleftmargin=5pt,
          framexrightmargin=-1pt,
          framexbottommargin=4pt,
-         showstringspaces=false
+         showstringspaces=false,
+         literate={ș}{{\textcommabelow{s}}}1,
 }
 
 \author{The Galois SAW Team\\\texttt{saw@galois.com}}
