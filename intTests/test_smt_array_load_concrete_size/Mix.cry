@@ -1,0 +1,8 @@
+module Mix where
+
+import Array
+
+type ByteArray = Array[64][8]
+
+mix : {l} (width l <= 64) => ByteArray -> [64] -> [l][8] -> ByteArray
+mix block n data = arrayCopy block n (arrayRangeUpdate (arrayConstant 0) 0 data) 0 `(l)

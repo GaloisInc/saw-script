@@ -754,7 +754,7 @@ resolveSAWPred cc tm = do
      mx <- case getAllExts tm' of
              -- concretely evaluate if it is a closed term
              [] -> do modmap <- scGetModuleMap sc
-                      let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                      let v = Concrete.evalSharedTerm modmap mempty mempty tm'
                       pure (Just (Concrete.toBool v))
              _ -> return Nothing
      case mx of
