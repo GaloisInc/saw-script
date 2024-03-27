@@ -1,0 +1,6 @@
+module B where
+
+import `A as A
+
+b : {n, a} (Zero a) => [n]a
+b = A::bar`{32} { foo = zero }
