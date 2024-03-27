@@ -1,0 +1,29 @@
+enable_experimental;
+
+let oneThroughFive = mir_term {{ [1, 2, 3, 4, 5] : [5][8] }};
+
+let f_spec_1 = do {
+  a <- mir_alloc (mir_array 5 mir_u8);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_value a];
+
+  mir_return (mir_term {{ 3 : [8] }});
+};
+
+let f_spec_2 = do {
+  a <- mir_alloc (mir_array 5 mir_u8);
+  mir_points_to a oneThroughFive;
+
+  mir_execute_func [mir_slice_range_value a 1 3];
+
+  mir_return (mir_term {{ 5 : [8] }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+f_ov_1 <- mir_verify m "test::f" [] false f_spec_1 z3;
+mir_verify m "test::g" [f_ov_1] false f_spec_1 z3;
+
+f_ov_2 <- mir_verify m "test::f" [] false f_spec_2 z3;
+mir_verify m "test::g" [f_ov_2] false f_spec_2 z3;
