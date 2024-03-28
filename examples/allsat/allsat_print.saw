@@ -12,7 +12,8 @@ rec allsat_print p = do {
   r <- sat abc p;
   caseSatResult r
     (print "Done!")
-    (\s -> do {
+    (\t -> do {
+      let s = {{ t.0 }};
       print s;
       allsat_print {{ \x -> x != s /\ p x }};
     });
