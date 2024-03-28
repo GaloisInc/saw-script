@@ -1204,48 +1204,64 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     (MIRVal (TupleShape _ _ xsFldShps) xs, Mir.TyTuple ys, MS.SetupTuple () zs) ->
       matchFields sym xsFldShps xs ys zs
 
-    -- Match the parts of a slice point-wise
+    -- See Note [Matching slices in overrides]
     (MIRVal (SliceShape _ actualElemTy actualMutbl actualElemTpr)
-            (Ctx.Empty Ctx.:> Crucible.RV actualRef Ctx.:> Crucible.RV actualLen),
-     Mir.TyRef (Mir.TySlice expectedElemTy) expectedMutbl,
-     MS.SetupSlice slice) ->
-      case slice of
-        MirSetupSliceRaw{} ->
-          panic "matchArg" ["SliceRaw not yet implemented"]
+            (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
+     Mir.TyRef (Mir.TySlice _) _,
+     MS.SetupSlice slice)
+       | -- Currently, all slice lengths must be concrete, so the case below
+         -- should always succeed.
+         Just actualSliceLenBV <- W4.asBV actualSliceLenSym -> do
+         let actualSliceLen :: Int
+             actualSliceLen = fromInteger $ BV.asUnsigned actualSliceLenBV
 
-        MirSetupSlice expectedRef -> do
-          actualRefTy <- typeOfSetupValue cc tyenv nameEnv expectedRef
-          case actualRefTy of
-            Mir.TyRef (Mir.TyArray _ expectedLen) _
-              |  Just actualLenBV <- W4.asBV actualLen
-              ,  BV.asUnsigned actualLenBV == toInteger expectedLen
-              -> do let (actualRefShp, _actualLenShp) =
-                          sliceShapeParts actualElemTy actualMutbl actualElemTpr
-                    matchArg opts sc cc cs prepost md
-                      (MIRVal actualRefShp actualRef)
-                      (Mir.TyRef expectedElemTy expectedMutbl)
-                      expectedRef
+         let -- Retrieve the N in &[T; N], failing if the supplied type is
+             -- different.
+             arrRefTyLen :: Mir.Ty -> OverrideMatcher MIR w Int
+             arrRefTyLen (Mir.TyRef (Mir.TyArray _ len) _) = pure len
+             arrRefTyLen _ = fail_
 
-            _ -> fail_
+         let -- Take the actual slice value's underlying reference, convert it
+             -- to an array reference value, and match it against the expected
+             -- array reference value. See Note [Matching slices in overrides]
+             -- for why we do this.
+             matchSlice :: Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
+             matchSlice expectedArrRefTy expectedArrRef = do
+               arrLen <- arrRefTyLen expectedArrRefTy
+               Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> _ <-
+                 liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualElemTpr actualSliceRef
+               let actualArrTy = Mir.TyArray actualElemTy arrLen
+               let actualArrTpr = Mir.MirVectorRepr actualElemTpr
+               let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl
+               let actualArrRefShp = RefShape actualArrRefTy actualArrTy actualMutbl actualArrTpr
+               matchArg opts sc cc cs prepost md
+                 (MIRVal actualArrRefShp actualArrRef)
+                 expectedArrRefTy
+                 expectedArrRef
 
-        MirSetupSliceRange expectedRef expectedStart expectedEnd
-          |  Just actualLenBV <- W4.asBV actualLen
-          ,  BV.asUnsigned actualLenBV == toInteger (expectedEnd - expectedStart)
-          -> do startBV <- liftIO $
-                  W4.bvLit sym W4.knownNat $
-                  BV.mkBV W4.knownNat $
-                  toInteger expectedStart
-                actualRef' <- liftIO $
-                  Mir.mirRef_offsetIO bak iTypes actualElemTpr actualRef startBV
-                let (actualRefShp, _actualLenShp) =
-                      sliceShapeParts actualElemTy actualMutbl actualElemTpr
-                matchArg opts sc cc cs prepost md
-                  (MIRVal actualRefShp actualRef')
-                  (Mir.TyRef expectedElemTy expectedMutbl)
-                  expectedRef
-
-          |  otherwise
-          -> fail_
+         case slice of
+           MirSetupSliceRaw{} ->
+             panic "matchArg" ["SliceRaw not yet implemented"]
+           MirSetupSlice expectedArrRef -> do
+             -- Check that the length of the expected array reference value
+             -- matches that of the actual slice reference value.
+             expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
+             expectedSliceLen <- arrRefTyLen expectedArrRefTy
+             unless (expectedSliceLen == actualSliceLen) fail_
+             -- Match the reference values.
+             matchSlice expectedArrRefTy expectedArrRef
+           MirSetupSliceRange expectedArrRef expectedStart expectedEnd -> do
+             -- Check that the length of the range of the expected slice
+             -- reference value matches that of the actual slice reference
+             -- value. By this point, we have already checked (in
+             -- resolveSetupVal) that the length of the range is less than or
+             -- equal to the length of the expected slice reference's underlying
+             -- array, so there is no need to check it here.
+             expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
+             let expectedSliceLen = expectedEnd - expectedStart
+             unless (expectedSliceLen == actualSliceLen) fail_
+             -- Match the reference values.
+             matchSlice expectedArrRefTy expectedArrRef
 
     (MIRVal (RefShape _ _ _ xTpr) x, Mir.TyRef _ _, MS.SetupGlobal () name) -> do
       static <- findStatic colState name
@@ -1316,6 +1332,41 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                  zs ]
 
     notEq = notEqual prepost opts loc cc sc cs expected actual
+
+{-
+Note [Matching slices in overrides]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Matching slice references in overrides is surprisingly tricky. Suppose we have
+expected and actual slice reference values, both of type &[T]. At a high level,
+we need to check two things:
+
+1. The lengths of the expected and actual slices are the same.
+2. The underlying references (of type `*const T`) are the same.
+
+(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to
+just call `matchArg` on the underlying references, but don't do this! These
+reference values are derived from array references, which are of type &[T; N],
+but calling matchArg on something of type `*const T` will associate the
+reference's AllocIndex to something that points to a value of type T, not a
+value of type [T; N]. This leads to disaster later when checking mir_points_to
+statements for that reference value in the precondition of the override, as it
+will incorrectly require the right-hand side to be of type T, not [T; N]. (See
+#2045 for an example of this actually happening.)
+
+Instead, we want to call `matchArg` on the *array reference value* associated
+with a slice, not the raw reference value itself. To do this, we take the raw
+reference value and use mirRef_peelIndexIO, a crucible-mir memory model
+operation which "peels back" the indexing operation that raw slice references
+use, thereby turning a `*const T` value into a `&[T; N]` value. It's a bit
+indirect, but it avoids needing to plumb around the original array reference
+value alongside the slice's raw reference value.
+
+This assumes that all slice reference values passed to an override were derived
+from crucible-mir's indexing operations, as this is crucial for
+mirRef_peelIndexIO to work. This is currently the case on every example we have
+tried, but if we encounter an example that breaks this assumption, then we will
+need to rethink this approach.
+-}
 
 -- | For each points-to statement read the memory value through the
 -- given pointer (lhs) and match the value against the given pattern
