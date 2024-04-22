@@ -955,7 +955,8 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
        Right _ ->
          do sc <- getSharedContext
             db <- getTheoremDB
-            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals)
+            what4PushMuxOps <- gets rwWhat4PushMuxOps
+            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals what4PushMuxOps)
             putTheoremDB db'
             pure thmResult
 

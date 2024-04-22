@@ -159,7 +159,7 @@ jvm_extract c mname = do
   ctx <- getJVMTrans
 
   io $ do -- only the IO monad, nothing else
-          sym <- newSAWCoreExprBuilder sc
+          sym <- newSAWCoreExprBuilder sc False
           SomeOnlineBackend bak <- newSAWCoreBackend pathSatSolver sym
           st  <- sawCoreState sym
           CJ.setSimulatorVerbosity verbosity sym

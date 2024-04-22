@@ -841,7 +841,7 @@ setupCrucibleContext jclass =
      cb <- getJavaCodebase
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
-     sym <- io $ newSAWCoreExprBuilder sc
+     sym <- io $ newSAWCoreExprBuilder sc False
      bak <- io $ newSAWCoreBackend pathSatSolver sym
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym

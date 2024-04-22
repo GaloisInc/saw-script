@@ -421,7 +421,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       opts <- getOptions
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
-      sym <- liftIO $ newSAWCoreExprBuilder sc
+      sym <- liftIO $ newSAWCoreExprBuilder sc False
       mdMap <- liftIO $ newIORef mempty
       SomeOnlineBackend bak <- liftIO $
         newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw

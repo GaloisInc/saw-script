@@ -466,15 +466,15 @@ unbindAndFreshenProp sc (Prop p0) = loop [] [] p0
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
 --   perform a variety of simplifications and rewrites.
-evalProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
-evalProp sc unints p =
+evalProp :: SharedContext -> Bool -> Set VarIndex -> Prop -> IO Prop
+evalProp sc what4PushMuxOps unints p =
   do (ecs, body) <- unbindAndFreshenProp sc p
      body' <-
        case asEqTrue body of
          Just t -> pure t
          Nothing -> fail ("goal_eval: expected EqTrue\n" ++ scPrettyTerm defaultPPOpts (unProp p))
 
-     sym <- Common.newSAWCoreExprBuilder sc
+     sym <- Common.newSAWCoreExprBuilder sc what4PushMuxOps
      st <- Common.sawCoreState sym
      (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints body'
      t1 <- W4Sim.toSC sym st p'
@@ -949,11 +949,11 @@ reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots
 --   does not totally guarantee the theorem is true, as it does
 --   not verify any solver-provided proofs, and it accepts admitted
 --   propositions and quickchecked propositions as valid.
-validateTheorem :: SharedContext -> TheoremDB -> Theorem -> IO ()
+validateTheorem :: SharedContext -> Bool -> TheoremDB -> Theorem -> IO ()
 
-validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
+validateTheorem sc what4PushMuxOps db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
    do let hyps = Map.keysSet (theoremMap db)
-      (deps,_) <- checkEvidence sc e p
+      (deps,_) <- checkEvidence sc what4PushMuxOps e p
       unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep hyps)
              (fail $ unlines ["Theorem failed to declare its dependencies correctly"
                              , show deps, show thmDep ])
@@ -1188,6 +1188,7 @@ proofByTerm sc db prf loc rsn =
 --   error will be raised.
 constructTheorem ::
   SharedContext ->
+  Bool ->
   TheoremDB ->
   Prop ->
   Evidence ->
@@ -1196,8 +1197,8 @@ constructTheorem ::
   Text ->
   NominalDiffTime ->
   IO (Theorem, TheoremDB)
-constructTheorem sc db p e loc ploc rsn elapsed =
-  do (deps,sy) <- checkEvidence sc e p
+constructTheorem sc what4PushMuxOps db p e loc ploc rsn elapsed =
+  do (deps,sy) <- checkEvidence sc what4PushMuxOps e p
      n  <- freshNonce globalNonceGenerator
      let thm =
           Theorem
@@ -1220,14 +1221,14 @@ constructTheorem sc db p e loc ploc rsn elapsed =
 --   specializes the leading quantifiers with the given terms.
 --   This will fail if the given terms to not match the quantifier structure
 --   of the given theorem.
-specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO (Theorem, TheoremDB)
-specializeTheorem _sc db _loc _rsn thm [] = return (thm, db)
-specializeTheorem sc db loc rsn thm ts =
+specializeTheorem :: SharedContext -> Bool -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO (Theorem, TheoremDB)
+specializeTheorem _sc _what4PushMuxOps db _loc _rsn thm [] = return (thm, db)
+specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
   do res <- specializeProp sc (_thmProp thm) ts
      case res of
        Left err -> fail (unlines (["specialize_theorem: failed to specialize"] ++ TC.prettyTCError err))
        Right p' ->
-         constructTheorem sc db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
+         constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
 specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TCError Prop)
 specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc Nothing []
@@ -1528,8 +1529,9 @@ normalizeConclBoolCommit sc b =
 
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifiers of all the theorems depended on while checking evidence.
-checkEvidence :: SharedContext -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
-checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
+checkEvidence :: SharedContext -> Bool -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
+checkEvidence sc what4PushMuxOps = \e p -> do
+                              nenv <- scGetNamingEnv sc
                               check nenv e (propToSequent p)
 
   where
@@ -1683,7 +1685,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            check nenv e' sqt'
 
       EvalEvidence vars e' ->
-        do sqt' <- traverseSequentWithFocus (evalProp sc vars) sqt
+        do sqt' <- traverseSequentWithFocus (evalProp sc what4PushMuxOps vars) sqt
            check nenv e' sqt'
 
       ConversionEvidence sqt' e' ->
@@ -1814,17 +1816,19 @@ finishProof ::
   ProofState ->
   Bool {- ^ should we record the theorem in the database? -} ->
   Bool {- ^ do we need to normalize the sequent to match the final goal ? -} ->
+  Bool {- ^ If 'True', push certain @ExprBuilder@ operations (e.g., @zext@) down
+            to the branches of @ite@ expressions -} ->
   IO (ProofResult, TheoremDB)
 finishProof sc db conclProp
     ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start)
-    recordThm useSequentGoals =
+    recordThm useSequentGoals what4PushMuxOps =
   case gs of
     [] ->
       do e <- checkEv []
          let e' = if useSequentGoals
                    then NormalizeSequentEvidence concl e
                    else e
-         (deps,sy) <- checkEvidence sc e' conclProp
+         (deps,sy) <- checkEvidence sc what4PushMuxOps e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          let theorem =

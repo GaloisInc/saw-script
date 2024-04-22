@@ -45,6 +45,7 @@ import qualified What4.Protocol.SMTLib2 as SMT2
 
 import qualified What4.Config as W4
 import qualified What4.Expr as W4
+import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
@@ -76,10 +77,13 @@ data SAWCruciblePersonality sym = SAWCruciblePersonality
 sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
 sawCoreState sym = pure (sym ^. W4.userState)
 
-newSAWCoreExprBuilder :: SC.SharedContext -> IO Sym
-newSAWCoreExprBuilder sc =
+newSAWCoreExprBuilder :: SC.SharedContext -> Bool -> IO Sym
+newSAWCoreExprBuilder sc what4PushMuxOps =
   do st <- newSAWCoreState sc
-     W4.newExprBuilder W4.FloatRealRepr st Nonce.globalNonceGenerator
+     sym <- W4.newExprBuilder W4.FloatRealRepr st Nonce.globalNonceGenerator
+     pushMuxOpsSetting <- W4.getOptionSetting W4.pushMuxOpsOption $ W4.getConfiguration sym
+     _ <- W4.setOpt pushMuxOpsSetting what4PushMuxOps
+     pure sym
 
 defaultSAWCoreBackendTimeout :: Integer
 defaultSAWCoreBackendTimeout = 10000

@@ -209,7 +209,7 @@ proof fileReader pss archi file mbCry globs fun =
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
-     sym <- newSAWCoreExprBuilder sc
+     sym <- newSAWCoreExprBuilder sc False
      SomeOnlineBackend bak <- newSAWCoreBackend pss sym
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
