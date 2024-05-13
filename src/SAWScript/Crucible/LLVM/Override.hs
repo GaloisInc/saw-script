@@ -1022,6 +1022,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         SetupNull _                -> Set.empty
         SetupGlobal _ _            -> Set.empty
         SetupGlobalInitializer _ _ -> Set.empty
+        SetupMux empty _ _ _       -> absurd empty
 
 
 ------------------------------------------------------------------------
@@ -1198,6 +1199,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
          matchArg opts sc cc cs prepost md (Crucible.LLVMValInt blk off') expectedTy v
 
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
+    (_, _, SetupMux empty _ _ _)        -> absurd empty
 
     (Crucible.LLVMValInt blk off, _, _) ->
       case expected of
@@ -2311,6 +2313,7 @@ instantiateSetupValue sc s v =
     SetupNull{}              -> return v
     SetupGlobal{}            -> return v
     SetupGlobalInitializer{} -> return v
+    SetupMux empty _ _ _     -> absurd empty
     SetupEnum  empty         -> absurd empty
     SetupTuple empty _       -> absurd empty
     SetupSlice empty         -> absurd empty

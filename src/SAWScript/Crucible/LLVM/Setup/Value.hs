@@ -132,6 +132,7 @@ type instance Setup.XSetupCast (LLVM _) = L.Type
 type instance Setup.XSetupUnion (LLVM _) = ()
 type instance Setup.XSetupGlobal (LLVM _) = ()
 type instance Setup.XSetupGlobalInitializer (LLVM _) = ()
+type instance Setup.XSetupMux (LLVM _) = Void
 
 type instance Setup.TypeName (LLVM arch) = CL.Ident
 type instance Setup.ExtType (LLVM arch) = CL.MemType

@@ -555,6 +555,9 @@ typeOfSetupValue cc env nameEnv val =
                           ]
             Right memTy -> return memTy
         Nothing -> throwError $ "resolveSetupVal: global not found: " ++ name
+
+    SetupMux empty _ _ _ ->
+      absurd empty
   where
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
@@ -682,6 +685,8 @@ resolveSetupVal cc mem env tyenv nameEnv val =
           fail $ "resolveSetupVal: global has no initializer: " ++ name
         Nothing ->
           fail $ "resolveSetupVal: global not found: " ++ name
+    SetupMux empty _ _ _ ->
+      absurd empty
 
 
 -- | Like 'resolveSetupVal', but specifically geared towards the needs of

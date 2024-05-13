@@ -4070,6 +4070,14 @@ primitives = Map.fromList
     Experimental
     [ "Load a MIR JSON file and return a handle to it." ]
 
+  , prim "mir_mux_values" "Term -> MIRValue -> MIRValue -> MIRValue"
+    (pureVal mir_mux_values)
+    Experimental
+    [ "Mux two MIRValues based on whether a (possibly symbolic) Term predicate"
+    , "holds or not. The Term argument must have the Cryptol type Bit, and the"
+    , "two MIRValue arguments must have the same type."
+    ]
+
   , prim "mir_points_to" "MIRValue -> MIRValue -> MIRSetup ()"
     (pureVal mir_points_to)
     Experimental
