@@ -167,6 +167,7 @@ import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
+import qualified Lang.Crucible.LLVM.Functions as Crucible
 import qualified Lang.Crucible.LLVM.Intrinsics as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
@@ -1820,7 +1821,9 @@ setupLLVMCrucibleContext pathSat lm action =
                      do -- register all the functions defined in the LLVM module
                         Crucible.registerLazyModule (handleTranslationWarning opts) mtrans
                         -- register the callable override functions
-                        Crucible.register_llvm_overrides llvm_mod saw_llvm_overrides saw_llvm_overrides ctx
+                        _ <- Crucible.register_llvm_overrides llvm_mod saw_llvm_overrides saw_llvm_overrides ctx
+
+                        pure ()
 
                let initExecState =
                      Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
@@ -1856,19 +1859,20 @@ handleTranslationWarning opts (Crucible.LLVMTranslationWarning s p msg) =
 
 saw_llvm_overrides ::
   ( Crucible.IsSymInterface sym, Crucible.HasLLVMAnn sym, Crucible.HasPtrWidth wptr ) =>
-  [Crucible.OverrideTemplate p sym arch rtp l a]
+  [Crucible.OverrideTemplate p sym ext arch]
 saw_llvm_overrides =
   [ Crucible.basic_llvm_override saw_assert_override
   ]
 
 saw_assert_override ::
   ( Crucible.IsSymInterface sym, Crucible.HasLLVMAnn sym, Crucible.HasPtrWidth wptr ) =>
-  Crucible.LLVMOverride p sym
+  Crucible.LLVMOverride p sym ext
     (Crucible.EmptyCtx Crucible.::> Crucible.BVType 32)
     Crucible.UnitType
 saw_assert_override =
   [llvmOvr| void @saw_assert( i32 ) |]
-  (\_memOps bak (Ctx.Empty Ctx.:> p) ->
+  (\_memOps (Ctx.Empty Ctx.:> p) ->
+     Crucible.ovrWithBackend $ \bak ->
      do let sym = Crucible.backendGetSym bak
         let msg = Crucible.GenericSimError "saw_assert"
         liftIO $
