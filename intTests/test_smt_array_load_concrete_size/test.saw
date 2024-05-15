@@ -1,0 +1,66 @@
+enable_experimental;
+
+import "Mix.cry";
+let arrayRangeEq = parse_core "arrayRangeEq 64 (Vec 8 Bool)";
+
+m <- llvm_load_module "test.bc";
+
+let i8 = llvm_int 8;
+let i32 = llvm_int 32;
+
+let alloc_init_readonly ty v = do {
+  p <- llvm_alloc_readonly ty;
+  llvm_points_to p v;
+  return p;
+};
+
+let ptr_to_fresh_readonly n ty = do {
+  x <- llvm_fresh_var n ty;
+  p <- alloc_init_readonly ty (llvm_term x);
+  return (x, p);
+};
+
+let mix_spec len res_block_len range_eq_len = do {
+  block <- llvm_fresh_cryptol_var "block" {| ByteArray |};
+  block_ptr <- llvm_symbolic_alloc false 1 {{ 128:[64] }};
+  llvm_points_to_array_prefix block_ptr block {{ 128:[64] }};
+
+  (data, data_ptr) <- ptr_to_fresh_readonly "data" (llvm_array len i8);
+
+  n <- llvm_fresh_var "n" i32;
+  llvm_precond({{ n < 128 }});
+
+  llvm_execute_func [block_ptr, (llvm_term n), data_ptr, (llvm_term {{ `len : [64] }})];
+
+  let res = {{ mix block (0 # n) data }};
+  res_block <- llvm_fresh_cryptol_var "res_block" {| ByteArray |};
+  llvm_points_to_array_prefix block_ptr res_block {{ `res_block_len:[64] }};
+  llvm_postcond {{ arrayRangeEq res_block 0 res 0 `range_eq_len }};
+
+  llvm_return (llvm_term {{ 1 : [32]}});
+};
+
+llvm_verify m "mix"
+  []
+  true
+  (mix_spec 1 128 128)
+  (do {
+    w4_unint_z3 [];
+  });
+
+llvm_verify m "mix"
+  []
+  true
+  (mix_spec 1 0 0)
+  (do {
+    w4_unint_z3 [];
+  });
+
+fails (llvm_verify m "mix"
+  []
+  true
+  (mix_spec 1 129 0)
+  (do {
+    w4_unint_z3 [];
+  }));
+

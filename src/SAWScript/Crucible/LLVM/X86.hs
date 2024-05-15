@@ -27,13 +27,14 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
   , llvm_verify_fixpoint_x86
+  , llvm_verify_fixpoint_chc_x86
   , llvm_verify_x86_with_invariant
   , defaultStackBaseAlign
   ) where
 
 import Control.Lens.TH (makeLenses)
 
-import System.IO (stdout)
+import System.IO
 import Control.Exception (throw)
 import Control.Lens (Getter, to, view, use, (&), (^.), (.~), (%~), (.=))
 import Control.Monad (forM, forM_, unless, when, zipWithM)
@@ -62,6 +63,7 @@ import Data.Maybe
 import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some
+import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
@@ -130,6 +132,7 @@ import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
 import qualified Lang.Crucible.LLVM.MemModel as C.LLVM
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
 import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpointCHC as Crucible.LLVM.FixpointCHC
 import qualified Lang.Crucible.LLVM.SimpleLoopInvariant as SimpleInvariant
 import qualified Lang.Crucible.LLVM.Translation as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
@@ -272,9 +275,10 @@ llvmPointerOffset = snd . C.LLVM.llvmPointerView
 -- the unsigned comparison between pointer1 and pointer2 is equivalent with the
 -- unsigned comparison between offset1 + 4096 and offset2 + 4096.
 doPtrCmp ::
+  FixpointSelect ->
   (sym -> W4.SymBV sym w -> W4.SymBV sym w -> IO (W4.Pred sym)) ->
   Macaw.PtrOp sym w (C.RegValue sym C.BoolType)
-doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
+doPtrCmp fixpointSelect f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
   let sym = backendGetSym bak
   let ptr_as_bv_for_cmp ptr = do
         page_size <- W4.bvLit sym (W4.bvWidth $ llvmPointerOffset ptr) $
@@ -286,6 +290,8 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
         ok <- W4.orPred sym is_valid
           =<< W4.andPred sym is_negative_offset is_not_overflow
         return (ptr_as_bv, ok)
+        -- is_valid <- Macaw.isValidPtr sym mem w ptr
+        -- return (llvmPointerOffset ptr, is_valid)
   both_bits <- W4.andPred sym xBits yBits
   both_ptrs <- W4.andPred sym xPtr yPtr
   same_region <- W4.natEq sym (llvmPointerBlock x) (llvmPointerBlock y)
@@ -296,9 +302,20 @@ doPtrCmp f = Macaw.ptrOp $ \bak mem w xPtr xBits yPtr yBits x y -> do
     =<< W4.andPred sym ok_x ok_y
   res_both_bits <- f sym (llvmPointerOffset x) (llvmPointerOffset y)
   res_both_ptrs <- f sym x_ptr_as_bv y_ptr_as_bv
-  undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
-  W4.itePred sym both_bits res_both_bits
-    =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+  let ptrCmpDefault = do
+        undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
+        W4.itePred sym both_bits res_both_bits
+          =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+  case fixpointSelect of
+    SimpleFixpointCHC{} ->
+      if | Just True <- W4.asConstantPred both_bits ->
+           return res_both_bits
+         | Just True <- W4.asConstantPred both_ptrs -> do
+           C.assert bak ok_both_ptrs $ C.AssertFailureSimError "" ""
+           return res_both_ptrs
+         | otherwise ->
+           ptrCmpDefault
+    _ -> ptrCmpDefault
 
 -------------------------------------------------------------------------------
 -- ** Entrypoint
@@ -337,6 +354,26 @@ llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
+--
+-- This differs from 'llvm_verify_fixpoint_x86' in that it leverages Z3's
+-- constrained horn-clause (CHC) functionality to synthesize some of the loop's
+-- properties.
+llvm_verify_fixpoint_chc_x86 ::
+  Some LLVMModule {- ^ Module to associate with method spec -} ->
+  FilePath {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
+  TypedTerm {- ^ Function specifying the loop -} ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_fixpoint_chc_x86 llvmModule path nm globsyms checkSat f =
+  llvm_verify_x86_common llvmModule path nm globsyms checkSat (SimpleFixpointCHC f)
+
+-- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
+-- to an LLVM specification. This allows for compositional verification of LLVM
+-- functions that call x86_64 functions (but not the other way around).
 llvm_verify_x86_with_invariant ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
@@ -354,6 +391,7 @@ llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,lo
 data FixpointSelect
  = NoFixpoint
  | SimpleFixpoint TypedTerm
+ | SimpleFixpointCHC TypedTerm
  | SimpleInvariant String Integer TypedTerm
 
 llvm_verify_x86_common ::
@@ -371,29 +409,34 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       start <- io getCurrentTime
       laxLoadsAndStores <- gets rwLaxLoadsAndStores
+      noSatisfyingWriteFreshConstant <- gets rwNoSatisfyingWriteFreshConstant
       pathSatSolver <- gets rwPathSatSolver
       let ?ptrWidth = knownNat @64
       let ?memOpts = C.LLVM.defaultMemOptions
                        { C.LLVM.laxLoadsAndStores = laxLoadsAndStores
+                       , C.LLVM.noSatisfyingWriteFreshConstant = noSatisfyingWriteFreshConstant
                        }
       let ?recordLLVMAnnotation = \_ _ _ -> return ()
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
       rw <- getTopLevelRW
-      sym <- liftIO $ newSAWCoreExprBuilder sc
+      sym <- liftIO $ newSAWCoreExprBuilder sc False
       mdMap <- liftIO $ newIORef mempty
       SomeOnlineBackend bak <- liftIO $
         newSAWCoreBackendWithTimeout pathSatSolver sym $ rwCrucibleTimeout rw
-      cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
+      let config = W4.getConfiguration sym
+      cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms config
       _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
+      pushMuxOpsSetting <- liftIO $ W4.getOptionSetting W4.B.pushMuxOpsOption config
+      _ <- liftIO $ W4.setOpt pushMuxOpsSetting $ rwWhat4PushMuxOps rw
       liftIO $ W4.extendConfig
         [ W4.opt
             LO.enableSMTArrayMemoryModel
             (W4.ConcreteBool $ rwSMTArrayMemoryModel rw)
             ("Enable SMT array memory model" :: Text)
         ]
-        (W4.getConfiguration sym)
+        config
       let ?w4EvalTactic = W4EvalTactic { doW4Eval = rwWhat4Eval rw }
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
@@ -493,8 +536,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           archEvalFns mvar mmConf
         sawMacawExtensions = defaultMacawExtensions_x86_64
           { C.extensionExec = \s0 st -> case s0 of
-              Macaw.PtrLt w x y -> doPtrCmp W4.bvUlt st mvar w x y
-              Macaw.PtrLeq w x y -> doPtrCmp W4.bvUle st mvar w x y
+              Macaw.PtrLt w x y -> doPtrCmp fixpointSelect W4.bvUlt st mvar w x y
+              Macaw.PtrLeq w x y -> doPtrCmp fixpointSelect W4.bvUle st mvar w x y
               _ -> (C.extensionExec defaultMacawExtensions_x86_64) s0 st
           }
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
@@ -539,12 +582,20 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
          else
            pure []
 
-      simpleLoopFixpointFeature <-
+      -- rw_ref <- liftIO . newIORef =<< getTopLevelRW
+      (simpleLoopFixpointFeature, maybe_ref) <-
         case fixpointSelect of
-          NoFixpoint -> return []
+          NoFixpoint -> return ([], Nothing)
           SimpleFixpoint func ->
-            do f <- liftIO (setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func)
-               return [f]
+            do f <- liftIO $ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func
+               return ([f], Nothing)
+          SimpleFixpointCHC func ->
+            do let ?ptrWidth = knownNat @64
+              --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar Nothing
+              --  (f, ref) <- liftIO $ Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $
+              --    Just $ simpleLoopFixpointFunction sc sym rw_ref $ methodSpec ^. csName
+               (f, ref) <- liftIO $ setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func
+               return ([f], Just ref)
           SimpleInvariant loopFixpointSymbol loopNum func ->
             do (loopaddr :: Macaw.MemSegmentOff 64) <-
                  case findSymbols (symMap relf) . encodeUtf8 $ Text.pack loopFixpointSymbol of
@@ -556,7 +607,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                    do let printFn = printOutLn opts Info
                       f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
                                                                    sc sawst mdMap loopcfg mvar func)
-                      return [f]
+                      return ([f], Nothing)
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
@@ -578,12 +629,22 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                          ]
         C.TimeoutResult{} -> fail "Execution timed out"
 
+      (invSubst, loopFunEquivConds) <- liftIO $ case maybe_ref of
+        Just fixpoint_state_ref -> do
+          uninterp_inv_fns <- Crucible.LLVM.FixpointCHC.executionFeatureContextInvPreds <$> readIORef fixpoint_state_ref
+          subst <- C.runCHC bak uninterp_inv_fns
+          loop_fun_equiv_conds <- Crucible.LLVM.FixpointCHC.executionFeatureContextLoopFunEquivConds <$> readIORef fixpoint_state_ref
+          return (subst, loop_fun_equiv_conds)
+        Nothing -> return (MapF.empty, [])
+
       liftIO $ printOutLn opts Info
         "Examining specification to determine postconditions"
       liftIO $ void $ runX86Sim finalState $
         assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
-      (stats,vcstats) <- checkGoals bak opts nm sc tactic mdMap
+      (stats,vcstats) <- checkGoals bak opts nm (methodSpec ^. MS.csLoc) sc tactic mdMap invSubst loopFunEquivConds
+
+      -- putTopLevelRW =<< liftIO (readIORef rw_ref)
 
       end <- io getCurrentTime
       let diff = diffUTCTime end start
@@ -591,8 +652,6 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       returnProof $ SomeLLVM ps
 
   | otherwise = fail "LLVM module must be 64-bit"
-
-
 
 setupSimpleLoopFixpointFeature ::
   ( sym ~ W4.B.ExprBuilder n st fs
@@ -664,6 +723,80 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
 
        return (result_substitution, result_condition)
+
+setupSimpleLoopFixpointCHCFeature ::
+  ( sym ~ W4.B.ExprBuilder n st fs
+  , C.IsSymInterface sym
+  , ?memOpts::C.LLVM.MemOptions
+  , C.LLVM.HasLLVMAnn sym
+  , C.IsSyntaxExtension ext
+  ) =>
+  sym ->
+  SharedContext ->
+  SAWCoreState n ->
+  C.CFG ext blocks init ret ->
+  C.GlobalVar C.LLVM.Mem ->
+  TypedTerm ->
+  IO (C.ExecutionFeature p sym ext rtp, IORef (Crucible.LLVM.FixpointCHC.ExecutionFeatureContext sym 64 ext))
+
+setupSimpleLoopFixpointCHCFeature sym sc sawst cfg mvar func = do
+  let ?ptrWidth = knownNat @64
+  Crucible.LLVM.FixpointCHC.simpleLoopFixpoint sym cfg mvar $ Just fixpoint_func
+
+ where
+  fixpoint_func fixpoint_substitution condition =
+    do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+       let header_exprs = map (mapSome $ Crucible.LLVM.FixpointCHC.headerValue) (MapF.elems fixpoint_substitution)
+       let body_exprs = map (mapSome $ Crucible.LLVM.FixpointCHC.bodyValue) (MapF.elems fixpoint_substitution)
+       let uninterpreted_constants = foldMap
+             (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
+             (Some condition : body_exprs ++ header_exprs)
+       let filtered_uninterpreted_constants = Set.toList $ Set.filter
+             (\(Some variable) ->
+               not (List.isPrefixOf "cindex_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "creg_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cmem_join_var" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "cundefined" $ show $ W4.printSymExpr variable)
+               && not (List.isPrefixOf "calign_amount" $ show $ W4.printSymExpr variable))
+             uninterpreted_constants
+       tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+       implicit_parameters <- mapM (scExtCns sc) $ Set.toList $ foldMap getAllExtSet tms
+       arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+         toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry
+       arguments_tuple <- scTuple sc arguments
+       applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]
+       applied_func_selectors <- forM [1 .. (length fixpoint_substitution_as_list)] $ \i ->
+         scTupleSelector sc applied_func i (length fixpoint_substitution_as_list)
+       result_substitution <- MapF.fromList <$> zipWithM
+         (\(MapF.Pair variable _) applied_func_selector ->
+           MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+         fixpoint_substitution_as_list
+         applied_func_selectors
+
+       explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+         toSC sym sawst variable
+       explicit_parameters_tuple <- scTuple sc explicit_parameters
+
+       inner_func <- case asConstant (ttTerm func) of
+         Just (_, Just (asApplyAll -> (isGlobalDef "Prelude.fix" -> Just (), [_, inner_func]))) ->
+           return inner_func
+         _ -> fail $ "not Prelude.fix: " ++ showTerm (ttTerm func)
+       func_body <- betaNormalize sc
+         =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
+
+       step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+         toSC sym sawst $ Crucible.LLVM.FixpointCHC.bodyValue fixpoint_entry
+       step_arguments_tuple <- scTuple sc step_arguments
+       tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]
+
+       loop_condition <- toSC sym sawst condition
+       output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+       loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
+
+       induction_step_condition <- scEq sc loop_body func_body
+       result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
+
+       return (result_substitution, Just result_condition)
 
 
 -- | This procedure sets up the simple loop fixpoint feature.
@@ -1384,12 +1517,28 @@ checkGoals ::
   bak ->
   Options ->
   String ->
+  W4.ProgramLoc ->
   SharedContext ->
   ProofScript () ->
   IORef MetadataMap {- ^ metadata map -} ->
+  MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym) ->
+  [W4.Pred Sym] ->
   TopLevel (SolverStats, [MS.VCStats])
-checkGoals bak opts nm sc tactic mdMap = do
-  gs <- liftIO $ getPoststateObligations sc bak mdMap
+checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
+  poststate_gs <- liftIO $ getPoststateObligations sc bak mdMap invSubst
+  loop_gs <- liftIO $ forM loopFunEquivConds $ \cond -> do
+    let sym = C.backendGetSym bak
+    st <- Common.sawCoreState sym
+    condTerm <- toSC sym st =<< W4.substituteSymFns sym invSubst cond
+    let defaultMd = MS.ConditionMetadata
+          { MS.conditionLoc = loc
+          , MS.conditionTags = mempty
+          , MS.conditionType = "loop function equivalence"
+          , MS.conditionContext = ""
+          }
+    return ("", defaultMd, condTerm)
+  let gs = poststate_gs ++ loop_gs
+
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs

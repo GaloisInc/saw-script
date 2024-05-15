@@ -333,7 +333,7 @@ showRefnset opts ss =
     ppFunAssumpRHS ctx (OpaqueFunAssump f args) =
       ppTermAppInCtx opts' ctx (funNameTerm f) args
     ppFunAssumpRHS ctx (RewriteFunAssump rhs) =
-      SAWCorePP.ppTermInCtx opts' (map fst $ mrVarCtxInnerToOuter ctx) rhs 
+      SAWCorePP.ppTermInCtx opts' (map fst $ mrVarCtxInnerToOuter ctx) rhs
     opts' = sawPPOpts opts
 
 showsPrecValue :: PPOpts -> SAWNamingEnv -> Int -> Value -> ShowS
@@ -586,6 +586,9 @@ data TopLevelRW =
   , rwStackBaseAlign :: Integer
 
   , rwAllocSymInitCheck :: Bool
+
+  , rwWhat4PushMuxOps :: Bool
+  , rwNoSatisfyingWriteFreshConstant :: Bool
 
   , rwCrucibleTimeout :: Integer
 
@@ -952,7 +955,8 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
        Right _ ->
          do sc <- getSharedContext
             db <- getTheoremDB
-            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals)
+            what4PushMuxOps <- gets rwWhat4PushMuxOps
+            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals what4PushMuxOps)
             putTheoremDB db'
             pure thmResult
 

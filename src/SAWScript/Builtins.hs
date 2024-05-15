@@ -717,7 +717,8 @@ goal_eval unints =
   execTactic $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     sqt' <- traverseSequentWithFocus (io . evalProp sc unintSet) (goalSequent goal)
+     what4PushMuxOps <- gets rwWhat4PushMuxOps
+     sqt' <- traverseSequentWithFocus (io . evalProp sc what4PushMuxOps unintSet) (goalSequent goal)
      return (sqt', EvalEvidence unintSet)
 
 extract_uninterp ::
@@ -2097,7 +2098,8 @@ specialize_theorem thm ts =
   do sc <- getSharedContext
      db <- SV.getTheoremDB
      pos <- SV.getPosition
-     (thm', db') <- io (specializeTheorem sc db pos "specialize_theorem" thm (map ttTerm ts))
+     what4PushMuxOps <- gets rwWhat4PushMuxOps
+     (thm', db') <- io (specializeTheorem sc what4PushMuxOps db pos "specialize_theorem" thm (map ttTerm ts))
      SV.putTheoremDB db'
      SV.returnProof thm'
 

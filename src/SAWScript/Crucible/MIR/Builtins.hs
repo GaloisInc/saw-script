@@ -1395,7 +1395,7 @@ setupCrucibleContext rm =
   do halloc <- getHandleAlloc
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
-     sym <- io $ newSAWCoreExprBuilder sc
+     sym <- io $ newSAWCoreExprBuilder sc False
      someBak@(SomeOnlineBackend bak) <- io $ newSAWCoreBackend pathSatSolver sym
      let cs     = rm ^. Mir.rmCS
      let col    = cs ^. Mir.collection

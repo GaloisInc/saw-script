@@ -9,6 +9,7 @@ module SAWScript.Prover.What4 where
 
 
 import           Control.Lens ((^.))
+import           Control.Monad.State (gets)
 import           Data.List (nub)
 import           Data.Set (Set)
 import qualified Data.Map as Map
@@ -20,7 +21,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery (SATQuery(..))
 
 import           SAWScript.Proof(Sequent, sequentToSATQuery, CEX)
-import           SAWScript.Value (TopLevel, io, getSharedContext)
+import           SAWScript.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
 
 import           Data.Parameterized.Nonce
 
@@ -41,15 +42,21 @@ import qualified What4.Expr.Builder as B
 -- trivial state
 data St t = St
 
-setupWhat4_sym :: Bool -> IO (B.ExprBuilder
-                              GlobalNonceGenerator
-                              St
-                              (B.Flags B.FloatReal))
-setupWhat4_sym hashConsing =
+setupWhat4_sym ::
+  Bool ->
+  Bool ->
+  IO (B.ExprBuilder
+      GlobalNonceGenerator
+      St
+      (B.Flags B.FloatReal))
+setupWhat4_sym hashConsing what4PushMuxOps =
   do -- TODO: get rid of GlobalNonceGenerator ???
      sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
-     cacheTermsSetting <- getOptionSetting B.cacheTerms $ getConfiguration sym
+     let cfg = getConfiguration sym
+     cacheTermsSetting <- getOptionSetting B.cacheTerms cfg
      _ <- setOpt cacheTermsSetting hashConsing
+     pushMuxOpsSetting <- getOptionSetting B.pushMuxOpsOption cfg
+     _ <- setOpt pushMuxOpsSetting what4PushMuxOps
      return sym
 
 what4Theories ::
@@ -57,9 +64,11 @@ what4Theories ::
   Bool ->
   Sequent ->
   TopLevel [String]
-what4Theories unintSet hashConsing goal =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
+what4Theories unintSet hashConsing goal = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
      satq <- sequentToSATQuery sc unintSet goal
      (_varMap, lits) <- W.w4Solve sym sc satq
      let pf lit = (predicateVarInfo lit)^.problemFeatures
@@ -86,9 +95,11 @@ proveWhat4_sym ::
   Bool ->
   SATQuery ->
   TopLevel (Maybe CEX, String)
-proveWhat4_sym solver hashConsing satq =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
+proveWhat4_sym solver hashConsing satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
      proveWhat4_solver solver sym sc satq (return ())
 
 proveExportWhat4_sym ::
@@ -97,9 +108,11 @@ proveExportWhat4_sym ::
   FilePath ->
   SATQuery ->
   TopLevel (Maybe CEX, String)
-proveExportWhat4_sym solver hashConsing outFilePath satq =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
+proveExportWhat4_sym solver hashConsing outFilePath satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
 
      -- Write smt out
      (_, _, lits, solver_name) <- setupWhat4_solver solver sym sc satq
@@ -131,9 +144,11 @@ proveWhat4_z3_using ::
   Bool          {- ^ Hash-consing of What4 terms -}->
   SATQuery      {- ^ The query to be proved -} ->
   TopLevel (Maybe CEX, String)
-proveWhat4_z3_using tactic hashConsing satq =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
+proveWhat4_z3_using tactic hashConsing satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
      proveWhat4_solver z3Adapter sym sc satq $
        do z3TacticSetting <- getOptionSetting z3Tactic $ getConfiguration sym
           _ <- setOpt z3TacticSetting $ Text.pack tactic

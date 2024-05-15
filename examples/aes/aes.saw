@@ -5,20 +5,22 @@ print "Proving encrypt_lemma...";
 encrypt_lemma <-
   time (prove_print (unint_z3 ["AESRound"])
   (rewrite (cryptol_ss())
-  {{ \(state0 : State) (ks : [9]RoundKey) ->
+  {{ \(state0 : State) (ks : [13]RoundKey) ->
       (rounds where rounds = [state0] # [ AESRound (rk, s) | rk <- ks | s <- rounds ]) ! 0 ==
-        AESRound(ks@8,AESRound(ks@7,AESRound(ks@6,AESRound(ks@5,AESRound(ks@4,
-          AESRound(ks@3,AESRound(ks@2,AESRound(ks@1,AESRound(ks@0,state0)))))))))
+        AESRound(ks@12,AESRound(ks@11,AESRound(ks@10,AESRound(ks@9,
+          AESRound(ks@8,AESRound(ks@7,AESRound(ks@6,AESRound(ks@5,AESRound(ks@4,
+            AESRound(ks@3,AESRound(ks@2,AESRound(ks@1,AESRound(ks@0,state0)))))))))))))
   }}));
 
 print "Proving decrypt_lemma...";
 decrypt_lemma <-
   time (prove_print (unint_z3 ["AESInvRound"])
   (rewrite (cryptol_ss())
-  {{ \(state0 : State) (ks : [9]RoundKey) ->
+  {{ \(state0 : State) (ks : [13]RoundKey) ->
       (rounds where rounds = [state0] # [ AESInvRound (rk, s) | rk <- reverse ks | s <- rounds ]) ! 0 ==
         AESInvRound(ks@0,AESInvRound(ks@1,AESInvRound(ks@2,AESInvRound(ks@3,AESInvRound(ks@4,
-          AESInvRound(ks@5,AESInvRound(ks@6,AESInvRound(ks@7,AESInvRound(ks@8,state0)))))))))
+          AESInvRound(ks@5,AESInvRound(ks@6,AESInvRound(ks@7,AESInvRound(ks@8,
+            AESInvRound(ks@9,AESInvRound(ks@10,AESInvRound(ks@11,AESInvRound(ks@12,state0)))))))))))))
   }}));
 
 print "Proving msgToState_stateToMsg(rme)...";
@@ -65,7 +67,7 @@ InvMixColumns_MixColumns <-
 print "Proving aesDecrypt_aesEncrypt(rewriting)...";
 dec_enc <-
   time (prove_print do {
-    unfolding ["aesEncrypt", "aesDecrypt"];
+    unfolding ["aesEncrypt", "aesEncryptWithKeySchedule", "aesDecrypt"];
     simplify (addsimps [encrypt_lemma,
                         decrypt_lemma]
               (cryptol_ss()));
@@ -112,7 +114,7 @@ MixColumns_InvMixColumns <-
 print "Proving aesEncrypt_aesDecrypt(rewriting)...";
 enc_dec <-
   time (prove_print do {
-    unfolding ["aesEncrypt", "aesDecrypt"];
+    unfolding ["aesEncrypt", "aesEncryptWithKeySchedule", "aesDecrypt"];
     simplify (addsimps [encrypt_lemma,
                         decrypt_lemma]
               (cryptol_ss()));

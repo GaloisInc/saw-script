@@ -252,5 +252,5 @@ yosys_verify_sequential_sally ::
   TopLevel ()
 yosys_verify_sequential_sally s path q fixed = do
   sc <- getSharedContext
-  sym <- liftIO $ Common.newSAWCoreExprBuilder sc
+  sym <- liftIO $ Common.newSAWCoreExprBuilder sc False
   queryModelChecker sym sc s path q . Set.fromList $ Text.pack <$> fixed

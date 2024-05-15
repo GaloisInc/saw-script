@@ -49,6 +49,7 @@ import Data.Foldable(toList)
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
+import Control.Monad.State (gets)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
@@ -103,7 +104,7 @@ import SAWScript.Value
 
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
-import What4.Config (extendConfig)
+import What4.Config (extendConfig, getOptionSetting, setOpt)
 import What4.Interface (getConfiguration, IsSymExprBuilder)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.SMTLib2.Response (smtParseOptions)
@@ -312,11 +313,16 @@ writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
 -- | Write a SAT query an SMT-Lib version 2 file.
 -- This version uses What4 instead of SBV.
 writeSMTLib2What4 :: FilePath -> SATQuery -> TopLevel ()
-writeSMTLib2What4 f satq = getSharedContext >>= \sc -> io $
-  do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
+writeSMTLib2What4 f satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
      (_varMap, lits) <- W.w4Solve sym sc satq
      let cfg = getConfiguration sym
      extendConfig smtParseOptions cfg
+     pushMuxOpsSetting <- getOptionSetting W4.pushMuxOpsOption cfg
+     _ <- setOpt pushMuxOpsSetting what4PushMuxOps
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h lits
 
@@ -328,7 +334,7 @@ write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]
 writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
-  do sym <- newSAWCoreExprBuilder sc
+  do sym <- newSAWCoreExprBuilder sc False
      -- For SAT checking, we don't care what order the variables are in,
      -- but only that we can correctly keep track of the connection
      -- between inputs and assignments.
@@ -380,7 +386,7 @@ flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  sym <- newSAWCoreExprBuilder sc
+  sym <- newSAWCoreExprBuilder sc False
   st  <- sawCoreState sym
   -- For writing Verilog in the general case, it's convenient for any
   -- lambda-bound inputs to appear first in the module input list, in
