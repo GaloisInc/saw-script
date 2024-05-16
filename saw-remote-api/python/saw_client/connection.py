@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import signal
 import sys
-from distutils.spawn import find_executable
+from shutil import which
 from argo_client.connection import ServerConnection, DynamicSocketProcess, HttpProcess, ManagedProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
@@ -52,11 +52,11 @@ def connect(command: Union[str, ServerConnection, None] = None,
         c = SAWConnection(command, log_dest=log_dest)
     elif url is not None:
         c = SAWConnection(ServerConnection(HttpProcess(url, verify=verify)), log_dest=log_dest)
-    elif (command := os.getenv('SAW_SERVER')) is not None and (command := find_executable(command)) is not None:
+    elif (command := os.getenv('SAW_SERVER')) is not None and (command := which(command)) is not None:
         c = SAWConnection(command+" socket", log_dest=log_dest) # SAWConnection(ServerConnection(StdIOProcess(command+" stdio")))
     elif (url := os.getenv('SAW_SERVER_URL')) is not None:
         c = SAWConnection(ServerConnection(HttpProcess(url, verify=verify)), log_dest=log_dest)
-    elif (command := find_executable('saw-remote-api')) is not None:
+    elif (command := which('saw-remote-api')) is not None:
         c = SAWConnection(command+" socket", log_dest=log_dest)
     else:
         raise ValueError(
