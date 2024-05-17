@@ -405,7 +405,9 @@ jobs:
 
       - uses: actions/setup-python@v2
         with:
-          python-version: '3.11'
+          # Ensure that this matches saw-remote-api/python/mypy.ini file
+          # and that saw-remote-api/python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
 
       - uses: abatilo/actions-poetry@v2.0.0
         with:
@@ -701,7 +703,9 @@ jobs:
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9'
+          # Ensure that this matches saw-remote-api/python/mypy.ini file
+          # and that saw-remote-api/python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: abatilo/actions-poetry@v2.0.0

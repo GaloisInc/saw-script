@@ -1,4 +1,4 @@
-import cbor2 # type: ignore
+import cbor2
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timezone

@@ -1,5 +1,9 @@
 # Revision history for saw-client
 
+## 1.1.1 -- 2024-05-16
+
+* Add support for Python 3.12
+
 ## 1.1.0 -- 2024-02-05
 
 * Add Python bindings for SAW's experimental MIR verification support:

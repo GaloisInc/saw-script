@@ -5,7 +5,7 @@ import uuid
 import sys
 import time
 import atexit
-from distutils.spawn import find_executable
+from shutil import which
 
 import cryptol
 
