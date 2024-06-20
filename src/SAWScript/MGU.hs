@@ -31,7 +31,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Identity
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -68,34 +67,60 @@ listSubst = Subst . M.fromList
 -- Most General Unifier {{{
 
 {-
- - If we fail here, the caller attaches the message we return to one
- - of its own that gives the position of the best enclosing expression
- - position available. It's important to make it clear that this is
- - all one message. Since what we send back is printed on its own
- - lines, indent it four spaces (the caller's message is already
- - indented two) to make it more clearly part of its preceding text.
+ - Error reporting.
  -
- - We're going to print the expected and found types on their own
- - lines because they can be large. (If so they can still be fairly
+ - When we find a mismatch, we have potentially recursed arbitrarily
+ - deeply into the original type. We need to print the specific types
+ - we trip on (this is important if they are e.g. elements in a large
+ - system of nested records and typles) but we also want to print the
+ - rest of the original context as well.
+ -
+ - Therefore, we start with an initial descriptive message plus (in
+ - most cases) a pair of expected and found types. Once we fail, we
+ - add more expected/found type pairs on the way out of the recursion,
+ - so we print every layer of the type.
+ -
+ - As a special case, we keep only the outermost of a series of nested
+ - function types, and drop the nested ones. Because functions are
+ - curried, this prints the complete function signature once and skips
+ - the incremental types completed by consuming each argument. (These
+ - add little information and can also confuse casual users.)
+ -
+ - The FailMGU type tracks this material. It contains three elements:
+ -    * the initial message
+ -    * the list of pairs of expected/found messages
+ -    * the current function-type expected/found message, if any
+ -
+ - Note that we print the messages on the fly rather than accumulating
+ - a list of type pairs and printing them at the end. (That may have
+ - been a mistake; we'll see.)
+ -
+ - The last element (current function-type expected/found message) is
+ - always either a list of two message strings or empty. Function types
+ - we see go in it (replacing anything already there, so we keep only
+ - the outermost of a series) and are shifted out of it when we see
+ - something else. It could be a Maybe (String, String), but the code
+ - is noticeably more convenient the way it is.
+ -
+ - The initial message is kept separate so that the expected/found
+ - list can readily be built in either order. It's not clear if it's
+ - better to print the outermost or innermost mismatches first.
+ -
+ - Further notes on the message formatting:
+ -
+ - Print the expected and found types on their own lines. They can be
+ - large; if they are the resulting lines can still be fairly
  - illegible, but at least the user doesn't have to hunt for "found"
- - in the middle of a multi-line print.) Also pad the prefix of the
- - prints so that the types line up; this is helpful for longer types
- - that still fit on one output line.
+ - in the middle of a multi-line print.
  -
- - We have recursed into the types and so if we get a mismatch we
- - should print those types (this is important if they are e.g.
- - elements in a large system of nested records and tuples) but also
- - print the enclosing types on the way out. This can become rather
- - verbose but makes it a lot easier to deal with errors deep within
- - complex structures.
+ - Pad the prefix of the prints so that the types line up; this is
+ - helpful for longer types that still fit on one output line.
  -
- - The failure result is a start line, then all the expected/found
- - lines we've accumulated, and finally, the in the middle, and the
- - last seen expected/found lines arising from a function type, which
- - we don't commit to using until we see a non-function type or get to
- - the end. The idea is that if we pass through a chain of function
- - types, each having the curried next argument to the previous, we
- - only print the last and largest one.
+ - Indent each line with four spaces. What we send back gets printed
+ - underneath a message that's already (at least in some cases)
+ - indented by two spaces. It's important to make it clear that all
+ - the stuff we generate is part of that message and not, for example,
+ - an additional separate error.
  -
  - Note that although we append to the end of the expected/found list,
  - we don't stick the start line in that list, because I keep going
@@ -104,7 +129,7 @@ listSubst = Subst . M.fromList
  - appending we don't need to keep the start line separate.
  -}
 
-type FailMGU = (String, [String], Maybe [String])
+type FailMGU = (String, [String], [String])
 
 -- common code for printing expected/found types
 showtypes :: Type -> Type -> [String]
@@ -116,26 +141,28 @@ showtypes ty1 ty2 =
 
 -- fail with expected/found types
 failMGU :: String -> Type -> Type -> Either FailMGU a
-failMGU start ty1 ty2 = Left (start, showtypes ty1 ty2, Nothing)
+failMGU start ty1 ty2 = Left (start, showtypes ty1 ty2, [])
 
 -- fail with no types
 failMGU' :: String -> Either FailMGU a
-failMGU' start = Left (start, [], Nothing)
+failMGU' start = Left (start, [], [])
 
 -- add another expected/found type pair to the failure
+-- (pull in the last function-type lines if any)
 failMGUadd :: FailMGU -> Type -> Type -> FailMGU
-failMGUadd (start, eflines, optfunlines) ty1 ty2 =
-  (start, eflines ++ fromMaybe [] optfunlines ++ showtypes ty1 ty2, Nothing)
+failMGUadd (start, eflines, lastfunlines) ty1 ty2 =
+  (start, eflines ++ lastfunlines ++ showtypes ty1 ty2, [])
 
 -- add another pair that's a function type
+-- (overwrite any previous function type lines)
 failMGUaddfun :: FailMGU -> Type -> Type -> FailMGU
 failMGUaddfun (start, eflines, _) ty1 ty2 =
-  (start, eflines, Just $ showtypes ty1 ty2)
+  (start, eflines, showtypes ty1 ty2)
 
 -- unpack the failure into a string list for printing
 failMGUunpack :: FailMGU -> [String]
-failMGUunpack (start, eflines, optfunlines) =
-  start : eflines ++ fromMaybe [] optfunlines
+failMGUunpack (start, eflines, lastfunlines) =
+  start : eflines ++ lastfunlines
 
 mgu :: Type -> Type -> Either FailMGU Subst
 mgu (LType _ t) t2 = mgu t t2
@@ -291,8 +318,9 @@ recordError err = do pos <- currentExprPos <$> ask
  - length, so we don't need to print any of that again.
  -
  - Indent the extra line four spaces because the first line ends up
- - indented by two when it ultimately gets printed and we want the
- - grouping to be clearly recognizable.
+ - indented by two when it ultimately gets printed (or at least
+ - sometimes it does) and we want the grouping to be clearly
+ - recognizable.
  -
  - The LName passed in is (at least in most cases) the name of the
  - top-level binding the failure appears inside. Its position is
