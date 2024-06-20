@@ -129,7 +129,7 @@ listSubst = Subst . M.fromList
  - appending we don't need to keep the start line separate.
  -}
 
-type FailMGU = (String, [String], [String])
+data FailMGU = FailMGU String [String] [String]
 
 -- common code for printing expected/found types
 showTypes :: Type -> Type -> [String]
@@ -141,27 +141,27 @@ showTypes ty1 ty2 =
 
 -- fail with expected/found types
 failMGU :: String -> Type -> Type -> Either FailMGU a
-failMGU start ty1 ty2 = Left (start, showTypes ty1 ty2, [])
+failMGU start ty1 ty2 = Left (FailMGU start (showTypes ty1 ty2) [])
 
 -- fail with no types
 failMGU' :: String -> Either FailMGU a
-failMGU' start = Left (start, [], [])
+failMGU' start = Left (FailMGU start [] [])
 
 -- add another expected/found type pair to the failure
 -- (pull in the last function-type lines if any)
 failMGUAdd :: FailMGU -> Type -> Type -> FailMGU
-failMGUAdd (start, eflines, lastfunlines) ty1 ty2 =
-  (start, eflines ++ lastfunlines ++ showTypes ty1 ty2, [])
+failMGUAdd (FailMGU start eflines lastfunlines) ty1 ty2 =
+  FailMGU start (eflines ++ lastfunlines ++ showTypes ty1 ty2) []
 
 -- add another pair that's a function type
 -- (overwrite any previous function type lines)
 failMGUAddFun :: FailMGU -> Type -> Type -> FailMGU
-failMGUAddFun (start, eflines, _) ty1 ty2 =
-  (start, eflines, showTypes ty1 ty2)
+failMGUAddFun (FailMGU start eflines _) ty1 ty2 =
+  FailMGU start eflines (showTypes ty1 ty2)
 
 -- unpack the failure into a string list for printing
 failMGUUnpack :: FailMGU -> [String]
-failMGUUnpack (start, eflines, lastfunlines) =
+failMGUUnpack (FailMGU start eflines lastfunlines) =
   start : eflines ++ lastfunlines
 
 mgu :: Type -> Type -> Either FailMGU Subst
