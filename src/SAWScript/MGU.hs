@@ -132,8 +132,8 @@ listSubst = Subst . M.fromList
 type FailMGU = (String, [String], [String])
 
 -- common code for printing expected/found types
-showtypes :: Type -> Type -> [String]
-showtypes ty1 ty2 =
+showTypes :: Type -> Type -> [String]
+showTypes ty1 ty2 =
   let expected = "    Expected: " ++ pShow ty1
       found    = "    Found:    " ++ pShow ty2
   in
@@ -141,7 +141,7 @@ showtypes ty1 ty2 =
 
 -- fail with expected/found types
 failMGU :: String -> Type -> Type -> Either FailMGU a
-failMGU start ty1 ty2 = Left (start, showtypes ty1 ty2, [])
+failMGU start ty1 ty2 = Left (start, showTypes ty1 ty2, [])
 
 -- fail with no types
 failMGU' :: String -> Either FailMGU a
@@ -149,19 +149,19 @@ failMGU' start = Left (start, [], [])
 
 -- add another expected/found type pair to the failure
 -- (pull in the last function-type lines if any)
-failMGUadd :: FailMGU -> Type -> Type -> FailMGU
-failMGUadd (start, eflines, lastfunlines) ty1 ty2 =
-  (start, eflines ++ lastfunlines ++ showtypes ty1 ty2, [])
+failMGUAdd :: FailMGU -> Type -> Type -> FailMGU
+failMGUAdd (start, eflines, lastfunlines) ty1 ty2 =
+  (start, eflines ++ lastfunlines ++ showTypes ty1 ty2, [])
 
 -- add another pair that's a function type
 -- (overwrite any previous function type lines)
-failMGUaddfun :: FailMGU -> Type -> Type -> FailMGU
-failMGUaddfun (start, eflines, _) ty1 ty2 =
-  (start, eflines, showtypes ty1 ty2)
+failMGUAddFun :: FailMGU -> Type -> Type -> FailMGU
+failMGUAddFun (start, eflines, _) ty1 ty2 =
+  (start, eflines, showTypes ty1 ty2)
 
 -- unpack the failure into a string list for printing
-failMGUunpack :: FailMGU -> [String]
-failMGUunpack (start, eflines, lastfunlines) =
+failMGUUnpack :: FailMGU -> [String]
+failMGUUnpack (start, eflines, lastfunlines) =
   start : eflines ++ lastfunlines
 
 mgu :: Type -> Type -> Either FailMGU Subst
@@ -174,14 +174,14 @@ mgu r1@(TyRecord ts1) r2@(TyRecord ts2)
       failMGU "    Record field names mismatch." r1 r2
   | otherwise = case mgus (M.elems ts1) (M.elems ts2) of
       Right result -> Right result
-      Left msgs -> Left $ failMGUadd msgs r1 r2
+      Left msgs -> Left $ failMGUAdd msgs r1 r2
 mgu c1@(TyCon tc1 ts1) c2@(TyCon tc2 ts2)
   | tc1 == tc2 = case mgus ts1 ts2 of
       Right result -> Right result
       Left msgs ->
         case tc1 of
-          FunCon -> Left $ failMGUaddfun msgs c1 c2
-          _ -> Left $ failMGUadd msgs c1 c2
+          FunCon -> Left $ failMGUAddFun msgs c1 c2
+          _ -> Left $ failMGUAdd msgs c1 c2
   | otherwise = case tc1 of
       FunCon ->
         failMGU "    Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
@@ -342,7 +342,7 @@ unify m t1 t2 = do
     Left msgs ->
        recordError $ unlines $ msglines
        where
-         msglines = [ "Type mismatch." ] ++ failMGUunpack msgs ++ ["    within " ++ show m]
+         msglines = [ "Type mismatch." ] ++ failMGUUnpack msgs ++ ["    within " ++ show m]
 
 bindSchema :: Located Name -> Schema -> TI a -> TI a
 bindSchema n s m = TI $ local (\ro -> ro { typeEnv = M.insert n s $ typeEnv ro })
