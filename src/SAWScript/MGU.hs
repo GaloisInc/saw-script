@@ -66,68 +66,68 @@ listSubst = Subst . M.fromList
 
 -- Most General Unifier {{{
 
-{-
- - Error reporting.
- -
- - When we find a mismatch, we have potentially recursed arbitrarily
- - deeply into the original type. We need to print the specific types
- - we trip on (this is important if they are e.g. elements in a large
- - system of nested records and typles) but we also want to print the
- - rest of the original context as well.
- -
- - Therefore, we start with an initial descriptive message plus (in
- - most cases) a pair of expected and found types. Once we fail, we
- - add more expected/found type pairs on the way out of the recursion,
- - so we print every layer of the type.
- -
- - As a special case, we keep only the outermost of a series of nested
- - function types, and drop the nested ones. Because functions are
- - curried, this prints the complete function signature once and skips
- - the incremental types completed by consuming each argument. (These
- - add little information and can also confuse casual users.)
- -
- - The FailMGU type tracks this material. It contains three elements:
- -    * the initial message
- -    * the list of pairs of expected/found messages
- -    * the current function-type expected/found message, if any
- -
- - Note that we print the messages on the fly rather than accumulating
- - a list of type pairs and printing them at the end. (That may have
- - been a mistake; we'll see.)
- -
- - The last element (current function-type expected/found message) is
- - always either a list of two message strings or empty. Function types
- - we see go in it (replacing anything already there, so we keep only
- - the outermost of a series) and are shifted out of it when we see
- - something else. It could be a Maybe (String, String), but the code
- - is noticeably more convenient the way it is.
- -
- - The initial message is kept separate so that the expected/found
- - list can readily be built in either order. It's not clear if it's
- - better to print the outermost or innermost mismatches first.
- -
- - Further notes on the message formatting:
- -
- - Print the expected and found types on their own lines. They can be
- - large; if they are the resulting lines can still be fairly
- - illegible, but at least the user doesn't have to hunt for "found"
- - in the middle of a multi-line print.
- -
- - Pad the prefix of the prints so that the types line up; this is
- - helpful for longer types that still fit on one output line.
- -
- - Indent each line with four spaces. What we send back gets printed
- - underneath a message that's already (at least in some cases)
- - indented by two spaces. It's important to make it clear that all
- - the stuff we generate is part of that message and not, for example,
- - an additional separate error.
- -
- - Note that although we append to the end of the expected/found list,
- - we don't stick the start line in that list, because I keep going
- - back and forth on whether the larger types should be printed first
- - (prepending in failMGUadd) or last (appending). If we commit to
- - appending we don't need to keep the start line separate.
- -}
+--
+-- Error reporting.
+--
+-- When we find a mismatch, we have potentially recursed arbitrarily
+-- deeply into the original type. We need to print the specific types
+-- we trip on (this is important if they are e.g. elements in a large
+-- system of nested records and typles) but we also want to print the
+-- rest of the original context as well.
+--
+-- Therefore, we start with an initial descriptive message plus (in
+-- most cases) a pair of expected and found types. Once we fail, we
+-- add more expected/found type pairs on the way out of the recursion,
+-- so we print every layer of the type.
+--
+-- As a special case, we keep only the outermost of a series of nested
+-- function types, and drop the nested ones. Because functions are
+-- curried, this prints the complete function signature once and skips
+-- the incremental types completed by consuming each argument. (These
+-- add little information and can also confuse casual users.)
+--
+-- The FailMGU type tracks this material. It contains three elements:
+--    * the initial message
+--    * the list of pairs of expected/found messages
+--    * the current function-type expected/found message, if any
+--
+-- Note that we print the messages on the fly rather than accumulating
+-- a list of type pairs and printing them at the end. (That may have
+-- been a mistake; we'll see.)
+--
+-- The last element (current function-type expected/found message) is
+-- always either a list of two message strings or empty. Function types
+-- we see go in it (replacing anything already there, so we keep only
+-- the outermost of a series) and are shifted out of it when we see
+-- something else. It could be a Maybe (String, String), but the code
+-- is noticeably more convenient the way it is.
+--
+-- The initial message is kept separate so that the expected/found
+-- list can readily be built in either order. It's not clear if it's
+-- better to print the outermost or innermost mismatches first.
+--
+-- Further notes on the message formatting:
+--
+-- Print the expected and found types on their own lines. They can be
+-- large; if they are the resulting lines can still be fairly
+-- illegible, but at least the user doesn't have to hunt for "found"
+-- in the middle of a multi-line print.
+--
+-- Pad the prefix of the prints so that the types line up; this is
+-- helpful for longer types that still fit on one output line.
+--
+-- Indent each line with four spaces. What we send back gets printed
+-- underneath a message that's already (at least in some cases)
+-- indented by two spaces. It's important to make it clear that all
+-- the stuff we generate is part of that message and not, for example,
+-- an additional separate error.
+--
+-- Note that although we append to the end of the expected/found list,
+-- we don't stick the start line in that list, because I keep going
+-- back and forth on whether the larger types should be printed first
+-- (prepending in failMGUadd) or last (appending). If we commit to
+-- appending we don't need to keep the start line separate.
+--
 
 data FailMGU = FailMGU String [String] [String]
 
@@ -313,26 +313,26 @@ recordError err = do pos <- currentExprPos <$> ask
                      TI $ modify $ \rw ->
                        rw { errors = (pos, err) : errors rw }
 
-{-
- - The error message returned by mgu already prints the types at some
- - length, so we don't need to print any of that again.
- -
- - Indent the extra line four spaces because the first line ends up
- - indented by two when it ultimately gets printed (or at least
- - sometimes it does) and we want the grouping to be clearly
- - recognizable.
- -
- - The LName passed in is (at least in most cases) the name of the
- - top-level binding the failure appears inside. Its position is
- - therefore usually not where the problem is except in a very
- - abstract sense and shouldn't be printed as if it's the error
- - location. So tack it onto the end of everything.
- -
- - It's not clear that this is always the case, so in turn it's not
- - entirely clear that it's always useless and I'm hesitant to remove
- - it entirely, but that seems like a reasonable thing to do in the
- - future given more clarity.
- -}
+--
+-- The error message returned by mgu already prints the types at some
+-- length, so we don't need to print any of that again.
+--
+-- Indent the extra line four spaces because the first line ends up
+-- indented by two when it ultimately gets printed (or at least
+-- sometimes it does) and we want the grouping to be clearly
+-- recognizable.
+--
+-- The LName passed in is (at least in most cases) the name of the
+-- top-level binding the failure appears inside. Its position is
+-- therefore usually not where the problem is except in a very
+-- abstract sense and shouldn't be printed as if it's the error
+-- location. So tack it onto the end of everything.
+--
+-- It's not clear that this is always the case, so in turn it's not
+-- entirely clear that it's always useless and I'm hesitant to remove
+-- it entirely, but that seems like a reasonable thing to do in the
+-- future given more clarity.
+--
 unify :: LName -> Type -> Type -> TI ()
 unify m t1 t2 = do
   t1' <- appSubstM =<< instantiateM t1
