@@ -116,11 +116,11 @@ listSubst = Subst . M.fromList
 -- Pad the prefix of the prints so that the types line up; this is
 -- helpful for longer types that still fit on one output line.
 --
--- Indent each line with four spaces. What we send back gets printed
--- underneath a message that's already (at least in some cases)
--- indented by two spaces. It's important to make it clear that all
--- the stuff we generate is part of that message and not, for example,
--- an additional separate error.
+-- We'll indent each line with four spaces. What we send back gets
+-- printed underneath a message that's already (at least in some
+-- cases) indented by two spaces. It's important to make it clear that
+-- all the stuff we generate is part of that message and not, for
+-- example, an additional separate error. The indenting happens below.
 --
 -- Note that although we append to the end of the expected/found list,
 -- we don't stick the start line in that list, because I keep going
@@ -134,8 +134,8 @@ data FailMGU = FailMGU String [String] [String]
 -- common code for printing expected/found types
 showTypes :: Type -> Type -> [String]
 showTypes ty1 ty2 =
-  let expected = "    Expected: " ++ pShow ty1
-      found    = "    Found:    " ++ pShow ty2
+  let expected = "Expected: " ++ pShow ty1
+      found    = "Found:    " ++ pShow ty2
   in
   [expected, found]
 
@@ -171,7 +171,7 @@ mgu (TyUnifyVar i) t2 = bindVar i t2
 mgu t1 (TyUnifyVar i) = bindVar i t1
 mgu r1@(TyRecord ts1) r2@(TyRecord ts2)
   | M.keys ts1 /= M.keys ts2 =
-      failMGU "    Record field names mismatch." r1 r2
+      failMGU "Record field names mismatch." r1 r2
   | otherwise = case mgus (M.elems ts1) (M.elems ts2) of
       Right result -> Right result
       Left msgs -> Left $ failMGUAdd msgs r1 r2
@@ -184,14 +184,14 @@ mgu c1@(TyCon tc1 ts1) c2@(TyCon tc2 ts2)
           _ -> Left $ failMGUAdd msgs c1 c2
   | otherwise = case tc1 of
       FunCon ->
-        failMGU "    Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
+        failMGU "Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
       _ ->
-        failMGU ("    Mismatch of type constructors. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2) c1 c2
+        failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2) c1 c2
 mgu (TySkolemVar a i) (TySkolemVar b j)
   | (a, i) == (b, j) = return emptySubst
 mgu (TyVar a) (TyVar b)
   | a == b = return emptySubst
-mgu t1 t2 = failMGU "    Mismatch of types." t1 t2
+mgu t1 t2 = failMGU "Mismatch of types." t1 t2
 
 mgus :: [Type] -> [Type] -> Either FailMGU Subst
 mgus [] [] = return emptySubst
@@ -200,12 +200,12 @@ mgus (t1:ts1) (t2:ts2) = do
   s' <- mgus (map (appSubst s) ts1) (map (appSubst s) ts2)
   return (s' @@ s)
 mgus ts1 ts2 =
-  failMGU' $ "    Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
+  failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
 bindVar :: TypeIndex -> Type -> Either FailMGU Subst
 bindVar i t
   | t == TyUnifyVar i        = return emptySubst
-  | i `S.member` unifyVars t = failMGU' "    occurs check failMGUs" -- FIXME: error message
+  | i `S.member` unifyVars t = failMGU' "occurs check failMGUs" -- FIXME: error message
   | otherwise                = return (singletonSubst i t)
 
 -- }}}
@@ -317,9 +317,9 @@ recordError err = do pos <- currentExprPos <$> ask
 -- The error message returned by mgu already prints the types at some
 -- length, so we don't need to print any of that again.
 --
--- Indent the extra line four spaces because the first line ends up
--- indented by two when it ultimately gets printed (or at least
--- sometimes it does) and we want the grouping to be clearly
+-- Indent all but the first line by four spaces because the first line
+-- ends up indented by two when it ultimately gets printed (or at
+-- least sometimes it does) and we want the grouping to be clearly
 -- recognizable.
 --
 -- The LName passed in is (at least in most cases) the name of the
@@ -340,9 +340,12 @@ unify m t1 t2 = do
   case mgu t1' t2' of
     Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
     Left msgs ->
-       recordError $ unlines $ msglines
+       recordError $ unlines $ firstline : morelines'
        where
-         msglines = [ "Type mismatch." ] ++ failMGUUnpack msgs ++ ["    within " ++ show m]
+         firstline = "Type mismatch."
+         morelines = failMGUUnpack msgs ++ ["within " ++ show m]
+         -- Indent all but the first line by four spaces.
+         morelines' = map (\msg -> "    " ++ msg) morelines
 
 bindSchema :: Located Name -> Schema -> TI a -> TI a
 bindSchema n s m = TI $ local (\ro -> ro { typeEnv = M.insert n s $ typeEnv ro })
