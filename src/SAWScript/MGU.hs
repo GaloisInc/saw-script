@@ -159,9 +159,9 @@ failMGUAddFun :: FailMGU -> Type -> Type -> FailMGU
 failMGUAddFun (FailMGU start eflines _) ty1 ty2 =
   FailMGU start eflines (showTypes ty1 ty2)
 
--- unpack the failure into a string list for printing
-failMGUUnpack :: FailMGU -> [String]
-failMGUUnpack (FailMGU start eflines lastfunlines) =
+-- print the failure as a string list
+ppFailMGU :: FailMGU -> [String]
+ppFailMGU (FailMGU start eflines lastfunlines) =
   start : eflines ++ lastfunlines
 
 mgu :: Type -> Type -> Either FailMGU Subst
@@ -343,7 +343,7 @@ unify m t1 t2 = do
        recordError $ unlines $ firstline : morelines'
        where
          firstline = "Type mismatch."
-         morelines = failMGUUnpack msgs ++ ["within " ++ show m]
+         morelines = ppFailMGU msgs ++ ["within " ++ show m]
          -- Indent all but the first line by four spaces.
          morelines' = map (\msg -> "    " ++ msg) morelines
 
