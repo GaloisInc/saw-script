@@ -129,7 +129,10 @@ listSubst = Subst . M.fromList
 -- appending we don't need to keep the start line separate.
 --
 
-data FailMGU = FailMGU String [String] [String]
+data FailMGU = FailMGU
+                    String	-- initial error message
+                    [String]	-- list of found/expected message pairs
+                    [String]	-- current found/expected function pair if any
 
 -- common code for printing expected/found types
 showTypes :: Type -> Type -> [String]
