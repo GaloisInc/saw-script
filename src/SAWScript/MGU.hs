@@ -130,9 +130,9 @@ listSubst = Subst . M.fromList
 --
 
 data FailMGU = FailMGU
-                    String	-- initial error message
-                    [String]	-- list of found/expected message pairs
-                    [String]	-- current found/expected function pair if any
+                    String      -- initial error message
+                    [String]    -- list of found/expected message pairs
+                    [String]    -- current found/expected function pair if any
 
 -- common code for printing expected/found types
 showTypes :: Type -> Type -> [String]
