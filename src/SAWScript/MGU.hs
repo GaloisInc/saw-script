@@ -660,7 +660,10 @@ checkE m e t = do
   unify m t t'
   return e'
 
-inferField :: LName -> Bind Expr -> TI (Bind OutExpr,Bind Type)
+-- Take a struct field binding (name and expression) and return the
+-- updated binding as well as the member entry for the enclosing
+-- struct type.
+inferField :: LName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
 inferField m (n,e) = do
   (e',t) <- inferE (m,e)
   return ((n,e'),(n,t))

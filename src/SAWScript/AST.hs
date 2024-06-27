@@ -17,7 +17,6 @@ Stability   : provisional
 module SAWScript.AST
        ( Name
        , LName
-       , Bind
        , Located(..)
        , Import(..)
        , Expr(..)
@@ -58,8 +57,6 @@ import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
 -- Names {{{
 
 type Name = String
-
-type Bind a = (Name,a)
 
 -- }}}
 
