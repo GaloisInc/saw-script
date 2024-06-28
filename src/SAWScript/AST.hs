@@ -60,16 +60,25 @@ type Name = String
 
 -- }}}
 
--- Expr Level {{{
+-- Location tracking {{{
 
-data Located a = Located { getVal :: a, getOrig :: Name, locatedPos :: Pos } deriving (Functor, Foldable, Traversable)
+--
+-- Type to wrap a thing with a position
+--
+-- This is declared with record syntax to provide accessors/projection
+-- functions; it is intended to be used positionally.
+--
+data Located a = Located {
+  getVal :: a,          -- the thing
+  getOrig :: Name,      -- a name/string for it, where applicable
+  locatedPos :: Pos     -- the position
+} deriving (Functor, Foldable, Traversable)
+
 instance Show (Located a) where
   show (Located _ v p) = show v ++ " (" ++ show p ++ ")"
 
 instance Positioned (Located a) where
   getPos = locatedPos
-
-type LName = Located Name
 
 instance Eq a => Eq (Located a) where
   a == b = getVal a == getVal b
@@ -77,8 +86,14 @@ instance Eq a => Eq (Located a) where
 instance Ord a => Ord (Located a) where
   compare a b = compare (getVal a) (getVal b)
 
+type LName = Located Name
+
 toLName :: Token Pos -> LName
 toLName p = Located (tokStr p) (tokStr p) (tokPos p)
+
+-- }}}
+
+-- Expr Level {{{
 
 data Import = Import
   { iModule    :: Either FilePath P.ModName
