@@ -924,11 +924,11 @@ instantiateSetupValue sc s v =
       MirSetupSliceRaw
         <$> instantiateSetupValue sc s ref
         <*> instantiateSetupValue sc s len
-    instantiateSetupSlice (MirSetupSlice arr) =
-      MirSetupSlice <$> instantiateSetupValue sc s arr
-    instantiateSetupSlice (MirSetupSliceRange arr start end) = do
+    instantiateSetupSlice (MirSetupSlice sliceInfo arr) =
+      MirSetupSlice sliceInfo <$> instantiateSetupValue sc s arr
+    instantiateSetupSlice (MirSetupSliceRange sliceInfo arr start end) = do
       arr' <- instantiateSetupValue sc s arr
-      pure $ MirSetupSliceRange arr' start end
+      pure $ MirSetupSliceRange sliceInfo arr' start end
 
 -- learn pre/post condition
 learnCond ::
@@ -1205,9 +1205,9 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
       matchFields sym xsFldShps xs ys zs
 
     -- See Note [Matching slices in overrides]
-    (MIRVal (SliceShape _ actualElemTy actualMutbl actualElemTpr)
+    (MIRVal (SliceShape actualSliceRefTy actualElemTy actualMutbl actualElemTpr)
             (Ctx.Empty Ctx.:> Crucible.RV actualSliceRef Ctx.:> Crucible.RV actualSliceLenSym),
-     Mir.TyRef (Mir.TySlice _) _,
+     Mir.TyRef _ _,
      MS.SetupSlice slice)
        | -- Currently, all slice lengths must be concrete, so the case below
          -- should always succeed.
@@ -1239,10 +1239,14 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                  expectedArrRefTy
                  expectedArrRef
 
+         actualSliceInfo <- sliceRefTyToSliceInfo actualSliceRefTy
          case slice of
            MirSetupSliceRaw{} ->
              panic "matchArg" ["SliceRaw not yet implemented"]
-           MirSetupSlice expectedArrRef -> do
+           MirSetupSlice expectedSliceInfo expectedArrRef -> do
+             -- Check that both the expected and actual values are the same sort
+             -- of slice.
+             matchSliceInfos expectedSliceInfo actualSliceInfo
              -- Check that the length of the expected array reference value
              -- matches that of the actual slice reference value.
              expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
@@ -1250,7 +1254,10 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              unless (expectedSliceLen == actualSliceLen) fail_
              -- Match the reference values.
              matchSlice expectedArrRefTy expectedArrRef
-           MirSetupSliceRange expectedArrRef expectedStart expectedEnd -> do
+           MirSetupSliceRange expectedSliceInfo expectedArrRef expectedStart expectedEnd -> do
+             -- Check that both the expected and actual values are the same sort
+             -- of slice.
+             matchSliceInfos expectedSliceInfo actualSliceInfo
              -- Check that the length of the range of the expected slice
              -- reference value matches that of the actual slice reference
              -- value. By this point, we have already checked (in
@@ -1331,6 +1338,13 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                  ys
                  zs ]
 
+    -- Check that both the expected and actual values are the same sort of
+    -- slice. We don't want to accidentally mix up a &[u8] value with a &str
+    -- value, as both have the same crucible-mir representation.
+    matchSliceInfos :: MirSliceInfo -> MirSliceInfo -> OverrideMatcher MIR w ()
+    matchSliceInfos expectedSliceInfo actualSliceInfo =
+      unless (expectedSliceInfo == actualSliceInfo) fail_
+
     notEq = notEqual prepost opts loc cc sc cs expected actual
 
 {-
@@ -1360,6 +1374,9 @@ operation which "peels back" the indexing operation that raw slice references
 use, thereby turning a `*const T` value into a `&[T; N]` value. It's a bit
 indirect, but it avoids needing to plumb around the original array reference
 value alongside the slice's raw reference value.
+
+We do something similar for &str slices, as crucible-mir backs them with an
+array reference value of type &[u8; N].
 
 This assumes that all slice reference values passed to an override were derived
 from crucible-mir's indexing operations, as this is crucial for
@@ -1447,9 +1464,9 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupSlice :: MirSetupSlice -> Set AllocIndex
     setupSlice (MirSetupSliceRaw ref len) =
       setupVars ref <> setupVars len
-    setupSlice (MirSetupSlice arr) =
+    setupSlice (MirSetupSlice _sliceInfo arr) =
       setupVars arr
-    setupSlice (MirSetupSliceRange arr _start _end) =
+    setupSlice (MirSetupSliceRange _sliceInfo arr _start _end) =
       setupVars arr
 
 -- | This function is responsible for implementing the \"override\" behavior

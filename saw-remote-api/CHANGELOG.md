@@ -1,5 +1,11 @@
 # Revision history for saw-remote-api
 
+## next -- TBA
+
+* Add `"str slice"` and `"str slice range"` `setup value`s, which are used to
+  represent MIR `str` slice references. Attempting to use these in LLVM or JVM
+  verification will raise an error.
+
 ## 1.1.0 -- 2024-02-05
 
 * Add remote API support for SAW's experimental MIR verification support:

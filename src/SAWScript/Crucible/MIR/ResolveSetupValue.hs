@@ -29,6 +29,9 @@ module SAWScript.Crucible.MIR.ResolveSetupValue
   , mirAdtToTy
   , findDefId
   , findDefIdEither
+    -- * Slices
+  , sliceElemTy
+  , sliceRefTyToSliceInfo
     -- * Static items
   , findStatic
   , findStaticInitializer
@@ -224,7 +227,10 @@ data MIRTypeOfError
   | MIRInvalidTypedTerm TypedTermType
   | MIRInvalidIdentifier String
   | MIRStaticNotFound Mir.DefId
+  | MIRSliceNonReference Mir.Ty
   | MIRSliceNonArrayReference Mir.Ty
+  | MIRSliceWrongTy Mir.Ty
+  | MIRStrSliceNonU8Array Mir.Ty
   | MIRMuxNonBoolCondition Mir.Ty
   | MIRMuxDifferentBranchTypes Mir.Ty Mir.Ty
 
@@ -250,9 +256,24 @@ instance Show MIRTypeOfError where
     errMsg
   show (MIRStaticNotFound did) =
     staticNotFoundErr did
+  show (MIRSliceNonReference ty) =
+    unlines
+    [ "Expected a reference, but got"
+    , show (PP.pretty ty)
+    ]
   show (MIRSliceNonArrayReference ty) =
     unlines
     [ "Expected a reference to an array, but got"
+    , show (PP.pretty ty)
+    ]
+  show (MIRSliceWrongTy ty) =
+    unlines
+    [ "Expected a slice type, but got"
+    , show (PP.pretty ty)
+    ]
+  show (MIRStrSliceNonU8Array ty) =
+    unlines
+    [ "Expected a value of type &[u8; <length>], but got"
     , show (PP.pretty ty)
     ]
   show (MIRMuxNonBoolCondition ty) =
@@ -315,10 +336,10 @@ typeOfSetupValue mcc env nameEnv val =
       case slice of
         MirSetupSliceRaw{} ->
           panic "typeOfSetupValue" ["MirSetupSliceRaw not yet implemented"]
-        MirSetupSlice arr ->
-          typeOfSliceFromArray arr
-        MirSetupSliceRange arr _ _ ->
-          typeOfSliceFromArray arr
+        MirSetupSlice sliceInfo arrRef ->
+          typeOfSliceFromArrayRef sliceInfo arrRef
+        MirSetupSliceRange sliceInfo arrRef _ _ ->
+          typeOfSliceFromArrayRef sliceInfo arrRef
     MS.SetupMux () c t f -> do
       cTy <- typeOfTypedTerm c
       unless (cTy == Mir.TyBool) $
@@ -337,14 +358,15 @@ typeOfSetupValue mcc env nameEnv val =
   where
     cs = mcc ^. mccRustModule . Mir.rmCS
 
-    typeOfSliceFromArray :: SetupValue -> m Mir.Ty
-    typeOfSliceFromArray arr = do
-      arrTy <- typeOfSetupValue mcc env nameEnv arr
-      case arrTy of
-        Mir.TyRef (Mir.TyArray ty _) mut ->
-          pure $ Mir.TyRef (Mir.TySlice ty) mut
+    typeOfSliceFromArrayRef :: MirSliceInfo -> SetupValue -> m Mir.Ty
+    typeOfSliceFromArrayRef sliceInfo arrRef = do
+      arrRefTy <- typeOfSetupValue mcc env nameEnv arrRef
+      case arrRefTy of
+        Mir.TyRef arrTy mut -> do
+          (sliceTy, _elemTy, _len) <- arrayToSliceTys sliceInfo mut arrTy
+          pure $ Mir.TyRef sliceTy mut
         _ ->
-          X.throwM $ MIRSliceNonArrayReference arrTy
+          X.throwM $ MIRSliceNonReference arrRefTy
 
     typeOfTypedTerm :: TypedTerm -> m Mir.Ty
     typeOfTypedTerm tt =
@@ -604,17 +626,17 @@ resolveSetupVal mcc env tyenv nameEnv val =
       case slice of
         MirSetupSliceRaw{} ->
           panic "resolveSetupVal" ["MirSetupSliceRaw not yet implemented"]
-        MirSetupSlice arrRef -> do
-          SetupSliceFromArray _elemTpr sliceShp refVal len <-
-            resolveSetupSliceFromArray bak arrRef
+        MirSetupSlice sliceInfo arrRef -> do
+          SetupSliceFromArrayRef _elemTpr sliceShp refVal len <-
+            resolveSetupSliceFromArrayRef bak sliceInfo arrRef
           lenVal <- usizeBvLit sym len
           pure $ MIRVal sliceShp (Ctx.Empty Ctx.:> RV refVal Ctx.:> RV lenVal)
-        MirSetupSliceRange arrRef start end -> do
+        MirSetupSliceRange sliceInfo arrRef start end -> do
           unless (start <= end) $
             fail $ "slice index starts at " ++ show start
                 ++ " but ends at " ++ show end
-          SetupSliceFromArray elemTpr sliceShp refVal0 len <-
-            resolveSetupSliceFromArray bak arrRef
+          SetupSliceFromArrayRef elemTpr sliceShp refVal0 len <-
+            resolveSetupSliceFromArrayRef bak sliceInfo arrRef
           unless (end <= len) $
             fail $ "range end index " ++ show end
                 ++ " out of range for slice of length " ++ show len
@@ -754,21 +776,23 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
     -- Resolve parts of a slice that are shared in common between
     -- 'MirSetupSlice' and 'MirSetupSliceRange'.
-    resolveSetupSliceFromArray ::
+    resolveSetupSliceFromArrayRef ::
       OnlineSolver solver =>
       Backend solver ->
+      MirSliceInfo ->
       SetupValue ->
-      IO SetupSliceFromArray
-    resolveSetupSliceFromArray bak arrRef = do
+      IO SetupSliceFromArrayRef
+    resolveSetupSliceFromArrayRef bak sliceInfo arrRef = do
       let sym = backendGetSym bak
       MIRVal arrRefShp arrRefVal <- resolveSetupVal mcc env tyenv nameEnv arrRef
       case arrRefShp of
-        RefShape _ (Mir.TyArray elemTy len) mut (Mir.MirVectorRepr elemTpr) -> do
+        RefShape _ arrTy mut (Mir.MirVectorRepr elemTpr) -> do
+          (sliceTy, elemTy, len) <- arrayToSliceTys sliceInfo mut arrTy
           zeroBV <- usizeBvLit sym 0
           refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV
-          let sliceShp = SliceShape (Mir.TySlice elemTy) elemTy mut elemTpr
-          pure $ SetupSliceFromArray elemTpr sliceShp refVal len
-        _ -> X.throwM $ MIRSliceNonArrayReference $ shapeMirTy arrRefShp
+          let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
+          pure $ SetupSliceFromArrayRef elemTpr sliceShp refVal len
+        _ -> X.throwM $ MIRSliceNonReference $ shapeMirTy arrRefShp
 
     -- Resolve a transparent struct or enum value.
     resolveTransparentSetupVal :: Mir.Adt -> SetupValue -> IO MIRVal
@@ -801,14 +825,14 @@ resolveSetupVal mcc env tyenv nameEnv val =
               flds
 
 -- | An intermediate data structure that is only used by
--- 'resolveSetupSliceFromArray'.
-data SetupSliceFromArray where
-  SetupSliceFromArray ::
+-- 'resolveSetupSliceFromArrayRef'.
+data SetupSliceFromArrayRef where
+  SetupSliceFromArrayRef ::
     TypeRepr tp {- ^ The array's element type -} ->
     TypeShape (Mir.MirSlice tp) {- ^ The overall shape of the slice -} ->
     Mir.MirReferenceMux Sym tp {- ^ The reference to the array -} ->
     Int {- ^ The array length -} ->
-    SetupSliceFromArray
+    SetupSliceFromArrayRef
 
 resolveTypedTerm ::
   MIRCrucibleContext ->
@@ -1157,6 +1181,75 @@ equalValsPred cc mv1 mv2 =
           let v1' = readField v1
           let v2' = readField v2
           goTy shp' v1' v2'
+
+-- | Take an array 'Mir.Ty' (arising from a reference type) and return three
+-- things:
+--
+-- 1. The 'Mir.Ty' of the corresponding slice. When the 'MirSliceInfo' argument
+--    is 'MirArraySlice', then 'Mir.TySlice' will be returned. When the
+--    'MirSliceInfo' argument is a 'MirStrSlice', then 'Mir.TyStr' will be
+--    returned.
+--
+-- 2. The 'Mir.Ty' of the \"element type\" of the slice. When the 'MirSliceInfo'
+--    argument is 'MirArraySlice', then the element type of the array will be
+--    returned. When the 'MirSliceInfo' argument is a 'MirStrSlice', then @u8@
+--    will be returned.
+--
+-- 3. The length of the array.
+--
+-- This function will throw an exception if the supplied 'Mir.Ty' is not an
+-- array type.
+arrayToSliceTys ::
+  X.MonadThrow m =>
+  MirSliceInfo ->
+  Mir.Mutability ->
+  Mir.Ty ->
+  m (Mir.Ty, Mir.Ty, Int)
+arrayToSliceTys sliceInfo mut arrTy@(Mir.TyArray ty len) =
+  case sliceInfo of
+    MirArraySlice ->
+      pure (Mir.TySlice ty, ty, len)
+    MirStrSlice
+      |  checkCompatibleTys ty u8
+      -> pure (Mir.TyStr, u8, len)
+      |  otherwise
+      -> X.throwM $ MIRStrSliceNonU8Array $ Mir.TyRef arrTy mut
+  where
+    u8 = Mir.TyUint Mir.B8
+arrayToSliceTys _sliceInfo mut arrTy =
+  X.throwM $ MIRSliceNonArrayReference $ Mir.TyRef arrTy mut
+
+-- | Retrieve the \"element type\" of a slice type. If the supplied type is an
+-- array slice type (e.g., @[u32]@), return the underlying type (e.g., @u32@).
+-- If the supplied type is a @str@ slice, return @u8@. For all other types,
+-- throw an exception.
+sliceElemTy ::
+  X.MonadThrow m =>
+  Mir.Ty ->
+  m Mir.Ty
+sliceElemTy (Mir.TySlice ty) =
+  pure ty
+sliceElemTy Mir.TyStr =
+  pure $ Mir.TyUint Mir.B8
+sliceElemTy ty =
+  X.throwM $ MIRSliceWrongTy ty
+
+-- | Take a slice reference type and return the corresponding 'MirSliceInfo'.
+-- Throw an exception if the supplied type is not a slice reference type.
+sliceRefTyToSliceInfo ::
+  X.MonadThrow m =>
+  Mir.Ty ->
+  m MirSliceInfo
+sliceRefTyToSliceInfo (Mir.TyRef sliceTy _) =
+  case sliceTy of
+    Mir.TySlice _ ->
+      pure MirArraySlice
+    Mir.TyStr ->
+      pure MirStrSlice
+    _ ->
+      X.throwM $ MIRSliceWrongTy sliceTy
+sliceRefTyToSliceInfo ty =
+  X.throwM $ MIRSliceNonReference ty
 
 -- | Check if two 'Mir.Ty's are compatible in SAW. This is a slightly coarser
 -- notion of equality to reflect the fact that MIR's type system is richer than

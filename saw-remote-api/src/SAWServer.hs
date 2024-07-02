@@ -116,6 +116,8 @@ data CrucibleSetupVal ty e
   | TupleValue [CrucibleSetupVal ty e]
   | SliceValue (CrucibleSetupVal ty e)
   | SliceRangeValue (CrucibleSetupVal ty e) Int Int
+  | StrSliceValue (CrucibleSetupVal ty e)
+  | StrSliceRangeValue (CrucibleSetupVal ty e) Int Int
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal ty e) String
   | CastLValue (CrucibleSetupVal ty e) ty

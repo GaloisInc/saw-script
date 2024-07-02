@@ -1,5 +1,11 @@
 # Revision history for saw-client
 
+## next -- TBA
+
+* Add `str_slice()` and `str_slice_range()` functions for constructing MIR `str`
+  slice references. Using these functions with LLVM or JVM verification will
+  raise an error.
+
 ## 1.1.1 -- 2024-05-16
 
 * Add support for Python 3.12
