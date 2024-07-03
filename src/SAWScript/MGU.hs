@@ -91,6 +91,9 @@ listSubst = Subst . M.fromList
 --    * the list of pairs of expected/found messages
 --    * the current function-type expected/found message, if any
 --
+-- Empty strings are inserted between pairs to make the output more
+-- readable.
+--
 -- Note that we print the messages on the fly rather than accumulating
 -- a list of type pairs and printing them at the end. (That may have
 -- been a mistake; we'll see.)
@@ -140,11 +143,11 @@ showTypes ty1 ty2 =
   let expected = "Expected: " ++ pShow ty1
       found    = "Found:    " ++ pShow ty2
   in
-  [expected, found]
+  [expected, found, ""]
 
 -- fail with expected/found types
 failMGU :: String -> Type -> Type -> Either FailMGU a
-failMGU start ty1 ty2 = Left (FailMGU start (showTypes ty1 ty2) [])
+failMGU start ty1 ty2 = Left (FailMGU start ("" : showTypes ty1 ty2) [])
 
 -- fail with no types
 failMGU' :: String -> Either FailMGU a
