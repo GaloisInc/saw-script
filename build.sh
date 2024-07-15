@@ -6,11 +6,8 @@ set -e
 git submodule update --init
 
 function install() {
-  # XXX: this should probably sort by timestamp (to get the file just
-  # built) rather than version. (Also, -g will not necessarily process
-  # versions correctly, since it's intended for floats, and it may not
-  # be as portable as we'd like.)
-  cp $(find dist-newstyle -type f -name $1 -print | sort -g | tail -1) bin/
+  PROG=$(cabal list-bin exe:$1)
+  cp $PROG bin/
 }
 
 cabal build exe:cryptol exe:saw exe:saw-remote-api \
