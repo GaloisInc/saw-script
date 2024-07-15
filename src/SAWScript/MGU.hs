@@ -27,7 +27,6 @@ import SAWScript.Position (Pos(..), Positioned(..))
 import Control.Applicative
 #endif
 
-import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Identity
@@ -67,44 +66,152 @@ listSubst = Subst . M.fromList
 
 -- Most General Unifier {{{
 
-failMGU :: String -> Either String a
-failMGU = Left
+--
+-- Error reporting.
+--
+-- When we find a mismatch, we have potentially recursed arbitrarily
+-- deeply into the original type. We need to print the specific types
+-- we trip on (this is important if they are e.g. elements in a large
+-- system of nested records and typles) but we also want to print the
+-- rest of the original context as well.
+--
+-- Therefore, we start with an initial descriptive message plus (in
+-- most cases) a pair of expected and found types. Once we fail, we
+-- add more expected/found type pairs on the way out of the recursion,
+-- so we print every layer of the type.
+--
+-- As a special case, we keep only the outermost of a series of nested
+-- function types, and drop the nested ones. Because functions are
+-- curried, this prints the complete function signature once and skips
+-- the incremental types completed by consuming each argument. (These
+-- add little information and can also confuse casual users.)
+--
+-- The FailMGU type tracks this material. It contains three elements:
+--    * the initial message
+--    * the list of pairs of expected/found messages
+--    * the current function-type expected/found message, if any
+--
+-- Empty strings are inserted between pairs to make the output more
+-- readable.
+--
+-- Note that we print the messages on the fly rather than accumulating
+-- a list of type pairs and printing them at the end. (That may have
+-- been a mistake; we'll see.)
+--
+-- The last element (current function-type expected/found message) is
+-- always either a list of two message strings or empty. Function types
+-- we see go in it (replacing anything already there, so we keep only
+-- the outermost of a series) and are shifted out of it when we see
+-- something else. It could be a Maybe (String, String), but the code
+-- is noticeably more convenient the way it is.
+--
+-- The initial message is kept separate so that the expected/found
+-- list can readily be built in either order. It's not clear if it's
+-- better to print the outermost or innermost mismatches first.
+--
+-- Further notes on the message formatting:
+--
+-- Print the expected and found types on their own lines. They can be
+-- large; if they are the resulting lines can still be fairly
+-- illegible, but at least the user doesn't have to hunt for "found"
+-- in the middle of a multi-line print.
+--
+-- Pad the prefix of the prints so that the types line up; this is
+-- helpful for longer types that still fit on one output line.
+--
+-- We'll indent each line with four spaces. What we send back gets
+-- printed underneath a message that's already (at least in some
+-- cases) indented by two spaces. It's important to make it clear that
+-- all the stuff we generate is part of that message and not, for
+-- example, an additional separate error. The indenting happens below.
+--
+-- Note that although we append to the end of the expected/found list,
+-- we don't stick the start line in that list, because I keep going
+-- back and forth on whether the larger types should be printed first
+-- (prepending in failMGUadd) or last (appending). If we commit to
+-- appending we don't need to keep the start line separate.
+--
 
-assert :: Bool -> String -> Either String ()
-assert b msg = unless b $ failMGU msg
+data FailMGU = FailMGU
+                    String      -- initial error message
+                    [String]    -- list of found/expected message pairs
+                    [String]    -- current found/expected function pair if any
 
-mgu :: LName -> Type -> Type -> Either String Subst
-mgu m (LType _ t) t2 = mgu m t t2
-mgu m t1 (LType _ t) = mgu m t1 t
-mgu m (TyUnifyVar i) t2 = bindVar m i t2
-mgu m t1 (TyUnifyVar i) = bindVar m i t1
-mgu m r1@(TyRecord ts1) r2@(TyRecord ts2) = do
-  assert (M.keys ts1 == M.keys ts2) $
-    "Record field type mismatch. Expected " ++ pShow r1 ++ " but got " ++ pShow r2 ++ " at " ++ show m
-  mgus m (M.elems ts1) (M.elems ts2)
-mgu m (TyCon tc1 ts1) (TyCon tc2 ts2)
-  | tc1 == tc2 = (mgus m ts1 ts2)
+-- common code for printing expected/found types
+showTypes :: Type -> Type -> [String]
+showTypes ty1 ty2 =
+  let expected = "Expected: " ++ pShow ty1
+      found    = "Found:    " ++ pShow ty2
+  in
+  [expected, found, ""]
+
+-- fail with expected/found types
+failMGU :: String -> Type -> Type -> Either FailMGU a
+failMGU start ty1 ty2 = Left (FailMGU start ("" : showTypes ty1 ty2) [])
+
+-- fail with no types
+failMGU' :: String -> Either FailMGU a
+failMGU' start = Left (FailMGU start [] [])
+
+-- add another expected/found type pair to the failure
+-- (pull in the last function-type lines if any)
+failMGUAdd :: FailMGU -> Type -> Type -> FailMGU
+failMGUAdd (FailMGU start eflines lastfunlines) ty1 ty2 =
+  FailMGU start (eflines ++ lastfunlines ++ showTypes ty1 ty2) []
+
+-- add another pair that's a function type
+-- (overwrite any previous function type lines)
+failMGUAddFun :: FailMGU -> Type -> Type -> FailMGU
+failMGUAddFun (FailMGU start eflines _) ty1 ty2 =
+  FailMGU start eflines (showTypes ty1 ty2)
+
+-- print the failure as a string list
+ppFailMGU :: FailMGU -> [String]
+ppFailMGU (FailMGU start eflines lastfunlines) =
+  start : eflines ++ lastfunlines
+
+mgu :: Type -> Type -> Either FailMGU Subst
+mgu (LType _ t) t2 = mgu t t2
+mgu t1 (LType _ t) = mgu t1 t
+mgu (TyUnifyVar i) t2 = bindVar i t2
+mgu t1 (TyUnifyVar i) = bindVar i t1
+mgu r1@(TyRecord ts1) r2@(TyRecord ts2)
+  | M.keys ts1 /= M.keys ts2 =
+      failMGU "Record field names mismatch." r1 r2
+  | otherwise = case mgus (M.elems ts1) (M.elems ts2) of
+      Right result -> Right result
+      Left msgs -> Left $ failMGUAdd msgs r1 r2
+mgu c1@(TyCon tc1 ts1) c2@(TyCon tc2 ts2)
+  | tc1 == tc2 = case mgus ts1 ts2 of
+      Right result -> Right result
+      Left msgs ->
+        case tc1 of
+          FunCon -> Left $ failMGUAddFun msgs c1 c2
+          _ -> Left $ failMGUAdd msgs c1 c2
   | otherwise = case tc1 of
-      FunCon -> failMGU $ "Term is not a function at " ++ show m ++ "\n(maybe a function is applied to too many arguments?)"
-      _ -> failMGU $ "Type constructors mismatch. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2 ++ " at " ++ show m
-mgu _ (TySkolemVar a i) (TySkolemVar b j)
+      FunCon ->
+        failMGU "Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
+      _ ->
+        failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2) c1 c2
+mgu (TySkolemVar a i) (TySkolemVar b j)
   | (a, i) == (b, j) = return emptySubst
-mgu _ (TyVar a) (TyVar b)
+mgu (TyVar a) (TyVar b)
   | a == b = return emptySubst
-mgu m t1 t2 = failMGU $ "Type mismatch. Expected: " ++ pShow t1 ++ " but got: " ++ pShow t2 ++ " at " ++ show m
+mgu t1 t2 = failMGU "Mismatch of types." t1 t2
 
-mgus :: LName -> [Type] -> [Type] -> Either String Subst
-mgus _ [] [] = return emptySubst
-mgus m (t1:ts1) (t2:ts2) = do
-  s <- mgu m t1 t2
-  s' <- mgus m (map (appSubst s) ts1) (map (appSubst s) ts2)
+mgus :: [Type] -> [Type] -> Either FailMGU Subst
+mgus [] [] = return emptySubst
+mgus (t1:ts1) (t2:ts2) = do
+  s <- mgu t1 t2
+  s' <- mgus (map (appSubst s) ts1) (map (appSubst s) ts2)
   return (s' @@ s)
-mgus m ts1 ts2 = failMGU $ "Expected " ++ show (length ts1) ++ " arguments but got " ++ show (length ts2) ++ " at " ++ show m
+mgus ts1 ts2 =
+  failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
-bindVar :: LName -> TypeIndex -> Type -> Either String Subst
-bindVar m i t
+bindVar :: TypeIndex -> Type -> Either FailMGU Subst
+bindVar i t
   | t == TyUnifyVar i        = return emptySubst
-  | i `S.member` unifyVars t = failMGU ("occurs check failMGUs " ++ " at " ++ show m) -- FIXME: error message
+  | i `S.member` unifyVars t = failMGU' "occurs check failMGUs" -- FIXME: error message
   | otherwise                = return (singletonSubst i t)
 
 -- }}}
@@ -212,17 +319,39 @@ recordError err = do pos <- currentExprPos <$> ask
                      TI $ modify $ \rw ->
                        rw { errors = (pos, err) : errors rw }
 
+--
+-- The error message returned by mgu already prints the types at some
+-- length, so we don't need to print any of that again.
+--
+-- Indent all but the first line by four spaces because the first line
+-- ends up indented by two when it ultimately gets printed (or at
+-- least sometimes it does) and we want the grouping to be clearly
+-- recognizable.
+--
+-- The LName passed in is (at least in most cases) the name of the
+-- top-level binding the failure appears inside. Its position is
+-- therefore usually not where the problem is except in a very
+-- abstract sense and shouldn't be printed as if it's the error
+-- location. So tack it onto the end of everything.
+--
+-- It's not clear that this is always the case, so in turn it's not
+-- entirely clear that it's always useless and I'm hesitant to remove
+-- it entirely, but that seems like a reasonable thing to do in the
+-- future given more clarity.
+--
 unify :: LName -> Type -> Type -> TI ()
 unify m t1 t2 = do
   t1' <- appSubstM =<< instantiateM t1
   t2' <- appSubstM =<< instantiateM t2
-  case mgu m t1' t2' of
+  case mgu t1' t2' of
     Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
-    Left e -> recordError $ unlines
-                [ "Type Mismatch, expected: " ++ pShow t1' ++ " but got: " ++ pShow t2'
-                , " at " ++ show m
-                , e
-                ]
+    Left msgs ->
+       recordError $ unlines $ firstline : morelines'
+       where
+         firstline = "Type mismatch."
+         morelines = ppFailMGU msgs ++ ["within " ++ show m]
+         -- Indent all but the first line by four spaces.
+         morelines' = map (\msg -> "    " ++ msg) morelines
 
 bindSchema :: Located Name -> Schema -> TI a -> TI a
 bindSchema n s m = TI $ local (\ro -> ro { typeEnv = M.insert n s $ typeEnv ro })
