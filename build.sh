@@ -1,8 +1,13 @@
-#!/bin/bash
+#!/bin/sh
+# build.sh: build SAW
+# usage: ./build.sh
+set -e
+
 git submodule update --init
 
 function install() {
-  cp $(find dist-newstyle -type f -name $1 | sort -g | tail -1) bin/
+  PROG=$(cabal list-bin exe:$1)
+  cp $PROG bin/
 }
 
 cabal build exe:cryptol exe:saw exe:saw-remote-api \
