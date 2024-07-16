@@ -161,7 +161,8 @@ typeOfCmd str
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
-     let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
+     let pos = getPos expr
+         decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
      rw <- getValueEnvironment
      ~(SS.Decl _pos _ (Just schema) _expr') <-
        either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl

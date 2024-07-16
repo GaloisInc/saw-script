@@ -124,9 +124,9 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal pat ms v env =
   case pat of
-    SS.PWild _   -> env
-    SS.PVar x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
-    SS.PTuple ps ->
+    SS.PWild _pos _   -> env
+    SS.PVar _pos x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
+    SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
@@ -135,16 +135,15 @@ bindPatternLocal pat ms v env =
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   Just t -> error ("bindPatternLocal: expected tuple type " ++ show t)
         _ -> error "bindPatternLocal: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternLocal pat' ms v env
 
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
-    SS.PWild _   -> pure env
-    SS.PVar x mt ->
+    SS.PWild _pos _   -> pure env
+    SS.PVar _pos x mt ->
       do sc <- getSharedContext
          liftIO $ extendEnv sc x (ms <|> (SS.tMono <$> mt)) Nothing v env
-    SS.PTuple ps ->
+    SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
           where mss = case ms of
@@ -153,7 +152,6 @@ bindPatternEnv pat ms v env =
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
         _ -> error "bindPatternEnv: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternEnv pat' ms v env
 
 -- Interpretation of SAWScript -------------------------------------------------
 
@@ -161,51 +159,50 @@ interpret :: SS.Expr -> TopLevel Value
 interpret expr =
     let ?fileReader = BS.readFile in
     case expr of
-      SS.Bool b              -> return $ VBool b
-      SS.String s            -> return $ VString (Text.pack s)
-      SS.Int z               -> return $ VInteger z
-      SS.Code str            -> do sc <- getSharedContext
-                                   cenv <- fmap rwCryptol getMergedEnv
-                                   --io $ putStrLn $ "Parsing code: " ++ show str
-                                   --showCryptolEnv' cenv
-                                   t <- io $ CEnv.parseTypedTerm sc cenv
-                                           $ locToInput str
-                                   return (toValue t)
-      SS.CType str           -> do cenv <- fmap rwCryptol getMergedEnv
-                                   s <- io $ CEnv.parseSchema cenv
-                                           $ locToInput str
-                                   return (toValue s)
-      SS.Array es            -> VArray <$> traverse interpret es
-      SS.Block stmts         -> interpretStmts stmts
-      SS.Tuple es            -> VTuple <$> traverse interpret es
-      SS.Record bs           -> VRecord <$> traverse interpret bs
-      SS.Index e1 e2         -> do a <- interpret e1
-                                   i <- interpret e2
-                                   return (indexValue a i)
-      SS.Lookup e n          -> do a <- interpret e
-                                   return (lookupValue a n)
-      SS.TLookup e i         -> do a <- interpret e
-                                   return (tupleLookupValue a i)
-      SS.Var x               -> do rw <- getMergedEnv
-                                   case Map.lookup x (rwValues rw) of
-                                     Nothing -> fail $ "unknown variable: " ++ SS.getVal x
-                                     Just v -> return (addTrace (show x) v)
-      SS.Function pat e      -> do env <- getLocalEnv
-                                   let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
-                                   return $ VLambda f
-      SS.Application e1 e2   -> do v1 <- interpret e1
-                                   v2 <- interpret e2
-                                   case v1 of
-                                     VLambda f -> f v2
-                                     _ -> fail $ "interpret Application: " ++ show v1
-      SS.Let dg e            -> do env' <- interpretDeclGroup dg
-                                   withLocalEnv env' (interpret e)
-      SS.TSig e _            -> interpret e
-      SS.IfThenElse e1 e2 e3 -> do v1 <- interpret e1
-                                   case v1 of
-                                     VBool b -> interpret (if b then e2 else e3)
-                                     _ -> fail $ "interpret IfThenElse: " ++ show v1
-      SS.LExpr _ e           -> interpret e
+      SS.Bool _ b              -> return $ VBool b
+      SS.String _ s            -> return $ VString (Text.pack s)
+      SS.Int _ z               -> return $ VInteger z
+      SS.Code str              -> do sc <- getSharedContext
+                                     cenv <- fmap rwCryptol getMergedEnv
+                                     --io $ putStrLn $ "Parsing code: " ++ show str
+                                     --showCryptolEnv' cenv
+                                     t <- io $ CEnv.parseTypedTerm sc cenv
+                                             $ locToInput str
+                                     return (toValue t)
+      SS.CType str             -> do cenv <- fmap rwCryptol getMergedEnv
+                                     s <- io $ CEnv.parseSchema cenv
+                                             $ locToInput str
+                                     return (toValue s)
+      SS.Array _ es            -> VArray <$> traverse interpret es
+      SS.Block _ stmts         -> interpretStmts stmts
+      SS.Tuple _ es            -> VTuple <$> traverse interpret es
+      SS.Record _ bs           -> VRecord <$> traverse interpret bs
+      SS.Index _ e1 e2         -> do a <- interpret e1
+                                     i <- interpret e2
+                                     return (indexValue a i)
+      SS.Lookup _ e n          -> do a <- interpret e
+                                     return (lookupValue a n)
+      SS.TLookup _ e i         -> do a <- interpret e
+                                     return (tupleLookupValue a i)
+      SS.Var x                 -> do rw <- getMergedEnv
+                                     case Map.lookup x (rwValues rw) of
+                                       Nothing -> fail $ "unknown variable: " ++ SS.getVal x
+                                       Just v -> return (addTrace (show x) v)
+      SS.Function _ pat e      -> do env <- getLocalEnv
+                                     let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
+                                     return $ VLambda f
+      SS.Application _ e1 e2   -> do v1 <- interpret e1
+                                     v2 <- interpret e2
+                                     case v1 of
+                                       VLambda f -> f v2
+                                       _ -> fail $ "interpret Application: " ++ show v1
+      SS.Let _ dg e            -> do env' <- interpretDeclGroup dg
+                                     withLocalEnv env' (interpret e)
+      SS.TSig _ e _            -> interpret e
+      SS.IfThenElse _ e1 e2 e3 -> do v1 <- interpret e1
+                                     case v1 of
+                                       VBool b -> interpret (if b then e2 else e3)
+                                       _ -> fail $ "interpret IfThenElse: " ++ show v1
 
 locToInput :: Located String -> CEnv.InputText
 locToInput l = CEnv.InputText { CEnv.inpText = getVal l
@@ -229,9 +226,9 @@ interpretDecl env (SS.Decl _ pat mt expr) = do
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
-      SS.Function pat e -> VLambda f
+      SS.Function _ pat e -> VLambda f
         where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
-      SS.TSig e _ -> interpretFunction env e
+      SS.TSig _ e _ -> interpretFunction env e
       _ -> error "interpretFunction: not a function"
 
 interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
@@ -247,15 +244,22 @@ interpretDeclGroup (SS.Recursive ds) =
 interpretStmts :: [SS.Stmt] -> TopLevel Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
+    -- XXX are the uses of withPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret e)
+      [SS.StmtBind pos (SS.PWild _patpos _) _ e] -> withPosition pos (interpret e)
       SS.StmtBind pos pat _mcxt e : ss ->
           do env <- getLocalEnv
              v1 <- withPosition pos (interpret e)
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
              bindValue pos v1 (VLambda f)
-      SS.StmtLet _ bs : ss -> interpret (SS.Let bs (SS.Block ss))
+      SS.StmtLet pos bs : ss ->
+          -- Caution: the position pos is not the correct position for
+          -- the block ss. However, interpret on Block ignores the
+          -- position there, so all we need is a placeholder for it to
+          -- ignore. Therefore, don't take the trouble to compute the
+          -- correct position (the bounding box on the statements ss).
+          interpret (SS.Let pos bs (SS.Block pos ss))
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv
@@ -284,17 +288,25 @@ processStmtBind ::
   SS.Expr ->
   m ()
 processStmtBind printBinds pat _mc expr = do -- mx mt
-  let (mx, mt) = case pat of
-        SS.PWild t -> (Nothing, t)
-        SS.PVar x t -> (Just x, t)
-        _ -> (Nothing, Nothing)
+  -- Extract the variable and type from the pattern, if any. If there
+  -- isn't any single variable use "it". We seem to get here only for
+  -- statements typed at the repl, so it apparently isn't wrong to use
+  -- PosREPL. All the same I wonder if we'd be better off always using
+  -- the position from the pattern. (Experimentally, for the time being
+  -- at least it seems the position doesn't actually get used, e.g. for
+  -- type errors it ends up using some other arguably wrong position;
+  -- may need to come back later.)
+  -- XXX: it seems problematic to discard the type for a tuple binding...
   let it = SS.Located "it" "it" SS.PosREPL
-  let lname = maybe it id mx
+  let (lname, mt) = case pat of
+        SS.PWild _pos t -> (it, t)
+        SS.PVar _pos x t -> (x, t)
+        SS.PTuple _pos _pats -> (it, Nothing)
   ctx <- SS.tContext <$> getMonadContext
   let expr' = case mt of
                 Nothing -> expr
-                Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl (SS.getPos expr) pat Nothing expr'
+                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock ctx t)
+  let decl = SS.Decl (SS.maxSpan' pat expr') pat Nothing expr'
   rw <- liftTopLevel getMergedEnv
   let opts = rwPPOpts rw
 
@@ -318,7 +330,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
 
   -- Print non-unit result if it was not bound to a variable
   case pat of
-    SS.PWild _ | printBinds && not (isVUnit result) ->
+    SS.PWild _ _ | printBinds && not (isVUnit result) ->
       liftTopLevel $
       do nenv <- io . scGetNamingEnv =<< getSharedContext
          printOutLnTop Info (showsPrecValue opts nenv 0 result "")

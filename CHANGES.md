@@ -6,6 +6,11 @@
   allow taking `&str` slices. For more information, see the documentation in the
   [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#string-slices).
 
+## Bug fixes
+
+* The locations printed with type errors (in particular) and other diagnostics
+  now have a much stronger connection with reality.
+
 # Version 1.1 -- 2024-02-05
 
 ## New Features
