@@ -100,7 +100,7 @@ data Import = Import
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
   , iPos       :: Pos
-  } deriving (Eq, Show)
+  } deriving Show
 
 instance Positioned Import where
   getPos = iPos
@@ -129,7 +129,7 @@ data Expr
   | Let Pos DeclGroup Expr
   | TSig Pos Expr Type
   | IfThenElse Pos Expr Expr Expr
-  deriving (Eq, Show) -- XXX eq?
+  deriving Show
 
 instance Positioned Expr where
   getPos (Bool pos _) = pos
@@ -155,7 +155,7 @@ data Pattern
   = PWild Pos (Maybe Type)
   | PVar Pos LName (Maybe Type)
   | PTuple Pos [Pattern]
-  deriving (Eq, Show) -- XXX Eq?
+  deriving Show
 
 instance Positioned Pattern where
   getPos (PWild pos _) = pos
@@ -168,7 +168,7 @@ data Stmt
   | StmtCode     Pos (Located String)
   | StmtImport   Pos Import
   | StmtTypedef  Pos (Located String) Type
-  deriving (Eq, Show)
+  deriving Show
 
 instance Positioned Stmt where
   getPos (StmtBind pos _ _ _)  = pos
@@ -180,7 +180,7 @@ instance Positioned Stmt where
 data DeclGroup
   = Recursive [Decl]
   | NonRecursive Decl
-  deriving (Eq, Show)
+  deriving Show
 
 instance Positioned DeclGroup where
   getPos (Recursive ds) = maxSpan ds
@@ -188,7 +188,7 @@ instance Positioned DeclGroup where
 
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
-  deriving (Eq, Show)
+  deriving Show
 
 instance Positioned Decl where
   getPos = dPos
@@ -214,7 +214,7 @@ data Type
   | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
   | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
   | LType Pos Type
-  deriving (Eq,Show)
+  deriving (Show, Eq)
 
 instance Positioned Type where
   getPos (LType pos _) = pos
@@ -241,7 +241,7 @@ data TyCon
   deriving (Eq, Show)
 
 data Schema = Forall [Name] Type
-  deriving (Eq, Show)
+  deriving Show
 
 -- }}}
 
