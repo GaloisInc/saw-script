@@ -33,6 +33,7 @@ module SAWScript.AST
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tJVMSpec, tLLVMSpec, tMIRSpec
        , tBlock, tContext, tVar
+       , isContext
 
        , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
        ) where
@@ -214,7 +215,7 @@ data Type
   | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
   | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
   | LType Pos Type
-  deriving (Show, Eq)
+  deriving Show
 
 instance Positioned Type where
   getPos (LType pos _) = pos
@@ -507,5 +508,18 @@ tContext c = TyCon (ContextCon c) []
 
 tVar :: Name -> Type
 tVar n = TyVar n
+
+-- }}}
+
+-- Type Classifiers {{{
+
+-- The idea is that calling these is/should be less messy than direct
+-- pattern matching, and also help a little to avoid splattering the
+-- internal representation of types all over the place.
+
+isContext :: Context -> Type -> Bool
+isContext c ty = case ty of
+  TyCon (ContextCon c') [] | c' == c -> True
+  _ -> False
 
 -- }}}

@@ -174,6 +174,7 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 mgu :: Type -> Type -> Either FailMGU Subst
 mgu (LType _ t) t2 = mgu t t2
 mgu t1 (LType _ t) = mgu t1 t
+mgu (TyUnifyVar i) (TyUnifyVar j) | i == j = return emptySubst
 mgu (TyUnifyVar i) t2 = bindVar i t2
 mgu t1 (TyUnifyVar i) = bindVar i t1
 mgu r1@(TyRecord ts1) r2@(TyRecord ts2)
@@ -209,9 +210,9 @@ mgus (t1:ts1) (t2:ts2) = do
 mgus ts1 ts2 =
   failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
+-- Does not handle the case where t _is_ TyUnifyVar i; the caller handles that
 bindVar :: TypeIndex -> Type -> Either FailMGU Subst
 bindVar i t
-  | t == TyUnifyVar i        = return emptySubst
   | i `S.member` unifyVars t = failMGU' "occurs check failMGUs" -- FIXME: error message
   | otherwise                = return (singletonSubst i t)
 
