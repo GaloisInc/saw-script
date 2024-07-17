@@ -302,10 +302,11 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
         SS.PWild _pos t -> (it, t)
         SS.PVar _pos x t -> (x, t)
         SS.PTuple _pos _pats -> (it, Nothing)
-  ctx <- SS.tContext <$> getMonadContext
+  ctx <- getMonadContext
+  let tyctx = SS.tContext ctx
   let expr' = case mt of
                 Nothing -> expr
-                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock ctx t)
+                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock tyctx t)
   let decl = SS.Decl (SS.maxSpan' pat expr') pat Nothing expr'
   rw <- liftTopLevel getMergedEnv
   let opts = rwPPOpts rw
@@ -320,7 +321,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
     case schema of
       SS.Forall [] t ->
         case t of
-          SS.TyCon SS.BlockCon [c, t'] | c == ctx -> do
+          SS.TyCon SS.BlockCon [c, t'] | SS.isContext ctx c -> do
             result <- actionFromValue val
             return (result, t')
           _ -> return (val, t)
