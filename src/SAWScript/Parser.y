@@ -213,7 +213,7 @@ Type :: { Type }
  : BaseType                             { $1                      }
  | BaseType '->' Type                   { LType (maxSpan [$1, $3]) (tFun $1 $3) }
 
-FieldType :: { Bind Type }
+FieldType :: { (Name, Type) }
   : name ':' BaseType                   { (tokStr $1, $3)         }
 
 BaseType :: { Type }
