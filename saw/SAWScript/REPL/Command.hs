@@ -280,12 +280,6 @@ splitCommand txt =
 
     expr -> guard (not (null expr)) >> return (expr,[])
 
--- | Uncons a list.
-uncons :: [a] -> Maybe (a,[a])
-uncons as = case as of
-  a:rest -> Just (a,rest)
-  _      -> Nothing
-
 -- | Lookup a string in the command list.
 findCommand :: String -> [CommandDescr]
 findCommand str = lookupTrie str commands
@@ -300,17 +294,20 @@ parseCommand findCmd line = do
   (cmd,args) <- splitCommand line
   let args' = sanitizeEnd args
   case findCmd cmd of
+    -- nothing matched; if it doesn't begin with a colon, eval it
+    [] -> case cmd of
+      []      -> Nothing
+      ':' : _ -> Just (Unknown cmd)
+      _       -> Just (Command (sawScriptCmd line))
+
+    -- matched exactly one command; run it
     [c] -> case cBody c of
       ExprArg     body -> Just (Command (body args'))
       FilenameArg body -> Just (Command (body =<< expandHome args'))
       ShellArg    body -> Just (Command (body args'))
       NoArg       body -> Just (Command  body)
 
-    [] -> case uncons cmd of
-      Just (':',_) -> Just (Unknown cmd)
-      Just _       -> Just (Command (sawScriptCmd line))
-      _            -> Nothing
-
+    -- matched several things; complain
     cs -> Just (Ambiguous cmd (map cName cs))
 
   where
