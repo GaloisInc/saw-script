@@ -328,11 +328,12 @@ parseError toks = case toks of
   []    -> Left UnexpectedEOF
   t : _ -> Left (UnexpectedToken t)
 
-once :: Pattern -> Expr -> Expr
-once pat e = Function (maxSpan' pat e) pat e
 buildFunction :: [Pattern] -> Expr -> Expr
 buildFunction args e =
-  foldr {-(\pat e -> once pat e)-} once e args
+  let once :: Pattern -> Expr -> Expr
+      once pat e = Function (maxSpan' pat e) pat e
+  in
+  foldr once e args
 
 buildApplication :: [Expr] -> Expr
 buildApplication es =
