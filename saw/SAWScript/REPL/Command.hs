@@ -154,7 +154,9 @@ runCommand c = case c of
 
 
 typeOfCmd :: String -> REPL ()
-typeOfCmd str =
+typeOfCmd str
+  | null str = do io $ putStrLn $ "[error] :type requires an argument"
+  | otherwise =
   do let tokens = SAWScript.Lexer.lexSAW replFileName str
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
