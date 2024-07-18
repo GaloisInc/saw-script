@@ -752,7 +752,7 @@ inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
 -- Get the position and name of the first binding in a pattern,
 -- for use as context info when printing messages. If there's a
 -- real variable, prefer that (Right cases); otherwise take the
--- position of the first _ or () (Left cases).
+-- position of the first wildcard or empty tuple (Left cases).
 patternLName :: Pattern -> LName
 patternLName pat0 =
   case visit pat0 of

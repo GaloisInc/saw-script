@@ -46,7 +46,10 @@ fmtPos :: Pos -> String -> String
 fmtPos p m = show p ++ ":\n" ++ m'
   where m' = intercalate "\n" . map ("  " ++) . lines $ m
 
--- Get the empty position at the beginning of the position of something else.
+-- Get the empty position at the beginning of the position of
+-- something else. This can be used to provide positions for implicit
+-- elements, such as the not-physically-present wildcard in a
+-- do-notation binding that doesn't bind anything.
 leadingPos :: Pos -> Pos
 leadingPos pos = case pos of
    Range f l1 c1 _l2 _c2 -> Range f l1 c1 l1 c1
