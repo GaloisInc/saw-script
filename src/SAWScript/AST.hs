@@ -517,7 +517,11 @@ tVar n = TyVar n
 -- pattern matching, and also help a little to avoid splattering the
 -- internal representation of types all over the place.
 
-isContext :: Context -> Type -> Bool
+-- | Check if type 'ty' is a 'Context' type of context 'c'.
+isContext ::
+       Context          -- ^ The context 'c' to look for
+    -> Type             -- ^ The type 'ty' to inspect
+    -> Bool
 isContext c ty = case ty of
   TyCon (ContextCon c') [] | c' == c -> True
   _ -> False
