@@ -291,17 +291,13 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   -- Extract the variable and type from the pattern, if any. If there
   -- isn't any single variable use "it". We seem to get here only for
   -- statements typed at the repl, so it apparently isn't wrong to use
-  -- PosREPL. All the same I wonder if we'd be better off always using
-  -- the position from the pattern. (Experimentally, for the time being
-  -- at least it seems the position doesn't actually get used, e.g. for
-  -- type errors it ends up using some other arguably wrong position;
-  -- may need to come back later.)
+  -- "it".
   -- XXX: it seems problematic to discard the type for a tuple binding...
-  let it = SS.Located "it" "it" SS.PosREPL
+  let it pos = SS.Located "it" "it" pos
   let (lname, mt) = case pat of
-        SS.PWild _pos t -> (it, t)
+        SS.PWild pos t -> (it pos, t)
         SS.PVar _pos x t -> (x, t)
-        SS.PTuple _pos _pats -> (it, Nothing)
+        SS.PTuple pos _pats -> (it pos, Nothing)
   ctx <- getMonadContext
   let tyctx = SS.tContext ctx
   let expr' = case mt of
