@@ -42,10 +42,6 @@ renderDoc :: PP.Doc ann -> String
 renderDoc doc = PP.renderString (PP.layoutPretty opts doc)
   where opts = PP.LayoutOptions (PP.AvailablePerLine 80 0.8)
 
--- This is not used, which is probably good because it seems odd
-endPos :: FilePath -> Pos
-endPos f = Range f 0 0 0 0
-
 fmtPos :: Pos -> String -> String
 fmtPos p m = show p ++ ":\n" ++ m'
   where m' = intercalate "\n" . map ("  " ++) . lines $ m
