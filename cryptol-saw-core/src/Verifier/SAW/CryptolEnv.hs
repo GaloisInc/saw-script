@@ -225,9 +225,9 @@ initCryptolEnv sc = do
   termEnv <- genTermEnv sc modEnv cryEnv0
 
   return CryptolEnv
-    { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing Nothing)
-                    , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing Nothing)
-                    , (OnlyPublic, P.Import arrayName Nothing Nothing Nothing)
+    { eImports    = [ (OnlyPublic, P.Import preludeName Nothing Nothing Nothing Nothing)
+                    , (OnlyPublic, P.Import preludeReferenceName (Just preludeReferenceName) Nothing Nothing Nothing)
+                    , (OnlyPublic, P.Import arrayName Nothing Nothing Nothing Nothing)
                     ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
@@ -529,7 +529,7 @@ importModule sc env src as vis imps = do
 
   return $
     updateFFITypes m
-      env { eImports   = (vis, P.Import (T.mName m) as imps Nothing)
+      env { eImports   = (vis, P.Import (T.mName m) as imps Nothing Nothing)
                        : eImports env
           , eModuleEnv = modEnv'
           , eTermEnv   = newTermEnv
