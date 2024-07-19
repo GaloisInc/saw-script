@@ -33,6 +33,7 @@ module SAWScript.AST
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tJVMSpec, tLLVMSpec, tMIRSpec
        , tBlock, tContext, tVar
+       , isContext
 
        , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
        ) where
@@ -60,16 +61,25 @@ type Name = String
 
 -- }}}
 
--- Expr Level {{{
+-- Location tracking {{{
 
-data Located a = Located { getVal :: a, getOrig :: Name, locatedPos :: Pos } deriving (Functor, Foldable, Traversable)
+--
+-- Type to wrap a thing with a position
+--
+-- This is declared with record syntax to provide accessors/projection
+-- functions; it is intended to be used positionally.
+--
+data Located a = Located {
+  getVal :: a,          -- the thing
+  getOrig :: Name,      -- a name/string for it, where applicable
+  locatedPos :: Pos     -- the position
+} deriving (Functor, Foldable, Traversable)
+
 instance Show (Located a) where
   show (Located _ v p) = show v ++ " (" ++ show p ++ ")"
 
 instance Positioned (Located a) where
   getPos = locatedPos
-
-type LName = Located Name
 
 instance Eq a => Eq (Located a) where
   a == b = getVal a == getVal b
@@ -77,64 +87,81 @@ instance Eq a => Eq (Located a) where
 instance Ord a => Ord (Located a) where
   compare a b = compare (getVal a) (getVal b)
 
+type LName = Located Name
+
 toLName :: Token Pos -> LName
 toLName p = Located (tokStr p) (tokStr p) (tokPos p)
+
+-- }}}
+
+-- Expr Level {{{
 
 data Import = Import
   { iModule    :: Either FilePath P.ModName
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
   , iPos       :: Pos
-  } deriving (Eq, Show)
+  } deriving Show
 
 instance Positioned Import where
   getPos = iPos
 
 data Expr
   -- Constants
-  = Bool Bool
-  | String String
-  | Int Integer
+  = Bool Pos Bool
+  | String Pos String
+  | Int Pos Integer
   | Code (Located String)
   | CType (Located String)
   -- Structures
-  | Array  [Expr]
-  | Block  [Stmt]
-  | Tuple  [Expr]
-  | Record (Map Name Expr)
+  | Array  Pos [Expr]
+  | Block  Pos [Stmt]
+  | Tuple  Pos [Expr]
+  | Record Pos (Map Name Expr)
   -- Accessors
-  | Index  Expr Expr
-  | Lookup Expr Name
-  | TLookup Expr Integer
+  | Index   Pos Expr Expr
+  | Lookup  Pos Expr Name
+  | TLookup Pos Expr Integer
   -- LC
   | Var (Located Name)
-  | Function Pattern Expr
-  | Application Expr Expr
+  | Function Pos Pattern Expr
+  | Application Pos Expr Expr
   -- Sugar
-  | Let DeclGroup Expr
-  | TSig Expr Type
-  | IfThenElse Expr Expr Expr
-  -- Source locations
-  | LExpr Pos Expr
-  deriving (Eq, Show)
+  | Let Pos DeclGroup Expr
+  | TSig Pos Expr Type
+  | IfThenElse Pos Expr Expr Expr
+  deriving Show
 
 instance Positioned Expr where
+  getPos (Bool pos _) = pos
+  getPos (String pos _) = pos
+  getPos (Int pos _) = pos
   getPos (Code c) = getPos c
   getPos (CType t) = getPos t
-  getPos (LExpr site _) = site
+  getPos (Array pos _) = pos
+  getPos (Block pos _) = pos
+  getPos (Tuple pos _) = pos
+  getPos (Record pos _) = pos
+  getPos (Index pos _ _) = pos
+  getPos (Lookup pos _ _) = pos
+  getPos (TLookup pos _ _) = pos
   getPos (Var n) = getPos n
-  getPos _ = Unknown
+  getPos (Function pos _ _) = pos
+  getPos (Application pos _ _) = pos
+  getPos (Let pos _ _) = pos
+  getPos (TSig pos _ _) = pos
+  getPos (IfThenElse pos _ _ _) = pos
 
 data Pattern
-  = PWild (Maybe Type)
-  | PVar LName (Maybe Type)
-  | PTuple [Pattern]
-  | LPattern Pos Pattern
-  deriving (Eq, Show)
+  = PWild Pos (Maybe Type)
+  | PVar Pos LName (Maybe Type)
+  | PTuple Pos [Pattern]
+  deriving Show
 
 instance Positioned Pattern where
-  getPos (LPattern pos _) = pos
-  getPos _ = Unknown
+  getPos (PWild pos _) = pos
+  getPos (PVar pos _ _) = pos
+  getPos (PTuple pos _) = pos
 
 data Stmt
   = StmtBind     Pos Pattern (Maybe Type) Expr
@@ -142,7 +169,7 @@ data Stmt
   | StmtCode     Pos (Located String)
   | StmtImport   Pos Import
   | StmtTypedef  Pos (Located String) Type
-  deriving (Eq, Show)
+  deriving Show
 
 instance Positioned Stmt where
   getPos (StmtBind pos _ _ _)  = pos
@@ -154,7 +181,7 @@ instance Positioned Stmt where
 data DeclGroup
   = Recursive [Decl]
   | NonRecursive Decl
-  deriving (Eq, Show)
+  deriving Show
 
 instance Positioned DeclGroup where
   getPos (Recursive ds) = maxSpan ds
@@ -162,7 +189,7 @@ instance Positioned DeclGroup where
 
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
-  deriving (Eq, Show)
+  deriving Show
 
 instance Positioned Decl where
   getPos = dPos
@@ -188,7 +215,7 @@ data Type
   | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
   | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
   | LType Pos Type
-  deriving (Eq,Show)
+  deriving Show
 
 instance Positioned Type where
   getPos (LType pos _) = pos
@@ -215,7 +242,7 @@ data TyCon
   deriving (Eq, Show)
 
 data Schema = Forall [Name] Type
-  deriving (Eq, Show)
+  deriving Show
 
 -- }}}
 
@@ -229,36 +256,36 @@ vcatWithSemi = PP.vcat . map (PP.<> PP.semi)
 
 instance Pretty Expr where
   pretty expr0 = case expr0 of
-    Bool b   -> PP.viaShow b
-    String s -> PP.dquotes (PP.pretty s)
-    Int i    -> PP.pretty i
-    Code ls  -> PP.braces . PP.braces $ PP.pretty (getVal ls)
+    Bool _ b   -> PP.viaShow b
+    String _ s -> PP.dquotes (PP.pretty s)
+    Int _ i    -> PP.pretty i
+    Code ls    -> PP.braces . PP.braces $ PP.pretty (getVal ls)
     CType (Located string _ _) -> PP.braces . PP.pretty $ "|" ++ string ++ "|"
-    Array xs -> PP.list (map PP.pretty xs)
-    Block stmts ->
+    Array _ xs -> PP.list (map PP.pretty xs)
+    Block _ stmts ->
       "do" PP.<+> PP.lbrace PP.<> PP.line' PP.<>
       (PP.indent 3 $ (PP.align . vcatWithSemi . map PP.pretty $ stmts)) PP.<>
       PP.line' PP.<> PP.rbrace
-    Tuple exprs -> PP.tupled (map PP.pretty exprs)
-    Record mapping ->
+    Tuple _ exprs -> PP.tupled (map PP.pretty exprs)
+    Record _ mapping ->
       PP.braces . (PP.space PP.<>) . (PP.<> PP.space) . PP.align . PP.sep . PP.punctuate PP.comma $
       map (\(name, value) -> PP.pretty name PP.<+> "=" PP.<+> PP.pretty value)
       (Map.assocs mapping)
-    Index _ _ -> error "No concrete syntax for AST node 'Index'"
-    Lookup expr name -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty name
-    TLookup expr int -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty int
+    Index _ _ _ -> error "No concrete syntax for AST node 'Index'"
+    Lookup _ expr name -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty name
+    TLookup _ expr int -> PP.pretty expr PP.<> PP.dot PP.<> PP.pretty int
     Var (Located name _ _) ->
       PP.pretty name
-    Function pat expr ->
+    Function _ pat expr ->
       "\\" PP.<+> PP.pretty pat PP.<+> "->" PP.<+> PP.pretty expr
     -- FIXME, use precedence to minimize parentheses
-    Application f a -> PP.parens (PP.pretty f PP.<+> PP.pretty a)
-    Let (NonRecursive decl) expr ->
+    Application _ f a -> PP.parens (PP.pretty f PP.<+> PP.pretty a)
+    Let _ (NonRecursive decl) expr ->
       PP.fillSep
       [ "let" PP.<+> prettyDef decl
       , "in" PP.<+> PP.pretty expr
       ]
-    Let (Recursive decls) expr ->
+    Let _ (Recursive decls) expr ->
       PP.fillSep
       [ "let" PP.<+>
         PP.cat (PP.punctuate
@@ -266,29 +293,27 @@ instance Pretty Expr where
                 (map prettyDef decls))
       , "in" PP.<+> PP.pretty expr
       ]
-    TSig expr typ -> PP.parens $ PP.pretty expr PP.<+> PP.colon PP.<+> pretty 0 typ
-    IfThenElse e1 e2 e3 ->
+    TSig _ expr typ -> PP.parens $ PP.pretty expr PP.<+> PP.colon PP.<+> pretty 0 typ
+    IfThenElse _ e1 e2 e3 ->
       "if" PP.<+> PP.pretty e1 PP.<+>
       "then" PP.<+> PP.pretty e2 PP.<+>
       "else" PP.<+> PP.pretty e3
-    LExpr _ e -> PP.pretty e
 
 instance PrettyPrint Expr where
   pretty _ e = PP.pretty e
 
 instance Pretty Pattern where
   pretty pat = case pat of
-    PWild mType ->
+    PWild _ mType ->
       prettyMaybeTypedArg ("_", mType)
-    PVar (Located name _ _) mType ->
+    PVar _ (Located name _ _) mType ->
       prettyMaybeTypedArg (name, mType)
-    PTuple pats ->
+    PTuple _ pats ->
       PP.tupled (map PP.pretty pats)
-    LPattern _ pat' -> PP.pretty pat'
 
 instance Pretty Stmt where
    pretty = \case
-      StmtBind _ (PWild _leftType) _rightType expr ->
+      StmtBind _ (PWild _ _leftType) _rightType expr ->
          PP.pretty expr
       StmtBind _ pat _rightType expr ->
          PP.pretty pat PP.<+> "<-" PP.<+> PP.align (PP.pretty expr)
@@ -345,7 +370,7 @@ prettyMaybeTypedArg (name,Just typ) =
 
 dissectLambda :: Expr -> ([Pattern], Expr)
 dissectLambda = \case
-  Function pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
+  Function _ pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
   expr -> ([], expr)
 
 pShow :: PrettyPrint a => a -> String
@@ -483,5 +508,22 @@ tContext c = TyCon (ContextCon c) []
 
 tVar :: Name -> Type
 tVar n = TyVar n
+
+-- }}}
+
+-- Type Classifiers {{{
+
+-- The idea is that calling these is/should be less messy than direct
+-- pattern matching, and also help a little to avoid splattering the
+-- internal representation of types all over the place.
+
+-- | Check if type 'ty' is a 'Context' type of context 'c'.
+isContext ::
+       Context          -- ^ The context 'c' to look for
+    -> Type             -- ^ The type 'ty' to inspect
+    -> Bool
+isContext c ty = case ty of
+  TyCon (ContextCon c') [] | c' == c -> True
+  _ -> False
 
 -- }}}

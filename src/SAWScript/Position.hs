@@ -42,12 +42,18 @@ renderDoc :: PP.Doc ann -> String
 renderDoc doc = PP.renderString (PP.layoutPretty opts doc)
   where opts = PP.LayoutOptions (PP.AvailablePerLine 80 0.8)
 
-endPos :: FilePath -> Pos
-endPos f = Range f 0 0 0 0
-
 fmtPos :: Pos -> String -> String
 fmtPos p m = show p ++ ":\n" ++ m'
   where m' = intercalate "\n" . map ("  " ++) . lines $ m
+
+-- Get the empty position at the beginning of the position of
+-- something else. This can be used to provide positions for implicit
+-- elements, such as the not-physically-present wildcard in a
+-- do-notation binding that doesn't bind anything.
+leadingPos :: Pos -> Pos
+leadingPos pos = case pos of
+   Range f l1 c1 _l2 _c2 -> Range f l1 c1 l1 c1
+   _ -> pos
 
 spanPos :: Pos -> Pos -> Pos
 spanPos (PosInternal str) _ = PosInternal str
@@ -118,8 +124,14 @@ class Positioned a where
 instance Positioned Pos where
   getPos p = p
 
+-- Caution: if you write maxSpan (a, b) for heterogeneous types a and b,
+-- it will typecheck but not actually work correctly. Either call getPos
+-- first or use maxSpan' for this case.
 maxSpan :: (Functor t, Foldable t, Positioned a) => t a -> Pos
 maxSpan xs = foldr spanPos Unknown (fmap getPos xs)
+
+maxSpan' :: (Positioned a, Positioned b) => a -> b -> Pos
+maxSpan' x y = spanPos (getPos x) (getPos y)
 
 -- WithPos -----------------------------------------------------------------
 

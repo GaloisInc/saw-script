@@ -31,6 +31,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Identity
 import Data.Map (Map)
+import Data.Either (partitionEithers)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -173,6 +174,7 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
 mgu :: Type -> Type -> Either FailMGU Subst
 mgu (LType _ t) t2 = mgu t t2
 mgu t1 (LType _ t) = mgu t1 t
+mgu (TyUnifyVar i) (TyUnifyVar j) | i == j = return emptySubst
 mgu (TyUnifyVar i) t2 = bindVar i t2
 mgu t1 (TyUnifyVar i) = bindVar i t1
 mgu r1@(TyRecord ts1) r2@(TyRecord ts2)
@@ -208,9 +210,9 @@ mgus (t1:ts1) (t2:ts2) = do
 mgus ts1 ts2 =
   failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
+-- Does not handle the case where t _is_ TyUnifyVar i; the caller handles that
 bindVar :: TypeIndex -> Type -> Either FailMGU Subst
 bindVar i t
-  | t == TyUnifyVar i        = return emptySubst
   | i `S.member` unifyVars t = failMGU' "occurs check failMGUs" -- FIXME: error message
   | otherwise                = return (singletonSubst i t)
 
@@ -274,7 +276,6 @@ newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
 data RO = RO
   { typeEnv :: M.Map (Located Name) Schema
   , typedefEnv :: M.Map Name Type
-  , currentExprPos :: Pos
   }
 
 data RW = RW
@@ -295,30 +296,48 @@ newTypeIndex = do
 newType :: TI Type
 newType = TyUnifyVar <$> newTypeIndex
 
-withExprPos :: Pos -> TI a -> TI a
-withExprPos p = local (\e -> e { currentExprPos = p })
-
 newTypePattern :: Pattern -> TI (Type, Pattern)
 newTypePattern pat =
   case pat of
-    PWild mt  -> do t <- maybe newType return mt
-                    return (t, PWild (Just t))
-    PVar x mt -> do t <- maybe newType return mt
-                    return (t, PVar x (Just t))
-    PTuple ps -> do (ts, ps') <- unzip <$> mapM newTypePattern ps
-                    return (tTuple ts, PTuple ps')
-    LPattern pos pat' -> withExprPos pos (newTypePattern pat')
+    PWild pos mt ->
+      do t <- maybe newType return mt
+         return (t, PWild pos (Just t))
+    PVar pos x mt ->
+      do t <- maybe newType return mt
+         return (t, PVar pos x (Just t))
+    PTuple pos ps ->
+      do (ts, ps') <- unzip <$> mapM newTypePattern ps
+         return (tTuple ts, PTuple pos ps')
 
 appSubstM :: AppSubst t => t -> TI t
 appSubstM t = do
   s <- TI $ gets subst
   return $ appSubst s t
 
-recordError :: String -> TI ()
-recordError err = do pos <- currentExprPos <$> ask
-                     TI $ modify $ \rw ->
-                       rw { errors = (pos, err) : errors rw }
+recordError :: Pos -> String -> TI ()
+recordError pos err = do
+  TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
 
+--
+-- Unify two types.
+--
+
+-- When typechecking an expression the first type argument (t1) should
+-- be the type expected from the context, and the second (t2) should
+-- be the type found in the expression appearing in that context. For
+-- example, when checking the second argument of a function application
+-- (Application _pos e1 e2) checking e1 gives rise to an expected type
+-- for e2, so when unifying that with the result of checking e2 the
+-- t1 argument should be the expected type arising from e1, the t2
+-- argument should be the type returned by checking e2, and the position
+-- argument should be the position of e2 (not the position of the
+-- enclosing apply node). If it doesn't work, the message generated
+-- will be of the form "pos: found t2, expected t1".
+--
+-- Other cases should pass the arguments analogously. As of this
+-- writing some are definitely backwards.
+--
+-- Further notes on error messages:
 --
 -- The error message returned by mgu already prints the types at some
 -- length, so we don't need to print any of that again.
@@ -329,7 +348,7 @@ recordError err = do pos <- currentExprPos <$> ask
 -- recognizable.
 --
 -- The LName passed in is (at least in most cases) the name of the
--- top-level binding the failure appears inside. Its position is
+-- top-level binding the unification happens inside. Its position is
 -- therefore usually not where the problem is except in a very
 -- abstract sense and shouldn't be printed as if it's the error
 -- location. So tack it onto the end of everything.
@@ -339,14 +358,14 @@ recordError err = do pos <- currentExprPos <$> ask
 -- it entirely, but that seems like a reasonable thing to do in the
 -- future given more clarity.
 --
-unify :: LName -> Type -> Type -> TI ()
-unify m t1 t2 = do
+unify :: LName -> Type -> Pos -> Type -> TI ()
+unify m t1 pos t2 = do
   t1' <- appSubstM =<< instantiateM t1
   t2' <- appSubstM =<< instantiateM t2
   case mgu t1' t2' of
     Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
     Left msgs ->
-       recordError $ unlines $ firstline : morelines'
+       recordError pos $ unlines $ firstline : morelines'
        where
          firstline = "Type mismatch."
          morelines = ppFailMGU msgs ++ ["within " ++ show m]
@@ -375,22 +394,20 @@ bindPattern pat = bindSchemas bs
 patternBindings :: Pattern -> [(Located Name, Maybe Type)]
 patternBindings pat =
   case pat of
-    PWild _mt -> []
-    PVar x mt -> [(x, mt)]
-    PTuple ps -> concatMap patternBindings ps
-    LPattern _ pat' -> patternBindings pat'
+    PWild _ _mt -> []
+    PVar _ x mt -> [(x, mt)]
+    PTuple _ ps -> concatMap patternBindings ps
 
 bindPatternSchema :: Pattern -> Schema -> TI a -> TI a
 bindPatternSchema pat s@(Forall vs t) m =
   case pat of
-    PWild _ -> m
-    PVar n _ -> bindSchema n s m
-    PTuple ps ->
+    PWild _ _ -> m
+    PVar _ n _ -> bindSchema n s m
+    PTuple _ ps ->
       case unlocated t of
         TyCon (TupleCon _) ts -> foldr ($) m
           [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
-    LPattern pos pat' -> withExprPos pos (bindPatternSchema pat' s m)
 
 bindTypedef :: LName -> Type -> TI a -> TI a
 bindTypedef n t m =
@@ -449,32 +466,30 @@ instance AppSubst Schema where
 
 instance AppSubst Expr where
   appSubst s expr = case expr of
-    TSig e t           -> TSig (appSubst s e) (appSubst s t)
-    Bool _             -> expr
-    String _           -> expr
-    Int _              -> expr
-    Code _             -> expr
-    CType _            -> expr
-    Array es           -> Array (appSubst s es)
-    Block bs           -> Block (appSubst s bs)
-    Tuple es           -> Tuple (appSubst s es)
-    Record fs          -> Record (appSubst s fs)
-    Index ar ix        -> Index (appSubst s ar) (appSubst s ix)
-    Lookup rec fld     -> Lookup (appSubst s rec) fld
-    TLookup tpl idx    -> TLookup (appSubst s tpl) idx
-    Var _              -> expr
-    Function pat body  -> Function (appSubst s pat) (appSubst s body)
-    Application f v    -> Application (appSubst s f) (appSubst s v)
-    Let dg e           -> Let (appSubst s dg) (appSubst s e)
-    IfThenElse e e2 e3 -> IfThenElse (appSubst s e) (appSubst s e2) (appSubst s e3)
-    LExpr p e          -> LExpr p (appSubst s e)
+    TSig pos e t           -> TSig pos (appSubst s e) (appSubst s t)
+    Bool _ _               -> expr
+    String _ _             -> expr
+    Int _ _                -> expr
+    Code _                 -> expr
+    CType _                -> expr
+    Array pos es           -> Array pos (appSubst s es)
+    Block pos bs           -> Block pos (appSubst s bs)
+    Tuple pos es           -> Tuple pos (appSubst s es)
+    Record pos fs          -> Record pos (appSubst s fs)
+    Index pos ar ix        -> Index pos (appSubst s ar) (appSubst s ix)
+    Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
+    TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
+    Var _                  -> expr
+    Function pos pat body  -> Function pos (appSubst s pat) (appSubst s body)
+    Application pos f v    -> Application pos (appSubst s f) (appSubst s v)
+    Let pos dg e           -> Let pos (appSubst s dg) (appSubst s e)
+    IfThenElse pos e e2 e3 -> IfThenElse pos (appSubst s e) (appSubst s e2) (appSubst s e3)
 
 instance AppSubst Pattern where
   appSubst s pat = case pat of
-    PWild mt  -> PWild (appSubst s mt)
-    PVar x mt -> PVar x (appSubst s mt)
-    PTuple ps -> PTuple (appSubst s ps)
-    LPattern _ pat' -> appSubst s pat'
+    PWild pos mt  -> PWild pos (appSubst s mt)
+    PVar pos x mt -> PVar pos x (appSubst s mt)
+    PTuple pos ps -> PTuple pos (appSubst s ps)
 
 instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
   appSubst s = fmap (appSubst s)
@@ -531,86 +546,86 @@ type OutStmt = Stmt
 
 inferE :: (LName, Expr) -> TI (OutExpr,Type)
 inferE (ln, expr) = case expr of
-  Bool b    -> return (Bool b, tBool)
-  String s  -> return (String s, tString)
-  Int i     -> return (Int i, tInt)
-  Code s    -> return (Code s, tTerm)
-  CType s   -> return (CType s, tType)
+  Bool pos b    -> return (Bool pos b, tBool)
+  String pos s  -> return (String pos s, tString)
+  Int pos i     -> return (Int pos i, tInt)
+  Code s        -> return (Code s, tTerm)
+  CType s       -> return (CType s, tType)
 
-  Array [] ->
+  Array pos [] ->
     do a <- newType
-       return (Array [], tArray a)
+       return (Array pos [], tArray a)
 
-  Array (e:es) ->
+  Array pos (e:es) ->
     do (e',t) <- inferE (ln, e)
        es' <- mapM (flip (checkE ln) t) es
-       return (Array (e':es'), tArray t)
+       return (Array pos (e':es'), tArray t)
 
-  Block bs ->
+  Block pos bs ->
     do ctx <- newType
-       (bs',t') <- inferStmts ln ctx bs
-       return (Block bs', tBlock ctx t')
+       (bs',t') <- inferStmts ln pos ctx bs
+       return (Block pos bs', tBlock ctx t')
 
-  Tuple es ->
+  Tuple pos es ->
     do (es',ts) <- unzip `fmap` mapM (inferE . (ln,)) es
-       return (Tuple es', tTuple ts)
+       return (Tuple pos es', tTuple ts)
 
-  Record fs ->
+  Record pos fs ->
     do (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
-       return (Record (M.fromList nes'), TyRecord $ M.fromList nts)
+       return (Record pos (M.fromList nes'), TyRecord $ M.fromList nts)
 
-  Index ar ix ->
+  Index pos ar ix ->
     do (ar',at) <- inferE (ln,ar)
        ix'      <- checkE ln ix tInt
        t        <- newType
-       unify ln (tArray t) at
-       return (Index ar' ix', t)
+       unify ln (tArray t) (getPos ar') at
+       return (Index pos ar' ix', t)
 
-  Lookup e n ->
+  Lookup pos e n ->
     do (e1,t) <- inferE (ln, e)
        t1 <- appSubstM =<< instantiateM t
        elTy <- case unlocated t1 of
                  TyRecord fs
                     | Just ty <- M.lookup n fs -> return ty
                     | otherwise ->
-                          do recordError $ unlines
+                          do recordError pos $ unlines
                                 [ "Selecting a missing field."
                                 , "Field name: " ++ n
                                 ]
                              newType
-                 _ -> do recordError $ unlines
+                 _ -> do recordError pos $ unlines
                             [ "Record lookup on non-record argument."
                             , "Field name: " ++ n
                             ]
                          newType
-       return (Lookup e1 n, elTy)
+       return (Lookup pos e1 n, elTy)
 
-  TLookup e i ->
+  TLookup pos e i ->
     do (e1,t) <- inferE (ln,e)
        t1 <- appSubstM =<< instantiateM t
        elTy <- case unlocated t1 of
                  TyCon (TupleCon n) tys
                    | i < n -> return (tys !! fromIntegral i)
                    | otherwise ->
-                          do recordError $ unlines
+                          do recordError pos $ unlines
                                 [ "Tuple index out of bounds."
                                 , "Given index " ++ show i ++
                                   " is too large for tuple size of " ++
                                   show n
                                 ]
                              newType
-                 _ -> do recordError $ unlines
+                 _ -> do recordError pos $ unlines
                             [ "Tuple lookup on non-tuple argument."
                             , "Given index " ++ show i
                             ]
                          newType
-       return (TLookup e1 i, elTy)
+       return (TLookup pos e1 i, elTy)
 
   Var x ->
     do env <- TI $ asks typeEnv
        case M.lookup x env of
          Nothing -> do
-           recordError $ unlines
+           recordError (getPos x) $ unlines
              [ "Unbound variable: " ++ show x
              , "Note that some built-in commands are available only after running"
              , "either `enable_deprecated` or `enable_experimental`."
@@ -621,43 +636,40 @@ inferE (ln, expr) = case expr of
            ts <- mapM (const newType) as
            return (Var x, instantiate (M.fromList (zip as ts)) t)
 
-  Function pat body ->
+  Function pos pat body ->
     do (pt, pat') <- newTypePattern pat
        (body', t) <- bindPattern pat' $ inferE (ln, body)
-       return (Function pat' body', tFun pt t)
+       return (Function pos pat' body', tFun pt t)
 
-  Application f v ->
+  Application pos f v ->
     do (v',fv) <- inferE (ln,v)
        t <- newType
        let ft = tFun fv t
        f' <- checkE ln f ft
-       return (Application f' v', t)
+       return (Application pos f' v', t)
 
-  Let dg body ->
+  Let pos dg body ->
     do dg' <- inferDeclGroup dg
        (body', t) <- bindDeclGroup dg' (inferE (ln, body))
-       return (Let dg' body', t)
+       return (Let pos dg' body', t)
 
-  TSig e t ->
+  TSig _pos e t ->
     do t' <- checkKind t
        (e',t'') <- inferE (ln,e)
-       unify ln t' t''
+       unify ln t' (getPos e') t''
        return (e',t'')
 
-  IfThenElse e1 e2 e3 ->
+  IfThenElse pos e1 e2 e3 ->
     do e1' <- checkE ln e1 tBool
        (e2', t) <- inferE (ln, e2)
        e3' <- checkE ln e3 t
-       return (IfThenElse e1' e2' e3', t)
-
-  LExpr p e ->
-    withExprPos p (inferE (ln, e))
+       return (IfThenElse pos e1' e2' e3', t)
 
 
 checkE :: LName -> Expr -> Type -> TI OutExpr
 checkE m e t = do
   (e',t') <- inferE (m,e)
-  unify m t t'
+  unify m t (getPos e') t'
   return e'
 
 -- Take a struct field binding (name and expression) and return the
@@ -677,79 +689,94 @@ inferDeclGroup (Recursive ds) = do
   ds' <- inferRecDecls ds
   return (Recursive ds')
 
-inferStmts :: LName -> Type -> [Stmt] -> TI ([OutStmt], Type)
+-- the passed-in position should be the position for the whole statement block
+-- the first type argument (ctx) is ... XXX
+inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
 
-inferStmts m _ctx [] = do
-  recordError ("do block must include at least one expression at " ++ show m)
+inferStmts m pos _ctx [] = do
+  recordError pos ("do block must include at least one expression at " ++ show m)
   t <- newType
   return ([], t)
 
-inferStmts m ctx [StmtBind pos (PWild mt) mc e] = do
+inferStmts m _dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
   t  <- maybe newType return mt
   e' <- checkE m e (tBlock ctx t)
   mc' <- case mc of
     Nothing -> return ctx
     Just ty  -> do ty' <- checkKind ty
-                   unify m ty ctx -- TODO: should this be ty'?
+                   -- dholland 20240628 are the type arguments backwards? thought
+                   -- so at first but now I'm not sure. Also I'm not sure this is
+                   -- the right position to use. Where does mc come from? Is it a
+                   -- source annotation? If so it should probably have its own
+                   -- position. XXX
+                   unify m ty (getPos e) ctx -- TODO: should this be ty'?
                    return ty'
-  return ([StmtBind pos (PWild (Just t)) (Just mc') e'],t)
+  return ([StmtBind spos (PWild patpos (Just t)) (Just mc') e'],t)
 
-inferStmts m _ [_] = do
-  recordError ("do block must end with expression at " ++ show m)
+inferStmts m dopos _ [_] = do
+  recordError dopos ("do block must end with expression at " ++ show m)
   t <- newType
   return ([],t)
 
-inferStmts m ctx (StmtBind pos pat mc e : more) = do
+inferStmts m dopos ctx (StmtBind spos pat mc e : more) = do
   (pt, pat') <- newTypePattern pat
   e' <- checkE m e (tBlock ctx pt)
   mc' <- case mc of
     Nothing -> return ctx
     Just c  -> do c' <- checkKind c
-                  unify m c ctx
+                  -- XXX same as above
+                  unify m c (getPos e) ctx
                   return c'
-  (more', t') <- bindPattern pat' $ inferStmts m ctx more
+  (more', t') <- bindPattern pat' $ inferStmts m dopos ctx more
 
-  return (StmtBind pos pat' (Just mc') e' : more', t')
+  return (StmtBind spos pat' (Just mc') e' : more', t')
 
-inferStmts m ctx (StmtLet pos dg : more) = do
+inferStmts m dopos ctx (StmtLet spos dg : more) = do
   dg' <- inferDeclGroup dg
-  (more', t) <- bindDeclGroup dg' (inferStmts m ctx more)
-  return (StmtLet pos dg' : more', t)
+  (more', t) <- bindDeclGroup dg' (inferStmts m dopos ctx more)
+  return (StmtLet spos dg' : more', t)
 
-inferStmts m ctx (StmtCode pos s : more) = do
-  (more',t) <- inferStmts m ctx more
-  return (StmtCode pos s : more', t)
+inferStmts m dopos ctx (StmtCode spos s : more) = do
+  (more',t) <- inferStmts m dopos ctx more
+  return (StmtCode spos s : more', t)
 
-inferStmts m ctx (StmtImport pos imp : more) = do
-  (more', t) <- inferStmts m ctx more
-  return (StmtImport pos imp : more', t)
+inferStmts m dopos ctx (StmtImport spos imp : more) = do
+  (more', t) <- inferStmts m dopos ctx more
+  return (StmtImport spos imp : more', t)
 
-inferStmts m ctx (StmtTypedef pos name ty : more) =
+inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
   bindTypedef name ty $ do
-    (more', t) <- inferStmts m ctx more
-    return (StmtTypedef pos name ty : more', t)
+    (more', t) <- inferStmts m dopos ctx more
+    return (StmtTypedef spos name ty : more', t)
 
-patternLNames :: Pattern -> [LName]
-patternLNames pat =
-  case pat of
-    PWild _ -> []
-    PVar n _ -> [n]
-    PTuple ps -> concatMap patternLNames ps
-    LPattern _ pat' -> patternLNames pat'
-
+-- Get the position and name of the first binding in a pattern,
+-- for use as context info when printing messages. If there's a
+-- real variable, prefer that (Right cases); otherwise take the
+-- position of the first wildcard or empty tuple (Left cases).
 patternLName :: Pattern -> LName
-patternLName pat =
-  case patternLNames pat of
-    (n : _) -> n
-    [] -> Located "_" "_" PosREPL
+patternLName pat0 =
+  case visit pat0 of
+    Left pos -> Located "_" "_" pos
+    Right n -> n
+  where
+    visit pat =
+      case pat of
+        PWild pos _ -> Left pos
+        PVar _ n _ -> Right n
+        PTuple pos [] -> Left pos
+        PTuple allpos ps ->
+          case partitionEithers $ map visit ps of
+             (_, n : _) -> Right n
+             (pos : _, _) -> Left pos
+             _ -> Left allpos
 
 constrainTypeWithPattern :: LName -> Type -> Pattern -> TI ()
 constrainTypeWithPattern ln t pat =
   do (pt, _pat') <- newTypePattern pat
-     unify ln t pt
+     unify ln t (getPos pat) pt
 
 inferDecl :: Decl -> TI Decl
-inferDecl (Decl pos pat _ e) = withExprPos pos $ do
+inferDecl (Decl pos pat _ e) = do
   let n = patternLName pat
   (e',t) <- inferE (n, e)
   constrainTypeWithPattern n t pat
@@ -762,8 +789,8 @@ inferRecDecls ds =
      (_ts, pats') <- unzip <$> mapM newTypePattern pats
      (es, ts) <- fmap unzip
                  $ flip (foldr bindPattern) pats'
-                 $ sequence [ withExprPos pos $ inferE (patternLName p, e)
-                            | Decl pos p _ e <- ds
+                 $ sequence [ inferE (patternLName p, e)
+                            | Decl _pos p _ e <- ds
                             ]
      sequence_ $ zipWith (constrainTypeWithPattern (patternLName (head pats))) ts pats'
      ess <- generalize es ts
@@ -799,26 +826,26 @@ checkKind = return
 
 checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either [(Pos, String)] DeclGroup
 checkDeclGroup env tenv dg =
-  case evalTIWithEnv env tenv (getPos dg) (inferDeclGroup dg) of
+  case evalTIWithEnv env tenv (inferDeclGroup dg) of
     Left errs -> Left errs
     Right dg' -> Right dg'
 
 checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either [(Pos, String)] Decl
 checkDecl env tenv decl =
-  case evalTIWithEnv env tenv (getPos decl) (inferDecl decl) of
+  case evalTIWithEnv env tenv (inferDecl decl) of
     Left errs -> Left errs
     Right decl' -> Right decl'
 
-evalTIWithEnv :: Map LName Schema -> Map Name Type -> Pos -> TI a -> Either [(Pos, String)] a
-evalTIWithEnv env tenv pos m =
-  case runTIWithEnv env tenv pos m of
+evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [(Pos, String)] a
+evalTIWithEnv env tenv m =
+  case runTIWithEnv env tenv m of
     (res, _, []) -> Right res
     (_, _, errs) -> Left errs
 
-runTIWithEnv :: Map LName Schema -> Map Name Type -> Pos -> TI a -> (a, Subst, [(Pos, String)])
-runTIWithEnv env tenv pos m = (a, subst rw, errors rw)
+runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [(Pos, String)])
+runTIWithEnv env tenv m = (a, subst rw, errors rw)
   where
-  m' = runReaderT (unTI m) (RO env tenv pos)
+  m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
 
 -- }}}
