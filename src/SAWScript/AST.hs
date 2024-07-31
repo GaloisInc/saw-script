@@ -208,18 +208,39 @@ data Context
   | CrucibleSetup
   deriving (Eq,Show)
 
+-- The position information in a type should be thought of as its
+-- provenance; for a type annotation in the input it'll be a concrete
+-- file position. For types we infer, we want the position to record
+-- not just where but also how the inference happened, so that when we
+-- report this to the user they can see what's going on. (For example,
+-- if we infer that a type must be a function because it's applied to
+-- an argument, we record that it's inferred from context and the
+-- position of the context is the position of the term that was
+-- applied.) When the type flows around during type inference it
+-- carries the position info with it.
+--
+-- Note that for a non-primitive type the various layers of the type
+-- may have totally different provenance. (E.g. we might have List Int
+-- where List was inferred from a term "[x]" somewhere but Int came
+-- from an explicit annotation somewhere completely different.) So
+-- printing this information usefully requires some thought. As of
+-- this writing most of that thought hasn't been put in yet and we
+-- just stuff the inference info into the Show instance output. See
+-- notes in Position.hs.
 data Type
-  = TyCon TyCon [Type]
-  | TyRecord (Map Name Type)
-  | TyVar Name
-  | TyUnifyVar TypeIndex       -- ^ For internal typechecker use only
-  | TySkolemVar Name TypeIndex -- ^ For internal typechecker use only
-  | LType Pos Type
+  = TyCon Pos TyCon [Type]
+  | TyRecord Pos (Map Name Type)
+  | TyVar Pos Name
+  | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
+  | TySkolemVar Pos Name TypeIndex -- ^ For internal typechecker use only
   deriving Show
 
 instance Positioned Type where
-  getPos (LType pos _) = pos
-  getPos _ = Unknown
+  getPos (TyCon pos _ _) = pos
+  getPos (TyRecord pos _) = pos
+  getPos (TyVar pos _) = pos
+  getPos (TyUnifyVar pos _) = pos
+  getPos (TySkolemVar pos _ _) = pos
 
 type TypeIndex = Integer
 
@@ -241,7 +262,7 @@ data TyCon
   | ContextCon Context
   deriving (Eq, Show)
 
-data Schema = Forall [Name] Type
+data Schema = Forall [(Pos, Name)] Type
   deriving Show
 
 -- }}}
@@ -382,10 +403,11 @@ class PrettyPrint p where
 instance PrettyPrint Schema where
   pretty _ (Forall ns t) = case ns of
     [] -> pretty 0 t
-    _  -> PP.braces (commaSepAll $ map PP.pretty ns) PP.<+> pretty 0 t
+    _  -> PP.braces (commaSepAll $ map PP.pretty ns') PP.<+> pretty 0 t
+          where ns' = map (\(_pos, n) -> n) ns
 
 instance PrettyPrint Type where
-  pretty par t@(TyCon tc ts) = case (tc,ts) of
+  pretty par t@(TyCon _ tc ts) = case (tc,ts) of
     (_,[])                 -> pretty par tc
     (TupleCon _,_)         -> PP.parens $ commaSepAll $ map (pretty 0) ts
     (ArrayCon,[typ])       -> PP.brackets (pretty 0 typ)
@@ -394,15 +416,14 @@ instance PrettyPrint Type where
     (BlockCon,[cxt,typ])   -> (if par > 1 then PP.parens else id) $
                                 pretty 1 cxt PP.<+> pretty 2 typ
     _ -> error $ "malformed TyCon: " ++ show t
-  pretty _par (TyRecord fs) =
+  pretty _par (TyRecord _ fs) =
       PP.braces
     $ commaSepAll
     $ map (\(n,t) -> PP.pretty n `prettyTypeSig` pretty 0 t)
     $ Map.toList fs
-  pretty _par (TyUnifyVar i)    = "t." PP.<> PP.pretty i
-  pretty _par (TySkolemVar n i) = PP.pretty n PP.<> PP.pretty i
-  pretty _par (TyVar n)         = PP.pretty n
-  pretty par (LType _ t)        = pretty par t
+  pretty _par (TyUnifyVar _ i)    = "t." PP.<> PP.pretty i
+  pretty _par (TySkolemVar _ n i) = PP.pretty n PP.<> PP.pretty i
+  pretty _par (TyVar _ n)         = PP.pretty n
 
 instance PrettyPrint TyCon where
   pretty par tc = case tc of
@@ -455,59 +476,59 @@ commaSepAll ds = case ds of
 tMono :: Type -> Schema
 tMono = Forall []
 
-tForall :: [Name] -> Schema -> Schema
+tForall :: [(Pos, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
 
-tTuple :: [Type] -> Type
-tTuple ts = TyCon (TupleCon $ fromIntegral $ length ts) ts
+tTuple :: Pos -> [Type] -> Type
+tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts
 
-tRecord :: [(Name, Type)] -> Type
-tRecord fields = TyRecord (Map.fromList fields)
+tRecord :: Pos -> [(Name, Type)] -> Type
+tRecord pos fields = TyRecord pos (Map.fromList fields)
 
-tArray :: Type -> Type
-tArray t = TyCon ArrayCon [t]
+tArray :: Pos -> Type -> Type
+tArray pos t = TyCon pos ArrayCon [t]
 
-tFun :: Type -> Type -> Type
-tFun f v = TyCon FunCon [f,v]
+tFun :: Pos -> Type -> Type -> Type
+tFun pos f v = TyCon pos FunCon [f,v]
 
-tString :: Type
-tString = TyCon StringCon []
+tString :: Pos -> Type
+tString pos = TyCon pos StringCon []
 
-tTerm :: Type
-tTerm = TyCon TermCon []
+tTerm :: Pos -> Type
+tTerm pos = TyCon pos TermCon []
 
-tType :: Type
-tType = TyCon TypeCon []
+tType :: Pos -> Type
+tType pos = TyCon pos TypeCon []
 
-tBool :: Type
-tBool = TyCon BoolCon []
+tBool :: Pos -> Type
+tBool pos = TyCon pos BoolCon []
 
-tAIG :: Type
-tAIG = TyCon AIGCon []
+tAIG :: Pos -> Type
+tAIG pos = TyCon pos AIGCon []
 
-tCFG :: Type
-tCFG = TyCon CFGCon []
+tCFG :: Pos -> Type
+tCFG pos = TyCon pos CFGCon []
 
-tInt :: Type
-tInt = TyCon IntCon []
+tInt :: Pos -> Type
+tInt pos = TyCon pos IntCon []
 
-tJVMSpec :: Type
-tJVMSpec = TyCon JVMSpecCon []
+tJVMSpec :: Pos -> Type
+tJVMSpec pos = TyCon pos JVMSpecCon []
 
-tLLVMSpec :: Type
-tLLVMSpec = TyCon LLVMSpecCon []
+tLLVMSpec :: Pos -> Type
+tLLVMSpec pos = TyCon pos LLVMSpecCon []
 
-tMIRSpec :: Type
-tMIRSpec = TyCon MIRSpecCon []
+tMIRSpec :: Pos -> Type
+tMIRSpec pos = TyCon pos MIRSpecCon []
 
-tBlock :: Type -> Type -> Type
-tBlock c t = TyCon BlockCon [c,t]
+tBlock :: Pos -> Type -> Type -> Type
+tBlock pos c t = TyCon pos BlockCon [c,t]
 
-tContext :: Context -> Type
-tContext c = TyCon (ContextCon c) []
+tContext :: Pos -> Context -> Type
+tContext pos c = TyCon pos (ContextCon c) []
 
-tVar :: Name -> Type
-tVar n = TyVar n
+tVar :: Pos -> Name -> Type
+tVar pos n = TyVar pos n
 
 -- }}}
 
@@ -523,7 +544,7 @@ isContext ::
     -> Type             -- ^ The type 'ty' to inspect
     -> Bool
 isContext c ty = case ty of
-  TyCon (ContextCon c') [] | c' == c -> True
+  TyCon _pos (ContextCon c') [] | c' == c -> True
   _ -> False
 
 -- }}}

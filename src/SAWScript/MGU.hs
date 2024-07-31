@@ -21,7 +21,7 @@ module SAWScript.MGU
        ) where
 
 import SAWScript.AST
-import SAWScript.Position (Pos(..), Positioned(..))
+import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -33,17 +33,7 @@ import Control.Monad.Identity
 import Data.Map (Map)
 import Data.Either (partitionEithers)
 import qualified Data.Map as M
-import qualified Data.Set as S
-
--- Ignoring source locations {{{
-
--- | Remove all location information from the top of a type. Use this
--- before checking for a particular canonical type former.
-unlocated :: Type -> Type
-unlocated (LType _ t) = unlocated t
-unlocated t = t
-
--- }}}
+--import qualified Data.Set as S
 
 -- Subst {{{
 
@@ -172,18 +162,16 @@ ppFailMGU (FailMGU start eflines lastfunlines) =
   start : eflines ++ lastfunlines
 
 mgu :: Type -> Type -> Either FailMGU Subst
-mgu (LType _ t) t2 = mgu t t2
-mgu t1 (LType _ t) = mgu t1 t
-mgu (TyUnifyVar i) (TyUnifyVar j) | i == j = return emptySubst
-mgu (TyUnifyVar i) t2 = bindVar i t2
-mgu t1 (TyUnifyVar i) = bindVar i t1
-mgu r1@(TyRecord ts1) r2@(TyRecord ts2)
+mgu (TyUnifyVar _ i) (TyUnifyVar _ j) | i == j = return emptySubst
+mgu (TyUnifyVar pos i) t2 = bindVar pos i t2
+mgu t1 (TyUnifyVar pos i) = bindVar pos i t1
+mgu r1@(TyRecord _ ts1) r2@(TyRecord _ ts2)
   | M.keys ts1 /= M.keys ts2 =
       failMGU "Record field names mismatch." r1 r2
   | otherwise = case mgus (M.elems ts1) (M.elems ts2) of
       Right result -> Right result
       Left msgs -> Left $ failMGUAdd msgs r1 r2
-mgu c1@(TyCon tc1 ts1) c2@(TyCon tc2 ts2)
+mgu c1@(TyCon _ tc1 ts1) c2@(TyCon _ tc2 ts2)
   | tc1 == tc2 = case mgus ts1 ts2 of
       Right result -> Right result
       Left msgs ->
@@ -195,9 +183,9 @@ mgu c1@(TyCon tc1 ts1) c2@(TyCon tc2 ts2)
         failMGU "Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
       _ ->
         failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2) c1 c2
-mgu (TySkolemVar a i) (TySkolemVar b j)
+mgu (TySkolemVar _ a i) (TySkolemVar _ b j)
   | (a, i) == (b, j) = return emptySubst
-mgu (TyVar a) (TyVar b)
+mgu (TyVar _ a) (TyVar _ b)
   | a == b = return emptySubst
 mgu t1 t2 = failMGU "Mismatch of types." t1 t2
 
@@ -211,32 +199,37 @@ mgus ts1 ts2 =
   failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
 -- Does not handle the case where t _is_ TyUnifyVar i; the caller handles that
-bindVar :: TypeIndex -> Type -> Either FailMGU Subst
-bindVar i t
-  | i `S.member` unifyVars t = failMGU' "occurs check failMGUs" -- FIXME: error message
-  | otherwise                = return (singletonSubst i t)
+bindVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
+bindVar pos i t =
+  case M.lookup i $ unifyVars t of
+     Just otherpos ->
+       -- FIXME/XXX: this error message is better than the one that was here before
+       -- but still lacks
+       failMGU' $ "Occurs check failure: the type at " ++ show otherpos ++
+                  " appears within the type at " ++ show pos
+     Nothing ->
+       return (singletonSubst i t)
 
 -- }}}
 
 -- UnifyVars {{{
 
 class UnifyVars t where
-  unifyVars :: t -> S.Set TypeIndex
+  unifyVars :: t -> M.Map TypeIndex Pos
 
 instance (Ord k, UnifyVars a) => UnifyVars (M.Map k a) where
   unifyVars = unifyVars . M.elems
 
 instance (UnifyVars a) => UnifyVars [a] where
-  unifyVars = S.unions . map unifyVars
+  unifyVars = M.unionsWith choosePos . map unifyVars
 
 instance UnifyVars Type where
   unifyVars t = case t of
-    TyCon _ ts      -> unifyVars ts
-    TyRecord tm     -> unifyVars tm
-    TyVar _         -> S.empty
-    TyUnifyVar i    -> S.singleton i
-    TySkolemVar _ _ -> S.empty
-    LType _ t'      -> unifyVars t'
+    TyCon _ _ ts      -> unifyVars ts
+    TyRecord _ tm     -> unifyVars tm
+    TyVar _ _         -> M.empty
+    TyUnifyVar pos i  -> M.singleton i pos
+    TySkolemVar _ _ _ -> M.empty
 
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
@@ -246,25 +239,25 @@ instance UnifyVars Schema where
 -- NamedVars {{{
 
 class NamedVars t where
-  namedVars :: t -> S.Set Name
+  namedVars :: t -> M.Map Name Pos
 
 instance (Ord k, NamedVars a) => NamedVars (M.Map k a) where
   namedVars = namedVars . M.elems
 
 instance (NamedVars a) => NamedVars [a] where
-  namedVars = S.unions . map namedVars
+  namedVars = M.unionsWith choosePos . map namedVars
 
 instance NamedVars Type where
   namedVars t = case t of
-    TyCon _ ts      -> namedVars ts
-    TyRecord tm     -> namedVars tm
-    TyVar n         -> S.singleton n
-    TyUnifyVar _    -> S.empty
-    TySkolemVar _ _ -> S.empty
-    LType _ t'      -> namedVars t'
+    TyCon _ _ ts      -> namedVars ts
+    TyRecord _ tm     -> namedVars tm
+    TyVar pos n       -> M.singleton n pos
+    TyUnifyVar _ _    -> M.empty
+    TySkolemVar _ _ _ -> M.empty
 
 instance NamedVars Schema where
-  namedVars (Forall ns t) = namedVars t S.\\ S.fromList ns
+  namedVars (Forall ns t) = namedVars t M.\\ M.fromList ns'
+    where ns' = map (\(pos, n) -> (n, pos)) ns
 
 -- }}}
 
@@ -293,21 +286,39 @@ newTypeIndex = do
   TI $ put $ rw { nameGen = nameGen rw + 1 }
   return $ nameGen rw
 
-newType :: TI Type
-newType = TyUnifyVar <$> newTypeIndex
+-- Construct a new type variable.
+--
+-- Collect the position that prompted us to make it; for example, if
+-- we're the element type of an empty list we get the position of the
+-- []. We haven't inferred anything, so use the Placeholder position.
+-- This will cause the position of anything more substantive that gets
+-- unified with it to be preferred. If no such thing happens though
+-- this will be the position that gets attached to the quantifier
+-- binding in generalize.
+newType :: Pos -> TI Type
+newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> newTypeIndex
 
+-- Construct a new type variable to use as a placeholder after an
+-- error occurs. For now this is the same as other fresh type
+-- variables, but I've split it out in case we want to distinguish it
+-- in the future.
+newTypeError :: Pos -> TI Type
+newTypeError pos = newType pos
+
+-- Typecheck a pattern and produce fresh type variables as needed.
+-- FUTURE: this function should get renamed.
 newTypePattern :: Pattern -> TI (Type, Pattern)
 newTypePattern pat =
   case pat of
     PWild pos mt ->
-      do t <- maybe newType return mt
+      do t <- maybe (newType pos) return mt
          return (t, PWild pos (Just t))
     PVar pos x mt ->
-      do t <- maybe newType return mt
+      do t <- maybe (newType pos) return mt
          return (t, PVar pos x (Just t))
     PTuple pos ps ->
       do (ts, ps') <- unzip <$> mapM newTypePattern ps
-         return (tTuple ts, PTuple pos ps')
+         return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
 
 appSubstM :: AppSubst t => t -> TI t
 appSubstM t = do
@@ -404,8 +415,8 @@ bindPatternSchema pat s@(Forall vs t) m =
     PWild _ _ -> m
     PVar _ n _ -> bindSchema n s m
     PTuple _ ps ->
-      case unlocated t of
-        TyCon (TupleCon _) ts -> foldr ($) m
+      case t of
+        TyCon _pos (TupleCon _) ts -> foldr ($) m
           [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
 
@@ -423,14 +434,14 @@ bindTypedef n t m =
 -- name. This could potentially cause a run-time type error if the
 -- type of a local function gets generalized too much. We can probably
 -- wait to fix it until someone finds a sawscript program that breaks.
-unifyVarsInEnv :: TI (S.Set TypeIndex)
+unifyVarsInEnv :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnv = do
   env <- TI $ asks typeEnv
   let ss = M.elems env
   ss' <- mapM appSubstM ss
   return $ unifyVars ss'
 
-namedVarsInEnv :: TI (S.Set Name)
+namedVarsInEnv :: TI (M.Map Name Pos)
 namedVarsInEnv = do
   env <- TI $ asks typeEnv
   let ss = M.elems env
@@ -452,14 +463,13 @@ instance (AppSubst t) => AppSubst (Maybe t) where
 
 instance AppSubst Type where
   appSubst s t = case t of
-    TyCon tc ts     -> TyCon tc (appSubst s ts)
-    TyRecord fs     -> TyRecord (appSubst s fs)
-    TyVar _         -> t
-    TyUnifyVar i    -> case M.lookup i (unSubst s) of
-                         Just t' -> t'
-                         Nothing -> t
-    TySkolemVar _ _ -> t
-    LType pos t'    -> LType pos (appSubst s t')
+    TyCon pos tc ts     -> TyCon pos tc (appSubst s ts)
+    TyRecord pos fs     -> TyRecord pos (appSubst s fs)
+    TyVar _ _           -> t
+    TyUnifyVar _ i      -> case M.lookup i (unSubst s) of
+                             Just t' -> t'
+                             Nothing -> t
+    TySkolemVar _ _ _   -> t
 
 instance AppSubst Schema where
   appSubst s (Forall ns t) = Forall ns (appSubst s t)
@@ -525,12 +535,11 @@ instance (Instantiate a) => Instantiate [a] where
 
 instance Instantiate Type where
   instantiate nts ty = case ty of
-    TyCon tc ts     -> TyCon tc (instantiate nts ts)
-    TyRecord fs     -> TyRecord (fmap (instantiate nts) fs)
-    TyVar n         -> M.findWithDefault ty n nts
-    TyUnifyVar _    -> ty
-    TySkolemVar _ _ -> ty
-    LType pos ty'   -> LType pos (instantiate nts ty')
+    TyCon pos tc ts     -> TyCon pos tc (instantiate nts ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (instantiate nts) fs)
+    TyVar _ n           -> M.findWithDefault ty n nts
+    TyUnifyVar _ _      -> ty
+    TySkolemVar _ _ _   -> ty
 
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
@@ -546,65 +555,66 @@ type OutStmt = Stmt
 
 inferE :: (LName, Expr) -> TI (OutExpr,Type)
 inferE (ln, expr) = case expr of
-  Bool pos b    -> return (Bool pos b, tBool)
-  String pos s  -> return (String pos s, tString)
-  Int pos i     -> return (Int pos i, tInt)
-  Code s        -> return (Code s, tTerm)
-  CType s       -> return (CType s, tType)
+  Bool pos b    -> return (Bool pos b, tBool pos)
+  String pos s  -> return (String pos s, tString pos)
+  Int pos i     -> return (Int pos i, tInt pos)
+  Code s        -> return (Code s, tTerm (getPos s))
+  CType s       -> return (CType s, tType (getPos s))
 
   Array pos [] ->
-    do a <- newType
-       return (Array pos [], tArray a)
+    do a <- newType pos
+       return (Array pos [], tArray (PosInferred InfTerm pos) a)
 
   Array pos (e:es) ->
     do (e',t) <- inferE (ln, e)
        es' <- mapM (flip (checkE ln) t) es
-       return (Array pos (e':es'), tArray t)
+       return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
 
   Block pos bs ->
-    do ctx <- newType
+    do ctx <- newType pos
        (bs',t') <- inferStmts ln pos ctx bs
-       return (Block pos bs', tBlock ctx t')
+       return (Block pos bs', tBlock (PosInferred InfTerm pos) ctx t')
 
   Tuple pos es ->
     do (es',ts) <- unzip `fmap` mapM (inferE . (ln,)) es
-       return (Tuple pos es', tTuple ts)
+       return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
 
   Record pos fs ->
     do (nes',nts) <- unzip `fmap` mapM (inferField ln) (M.toList fs)
-       return (Record pos (M.fromList nes'), TyRecord $ M.fromList nts)
+       let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts
+       return (Record pos (M.fromList nes'), ty)
 
   Index pos ar ix ->
     do (ar',at) <- inferE (ln,ar)
-       ix'      <- checkE ln ix tInt
-       t        <- newType
-       unify ln (tArray t) (getPos ar') at
+       ix'      <- checkE ln ix (tInt (PosInferred InfContext (getPos ix)))
+       t        <- newType (getPos ix')
+       unify ln (tArray (PosInferred InfContext (getPos ar')) t) (getPos ar') at
        return (Index pos ar' ix', t)
 
   Lookup pos e n ->
     do (e1,t) <- inferE (ln, e)
        t1 <- appSubstM =<< instantiateM t
-       elTy <- case unlocated t1 of
-                 TyRecord fs
+       elTy <- case t1 of
+                 TyRecord typos fs
                     | Just ty <- M.lookup n fs -> return ty
                     | otherwise ->
                           do recordError pos $ unlines
                                 [ "Selecting a missing field."
                                 , "Field name: " ++ n
                                 ]
-                             newType
+                             newTypeError typos
                  _ -> do recordError pos $ unlines
                             [ "Record lookup on non-record argument."
                             , "Field name: " ++ n
                             ]
-                         newType
+                         newTypeError pos
        return (Lookup pos e1 n, elTy)
 
   TLookup pos e i ->
     do (e1,t) <- inferE (ln,e)
        t1 <- appSubstM =<< instantiateM t
-       elTy <- case unlocated t1 of
-                 TyCon (TupleCon n) tys
+       elTy <- case t1 of
+                 TyCon typos (TupleCon n) tys
                    | i < n -> return (tys !! fromIntegral i)
                    | otherwise ->
                           do recordError pos $ unlines
@@ -613,12 +623,12 @@ inferE (ln, expr) = case expr of
                                   " is too large for tuple size of " ++
                                   show n
                                 ]
-                             newType
+                             newTypeError typos
                  _ -> do recordError pos $ unlines
                             [ "Tuple lookup on non-tuple argument."
                             , "Given index " ++ show i
                             ]
-                         newType
+                         newTypeError pos
        return (TLookup pos e1 i, elTy)
 
   Var x ->
@@ -630,21 +640,27 @@ inferE (ln, expr) = case expr of
              , "Note that some built-in commands are available only after running"
              , "either `enable_deprecated` or `enable_experimental`."
              ]
-           t <- newType
+           t <- newType (getPos x)
            return (Var x, t)
          Just (Forall as t) -> do
-           ts <- mapM (const newType) as
-           return (Var x, instantiate (M.fromList (zip as ts)) t)
+           -- get a fresh tyvar for each quantifier binding, convert
+           -- to a name -> ty map, and instantiate with the fresh tyvars
+           let once (apos, a) = do
+                 at <- newType apos
+                 return (a, at)
+           substs <- mapM once as
+           let t' = instantiate (M.fromList substs) t
+           return (Var x, t')
 
   Function pos pat body ->
     do (pt, pat') <- newTypePattern pat
        (body', t) <- bindPattern pat' $ inferE (ln, body)
-       return (Function pos pat' body', tFun pt t)
+       return (Function pos pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
 
   Application pos f v ->
     do (v',fv) <- inferE (ln,v)
-       t <- newType
-       let ft = tFun fv t
+       t <- newType pos
+       let ft = tFun (PosInferred InfContext $ getPos f) fv t
        f' <- checkE ln f ft
        return (Application pos f' v', t)
 
@@ -660,7 +676,7 @@ inferE (ln, expr) = case expr of
        return (e',t'')
 
   IfThenElse pos e1 e2 e3 ->
-    do e1' <- checkE ln e1 tBool
+    do e1' <- checkE ln e1 (tBool (PosInferred InfContext $ getPos e1))
        (e2', t) <- inferE (ln, e2)
        e3' <- checkE ln e3 t
        return (IfThenElse pos e1' e2' e3', t)
@@ -695,12 +711,12 @@ inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
 
 inferStmts m pos _ctx [] = do
   recordError pos ("do block must include at least one expression at " ++ show m)
-  t <- newType
+  t <- newTypeError pos
   return ([], t)
 
-inferStmts m _dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
-  t  <- maybe newType return mt
-  e' <- checkE m e (tBlock ctx t)
+inferStmts m dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
+  t  <- maybe (newType patpos) return mt
+  e' <- checkE m e (tBlock dopos ctx t)
   mc' <- case mc of
     Nothing -> return ctx
     Just ty  -> do ty' <- checkKind ty
@@ -715,12 +731,12 @@ inferStmts m _dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
 
 inferStmts m dopos _ [_] = do
   recordError dopos ("do block must end with expression at " ++ show m)
-  t <- newType
+  t <- newTypeError dopos
   return ([],t)
 
 inferStmts m dopos ctx (StmtBind spos pat mc e : more) = do
   (pt, pat') <- newTypePattern pat
-  e' <- checkE m e (tBlock ctx pt)
+  e' <- checkE m e (tBlock dopos ctx pt)
   mc' <- case mc of
     Nothing -> return ctx
     Just c  -> do c' <- checkKind c
@@ -792,7 +808,8 @@ inferRecDecls ds =
                  $ sequence [ inferE (patternLName p, e)
                             | Decl _pos p _ e <- ds
                             ]
-     sequence_ $ zipWith (constrainTypeWithPattern (patternLName (head pats))) ts pats'
+     let lname = patternLName (head pats)
+     sequence_ $ zipWith (constrainTypeWithPattern lname) ts pats'
      ess <- generalize es ts
      return [ Decl pos p (Just s) e1
             | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
@@ -805,11 +822,25 @@ generalize es0 ts0 =
 
      envUnify <- unifyVarsInEnv
      envNamed <- namedVarsInEnv
-     let is = S.toList (unifyVars ts S.\\ envUnify)
-     let bs = S.toList (namedVars ts S.\\ envNamed)
-     let ns = [ "a." ++ show i | i <- is ]
-     let s = listSubst (zip is (map TyVar ns))
-     let mk e t = (appSubst s e, Forall (ns ++ bs) (appSubst s t))
+     let is = M.toList (unifyVars ts M.\\ envUnify)
+     let bs = M.toList (namedVars ts M.\\ envNamed)
+
+     -- if the position is "fresh" turn it into "inferred from term"
+     let adjustPos pos = case pos of
+           PosInferred InfFresh pos' -> PosInferred InfTerm pos'
+           _ -> pos
+
+     -- generate names for the unification vars
+     let is' = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is ]
+
+     -- build the substitution
+     let s = listSubst [ (i, TyVar pos n) | (i, pos, n) <- is' ]
+
+     -- get the names for the Forall
+     let inames = [ (pos, n) | (_i, pos, n) <- is' ]
+     let bnames = [ (pos, x) | (x, pos) <- bs ]
+
+     let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
 
      return $ zipWith mk es ts
 

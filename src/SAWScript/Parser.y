@@ -201,51 +201,51 @@ CType :: { Located String }
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }
 
-Names :: { [Name] }
- : name                                 { [tokStr $1] }
- | name ',' Names                       { tokStr $1:$3 }
+Names :: { [(Pos, Name)] }
+ : name                                 { [(getPos $1, tokStr $1)] }
+ | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
 
 PolyType :: { Schema }
- : Type                                 { tMono $1                }
- | '{' Names '}' Type                   { Forall $2 $4            }
+ : Type                                 { tMono $1     }
+ | '{' Names '}' Type                   { Forall $2 $4 }
 
 Type :: { Type }
  : BaseType                             { $1                      }
- | BaseType '->' Type                   { LType (maxSpan [$1, $3]) (tFun $1 $3) }
+ | BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 FieldType :: { (Name, Type) }
   : name ':' BaseType                   { (tokStr $1, $3)         }
 
 BaseType :: { Type }
- : name                                 { LType (getPos $1) (tVar (tokStr $1))  }
- | Context BaseType                     { tBlock $1 $2                          }
- | '(' ')'                              { LType (maxSpan [$1, $2]) (tTuple [])  }
- | 'Bool'                               { LType (getPos $1) tBool               }
- | 'Int'                                { LType (getPos $1) tInt                }
- | 'String'                             { LType (getPos $1) tString             }
- | 'Term'                               { LType (getPos $1) tTerm               }
- | 'Type'                               { LType (getPos $1) tType               }
- | 'AIG'                                { LType (getPos $1) tAIG                }
- | 'CFG' 				{ LType (getPos $1) tCFG                }
- | 'CrucibleMethodSpec'			{ LType (getPos $1) tLLVMSpec           }
- | 'LLVMSpec' 				{ LType (getPos $1) tLLVMSpec           }
- | 'JVMMethodSpec'			{ LType (getPos $1) tJVMSpec            }
- | 'JVMSpec' 				{ LType (getPos $1) tJVMSpec            }
- | 'MIRSpec' 				{ LType (getPos $1) tMIRSpec            }
- | '(' Type ')'                         { LType (maxSpan [$1, $3]) $2           }
- | '(' commas2(Type) ')'                { LType (maxSpan [$1, $3]) (tTuple $2)  }
- | '[' Type ']'                         { LType (maxSpan [$1, $3]) (tArray $2)  }
- | '{' commas(FieldType) '}'            { LType (maxSpan [$1, $3]) (tRecord $2) }
+ : name                                 { tVar (getPos $1) (tokStr $1)  }
+ | Context BaseType                     { tBlock (maxSpan' $1 $2) $1 $2 }
+ | '(' ')'                              { tTuple (maxSpan [$1, $2]) []  }
+ | 'Bool'                               { tBool (getPos $1)             }
+ | 'Int'                                { tInt (getPos $1)              }
+ | 'String'                             { tString (getPos $1)           }
+ | 'Term'                               { tTerm (getPos $1)             }
+ | 'Type'                               { tType (getPos $1)             }
+ | 'AIG'                                { tAIG (getPos $1)              }
+ | 'CFG'                                { tCFG (getPos $1)              }
+ | 'CrucibleMethodSpec'                 { tLLVMSpec (getPos $1)         }
+ | 'LLVMSpec'                           { tLLVMSpec (getPos $1)         }
+ | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)          }
+ | 'JVMSpec'                            { tJVMSpec (getPos $1)          }
+ | 'MIRSpec'                            { tMIRSpec (getPos $1)          }
+ | '(' Type ')'                         { $2                            }
+ | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2  }
+ | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2  }
+ | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2 }
 
 Context :: { Type }
- : 'CryptolSetup'                       { tContext CryptolSetup   }
- | 'JavaSetup'                          { tContext JavaSetup      }
- | 'LLVMSetup'                          { tContext LLVMSetup      }
- | 'MIRSetup'                           { tContext MIRSetup       }
- | 'ProofScript'                        { tContext ProofScript    }
- | 'TopLevel'                           { tContext TopLevel       }
- | 'CrucibleSetup'                      { tContext LLVMSetup      }
- | name                                 { tVar (tokStr $1)        }
+ : 'CryptolSetup'                       { tContext (getPos $1) CryptolSetup   }
+ | 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
+ | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup      }
+ | 'MIRSetup'                           { tContext (getPos $1) MIRSetup       }
+ | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
+ | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
+ | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
+ | name                                 { tVar (getPos $1) (tokStr $1)        }
 
 -- Parameterized productions, most come directly from the Happy manual.
 fst(p, q)  : p q   { $1 }
