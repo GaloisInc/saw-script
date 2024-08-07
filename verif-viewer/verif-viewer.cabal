@@ -27,7 +27,7 @@ library
     text
   hs-source-dirs: src
   exposed-modules:
-    
+
 
   GHC-options: -Wall -Werror -Wcompat
   if impl(ghc == 8.0.1)
@@ -46,6 +46,7 @@ executable verif-viewer
       base >= 4
     , aeson
     , attoparsec
+    , attoparsec-aeson
     , containers
     , text
     , verif-viewer
