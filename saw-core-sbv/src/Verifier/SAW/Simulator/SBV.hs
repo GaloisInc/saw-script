@@ -673,7 +673,9 @@ parseUninterpreted cws nm ty =
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm =
   svUninterpreted k nm'
-#if MIN_VERSION_sbv(10,0,0)
+#if MIN_VERSION_sbv(10,3,0)
+                  (UINone True)
+#elif MIN_VERSION_sbv(10,0,0)
                   UINone
 #else
                   Nothing
