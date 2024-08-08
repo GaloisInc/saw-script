@@ -763,13 +763,13 @@ jobs:
       - shell: bash
         working-directory: s2nTests
         run: |
-          docker-compose pull
+          docker compose pull --ignore-buildable
           grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
 
       - shell: bash
         name: "make s2n"
         working-directory: s2nTests
-        run: docker-compose build s2n
+        run: docker compose build s2n
 
       - uses: actions/cache/restore@v3
         name: Restore SMT solver result cache
