@@ -38,7 +38,7 @@ RUN chown -R root:root /home/saw/rootfs
 
 FROM ubuntu:22.04
 RUN apt-get update && \
-    apt-get install -y libgmp10 libgomp1 libffi8 wget libncurses6 unzip libreadline-dev openjdk-11-jdk-headless
+    apt-get install -y libgmp10 libgomp1 libffi8 wget libncurses6 unzip libreadline-dev openjdk-11-jdk-headless zlib1g
 COPY --from=build /home/saw/rootfs /
 RUN useradd -m saw && chown -R saw:saw /home/saw
 USER saw
