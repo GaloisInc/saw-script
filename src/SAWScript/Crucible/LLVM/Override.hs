@@ -26,6 +26,7 @@ Stability   : provisional
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.LLVM.Override
   ( OverrideMatcher
