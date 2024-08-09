@@ -44,7 +44,7 @@ import           Control.Monad
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
 import           Data.Foldable
-import           Data.Functor
+import           Data.Functor                         ((<&>))
 import           Data.List
 import           Data.List.NonEmpty                   (NonEmpty (..))
 import qualified Data.List.NonEmpty                   as NE
