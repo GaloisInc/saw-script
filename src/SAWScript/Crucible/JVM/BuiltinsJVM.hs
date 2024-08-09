@@ -77,7 +77,6 @@ import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
 import SAWScript.Crucible.Common
-import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)
 
 -- jvm-parser
 import qualified Language.JVM.Common as J
