@@ -28,6 +28,7 @@ import           Verifier.SAW.SATQuery
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
+import SAWScript.Panic (panic)
 import SAWScript.Proof
   ( sequentToSATQuery, goalSequent, ProofGoal
   , goalType, goalNum, CEX
@@ -209,11 +210,18 @@ parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
 parseDimacsSolution vars ls = map lkup vars
   where
     vs :: [Int]
-    vs = concatMap (filter (/= 0) . mapMaybe readMaybe . tail . words) ls
+    vs = concatMap (filter (/= 0) . mapMaybe readMaybe . parseLine) ls
     varToPair n | n < 0 = (-n, False)
                 | otherwise = (n, True)
     assgnMap = Map.fromList (map varToPair vs)
     lkup v = Map.findWithDefault False v assgnMap
+
+    parseLine :: String -> [String]
+    parseLine line =
+      case words line of
+        _:ws -> ws
+        [] -> panic "parseDimacsSolution"
+                    ["DIMACS solution has line with no values"]
 
 writeAIGWithMapping :: AIG.IsAIG l g => g s -> l s -> FilePath -> IO [Int]
 writeAIGWithMapping be l path = do

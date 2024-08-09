@@ -62,6 +62,8 @@ import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
 import           Data.List
+import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe, isNothing)
@@ -610,12 +612,12 @@ registerOverride ::
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym CJ.JVM ->
   W4.ProgramLoc ->
   IORef MetadataMap {- ^ metadata map -} ->
-  [MethodSpec] ->
+  NonEmpty MethodSpec ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc mdMap cs =
   do let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
-     let c0 = head cs
+     let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
 
      sc <- saw_ctx <$> liftIO (sawCoreState sym)
@@ -1453,5 +1455,5 @@ jvm_ghost_value ghost val = JVMSetupM $
 groupOn ::
   Ord b =>
   (a -> b) {- ^ equivalence class projection -} ->
-  [a] -> [[a]]
-groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)
+  [a] -> [NonEmpty a]
+groupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)

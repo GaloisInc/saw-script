@@ -62,7 +62,7 @@ module SAWScript.HeapsterBuiltins
 import Data.Maybe
 import Data.String
 import Data.List
-import Data.List.Extra (splitOn)
+import qualified Data.List.Extra as List
 import Data.IORef
 import Data.Functor.Product
 import Data.Functor.Constant (getConstant)
@@ -916,18 +916,18 @@ heapster_find_symbol_commands _bic _opts henv str =
 -- @"trait::method<type>"@. Fails if there is not exactly one such symbol.
 heapster_find_trait_method_symbol :: BuiltinContext -> Options ->
                                      HeapsterEnv -> String -> TopLevel String
-heapster_find_trait_method_symbol bic opts henv str =
-  if length instType >= 2 then
-    let unbracketedType = (init . tail) instType
-        queryStr = unbracketedType
+heapster_find_trait_method_symbol bic opts henv str
+  | _openingBracket:typeWithClosingBracket <- instType
+  , Just (unbracketedType, _closingBracket) <- List.unsnoc typeWithClosingBracket
+  = let queryStr = unbracketedType
                 <> "$u20$as$u20$"
                 <> trait
                 <> "$GT$"
                 <> (show . length) method
                 <> method
     in heapster_find_symbol bic opts henv queryStr
-  else
-    fail ("Ill-formed query string: " ++ str)
+  | otherwise
+  = fail ("Ill-formed query string: " ++ str)
   where
     (traitMethod, instType) = span (/= '<') str
 
@@ -935,7 +935,7 @@ heapster_find_trait_method_symbol bic opts henv str =
       let (revMethod, revTrait) = span (/= ':') (reverse traitMethod)
       in ((reverse . drop 2) revTrait, reverse revMethod)
 
-    trait = intercalate ".." $ splitOn "::" colonTrait
+    trait = intercalate ".." $ List.splitOn "::" colonTrait
 
 
 -- | Assume that the given named function has the supplied type and translates

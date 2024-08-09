@@ -794,11 +794,12 @@ getLabels ls d args
 
   getLabel ZeroWidthWordLabel = FOVWord 0 0
 
-  getLabel (VecLabel ns)
-    | V.null ns = error "getLabel of empty vector"
-    | otherwise = fovVec t vs
-    where vs = map getLabel (V.toList ns)
-          t  = firstOrderTypeOf (head vs)
+  getLabel (VecLabel ns) =
+    case V.uncons ns of
+      Nothing     -> error "getLabel of empty vector"
+      Just (n, _) -> fovVec t vs
+        where vs = map getLabel (V.toList ns)
+              t  = firstOrderTypeOf (getLabel n)
 
   getLabel (TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
   getLabel (RecLabel ns) = FOVRec $ fmap getLabel ns

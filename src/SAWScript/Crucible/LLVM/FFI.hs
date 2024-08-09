@@ -464,7 +464,21 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                 cumulLenTerms = map natOpenTerm $ scanl1 (*) lens
                 arrCryType :| cumulElemTypes =
                   NE.scanr vectorTypeOpenTerm basicCryType lenTerms
-                cumul = zip3 cumulLenTerms (tail lenTerms) (tail cumulElemTypes)
+
+                noArrayLengths :: a
+                noArrayLengths =
+                  panic "arrayTypeInfo"
+                        ["FFIArray with empty list of length types"]
+
+                lenTermsTail =
+                  case lenTerms of
+                    _:lenTermsTail' -> lenTermsTail'
+                    [] -> noArrayLengths
+                cumulElemTypesTail =
+                  case cumulElemTypes of
+                    _:cumulElemTypesTail' -> cumulElemTypesTail'
+                    [] -> noArrayLengths
+                cumul = zip3 cumulLenTerms lenTermsTail cumulElemTypesTail
             Just FFIConv
               { ffiCryType = arrCryType
               , ffiPrecond = \arr {- : Vec totalLen ffiLLVMCoreType -} ->
