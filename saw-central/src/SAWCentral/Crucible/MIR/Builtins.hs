@@ -22,6 +22,7 @@ module SAWCentral.Crucible.MIR.Builtins
   , mir_cast_raw_ptr
   , mir_execute_func
   , mir_equal
+  , mir_extract
   , mir_find_adt
   , mir_find_mangled_adt
   , mir_fresh_cryptol_var
@@ -80,7 +81,7 @@ module SAWCentral.Crucible.MIR.Builtins
   ) where
 
 import Control.Lens
-import Control.Monad (foldM, forM, forM_, unless, when, zipWithM)
+import Control.Monad (foldM, forM, forM_, mapAndUnzipM, unless, when, zipWithM)
 import qualified Control.Monad.Catch as X
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (runReaderT)
@@ -88,7 +89,7 @@ import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy as BSL
-import Data.Foldable (for_)
+import Data.Foldable (for_, toList)
 import qualified Data.Foldable.WithIndex as FWI
 import qualified Data.IntMap as IntMap
 import Data.IORef
@@ -105,12 +106,16 @@ import Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.TraversableFC.WithIndex as FCI
 import qualified Data.Set as Set
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.String (IsString)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Data.Traversable (mapAccumL)
 import Data.Type.Equality (TestEquality(..))
+import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 import qualified Prettyprinter as PP
 import System.IO (stdout)
 
@@ -142,8 +147,11 @@ import qualified What4.ProgramLoc as W4
 
 import SAWCore.FiniteValue (ppFirstOrderValue)
 import SAWCore.Name (ecShortName)
+import SAWCore.Recognizer ((:*:)(..), asTupleType, asVecType)
 import SAWCore.SharedTerm
+import SAWCore.Term.Pretty (ppTerm)
 import SAWCoreWhat4.ReturnTrip
+import qualified SAWSupport.Pretty as PPS (defaultOpts)
 import qualified CryptolSAWCore.CryptolEnv as CryEnv
 import CryptolSAWCore.TypedTerm
 
@@ -333,6 +341,20 @@ mir_equal val1 val2 =
        , show ty2
        ]
      Setup.crucible_equal loc val1 val2
+
+-- | Extract a MIR function of the given name to SAWCore. See the SAW user
+-- manual for more details on what argument/result types this can support.
+mir_extract :: Mir.RustModule -> Text -> TopLevel TypedTerm
+mir_extract rm nm =
+  do opts <- getOptions
+     sc <- getSharedContext
+     cc <- setupCrucibleContext rm
+     fn <- findFn rm nm
+     let sig = fn ^. Mir.fsig
+     let argTys = sig ^. Mir.fsarg_tys
+     let retTy = sig ^. Mir.fsreturn_ty
+     acfg <- lookupDefIdCFG rm (fn ^. Mir.fname)
+     io $ extractFromMirCFG opts sc cc argTys retTy acfg
 
 -- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt' with the given
 -- 'String' as a mangled identifier (i.e., an identifier for an ADT that is
@@ -1644,6 +1666,50 @@ cryptolTypeOfActual mty =
     baseSizeType Mir.B128  = Just $ Cryptol.tWord $ Cryptol.tNum (128 :: Integer)
     baseSizeType Mir.USize = Just $ Cryptol.tWord $ Cryptol.tNum $ natValue $ knownNat @Mir.SizeBits
 
+-- | Extract a SAWCore term from a @crucible-mir@ CFG.
+extractFromMirCFG ::
+  Options ->
+  SharedContext ->
+  MIRCrucibleContext ->
+  -- | The CFG's MIR argument types.
+  [Mir.Ty] ->
+  -- | The CFG's MIR return type.
+  Mir.Ty ->
+  Crucible.AnyCFG MIR ->
+  IO TypedTerm
+extractFromMirCFG opts sc cc argTys retTy (Crucible.AnyCFG cfg) =
+  do let h = Crucible.cfgHandle cfg
+     (ecs, args) <- setupArgs sc cc argTys h
+     let simCtx  = cc^.mccSimContext
+     let globals = cc^.mccSymGlobalState
+     res <- runCFG simCtx globals h cfg args
+     case res of
+       Crucible.FinishedResult _ pr ->
+         do gp <- getGlobalPair opts pr
+            let regv = gp^.Crucible.gpValue
+                rt = Crucible.regType regv
+                rv = Crucible.regValue regv
+            cty <-
+              case cryptolTypeOfActual retTy of
+                Just cty -> pure cty
+                Nothing ->
+                  fail $ unwords
+                    [ "Unsupported type for Crucible extraction:"
+                    , show (PP.pretty retTy)
+                    ]
+            term <- setupResultTerm sc cc retTy rt rv
+            let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) term
+            tt' <- abstractTypedExts sc (toList ecs) tt
+            pure tt'
+       Crucible.AbortedResult _ ar ->
+         do let resultDoc = ppMIRAbortedResult ar
+            fail $ unlines [ "Symbolic execution failed."
+                           , show resultDoc
+                           ]
+
+       Crucible.TimeoutResult _ ->
+         fail "Symbolic execution timed out."
+
 -- Find the ADT definition that is monomorphized from `origName` with `substs`.
 -- This should only be used on types that are known to be present in the crate
 -- after dead code elimination - for example, because the type appears in the
@@ -1736,6 +1802,206 @@ runCrucible opts simCtx globals execFeatures ovRetTpr ovSim = do
 
     Crucible.TimeoutResult _cxt ->
       fail "Symbolic execution timed out."
+
+-- | Create a fresh argument variable of the appropriate type, suitable for use
+-- in an extracted function derived from @mir_extract@.
+setupArg ::
+  forall tp.
+  SharedContext ->
+  MIRCrucibleContext ->
+  IORef (Seq TypedExtCns) ->
+  -- | The argument's MIR type.
+  Mir.Ty ->
+  -- | The argument's corresponding Crucible type.
+  Crucible.TypeRepr tp ->
+  IO (Crucible.RegEntry Sym tp)
+setupArg sc cc ecRef mty0 tp0 =
+  mccWithBackend cc $ \bak -> do
+    let sym = backendGetSym bak
+    let rm = cc ^. mccRustModule
+    let cs = rm ^. Mir.rmCS
+    let col = cs ^. Mir.collection
+
+    let -- Throw a user-facing error message if a MIR type is not supported
+        -- for extraction.
+        unsupportedType :: forall a. Mir.Ty -> IO a
+        unsupportedType ty =
+          fail $ unwords
+            [ "Unsupported type for Crucible extraction:"
+            , show (PP.pretty ty)
+            ]
+
+    let -- Given a TypeShape, compute the corresponding Cryptol type
+        -- (Cryptol.Type) and SAWCore type (Term). If the TypeShape is
+        -- unsupported for extraction, throw an error message.
+        typeShapeToSAWTypes ::
+          forall tp'.
+          TypeShape tp' ->
+          IO (Cryptol.Type, Term)
+        typeShapeToSAWTypes shp =
+          case shp of
+            UnitShape {} -> do
+              scTp <- scUnitType sc
+              pure (Cryptol.tTuple [], scTp)
+            TupleShape _ elems -> do
+              (eltCtys, eltScTps) <-
+                mapAndUnzipM
+                  (\(AgElemShape _ _ shp') -> typeShapeToSAWTypes shp')
+                  elems
+              scTp <- scTupleType sc eltScTps
+              pure (Cryptol.tTuple eltCtys, scTp)
+            PrimShape {} ->
+              typeReprToSAWTypes sym sc (shapeType shp)
+            ArrayShape mty _ eltShp -> do
+              arraySz <-
+                case mty of
+                  Mir.TyArray _ arraySz -> pure arraySz
+                  _ -> panic
+                         "setupArg"
+                         [ "ArrayShape with non-TyArray type:"
+                         , Text.pack $ show $ PP.pretty mty
+                         ]
+              (eltCty, eltScTp) <- typeShapeToSAWTypes eltShp
+              arraySzTerm <- scNat sc $ fromIntegral @Int @Natural arraySz
+              let cty = Cryptol.tSeq (Cryptol.tNum (toInteger @Int arraySz)) eltCty
+              scTp <- scVecType sc arraySzTerm eltScTp
+              pure (cty, scTp)
+
+            StructShape mty _ _ ->
+              unsupportedType mty
+            EnumShape mty _ _ _ _ ->
+              unsupportedType mty
+            TransparentShape mty _ ->
+              unsupportedType mty
+            RefShape mty _ _ _ ->
+              unsupportedType mty
+            SliceShape mty _ _ _ ->
+              unsupportedType mty
+            FnPtrShape mty _ _ ->
+              unsupportedType mty
+
+    let -- Panic if we encounter an unsupported type that should have been
+        -- caught earlier by typeShapeToSAWTypes.
+        impossibleType :: forall a. Term -> IO a
+        impossibleType ty =
+          panic
+            "setupArg"
+            [ "Type that should have been rejected by typeShapeToSAWTypes:"
+            , Text.pack $ show $ ppTerm PPS.defaultOpts ty
+            ]
+
+    let -- Convert a fresh SAWCore term to a MIR-related Crucible.RegValue,
+        -- binding fresh What4 constants as needed and associating them to the
+        -- corresponding SAWCore subterms.
+        termToMirRegValue ::
+          forall tp'.
+          -- | The TypeShape of the SAWCore term.
+          TypeShape tp' ->
+          -- | The corresponding SAWCore type.
+          Term ->
+          -- | The SAWCore term.
+          Term ->
+          IO (Crucible.RegValue Sym tp')
+        termToMirRegValue shp scTp t =
+          case shp of
+            UnitShape {} -> do
+              pure ()
+            TupleShape _ elems -> do
+              eltScTps <-
+                case asTupleType scTp of
+                  Just eltScTps -> pure eltScTps
+                  Nothing ->
+                    panic
+                      "setupArg"
+                      [ "TupleShape with non-tuple type:"
+                      , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
+                      ]
+              let tupleSz = length elems
+              let ag0 = Mir.MirAggregate (fromIntegral tupleSz) mempty
+              foldM
+                (\ag (idx, eltScTp, AgElemShape _ _ shp') -> do
+                    let oneBasedIdx :: Int
+                        oneBasedIdx = fromIntegral @Word @Int (idx+1)
+                    t' <- scTupleSelector sc t oneBasedIdx tupleSz
+                    elt <- termToMirRegValue shp' eltScTp t'
+                    -- The choice to represent fields as having size 1 is
+                    -- temporary, intended to match similar temporary behavior
+                    -- elsewhere, e.g. in union construction (see Note [union
+                    -- representation] in crucible-mir:Mir.TransTy). In the
+                    -- medium term, we'll want to update this to incorporate
+                    -- size and layout information to compute and use the
+                    -- proper sizes and offsets for each field.
+                    let fieldSize = 1
+                    Mir.mirAggregate_setIO bak idx fieldSize (shapeType shp') elt ag)
+                ag0
+                (zip3 [0..] eltScTps elems)
+            PrimShape {} ->
+              termToRegValue sym (shapeType shp) t
+            ArrayShape _ _ eltShp -> do
+              (arraySz :*: eltScTp) <-
+                case asVecType scTp of
+                  Just nt -> pure nt
+                  Nothing ->
+                    panic
+                      "setupArg"
+                      [ "ArrayShape with non-Vec type:"
+                      , Text.pack $ show $ ppTerm PPS.defaultOpts scTp
+                      ]
+              arraySzTerm <- scNat sc arraySz
+              elts <-
+                V.generateM (fromIntegral @Natural @Int arraySz) $ \idx -> do
+                  idxTerm <- scNat sc $ fromIntegral @Int @Natural idx
+                  t' <- scAt sc arraySzTerm eltScTp t idxTerm
+                  termToMirRegValue eltShp eltScTp t'
+              pure $ Mir.MirVector_Vector elts
+
+            StructShape {} ->
+              impossibleType scTp
+            EnumShape {} ->
+              impossibleType scTp
+            TransparentShape {} ->
+              impossibleType scTp
+            RefShape {} ->
+              impossibleType scTp
+            SliceShape {} ->
+              impossibleType scTp
+            FnPtrShape {} ->
+              impossibleType scTp
+
+    let shp = tyToShapeEq col mty0 tp0
+    (cty, scTp) <- typeShapeToSAWTypes shp
+
+    ecs <- readIORef ecRef
+    ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
+    writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
+
+    t <- scVariable sc ec
+    Crucible.RegEntry tp0 <$> termToMirRegValue shp scTp t
+
+-- | Create fresh argument variables of the appropriate types, suitable for use
+-- in an extracted function derived from @mir_extract@.
+setupArgs ::
+  SharedContext ->
+  MIRCrucibleContext ->
+  -- | The extracted function's MIR argument types. Precondition: this should
+  -- be the same length as the number of argument types in the
+  -- 'Crucible.FnHandle'.
+  [Mir.Ty] ->
+  Crucible.FnHandle init ret ->
+  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+setupArgs sc cc mirArgTys fn =
+  do ecRef  <- newIORef Seq.empty
+     let fnArgTys = Crucible.handleArgTypes fn
+     let mirArgTysVec = V.fromList mirArgTys
+     let mirArgTysCtx =
+           Ctx.generate (Ctx.size fnArgTys) $ \idx ->
+             -- This is in bounds because of the precondition on `mirArgTys`.
+             Const (mirArgTysVec V.! Ctx.indexVal idx)
+     regmap <-
+       Crucible.RegMap <$>
+       Ctx.zipWithM (\(Const mty) -> setupArg sc cc ecRef mty) mirArgTysCtx fnArgTys
+     ecs    <- readIORef ecRef
+     return (ecs, regmap)
 
 setupCrucibleContext :: Mir.RustModule -> TopLevel MIRCrucibleContext
 setupCrucibleContext rm =
@@ -1832,6 +2098,95 @@ setupCrucibleContext rm =
                                , _mccSymGlobalState = globalsImmutStaticsOnly
                                , _mccStaticInitializerMap = staticInitializerMap
                                }
+
+-- | Create a result value of the appropriate type, suitable for use in an
+-- extracted function derived from @mir_extract@.
+setupResultTerm ::
+  SharedContext ->
+  MIRCrucibleContext ->
+  -- | The result's MIR type.
+  Mir.Ty ->
+  -- | The result's corresponding Crucible type.
+  Crucible.TypeRepr tp ->
+  Crucible.RegValue Sym tp ->
+  IO Term
+setupResultTerm sc cc mty0 tpr0 val0 =
+  mccWithBackend cc $ \bak -> do
+    let sym = backendGetSym bak
+    let rm = cc ^. mccRustModule
+    let cs = rm ^. Mir.rmCS
+    let col = cs ^. Mir.collection
+
+    let unsupportedType :: forall a. Mir.Ty -> IO a
+        unsupportedType ty =
+          fail $ unwords
+            [ "Unsupported type for Crucible extraction:"
+            , show (PP.pretty ty)
+            ]
+
+    let go ::
+          forall tp'.
+          Mir.Ty ->
+          Crucible.TypeRepr tp' ->
+          Crucible.RegValue Sym tp' ->
+          IO Term
+        go mty tpr val =
+          let shp = tyToShapeEq col mty tpr in
+          case shp of
+            UnitShape {} ->
+              scUnitValue sc
+            TupleShape _ elems -> do
+              tys <-
+                case mty of
+                  Mir.TyTuple tys -> pure tys
+                  _ -> panic
+                         "setupResultTerm"
+                         [ "TupleShape with non-TyTuple type:"
+                         , Text.pack $ show $ PP.pretty mty
+                         ]
+              terms <- accessMirAggregate' sym elems tys val $
+                  \_off _sz shp' val' tval' -> go tval' (shapeType shp') val'
+              scTupleReduced sc terms
+            PrimShape {} -> do
+              st <- sawCoreState sym
+              toSC sym st val
+            ArrayShape _ _ eltShp -> do
+              eltTy <-
+                case mty of
+                  Mir.TyArray eltTy _ -> pure eltTy
+                  _ -> panic
+                         "setupResultTerm"
+                         [ "ArrayShape with non-TyArray type:"
+                         , Text.pack $ show $ PP.pretty mty
+                         ]
+              let eltTpr = shapeType eltShp
+              case val of
+                Mir.MirVector_Vector elts -> do
+                  shpTypeTerm <- shapeToTerm sc shp
+                  typedElts <- traverse (go eltTy eltTpr) (V.toList elts)
+                  scVectorReduced sc shpTypeTerm typedElts
+                Mir.MirVector_PartialVector elts -> do
+                  shpTypeTerm <- shapeToTerm sc shp
+                  let elts' = V.map (readMaybeType sym "vector element" eltTpr) elts
+                  typedElts <- traverse (go eltTy eltTpr) (V.toList elts')
+                  scVectorReduced sc shpTypeTerm typedElts
+                Mir.MirVector_Array {} ->
+                  fail "setupResultTerm: MirVector_Array not yet supported"
+
+            StructShape {} ->
+              unsupportedType mty
+            EnumShape {} ->
+              unsupportedType mty
+            TransparentShape {} ->
+              unsupportedType mty
+            RefShape {} ->
+              unsupportedType mty
+            SliceShape {} ->
+              unsupportedType mty
+            FnPtrShape {} ->
+              unsupportedType mty
+
+    go mty0 tpr0 val0
 
 {-
 Note [Translating MIR statics in SAW]
