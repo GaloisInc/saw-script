@@ -78,7 +78,6 @@ import SAWCoreWhat4.ReturnTrip
 import SAWCentral.Value
 import SAWCentral.Options(Options,simVerbose)
 import SAWCentral.Crucible.Common
-import SAWCentral.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)
 
 -- jvm-parser
 import qualified Language.JVM.Common as J
