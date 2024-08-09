@@ -4031,6 +4031,15 @@ primitives = Map.fromList
     , "section."
     ]
 
+  , prim "mir_extract" "MIRModule -> String -> TopLevel Term"
+    (pureVal mir_extract)
+    Current
+    [ "Translate a MIR function directly to a Term. The parameters of the"
+    , "Term will be the parameters of the MIR function, and the return"
+    , "value will be the return value of the function. Only functions with"
+    , "scalar argument and return types are currently supported."
+    ]
+
   , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"
     (funVal3 mir_find_adt)
     Experimental

@@ -14,6 +14,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_alloc_mut
   , mir_assert
   , mir_execute_func
+  , mir_extract
   , mir_find_adt
   , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
@@ -70,7 +71,7 @@ import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.ByteString.Lazy as BSL
-import Data.Foldable (for_)
+import Data.Foldable (for_, toList)
 import qualified Data.Foldable.WithIndex as FWI
 import Data.IORef
 import qualified Data.List.Extra as List (find, unsnoc)
@@ -78,7 +79,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr (knownNat, natValue)
@@ -236,6 +237,19 @@ mir_execute_func args =
             checkArgs (i + 1) tys vals
      checkArgs 0 argTys args
      Setup.crucible_execute_func args
+
+-- | TODO RGS: Docs
+mir_extract :: Mir.RustModule -> String -> TopLevel TypedTerm
+mir_extract rm nm =
+  do opts <- getOptions
+     sc <- getSharedContext
+     cc <- setupCrucibleContext rm
+     fn <- findFn rm nm
+     let argTys = fn ^. Mir.fsig . Mir.fsarg_tys
+     when (any (isNothing . cryptolTypeOfActual) argTys) $
+       error "TODO RGS 1"
+     acfg <- lookupDefIdCFG rm (fn ^. Mir.fname)
+     io $ extractFromMirCFG opts sc cc acfg
 
 -- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt'" with the given
 -- 'String' as an identifier and the given 'Mir.Ty's as the types used to
@@ -1322,6 +1336,42 @@ cryptolTypeOfActual mty =
     baseSizeType Mir.B64   = Just $ Cryptol.tWord $ Cryptol.tNum (64 :: Integer)
     baseSizeType Mir.B128  = Just $ Cryptol.tWord $ Cryptol.tNum (128 :: Integer)
     baseSizeType Mir.USize = Just $ Cryptol.tWord $ Cryptol.tNum $ natValue $ knownNat @Mir.SizeBits
+
+-- | TODO RGS: Docs
+extractFromMirCFG ::
+  Options -> SharedContext -> MIRCrucibleContext -> Crucible.AnyCFG MIR -> IO TypedTerm
+extractFromMirCFG opts sc cc (Crucible.AnyCFG cfg) =
+  mccWithBackend cc $ \bak ->
+  do let sym = backendGetSym bak
+     st <- sawCoreState sym
+     let h   = Crucible.cfgHandle cfg
+     (ecs, args) <- setupArgs sc sym h
+     let simCtx  = cc^.mccSimContext
+     let globals = cc^.mccSymGlobalState
+     res <- runCFG simCtx globals h cfg args
+     case res of
+       Crucible.FinishedResult _ pr ->
+         do gp <- getGlobalPair opts pr
+            let regv = gp^.Crucible.gpValue
+                rt = Crucible.regType regv
+                rv = Crucible.regValue regv
+            tt <-
+              case rt of
+                Crucible.BVRepr w ->
+                  do t <- toSC sym st rv
+                     let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+                     pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
+                _ -> fail $ unwords ["Unexpected return type:", show rt]
+            tt' <- abstractTypedExts sc (toList ecs) tt
+            pure tt'
+       Crucible.AbortedResult _ ar ->
+         do let resultDoc = ppMIRAbortedResult ar
+            fail $ unlines [ "Symbolic execution failed."
+                           , show resultDoc
+                           ]
+
+       Crucible.TimeoutResult _ ->
+         fail "Symbolic execution timed out."
 
 -- Find the ADT definition that is monomorphized from `origName` with `substs`.
 -- This should only be used on types that are known to be present in the crate
