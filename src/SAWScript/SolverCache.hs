@@ -167,6 +167,7 @@ data SolverBackend = What4
                    | CVC5
                    | DReal -- NOTE: Not currently supported by SAW
                    | MathSAT
+                   | OpenSMT -- NOTE: Not currently supported by SAW
                    | Yices
                    | Z3
                    deriving (Eq, Ord, Enum, Bounded, Show, Generic)
@@ -195,6 +196,7 @@ sbvBackends conf = [SBV, cvtSolver $ SBV.name $ SBV.solver conf]
         cvtSolver SBV.CVC5      = CVC5
         cvtSolver SBV.DReal     = DReal
         cvtSolver SBV.MathSAT   = MathSAT
+        cvtSolver SBV.OpenSMT   = OpenSMT
         cvtSolver SBV.Yices     = Yices
         cvtSolver SBV.Z3        = Z3
 
@@ -259,7 +261,7 @@ showBackendVersionsWithOptions sep vs opts =
 -- 'mkSolverCacheKey') along with optional solver version information used only
 -- for pretty-printing.
 data SolverCacheKey =
-  SolverCacheKey 
+  SolverCacheKey
   { solverCacheKeyVersions :: SolverBackendVersions
   , solverCacheKeyOptions  :: [SolverBackendOption]
   , solverCacheKeyHash     :: ByteString
@@ -273,7 +275,7 @@ instance Show SolverCacheKey where
     if M.null vs && null opts then ""
     else " (" ++ showBackendVersionsWithOptions ", " vs opts ++ ")"
 
--- | Make a 'SolverCacheKey' with no version information 
+-- | Make a 'SolverCacheKey' with no version information
 solverCacheKeyFromHash :: ByteString -> SolverCacheKey
 solverCacheKeyFromHash = SolverCacheKey M.empty []
 
@@ -452,7 +454,7 @@ tryTransaction :: (LMDB.Mode tmode, LMDB.SubMode LMDB.ReadWrite tmode) =>
                   IO (Either String a, SolverCache)
 tryTransaction cache@SolverCache{..} t =
   tryWithTimeout solverCacheTimeout (forceSolverCacheOpened cache) >>= \case
-    Right (env, db, cache') -> 
+    Right (env, db, cache') ->
       (,cache') <$> tryWithTimeout solverCacheTimeout
                                    (LMDB.transaction env (t db))
     Left err ->

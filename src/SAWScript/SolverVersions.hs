@@ -38,6 +38,7 @@ getSolverVersion s =
         SBV.CVC5      -> (["--version"]              , "This is cvc5 version ")
         SBV.DReal     -> (["--version"]              , "dReal v")
         SBV.MathSAT   -> (["-version"]               , "MathSAT5 version ")
+        SBV.OpenSMT   -> error "opensmt not currently supported"
         SBV.Yices     -> (["--version"]              , "Yices ")
         SBV.Z3        -> (["--version"]              , "Z3 version ")
   in try (readProcessWithExitCode (SBV.executable s') args "") >>= \case
@@ -64,6 +65,7 @@ getSolverBackendVersion backend = case backend of
   CVC5      -> getSolverVersion SBV.CVC5
   DReal     -> getSolverVersion SBV.DReal
   MathSAT   -> getSolverVersion SBV.MathSAT
+  OpenSMT   -> getSolverVersion SBV.OpenSMT
   Yices     -> getSolverVersion SBV.Yices
   Z3        -> getSolverVersion SBV.Z3
 
