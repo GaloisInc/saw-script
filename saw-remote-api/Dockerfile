@@ -5,7 +5,7 @@ RUN apt-get update && \
       # ghcup requirements
       build-essential curl libffi-dev libffi8 libgmp-dev libgmp10 libncurses-dev libncurses6 libtinfo6 \
       # SAW dependencies
-      zlib1g-dev \
+      pkg-config zlib1g-dev \
       # Miscellaneous
       git wget unzip
 RUN useradd -m saw
