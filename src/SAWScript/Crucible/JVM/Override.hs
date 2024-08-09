@@ -60,6 +60,8 @@ import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.IORef
 import           Data.List (tails)
+import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -180,7 +182,7 @@ methodSpecHandler ::
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   IORef MetadataMap {- ^ metadata map -} ->
-  [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
+  NonEmpty CrucibleMethodSpecIR {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ a handle for the function -} ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
@@ -209,7 +211,7 @@ methodSpecHandler opts sc cc top_loc _mdMap css h =
   -- all the override states that might apply, and compute the conjunction of all
   -- the preconditions.  We'll use these to perform symbolic branches between the
   -- various overrides.
-  branches <- case partitionEithers prestates of
+  branches <- case partitionEithers (NE.toList prestates) of
                 (e, []) ->
                   fail $ show $
                   PP.vcat

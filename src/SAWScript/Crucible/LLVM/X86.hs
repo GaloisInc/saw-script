@@ -714,7 +714,12 @@ setupSimpleLoopFixpointFeature sym sc sawst cfg mvar func =
        explicit_parameters_tuple <- scTuple sc explicit_parameters
        let lhs = Prelude.last step_arguments
        w <- scNat sc 64
-       rhs <- scBvMul sc w (head implicit_parameters) =<< scBvNat sc w =<< scNat sc 128
+       let implicit_parameter_head =
+             case implicit_parameters of
+               ip:_ -> ip
+               [] -> panic "setupSimpleLoopFixpointFeature"
+                           ["No implicit parameters"]
+       rhs <- scBvMul sc w implicit_parameter_head =<< scBvNat sc w =<< scNat sc 128
        loop_condition <- scBvULt sc w lhs rhs
        output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
        loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple

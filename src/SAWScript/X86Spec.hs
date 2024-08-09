@@ -1167,7 +1167,7 @@ setupGlobals opts gs fs s
               | (nm,start,u,els) <- gs ]
   cmpStart (_,s1,_) (_,s2,_) = compare s1 s2
 
-  overlaps = catMaybes (zipWith check regions (tail regions))
+  overlaps = catMaybes (zipWith check regions (drop 1 regions))
 
   -- check for overlap, assuming first one starts at smaller address.
   check (r1,s1,n1) (r2,s2,_)
