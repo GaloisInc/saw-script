@@ -714,12 +714,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
 
      case res of
        Crucible.FinishedResult _ pr ->
-         do Crucible.GlobalPair retval globals1 <-
-              case pr of
-                Crucible.TotalRes gp -> return gp
-                Crucible.PartialRes _ _ gp _ ->
-                  do printOutLn opts Info "Symbolic simulation completed with side conditions."
-                     return gp
+         do Crucible.GlobalPair retval globals1 <- getGlobalPair opts pr
             let ret_ty = mspec ^. MS.csRet
             retval' <-
               case ret_ty of

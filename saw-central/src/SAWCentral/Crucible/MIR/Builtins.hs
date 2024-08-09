@@ -1724,12 +1724,9 @@ runCrucible opts simCtx globals execFeatures ovRetTpr ovSim = do
         Crucible.runOverrideSim ovRetTpr ovSim
   res <- Crucible.executeCrucible execFeatures initExecState
   case res of
-    Crucible.FinishedResult simctx pr ->
-      case pr of
-        Crucible.TotalRes gp -> return (simctx, gp)
-        Crucible.PartialRes _ _ gp _ ->
-          do printOutLn opts Info "Symbolic simulation completed with side conditions."
-             return (simctx, gp)
+    Crucible.FinishedResult simctx pr -> do
+      gp <- getGlobalPair opts pr
+      return (simctx, gp)
 
     Crucible.AbortedResult _ ar -> do
       let resultDoc = ppMIRAbortedResult ar
