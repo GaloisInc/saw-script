@@ -108,6 +108,8 @@ import qualified Data.Map as Map
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Set as Set
+import           Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock (getCurrentTime, diffUTCTime)
@@ -125,6 +127,7 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.TraversableFC as FC
 
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
@@ -1815,6 +1818,50 @@ saw_assert_override =
              Crucible.addAssumption bak (Crucible.GenericAssumption loc "crucible_assume" cond)
   )
 
+-- | Create a fresh argument variable of the appropriate type, suitable for use
+-- in an extracted function derived from @llvm_extract@.
+setupArg ::
+  SharedContext ->
+  Sym ->
+  IORef (Seq TypedExtCns) ->
+  Crucible.TypeRepr tp ->
+  IO (Crucible.RegEntry Sym tp)
+setupArg sc sym ecRef tp = do
+  (cty, scTp) <-
+    case tp of
+      Crucible.LLVMPointerRepr w -> do
+        let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+        scTp <- scBitvector sc (natValue w)
+        pure (cty, scTp)
+      _ -> Common.typeReprToSAWTypes sym sc tp
+
+  ecs <- readIORef ecRef
+  ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
+  writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
+
+  t <- scVariable sc ec
+  elt <-
+    case tp of
+      Crucible.LLVMPointerRepr w -> do
+        st <- Common.sawCoreState sym
+        elt <- bindSAWTerm sym st (Crucible.BaseBVRepr w) t
+        Crucible.llvmPointer_bv sym elt
+      _ -> Common.termToRegValue sym tp t
+  pure $ Crucible.RegEntry tp elt
+
+-- | Create fresh argument variables of the appropriate types, suitable for use
+-- in an extracted function derived from @llvm_extract@.
+setupArgs ::
+  SharedContext ->
+  Sym ->
+  Crucible.FnHandle init ret ->
+  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+setupArgs sc sym fn =
+  do ecRef  <- newIORef Seq.empty
+     regmap <- Crucible.RegMap <$> FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
+     ecs    <- readIORef ecRef
+     return (ecs, regmap)
+
 --------------------------------------------------------------------------------
 
 extractFromLLVMCFG ::
@@ -1825,7 +1872,7 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
   do let sym = Common.backendGetSym bak
      st <- Common.sawCoreState sym
      let h   = Crucible.cfgHandle cfg
-     (ecs, args) <- Common.setupArgs sc sym h
+     (ecs, args) <- setupArgs sc sym h
      let simCtx  = cc^.ccLLVMSimContext
      let globals = cc^.ccLLVMGlobals
      res <- Common.runCFG simCtx globals h cfg args

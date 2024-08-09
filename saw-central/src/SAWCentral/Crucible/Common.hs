@@ -31,15 +31,14 @@ module SAWCentral.Crucible.Common
   , baseCryptolType
   , getGlobalPair
   , runCFG
-  , setupArg
-  , setupArgs
+  , typeReprToSAWTypes
+  , termToRegValue
   ) where
 
 import qualified Cryptol.TypeCheck.Type as Cryptol
 import qualified Lang.Crucible.CFG.Core as Crucible
 import qualified Lang.Crucible.CFG.Extension as Crucible (IsSyntaxExtension)
 import qualified Lang.Crucible.FunctionHandle as Crucible
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import           Lang.Crucible.Simulator (GenericExecutionFeature)
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
@@ -52,7 +51,6 @@ import           Lang.Crucible.Backend.Online (OnlineBackend, newOnlineBackend)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr (natValue)
 import qualified Data.Parameterized.Nonce as Nonce
-import qualified Data.Parameterized.TraversableFC as FC
 import           What4.Protocol.Online (OnlineSolver(..))
 import qualified What4.Solver.CVC5 as CVC5
 import qualified What4.Solver.Z3 as Z3
@@ -66,16 +64,11 @@ import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
 import Control.Lens ( (^.) )
-import Data.IORef
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import qualified Prettyprinter as PP
 
 
-import CryptolSAWCore.TypedTerm
 import SAWCore.SharedTerm as SC
 import SAWCoreWhat4.ReturnTrip
          (SAWCoreState, baseSCType, bindSAWTerm, newSAWCoreState)
@@ -179,6 +172,10 @@ setupProfiling sym profSource (Just dir) =
      pfs <- profilingFeature tbl profilingEventFilter (Just profOpts)
      return (saveProf tbl, [pfs])
 
+-- | Given a base Crucible type, compute the corresponding Cryptol type. This
+-- should return reasonable results for most language backends, but it may not
+-- cover everything. (For instance, MIR arrays use a custom intrinsic type,
+-- not 'Crucible.BaseArrayRepr', so those would need to be handled separately.)
 baseCryptolType :: Crucible.BaseTypeRepr tp -> Maybe Cryptol.Type
 baseCryptolType bt =
   case bt of
@@ -199,56 +196,6 @@ baseCryptolType bt =
       do ts <- baseCryptolTypes xs
          t <- baseCryptolType x
          pure (ts ++ [t])
-
-setupArg ::
-  forall tp.
-  SharedContext ->
-  Sym ->
-  IORef (Seq TypedExtCns) ->
-  Crucible.TypeRepr tp ->
-  IO (Crucible.RegEntry Sym tp)
-setupArg sc sym ecRef tp = do
-  st <- sawCoreState sym
-  case (Crucible.asBaseType tp, tp) of
-    (Crucible.AsBaseType btp, _) ->
-      do cty <-
-           case baseCryptolType btp of
-             Just cty -> pure cty
-             Nothing ->
-               fail $ unwords ["Unsupported type for Crucible extraction:", show btp]
-         sc_tp <- baseSCType sym sc btp
-         t     <- freshGlobal cty sc_tp
-         elt   <- bindSAWTerm sym st btp t
-         return (Crucible.RegEntry tp elt)
-
-    (Crucible.NotBaseType, Crucible.LLVMPointerRepr w) ->
-      do let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-         sc_tp <- scBitvector sc (natValue w)
-         t     <- freshGlobal cty sc_tp
-         elt   <- bindSAWTerm sym st (Crucible.BaseBVRepr w) t
-         elt'  <- Crucible.llvmPointer_bv sym elt
-         return (Crucible.RegEntry tp elt')
-
-    (Crucible.NotBaseType, _) ->
-      fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
-  where
-    freshGlobal cty sc_tp =
-      do ecs <- readIORef ecRef
-         let len = Seq.length ecs
-         ec <- scFreshEC sc ("arg_" <> Text.pack (show len)) sc_tp
-         writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
-         scVariable sc ec
-
-setupArgs ::
-  SharedContext ->
-  Sym ->
-  Crucible.FnHandle init ret ->
-  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
-setupArgs sc sym fn =
-  do ecRef  <- newIORef Seq.empty
-     regmap <- Crucible.RegMap <$> FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
-     ecs    <- readIORef ecRef
-     return (ecs, regmap)
 
 getGlobalPair ::
   Options ->
@@ -275,3 +222,53 @@ runCFG simCtx globals h cfg args =
            Crucible.runOverrideSim (Crucible.handleReturnType h)
                     (Crucible.regValue <$> (Crucible.callCFG cfg args))
      Crucible.executeCrucible [] initExecState
+
+-- | Given a 'Crucible.TypeRepr', compute the corresponding Cryptol type
+-- ('Cryptol.Type') and SAWCore type ('Term'). If the 'Crucible.TypeRepr' is
+-- unsupported for extraction, throw an error message.
+--
+-- This is a language backend-agnostic implementation that only supports
+-- Crucible base types. Individual language backends will want to add
+-- additional cases on top of this function in order to support intrinsic
+-- types.
+typeReprToSAWTypes ::
+  Sym ->
+  SharedContext ->
+  Crucible.TypeRepr tp ->
+  IO (Cryptol.Type, Term)
+typeReprToSAWTypes sym sc tp =
+  case Crucible.asBaseType tp of
+    Crucible.AsBaseType btp -> do
+      cty <-
+        case baseCryptolType btp of
+          Just cty -> pure cty
+          Nothing ->
+            fail $ unwords ["Unsupported type for Crucible extraction:", show btp]
+      scTp <- baseSCType sym sc btp
+      pure (cty, scTp)
+
+    Crucible.NotBaseType ->
+      fail $ unwords ["Unsupported type for Crucible extraction:", show tp]
+
+-- | Convert a fresh SAWCore 'Term' to a 'Crucible.RegValue', also binding a
+-- fresh What4 constant and associating it to the 'Term'.
+--
+-- This is a language backend-agnostic implementation that only supports
+-- Crucible base types. Individual language backends will want to add
+-- additional cases on top of this function in order to support intrinsic
+-- types.
+termToRegValue ::
+  Sym ->
+  -- | The Crucible type of the SAWCore term.
+  Crucible.TypeRepr tp ->
+  -- | The SAWCore term.
+  Term ->
+  IO (Crucible.RegValue Sym tp)
+termToRegValue sym tp t =
+  case Crucible.asBaseType tp of
+    Crucible.AsBaseType btp -> do
+      st <- sawCoreState sym
+      bindSAWTerm sym st btp t
+
+    Crucible.NotBaseType ->
+      fail $ unwords ["Unsupported type for Crucible extraction:", show tp]

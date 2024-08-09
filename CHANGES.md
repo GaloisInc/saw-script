@@ -101,6 +101,10 @@ This release supports [version
 * Adds `w4_unint_rme` proof script for using RME extended with uninterpreted
   functions to resolve goals.
 
+* Add a `mir_extract : MIRModule -> String -> TopLevel Term` command, which
+  allows extracting a MIR function to a term. See the SAW manual for details on
+  what types of MIR functions are supported for extraction.
+
 # Version 1.4 -- date still TBD
 
 This release supports [version

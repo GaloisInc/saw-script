@@ -7,6 +7,7 @@ Stability   : provisional
 
 
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
@@ -29,11 +30,14 @@ module SAWCentral.Crucible.JVM.BuiltinsJVM
 
 import           Data.List (isPrefixOf)
 import           Control.Lens
+import           Data.IORef
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Map (Map,(!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import           Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import           Data.Foldable (toList)
 import           System.IO
 import           Control.Monad (forM_,unless,when,foldM)
@@ -43,6 +47,7 @@ import           Control.Monad.State.Strict
 -- parameterized-utils
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Nonce
+import qualified Data.Parameterized.TraversableFC as FC
 
 -- crucible/crucible
 import qualified Lang.Crucible.FunctionHandle          as Crucible
@@ -66,10 +71,12 @@ import qualified What4.Interface as W4
 import qualified What4.Solver.Yices as Yices
 
 -- saw-core
-import SAWCore.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
+import SAWCore.SharedTerm
+  ( Term, SharedContext, mkSharedContext, scFreshEC, scImplies, scVariable )
 
 -- cryptol-saw-core
-import CryptolSAWCore.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(..))
+import CryptolSAWCore.TypedTerm
+    ( TypedExtCns(..), TypedTerm(..), abstractTypedExts, TypedTermType(..) )
 
 -- saw-core-what4
 import SAWCoreWhat4.ReturnTrip
@@ -194,3 +201,33 @@ jvm_extract c mname = do
               fail $ unlines [ "Symbolic execution failed." ]
             Crucible.TimeoutResult _cxt -> do
               fail $ unlines [ "Symbolic execution timed out." ]
+
+-- | Create a fresh argument variable of the appropriate type, suitable for use
+-- in an extracted function derived from @jvm_extract@.
+setupArg ::
+  SharedContext ->
+  Sym ->
+  -- | The function arguments extracted so far.
+  IORef (Seq TypedExtCns) ->
+  Crucible.TypeRepr tp ->
+  IO (Crucible.RegEntry Sym tp)
+setupArg sc sym ecRef tp = do
+  (cty, scTp) <- typeReprToSAWTypes sym sc tp
+  ecs <- readIORef ecRef
+  ec <- scFreshEC sc ("arg_" <> Text.pack (show (length ecs))) scTp
+  writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
+  t <- scVariable sc ec
+  Crucible.RegEntry tp <$> termToRegValue sym tp t
+
+-- | Create fresh argument variables of the appropriate types, suitable for use
+-- in an extracted function derived from @jvm_extract@.
+setupArgs ::
+  SharedContext ->
+  Sym ->
+  Crucible.FnHandle init ret ->
+  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
+setupArgs sc sym fn =
+  do ecRef  <- newIORef Seq.empty
+     regmap <- Crucible.RegMap <$> FC.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
+     ecs    <- readIORef ecRef
+     return (ecs, regmap)
