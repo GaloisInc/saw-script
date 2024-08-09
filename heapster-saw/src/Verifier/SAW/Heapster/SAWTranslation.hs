@@ -45,7 +45,6 @@ import qualified Control.Applicative as App
 import Control.Lens hiding ((:>), Index, ix, op, getting)
 import qualified Control.Monad as Monad
 import Control.Monad (MonadPlus(..), zipWithM)
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, runReader, withReader,
                              ReaderT(..), mapReaderT, ask)
 import Control.Monad.State (MonadState(..), StateT(..))

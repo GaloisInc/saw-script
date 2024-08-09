@@ -41,7 +41,6 @@ import qualified Data.Type.RList as RL
 
 import What4.ProgramLoc
 import What4.Partial
-import What4.InterpretedFloatingPoint (X86_80Val(..))
 import What4.Interface (StringLiteral(..))
 import What4.Utils.Word16String (Word16String)
 
