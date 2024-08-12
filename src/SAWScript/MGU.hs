@@ -124,7 +124,7 @@ listSubst = Subst . M.fromList
 --
 
 data FailMGU = FailMGU
-                    String      -- initial error message
+                    [String]    -- initial error message
                     [String]    -- list of found/expected message pairs
                     [String]    -- current found/expected function pair if any
 
@@ -136,13 +136,26 @@ showTypes ty1 ty2 =
   in
   [expected, found, ""]
 
+-- logic for showing details of a type
+showTypeDetails :: Type -> String
+showTypeDetails ty =
+  let pr pos what =
+        show pos ++ ": The type " ++ pShow ty ++ " arises from " ++ what
+  in
+  case getPos ty of
+    PosInferred InfFresh pos -> pr pos "fresh type variable introduced here"
+    PosInferred InfTerm pos -> pr pos "the type of this term"
+    PosInferred InfContext pos -> pr pos "the context of the term"
+    pos -> pr pos "this type annotation"
+
 -- fail with expected/found types
 failMGU :: String -> Type -> Type -> Either FailMGU a
-failMGU start ty1 ty2 = Left (FailMGU start ("" : showTypes ty1 ty2) [])
+failMGU start ty1 ty2 = Left (FailMGU start' ("" : showTypes ty1 ty2) [])
+  where start' = [start, showTypeDetails ty1, showTypeDetails ty2]
 
 -- fail with no types
 failMGU' :: String -> Either FailMGU a
-failMGU' start = Left (FailMGU start [] [])
+failMGU' start = Left (FailMGU [start] [] [])
 
 -- add another expected/found type pair to the failure
 -- (pull in the last function-type lines if any)
@@ -159,7 +172,7 @@ failMGUAddFun (FailMGU start eflines _) ty1 ty2 =
 -- print the failure as a string list
 ppFailMGU :: FailMGU -> [String]
 ppFailMGU (FailMGU start eflines lastfunlines) =
-  start : eflines ++ lastfunlines
+  start ++ eflines ++ lastfunlines
 
 mgu :: Type -> Type -> Either FailMGU Subst
 mgu (TyUnifyVar _ i) (TyUnifyVar _ j) | i == j = return emptySubst
@@ -555,11 +568,11 @@ type OutStmt = Stmt
 
 inferE :: (LName, Expr) -> TI (OutExpr,Type)
 inferE (ln, expr) = case expr of
-  Bool pos b    -> return (Bool pos b, tBool pos)
-  String pos s  -> return (String pos s, tString pos)
-  Int pos i     -> return (Int pos i, tInt pos)
-  Code s        -> return (Code s, tTerm (getPos s))
-  CType s       -> return (CType s, tType (getPos s))
+  Bool pos b    -> return (Bool pos b, tBool (PosInferred InfTerm pos))
+  String pos s  -> return (String pos s, tString (PosInferred InfTerm pos))
+  Int pos i     -> return (Int pos i, tInt (PosInferred InfTerm pos))
+  Code s        -> return (Code s, tTerm (PosInferred InfTerm $ getPos s))
+  CType s       -> return (CType s, tType (PosInferred InfTerm $ getPos s))
 
   Array pos [] ->
     do a <- newType pos
