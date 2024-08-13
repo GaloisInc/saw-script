@@ -49,7 +49,7 @@ jobs:
       release: ${{ steps.config.outputs.release }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -116,7 +116,7 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
            git submodule update --init
 
@@ -147,7 +147,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore cabal store cache
         with:
           path: |
@@ -269,7 +269,7 @@ jobs:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v4
         name: Save cabal store cache
         if: always()
         with:
@@ -286,7 +286,7 @@ jobs:
         os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -321,7 +321,7 @@ jobs:
         os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -388,7 +388,7 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -451,7 +451,7 @@ jobs:
             os: windows-2019
             continue-on-error: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -490,7 +490,7 @@ jobs:
           java-package: jdk
           architecture: x64
 
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration_tests'"
         with:
@@ -513,7 +513,7 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: "matrix.suite == 'integration_tests'"
         with:
@@ -538,7 +538,7 @@ jobs:
         os: [ubuntu-22.04]
     steps:
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -582,7 +582,7 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         with:
           path: ${{ matrix.suite }}.cache
@@ -644,7 +644,7 @@ jobs:
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -750,7 +750,7 @@ jobs:
         os: [ubuntu-22.04]
         ghc: ["9.2.8"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p s2nTests/bin
 
@@ -771,7 +771,7 @@ jobs:
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         with:
           path: s2nTests/cache
@@ -788,7 +788,7 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: always()
         with:
@@ -804,7 +804,7 @@ jobs:
         os: [ubuntu-22.04]
         ghc: ["9.2.8"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p exercises/bin
 
