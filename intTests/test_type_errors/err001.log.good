@@ -1,0 +1,10 @@
+ Loading file "err001.saw"
+ err001.saw:1:23-1:24: Type mismatch.
+    Mismatch of type constructors. Expected: String but got Int
+    
+    Expected: String
+    Found:    Int
+    
+    within "foo" (err001.saw:1:5-1:8)
+
+FAILED
