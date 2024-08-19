@@ -232,7 +232,6 @@ data Type
   | TyRecord Pos (Map Name Type)
   | TyVar Pos Name
   | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
-  | TySkolemVar Pos Name TypeIndex -- ^ For internal typechecker use only
   deriving Show
 
 instance Positioned Type where
@@ -240,7 +239,6 @@ instance Positioned Type where
   getPos (TyRecord pos _) = pos
   getPos (TyVar pos _) = pos
   getPos (TyUnifyVar pos _) = pos
-  getPos (TySkolemVar pos _ _) = pos
 
 type TypeIndex = Integer
 
@@ -422,7 +420,6 @@ instance PrettyPrint Type where
     $ map (\(n,t) -> PP.pretty n `prettyTypeSig` pretty 0 t)
     $ Map.toList fs
   pretty _par (TyUnifyVar _ i)    = "t." PP.<> PP.pretty i
-  pretty _par (TySkolemVar _ n i) = PP.pretty n PP.<> PP.pretty i
   pretty _par (TyVar _ n)         = PP.pretty n
 
 instance PrettyPrint TyCon where

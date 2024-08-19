@@ -196,8 +196,6 @@ mgu c1@(TyCon _ tc1 ts1) c2@(TyCon _ tc2 ts2)
         failMGU "Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
       _ ->
         failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2) c1 c2
-mgu (TySkolemVar _ a i) (TySkolemVar _ b j)
-  | (a, i) == (b, j) = return emptySubst
 mgu (TyVar _ a) (TyVar _ b)
   | a == b = return emptySubst
 mgu t1 t2 = failMGU "Mismatch of types." t1 t2
@@ -242,7 +240,6 @@ instance UnifyVars Type where
     TyRecord _ tm     -> unifyVars tm
     TyVar _ _         -> M.empty
     TyUnifyVar pos i  -> M.singleton i pos
-    TySkolemVar _ _ _ -> M.empty
 
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
@@ -266,7 +263,6 @@ instance NamedVars Type where
     TyRecord _ tm     -> namedVars tm
     TyVar pos n       -> M.singleton n pos
     TyUnifyVar _ _    -> M.empty
-    TySkolemVar _ _ _ -> M.empty
 
 instance NamedVars Schema where
   namedVars (Forall ns t) = namedVars t M.\\ M.fromList ns'
@@ -482,7 +478,6 @@ instance AppSubst Type where
     TyUnifyVar _ i      -> case M.lookup i (unSubst s) of
                              Just t' -> t'
                              Nothing -> t
-    TySkolemVar _ _ _   -> t
 
 instance AppSubst Schema where
   appSubst s (Forall ns t) = Forall ns (appSubst s t)
@@ -552,7 +547,6 @@ instance Instantiate Type where
     TyRecord pos fs     -> TyRecord pos (fmap (instantiate nts) fs)
     TyVar _ n           -> M.findWithDefault ty n nts
     TyUnifyVar _ _      -> ty
-    TySkolemVar _ _ _   -> ty
 
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
