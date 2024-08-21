@@ -1076,7 +1076,15 @@ heapster_typecheck_mut_funs_rename ::
   BuiltinContext -> Options -> HeapsterEnv ->
   [(String, String, String)] -> TopLevel ()
 heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
-  do let (fst_nm, _, _) = head fn_names_and_perms
+  do let (fst_nm, _, _) =
+           case fn_names_and_perms of
+             fn_name_and_perm:_ -> fn_name_and_perm
+             -- TODO: Give a proper error message here instead of panicking,
+             -- and document the non-empty list requirement. See #2096.
+             [] -> panic "heapster_typecheck_mut_funs_rename"
+                         [ "Unexpected empty list of mutually recursive functions"
+                         , "See https://github.com/GaloisInc/saw-script/issues/2096"
+                         ]
      Some lm <- failOnNothing ("Could not find symbol definition: " ++ fst_nm)
                               (lookupModDefiningSym henv fst_nm)
      let w = llvmModuleArchReprWidth lm
