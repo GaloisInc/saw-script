@@ -478,6 +478,13 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                   case cumulElemTypes of
                     _:cumulElemTypesTail' -> cumulElemTypesTail'
                     [] -> noArrayLengths
+
+                -- Note that the length of cumulLenTerms will always be one
+                -- greater than the lengths of the other two lists, which means
+                -- that zip3 will drop the last element of cumulLenTerms. This
+                -- is fine, as `cumul` is used in such a way where the last
+                -- element is never required. (See the comments next to the uses
+                -- of `cumul` below.)
                 cumul = zip3 cumulLenTerms lenTermsTail cumulElemTypesTail
             Just FFIConv
               { ffiCryType = arrCryType
