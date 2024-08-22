@@ -25,7 +25,7 @@ library
 
   build-depends:
     base >= 4.8,
-    aeson >= 2.0 && < 2.2,
+    aeson >= 2.0 && < 2.3,
     array,
     bytestring,
     containers,

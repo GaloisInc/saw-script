@@ -1,5 +1,5 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 9.2.8
+# - Artifact uploads for binaries are from GHC 9.4.8
 # - Builds for Ubuntu happen on 22.04. We also include a single configuration
 #   for 20.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
@@ -49,7 +49,7 @@ jobs:
       release: ${{ steps.config.outputs.release }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -77,8 +77,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04]
-        cabal: ["3.10.1.0"]
-        ghc: ["9.2.8", "9.4.8", "9.6.3"]
+        cabal: ["3.10.3.0"]
+        ghc: ["9.4.8", "9.6.6", "9.8.2"]
         run-tests: [true]
         hpc: [false]
         include:
@@ -86,14 +86,14 @@ jobs:
           # coverage of possible Linux configurations. Since we already run the
           # tests with the newest LTS release, we won't bother testing this one.
           - os: ubuntu-20.04
-            ghc: "9.2.8"
-            cabal: "3.10.1.0"
+            ghc: "9.4.8"
+            cabal: "3.10.3.0"
             run-tests: false
             hpc: false
           # Include one job with HPC enabled
           - os: ubuntu-22.04
             ghc: "9.4.8"
-            cabal: "3.10.1.0"
+            cabal: "3.10.3.0"
             run-tests: true
             hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
@@ -101,22 +101,22 @@ jobs:
           # include both an x86-64 macOS runner (macos-12) as well as an AArch64
           # macOS runner (macos-14).
           - os: windows-2019
-            ghc: 9.2.8
+            ghc: 9.4.8
             run-tests: true
             hpc: false
           - os: macos-12
-            ghc: 9.2.8
+            ghc: 9.4.8
             run-tests: true
             hpc: false
           - os: macos-14
-            ghc: 9.2.8
+            ghc: 9.4.8
             run-tests: true
             hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
            git submodule update --init
 
@@ -147,7 +147,7 @@ jobs:
           BUILD_TARGET_OS: ${{ matrix.os }}
           BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore cabal store cache
         with:
           path: |
@@ -188,7 +188,7 @@ jobs:
           dest: dist-tests
 
       - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '9.2.8'"
+        if: "matrix.ghc == '9.4.8'"
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
@@ -205,14 +205,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '9.2.8' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '9.2.8' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
@@ -222,7 +222,7 @@ jobs:
       ##########################################################################
       # We upload an archive containing SAW, and also and archive containing SAW
       # and the set of possible SMT solvers, but only for our "primary"
-      # distribution (currently: GHC 9.2.8).  These archives are utilized in
+      # distribution (currently: GHC 9.4.8).  These archives are utilized in
       # subsequent CI jobs, but are also published for external users, and are
       # therefore signed.
       #
@@ -237,7 +237,7 @@ jobs:
       # In the next 3 steps we check that `matrix.hpc == false` so that if the
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
-      - if: matrix.ghc == '9.2.8' && matrix.hpc == false
+      - if: matrix.ghc == '9.4.8' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -245,7 +245,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.2.8' && matrix.hpc == false
+      - if: matrix.ghc == '9.4.8' && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
@@ -253,7 +253,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.2.8' && matrix.run-tests && matrix.hpc == false
+      - if: matrix.ghc == '9.4.8' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -269,7 +269,7 @@ jobs:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v4
         name: Save cabal store cache
         if: always()
         with:
@@ -286,7 +286,7 @@ jobs:
         os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -321,7 +321,7 @@ jobs:
         os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -388,7 +388,7 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -451,7 +451,7 @@ jobs:
             os: windows-2019
             continue-on-error: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -490,7 +490,7 @@ jobs:
           java-package: jdk
           architecture: x64
 
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration_tests'"
         with:
@@ -513,7 +513,7 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: "matrix.suite == 'integration_tests'"
         with:
@@ -538,7 +538,7 @@ jobs:
         os: [ubuntu-22.04]
     steps:
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -582,7 +582,7 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         with:
           path: ${{ matrix.suite }}.cache
@@ -644,7 +644,7 @@ jobs:
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -748,9 +748,9 @@ jobs:
           - awslc
           - blst
         os: [ubuntu-22.04]
-        ghc: ["9.2.8"]
+        ghc: ["9.4.8"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p s2nTests/bin
 
@@ -771,7 +771,7 @@ jobs:
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v4
         name: Restore SMT solver result cache
         with:
           path: s2nTests/cache
@@ -788,7 +788,7 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v4
         name: Save SMT solver result cache
         if: always()
         with:
@@ -802,9 +802,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        ghc: ["9.2.8"]
+        ghc: ["9.4.8"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p exercises/bin
 

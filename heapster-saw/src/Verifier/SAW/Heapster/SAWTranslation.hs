@@ -45,7 +45,6 @@ import qualified Control.Applicative as App
 import Control.Lens hiding ((:>), Index, ix, op, getting)
 import qualified Control.Monad as Monad
 import Control.Monad (MonadPlus(..), zipWithM)
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (MonadReader(..), Reader, runReader, withReader,
                              ReaderT(..), mapReaderT, ask)
 import Control.Monad.State (MonadState(..), StateT(..))
@@ -6179,11 +6178,11 @@ translateTypedEntry ::
 translateTypedEntry (Some entry) =
   if typedEntryHasMultiInDegree entry then
     do fs <- get
-       let f =
+       let (f, fs') =
              case fs of
                [] -> panic "translateTypedEntry" ["Ran out of functions"]
-               _ -> head fs
-       put $ tail fs
+               f_:fs'_ -> (f_, fs'_)
+       put fs'
        return (Some (TypedEntryTrans entry $ Just f))
   else return $ Some (TypedEntryTrans entry Nothing)
 
@@ -6480,7 +6479,7 @@ tcTranslateAddCFGs ::
 -- cfgs_and_perms list below and know it will succeeed
 tcTranslateAddCFGs _ _ env _ _ _ [] = return (env, [])
 
-tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
+tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms@(cfg_and_perm:_) =
   do
     -- First, we type-check all the CFGs, mapping them to SomeTypedCFGs; this
     -- uses a temporary PermEnv where all the function symbols being
@@ -6503,7 +6502,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
     -- Insert a SAW core definition in the current SAW module for bodies
     let ev = permEnvEventType env
     let bodies_id =
-          mkSafeIdent mod_name (someCFGAndPermToName (head cfgs_and_perms)
+          mkSafeIdent mod_name (someCFGAndPermToName cfg_and_perm
                                 ++ "__bodies")
     bodies_tp <- completeOpenTerm sc $ multiFixBodiesOpenTerm ev ds
     bodies_tm <- completeOpenTerm sc bodies

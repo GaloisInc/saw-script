@@ -281,10 +281,21 @@ findDecl llmod nm =
 resolveSpecName :: String -> TopLevel (String, Maybe String)
 resolveSpecName nm =
   if Crucible.testBreakpointFunction nm
-  then return
-    ( (takeWhile (not . (== '#')) nm)
-    , Just (tail (dropWhile (not . (== '#')) nm))
-    )
+  then
+    let (fnName, fnSuffix) = break (== '#') nm
+        parentName =
+          case fnSuffix of
+            _:parentName' -> parentName'
+            -- TODO: Give a proper error message here instead of panicking,
+            -- and document __breakpoint__ naming requirements. See #2097.
+            [] -> panic "resolveSpecName"
+                        [ "__breakpoint__ function not followed by #<parent_name>"
+                        , "See https://github.com/GaloisInc/saw-script/issues/2097"
+                        ] in
+    return
+      ( fnName
+      , Just parentName
+      )
   else return (nm, Nothing)
 
 llvm_verify ::

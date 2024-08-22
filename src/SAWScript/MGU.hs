@@ -21,6 +21,7 @@ module SAWScript.MGU
        ) where
 
 import SAWScript.AST
+import SAWScript.Panic (panic)
 import SAWScript.Position (Pos(..), Positioned(..))
 
 #if !MIN_VERSION_base(4,8,0)
@@ -786,13 +787,19 @@ inferDecl (Decl pos pat _ e) = do
 inferRecDecls :: [Decl] -> TI [Decl]
 inferRecDecls ds =
   do let pats = map dPat ds
+         pat =
+           case pats of
+             p:_ -> p
+             [] -> panic
+                     "inferRecDecls"
+                     ["Empty list of declarations in recursive group"]
      (_ts, pats') <- unzip <$> mapM newTypePattern pats
      (es, ts) <- fmap unzip
                  $ flip (foldr bindPattern) pats'
                  $ sequence [ inferE (patternLName p, e)
                             | Decl _pos p _ e <- ds
                             ]
-     sequence_ $ zipWith (constrainTypeWithPattern (patternLName (head pats))) ts pats'
+     sequence_ $ zipWith (constrainTypeWithPattern (patternLName pat)) ts pats'
      ess <- generalize es ts
      return [ Decl pos p (Just s) e1
             | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
