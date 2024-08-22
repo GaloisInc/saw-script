@@ -282,8 +282,9 @@ resolveSpecName :: String -> TopLevel (String, Maybe String)
 resolveSpecName nm =
   if Crucible.testBreakpointFunction nm
   then
-    let parentName =
-          case dropWhile (not . (== '#')) nm of
+    let (fnName, fnSuffix) = break (== '#') nm
+        parentName =
+          case fnSuffix of
             _:parentName' -> parentName'
             -- TODO: Give a proper error message here instead of panicking,
             -- and document __breakpoint__ naming requirements. See #2097.
@@ -292,7 +293,7 @@ resolveSpecName nm =
                         , "See https://github.com/GaloisInc/saw-script/issues/2097"
                         ] in
     return
-      ( (takeWhile (not . (== '#')) nm)
+      ( fnName
       , Just parentName
       )
   else return (nm, Nothing)

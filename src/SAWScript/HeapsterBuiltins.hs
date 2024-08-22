@@ -1076,9 +1076,9 @@ heapster_typecheck_mut_funs_rename ::
   BuiltinContext -> Options -> HeapsterEnv ->
   [(String, String, String)] -> TopLevel ()
 heapster_typecheck_mut_funs_rename _bic opts henv fn_names_and_perms =
-  do let (fst_nm, _, _) =
+  do let fst_nm =
            case fn_names_and_perms of
-             fn_name_and_perm:_ -> fn_name_and_perm
+             (nm, _, _):_ -> nm
              -- TODO: Give a proper error message here instead of panicking,
              -- and document the non-empty list requirement. See #2096.
              [] -> panic "heapster_typecheck_mut_funs_rename"
