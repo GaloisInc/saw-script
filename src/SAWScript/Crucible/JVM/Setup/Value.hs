@@ -30,6 +30,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.JVM.Setup.Value
   ( JIdent

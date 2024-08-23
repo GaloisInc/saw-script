@@ -44,7 +44,7 @@ import           Control.Monad
 import           Control.Monad.Trans
 import           Data.Bits                            (finiteBitSize)
 import           Data.Foldable
-import           Data.Functor
+import           Data.Functor                         ((<&>))
 import           Data.List
 import           Data.List.NonEmpty                   (NonEmpty (..))
 import qualified Data.List.NonEmpty                   as NE
@@ -464,7 +464,28 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                 cumulLenTerms = map natOpenTerm $ scanl1 (*) lens
                 arrCryType :| cumulElemTypes =
                   NE.scanr vectorTypeOpenTerm basicCryType lenTerms
-                cumul = zip3 cumulLenTerms (tail lenTerms) (tail cumulElemTypes)
+
+                noArrayLengths :: a
+                noArrayLengths =
+                  panic "arrayTypeInfo"
+                        ["FFIArray with empty list of length types"]
+
+                lenTermsTail =
+                  case lenTerms of
+                    _:lenTermsTail' -> lenTermsTail'
+                    [] -> noArrayLengths
+                cumulElemTypesTail =
+                  case cumulElemTypes of
+                    _:cumulElemTypesTail' -> cumulElemTypesTail'
+                    [] -> noArrayLengths
+
+                -- Note that the length of cumulLenTerms will always be one
+                -- greater than the lengths of the other two lists, which means
+                -- that zip3 will drop the last element of cumulLenTerms. This
+                -- is fine, as `cumul` is used in such a way where the last
+                -- element is never required. (See the comments next to the uses
+                -- of `cumul` below.)
+                cumul = zip3 cumulLenTerms lenTermsTail cumulElemTypesTail
             Just FFIConv
               { ffiCryType = arrCryType
               , ffiPrecond = \arr {- : Vec totalLen ffiLLVMCoreType -} ->

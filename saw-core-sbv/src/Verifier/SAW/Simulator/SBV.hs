@@ -673,7 +673,9 @@ parseUninterpreted cws nm ty =
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm =
   svUninterpreted k nm'
-#if MIN_VERSION_sbv(10,0,0)
+#if MIN_VERSION_sbv(10,3,0)
+                  (UINone True)
+#elif MIN_VERSION_sbv(10,0,0)
                   UINone
 #else
                   Nothing
@@ -792,11 +794,12 @@ getLabels ls d args
 
   getLabel ZeroWidthWordLabel = FOVWord 0 0
 
-  getLabel (VecLabel ns)
-    | V.null ns = error "getLabel of empty vector"
-    | otherwise = fovVec t vs
-    where vs = map getLabel (V.toList ns)
-          t  = firstOrderTypeOf (head vs)
+  getLabel (VecLabel ns) =
+    case V.uncons ns of
+      Nothing     -> error "getLabel of empty vector"
+      Just (n, _) -> fovVec t vs
+        where vs = map getLabel (V.toList ns)
+              t  = firstOrderTypeOf (getLabel n)
 
   getLabel (TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
   getLabel (RecLabel ns) = FOVRec $ fmap getLabel ns

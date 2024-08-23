@@ -19,6 +19,7 @@ module, plus additional functionality) instead.
 {-# Language TemplateHaskell #-}
 {-# Language TypeFamilies #-}
 {-# Language TypeOperators #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.MIR.Setup.Value
   ( -- * @MIRCrucibleContext@

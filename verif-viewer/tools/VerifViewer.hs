@@ -5,6 +5,7 @@ module Main where
 
 import Control.Monad
 import Data.Aeson
+import qualified Data.Aeson.Parser as AP
 import Data.Aeson.Types (Parser)
 import qualified Data.Aeson.Types as AE
 import Data.Maybe (isJust)
@@ -33,7 +34,7 @@ main :: IO ()
 main =
   do [f,o] <- getArgs
      bs <- BS.readFile f
-     case AT.parseOnly json' bs of
+     case AT.parseOnly AP.json' bs of
        Left msg -> putStrLn msg >> exitFailure
        Right v ->
          case AE.parse parseNodes v of
