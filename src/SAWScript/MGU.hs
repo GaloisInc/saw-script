@@ -124,7 +124,7 @@ listSubst = Subst . M.fromList
 --
 
 data FailMGU = FailMGU
-                    [String]    -- initial error message
+                    [String]    -- initial error message (often multiple lines)
                     [String]    -- list of found/expected message pairs
                     [String]    -- current found/expected function pair if any
 
@@ -215,7 +215,7 @@ bindVar pos i t =
   case M.lookup i $ unifyVars t of
      Just otherpos ->
        -- FIXME/XXX: this error message is better than the one that was here before
-       -- but still lacks
+       -- but still lacks a certain something
        failMGU' $ "Occurs check failure: the type at " ++ show otherpos ++
                   " appears within the type at " ++ show pos
      Nothing ->
@@ -225,6 +225,10 @@ bindVar pos i t =
 
 -- UnifyVars {{{
 
+-- unifyVars is a type-class-polymorphic function for extracting
+-- unification vars from a type or type schema. It returns a set of
+-- TypeIndex (TypeIndex is just Integer) manifested as a map from
+-- those TypeIndexes to their positions/provenance.
 class UnifyVars t where
   unifyVars :: t -> M.Map TypeIndex Pos
 
@@ -248,6 +252,10 @@ instance UnifyVars Schema where
 
 -- NamedVars {{{
 
+-- namedVars is a type-class-polymorphic function for extracting named
+-- type variables from a type or type schema. It returns a set of Name
+-- (Name is just String) manifested as a map from those Names to their
+-- positions/provenance.
 class NamedVars t where
   namedVars :: t -> M.Map Name Pos
 
@@ -299,7 +307,7 @@ newTypeIndex = do
 --
 -- Collect the position that prompted us to make it; for example, if
 -- we're the element type of an empty list we get the position of the
--- []. We haven't inferred anything, so use the Placeholder position.
+-- []. We haven't inferred anything, so use the InfFresh position.
 -- This will cause the position of anything more substantive that gets
 -- unified with it to be preferred. If no such thing happens though
 -- this will be the position that gets attached to the quantifier
