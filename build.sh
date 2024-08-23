@@ -5,7 +5,7 @@ set -e
 
 git submodule update --init
 
-function install() {
+install() {
   PROG=$(cabal list-bin exe:$1)
   cp $PROG bin/
 }
