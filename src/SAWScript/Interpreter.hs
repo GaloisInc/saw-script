@@ -131,7 +131,7 @@ bindPatternLocal pat ms v env =
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   Just t -> error ("bindPatternLocal: expected tuple type " ++ show t)
         _ -> error "bindPatternLocal: expected tuple value"
@@ -148,7 +148,7 @@ bindPatternEnv pat ms v env =
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
         _ -> error "bindPatternEnv: expected tuple value"
@@ -211,9 +211,10 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
                               , CEnv.inpCol  = col + 2 -- for dropped }}
                               }
   where
-  (file,ln,col) =
-    case locatedPos l of
+  (file, ln, col) = extract $ locatedPos l
+  extract pos = case pos of
       SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
@@ -299,10 +300,16 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
         SS.PVar _pos x t -> (x, t)
         SS.PTuple pos _pats -> (it pos, Nothing)
   ctx <- getMonadContext
-  let tyctx = SS.tContext ctx
+  -- XXX SS.PosREPL probably is not what we want
+  -- but the position we want for the block type isn't the position of
+  -- the pattern (perhaps we want the position of the "do" that makes
+  -- this a block context? but there isn't necessarily one in the
+  -- repl)
+  let pos = SS.PosREPL
+  let tyctx = SS.tContext pos ctx
   let expr' = case mt of
                 Nothing -> expr
-                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock tyctx t)
+                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock pos tyctx t)
   let decl = SS.Decl (SS.maxSpan' pat expr') pat Nothing expr'
   rw <- liftTopLevel getMergedEnv
   let opts = rwPPOpts rw
@@ -317,7 +324,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
     case schema of
       SS.Forall [] t ->
         case t of
-          SS.TyCon SS.BlockCon [c, t'] | SS.isContext ctx c -> do
+          SS.TyCon _ SS.BlockCon [c, t'] | SS.isContext ctx c -> do
             result <- actionFromValue val
             return (result, t')
           _ -> return (val, t)
@@ -335,7 +342,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
 
   -- Print function type if result was a function
   case ty of
-    SS.TyCon SS.FunCon _ ->
+    SS.TyCon _ SS.FunCon _ ->
       liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
     _ -> return ()
 
