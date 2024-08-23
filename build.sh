@@ -6,7 +6,7 @@ set -e
 git submodule update --init
 
 install() {
-  PROG=$(cabal list-bin exe:$1)
+  PROG=$(cabal list-bin -v0 exe:$1)
   cp $PROG bin/
 }
 
