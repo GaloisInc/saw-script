@@ -18,6 +18,7 @@ library
     base >= 4.9,
     bv-sized >= 1.0.0,
     containers,
+    indexed-traversable,
     lens,
     mtl,
     saw-core,

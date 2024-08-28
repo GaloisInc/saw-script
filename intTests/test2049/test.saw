@@ -1,0 +1,60 @@
+// Test printing a counterexample that contains an array.
+
+enable_experimental;
+import "Test.cry";
+
+// make some ghost state
+casper <- declare_ghost_state "casper";
+
+// write a (correct) spec for assign; it updates the table with k := v
+let assign_spec = do {
+   // initial state
+   table <- llvm_fresh_cryptol_var "assign::table" {| Table |};
+
+   // get args
+   k <- llvm_fresh_var "k" (llvm_int 8);
+   v <- llvm_fresh_var "v" (llvm_int 8);
+
+   // updated state
+   let table' = {{ arrayUpdate table k v }};
+
+   // run the function
+   llvm_ghost_value casper table;
+   llvm_execute_func [crucible_term k, crucible_term v];
+   llvm_ghost_value casper table';
+};
+
+// write a (wrong) spec for zero; it sets an entry of the table to zero
+let zero_spec = do {
+   // make an initial state
+   table <- llvm_fresh_cryptol_var "zero::table" {| Table |};
+
+   // make an arg
+   k <- llvm_fresh_var "zero::k" (llvm_int 8);
+
+
+   // Restrict the args and initial state so the output is more
+   // deterministic. (There are still two possible counterexamples
+   // and we can't distinguish them without being able to assert
+   // equality of arrays, which Cryptol rejects.) (And actually
+   // there's infinitely many more but it's reasonable to assume
+   // the solver will return a minimal array model.)
+   llvm_assert {{ k == 1 }};
+   llvm_assert {{ arrayLookup table 0 == 0 }};
+   llvm_assert {{ arrayLookup table 1 == 1 }};
+
+   // use a wrong final state
+   let table' = table;
+
+   // run the function
+   llvm_ghost_value casper table;
+   llvm_execute_func [crucible_term k];
+   llvm_ghost_value casper table';
+};
+
+mod <- llvm_load_module "test.bc";
+
+// (we could verify assign, but it's giving me noise about the static
+// allocation and that's not the point here)
+assign <- llvm_unsafe_assume_spec mod "assign" assign_spec;
+llvm_verify mod "zero" [assign] false zero_spec w4;

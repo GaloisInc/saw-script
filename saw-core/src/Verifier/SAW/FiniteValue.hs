@@ -27,9 +27,11 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
+import Data.Foldable.WithIndex (ifoldrM)
+
 import Prettyprinter hiding (Doc)
 
-import Data.Aeson ( FromJSON(..), ToJSON(..) )
+import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..) )
 import qualified Data.Aeson as JSON
 
 import qualified Verifier.SAW.Recognizer as R
@@ -66,22 +68,53 @@ data FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Ord, Show, Generic)
 
 -- | Values inhabiting those first-order types.
 -- NB: The JSON encoding of this type, used for saw-script solver result caching,
 -- assumes constructor names and argument orders will not change (though the
 -- order and number of constructors may change) - see 'firstOrderJSONOptions'
+--
+-- The type argument of FOVArray is the key type; the value type is
+-- derivable from the default value, which is the second argument. The third
+-- argument is an assignment for all the entries that have non-default values.
 data FirstOrderValue
   = FOVBit Bool
   | FOVInt Integer
   | FOVIntMod Natural Integer
   | FOVWord Natural Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
   | FOVVec FirstOrderType [FirstOrderValue]
-  | FOVArray FirstOrderType FirstOrderType
+  | FOVArray FirstOrderType FirstOrderValue (Map FirstOrderValue FirstOrderValue)
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
-  deriving (Eq, Generic)
+  deriving (Eq, Ord, Generic)
+
+--
+-- Note [FOVArray]
+-- ~~~~~~~~~~~~~~~
+--
+-- We only handle arrays that are:
+--    - unidimensional
+--    - made up of explicit concrete values
+--
+-- We could handle multidimensional arrays easily enough (the key type
+-- and assignment keys just need to become lists) but for the moment
+-- there's no use case.
+--
+-- The What4 interface can sometimes return an array that isn't made
+-- up of explicit concrete values but is instead represented as a
+-- function you can call to get values out for given keys. It is not
+-- clear how we'd use this, since the primary thing we do with array
+-- values that come back from the solver is print them as part of
+-- models and without a way to know what keys are present a function
+-- that just extracts values is fairly useless. For the moment, if one
+-- of these pops up, it fails during conversion to FOVArray.
+-- 
+-- Furthermore, restrictions in What4 mean that array values coming
+-- back from the solver via that interface are indexed only by
+-- integers or bitvectors. At this layer, though, we can support any
+-- FirstOrderValue.
+--
 
 toFirstOrderType :: FiniteType -> FirstOrderType
 toFirstOrderType ft =
@@ -121,11 +154,16 @@ instance Show FirstOrderValue where
       FOVIntMod _ i -> shows i
       FOVWord _ x -> shows x
       FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
-      FOVArray{}  -> shows $ firstOrderTypeOf fv
+      FOVArray _kty d vs ->
+        let vs' = map showEntry $ Map.toAscList vs
+            d' = showEntry ("<default>", d)
+        in
+        showString "[" . commaSep (vs' ++ [d']) . showString "]"
       FOVTuple vs -> showString "(" . commaSep (map shows vs) . showString ")"
       FOVRec vm   -> showString "{" . commaSep (map showField (Map.assocs vm)) . showString "}"
     where
       commaSep ss = foldr (.) id (intersperse (showString ",") ss)
+      showEntry (k, v) = shows k . showString " := " . shows v
       showField (field, v) = showString (Text.unpack field) . showString " = " . shows v
 
 ppFiniteValue :: PPOpts -> FiniteValue -> SawDoc
@@ -142,8 +180,14 @@ ppFirstOrderValue opts = loop
    FOVIntMod _ i -> pretty i
    FOVWord _w i  -> ppNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
-   FOVArray{}    -> viaShow $ firstOrderTypeOf fv
-   FOVTuple xs   -> parens (sep (punctuate comma (map loop xs)))
+   FOVArray _kty d vs ->
+      let ppEntry' k' v = k' <+> pretty ":=" <+> loop v
+          ppEntry (k, v) = ppEntry' (loop k) v
+          d' = ppEntry' (pretty "<default>") d
+          vs' = map ppEntry $ Map.toAscList vs
+      in
+      brackets (nest 4 (sep (punctuate comma (vs' ++ [d']))))
+   FOVTuple xs   -> parens (nest 4 (sep (punctuate comma (map loop xs))))
    FOVRec xs     -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
       where ppField (f,x) = pretty f <+> pretty '=' <+> loop x
 
@@ -163,6 +207,7 @@ instance FromJSON FirstOrderType where
   parseJSON = JSON.genericParseJSON firstOrderJSONOptions
 instance FromJSON FirstOrderValue where
   parseJSON = JSON.genericParseJSON firstOrderJSONOptions
+instance FromJSONKey FirstOrderValue
 
 instance ToJSON FirstOrderType where
   toJSON = JSON.genericToJSON firstOrderJSONOptions
@@ -170,6 +215,7 @@ instance ToJSON FirstOrderType where
 instance ToJSON FirstOrderValue where
   toJSON = JSON.genericToJSON firstOrderJSONOptions
   toEncoding = JSON.genericToEncoding firstOrderJSONOptions
+instance ToJSONKey FirstOrderValue
 
 
 -- | Smart constructor
@@ -217,11 +263,7 @@ firstOrderTypeOf fv =
     FOVIntMod n _ -> FOTIntMod n
     FOVWord n _ -> FOTVec n FOTBit
     FOVVec t vs -> FOTVec (fromIntegral (length vs)) t
-    -- Note: FOVArray contains type information, but not an actual Array value,
-    -- because it is not possible to obtain Array values from SMT solvers. This
-    -- is needed to display a counterexample that includes variables of Array
-    -- type.
-    FOVArray t1 t2 -> FOTArray t1 t2
+    FOVArray tk d _vs -> FOTArray tk (firstOrderTypeOf d)
     FOVTuple vs -> FOTTuple (map firstOrderTypeOf vs)
     FOVRec vm   -> FOTRec (fmap firstOrderTypeOf vm)
 
@@ -336,9 +378,19 @@ scFirstOrderValue sc fv =
     FOVVec t vs -> do t' <- scFirstOrderType sc t
                       vs' <- traverse (scFirstOrderValue sc) vs
                       scVector sc t' vs'
-    FOVArray t1 t2 -> do t1' <- scFirstOrderType sc t1
-                         t2' <- scFirstOrderType sc t2
-                         scArrayType sc t1' t2'
+    FOVArray tk d vs -> do
+        -- first get the key and value types
+        tk' <- scFirstOrderType sc tk
+        tv' <- scFirstOrderType sc $ firstOrderTypeOf d
+        -- convert the default value and make an array
+        d' <- scFirstOrderValue sc d
+        arr0 <- scArrayConstant sc tk' tv' d'
+        -- now add each update to the array (monadic fold)
+        let visit k v arr = do
+              k' <- scFirstOrderValue sc k
+              v' <- scFirstOrderValue sc v
+              scArrayUpdate sc tk' tv' arr k' v'
+        ifoldrM visit arr0 vs
     FOVTuple vs -> scTuple sc =<< traverse (scFirstOrderValue sc) vs
     FOVRec vm   -> scRecord sc =<< traverse (scFirstOrderValue sc) vm
 
