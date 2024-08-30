@@ -1,6 +1,6 @@
 # Revision history for saw-remote-api
 
-## next -- TBA
+## 1.2.0 -- 2024-08-30
 
 * Add `"str slice"` and `"str slice range"` `setup value`s, which are used to
   represent MIR `str` slice references. Attempting to use these in LLVM or JVM
