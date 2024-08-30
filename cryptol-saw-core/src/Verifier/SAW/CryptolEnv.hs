@@ -671,6 +671,7 @@ parseDecls sc env input = do
     let rmodule = P.Module { P.mName = P.Located P.emptyRange interactiveName
                            , P.mDef  = P.NormalModule rdecls
                            , P.mInScope = mempty
+                           , P.mDocTop = Nothing
                            }
 
     -- Infer types
