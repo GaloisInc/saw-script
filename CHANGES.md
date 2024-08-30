@@ -1,4 +1,4 @@
-# next -- TBA
+# Version 1.2 -- 2024-08-30
 
 ## New Features
 
@@ -6,10 +6,15 @@
   allow taking `&str` slices. For more information, see the documentation in the
   [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#string-slices).
 
+* Add `mir_mux_values` command for muxing two MIR values.
+
+* Add support for GHC 9.8.
+
 ## Bug fixes
 
-* The locations printed with type errors (in particular) and other diagnostics
-  now have a much stronger connection with reality.
+* Fix bug that caused MIR to incorrectly reject overrides with multiple const slice arguments
+
+* Error messages have been improved such that the locations printed with type errors and other diagnostics now have a much stronger connection with reality.
 
 # Version 1.1 -- 2024-02-05
 
