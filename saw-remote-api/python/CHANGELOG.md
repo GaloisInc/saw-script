@@ -1,6 +1,6 @@
 # Revision history for saw-client
 
-## next -- TBA
+## 1.2.0 -- 2024-08-30
 
 * Add `str_slice()` and `str_slice_range()` functions for constructing MIR `str`
   slice references. Using these functions with LLVM or JVM verification will
