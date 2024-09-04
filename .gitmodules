@@ -49,3 +49,6 @@
 [submodule "deps/lmdb"]
 	path = deps/lmdb
 	url = https://github.com/GaloisInc/lmdb.git
+[submodule "deps/mir-json"]
+	path = deps/mir-json
+	url = https://github.com/GaloisInc/mir-json.git
