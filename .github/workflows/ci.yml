@@ -187,11 +187,20 @@ jobs:
             prover_tests
           dest: dist-tests
 
+      # In the next 2 steps, we upload to different names depending on whether
+      # the binaries were compiled using HPC or not. This is done to ensure that
+      # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
       - uses: actions/upload-artifact@v4
-        if: "matrix.ghc == '9.4.8'"
+        if: matrix.ghc == '9.4.8' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.ghc == '9.4.8' && matrix.hpc == true
+        with:
+          path: dist-tests
+          name: dist-tests-${{ matrix.os }}-hpc
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -556,7 +565,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: dist-tests-${{ matrix.os }}
+          name: dist-tests-${{ matrix.os }}-hpc
           path: dist-tests
 
       - uses: actions/download-artifact@v4
