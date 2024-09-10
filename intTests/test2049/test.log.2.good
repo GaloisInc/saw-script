@@ -1,0 +1,23 @@
+ Loading file "test.saw"
+ Assume override assign
+ Verifying zero ...
+ Simulating zero ...
+ Registering overrides for `assign`
+   variant `Symbol "assign"`
+ Matching 1 overrides of  assign ...
+ Branching on 1 override variants of assign ...
+ Applied override! assign
+ Checking proof obligations zero ...
+ Subgoal failed: zero test.saw:60:1: error: in ghost_value
+Literal equality postcondition
+
+ SolverStats {solverStatsSolvers = fromList ["W4 ->z3"], solverStatsGoalSize = 334}
+ ----------Counterexample----------
+   zero::table: [0 := 0, <default> := 1]
+   zero::k: 1
+ ----------------------------------
+ Stack trace:
+"llvm_verify" (test.saw:60:1-60:12)
+Proof failed.
+
+FAILED

@@ -1,3 +1,10 @@
+# next -- TBA
+
+## Bug fixes
+
+* Counterexamples including SMT arrays are now printed with the array
+  contents instead of placeholder text.
+
 # Version 1.2 -- 2024-08-30
 
 ## New Features

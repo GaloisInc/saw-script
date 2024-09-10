@@ -29,6 +29,8 @@ module Verifier.SAW.Simulator.What4.FirstOrder
   ) where
 
 import qualified Data.BitVector.Sized as BV
+import qualified Data.Map as Map
+import Data.Foldable.WithIndex (ifoldlM)
 import Data.Parameterized.TraversableFC (FoldableFC(..))
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context hiding (replicate)
@@ -38,6 +40,7 @@ import Verifier.SAW.Simulator.What4.PosNat
 import Verifier.SAW.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
 
 import What4.BaseTypes
+import What4.IndexLit
 import What4.Expr.GroundEval
 
 ---------------------------------------------------------------------
@@ -111,12 +114,28 @@ groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
 groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"
 groundToFOV (BaseFloatRepr _)       _ = Left "Floating point is not FOV"
-groundToFOV (BaseArrayRepr (Empty :> ty) b) _
-  | Right fot1 <- typeReprToFOT ty
-  , Right fot2 <- typeReprToFOT b
-  = pure $ FOVArray fot1 fot2
-groundToFOV (BaseArrayRepr _idx _b) _ = Left "Unsupported FOV Array"
+groundToFOV (BaseArrayRepr _ _) (ArrayMapping _) =
+    -- We don't have a way to represent ArrayMapping in FirstOrderValue
+    -- (see note in FiniteValue.hs where FirstOrderValue's defined)
+    Left "Unsupported FOV Array (values only available by lookup)"
+groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayConcrete dfl values) = do
+    ty_idx' <- typeReprToFOT ty_idx
+    dfl' <- groundToFOV ty_val dfl
+    let convert idx values' v = do
+          let idx' = indexToFOV idx
+          v' <- groundToFOV ty_val v
+          return $ Map.insert idx' v' values'
+    values' <- ifoldlM convert Map.empty values
+    pure $ FOVArray ty_idx' dfl' values'
+groundToFOV (BaseArrayRepr _ _) _ =
+    Left "Unsupported FOV array (unexpected key type)"
 groundToFOV (BaseStructRepr ctx) tup  = FOVTuple <$> tupleToList ctx tup
+
+indexToFOV :: Assignment IndexLit (EmptyCtx ::> ty) -> FirstOrderValue
+indexToFOV (Empty :> IntIndexLit k) =
+    FOVInt k
+indexToFOV (Empty :> BVIndexLit w k) =
+    FOVWord (natValue w) (BV.asUnsigned k)
 
 
 tupleToList :: Assignment BaseTypeRepr ctx ->
