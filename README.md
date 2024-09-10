@@ -88,6 +88,26 @@ will be possible for all language constructs. There are various
 instructions that are not supported during verification. However,
 any failure during `llvm_load_module` should be considered a bug.
 
+## Notes on Rust
+
+SAW has experimental support for analyzing Rust programs. To do so, one must
+compile Rust code using [`mir-json`](https://github.com/GaloisInc/mir-json), a
+tool which compiles Rust code to a machine-readable, JSON-based format.
+Note that:
+
+* Each version of SAW understands the JSON output of a particular version of
+  `mir-json`, so make sure that you build the version `mir-json` that is
+  included in the `mir-json` submodule (located in `deps/mir-json`).
+* Moreover, SAW requires slightly modified versions of the Rust standard
+  libraries that are suited to verification purposes. SAW consults the value
+  of the `SAW_RUST_LIBRARY_PATH` environment variable to determine where to
+  look for these modified standard libraries.
+
+For complete instructions on how to install `mir-json`, the modified Rust
+standard libraries, and how to defined the `SAW_RUST_LIBRARY_PATH` environment
+variable, follow the instructions
+[here](https://github.com/GaloisInc/mir-json#installation-instructions).
+
 ## Notes on Windows
 
 If you have trouble loading the SAW REPL on Windows, try invoking it

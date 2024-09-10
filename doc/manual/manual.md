@@ -1812,7 +1812,54 @@ In order to verify Rust code, SAW analyzes Rust's MIR (mid-level intermediate
 representation) language. In particular, SAW analyzes a particular form of MIR
 that the [`mir-json`](https://github.com/GaloisInc/mir-json) tool produces. You
 will need to intall `mir-json` and run it on Rust code in order to produce MIR
-JSON files that SAW can load (see [this section](#loading-mir)).
+JSON files that SAW can load (see [this section](#loading-mir)). You will also
+need to use `mir-json` to build custom versions of the Rust standard libraries
+that are more suited to verification purposes.
+
+If you are working from a checkout of the `saw-script` repo, you can install
+the `mir-json` tool and the custom Rust standard libraries by performing the
+following steps:
+
+1. Clone the [`crucible`](https://github.com/GaloisInc/crucible) and `mir-json`
+   submodules like so:
+
+   ```
+   $ git submodule update deps/crucible deps/mir-json
+   ```
+
+2. Navigate to the `mir-json` submodule:
+
+   ```
+   $ cd deps/mir-json
+   ```
+
+3. Follow the instructions laid out in the [`mir-json` installation
+   instructions](https://github.com/GaloisInc/mir-json#installation-instructions)
+   in order to install `mir-json`.
+
+4. Navigate to the
+   [`crux-mir`](https://github.com/GaloisInc/crucible/tree/master/crux-mir)
+   subdirectory of the `crucible` submodule:
+
+   ```
+   $ cd ../crucible/crux-mir/
+   ```
+
+5. Run the `translate_libs.sh` script:
+
+   ```
+   $ ./translate_libs.sh
+   ```
+
+   This will compile the custom versions of the Rust standard libraries using
+   `mir-json`, placing the results under the `rlibs` subdirectory.
+
+6. Finally, define a `SAW_RUST_LIBRARY_PATH` environment variable that points
+   to the newly created `rlibs` subdirectory:
+
+   ```
+   $ export SAW_RUST_LIBRARY_PATH=<...>/crucible/crux-mir/rlibs
+   ```
 
 For `cargo`-based projects, `mir-json` provides a `cargo` subcommand called
 `cargo saw-build` that builds a JSON file suitable for use with SAW. `cargo
@@ -1820,7 +1867,7 @@ saw-build` integrates directly with `cargo`, so you can pass flags to it like
 any other `cargo` subcommand. For example:
 
 ```
-$ export SAW_RUST_LIBRARY_PATH=<...>
+# Make sure that SAW_RUST_LIBRARY_PATH is defined, as described above
 $ cargo saw-build <other cargo flags>
 <snip>
 linking 11 mir files into <...>/example-364cf2df365c7055.linked-mir.json
@@ -1840,7 +1887,7 @@ Note that:
 `rustc` accepts. For example:
 
 ```
-$ export SAW_RUST_LIBRARY_PATH=<...>
+# Make sure that SAW_RUST_LIBRARY_PATH is defined, as described above
 $ saw-rustc example.rs <other rustc flags>
 <snip>
 linking 11 mir files into <...>/example.linked-mir.json
