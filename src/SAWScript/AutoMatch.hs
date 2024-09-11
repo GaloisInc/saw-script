@@ -39,7 +39,6 @@ import qualified Cryptol.Parser.AST      as Cryptol
 import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
 import qualified Cryptol.Utils.Ident     as Cryptol (packIdent)
-import SAWScript.Builtins
 import SAWScript.Position
 import SAWScript.Utils
 import SAWScript.TopLevel
@@ -289,7 +288,8 @@ loadDecls (TaggedSourceFile lang path) = do
    where
       loadJavaClassTopLevel cls = do
          javaCodebase <- getJavaCodebase
-         io . lookupClass javaCodebase fixPos . mkClassName . dotsToSlashes $ cls
+         let pos = FileOnlyPos path
+         io . lookupClass javaCodebase pos . mkClassName . dotsToSlashes $ cls
 
 -- A description of the result of matching: some generated SAWScript, and some flags determining what to do now
 data MatchResult =

@@ -59,6 +59,10 @@ data Inference
 -- XXX: some logic uses Range with zero line/column numbers for end-of-file.
 -- This should be replaced with an explicit end-of-file position.
 --
+-- FileOnlyPos is for both whole-file things (such as symbol tables in
+-- executable images) and cases where we just don't have any more
+-- detailed info.
+--
 -- Internally generated objects use PosInternal with descriptive text.
 -- (FUTURE: eliminate PosInternal in favor of explicit constructors
 -- for the cases that currently generate PosInternal, so we can keep
@@ -77,6 +81,7 @@ data Inference
 data Pos = Range !FilePath -- file
                  !Int !Int -- start line, col
                  !Int !Int -- end line, col
+         | FileOnlyPos !FilePath
          | Unknown
          | PosInternal String
          | PosREPL
@@ -119,13 +124,26 @@ leadingPos pos = case pos of
 -- upstream of that.
 --
 -- If we mix an inferred position and a real one, just use the real one.
+--
+-- Similar considerations arise from pasting FileOnlyPos. It should
+-- also only appear downstream of the saw-script parser.
 spanPos :: Pos -> Pos -> Pos
+-- prefer internal and REPL to anything else
 spanPos (PosInternal str) _ = PosInternal str
 spanPos PosREPL _ = PosREPL
 spanPos _ (PosInternal str) = PosInternal str
 spanPos _ PosREPL = PosREPL
+-- prefer anything else to unknown
 spanPos Unknown p = p
 spanPos p Unknown = p
+-- if it's the same file, keep it; otherwise give up
+spanPos (FileOnlyPos f) (FileOnlyPos f') | f == f' = FileOnlyPos f
+spanPos (FileOnlyPos _) (FileOnlyPos _) = Unknown
+-- these cases should really not arise
+spanPos (FileOnlyPos _) p = p
+spanPos p (FileOnlyPos _) = p
+-- for two inferred positions arbitrarily choose the left one;
+-- otherwise defer to the real position
 spanPos p@(PosInferred _ _) (PosInferred _ _) = p
 spanPos (PosInferred _ _) p = p
 spanPos p (PosInferred _ _) = p
@@ -174,6 +192,9 @@ comparePosQuality p1 p2 = case (p1, p2) of
    (PosInternal _, PosInternal _) -> EQ
    (PosInternal _, _) -> LT
    (_, PosInternal _) -> GT
+   (FileOnlyPos _, FileOnlyPos _) -> EQ
+   (FileOnlyPos _, _) -> LT
+   (_, FileOnlyPos _) -> GT
    (PosInferred inf1 p1', PosInferred inf2 p2') ->
      case compareInfQuality inf1 inf2 of
        EQ -> comparePosQuality p1' p2'
@@ -202,6 +223,7 @@ fmtPoss ps m = "[" ++ intercalate ",\n " (map show ps) ++ "]:\n" ++ m'
 
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Range f sl sc el ec) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec)
+posRelativeToCurrentDirectory (FileOnlyPos f)       = makeRelativeToCurrentDirectory f >>= \f' -> return (FileOnlyPos f')
 posRelativeToCurrentDirectory Unknown               = return Unknown
 posRelativeToCurrentDirectory (PosInternal s)       = return $ PosInternal s
 posRelativeToCurrentDirectory PosREPL               = return PosREPL
@@ -210,17 +232,20 @@ posRelativeToCurrentDirectory (PosInferred inf p) =
 
 posRelativeTo :: FilePath -> Pos -> Pos
 posRelativeTo d (Range f sl sc el ec) = Range (makeRelative d f) sl sc el ec
+posRelativeTo d (FileOnlyPos f)       = FileOnlyPos (makeRelative d f)
 posRelativeTo _ Unknown               = Unknown
 posRelativeTo _ (PosInternal s)       = PosInternal s
 posRelativeTo _ PosREPL               = PosREPL
 posRelativeTo d (PosInferred inf p)   = PosInferred inf $ posRelativeTo d p
 
 routePathThroughPos :: Pos -> FilePath -> FilePath
-routePathThroughPos (Range f _ _ _ _) fp
+routePathThroughPos pos fp
   | isAbsolute fp = fp
-  | True          = takeDirectory f </> fp
-routePathThroughPos (PosInferred _inf pos') fp = routePathThroughPos pos' fp
-routePathThroughPos _ fp = fp
+  | True = case pos of
+        Range f _ _ _ _        -> takeDirectory f </> fp
+        FileOnlyPos f          -> takeDirectory f </> fp
+        PosInferred _inf pos'  -> routePathThroughPos pos' fp
+        _ -> fp
 
 -- Show instance for positions.
 --
@@ -241,6 +266,7 @@ instance Show Pos where
   -- show (Pos f l c)           = f ++ ":" ++ show l ++ ":" ++ show c
   show (Range f 0 0 0 0) = f ++ ":end-of-file"
   show (Range f sl sc el ec) = f ++ ":" ++ show sl ++ ":" ++ show sc ++ "-" ++ show el ++ ":" ++ show ec
+  show (FileOnlyPos f)          = f
   show (PosInferred InfFresh p)   = show p ++ ": Fresh type for this term"
   show (PosInferred InfTerm p)    = show p ++ ": Inferred from this term"
   show (PosInferred InfContext p) = show p ++ ": Inferred from this context"
@@ -252,6 +278,7 @@ toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =
   \case
     Unknown -> mkLoc fnm W4.InternalPos
+    FileOnlyPos f -> mkLoc (fnm <> " " <> Text.pack f) W4.InternalPos
     PosREPL -> mkLoc (fnm <> " <REPL>") W4.InternalPos
     PosInternal nm -> mkLoc (fnm <> " " <> Text.pack nm) W4.InternalPos
     PosInferred _ p -> toW4Loc fnm p

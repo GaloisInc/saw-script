@@ -89,8 +89,6 @@ import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.TermModel as TM
 import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
-import SAWScript.Position
-
 -- cryptol-saw-core
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
@@ -1648,9 +1646,6 @@ check_goal =
          do sc <- getSharedContext
             opts <- getTopLevelPPOpts
             io $ checkSequent sc opts (goalSequent g)
-
-fixPos :: Pos
-fixPos = PosInternal "FIXME"
 
 freshSymbolicPrim :: Text -> C.Schema -> TopLevel TypedTerm
 freshSymbolicPrim x schema@(C.Forall [] [] ct) = do
