@@ -231,7 +231,8 @@ exportFirstOrderExpression fv =
     FOVIntMod m i -> return $ IntegerModulo i (toInteger m)
     FOVWord w x -> return $ Num Hex (pack (showHex x "")) (toInteger w)
     FOVVec _t vs -> Sequence <$> mapM exportFirstOrderExpression vs
-    FOVArray{}  -> Left "exportFirstOrderExpression: unsupported type: Array"
+    FOVArray{} -> Left "exportFirstOrderExpression: unsupported type: Array (concrete case)"
+    FOVOpaqueArray{} -> Left "exportFirstOrderExpression: unsupported type: Array (opaque case)"
     FOVTuple vs -> Tuple <$> mapM exportFirstOrderExpression vs
     FOVRec _vm  -> Left "exportFirstOrderExpression: unsupported type: Record"
 

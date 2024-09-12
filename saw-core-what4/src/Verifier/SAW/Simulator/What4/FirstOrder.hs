@@ -114,10 +114,32 @@ groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
 groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"
 groundToFOV (BaseFloatRepr _)       _ = Left "Floating point is not FOV"
-groundToFOV (BaseArrayRepr _ _) (ArrayMapping _) =
-    -- We don't have a way to represent ArrayMapping in FirstOrderValue
-    -- (see note in FiniteValue.hs where FirstOrderValue's defined)
-    Left "Unsupported FOV Array (values only available by lookup)"
+groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayMapping _) = do
+    -- ArrayMapping is an array represented as a function call we can
+    -- use to extract values. We can't do anything useful with this
+    -- because we don't have any clue what key values to look at and
+    -- no good way to figure that out either. So return a placeholder
+    -- value in FirstOrderValue.
+    --
+    -- (The frustrating part is that in many cases the _user_ will
+    -- know what key values to look at, but has no way to tell us.)
+    --
+    -- In principle we could change groundToFOV to return any of an
+    -- error, a FirstOrderValue, or a separate FunctionArrayValue
+    -- type, and use that channel to return the actual function
+    -- handle. (Including the function handle in a FirstOrderValue
+    -- value is problematic as things stand.) However, there's nothing
+    -- to be gained by doing this without a way to figure out what
+    -- key values to look at. And realistically, if we ever _do_
+    -- come up with a way to figure out what key values to look at,
+    -- it should be implemented in What4 so What4 never returns
+    -- ArrayMapping.
+    --
+    -- (See Note [FOVArray] in in saw-core:Verifier.SAW.FiniteValue
+    -- where FirstOrderValue is defined.)
+    ty_idx' <- typeReprToFOT ty_idx
+    ty_val' <- typeReprToFOT ty_val
+    pure $ FOVOpaqueArray ty_idx' ty_val'
 groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayConcrete dfl values) = do
     ty_idx' <- typeReprToFOT ty_idx
     dfl' <- groundToFOV ty_val dfl
