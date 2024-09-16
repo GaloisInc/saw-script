@@ -215,6 +215,7 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
   extract pos = case pos of
       SS.Range f sl sc _ _ -> (f,sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
+      SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
