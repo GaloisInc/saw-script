@@ -650,12 +650,14 @@ io f = (TopLevel_ (liftIO f))
              rethrow (SS.TopLevelException pos (dropEnd 1 . drop 12 $ show e))
       | otherwise = rethrow e
 
-    handleX86Unsupported (X86Unsupported s) =
-      do pos <- getPosition
+    handleX86Unsupported (X86Unsupported path s) =
+      do let pos = SS.FileOnlyPos path
          rethrow (SS.TopLevelException pos ("Unsupported x86 feature: " ++ s))
 
-    handleX86Error (X86Error s) =
-      do pos <- getPosition
+    handleX86Error (X86Error path optfunc s) =
+      do let pos = case optfunc of
+               Nothing -> SS.FileOnlyPos path
+               Just func -> SS.FileAndFunctionPos path func
          rethrow (SS.TopLevelException pos ("Error in x86 code: " ++ s))
 
 
