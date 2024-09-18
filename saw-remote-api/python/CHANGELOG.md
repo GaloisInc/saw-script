@@ -1,5 +1,10 @@
 # Revision history for saw-client
 
+## next -- TBA
+
+* Require building with `argo-client-0.0.13` or later. `argo-client-0.0.13` uses
+  blocking IO, which should reduce CPU load when receiving replies.
+
 ## 1.2.0 -- 2024-08-30
 
 * Add `str_slice()` and `str_slice_range()` functions for constructing MIR `str`
