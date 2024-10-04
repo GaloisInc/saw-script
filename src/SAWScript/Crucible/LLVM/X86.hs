@@ -186,8 +186,15 @@ makeLenses ''X86State
 runX86Sim :: X86State -> X86Sim a -> IO (a, X86State)
 runX86Sim st m = runStateT (unX86Sim m) st
 
-throwX86 :: MonadThrow m => String -> m a
-throwX86 = throw . X86Error
+-- | Throw an X86Error (general failure of the X86 stuff) with the
+--   pathname of the file we choked on.
+throwX86 :: MonadThrow m => FilePath -> String -> m a
+throwX86 path msg = throw $ X86Error path Nothing msg
+
+-- | Throw an X86Error (general failure of the X86 stuff) with the
+--   pathname of the file we choked on and also the affected function name.
+throwX86' :: MonadThrow m => FilePath -> String -> String -> m a
+throwX86' path func msg = throw $ X86Error path (Just func) msg
 
 x86Sym :: Getter X86State Sym
 x86Sym = to (\st -> case _x86Backend st of SomeOnlineBackend bak -> backendGetSym bak)
@@ -197,30 +204,36 @@ defaultStackBaseAlign = 16
 
 integerToAlignment ::
   (MonadIO m, MonadThrow m) =>
+  FilePath ->
+  String ->
   Integer ->
   m C.LLVM.Alignment
-integerToAlignment i
+integerToAlignment path func i
   | Just ba <- C.LLVM.toAlignment (C.LLVM.toBytes i) = pure ba
-  | otherwise = throwX86 $ mconcat ["Invalid alignment specified: ", show i]
+  | otherwise = throwX86' path func $ mconcat ["Invalid alignment specified: ", show i]
 
 setReg ::
   (MonadIO m, MonadThrow m) =>
+  FilePath ->
+  String ->
   Register ->
   C.RegValue Sym (C.LLVM.LLVMPointerType 64) ->
   Regs ->
   m Regs
-setReg reg val regs
+setReg path func reg val regs
   | Just regs' <- Macaw.updateX86Reg reg (C.RV . const val) regs = pure regs'
-  | otherwise = throwX86 $ mconcat ["Invalid register: ", show reg]
+  | otherwise = throwX86' path func $ mconcat ["Invalid register: ", show reg]
 
 getReg ::
   (MonadIO m, MonadThrow m) =>
+  FilePath ->
+  String ->
   Register ->
   Regs ->
   m (C.RegValue Sym (C.LLVM.LLVMPointerType 64))
-getReg reg regs = case Macaw.lookupX86Reg reg regs of
+getReg path func reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
-  Nothing -> throwX86 $ mconcat ["Invalid register: ", show reg]
+  Nothing -> throwX86' path func $ mconcat ["Invalid register: ", show reg]
 
 -- TODO: extend to more than general purpose registers
 stringToReg :: Text -> Maybe (Some Macaw.X86Reg)
@@ -245,14 +258,16 @@ stringToReg s = case s of
 
 cryptolUninterpreted ::
   (MonadIO m, MonadThrow m) =>
+  FilePath ->
+  String ->
   CryptolEnv ->
   String ->
   SharedContext ->
   [Term] ->
   m Term
-cryptolUninterpreted env nm sc xs =
+cryptolUninterpreted path func env nm sc xs =
   case lookupIn nm $ eTermEnv env of
-    Left _err -> throwX86 $ mconcat
+    Left _err -> throwX86' path func $ mconcat
       [ "Failed to lookup Cryptol name \"", nm
       , "\" in Cryptol environment"
       ]
@@ -443,19 +458,19 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
       let cenv = rwCryptol rw
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma0 sfs) $ cryptolUninterpreted cenv "sigma_0"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma1 sfs) $ cryptolUninterpreted cenv "sigma_1"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma0 sfs) $ cryptolUninterpreted cenv "SIGMA_0"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma1 sfs) $ cryptolUninterpreted cenv "SIGMA_1"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaCh sfs) $ cryptolUninterpreted cenv "Ch"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaMaj sfs) $ cryptolUninterpreted cenv "Maj"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEnc sfs) $ cryptolUninterpreted path nm cenv "aesenc"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted path nm cenv "aesenclast"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDec sfs) $ cryptolUninterpreted path nm cenv "aesdec"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted path nm cenv "aesdeclast"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted path nm cenv "aeskeygenassist"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesIMC sfs) $ cryptolUninterpreted path nm cenv "aesimc"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnClMul sfs) $ cryptolUninterpreted path nm cenv "clmul"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma0 sfs) $ cryptolUninterpreted path nm cenv "sigma_0"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma1 sfs) $ cryptolUninterpreted path nm cenv "sigma_1"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma0 sfs) $ cryptolUninterpreted path nm cenv "SIGMA_0"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma1 sfs) $ cryptolUninterpreted path nm cenv "SIGMA_1"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaCh sfs) $ cryptolUninterpreted path nm cenv "Ch"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaMaj sfs) $ cryptolUninterpreted path nm cenv "Maj"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
       (C.SomeCFG cfg, elf, relf, addr, cfgs) <- io $ buildCFG opts halloc preserved path nm
@@ -489,13 +504,13 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
-      emptyState <- io $ initialState bak opts sc cc elf relf methodSpec globsyms maxAddr
-      balign <- integerToAlignment $ rwStackBaseAlign rw
-      (env, preState) <- io . runX86Sim emptyState $ setupMemory globsyms balign
+      emptyState <- io $ initialState bak opts sc cc path elf relf methodSpec globsyms maxAddr
+      balign <- integerToAlignment path nm $ rwStackBaseAlign rw
+      (env, preState) <- io . runX86Sim emptyState $ setupMemory path nm globsyms balign
 
       let
         funcLookup = Macaw.LookupFunctionHandle $ \st _mem regs -> do
-          C.LLVM.LLVMPointer _base off <- getReg Macaw.X86_IP regs
+          C.LLVM.LLVMPointer _base off <- getReg path nm Macaw.X86_IP regs
           case BV.asUnsigned <$> W4.asBV off of
             Nothing -> fail $ mconcat
               [ "Attempted to call a function with non-concrete address "
@@ -602,7 +617,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
                    (loopaddr:_) -> pure loopaddr
                    _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
                case Map.lookup loopaddr cfgs of
-                 Nothing -> throwX86 $ "Unable to discover looping CFG from address " <> show loopaddr
+                 Nothing -> throwX86 path $ "Unable to discover looping CFG from address " <> show loopaddr
                  Just (C.SomeCFG loopcfg) ->
                    do let printFn = printOutLn opts Info
                       f <- liftIO (setupSimpleLoopInvariantFeature sym printFn loopNum
@@ -640,7 +655,7 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
       liftIO $ printOutLn opts Info
         "Examining specification to determine postconditions"
       liftIO $ void $ runX86Sim finalState $
-        assertPost env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
+        assertPost path nm env (preState ^. x86Mem) (preState ^. x86Regs) mdMap
 
       (stats,vcstats) <- checkGoals bak opts nm (methodSpec ^. MS.csLoc) sc tactic mdMap invSubst loopFunEquivConds
 
@@ -923,7 +938,7 @@ buildCFG ::
   Options ->
   C.HandleAllocator ->
   Set (Some Macaw.X86Reg) {- ^ Registers to treat as callee-saved -} ->
-  String {- ^ Path to ELF file -} ->
+  FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
   IO ( C.SomeCFG
        (Macaw.MacawExt Macaw.X86_64)
@@ -942,7 +957,7 @@ buildCFG ::
 buildCFG opts halloc preserved path nm = do
   printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
   elf <- getElf path
-  relf <- getRelevant elf
+  relf <- getRelevant path elf
   (addr :: Macaw.MemSegmentOff 64) <-
     case findSymbols (symMap relf) . encodeUtf8 $ Text.pack nm of
       (addr:_) -> pure addr
@@ -968,7 +983,7 @@ buildCFG opts halloc preserved path nm = do
     posFn finfo
 
   case Map.lookup addr cfgs of
-    Nothing -> throwX86 $ "Unable to discover CFG from address " <> show addr
+    Nothing -> throwX86 path $ "Unable to discover CFG from address " <> show addr
     Just scfg -> pure (scfg, elf, relf, addr, cfgs)
 
 --------------------------------------------------------------------------------
@@ -1043,19 +1058,20 @@ initialState ::
   Options ->
   SharedContext ->
   LLVMCrucibleContext LLVMArch ->
+  FilePath ->
   Elf.ElfHeaderInfo 64 ->
   RelevantElf ->
   MS.CrucibleMethodSpecIR LLVM ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   IO X86State
-initialState bak opts sc cc elf relf ms globs maxAddr = do
+initialState bak opts sc cc path elf relf ms globs maxAddr = do
   let sym = backendGetSym bak
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
   symTab <- case Elf.decodeHeaderSymtab elf of
-    Nothing -> throwX86 "Elf file has no symbol table"
-    Just (Left _err) -> throwX86 "Failed to decode symbol table"
+    Nothing -> throwX86 path "Elf file has no symbol table"
+    Just (Left _err) -> throwX86 path "Failed to decode symbol table"
     Just (Right st) -> pure st
   let
     align = C.LLVM.exponentToAlignment 4
@@ -1092,10 +1108,12 @@ initialState bak opts sc cc elf relf ms globs maxAddr = do
 -- | Given the method spec, build the initial memory, register map, and global map.
 setupMemory ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-setupMemory globsyms balign = do
+setupMemory path func globsyms balign = do
   setupGlobals globsyms
 
   ms <- use x86MethodSpec
@@ -1104,7 +1122,7 @@ setupMemory globsyms balign = do
   -- %rbp value + 1 qword for the return address + 1 qword for each stack
   -- argument)
   let argsStackSize = fromIntegral $ 8 * (length $ Prelude.drop (length argRegs) $ Map.elems $ ms ^. MS.csArgBindings)
-  allocateStack (4096 + 16 + argsStackSize) balign
+  allocateStack path func (4096 + 16 + argsStackSize) balign
 
   let
     tyenv = ms ^. MS.csPreState . MS.csAllocs
@@ -1112,11 +1130,11 @@ setupMemory globsyms balign = do
 
   env <- foldlM assumeAllocation Map.empty . Map.assocs $ tyenv
 
-  mapM_ (assumePointsTo env tyenv nameEnv) $ ms ^. MS.csPreState . MS.csPointsTos
+  mapM_ (assumePointsTo path func env tyenv nameEnv) $ ms ^. MS.csPreState . MS.csPointsTos
 
-  setArgs env tyenv nameEnv . fmap snd . Map.elems $ ms ^. MS.csArgBindings
+  setArgs path func env tyenv nameEnv . fmap snd . Map.elems $ ms ^. MS.csArgBindings
 
-  pushFreshReturnAddress
+  pushFreshReturnAddress path func
 
   pure env
 
@@ -1154,10 +1172,12 @@ setupGlobals globsyms = do
 -- | Allocate memory for the stack.
 allocateStack ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   Integer {- ^ Stack size in bytes -} ->
   C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim ()
-allocateStack szInt balign = do
+allocateStack path func szInt balign = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   mem <- use x86Mem
@@ -1166,25 +1186,26 @@ allocateStack szInt balign = do
   (base, finalMem) <- liftIO $ C.LLVM.doMalloc bak C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
   ptr <- liftIO $ C.LLVM.doPtrAddOffset bak finalMem base sz
   x86Mem .= finalMem
-  finalRegs <- setReg Macaw.RSP ptr regs
+  finalRegs <- setReg path func Macaw.RSP ptr regs
   x86Regs .= finalRegs
 
 -- | Push a fresh pointer as the return address.
 pushFreshReturnAddress ::
   X86Constraints =>
+  FilePath -> String ->
   X86Sim ()
-pushFreshReturnAddress = do
+pushFreshReturnAddress path func = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
   sn <- case W4.userSymbol "stack" of
-    Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
+    Left err -> throwX86 path $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  rsp <- getReg Macaw.RSP regs
+  rsp <- getReg path func Macaw.RSP regs
 
   -- x86-64 System V ABI specifies that: "In other words, the stack needs to be
   -- 16 (32 or 64) byte aligned immediately before the call instruction is
@@ -1192,7 +1213,7 @@ pushFreshReturnAddress = do
   -- i.e. immediately after the return address has been pushed, %rsp points to
   -- the return address, and the value of (%rsp + 8) is a multiple of 16 (32 or
   -- 64)."
-  stackAlign <- integerToAlignment defaultStackBaseAlign
+  stackAlign <- integerToAlignment path func defaultStackBaseAlign
   is_aligned <- liftIO $ C.LLVM.isAligned sym (knownNat @64) rsp stackAlign
   when (W4.asConstantPred is_aligned /= Just True) $
     panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["%rsp is not 16 byte aligned before the call instruction is executed."]
@@ -1203,7 +1224,7 @@ pushFreshReturnAddress = do
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
     (C.LLVM.bitvectorType 8) writeAlign fresh
   x86Mem .= finalMem
-  finalRegs <- setReg Macaw.RSP ptr regs
+  finalRegs <- setReg path func Macaw.RSP ptr regs
   x86Regs .= finalRegs
 
 -- | Process an llvm_alloc statement, allocating the requested memory and
@@ -1229,20 +1250,22 @@ assumeAllocation env _ = pure env
 -- | Process an llvm_points_to statement, writing some SetupValue to a pointer.
 assumePointsTo ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
-assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
+assumePointsTo path func env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
-  ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
+  ptr <- resolvePtrSetupValue path func env tyenv nameEnv tptr
   cond' <- liftIO $ mapM (resolveSAWPred cc . ttTerm) cond
   mem' <- liftIO $ LO.storePointsToValue opts cc env tyenv nameEnv mem cond' ptr tptval Nothing
   x86Mem .= mem'
-assumePointsTo env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldName tptval) = do
+assumePointsTo _path _func env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldName tptval) = do
   opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
@@ -1252,12 +1275,14 @@ assumePointsTo env tyenv nameEnv (LLVMPointsToBitfield _ tptr fieldName tptval) 
 
 resolvePtrSetupValue ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr ->
   Map MS.AllocIndex LLVMAllocSpec ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   MS.SetupValue LLVM ->
   X86Sim Ptr
-resolvePtrSetupValue env tyenv nameEnv tptr = do
+resolvePtrSetupValue path func env tyenv nameEnv tptr = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   cc <- use x86CrucibleContext
@@ -1269,7 +1294,7 @@ resolvePtrSetupValue env tyenv nameEnv tptr = do
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       $ Elf.symtabEntries symTab of
-      Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
+      Nothing -> throwX86' path func $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset bak mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
@@ -1302,7 +1327,7 @@ resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName = do
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       $ Elf.symtabEntries symTab of
-      Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
+      Nothing -> throwX86 path $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
@@ -1316,12 +1341,14 @@ resolvePtrSetupValueBitfield env tyenv nameEnv tptr fieldName = do
 -- x86_64 register from the calling convention.
 setArgs ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   [MS.SetupValue LLVM] {- ^ Arguments passed to llvm_execute_func -} ->
   X86Sim ()
-setArgs env tyenv nameEnv args = do
+setArgs path func env tyenv nameEnv args = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   cc <- use x86CrucibleContext
@@ -1332,11 +1359,11 @@ setArgs env tyenv nameEnv args = do
         ty | C.LLVM.isPointerMemType ty -> do
           val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
             =<< resolveSetupVal cc mem env tyenv nameEnv sval
-          setReg reg val rs
+          setReg path func reg val rs
         C.LLVM.IntType 64 -> do
           val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
             =<< resolveSetupVal cc mem env tyenv nameEnv sval
-          setReg reg val rs
+          setReg path func reg val rs
         C.LLVM.IntType _ -> do
           C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
           case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
@@ -1345,7 +1372,7 @@ setArgs env tyenv nameEnv args = do
               off' <- W4.bvZext sym (knownNat @64) off
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
                 $ C.LLVM.LLVMValInt base off'
-              setReg reg val rs
+              setReg path func reg val rs
         _ -> fail "Argument does not fit into a single general-purpose register"
   regs <- use x86Regs
   newRegs <- liftIO . foldlM setRegSetupValue regs $ zip argRegs args
@@ -1362,9 +1389,9 @@ setArgs env tyenv nameEnv args = do
       _ -> fail "Stack argument is not a 64 bit integer."
 
     regs' <- use x86Regs
-    rsp <- getReg Macaw.RSP regs'
+    rsp <- getReg path func Macaw.RSP regs'
     rsp' <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
-    newRegs' <- setReg Macaw.RSP rsp' regs'
+    newRegs' <- setReg path func Macaw.RSP rsp' regs'
     x86Regs .= newRegs'
 
     val <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
@@ -1384,12 +1411,14 @@ argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr ->
   Mem {- ^ The state of memory before simulation -} ->
   Regs {- ^ The state of the registers before simulation -} ->
   IORef MetadataMap {- ^ metadata map -} ->
   X86Sim ()
-assertPost env premem preregs mdMap = do
+assertPost path func env premem preregs mdMap = do
   SomeOnlineBackend bak <- use x86Backend
   sym <- use x86Sym
   opts <- use x86Options
@@ -1402,23 +1431,23 @@ assertPost env premem preregs mdMap = do
     nameEnv = MS.csTypeNames ms
     globals = cc ^. ccLLVMGlobals
 
-  prersp <- getReg Macaw.RSP preregs
+  prersp <- getReg path func Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad bak premem prersp (C.LLVM.bitvectorType 8)
     (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
-  actualIP <- getReg Macaw.X86_IP postregs
+  actualIP <- getReg path func Macaw.X86_IP postregs
   correctRetAddr <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth actualIP expectedIP
   liftIO . C.addAssertion bak . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
 
   stack <- liftIO $ C.LLVM.doPtrAddOffset bak premem prersp =<< W4.bvLit sym knownNat (BV.mkBV knownNat 8)
-  postrsp <- getReg Macaw.RSP postregs
+  postrsp <- getReg path func Macaw.RSP postregs
   correctStack <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
   liftIO $ C.addAssertion bak . C.LabeledPred correctStack . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Stack not preserved" ""
 
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
     (Just expectedRet, Just retTy) -> do
-      postRAX <- C.LLVM.ptrToPtrVal <$> getReg Macaw.RAX postregs
+      postRAX <- C.LLVM.ptrToPtrVal <$> getReg path func Macaw.RAX postregs
       case (postRAX, C.LLVM.memTypeBitwidth retTy) of
         (C.LLVM.LLVMValInt base off, Just retTyBits) -> do
           let
@@ -1431,7 +1460,7 @@ assertPost env premem preregs mdMap = do
                       offTrunc <- liftIO $ W4.bvTrunc sym rsz off
                       pure $ C.LLVM.LLVMValInt base offTrunc
                     _ -> pure $ C.LLVM.LLVMValInt base off
-                _ -> throwX86 "Width of return type is zero bits"
+                _ -> throwX86' path func "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
           let md = MS.ConditionMetadata
                    { MS.conditionLoc = ms ^. MS.csLoc
@@ -1440,12 +1469,12 @@ assertPost env premem preregs mdMap = do
                    , MS.conditionContext = ""
                    }
           pure [LO.matchArg opts sc cc ms MS.PostState md postRAXTrunc retTy expectedRet]
-        _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
+        _ -> throwX86' path func $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo env tyenv nameEnv
+    $ assertPointsTo path func env tyenv nameEnv
 
   let setupConditionMatchesPost = fmap -- assert postconditions
         (LO.learnSetupCondition opts sc cc ms MS.PostState)
@@ -1470,7 +1499,7 @@ assertPost env premem preregs mdMap = do
     , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
-    Left err -> throwX86 $ show err
+    Left err -> throwX86' path func $ show err
     Right (_, st) -> pure st
   liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) ->
        do (ann,p') <- W4.annotateTerm sym p
@@ -1480,19 +1509,21 @@ assertPost env premem preregs mdMap = do
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
   X86Constraints =>
+  FilePath -> {- ^ File we're in -}
+  String -> {- ^ Function we're in -}
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do
+assertPointsTo path func env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
   let loc = MS.conditionLoc md
 
-  ptr <- resolvePtrSetupValue env tyenv nameEnv tptr
+  ptr <- resolvePtrSetupValue path func env tyenv nameEnv tptr
   pure $ do
     err <- LO.matchPointsToValue opts sc cc ms MS.PostState md cond ptr tptval
     case err of
@@ -1500,7 +1531,7 @@ assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsTo md cond tptr tptval) = d
         doc <- LO.ppPointsToAsLLVMVal opts cc sc ms pointsTo
         O.failure loc (O.BadPointerLoad (Right doc) msg)
       Nothing -> pure ()
-assertPointsTo env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
+assertPointsTo _path _func env tyenv nameEnv pointsTo@(LLVMPointsToBitfield md tptr fieldName tptval) = do
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
