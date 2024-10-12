@@ -15,7 +15,7 @@ panic = Panic.panic SAWCoreWhat4
 
 instance PanicComponent SAWCoreWhat4 where
   panicComponentName _ = "SAWCoreWhat4"
-  panicComponentIssues _ = "https://github.com/GaloisInc/saw-core-what4/issues"
+  panicComponentIssues _ = "https://github.com/GaloisInc/saw-script/issues"
 
   {-# Noinline panicComponentRevision #-}
   panicComponentRevision = $useGitRevision
