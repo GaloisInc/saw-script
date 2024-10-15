@@ -30,12 +30,11 @@ module SAWScript.Yosys
 
 import Control.Lens.TH (makeLenses)
 
-import Control.Lens (view, (^.), (.~))
+import Control.Lens (view, (^.))
 import Control.Exception (throw)
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO(..))
 
-import Data.Function ((&))
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -64,7 +63,7 @@ import SAWScript.Yosys.IR
 import SAWScript.Yosys.State
 import SAWScript.Yosys.Theorem
 import SAWScript.Yosys.TransitionSystem
-import qualified SAWScript.Yosys.CompositionalTranslation as Comp
+import SAWScript.Yosys.Netgraph
 
 --------------------------------------------------------------------------------
 -- ** Building the module graph from Yosys IR
@@ -94,15 +93,15 @@ convertYosysIR ::
   MonadIO m =>
   SC.SharedContext ->
   YosysIR ->
-  m (Map Text Comp.TranslatedModule)
+  m (Map Text ConvertedModule)
 convertYosysIR sc ir = do
   let mg = yosysIRModgraph ir
   let sorted = reverseTopSort $ mg ^. modgraphGraph
   foldM
     (\env v -> do
         let (m, nm, _) = mg ^. modgraphNodeFromVertex $ v
-        tm <- Comp.translateModule sc env m
-        _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ tm ^. Comp.translatedModuleTerm
+        cm <- convertModule sc env m
+        _ <- validateTerm sc ("translating the combinational circuit \"" <> nm <> "\"") $ cm ^. convertedModuleTerm
         n <- liftIO $ Nonce.freshNonce Nonce.globalNonceGenerator
         let frag = Text.pack . show $ Nonce.indexValue n
         let uri = URI.URI
@@ -113,9 +112,9 @@ convertYosysIR sc ir = do
               , URI.uriFragment = URI.mkFragment frag
               }
         let ni = SC.ImportedName uri [nm]
-        tc <- liftIO $ SC.scConstant' sc ni (tm ^. Comp.translatedModuleTerm) (tm ^. Comp.translatedModuleType)
-        let tm' = tm & Comp.translatedModuleTerm .~ tc
-        pure $ Map.insert nm tm' env
+        tc <- liftIO $ SC.scConstant' sc ni (cm ^. convertedModuleTerm) (cm ^. convertedModuleType)
+        let cm' = cm { _convertedModuleTerm = tc }
+        pure $ Map.insert nm cm' env
     )
     Map.empty
     sorted
@@ -128,10 +127,10 @@ yosysIRToTypedTerms ::
   m (Map Text SC.TypedTerm)
 yosysIRToTypedTerms sc ir = do
   env <- convertYosysIR sc ir
-  pure . flip fmap env $ \tm ->
+  pure . flip fmap env $ \cm ->
     SC.TypedTerm
-    (SC.TypedTermSchema $ C.tMono $ tm ^. Comp.translatedModuleCryptolType)
-    $ tm ^. Comp.translatedModuleTerm
+    (SC.TypedTermSchema $ C.tMono $ cm ^. convertedModuleCryptolType)
+    $ cm ^. convertedModuleTerm
 
 -- | Given a Yosys IR, construct a SAWCore record containing terms for each module
 yosysIRToRecordTerm ::
@@ -141,8 +140,8 @@ yosysIRToRecordTerm ::
   m SC.TypedTerm
 yosysIRToRecordTerm sc ir = do
   env <- convertYosysIR sc ir
-  record <- cryptolRecord sc $ view Comp.translatedModuleTerm <$> env
-  let cty = C.tRec . C.recordFromFields $ (\(nm, tm) -> (C.mkIdent nm, tm ^. Comp.translatedModuleCryptolType)) <$> Map.assocs env
+  record <- cryptolRecord sc $ view convertedModuleTerm <$> env
+  let cty = C.tRec . C.recordFromFields $ (\(nm, cm) -> (C.mkIdent nm, cm ^. convertedModuleCryptolType)) <$> Map.assocs env
   let tt = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) record
   pure tt
 
