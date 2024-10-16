@@ -195,6 +195,8 @@ instance Aeson.FromJSON CellType where
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
+            -- XXX We should probably log a warning when generating CellTypeUnsupportedPrimitive, 
+            -- we can't do that here however.    
             Nothing -> pure $ CellTypeUnsupportedPrimitive s
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
