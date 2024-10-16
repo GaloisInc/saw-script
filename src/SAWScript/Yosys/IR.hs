@@ -176,6 +176,7 @@ data CellType
   | CellTypeMux
   | CellTypePmux
   | CellTypeDff
+  | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)
 instance Aeson.FromJSON CellType where
@@ -194,13 +195,14 @@ instance Aeson.FromJSON CellType where
       _ | cellTypeIsPrimitive s ->
           case Map.lookup s textToPrimitiveCellType of
             Just cellType -> pure cellType
-            Nothing -> throw $ YosysErrorUnsupportedPrimitive s
+            Nothing -> pure $ CellTypeUnsupportedPrimitive s
         | otherwise -> pure $ CellTypeUserType s
   parseJSON v = fail $ "Failed to parse cell type: " <> show v
 instance Show CellType where
   show ct = Text.unpack $
     case ct of
       CellTypeUserType ut -> ut
+      CellTypeUnsupportedPrimitive t -> t
       _ | Just t <- Map.lookup ct primitiveCellTypeToText -> t
         | otherwise -> panic "Show CellType" ["Unknown primitive cell type"]
 
@@ -209,6 +211,7 @@ asUserType :: CellType -> Text
 asUserType cellType =
   case cellType of
     CellTypeUserType t -> t
+    CellTypeUnsupportedPrimitive t -> t
     _ ->
       panic "asUserType"
             [  "Expected a user defined type, but got a primitive type: "
