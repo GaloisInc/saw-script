@@ -52,7 +52,6 @@ data YosysError
   = YosysError Text
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
-  | YosysErrorUnsupportedPrimitive Text
   | YosysErrorNoSuchSubmodule Text Text
   | YosysErrorUnsupportedFF Text
   | YosysErrorInvalidOverrideTarget
@@ -83,13 +82,6 @@ instance Show YosysError where
     , "\" of the cell with name \"", cnm
     , "\".\n"
     , "It is possible that this represents an undetected cycle in the netgraph.\n"
-    , reportBugText
-    ]
-  show (YosysErrorUnsupportedPrimitive primitive) = Text.unpack $ mconcat
-    [
-      "Error: Encountered a cell with unsupported primitive type \""
-    , primitive
-    , "\".\n"
     , reportBugText
     ]
   show (YosysErrorNoSuchSubmodule submoduleName cellName) =
