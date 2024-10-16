@@ -231,7 +231,7 @@ proofWithOptions :: Options -> IO (SharedContext,Integer,[Goal])
 proofWithOptions opts =
   do let path = fileName opts
      elf <- getRelevant path =<< getElf path
-     translate opts path elf (function opts)
+     translate opts elf (function opts)
 
 -- | Add interpretations for the symbolic functions, by looking
 -- them up in the Cryptol environment.  There should be definitions
@@ -406,8 +406,8 @@ callHandler callMap sym = Macaw.LookupFunctionHandle $ \st mem regs -> do
 -- Returns the shared context and the goals (from the Sym)
 -- and the integer is the (aboslute) address of the function.
 translate ::
-  Options -> FilePath -> RelevantElf -> Fun -> IO (SharedContext, Integer, [Goal])
-translate opts path elf fun =
+  Options -> RelevantElf -> Fun -> IO (SharedContext, Integer, [Goal])
+translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
@@ -433,7 +433,7 @@ translate opts path elf fun =
                debug st
                return (gs,st,\st1 -> debug st1 >> po st1)
 
-     addr <- doSim opts path elf sfs name globs st checkPost
+     addr <- doSim opts elf sfs name globs st checkPost
 
      gs <- getGoals bak mdMap
      sc <- saw_ctx <$> sawCoreState sym
@@ -451,7 +451,6 @@ setSimulatorVerbosity verbosity sym = do
 doSim ::
   (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Options ->
-  FilePath ->
   RelevantElf ->
   SymFuns Sym ->
   ByteString ->
@@ -459,8 +458,9 @@ doSim ::
   State ->
   (State -> IO ()) ->
   IO Integer
-doSim opts path elf sfs name (globs,overs) st checkPost =
+doSim opts elf sfs name (globs,overs) st checkPost =
   do say "  Looking for address... "
+     let path = fileName opts
      addr <- findSymbol path (symMap elf) name
      -- addr :: MemSegmentOff 64
      let addrInt =
