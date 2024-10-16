@@ -659,10 +659,13 @@ x86 = x86_64MacawSymbolicFns
 --------------------------------------------------------------------------------
 -- Errors
 
--- | Exception for hitting an unsupported object or feature.
+-- | Exception for hitting an unsupported object or feature. The arguments
+--   are the filename we were looking at, and a message.
 data X86Unsupported = X86Unsupported FilePath String deriving Show
 
--- | Exception for miscellaneous errors during verification.
+-- | Exception for miscellaneous errors during verification. The arguments
+--   are the filename we were looking at, also optionally a function/symbol
+--   name, and a message.
 data X86Error       = X86Error FilePath (Maybe String) String deriving Show
 
 instance Exception X86Unsupported

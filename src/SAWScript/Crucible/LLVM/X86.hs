@@ -193,8 +193,8 @@ throwX86 path msg = throw $ X86Error path Nothing msg
 
 -- | Throw an X86Error (general failure of the X86 stuff) with the
 --   pathname of the file we choked on and also the affected function name.
-throwX86' :: MonadThrow m => FilePath -> String -> String -> m a
-throwX86' path func msg = throw $ X86Error path (Just func) msg
+throwX86func :: MonadThrow m => FilePath -> String -> String -> m a
+throwX86func path func msg = throw $ X86Error path (Just func) msg
 
 x86Sym :: Getter X86State Sym
 x86Sym = to (\st -> case _x86Backend st of SomeOnlineBackend bak -> backendGetSym bak)
@@ -210,7 +210,7 @@ integerToAlignment ::
   m C.LLVM.Alignment
 integerToAlignment path func i
   | Just ba <- C.LLVM.toAlignment (C.LLVM.toBytes i) = pure ba
-  | otherwise = throwX86' path func $ mconcat ["Invalid alignment specified: ", show i]
+  | otherwise = throwX86func path func $ mconcat ["Invalid alignment specified: ", show i]
 
 setReg ::
   (MonadIO m, MonadThrow m) =>
@@ -222,7 +222,7 @@ setReg ::
   m Regs
 setReg path func reg val regs
   | Just regs' <- Macaw.updateX86Reg reg (C.RV . const val) regs = pure regs'
-  | otherwise = throwX86' path func $ mconcat ["Invalid register: ", show reg]
+  | otherwise = throwX86func path func $ mconcat ["Invalid register: ", show reg]
 
 getReg ::
   (MonadIO m, MonadThrow m) =>
@@ -233,7 +233,7 @@ getReg ::
   m (C.RegValue Sym (C.LLVM.LLVMPointerType 64))
 getReg path func reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
-  Nothing -> throwX86' path func $ mconcat ["Invalid register: ", show reg]
+  Nothing -> throwX86func path func $ mconcat ["Invalid register: ", show reg]
 
 -- TODO: extend to more than general purpose registers
 stringToReg :: Text -> Maybe (Some Macaw.X86Reg)
@@ -267,7 +267,7 @@ cryptolUninterpreted ::
   m Term
 cryptolUninterpreted path func env nm sc xs =
   case lookupIn nm $ eTermEnv env of
-    Left _err -> throwX86' path func $ mconcat
+    Left _err -> throwX86func path func $ mconcat
       [ "Failed to lookup Cryptol name \"", nm
       , "\" in Cryptol environment"
       ]
@@ -1294,7 +1294,7 @@ resolvePtrSetupValue path func env tyenv nameEnv tptr = do
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       $ Elf.symtabEntries symTab of
-      Nothing -> throwX86' path func $ mconcat ["Global symbol \"", nm, "\" not found"]
+      Nothing -> throwX86func path func $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset bak mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
@@ -1460,7 +1460,7 @@ assertPost path func env premem preregs mdMap = do
                       offTrunc <- liftIO $ W4.bvTrunc sym rsz off
                       pure $ C.LLVM.LLVMValInt base offTrunc
                     _ -> pure $ C.LLVM.LLVMValInt base off
-                _ -> throwX86' path func "Width of return type is zero bits"
+                _ -> throwX86func path func "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
           let md = MS.ConditionMetadata
                    { MS.conditionLoc = ms ^. MS.csLoc
@@ -1469,7 +1469,7 @@ assertPost path func env premem preregs mdMap = do
                    , MS.conditionContext = ""
                    }
           pure [LO.matchArg opts sc cc ms MS.PostState md postRAXTrunc retTy expectedRet]
-        _ -> throwX86' path func $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
+        _ -> throwX86func path func $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
 
@@ -1499,7 +1499,7 @@ assertPost path func env premem preregs mdMap = do
     , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
-    Left err -> throwX86' path func $ show err
+    Left err -> throwX86func path func $ show err
     Right (_, st) -> pure st
   liftIO . forM_ (view LO.osAsserts st) $ \(md, W4.LabeledPred p r) ->
        do (ann,p') <- W4.annotateTerm sym p
