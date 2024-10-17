@@ -73,7 +73,6 @@ import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(.
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 -- saw-script
-import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
 import SAWScript.Crucible.Common
