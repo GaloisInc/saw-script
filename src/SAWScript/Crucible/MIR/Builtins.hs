@@ -534,7 +534,7 @@ mir_load_module inputFile = do
 
    withImplicitParams opts $ do
      col <- io $ Mir.parseMIR inputFile b
-     io $ Mir.translateMIR mempty col halloc
+     io $ Mir.translateMIR col halloc
 
 mir_return :: SetupValue -> MIRSetupM ()
 mir_return retVal =
