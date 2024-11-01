@@ -114,7 +114,7 @@ options =
      "path"
     )
     pathDesc
-  , Option "t" ["detect-vacuity"]
+  , Option "" ["detect-vacuity"]
     (NoArg
      (\opts -> return opts { detectVacuity = True }))
     "Checks and warns the user about contradictory assumptions. (default: false)"
