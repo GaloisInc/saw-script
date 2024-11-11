@@ -1,0 +1,14 @@
+enable_experimental;
+
+let f_spec = do {
+    x <- mir_fresh_expanded_value "x" (mir_array 32 mir_u16);
+    y <- mir_fresh_expanded_value "y" (mir_array 32 mir_u16);
+    mir_equal x y;
+
+    mir_execute_func [x, y];
+
+    mir_return (mir_term {{ True }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+mir_verify m "test::f" [] false f_spec z3;

@@ -3710,16 +3710,18 @@ values in scope at the time.
 * `mir_postcond : Term -> MIRSetup ()`
 * `mir_assert : Term -> MIRSetup ()`
 
-These commands take `Term` arguments, and therefore cannot describe
-the values of pointers. The "assert" variants will work in either pre-
-or post-conditions, and are useful when defining helper functions
-that, e.g., state datastructure invariants that make sense in both
-phases.  The `llvm_equal` command states that two `SetupValue`s should
-be equal, and can be used in either the initial or the final state.
+These commands take `Term` arguments, and therefore cannot describe the values
+of pointers. The "assert" variants will work in either pre- or post-conditions,
+and are useful when defining helper functions that, e.g., provide datastructure
+invariants that make sense in both phases.  The `{llvm,jvm,mir}_equal` commands
+state that two values should be equal, and can be used in either the initial or
+the final state.
 
 * `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
+* `jvm_equal : JVMValue -> JVMValue -> JVMSetup ()`
+* `mir_equal : MIRValue -> MIRValue -> MIRSetup ()`
 
-The use of `llvm_equal` can also sometimes lead to more efficient
+The use of `{llvm,jvm,mir}_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
 
 ## Assuming specifications

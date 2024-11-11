@@ -2824,14 +2824,7 @@ llvm_equal (getAllLLVM -> val1) (getAllLLVM -> val2) =
        , show ty1
        , show ty2
        ]
-     tags <- view Setup.croTags
-     let md = MS.ConditionMetadata
-              { MS.conditionLoc = loc
-              , MS.conditionTags = tags
-              , MS.conditionType = "equality specification"
-              , MS.conditionContext = ""
-              }
-     Setup.addCondition (MS.SetupCond_Equal md val1 val2)
+     Setup.crucible_equal loc val1 val2
 
 llvm_ghost_value ::
   MS.GhostGlobal ->

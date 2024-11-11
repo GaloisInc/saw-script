@@ -14,6 +14,7 @@ module SAWScript.Crucible.Common.Setup.Builtins
   , crucible_postcond
   , crucible_return
   , crucible_execute_func
+  , crucible_equal
   , CheckPointsToType(..)
   ) where
 
@@ -90,6 +91,21 @@ crucible_execute_func args = do
                                                   | a <- args
                                                   | t <- tps
                                                   ]
+
+crucible_equal ::
+  W4.ProgramLoc ->
+  MS.SetupValue ext ->
+  MS.SetupValue ext ->
+  CrucibleSetup ext ()
+crucible_equal loc val1 val2 = do
+  tags <- view croTags
+  let md = MS.ConditionMetadata
+           { MS.conditionLoc = loc
+           , MS.conditionTags = tags
+           , MS.conditionType = "equality specification"
+           , MS.conditionContext = ""
+           }
+  addCondition (MS.SetupCond_Equal md val1 val2)
 
 --------------------------------------------------------------------------------
 -- ** Shared data types
