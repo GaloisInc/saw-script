@@ -1,0 +1,47 @@
+// A regression test that ensures that LLVM overrides will match successfully
+// when an argument is a string constant (#2148).
+
+let alloc_init ty v = do {
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
+    return (x, p);
+};
+
+let foo_spec1 = do {
+    (x, p_x) <- ptr_to_fresh "xs" (llvm_array 4 (llvm_int 8));
+
+    llvm_execute_func [p_x];
+
+    llvm_points_to p_x (llvm_term x);
+};
+
+// A slight variation of foo_spec1 that uses `llvm_fresh_expanded_val` instead
+// of `llvm_fresh_var`. This triggers a different code path in the LLVM override
+// matching logic.
+let foo_spec2 = do {
+    let ty = llvm_array 4 (llvm_int 8);
+    x <- llvm_fresh_expanded_val ty;
+    p_x <- alloc_init ty x;
+
+    llvm_execute_func [p_x];
+
+    llvm_points_to p_x x;
+};
+
+let bar_spec = do {
+    llvm_execute_func [];
+};
+
+m <- llvm_load_module "test.bc";
+
+foo_ov1 <- llvm_unsafe_assume_spec m "foo" foo_spec1;
+llvm_verify m "bar" [foo_ov1] true bar_spec z3;
+
+foo_ov2 <- llvm_unsafe_assume_spec m "foo" foo_spec2;
+llvm_verify m "bar" [foo_ov2] true bar_spec z3;
