@@ -9,7 +9,13 @@ Stability   : provisional
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ParallelListComp #-}
 
-module SAWScript.Crucible.Common.Setup.Builtins where
+module SAWScript.Crucible.Common.Setup.Builtins
+  ( crucible_precond
+  , crucible_postcond
+  , crucible_return
+  , crucible_execute_func
+  , CheckPointsToType(..)
+  ) where
 
 import           Control.Lens
 import           Control.Monad (when)
