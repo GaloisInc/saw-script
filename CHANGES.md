@@ -7,6 +7,9 @@
 
 * Due to the regressions seen in issues #1946 and #1944, the experimental compositional hardware verification work has been reverted.
 
+* Fix a bug in which an LLVM override would fail to apply when matching an
+  argument against a string constant.
+
 # Version 1.2 -- 2024-08-30
 
 ## New Features

@@ -68,6 +68,7 @@ import           Control.Exception as X
 import           Control.Monad (filterM, foldM, forM, forM_, zipWithM)
 import           Control.Monad.Except (runExcept)
 import           Control.Monad.IO.Class (MonadIO(..))
+import qualified Data.ByteString as BS
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
 import           Data.List
@@ -1165,6 +1166,13 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
           [ matchArg opts sc cc cs prepost md x y z
           | (x, z) <- zip (V.toList xs) zs ]
 
+    -- LLVM string literals are syntactic shorthand for [<N> x i8] arrays,
+    -- so we defer to the LLVMValArray case above.
+    (Crucible.LLVMValString xs, Crucible.ArrayType _len (Crucible.IntType 8), SetupArray () zs)
+      | BS.length xs >= length zs ->
+        do explodedActual <- liftIO $ Crucible.explodeStringValue sym xs
+           matchArg opts sc cc cs prepost md explodedActual expectedTy expected
+
     -- match the fields of struct point-wise
     (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct _ zs) ->
       sequence_
@@ -1305,6 +1313,13 @@ valueToSC sym md failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
        let sc = saw_ctx st
        t <- liftIO (typeToSC sc ty)
        liftIO (scVectorReduced sc t terms)
+
+-- LLVM string literals are syntactic shorthand for [<N> x i8] arrays, so we
+-- defer to the LLVMValArray case above.
+valueToSC sym md failMsg tval@(Cryptol.TVSeq n (Cryptol.TVSeq 8 Cryptol.TVBit)) (Crucible.LLVMValString str)
+  | toInteger (BS.length str) == n
+  = do explodedVal <- liftIO $ Crucible.explodeStringValue sym str
+       valueToSC sym md failMsg tval explodedVal
 
 valueToSC _ _ _ _ Crucible.LLVMValFloat{} =
   fail  "valueToSC: Real not supported"
