@@ -35,12 +35,13 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , W4EvalTactic(..)
   ) where
 
-import Control.Lens ((^.))
+import Control.Lens ( (^.), view )
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, fromJust)
+import Data.Void (absurd)
 
 import qualified Data.Dwarf as Dwarf
 import           Data.Map (Map)
@@ -84,11 +85,11 @@ import           SAWScript.Crucible.Common (Sym, sawCoreState, HasSymInterface(.
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Crucible.LLVM.Setup.Value (LLVMPtr)
 import qualified SAWScript.Proof as SP
 
 
 type LLVMVal = Crucible.LLVMVal Sym
-type LLVMPtr wptr = Crucible.LLVMPtr Sym wptr
 
 
 
@@ -120,7 +121,7 @@ resolveSetupValueInfo cc env nameEnv v =
            -- TODO? is this a panic situation?
            throwError $ "Type information for local allocation value not found: " ++ show i
 
-    SetupCast () _ (L.Alias alias) -> pure (L.guessAliasInfo mdMap alias)
+    SetupCast (L.Alias alias) _ -> pure (L.guessAliasInfo mdMap alias)
 
     SetupField () a n ->
       do i <- resolveSetupValueInfo cc env nameEnv a
@@ -445,10 +446,17 @@ typeOfSetupValue cc env nameEnv val =
                 , show (ppTypedTermType tp)
                 ]
 
-    SetupStruct () packed vs ->
+    SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
+
+    SetupEnum empty ->
+      absurd empty
+    SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
+      absurd empty
 
     SetupArray () [] -> throwError "typeOfSetupValue: invalid empty llvm_array_value"
     SetupArray () (v : vs) ->
@@ -469,12 +477,12 @@ typeOfSetupValue cc env nameEnv val =
                         [ "Could not determine LLVM type from computed debug type information:"
                         , show info
                         ]
-           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast () v ltp)
+           Just ltp -> typeOfSetupValue cc env nameEnv (SetupCast ltp v)
 
-    SetupCast () v ltp ->
+    SetupCast ltp v ->
       do memTy <- typeOfSetupValue cc env nameEnv v
-         case memTy of
-           Crucible.PtrType _symTy ->
+         if Crucible.isPointerMemType memTy
+           then
              case let ?lc = lc in Crucible.liftMemType (L.PtrTo ltp) of
                Left err -> throwError $ unlines
                              [ "typeOfSetupValue: invalid type " ++ show ltp
@@ -483,10 +491,11 @@ typeOfSetupValue cc env nameEnv val =
                              ]
                Right mt -> pure mt
 
-           _ -> throwError $ unwords $
-                  [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
-                  , "actual type of value: " ++ show memTy
-                  ]
+           else
+             throwError $ unwords $
+               [ "typeOfSetupValue: tried to cast the type of a non-pointer value"
+               , "actual type of value: " ++ show memTy
+               ]
 
     SetupElem () v i -> do
       do memTy <- typeOfSetupValue cc env nameEnv v
@@ -497,7 +506,7 @@ typeOfSetupValue cc env nameEnv val =
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
                      | otherwise -> throwError $ unwords $
                          [ "typeOfSetupValue: array type index out of bounds"
                          , "(index: " ++ show i ++ ")"
@@ -536,7 +545,7 @@ typeOfSetupValue cc env nameEnv val =
             Right symTy -> return (Crucible.PtrType symTy)
 
     SetupGlobalInitializer () name -> do
-      case Map.lookup (L.Symbol name) (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
+      case Map.lookup (L.Symbol name) (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
             Left err -> throwError $ unlines
@@ -546,6 +555,9 @@ typeOfSetupValue cc env nameEnv val =
                           ]
             Right memTy -> return memTy
         Nothing -> throwError $ "resolveSetupVal: global not found: " ++ name
+
+    SetupMux empty _ _ _ ->
+      absurd empty
   where
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
@@ -569,7 +581,7 @@ resolveSetupElemOffset cc env nameEnv v i = do
            Right memTy' ->
              case memTy' of
                Crucible.ArrayType n memTy''
-                 | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                 | fromIntegral i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
                Crucible.StructType si ->
                  case Crucible.siFieldOffset si i of
                    Just d -> return d
@@ -613,11 +625,11 @@ resolveSetupVal cc mem env tyenv nameEnv val =
     SetupTerm tm -> resolveTypedTerm cc tm
     -- NB, SetupCast values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
-    SetupCast () v _lty -> resolveSetupVal cc mem env tyenv nameEnv v
+    SetupCast _lty v -> resolveSetupVal cc mem env tyenv nameEnv v
     -- NB, SetupUnion values should always be pointers. Pointer casts have no
     -- effect on the actual computed LLVMVal.
     SetupUnion () v _n -> resolveSetupVal cc mem env tyenv nameEnv v
-    SetupStruct () packed vs -> do
+    SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map Crucible.llvmValStorableType vals
       let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
@@ -625,6 +637,12 @@ resolveSetupVal cc mem env tyenv nameEnv val =
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
+    SetupEnum empty ->
+      absurd empty
+    SetupTuple empty _ ->
+      absurd empty
+    SetupSlice empty ->
+      absurd empty
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do
       vals <- V.mapM (resolveSetupVal cc mem env tyenv nameEnv) (V.fromList vs)
@@ -657,7 +675,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal bak mem (L.Symbol name)
     SetupGlobalInitializer () name ->
       case Map.lookup (L.Symbol name)
-                      (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
+                      (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         -- There was an error in global -> constant translation
         Just (_, Left e) -> fail e
         Just (_, Right (_, Just v)) ->
@@ -667,6 +685,8 @@ resolveSetupVal cc mem env tyenv nameEnv val =
           fail $ "resolveSetupVal: global has no initializer: " ++ name
         Nothing ->
           fail $ "resolveSetupVal: global not found: " ++ name
+    SetupMux empty _ _ _ ->
+      absurd empty
 
 
 -- | Like 'resolveSetupVal', but specifically geared towards the needs of
@@ -734,7 +754,7 @@ resolveSAWPred cc tm = do
      mx <- case getAllExts tm' of
              -- concretely evaluate if it is a closed term
              [] -> do modmap <- scGetModuleMap sc
-                      let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                      let v = Concrete.evalSharedTerm modmap mempty mempty tm'
                       pure (Just (Concrete.toBool v))
              _ -> return Nothing
      case mx of
@@ -853,10 +873,8 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented record type (FIXME)"
       Cryptol.TVFun _ _ ->
         fail "resolveSAWTerm: invalid function type"
-      Cryptol.TVAbstract _ _ ->
-        fail "resolveSAWTerm: invalid abstract type"
-      Cryptol.TVNewtype{} ->
-        fail "resolveSAWTerm: invalid newtype"
+      Cryptol.TVNominal {} ->
+        fail "resolveSAWTerm: invalid nominal type"
   where
     sym = cc^.ccSym
     dl = Crucible.llvmDataLayout (ccTypeCtx cc)
@@ -916,8 +934,7 @@ toLLVMType dl tp =
       return (Crucible.StructType si)
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
-    Cryptol.TVAbstract _ _ -> Left (Impossible "abstract")
-    Cryptol.TVNewtype{} -> Left (Impossible "newtype")
+    Cryptol.TVNominal {} -> Left (Impossible "nominal")
 
 toLLVMStorageType ::
   forall w .

@@ -61,6 +61,10 @@ pub fn two_values_proj1 (x:TwoValues) -> u32 {
     }
 }
 
+pub fn two_values_proj1_ref <'a> (x:&'a mut TwoValues) -> &'a mut u32 {
+    &mut x.1
+}
+
 pub extern fn two_values_proj1_extern (x:TwoValues) -> u32 {
     match x {
         TwoValues(x1,_) => x1
@@ -211,6 +215,10 @@ impl Sum<u64,u64> {
     }
 }
 
+pub fn mk_sum_left_asym (x:u32) -> Sum<u32,u64> {
+    Sum::Left (x)
+}
+
 pub fn mk_string_sum_left (x:&str) -> Sum<String,u64> {
     Sum::Left (x.to_string())
 }
@@ -229,6 +237,14 @@ pub fn mk_sum_sum_left_asym (x:Sum<u32,u64>) -> Sum<Sum<u32,u64>,u64> {
 
 pub extern fn mk_sum_sum_left_asym_extern (x:Sum<u32,u64>) -> Sum<Sum<u32,u64>,u64> {
     Sum::Left (x)
+}
+
+
+pub fn elim_sum_u64_u64 (x:Sum<u64,u64>) -> u64 {
+    match x {
+        Sum::Left (x) => x,
+        Sum::Right (x) => x,
+    }
 }
 
 
@@ -344,36 +360,66 @@ impl fmt::Display for TrueEnum {
 }
 
 
+/***
+ *** Pointers and References
+ ***/
+
+pub fn box_read (p:Box<u64>) -> u64 {
+    *p
+}
+
+
+/***
+ *** Slices and Arrays
+ ***/
+
+pub fn index_one_array (x:[u64; 1]) -> u64 {
+    x[0]
+}
+
+pub fn index_two_array (x:[u64; 2]) -> u64 {
+    x[0]
+}
+
+pub fn index_three_array (x:[u64; 3]) -> u64 {
+    x[0]
+}
+
+
+/***
+ *** Linked Lists
+ ***/
+
 /* A linked list */
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C,u64)]
-pub enum List<X> {
+pub enum LList<X> {
     Nil,
-    Cons (X,Box<List<X>>)
+    Cons (X,Box<LList<X>>)
 }
 
 /* Test if a list is empty */
-pub fn list_is_empty (l: &List<u64>) -> bool {
+pub fn list_is_empty (l: &LList<u64>) -> bool {
     match l {
-        List::Nil => true,
-        List::Cons (_,_) => false
+        LList::Nil => true,
+        LList::Cons (_,_) => false
     }
 }
 
 /* Get the head of a linked list or return an error */
-pub fn list_head (l: &List<u64>) -> Box<Sum<u64,()>> {
+pub fn list_head (l: &LList<u64>) -> Box<Sum<u64,()>> {
     match l {
-        List::Nil => Box::new(Sum::Right (())),
-        List::Cons (x,_) => Box::new(Sum::Left (*x))
+        LList::Nil => Box::new(Sum::Right (())),
+        LList::Cons (x,_) => Box::new(Sum::Left (*x))
     }
 }
 
 /* Get the head of a linked list or return an error, in an impl block */
-impl List<u64> {
+impl LList<u64> {
     pub fn list_head_impl (&self) -> Result<u64,()> {
         match self {
-            List::Nil => Err (()),
-            List::Cons (x,_) => Ok (*x)
+            LList::Nil => Err (()),
+            LList::Cons (x,_) => Ok (*x)
         }
     }
 }
@@ -426,6 +472,22 @@ pub fn list64_head_mut <'a> (l:&'a mut List64) -> Option<&'a mut u64> {
     match l {
         List64::Nil64 => None,
         List64::Cons64 (h,_) => Some (h),
+    }
+}
+
+/* Return a mutable reference to the tail of a list, or None if it is empty */
+pub fn list64_tail_mut <'a> (l:&'a mut List64) -> Option<&'a mut List64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (_,t) => Some (t),
+    }
+}
+
+/* Truncate a List64 to just one element */
+pub fn list64_truncate <'a> (l:&'a mut List64) {
+    match list64_tail_mut(l) {
+        Some (tl) => *tl = List64::Nil64,
+        None => ()
     }
 }
 
@@ -537,7 +599,7 @@ pub enum Enum20<X> {
   Enum20_19(X),
 }
 
-pub fn enum20_list_proj<'a> (x:&'a Enum20<List<u64>>) -> &'a List<u64> {
+pub fn enum20_list_proj<'a> (x:&'a Enum20<LList<u64>>) -> &'a LList<u64> {
   match x {
       Enum20::Enum20_0(l) => l,
       Enum20::Enum20_1(l) => l,
@@ -578,7 +640,7 @@ pub enum List10<X> {
   List10_9(X,Box<List10<X>>),
 }
 
-pub fn list10_head<'a> (x:&'a List10<List<u64>>) -> &'a List<u64> {
+pub fn list10_head<'a> (x:&'a List10<LList<u64>>) -> &'a LList<u64> {
   match x {
       List10::List10Head(l) => l,
       List10::List10_0(l,_) => l,
@@ -621,7 +683,7 @@ pub enum List20<X> {
   List20_19(X,Box<List20<X>>),
 }
 
-pub fn list20_head<'a> (x:&'a List20<List<u64>>) -> &'a List<u64> {
+pub fn list20_head<'a> (x:&'a List20<LList<u64>>) -> &'a LList<u64> {
   match x {
       List20::List20Head(l) => l,
       List20::List20_0(l,_) => l,

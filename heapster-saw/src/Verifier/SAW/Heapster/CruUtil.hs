@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -14,6 +16,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -23,12 +26,13 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Reflection
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Functor.Constant
 import Data.ByteString
 import Numeric
 import Numeric.Natural
 import qualified Data.BitVector.Sized as BV
 import System.FilePath
-import GHC.TypeNats
+import GHC.TypeNats (KnownNat, natVal)
 import Data.Functor.Product
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
 import qualified Control.Monad.Fail as Fail
@@ -37,7 +41,6 @@ import qualified Data.Type.RList as RL
 
 import What4.ProgramLoc
 import What4.Partial
-import What4.InterpretedFloatingPoint (X86_80Val(..))
 import What4.Interface (StringLiteral(..))
 import What4.Utils.Word16String (Word16String)
 
@@ -271,7 +274,7 @@ instance Closable ProgramLoc where
 instance Liftable ProgramLoc where
   mbLift = unClosed . mbLift . fmap toClosed
 
--- | Pretty-print a 'Position' with a "short" filename, without the path
+-- | Pretty-print a 'Position' with a \"short\" filename, without the path
 ppShortFileName :: Position -> PP.Doc ann
 ppShortFileName (SourcePos path l c) =
   PP.pretty (takeFileName $ Text.unpack path)
@@ -315,13 +318,6 @@ instance Liftable EndianForm where
   mbLift = unClosed . mbLift . fmap toClosed
 
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => Some f |])
-
-instance NuMatchingAny1 BaseTypeRepr where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 TypeRepr where
-  nuMatchingAny1Proof = nuMatchingProof
-
 $(mkNuMatching [t| forall f ctx . NuMatchingAny1 f => AssignView f ctx |])
 
 viewToAssign :: AssignView f ctx -> Assignment f ctx
@@ -336,9 +332,6 @@ instance NuMatchingAny1 f => NuMatching (Assignment f ctx) where
     -- here?
     isoMbTypeRepr viewAssign viewToAssign
 
-instance NuMatchingAny1 f => NuMatchingAny1 (Assignment f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 instance Closable (Assignment TypeRepr ctx) where
   toClosed = unsafeClose
 
@@ -347,10 +340,6 @@ instance Liftable (Assignment TypeRepr ctx) where
 
 
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => BaseTerm f tp |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (BaseTerm f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 $(mkNuMatching [t| forall a. NuMatching a => NonEmpty a |])
 $(mkNuMatching [t| forall p v. (NuMatching p, NuMatching v) => Partial p v |])
 $(mkNuMatching [t| X86_80Val |])
@@ -359,10 +348,18 @@ $(mkNuMatching [t| forall w. BV.BV w |])
 $(mkNuMatching [t| Word16String |])
 $(mkNuMatching [t| forall s. StringLiteral s |])
 $(mkNuMatching [t| forall s. StringInfoRepr s |])
+
+#if __GLASGOW_HASKELL__ >= 902
 $(mkNuMatching [t| forall ext f tp.
                 (NuMatchingAny1 f, NuMatchingAny1 (ExprExtension ext f)) =>
                 App ext f tp |])
-
+#else
+-- See Note [QuantifiedConstraints + TypeFamilies trick]
+$(mkNuMatching [t| forall ext f tp exprExt.
+                ( NuMatchingAny1 f
+                , exprExt ~ ExprExtension ext f, NuMatchingAny1 exprExt
+                ) => App ext f tp |])
+#endif
 
 $(mkNuMatching [t| Bytes |])
 $(mkNuMatching [t| forall v. NuMatching v => Field v |])
@@ -385,9 +382,6 @@ $(mkNuMatching [t| forall blocks tp. BlockID blocks tp |])
 instance NuMatching (EmptyExprExtension f tp) where
   nuMatchingProof = unsafeMbTypeRepr
 
-instance NuMatchingAny1 (EmptyExprExtension f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 $(mkNuMatching [t| AVXOp1 |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => ExtX86 f tp |])
 
@@ -403,9 +397,6 @@ instance Liftable (Nonce s tp) where
 $(mkNuMatching [t| forall tp. GlobalVar tp |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f =>
                 LLVMExtensionExpr f tp |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (LLVMExtensionExpr f) where
-  nuMatchingAny1Proof = nuMatchingProof
 
 {-
 $(mkNuMatching [t| forall w f tp. NuMatchingAny1 f => LLVMStmt w f tp |])
@@ -436,7 +427,7 @@ instance Closable (BadBehavior e) where
 -- instance NuMatchingAny1 e => Liftable (BadBehavior e) where
   -- mbLift = unClosed . mbLift . fmap toClosed
 
--- NOTE: Crucible objects can never contain any Hobbits names, but "proving"
+-- NOTE: Crucible objects can never contain any Hobbits names, but \"proving\"
 -- that would require introspection of opaque types like 'Index' and 'Nonce',
 -- and would also be inefficient, so we just use 'unsafeClose'
 
@@ -475,9 +466,6 @@ closeAssign f (viewAssign -> AssignExtend asgn fa) =
 data Typed f a = Typed { typedType :: TypeRepr a, typedObj :: f a }
 
 $(mkNuMatching [t| forall f a. NuMatching (f a) => Typed f a |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (Typed f) where
-  nuMatchingAny1Proof = nuMatchingProof
 
 -- | Cast an existential 'Typed' to a particular type or raise an error
 castTypedM :: Fail.MonadFail m => String -> TypeRepr a -> Some (Typed f) -> m (f a)
@@ -577,14 +565,20 @@ unKnownReprObj (KnownReprObj :: KnownReprObj f a) = knownRepr :: f a
 
 $(mkNuMatching [t| forall f a. KnownReprObj f a |])
 
-instance NuMatchingAny1 (KnownReprObj f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 instance Liftable (KnownReprObj f a) where
   mbLift (mbMatch -> [nuMP| KnownReprObj |]) = KnownReprObj
 
 instance LiftableAny1 (KnownReprObj f) where
   mbLiftAny1 = mbLift
+
+instance Liftable a => LiftableAny1 (Constant a) where
+  mbLiftAny1 = mbLift
+
+instance Liftable a => Liftable (Constant a b) where
+  mbLift (mbMatch -> [nuMP| Data.Functor.Constant.Constant x |]) = Data.Functor.Constant.Constant (mbLift x)
+
+instance (Liftable a, Liftable b, Liftable c) => Liftable (a,b,c) where
+  mbLift (mbMatch -> [nuMP| (x,y,z) |]) = (mbLift x, mbLift y, mbLift z)
 
 -- FIXME: this change for issue #28 requires ClosableAny1 to be exported from
 -- Hobbits
@@ -737,6 +731,7 @@ cruCtxLen (CruCtxCons ctx _) = 1 + cruCtxLen ctx
 
 -- | Look up a type in a 'CruCtx'
 cruCtxLookup :: CruCtx ctx -> Member ctx a -> TypeRepr a
+cruCtxLookup CruCtxNil m = case m of {}
 cruCtxLookup (CruCtxCons _ tp) Member_Base = tp
 cruCtxLookup (CruCtxCons ctx _) (Member_Step memb) = cruCtxLookup ctx memb
 
@@ -834,3 +829,35 @@ termStmtRegs (Return reg) = [Some reg]
 termStmtRegs (TailCall reg _ regs) =
   Some reg : foldMapFC (\r -> [Some r]) regs
 termStmtRegs (ErrorStmt reg) = [Some reg]
+
+{-
+Note [QuantifiedConstraints + TypeFamilies trick]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+GHC 9.2 and later are reasonably adept and combining TypeFamilies with type
+classes that have quantified superclasses. This is important, as there are
+several places in heapster-saw that require constraints of the form
+`NuMatchingAny1 (ExprExtension ext f)`, where NuMatchingAny1 has a quantified
+superclass and ExprExtension is a type family.
+
+Unfortunately, GHC 9.0 and earlier suffer from a bug where constraints of the
+form `NuMatchingAny1 (ExprExtension ext f)`. See
+https://gitlab.haskell.org/ghc/ghc/-/issues/14860. Thankfully, it is relatively
+straightforward to work around the bug. Instead of writing instances like
+these:
+
+  instance forall ext f.
+           NuMatchingAny1 (ExprExtension ext f) =>
+           NuMatchingAny (Foo ext f tp)
+
+We instead write instances like these, introducing an intermediate `exprExt`
+type variable that is used in conjunction with an equality constraint:
+
+  instance forall ext f exprExt.
+           (exprExt ~ ExprExtension ext f, NuMatchingAny1 exprExt) =>
+           NuMatchingAny (Foo ext f tp)
+
+A bit tedious, but this version actually works on pre-9.2 GHCs, which is nice.
+
+I have guarded each use of this trick with CPP so that we remember to remove
+this workaround when we drop support for pre-9.2 GHCs.
+-}

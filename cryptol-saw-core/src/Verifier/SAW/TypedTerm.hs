@@ -19,10 +19,11 @@ import Cryptol.Utils.PP (pretty)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import Verifier.SAW.Cryptol (scCryptolType)
+import Verifier.SAW.Cryptol (scCryptolType, Env, importKind, importSchema)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
 -- Typed terms -----------------------------------------------------------------
 
@@ -48,6 +49,13 @@ data TypedTermType
  deriving Show
 
 
+-- | Convert the 'ttType' field of a 'TypedTerm' to a SAW core term
+ttTypeAsTerm :: SharedContext -> Env -> TypedTerm -> IO Term
+ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =
+  importSchema sc env schema
+ttTypeAsTerm sc _ (TypedTerm (TypedTermKind k) _) = importKind sc k
+ttTypeAsTerm _ _ (TypedTerm (TypedTermOther tp) _) = return tp
+
 ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
 ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))
 
@@ -67,22 +75,31 @@ mkTypedTerm sc trm = do
         Just (Right t) -> TypedTermSchema (C.tMono t)
   return (TypedTerm ttt trm)
 
--- | Apply a function-typed 'TypedTerm' to an argument. This operation
--- fails if the first 'TypedTerm' does not have a monomorphic function
--- type.
+-- | Apply a function-typed 'TypedTerm' to an argument.
+--   This operation fails if the type of the argument does
+--   not match the function.
 applyTypedTerm :: SharedContext -> TypedTerm -> TypedTerm -> IO TypedTerm
-applyTypedTerm sc (TypedTerm tp t1) (TypedTerm _ t2)
-  | Just (_,cty') <- C.tIsFun =<< ttIsMono tp
-  = TypedTerm (TypedTermSchema (C.tMono cty')) <$> scApply sc t1 t2
-
--- TODO? extend this to allow explicit application of types?
-applyTypedTerm _ _ _ = fail "applyTypedTerm: not a (monomorphic) function type"
+applyTypedTerm sc x y = applyTypedTerms sc x [y]
 
 -- | Apply a 'TypedTerm' to a list of arguments. This operation fails
 -- if the first 'TypedTerm' does not have a function type of
--- sufficient arity.
+-- sufficient arity, or if the types of the arguments do not match
+-- the type of the function.
 applyTypedTerms :: SharedContext -> TypedTerm -> [TypedTerm] -> IO TypedTerm
-applyTypedTerms sc = foldM (applyTypedTerm sc)
+applyTypedTerms sc (TypedTerm _ fn) args =
+  do trm <- foldM (scApply sc) fn (map ttTerm args)
+     ty <- scTypeCheckError sc trm
+     -- NB, scCryptolType can behave in strange ways due to the non-injectivity
+     -- of the mapping from Cryptol to SAWCore types. Perhaps we would be better
+     -- to combine the incoming type information instead of applying and then
+     -- reconstructing here.
+     ct <- scCryptolType sc ty
+     let ttt = case ct of
+           Nothing        -> TypedTermOther ty
+           Just (Left k)  -> TypedTermKind k
+           Just (Right t) -> TypedTermSchema (C.tMono t)
+     return (TypedTerm ttt trm)
+
 
 -- | Create an abstract defined constant with the specified name and body.
 defineTypedTerm :: SharedContext -> Text -> TypedTerm -> IO TypedTerm

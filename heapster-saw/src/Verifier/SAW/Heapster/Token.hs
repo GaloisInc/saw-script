@@ -22,6 +22,7 @@ data Token
   | TSemicolon          -- ^ symbol @;@
   | TComma              -- ^ symbol @,@
   | TPlus               -- ^ symbol @+@
+  | TMinus              -- ^ symbol @-@
   | TStar               -- ^ symbol @*@
   | TAt                 -- ^ symbol @\@@
   | TLoli               -- ^ symbol @-o@
@@ -64,6 +65,7 @@ data Token
   | TPtrSh              -- ^ keyword @ptrsh@
   | TFieldSh            -- ^ keyword @fieldsh@
   | TArraySh            -- ^ keyword @arraysh@
+  | TTupleSh            -- ^ keyword @tuplesh@
   | TExSh               -- ^ keyword @exsh@
   | TOrSh               -- ^ keyword @orsh@
   | TMemBlock           -- ^ keyword @memblock@
@@ -105,6 +107,7 @@ describeToken t =
     TComma              -> "','"
     TSemicolon          -> "';'"
     TPlus               -> "'+'"
+    TMinus              -> "'-'"
     TStar               -> "'*'"
     TAt                 -> "'@'"
     TLoli               -> "'-o'"
@@ -147,6 +150,7 @@ describeToken t =
     TPtrSh              -> "keyword 'ptrsh'"
     TFieldSh            -> "keyword 'fieldsh'"
     TArraySh            -> "keyword 'arraysh'"
+    TTupleSh            -> "keyword 'tuplesh'"
     TExSh               -> "keyword 'exsh'"
     TOrSh               -> "keyword 'orsh'"
     TMemBlock           -> "keyword 'memblock'"

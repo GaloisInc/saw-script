@@ -7,7 +7,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -31,14 +30,18 @@ module Verifier.SAW.Heapster.Widening where
 
 import Data.Maybe
 import Data.List
+import Data.Functor (void)
 import Data.Functor.Constant
 import Data.Functor.Product
-import Control.Monad.State
--- import Control.Monad.Cont
-import GHC.TypeLits
+import Control.Monad (ap, zipWithM)
+import Control.Monad.State (MonadState(..), StateT(..), modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
+import GHC.TypeLits (KnownNat)
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
+import Control.Monad.Extra (concatMapM)
 
 import Data.Parameterized.Some
+import Data.Parameterized.BoolRepr
 
 import Prettyprinter
 
@@ -78,7 +81,7 @@ newtype ExtVarPermsFun vars =
                      RAssign Name vars -> ExtVarPerms vars }
 
 -- | A map from free variables to their permissions and whether they have been
--- "visited" yet
+-- \"visited\" yet
 type WidNameMap = NameMap (Product ValuePerm (Constant Bool))
 
 -- | Modify the entry in a 'WidNameMap' associated with a particular free
@@ -110,6 +113,15 @@ wnMapDropUnvisiteds =
   p@(Pair _ (Constant True)) -> p
   (Pair _ (Constant False)) -> Pair ValPerm_True (Constant False)
 
+-- | Look up a variable of block type in a 'WidNameMap' to see if it has an
+-- associated @shape(sh)@ permission
+wnMapBlockShape :: WidNameMap -> ExprVar (LLVMBlockType w) ->
+                   Maybe (PermExpr (LLVMShapeType w))
+wnMapBlockShape nmap n =
+  NameMap.lookup n nmap >>= \case
+  Pair (ValPerm_Conj1 (Perm_LLVMBlockShape sh)) _ -> Just sh
+  _ -> Nothing
+
 newtype PolyContT r m a =
   PolyContT { runPolyContT :: forall x. (forall y. a -> m (r y)) -> m (r x) }
 
@@ -117,11 +129,11 @@ instance Functor (PolyContT r m) where
   fmap f m = m >>= return . f
 
 instance Applicative (PolyContT r m) where
-  pure = return
+  pure x = PolyContT $ \k -> k x
   (<*>) = ap
 
 instance Monad (PolyContT r m) where
-  return x = PolyContT $ \k -> k x
+  return = pure
   (PolyContT m) >>= f =
     PolyContT $ \k -> m $ \a -> runPolyContT (f a) k
 
@@ -195,6 +207,15 @@ traceM f = do
   dlevel <- view wsDebugLevel <$> get
   str <- renderDoc <$> f <$> view wsPPInfo <$> get
   debugTraceTraceLvl dlevel str $ return ()
+
+-- | Unfold an 'AtomicPerm' if it is a named conjunct, otherwise leave it alone
+widUnfoldConjPerm :: AtomicPerm a -> WideningM [AtomicPerm a]
+widUnfoldConjPerm (Perm_NamedConj npn args off)
+  | TrueRepr <- nameCanFoldRepr npn =
+    do env <- use wsPermEnv
+       let np = requireNamedPerm env npn
+       return $ unfoldConjPerm np args off
+widUnfoldConjPerm p = return [p]
 
 
 ----------------------------------------------------------------------
@@ -406,11 +427,17 @@ widenExpr' _ (PExpr_FieldShape (LLVMFieldShape p1)) (PExpr_FieldShape
   | Just Refl <- testEquality (exprLLVMTypeWidth p1) (exprLLVMTypeWidth p2) =
     PExpr_FieldShape <$> LLVMFieldShape <$> widenPerm knownRepr p1 p2
 
--- Array shapes can only be widened if they have the same length and stride
+-- Array shapes can be widened if they have the same length and stride
 widenExpr' _ (PExpr_ArrayShape
               len1 stride1 sh1) (PExpr_ArrayShape len2 stride2 sh2)
   | bvEq len1 len2 && stride1 == stride2 =
     PExpr_ArrayShape len1 stride1 <$> widenExpr knownRepr sh1 sh2
+
+-- An array shape of length 1 can be replaced by its sole cell
+widenExpr' tp (PExpr_ArrayShape len1 _ sh1) sh2
+  | bvEq len1 (bvInt 1) = widenExpr' tp sh1 sh2
+widenExpr' tp sh1 (PExpr_ArrayShape len2 _ sh2)
+  | bvEq len2 (bvInt 1) = widenExpr' tp sh1 sh2
 
 -- FIXME: there should be some check that the first shapes have the same length,
 -- though this is more complex if they might have free variables...?
@@ -454,7 +481,7 @@ widenExprs (CruCtxCons tps tp) (es1 :>: e1) (es2 :>: e2) =
 
 
 -- | Widen two bitvector offsets by trying to widen them additively
--- ('widenBVsAddy'), or if that is not possible, by widening them 
+-- ('widenBVsAddy'), or if that is not possible, by widening them
 -- multiplicatively ('widenBVsMulty')
 widenOffsets :: (1 <= w, KnownNat w) => TypeRepr (BVType w) ->
                 PermOffset (LLVMPointerType w) ->
@@ -492,47 +519,51 @@ widenBVsMulty tp bv1 bv2 =
 -- returning some @bp1'@ and @bp2'@ with the same range, along with additional
 -- portions of @bp1@ and @bp2@ that were removed
 equalizeLLVMBlockRanges' :: (1 <= w, KnownNat w) =>
-                            LLVMBlockPerm w -> LLVMBlockPerm w ->
+                            WidNameMap -> LLVMBlockPerm w -> LLVMBlockPerm w ->
                             Maybe (LLVMBlockPerm w, LLVMBlockPerm w,
                                    [LLVMBlockPerm w], [LLVMBlockPerm w])
-equalizeLLVMBlockRanges' bp1 bp2
+equalizeLLVMBlockRanges' _ bp1 bp2
   | not (bvEq (llvmBlockOffset bp1) (llvmBlockOffset bp2)) =
     error "equalizeLLVMBlockRanges'"
-equalizeLLVMBlockRanges' bp1 bp2
+equalizeLLVMBlockRanges' _ bp1 bp2
   | bvEq (llvmBlockLen bp1) (llvmBlockLen bp2) =
     return (bp1, bp2, [], [])
-equalizeLLVMBlockRanges' bp1 bp2
+equalizeLLVMBlockRanges' wnmap bp1 bp2
   | bvLt (llvmBlockLen bp1) (llvmBlockLen bp2) =
-    do (bp2', bp2'') <- splitLLVMBlockPerm (llvmBlockEndOffset bp1) bp2
+    do let blsubst = wnMapBlockShape wnmap
+       (bp2', bp2'') <- splitLLVMBlockPerm blsubst (llvmBlockEndOffset bp1) bp2
        return (bp1, bp2', [], [bp2''])
-equalizeLLVMBlockRanges' bp1 bp2
+equalizeLLVMBlockRanges' wnmap bp1 bp2
   | bvLt (llvmBlockLen bp2) (llvmBlockLen bp1) =
-    do (bp1', bp1'') <- splitLLVMBlockPerm (llvmBlockEndOffset bp2) bp1
+    do let blsubst = wnMapBlockShape wnmap
+       (bp1', bp1'') <- splitLLVMBlockPerm blsubst (llvmBlockEndOffset bp2) bp1
        return (bp1', bp2, [bp1''], [])
-equalizeLLVMBlockRanges' _ _ = Nothing
+equalizeLLVMBlockRanges' _ _ _ = Nothing
 
 -- | Take two block permissions @bp1@ and @bp2@ whose ranges overlap and use
 -- 'splitLLVMBlockPerm' to remove any parts of them that do not overlap,
 -- returning some @bp1'@ and @bp2'@ with the same range, along with additional
 -- portions of @bp1@ and @bp2@ that were removed
 equalizeLLVMBlockRanges :: (1 <= w, KnownNat w) =>
-                           LLVMBlockPerm w -> LLVMBlockPerm w ->
+                           WidNameMap -> LLVMBlockPerm w -> LLVMBlockPerm w ->
                            Maybe (LLVMBlockPerm w, LLVMBlockPerm w,
                                   [LLVMBlockPerm w], [LLVMBlockPerm w])
-equalizeLLVMBlockRanges bp1 bp2
+equalizeLLVMBlockRanges wnmap bp1 bp2
   | bvEq (llvmBlockOffset bp1) (llvmBlockOffset bp2) =
-    equalizeLLVMBlockRanges' bp1 bp2
-equalizeLLVMBlockRanges bp1 bp2
+    equalizeLLVMBlockRanges' wnmap bp1 bp2
+equalizeLLVMBlockRanges wnmap bp1 bp2
   | bvLt (llvmBlockOffset bp1) (llvmBlockOffset bp2) =
-    do (bp1', bp1'') <- splitLLVMBlockPerm (llvmBlockOffset bp2) bp1
-       (bp1_ret, bp2_ret, bps1, bps2) <- equalizeLLVMBlockRanges' bp1'' bp2
+    do let blsubst = wnMapBlockShape wnmap
+       (bp1', bp1'') <- splitLLVMBlockPerm blsubst (llvmBlockOffset bp2) bp1
+       (bp1_ret, bp2_ret, bps1, bps2) <- equalizeLLVMBlockRanges' wnmap bp1'' bp2
        return (bp1_ret, bp2_ret, bp1':bps1, bps2)
-equalizeLLVMBlockRanges bp1 bp2
+equalizeLLVMBlockRanges wnmap bp1 bp2
   | bvLt (llvmBlockOffset bp2) (llvmBlockOffset bp1) =
-    do (bp2', bp2'') <- splitLLVMBlockPerm (llvmBlockOffset bp1) bp2
-       (bp1_ret, bp2_ret, bps1, bps2) <- equalizeLLVMBlockRanges' bp1 bp2''
+    do let blsubst = wnMapBlockShape wnmap
+       (bp2', bp2'') <- splitLLVMBlockPerm blsubst (llvmBlockOffset bp1) bp2
+       (bp1_ret, bp2_ret, bps1, bps2) <- equalizeLLVMBlockRanges' wnmap bp1 bp2''
        return (bp1_ret, bp2_ret, bps1, bp2':bps2)
-equalizeLLVMBlockRanges _ _ = Nothing
+equalizeLLVMBlockRanges _ _ _ = Nothing
 
 
 -- | Widen two block permissions against each other, assuming they already have
@@ -551,21 +582,23 @@ widenBlockPerm bp1 bp2 =
 widenAtomicPerms :: TypeRepr a -> [AtomicPerm a] -> [AtomicPerm a] ->
                     WideningM [AtomicPerm a]
 widenAtomicPerms tp ps1 ps2 =
-  traceM (\i ->
-           fillSep [pretty "widenAtomicPerms",
-                    permPretty i ps1, permPretty i ps2]) >>
-  widenAtomicPerms' tp ps1 ps2
+  do traceM (\i ->
+              fillSep [pretty "widenAtomicPerms",
+                       permPretty i ps1, permPretty i ps2])
+     wnmap <- view wsNameMap <$> get
+     widenAtomicPerms' wnmap tp ps1 ps2
 
-widenAtomicPerms' :: TypeRepr a -> [AtomicPerm a] -> [AtomicPerm a] ->
+widenAtomicPerms' :: WidNameMap -> TypeRepr a ->
+                     [AtomicPerm a] -> [AtomicPerm a] ->
                      WideningM [AtomicPerm a]
 
 -- If one side is empty, we return the empty list, i.e., true
-widenAtomicPerms' _ [] _ = return []
-widenAtomicPerms' _ _ [] = return []
+widenAtomicPerms' _ _ [] _ = return []
+widenAtomicPerms' _ _ _ [] = return []
 
 -- If there is a permission on the right that equals p1, use p1, and recursively
 -- widen the remaining permissions
-widenAtomicPerms' tp (p1 : ps1) ps2
+widenAtomicPerms' _ tp (p1 : ps1) ps2
   | Just i <- findIndex (== p1) ps2 =
     (p1 :) <$> widenAtomicPerms tp ps1 (deleteNth i ps2)
 
@@ -573,8 +606,7 @@ widenAtomicPerms' tp (p1 : ps1) ps2
 -- sides, check that their fields are the same and equalize their borrows
 --
 -- FIXME: handle arrays with different lengths, and widen their fields
-widenAtomicPerms' tp (Perm_LLVMArray ap1 : ps1) ps2 =
-  (view wsNameMap <$> get) >>= \wnmap ->
+widenAtomicPerms' wnmap tp (Perm_LLVMArray ap1 : ps1) ps2 =
   case findIndex
        (\case
            Perm_LLVMArray ap2 ->
@@ -607,7 +639,7 @@ widenAtomicPerms' tp (Perm_LLVMArray ap1 : ps1) ps2 =
 
 -- If the first permission on the left is an LLVM permission overlaps with some
 -- permission on the right, widen these against each other
-widenAtomicPerms' tp@(LLVMPointerRepr w) (p1 : ps1) ps2
+widenAtomicPerms' wnmap tp@(LLVMPointerRepr w) (p1 : ps1) ps2
   | Just bp1 <- llvmAtomicPermToBlock p1
   , rng1 <- llvmBlockRange bp1
   , Just i <-
@@ -615,7 +647,7 @@ widenAtomicPerms' tp@(LLVMPointerRepr w) (p1 : ps1) ps2
                                  . llvmAtomicPermRange) ps2)
   , Just bp2 <- llvmAtomicPermToBlock (ps2!!i)
   , Just (bp1', bp2', bps1_rem, bps2_rem) <-
-      withKnownNat w (equalizeLLVMBlockRanges bp1 bp2)
+      withKnownNat w (equalizeLLVMBlockRanges wnmap bp1 bp2)
   = withKnownNat w (
       (:) <$> (Perm_LLVMBlock <$> widenBlockPerm bp1' bp2') <*>
       widenAtomicPerms tp (map Perm_LLVMBlock bps1_rem ++ ps1)
@@ -623,7 +655,7 @@ widenAtomicPerms' tp@(LLVMPointerRepr w) (p1 : ps1) ps2
 
 -- If the LHS is a frame permission such that there is a frame permission on the
 -- RHS with the same list of lengths, widen the expressions
-widenAtomicPerms' tp@(LLVMFrameRepr w) (Perm_LLVMFrame frmps1 : ps1) ps2
+widenAtomicPerms' _ tp@(LLVMFrameRepr w) (Perm_LLVMFrame frmps1 : ps1) ps2
   | Just i <- findIndex (\case
                             Perm_LLVMFrame _ -> True
                             _ -> False) ps2
@@ -634,8 +666,15 @@ widenAtomicPerms' tp@(LLVMFrameRepr w) (Perm_LLVMFrame frmps1 : ps1) ps2
        (Perm_LLVMFrame (zip es (map snd frmps1)) :) <$>
          widenAtomicPerms tp ps1 (deleteNth i ps2)
 
+-- If either side has unfoldable named permissions, unfold them and recurse
+widenAtomicPerms' _ tp ps1 ps2
+  | any isFoldableConjPerm (ps1 ++ ps2)
+  = do ps1' <- concatMapM widUnfoldConjPerm ps1
+       ps2' <- concatMapM widUnfoldConjPerm ps2
+       widenAtomicPerms tp ps1' ps2'
+
 -- Default: cannot widen p1 against any p2 on the right, so drop it and recurse
-widenAtomicPerms' tp (_ : ps1) ps2 = widenAtomicPerms tp ps1 ps2
+widenAtomicPerms' _ tp (_ : ps1) ps2 = widenAtomicPerms tp ps1 ps2
 
 
 -- | Widen permissions against each other

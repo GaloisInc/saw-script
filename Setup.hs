@@ -1,11 +1,12 @@
 import Control.Exception
 import Control.Monad (unless)
+import Data.List (find)
 import Distribution.Simple
 import Distribution.Simple.BuildPaths (autogenPackageModulesDir)
 import Distribution.PackageDescription (emptyHookedBuildInfo, allBuildInfo)
-import System.Directory (createDirectoryIfMissing, findExecutable)
+import System.Directory
 import System.FilePath ((</>))
-import System.Process (readProcess)
+import System.Process (readProcess, callProcess)
 import System.Exit
 
 main = defaultMainWithHooks myHooks
@@ -17,20 +18,40 @@ myBuild pd lbi uh flags = do
 
   hasGit <- findExecutable "git"
 
-  let gitfailure :: SomeException -> IO String
-      gitfailure _e = return "<non-dev-build> "
+  let gitfailure :: a -> SomeException -> IO a
+      gitfailure a _e = return a
 
-  desc <- case hasGit of
-            Just git -> readProcess "git" ["describe", "--always", "--dirty"] ""
-                        `catch` gitfailure
-            Nothing -> return "<VCS-less build> "
+  let gitdescribe dir m on_no_exe on_fail = case hasGit of
+        Just exe -> withCurrentDirectory dir (m <$>
+                      readProcess "git" ["describe", "--always", "--dirty"] "")
+                    `catch` gitfailure on_fail
+        Nothing -> return on_no_exe
+
+  desc     <- gitdescribe "." init "<VCS-less build>" "<non-dev-build>"
+  aig_desc <- gitdescribe "deps/aig" (Just . init) Nothing Nothing
+  w4_desc  <- gitdescribe "deps/what4" (Just . init) Nothing Nothing
+
+  rme_desc <- case hasGit of
+    Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
+                `catch` gitfailure Nothing
+    Nothing -> return Nothing
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
+    , "-- | String describing the HEAD of saw-script at compile-time"
     , "hash :: String"
-    , "hash = " ++ show (init desc)
+    , "hash = " ++ show desc
+    , "-- | String describing the HEAD of the deps/aig submodule at compile-time"
+    , "aigHash :: Maybe String"
+    , "aigHash = " ++ show aig_desc
+    , "-- | String describing the HEAD of the deps/what4 submodule at compile-time"
+    , "what4Hash :: Maybe String"
+    , "what4Hash = " ++ show w4_desc
+    , "-- | String describing the most recent commit which modified the rme directory"
+    , "-- at compile-time"
+    , "rmeHash :: Maybe String"
+    , "rmeHash = " ++ show rme_desc
     ]
 
   unless (null $ allBuildInfo pd) $
     (buildHook simpleUserHooks) pd lbi uh flags
-

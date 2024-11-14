@@ -1,0 +1,28 @@
+enable_experimental;
+
+MODULE <- mir_load_module "unsound_global.linked-mir.json";
+
+let foo_setup = do {
+  //mir_alloc_global "GLOBAL";
+  x <- mir_fresh_var "x" mir_u32;
+  mir_assert {{ x < 0x10000000 }};
+  mir_execute_func [mir_term x];
+  mir_return (mir_term {{ x + 1 : [32] }});
+  // mir_points_to (mir_elem (mir_static "GLOBAL") 1) (mir_term x);
+};
+foo_spec <- mir_verify MODULE "unsound_global::foo" [] false foo_setup z3;
+
+let bar_setup = do {
+  //mir_alloc_global "GLOBAL";
+  //mir_alloc_global "TEST";
+  mir_execute_func [];
+  mir_return (mir_term {{ 2 : [32] }});
+};
+
+// the below line (without override) correctly fails
+// mir_verify MODULE "unsound_global::bar" [] false bar_setup z3;
+
+// this also correctly fails these days
+mir_verify MODULE "unsound_global::bar" [foo_spec] false bar_setup z3;
+
+print "Should not have succeeded - unsound!";

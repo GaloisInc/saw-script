@@ -1,0 +1,13 @@
+enable_experimental;
+enable_lax_loads_and_stores;
+
+let f_spec = do {
+  aa <- llvm_fresh_var "aa" (llvm_alias "struct.a");
+  bb <- llvm_alloc (llvm_alias "struct.b");
+  llvm_points_to (llvm_field bb "aa") (llvm_term aa);
+
+  llvm_execute_func [bb];
+};
+
+m <- llvm_load_module "test.bc";
+llvm_verify m "f" [] false f_spec (w4_unint_yices []);

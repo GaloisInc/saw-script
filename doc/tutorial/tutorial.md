@@ -276,7 +276,7 @@ $include all code/double.c
 In this trivial example, an integer can be doubled either using
 multiplication or shifting. The following SAWScript program (in
 `double.saw`) verifies that the two are equivalent using both internal
-ABC, Yices, and Z3 modes, and by exporting an SMT-Lib theorem to be
+Yices and Z3 modes, and by exporting an SMT-Lib theorem to be
 checked later, by an external SAT solver.
 
 ```
@@ -296,7 +296,7 @@ passes the given term through unchanged, because it might be used for
 either satisfiability or validity checking.
 
 The SMT-Lib export capabilities in SAWScript make use of the Haskell
-SBV package, and support ABC, Boolector, CVC4, MathSAT, Yices, and Z3.
+SBV package, and support ABC, Boolector, CVC4, CVC5, MathSAT, Yices, and Z3.
 
 \newpage
 

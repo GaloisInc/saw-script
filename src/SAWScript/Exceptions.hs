@@ -64,9 +64,10 @@ topLevelExceptionFromException x =
 
 instance Exception TopLevelException
 
-data TraceException = TraceException String
+data TraceException = TraceException [String] SomeException
 
 instance Show TraceException where
-  show (TraceException msg) = "Stack trace:\n" ++ msg
+  show (TraceException msg ex) =
+    unlines (["Stack trace:"] ++ msg ++ [displayException ex])
 
 instance Exception TraceException

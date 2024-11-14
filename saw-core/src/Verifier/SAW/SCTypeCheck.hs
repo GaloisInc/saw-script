@@ -47,9 +47,11 @@ module Verifier.SAW.SCTypeCheck
   ) where
 
 import Control.Applicative
-import Control.Monad.Except
-import Control.Monad.State.Strict
-import Control.Monad.Reader
+import Control.Monad (foldM, forM, forM_, mapM, unless, void)
+import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Reader (MonadReader(..), Reader, ReaderT(..), runReader)
+import Control.Monad.State.Strict (MonadState(..), StateT, evalStateT, modify)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -79,9 +81,9 @@ type TCState = Map TermIndex Term
 -- * Memoizes the most general type inferred for each expression; AND
 --
 -- * Can throw 'TCError's
-type TCM a =
+type TCM =
   ReaderT (SharedContext, Maybe ModuleName, [(LocalName, Term)])
-  (StateT TCState (ExceptT TCError IO)) a
+  (StateT TCState (ExceptT TCError IO))
 
 -- | Run a type-checking computation in a given context, starting from the empty
 -- memoization table
@@ -400,16 +402,22 @@ instance TypeInfer (TermF Term) where
     -- special-case handling itself
     typeInfer ftf
   typeInfer (Lambda x a rhs) =
-    do a_tptrm <- typeInferCompleteWHNF a
+    do a_whnf <- typeInferCompleteWHNF a
        -- NOTE: before adding a type to the context, we want to be sure it is in
-       -- WHNF, so we don't have to normalize each time we look up a var type
-       rhs_tptrm <- withVar x (typedVal a_tptrm) $ typeInferComplete rhs
+       -- WHNF, so we don't have to normalize each time we look up a var type,
+       -- but we want to leave the non-normalized value of a in the returned
+       -- term, so we create a_tptrm with the type of a_whnf but the value of a
+       rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
+       let a_tptrm = TypedTerm a (typedType a_whnf)
        typeInfer (Lambda x a_tptrm rhs_tptrm)
   typeInfer (Pi x a rhs) =
-    do a_tptrm <- typeInferCompleteWHNF a
+    do a_whnf <- typeInferCompleteWHNF a
        -- NOTE: before adding a type to the context, we want to be sure it is in
-       -- WHNF, so we don't have to normalize each time we look up a var type
-       rhs_tptrm <- withVar x (typedVal a_tptrm) $ typeInferComplete rhs
+       -- WHNF, so we don't have to normalize each time we look up a var type,
+       -- but we want to leave the non-normalized value of a in the returned
+       -- term, so we create a_typed with the type of a_whnf but the value of a
+       rhs_tptrm <- withVar x (typedVal a_whnf) $ typeInferComplete rhs
+       let a_tptrm = TypedTerm a (typedType a_whnf)
        typeInfer (Pi x a_tptrm rhs_tptrm)
   typeInfer (Constant ec _) =
     -- NOTE: this special case is to prevent us from re-type-checking the

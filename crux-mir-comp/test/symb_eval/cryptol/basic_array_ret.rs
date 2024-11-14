@@ -3,7 +3,7 @@ use crucible::*;
 
 const PATH: &str = "test::symb_eval::cryptol::basic";
 
-#[crux_test]
+#[crux::test]
 fn test() {
     let x = u8::symbolic("x");
     let y = u8::symbolic("y");

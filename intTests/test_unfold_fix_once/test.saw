@@ -1,0 +1,12 @@
+let {{
+  f : [64] -> [64]
+  f x = if x <$ 0 then 0 else 2 * (f (x + 1))
+}};
+
+prove_print
+  (do {
+    unfolding_fix_once ["f"];
+    w4_unint_z3 ["f"];
+  })
+  {{ \x -> (f x) % 2 == 0 }};
+

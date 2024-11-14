@@ -5,7 +5,7 @@ import uuid
 import sys
 import time
 import atexit
-from distutils.spawn import find_executable
+from shutil import which
 
 import cryptol
 
@@ -13,6 +13,7 @@ from cryptol import cryptoltypes
 from . import connection
 from argo_client.connection import ServerConnection
 from . import llvm
+from . import mir
 from . import exceptions
 from . import option
 from . import proofscript
@@ -393,7 +394,7 @@ def jvm_load_class(class_name: str) -> JVMClass:
     __get_designated_connection().jvm_load_class(name, class_name).result()
     return JVMClass(class_name, name)
 
-# TODO: this is almost identical to llvm_assume. Can we reduce duplication?
+# TODO: this is almost identical to llvm_assume and mir_assume. Can we reduce duplication?
 def jvm_assume(cls: JVMClass,
                method_name: str,
                contract: llvm.Contract,
@@ -433,7 +434,7 @@ def jvm_assume(cls: JVMClass,
 
     return result
 
-# TODO: this is almost identical to llvm_verify. Can we reduce duplication?
+# TODO: this is almost identical to llvm_verify and mir_verify. Can we reduce duplication?
 def jvm_verify(cls: JVMClass,
                method_name: str,
                contract: llvm.Contract,
@@ -624,6 +625,150 @@ def llvm_verify(module: LLVMModule,
         raise result.exception from None
 
     return result
+
+
+@dataclass
+class MIRModule:
+    json_file: str
+    server_name: str
+
+
+def mir_load_module(json_file: str) -> MIRModule:
+    name = __fresh_server_name(json_file)
+    __get_designated_connection().mir_load_module(name, json_file).result()
+    return MIRModule(json_file, name)
+
+
+# TODO: this is almost identical to llvm_assume and jvm_assume. Can we reduce duplication?
+def mir_assume(module: MIRModule,
+               function: str,
+               contract: llvm.Contract,
+               lemma_name_hint: Optional[str] = None) -> VerificationResult:
+    """Assume that the given function satisfies the given contract. Returns an
+    override linking the function and contract that can be passed as an
+    argument in calls to `mir_verify`
+    """
+    if lemma_name_hint is None:
+        lemma_name_hint = contract.__class__.__name__ + "_" + function
+    name = __fresh_server_name(lemma_name_hint)
+
+    result: VerificationResult
+    try:
+        conn = __get_designated_connection()
+        res = conn.mir_assume(module.server_name,
+                              function,
+                              contract.to_json(),
+                              name)
+        result = AssumptionSucceeded(server_name=name,
+                                     contract=contract,
+                                     stdout=res.stdout(),
+                                     stderr=res.stderr())
+        __global_success = True
+        # If something stopped us from even **assuming**...
+    except exceptions.VerificationError as err:
+        __global_success = False
+        result = AssumptionFailed(server_name=name,
+                                  assumptions=[],
+                                  contract=contract,
+                                  exception=err)
+    except Exception as err:
+        __global_success = False
+        for view in __designated_views:
+            view.on_python_exception(err)
+        raise err from None
+
+    return result
+
+
+# TODO: this is almost identical to llvm_verify and jvm_verify. Can we reduce duplication?
+def mir_verify(module: MIRModule,
+               function: str,
+               contract: llvm.Contract,
+               lemmas: List[VerificationResult] = [],
+               check_sat: bool = False,
+               script: Optional[proofscript.ProofScript] = None,
+               lemma_name_hint: Optional[str] = None) -> VerificationResult:
+    """Verify that the given function satisfies the given contract. Returns an
+    override linking the function and contract that can be passed as an
+    argument in further calls to `mir_verify`
+    """
+
+    if script is None:
+        script = proofscript.ProofScript([proofscript.z3([])])
+    if lemma_name_hint is None:
+        lemma_name_hint = contract.__class__.__name__ + "_" + function
+
+    name = __fresh_server_name(lemma_name_hint)
+
+    result: VerificationResult
+    conn = __get_designated_connection()
+
+    global __global_success
+    global __designated_views
+
+    try:
+        res = conn.mir_verify(module.server_name,
+                              function,
+                              [l.server_name for l in lemmas],
+                              check_sat,
+                              contract.to_json(),
+                              script.to_json(),
+                              name)
+
+        stdout = res.stdout()
+        stderr = res.stderr()
+        result = VerificationSucceeded(server_name=name,
+                                       assumptions=lemmas,
+                                       contract=contract,
+                                       stdout=stdout,
+                                       stderr=stderr)
+    # If the verification did not succeed...
+    except exceptions.VerificationError as err:
+        # FIXME add the goal as an assumption if it failed...?
+        result = VerificationFailed(server_name=name,
+                                    assumptions=lemmas,
+                                    contract=contract,
+                                    exception=err)
+    # If something else went wrong...
+    except Exception as err:
+        __global_success = False
+        for view in __designated_views:
+            view.on_python_exception(err)
+        raise err from None
+
+    # Log or otherwise process the verification result
+    for view in __designated_views:
+        if isinstance(result, VerificationSucceeded):
+            view.on_success(result)
+        elif isinstance(result, VerificationFailed):
+            view.on_failure(result)
+
+    # Note when any failure occurs
+    __global_success = __global_success and result.is_success()
+
+    # Abort the proof if we failed to assume a failed verification, otherwise
+    # return the result of the verification
+    if isinstance(result, AssumptionFailed):
+        raise result.exception from None
+
+    return result
+
+
+def mir_find_adt(module: MIRModule,
+                 adt_orig_name: str,
+                 *tys: mir.MIRType,
+                 adt_server_name_hint: Optional[str] = None) -> mir.MIRAdt:
+    """Consult the given MIR module (``module_server_name``) to find an
+       algebraic data type (ADT) with ``adt_orig_name`` as its identifier and
+       ``tys`` as the types used to instantiate the type parameters. If such an
+       ADT cannot be found in the module, this will raise an error.
+    """
+    if adt_server_name_hint is None:
+        adt_server_name_hint = adt_orig_name
+    adt_server_name = __fresh_server_name(adt_server_name_hint)
+    __get_designated_connection().mir_find_adt(module.server_name, adt_orig_name, list(tys), adt_server_name).result()
+    return mir.MIRAdt(adt_orig_name, adt_server_name)
+
 
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:

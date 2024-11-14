@@ -1,0 +1,87 @@
+enable_experimental;
+
+// Specifications using `mir_fresh_var`
+
+let id_spec mty = do {
+  x <- mir_fresh_var "x" mty;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term x);
+};
+
+let id_u32_wrong = do {
+  x <- mir_fresh_var "x" (mir_u32);
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 : [32] }});
+};
+
+let id_unit = do {
+  x <- mir_fresh_var "x" (mir_tuple []);
+
+  mir_execute_func [mir_term x];
+};
+
+// Specifications using specific Cryptol terms
+
+let id_array_cryptol_spec = do {
+  let t = mir_term {{ [42, 27, 100, 27, 42] : [5][32] }};
+
+  mir_execute_func [t];
+
+  mir_return t;
+};
+
+let id_tuple_cryptol_spec = do {
+  let t = mir_term {{ (42, 27) : ([32], [32]) }};
+
+  mir_execute_func [t];
+
+  mir_return t;
+};
+
+let id_u32_cryptol_spec = do {
+  let t = mir_term {{ 42 : [32] }};
+
+  mir_execute_func [t];
+
+  mir_return t;
+};
+
+let id_unit_cryptol_spec = do {
+  mir_execute_func [mir_term {{ () }}];
+};
+
+/////
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::id_array" [] false (id_spec (mir_array 5 mir_u32)) z3;
+mir_verify m "test::id_i8" [] false (id_spec mir_i8) z3;
+mir_verify m "test::id_i16" [] false (id_spec mir_i16) z3;
+mir_verify m "test::id_i32" [] false (id_spec mir_i32) z3;
+mir_verify m "test::id_i64" [] false (id_spec mir_i64) z3;
+mir_verify m "test::id_isize" [] false (id_spec mir_isize) z3;
+mir_verify m "test::id_tuple" [] false (id_spec (mir_tuple [mir_u32, mir_u32])) z3;
+mir_verify m "test::id_u8" [] false (id_spec mir_u8) z3;
+mir_verify m "test::id_u16" [] false (id_spec mir_u16) z3;
+mir_verify m "test::id_u32" [] false (id_spec mir_u32) z3;
+mir_verify m "test::id_u64" [] false (id_spec mir_u64) z3;
+mir_verify m "test::id_usize" [] false (id_spec mir_usize) z3;
+mir_verify m "test::id_unit" [] false id_unit z3;
+
+// Test using fully disambiguated names
+mir_verify m "test/ff7472fa::id_u8" [] false (id_spec mir_u8) z3;
+mir_verify m "test/ff7472fa::id_u8[0]" [] false (id_spec mir_u8) z3;
+
+mir_verify m "test::id_array" [] false id_array_cryptol_spec z3;
+mir_verify m "test::id_tuple" [] false id_tuple_cryptol_spec z3;
+mir_verify m "test::id_u32" [] false id_u32_cryptol_spec z3;
+mir_verify m "test::id_unit" [] false id_unit_cryptol_spec z3;
+
+// A specification that is expected to fail
+fails (
+  mir_verify m "test::id_u32" [] false id_u32_wrong z3
+);

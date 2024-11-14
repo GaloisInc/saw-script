@@ -5,7 +5,8 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The
+Cryptol, LLVM (and therefore C), and JVM (and therefore Java). SAW also has
+experimental, incomplete support for MIR (and therefore Rust). The
 models take the form of typed functional programs, so in a sense SAW can
 be considered a translator from imperative programs to their functional
 equivalents. Various external proof tools, including a variety of SAT
@@ -85,6 +86,15 @@ command-line options:
 
   ~ Set the verbosity level of the SAWScript interpreter.
 
+`--clean-mismatched-versions-solver-cache[=path]`
+
+  ~ Run the `clean_mismatched_versions_solver_cache` command on the solver
+  cache at the given path, or if no path is given, the solver cache at the
+  value of the `SAW_SOLVER_CACHE_PATH` environment variable, then exit. See
+  the section **Caching Solver Results** for a description of the
+  `clean_mismatched_versions_solver_cache` command and the solver caching
+  feature in general.
+
 SAW also uses several environment variables for configuration:
 
 `CRYPTOLPATH`
@@ -107,6 +117,13 @@ SAW also uses several environment variables for configuration:
   libraries. Note that that is not necessary if the `--java-bin-dirs` option
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
+
+`SAW_SOLVER_CACHE_PATH`
+
+  ~ Specify a path at which to keep a cache of solver results obtained during
+  calls to certain tactics. A cache is not created at this path until it is
+  needed. See the section **Caching Solver Results** for more detail about this
+  feature.
 
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
@@ -176,7 +193,7 @@ Cryptol, Haskell and ML. In particular, functions are applied by
 writing them next to their arguments rather than by using parentheses
 and commas. Rather than writing `f(x, y)`, write `f x y`.
 
-Comments are written as in C and Java (among many other languages). All
+Comments are written as in C, Java, and Rust (among many other languages). All
 text from `//` until the end of a line is ignored. Additionally, all
 text between `/*` and `*/` is ignored, regardless of whether the line
 ends.
@@ -746,7 +763,13 @@ In addition to the use of brackets to write Cryptol expressions inline,
 several built-in functions can extract `Term` values from Cryptol files
 in other ways. The `import` command at the top level imports all
 top-level definitions from a Cryptol file and places them in scope
-within later bracketed expressions.
+within later bracketed expressions. This includes [Cryptol `foreign`
+declarations](https://galoisinc.github.io/cryptol/master/FFI.html). If a
+[Cryptol implementation of a foreign
+function](https://galoisinc.github.io/cryptol/master/FFI.html#cryptol-implementation-of-foreign-functions)
+is present, then it will be used as the definition when reasoning about
+the function. Otherwise, the function will be imported as an opaque
+constant with no definition.
 
 The `cryptol_load` command behaves similarly, but returns a
 `CryptolModule` instead. If any `CryptolModule` is in scope, its
@@ -1131,7 +1154,7 @@ sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
 
-In addition to these, the `boolector`, `cvc4`, `mathsat`, and `yices`
+In addition to these, the `boolector`, `cvc4`, `cvc5`, `mathsat`, and `yices`
 provers are available. The internal decision procedure `rme`, short for
 Reed-Muller Expansion, is an automated prover that works particularly
 well on the Galois field operations that show up, for example, in AES.
@@ -1199,6 +1222,8 @@ named subterms should be represented as uninterpreted functions.
 
 * `unint_cvc4 : [String] -> ProofScript ()`
 
+* `unint_cvc5 : [String] -> ProofScript ()`
+
 * `unint_yices : [String] -> ProofScript ()`
 
 * `unint_z3 : [String] -> ProofScript ()`
@@ -1218,6 +1243,8 @@ library to represent and solve SMT queries:
 
 * `sbv_unint_cvc4 : [String] -> ProofScript ()`
 
+* `sbv_unint_cvc5 : [String] -> ProofScript ()`
+
 * `sbv_unint_yices : [String] -> ProofScript ()`
 
 * `sbv_unint_z3 : [String] -> ProofScript ()`
@@ -1225,6 +1252,8 @@ library to represent and solve SMT queries:
 The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
 
 * `w4_unint_cvc4 : [String] -> ProofScript ()`
+
+* `w4_unint_cvc5 : [String] -> ProofScript ()`
 
 * `w4_unint_yices : [String] -> ProofScript ()`
 
@@ -1236,6 +1265,102 @@ situations where one library may outpeform the other, however, due to
 differences in how each library represents certain SMT queries. There are also
 some experimental features that are only supported with What4 at the moment,
 such as `enable_lax_loads_and_stores`.
+
+## Caching Solver Results
+
+SAW has the capability to cache the results of tactics which call out to
+automated provers. This can save a considerable amount of time in cases such as
+proof development and CI, where the same proof scripts are often run repeatedly
+without changes.
+
+This caching is available for all tactics which call out to automated provers
+at runtime: `abc`, `boolector`, `cvc4`, `cvc5`, `mathsat`, `yices`, `z3`,
+`rme`, and the family of `unint` tactics described in the previous section.
+
+When solver caching is enabled and one of the tactics mentioned above is
+encountered, if there is already an entry in the cache corresponding to the
+call then the cached result is used, otherwise the appropriate solver is
+queried, and the result saved to the cache. Entries are indexed by a SHA256
+hash of the exact query to the solver (ignoring variable names), any options
+passed to the solver, and the names and full version strings of all the solver
+backends involved (e.g. ABC and SBV for the `abc` tactic). This ensures cached
+results are only used when they would be identical to the result of actually
+running the tactic.
+
+The simplest way to enable solver caching is to set the environment variable
+`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+`saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
+database at the given path containing the solver result cache. Setting this
+environment variable globally therefore creates a global, concurrency-safe
+solver result cache used by all newly created `saw` or `saw-remote-api`
+processes. Note that when this environment variable is set, SAW does not create
+a cache at the specified path until it is actually needed.
+
+There are also a number of SAW commands related to solver caching.
+
+* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+  remainder of the current session, but opens an LMDB database at the specified
+  path immediately. If a cache is already in use in the current session
+  (i.e. through a prior call to `set_solver_cache_path` or through
+  `SAW_SOLVER_CACHE_PATH` being set and the cache being used at least once)
+  then all entries in the cache already in use will be copied to the new cache
+  being opened.
+
+* `clean_mismatched_versions_solver_cache` will remove all entries in the
+  solver result cache which were created using solver backend versions which do
+  not match the versions in the current environment. This can be run after an
+  update to clear out any old, unusable entries from the solver cache. This
+  command can also be run directly from the command line through the
+  `--clean-mismatched-versions-solver-cache` command-line option.
+
+* `print_solver_cache` prints to the console all entries in the cache whose
+  SHA256 hash keys start with the given hex string. Providing an empty string
+  results in all entries in the cache being printed.
+
+* `print_solver_cache_stats` prints to the console statistics including the
+  size of the solver cache, where on disk it is stored, and some counts of how
+  often it has been used during the current session.
+
+For performing more complicated database operations on the set of cached
+results, the file `solver_cache.py` is provided with the Python bindings of the
+SAW Remote API. This file implements a general-purpose Python interface for
+interacting with the LMDB databases kept by SAW for solver caching.
+
+Below is an example of using solver caching with `saw -v Debug`. Only the
+relevant output is shown, the rest abbreviated with "...".
+
+~~~~
+sawscript> set_solver_cache_path "example.cache"
+sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print z3 {{ \(new:[8]) -> new+new == new*2 }}
+[22:13:04.122] Using cached result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
+...
+sawscript> prove_print (w4_unint_z3_using "qfnia" []) \
+                                  {{ \(x:[8]) -> x+x == x*2 }}
+[22:13:09.484] Caching result: 4ee451f8429c2dfe (What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit)
+...
+sawscript> print_solver_cache "d1f5a76e7a0b7c01"
+[22:13:13.250] SHA: d1f5a76e7a0b7c01bdfe7d0e1be82b4f233a805ae85a287d45933ed12a54d3eb
+[22:13:13.250] - Result: unsat
+[22:13:13.250] - Solver: "SBV->Z3"
+[22:13:13.250] - Versions: SBV 9.2, Z3 4.8.7 - 64 bit
+[22:13:13.250] - Last used: 2023-07-25 22:13:04.120351 UTC
+
+sawscript> print_solver_cache "4ee451f8429c2dfe"
+[22:13:16.727] SHA: 4ee451f8429c2dfefecb6216162bd33cf053f8e66a3b41833193529449ef5752
+[22:13:16.727] - Result: unsat
+[22:13:16.727] - Solver: "W4 ->z3"
+[22:13:16.727] - Versions: What4 v1.3-29-g6c462cd using qfnia, Z3 4.8.7 - 64 bit
+[22:13:16.727] - Last used: 2023-07-25 22:13:09.484464 UTC
+
+sawscript> print_solver_cache_stats
+[22:13:20.585] == Solver result cache statistics ==
+[22:13:20.585] - 2 results cached in example.cache
+[22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
+[22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
+~~~~
 
 ## Other External Provers
 
@@ -1562,6 +1687,8 @@ analyze JVM and LLVM programs.
 
 The first step in analyzing any code is to load it into the system.
 
+## Loading LLVM
+
 To load LLVM code, simply provide the location of a valid bitcode file
 to the `llvm_load_module` function.
 
@@ -1571,11 +1698,13 @@ The resulting `LLVMModule` can be passed into the various functions
 described below to perform analysis of specific LLVM functions.
 
 The LLVM bitcode parser should generally work with LLVM versions between
-3.5 and 9.0, though it may be incomplete for some versions. Debug
+3.5 and 16.0, though it may be incomplete for some versions. Debug
 metadata has changed somewhat throughout that version range, so is the
 most likely case of incompleteness. We aim to support every version
 after 3.5, however, so report any parsing failures as [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
+
+## Loading Java
 
 Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, three flags
@@ -1617,12 +1746,28 @@ unresolved issues in verifying code involving classes such as `String`. For
 more information on these issues, refer to
 [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
+## Loading MIR
+
+To load a piece of Rust code, first compile it to a MIR JSON file, as described
+in [this section](#compiling-mir), and then provide the location of the JSON
+file to the `mir_load_module` function:
+
+* `mir_load_module : String -> TopLevel MIRModule`
+
+SAW currently supports Rust code that can be built with a [January 23, 2023
+Rust nightly](https://static.rust-lang.org/dist/2023-01-23/).  If you encounter
+a Rust feature that SAW does not support, please report it [on
+GitHub](https://github.com/GaloisInc/saw-script/issues).
+
 ## Notes on Compiling Code for SAW
 
-SAW will generally be able to load arbitrary LLVM bitcode and JVM
-bytecode files, but several guidelines can help make verification
-easier or more likely to succeed. For generating LLVM with `clang`, it
-can be helpful to:
+SAW will generally be able to load arbitrary LLVM bitcode, JVM bytecode, and
+MIR JSON files, but several guidelines can help make verification easier or
+more likely to succeed.
+
+### Compiling LLVM
+
+For generating LLVM with `clang`, it can be helpful to:
 
 * Turn on debugging symbols with `-g` so that SAW can find source
   locations of functions, names of variables, etc.
@@ -1653,11 +1798,101 @@ behavior, and SAW currently does not have built in support for these
 functions (though you could manually create overrides for them in a
 verification script).
 
+[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+
+### Compiling Java
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
 
-[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+### Compiling MIR
+
+In order to verify Rust code, SAW analyzes Rust's MIR (mid-level intermediate
+representation) language. In particular, SAW analyzes a particular form of MIR
+that the [`mir-json`](https://github.com/GaloisInc/mir-json) tool produces. You
+will need to intall `mir-json` and run it on Rust code in order to produce MIR
+JSON files that SAW can load (see [this section](#loading-mir)). You will also
+need to use `mir-json` to build custom versions of the Rust standard libraries
+that are more suited to verification purposes.
+
+If you are working from a checkout of the `saw-script` repo, you can install
+the `mir-json` tool and the custom Rust standard libraries by performing the
+following steps:
+
+1. Clone the [`crucible`](https://github.com/GaloisInc/crucible) and `mir-json`
+   submodules like so:
+
+   ```
+   $ git submodule update deps/crucible deps/mir-json
+   ```
+
+2. Navigate to the `mir-json` submodule:
+
+   ```
+   $ cd deps/mir-json
+   ```
+
+3. Follow the instructions laid out in the [`mir-json` installation
+   instructions](https://github.com/GaloisInc/mir-json#installation-instructions)
+   in order to install `mir-json`.
+
+4. Navigate to the
+   [`crux-mir`](https://github.com/GaloisInc/crucible/tree/master/crux-mir)
+   subdirectory of the `crucible` submodule:
+
+   ```
+   $ cd ../crucible/crux-mir/
+   ```
+
+5. Run the `translate_libs.sh` script:
+
+   ```
+   $ ./translate_libs.sh
+   ```
+
+   This will compile the custom versions of the Rust standard libraries using
+   `mir-json`, placing the results under the `rlibs` subdirectory.
+
+6. Finally, define a `SAW_RUST_LIBRARY_PATH` environment variable that points
+   to the newly created `rlibs` subdirectory:
+
+   ```
+   $ export SAW_RUST_LIBRARY_PATH=<...>/crucible/crux-mir/rlibs
+   ```
+
+For `cargo`-based projects, `mir-json` provides a `cargo` subcommand called
+`cargo saw-build` that builds a JSON file suitable for use with SAW. `cargo
+saw-build` integrates directly with `cargo`, so you can pass flags to it like
+any other `cargo` subcommand. For example:
+
+```
+# Make sure that SAW_RUST_LIBRARY_PATH is defined, as described above
+$ cargo saw-build <other cargo flags>
+<snip>
+linking 11 mir files into <...>/example-364cf2df365c7055.linked-mir.json
+<snip>
+```
+
+Note that:
+
+* The full output of `cargo saw-build` here is omitted. The important part is
+  the `.linked-mir.json` file that appears after `linking X mir files into`, as
+  that is the JSON file that must be loaded with SAW.
+* `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
+  standard library.
+
+`mir-json` also supports compiling individual `.rs` files through `mir-json`'s
+`saw-rustc` command. As the name suggests, it accepts all of the flags that
+`rustc` accepts. For example:
+
+```
+# Make sure that SAW_RUST_LIBRARY_PATH is defined, as described above
+$ saw-rustc example.rs <other rustc flags>
+<snip>
+linking 11 mir files into <...>/example.linked-mir.json
+<snip>
+```
 
 ## Notes on C++ Analysis
 
@@ -1742,7 +1977,7 @@ allocated during execution is allowed).
 
 The direct extraction process just discussed automatically introduces
 symbolic variables and then abstracts over them, yielding a SAWScript
-`Term` that reflects the semantics of the original Java or LLVM code.
+`Term` that reflects the semantics of the original Java, LLVM, or MIR code.
 For simple functions, this is often the most convenient interface. For
 more complex code, however, it can be necessary (or more natural) to
 specifically introduce fresh variables and indicate what portions of the
@@ -1869,7 +2104,7 @@ The built-in functions described so far work by extracting models of
 code that can then be used for a variety of purposes, including proofs
 about the properties of the code.
 
-When the goal is to prove equivalence between some LLVM or Java code and
+When the goal is to prove equivalence between some LLVM, Java, or MIR code and
 a specification, however, a more declarative approach is sometimes
 convenient. The following sections describe an approach that combines
 model extraction and verification with respect to a specification. A
@@ -1901,8 +2136,7 @@ gives the proof script to use for verification. The result is a proved
 specification that can be used to simplify verification of functions
 that call this one.
 
-A similar command for JVM programs is available if `enable_experimental`
-has been run.
+Similar commands are available for JVM programs:
 
 ~~~~
 jvm_verify :
@@ -1915,8 +2149,73 @@ jvm_verify :
   TopLevel JVMMethodSpec
 ~~~~
 
-Now we describe how to construct a value of type `LLVMSetup ()` (or
-`JVMSetup ()`).
+And for MIR programs:
+
+~~~~
+mir_verify :
+  MIRModule ->
+  String ->
+  [MIRSpec] ->
+  Bool ->
+  MIRSetup () ->
+  ProofScript () ->
+  TopLevel MIRSpec
+~~~~
+
+### Running a MIR-based verification
+
+(Note: API functions involving MIR verification require `enable_experimental`
+in order to be used. As such, some parts of this API may change before being
+finalized.)
+
+The `String` supplied as an argument to `mir_verify` is expected to be a
+function _identifier_. An identifier is expected adhere to one of the following
+conventions:
+
+* `<crate name>/<disambiguator>::<function path>`
+* `<crate name>::<function path>`
+
+Where:
+
+* `<crate name>` is the name of the crate in which the function is defined. (If
+  you produced your MIR JSON file by compiling a single `.rs` file with
+  `saw-rustc`, then the crate name is the same as the name of the file, but
+  without the `.rs` file extension.)
+* `<disambiguator>` is a hash of the crate and its dependencies. In extreme
+  cases, it is possible for two different crates to have identical crate names,
+  in which case the disambiguator must be used to distinguish between the two
+  crates. In the common case, however, most crate names will correspond to
+  exactly one disambiguator, and you are allowed to leave out the
+  `/<disambiguator>` part of the `String` in this case. If you supply an
+  identifier with an ambiguous crate name and omit the disambiguator, then SAW
+  will raise an error.
+* `<function path>` is the path to the function within the crate. Sometimes,
+  this is as simple as the function name itself. In other cases, a function
+  path may involve multiple _segments_, depending on the module hierarchy for
+  the program being verified. For instance, a `read` function located in
+  `core/src/ptr/mod.rs` will have the identifier:
+
+  ```
+  core::ptr::read
+  ```
+
+  Where `core` is the crate name and `ptr::read` is the function path, which
+  has two segments `ptr` and `read`. There are also some special forms of
+  segments that appear for functions defined in certain language constructs.
+  For instance, if a function is defined in an `impl` block, then it will have
+  `{impl}` as one of its segments, e.g.,
+
+  ```
+  core::ptr::const_ptr::{impl}::offset
+  ```
+
+  If you are in doubt about what the full identifier for a given function is,
+  consult the MIR JSON file for your program.
+
+-----
+
+Now we describe how to construct a value of type `LLVMSetup ()`, `JVMSetup ()`,
+or `MIRSetup ()`.
 
 ## Structure of a Specification
 
@@ -1928,34 +2227,42 @@ A specifications for Crucible consists of three logical components:
 
 * A specification of the expected final value of the program state.
 
-These three portions of the specification are written in sequence within
-a `do` block of `LLVMSetup` (or `JVMSetup`) type. The command
-`llvm_execute_func` (or `jvm_execute_func`) separates the
-specification of the initial state from the specification of the final
-state, and specifies the arguments to the function in terms of the
-initial state. Most of the commands available for state description will
-work either before or after `llvm_execute_func`, though with
-slightly different meaning, as described below.
+These three portions of the specification are written in sequence within a `do`
+block of type `{LLVM,JVM,MIR}Setup`. The command `{llvm,jvm,mir}_execute_func`
+separates the specification of the initial state from the specification of the
+final state, and specifies the arguments to the function in terms of the
+initial state. Most of the commands available for state description will work
+either before or after `{llvm,jvm,mir}_execute_func`, though with slightly
+different meaning, as described below.
 
 ## Creating Fresh Variables
 
-In any case where you want to prove a property of a function for an
-entire class of inputs (perhaps all inputs) rather than concrete values,
-the initial values of at least some elements of the program state must
-contain fresh variables. These are created in a specification with the
-`llvm_fresh_var` and `jvm_fresh_var` commands rather than
-`fresh_symbolic`.
+In any case where you want to prove a property of a function for an entire
+class of inputs (perhaps all inputs) rather than concrete values, the initial
+values of at least some elements of the program state must contain fresh
+variables. These are created in a specification with the
+`{llvm,jvm,mir}_fresh_var` commands rather than `fresh_symbolic`.
 
 * `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
 
 * `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
+* `mir_fresh_var : String -> MIRType -> MIRSetup Term`
+
 The first parameter to both functions is a name, used only for
 presentation. It's possible (though not recommended) to create multiple
 variables with the same name, but SAW will distinguish between them
-internally. The second parameter is the LLVM (or Java) type of the
+internally. The second parameter is the LLVM, Java, or MIR type of the
 variable. The resulting `Term` can be used in various subsequent
 commands.
+
+Note that the second parameter to `{llvm,jvm,mir}_fresh_var` must be a type
+that has a counterpart in Cryptol. (For more information on this, refer to the
+"Cryptol type correspondence" section.) If the type does not have a Cryptol
+counterpart, the function will raise an error. If you do need to create a fresh
+value of a type that cannot be represented in Cryptol, consider using a
+function such as `llvm_fresh_expanded_val` (for LLVM verification) or
+`mir_fresh_expanded_value` (for MIR verification).
 
 LLVM types are built with this set of functions:
 
@@ -1980,12 +2287,47 @@ Java types are built up using the following functions:
 * `java_class : String -> JavaType`
 * `java_array : Int -> JavaType -> JavaType`
 
+MIR types are built up using the following functions:
+
+* `mir_adt : MIRAdt -> MIRType`
+* `mir_array : Int -> MIRType -> MIRType`
+* `mir_bool : MIRType`
+* `mir_char : MIRType`
+* `mir_i8 : MIRType`
+* `mir_i6 : MIRType`
+* `mir_i32 : MIRType`
+* `mir_i64 : MIRType`
+* `mir_i128 : MIRType`
+* `mir_isize : MIRType`
+* `mir_f32 : MIRType`
+* `mir_f64 : MIRType`
+* `mir_lifetime : MIRType`
+* `mir_ref : MIRType -> MIRType`
+* `mir_ref_mut : MIRType -> MIRType`
+* `mir_slice : MIRType -> MIRType`
+* `mir_str : MIRType`
+* `mir_tuple : [MIRType] -> MIRType`
+* `mir_u8 : MIRType`
+* `mir_u6 : MIRType`
+* `mir_u32 : MIRType`
+* `mir_u64 : MIRType`
+* `mir_u128 : MIRType`
+* `mir_usize : MIRType`
+
 Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
 concrete size. Therefore, all analysis results are valid only under the
 assumption that any arrays have the specific size indicated, and may not
-hold for other sizes. The `llvm_int` function also takes an `Int`
-parameter indicating the variable's bit width.
+hold for other sizes.
+
+The `llvm_int` function takes an `Int` parameter indicating the variable's bit
+width. For example, the C `uint16_t` and `int16_t` types correspond to
+`llvm_int 16`. The C `bool` type is slightly trickier. A bare `bool` type
+typically corresponds to `llvm_int 1`, but if a `bool` is a member of a
+composite type such as a pointer, array, or struct, then it corresponds to
+`llvm_int 8`. This is due to a peculiarity in the way Clang compiles `bool`
+down to LLVM.  When in doubt about how a `bool` is represented, check the LLVM
+bitcode by compiling your code with `clang -S -emit-llvm`.
 
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
@@ -2010,27 +2352,111 @@ values that can occur during symbolic execution, which includes both
 `Term` values, pointers, and composite types consisting of either of
 these (both structures and arrays).
 
-The `llvm_term` and `jvm_term` functions create a `SetupValue` or
-`JVMValue` from a `Term`:
+The `llvm_term`, `jvm_term`, and `mir_term` functions create a `SetupValue`,
+`JVMValue`, or `MIRValue`, respectively, from a `Term`:
 
 * `llvm_term : Term -> SetupValue`
 * `jvm_term : Term -> JVMValue`
+* `mir_term : Term -> MIRValue`
+
+The value that these functions return will have an LLVM, JVM, or MIR type
+corresponding to the Cryptol type of the `Term` argument. (For more information
+on this, refer to the "Cryptol type correspondence" section.) If the type does
+not have a Cryptol counterpart, the function will raise an error.
+
+### Cryptol type correspondence
+
+The `{llvm,jvm,mir}_fresh_var` functions take an LLVM, JVM, or MIR type as an
+argument and produces a `Term` variable of the corresponding Cryptol type as
+output. Similarly, the `{llvm,jvm,mir}_term` functions take a Cryptol `Term` as
+input and produce a value of the corresponding LLVM, JVM, or MIR type as
+output. This section describes precisely which types can be converted to
+Cryptol types (and vice versa) in this way.
+
+#### LLVM verification
+
+The following LLVM types correspond to Cryptol types:
+
+* `llvm_alias <name>`: Corresponds to the same Cryptol type as the type used
+  in the definition of `<name>`.
+* `llvm_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+  where `<cty>` is the Cryptol type corresponding to `<ty>`.
+* `llvm_int <n>`: Corresponds to the Cryptol word `[<n>]`.
+* `llvm_struct [<ty_1>, ..., <ty_n>]` and `llvm_packed_struct [<ty_1>, ..., <ty_n>]`:
+  Corresponds to the Cryptol tuple `(<cty_1>, ..., <cty_n>)`, where `<cty_i>`
+  is the Cryptol type corresponding to `<ty_i>` for each `i` ranging from `1`
+  to `n`.
+
+The following LLVM types do _not_ correspond to Cryptol types:
+
+* `llvm_double`
+* `llvm_float`
+* `llvm_pointer`
+
+#### JVM verification
+
+The following Java types correspond to Cryptol types:
+
+* `java_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+  where `<cty>` is the Cryptol type corresponding to `<ty>`.
+* `java_bool`: Corresponds to the Cryptol `Bit` type.
+* `java_byte`: Corresponds to the Cryptol `[8]` type.
+* `java_char`: Corresponds to the Cryptol `[16]` type.
+* `java_int`: Corresponds to the Cryptol `[32]` type.
+* `java_long`: Corresponds to the Cryptol `[64]` type.
+* `java_short`: Corresponds to the Cryptol `[16]` type.
+
+The following Java types do _not_ correspond to Cryptol types:
+
+* `java_class`
+* `java_double`
+* `java_float`
+
+#### MIR verification
+
+The following MIR types correspond to Cryptol types:
+
+* `mir_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+  where `<cty>` is the Cryptol type corresponding to `<ty>`.
+* `mir_bool`: Corresponds to the Cryptol `Bit` type.
+* `mir_char`: Corresponds to the Cryptol `[32]` type.
+* `mir_i8` and `mir_u8`: Corresponds to the Cryptol `[8]` type.
+* `mir_i16` and `mir_u16`: Corresponds to the Cryptol `[16]` type.
+* `mir_i32` and `mir_u32`: Corresponds to the Cryptol `[32]` type.
+* `mir_i64` and `mir_u64`: Corresponds to the Cryptol `[64]` type.
+* `mir_i128` and `mir_u128`: Corresponds to the Cryptol `[128]` type.
+* `mir_isize` and `mir_usize`: Corresponds to the Cryptol `[32]` type.
+* `mir_tuple [<ty_1>, ..., <ty_n>]`: Corresponds to the Cryptol tuple
+  `(<cty_1>, ..., <cty_n>)`, where `<cty_i>` is the Cryptol type corresponding
+  to `<ty_i>` for each `i` ranging from `1` to `n`.
+
+The following MIR types do _not_ correspond to Cryptol types:
+
+* `mir_adt`
+* `mir_f32`
+* `mir_f64`
+* `mir_ref` and `mir_ref_mut`
+* `mir_slice`
+* `mir_str`
 
 ## Executing
 
-Once the initial state has been configured, the `llvm_execute_func`
+Once the initial state has been configured, the `{llvm,jvm,mir}_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
 * `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
+* `jvm_execute_func : [JVMValue] -> JVMSetup ()`
+* `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
-verified use the `llvm_return` or `jvm_return` command.
+verified use the `{llvm,jvm,mir}_return` command.
 
 * `llvm_return : SetupValue -> LLVMSetup ()`
 * `jvm_return : JVMValue -> JVMSetup ()`
+* `mir_return : MIRValue -> MIRSetup ()`
 
 ## A First Simple Example
 
@@ -2073,11 +2499,11 @@ of properties we have already proved about its callees rather than
 analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
-The `llvm_verify` and `jvm_verify` functions return values of
-type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
-values are opaque objects that internally contain both the information
-provided in the associated `JVMSetup` or `LLVMSetup` blocks and
-the results of the verification process.
+The `llvm_verify`, `jvm_verify`, and `mir_verify` functions return values of
+type `CrucibleMethodSpec`, `JVMMethodSpec`, and `MIRMethodSpec`, respectively.
+These values are opaque objects that internally contain both the information
+provided in the associated `LLVMSetup`, `JVMSetup`, or `MIRSetup` blocks,
+respectively, and the results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
 argument of the `..._verify` functions. For any function or method
@@ -2086,7 +2512,7 @@ calls to the associated target. Instead, it will perform the following
 steps:
 
 * Check that all `llvm_points_to` and `llvm_precond` statements
-  (or the corresponding JVM statements) in the specification are
+  (or the corresponding JVM or MIR statements) in the specification are
   satisfied.
 
 * Update the simulator state and optionally construct a return value as
@@ -2121,6 +2547,296 @@ In this case, doing the verification compositionally doesn't save
 computational effort, since the functions are so simple, but it
 illustrates the approach.
 
+### Compositional Verification and Mutable Allocations
+
+A common pitfall when using compositional verification is to reuse a
+specification that underspecifies the value of a mutable allocation. In
+general, doing so can lead to unsound verification, so SAW goes through great
+lengths to check for this.
+
+Here is an example of this pitfall in an LLVM verification. Given this C code:
+
+~~~ .c
+void side_effect(uint32_t *a) {
+  *a = 0;
+}
+
+uint32_t foo(uint32_t x) {
+  uint32_t b = x;
+  side_effect(&b);
+  return b;
+}
+~~~
+
+And the following SAW specifications:
+
+~~~
+let side_effect_spec = do {
+  a_ptr <- llvm_alloc (llvm_int 32);
+  a_val <- llvm_fresh_var "a_val" (llvm_int 32);
+  llvm_points_to a_ptr (llvm_term a_val);
+
+  llvm_execute_func [a_ptr];
+};
+
+let foo_spec = do {
+  x <- llvm_fresh_var "x" (llvm_int 32);
+
+  llvm_execute_func [llvm_term x];
+
+  llvm_return (llvm_term x);
+};
+~~~
+
+Should SAW be able to verify the `foo` function against `foo_spec` using
+compositional verification? That is, should the following be expected to work?
+
+~~~
+side_effect_ov <- llvm_verify m "side_effect" [] false side_effect_spec z3;
+llvm_verify m "foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+A literal reading of `side_effect_spec` would suggest that the `side_effect`
+function allocates `a_ptr` but then does nothing with it, implying that `foo`
+returns its argument unchanged. This is incorrect, however, as the
+`side_effect` function actually changes its argument to point to `0`, so the
+`foo` function ought to return `0` as a result. SAW should not verify `foo`
+against `foo_spec`, and indeed it does not.
+
+The problem is that `side_effect_spec` underspecifies the value of `a_ptr` in
+its postconditions, which can lead to the potential unsoundness seen above when
+`side_effect_spec` is used in compositional verification. To prevent this
+source of unsoundness, SAW will _invalidate_ the underlying memory of any
+mutable pointers (i.e., those declared with `llvm_alloc`, not
+`llvm_alloc_global`) allocated in the preconditions of compositional override
+that do not have a corresponding `llvm_points_to` statement in the
+postconditions. Attempting to read from invalidated memory constitutes an
+error, as can be seen in this portion of the error message when attempting to
+verify `foo` against `foo_spec`:
+
+~~~
+invalidate (state of memory allocated in precondition (at side.saw:3:12) not described in postcondition)
+~~~
+
+To fix this particular issue, add an `llvm_points_to` statement to
+`side_effect_spec`:
+
+~~~
+let side_effect_spec = do {
+  a_ptr <- llvm_alloc (llvm_int 32);
+  a_val <- llvm_fresh_var "a_val" (llvm_int 32);
+  llvm_points_to a_ptr (llvm_term a_val);
+
+  llvm_execute_func [a_ptr];
+
+  // This is new
+  llvm_points_to a_ptr (llvm_term {{ 0 : [32] }});
+};
+~~~
+
+After making this change, SAW will reject `foo_spec` for a different reason, as
+it claims that `foo` returns its argument unchanged when it actually returns
+`0`.
+
+Note that invalidating memory itself does not constitute an error, so if the
+`foo` function never read the value of `b` after calling `side_effect(&b)`,
+then there would be no issue. It is only when a function attempts to _read_
+from invalidated memory that an error is thrown. In general, it can be
+difficult to predict when a function will or will not read from invalidated
+memory, however. For this reason, it is recommended to always specify the
+values of mutable allocations in the postconditions of your specs, as it can
+avoid pitfalls like the one above.
+
+The same pitfalls apply to compositional MIR verification, with a couple of key
+differences. In MIR verification, mutable references are allocated using
+`mir_alloc_mut`. Here is a Rust version of the pitfall program above:
+
+~~~ .rs
+pub fn side_effect(a: &mut u32) {
+    *a = 0;
+}
+
+pub fn foo(x: u32) -> u32 {
+    let mut b: u32 = x;
+    side_effect(&mut b);
+    b
+}
+~~~
+
+~~~
+let side_effect_spec = do {
+  a_ref <- mir_alloc_mut mir_u32;
+  a_val <- mir_fresh_var "a_val" mir_u32;
+  mir_points_to a_ref (mir_term a_val);
+
+  mir_execute_func [a_ref];
+};
+
+let foo_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x }});
+};
+~~~
+
+Just like above, if you attempted to prove `foo` against `foo_spec` using
+compositional verification:
+
+~~~
+side_effect_ov <- mir_verify m "test::side_effect" [] false side_effect_spec z3;
+mir_verify m "test::foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+Then SAW would throw an error, as `side_effect_spec` underspecifies the value
+of `a_ref` in its postconditions. `side_effect_spec` can similarly be repaired
+by adding a `mir_points_to` statement involving `a_ref` in `side_effect_spec`'s
+postconditions.
+
+MIR verification differs slightly from LLVM verification in how it catches
+underspecified mutable allocations when using compositional overrides. The LLVM
+memory model achieves this by invalidating the underlying memory in
+underspecified allocations. The MIR memory model, on the other hand, does not
+have a direct counterpart to memory invalidation. As a result, any MIR overrides
+must specify the values of all mutable allocations in their postconditions,
+_even if the function that calls the override never uses the allocations_.
+
+To illustrate this point more finely, suppose that the `foo` function had
+instead been defined like this:
+
+~~~ .rs
+pub fn foo(x: u32) -> u32 {
+    let mut b: u32 = x;
+    side_effect(&mut b);
+    42
+}
+~~~
+
+Here, it does not particularly matter what effects the `side_effect` function
+has on its argument, as `foo` will now return `42` regardless. Still, if you
+attempt to prove `foo` by using `side_effect` as a compositional override, then
+it is strictly required that you specify the value of `side_effect`'s argument
+in its postconditions, even though the answer that `foo` returns is unaffected
+by this. This is in contrast with LLVM verification, where one could get away
+without specifying `side_effect`'s argument in this example, as the invalidated
+memory in `b` would never be read.
+
+### Compositional Verification and Mutable Global Variables
+
+Just like with local mutable allocations (see the previous section),
+specifications used in compositional overrides must specify the values of
+mutable global variables in their postconditions. To illustrate this using LLVM
+verification, here is a variant of the C program from the previous example that
+uses a mutable global variable `a`:
+
+~~~ .c
+
+uint32_t a = 42;
+
+void side_effect(void) {
+  a = 0;
+}
+
+uint32_t foo(void) {
+  side_effect();
+  return a;
+}
+~~~
+
+If we attempted to verify `foo` against this `foo_spec` specification using
+compositional verification:
+
+~~~
+let side_effect_spec = do {
+  llvm_alloc_global "a";
+  llvm_points_to (llvm_global "a") (llvm_global_initializer "a");
+
+  llvm_execute_func [];
+};
+
+let foo_spec = do {
+  llvm_alloc_global "a";
+  llvm_points_to (llvm_global "a") (llvm_global_initializer "a");
+
+  llvm_execute_func [];
+
+  llvm_return (llvm_global_initializer "a");
+};
+
+side_effect_ov <- llvm_verify m "side_effect" [] false side_effect_spec z3;
+llvm_verify m "foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+Then SAW would reject it, as `side_effect_spec` does not specify what `a`'s
+value should be in its postconditions. Just as with local mutable allocations,
+SAW will invalidate the underlying memory in `a`, and subsequently reading from
+`a` in the `foo` function will throw an error. The solution is to add an
+`llvm_points_to` statement in the postconditions that declares that `a`'s value
+is set to `0`.
+
+The same concerns apply to MIR verification, where mutable global variables are
+referred to as `static mut` items. (See the [MIR static
+items](#mir-static-items) section for more information). Here is a Rust version
+of the program above:
+
+~~~ .rs
+static mut A: u32 = 42;
+
+pub fn side_effect() {
+    unsafe {
+        A = 0;
+    }
+}
+
+pub fn foo() -> u32 {
+    side_effect();
+    unsafe { A }
+}
+~~~
+
+~~~
+let side_effect_spec = do {
+  mir_points_to (mir_static "test::A") (mir_static_initializer "test::A");
+
+  mir_execute_func [];
+};
+
+let foo_spec = do {
+  mir_points_to (mir_static "test::A") (mir_static_initializer "test::A");
+
+  mir_execute_func [];
+
+  mir_return (mir_static_initializer "test::A");
+};
+
+side_effect_ov <- mir_verify m "side_effect" [] false side_effect_spec z3;
+mir_verify m "foo" [side_effect_ov] false foo_spec z3;
+~~~
+
+Just as above, we can repair this by adding a `mir_points_to` statement in
+`side_effect_spec`'s postconditions that specifies that `A` is set to `0`.
+
+Recall from the previous section that MIR verification is stricter than LLVM
+verification when it comes to specifying mutable allocations in the
+postconditions of compositional overrides. This is especially true for mutable
+static items. In MIR verification, any compositional overrides must specify the
+values of all mutable static items in the entire program in their
+postconditions, _even if the function that calls the override never uses the
+static items_. For example, if the `foo` function were instead defined like
+this:
+
+~~~ .rs
+pub fn foo() -> u32 {
+    side_effect();
+    42
+}
+~~~
+
+Then it is still required for `side_effect_spec` to specify what `A`'s value
+will be in its postconditions, despite the fact that this has no effect on the
+value that `foo` will return.
+
 ## Specifying Heap Layout
 
 Most functions that operate on pointers expect that certain pointers
@@ -2147,6 +2863,17 @@ array of the given concrete size, with elements of the given type.
 * `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
 of the given class name.
 
+The experimental MIR implementation also has a `mir_alloc` function, which
+behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
+but there is also a `mir_alloc_mut` function for creating a mutable reference:
+
+* `mir_alloc : MIRType -> MIRSetup MIRValue`
+
+* `mir_alloc_mut : MIRType -> MIRSetup MIRValue`
+
+MIR tracks whether references are mutable or immutable at the type level, so it
+is important to use the right allocation command for a given reference type.
+
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
@@ -2171,15 +2898,19 @@ will not modify. Unlike `llvm_alloc`, regions allocated with
 
 ## Specifying Heap Values
 
-Pointers returned by `llvm_alloc` don't, initially, point to
-anything. So if you pass such a pointer directly into a function that
-tried to dereference it, symbolic execution will fail with a message
-about an invalid load. For some functions, such as those that are
-intended to initialize data structures (writing to the memory pointed
-to, but never reading from it), this sort of uninitialized memory is
-appropriate. In most cases, however, it's more useful to state that a
-pointer points to some specific (usually symbolic) value, which you can
-do with the `llvm_points_to` command.
+Pointers returned by `llvm_alloc`, `jvm_alloc_{array,object}`, or
+`mir_alloc{,_mut}` don't initially point to anything. So if you pass such a
+pointer directly into a function that tried to dereference it, symbolic
+execution will fail with a message about an invalid load. For some functions,
+such as those that are intended to initialize data structures (writing to the
+memory pointed to, but never reading from it), this sort of uninitialized
+memory is appropriate. In most cases, however, it's more useful to state that a
+pointer points to some specific (usually symbolic) value, which you can do with
+the *points-to* family of commands.
+
+### LLVM heap values
+
+LLVM verification primarily uses the `llvm_points_to` command:
 
 * `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
@@ -2201,6 +2932,49 @@ checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
 reinterpretation is intentional. As an alternative, one
 may instead use `llvm_cast_pointer` to line up the static types.
+
+### JVM heap values
+
+JVM verification has two categories of commands for specifying heap values.
+One category consists of the `jvm_*_is` commands, which allow users to directly
+specify what value a heap object points to. There are specific commands for
+each type of JVM heap object:
+
+* `jvm_array_is : JVMValue -> Term -> JVMSetup ()` declares that an array (the
+  first argument) contains a sequence of values (the second argument).
+* `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` declares that an
+  array (the first argument) has an element at the given index (the second
+  argument) containing the given value (the third argument).
+* `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()` declares that
+  an object (the first argument) has a field (the second argument) containing
+  the given value (the third argument).
+* `jvm_static_field_is : String -> JVMValue -> JVMSetup ()` declares that a
+  named static field (the first argument) contains the given value (the second
+  argument). By default, the field name is assumed to belong to the same class
+  as the method being specified. Static fields belonging to other classes can
+  be selected using the `<classname>.<fieldname>` syntax in the first argument.
+
+Another category consists of the `jvm_modifies_*` commands. Like the `jvm_*_is`
+commands, these specify that a JVM heap object points to valid memory, but
+unlike the `jvm_*_is` commands, they leave the exact value being pointed to as
+unspecified. These are useful for writing partial specifications for methods
+that modify some heap value, but without saying anything specific about the new
+value.
+
+* `jvm_modifies_array : JVMValue -> JVMSetup ()`
+* `jvm_modifies_elem : JVMValue -> Int -> JVMSetup ()`
+* `jvm_modifies_field : JVMValue -> String -> JVMSetup ()`
+* `jvm_modifies_static_field : String -> JVMSetup ()`
+
+### MIR heap values
+
+MIR verification has a single `mir_points_to` command:
+
+* `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
+takes two `SetupValue` arguments, the first of which must be a reference,
+and states that the memory specified by that reference should contain the
+value given in the second argument (which may be any type of
+`SetupValue`).
 
 ## Working with Compound Types
 
@@ -2279,6 +3053,392 @@ the value of an array element.
 * `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
 
+In the experimental MIR verification implementation, the following functions
+construct compound values:
+
+* `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
+  of the given type whose elements consist of the given values. Supplying the
+  element type is necessary to support length-0 arrays.
+* `mir_enum_value : MIRAdt -> String -> [MIRValue] -> MIRValue` constructs an
+  enum using a particular enum variant. The `MIRAdt` arguments determines what
+  enum type to create, the `String` value determines the name of the variant to
+  use, and the `[MIRValue]` list are the values to use as elements in the
+  variant.
+
+  See the "Finding MIR algebraic data types" section (as well as the "Enums"
+  subsection) for more information on how to compute a `MIRAdt` value to pass
+  to `mir_enum_value`.
+* `mir_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section below.
+* `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
+  "MIR slices" section below.
+* `mir_str_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section
+  below.
+* `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
+  "MIR slices" section below.
+* `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
+  with the given list of values as elements. The `MIRAdt` argument determines
+  what struct type to create.
+
+  See the "Finding MIR algebraic data types" section for more information on how
+  to compute a `MIRAdt` value to pass to `mir_struct_value`.
+* `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
+  list of values as elements.
+
+To specify a compound value in which each element or field is symbolic, it
+would be possible, but tedious, to use a large number of `mir_fresh_var`
+invocations in conjunction with the commands above. However, the following
+function can simplify the common case where you want every element or field to
+have a fresh value:
+
+* `mir_fresh_expanded_value : String -> MIRType -> MIRSetup MIRValue`
+
+The `String` argument denotes a prefix to use when generating the names of
+fresh symbolic variables. The `MIRType` can be any type, with the exception of
+reference types (or compound types that contain references as elements or
+fields), which are not currently supported.
+
+### MIR slices
+
+Slices are a unique form of compound type that is currently only used during
+MIR verification. Unlike other forms of compound values, such as arrays, it is
+not possible to directly construct a slice. Instead, one must take a slice of
+an existing reference value that points to the thing being sliced.
+
+SAW currently supports taking slices of arrays and strings.
+
+#### Array slices
+
+The following commands are used to construct slices of arrays:
+
+* `mir_slice_value : MIRValue -> MIRValue`: the SAWScript expression
+  `mir_slice_value base` is equivalent to the Rust expression `&base[..]`,
+  i.e., a slice of the entirety of `base`. `base` must be a reference to an
+  array value (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
+  or `&mut [T]` (if `base` is a mutable reference).
+* `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the SAWScript
+  expression `mir_slice_range_value base start end` is equivalent to the Rust
+  expression `&base[start..end]`, i.e., a slice over a part of `base` which
+  ranges from `start` to `end`. `base` must be a reference to an array value
+  (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
+  or `&mut [T]` (if `base` is a mutable reference).
+
+  `start` and `end` are assumed to be zero-indexed. `start` must not exceed
+  `end`, and `end` must not exceed the length of the array that `base` points
+  to.
+
+As an example of how to use these functions, consider this Rust function, which
+accepts an arbitrary slice as an argument:
+
+~~~~ .rs
+pub fn f(s: &[u32]) -> u32 {
+    s[0] + s[1]
+}
+~~~~
+
+We can write a specification that passes a slice to the array `[1, 2, 3, 4, 5]`
+as an argument to `f`:
+
+~~~~
+let f_spec_1 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a (mir_term {{ [1, 2, 3, 4, 5] : [5][32] }});
+
+  mir_execute_func [mir_slice_value a];
+
+  mir_return (mir_term {{ 3 : [32] }});
+};
+~~~~
+
+Alternatively, we can write a specification that passes a part of this array
+over the range `[1..3]`, i.e., ranging from second element to the fourth.
+Because this is a half-open range, the resulting slice has length 2:
+
+~~~~
+let f_spec_2 = do {
+  a <- mir_alloc (mir_array 5 mir_u32);
+  mir_points_to a (mir_term {{ [1, 2, 3, 4, 5] : [5][32] }});
+
+  mir_execute_func [mir_slice_range_value a 1 3];
+
+  mir_return (mir_term {{ 5 : [32] }});
+};
+~~~~
+
+Note that we are passing _references_ of arrays to `mir_slice_value` and
+`mir_slice_range_value`. It would be an error to pass a bare array to these
+functions, so the following specification would be invalid:
+
+~~~~
+let f_fail_spec_ = do {
+  let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
+
+  mir_execute_func [mir_slice_value arr]; // BAD: `arr` is not a reference
+
+  mir_return (mir_term {{ 3 : [32] }});
+};
+~~~~
+
+Note that The `mir_slice_range_value` function must accept bare `Int` arguments
+to specify the lower and upper bounds of the range. A consequence of this
+design is that it is not possible to create a slice with a symbolic length. If
+this limitation prevents you from using SAW, please file an issue [on
+GitHub](https://github.com/GaloisInc/saw-script/issues).
+
+#### String slices
+
+In addition to slices of arrays (i.e., of type `&[T]`), SAW also supports
+slices of strings (i.e., of type `&str`) through the following commands:
+
+* `mir_str_slice_value : MIRValue -> MIRValue`: the SAWScript expression
+  `mir_str_slice_value base` is equivalent to the Rust expression `&base[..]`,
+  i.e., a slice of the entirety of `base`. `base` must be a reference to an
+  array of bytes (`&[u8; N]` or `&mut [u8; N]`), not an array itself. The type
+  of `mir_str_slice_value base` will be `&str` (if `base` is an immutable
+  reference) or `&mut str` (if `base` is a mutable reference).
+* `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the
+  SAWScript expression `mir_slice_range_value base start end` is equivalent to
+  the Rust expression `&base[start..end]`, i.e., a slice over a part of `base`
+  which ranges from `start` to `end`. `base` must be a reference to an array of
+  bytes (`&[u8; N]` or `&mut [u8; N]`), not an array itself. The type of
+  `mir_slice_value base` will be `&str` (if `base` is an immutable reference)
+  or `&mut str` (if `base` is a mutable reference).
+
+  `start` and `end` are assumed to be zero-indexed. `start` must not exceed
+  `end`, and `end` must not exceed the length of the array that `base` points
+  to.
+
+One unusual requirement about `mir_str_slice_value` and
+`mir_str_slice_range_value` is that they require the argument to be of type
+`&[u8; N]`, i.e., a reference to an array of bytes. This is an artifact of the
+way that strings are encoded in Cryptol. The following Cryptol expressions:
+
+* `"A"`
+* `"123"`
+* `"Hello World"`
+
+Have the following types:
+
+* `[1][8]`
+* `[3][8]`
+* `[11][8]`
+
+This is because Cryptol strings are syntactic shorthand for sequences of bytes.
+The following Cryptol expressions are wholly equivalent:
+
+* `[0x41]`
+* `[0x31, 0x32, 0x33]`
+* `[0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64]`
+
+These represent the strings in the extended ASCII character encoding. The
+Cryptol sequence type `[N][8]` is equivalent to the Rust type `[u8; N]`, so the
+requirement to have something of type `&[u8; N]` as an argument reflects this
+design choice.
+
+Note that `mir_str_slice_value <u8_array_ref>` is _not_ the same thing as
+`mir_slice_value <u8_array_ref>`, as the two commands represent different types
+of Rust values. While both commands take a `<u8_array_ref>` as an argument,
+`mir_str_slice_value` will return a value of Rust type `&str` (or `&mut str`),
+whereas `mir_slice_value` will return a value of Rust type `&[u8]` (or `&mut
+[u8]`). These Rust types are checked when you pass these values as arguments to
+Rust functions (using `mir_execute_func`) or when you return these values
+(using `mir_return`), and it is an error to supply a `&str` value in a place
+where a `&[u8]` value is expected (and vice versa).
+
+As an example of how to write specifications involving string slices,
+consider this Rust function:
+
+~~~ .rs
+pub fn my_len(s: &str) -> usize {
+    s.len()
+}
+~~~
+
+We can use `mir_str_slice_value` to write a specification for `my_len` when it
+is given the string `"hello"` as an argument:
+
+~~~
+let my_len_spec = do {
+  s <- mir_alloc (mir_array 5 mir_u8);
+  mir_points_to s (mir_term {{ "hello" }});
+
+  mir_execute_func [mir_str_slice_value s];
+
+  mir_return (mir_term {{ 5 : [32] }});
+};
+~~~
+
+Currently, Cryptol only supports characters that can be encoded in a single
+byte. As a result, it is not currently possible to take slices of strings with
+certain characters. For example, the string `"roșu"` cannot be used as a
+Cryptol expression, as the character `'ș'` would require 10 bits to represent
+instead of 8. The alternative is to use UTF-8 to encode such characters. For
+instance, the UTF-8 encoding of the string `"roșu"` is `"ro\200\153u"`, where
+`"\200\153"` is a sequence of two bytes that represents the `'ș'` character.
+
+SAW makes no attempt to ensure that string slices over a particular range
+aligns with UTF-8 character boundaries. For example, the following Rust code
+would panic:
+
+~~~ .rs
+    let rosu: &str = "roșu";
+    let s: &str = &rosu[0..3];
+    println!("{:?}", s);
+~~~
+~~~
+thread 'main' panicked at 'byte index 3 is not a char boundary; it is inside 'ș' (bytes 2..4) of `roșu`'
+~~~
+
+On the other hand, SAW will allow you define a slice of the form
+`mir_str_slice_range r 0 3`, where `r` is a reference to `"ro\200\153u"`. It is
+the responsibility of the SAW user to ensure that `mir_str_slice_range` indices
+align with character boundaries.
+
+### Finding MIR algebraic data types
+
+We collectively refer to MIR `struct`s and `enum`s together as _algebraic data
+types_, or ADTs for short. ADTs have identifiers to tell them apart, and a
+single ADT declaration can give rise to multiple identifiers depending on how
+the declaration is used. For example:
+
+~~~~ .rs
+pub struct S<A, B> {
+    pub x: A,
+    pub y: B,
+}
+
+pub fn f() -> S<u8, u16> {
+    S {
+        x: 1,
+        y: 2,
+    }
+}
+
+pub fn g() -> S<u32, u64> {
+    S {
+        x: 3,
+        y: 4,
+    }
+}
+~~~~
+
+This program as a single `struct` declaration `S`, which is used in the
+functions `f` and `g`. Note that `S`'s declaration is _polymorphic_, as it uses
+type parameters, but the uses of `S` in `f` and `g` are _monomorphic_, as `S`'s
+type parameters are fully instantiated. Each unique, monomorphic instantiation
+of an ADT gives rise to its own identifier. In the example above, this might
+mean that the following identifiers are created when this code is compiled with
+`mir-json`:
+
+* `S<u8, u16>` gives rise to `example/abcd123::S::_adt456`
+* `S<u32, u64>` gives rise to `example/abcd123::S::_adt789`
+
+The suffix `_adt<number>` is autogenerated by `mir-json` and is typically
+difficult for humans to guess. For this reason, we offer a command to look up
+an ADT more easily:
+
+* `mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt` consults the
+  given `MIRModule` to find an algebraic data type (`MIRAdt`). It uses the given
+  `String` as an identifier and the given MIRTypes as the types to instantiate
+  the type parameters of the ADT. If such a `MIRAdt` cannot be found in the
+  `MIRModule`, this will raise an error.
+
+Note that the `String` argument to `mir_find_adt` does not need to include the
+`_adt<num>` suffix, as `mir_find_adt` will discover this for you. The `String`
+is expected to adhere to the identifier conventions described in the "Running a
+MIR-based verification" section. For instance, the following two lines will
+look up `S<u8, u16>` and `S<u32, u64>` from the example above as `MIRAdt`s:
+
+~~~~
+m <- mir_load_module "example.linked-mir.json";
+
+s_8_16  <- mir_find_adt m "example::S" [mir_u8,  mir_u16];
+s_32_64 <- mir_find_adt m "example::S" [mir_u32, mir_u64];
+~~~~
+
+The `mir_adt` command (for constructing a struct type), `mir_struct_value` (for
+constructing a struct value), and `mir_enum_value` (for constructing an enum
+value) commands in turn take a `MIRAdt` as an argument.
+
+#### Enums
+
+In addition to taking a `MIRAdt` as an argument, `mir_enum_value` also takes a
+`String` representing the name of the variant to construct. The variant name
+should be a short name such as `"None"` or `"Some"`, and not a full identifier
+such as `"core::option::Option::None"` or `"core::option::Option::Some"`. This
+is because the `MIRAdt` already contains the full identifiers for all of an
+enum's variants, so SAW will use this information to look up a variant's
+identifier from a short name. Here is an example of using `mir_enum_value` in
+practice:
+
+~~~~ .rs
+pub fn n() -> Option<u32> {
+    None
+}
+
+pub fn s(x: u32) -> Option<u32> {
+    Some(x)
+}
+~~~~
+~~~~
+m <- mir_load_module "example.linked-mir.json";
+
+option_u32 <- mir_find_adt m "core::option::Option" [mir_u32];
+
+let n_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value option_u32 "None" []);
+};
+
+let s_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_enum_value option_u32 "Some" [mir_term x]);
+};
+~~~~
+
+Note that `mir_enum_value` can only be used to construct a specific variant. If
+you need to construct a symbolic enum value that can range over many potential
+variants, use `mir_fresh_expanded_value` instead.
+
+#### Lifetimes
+
+Rust ADTs can have both type parameters as well as _lifetime_ parameters. The
+following Rust code declares a lifetime parameter `'a` on the struct `S`, as
+well on the function `f` that computes an `S` value:
+
+~~~~ .rs
+pub struct S<'a> {
+    pub x: &'a u32,
+}
+
+pub fn f<'a>(y: &'a u32) -> S<'a> {
+    S { x: y }
+}
+~~~~
+
+When `mir-json` compiles a piece of Rust code that contains lifetime
+parameters, it will instantiate all of the lifetime parameters with a
+placeholder MIR type that is simply called `lifetime`. This is important to
+keep in mind when looking up ADTs with `mir_find_adt`, as you will also need to
+indicate to SAW that the lifetime parameter is instantiated with `lifetime`. In
+order to do so, use `mir_lifetime`. For example, here is how to look up `S`
+with `'a` instantiated to `lifetime`:
+
+~~~~
+s_adt = mir_find_adt m "example::S" [mir_lifetime]
+~~~~
+
+Note that this part of SAW's design is subject to change in the future.
+Ideally, users would not have to care about lifetimes at all at the MIR level;
+see [this issue](https://github.com/GaloisInc/mir-json/issues/58) for further
+discussion on this point. If that issue is fixed, then we will likely remove
+`mir_lifetime`, as it will no longer be necessary.
+
 ### Bitfields
 
 SAW has experimental support for specifying `struct`s with bitfields, such as
@@ -2353,6 +3513,10 @@ them.
 
 ## Global variables
 
+SAW supports verifying LLVM and MIR specifications involving global variables.
+
+### LLVM global variables
+
 Mutable global variables that are accessed in a function must first be allocated
 by calling `llvm_alloc_global` on the name of the global.
 
@@ -2363,7 +3527,9 @@ accounted for explicitly in the specification: if `llvm_alloc_global` is
 used in the precondition, there must be a corresponding `llvm_points_to`
 in the postcondition describing the new state of that global. Otherwise, a
 specification might not fully capture the behavior of the function, potentially
-leading to unsoundness in the presence of compositional verification.
+leading to unsoundness in the presence of compositional verification. (For more
+details on this point, see the [Compositional Verification and Mutable Global
+Variables](#compositional-verification-and-mutable-global-variables) section.)
 
 Immutable (i.e. `const`) global variables are allocated implicitly, and do not
 require a call to `llvm_alloc_global`.
@@ -2381,7 +3547,7 @@ verification](#compositional-verification).
 To understand the issues surrounding global variables, consider the following C
 code:
 
-<!-- This should (partially) match intTests/test0036_globals/test.c -->
+<!-- This matches intTests/test0036_globals/test-signed.c -->
 ~~~
 int x = 0;
 
@@ -2398,7 +3564,7 @@ int g(int z) {
 
 One might initially write the following specifications for `f` and `g`:
 
-<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+<!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
@@ -2429,12 +3595,13 @@ To deal with this, we can use the following function:
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
-<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+<!-- This matches intTests/test0036_globals/test-signed.saw -->
 ~~~
 m <- llvm_load_module "./test.bc";
 
 
 let init_global name = do {
+  llvm_alloc_global name;
   llvm_points_to (llvm_global name)
                  (llvm_global_initializer name);
 };
@@ -2442,6 +3609,7 @@ let init_global name = do {
 f_spec <- llvm_verify m "f" [] true (do {
     y <- llvm_fresh_var "y" (llvm_int 32);
     init_global "x";
+    llvm_precond {{ y < 2^^31 - 1 }};
     llvm_execute_func [llvm_term y];
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
@@ -2451,7 +3619,78 @@ which initializes `x` to whatever it is initialized to in the C code at
 the beginning of verification. This specification is now safe for
 compositional verification: SAW won't use the specification `f_spec`
 unless it can determine that `x` still has its initial value at the
-point of a call to `f`.
+point of a call to `f`. This specification also constrains `y` to prevent
+signed integer overflow resulting from the `x + y` expression in `f`,
+which is undefined behavior in C.
+
+### MIR static items
+
+Rust's static items are the MIR version of global variables. A reference to a
+static item can be accessed with the `mir_static` function. This function takes
+a `String` representing a static item's identifier, and this identifier is
+expected to adhere to the naming conventions outlined in the "Running a
+MIR-based verification" section:
+
+* `mir_static : String -> MIRValue`
+
+References to static values can be initialized with the `mir_points_to`
+command, just like with other forms of references. Immutable static items
+(e.g., `static X: u8 = 42`) are initialized implicitly in every SAW
+specification, so there is no need for users to do so manually. Mutable static
+items (e.g., `static mut Y: u8 = 27`), on the other hand, are *not* initialized
+implicitly, and users must explicitly pick a value to initialize them with.
+
+The `mir_static_initializer` function can be used to access the initial value
+of a static item in a MIR program. Like with `mir_static`, the `String`
+supplied as an argument must be a valid identifier:
+
+* `mir_static_initializer : String -> MIRValue`.
+
+As an example of how to use these functions, here is a Rust program involving
+static items:
+
+~~~ .rs
+// statics.rs
+static     S1: u8 = 1;
+static mut S2: u8 = 2;
+
+pub fn f() -> u8 {
+    // Reading a mutable static item requires an `unsafe` block due to
+    // concurrency-related concerns. We are only concerned about the behavior
+    // of this program in a single-threaded context, so this is fine.
+    let s2 = unsafe { S2 };
+    S1 + s2
+}
+~~~
+
+We can write a specification for `f` like so:
+
+~~~
+// statics.saw
+enable_experimental;
+
+let f_spec = do {
+  mir_points_to (mir_static "statics::S2")
+                (mir_static_initializer "statics::S2");
+  // Note that we do not initialize S1, as immutable static items are implicitly
+  // initialized in every specification.
+
+  mir_execute_func [];
+
+  mir_return (mir_term {{ 3 : [8] }});
+};
+
+m <- mir_load_module "statics.linked-mir.json";
+
+mir_verify m "statics::f" [] false f_spec z3;
+~~~
+
+In order to use a specification involving mutable static items for
+compositional verification, it is required to specify the value of all mutable
+static items using the `mir_points_to` command in the specification's
+postconditions. For more details on this point, see the [Compositional
+Verification and Mutable Global
+Variables](#compositional-verification-and-mutable-global-variables) section.
 
 ## Preconditions and Postconditions
 
@@ -2467,17 +3706,22 @@ values in scope at the time.
 * `jvm_precond : Term -> JVMSetup ()`
 * `jvm_postcond : Term -> JVMSetup ()`
 * `jvm_assert : Term -> JVMSetup ()`
+* `mir_precond : Term -> MIRSetup ()`
+* `mir_postcond : Term -> MIRSetup ()`
+* `mir_assert : Term -> MIRSetup ()`
 
-These commands take `Term` arguments, and therefore cannot describe
-the values of pointers. The "assert" variants will work in either pre-
-or post-conditions, and are useful when defining helper functions
-that, e.g., state datastructure invariants that make sense in both
-phases.  The `llvm_equal` command states that two `SetupValue`s should
-be equal, and can be used in either the initial or the final state.
+These commands take `Term` arguments, and therefore cannot describe the values
+of pointers. The "assert" variants will work in either pre- or post-conditions,
+and are useful when defining helper functions that, e.g., provide datastructure
+invariants that make sense in both phases.  The `{llvm,jvm,mir}_equal` commands
+state that two values should be equal, and can be used in either the initial or
+the final state.
 
 * `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
+* `jvm_equal : JVMValue -> JVMValue -> JVMSetup ()`
+* `mir_equal : MIRValue -> MIRValue -> MIRSetup ()`
 
-The use of `llvm_equal` can also sometimes lead to more efficient
+The use of `{llvm,jvm,mir}_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
 
 ## Assuming specifications
@@ -2487,18 +3731,18 @@ the target code. However, in some cases, it can be useful to use a
 `MethodSpec` to specify some code that either doesn't exist or is hard
 to prove. The previously-mentioned [`assume_unsat`
 tactic](#miscellaneous-tactics) omits proof but does not prevent
-simulation of the function. To skip simulation altogether, one can use:
+simulation of the function. To skip simulation altogether, one can use
+one of the following commands:
 
 ~~~
 llvm_unsafe_assume_spec :
   LLVMModule -> String -> LLVMSetup () -> TopLevel CrucibleMethodSpec
-~~~
 
-Or, in the experimental JVM implementation:
-
-~~~
 jvm_unsafe_assume_spec :
   JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec
+
+mir_unsafe_assume_spec :
+  MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
 ~~~
 
 ## A Heap-Based Example
@@ -2632,18 +3876,19 @@ thought of as additional global state that is visible only to the
 verifier. Ghost state with a given name can be declared at the top level
 with the following function:
 
-* `llvm_declare_ghost_state : String -> TopLevel Ghost`
+* `declare_ghost_state : String -> TopLevel Ghost`
 
 Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
-function can be used to specify its value:
+functions can be used to specify its value:
 
 * `llvm_ghost_value : Ghost -> Term -> LLVMSetup ()`
+* `jvm_ghost_value  : Ghost -> Term -> JVMSetup  ()`
+* `mir_ghost_value  : Ghost -> Term -> MIRSetup  ()`
 
-Currently, this function can only be used for LLVM verification, though
-that will likely be generalized in the future. It can be used in either
-the pre state or the post state, to specify the value of ghost state
-either before or after the execution of the function, respectively.
+These can be used in either the pre state or the post state, to specify the
+value of ghost state either before or after the execution of the function,
+respectively.
 
 ## An Extended Example
 
@@ -2895,6 +4140,89 @@ let main : TopLevel () = do {
 
 [^4]: https://en.wikipedia.org/wiki/Salsa20
 
+## Verifying Cryptol FFI functions
+
+SAW has special support for verifying the correctness of Cryptol's
+[`foreign`
+functions](https://galoisinc.github.io/cryptol/master/FFI.html),
+implemented in a language such as C which compiles to LLVM, provided
+that there exists a [reference Cryptol
+implementation](https://galoisinc.github.io/cryptol/master/FFI.html#cryptol-implementation-of-foreign-functions)
+of the function as well. Since the way in which `foreign` functions are
+called is precisely specified by the Cryptol FFI, SAW is able to
+generate a `LLVMSetup ()` spec directly from the type of a Cryptol
+`foreign` function. This is done with the `llvm_ffi_setup` command,
+which is experimental and requires `enable_experimental;` to be run
+beforehand.
+```
+llvm_ffi_setup : Term -> LLVMSetup ()
+```
+
+For instance, for the simple imported Cryptol foreign function `foreign
+add : [32] -> [32] -> [32]` we can obtain a `LLVMSetup` spec simply by
+writing
+```
+let add_setup = llvm_ffi_setup {{ add }};
+```
+which behind the scenes expands to something like
+```
+let add_setup = do {
+  in0 <- llvm_fresh_var "in0" (llvm_int 32);
+  in1 <- llvm_fresh_var "in1" (llvm_int 32);
+  llvm_execute_func [llvm_term in0, llvm_term in1];
+  llvm_return (llvm_term {{ add in0 in1 }});
+};
+```
+
+### Polymorphism
+
+In general, Cryptol `foreign` functions can be polymorphic, with type
+parameters of kind `#`, representing e.g. the sizes of input sequences.
+However, any individual `LLVMSetup ()` spec only specifies the behavior
+of the LLVM function on inputs of concrete sizes. We handle this by
+allowing the argument term of `llvm_ffi_setup` to contain any necessary
+type arguments in addition to the Cryptol function name, so that the
+resulting term is monomorphic. The user can then define a parameterized
+specification simply as a SAWScript function in the usual way. For
+example, for a function `foreign f : {n, m} (fin n, fin m) => [n][32] ->
+[m][32]`, we can obtain a parameterized `LLVMSetup` spec by
+```
+let f_setup (n : Int) (m : Int) = llvm_ffi_setup {{ f`{n, m} }};
+```
+Note that the `Term` parameter that `llvm_ffi_setup` takes is restricted
+syntactically to the format described above (``{{ fun`{tyArg0, tyArg1,
+..., tyArgN} }}``), and cannot be any arbitrary term.
+
+### Supported types
+
+`llvm_ffi_setup` supports all Cryptol types that are supported by the
+Cryptol FFI, with the exception of `Integer`, `Rational`, `Z`, and
+`Float`. `Integer`, `Rational`, and `Z` are not supported since they are
+translated to `gmp` arbitrary-precision types which are hard for SAW to
+handle without additional overrides. There is no fundamental obstacle to
+supporting `Float`, and in fact `llvm_ffi_setup` itself does work with
+Cryptol floating point types, but the underlying functions such as
+`llvm_fresh_var` do not, so until that is implemented `llvm_ffi_setup`
+can generate a spec involving floating point types but it cannot
+actually be run.
+
+### Performing the verification
+
+The resulting `LLVMSetup ()` spec can be used with the existing
+`llvm_verify` function to perform the actual verification. And the
+`LLVMSpec` output from that can be used as an override as usual for
+further compositional verification.
+```
+f_ov <- llvm_verify mod "f" [] true (f_setup 3 5) z3;
+```
+
+As with the Cryptol FFI itself, SAW does not manage the compilation of
+the C source implementations of `foreign` functions to LLVM bitcode. For
+the verification to be meaningful, is expected that the LLVM module
+passed to `llvm_verify` matches the compiled dynamic library actually
+used with the Cryptol interpreter. Alternatively, on x86_64 Linux, SAW
+can perform verification directly on the `.so` ELF file with the
+experimental `llvm_verify_x86` command.
 
 # Extraction to the Coq theorem prover
 
@@ -3114,3 +4442,555 @@ problem with this aspect of the translation.
 
 [^5]: https://coq.inria.fr
 [^6]: https://github.com/mit-plv/fiat-crypto
+
+# Analyzing Hardware Circuits using Yosys
+SAW has experimental support for analysis of hardware descriptions written in VHDL ([via GHDL](https://github.com/ghdl/ghdl-yosys-plugin)) through an intermediate representation produced by [Yosys](https://yosyshq.net/yosys/).
+This generally follows the same conventions and idioms used in the rest of SAWScript.
+
+## Processing VHDL With Yosys
+Given a VHDL file `test.vhd` containing an entity `test`, one can generate an intermediate representation `test.json` suitable for loading into SAW:
+
+~~~~
+$ ghdl -a test.vhd
+$ yosys
+...
+Yosys 0.10+1 (git sha1 7a7df9a3b4, gcc 10.3.0 -fPIC -Os)
+yosys> ghdl test
+
+1. Executing GHDL.
+Importing module test.
+
+yosys> write_json test.json
+
+2. Executing JSON backend.
+~~~~
+
+It can sometimes be helpful to invoke additional Yosys passes between the `ghdl` and `write_json` commands.
+For example, at present SAW does not support the `$pmux` cell type.
+Yosys is able to convert `$pmux` cells into trees of `$mux` cells using the `pmuxtree` command.
+We expect there are many other situations where Yosys' considerable library of commands is valuable for pre-processing.
+
+## Example: Ripple-Carry Adder
+Consider three VHDL entities.
+First, a half-adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity half is
+  port (
+    a : in std_logic;
+    b : in std_logic;
+    c : out std_logic;
+    s : out std_logic
+  );
+end half;
+
+architecture halfarch of half is
+begin
+  c <= a and b;
+  s <= a xor b;
+end halfarch;
+~~~~
+
+Next, a one-bit adder built atop that half-adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity full is
+  port (
+    a : in std_logic;
+    b : in std_logic;
+    cin : in std_logic;
+    cout : out std_logic;
+    s : out std_logic
+  );
+end full;
+
+architecture fullarch of full is
+  signal half0c : std_logic;
+  signal half0s : std_logic;
+  signal half1c : std_logic;
+begin
+  half0 : entity work.half port map (a => a, b => b, c => half0c, s => half0s);
+  half1 : entity work.half port map (a => half0s, b => cin, c => half1c, s => s);
+  cout <= half0c or half1c;
+end fullarch;
+~~~~
+
+Finally, a four-bit adder:
+
+~~~~vhdl
+library ieee;
+use ieee.std_logic_1164.all;
+
+entity add4 is
+  port (
+    a : in std_logic_vector(0 to 3);
+    b : in std_logic_vector(0 to 3);
+    res : out std_logic_vector(0 to 3)
+  );
+end add4;
+
+architecture add4arch of add4 is
+  signal full0cout : std_logic;
+  signal full1cout : std_logic;
+  signal full2cout : std_logic;
+  signal ignore : std_logic;
+begin
+  full0 : entity work.full port map (a => a(0), b => b(0), cin => '0', cout => full0cout, s => res(0));
+  full1 : entity work.full port map (a => a(1), b => b(1), cin => full0cout, cout => full1cout, s => res(1));
+  full2 : entity work.full port map (a => a(2), b => b(2), cin => full1cout, cout => full2cout, s => res(2));
+  full3 : entity work.full port map (a => a(3), b => b(3), cin => full2cout, cout => ignore, s => res(3));
+end add4arch;
+~~~~
+
+Using GHDL and Yosys, we can convert the VHDL source above into a format that SAW can import.
+If all of the code above is in a file `adder.vhd`, we can run the following commands:
+
+~~~~
+$ ghdl -a adder.vhd
+$ yosys -p 'ghdl add4; write_json adder.json'
+~~~~
+
+The produced file `adder.json` can then be loaded into SAW with `yosys_import`:
+
+~~~~
+$ saw
+...
+sawscript> enable_experimental
+sawscript> m <- yosys_import "adder.json"
+sawscript> :type m
+Term
+sawscript> type m
+[23:57:14.492] {add4 : {a : [4], b : [4]} -> {res : [4]},
+ full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]},
+ half : {a : [1], b : [1]} -> {c : [1], s : [1]}}
+~~~~
+
+`yosys_import` returns a `Term` with a Cryptol record type, where the fields correspond to each VHDL module.
+We can access the fields of this record like we would any Cryptol record, and call the functions within like any Cryptol function.
+
+~~~~
+sawscript> type {{ m.add4 }}
+[00:00:25.255] {a : [4], b : [4]} -> {res : [4]}
+sawscript> eval_int {{ (m.add4 { a = 1, b = 2 }).res }}
+[00:02:07.329] 3
+~~~~
+
+We can also use all of SAW's infrastructure for asking solvers about `Term`s, such as the `sat` and `prove` commands.
+For example:
+
+~~~~
+sawscript> sat w4 {{ m.add4 === \_ -> { res = 5 } }}
+[00:04:41.993] Sat: [_ = (5, 0)]
+sawscript> prove z3 {{ m.add4 === \inp -> { res = inp.a + inp.b } }}
+[00:05:43.659] Valid
+sawscript> prove yices {{ m.add4 === \inp -> { res = inp.a - inp.b } }}
+[00:05:56.171] Invalid: [_ = (8, 13)]
+~~~~
+
+The full library of `ProofScript` tactics is available in this setting.
+If necessary, proof tactics like `simplify` can be used to rewrite goals before querying a solver.
+
+Special support is provided for the common case of equivalence proofs between HDL modules and other `Term`s (e.g. Cryptol functions, other HDL modules, or "extracted" imperative LLVM or JVM code).
+The command `yosys_verify` has an interface similar to `llvm_verify`: given a specification, some lemmas, and a proof tactic, it produces evidence of a proven equivalence that may be passed as a lemma to future calls of `yosys_verify`.
+For example, consider the following Cryptol specifications for one-bit and four-bit adders:
+
+~~~~cryptol
+cryfull :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+cryfull inp = { cout = [cout], s = [s] }
+  where [cout, s] = zext inp.a + zext inp.b + zext inp.cin
+
+cryadd4 : {a : [4], b : [4]} -> {res : [4]}
+cryadd4 inp = { res = inp.a + inp.b }
+~~~~
+
+We can prove equivalence between `cryfull` and the VHDL `full` module:
+
+~~~~
+sawscript> full_spec <- yosys_verify {{ m.full }} [] {{ cryfull }} [] w4;
+~~~~
+
+The result `full_spec` can then be used as an "override" when proving equivalence between `cryadd4` and the VHDL `add4` module:
+
+~~~~
+sawscript> add4_spec <- yosys_verify {{ m.add4 }} [] {{ cryadd4 }} [full_spec] w4;
+~~~~
+
+The above could also be accomplished through the use of `prove_print` and term rewriting, but it is much more verbose.
+
+`yosys_verify` may also be given a list of preconditions under which the equivalence holds.
+For example, consider the following Cryptol specification for `full` that ignores the `cin` bit:
+
+~~~~cryptol
+cryfullnocarry :  {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+cryfullnocarry inp = { cout = [cout], s = [s] }
+  where [cout, s] = zext inp.a + zext inp.b
+~~~~
+
+This is not equivalent to `full` in general, but it is if constrained to inputs where `cin = 0`.
+We may express that precondition like so:
+
+~~~~
+sawscript> full_nocarry_spec <- yosys_verify {{ adderm.full }} [{{\(inp : {a : [1], b : [1], cin : [1]}) -> inp.cin == 0}}] {{ cryfullnocarry }} [] w4;
+~~~~
+
+The resulting override `full_nocarry_spec` may still be used in the proof for `add4` (this is accomplished by rewriting to a conditional expression).
+
+## API Reference
+N.B: The following commands must first be enabled using `enable_experimental`.
+
+* `yosys_import : String -> TopLevel Term` produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command.
+  The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
+  Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.
+  For example, consider a Yosys JSON file derived from the following VHDL entities:
+  ~~~~vhdl
+  entity half is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      c : out std_logic;
+      s : out std_logic
+    );
+  end half;
+
+  entity full is
+    port (
+      a : in std_logic;
+      b : in std_logic;
+      cin : in std_logic;
+      cout : out std_logic;
+      s : out std_logic
+    );
+  end full;
+  ~~~~
+  The resulting `Term` will have the type:
+  ~~~~
+  { half : {a : [1], b : [1]} -> {c : [1], s : [1]}
+  , full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
+  }
+  ~~~~
+* `yosys_verify : Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem` proves equality between an HDL module and a specification.
+  The first parameter is the HDL module - given a record `m` from `yosys_import`, this will typically look something like `{{ m.foo }}`.
+  The second parameter is a list of preconditions for the equality.
+  The third parameter is the specification, a term of the same type as the HDL module, which will typically be some Cryptol function or another HDL module.
+  The fourth parameter is a list of "overrides", which witness the results of previous `yosys_verify` proofs.
+  These overrides can be used to simplify terms by replacing use sites of submodules with their specifications.
+
+  Note that `Term`s derived from HDL modules are "first class", and are not restricted to `yosys_verify`: they may also be used with SAW's typical `Term` infrastructure like `sat`, `prove_print`, term rewriting, etc.
+  `yosys_verify` simply provides a convenient and familiar interface, similar to `llvm_verify` or `jvm_verify`.
+
+# Bisimulation Prover
+
+SAW contains a bisimulation prover to prove that two terms simulate each other.
+This prover allows users to prove that two terms executing in lockstep satisfy
+some relations over the state of each circuit and their outputs.  This type of
+proof is useful in demonstrating the eventual equivalence of two circuits, or
+of a circuit and a functional specification.  SAW enables these proofs with the
+experimental `prove_bisim` command:
+
+~~~~
+prove_bisim : ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel BisimTheorem
+~~~~
+
+When invoking `prove_bisim strat theorems srel orel lhs rhs`, the arguments
+represent the following:
+
+1. `strat`: A proof strategy to use during verification.
+2. `theorems`: A list of already proven bisimulation theorems.
+3. `srel`: A state relation between `lhs` and `rhs`.  This relation must have
+   the type `lhsState -> rhsState -> Bit`. The relation's first argument is
+   `lhs`'s state prior to execution. The relation's second argument is `rhs`'s
+   state prior to execution. `srel` then returns a `Bit` indicating whether
+   the two arguments satisfy the bisimulation's state relation.
+4. `orel`: An output relation between `lhs` and `rhs`.  This relation must have
+   the type `(lhsState, output) -> (rhsState, output) -> Bit`. The relation's
+   first argument is a pair consisting of `lhs`'s state and output following
+   execution. The relation's second argument is a pair consisting of `rhs`'s
+   state and output following execution. `orel` then returns a `Bit` indicating
+   whether the two arguments satisfy the bisimulation's output relation.
+5. `lhs`: A term that simulates `rhs`. `lhs` must have the type
+   `(lhsState, input) -> (lhsState, output)`.  The first argument to `lhs` is a
+   tuple containing the internal state of `lhs`, as well as the input to `lhs`.
+   `lhs` returns a tuple containing its internal state after execution, as well
+   as its output.
+6. `rhs`: A term that simulates `lhs`. `rhs` must have the type
+   `(rhsState, input) -> (rhsState, output)`.  The first argument to `rhs` is a
+   tuple containing the internal state of `rhs`, as well as the input to `rhs`.
+   `rhs` returns a tuple containing its internal state after execution, as well
+   as its output.
+
+On success, `prove_bisim` returns a `BisimTheorem` that can be used in future
+bisimulation proofs to enable compositional bisimulation proofs.  On failure,
+`prove_bisim` will abort.
+
+## Bisimulation Example
+
+This section walks through an example proving that the Cryptol implementation
+of an AND gate that makes use of internal state and takes two cycles to
+complete is equivalent to a pure function that computes the logical AND of its
+inputs in one cycle. First, we define the implementation's state type:
+
+~~~~
+type andState = { loaded : Bit, origX : Bit, origY : Bit }
+~~~~
+
+`andState` is a record type with three fields:
+
+1. `loaded`: A `Bit` indicating whether the input to the AND gate has been
+   loaded into the state record.
+2. `origX`: A `Bit` storing the first input to the AND gate.
+3. `origY`: A `Bit` storing the second input to the AND gate.
+
+Now, we define the AND gate's implementation:
+
+~~~~
+andImp : (andState, (Bit, Bit)) -> (andState, (Bit, Bit))
+andImp (s, (x, y)) =
+  if s.loaded /\ x == s.origX /\ y == s.origY
+  then (s, (True, s.origX && s.origY))
+  else ({ loaded = True, origX = x, origY = y }, (False, 0))
+~~~~
+
+`andImp` takes a tuple as input where the first field is an `andState` holding
+the gate's internal state, and second field is a tuple containing the inputs to
+the AND gate. `andImp` returns a tuple consisting of the updated `andState` and
+the gate's output.  The output is a tuple where the first field is a ready bit
+that is `1` when the second field is ready to be read, and the second field
+is the result of gate's computation.
+
+`andImp` takes two cycles to complete:
+
+1. The first cycle loads the inputs into its state's `origX` and `origY` fields
+   and sets `loaded` to `True`. It sets both of its output bits to `0`.
+2. The second cycle uses the stored input values to compute the logical AND.
+   It sets its ready bit to `1` and its second output to the logical AND
+   result.
+
+So long as the inputs remain fixed after the second cycle, `andImp`'s output
+remains unchanged.  If the inputs change, then `andImp` restarts the
+computation (even if the inputs change between the first and second cycles).
+
+Next, we define the pure function we'd like to prove `andImp` bisimilar to:
+
+~~~~
+andSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+andSpec (_, (x, y)) = ((), (True, x && y))
+~~~~
+
+`andSpec` takes a tuple as input where the first field is `()`, indicating that
+`andSpec` is a pure function without internal state, and the second field is a
+tuple containing the inputs to the AND function. `andSpec` returns a tuple
+consisting of `()` (again, because `andSpec` is stateless) and the function's
+output.  Like `andImp`, the output is a tuple where the first field is a ready
+bit that is `1` when the second field is ready to be read, and the second field
+is the result of the function's computation.
+
+`andSpec` completes in a single cycle, and as such its ready bit is always `1`.
+It computes the logical AND directly on the function's inputs using Cryptol's
+`(&&)` operator.
+
+Next, we define a state relation over `andImp` and `andSpec`:
+
+~~~~
+andStateRel : andState -> () -> Bit
+andStateRel _ () = True
+~~~~
+
+`andStateRel` takes two arguments:
+
+1. An `andState` for `andImp`.
+2. An empty state (`()`) for `andSpec`.
+
+`andStateRel` returns a `Bit` indicating whether the relation is satisified.  In
+this case, `andStateRel` always returns `True` because `andSpec` is stateless
+and therefore the state relation permits `andImp` to accept any state.
+
+Lastly, we define a relation over `andImp` and `andSpec`:
+
+~~~~
+andOutputRel : (andState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+andOutputRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+~~~~
+
+`andOutputRel` takes two arguments:
+
+1. A return value from `andImp`. Specifically, a pair consisting of an
+   `andState` and a pair containing a ready bit and result of the logical AND.
+2. A return value from `andSpec`. Specifically, a pair consisting of an empty
+   state `()` and a pair containing a ready bit and result of the logical AND.
+
+`andOutputRel` returns a `Bit` indicating whether the relation is satisfied.  It
+considers the relation satisfied in two ways:
+
+1. If `andImp`'s ready bit is set, the relation is satisfied if the output
+   values `impO` and `specO` from `andImp` and `andSpec` respectively are
+   equivalent.
+2. If `andImp`'s ready bit is not set, the relation is satisfied.
+
+Put another way, the relation is satisfied if the end result of `andImp` and
+`andSpec` are equivalent.  The relation permits intermediate outputs to differ.
+
+We can verify that this relation is always satisfied--and therefore the two
+terms are bisimilar--by using `prove_bisim`:
+
+~~~~
+import "And.cry";
+enable_experimental;
+
+and_bisim <- prove_bisim z3 [] {{ andStateRel }} {{ andOutputRel }} {{ andImp }} {{ andSpec }};
+~~~~
+
+Upon running this script, SAW prints:
+
+~~~~
+Successfully proved bisimulation between andImp and andSpec
+~~~~
+
+### Building a NAND gate
+
+We can make the example more interesting by reusing components to build a NAND
+gate.  We first define a state type for the NAND gate implementation that
+contains `andImp`'s state.  This NAND gate will not need any additional state,
+so we will define a type `nandState` that is equal to `andState`:
+
+~~~~
+type nandState = andState
+~~~~
+
+Now, we define an implementation `nandImp` that calls `andImp` and negates the
+result:
+
+~~~~
+nandImp : (nandState, (Bit, Bit)) -> (nandState, (Bit, Bit))
+nandImp x = (s, (andReady, ~andRes))
+  where
+    (s, (andReady, andRes)) = andImp x
+~~~~
+
+Note that `nandImp` is careful to preserve the ready status of `andImp`.
+Because `nandImp` relies on `andImp`, it also takes two cycles to compute the
+logical NAND of its inputs.
+
+Next, we define a specification `nandSpec` in terms of `andSpec`:
+
+~~~~
+nandSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+nandSpec (_, (x, y)) = ((), (True, ~ (andSpec ((), (x, y))).1.1))
+~~~~
+
+As with `andSpec`, `nandSpec` is pure and computes its result in a single
+cycle.
+
+Next, we define a state relation over `nandImp` and `nandSpec`:
+
+~~~~
+nandStateRel : andState -> () -> Bit
+nandStateRel _ () = True
+~~~~
+
+As with `andStateRel`, this state relation is always `True` because `nandSpec`
+is stateless.
+
+Lastly, we define an output relation indicating that `nandImp` and `nandSpec`
+produce equivalent results once `nandImp`'s ready bit is `1`:
+
+~~~~
+nandOutputRel : (nandState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+nandOutputRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+~~~~
+
+To prove that `nandImp` and `nandSpec` are bisimilar, we again use
+`prove_bisim`. This time however, we can reuse the bisimulation proof for the
+AND gate by including it in the `theorems` paramter for `prove_bisim`:
+
+~~~~
+prove_bisim z3 [and_bisim] {{ nandStateRel }} {{ nandOutputRel }} {{ nandImp }} {{ nandSpec }};
+~~~~
+
+Upon running this script, SAW prints:
+
+~~~~
+Successfully proved bisimulation between nandImp and nandSpec
+~~~~
+
+## Understanding the proof goals
+
+While not necessary for simple proofs, more advanced proofs may require
+inspecting proof goals.  `prove_bisim` generates and attempts to solve the
+following proof goals:
+
+~~~~
+OUTPUT RELATION THEOREM:
+  forall s1 s2 in.
+    srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))
+
+STATE RELATION THEOREM:
+  forall s1 s2 out1 out2.
+    orel (s1, out1) (s2, out2) -> srel s1 s2
+~~~~
+
+where the variables in the `forall`s are:
+
+* `s1`: Initial state for `lhs`
+* `s2`: Initial state for `rhs`
+* `in`: Input value to `lhs` and `rhs`
+* `out1`: Initial output value for `lhs`
+* `out2`: Initial output value for `rhs`
+
+The `STATE RELATION THEOREM` verifies that the output relation properly captures
+the guarantees of the state relation.  The `OUTPUT RELATION THEOREM` verifies
+that if `lhs` and `rhs` are executed with related states, then the result of
+that execution is also related.  These two theorems together guarantee that the
+terms simulate each other.
+
+When using composition, `prove_bisim` also generates and attempts to solve
+the proof goal below for any successfully applied `BisimTheorem` in the
+`theorems` list:
+
+~~~~
+COMPOSITION SIDE CONDITION:
+  forall g_lhs_s g_rhs_s.
+    g_srel g_lhs_s g_rhs_s -> f_srel f_lhs_s f_rhs_s
+    where
+      f_lhs_s = extract_inner_state g_lhs g_lhs_s f_lhs
+      f_rhs_s = extract_inner_state g_rhs g_rhs_s f_rhs
+~~~~
+
+where `g_lhs` is an outer term containing a call to an inner term `f_lhs`
+represented by a `BisimTheorem` and `g_rhs` is an outer term containing a call
+to an inner term `f_rhs` represented by the same `BisimTheorem`. The variables
+in `COMPOSITION SIDE CONDITION` are:
+
+* `extract_inner_state x x_s y`: A helper function that takes an outer term `x`, an
+  outer state `x_s`, and an inner term `y`, and returns the inner state of `x_s`
+  that `x` passes to `y`.
+* `g_lhs_s`: The state for `g_lhs`
+* `g_rhs_s`: The state for `g_rhs`
+* `g_srel`: The state relation for `g_lhs` and `g_rhs`
+* `f_srel`: The state relation for `f_lhs` and `f_rhs`
+* `f_lhs_s`: The state for `f_lhs`, as represented in `g_lhs_s` (extracted using
+  `extract_inner_state`).
+* `f_rhs_s`: The state for `f_rhs`, as represented in `g_rhs_s` (extracted using
+  `extract_inner_state`).
+
+The `COMPOSITION SIDE CONDITION` exists to verify that the terms in the
+bisimulation relation properly set up valid states for subterms they contain.
+
+## Limitiations
+
+For now, the `prove_bisim` command has a couple limitations:
+
+* `lhs` and `rhs` must be named functions.  This is because `prove_bisim` uses
+  these names to perform substitution when making use of compositionality.
+* Each subterm present in the list of bisimulation theorems already
+  proven may be invoked at most once in `lhs` or `rhs`.  That is, if some
+  function `g_lhs` calls `f_lhs`, and `prove_bisim` is invoked with a
+  `BisimTheorem` proving that `f_lhs` is bisimilar to `f_rhs`, then `g_lhs` may
+  call `f_lhs` at most once.

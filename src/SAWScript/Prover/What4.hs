@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
 
@@ -8,6 +9,8 @@ module SAWScript.Prover.What4 where
 
 
 import           Control.Lens ((^.))
+import           Control.Monad.State (gets)
+import           Data.List (nub)
 import           Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -17,9 +20,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery (SATQuery(..))
 
-import           SAWScript.Proof(Prop, propToSATQuery, propSize, CEX)
-import           SAWScript.Prover.SolverStats
-import           SAWScript.Value (TopLevel, io, getSharedContext)
+import           SAWScript.Proof(Sequent, sequentToSATQuery, CEX)
+import           SAWScript.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
 
 import           Data.Parameterized.Nonce
 
@@ -40,29 +42,37 @@ import qualified What4.Expr.Builder as B
 -- trivial state
 data St t = St
 
-setupWhat4_sym :: Bool -> IO (B.ExprBuilder
-                              GlobalNonceGenerator
-                              St
-                              (B.Flags B.FloatReal))
-setupWhat4_sym hashConsing =
+setupWhat4_sym ::
+  Bool ->
+  Bool ->
+  IO (B.ExprBuilder
+      GlobalNonceGenerator
+      St
+      (B.Flags B.FloatReal))
+setupWhat4_sym hashConsing what4PushMuxOps =
   do -- TODO: get rid of GlobalNonceGenerator ???
      sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
-     cacheTermsSetting <- getOptionSetting B.cacheTerms $ getConfiguration sym
+     let cfg = getConfiguration sym
+     cacheTermsSetting <- getOptionSetting B.cacheTerms cfg
      _ <- setOpt cacheTermsSetting hashConsing
+     pushMuxOpsSetting <- getOptionSetting B.pushMuxOpsOption cfg
+     _ <- setOpt pushMuxOpsSetting what4PushMuxOps
      return sym
 
 what4Theories ::
   Set VarIndex ->
   Bool ->
-  Prop ->
+  Sequent ->
   TopLevel [String]
-what4Theories unintSet hashConsing goal =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
-     satq <- propToSATQuery sc unintSet goal
-     (_varMap, lit) <- W.w4Solve sym sc satq
-     let pf = (predicateVarInfo lit)^.problemFeatures
-     return (evalTheories pf)
+what4Theories unintSet hashConsing goal = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
+     satq <- sequentToSATQuery sc unintSet goal
+     (_varMap, lits) <- W.w4Solve sym sc satq
+     let pf lit = (predicateVarInfo lit)^.problemFeatures
+     return (nub (concatMap evalTheories (map pf lits)))
 
 evalTheories :: ProblemFeatures -> [String]
 evalTheories pf = [ nm | (nm,f) <- xs, hasProblemFeature pf f ]
@@ -82,45 +92,48 @@ evalTheories pf = [ nm | (nm,f) <- xs, hasProblemFeature pf f ]
 
 proveWhat4_sym ::
   SolverAdapter St ->
-  Set VarIndex ->
   Bool ->
-  Prop ->
-  TopLevel (Maybe CEX, SolverStats)
-proveWhat4_sym solver un hashConsing t =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
-     proveWhat4_solver solver sym un sc t (return ())
+  SATQuery ->
+  TopLevel (Maybe CEX, String)
+proveWhat4_sym solver hashConsing satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
+     proveWhat4_solver solver sym sc satq (return ())
 
 proveExportWhat4_sym ::
   SolverAdapter St ->
-  Set VarIndex ->
   Bool ->
   FilePath ->
-  Prop ->
-  TopLevel (Maybe CEX, SolverStats)
-proveExportWhat4_sym solver un hashConsing outFilePath t =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
+  SATQuery ->
+  TopLevel (Maybe CEX, String)
+proveExportWhat4_sym solver hashConsing outFilePath satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
 
      -- Write smt out
-     (_, _, lit, stats) <- setupWhat4_solver solver sym un sc t
+     (_, _, lits, solver_name) <- setupWhat4_solver solver sym sc satq
      withFile outFilePath WriteMode $ \handle ->
-       solver_adapter_write_smt2 solver sym handle [lit]
+       solver_adapter_write_smt2 solver sym handle lits
 
      -- Assume unsat
-     return (Nothing, stats)
+     return (Nothing, solver_name)
 
-proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
+proveWhat4_z3, proveWhat4_boolector,
+  proveWhat4_cvc4, proveWhat4_cvc5,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
   proveWhat4_abc ::
-  Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
-  Prop          {- ^ A proposition to be proved -} ->
-  TopLevel (Maybe CEX, SolverStats)
+  SATQuery      {- ^ The query to be proved -} ->
+  TopLevel (Maybe CEX, String)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
 proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
+proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter
 proveWhat4_dreal     = proveWhat4_sym drealAdapter
 proveWhat4_stp       = proveWhat4_sym stpAdapter
 proveWhat4_yices     = proveWhat4_sym yicesAdapter
@@ -128,29 +141,31 @@ proveWhat4_abc       = proveWhat4_sym externalABCAdapter
 
 proveWhat4_z3_using ::
   String        {- ^ Solver tactic -} ->
-  Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
-  Prop          {- ^ A proposition to be proved -} ->
-  TopLevel (Maybe CEX, SolverStats)
-proveWhat4_z3_using tactic un hashConsing t =
-  getSharedContext >>= \sc -> io $
-  do sym <- setupWhat4_sym hashConsing
-     proveWhat4_solver z3Adapter sym un sc t $
+  SATQuery      {- ^ The query to be proved -} ->
+  TopLevel (Maybe CEX, String)
+proveWhat4_z3_using tactic hashConsing satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- setupWhat4_sym hashConsing what4PushMuxOps
+     proveWhat4_solver z3Adapter sym sc satq $
        do z3TacticSetting <- getOptionSetting z3Tactic $ getConfiguration sym
           _ <- setOpt z3TacticSetting $ Text.pack tactic
           return ()
 
-proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
+proveExportWhat4_z3, proveExportWhat4_boolector,
+  proveExportWhat4_cvc4, proveExportWhat4_cvc5,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
-  Set VarIndex  {- ^ Uninterpreted functions -} ->
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
-  Prop          {- ^ A proposition to be proved -} ->
-  TopLevel (Maybe CEX, SolverStats)
+  SATQuery      {- ^ The query to be proved -} ->
+  TopLevel (Maybe CEX, String)
 
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
 proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter
 proveExportWhat4_cvc4      = proveExportWhat4_sym cvc4Adapter
+proveExportWhat4_cvc5      = proveExportWhat4_sym cvc5Adapter
 proveExportWhat4_dreal     = proveExportWhat4_sym drealAdapter
 proveExportWhat4_stp       = proveExportWhat4_sym stpAdapter
 proveExportWhat4_yices     = proveExportWhat4_sym yicesAdapter
@@ -159,44 +174,40 @@ proveExportWhat4_yices     = proveExportWhat4_sym yicesAdapter
 setupWhat4_solver :: forall st t ff.
   SolverAdapter st   {- ^ Which solver to use -} ->
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
-  Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
-  Prop               {- ^ A proposition to be proved/checked. -} ->
+  SATQuery           {- ^ The query to be proved/checked. -} ->
   IO ( [ExtCns Term]
      , [W.Labeler (B.ExprBuilder t st ff)]
-     , Pred (B.ExprBuilder t st ff)
-     , SolverStats)
-setupWhat4_solver solver sym unintSet sc goal =
+     , [Pred (B.ExprBuilder t st ff)]
+     , String)
+setupWhat4_solver solver sym sc satq =
   do
      -- symbolically evaluate
-     satq <- propToSATQuery sc unintSet goal
      let varList  = Map.toList (satVariables satq)
      let argNames = map fst varList
-     (varMap, lit) <- W.w4Solve sym sc satq
+     (varMap, lits) <- W.w4Solve sym sc satq
      let bvs = map (fst . snd) varMap
 
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)
 
-     let stats = solverStats ("W4 ->" ++ solver_adapter_name solver)
-                             (propSize goal)
+     let solver_name = "W4 ->" ++ solver_adapter_name solver
 
-     return (argNames, bvs, lit, stats)
+     return (argNames, bvs, lits, solver_name)
 
 
 -- | Check the validity of a proposition using What4.
 proveWhat4_solver :: forall st t ff.
   SolverAdapter st   {- ^ Which solver to use -} ->
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
-  Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
-  Prop               {- ^ A proposition to be proved/checked. -} ->
+  SATQuery           {- ^ The query to be proved/checked. -} ->
   IO ()              {- ^ Extra setup actions -} ->
-  IO (Maybe CEX, SolverStats)
+  IO (Maybe CEX, String)
   -- ^ (example/counter-example, solver statistics)
-proveWhat4_solver solver sym unintSet sc goal extraSetup =
+proveWhat4_solver solver sym sc satq extraSetup =
   do
-     (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unintSet sc goal
+     (argNames, bvs, lits, solver_name) <- setupWhat4_solver solver sym sc satq
      extraSetup
 
      -- log to stdout
@@ -205,13 +216,13 @@ proveWhat4_solver solver sym unintSet sc goal extraSetup =
                                   , logReason = "SAW proof" }
 
      -- run solver
-     solver_adapter_check_sat solver sym logData [lit] $ \ r -> case r of
+     solver_adapter_check_sat solver sym logData lits $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)
-           return (Just mvals, stats) where
+           return (Just mvals, solver_name) where
 
-         Unsat _ -> return (Nothing, stats)
+         Unsat _ -> return (Nothing, solver_name)
 
          Unknown -> fail "Prover returned Unknown"
 

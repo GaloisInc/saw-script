@@ -36,10 +36,22 @@ import SAWServer.LLVMVerify
       llvmAssume,
       llvmVerifyX86Descr,
       llvmVerifyX86 )
+import SAWServer.MIRCrucibleSetup
+    ( mirLoadModuleDescr, mirLoadModule )
+import SAWServer.MIRFindADT
+    ( mirFindADTDescr, mirFindADT )
+import SAWServer.MIRVerify
+    ( mirAssumeDescr, mirAssume,
+      mirVerifyDescr, mirVerify )
 import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
 import SAWServer.SetOption ( setOptionDescr, setOption )
+import SAWServer.Yosys
+    ( yosysImportDescr, yosysImport,
+      yosysVerifyDescr, yosysVerify,
+      yosysImportSequentialDescr, yosysImportSequential,
+      yosysExtractSequentialDescr, yosysExtractSequential )
 
 
 main :: IO ()
@@ -109,6 +121,40 @@ sawMethods =
      "SAW/LLVM/assume"
      llvmAssumeDescr
      llvmAssume
+  -- MIR
+  , Argo.command
+      "SAW/MIR/load module"
+      mirLoadModuleDescr
+      mirLoadModule
+  , Argo.command
+     "SAW/MIR/verify"
+     mirVerifyDescr
+     mirVerify
+  , Argo.command
+     "SAW/MIR/assume"
+     mirAssumeDescr
+     mirAssume
+  , Argo.command
+     "SAW/MIR/find ADT"
+     mirFindADTDescr
+     mirFindADT
+  -- Yosys
+  , Argo.command
+     "SAW/Yosys/import"
+     yosysImportDescr
+     yosysImport
+  , Argo.command
+     "SAW/Yosys/verify"
+     yosysVerifyDescr
+     yosysVerify
+  , Argo.command
+     "SAW/Yosys/import sequential"
+     yosysImportSequentialDescr
+     yosysImportSequential
+  , Argo.command
+     "SAW/Yosys/extract sequential"
+     yosysExtractSequentialDescr
+     yosysExtractSequential
   -- General
   , Argo.command
      "SAW/create ghost variable"

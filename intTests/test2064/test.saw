@@ -1,0 +1,26 @@
+enable_experimental;
+
+let f_spec = do {
+  x_ref <- mir_alloc (mir_array 4 mir_u32);
+  x_val <- mir_fresh_var "x" (mir_array 4 mir_u32);
+  mir_points_to x_ref (mir_term x_val);
+
+  y_ref <- mir_alloc (mir_array 4 mir_u32);
+  y_val <- mir_fresh_var "y" (mir_array 4 mir_u32);
+  mir_points_to y_ref (mir_term y_val);
+
+  mir_execute_func [mir_slice_value x_ref, mir_slice_value y_ref];
+
+  mir_return (mir_term {{ x_val@0 == y_val@0 }});
+};
+
+let g_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_term {{ False }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [f_ov] false g_spec z3;

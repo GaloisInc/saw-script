@@ -18,25 +18,6 @@ extract_exe() {
   $IS_WIN || chmod +x "$2/$name"
 }
 
-retry() {
-  echo "Attempting with retry:" "$@"
-  local n=1
-  while true; do
-    if "$@"; then
-      break
-    else
-      if [[ $n -lt 3 ]]; then
-        sleep $n # don't retry immediately
-        ((n++))
-        echo "Command failed. Attempt $n/3:"
-      else
-        echo "The command has failed after $n attempts."
-        return 1
-      fi
-    fi
-  done
-}
-
 setup_dist_bins() {
   if $IS_WIN; then
     is_exe "dist/bin" "saw" && return
@@ -62,25 +43,39 @@ build() {
   else
     pkgs=(saw crux-mir-comp saw-remote-api)
   fi
-  tee -a cabal.project.local > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
-    if [[ "$RUNNER_OS" == "macOS" ]]; then
-      echo "Working around a dylib issue on macos by removing the cache and trying again"
-      cabal v2-clean
-      retry cabal v2-build "$@" "${pkgs[@]}"
-    else
-      return 1
-    fi
+  cat cabal.project.ci >> cabal.project.local
+  if [[ "$ENABLE_HPC" == "true" ]]; then
+    cat cabal.project.ci-hpc >> cabal.project.local
   fi
+  # In the distant past, we had to retry the `cabal build` command to work
+  # around issues with caching dylib files on macOS. These issues appear to
+  # be less likely with modern GitHub Actions caching, so we have removed the
+  # retry logic.
+  cabal v2-build "$@" "${pkgs[@]}"
+}
+
+# Gather and tar up all HPC coverage files and binaries
+collect_hpc_files() {
+  local MIX_FILES=$(find dist-newstyle -name "*.mix")
+  local GENERATED_HS_FILES=$(find dist-newstyle/build -name "*.hs")
+  local BINS="dist/bin"
+  tar cvf hpc.tar.gz ${MIX_FILES} ${GENERATED_HS_FILES} ${BINS}
+}
+
+# Download HTML coverage reports and generate an index file linking to them
+collect_all_html() {
+  local HTML_DIR=all-html
+  mkdir -p ${HTML_DIR}
+  (cd ${HTML_DIR} && gh run download -p "coverage-html-*" && python3 ../.github/generate_index.py)
 }
 
 install_system_deps() {
-  (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-bin.zip" && unzip -o bins.zip && rm bins.zip)
+  (cd $BIN && curl -o bins.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/$SOLVER_PKG_VERSION/$BUILD_TARGET_OS-$BUILD_TARGET_ARCH-bin.zip" && unzip -o bins.zip && rm bins.zip)
   chmod +x $BIN/*
   cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT
   export PATH="$BIN:$PATH"
   echo "$BIN" >> "$GITHUB_PATH"
-  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices
+  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" cvc5 && is_exe "$BIN" yices
 }
 
 build_cryptol() {
@@ -127,9 +122,16 @@ zip_dist_with_solvers() {
   # dependencies) as the SAW binaries.
   cp "$BIN/abc"        dist/bin/
   cp "$BIN/cvc4"       dist/bin/
+  cp "$BIN/cvc5"       dist/bin/
   cp "$BIN/yices"      dist/bin/
   cp "$BIN/yices-smt2" dist/bin/
+  # Z3 4.8.14 has been known to nondeterministically time out with the AWSLC
+  # and BLST proofs, so we include both 4.8.8 and 4.8.14 so that we can fall
+  # back to 4.8.8 (a version known to work with the AWSLC and BLST proofs)
+  # where necessary. See #1772.
   cp "$BIN/z3"         dist/bin/
+  cp "$BIN/z3-4.8.8"   dist/bin/
+  cp "$BIN/z3-4.8.14"  dist/bin/
   cp -r dist "$sname"
   tar -cvzf "$sname".tar.gz "$sname"
 }

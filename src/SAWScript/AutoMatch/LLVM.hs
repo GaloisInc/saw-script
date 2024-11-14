@@ -4,7 +4,7 @@
 
 module SAWScript.AutoMatch.LLVM where
 
-import Control.Monad.State hiding (mapM)
+import Control.Monad (when)
 import Control.Monad.Free
 
 import qualified Data.AIG as AIG

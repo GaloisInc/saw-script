@@ -1,0 +1,17 @@
+enable_experimental;
+enable_lax_loads_and_stores;
+
+let f_spec = do {
+  ss <- llvm_alloc_readonly (llvm_alias "struct.s");
+  x <- llvm_fresh_var "x" (llvm_int 1);
+  y <- llvm_fresh_var "y" (llvm_int 1);
+  llvm_points_to_bitfield ss "x" (llvm_term x);
+  llvm_points_to_bitfield ss "y" (llvm_term y);
+
+  llvm_execute_func [ss];
+
+  llvm_return (llvm_term {{ if x == y then 1 else 0 : [32] }});
+};
+
+m <- llvm_load_module "test.bc";
+ov <- llvm_verify m "f" [] false f_spec (w4_unint_yices []);

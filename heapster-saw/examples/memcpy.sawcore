@@ -1,9 +1,9 @@
 
 module memcpy where
 
-import Prelude;
+import SpecM;
 
-mallocSpec : (sz:Vec 64 Bool) -> CompM (BVVec 64 sz #());
+mallocSpec : (sz:Vec 64 Bool) -> SpecM VoidEv (BVVec 64 sz #());
 mallocSpec sz =
-  returnM (BVVec 64 sz #())
-          (genBVVec 64 sz #() (\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()));
+  retS VoidEv (BVVec 64 sz #())
+       (genBVVec 64 sz #() (\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()));

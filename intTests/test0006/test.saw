@@ -1,4 +1,4 @@
-import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
+import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.md";
 
 let main = do {
    print "ref type";

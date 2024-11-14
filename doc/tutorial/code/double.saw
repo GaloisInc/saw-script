@@ -6,9 +6,6 @@ let thm = {{ \x -> double_ref x == double_imp x }};
 r <- prove yices thm;
 print r;
 
-r <- prove yices thm;
-print r;
-
 r <- prove z3 thm;
 print r;
 

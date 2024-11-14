@@ -25,7 +25,7 @@ Portability : portable
 module Verifier.SAW.Translation.Coq.SAWModule where
 
 import qualified Control.Monad.Except                          as Except
-import           Control.Monad.Reader                          hiding (fail)
+import           Control.Monad.Reader                          (asks)
 import           Prelude                                       hiding (fail)
 import           Prettyprinter                                 (Doc, pretty)
 
@@ -42,14 +42,14 @@ import Verifier.SAW.Translation.Coq.Monad
 -- import Debug.Trace
 
 type ModuleTranslationMonad m =
-  M.TranslationMonad TermTranslation.TranslationReader () m
+  M.TranslationMonad (Maybe ModuleName) () m
 
 runModuleTranslationMonad ::
   M.TranslationConfiguration -> Maybe ModuleName ->
   (forall m. ModuleTranslationMonad m => m a) ->
   Either (M.TranslationError Term) (a, ())
 runModuleTranslationMonad configuration modName =
-  M.runTranslationMonad configuration (TermTranslation.TranslationReader modName) ()
+  M.runTranslationMonad configuration modName ()
 
 dropPi :: Coq.Term -> Coq.Term
 dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
@@ -93,10 +93,23 @@ translateDataType (DataType {..}) =
     translateNamed name = do
       let inductiveName = name
       (inductiveParameters, inductiveIndices) <-
-        liftTermTranslationMonad $ do
-        ps <- TermTranslation.translateParams dtParams
-        ixs <- TermTranslation.translateParams dtIndices
-        return (ps, map (\(Coq.Binder s (Just t)) -> Coq.PiBinder (Just s) t) ixs)
+        liftTermTranslationMonad $
+        TermTranslation.translateParams dtParams $ \ps ->
+        TermTranslation.translateParams dtIndices $ \ixs ->
+        -- Translating the indices of a data type should never yield
+        -- Inhabited constraints, so the result of calling
+        -- `translateParams dtIndices` above should only return Binders and not
+        -- any ImplicitBinders. Moreover, `translateParams` always returns
+        -- Binders where the second field is `Just t`, where `t` is the type.
+        let errorBecause msg = error $ "translateDataType.translateNamed: " ++ msg in
+        let bs = map (\case Coq.Binder s (Just t) ->
+                              Coq.PiBinder (Just s) t
+                            Coq.Binder _ Nothing ->
+                              errorBecause "encountered a Binder without a Type"
+                            Coq.ImplicitBinder{} ->
+                              errorBecause "encountered an implicit binder")
+                     ixs in
+        return (ps, bs)
       let inductiveSort = TermTranslation.translateSort dtSort
       inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
       return $ Coq.InductiveDecl $ Coq.Inductive

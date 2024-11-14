@@ -1,0 +1,22 @@
+import "Test.cry";
+
+// Test exhaustive constraint guards
+prove_print z3 {{ \(x : [32])  -> guard x == 0 }};
+prove_print z3 {{ \(x : [34])  -> guard x == 1 }};
+prove_print z3 {{ \(x : [4])   -> guard x == 2 }};
+prove_print z3 {{ \(x : [16])  -> guard x == 3 }};
+prove_print z3 {{ \(x : [8])   -> guard x == 4}};
+prove_print z3 {{ \(x : [9])   -> guard x == 4}};
+
+// Test non-exhaustive constraint guards
+prove_print z3 {{ \(x : [32]) -> incomplete x }};
+fails (prove_print z3 {{ \(x : [64]) -> incomplete x }});
+
+// Test more dependently typed constraint guards
+prove_print z3 {{ dependent`{1} == [True] }};
+prove_print z3 {{ dependent`{3} == [False, False, False] }};
+prove_print z3 {{ dependent`{0} == [] }};
+
+// Test constraint guards dependently typed on module parameters
+import "Instantiated.cry";
+prove_print z3 {{ v == 0 }};

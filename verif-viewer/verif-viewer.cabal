@@ -4,7 +4,7 @@ License:            BSD3
 License-file:       LICENSE
 Author:             Galois, Inc.
 Maintainer:         rdockins@galois.com
-Copyright:          (c) 2021 Galois Inc.
+Copyright:          (c) 2021-2023 Galois Inc.
 Category:           Formal Methods
 Build-type:         Simple
 cabal-version:      >= 1.8
@@ -27,7 +27,7 @@ library
     text
   hs-source-dirs: src
   exposed-modules:
-    
+
 
   GHC-options: -Wall -Werror -Wcompat
   if impl(ghc == 8.0.1)
@@ -46,6 +46,7 @@ executable verif-viewer
       base >= 4
     , aeson
     , attoparsec
+    , attoparsec-aeson
     , containers
     , text
     , verif-viewer

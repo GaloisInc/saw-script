@@ -1,0 +1,50 @@
+enable_experimental;
+
+m <- mir_load_module "structs.linked-mir.json";
+
+s_adt <- mir_find_adt m "structs::S" [];
+t_adt <- mir_find_adt m "structs::T" [];
+foo_adt <- mir_find_adt m "structs::Foo" [mir_u32, mir_u64];
+
+let make_foo_spec = do {
+  mir_execute_func [];
+
+  let ret = mir_struct_value
+              foo_adt
+              [mir_term {{ 27 : [32] }}, mir_term {{ 42 : [64] }}];
+  mir_return ret;
+};
+
+mir_verify m "structs::make_foo" [] false make_foo_spec z3;
+
+bar_adt <- mir_find_adt m "structs::Bar" [];
+
+let do_stuff_with_bar_spec1 = do {
+  z1 <- mir_fresh_var "z1" mir_u32;
+  z2 <- mir_fresh_var "z2" mir_u64;
+  let z = mir_struct_value
+            foo_adt
+            [mir_term z1, mir_term z2];
+
+  x <- mir_fresh_var "x" mir_u8;
+  y <- mir_fresh_var "y" mir_u16;
+  let b = mir_struct_value
+            bar_adt
+            [mir_term x, mir_term y, z];
+
+  mir_execute_func [b];
+
+  // ...
+};
+
+mir_verify m "structs::do_stuff_with_bar" [] false do_stuff_with_bar_spec1 z3;
+
+let do_stuff_with_bar_spec2 = do {
+  b <- mir_fresh_expanded_value "b" (mir_adt bar_adt);
+
+  mir_execute_func [b];
+
+  // ...
+};
+
+mir_verify m "structs::do_stuff_with_bar" [] false do_stuff_with_bar_spec2 z3;

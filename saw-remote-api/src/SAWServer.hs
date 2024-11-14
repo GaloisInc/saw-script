@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 module SAWServer
@@ -26,6 +27,7 @@ import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
 --import qualified Crypto.Hash.Conduit as Hash
 import System.Directory (getCurrentDirectory)
+import System.Environment (lookupEnv)
 import System.IO.Silently (silence)
 
 import qualified Cryptol.Parser.AST as P
@@ -38,6 +40,9 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.JVM.Codebase as JSS
+import Mir.Generator (RustModule)
+import Mir.Intrinsics (MIR)
+import Mir.Mir (Adt)
 --import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
@@ -45,23 +50,29 @@ import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 
-import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
 import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWScript.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (ProvedSpec, GhostGlobal)
+import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.Options (Options(..), processEnv, defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
+import SAWScript.Yosys.State (YosysSequential)
+import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
 import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.SolverCache (lazyOpenSolverCache)
 
 import qualified Argo
+--import qualified CryptolServer (validateServerState, ServerState(..))
+--import qualified CryptolServer (validateServerState, ServerState(..))
+--import qualified CryptolServer (validateServerState, ServerState(..))
 --import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
     ( serverValNotFound,
@@ -71,7 +82,11 @@ import SAWServer.Exceptions
       notASimpset,
       notATerm,
       notAJVMClass,
-      notAJVMMethodSpecIR )
+      notAJVMMethodSpecIR,
+      notAYosysImport,
+      notAYosysTheorem, notAYosysSequential,
+      notAMIRModule, notAMIRMethodSpecIR, notAMIRAdt
+    )
 
 type SAWCont = (SAWEnv, SAWTask)
 
@@ -81,17 +96,28 @@ data SAWTask
   = ProofScriptTask
   | LLVMCrucibleSetup ServerName
   | JVMSetup ServerName
+  | MIRSetup ServerName
 
 instance Show SAWTask where
   show ProofScriptTask = "ProofScript"
   show (LLVMCrucibleSetup n) = "(LLVMCrucibleSetup" ++ show n ++ ")"
   show (JVMSetup n) = "(JVMSetup" ++ show n ++ ")"
+  show (MIRSetup n) = "(MIRSetup" ++ show n ++ ")"
 
 
 data CrucibleSetupVal ty e
   = NullValue
-  | ArrayValue [CrucibleSetupVal ty e]
+  | ArrayValue (Maybe ty) [CrucibleSetupVal ty e]
+  | StructValue (Maybe ServerName) [CrucibleSetupVal ty e]
+    -- ^ The @'Maybe' 'ServerName'@ value represents a possible MIR
+    -- ADT. This should always be 'Just' with MIR verification and
+    -- 'Nothing' with LLVM or JVM verification.
+  | EnumValue ServerName String [CrucibleSetupVal ty e]
   | TupleValue [CrucibleSetupVal ty e]
+  | SliceValue (CrucibleSetupVal ty e)
+  | SliceRangeValue (CrucibleSetupVal ty e) Int Int
+  | StrSliceValue (CrucibleSetupVal ty e)
+  | StrSliceRangeValue (CrucibleSetupVal ty e) Int Int
   -- | RecordValue [(String, CrucibleSetupVal e)]
   | FieldLValue (CrucibleSetupVal ty e) String
   | CastLValue (CrucibleSetupVal ty e) ty
@@ -101,6 +127,7 @@ data CrucibleSetupVal ty e
   | GlobalLValue String
   | NamedValue ServerName
   | CryptolExpr e
+  | FreshExpandedValue Text ty
   deriving stock (Foldable, Functor, Traversable)
 
 data SetupStep ty
@@ -197,10 +224,11 @@ initialState readFileFn =
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
-     db <- newTheoremDB
+     mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
+       Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+       _ -> return Nothing
      let ro = TopLevelRO
-                { roSharedContext = sc
-                , roJavaCodebase = jcb
+                { roJavaCodebase = jcb
                 , roOptions = opts
                 , roHandleAlloc = halloc
                 , roPosition = PosInternal "SAWServer"
@@ -211,7 +239,10 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
-                , roTheoremDB = db
+                , roStackTrace = []
+                , roSubshell = fail "SAW server does not support subshells."
+                , roProofSubshell = fail "SAW server does not support subshells."
+                , roLocalEnv = []
                 }
          rw = TopLevelRW
                 { rwValues = mempty
@@ -222,6 +253,9 @@ initialState readFileFn =
                 , rwMonadify = defaultMonEnv
                 , rwMRSolverEnv = emptyMREnv
                 , rwPPOpts = defaultPPOpts
+                , rwSolverCache = mb_cache
+                , rwTheoremDB = emptyTheoremDB
+                , rwSharedContext = sc
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
                 , rwSMTArrayMemoryModel = False
@@ -238,9 +272,13 @@ initialState readFileFn =
                 , rwProofs = []
                 , rwPreservedRegs = []
                 , rwAllocSymInitCheck = True
+                , rwWhat4PushMuxOps = False
+                , rwNoSatisfyingWriteFreshConstant = True
                 , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                 , rwPathSatSolver = CC.PathSat_Z3
                 , rwSkipSafetyProofs = False
+                , rwSingleOverrideSpecialCase = False
+                , rwSequentGoals = False
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 
@@ -303,9 +341,15 @@ data ServerVal
   | VJVMCrucibleSetup (Pair CrucibleSetupTypeRepr JVMSetupM)
   | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
+  | VMIRModule RustModule
+  | VMIRAdt Adt
   | VJVMMethodSpecIR (CMS.ProvedSpec CJ.JVM)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.ProvedSpec)
+  | VMIRMethodSpecIR (CMS.ProvedSpec MIR)
   | VGhostVar CMS.GhostGlobal
+  | VYosysImport YosysImport
+  | VYosysTheorem YosysTheorem
+  | VYosysSequential YosysSequential
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -316,9 +360,15 @@ instance Show ServerVal where
   show (VJVMCrucibleSetup _) = "VJVMCrucibleSetup"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
+  show (VMIRModule _) = "VMIRModule"
+  show (VMIRAdt _) = "VMIRAdt"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
   show (VJVMMethodSpecIR _) = "VJVMMethodSpecIR"
+  show (VMIRMethodSpecIR _) = "VMIRMethodSpecIR"
   show (VGhostVar x) = "(VGhostVar " ++ show x ++ ")"
+  show (VYosysImport _) = "VYosysImport"
+  show (VYosysTheorem _) = "VYosysTheorem"
+  show (VYosysSequential _) = "VYosysSequential"
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -341,11 +391,23 @@ instance IsServerVal (CMS.ProvedSpec CJ.JVM) where
 instance IsServerVal (CMS.SomeLLVM CMS.ProvedSpec) where
   toServerVal = VLLVMMethodSpecIR
 
+instance IsServerVal (CMS.ProvedSpec MIR) where
+  toServerVal = VMIRMethodSpecIR
+
 instance IsServerVal JSS.Class where
   toServerVal = VJVMClass
 
 instance IsServerVal CMS.GhostGlobal where
   toServerVal = VGhostVar
+
+instance IsServerVal YosysImport where
+  toServerVal = VYosysImport
+
+instance IsServerVal YosysTheorem where
+  toServerVal = VYosysTheorem
+
+instance IsServerVal YosysSequential where
+  toServerVal = VYosysSequential
 
 class KnownCrucibleSetupType a where
   knownCrucibleSetupRepr :: CrucibleSetupTypeRepr a
@@ -362,6 +424,12 @@ instance KnownCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
 instance IsServerVal (Some CMS.LLVMModule) where
   toServerVal = VLLVMModule
 
+instance IsServerVal RustModule where
+  toServerVal = VMIRModule
+
+instance IsServerVal Adt where
+  toServerVal = VMIRAdt
+
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
   do Argo.debugLog $ "Saving " <> (T.pack (show name))
@@ -376,12 +444,18 @@ setServerVal name val =
 
 getServerVal :: ServerName -> Argo.Command SAWState ServerVal
 getServerVal n =
-  do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
+  do sawenv <- view sawEnv <$> Argo.getState
      st <- Argo.getState @SAWState
      Argo.debugLog $ "Looking up " <> T.pack (show n) <> " in " <> T.pack (show st)
-     case M.lookup n serverEnv of
-       Nothing -> Argo.raise (serverValNotFound n)
-       Just val -> return val
+     case getServerValEither sawenv n of
+       Left ex -> Argo.raise ex
+       Right val -> return val
+
+getServerValEither :: SAWEnv -> ServerName -> Either Argo.JSONRPCException ServerVal
+getServerValEither (SAWEnv serverEnv) n =
+  case M.lookup n serverEnv of
+    Nothing -> Left (serverValNotFound n)
+    Just val -> Right val
 
 bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
@@ -408,6 +482,38 @@ getLLVMModule n =
      case v of
        VLLVMModule m -> return m
        _other -> Argo.raise (notAnLLVMModule n)
+
+getMIRMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.ProvedSpec MIR)
+getMIRMethodSpecIR n =
+  do v <- getServerVal n
+     case v of
+       VMIRMethodSpecIR ir -> return ir
+       _other -> Argo.raise (notAMIRMethodSpecIR n)
+
+getMIRModule :: ServerName -> Argo.Command SAWState RustModule
+getMIRModule n =
+  do v <- getServerVal n
+     case v of
+       VMIRModule m -> return m
+       _other -> Argo.raise (notAMIRModule n)
+
+getMIRAdt :: ServerName -> Argo.Command SAWState Adt
+getMIRAdt n =
+  do v <- getServerVal n
+     case mirAdtEither n v of
+       Left ex -> Argo.raise ex
+       Right adt -> pure adt
+
+getMIRAdtEither :: SAWEnv -> ServerName -> Either Argo.JSONRPCException Adt
+getMIRAdtEither sawenv n =
+  do v <- getServerValEither sawenv n
+     mirAdtEither n v
+
+mirAdtEither :: ServerName -> ServerVal -> Either Argo.JSONRPCException Adt
+mirAdtEither n v =
+  case v of
+    VMIRAdt adt -> Right adt
+    _other -> Left (notAMIRAdt n)
 
 getLLVMSetup :: ServerName -> Argo.Command SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =
@@ -448,3 +554,24 @@ getGhosts :: Argo.Command SAWState [(ServerName, CMS.GhostGlobal)]
 getGhosts =
   do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
      return [ (n, g) | (n, VGhostVar g) <- M.toList serverEnv ]
+
+getYosysImport :: ServerName -> Argo.Command SAWState YosysImport
+getYosysImport n =
+  do v <- getServerVal n
+     case v of
+       VYosysImport t -> return t
+       _other -> Argo.raise (notAYosysImport n)
+
+getYosysTheorem :: ServerName -> Argo.Command SAWState YosysTheorem
+getYosysTheorem n =
+  do v <- getServerVal n
+     case v of
+       VYosysTheorem t -> return t
+       _other -> Argo.raise (notAYosysTheorem n)
+
+getYosysSequential :: ServerName -> Argo.Command SAWState YosysSequential
+getYosysSequential n =
+  do v <- getServerVal n
+     case v of
+       VYosysSequential t -> return t
+       _other -> Argo.raise (notAYosysSequential n)

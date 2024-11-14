@@ -1,6 +1,7 @@
 packages:
     saw-script.cabal
     saw-remote-api
+    crucible-mir-comp
     crux-mir-comp
     cryptol-saw-core
     rme
@@ -17,10 +18,13 @@ packages:
     deps/aig
     deps/cryptol
     deps/what4/what4
+    deps/what4/what4-transition-system
+    deps/language-sally
     deps/crucible/crucible
     deps/crucible/crucible-concurrency
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
+    deps/crucible/crucible-mir
     deps/crucible/crucible-symio
     deps/crucible/crucible-syntax
     deps/crucible/crux
@@ -28,6 +32,8 @@ packages:
     deps/parameterized-utils
     deps/flexdis86
     deps/flexdis86/binary-symbols
+    deps/lmdb/lmdb
+    deps/lmdb/lmdb-simple
     deps/macaw/base
     deps/macaw/symbolic
     deps/macaw/x86
@@ -42,4 +48,4 @@ packages:
 source-repository-package
     type: git
     location: https://github.com/eddywestbrook/hobbits.git
-    tag: e2df7a85ea8dfebce2be8065afdca96cbaef12ae
+    tag: 70963e0e3eba2b16f6fc030acb582e8100955e47

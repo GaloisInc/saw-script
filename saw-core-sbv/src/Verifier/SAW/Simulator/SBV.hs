@@ -37,6 +37,9 @@ module Verifier.SAW.Simulator.SBV
   ) where
 
 import Data.SBV.Dynamic
+#if MIN_VERSION_sbv(10,0,0)
+import Data.SBV.Internals (UICodeKind(..))
+#endif
 
 import Verifier.SAW.Simulator.SBV.SWord
 
@@ -56,8 +59,9 @@ import Data.Traversable as T
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
+import Control.Monad ((<=<), (>=>), foldM, unless, void)
 import Control.Monad.IO.Class
-import Control.Monad.State as ST
+import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
 import qualified Verifier.SAW.Prim as Prim
@@ -314,8 +318,10 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- selectV merger maxValue valueFn index returns valueFn v when index has value v
--- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
+-- @selectV merger maxValue valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
+-- if-then-else operator. If the index is greater than @maxValue@, then it
+-- returns @valueFn maxValue@.
 selectV :: (SBool -> b -> b -> b) -> Natural -> (Natural -> b) -> SWord -> b
 selectV merger maxValue valueFn vx =
   case svAsInteger vx of
@@ -326,7 +332,13 @@ selectV merger maxValue valueFn vx =
   where
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
-    impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
+    impl i y =
+      -- NB: `i` counts down in each iteration, so we use svTestBit (a
+      -- little-endian indexing function) to ensure that the bits are processed
+      -- in big-endian order. Alternatively, we could have `i` count up and use
+      -- svAt (a big-endian indexing function), but we use svTestBit as it is
+      -- slightly cheaper to compute.
+      merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool
@@ -659,13 +671,21 @@ parseUninterpreted cws nm ty =
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
 mkUninterpreted :: Kind -> [SVal] -> String -> SVal
-mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
+mkUninterpreted k args nm =
+  svUninterpreted k nm'
+#if MIN_VERSION_sbv(10,3,0)
+                  (UINone True)
+#elif MIN_VERSION_sbv(10,0,0)
+                  UINone
+#else
+                  Nothing
+#endif
+                  args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
 sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
-  do true <- liftIO (scBool sc True)
-     t <- liftIO (foldM (scAnd sc) true (satAsserts query))
+  do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
      let unintSet = satUninterp query
      let ecVars (ec, fot) = newVars (Text.unpack (toShortName (ecName ec))) fot
@@ -774,11 +794,12 @@ getLabels ls d args
 
   getLabel ZeroWidthWordLabel = FOVWord 0 0
 
-  getLabel (VecLabel ns)
-    | V.null ns = error "getLabel of empty vector"
-    | otherwise = fovVec t vs
-    where vs = map getLabel (V.toList ns)
-          t  = firstOrderTypeOf (head vs)
+  getLabel (VecLabel ns) =
+    case V.uncons ns of
+      Nothing     -> error "getLabel of empty vector"
+      Just (n, _) -> fovVec t vs
+        where vs = map getLabel (V.toList ns)
+              t  = firstOrderTypeOf (getLabel n)
 
   getLabel (TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
   getLabel (RecLabel ns) = FOVRec $ fmap getLabel ns

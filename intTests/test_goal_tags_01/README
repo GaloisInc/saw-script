@@ -1,0 +1,6 @@
+This is a simple test of the "goal tagging" instructions.
+
+The test is setup to produce two tagged goals, and the tags are used
+by the proof tactic uses to select a proving method.  Any additional
+goals are ignored, and should lead to a proof failure. This test
+ensures the goals are being correctly tagged and filtered.

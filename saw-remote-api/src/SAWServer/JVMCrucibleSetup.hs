@@ -26,7 +26,7 @@ import qualified Data.Map as Map
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Lang.Crucible.JVM as CJ
-import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.JVM.Builtins
     ( jvm_alloc_array,
       jvm_alloc_object,
@@ -35,6 +35,7 @@ import SAWScript.Crucible.JVM.Builtins
       jvm_static_field_is,
       jvm_execute_func,
       jvm_fresh_var,
+      jvm_ghost_value,
       jvm_postcond,
       jvm_precond,
       jvm_return )
@@ -56,10 +57,11 @@ import SAWServer
 import SAWServer.Data.Contract
     ( PointsTo(PointsTo),
       PointsToBitfield,
+      GhostValue(GhostValue),
       Allocated(Allocated),
       ContractVar(ContractVar),
-      Contract(preVars, preConds, preAllocated, prePointsTos, prePointsToBitfields,
-               argumentVals, postVars, postConds, postAllocated, postPointsTos, postPointsToBitfields,
+      Contract(preVars, preConds, preAllocated, preGhostValues, prePointsTos, prePointsToBitfields,
+               argumentVals, postVars, postConds, postAllocated, postGhostValues, postPointsTos, postPointsToBitfields,
                returnVal) )
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
@@ -82,28 +84,29 @@ instance Doc.DescribedMethod StartJVMSetupParams OK where
     ]
   resultFieldDescription = []
 
-newtype ServerSetupVal = Val (SetupValue CJ.JVM)
+newtype ServerSetupVal = Val (MS.SetupValue CJ.JVM)
 
 compileJVMContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
+  Map ServerName MS.GhostGlobal ->
   CryptolEnv ->
   Contract JavaType (P.Expr P.PName) ->
   JVMSetupM ()
-compileJVMContract fileReader bic cenv0 c =
+compileJVMContract fileReader bic ghostEnv cenv0 c =
   do allocsPre <- mapM setupAlloc (preAllocated c)
      (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= jvm_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
      mapM_ setupPointsToBitfields (prePointsToBitfields c)
-     --mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
+     mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= jvm_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
      (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= jvm_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
      mapM_ setupPointsToBitfields (postPointsToBitfields c)
-     --mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
+     mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
      case returnVal c of
        Just v -> getSetupVal (envPost, cenvPost) v >>= jvm_return
        Nothing -> return ()
@@ -149,7 +152,10 @@ compileJVMContract fileReader bic cenv0 c =
     setupPointsToBitfields _ =
       JVMSetupM $ fail "Points-to-bitfield not supported in JVM API."
 
-    --setupGhostValue _ _ _ = fail "Ghost values not supported yet in JVM API."
+    setupGhostValue genv cenv (GhostValue serverName e) =
+      do g <- resolve genv serverName
+         t <- getTypedTerm cenv e
+         jvm_ghost_value g t
 
     resolve :: Map ServerName a -> ServerName -> JVMSetupM a
     resolve env name =
@@ -180,10 +186,22 @@ compileJVMContract fileReader bic cenv0 c =
       resolve env n >>= \case Val x -> return x
     getSetupVal (_, cenv) (CryptolExpr expr) =
       MS.SetupTerm <$> getTypedTerm cenv expr
-    getSetupVal _ (ArrayValue _) =
+    getSetupVal _ (ArrayValue _ _) =
       JVMSetupM $ fail "Array setup values unsupported in JVM API."
+    getSetupVal _ (StructValue _ _) =
+      JVMSetupM $ fail "Struct setup values unsupported in JVM API."
+    getSetupVal _ (EnumValue _ _ _) =
+      JVMSetupM $ fail "Enum setup values unsupported in JVM API."
     getSetupVal _ (TupleValue _) =
       JVMSetupM $ fail "Tuple setup values unsupported in JVM API."
+    getSetupVal _ (SliceValue _) =
+      JVMSetupM $ fail "Slice setup values unsupported in JVM API."
+    getSetupVal _ (SliceRangeValue _ _ _) =
+      JVMSetupM $ fail "Slice range setup values unsupported in JVM API."
+    getSetupVal _ (StrSliceValue _) =
+      JVMSetupM $ fail "String slice setup values unsupported in JVM API."
+    getSetupVal _ (StrSliceRangeValue _ _ _) =
+      JVMSetupM $ fail "String slice range setup values unsupported in JVM API."
     getSetupVal _ (FieldLValue _ _) =
       JVMSetupM $ fail "Field l-values unsupported in JVM API."
     getSetupVal _ (CastLValue _ _) =
@@ -196,6 +214,8 @@ compileJVMContract fileReader bic cenv0 c =
       JVMSetupM $ fail "Global initializers unsupported in JVM API."
     getSetupVal _ (GlobalLValue _) =
       JVMSetupM $ fail "Global l-values unsupported in JVM API."
+    getSetupVal _ (FreshExpandedValue _ _) =
+      JVMSetupM $ fail "Fresh expanded values unsupported in JVM API."
 
 data JVMLoadClassParams
   = JVMLoadClassParams ServerName String

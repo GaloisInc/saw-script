@@ -1,0 +1,101 @@
+// Basic integral types
+
+foreign add8 : [8] -> [8] -> [8]
+add8 = (+)
+
+foreign sub16 : [16] -> [16] -> [16]
+sub16 = (-)
+
+foreign mul32 : [32] -> [32] -> [32]
+mul32 = (*)
+
+foreign div64 : [64] -> [64] -> [64]
+div64 x y = if y == 0 then 0 else x / y
+
+// Non-machine integer sizes
+
+foreign extendInput : [3] -> [8]
+extendInput = zext
+
+foreign maskOutput : [8] -> [3]
+maskOutput = drop
+
+foreign noBits : [0] -> [0]
+noBits x = x
+
+// Bit
+
+foreign not : Bit -> Bit
+not x = ~ x
+
+// Type synonyms
+
+type Word32 = [32]
+type Word64 = [64]
+type MyFunc = Word32 -> [64] -> Bit
+
+foreign usesTypeSynonym : MyFunc
+usesTypeSynonym x y = zext x == y
+
+// Sequences
+
+foreign sum10 : [10]Word32 -> Word32
+sum10 = sum
+
+foreign reverse5 : [5]Word64 -> [5]Word64
+reverse5 = reverse
+
+// Tuples and records
+
+foreign compoundTypes : ([32], { x : [10], y : [3][20] }) -> { z : [5][20] }
+  -> { a : ([16], [16]), b : { c : [8][20], d : [5], e : [5] } }
+compoundTypes (n, { x = x, y = y }) { z = z } =
+  { a = splitAt `{16} n
+  , b = { c = y # z, d = take `{5} x, e = drop `{5} x }
+  }
+
+// Polymorphic sizes
+
+foreign typeToValue : {n} (fin n, width n <= 64) => () -> [64]
+typeToValue () = `n
+
+foreign sumPoly : {n} (fin n) => [n]Word32 -> Word32
+sumPoly = sum
+
+foreign inits : {n} (fin n) => [n][8] -> [n * (n + 1) / 2][8]
+// Cryptol implementation copied from constraint guards inits test case
+inits xs
+  | n == 0 => []
+  | n >  0 => initsLoop xs' x []
+    where
+      (x : [1]_) # xs' = xs
+
+initsLoop : {n, l, m, a} (fin l, fin m, l + m == n, m >= 1) =>
+        [l]a -> [m]a ->
+        [((m - 1) * ((m - 1) + 1)) / 2]a ->
+        [(n * (n + 1)) / 2]a
+initsLoop ys zs acc
+  | l == 0 => acc # zs
+  | l >  0 => initsLoop ys' (zs # y) (acc # zs)
+   where (y : [1]_) # ys' = ys
+
+foreign zipMul3 : {n, m, p} (fin n, fin m, fin p) =>
+  [n][27] -> [m][27] -> [p][27] -> [min n (min m p)][27]
+zipMul3 xs ys zs = [x * y * z | x <- xs | y <- ys | z <- zs]
+
+// Nested sequences
+
+foreign reshape : {a, b, c, d} (fin a, fin b, fin c, fin d) =>
+  [a][b][c][d][32] -> { dcba : [d][c][b][a][32], acbd : [a][c][b][d][32] }
+reshape x =
+  { dcba = split (split (split (join (join (join x)))))
+  , acbd = split (split (split (join (join (join x)))))
+  }
+
+// Test overrides
+
+foreign same : ([32], [10], [8][20]) -> ([32], [10], [8][20])
+same x = x
+
+foreign notnot : Bit -> Bit
+notnot x = not (not x)

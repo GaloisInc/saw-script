@@ -199,3 +199,8 @@ saw_client.connect(url="http://localhost:8080/", reset_server=True)
 
 will connect to a SAW server running at `http://localhost:8080/` and will
 guarantee any previous state on the server is cleared.
+
+
+## Python Version Support
+
+Currently, `saw-remote-api` officially supports python `3.12`.

@@ -27,6 +27,7 @@ $white+                         ;
 "."                             { token_ TDot           }
 ","                             { token_ TComma         }
 "+"                             { token_ TPlus          }
+"-"                             { token_ TMinus         }
 "*"                             { token_ TStar          }
 "@"                             { token_ TAt            }
 "-o"                            { token_ TLoli          }
@@ -68,6 +69,7 @@ $white+                         ;
 "ptrsh"                         { token_ TPtrSh         }
 "fieldsh"                       { token_ TFieldSh       }
 "arraysh"                       { token_ TArraySh       }
+"tuplesh"                       { token_ TTupleSh       }
 "exsh"                          { token_ TExSh          }
 "orsh"                          { token_ TOrSh          }
 "memblock"                      { token_ TMemBlock      }

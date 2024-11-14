@@ -13,6 +13,7 @@ module SAWScript.Options where
 
 import Data.Char (toLower)
 import Data.List (partition)
+import Data.Maybe (fromMaybe)
 import Data.Time
 import System.Console.GetOpt
 import System.Environment
@@ -39,6 +40,7 @@ data Options = Options
   , showVersion      :: Bool
   , printShowPos     :: Bool
   , useColor         :: Bool
+  , cleanMisVsCache  :: Maybe FilePath
   , printOutFn       :: Verbosity -> String -> IO ()
   , summaryFile      :: Maybe FilePath
   , summaryFormat    :: SummaryFormat
@@ -77,6 +79,7 @@ defaultOptions
     , showHelp = False
     , showVersion = False
     , useColor = True
+    , cleanMisVsCache = Nothing
     , summaryFile = Nothing
     , summaryFormat = Pretty
     }
@@ -111,7 +114,7 @@ options =
      "path"
     )
     pathDesc
-  , Option "t" ["detect-vacuity"]
+  , Option "" ["detect-vacuity"]
     (NoArg
      (\opts -> return opts { detectVacuity = True }))
     "Checks and warns the user about contradictory assumptions. (default: false)"
@@ -156,6 +159,14 @@ options =
   , Option [] ["no-color"]
     (NoArg (\opts -> return opts { useColor = False }))
     "Disable ANSI color and Unicode output"
+  , Option [] ["clean-mismatched-versions-solver-cache"]
+    (OptArg
+     (\mb_path opts -> do
+        mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
+        let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
+        return opts { cleanMisVsCache = Just path })
+     "path")
+    "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit"
   , Option "s" ["summary"]
     (ReqArg
      (\file opts -> return opts { summaryFile = Just file })

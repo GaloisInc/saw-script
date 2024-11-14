@@ -1,0 +1,5 @@
+module Popcount where
+
+popCount : [32] -> [32]
+popCount bits = ic ! 0 where
+     ic = [0] # [ if elt then prev + 1 else prev | elt <- bits | prev <- ic]

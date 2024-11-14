@@ -109,19 +109,19 @@ Proof.
 Defined.
 
 Theorem sawAt_zero T size h t :
-    sawAt (S size) T (cons T h size t) 0 = h.
+    sawAt (S size) T (Vector.cons T h size t) 0 = h.
 Proof.
   unfold sawAt. now simpl.
 Qed.
 
 Theorem sawAt_S T size h t index :
-    sawAt (S size) T (cons T h size t) (S index) = sawAt size T t index.
+    sawAt (S size) T (Vector.cons T h size t) (S index) = sawAt size T t index.
 Proof.
   unfold sawAt. now simpl.
 Qed.
 
 Lemma gen_sawAt T {HT : Inhabited T}
-  : forall (m : Nat) a, gen m T (fun i => sawAt m T a i) = a.
+  : forall (m : nat) a, gen m T (fun i => sawAt m T a i) = a.
 Proof.
   apply Vector.t_ind.
   {
@@ -137,9 +137,9 @@ Proof.
 Qed.
 
 Lemma append_cons m n T {HT:Inhabited T} h t v
-  : append m.+1 n T (cons T h m t) v
+  : append m.+1 n T (Vector.cons T h m t) v
     =
-    cons T h _ (append m n T t v).
+    Vector.cons T h _ (append m n T t v).
 Proof.
   reflexivity.
 Qed.

@@ -24,15 +24,18 @@ library
     happy >= 1.9.6
 
   build-depends:
-    base == 4.*,
+    base >= 4.8,
+    aeson >= 2.0 && < 2.3,
     array,
     bytestring,
     containers,
     data-inttrie,
     data-ref,
     directory,
+    extra,
     filepath,
     hashable >= 1.3.4,
+    indexed-traversable,
     lens >= 3.8,
     modern-uri >= 0.3.2 && < 0.4,
     MonadRandom,
@@ -135,6 +138,7 @@ test-suite test-sawcore
     Tests.Parser
     Tests.Rewriter
     Tests.SharedTerm
+    Tests.Simulator
 
 executable extcore-info
   main-is: extcore-info.hs

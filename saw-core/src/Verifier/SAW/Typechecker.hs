@@ -33,7 +33,8 @@ module Verifier.SAW.Typechecker
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad.State
+import Control.Monad (forM, forM_, void)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.List (findIndex)
 import Data.Text (Text)
 import qualified Data.Vector as V
@@ -208,10 +209,13 @@ typeInferCompleteTerm (Un.App f arg) =
   >>= typeInferComplete
 typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
 typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
-  do tp_trm <- typeInferCompleteWHNF tp
-     -- Normalize (the Term value of) tp before putting it into the context. See
-     -- the documentation for withVar.
-     body <- withVar x (typedVal tp_trm) $
+  do tp_trm <- typeInferComplete tp
+     -- NOTE: we need the type of x to be normalized when we add it to the
+     -- context in withVar, but we do not want to normalize this type in the
+     -- output, as the contract for typeInferComplete only normalizes the type,
+     -- so we use the unnormalized tp_trm in the return
+     tp_whnf <- typeCheckWHNF $ typedVal tp_trm
+     body <- withVar x tp_whnf $
        typeInferComplete $ Un.Lambda p ctx t
      typeInferComplete (Lambda x tp_trm body)
 typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
@@ -400,7 +404,8 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- type of d as (p1:param1) -> ... -> (i1:ix1) -> ... -> Type s
   (dt_ixs, dtSort) <-
     case Un.asPiList dt_tp of
-      (ixs, Un.Sort _ s False) -> return (ixs, s) -- NB, don't allow `isort`
+      (ixs, Un.Sort _ s h) | h == noFlags ->
+        return (ixs, s) -- NB, don't allow `isort`, etc.
       _ -> err "Wrong form for type of datatype"
   dt_ixs_typed <- typeInferCompleteCtx dt_ixs
   let dtIndices = map (\(x,tp,_) -> (x,tp)) dt_ixs_typed

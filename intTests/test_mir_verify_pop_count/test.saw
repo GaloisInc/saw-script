@@ -1,0 +1,19 @@
+enable_experimental;
+
+let
+{{
+popCount : [32] -> [32]
+popCount bs = zext`{32,6} (ic ! 0) where
+    ic = [0] # [ if elt then prev + 1 else prev | elt <- bs | prev <- ic]
+}};
+
+let pop_count_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ popCount x }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+mir_verify m "test::pop_count" [] false pop_count_spec z3;

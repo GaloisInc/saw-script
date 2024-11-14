@@ -3,14 +3,18 @@ set -xe
 
 cd /workdir
 ./scripts/install.sh
+cp /saw-bin/cryptol bin/cryptol
 cp /saw-bin/saw bin/saw
-
-wget --quiet -O solvers.zip "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20210917/ubuntu-20.04-bin.zip"
-(cd bin && unzip -o ../solvers.zip)
-chmod +x bin/*
+cp /saw-bin/abc bin/abc
+cp /saw-bin/yices bin/yices
+# Z3 4.8.14 has been known to nondeterministically time out with the BLST
+# proofs, so fall back to 4.8.8 instead. See #1772.
+cp /saw-bin/z3-4.8.8 bin/z3
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec
+export SAW_SOLVER_CACHE_PATH=/saw-cache
+saw --clean-mismatched-versions-solver-cache
 
 abc -h || true
 z3 --version

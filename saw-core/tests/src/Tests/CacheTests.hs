@@ -6,6 +6,8 @@ Stability   : experimental
 Portability : portable
 -}
 
+{-# LANGUAGE OverloadedLists #-}
+
 module Tests.CacheTests
   ( cacheTests
   )
@@ -13,6 +15,8 @@ where
 
 import Control.Monad
 import Control.Monad.ST
+import Data.List.NonEmpty ( NonEmpty(..) )
+import qualified Data.List.NonEmpty as NE
 import Data.Ref ( C )
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -85,12 +89,12 @@ intMapTestST =
 
 -- Always pass at least 2 entries in the keyval array, keys and values should be independently unique
 cTestA :: (C m, Eq k, Eq v, Show k, Show v) =>
-          m (Cache m k v) -> [(k,v)] -> m ()
+          m (Cache m k v) -> NonEmpty (k,v) -> m ()
 cTestA mkCache keyvals = do
   c1 <- mkCache  -- will cache the keyvals
   c2 <- mkCache  -- will separately cache all keys equal to the same val (the first)
-  let (k0, v0) = head keyvals
-  let (kOmega, vOmega) = last keyvals
+  let (k0, v0) = NE.head keyvals
+  let (kOmega, vOmega) = NE.last keyvals
 
   -- Verify a value can be added, and once it is added, it does not
   -- need to be recomputed (i.e. it is memoized)
@@ -107,7 +111,7 @@ cTestA mkCache keyvals = do
 
   -- Verify all the other values can similarly be cached once, and
   -- that they are distinct from the initial value.
-  forM_ (tail keyvals) $ \(k,v) -> do
+  forM_ (NE.tail keyvals) $ \(k,v) -> do
     vx <- useCache c1 k (return v)
     unless (v == vx) $ error "incorrect value stored"
     vy <- useCache c1 k (error "must not be called for vy")

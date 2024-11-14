@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import signal
 import sys
-from distutils.spawn import find_executable
+from shutil import which
 from argo_client.connection import ServerConnection, DynamicSocketProcess, HttpProcess, ManagedProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
@@ -52,11 +52,11 @@ def connect(command: Union[str, ServerConnection, None] = None,
         c = SAWConnection(command, log_dest=log_dest)
     elif url is not None:
         c = SAWConnection(ServerConnection(HttpProcess(url, verify=verify)), log_dest=log_dest)
-    elif (command := os.getenv('SAW_SERVER')) is not None and (command := find_executable(command)) is not None:
+    elif (command := os.getenv('SAW_SERVER')) is not None and (command := which(command)) is not None:
         c = SAWConnection(command+" socket", log_dest=log_dest) # SAWConnection(ServerConnection(StdIOProcess(command+" stdio")))
     elif (url := os.getenv('SAW_SERVER_URL')) is not None:
         c = SAWConnection(ServerConnection(HttpProcess(url, verify=verify)), log_dest=log_dest)
-    elif (command := find_executable('saw-remote-api')) is not None:
+    elif (command := which('saw-remote-api')) is not None:
         c = SAWConnection(command+" socket", log_dest=log_dest)
     else:
         raise ValueError(
@@ -227,6 +227,85 @@ class SAWConnection:
         """
         self.most_recent_result = \
             LLVMAssume(self, module, function, contract, lemma_name, timeout)
+        return self.most_recent_result
+
+    def mir_load_module(self, name: str, mir_json_file: str, timeout : Optional[float] = None)  -> Command:
+        """Create an instance of the `MIRLoadClass` command. Documentation on the purpose
+        and use of this command is associated with the top-level `mir_load_class`
+        function.
+        """
+        self.most_recent_result = MIRLoadModule(self, name, mir_json_file, timeout)
+        return self.most_recent_result
+
+    def mir_verify(self,
+                   module: str,
+                   function: str,
+                   lemmas: List[str],
+                   check_sat: bool,
+                   contract: Any,
+                   script: ProofScript,
+                   lemma_name: str,
+                   timeout : Optional[float] = None) -> Command:
+        """Create an instance of the `MIRVerify` command. Documentation on the purpose
+        and use of this command is associated with the top-level `mir_verify`
+        function.
+        """
+        self.most_recent_result = \
+            MIRVerify(self, module, function, lemmas, check_sat, contract, script, lemma_name, timeout)
+        return self.most_recent_result
+
+    def mir_assume(self,
+                   module: str,
+                   function: str,
+                   contract: Any,
+                   lemma_name: str,
+                   timeout : Optional[float] = None) -> Command:
+        """Create an instance of the `MIRAssume` command. Documentation on the purpose
+        and use of this command is associated with the top-level `mir_assume`
+        function.
+        """
+        self.most_recent_result = \
+            MIRAssume(self, module, function, contract, lemma_name, timeout)
+        return self.most_recent_result
+
+    def mir_find_adt(self,
+                     module_server_name : str,
+                     adt_orig_name : str,
+                     tys : List[MIRType],
+                     adt_server_name: str,
+                     timeout : Optional[float] = None) -> Command:
+        """Consult the given MIR module (``module_server_name``) to find an
+           algebraic data type (ADT) with ``adt_orig_name`` as its identifier
+           and ``tys`` as the types used to instantiate the type parameters. If
+           such an ADT cannot be found in the module, this will raise an error.
+        """
+        self.most_recent_result = \
+            MIRFindADT(self, module_server_name, adt_orig_name, tys, adt_server_name, timeout)
+        return self.most_recent_result
+
+    def yosys_import(self, name: str, path: str, timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = YosysImport(self, name, path, timeout)
+        return self.most_recent_result
+
+    def yosys_verify(self,
+                     imp: str,
+                     module: str,
+                     preconds: List[str],
+                     spec: str,
+                     lemmas: List[str],
+                     script: ProofScript,
+                     lemma_name: str,
+                     timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = \
+            YosysVerify(self, imp, module, preconds, spec, lemmas, script, lemma_name, timeout)
+        return self.most_recent_result
+
+    def yosys_import_sequential(self, name: str, path: str, module: str, timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = YosysImportSequential(self, name, path, module, timeout)
+        return self.most_recent_result
+
+    def yosys_extract_sequential(self, name: str, module: str, cycles: int, timeout : Optional[float] = None) -> Command:
+        self.most_recent_result = YosysExtractSequential(self, name, module, cycles, timeout)
         return self.most_recent_result
 
     def prove(self,

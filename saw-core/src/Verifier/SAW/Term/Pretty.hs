@@ -36,15 +36,19 @@ module Verifier.SAW.Term.Pretty
   , PPModule(..), PPDecl(..)
   , ppPPModule
   , scTermCount
+  , scTermCountAux
+  , scTermCountMany
   , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
+  , ppTermContainerWithNames
   ) where
 
 import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
-import Control.Monad.Reader
-import Control.Monad.State.Strict as State
+import Control.Monad (forM)
+import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
+import Control.Monad.State.Strict (MonadState(..), State, execState)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
@@ -52,6 +56,8 @@ import qualified Data.Foldable as Fold
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Prettyprinter
@@ -103,11 +109,14 @@ data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
                      , ppMaxDepth :: Maybe Int
+                     , ppNoInlineMemo :: [MemoVar]
+                     , ppNoInlineIdx :: Set TermIndex -- move to PPState?
                      , ppMinSharing :: Int }
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
 defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
+                         ppNoInlineMemo = mempty, ppNoInlineIdx = mempty,
                          ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
 
 -- | Options for printing with a maximum depth
@@ -286,22 +295,45 @@ withBoundVarM basename m =
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
 
--- | Run a computation in the context of a fresh "memoization variable" that is
--- bound to the given term index, passing the new memoization variable to the
--- computation. If the flag is true, use the global table, otherwise use the
--- local table.
-withMemoVar :: Bool -> TermIndex -> (MemoVar -> PPM a) -> PPM a
+-- | Attempt to memoize the given term (index) 'idx' and run a computation in
+-- the context that the attempt produces. If memoization succeeds, the context
+-- will contain a binding (global in scope if 'global_p' is set, local if not)
+-- of a fresh memoization variable to the term, and the fresh variable will be
+-- supplied to the computation. If memoization fails, the context will not
+-- contain such a binding, and no fresh variable will be supplied.
+withMemoVar :: Bool -> TermIndex -> (Maybe MemoVar -> PPM a) -> PPM a
 withMemoVar global_p idx f =
-  do memo_var <- ppNextMemoVar <$> ask
-     local (\s -> add_to_table global_p memo_var s) (f memo_var)
-       where
-         add_to_table True v st =
-           st { ppNextMemoVar = v + 1,
-                ppGlobalMemoTable = IntMap.insert idx v (ppGlobalMemoTable st) }
-         add_to_table False v st =
-           st { ppNextMemoVar = v + 1,
-                ppLocalMemoTable = IntMap.insert idx v (ppLocalMemoTable st) }
+  do
+    memoVar <- asks ppNextMemoVar
+    memoSkips <- asks (ppNoInlineMemo . ppOpts)
+    idxSkips <- asks (ppNoInlineIdx . ppOpts)
+    case memoSkips of
+      -- Even if we must skip this memoization variable, we still want to
+      -- "pretend" we memoized by calling `updateMemoVar`, so that non-inlined
+      -- memoization identifiers are kept constant between two
+      -- otherwise-identical terms with differing inline strategies.
+      (skip:skips)
+        | skip == memoVar -> local (updateMemoVar . addIdxSkip . setMemoSkips skips) (f Nothing)
+      _
+        | idx `Set.member` idxSkips -> f Nothing
+        | otherwise -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
+  where
+    bind = if global_p then bindGlobal else bindLocal
 
+    bindGlobal memoVar PPState{ .. } =
+      PPState { ppGlobalMemoTable = IntMap.insert idx memoVar ppGlobalMemoTable, .. }
+
+    bindLocal memoVar PPState{ .. } =
+      PPState { ppLocalMemoTable = IntMap.insert idx memoVar ppLocalMemoTable, .. }
+
+    setMemoSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineMemo = memoSkips, ..}, ..}
+
+    addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert idx ppNoInlineIdx, .. }, .. }
+
+    updateMemoVar PPState{ .. } =
+      PPState { ppNextMemoVar = ppNextMemoVar + 1, .. }
 
 --------------------------------------------------------------------------------
 -- * The Pretty-Printing of Specific Constructs
@@ -481,7 +513,7 @@ ppFlatTermF prec tf =
     RecordValue alist ->
       ppRecord False <$> mapM (\(fld,t) -> (fld,) <$> ppTerm' PrecTerm t) alist
     RecordProj e fld -> ppProj fld <$> ppTerm' PrecArg e
-    Sort s h -> return ((if h then pretty ("i"::String) else mempty) <> viaShow s)
+    Sort s h -> return (viaShow h <> viaShow s)
     NatLit i -> ppNat <$> (ppOpts <$> ask) <*> return (toInteger i)
     ArrayValue (asBoolType -> Just _) args
       | Just bits <- mapM asBool $ V.toList args ->
@@ -558,7 +590,17 @@ type OccurrenceMap = IntMap (Term, Int)
 -- side of an application are excluded. (FIXME: why?) The boolean flag indicates
 -- whether to descend under lambdas and other binders.
 scTermCount :: Bool -> Term -> OccurrenceMap
-scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
+scTermCount doBinders t = execState (scTermCountAux doBinders [t]) IntMap.empty
+
+-- | Returns map that associates each term index appearing in the list of terms to the
+-- number of occurrences in the shared term. Subterms that are on the left-hand
+-- side of an application are excluded. (FIXME: why?) The boolean flag indicates
+-- whether to descend under lambdas and other binders.
+scTermCountMany :: Bool -> [Term] -> OccurrenceMap
+scTermCountMany doBinders ts = execState (scTermCountAux doBinders ts)  IntMap.empty
+
+scTermCountAux :: Bool -> [Term] -> State OccurrenceMap ()
+scTermCountAux doBinders = go
   where go :: [Term] -> State OccurrenceMap ()
         go [] = return ()
         go (t:r) =
@@ -575,6 +617,7 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
                   recurse
           where
             recurse = go (r ++ argsAndSubterms t)
+
         argsAndSubterms (unwrapTermF -> App f arg) = arg : argsAndSubterms f
         argsAndSubterms h =
           case unwrapTermF h of
@@ -589,6 +632,7 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
                                               [recursorMotive crec] ++
                                               map fst (Map.elems (recursorElims crec))
             tf                             -> Fold.toList tf
+
 
 -- | Return true if the printing of the given term should be memoized; we do not
 -- want to memoize the printing of terms that are "too small"
@@ -615,39 +659,45 @@ shouldMemoizeTerm t =
 ppTermWithMemoTable :: Prec -> Bool -> Term -> PPM SawDoc
 ppTermWithMemoTable prec global_p trm = do
      min_occs <- ppMinSharing <$> ppOpts <$> ask
-     ppLets (occ_map_elems min_occs) [] where
+     let occPairs = IntMap.assocs $ filterOccurenceMap min_occs global_p $ scTermCount global_p trm
+     ppLets global_p occPairs [] (ppTerm' prec trm)
 
-  -- Generate an occurrence map for trm, filtering out terms that only occur
-  -- once, that are "too small" to memoize, and, for the global table, terms
-  -- that are not closed
-  occ_map_elems min_occs =
-    IntMap.assocs $
+-- Filter an occurrence map, filtering out terms that only occur
+-- once, that are "too small" to memoize, and, for the global table, terms
+-- that are not closed
+filterOccurenceMap :: Int -> Bool -> OccurrenceMap -> OccurrenceMap
+filterOccurenceMap min_occs global_p =
     IntMap.filter
-    (\(t,cnt) ->
-      cnt >= min_occs && shouldMemoizeTerm t &&
-      (if global_p then looseVars t == emptyBitSet else True)) $
-    scTermCount global_p trm
+      (\(t,cnt) ->
+        cnt >= min_occs && shouldMemoizeTerm t &&
+        (if global_p then termIsClosed t else True))
 
-  -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
-  -- Term and then add it to the memoization table of subsequent printing. The
-  -- pretty-printing of these terms is reverse-accumulated in the second
-  -- list. Finally, print trm with a let-binding for the bound terms.
-  ppLets :: [(TermIndex, (Term, Int))] -> [(MemoVar, SawDoc)] -> PPM SawDoc
 
-  -- Special case: don't print let-binding if there are no bound vars
-  ppLets [] [] = ppTerm' prec trm
-  -- When we have run out of (idx,term) pairs, pretty-print a let binding for
-  -- all the accumulated bindings around the term
-  ppLets [] bindings = ppLetBlock (reverse bindings) <$> ppTerm' prec trm
-  -- To add an (idx,term) pair, first check if idx is already bound, and, if
-  -- not, add a new MemoVar bind it to idx
-  ppLets ((idx, (t_rhs,_)):idxs) bindings =
-    do isBound <- isJust <$> memoLookupM idx
-       if isBound then ppLets idxs bindings else
-         do doc_rhs <- ppTerm' prec t_rhs
-            withMemoVar global_p idx $ \memo_var ->
-              ppLets idxs ((memo_var, doc_rhs):bindings)
+-- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
+-- Term and then add it to the memoization table of subsequent printing. The
+-- pretty-printing of these terms is reverse-accumulated in the second
+-- list. Finally, print the given base document in the context of let-bindings
+-- for the bound terms.
+ppLets :: Bool -> [(TermIndex, (Term, Int))] -> [(MemoVar, SawDoc)] -> PPM SawDoc -> PPM SawDoc
 
+-- Special case: don't print let-binding if there are no bound vars
+ppLets _ [] [] baseDoc = baseDoc
+
+-- When we have run out of (idx,term) pairs, pretty-print a let binding for
+-- all the accumulated bindings around the term
+ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
+
+-- To add an (idx,term) pair, first check if idx is already bound, and, if
+-- not, add a new MemoVar bind it to idx
+ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
+  do isBound <- isJust <$> memoLookupM idx
+     if isBound then ppLets global_p idxs bindings baseDoc else
+       do doc_rhs <- ppTerm' PrecTerm t_rhs
+          withMemoVar global_p idx $ \memoVarM ->
+            let bindings' = case memoVarM of
+                  Just memoVar -> (memoVar, doc_rhs):bindings
+                  Nothing -> bindings
+            in  ppLets global_p idxs bindings' baseDoc
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
 -- returning both the result of pretty-printing and the fresh name actually used
@@ -681,7 +731,7 @@ ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 
 -- | Pretty-print a term, but only to a maximum depth
 ppTermDepth :: Int -> Term -> SawDoc
-ppTermDepth depth t = ppTerm (depthPPOpts depth) t
+ppTermDepth depth = ppTerm (depthPPOpts depth)
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context
@@ -732,6 +782,22 @@ ppTermWithNames opts ne trm =
 showTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> String
 showTermWithNames opts ne trm =
   renderSawDoc opts $ ppTermWithNames opts ne trm
+
+
+ppTermContainerWithNames ::
+  (Traversable m) =>
+  (m SawDoc -> SawDoc) ->
+  PPOpts -> SAWNamingEnv -> m Term -> SawDoc
+ppTermContainerWithNames ppContainer opts ne trms =
+  let min_occs = ppMinSharing opts
+      global_p = True
+      occPairs = IntMap.assocs $
+                   filterOccurenceMap min_occs global_p $
+                   flip execState mempty $
+                   traverse (\t -> scTermCountAux global_p [t]) $
+                   trms
+   in runPPM opts ne $ ppLets global_p occPairs []
+        (ppContainer <$> traverse (ppTerm' PrecTerm) trms)
 
 --------------------------------------------------------------------------------
 -- * Pretty-printers for Modules and Top-level Constructs

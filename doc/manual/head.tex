@@ -1,5 +1,4 @@
 \usepackage{listings}
-\usepackage{float}
 \usepackage{xspace}
 \usepackage{color}
 \usepackage{tikz}
@@ -32,7 +31,13 @@
          framexleftmargin=5pt,
          framexrightmargin=-1pt,
          framexbottommargin=4pt,
-         showstringspaces=false
+         showstringspaces=false,
+         % Note that the `1` at the end is required. Per the documentation for
+         % the `listings` package (see Section 5.4 of
+         % https://mirrors.mit.edu/CTAN/macros/latex/contrib/listings/listings.pdf),
+         % the `1` indicates the length of the replacement text (i.e., a single
+         % character).
+         literate={ș}{{\textcommabelow{s}}}1,
 }
 
 \author{The Galois SAW Team\\\texttt{saw@galois.com}}

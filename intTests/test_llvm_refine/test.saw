@@ -1,0 +1,59 @@
+enable_experimental;
+
+let {{
+ popcount : [32] -> [32]
+ popcount x = sum [ zext [b] | b <- x ]
+}};
+
+// A parameterized spec where the input value is
+// given as a parameter.
+let f_concrete_spec (x:Term) : LLVMSetup () =
+  do {
+    llvm_execute_func [ llvm_term x ];
+
+    r <- llvm_fresh_var "r" (llvm_int 32);
+    llvm_return (llvm_term r);
+    llvm_postcond {{ 2^^r == x }};
+  };
+
+// A "unified" spec, where the input is taken from the
+// call site argument.
+let f_total_spec : LLVMSetup () =
+  do {
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_precond {{ x <= 16 }};
+    llvm_precond {{ popcount x == 1 }};
+
+    llvm_execute_func [ llvm_term x ];
+
+    r <- llvm_fresh_var "r" (llvm_int 32);
+    llvm_return (llvm_term r);
+    llvm_postcond {{ 2^^r == x }};
+  };
+
+// This spec is incorrect, and should be rejected
+let f_bogus_spec : LLVMSetup () =
+  do {
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_precond {{ x <= 32 }};
+    llvm_precond {{ popcount x == 1 }};
+
+    llvm_execute_func [ llvm_term x ];
+
+    r <- llvm_fresh_var "r" (llvm_int 32);
+    llvm_return (llvm_term r);
+    llvm_postcond {{ 2^^r == x }};
+  };
+
+m <- llvm_load_module "test.bc";
+
+f_concrete_ovrs <-
+  for (eval_list {{ [1,2,4,8,16:[32]] }}) (\i ->
+    do {
+      print (str_concat "f lemma: " (show (eval_int i)));
+      llvm_verify m "f" [] false (f_concrete_spec i) yices;
+    });
+
+llvm_refine_spec m "f" f_concrete_ovrs f_total_spec yices;
+
+fails (llvm_refine_spec m "f" f_concrete_ovrs f_bogus_spec yices);

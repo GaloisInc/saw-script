@@ -4,6 +4,7 @@
 {-# Language DataKinds #-}
 {-# Language GADTs #-}
 {-# Language OverloadedStrings #-}
+{-# Language TypeOperators #-}
 
 module Mir.Compositional
 where
@@ -11,7 +12,6 @@ where
 import Data.Parameterized.Context (pattern Empty, pattern (:>))
 import Data.Parameterized.NatRepr
 import Data.Text (Text)
-import qualified Data.Text as Text
 
 import Lang.Crucible.Backend
 import Lang.Crucible.CFG.Core
@@ -27,6 +27,7 @@ import Mir.Intrinsics
 
 import Mir.Compositional.Builder (builderNew)
 import Mir.Compositional.Clobber (clobberGlobalsOverride)
+import Mir.Compositional.DefId (hasInstPrefix)
 
 
 compositionalOverrides ::
@@ -39,7 +40,7 @@ compositionalOverrides ::
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
 compositionalOverrides _symOnline cs name cfg
 
-  | (normDefId "crucible::method_spec::raw::builder_new" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "method_spec", "raw", "builder_new"] explodedName
   , Empty <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -47,7 +48,7 @@ compositionalOverrides _symOnline cs name cfg
         msb <- builderNew cs (textId name)
         return $ MethodSpecBuilder msb
 
-  | (normDefId "crucible::method_spec::raw::builder_add_arg" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "method_spec", "raw", "builder_add_arg"] explodedName
   , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr _tpr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -57,7 +58,7 @@ compositionalOverrides _symOnline cs name cfg
         msb' <- msbAddArg tpr argRef msb
         return $ MethodSpecBuilder msb'
 
-  | (normDefId "crucible::method_spec::raw::builder_set_return" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "method_spec", "raw", "builder_set_return"] explodedName
   , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr _tpr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -67,7 +68,7 @@ compositionalOverrides _symOnline cs name cfg
         msb' <- msbSetReturn tpr argRef msb
         return $ MethodSpecBuilder msb'
 
-  | normDefId "crucible::method_spec::raw::builder_gather_assumes" == name
+  | ["crucible", "method_spec", "raw", "builder_gather_assumes"] == explodedName
   , Empty :> MethodSpecBuilderRepr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -76,7 +77,7 @@ compositionalOverrides _symOnline cs name cfg
         msb' <- msbGatherAssumes msb
         return $ MethodSpecBuilder msb'
 
-  | normDefId "crucible::method_spec::raw::builder_gather_asserts" == name
+  | ["crucible", "method_spec", "raw", "builder_gather_asserts"] == explodedName
   , Empty :> MethodSpecBuilderRepr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -85,7 +86,7 @@ compositionalOverrides _symOnline cs name cfg
         msb' <- msbGatherAsserts msb
         return $ MethodSpecBuilder msb'
 
-  | normDefId "crucible::method_spec::raw::builder_finish" == name
+  | ["crucible", "method_spec", "raw", "builder_finish"] == explodedName
   , Empty :> MethodSpecBuilderRepr <- cfgArgTypes cfg
   , MethodSpecRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -94,7 +95,7 @@ compositionalOverrides _symOnline cs name cfg
         msbFinish msb
 
 
-  | normDefId "crucible::method_spec::raw::clobber_globals" == name
+  | ["crucible", "method_spec", "raw", "clobber_globals"] == explodedName
   , Empty <- cfgArgTypes cfg
   , UnitRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -102,7 +103,7 @@ compositionalOverrides _symOnline cs name cfg
         clobberGlobalsOverride cs
 
 
-  | normDefId "crucible::method_spec::raw::spec_pretty_print" == name
+  | ["crucible", "method_spec", "raw", "spec_pretty_print"] == explodedName
   , Empty :> MethodSpecRepr <- cfgArgTypes cfg
   , MirSliceRepr (BVRepr w) <- cfgReturnType cfg
   , Just Refl <- testEquality w (knownNat @8)
@@ -111,7 +112,7 @@ compositionalOverrides _symOnline cs name cfg
         RegMap (Empty :> RegEntry _tpr (MethodSpec ms _)) <- getOverrideArgs
         msPrettyPrint ms
 
-  | normDefId "crucible::method_spec::raw::spec_enable" == name
+  | ["crucible", "method_spec", "raw", "spec_enable"] == explodedName
   , Empty :> MethodSpecRepr <- cfgArgTypes cfg
   , UnitRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
@@ -121,4 +122,5 @@ compositionalOverrides _symOnline cs name cfg
 
 
   | otherwise = Nothing
-
+  where
+    explodedName = textIdKey name

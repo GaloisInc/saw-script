@@ -41,7 +41,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -69,7 +68,9 @@ import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWScript.Panic
 import SAWScript.Crucible.JVM.MethodSpecIR
+import SAWScript.Crucible.JVM.Setup.Value (JVMRefVal)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
 
 
 data JVMVal
@@ -81,8 +82,6 @@ instance Show JVMVal where
   show (RVal _) = "RVal"
   show (IVal _) = "IVal"
   show (LVal _) = "LVal"
-
-type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 
 type SetupValue = MS.SetupValue CJ.JVM
 
@@ -114,7 +113,7 @@ instance X.Exception JVMTypeOfError
 typeOfSetupValue ::
   X.MonadThrow m =>
   JVMCrucibleContext ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   m J.Type
@@ -140,13 +139,17 @@ typeOfSetupValue _cc env _nameEnv val =
       -- type-safe field accesses.
       return (J.ClassType (J.mkClassName "java/lang/Object"))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
+    MS.SetupEnum empty                -> absurd empty
+    MS.SetupTuple empty _             -> absurd empty
+    MS.SetupSlice empty               -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+    MS.SetupMux empty _ _ _           -> absurd empty
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
@@ -159,7 +162,7 @@ lookupAllocIndex env i =
 resolveSetupVal ::
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   IO JVMVal
@@ -171,13 +174,17 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
+    MS.SetupEnum empty                -> absurd empty
+    MS.SetupTuple empty _             -> absurd empty
+    MS.SetupSlice empty               -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
-    MS.SetupCast empty _ _            -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+    MS.SetupMux empty _ _ _           -> absurd empty
   where
     sym = cc^.jccSym
 
@@ -246,10 +253,8 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
       fail "resolveSAWTerm: unsupported function type"
-    Cryptol.TVAbstract _ _ ->
-      fail "resolveSAWTerm: unsupported abstract type"
-    Cryptol.TVNewtype{} ->
-      fail "resolveSAWTerm: unsupported newtype"
+    Cryptol.TVNominal {} ->
+      fail "resolveSAWTerm: unsupported nominal type"
   where
     sym = cc^.jccSym
 
@@ -274,21 +279,6 @@ resolveBitvectorTerm sym w tm =
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
        Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
-resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
-resolveBoolTerm sym tm =
-  do st <- sawCoreState sym
-     let sc = saw_ctx st
-     mx <- case getAllExts tm of
-             -- concretely evaluate if it is a closed term
-             [] ->
-               do modmap <- scGetModuleMap sc
-                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
-                  pure (Just (Concrete.toBool v))
-             _ -> return Nothing
-     case mx of
-       Just x  -> return (W4.backendPred sym x)
-       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm
-
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =
   case tp of
@@ -312,8 +302,7 @@ toJVMType tp =
     Cryptol.TVTuple _tps -> Nothing
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
-    Cryptol.TVAbstract _ _ -> Nothing
-    Cryptol.TVNewtype{} -> Nothing
+    Cryptol.TVNominal {} -> Nothing
 
 equalValsPred ::
   JVMCrucibleContext ->

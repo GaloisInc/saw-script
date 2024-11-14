@@ -3,7 +3,7 @@
 
 module Verifier.SAW.Translation.Coq.CryptolModule where
 
-import           Control.Lens                       (over, set, view)
+import           Control.Lens                       (over, view)
 import           Control.Monad                      (forM)
 import           Control.Monad.State                (modify)
 import qualified Data.Map                           as Map
@@ -12,23 +12,24 @@ import           Cryptol.ModuleSystem.Name          (Name, nameIdent)
 import           Cryptol.Utils.Ident                (unpackIdent)
 import qualified Language.Coq.AST                   as Coq
 import           Verifier.SAW.Term.Functor          (Term)
+import           Verifier.SAW.SharedTerm            (SharedContext)
 import           Verifier.SAW.Translation.Coq.Monad
 import qualified Verifier.SAW.Translation.Coq.Term  as TermTranslation
 import           Verifier.SAW.TypedTerm
+import           Verifier.SAW.Cryptol (Env)
 
 
-
+-- | Translate a list of named terms with their types to a Coq definitions
 translateTypedTermMap ::
-  TermTranslation.TermTranslationMonad m => Map.Map Name TypedTerm -> m [Coq.Decl]
-translateTypedTermMap tm = forM (Map.assocs tm) translateAndRegisterEntry
+  TermTranslation.TermTranslationMonad m => [(Name,Term,Term)] -> m [Coq.Decl]
+translateTypedTermMap defs = forM defs translateAndRegisterEntry
   where
-    translateAndRegisterEntry (name, symbol) = do
-      let t = ttTerm symbol
+    translateAndRegisterEntry (name, t, tp) = do
       let nameStr = unpackIdent (nameIdent name)
-      term <- TermTranslation.withLocalTranslationState $ do
-        modify $ set TermTranslation.localEnvironment [nameStr]
-        TermTranslation.translateTerm t
-      let decl = TermTranslation.mkDefinition nameStr term
+      decl <-
+        do t_trans <- TermTranslation.translateTerm t
+           tp_trans <- TermTranslation.translateTerm tp
+           return $ TermTranslation.mkDefinition nameStr t_trans tp_trans
       modify $ over TermTranslation.globalDeclarations (nameStr :)
       return decl
 
@@ -37,16 +38,22 @@ translateTypedTermMap tm = forM (Map.assocs tm) translateAndRegisterEntry
 -- terms, and accumulating the translated declarations of all top-level
 -- declarations encountered.
 translateCryptolModule ::
+  SharedContext -> Env ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [String] ->
   CryptolModule ->
-  Either (TranslationError Term) [Coq.Decl]
-translateCryptolModule configuration globalDecls (CryptolModule _ tm) =
-  reverse . view TermTranslation.topLevelDeclarations . snd
-  <$> TermTranslation.runTermTranslationMonad
-      configuration
-      (TermTranslation.TranslationReader Nothing) -- TODO: this should be Just no?
-      globalDecls
-      []
-      (translateTypedTermMap tm)
+  IO (Either (TranslationError Term) [Coq.Decl])
+translateCryptolModule sc env configuration globalDecls (CryptolModule _ tm) =
+  do defs <-
+       forM (Map.assocs tm) $ \(nm, t) ->
+       do tp <- ttTypeAsTerm sc env t
+          return (nm, ttTerm t, tp)
+     return
+       (reverse . view TermTranslation.topLevelDeclarations . snd <$>
+        TermTranslation.runTermTranslationMonad
+        configuration
+        Nothing -- TODO: this should be Just no?
+        globalDecls
+        []
+        (translateTypedTermMap defs))

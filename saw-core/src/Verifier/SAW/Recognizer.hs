@@ -46,6 +46,8 @@ module Verifier.SAW.Recognizer
   , asNat
   , asBvNat
   , asUnsignedConcreteBv
+  , asBvToNat
+  , asUnsignedConcreteBvToNat
   , asArrayValue
   , asStringLit
   , asLambda
@@ -56,7 +58,7 @@ module Verifier.SAW.Recognizer
   , asConstant
   , asExtCns
   , asSort
-  , asISort
+  , asSortWithFlags
     -- * Prelude recognizers.
   , asBool
   , asBoolType
@@ -75,6 +77,7 @@ module Verifier.SAW.Recognizer
 
 import Control.Lens
 import Control.Monad
+import Data.List (foldl')
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
@@ -92,6 +95,9 @@ instance Field1 (a :*: b) (a' :*: b) a a' where
 
 instance Field2 (a :*: b) (a :*: b') b b' where
   _2 k (a :*: b) = (a :*:) <$> indexed k (1 :: Int) b
+
+toPair :: a :*: b -> (a, b)
+toPair (a :*: b) = (a, b)
 
 type Recognizer t a = t -> Maybe a
 
@@ -282,13 +288,47 @@ asNat (asCtor -> Just (c, [asNat -> Just i]))
   | primName c == preludeSuccIdent = return (i+1)
 asNat _ = Nothing
 
-asBvNat :: Recognizer Term (Natural :*: Natural)
-asBvNat = (isGlobalDef "Prelude.bvNat" @> asNat) <@> asNat
+-- | Recognize an application of @bvNat@
+asBvNat :: Recognizer Term (Term, Term)
+asBvNat = fmap toPair . ((isGlobalDef "Prelude.bvNat" @> return) <@> return)
 
+-- | Try to convert the given term of type @Vec w Bool@ to a concrete 'Natural',
+-- taking into account nat, bitvector and integer conversions (treating all
+-- bitvectors as unsigned)
 asUnsignedConcreteBv :: Recognizer Term Natural
-asUnsignedConcreteBv term = do
-  (n :*: v) <- asBvNat term
-  return $ mod v (2 ^ n)
+asUnsignedConcreteBv (asApplyAll -> (asGlobalDef -> Just "Prelude.bvNat",
+                                     [asNat -> Just n, v])) =
+  (`mod` (2 ^ n)) <$> asUnsignedConcreteBvToNat v
+asUnsignedConcreteBv (asArrayValue -> Just (asBoolType -> Just _,
+                                            mapM asBool -> Just bits)) =
+  return $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
+asUnsignedConcreteBv (asApplyAll -> (asGlobalDef -> Just "Prelude.intToBv",
+                                     [asNat -> Just n, i])) = case i of
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+    (`mod` (2 ^ n)) <$> asUnsignedConcreteBvToNat v
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [_, bv])) ->
+    asUnsignedConcreteBv bv
+  _ -> Nothing
+asUnsignedConcreteBv _ = Nothing
+
+-- | Recognize an application of @bvToNat@
+asBvToNat :: Recognizer Term (Term, Term)
+asBvToNat = fmap toPair . ((isGlobalDef "Prelude.bvToNat" @> return) <@> return)
+
+-- | Try to convert the given term of type @Nat@ to a concrete 'Natural',
+-- taking into account nat, bitvector and integer conversions (treating all
+-- bitvectors as unsigned)
+asUnsignedConcreteBvToNat :: Recognizer Term Natural
+asUnsignedConcreteBvToNat (asNat -> Just v) = return v
+asUnsignedConcreteBvToNat (asBvToNat -> Just (_, bv)) = asUnsignedConcreteBv bv
+asUnsignedConcreteBvToNat (asApplyAll -> (asGlobalDef -> Just "Prelude.intToNat",
+                                        [i])) = case i of
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+    asUnsignedConcreteBvToNat v
+  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [_, bv])) ->
+    asUnsignedConcreteBv bv
+  _ -> Nothing
+asUnsignedConcreteBvToNat _ = Nothing
 
 asArrayValue :: Recognizer Term (Term, [Term])
 asArrayValue (unwrapTermF -> FTermF (ArrayValue tp tms)) =
@@ -340,12 +380,12 @@ asSort t = do
     Sort s _ -> return s
     _      -> Nothing
 
-asISort :: Recognizer Term Sort
-asISort t = do
+asSortWithFlags :: Recognizer Term (Sort, SortFlags)
+asSortWithFlags t = do
   ftf <- asFTermF t
   case ftf of
-    Sort s True -> return s
-    _           -> Nothing
+    Sort s h -> return (s, h)
+    _      -> Nothing
 
 
 
@@ -370,10 +410,7 @@ asIntModType :: Recognizer Term Natural
 asIntModType = isGlobalDef "Prelude.IntMod" @> asNat
 
 asVectorType :: Recognizer Term (Term, Term)
-asVectorType = helper ((isGlobalDef "Prelude.Vec" @> return) <@> return) where
-  helper r t =
-    do (n :*: a) <- r t
-       return (n, a)
+asVectorType = fmap toPair . ((isGlobalDef "Prelude.Vec" @> return) <@> return)
 
 isVecType :: Recognizer Term a -> Recognizer Term (Natural :*: a)
 isVecType tp = (isGlobalDef "Prelude.Vec" @> asNat) <@> tp

@@ -27,6 +27,7 @@ import Control.Arrow
 import Control.Monad
 import Control.Lens
 
+import qualified Data.IntMap.Strict as IntMap
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -36,6 +37,9 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import qualified Text.LLVM as LLVM
+import qualified Text.LLVM.DebugUtils as LLVM
+
+import SAWScript.Panic (panic)
 
 --------------------------------------------------------------------------------
 -- ** Skeletons
@@ -96,48 +100,40 @@ makeLenses ''ModuleSkeleton
 
 parseType :: LLVM.Type -> IO TypeSkeleton
 parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 True "default guess of size 1"]
+-- It is unclear how to combine opaque pointers with type skeletons due to the
+-- lack of a pointee type. For now, we simply fail if we encounter one
+-- (see #1877).
+parseType LLVM.PtrOpaque =
+  panic "SAWScript.Crucible.LLVM.Skeleton.parseType"
+        [ "Skeleton generation does not support opaque pointers"
+        , "Please report this at: https://github.com/GaloisInc/saw-script/issues/1877"
+        ]
 parseType (LLVM.Array i t) = pure $ TypeSkeleton t True
   [ SizeGuess (fromIntegral i) True $ "default guess of size " <> Text.pack (show i)
   ]
 parseType t = pure $ TypeSkeleton t False []
 
-debugInfoGlobalLines :: LLVM.Module -> Map Text Int
-debugInfoGlobalLines = go . LLVM.modUnnamedMd
-  where
-    go :: [LLVM.UnnamedMd] -> Map Text Int
-    go (LLVM.UnnamedMd
-         { LLVM.umValues = LLVM.ValMdDebugInfo
-           (LLVM.DebugInfoGlobalVariable LLVM.DIGlobalVariable
-             { LLVM.digvName = Just n
-             , LLVM.digvLine = l
-             }
-           )
-         }:xs) = Map.insert (Text.pack n) (fromIntegral l) $ go xs
-    go (_:xs) = go xs
-    go [] = Map.empty
-
-parseGlobal :: Map Text Int -> LLVM.Global -> IO GlobalSkeleton
+parseGlobal :: Map String Int -> LLVM.Global -> IO GlobalSkeleton
 parseGlobal ls LLVM.Global
   { LLVM.globalSym = LLVM.Symbol s
   , LLVM.globalType = t
   , LLVM.globalValue = v
   , LLVM.globalAttrs = LLVM.GlobalAttrs { LLVM.gaConstant = c }
   } = do
-  let nm = Text.pack s
   ty <- parseType t
   pure GlobalSkeleton
     { _globSkelName = Text.pack s
-    , _globSkelLoc = flip Location Nothing <$> Map.lookup nm ls
+    , _globSkelLoc = flip Location Nothing <$> Map.lookup s ls
     , _globSkelType = ty
     , _globSkelMutable = not c
     , _globSkelInitialized = isJust v
     }
 
-parseArg :: LLVM.Typed LLVM.Ident -> (Maybe Text, Maybe Location) -> IO ArgSkeleton
+parseArg :: LLVM.Typed LLVM.Ident -> (Maybe String, Maybe Location) -> IO ArgSkeleton
 parseArg LLVM.Typed { LLVM.typedType = t } (nm, loc) = do
   ty <- parseType t
   pure ArgSkeleton
-    { _argSkelName = nm
+    { _argSkelName = Text.pack <$> nm
     , _argSkelLoc = loc
     , _argSkelType = ty
     }
@@ -167,7 +163,7 @@ stmtDebugDeclares
   , Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) <- lookup "dbg" md
   = Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts
 stmtDebugDeclares
-  (LLVM.Effect 
+  (LLVM.Effect
     (LLVM.Call _ _
       (LLVM.ValSymbol (LLVM.Symbol s))
       [ _
@@ -185,45 +181,7 @@ stmtDebugDeclares (_:stmts) = stmtDebugDeclares stmts
 defineName :: LLVM.Define -> Text
 defineName LLVM.Define { LLVM.defName = LLVM.Symbol s } = Text.pack s
 
-debugInfoArgNames :: LLVM.Module -> LLVM.Define -> Map Int Text
-debugInfoArgNames m d =
-  case Map.lookup "dbg" $ LLVM.defMetadata d of
-    Just (LLVM.ValMdRef s) -> scopeArgs s
-    _ -> Map.empty
-  where
-    scopeArgs :: Int -> Map Int Text
-    scopeArgs s = go $ LLVM.modUnnamedMd m
-      where go :: [LLVM.UnnamedMd] -> Map Int Text
-            go [] = Map.empty
-            go (LLVM.UnnamedMd
-                 { LLVM.umValues =
-                   LLVM.ValMdDebugInfo
-                     (LLVM.DebugInfoLocalVariable
-                       LLVM.DILocalVariable
-                       { LLVM.dilvScope = Just (LLVM.ValMdRef s')
-                       , LLVM.dilvArg = a
-                       , LLVM.dilvName = Just n
-                       })}:xs) =
-              if s == s' then Map.insert (fromIntegral a) (Text.pack n) $ go xs else go xs
-            go (_:xs) = go xs
-
-debugInfoDefineLines :: LLVM.Module -> Map Text Int
-debugInfoDefineLines = go . LLVM.modUnnamedMd
-  where
-    go :: [LLVM.UnnamedMd] -> Map Text Int
-    go (LLVM.UnnamedMd
-         { LLVM.umValues = LLVM.ValMdDebugInfo
-           (LLVM.DebugInfoSubprogram LLVM.DISubprogram
-             { LLVM.dispName = Just n
-             , LLVM.dispIsDefinition = True
-             , LLVM.dispLine = l
-             }
-           )
-         }:xs) = Map.insert (Text.pack n) (fromIntegral l) $ go xs
-    go (_:xs) = go xs
-    go [] = Map.empty
-
-parseDefine :: Map Text Int -> LLVM.Module -> LLVM.Define -> IO FunctionSkeleton
+parseDefine :: Map String Int -> LLVM.Module -> LLVM.Define -> IO FunctionSkeleton
 parseDefine _ _ LLVM.Define { LLVM.defVarArgs = True } =
   fail "Skeleton generation does not support varargs"
 parseDefine ls m d@LLVM.Define
@@ -233,13 +191,13 @@ parseDefine ls m d@LLVM.Define
   , LLVM.defRetType = ret
   } = do
   let stmts = mconcat $ LLVM.bbStmts <$> body
-  let argNames = debugInfoArgNames m d
+  let argNames = LLVM.debugInfoArgNames m d
   let debugDeclares = stmtDebugDeclares stmts
-  argSkels <- zipWithM parseArg args $ (flip Map.lookup argNames &&& flip Map.lookup debugDeclares) <$> [1, 2..]
+  argSkels <- zipWithM parseArg args $ (flip IntMap.lookup argNames &&& flip Map.lookup debugDeclares) <$> [1, 2..]
   retTy <- parseType ret
   pure FunctionSkeleton
     { _funSkelName = Text.pack s
-    , _funSkelLoc = flip Location Nothing <$> Map.lookup (Text.pack s) ls
+    , _funSkelLoc = flip Location Nothing <$> Map.lookup s ls
     , _funSkelArgs = argSkels
     , _funSkelRet = retTy
     , _funSkelCalls = Set.intersection
@@ -249,8 +207,8 @@ parseDefine ls m d@LLVM.Define
 
 moduleSkeleton :: LLVM.Module -> IO ModuleSkeleton
 moduleSkeleton ast = do
-  globs <- mapM (parseGlobal $ debugInfoGlobalLines ast) $ LLVM.modGlobals ast
-  funs <- mapM (parseDefine (debugInfoDefineLines ast) ast) $ LLVM.modDefines ast
+  globs <- mapM (parseGlobal $ LLVM.debugInfoGlobalLines ast) $ LLVM.modGlobals ast
+  funs <- mapM (parseDefine (LLVM.debugInfoDefineLines ast) ast) $ LLVM.modDefines ast
   pure $ ModuleSkeleton
     { _modSkelGlobals = Map.fromList $ (\g -> (g ^. globSkelName, g)) <$> globs
     , _modSkelFunctions = Map.fromList $ (\f -> (f ^. funSkelName, f)) <$> funs

@@ -8,6 +8,7 @@
 {-# Language RankNTypes #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language TypeApplications #-}
+{-# Language TypeOperators #-}
 {-# Language ViewPatterns #-}
 
 module Mir.Cryptol
@@ -60,7 +61,10 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.TypedTerm as SAW
 
+import SAWScript.Crucible.MIR.TypeShape
+
 import Mir.Compositional.Convert
+import Mir.Compositional.DefId (hasInstPrefix)
 
 
 cryptolOverrides ::
@@ -73,7 +77,7 @@ cryptolOverrides ::
     Maybe (OverrideSim (p sym) sym MIR rtp a r ())
 cryptolOverrides _symOnline cs name cfg
 
-  | (normDefId "crucible::cryptol::load" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "cryptol", "load"] explodedName
   , Empty
       :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
       :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
@@ -89,7 +93,7 @@ cryptolOverrides _symOnline cs name cfg
         RegMap (Empty :> RegEntry _tpr modulePathStr :> RegEntry _tpr' nameStr) <- getOverrideArgs
         cryptolLoad (cs ^. collection) sig (cfgReturnType cfg) modulePathStr nameStr
 
-  | (normDefId "crucible::cryptol::override_" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "cryptol", "override_"] explodedName
   , Empty
       :> UnitRepr
       :> MirSliceRepr (BVRepr (testEquality (knownNat @8) -> Just Refl))
@@ -113,7 +117,7 @@ cryptolOverrides _symOnline cs name cfg
           :> RegEntry _tpr' nameStr) <- getOverrideArgs
         cryptolOverride (cs ^. collection) mh modulePathStr nameStr
 
-  | (normDefId "crucible::cryptol::munge" <> "::_inst") `Text.isPrefixOf` name
+  | hasInstPrefix ["crucible", "cryptol", "munge"] explodedName
   , Empty :> tpr <- cfgArgTypes cfg
   , tpr' <- cfgReturnType cfg
   , Just Refl <- testEquality tpr tpr'
@@ -130,7 +134,8 @@ cryptolOverrides _symOnline cs name cfg
         liftIO $ munge sym shp rv
 
   | otherwise = Nothing
-
+  where
+    explodedName = textIdKey name
 
 cryptolLoad ::
     forall sym p t st fs rtp a r tp .
@@ -326,9 +331,22 @@ munge sym shp rv = do
                     W4.justPartExpr sym <$> go shp rv
                 return $ MirVector_PartialVector pv'
             MirVector_Array _ -> error $ "munge: MirVector_Array NYI"
-        -- TODO: StructShape
+        go (StructShape _ _ flds) (AnyValue tpr rvs)
+            | StructRepr ctx <- tpr
+            , Just Refl <- testEquality (fmapFC fieldShapeType flds) ctx =
+                AnyValue tpr <$> goFields flds rvs
+            | otherwise = error $  "munge: StructShape AnyValue with NYI TypeRepr " ++ show tpr
         go (TransparentShape _ shp) rv = go shp rv
+        go (EnumShape _ _ _ _ _) _ =
+            error "Enums not currently supported in overrides"
+        go (FnPtrShape _ _ _) _ =
+            error "Function pointers not currently supported in overrides"
         -- TODO: RefShape
+        go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+            let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+            ref' <- go refShp ref
+            len' <- go lenShp len
+            pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
         go shp _ = error $ "munge: " ++ show (shapeType shp) ++ " NYI"
 
         goFields :: forall ctx.

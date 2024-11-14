@@ -13,13 +13,13 @@ In this document, we use the following metavariables to refer to different sorts
   `sh`               | Shape expression
   `l`                | Lifetime expression
   `p`                | Value permission
-                     
-                     
 
-Permission types
+
+
+Value Types
 ================
 
-A permission type includes regular crucible types as well as heapster-specific types
+The Heapster value types include the regular crucible types as well as heapster-specific types:
 
 | **Permission Types `a`** | **Description** |
 | :---: | :--- |
@@ -53,6 +53,7 @@ Any crucible type can have a variable of that type, and that thing is an express
 | `n`                          | `nat`              | A literal natural number |
 | `n`                          | `bv w`             | A literal bitvector |
 | `b1 + b2`                    | `bv w`             | Sum of two bitvectors |
+| `-b`                         | `bv w`             | 2's complement negation of a bitvector |
 | `b1 * b2`                    | `bv w`             | Linear multiplication of two bitvectors, meaning that one of the operands must be a constant |
 | `struct(e1,..,en)`           | `struct(a1,..,an)` | A (crucible) struct is a tuple of expressions for each argument of the struct type. Crucible structs are different from C structs, and we only use crucible structs when we need to, otherwise C structs are described manually as pointers into chunks of memory |
 | `llvmword(e)`                | `llvmptr(w)`       | An LLVM value that represents a word, i.e. whose region identifier is 0, given a bitvector expression `e:bv w` |
@@ -71,10 +72,12 @@ In addition to the above expressions, we also have shape expressions, which we s
 | `sh1 orsh sh2`              | `llvmshape w` | A disjunctive shape. `sh1` and `sh2` need not have the same size. |
 | `sh1 ; sh2`                 | `llvmshape w` | A sequence of two shapes |
 | `[l]ptrsh(rw,sh)`           | `llvmshape w` | A shape for a pointer to another memory block, i.e. a memblock permission, with a given shape. This memblock permission will have the same read/write and lifetime modalities as the memblock permission containing this pointer shape, unless they are specifically overridden by the pointer shape; i.e., we have that `[l]memblock(rw,off,len,[l']ptrsh(rw',sh)) = [l]memblock(rw,off,len, fieldsh([l']memblock(rw',0,len(sh),sh)))`, where `rw'` and/or `l'` can be `Nothing`, in which case they default to `rw` and `l`, respectively. |
-| `fieldsh(p)`                | `llvmshape w` | A shape for a single pointer field, given a permission that acts on a pointer of unknown size. |
-| `fieldsh(sz,p)`             | `llvmshape w` | Like `fieldsh(p)`, but where the permission acts on a pointer of size `sz`. |
+| `fieldsh(sz,p)`             | `llvmshape w` | A shape for a single pointer field, given a permission `p` that acts on a pointer of size `sz`. |
+| `fieldsh(p)`                | `llvmshape w` | Equivalent to `fieldsh(w,p)`. |
 | `arraysh(s,len,sh)`         | `llvmshape w` | A shape for an array with the given stride, length (in number of elements = total length / stride), and fields `sh` |
 | `exsh x:a.sh`               | `llvmshape w` | An existential shape |
+| `falsesh`                    | `llvmshape w` | The unsatisfiable or contradictory shape |
+
 
 Value permissions
 =================
@@ -108,6 +111,7 @@ For a variable `x:a`, the proposition `x:p` means "`x` has permission `p`": this
 | `p1 * p2`                                 | `perm(a)`                 | separating conjunction; `p1` and `p2` (both satisfying `perm(a)`) must be atomic permissions (not a disjunction, existential, or equality permission) |
 | `eq(e)`                                   | `perm(a)`                 | a value equal to the expression `e:a` |
 | `exists x:a. p`                           | `perm(b)`                 | there exists some expression `e:a` such that `p[e/x]:perm(b)` holds |
+| `false`                           | `perm(a)`  | The unsatisfiable or contradictory permission |
 | `x<e1,..,e2>@o`                           | `perm(a)`                 | A named permission with expression arguments, with optional offset expression `o`. Named permissions can either be (1) defined permissions (aliases) (2) recursive permissions, or (3) opaque permissions (axioms). |
 | `[l]array(rw, off,<len,*stride,sh)`       | `perm(llvmptr w)`         | a permission for a pointer to an array, where: <ul><li>`l` is the lifetime during which this permission is active;</li> <li>`off` is a permission expression representing the offset of this array from the pointer in bytes;</li> <li>`len` is a permission expression representing the number of cells in the array;</li> <li>`stride` is a permission expression representing the number of bytes in a cell;</li> <li>`sh` is a shape expression representing the shape of elements in the array</li> </ul> |
 | `[l]memblock(rw,o,len,sh)`                | `perm(llvmptr w)`         | gives read or write access to a memory block, whose contents also give some permissions, where: <ul> <li> `rw` indicates whether this is a read or write block permission </li> <li> `l` is the lifetime during which this block permission is active </li> <li> `o` is the offset of the block from the pointer in bytes </li> <li> `len` is the length of the block in bytes </li> <li> `sh` is the shape of the block </li> </ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |

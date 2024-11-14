@@ -24,7 +24,7 @@ module Verifier.SAW.Name
   , moduleNameText
   , moduleNamePieces
    -- * Identifiers
-  , Ident(identModule, identBaseName), identName, mkIdent
+  , Ident(identModule, identBaseName), identName, mkIdent, mkSafeIdent
   , parseIdent
   , isIdent
   , identText
@@ -41,6 +41,7 @@ module Verifier.SAW.Name
   , ExtCns(..)
   , scFreshNameURI
   , PrimName(..)
+  , primNameToExtCns
     -- * Naming Environments
   , SAWNamingEnv(..)
   , emptySAWNamingEnv
@@ -50,6 +51,7 @@ module Verifier.SAW.Name
   , bestAlias
   ) where
 
+import           Numeric (showHex)
 import           Control.Exception (assert)
 import           Data.Char
 import           Data.Hashable
@@ -133,6 +135,23 @@ instance Read Ident where
 mkIdent :: ModuleName -> Text -> Ident
 mkIdent m s = Ident m s
 
+-- | Make a \"coq-safe\" identifier from a string that might contain
+-- non-identifier characters, where we use the SAW core notion of identifier
+-- characters as letters, digits, underscore and primes. Any disallowed
+-- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
+-- for that character. Additionally, a SAW core identifier is not allowed to
+-- start with a prime, so a leading underscore is added in such a case.
+mkSafeIdent :: ModuleName -> String -> Ident
+mkSafeIdent _ [] = fromString "_"
+mkSafeIdent mnm nm =
+  let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in
+  mkIdent mnm $ Text.pack $
+  (if nm!!0 == '\'' then ('_' :) else id) $
+  concatMap
+  (\c -> if is_safe_char c then [c] else
+           "__x" ++ showHex (ord c) "")
+  nm
+
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident
 parseIdent s0 =
@@ -173,7 +192,7 @@ data NameInfo
   | -- | This name was imported from some other programming language/scope
     ImportedName
       URI      -- ^ An absolutely-qualified name, which is required to be unique
-      [Text]   -- ^ A collection of aliases for this name.  Sorter or "less-qualified"
+      [Text]   -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
                --   aliases should be nearer the front of the list
 
  deriving (Eq,Ord,Show)
@@ -248,15 +267,16 @@ data PrimName e =
   deriving (Show, Functor, Foldable, Traversable)
 
 instance Eq (PrimName e) where
-  x == y = primVarIndex x == primVarIndex y
+  x == y = primName x == primName y
 
 instance Ord (PrimName e) where
-  compare x y = compare (primVarIndex x) (primVarIndex y)
+  compare x y = compare (primName x) (primName y)
 
 instance Hashable (PrimName e) where
-  hashWithSalt x pn = hashWithSalt x (primVarIndex pn)
+  hashWithSalt x pn = hashWithSalt x (primName pn)
 
-
+primNameToExtCns :: PrimName e -> ExtCns e
+primNameToExtCns (PrimName varIdx nm tp) = EC varIdx (ModuleIdentifier nm) tp
 
 scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
