@@ -14,6 +14,7 @@ module SAWScript.Crucible.MIR.Builtins
   , mir_alloc_mut
   , mir_assert
   , mir_execute_func
+  , mir_equal
   , mir_find_adt
   , mir_fresh_cryptol_var
   , mir_fresh_expanded_value
@@ -236,6 +237,25 @@ mir_execute_func args =
             checkArgs (i + 1) tys vals
      checkArgs 0 argTys args
      Setup.crucible_execute_func args
+
+mir_equal :: SetupValue -> SetupValue -> MIRSetupM ()
+mir_equal val1 val2 =
+  MIRSetupM $
+  do cc <- getMIRCrucibleContext
+     loc <- getW4Position "mir_equal"
+     st <- get
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+         nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ty1 <- typeOfSetupValue cc env nameEnv val1
+     ty2 <- typeOfSetupValue cc env nameEnv val2
+
+     let b = checkCompatibleTys ty1 ty2
+     unless b $ throwCrucibleSetup loc $ unlines
+       [ "Incompatible types when asserting equality:"
+       , show ty1
+       , show ty2
+       ]
+     Setup.crucible_equal loc val1 val2
 
 -- | Consult the given 'Mir.RustModule' to find an 'Mir.Adt'" with the given
 -- 'String' as an identifier and the given 'Mir.Ty's as the types used to

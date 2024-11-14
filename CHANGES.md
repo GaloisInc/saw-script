@@ -1,5 +1,10 @@
 # next -- TBA
 
+## New Features
+
+* Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
+  command for the MIR and JVM backends, respectively.
+
 ## Bug fixes
 
 * Counterexamples including SMT arrays are now printed with the array

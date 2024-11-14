@@ -45,6 +45,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_alloc_array
     , jvm_setup_with_tag
     , jvm_ghost_value
+    , jvm_equal
     ) where
 
 import           Control.Lens
@@ -1448,6 +1449,25 @@ jvm_ghost_value ::
   JVMSetupM ()
 jvm_ghost_value ghost val = JVMSetupM $
   ghost_value ghost val
+
+jvm_equal :: SetupValue -> SetupValue -> JVMSetupM ()
+jvm_equal val1 val2 =
+  JVMSetupM $
+  do loc <- getW4Position "jvm_equal"
+     st <- get
+     let cc = st ^. Setup.csCrucibleContext
+         env = MS.csAllocations (st ^. Setup.csMethodSpec)
+         nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ty1 <- typeOfSetupValue cc env nameEnv val1
+     ty2 <- typeOfSetupValue cc env nameEnv val2
+
+     let b = registerCompatible ty1 ty2
+     unless b $ throwCrucibleSetup loc $ unlines
+       [ "Incompatible types when asserting equality:"
+       , show ty1
+       , show ty2
+       ]
+     Setup.crucible_equal loc val1 val2
 
 --------------------------------------------------------------------------------
 

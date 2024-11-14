@@ -3922,6 +3922,15 @@ primitives = Map.fromList
     , "method being verified."
     ]
 
+  , prim "jvm_equal" "JVMValue -> JVMValue -> JVMSetup ()"
+    (pureVal jvm_equal)
+    Current
+    [ "State that two JVM values should be equal. Can be used as either a"
+    , "pre-condition or a post-condition. It is semantically equivalent to"
+    , "an `jvm_precond` or `jvm_postcond` statement which is an equality"
+    , "predicate, but potentially more efficient."
+    ]
+
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
     (pureVal jvm_execute_func)
     Current
@@ -4035,6 +4044,15 @@ primitives = Map.fromList
     , "list of values as elements. The MIRAdt argument determines what enum"
     , "type to create; use `mir_find_adt` to retrieve a MIRAdt value. The"
     , "String argument represents the variant name."
+    ]
+
+  , prim "mir_equal" "MIRValue -> MIRValue -> MIRSetup ()"
+    (pureVal mir_equal)
+    Experimental
+    [ "State that two MIR values should be equal. Can be used as either a"
+    , "pre-condition or a post-condition. It is semantically equivalent to"
+    , "an `mir_precond` or `mir_postcond` statement which is an equality"
+    , "predicate, but potentially more efficient."
     ]
 
   , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
