@@ -1602,7 +1602,8 @@ term_eval :: [String] -> TypedTerm -> TopLevel TypedTerm
 term_eval unints (TypedTerm schema t0) =
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     sym <- liftIO $ Common.newSAWCoreExprBuilder sc
+     what4PushMuxOps <- gets rwWhat4PushMuxOps
+     sym <- liftIO $ Common.newSAWCoreExprBuilder sc what4PushMuxOps
      st <- liftIO $ Common.sawCoreState sym
      t1 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t0
      pure (TypedTerm schema t1)
