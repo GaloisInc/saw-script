@@ -33,7 +33,7 @@ env:
   # ./saw-remote-api/Dockerfile
   # ./s2nTests/scripts/blst-entrypoint.sh
   # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20240212"
+  SOLVER_PKG_VERSION: "snapshot-20241119"
 
 jobs:
   config:
@@ -96,13 +96,13 @@ jobs:
             hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
           # so we only build one particular GHC version to test them on. We
-          # include both an x86-64 macOS runner (macos-12) as well as an AArch64
+          # include both an x86-64 macOS runner (macos-13) as well as an AArch64
           # macOS runner (macos-14).
           - os: windows-2019
             ghc: 9.4.8
             run-tests: true
             hpc: false
-          - os: macos-12
+          - os: macos-13
             ghc: 9.4.8
             run-tests: true
             hpc: false
