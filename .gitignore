@@ -1,6 +1,6 @@
 src/SAWScript/Lexer.hs
 src/SAWScript/Parser.hs
-bin
+/bin
 cabal.sandbox.config
 cabal.project.local
 dist
