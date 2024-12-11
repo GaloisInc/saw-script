@@ -123,8 +123,8 @@ newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
 -- before calling singletonSubst), there doesn't seem to be any such
 -- assurance for substFromList. I'm not sure if this is actually a
 -- problem or not but it should probably be looked into at some point.
-(@@) :: Subst -> Subst -> Subst
-s2@(Subst m2) @@ (Subst m1) = Subst $ m1' `M.union` m2
+concatSubst :: Subst -> Subst -> Subst
+concatSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `M.union` m2
   where
   m1' = fmap (appSubst s2) m1
 
@@ -303,15 +303,15 @@ getFreshTypeIndex = do
 -- unified with it to be preferred. If no such thing happens though
 -- this will be the position that gets attached to the quantifier
 -- binding in generalize.
-newType :: Pos -> TI Type
-newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> getFreshTypeIndex
+getFreshTyVar :: Pos -> TI Type
+getFreshTyVar pos = TyUnifyVar (PosInferred InfFresh pos) <$> getFreshTypeIndex
 
 -- Construct a new type variable to use as a placeholder after an
 -- error occurs. For now this is the same as other fresh type
 -- variables, but I've split it out in case we want to distinguish it
 -- in the future.
-newTypeError :: Pos -> TI Type
-newTypeError pos = newType pos
+getErrorTyVar :: Pos -> TI Type
+getErrorTyVar pos = getFreshTyVar pos
 
 -- Add an error message.
 recordError :: Pos -> String -> TI ()
@@ -319,14 +319,14 @@ recordError pos err = do
   TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
 
 -- Apply the current substitution with appSubst.
-appSubstM :: AppSubst t => t -> TI t
-appSubstM t = do
+applyCurrentSubst :: AppSubst t => t -> TI t
+applyCurrentSubst t = do
   s <- TI $ gets subst
   return $ appSubst s t
 
 -- Apply the current typedef collection with instantiate.
-instantiateM :: Instantiate t => t -> TI t
-instantiateM t = do
+resolveCurrentTypedefs :: Instantiate t => t -> TI t
+resolveCurrentTypedefs t = do
   s <- TI $ asks typedefEnv
   return $ instantiate s t
 
@@ -342,7 +342,7 @@ unifyVarsInEnv :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnv = do
   env <- TI $ asks varEnv
   let ss = M.elems env
-  ss' <- mapM appSubstM ss
+  ss' <- mapM applyCurrentSubst ss
   return $ unifyVars ss'
 
 -- Get the named typedef vars that occur in the current variable typing
@@ -351,7 +351,7 @@ namedVarsInEnv :: TI (M.Map Name Pos)
 namedVarsInEnv = do
   env <- TI $ asks varEnv
   let ss = M.elems env
-  ss' <- mapM appSubstM ss
+  ss' <- mapM applyCurrentSubst ss
   return $ namedVars ss'
 
 -- Get the position and name of the first binding in a pattern,
@@ -567,7 +567,7 @@ mgus [] [] = return emptySubst
 mgus (t1:ts1) (t2:ts2) = do
   s <- mgu t1 t2
   s' <- mgus (map (appSubst s) ts1) (map (appSubst s) ts2)
-  return (s' @@ s)
+  return (concatSubst s' s)
 mgus ts1 ts2 =
   failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
@@ -613,10 +613,10 @@ mgus ts1 ts2 =
 --
 unify :: LName -> Type -> Pos -> Type -> TI ()
 unify m t1 pos t2 = do
-  t1' <- appSubstM =<< instantiateM t1
-  t2' <- appSubstM =<< instantiateM t2
+  t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
+  t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
   case mgu t1' t2' of
-    Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
+    Right s -> TI $ modify $ \rw -> rw { subst = concatSubst s $ subst rw }
     Left msgs ->
        recordError pos $ unlines $ firstline : morelines'
        where
@@ -643,7 +643,7 @@ type OutStmt = Stmt
 -- struct type.
 inferField :: LName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
 inferField m (n,e) = do
-  (e',t) <- inferE (m,e)
+  (e',t) <- inferExpr (m,e)
   return ((n,e'),(n,t))
 
 -- wrap m with a type for x
@@ -704,8 +704,8 @@ withDeclGroup (Recursive ds) m = foldr withDecl m ds
 -- The LName is the context name passed to unify, which isn't generally
 -- useful and should probably be removed.
 --
-inferE :: (LName, Expr) -> TI (OutExpr,Type)
-inferE (ln, expr) = case expr of
+inferExpr :: (LName, Expr) -> TI (OutExpr,Type)
+inferExpr (ln, expr) = case expr of
   Bool pos b    -> return (Bool pos b, tBool (PosInferred InfTerm pos))
   String pos s  -> return (String pos s, tString (PosInferred InfTerm pos))
   Int pos i     -> return (Int pos i, tInt (PosInferred InfTerm pos))
@@ -713,21 +713,21 @@ inferE (ln, expr) = case expr of
   CType s       -> return (CType s, tType (PosInferred InfTerm $ getPos s))
 
   Array pos [] ->
-    do a <- newType pos
+    do a <- getFreshTyVar pos
        return (Array pos [], tArray (PosInferred InfTerm pos) a)
 
   Array pos (e:es) ->
-    do (e',t) <- inferE (ln, e)
-       es' <- mapM (flip (checkE ln) t) es
+    do (e',t) <- inferExpr (ln, e)
+       es' <- mapM (flip (checkExpr ln) t) es
        return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
 
   Block pos bs ->
-    do ctx <- newType pos
+    do ctx <- getFreshTyVar pos
        (bs',t') <- inferStmts ln pos ctx bs
        return (Block pos bs', tBlock (PosInferred InfTerm pos) ctx t')
 
   Tuple pos es ->
-    do (es',ts) <- unzip `fmap` mapM (inferE . (ln,)) es
+    do (es',ts) <- unzip `fmap` mapM (inferExpr . (ln,)) es
        return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
 
   Record pos fs ->
@@ -736,15 +736,15 @@ inferE (ln, expr) = case expr of
        return (Record pos (M.fromList nes'), ty)
 
   Index pos ar ix ->
-    do (ar',at) <- inferE (ln,ar)
-       ix'      <- checkE ln ix (tInt (PosInferred InfContext (getPos ix)))
-       t        <- newType (getPos ix')
+    do (ar',at) <- inferExpr (ln,ar)
+       ix'      <- checkExpr ln ix (tInt (PosInferred InfContext (getPos ix)))
+       t        <- getFreshTyVar (getPos ix')
        unify ln (tArray (PosInferred InfContext (getPos ar')) t) (getPos ar') at
        return (Index pos ar' ix', t)
 
   Lookup pos e n ->
-    do (e1,t) <- inferE (ln, e)
-       t1 <- appSubstM =<< instantiateM t
+    do (e1,t) <- inferExpr (ln, e)
+       t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
        elTy <- case t1 of
                  TyRecord typos fs
                     | Just ty <- M.lookup n fs -> return ty
@@ -753,17 +753,17 @@ inferE (ln, expr) = case expr of
                                 [ "Selecting a missing field."
                                 , "Field name: " ++ n
                                 ]
-                             newTypeError typos
+                             getErrorTyVar typos
                  _ -> do recordError pos $ unlines
                             [ "Record lookup on non-record argument."
                             , "Field name: " ++ n
                             ]
-                         newTypeError pos
+                         getErrorTyVar pos
        return (Lookup pos e1 n, elTy)
 
   TLookup pos e i ->
-    do (e1,t) <- inferE (ln,e)
-       t1 <- appSubstM =<< instantiateM t
+    do (e1,t) <- inferExpr (ln,e)
+       t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
        elTy <- case t1 of
                  TyCon typos (TupleCon n) tys
                    | i < n -> return (tys !! fromIntegral i)
@@ -774,12 +774,12 @@ inferE (ln, expr) = case expr of
                                   " is too large for tuple size of " ++
                                   show n
                                 ]
-                             newTypeError typos
+                             getErrorTyVar typos
                  _ -> do recordError pos $ unlines
                             [ "Tuple lookup on non-tuple argument."
                             , "Given index " ++ show i
                             ]
-                         newTypeError pos
+                         getErrorTyVar pos
        return (TLookup pos e1 i, elTy)
 
   Var x ->
@@ -791,13 +791,13 @@ inferE (ln, expr) = case expr of
              , "Note that some built-in commands are available only after running"
              , "either `enable_deprecated` or `enable_experimental`."
              ]
-           t <- newType (getPos x)
+           t <- getFreshTyVar (getPos x)
            return (Var x, t)
          Just (Forall as t) -> do
            -- get a fresh tyvar for each quantifier binding, convert
            -- to a name -> ty map, and instantiate with the fresh tyvars
            let once (apos, a) = do
-                 at <- newType apos
+                 at <- getFreshTyVar apos
                  return (a, at)
            substs <- mapM once as
            let t' = instantiate (M.fromList substs) t
@@ -805,40 +805,40 @@ inferE (ln, expr) = case expr of
 
   Function pos pat body ->
     do (pt, pat') <- inferPattern pat
-       (body', t) <- withPattern pat' $ inferE (ln, body)
+       (body', t) <- withPattern pat' $ inferExpr (ln, body)
        return (Function pos pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
 
   Application pos f v ->
-    do (v',fv) <- inferE (ln,v)
-       t <- newType pos
+    do (v',fv) <- inferExpr (ln,v)
+       t <- getFreshTyVar pos
        let ft = tFun (PosInferred InfContext $ getPos f) fv t
-       f' <- checkE ln f ft
+       f' <- checkExpr ln f ft
        return (Application pos f' v', t)
 
   Let pos dg body ->
     do dg' <- inferDeclGroup dg
-       (body', t) <- withDeclGroup dg' (inferE (ln, body))
+       (body', t) <- withDeclGroup dg' (inferExpr (ln, body))
        return (Let pos dg' body', t)
 
   TSig _pos e t ->
     do t' <- checkKind t
-       (e',t'') <- inferE (ln,e)
+       (e',t'') <- inferExpr (ln,e)
        unify ln t' (getPos e') t''
        return (e',t'')
 
   IfThenElse pos e1 e2 e3 ->
-    do e1' <- checkE ln e1 (tBool (PosInferred InfContext $ getPos e1))
-       (e2', t) <- inferE (ln, e2)
-       e3' <- checkE ln e3 t
+    do e1' <- checkExpr ln e1 (tBool (PosInferred InfContext $ getPos e1))
+       (e2', t) <- inferExpr (ln, e2)
+       e3' <- checkExpr ln e3 t
        return (IfThenElse pos e1' e2' e3', t)
 
 --
 -- Check the type of an expr, by inferring and then unifying the
 -- result.
 --
-checkE :: LName -> Expr -> Type -> TI OutExpr
-checkE m e t = do
-  (e',t') <- inferE (m,e)
+checkExpr :: LName -> Expr -> Type -> TI OutExpr
+checkExpr m e t = do
+  (e',t') <- inferExpr (m,e)
   unify m t (getPos e') t'
   return e'
 
@@ -851,10 +851,10 @@ inferPattern :: Pattern -> TI (Type, Pattern)
 inferPattern pat =
   case pat of
     PWild pos mt ->
-      do t <- maybe (newType pos) return mt
+      do t <- maybe (getFreshTyVar pos) return mt
          return (t, PWild pos (Just t))
     PVar pos x mt ->
-      do t <- maybe (newType pos) return mt
+      do t <- maybe (getFreshTyVar pos) return mt
          return (t, PVar pos x (Just t))
     PTuple pos ps ->
       do (ts, ps') <- unzip <$> mapM inferPattern ps
@@ -894,12 +894,12 @@ inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
 
 inferStmts m pos _ctx [] = do
   recordError pos ("do block must include at least one expression at " ++ show m)
-  t <- newTypeError pos
+  t <- getErrorTyVar pos
   return ([], t)
 
 inferStmts m dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
-  t  <- maybe (newType patpos) return mt
-  e' <- checkE m e (tBlock dopos ctx t)
+  t  <- maybe (getFreshTyVar patpos) return mt
+  e' <- checkExpr m e (tBlock dopos ctx t)
   mc' <- case mc of
     Nothing -> return ctx
     Just ty  -> do ty' <- checkKind ty
@@ -914,12 +914,12 @@ inferStmts m dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
 
 inferStmts m dopos _ [_] = do
   recordError dopos ("do block must end with expression at " ++ show m)
-  t <- newTypeError dopos
+  t <- getErrorTyVar dopos
   return ([],t)
 
 inferStmts m dopos ctx (StmtBind spos pat mc e : more) = do
   (pt, pat') <- inferPattern pat
-  e' <- checkE m e (tBlock dopos ctx pt)
+  e' <- checkExpr m e (tBlock dopos ctx pt)
   mc' <- case mc of
     Nothing -> return ctx
     Just c  -> do c' <- checkKind c
@@ -958,8 +958,8 @@ inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
 -- potentially updates the expression.)
 generalize :: [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
 generalize es0 ts0 =
-  do es <- appSubstM es0
-     ts <- appSubstM ts0
+  do es <- applyCurrentSubst es0
+     ts <- applyCurrentSubst ts0
 
      envUnify <- unifyVarsInEnv
      envNamed <- namedVarsInEnv
@@ -989,7 +989,7 @@ generalize es0 ts0 =
 inferDecl :: Decl -> TI Decl
 inferDecl (Decl pos pat _ e) = do
   let n = patternLName pat
-  (e',t) <- inferE (n, e)
+  (e',t) <- inferExpr (n, e)
   checkPattern n t pat
   ~[(e1,s)] <- generalize [e'] [t]
   return (Decl pos pat (Just s) e1)
@@ -1007,7 +1007,7 @@ inferRecDecls ds =
      (_ts, pats') <- unzip <$> mapM inferPattern pats
      (es, ts) <- fmap unzip
                  $ flip (foldr withPattern) pats'
-                 $ sequence [ inferE (patternLName p, e)
+                 $ sequence [ inferExpr (patternLName p, e)
                             | Decl _pos p _ e <- ds
                             ]
      sequence_ $ zipWith (checkPattern (patternLName pat)) ts pats'
