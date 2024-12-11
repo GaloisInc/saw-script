@@ -1,0 +1,12 @@
+ Loading file "err002.saw"
+ err002.saw:5:44-5:57: Type mismatch.
+    Mismatch of type constructors. Expected: String but got ([])
+    internal:1:1-1:7: The type String arises from this type annotation
+    err002.saw:5:44-5:57: The type [LLVMType] arises from the type of this term
+    
+    Expected: String
+    Found:    [LLVMType]
+    
+    within "spec" (err002.saw:4:5-4:9)
+
+FAILED

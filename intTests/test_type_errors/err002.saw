@@ -1,0 +1,8 @@
+// llvm_alias takes a string, pass it a list of types instead
+// (user meant to use llvm_struct_type and used llvm_struct,
+// which is a deprecated name for llvm_alias)
+let spec = do {
+   input <- llvm_fresh_var "x" (llvm_alias [llvm_int 32]);
+   llvm_execute_func [llvm_term input];
+};
+
