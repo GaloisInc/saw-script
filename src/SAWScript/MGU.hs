@@ -37,6 +37,10 @@ import SAWScript.AST
 import SAWScript.Panic (panic)
 import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
+-- should probably move this to AST
+tUnit :: Pos -> Type
+tUnit pos = tTuple pos []
+
 
 ------------------------------------------------------------
 -- UnifyVars, NamedVars {{{
@@ -537,39 +541,76 @@ resolveUnificationVar pos i t =
 -- (to add to the cumulative substitution we build up) that makes them
 -- the same.
 mgu :: Type -> Type -> Either FailMGU Subst
-mgu (TyUnifyVar _ i) (TyUnifyVar _ j) | i == j = return emptySubst
-mgu (TyUnifyVar pos i) t2 = resolveUnificationVar pos i t2
-mgu t1 (TyUnifyVar pos i) = resolveUnificationVar pos i t1
-mgu r1@(TyRecord _ ts1) r2@(TyRecord _ ts2)
-  | M.keys ts1 /= M.keys ts2 =
-      failMGU "Record field names mismatch." r1 r2
-  | otherwise = case mgus (M.elems ts1) (M.elems ts2) of
-      Right result -> Right result
-      Left msgs -> Left $ failMGUAdd msgs r1 r2
-mgu c1@(TyCon _ tc1 ts1) c2@(TyCon _ tc2 ts2)
-  | tc1 == tc2 = case mgus ts1 ts2 of
-      Right result -> Right result
-      Left msgs ->
-        case tc1 of
-          FunCon -> Left $ failMGUAddFun msgs c1 c2
-          _ -> Left $ failMGUAdd msgs c1 c2
-  | otherwise = case tc1 of
-      FunCon ->
-        failMGU "Term is not a function. (Maybe a function is applied to too many arguments?)" c1 c2
-      _ ->
-        failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2) c1 c2
-mgu (TyVar _ a) (TyVar _ b)
-  | a == b = return emptySubst
-mgu t1 t2 = failMGU "Mismatch of types." t1 t2
+mgu t1 t2 = case (t1, t2) of
 
+  (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
+      -- same unification var, nothing to do
+      return emptySubst
+
+  (TyUnifyVar pos i, _) ->
+      -- one side is a unification var, resolve it
+      resolveUnificationVar pos i t2
+
+  (_, TyUnifyVar pos i) ->
+      -- one side is a unification var, resolve it
+      resolveUnificationVar pos i t1
+
+  (TyRecord _ ts1, TyRecord _ ts2) | M.keys ts1 /= M.keys ts2 ->
+      -- records with different keys
+      failMGU "Record field names mismatch." t1 t2
+
+  (TyRecord _ ts1, TyRecord _ ts2) ->
+      -- records with the same field names, try unifying the field types
+      case mgus (M.elems ts1) (M.elems ts2) of
+        Right result -> Right result
+        Left msgs -> Left $ failMGUAdd msgs t1 t2
+
+  (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 ->
+      -- same type constructor, unify the args
+      case mgus ts1 ts2 of
+        Right result -> Right result
+        Left msgs ->
+          -- oops, didn't work. handle functions specially for
+          -- nicer error reporting
+          case tc1 of
+            FunCon -> Left $ failMGUAddFun msgs t1 t2
+            _ -> Left $ failMGUAdd msgs t1 t2
+
+  (TyCon _ tc1 _ts1, TyCon _ tc2 _ts2) ->
+      -- Wrong type constructors
+      case tc1 of
+        FunCon ->
+          failMGU ("Term is not a function. (Maybe a function is applied " ++
+                   "to too many arguments?)") t1 t2
+        _ ->
+          failMGU ("Mismatch of type constructors. Expected: " ++ pShow tc1 ++
+                   " but got " ++ pShow tc2) t1 t2
+
+  (TyVar _ a, TyVar _ b) | a == b ->
+      -- Same named variable
+      return emptySubst
+
+  (_, _) ->
+      -- Did not work
+      failMGU "Mismatch of types." t1 t2
+
+-- Run mgu on two lists of types.
 mgus :: [Type] -> [Type] -> Either FailMGU Subst
-mgus [] [] = return emptySubst
-mgus (t1:ts1) (t2:ts2) = do
-  s <- mgu t1 t2
-  s' <- mgus (map (appSubst s) ts1) (map (appSubst s) ts2)
-  return (concatSubst s' s)
-mgus ts1 ts2 =
-  failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
+mgus t1s t2s = case (t1s, t2s) of
+    ([], []) ->
+        return emptySubst
+    (t1 : t1s', t2 : t2s') -> do
+        -- unify the first types
+        s <- mgu t1 t2
+        -- apply that substitution and then recurse
+        s' <- mgus (map (appSubst s) t1s') (map (appSubst s) t2s')
+        return (concatSubst s' s)
+    (_, _) ->
+      -- XXX this is no good, it will always print one of the lengths as 0!
+      -- (also, note that this is only reachable for type constructor args
+      -- and not function args)
+      failMGU' $ "Wrong number of arguments. Expected " ++ show (length t1s) ++
+                 " but got " ++ show (length t2s)
 
 --
 -- Unify two types.
@@ -886,67 +927,71 @@ withTypedef n t m =
       in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
     $ unTI m
 
+-- Check if a statement is an allowable one for the end of a do-block.
+-- The last thing in a do-block should be an expression, which manifests
+-- as a bind-statement of the form _ <- e.
+legalEndOfBlock :: Stmt -> Bool
+legalEndOfBlock s = case s of
+    StmtBind _spos (PWild _patpos _mt) _mc _e -> True
+    _ -> False
+
 -- type inference for statements
 --
 -- the passed-in position should be the position for the whole statement block
--- the first type argument (ctx) is ... XXX
+-- the first type argument (ctx) is the monad type for the block
 inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
+inferStmts ln blockpos ctx stmts = case stmts of
+    [] -> do
+        recordError blockpos ("do block must include at least one " ++
+                              "expression at " ++ show ln)
+        t <- getErrorTyVar blockpos
+        return ([], t)
 
-inferStmts m pos _ctx [] = do
-  recordError pos ("do block must include at least one expression at " ++ show m)
-  t <- getErrorTyVar pos
-  return ([], t)
-
-inferStmts m dopos ctx [StmtBind spos (PWild patpos mt) mc e] = do
-  t  <- maybe (getFreshTyVar patpos) return mt
-  e' <- checkExpr m e (tBlock dopos ctx t)
-  mc' <- case mc of
-    Nothing -> return ctx
-    Just ty  -> do ty' <- checkKind ty
-                   -- dholland 20240628 are the type arguments backwards? thought
-                   -- so at first but now I'm not sure. Also I'm not sure this is
-                   -- the right position to use. Where does mc come from? Is it a
-                   -- source annotation? If so it should probably have its own
-                   -- position. XXX
-                   unify m ty (getPos e) ctx -- TODO: should this be ty'?
-                   return ty'
-  return ([StmtBind spos (PWild patpos (Just t)) (Just mc') e'],t)
-
-inferStmts m dopos _ [_] = do
-  recordError dopos ("do block must end with expression at " ++ show m)
-  t <- getErrorTyVar dopos
-  return ([],t)
-
-inferStmts m dopos ctx (StmtBind spos pat mc e : more) = do
-  (pt, pat') <- inferPattern pat
-  e' <- checkExpr m e (tBlock dopos ctx pt)
-  mc' <- case mc of
-    Nothing -> return ctx
-    Just c  -> do c' <- checkKind c
-                  -- XXX same as above
-                  unify m c (getPos e) ctx
-                  return c'
-  (more', t') <- withPattern pat' $ inferStmts m dopos ctx more
-
-  return (StmtBind spos pat' (Just mc') e' : more', t')
-
-inferStmts m dopos ctx (StmtLet spos dg : more) = do
-  dg' <- inferDeclGroup dg
-  (more', t) <- withDeclGroup dg' (inferStmts m dopos ctx more)
-  return (StmtLet spos dg' : more', t)
-
-inferStmts m dopos ctx (StmtCode spos s : more) = do
-  (more',t) <- inferStmts m dopos ctx more
-  return (StmtCode spos s : more', t)
-
-inferStmts m dopos ctx (StmtImport spos imp : more) = do
-  (more', t) <- inferStmts m dopos ctx more
-  return (StmtImport spos imp : more', t)
-
-inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
-  withTypedef name ty $ do
-    (more', t) <- inferStmts m dopos ctx more
-    return (StmtTypedef spos name ty : more', t)
+    s : more -> do
+        (wrapper, s', t) <- case s of
+            StmtBind spos pat mc e -> do
+                (pt, pat') <- inferPattern pat
+                e' <- checkExpr ln e (tBlock blockpos ctx pt)
+                mc' <- case mc of
+                    Nothing -> return ctx
+                    Just ty  -> do
+                        ty' <- checkKind ty
+                        -- dholland 20240628 are the type arguments
+                        -- backwards? thought so at first but now I'm
+                        -- not sure. Also I'm not sure this is the
+                        -- right position to use. Where does mc come
+                        -- from? Is it a source annotation? If so it
+                        -- should probably have its own position. XXX
+                        unify ln ty (getPos e) ctx -- TODO: should this be ty'?
+                        return ty'
+                let s' = StmtBind spos pat' (Just mc') e'
+                let wrapper = withPattern pat'
+                return (wrapper, s', pt)
+            StmtLet spos dg -> do
+                dg' <- inferDeclGroup dg
+                let s' = StmtLet spos dg'
+                let wrapper = withDeclGroup dg'
+                return (wrapper, s', tUnit $ PosInferred InfTerm spos)
+            StmtCode spos _ ->
+                return (id, s, tUnit $ PosInferred InfTerm spos)
+            StmtImport spos _ ->
+                return (id, s, tUnit $ PosInferred InfTerm spos)
+            StmtTypedef spos name ty -> do
+                -- XXX how about a checkKind ty here?
+                let wrapper = withTypedef name ty
+                return (wrapper, s, tUnit $ PosInferred InfTerm spos)
+        case more of
+            [] | legalEndOfBlock s ->
+                return ([s'], t)
+            [] -> do
+                recordError blockpos ("do block must end with expression at " ++
+                                      show ln)
+                t' <- getErrorTyVar blockpos
+                -- XXX this has been throwing away s' but probably shouldn't
+                return ([], t')
+            _ -> do
+               (more', t') <- wrapper $ inferStmts ln blockpos ctx more
+               return (s' : more', t')
 
 --
 -- decls
