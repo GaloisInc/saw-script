@@ -38,12 +38,16 @@ import SAWScript.Panic (panic)
 import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
 
--- UnifyVars {{{
+------------------------------------------------------------
+-- UnifyVars, NamedVars {{{
 
+--
 -- unifyVars is a type-class-polymorphic function for extracting
 -- unification vars from a type or type schema. It returns a set of
 -- TypeIndex (TypeIndex is just Integer) manifested as a map from
 -- those TypeIndexes to their positions/provenance.
+--
+
 class UnifyVars t where
   unifyVars :: t -> M.Map TypeIndex Pos
 
@@ -63,14 +67,13 @@ instance UnifyVars Type where
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
 
--- }}}
-
--- NamedVars {{{
-
+--
 -- namedVars is a type-class-polymorphic function for extracting named
 -- type variables from a type or type schema. It returns a set of Name
 -- (Name is just String) manifested as a map from those Names to their
 -- positions/provenance.
+--
+
 class NamedVars t where
   namedVars :: t -> M.Map Name Pos
 
@@ -93,10 +96,33 @@ instance NamedVars Schema where
 
 -- }}}
 
--- Subst {{{
 
+------------------------------------------------------------
+-- Substitutions {{{
+
+-- Subst is the type of a substitution map for unification vars.
 newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
 
+-- Union for substitution maps
+--
+-- XXX: this knows that in the uses below the right substitution is the
+-- older/preexisting one. That probably shouldn't be silently baked in.
+--
+-- XXX: we apply the left substitution into the types in the right
+-- substitution. I expect this in pursuit of an invariant where any
+-- unification variables existing in the right-hand sides of the
+-- substitution aren't themselves defined by the substitution, so we
+-- don't have to recurse into the right-hand sides later when applying
+-- the substitution. However, this assumes that whatever is on the
+-- left-hand side doesn't already violate this invariant. We can check
+-- this with reasonable accuracy since we have right here all the ways
+-- to create a Subst (and we can check that there aren't any others
+-- hidden below)... and we find that while emptySubst is obviously ok,
+-- and singletonSubst is ok (an attempt to create a singleton
+-- substitution that refers to itself will fail the occurs check right
+-- before calling singletonSubst), there doesn't seem to be any such
+-- assurance for substFromList. I'm not sure if this is actually a
+-- problem or not but it should probably be looked into at some point.
 (@@) :: Subst -> Subst -> Subst
 s2@(Subst m2) @@ (Subst m1) = Subst $ m1' `M.union` m2
   where
@@ -108,12 +134,13 @@ emptySubst = Subst M.empty
 singletonSubst :: TypeIndex -> Type -> Subst
 singletonSubst tv t = Subst $ M.singleton tv t
 
-listSubst :: [(TypeIndex, Type)] -> Subst
-listSubst = Subst . M.fromList
+substFromList :: [(TypeIndex, Type)] -> Subst
+substFromList entries = Subst $ M.fromList entries
 
--- }}}
-
--- AppSubst {{{
+--
+-- appSubst is a type-class-polymorphic function for applying a
+-- substitution (of numbered unification vars) to AST elements.
+--
 
 class AppSubst t where
   appSubst :: Subst -> t -> t
@@ -183,7 +210,20 @@ instance AppSubst Schema where
 
 -- }}}
 
+
+------------------------------------------------------------
 -- Instantiate {{{
+
+--
+-- instantiate is a typeclass-polymorphic function for substituting
+-- named type variables (such as those declared with typedef) in a
+-- Type.
+--
+-- Note: instantiate is exposed from this module and reused by the
+-- interpreter as part of its handling of typedefs during execution.
+-- XXX: Should probably come up with a clearer name. "instantiate"
+-- could mean just about anything...
+--
 
 class Instantiate t where
   -- | @instantiate m x@ applies the map @m@ to type variables in @x@.
@@ -204,18 +244,42 @@ instance Instantiate Type where
 
 -- }}}
 
--- TI Monad {{{
+
+------------------------------------------------------------
+-- Pass context {{{
+
+--
+-- The monad for this pass is "TI", which is composed of a "readonly"
+-- part (which is not constant or readonly, but where changes are
+-- scoped by the recursive structure of the code) and a read-write
+-- part that accumulates as we move through the code.
+--
+-- XXX: the "readonly" part is used to implement scoping, which is
+-- fine in theory, but in practice because we have declarations that
+-- update the environment, the recursive structure of the code does
+-- not naturally match the scoping. The result is that the recursive
+-- structure of the code has been twisted around to make it work;
+-- that isn't desirable and the organization should probably be
+-- revised.
+--
+-- Anyhow, the elements of the context are:
+--    varEnv: the variable typing environment (variable name to type scheme)
+--    typedefEnv: typedefs (typedef name to its expansion type)
+--    nextTypeIndex: the next fresh unification var number
+--    subst: the unification var substitution we're accumulating
+--    errors: any type errors we've generated so far
+--
 
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
                         deriving (Functor,Applicative,Monad,MonadReader RO)
 
 data RO = RO
-  { typeEnv :: M.Map (Located Name) Schema
+  { varEnv :: M.Map (Located Name) Schema
   , typedefEnv :: M.Map Name Type
   }
 
 data RW = RW
-  { nameGen :: TypeIndex
+  { nextTypeIndex :: TypeIndex
   , subst   :: Subst
   , errors  :: [(Pos, String)]
   }
@@ -223,13 +287,14 @@ data RW = RW
 emptyRW :: RW
 emptyRW = RW 0 emptySubst []
 
-newTypeIndex :: TI TypeIndex
-newTypeIndex = do
+-- Get a fresh unification var number.
+getFreshTypeIndex :: TI TypeIndex
+getFreshTypeIndex = do
   rw <- TI get
-  TI $ put $ rw { nameGen = nameGen rw + 1 }
-  return $ nameGen rw
+  TI $ put $ rw { nextTypeIndex = nextTypeIndex rw + 1 }
+  return $ nextTypeIndex rw
 
--- Construct a new type variable.
+-- Construct a fresh type variable.
 --
 -- Collect the position that prompted us to make it; for example, if
 -- we're the element type of an empty list we get the position of the
@@ -239,7 +304,7 @@ newTypeIndex = do
 -- this will be the position that gets attached to the quantifier
 -- binding in generalize.
 newType :: Pos -> TI Type
-newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> newTypeIndex
+newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> getFreshTypeIndex
 
 -- Construct a new type variable to use as a placeholder after an
 -- error occurs. For now this is the same as other fresh type
@@ -248,20 +313,26 @@ newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> newTypeIndex
 newTypeError :: Pos -> TI Type
 newTypeError pos = newType pos
 
+-- Add an error message.
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
   TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
 
+-- Apply the current substitution with appSubst.
 appSubstM :: AppSubst t => t -> TI t
 appSubstM t = do
   s <- TI $ gets subst
   return $ appSubst s t
 
+-- Apply the current typedef collection with instantiate.
 instantiateM :: Instantiate t => t -> TI t
 instantiateM t = do
   s <- TI $ asks typedefEnv
   return $ instantiate s t
 
+-- Get the unification vars that are used in the current variable typing
+-- environment.
+--
 -- FIXME: This function may miss type variables that occur in the type
 -- of a binding that has been shadowed by another value with the same
 -- name. This could potentially cause a run-time type error if the
@@ -269,14 +340,16 @@ instantiateM t = do
 -- wait to fix it until someone finds a sawscript program that breaks.
 unifyVarsInEnv :: TI (M.Map TypeIndex Pos)
 unifyVarsInEnv = do
-  env <- TI $ asks typeEnv
+  env <- TI $ asks varEnv
   let ss = M.elems env
   ss' <- mapM appSubstM ss
   return $ unifyVars ss'
 
+-- Get the named typedef vars that occur in the current variable typing
+-- environment.
 namedVarsInEnv :: TI (M.Map Name Pos)
 namedVarsInEnv = do
-  env <- TI $ asks typeEnv
+  env <- TI $ asks varEnv
   let ss = M.elems env
   ss' <- mapM appSubstM ss
   return $ namedVars ss'
@@ -302,6 +375,7 @@ patternLName pat0 =
              (pos : _, _) -> Left pos
              _ -> Left allpos
 
+-- Get all the bindings in a pattern.
 patternBindings :: Pattern -> [(Located Name, Maybe Type)]
 patternBindings pat =
   case pat of
@@ -311,7 +385,9 @@ patternBindings pat =
 
 -- }}}
 
--- Most General Unifier {{{
+
+------------------------------------------------------------
+-- Unification {{{
 
 --
 -- Error reporting.
@@ -430,10 +506,17 @@ ppFailMGU :: FailMGU -> [String]
 ppFailMGU (FailMGU start eflines lastfunlines) =
   start ++ eflines ++ lastfunlines
 
+-- Guts of unification.
+--
+-- "mgu" stands for "most general unifier".
+--
+-- Given two types, produce either a failure report or a substitution
+-- (to add to the cumulative substitution we build up) that makes them
+-- the same.
 mgu :: Type -> Type -> Either FailMGU Subst
 mgu (TyUnifyVar _ i) (TyUnifyVar _ j) | i == j = return emptySubst
-mgu (TyUnifyVar pos i) t2 = bindVar pos i t2
-mgu t1 (TyUnifyVar pos i) = bindVar pos i t1
+mgu (TyUnifyVar pos i) t2 = resolveUnificationVar pos i t2
+mgu t1 (TyUnifyVar pos i) = resolveUnificationVar pos i t1
 mgu r1@(TyRecord _ ts1) r2@(TyRecord _ ts2)
   | M.keys ts1 /= M.keys ts2 =
       failMGU "Record field names mismatch." r1 r2
@@ -465,9 +548,20 @@ mgus (t1:ts1) (t2:ts2) = do
 mgus ts1 ts2 =
   failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
 
--- Does not handle the case where t _is_ TyUnifyVar i; the caller handles that
-bindVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
-bindVar pos i t =
+-- We've found a substitution for unification var i.
+--
+-- Create the substitution, but first check that this doesn't result
+-- in an invalid type.
+--
+-- Does not handle the case where t _is_ TyUnifyVar i; the caller
+-- handles that.
+--
+-- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here, which is
+-- fine as far as it goes but there doesn't seem to be any logic to
+-- prohibit also resolving TyUnifyVar j to TyUnifyVar i and creating
+-- cycles.
+resolveUnificationVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
+resolveUnificationVar pos i t =
   case M.lookup i $ unifyVars t of
      Just otherpos ->
        -- FIXME/XXX: this error message is better than the one that was here before
@@ -476,10 +570,6 @@ bindVar pos i t =
                   " appears within the type at " ++ show pos
      Nothing ->
        return (singletonSubst i t)
-
--- }}}
-
--- Unification {{{
 
 --
 -- Unify two types.
@@ -537,6 +627,8 @@ unify m t1 pos t2 = do
 
 -- }}}
 
+
+------------------------------------------------------------
 -- Main recursive pass {{{
 
 type OutExpr = Expr
@@ -554,36 +646,64 @@ inferField m (n,e) = do
   (e',t) <- inferE (m,e)
   return ((n,e'),(n,t))
 
-bindSchema :: Located Name -> Schema -> TI a -> TI a
-bindSchema n s m = TI $ local (\ro -> ro { typeEnv = M.insert n s $ typeEnv ro })
-  $ unTI m
+-- wrap m with a type for x
+withVar :: Located Name -> Schema -> TI a -> TI a
+withVar x s m =
+  TI $ local (\ro -> ro { varEnv = M.insert x s $ varEnv ro }) $ unTI m
 
-bindSchemas :: [(Located Name, Schema)] -> TI a -> TI a
-bindSchemas bs m = foldr (uncurry bindSchema) m bs
+-- wrap m with types for a list of vars
+withVars :: [(Located Name, Schema)] -> TI a -> TI a
+withVars bindings m = foldr (uncurry withVar) m bindings
 
-bindPattern :: Pattern -> TI a -> TI a
-bindPattern pat = bindSchemas bs
-  where bs = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
+-- wrap m with types for all the vars in a pattern
+--
+-- (note that the pattern should have already been processed so it
+-- contains types; hence the irrefutable Just t)
+withPattern :: Pattern -> TI a -> TI a
+withPattern pat = withVars bindings
+  where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
-bindPatternSchema :: Pattern -> Schema -> TI a -> TI a
-bindPatternSchema pat s@(Forall vs t) m =
+-- wrap m with types for all the vars in a pattern, using the
+-- passed-in schema to produce the types and ignoring the types
+-- already loaded into the pattern.
+--
+-- XXX: is that what we want? should probably assert that the schema
+-- matches the types in the pattern, unless the pattern hasn't already
+-- been checked yet, and that seems like it would be a bug.
+--
+-- Note that if the pattern is a tuple and the schema is not a tuple
+-- type, we do nothing. Presumably in this case a type error has
+-- already been generated and we don't need another one? But it would
+-- probably be a good idea to check up on that. XXX
+withPatternSchema :: Pattern -> Schema -> TI a -> TI a
+withPatternSchema pat s@(Forall vs t) m =
   case pat of
     PWild _ _ -> m
-    PVar _ n _ -> bindSchema n s m
+    PVar _ x _ -> withVar x s m
     PTuple _ ps ->
       case t of
         TyCon _pos (TupleCon _) ts -> foldr ($) m
-          [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
+          [ withPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
 
-bindDecl :: Decl -> TI a -> TI a
-bindDecl (Decl _ _ Nothing _) m = m
-bindDecl (Decl _ p (Just s) _) m = bindPatternSchema p s m
+-- wrap m with types for the vars in a declaration.
+--
+-- Do nothing if there's no type schema in this declaration yet.
+withDecl :: Decl -> TI a -> TI a
+withDecl (Decl _ _ Nothing _) m = m
+withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
 
-bindDeclGroup :: DeclGroup -> TI a -> TI a
-bindDeclGroup (NonRecursive d) m = bindDecl d m
-bindDeclGroup (Recursive ds) m = foldr bindDecl m ds
+-- wrap m with types for the vars in a declgroup.
+withDeclGroup :: DeclGroup -> TI a -> TI a
+withDeclGroup (NonRecursive d) m = withDecl d m
+withDeclGroup (Recursive ds) m = foldr withDecl m ds
 
+--
+-- Infer the type for an expression.
+--
+-- The LName is the context name passed to unify, which isn't generally
+-- useful and should probably be removed.
+--
 inferE :: (LName, Expr) -> TI (OutExpr,Type)
 inferE (ln, expr) = case expr of
   Bool pos b    -> return (Bool pos b, tBool (PosInferred InfTerm pos))
@@ -663,7 +783,7 @@ inferE (ln, expr) = case expr of
        return (TLookup pos e1 i, elTy)
 
   Var x ->
-    do env <- TI $ asks typeEnv
+    do env <- TI $ asks varEnv
        case M.lookup x env of
          Nothing -> do
            recordError (getPos x) $ unlines
@@ -684,8 +804,8 @@ inferE (ln, expr) = case expr of
            return (Var x, t')
 
   Function pos pat body ->
-    do (pt, pat') <- newTypePattern pat
-       (body', t) <- bindPattern pat' $ inferE (ln, body)
+    do (pt, pat') <- inferPattern pat
+       (body', t) <- withPattern pat' $ inferE (ln, body)
        return (Function pos pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
 
   Application pos f v ->
@@ -697,7 +817,7 @@ inferE (ln, expr) = case expr of
 
   Let pos dg body ->
     do dg' <- inferDeclGroup dg
-       (body', t) <- bindDeclGroup dg' (inferE (ln, body))
+       (body', t) <- withDeclGroup dg' (inferE (ln, body))
        return (Let pos dg' body', t)
 
   TSig _pos e t ->
@@ -712,7 +832,10 @@ inferE (ln, expr) = case expr of
        e3' <- checkE ln e3 t
        return (IfThenElse pos e1' e2' e3', t)
 
-
+--
+-- Check the type of an expr, by inferring and then unifying the
+-- result.
+--
 checkE :: LName -> Expr -> Type -> TI OutExpr
 checkE m e t = do
   (e',t') <- inferE (m,e)
@@ -723,10 +846,9 @@ checkE m e t = do
 -- patterns
 --
 
--- Typecheck a pattern and produce fresh type variables as needed.
--- FUTURE: this function should get renamed.
-newTypePattern :: Pattern -> TI (Type, Pattern)
-newTypePattern pat =
+-- Infer types for a pattern, producing fresh type variables as needed.
+inferPattern :: Pattern -> TI (Type, Pattern)
+inferPattern pat =
   case pat of
     PWild pos mt ->
       do t <- maybe (newType pos) return mt
@@ -735,20 +857,28 @@ newTypePattern pat =
       do t <- maybe (newType pos) return mt
          return (t, PVar pos x (Just t))
     PTuple pos ps ->
-      do (ts, ps') <- unzip <$> mapM newTypePattern ps
+      do (ts, ps') <- unzip <$> mapM inferPattern ps
          return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
 
-constrainTypeWithPattern :: LName -> Type -> Pattern -> TI ()
-constrainTypeWithPattern ln t pat =
-  do (pt, _pat') <- newTypePattern pat
+-- Check the type of a pattern, by inferring and then unifying the
+-- result.
+--
+-- XXX: it doesn't seem like there's any guarantee that fresh tyvars
+-- produced by inferPattern will necessarily be resolved by the
+-- unification, and therefore it seems that dropping the possibly
+-- updated pattern is a bug.
+checkPattern :: LName -> Type -> Pattern -> TI ()
+checkPattern ln t pat =
+  do (pt, _pat') <- inferPattern pat
      unify ln t (getPos pat) pt
 
 --
 -- statements
 --
 
-bindTypedef :: LName -> Type -> TI a -> TI a
-bindTypedef n t m =
+-- wrap m with a typedef binding
+withTypedef :: LName -> Type -> TI a -> TI a
+withTypedef n t m =
   TI $
   local
     (\ro ->
@@ -756,6 +886,8 @@ bindTypedef n t m =
       in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
     $ unTI m
 
+-- type inference for statements
+--
 -- the passed-in position should be the position for the whole statement block
 -- the first type argument (ctx) is ... XXX
 inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
@@ -786,7 +918,7 @@ inferStmts m dopos _ [_] = do
   return ([],t)
 
 inferStmts m dopos ctx (StmtBind spos pat mc e : more) = do
-  (pt, pat') <- newTypePattern pat
+  (pt, pat') <- inferPattern pat
   e' <- checkE m e (tBlock dopos ctx pt)
   mc' <- case mc of
     Nothing -> return ctx
@@ -794,13 +926,13 @@ inferStmts m dopos ctx (StmtBind spos pat mc e : more) = do
                   -- XXX same as above
                   unify m c (getPos e) ctx
                   return c'
-  (more', t') <- bindPattern pat' $ inferStmts m dopos ctx more
+  (more', t') <- withPattern pat' $ inferStmts m dopos ctx more
 
   return (StmtBind spos pat' (Just mc') e' : more', t')
 
 inferStmts m dopos ctx (StmtLet spos dg : more) = do
   dg' <- inferDeclGroup dg
-  (more', t) <- bindDeclGroup dg' (inferStmts m dopos ctx more)
+  (more', t) <- withDeclGroup dg' (inferStmts m dopos ctx more)
   return (StmtLet spos dg' : more', t)
 
 inferStmts m dopos ctx (StmtCode spos s : more) = do
@@ -812,7 +944,7 @@ inferStmts m dopos ctx (StmtImport spos imp : more) = do
   return (StmtImport spos imp : more', t)
 
 inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
-  bindTypedef name ty $ do
+  withTypedef name ty $ do
     (more', t) <- inferStmts m dopos ctx more
     return (StmtTypedef spos name ty : more', t)
 
@@ -820,6 +952,10 @@ inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
 -- decls
 --
 
+-- Create a type schema for a declaration out of its free vars.
+--
+-- (This creates names for any remaining unification vars, so
+-- potentially updates the expression.)
 generalize :: [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
 generalize es0 ts0 =
   do es <- appSubstM es0
@@ -839,7 +975,7 @@ generalize es0 ts0 =
      let is' = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is ]
 
      -- build the substitution
-     let s = listSubst [ (i, TyVar pos n) | (i, pos, n) <- is' ]
+     let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is' ]
 
      -- get the names for the Forall
      let inames = [ (pos, n) | (_i, pos, n) <- is' ]
@@ -849,14 +985,16 @@ generalize es0 ts0 =
 
      return $ zipWith mk es ts
 
+-- Type inference for a declaration.
 inferDecl :: Decl -> TI Decl
 inferDecl (Decl pos pat _ e) = do
   let n = patternLName pat
   (e',t) <- inferE (n, e)
-  constrainTypeWithPattern n t pat
+  checkPattern n t pat
   ~[(e1,s)] <- generalize [e'] [t]
   return (Decl pos pat (Just s) e1)
 
+-- Type inference for a system of mutually recursive declarations.
 inferRecDecls :: [Decl] -> TI [Decl]
 inferRecDecls ds =
   do let pats = map dPat ds
@@ -866,18 +1004,19 @@ inferRecDecls ds =
              [] -> panic
                      "inferRecDecls"
                      ["Empty list of declarations in recursive group"]
-     (_ts, pats') <- unzip <$> mapM newTypePattern pats
+     (_ts, pats') <- unzip <$> mapM inferPattern pats
      (es, ts) <- fmap unzip
-                 $ flip (foldr bindPattern) pats'
+                 $ flip (foldr withPattern) pats'
                  $ sequence [ inferE (patternLName p, e)
                             | Decl _pos p _ e <- ds
                             ]
-     sequence_ $ zipWith (constrainTypeWithPattern (patternLName pat)) ts pats'
+     sequence_ $ zipWith (checkPattern (patternLName pat)) ts pats'
      ess <- generalize es ts
      return [ Decl pos p (Just s) e1
             | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
             ]
 
+-- Type inference for a decl group.
 inferDeclGroup :: DeclGroup -> TI DeclGroup
 inferDeclGroup (NonRecursive d) = do
   d' <- inferDecl d
@@ -891,33 +1030,47 @@ inferDeclGroup (Recursive ds) = do
 -- types
 --
 
+-- kind checking. or not.
+--
 -- XXX: TODO
 checkKind :: Type -> TI Type
 checkKind = return
 
-
 -- }}}
 
--- Main interface {{{
 
+------------------------------------------------------------
+-- External interface {{{
+
+-- Run the TI monad.
 runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [(Pos, String)])
 runTIWithEnv env tenv m = (a, subst rw, errors rw)
   where
   m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
 
+-- Run the TI monad and interpret/collect the results
+-- (failure if any errors were produced)
 evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [(Pos, String)] a
 evalTIWithEnv env tenv m =
   case runTIWithEnv env tenv m of
     (res, _, []) -> Right res
     (_, _, errs) -> Left errs
 
+-- Check a single declaration. (This is an external interface.)
+--
+-- The first two arguments are the starting variable and typedef
+-- environments to use.
 checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either [(Pos, String)] Decl
 checkDecl env tenv decl =
   case evalTIWithEnv env tenv (inferDecl decl) of
     Left errs -> Left errs
     Right decl' -> Right decl'
 
+-- Check a declgroup. (This is an external interface.)
+--
+-- The first two arguments are the starting variable and typedef
+-- environments to use.
 checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either [(Pos, String)] DeclGroup
 checkDeclGroup env tenv dg =
   case evalTIWithEnv env tenv (inferDeclGroup dg) of
