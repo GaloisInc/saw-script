@@ -849,12 +849,13 @@ inferExpr (ln, expr) = case expr of
        (body', t) <- withPattern pat' $ inferExpr (ln, body)
        return (Function pos pat' body', tFun (PosInferred InfContext (getPos body)) pt t)
 
-  Application pos f v ->
-    do (v',fv) <- inferExpr (ln,v)
-       t <- getFreshTyVar pos
-       let ft = tFun (PosInferred InfContext $ getPos f) fv t
-       f' <- checkExpr ln f ft
-       return (Application pos f' v', t)
+  Application pos f arg ->
+    do argtype <- getFreshTyVar pos
+       rettype <- getFreshTyVar pos
+       let ftype = tFun (PosInferred InfContext $ getPos f) argtype rettype
+       f' <- checkExpr ln f ftype
+       arg' <- checkExpr ln arg argtype
+       return (Application pos f' arg', rettype)
 
   Let pos dg body ->
     do dg' <- inferDeclGroup dg
