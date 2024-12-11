@@ -506,6 +506,29 @@ ppFailMGU :: FailMGU -> [String]
 ppFailMGU (FailMGU start eflines lastfunlines) =
   start ++ eflines ++ lastfunlines
 
+-- We've found a substitution for unification var i.
+--
+-- Create the substitution, but first check that this doesn't result
+-- in an invalid type.
+--
+-- Does not handle the case where t _is_ TyUnifyVar i; the caller
+-- handles that.
+--
+-- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here, which is
+-- fine as far as it goes but there doesn't seem to be any logic to
+-- prohibit also resolving TyUnifyVar j to TyUnifyVar i and creating
+-- cycles.
+resolveUnificationVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
+resolveUnificationVar pos i t =
+  case M.lookup i $ unifyVars t of
+     Just otherpos ->
+       -- FIXME/XXX: this error message is better than the one that was here before
+       -- but still lacks a certain something
+       failMGU' $ "Occurs check failure: the type at " ++ show otherpos ++
+                  " appears within the type at " ++ show pos
+     Nothing ->
+       return (singletonSubst i t)
+
 -- Guts of unification.
 --
 -- "mgu" stands for "most general unifier".
@@ -547,29 +570,6 @@ mgus (t1:ts1) (t2:ts2) = do
   return (s' @@ s)
 mgus ts1 ts2 =
   failMGU' $ "Wrong number of arguments. Expected " ++ show (length ts1) ++ " but got " ++ show (length ts2)
-
--- We've found a substitution for unification var i.
---
--- Create the substitution, but first check that this doesn't result
--- in an invalid type.
---
--- Does not handle the case where t _is_ TyUnifyVar i; the caller
--- handles that.
---
--- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here, which is
--- fine as far as it goes but there doesn't seem to be any logic to
--- prohibit also resolving TyUnifyVar j to TyUnifyVar i and creating
--- cycles.
-resolveUnificationVar :: Pos -> TypeIndex -> Type -> Either FailMGU Subst
-resolveUnificationVar pos i t =
-  case M.lookup i $ unifyVars t of
-     Just otherpos ->
-       -- FIXME/XXX: this error message is better than the one that was here before
-       -- but still lacks a certain something
-       failMGU' $ "Occurs check failure: the type at " ++ show otherpos ++
-                  " appears within the type at " ++ show pos
-     Nothing ->
-       return (singletonSubst i t)
 
 --
 -- Unify two types.
