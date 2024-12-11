@@ -163,6 +163,11 @@ instance Positioned Pattern where
   getPos (PVar pos _ _) = pos
   getPos (PTuple pos _) = pos
 
+-- The 3rd argument of StmtBind is not the type of the value (that
+-- appears in the Pattern) but the monad ("context") type for the
+-- enclosing block. This does _not_ include the result type of the
+-- computation). Once fully resolved, it should have the form TyCon
+-- pos (ContextCon context) [], where context is e.g. LLVMSetup.
 data Stmt
   = StmtBind     Pos Pattern (Maybe Type) Expr
   | StmtLet      Pos DeclGroup

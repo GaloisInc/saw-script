@@ -889,13 +889,18 @@ checkExpr m e t = do
 --
 
 -- Infer types for a pattern, producing fresh type variables as needed.
+--
+-- There may already be types in the pattern if there were explicit
+-- type annotations in the input; if so don't throw them away.
 inferPattern :: Pattern -> TI (Type, Pattern)
 inferPattern pat =
   case pat of
     PWild pos mt ->
+      -- XXX how about checkKind on mt of not None?
       do t <- maybe (getFreshTyVar pos) return mt
          return (t, PWild pos (Just t))
     PVar pos x mt ->
+      -- XXX how about checkKind on mt of not None?
       do t <- maybe (getFreshTyVar pos) return mt
          return (t, PVar pos x (Just t))
     PTuple pos ps ->
@@ -950,24 +955,44 @@ inferStmts ln blockpos ctx stmts = case stmts of
 
     s : more -> do
         (wrapper, s', t) <- case s of
-            StmtBind spos pat mc e -> do
-                (pt, pat') <- inferPattern pat
-                e' <- checkExpr ln e (tBlock blockpos ctx pt)
-                mc' <- case mc of
-                    Nothing -> return ctx
-                    Just ty  -> do
-                        ty' <- checkKind ty
+            StmtBind spos pat mctx2 e -> do
+                (pty, pat') <- inferPattern pat
+                -- The expression should be of monad type; unify both
+                -- the monad type (ctx) and the result type expected
+                -- by the pattern (pty).
+                e' <- checkExpr ln e (tBlock blockpos ctx pty)
+                ctx2' <- case mctx2 of
+                    Nothing ->
+                        return ctx
+                    Just ctx2  -> do
+                        ctx2' <- checkKind ctx2
                         -- dholland 20240628 are the type arguments
-                        -- backwards? thought so at first but now I'm
-                        -- not sure. Also I'm not sure this is the
-                        -- right position to use. Where does mc come
-                        -- from? Is it a source annotation? If so it
-                        -- should probably have its own position. XXX
-                        unify ln ty (getPos e) ctx -- TODO: should this be ty'?
-                        return ty'
-                let s' = StmtBind spos pat' (Just mc') e'
+                        -- backwards, and what position should we use?
+                        --
+                        -- Update 20241211: it is complicated. We're
+                        -- unifying the monad type with a hint stored
+                        -- in the AST. However, the parser never
+                        -- stores such hints, so it's not clear if
+                        -- this code is even reachable or (if it is)
+                        -- where the hint came from. I'm changing the
+                        -- AST to include a position to use. That will
+                        -- be the position that ctx2 came from. And if
+                        -- it's wrong, ctx is the context that
+                        -- produces the expectation, ctx2 is the type
+                        -- we found instead, and its accompanying
+                        -- position is the position it came from where
+                        -- something's wrong. Thus, we want ctx to be
+                        -- the first type argument to unify and ctx2
+                        -- to be the second. So it was backwards until
+                        -- now.
+                        --
+                        -- XXX: haven't done the AST change yet;
+                        -- replace (getPos e) when that happens.
+                        unify ln ctx (getPos e) ctx2'
+                        return ctx2'
+                let s' = StmtBind spos pat' (Just ctx2') e'
                 let wrapper = withPattern pat'
-                return (wrapper, s', pt)
+                return (wrapper, s', pty)
             StmtLet spos dg -> do
                 dg' <- inferDeclGroup dg
                 let s' = StmtLet spos dg'
@@ -1032,6 +1057,10 @@ generalize es0 ts0 =
      return $ zipWith mk es ts
 
 -- Type inference for a declaration.
+--
+-- Note that the type schema slot in Decl is always Nothing as we get
+-- it from the parser; if there's an explicit type annotation on the
+-- declaration that shows up as a type signature in the expression.
 inferDecl :: Decl -> TI Decl
 inferDecl (Decl pos pat _ e) = do
   let n = patternLName pat
@@ -1041,6 +1070,11 @@ inferDecl (Decl pos pat _ e) = do
   return (Decl pos pat (Just s) e1)
 
 -- Type inference for a system of mutually recursive declarations.
+--
+-- Note that the type schema slot in the Decls is always Nothing as we
+-- get them from the parser; if there's an explicit type annotation on
+-- some or all of the declarations those shows up as type signatures
+-- in the expressions.
 inferRecDecls :: [Decl] -> TI [Decl]
 inferRecDecls ds =
   do let pats = map dPat ds
