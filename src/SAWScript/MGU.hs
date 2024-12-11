@@ -5,6 +5,7 @@ License     : BSD3
 Maintainer  : diatchki
 Stability   : provisional
 -}
+
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternGuards #-}
@@ -20,10 +21,6 @@ module SAWScript.MGU
        , instantiate
        ) where
 
-import SAWScript.AST
-import SAWScript.Panic (panic)
-import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
-
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
@@ -35,6 +32,66 @@ import Data.Map (Map)
 import Data.Either (partitionEithers)
 import qualified Data.Map as M
 --import qualified Data.Set as S
+
+import SAWScript.AST
+import SAWScript.Panic (panic)
+import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
+
+
+-- UnifyVars {{{
+
+-- unifyVars is a type-class-polymorphic function for extracting
+-- unification vars from a type or type schema. It returns a set of
+-- TypeIndex (TypeIndex is just Integer) manifested as a map from
+-- those TypeIndexes to their positions/provenance.
+class UnifyVars t where
+  unifyVars :: t -> M.Map TypeIndex Pos
+
+instance (Ord k, UnifyVars a) => UnifyVars (M.Map k a) where
+  unifyVars = unifyVars . M.elems
+
+instance (UnifyVars a) => UnifyVars [a] where
+  unifyVars = M.unionsWith choosePos . map unifyVars
+
+instance UnifyVars Type where
+  unifyVars t = case t of
+    TyCon _ _ ts      -> unifyVars ts
+    TyRecord _ tm     -> unifyVars tm
+    TyVar _ _         -> M.empty
+    TyUnifyVar pos i  -> M.singleton i pos
+
+instance UnifyVars Schema where
+  unifyVars (Forall _ t) = unifyVars t
+
+-- }}}
+
+-- NamedVars {{{
+
+-- namedVars is a type-class-polymorphic function for extracting named
+-- type variables from a type or type schema. It returns a set of Name
+-- (Name is just String) manifested as a map from those Names to their
+-- positions/provenance.
+class NamedVars t where
+  namedVars :: t -> M.Map Name Pos
+
+instance (Ord k, NamedVars a) => NamedVars (M.Map k a) where
+  namedVars = namedVars . M.elems
+
+instance (NamedVars a) => NamedVars [a] where
+  namedVars = M.unionsWith choosePos . map namedVars
+
+instance NamedVars Type where
+  namedVars t = case t of
+    TyCon _ _ ts      -> namedVars ts
+    TyRecord _ tm     -> namedVars tm
+    TyVar pos n       -> M.singleton n pos
+    TyUnifyVar _ _    -> M.empty
+
+instance NamedVars Schema where
+  namedVars (Forall ns t) = namedVars t M.\\ M.fromList ns'
+    where ns' = map (\(pos, n) -> (n, pos)) ns
+
+-- }}}
 
 -- Subst {{{
 
@@ -53,6 +110,204 @@ singletonSubst tv t = Subst $ M.singleton tv t
 
 listSubst :: [(TypeIndex, Type)] -> Subst
 listSubst = Subst . M.fromList
+
+-- }}}
+
+-- AppSubst {{{
+
+class AppSubst t where
+  appSubst :: Subst -> t -> t
+
+instance (AppSubst t) => AppSubst (Maybe t) where
+  appSubst s = fmap $ appSubst s
+
+instance (AppSubst t) => AppSubst [t] where
+  appSubst s = map $ appSubst s
+
+instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
+  appSubst s = fmap (appSubst s)
+
+instance AppSubst Expr where
+  appSubst s expr = case expr of
+    TSig pos e t           -> TSig pos (appSubst s e) (appSubst s t)
+    Bool _ _               -> expr
+    String _ _             -> expr
+    Int _ _                -> expr
+    Code _                 -> expr
+    CType _                -> expr
+    Array pos es           -> Array pos (appSubst s es)
+    Block pos bs           -> Block pos (appSubst s bs)
+    Tuple pos es           -> Tuple pos (appSubst s es)
+    Record pos fs          -> Record pos (appSubst s fs)
+    Index pos ar ix        -> Index pos (appSubst s ar) (appSubst s ix)
+    Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
+    TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
+    Var _                  -> expr
+    Function pos pat body  -> Function pos (appSubst s pat) (appSubst s body)
+    Application pos f v    -> Application pos (appSubst s f) (appSubst s v)
+    Let pos dg e           -> Let pos (appSubst s dg) (appSubst s e)
+    IfThenElse pos e e2 e3 -> IfThenElse pos (appSubst s e) (appSubst s e2) (appSubst s e3)
+
+instance AppSubst Pattern where
+  appSubst s pat = case pat of
+    PWild pos mt  -> PWild pos (appSubst s mt)
+    PVar pos x mt -> PVar pos x (appSubst s mt)
+    PTuple pos ps -> PTuple pos (appSubst s ps)
+
+instance AppSubst Stmt where
+  appSubst s bst = case bst of
+    StmtBind pos pat ctx e   -> StmtBind pos (appSubst s pat) (appSubst s ctx) (appSubst s e)
+    StmtLet pos dg           -> StmtLet pos (appSubst s dg)
+    StmtCode pos str         -> StmtCode pos str
+    StmtImport pos imp       -> StmtImport pos imp
+    StmtTypedef pos name ty  -> StmtTypedef pos name (appSubst s ty)
+
+instance AppSubst DeclGroup where
+  appSubst s (Recursive ds) = Recursive (appSubst s ds)
+  appSubst s (NonRecursive d) = NonRecursive (appSubst s d)
+
+instance AppSubst Decl where
+  appSubst s (Decl pos p mt e) = Decl pos (appSubst s p) (appSubst s mt) (appSubst s e)
+
+instance AppSubst Type where
+  appSubst s t = case t of
+    TyCon pos tc ts     -> TyCon pos tc (appSubst s ts)
+    TyRecord pos fs     -> TyRecord pos (appSubst s fs)
+    TyVar _ _           -> t
+    TyUnifyVar _ i      -> case M.lookup i (unSubst s) of
+                             Just t' -> t'
+                             Nothing -> t
+
+instance AppSubst Schema where
+  appSubst s (Forall ns t) = Forall ns (appSubst s t)
+
+-- }}}
+
+-- Instantiate {{{
+
+class Instantiate t where
+  -- | @instantiate m x@ applies the map @m@ to type variables in @x@.
+  instantiate :: Map Name Type -> t -> t
+
+instance (Instantiate a) => Instantiate (Maybe a) where
+  instantiate nts = fmap (instantiate nts)
+
+instance (Instantiate a) => Instantiate [a] where
+  instantiate nts = map (instantiate nts)
+
+instance Instantiate Type where
+  instantiate nts ty = case ty of
+    TyCon pos tc ts     -> TyCon pos tc (instantiate nts ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (instantiate nts) fs)
+    TyVar _ n           -> M.findWithDefault ty n nts
+    TyUnifyVar _ _      -> ty
+
+-- }}}
+
+-- TI Monad {{{
+
+newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
+                        deriving (Functor,Applicative,Monad,MonadReader RO)
+
+data RO = RO
+  { typeEnv :: M.Map (Located Name) Schema
+  , typedefEnv :: M.Map Name Type
+  }
+
+data RW = RW
+  { nameGen :: TypeIndex
+  , subst   :: Subst
+  , errors  :: [(Pos, String)]
+  }
+
+emptyRW :: RW
+emptyRW = RW 0 emptySubst []
+
+newTypeIndex :: TI TypeIndex
+newTypeIndex = do
+  rw <- TI get
+  TI $ put $ rw { nameGen = nameGen rw + 1 }
+  return $ nameGen rw
+
+-- Construct a new type variable.
+--
+-- Collect the position that prompted us to make it; for example, if
+-- we're the element type of an empty list we get the position of the
+-- []. We haven't inferred anything, so use the InfFresh position.
+-- This will cause the position of anything more substantive that gets
+-- unified with it to be preferred. If no such thing happens though
+-- this will be the position that gets attached to the quantifier
+-- binding in generalize.
+newType :: Pos -> TI Type
+newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> newTypeIndex
+
+-- Construct a new type variable to use as a placeholder after an
+-- error occurs. For now this is the same as other fresh type
+-- variables, but I've split it out in case we want to distinguish it
+-- in the future.
+newTypeError :: Pos -> TI Type
+newTypeError pos = newType pos
+
+recordError :: Pos -> String -> TI ()
+recordError pos err = do
+  TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
+
+appSubstM :: AppSubst t => t -> TI t
+appSubstM t = do
+  s <- TI $ gets subst
+  return $ appSubst s t
+
+instantiateM :: Instantiate t => t -> TI t
+instantiateM t = do
+  s <- TI $ asks typedefEnv
+  return $ instantiate s t
+
+-- FIXME: This function may miss type variables that occur in the type
+-- of a binding that has been shadowed by another value with the same
+-- name. This could potentially cause a run-time type error if the
+-- type of a local function gets generalized too much. We can probably
+-- wait to fix it until someone finds a sawscript program that breaks.
+unifyVarsInEnv :: TI (M.Map TypeIndex Pos)
+unifyVarsInEnv = do
+  env <- TI $ asks typeEnv
+  let ss = M.elems env
+  ss' <- mapM appSubstM ss
+  return $ unifyVars ss'
+
+namedVarsInEnv :: TI (M.Map Name Pos)
+namedVarsInEnv = do
+  env <- TI $ asks typeEnv
+  let ss = M.elems env
+  ss' <- mapM appSubstM ss
+  return $ namedVars ss'
+
+-- Get the position and name of the first binding in a pattern,
+-- for use as context info when printing messages. If there's a
+-- real variable, prefer that (Right cases); otherwise take the
+-- position of the first wildcard or empty tuple (Left cases).
+patternLName :: Pattern -> LName
+patternLName pat0 =
+  case visit pat0 of
+    Left pos -> Located "_" "_" pos
+    Right n -> n
+  where
+    visit pat =
+      case pat of
+        PWild pos _ -> Left pos
+        PVar _ n _ -> Right n
+        PTuple pos [] -> Left pos
+        PTuple allpos ps ->
+          case partitionEithers $ map visit ps of
+             (_, n : _) -> Right n
+             (pos : _, _) -> Left pos
+             _ -> Left allpos
+
+patternBindings :: Pattern -> [(Located Name, Maybe Type)]
+patternBindings pat =
+  case pat of
+    PWild _ _mt -> []
+    PVar _ x mt -> [(x, mt)]
+    PTuple _ ps -> concatMap patternBindings ps
 
 -- }}}
 
@@ -224,128 +479,7 @@ bindVar pos i t =
 
 -- }}}
 
--- UnifyVars {{{
-
--- unifyVars is a type-class-polymorphic function for extracting
--- unification vars from a type or type schema. It returns a set of
--- TypeIndex (TypeIndex is just Integer) manifested as a map from
--- those TypeIndexes to their positions/provenance.
-class UnifyVars t where
-  unifyVars :: t -> M.Map TypeIndex Pos
-
-instance (Ord k, UnifyVars a) => UnifyVars (M.Map k a) where
-  unifyVars = unifyVars . M.elems
-
-instance (UnifyVars a) => UnifyVars [a] where
-  unifyVars = M.unionsWith choosePos . map unifyVars
-
-instance UnifyVars Type where
-  unifyVars t = case t of
-    TyCon _ _ ts      -> unifyVars ts
-    TyRecord _ tm     -> unifyVars tm
-    TyVar _ _         -> M.empty
-    TyUnifyVar pos i  -> M.singleton i pos
-
-instance UnifyVars Schema where
-  unifyVars (Forall _ t) = unifyVars t
-
--- }}}
-
--- NamedVars {{{
-
--- namedVars is a type-class-polymorphic function for extracting named
--- type variables from a type or type schema. It returns a set of Name
--- (Name is just String) manifested as a map from those Names to their
--- positions/provenance.
-class NamedVars t where
-  namedVars :: t -> M.Map Name Pos
-
-instance (Ord k, NamedVars a) => NamedVars (M.Map k a) where
-  namedVars = namedVars . M.elems
-
-instance (NamedVars a) => NamedVars [a] where
-  namedVars = M.unionsWith choosePos . map namedVars
-
-instance NamedVars Type where
-  namedVars t = case t of
-    TyCon _ _ ts      -> namedVars ts
-    TyRecord _ tm     -> namedVars tm
-    TyVar pos n       -> M.singleton n pos
-    TyUnifyVar _ _    -> M.empty
-
-instance NamedVars Schema where
-  namedVars (Forall ns t) = namedVars t M.\\ M.fromList ns'
-    where ns' = map (\(pos, n) -> (n, pos)) ns
-
--- }}}
-
--- TI Monad {{{
-
-newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
-                        deriving (Functor,Applicative,Monad,MonadReader RO)
-
-data RO = RO
-  { typeEnv :: M.Map (Located Name) Schema
-  , typedefEnv :: M.Map Name Type
-  }
-
-data RW = RW
-  { nameGen :: TypeIndex
-  , subst   :: Subst
-  , errors  :: [(Pos, String)]
-  }
-
-emptyRW :: RW
-emptyRW = RW 0 emptySubst []
-
-newTypeIndex :: TI TypeIndex
-newTypeIndex = do
-  rw <- TI get
-  TI $ put $ rw { nameGen = nameGen rw + 1 }
-  return $ nameGen rw
-
--- Construct a new type variable.
---
--- Collect the position that prompted us to make it; for example, if
--- we're the element type of an empty list we get the position of the
--- []. We haven't inferred anything, so use the InfFresh position.
--- This will cause the position of anything more substantive that gets
--- unified with it to be preferred. If no such thing happens though
--- this will be the position that gets attached to the quantifier
--- binding in generalize.
-newType :: Pos -> TI Type
-newType pos = TyUnifyVar (PosInferred InfFresh pos) <$> newTypeIndex
-
--- Construct a new type variable to use as a placeholder after an
--- error occurs. For now this is the same as other fresh type
--- variables, but I've split it out in case we want to distinguish it
--- in the future.
-newTypeError :: Pos -> TI Type
-newTypeError pos = newType pos
-
--- Typecheck a pattern and produce fresh type variables as needed.
--- FUTURE: this function should get renamed.
-newTypePattern :: Pattern -> TI (Type, Pattern)
-newTypePattern pat =
-  case pat of
-    PWild pos mt ->
-      do t <- maybe (newType pos) return mt
-         return (t, PWild pos (Just t))
-    PVar pos x mt ->
-      do t <- maybe (newType pos) return mt
-         return (t, PVar pos x (Just t))
-    PTuple pos ps ->
-      do (ts, ps') <- unzip <$> mapM newTypePattern ps
-         return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
-
-appSubstM :: AppSubst t => t -> TI t
-appSubstM t = do
-  s <- TI $ gets subst
-  return $ appSubst s t
-
-recordError :: Pos -> String -> TI ()
-recordError pos err = do
-  TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
+-- Unification {{{
 
 --
 -- Unify two types.
@@ -401,6 +535,25 @@ unify m t1 pos t2 = do
          -- Indent all but the first line by four spaces.
          morelines' = map (\msg -> "    " ++ msg) morelines
 
+-- }}}
+
+-- Main recursive pass {{{
+
+type OutExpr = Expr
+type OutStmt = Stmt
+
+--
+-- Expressions
+--
+
+-- Take a struct field binding (name and expression) and return the
+-- updated binding as well as the member entry for the enclosing
+-- struct type.
+inferField :: LName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
+inferField m (n,e) = do
+  (e',t) <- inferE (m,e)
+  return ((n,e'),(n,t))
+
 bindSchema :: Located Name -> Schema -> TI a -> TI a
 bindSchema n s m = TI $ local (\ro -> ro { typeEnv = M.insert n s $ typeEnv ro })
   $ unTI m
@@ -408,24 +561,9 @@ bindSchema n s m = TI $ local (\ro -> ro { typeEnv = M.insert n s $ typeEnv ro }
 bindSchemas :: [(Located Name, Schema)] -> TI a -> TI a
 bindSchemas bs m = foldr (uncurry bindSchema) m bs
 
-bindDecl :: Decl -> TI a -> TI a
-bindDecl (Decl _ _ Nothing _) m = m
-bindDecl (Decl _ p (Just s) _) m = bindPatternSchema p s m
-
-bindDeclGroup :: DeclGroup -> TI a -> TI a
-bindDeclGroup (NonRecursive d) m = bindDecl d m
-bindDeclGroup (Recursive ds) m = foldr bindDecl m ds
-
 bindPattern :: Pattern -> TI a -> TI a
 bindPattern pat = bindSchemas bs
   where bs = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
-
-patternBindings :: Pattern -> [(Located Name, Maybe Type)]
-patternBindings pat =
-  case pat of
-    PWild _ _mt -> []
-    PVar _ x mt -> [(x, mt)]
-    PTuple _ ps -> concatMap patternBindings ps
 
 bindPatternSchema :: Pattern -> Schema -> TI a -> TI a
 bindPatternSchema pat s@(Forall vs t) m =
@@ -438,136 +576,13 @@ bindPatternSchema pat s@(Forall vs t) m =
           [ bindPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
 
-bindTypedef :: LName -> Type -> TI a -> TI a
-bindTypedef n t m =
-  TI $
-  local
-    (\ro ->
-      let t' = instantiate (typedefEnv ro) t
-      in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
-    $ unTI m
+bindDecl :: Decl -> TI a -> TI a
+bindDecl (Decl _ _ Nothing _) m = m
+bindDecl (Decl _ p (Just s) _) m = bindPatternSchema p s m
 
--- FIXME: This function may miss type variables that occur in the type
--- of a binding that has been shadowed by another value with the same
--- name. This could potentially cause a run-time type error if the
--- type of a local function gets generalized too much. We can probably
--- wait to fix it until someone finds a sawscript program that breaks.
-unifyVarsInEnv :: TI (M.Map TypeIndex Pos)
-unifyVarsInEnv = do
-  env <- TI $ asks typeEnv
-  let ss = M.elems env
-  ss' <- mapM appSubstM ss
-  return $ unifyVars ss'
-
-namedVarsInEnv :: TI (M.Map Name Pos)
-namedVarsInEnv = do
-  env <- TI $ asks typeEnv
-  let ss = M.elems env
-  ss' <- mapM appSubstM ss
-  return $ namedVars ss'
-
--- }}}
-
--- AppSubst {{{
-
-class AppSubst t where
-  appSubst :: Subst -> t -> t
-
-instance (AppSubst t) => AppSubst [t] where
-  appSubst s = map $ appSubst s
-
-instance (AppSubst t) => AppSubst (Maybe t) where
-  appSubst s = fmap $ appSubst s
-
-instance AppSubst Type where
-  appSubst s t = case t of
-    TyCon pos tc ts     -> TyCon pos tc (appSubst s ts)
-    TyRecord pos fs     -> TyRecord pos (appSubst s fs)
-    TyVar _ _           -> t
-    TyUnifyVar _ i      -> case M.lookup i (unSubst s) of
-                             Just t' -> t'
-                             Nothing -> t
-
-instance AppSubst Schema where
-  appSubst s (Forall ns t) = Forall ns (appSubst s t)
-
-instance AppSubst Expr where
-  appSubst s expr = case expr of
-    TSig pos e t           -> TSig pos (appSubst s e) (appSubst s t)
-    Bool _ _               -> expr
-    String _ _             -> expr
-    Int _ _                -> expr
-    Code _                 -> expr
-    CType _                -> expr
-    Array pos es           -> Array pos (appSubst s es)
-    Block pos bs           -> Block pos (appSubst s bs)
-    Tuple pos es           -> Tuple pos (appSubst s es)
-    Record pos fs          -> Record pos (appSubst s fs)
-    Index pos ar ix        -> Index pos (appSubst s ar) (appSubst s ix)
-    Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
-    TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
-    Var _                  -> expr
-    Function pos pat body  -> Function pos (appSubst s pat) (appSubst s body)
-    Application pos f v    -> Application pos (appSubst s f) (appSubst s v)
-    Let pos dg e           -> Let pos (appSubst s dg) (appSubst s e)
-    IfThenElse pos e e2 e3 -> IfThenElse pos (appSubst s e) (appSubst s e2) (appSubst s e3)
-
-instance AppSubst Pattern where
-  appSubst s pat = case pat of
-    PWild pos mt  -> PWild pos (appSubst s mt)
-    PVar pos x mt -> PVar pos x (appSubst s mt)
-    PTuple pos ps -> PTuple pos (appSubst s ps)
-
-instance (Ord k, AppSubst a) => AppSubst (M.Map k a) where
-  appSubst s = fmap (appSubst s)
-
-instance AppSubst Stmt where
-  appSubst s bst = case bst of
-    StmtBind pos pat ctx e   -> StmtBind pos (appSubst s pat) (appSubst s ctx) (appSubst s e)
-    StmtLet pos dg           -> StmtLet pos (appSubst s dg)
-    StmtCode pos str         -> StmtCode pos str
-    StmtImport pos imp       -> StmtImport pos imp
-    StmtTypedef pos name ty  -> StmtTypedef pos name (appSubst s ty)
-
-instance AppSubst DeclGroup where
-  appSubst s (Recursive ds) = Recursive (appSubst s ds)
-  appSubst s (NonRecursive d) = NonRecursive (appSubst s d)
-
-instance AppSubst Decl where
-  appSubst s (Decl pos p mt e) = Decl pos (appSubst s p) (appSubst s mt) (appSubst s e)
-
--- }}}
-
--- Instantiate {{{
-
-class Instantiate t where
-  -- | @instantiate m x@ applies the map @m@ to type variables in @x@.
-  instantiate :: Map Name Type -> t -> t
-
-instance (Instantiate a) => Instantiate (Maybe a) where
-  instantiate nts = fmap (instantiate nts)
-
-instance (Instantiate a) => Instantiate [a] where
-  instantiate nts = map (instantiate nts)
-
-instance Instantiate Type where
-  instantiate nts ty = case ty of
-    TyCon pos tc ts     -> TyCon pos tc (instantiate nts ts)
-    TyRecord pos fs     -> TyRecord pos (fmap (instantiate nts) fs)
-    TyVar _ n           -> M.findWithDefault ty n nts
-    TyUnifyVar _ _      -> ty
-
-instantiateM :: Instantiate t => t -> TI t
-instantiateM t = do
-  s <- TI $ asks typedefEnv
-  return $ instantiate s t
-
--- }}}
-
--- Type Inference {{{
-
-type OutExpr = Expr
-type OutStmt = Stmt
+bindDeclGroup :: DeclGroup -> TI a -> TI a
+bindDeclGroup (NonRecursive d) m = bindDecl d m
+bindDeclGroup (Recursive ds) m = foldr bindDecl m ds
 
 inferE :: (LName, Expr) -> TI (OutExpr,Type)
 inferE (ln, expr) = case expr of
@@ -704,22 +719,42 @@ checkE m e t = do
   unify m t (getPos e') t'
   return e'
 
--- Take a struct field binding (name and expression) and return the
--- updated binding as well as the member entry for the enclosing
--- struct type.
-inferField :: LName -> (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
-inferField m (n,e) = do
-  (e',t) <- inferE (m,e)
-  return ((n,e'),(n,t))
+--
+-- patterns
+--
 
-inferDeclGroup :: DeclGroup -> TI DeclGroup
-inferDeclGroup (NonRecursive d) = do
-  d' <- inferDecl d
-  return (NonRecursive d')
+-- Typecheck a pattern and produce fresh type variables as needed.
+-- FUTURE: this function should get renamed.
+newTypePattern :: Pattern -> TI (Type, Pattern)
+newTypePattern pat =
+  case pat of
+    PWild pos mt ->
+      do t <- maybe (newType pos) return mt
+         return (t, PWild pos (Just t))
+    PVar pos x mt ->
+      do t <- maybe (newType pos) return mt
+         return (t, PVar pos x (Just t))
+    PTuple pos ps ->
+      do (ts, ps') <- unzip <$> mapM newTypePattern ps
+         return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
 
-inferDeclGroup (Recursive ds) = do
-  ds' <- inferRecDecls ds
-  return (Recursive ds')
+constrainTypeWithPattern :: LName -> Type -> Pattern -> TI ()
+constrainTypeWithPattern ln t pat =
+  do (pt, _pat') <- newTypePattern pat
+     unify ln t (getPos pat) pt
+
+--
+-- statements
+--
+
+bindTypedef :: LName -> Type -> TI a -> TI a
+bindTypedef n t m =
+  TI $
+  local
+    (\ro ->
+      let t' = instantiate (typedefEnv ro) t
+      in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
+    $ unTI m
 
 -- the passed-in position should be the position for the whole statement block
 -- the first type argument (ctx) is ... XXX
@@ -781,60 +816,9 @@ inferStmts m dopos ctx (StmtTypedef spos name ty : more) =
     (more', t) <- inferStmts m dopos ctx more
     return (StmtTypedef spos name ty : more', t)
 
--- Get the position and name of the first binding in a pattern,
--- for use as context info when printing messages. If there's a
--- real variable, prefer that (Right cases); otherwise take the
--- position of the first wildcard or empty tuple (Left cases).
-patternLName :: Pattern -> LName
-patternLName pat0 =
-  case visit pat0 of
-    Left pos -> Located "_" "_" pos
-    Right n -> n
-  where
-    visit pat =
-      case pat of
-        PWild pos _ -> Left pos
-        PVar _ n _ -> Right n
-        PTuple pos [] -> Left pos
-        PTuple allpos ps ->
-          case partitionEithers $ map visit ps of
-             (_, n : _) -> Right n
-             (pos : _, _) -> Left pos
-             _ -> Left allpos
-
-constrainTypeWithPattern :: LName -> Type -> Pattern -> TI ()
-constrainTypeWithPattern ln t pat =
-  do (pt, _pat') <- newTypePattern pat
-     unify ln t (getPos pat) pt
-
-inferDecl :: Decl -> TI Decl
-inferDecl (Decl pos pat _ e) = do
-  let n = patternLName pat
-  (e',t) <- inferE (n, e)
-  constrainTypeWithPattern n t pat
-  ~[(e1,s)] <- generalize [e'] [t]
-  return (Decl pos pat (Just s) e1)
-
-inferRecDecls :: [Decl] -> TI [Decl]
-inferRecDecls ds =
-  do let pats = map dPat ds
-         pat =
-           case pats of
-             p:_ -> p
-             [] -> panic
-                     "inferRecDecls"
-                     ["Empty list of declarations in recursive group"]
-     (_ts, pats') <- unzip <$> mapM newTypePattern pats
-     (es, ts) <- fmap unzip
-                 $ flip (foldr bindPattern) pats'
-                 $ sequence [ inferE (patternLName p, e)
-                            | Decl _pos p _ e <- ds
-                            ]
-     sequence_ $ zipWith (constrainTypeWithPattern (patternLName pat)) ts pats'
-     ess <- generalize es ts
-     return [ Decl pos p (Just s) e1
-            | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
-            ]
+--
+-- decls
+--
 
 generalize :: [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
 generalize es0 ts0 =
@@ -865,34 +849,56 @@ generalize es0 ts0 =
 
      return $ zipWith mk es ts
 
+inferDecl :: Decl -> TI Decl
+inferDecl (Decl pos pat _ e) = do
+  let n = patternLName pat
+  (e',t) <- inferE (n, e)
+  constrainTypeWithPattern n t pat
+  ~[(e1,s)] <- generalize [e'] [t]
+  return (Decl pos pat (Just s) e1)
+
+inferRecDecls :: [Decl] -> TI [Decl]
+inferRecDecls ds =
+  do let pats = map dPat ds
+         pat =
+           case pats of
+             p:_ -> p
+             [] -> panic
+                     "inferRecDecls"
+                     ["Empty list of declarations in recursive group"]
+     (_ts, pats') <- unzip <$> mapM newTypePattern pats
+     (es, ts) <- fmap unzip
+                 $ flip (foldr bindPattern) pats'
+                 $ sequence [ inferE (patternLName p, e)
+                            | Decl _pos p _ e <- ds
+                            ]
+     sequence_ $ zipWith (constrainTypeWithPattern (patternLName pat)) ts pats'
+     ess <- generalize es ts
+     return [ Decl pos p (Just s) e1
+            | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
+            ]
+
+inferDeclGroup :: DeclGroup -> TI DeclGroup
+inferDeclGroup (NonRecursive d) = do
+  d' <- inferDecl d
+  return (NonRecursive d')
+
+inferDeclGroup (Recursive ds) = do
+  ds' <- inferRecDecls ds
+  return (Recursive ds')
+
+--
+-- types
+--
+
 -- XXX: TODO
 checkKind :: Type -> TI Type
 checkKind = return
 
 
-
 -- }}}
 
-
 -- Main interface {{{
-
-checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either [(Pos, String)] DeclGroup
-checkDeclGroup env tenv dg =
-  case evalTIWithEnv env tenv (inferDeclGroup dg) of
-    Left errs -> Left errs
-    Right dg' -> Right dg'
-
-checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either [(Pos, String)] Decl
-checkDecl env tenv decl =
-  case evalTIWithEnv env tenv (inferDecl decl) of
-    Left errs -> Left errs
-    Right decl' -> Right decl'
-
-evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [(Pos, String)] a
-evalTIWithEnv env tenv m =
-  case runTIWithEnv env tenv m of
-    (res, _, []) -> Right res
-    (_, _, errs) -> Left errs
 
 runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [(Pos, String)])
 runTIWithEnv env tenv m = (a, subst rw, errors rw)
@@ -900,7 +906,26 @@ runTIWithEnv env tenv m = (a, subst rw, errors rw)
   m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
 
+evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [(Pos, String)] a
+evalTIWithEnv env tenv m =
+  case runTIWithEnv env tenv m of
+    (res, _, []) -> Right res
+    (_, _, errs) -> Left errs
+
+checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either [(Pos, String)] Decl
+checkDecl env tenv decl =
+  case evalTIWithEnv env tenv (inferDecl decl) of
+    Left errs -> Left errs
+    Right decl' -> Right decl'
+
+checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either [(Pos, String)] DeclGroup
+checkDeclGroup env tenv dg =
+  case evalTIWithEnv env tenv (inferDeclGroup dg) of
+    Left errs -> Left errs
+    Right dg' -> Right dg'
+
 -- }}}
+
 
 {-
 Note [-Wincomplete-uni-patterns and irrefutable patterns]
