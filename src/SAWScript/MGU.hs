@@ -28,10 +28,13 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Identity
+import Data.List (intercalate, genericTake)
 import Data.Map (Map)
 import Data.Either (partitionEithers)
 import qualified Data.Map as M
 --import qualified Data.Set as S
+
+import qualified Prettyprinter as PP
 
 import SAWScript.AST
 import SAWScript.Panic (panic)
@@ -245,6 +248,41 @@ instance Instantiate Type where
     TyRecord pos fs     -> TyRecord pos (fmap (instantiate nts) fs)
     TyVar _ n           -> M.findWithDefault ty n nts
     TyUnifyVar _ _      -> ty
+
+-- }}}
+
+
+------------------------------------------------------------
+-- Kinds {{{
+
+--
+-- For the time being we can handle kinds using the number of expected
+-- type arguments. Apart from tuples the only things we have are of
+-- kinds *, * -> *, and * -> * -> *, but we do have tuples of
+-- arbitrary arity.
+--
+-- If we ever want additional structure (e.g. distinguishing the
+-- monad/context types from other types) we can extend this
+-- representation easily enough.
+--
+
+data Kind = Kind Int
+  deriving Eq
+
+kindStar :: Kind
+kindStar = Kind 0
+
+-- these aren't currently used
+--kindStarToStar :: Kind
+--kindStarToStar = Kind 1
+--
+--kindStarToStarToStar :: Kind
+--kindStarToStarToStar = Kind 2
+
+instance PrettyPrint Kind where
+  pretty _ (Kind n) =
+     PP.viaShow $ intercalate " -> " $ take (n + 1) $ repeat "*"
+
 
 -- }}}
 
@@ -863,7 +901,7 @@ inferExpr (ln, expr) = case expr of
        return (Let pos dg' body', t)
 
   TSig _pos e t ->
-    do t' <- checkKind t
+    do t' <- checkType kindStar t
        (e',t'') <- inferExpr (ln,e)
        unify ln t' (getPos e') t''
        return (e',t'')
@@ -894,14 +932,16 @@ checkExpr m e t = do
 -- type annotations in the input; if so don't throw them away.
 inferPattern :: Pattern -> TI (Type, Pattern)
 inferPattern pat =
+  let resolveType pos mt = case mt of
+        Nothing -> getFreshTyVar pos
+        Just t -> checkType kindStar t
+  in
   case pat of
     PWild pos mt ->
-      -- XXX how about checkKind on mt of not None?
-      do t <- maybe (getFreshTyVar pos) return mt
+      do t <- resolveType pos mt
          return (t, PWild pos (Just t))
     PVar pos x mt ->
-      -- XXX how about checkKind on mt of not None?
-      do t <- maybe (getFreshTyVar pos) return mt
+      do t <- resolveType pos mt
          return (t, PVar pos x (Just t))
     PTuple pos ps ->
       do (ts, ps') <- unzip <$> mapM inferPattern ps
@@ -974,9 +1014,10 @@ inferStmts ln blockpos ctx stmts = case stmts of
             StmtImport spos _ ->
                 return (id, s, tUnit $ PosInferred InfTerm spos)
             StmtTypedef spos name ty -> do
-                -- XXX how about a checkKind ty here?
-                let wrapper = withTypedef name ty
-                return (wrapper, s, tUnit $ PosInferred InfTerm spos)
+                ty' <- checkType kindStar ty
+                let s' = StmtTypedef spos name ty'
+                let wrapper = withTypedef name ty'
+                return (wrapper, s', tUnit $ PosInferred InfTerm spos)
         case more of
             [] | legalEndOfBlock s ->
                 return ([s'], t)
@@ -1081,11 +1122,109 @@ inferDeclGroup (Recursive ds) = do
 -- types
 --
 
--- kind checking. or not.
---
--- XXX: TODO
-checkKind :: Type -> TI Type
-checkKind = return
+-- Look up a type constructor and return its params as a list of kinds.
+lookupTyCon :: TyCon -> [Kind]
+lookupTyCon tycon = case tycon of
+  TupleCon n -> genericTake n (repeat kindStar)
+  ArrayCon -> [kindStar]
+  FunCon -> [kindStar, kindStar]
+  StringCon -> []
+  TermCon -> []
+  TypeCon -> []
+  BoolCon -> []
+  IntCon -> []
+  BlockCon -> [kindStar, kindStar]
+  AIGCon -> []
+  CFGCon -> []
+  JVMSpecCon -> []
+  LLVMSpecCon -> []
+  MIRSpecCon -> []
+  ContextCon _ctx ->
+    -- XXX: while BlockCon exists, ContextCon has kind * and you
+    -- have to use BlockCon to paste a result type to a ContextCon.
+    -- (BlockCon should be removed. Then ContextCon has kind * -> *
+    -- like you'd expect.)
+    []
+
+-- Check a type for validity and also for having the
+-- correct kinding.
+checkType :: Kind -> Type -> TI Type
+checkType kind ty = case ty of
+  TyCon pos tycon args -> do
+      -- First, look up the constructor.
+      let params = lookupTyCon tycon
+      let nparams = length params
+          nargs = length args
+          argsleft = case kind of
+            Kind n -> n
+      if nargs > nparams then do
+          -- XXX special case for BlockCon (remove along with BlockCon)
+          case (tycon, args) of
+              (BlockCon, arg : _) ->
+                  recordError pos ("Too many type arguments for type " ++
+                                   "constructor " ++ pShow arg ++
+                                   "; found " ++ show (nargs - 1) ++
+                                   " but expected only " ++ show (nparams - 1))
+              (_, _) ->
+                  recordError pos ("Too many type arguments for type " ++
+                                   "constructor " ++ pShow tycon ++
+                                   "; found " ++ show nargs ++
+                                   " but expected only " ++ show nparams)
+          getErrorTyVar pos
+      else if nargs + argsleft /= nparams then do
+          recordError pos ("Kind mismatch: expected " ++ pShow kind ++
+                           " but found " ++ (pShow $ Kind (nparams - nargs)))
+          getErrorTyVar pos
+      else do
+          -- note that this will ignore the extra params
+          args' <- zipWithM checkType params args
+          return $ TyCon pos tycon args'
+
+  TyRecord pos fields -> do
+      if kind /= kindStar then do
+          recordError pos ("Kind mismatch: expected " ++ pShow kind ++
+                           " but found " ++ pShow kindStar)
+          getErrorTyVar pos
+      else do
+          -- Someone upstream had better have checked for duplicate
+          -- field names because we can't once the fields are loaded
+          -- into a map. (XXX: someone hasn't)
+          fields' <- traverse (checkType kindStar) fields
+          return $ TyRecord pos fields'
+
+  TyVar pos x -> do
+      typedefs <- TI $ asks typedefEnv
+      case M.lookup x typedefs of
+          Nothing -> do
+              recordError pos ("Unbound type variable " ++ x)
+              getErrorTyVar pos
+          Just _ty' ->
+              -- Assume ty' was checked when it was entered.
+              -- (If we entered it that's true, if it was in the
+              -- initial environment we were given that depends on the
+              -- interpreter not doing unfortunate things.)
+              --
+              -- For now at least we require typedefs to be kind *
+              -- (they can't have parameters and the expansions are so
+              -- restricted) so just fail if we use one in a context
+              -- expecting something else.
+              if kind /= kindStar then do
+                  recordError pos ("Kind mismatch: expected " ++ pShow kind ++
+                                   " but found " ++ pShow kindStar)
+                  getErrorTyVar pos
+              else
+                  -- We do _not_ want to expand typedefs when checking,
+                  -- so return the original TyVar.
+                  return ty
+
+  TyUnifyVar _pos _ix ->
+      -- for now at least we don't track the kinds of unification vars
+      -- (types of mismatch kinds can't be the same types, so they
+      -- won't ever unify, so the possible mischief is limited) and all
+      -- possible unification var numbers are well formed, so we don't
+      -- need to do anything.
+      return ty
+
 
 -- }}}
 
