@@ -259,16 +259,16 @@ instance Instantiate Type where
 
 --
 -- For the time being we can handle kinds using the number of expected
--- type arguments. Apart from tuples the only things we have are of
--- kinds *, * -> *, and * -> * -> *, but we do have tuples of
--- arbitrary arity.
+-- type arguments. That is, Kind 0 is *. Apart from tuples the only
+-- things we have are of kinds *, * -> *, and * -> * -> *, but we do
+-- have tuples of arbitrary arity.
 --
 -- If we ever want additional structure (e.g. distinguishing the
 -- monad/context types from other types) we can extend this
 -- representation easily enough.
 --
 
-data Kind = Kind Int
+newtype Kind = Kind { kindNumArgs :: Int }
   deriving Eq
 
 kindStar :: Kind
@@ -306,26 +306,34 @@ instance PrettyPrint Kind where
 -- that isn't desirable and the organization should probably be
 -- revised.
 --
--- Anyhow, the elements of the context are:
---    varEnv: the variable typing environment (variable name to type scheme)
---    typedefEnv: typedefs (typedef name to its expansion type)
---    nextTypeIndex: the next fresh unification var number
---    subst: the unification var substitution we're accumulating
---    errors: any type errors we've generated so far
+-- Anyhow, the elements of the context are split across RO and RW
+-- below.
 --
 
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
                         deriving (Functor,Applicative,Monad,MonadReader RO)
 
+-- | The "readonly" portion
 data RO = RO
-  { varEnv :: M.Map (Located Name) Schema
-  , typedefEnv :: M.Map Name Type
+  {
+    -- | The variable typing environment (variable name to type scheme)
+    varEnv :: M.Map (Located Name) Schema,
+
+    -- | The typedef environment (typedef name to its expansion type)
+    typedefEnv :: M.Map Name Type
   }
 
+-- | The read-write portion
 data RW = RW
-  { nextTypeIndex :: TypeIndex
-  , subst   :: Subst
-  , errors  :: [(Pos, String)]
+  {
+    -- | The next fresh unification var number
+    nextTypeIndex :: TypeIndex,
+
+    -- | The unification var substitution we're accumulating
+    subst :: Subst,
+
+    -- | Any type errors we've generated so far
+    errors :: [(Pos, String)]
   }
 
 emptyRW :: RW
@@ -599,7 +607,7 @@ mgu t1 t2 = case (t1, t2) of
       -- records with different keys
       failMGU "Record field names mismatch." t1 t2
 
-  (TyRecord _ ts1, TyRecord _ ts2) ->
+  (TyRecord _ ts1, TyRecord _ ts2) | otherwise ->
       -- records with the same field names, try unifying the field types
       case mgus (M.elems ts1) (M.elems ts2) of
         Right result -> Right result
@@ -616,7 +624,7 @@ mgu t1 t2 = case (t1, t2) of
             FunCon -> Left $ failMGUAddFun msgs t1 t2
             _ -> Left $ failMGUAdd msgs t1 t2
 
-  (TyCon _ tc1 _ts1, TyCon _ tc2 _ts2) ->
+  (TyCon _ tc1 _ts1, TyCon _ tc2 _ts2) | otherwise ->
       -- Wrong type constructors
       case tc1 of
         FunCon ->
@@ -727,16 +735,16 @@ inferField m (n,e) = do
   (e',t) <- inferExpr (m,e)
   return ((n,e'),(n,t))
 
--- wrap m with a type for x
+-- wrap the action m with a type for x
 withVar :: Located Name -> Schema -> TI a -> TI a
 withVar x s m =
   TI $ local (\ro -> ro { varEnv = M.insert x s $ varEnv ro }) $ unTI m
 
--- wrap m with types for a list of vars
+-- wrap the action m with types for a list of vars
 withVars :: [(Located Name, Schema)] -> TI a -> TI a
 withVars bindings m = foldr (uncurry withVar) m bindings
 
--- wrap m with types for all the vars in a pattern
+-- wrap the action m with types for all the vars in a pattern
 --
 -- (note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t)
@@ -744,8 +752,8 @@ withPattern :: Pattern -> TI a -> TI a
 withPattern pat = withVars bindings
   where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
--- wrap m with types for all the vars in a pattern, using the
--- passed-in schema to produce the types and ignoring the types
+-- wrap the action m with types for all the vars in a pattern, using
+-- the passed-in schema to produce the types and ignoring the types
 -- already loaded into the pattern.
 --
 -- XXX: is that what we want? should probably assert that the schema
@@ -767,14 +775,14 @@ withPatternSchema pat s@(Forall vs t) m =
           [ withPatternSchema p (Forall vs t') | (p, t') <- zip ps ts ]
         _ -> m
 
--- wrap m with types for the vars in a declaration.
+-- wrap the action m with types for the vars in a declaration.
 --
 -- Do nothing if there's no type schema in this declaration yet.
 withDecl :: Decl -> TI a -> TI a
 withDecl (Decl _ _ Nothing _) m = m
 withDecl (Decl _ p (Just s) _) m = withPatternSchema p s m
 
--- wrap m with types for the vars in a declgroup.
+-- wrap the action m with types for the vars in a declgroup.
 withDeclGroup :: DeclGroup -> TI a -> TI a
 withDeclGroup (NonRecursive d) m = withDecl d m
 withDeclGroup (Recursive ds) m = foldr withDecl m ds
@@ -893,6 +901,9 @@ inferExpr (ln, expr) = case expr of
     do argtype <- getFreshTyVar pos
        rettype <- getFreshTyVar pos
        let ftype = tFun (PosInferred InfContext $ getPos f) argtype rettype
+       -- Check f' first so that we complain about the arg (not the
+       -- function) if they don't match. This is what everyone expects
+       -- and doing it the other way is surprisingly confusing.
        f' <- checkExpr ln f ftype
        arg' <- checkExpr ln arg argtype
        return (Application pos f' arg', rettype)
@@ -1032,13 +1043,13 @@ inferStmts ln blockpos ctx stmts = case stmts of
         case more of
             [] | legalEndOfBlock s ->
                 return ([s'], t)
-            [] -> do
+            [] | otherwise -> do
                 recordError blockpos ("do block must end with expression at " ++
                                       show ln)
                 t' <- getErrorTyVar blockpos
                 -- XXX this has been throwing away s' but probably shouldn't
                 return ([], t')
-            _ -> do
+            _ : _ -> do
                (more', t') <- wrapper $ inferStmts ln blockpos ctx more
                return (s' : more', t')
 
@@ -1133,7 +1144,8 @@ inferDeclGroup (Recursive ds) = do
 -- types
 --
 
--- Look up a type constructor and return its params as a list of kinds.
+-- Look up a type constructor (in our fixed environment of hardcoded
+-- types) and return its params as a list of kinds.
 lookupTyCon :: TyCon -> [Kind]
 lookupTyCon tycon = case tycon of
   TupleCon n -> genericTake n (repeat kindStar)
@@ -1166,8 +1178,7 @@ checkType kind ty = case ty of
       let params = lookupTyCon tycon
       let nparams = length params
           nargs = length args
-          argsleft = case kind of
-            Kind n -> n
+          argsleft = kindNumArgs kind
       if nargs > nparams then do
           -- XXX special case for BlockCon (remove along with BlockCon)
           case (tycon, args) of
@@ -1258,7 +1269,7 @@ evalTIWithEnv env tenv m =
     (res, _, []) -> Right res
     (_, _, errs) -> Left errs
 
--- Check a single statement. (This is an external interface.)
+-- | Check a single statement. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
@@ -1278,7 +1289,7 @@ checkStmt env tenv pos ctx stmt = do
     Right (_wrapper, stmt', _type) -> Right stmt'
 
 
--- Check a single declaration. (This is an external interface.)
+-- | Check a single declaration. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
@@ -1288,7 +1299,7 @@ checkDecl env tenv decl =
     Left errs -> Left errs
     Right decl' -> Right decl'
 
--- Check a declgroup. (This is an external interface.)
+-- | Check a declgroup. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
