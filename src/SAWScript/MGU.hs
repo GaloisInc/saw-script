@@ -26,10 +26,10 @@ module SAWScript.MGU
 import Control.Applicative
 #endif
 
-import Control.Monad -- required for zipWithM in some(?) ghc versions
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Identity
+import Control.Monad (zipWithM)
+import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
+import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
+import Control.Monad.Identity (Identity)
 import Data.List (intercalate, genericTake)
 import Data.Map (Map)
 import Data.Either (partitionEithers)
