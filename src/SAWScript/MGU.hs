@@ -981,8 +981,40 @@ legalEndOfBlock s = case s of
     StmtBind _spos (PWild _patpos _mt) _e -> True
     _ -> False
 
--- type inference for statements
+-- type inference for a single statement
 --
+-- the passed-in position should be the position associated with the monad type
+-- the first type argument (ctx) is the monad type for any binds that occur
+--
+-- returns a wrapper for checking subsequent statements as well as
+-- an updated statement and a type.
+inferStmt :: LName -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt, Type)
+inferStmt ln blockpos ctx s =
+    case s of
+        StmtBind spos pat e -> do
+            (pty, pat') <- inferPattern pat
+            -- The expression should be of monad type; unify both
+            -- the monad type (ctx) and the result type expected
+            -- by the pattern (pty).
+            e' <- checkExpr ln e (tBlock blockpos ctx pty)
+            let s' = StmtBind spos pat' e'
+            let wrapper = withPattern pat'
+            return (wrapper, s', pty)
+        StmtLet spos dg -> do
+            dg' <- inferDeclGroup dg
+            let s' = StmtLet spos dg'
+            let wrapper = withDeclGroup dg'
+            return (wrapper, s', tUnit $ PosInferred InfTerm spos)
+        StmtCode spos _ ->
+            return (id, s, tUnit $ PosInferred InfTerm spos)
+        StmtImport spos _ ->
+            return (id, s, tUnit $ PosInferred InfTerm spos)
+        StmtTypedef spos name ty -> do
+            ty' <- checkType kindStar ty
+            let s' = StmtTypedef spos name ty'
+            let wrapper = withTypedef name ty'
+            return (wrapper, s', tUnit $ PosInferred InfTerm spos)
+
 -- the passed-in position should be the position for the whole statement block
 -- the first type argument (ctx) is the monad type for the block
 inferStmts :: LName -> Pos -> Type -> [Stmt] -> TI ([OutStmt], Type)
@@ -994,30 +1026,7 @@ inferStmts ln blockpos ctx stmts = case stmts of
         return ([], t)
 
     s : more -> do
-        (wrapper, s', t) <- case s of
-            StmtBind spos pat e -> do
-                (pty, pat') <- inferPattern pat
-                -- The expression should be of monad type; unify both
-                -- the monad type (ctx) and the result type expected
-                -- by the pattern (pty).
-                e' <- checkExpr ln e (tBlock blockpos ctx pty)
-                let s' = StmtBind spos pat' e'
-                let wrapper = withPattern pat'
-                return (wrapper, s', pty)
-            StmtLet spos dg -> do
-                dg' <- inferDeclGroup dg
-                let s' = StmtLet spos dg'
-                let wrapper = withDeclGroup dg'
-                return (wrapper, s', tUnit $ PosInferred InfTerm spos)
-            StmtCode spos _ ->
-                return (id, s, tUnit $ PosInferred InfTerm spos)
-            StmtImport spos _ ->
-                return (id, s, tUnit $ PosInferred InfTerm spos)
-            StmtTypedef spos name ty -> do
-                ty' <- checkType kindStar ty
-                let s' = StmtTypedef spos name ty'
-                let wrapper = withTypedef name ty'
-                return (wrapper, s', tUnit $ PosInferred InfTerm spos)
+        (wrapper, s', t) <- inferStmt ln blockpos ctx s
         case more of
             [] | legalEndOfBlock s ->
                 return ([s'], t)
