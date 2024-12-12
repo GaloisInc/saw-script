@@ -65,7 +65,7 @@ import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkDecl, checkDeclGroup)
+import SAWScript.MGU (checkDecl, checkDeclGroup, checkStmt)
 import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
@@ -294,6 +294,8 @@ processStmtBind printBinds pat expr = do -- mx mt
   -- isn't any single variable use "it". We seem to get here only for
   -- statements typed at the repl, so it apparently isn't wrong to use
   -- "it".
+  -- XXX: that's not actually true, file loads come here via
+  -- interpretStmt and interpretFile.
   -- XXX: it seems problematic to discard the type for a tuple binding...
   let it pos = SS.Located "it" "it" pos
   let (lname, mt) = case pat of
@@ -377,6 +379,18 @@ interpretStmt :: InteractiveMonad m =>
   m ()
 interpretStmt printBinds stmt =
   let ?fileReader = BS.readFile in
+
+-- XXX: not yet. The code in processStmtBind that typechecks the
+-- statement incrementally does extra things behind the typechecker's
+-- back (it wraps each bind in a Decl so it passes through generalize)
+-- and we need to figure out the correct way to make that happen
+-- before typechecking up front.
+{-
+  rw <- getTopLevelRW
+  stmt' <- either failTypecheck return $
+           checkStmt (rwTypes rw) (rwTypedef rw) stmt
+-}
+
   case stmt of
 
     SS.StmtBind pos pat expr ->
@@ -412,9 +426,15 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
-    SS.StmtTypedef _ name ty ->
+    SS.StmtTypedef _ _ _ ->
       liftTopLevel $
       do rw <- getTopLevelRW
+         ctx <- getMonadContext
+         pos <- getPosition
+         -- XXX: hack this until such time as we can get it to work up front
+         stmt' <- either failTypecheck return $
+                  checkStmt (rwTypes rw) (rwTypedef rw) pos ctx stmt
+         let (SS.StmtTypedef _ name ty) = stmt'
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()

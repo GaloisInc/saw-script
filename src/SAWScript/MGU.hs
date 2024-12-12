@@ -18,6 +18,7 @@ Stability   : provisional
 module SAWScript.MGU
        ( checkDecl
        , checkDeclGroup
+       , checkStmt
        , instantiate
        ) where
 
@@ -1255,6 +1256,26 @@ evalTIWithEnv env tenv m =
   case runTIWithEnv env tenv m of
     (res, _, []) -> Right res
     (_, _, errs) -> Left errs
+
+-- Check a single statement. (This is an external interface.)
+--
+-- The first two arguments are the starting variable and typedef
+-- environments to use.
+--
+-- The third is a current position, and the fourth is the
+-- context/monad type associated with the execution.
+checkStmt :: Map LName Schema -> Map Name Type -> Pos -> Context -> Stmt -> Either [(Pos, String)] Stmt
+checkStmt env tenv pos ctx stmt = do
+  -- Ugh. This should all be cleaned out further. XXX
+  ln <- case ctx of
+       TopLevel -> return $ Located "<toplevel>" "<toplevel>" pos
+       ProofScript -> return $ Located "<proofscript>" "<proofscript>" pos
+       _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
+  let ctxtype = TyCon pos (ContextCon ctx) []
+  case evalTIWithEnv env tenv (inferStmt ln pos ctxtype stmt) of
+    Left errs -> Left errs
+    Right (_wrapper, stmt', _type) -> Right stmt'
+
 
 -- Check a single declaration. (This is an external interface.)
 --
