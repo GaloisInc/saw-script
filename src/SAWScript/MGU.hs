@@ -26,6 +26,7 @@ module SAWScript.MGU
 import Control.Applicative
 #endif
 
+import Control.Monad -- required for zipWithM in some(?) ghc versions
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Identity
