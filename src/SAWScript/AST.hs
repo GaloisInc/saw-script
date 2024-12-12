@@ -163,13 +163,8 @@ instance Positioned Pattern where
   getPos (PVar pos _ _) = pos
   getPos (PTuple pos _) = pos
 
--- The 3rd argument of StmtBind is not the type of the value (that
--- appears in the Pattern) but the monad ("context") type for the
--- enclosing block. This does _not_ include the result type of the
--- computation). Once fully resolved, it should have the form TyCon
--- pos (ContextCon context) [], where context is e.g. LLVMSetup.
 data Stmt
-  = StmtBind     Pos Pattern (Maybe Type) Expr
+  = StmtBind     Pos Pattern Expr
   | StmtLet      Pos DeclGroup
   | StmtCode     Pos (Located String)
   | StmtImport   Pos Import
@@ -177,7 +172,7 @@ data Stmt
   deriving Show
 
 instance Positioned Stmt where
-  getPos (StmtBind pos _ _ _)  = pos
+  getPos (StmtBind pos _ _)  = pos
   getPos (StmtLet pos _)       = pos
   getPos (StmtCode pos _)      = pos
   getPos (StmtImport pos _)    = pos
@@ -337,9 +332,9 @@ instance Pretty Pattern where
 
 instance Pretty Stmt where
    pretty = \case
-      StmtBind _ (PWild _ _leftType) _rightType expr ->
+      StmtBind _ (PWild _ _ty) expr ->
          PP.pretty expr
-      StmtBind _ pat _rightType expr ->
+      StmtBind _ pat expr ->
          PP.pretty pat PP.<+> "<-" PP.<+> PP.align (PP.pretty expr)
       StmtLet _ (NonRecursive decl) ->
          "let" PP.<+> prettyDef decl

@@ -250,8 +250,8 @@ interpretStmts stmts =
     -- XXX are the uses of withPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _patpos _) _ e] -> withPosition pos (interpret e)
-      SS.StmtBind pos pat _mcxt e : ss ->
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> withPosition pos (interpret e)
+      SS.StmtBind pos pat e : ss ->
           do env <- getLocalEnv
              v1 <- withPosition pos (interpret e)
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
@@ -287,10 +287,9 @@ processStmtBind ::
   InteractiveMonad m =>
   Bool ->
   SS.Pattern ->
-  Maybe SS.Type ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pat _mc expr = do -- mx mt
+processStmtBind printBinds pat expr = do -- mx mt
   -- Extract the variable and type from the pattern, if any. If there
   -- isn't any single variable use "it". We seem to get here only for
   -- statements typed at the repl, so it apparently isn't wrong to use
@@ -380,8 +379,8 @@ interpretStmt printBinds stmt =
   let ?fileReader = BS.readFile in
   case stmt of
 
-    SS.StmtBind pos pat mc expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat mc expr)
+    SS.StmtBind pos pat expr ->
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
 
     SS.StmtLet _ dg           ->
       liftTopLevel $

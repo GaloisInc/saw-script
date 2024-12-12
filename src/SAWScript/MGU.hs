@@ -187,7 +187,7 @@ instance AppSubst Pattern where
 
 instance AppSubst Stmt where
   appSubst s bst = case bst of
-    StmtBind pos pat ctx e   -> StmtBind pos (appSubst s pat) (appSubst s ctx) (appSubst s e)
+    StmtBind pos pat e       -> StmtBind pos (appSubst s pat) (appSubst s e)
     StmtLet pos dg           -> StmtLet pos (appSubst s dg)
     StmtCode pos str         -> StmtCode pos str
     StmtImport pos imp       -> StmtImport pos imp
@@ -938,7 +938,7 @@ withTypedef n t m =
 -- as a bind-statement of the form _ <- e.
 legalEndOfBlock :: Stmt -> Bool
 legalEndOfBlock s = case s of
-    StmtBind _spos (PWild _patpos _mt) _mc _e -> True
+    StmtBind _spos (PWild _patpos _mt) _e -> True
     _ -> False
 
 -- type inference for statements
@@ -955,42 +955,13 @@ inferStmts ln blockpos ctx stmts = case stmts of
 
     s : more -> do
         (wrapper, s', t) <- case s of
-            StmtBind spos pat mctx2 e -> do
+            StmtBind spos pat e -> do
                 (pty, pat') <- inferPattern pat
                 -- The expression should be of monad type; unify both
                 -- the monad type (ctx) and the result type expected
                 -- by the pattern (pty).
                 e' <- checkExpr ln e (tBlock blockpos ctx pty)
-                ctx2' <- case mctx2 of
-                    Nothing ->
-                        return ctx
-                    Just ctx2  -> do
-                        ctx2' <- checkKind ctx2
-                        -- dholland 20240628 are the type arguments
-                        -- backwards, and what position should we use?
-                        --
-                        -- Update 20241211: it is complicated. We're
-                        -- unifying the monad type with a hint stored
-                        -- in the AST. However, the parser never
-                        -- stores such hints, so it's not clear if
-                        -- this code is even reachable or (if it is)
-                        -- where the hint came from. I'm changing the
-                        -- AST to include a position to use. That will
-                        -- be the position that ctx2 came from. And if
-                        -- it's wrong, ctx is the context that
-                        -- produces the expectation, ctx2 is the type
-                        -- we found instead, and its accompanying
-                        -- position is the position it came from where
-                        -- something's wrong. Thus, we want ctx to be
-                        -- the first type argument to unify and ctx2
-                        -- to be the second. So it was backwards until
-                        -- now.
-                        --
-                        -- XXX: haven't done the AST change yet;
-                        -- replace (getPos e) when that happens.
-                        unify ln ctx (getPos e) ctx2'
-                        return ctx2'
-                let s' = StmtBind spos pat' (Just ctx2') e'
+                let s' = StmtBind spos pat' e'
                 let wrapper = withPattern pat'
                 return (wrapper, s', pty)
             StmtLet spos dg -> do
