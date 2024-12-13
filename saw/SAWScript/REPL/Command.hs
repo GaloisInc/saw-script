@@ -111,6 +111,8 @@ nbCommandList :: [CommandDescr]
 nbCommandList  =
   [ CommandDescr ":env"    (NoArg envCmd)
     "display the current sawscript environment"
+  , CommandDescr ":tenv"    (NoArg tenvCmd)
+    "display the current sawscript type environment"
   , CommandDescr ":type"   (ExprArg typeOfCmd)
     "check the type of an expression"
   , CommandDescr ":?"      (ExprArg helpCmd)
@@ -177,6 +179,11 @@ envCmd = do
   env <- getValueEnvironment
   let showLName = SS.getVal
   io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
+
+tenvCmd :: REPL ()
+tenvCmd = do
+  env <- getValueEnvironment
+  io $ sequence_ [ putStrLn (a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwTypedef env) ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
