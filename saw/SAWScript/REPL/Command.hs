@@ -172,7 +172,7 @@ typeOfCmd str
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
      rw <- getValueEnvironment
      ~(SS.Decl _pos _ (Just schema) _expr') <-
-       either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+       either failTypecheck return $ checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
      io $ putStrLn $ SS.pShow schema
 
 quitCmd :: REPL ()
@@ -183,12 +183,12 @@ envCmd :: REPL ()
 envCmd = do
   env <- getValueEnvironment
   let showLName = SS.getVal
-  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
+  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwValueTypes env) ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
   env <- getValueEnvironment
-  io $ sequence_ [ putStrLn (a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwTypedef env) ]
+  io $ sequence_ [ putStrLn (a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd

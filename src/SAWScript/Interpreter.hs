@@ -318,7 +318,7 @@ processStmtBind printBinds pat expr = do -- mx mt
   let opts = rwPPOpts rw
 
   ~(SS.Decl _ _ (Just schema) expr'') <- liftTopLevel $
-    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+    either failTypecheck return $ checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
 
   val <- liftTopLevel $ interpret expr''
 
@@ -388,7 +388,7 @@ interpretStmt printBinds stmt =
 {-
   rw <- getTopLevelRW
   stmt' <- either failTypecheck return $
-           checkStmt (rwTypes rw) (rwTypedef rw) stmt
+           checkStmt (rwValueTypes rw) (rwNamedTypes rw) stmt
 -}
 
   case stmt of
@@ -400,7 +400,7 @@ interpretStmt printBinds stmt =
       liftTopLevel $
       do rw <- getTopLevelRW
          dg' <- either failTypecheck return $
-                checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
+                checkDeclGroup (rwValueTypes rw) (rwNamedTypes rw) dg
          env <- interpretDeclGroup dg'
          withLocalEnv env getMergedEnv >>= putTopLevelRW
 
@@ -433,7 +433,7 @@ interpretStmt printBinds stmt =
          pos <- getPosition
          -- XXX: hack this until such time as we can get it to work up front
          stmt' <- either failTypecheck return $
-                  checkStmt (rwTypes rw) (rwTypedef rw) pos ctx stmt
+                  checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
          let (SS.StmtTypedef _ name ty) = stmt'
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
@@ -526,8 +526,8 @@ buildTopLevelEnv proxy opts =
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
-                   , rwTypes      = primTypeEnv primsAvail
-                   , rwTypedef    = Map.empty
+                   , rwValueTypes = primValueTypeEnv primsAvail
+                   , rwNamedTypes = Map.empty
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
@@ -590,7 +590,7 @@ add_primitives lc bic opts = do
   let lcs = Set.singleton lc
   putTopLevelRW rw {
     rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
-  , rwTypes      = rwTypes rw `Map.union` primTypeEnv lcs
+  , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
@@ -4976,8 +4976,8 @@ filterAvail ::
 filterAvail primsAvail =
   Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
-primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
+primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
+primValueTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
 valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
