@@ -67,6 +67,7 @@ import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkDecl, checkDeclGroup, checkStmt)
 import SAWScript.Parser (parseSchema)
+import SAWScript.Panic (panic)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
@@ -527,7 +528,7 @@ buildTopLevelEnv proxy opts =
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
                    , rwValueTypes = primValueTypeEnv primsAvail
-                   , rwNamedTypes = Map.empty
+                   , rwNamedTypes = primNamedTypeEnv primsAvail
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
@@ -591,6 +592,7 @@ add_primitives lc bic opts = do
   putTopLevelRW rw {
     rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
   , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
+  , rwNamedTypes = rwNamedTypes rw `Map.union` primNamedTypeEnv lcs
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
@@ -859,6 +861,14 @@ readSchema str =
     Left err -> error (show err)
     Right schema -> schema
 
+data Primtype
+  = Primtype
+    { primtypeName :: SS.Name
+    , primtypeType :: SS.NamedType
+    , primtypeLife :: PrimitiveLifecycle
+    -- FUTURE: add doc strings for these?
+    }
+
 data Primitive
   = Primitive
     { primitiveName :: SS.LName
@@ -867,6 +877,61 @@ data Primitive
     , primitiveDoc  :: [String]
     , primitiveFn   :: Options -> BuiltinContext -> Value
     }
+
+primtypes :: Map SS.Name Primtype
+primtypes = Map.fromList
+  [ abstype "BisimTheorem" Experimental
+  , abstype "CryptolModule" Current
+  , abstype "FunctionProfile" Experimental
+  , abstype "FunctionSkeleton" Experimental
+  , abstype "Ghost" Current
+  , abstype "HeapsterEnv" Experimental
+  , abstype "JVMSetup" Current
+  , abstype "JVMValue" Current
+  , abstype "JavaClass" Current
+  , abstype "JavaType" Current
+  , abstype "LLVMModule" Current
+  , abstype "LLVMType" Current
+  , abstype "MIRAdt" Experimental
+  , abstype "MIRModule" Experimental
+  , abstype "MIRType" Experimental
+  , abstype "MIRValue" Experimental
+  , abstype "ModuleSkeleton" Experimental
+  , abstype "ProofResult" Current
+  , abstype "Refnset" Experimental
+  , abstype "SatResult" Current
+  , abstype "SetupValue" Current
+  , abstype "Simpset" Current
+  , abstype "SkeletonState" Experimental
+  , abstype "Theorem" Current
+  , abstype "Uninterp" Deprecated
+  , abstype "YosysSequential" Experimental
+  , abstype "YosysTheorem" Experimental
+  ]
+  where
+    -- abstract type
+    abstype :: String -> PrimitiveLifecycle -> (SS.Name, Primtype)
+    abstype name lc = (name, info)
+      where
+        info = Primtype
+          { primtypeName = name
+          , primtypeType = SS.AbstractType
+          , primtypeLife = lc
+          }
+
+    -- concrete type (not currently used)
+    _conctype :: String -> String -> PrimitiveLifecycle -> (SS.Name, Primtype)
+    _conctype name tystr lc = (name, info)
+      where
+        info = Primtype
+          { primtypeName = name
+          , primtypeType = SS.ConcreteType ty
+          , primtypeLife = lc
+          }
+        ty = case readSchema tystr of
+            SS.Forall [] ty' -> ty'
+            _ -> panic "primtypes" ["Builtin typedef name not monomorphic"]
+
 
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
@@ -4969,18 +5034,28 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
-filterAvail ::
+filterAvailTypes ::
+  Set PrimitiveLifecycle ->
+  Map SS.Name Primtype ->
+  Map SS.Name Primtype
+filterAvailTypes primsAvail =
+  Map.filter (\p -> primtypeLife p `Set.member` primsAvail)
+
+filterAvailPrims ::
   Set PrimitiveLifecycle ->
   Map SS.LName Primitive ->
   Map SS.LName Primitive
-filterAvail primsAvail =
+filterAvailPrims primsAvail =
   Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
 primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primValueTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
+primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
+
+primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
+primNamedTypeEnv primsAvail = fmap primtypeType (filterAvailTypes primsAvail primtypes)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
-valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
+valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)
   where f p = (primitiveFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
@@ -4989,7 +5064,7 @@ primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
 primDocEnv primsAvail =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
-      prims = filterAvail primsAvail primitives
+      prims = filterAvailPrims primsAvail primitives
       tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]
