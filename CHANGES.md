@@ -2,6 +2,10 @@
 
 ## New Features
 
+* Add a `:tenv` REPL command, which is like `:env` but prints the type
+  environment instead of the variable environment. `:t` is still short
+  for `:type`.
+
 * Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
   command for the MIR and JVM backends, respectively.
 
