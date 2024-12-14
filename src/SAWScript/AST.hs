@@ -28,6 +28,7 @@ module SAWScript.AST
        , Type(..), TypeIndex
        , TyCon(..)
        , Schema(..)
+       , NamedType(..)
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
@@ -263,6 +264,13 @@ data TyCon
 data Schema = Forall [(Pos, Name)] Type
   deriving Show
 
+-- | The things a TyVar can refer to.
+--
+-- AbstractType is an opaque type whose only semantics are the
+-- operations available for it, if any. The name identifies it; the
+-- AbstractType constructor is a placeholder.
+data NamedType = ConcreteType Type | AbstractType
+
 -- }}}
 
 -- Pretty Printing {{{
@@ -449,6 +457,11 @@ instance PrettyPrint Context where
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
     CrucibleSetup-> "CrucibleSetup"
+
+instance PrettyPrint NamedType where
+  pretty par ty = case ty of
+    ConcreteType ty' -> pretty par ty'
+    AbstractType -> "<opaque>"
 
 replicateDoc :: Integer -> PP.Doc ann -> PP.Doc ann
 replicateDoc n d

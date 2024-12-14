@@ -47,6 +47,11 @@ tUnit :: Pos -> Type
 tUnit pos = tTuple pos []
 
 
+-- short names for the environment types we use
+type VarEnv = Map LName Schema
+type TyEnv = Map Name NamedType 
+
+
 ------------------------------------------------------------
 -- UnifyVars, NamedVars {{{
 
@@ -274,20 +279,24 @@ instance AppSubst Schema where
 
 class Instantiate t where
   -- | @instantiate m x@ applies the map @m@ to type variables in @x@.
-  instantiate :: Map Name Type -> t -> t
+  instantiate :: TyEnv -> t -> t
 
 instance (Instantiate a) => Instantiate (Maybe a) where
-  instantiate nts = fmap (instantiate nts)
+  instantiate tyenv = fmap (instantiate tyenv)
 
 instance (Instantiate a) => Instantiate [a] where
-  instantiate nts = map (instantiate nts)
+  instantiate tyenv = map (instantiate tyenv)
 
 instance Instantiate Type where
-  instantiate nts ty = case ty of
-    TyCon pos tc ts     -> TyCon pos tc (instantiate nts ts)
-    TyRecord pos fs     -> TyRecord pos (fmap (instantiate nts) fs)
-    TyVar _ n           -> M.findWithDefault ty n nts
+  instantiate tyenv ty = case ty of
+    TyCon pos tc ts     -> TyCon pos tc (instantiate tyenv ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (instantiate tyenv) fs)
     TyUnifyVar _ _      -> ty
+    TyVar _ n           ->
+        case M.lookup n tyenv of
+            Nothing -> ty
+            Just AbstractType -> ty
+            Just (ConcreteType ty') -> ty'
 
 -- }}}
 
@@ -355,10 +364,10 @@ newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
 data RO = RO
   {
     -- | The variable typing environment (variable name to type scheme)
-    varEnv :: M.Map (Located Name) Schema,
+    varEnv :: VarEnv,
 
-    -- | The typedef environment (typedef name to its expansion type)
-    typedefEnv :: M.Map Name Type
+    -- | The type environment (type name to its expansion type or "abstract")
+    tyEnv :: TyEnv
   }
 
 -- | The read-write portion
@@ -417,7 +426,7 @@ applyCurrentSubst t = do
 -- Apply the current typedef collection with instantiate.
 resolveCurrentTypedefs :: Instantiate t => t -> TI t
 resolveCurrentTypedefs t = do
-  s <- TI $ asks typedefEnv
+  s <- TI $ asks tyEnv
   return $ instantiate s t
 
 -- Get the unification vars that are used in the current variable typing
@@ -927,7 +936,7 @@ inferExpr (ln, expr) = case expr of
            -- to a name -> ty map, and instantiate with the fresh tyvars
            let once (apos, a) = do
                  at <- getFreshTyVar apos
-                 return (a, at)
+                 return (a, ConcreteType at)
            substs <- mapM once as
            let t' = instantiate (M.fromList substs) t
            return (Var x, t')
@@ -1022,8 +1031,8 @@ withTypedef n t m =
   TI $
   local
     (\ro ->
-      let t' = instantiate (typedefEnv ro) t
-      in  ro { typedefEnv = M.insert (getVal n) t' $ typedefEnv ro })
+      let t' = instantiate (tyEnv ro) t
+      in  ro { tyEnv = M.insert (getVal n) (ConcreteType t') $ tyEnv ro })
     $ unTI m
 
 -- Check if a statement is an allowable one for the end of a do-block.
@@ -1256,8 +1265,8 @@ checkType kind ty = case ty of
           return $ TyRecord pos fields'
 
   TyVar pos x -> do
-      typedefs <- TI $ asks typedefEnv
-      case M.lookup x typedefs of
+      tyenv <- TI $ asks tyEnv
+      case M.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ x)
               getErrorTyVar pos
@@ -1265,12 +1274,16 @@ checkType kind ty = case ty of
               -- Assume ty' was checked when it was entered.
               -- (If we entered it that's true, if it was in the
               -- initial environment we were given that depends on the
-              -- interpreter not doing unfortunate things.)
+              -- interpreter not doing unfortunate things. This isn't
+              -- currently seeming like a very good bet.)
               --
               -- For now at least we require typedefs to be kind *
-              -- (they can't have parameters and the expansions are so
+              -- (they can't have parameters and the expansions are thus
               -- restricted) so just fail if we use one in a context
               -- expecting something else.
+              --
+              -- The same holds for abstract types, so we don't need
+              -- separate cases.
               if kind /= kindStar then do
                   recordError pos ("Kind mismatch: expected " ++ pShow kind ++
                                    " but found " ++ pShow kindStar)
@@ -1296,7 +1309,7 @@ checkType kind ty = case ty of
 -- External interface {{{
 
 -- Run the TI monad.
-runTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> (a, Subst, [(Pos, String)])
+runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, [(Pos, String)])
 runTIWithEnv env tenv m = (a, subst rw, errors rw)
   where
   m' = runReaderT (unTI m) (RO env tenv)
@@ -1304,7 +1317,7 @@ runTIWithEnv env tenv m = (a, subst rw, errors rw)
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
-evalTIWithEnv :: Map LName Schema -> Map Name Type -> TI a -> Either [(Pos, String)] a
+evalTIWithEnv :: VarEnv -> TyEnv -> TI a -> Either [(Pos, String)] a
 evalTIWithEnv env tenv m =
   case runTIWithEnv env tenv m of
     (res, _, []) -> Right res
@@ -1339,7 +1352,7 @@ evalTIWithEnv env tenv m =
 --      result of BlockCon existing and can go away when BlockCon is
 --      removed.)
 --
-checkStmt :: Map LName Schema -> Map Name Type -> Pos -> Context -> Stmt -> Either [(Pos, String)] Stmt
+checkStmt :: VarEnv -> TyEnv -> Pos -> Context -> Stmt -> Either [(Pos, String)] Stmt
 checkStmt env tenv pos ctx stmt = do
   ln <- case ctx of
        TopLevel -> return $ Located "<toplevel>" "<toplevel>" pos
@@ -1354,7 +1367,7 @@ checkStmt env tenv pos ctx stmt = do
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
-checkDecl :: Map LName Schema -> Map Name Type -> Decl -> Either [(Pos, String)] Decl
+checkDecl :: VarEnv -> TyEnv -> Decl -> Either [(Pos, String)] Decl
 checkDecl env tenv decl =
   case evalTIWithEnv env tenv (inferDecl decl) of
     Left errs -> Left errs
@@ -1364,7 +1377,7 @@ checkDecl env tenv decl =
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
-checkDeclGroup :: Map LName Schema -> Map Name Type -> DeclGroup -> Either [(Pos, String)] DeclGroup
+checkDeclGroup :: VarEnv -> TyEnv -> DeclGroup -> Either [(Pos, String)] DeclGroup
 checkDeclGroup env tenv dg =
   case evalTIWithEnv env tenv (inferDeclGroup dg) of
     Left errs -> Left errs

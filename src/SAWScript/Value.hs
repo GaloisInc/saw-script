@@ -505,7 +505,8 @@ extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv 
 extendLocal x mt md v env = LocalLet x mt md v : env
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw = rw { rwNamedTypes = M.insert name ty' (rwNamedTypes rw) }
+addTypedef name ty rw =
+  rw { rwNamedTypes = M.insert name (SS.ConcreteType ty') (rwNamedTypes rw) }
   where ty' = instantiate (rwNamedTypes rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
@@ -553,7 +554,7 @@ data TopLevelRW =
   TopLevelRW
   { rwValues     :: Map SS.LName Value
   , rwValueTypes :: Map SS.LName SS.Schema
-  , rwNamedTypes :: Map SS.Name SS.Type
+  , rwNamedTypes :: Map SS.Name SS.NamedType
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
   , rwMonadify   :: Monadify.MonadifyEnv
