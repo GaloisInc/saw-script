@@ -112,28 +112,66 @@ instance NamedVars Schema where
 -- Subst is the type of a substitution map for unification vars.
 newtype Subst = Subst { unSubst :: M.Map TypeIndex Type } deriving (Show)
 
--- Union for substitution maps
+-- Merge two substitution maps.
 --
--- XXX: this knows that in the uses below the right substitution is the
--- older/preexisting one. That probably shouldn't be silently baked in.
+-- XXX: this knows that in the uses below the right substitution (m1)
+-- is the older/preexisting one. That probably shouldn't be silently
+-- baked in.
 --
--- XXX: we apply the left substitution into the types in the right
--- substitution. I expect this in pursuit of an invariant where any
--- unification variables existing in the right-hand sides of the
+-- We apply the left substitution (m2) into the types in the right
+-- substitution (m1). That is, any new substitutions are applied into
+-- the existing ones. I expect this in pursuit of an invariant where
+-- any unification variables existing in the right-hand sides of the
 -- substitution aren't themselves defined by the substitution, so we
 -- don't have to recurse into the right-hand sides later when applying
--- the substitution. However, this assumes that whatever is on the
--- left-hand side doesn't already violate this invariant. We can check
--- this with reasonable accuracy since we have right here all the ways
--- to create a Subst (and we can check that there aren't any others
--- hidden below)... and we find that while emptySubst is obviously ok,
--- and singletonSubst is ok (an attempt to create a singleton
--- substitution that refers to itself will fail the occurs check right
--- before calling singletonSubst), there doesn't seem to be any such
+-- the substitution.
+--
+-- XXX: However, this assumes that whatever is on the left-hand side
+-- doesn't already violate this invariant. We can check this with
+-- reasonable accuracy since we have right here all the ways to create
+-- a Subst (and we can check that there aren't any others hidden
+-- below)... and we find that while emptySubst is obviously ok, and
+-- singletonSubst is ok (an attempt to create a singleton substitution
+-- that refers to itself will fail the occurs check right before
+-- calling singletonSubst), there doesn't seem to be any such
 -- assurance for substFromList. I'm not sure if this is actually a
 -- problem or not but it should probably be looked into at some point.
-concatSubst :: Subst -> Subst -> Subst
-concatSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `M.union` m2
+--
+-- XXX: we should probably crosscheck the key space of the maps. Note
+-- that the ordering of the M.union args means that if there are
+-- duplicated keys we prefer the right substitution (m1), namely the
+-- preexisting one. Given that this choice seems to be explicit, it
+-- must have been for a reason, but I'm not sure what that reason
+-- would be. Ordinarily in this kind of typechecker you might update a
+-- substitution you've already made, but only when replacing a weak
+-- substitution (one unification var for another, like a1 -> a2) with
+-- a strong one (involving a real type, like a1 -> Int)... but if so
+-- it would always be the _new_ substitution you'd want to keep.
+-- However, in this particular code we always apply the existing
+-- substitution before doing further unification, so once we have any
+-- substitution for a given unification var we shouldn't get another.
+-- (Unless I guess if the intended invariant above is violated, but if
+-- that happens we should probably panic, not chug along.)
+--
+-- XXX: also it isn't clear that anything below guarantees that we
+-- won't just derive multiple inconsistent substitutions (e.g. from
+-- disjoint subexpressions) and combine them incoherently. This should
+-- really be looked into further.
+--
+-- XXX: and _furthermore_ it's not clear that we can't get cyclic
+-- substitutions. If we already have a substitution a1 -> a2, and we
+-- add a2 -> a1, we'll resolve the existing substitution to a1 -> a1
+-- rather than going directly into an infinite loop. That's not
+-- necessarily preferable though. Normally in this kind of typechecker
+-- one also wants some kind of acyclicity-oriented invariant, like
+-- aN resolves to aM only if N > M (otherwise you substitute the other
+-- way) but we don't do anything like that.
+--
+-- When all the above issues get clarified we should consider coming
+-- up with a different name that indicates that this operation isn't
+-- commutative. Unless it actually can be.
+mergeSubst :: Subst -> Subst -> Subst
+mergeSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `M.union` m2
   where
   m1' = fmap (appSubst s2) m1
 
@@ -603,17 +641,19 @@ mgu t1 t2 = case (t1, t2) of
       -- one side is a unification var, resolve it
       resolveUnificationVar pos i t1
 
-  (TyRecord _ ts1, TyRecord _ ts2) | M.keys ts1 /= M.keys ts2 ->
+  (TyRecord _ ts1, TyRecord _ ts2)
+    | M.keys ts1 /= M.keys ts2 ->
       -- records with different keys
       failMGU "Record field names mismatch." t1 t2
 
-  (TyRecord _ ts1, TyRecord _ ts2) | otherwise ->
+    | otherwise ->
       -- records with the same field names, try unifying the field types
       case mgus (M.elems ts1) (M.elems ts2) of
         Right result -> Right result
         Left msgs -> Left $ failMGUAdd msgs t1 t2
 
-  (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 ->
+  (TyCon _ tc1 ts1, TyCon _ tc2 ts2)
+    | tc1 == tc2 ->
       -- same type constructor, unify the args
       case mgus ts1 ts2 of
         Right result -> Right result
@@ -624,7 +664,7 @@ mgu t1 t2 = case (t1, t2) of
             FunCon -> Left $ failMGUAddFun msgs t1 t2
             _ -> Left $ failMGUAdd msgs t1 t2
 
-  (TyCon _ tc1 _ts1, TyCon _ tc2 _ts2) | otherwise ->
+    | otherwise ->
       -- Wrong type constructors
       case tc1 of
         FunCon ->
@@ -652,7 +692,7 @@ mgus t1s t2s = case (t1s, t2s) of
         s <- mgu t1 t2
         -- apply that substitution and then recurse
         s' <- mgus (map (appSubst s) t1s') (map (appSubst s) t2s')
-        return (concatSubst s' s)
+        return (mergeSubst s' s)
     (_, _) ->
       -- XXX this is no good, it will always print one of the lengths as 0!
       -- (also, note that this is only reachable for type constructor args
@@ -705,7 +745,7 @@ unify m t1 pos t2 = do
   t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
   t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
   case mgu t1' t2' of
-    Right s -> TI $ modify $ \rw -> rw { subst = concatSubst s $ subst rw }
+    Right s -> TI $ modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
     Left msgs ->
        recordError pos $ unlines $ firstline : morelines'
        where
@@ -749,7 +789,7 @@ withVars bindings m = foldr (uncurry withVar) m bindings
 -- (note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t)
 withPattern :: Pattern -> TI a -> TI a
-withPattern pat = withVars bindings
+withPattern pat m = withVars bindings m
   where bindings = [ (x, tMono t) | (x, Just t) <- patternBindings pat ]
 
 -- wrap the action m with types for all the vars in a pattern, using
@@ -1041,14 +1081,15 @@ inferStmts ln blockpos ctx stmts = case stmts of
     s : more -> do
         (wrapper, s', t) <- inferStmt ln blockpos ctx s
         case more of
-            [] | legalEndOfBlock s ->
-                return ([s'], t)
-            [] | otherwise -> do
-                recordError blockpos ("do block must end with expression at " ++
-                                      show ln)
-                t' <- getErrorTyVar blockpos
-                -- XXX this has been throwing away s' but probably shouldn't
-                return ([], t')
+            [] ->
+                if legalEndOfBlock s then
+                    return ([s'], t)
+                else do
+                    recordError blockpos ("do block must end with " ++
+                                          "expression at " ++ show ln)
+                    t' <- getErrorTyVar blockpos
+                    -- XXX this has been throwing away s' but probably shouldn't
+                    return ([], t')
             _ : _ -> do
                (more', t') <- wrapper $ inferStmts ln blockpos ctx more
                return (s' : more', t')
@@ -1276,9 +1317,30 @@ evalTIWithEnv env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
+--
+-- XXX: we shouldn't need a position here.
+-- The position is used for the following things:
+--
+--    - to create ln, which is used as part of the error printing
+--      scheme, but is no longer particularly useful after recent
+--      improvements (especially here where it contains no real
+--      information) and should be removed;
+--
+--    - to be the position associated with the monad context, which
+--      in a tidy world should just be PosRepl (as in, the only
+--      time we should be typechecking a single statement is when
+--      it was just typed interactively, and which monad we're in
+--      is a direct property of that context) but this is not
+--      currently true and will require a good bit of interpreter
+--      cleanup to make it true;
+--
+--    - to pass to inferStmt, which also uses it as part of the
+--      position associated with the monad context. (This part is a
+--      result of BlockCon existing and can go away when BlockCon is
+--      removed.)
+--
 checkStmt :: Map LName Schema -> Map Name Type -> Pos -> Context -> Stmt -> Either [(Pos, String)] Stmt
 checkStmt env tenv pos ctx stmt = do
-  -- Ugh. This should all be cleaned out further. XXX
   ln <- case ctx of
        TopLevel -> return $ Located "<toplevel>" "<toplevel>" pos
        ProofScript -> return $ Located "<proofscript>" "<proofscript>" pos
@@ -1287,7 +1349,6 @@ checkStmt env tenv pos ctx stmt = do
   case evalTIWithEnv env tenv (inferStmt ln pos ctxtype stmt) of
     Left errs -> Left errs
     Right (_wrapper, stmt', _type) -> Right stmt'
-
 
 -- | Check a single declaration. (This is an external interface.)
 --
