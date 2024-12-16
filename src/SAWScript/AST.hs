@@ -264,7 +264,7 @@ data TyCon
 data Schema = Forall [(Pos, Name)] Type
   deriving Show
 
--- | The things a TyVar can refer to.
+-- | The things a (named) TyVar can refer to by its name.
 --
 -- AbstractType is an opaque type whose only semantics are the
 -- operations available for it, if any. The name identifies it; the

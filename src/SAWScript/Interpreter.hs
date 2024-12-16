@@ -861,11 +861,11 @@ readSchema str =
     Left err -> error (show err)
     Right schema -> schema
 
-data Primtype
-  = Primtype
-    { primtypeName :: SS.Name
-    , primtypeType :: SS.NamedType
-    , primtypeLife :: PrimitiveLifecycle
+data PrimType
+  = PrimType
+    { primTypeName :: SS.Name
+    , primTypeType :: SS.NamedType
+    , primTypeLife :: PrimitiveLifecycle
     -- FUTURE: add doc strings for these?
     }
 
@@ -878,8 +878,16 @@ data Primitive
     , primitiveFn   :: Options -> BuiltinContext -> Value
     }
 
-primtypes :: Map SS.Name Primtype
-primtypes = Map.fromList
+-- | Primitive types, that is, builtin types used by the primitives.
+--
+-- This excludes certain types that are built in more deeply and
+-- appear as entries in @TyCon in AST.hs. Note that those are also
+-- handled as reserved words in the lexer and parser. XXX: and there's
+-- no particular system to which are there and which are here; some of
+-- the ones there have no special syntax or semantics and should
+-- probably be moved here at some point.
+primTypes :: Map SS.Name PrimType
+primTypes = Map.fromList
   [ abstype "BisimTheorem" Experimental
   , abstype "CryptolModule" Current
   , abstype "FunctionProfile" Experimental
@@ -910,27 +918,27 @@ primtypes = Map.fromList
   ]
   where
     -- abstract type
-    abstype :: String -> PrimitiveLifecycle -> (SS.Name, Primtype)
+    abstype :: String -> PrimitiveLifecycle -> (SS.Name, PrimType)
     abstype name lc = (name, info)
       where
-        info = Primtype
-          { primtypeName = name
-          , primtypeType = SS.AbstractType
-          , primtypeLife = lc
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.AbstractType
+          , primTypeLife = lc
           }
 
     -- concrete type (not currently used)
-    _conctype :: String -> String -> PrimitiveLifecycle -> (SS.Name, Primtype)
+    _conctype :: String -> String -> PrimitiveLifecycle -> (SS.Name, PrimType)
     _conctype name tystr lc = (name, info)
       where
-        info = Primtype
-          { primtypeName = name
-          , primtypeType = SS.ConcreteType ty
-          , primtypeLife = lc
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.ConcreteType ty
+          , primTypeLife = lc
           }
         ty = case readSchema tystr of
             SS.Forall [] ty' -> ty'
-            _ -> panic "primtypes" ["Builtin typedef name not monomorphic"]
+            _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
 
 primitives :: Map SS.LName Primitive
@@ -5036,10 +5044,10 @@ primitives = Map.fromList
 
 filterAvailTypes ::
   Set PrimitiveLifecycle ->
-  Map SS.Name Primtype ->
-  Map SS.Name Primtype
+  Map SS.Name PrimType ->
+  Map SS.Name PrimType
 filterAvailTypes primsAvail =
-  Map.filter (\p -> primtypeLife p `Set.member` primsAvail)
+  Map.filter (\p -> primTypeLife p `Set.member` primsAvail)
 
 filterAvailPrims ::
   Set PrimitiveLifecycle ->
@@ -5052,7 +5060,7 @@ primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
 primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
 
 primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
-primNamedTypeEnv primsAvail = fmap primtypeType (filterAvailTypes primsAvail primtypes)
+primNamedTypeEnv primsAvail = fmap primTypeType (filterAvailTypes primsAvail primTypes)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
 valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)

@@ -50,8 +50,9 @@ lookupTrieWithExact key t@(Node mp mb) = case key of
     Just m' -> lookupTrieWithExact cs m'
     Nothing -> []
 
-  [] | Just b <- mb -> [b]
-  [] | otherwise -> leaves t
+  [] -> case mb of
+    Just b -> [b]
+    Nothing -> leaves t
 
 -- | Return all of the values from a Trie.
 leaves :: Trie a -> [a]

@@ -366,7 +366,8 @@ data RO = RO
     -- | The variable typing environment (variable name to type scheme)
     varEnv :: VarEnv,
 
-    -- | The type environment (type name to its expansion type or "abstract")
+    -- | The type environment: named type variables, which are either
+    --   typedefs (map to ConcreteType) or abstract types (AbstractType)
     tyEnv :: TyEnv
   }
 
@@ -1330,7 +1331,8 @@ evalTIWithEnv env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
---
+
+-- (separate comment so this part doesn't appear in the Haddocks)
 -- XXX: we shouldn't need a position here.
 -- The position is used for the following things:
 --
