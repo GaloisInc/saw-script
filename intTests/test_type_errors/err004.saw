@@ -1,0 +1,4 @@
+
+typedef t = Nonexistent;
+
+let foo (a: t) = a;

@@ -65,8 +65,9 @@ import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkDecl, checkDeclGroup)
+import SAWScript.MGU (checkDecl, checkDeclGroup, checkStmt)
 import SAWScript.Parser (parseSchema)
+import SAWScript.Panic (panic)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
@@ -250,8 +251,8 @@ interpretStmts stmts =
     -- XXX are the uses of withPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _patpos _) _ e] -> withPosition pos (interpret e)
-      SS.StmtBind pos pat _mcxt e : ss ->
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> withPosition pos (interpret e)
+      SS.StmtBind pos pat e : ss ->
           do env <- getLocalEnv
              v1 <- withPosition pos (interpret e)
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
@@ -287,14 +288,15 @@ processStmtBind ::
   InteractiveMonad m =>
   Bool ->
   SS.Pattern ->
-  Maybe SS.Type ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pat _mc expr = do -- mx mt
+processStmtBind printBinds pat expr = do -- mx mt
   -- Extract the variable and type from the pattern, if any. If there
   -- isn't any single variable use "it". We seem to get here only for
   -- statements typed at the repl, so it apparently isn't wrong to use
   -- "it".
+  -- XXX: that's not actually true, file loads come here via
+  -- interpretStmt and interpretFile.
   -- XXX: it seems problematic to discard the type for a tuple binding...
   let it pos = SS.Located "it" "it" pos
   let (lname, mt) = case pat of
@@ -317,7 +319,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   let opts = rwPPOpts rw
 
   ~(SS.Decl _ _ (Just schema) expr'') <- liftTopLevel $
-    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+    either failTypecheck return $ checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
 
   val <- liftTopLevel $ interpret expr''
 
@@ -378,16 +380,28 @@ interpretStmt :: InteractiveMonad m =>
   m ()
 interpretStmt printBinds stmt =
   let ?fileReader = BS.readFile in
+
+-- XXX: not yet. The code in processStmtBind that typechecks the
+-- statement incrementally does extra things behind the typechecker's
+-- back (it wraps each bind in a Decl so it passes through generalize)
+-- and we need to figure out the correct way to make that happen
+-- before typechecking up front.
+{-
+  rw <- getTopLevelRW
+  stmt' <- either failTypecheck return $
+           checkStmt (rwValueTypes rw) (rwNamedTypes rw) stmt
+-}
+
   case stmt of
 
-    SS.StmtBind pos pat mc expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat mc expr)
+    SS.StmtBind pos pat expr ->
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
 
     SS.StmtLet _ dg           ->
       liftTopLevel $
       do rw <- getTopLevelRW
          dg' <- either failTypecheck return $
-                checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
+                checkDeclGroup (rwValueTypes rw) (rwNamedTypes rw) dg
          env <- interpretDeclGroup dg'
          withLocalEnv env getMergedEnv >>= putTopLevelRW
 
@@ -413,9 +427,15 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
-    SS.StmtTypedef _ name ty ->
+    SS.StmtTypedef _ _ _ ->
       liftTopLevel $
       do rw <- getTopLevelRW
+         ctx <- getMonadContext
+         pos <- getPosition
+         -- XXX: hack this until such time as we can get it to work up front
+         stmt' <- either failTypecheck return $
+                  checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+         let (SS.StmtTypedef _ name ty) = stmt'
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
@@ -507,8 +527,8 @@ buildTopLevelEnv proxy opts =
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
-                   , rwTypes      = primTypeEnv primsAvail
-                   , rwTypedef    = Map.empty
+                   , rwValueTypes = primValueTypeEnv primsAvail
+                   , rwNamedTypes = primNamedTypeEnv primsAvail
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
@@ -571,7 +591,8 @@ add_primitives lc bic opts = do
   let lcs = Set.singleton lc
   putTopLevelRW rw {
     rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
-  , rwTypes      = rwTypes rw `Map.union` primTypeEnv lcs
+  , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
+  , rwNamedTypes = rwNamedTypes rw `Map.union` primNamedTypeEnv lcs
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
@@ -840,6 +861,14 @@ readSchema str =
     Left err -> error (show err)
     Right schema -> schema
 
+data PrimType
+  = PrimType
+    { primTypeName :: SS.Name
+    , primTypeType :: SS.NamedType
+    , primTypeLife :: PrimitiveLifecycle
+    -- FUTURE: add doc strings for these?
+    }
+
 data Primitive
   = Primitive
     { primitiveName :: SS.LName
@@ -848,6 +877,69 @@ data Primitive
     , primitiveDoc  :: [String]
     , primitiveFn   :: Options -> BuiltinContext -> Value
     }
+
+-- | Primitive types, that is, builtin types used by the primitives.
+--
+-- This excludes certain types that are built in more deeply and
+-- appear as entries in @TyCon in AST.hs. Note that those are also
+-- handled as reserved words in the lexer and parser. XXX: and there's
+-- no particular system to which are there and which are here; some of
+-- the ones there have no special syntax or semantics and should
+-- probably be moved here at some point.
+primTypes :: Map SS.Name PrimType
+primTypes = Map.fromList
+  [ abstype "BisimTheorem" Experimental
+  , abstype "CryptolModule" Current
+  , abstype "FunctionProfile" Experimental
+  , abstype "FunctionSkeleton" Experimental
+  , abstype "Ghost" Current
+  , abstype "HeapsterEnv" Experimental
+  , abstype "JVMSetup" Current
+  , abstype "JVMValue" Current
+  , abstype "JavaClass" Current
+  , abstype "JavaType" Current
+  , abstype "LLVMModule" Current
+  , abstype "LLVMType" Current
+  , abstype "MIRAdt" Experimental
+  , abstype "MIRModule" Experimental
+  , abstype "MIRType" Experimental
+  , abstype "MIRValue" Experimental
+  , abstype "ModuleSkeleton" Experimental
+  , abstype "ProofResult" Current
+  , abstype "Refnset" Experimental
+  , abstype "SatResult" Current
+  , abstype "SetupValue" Current
+  , abstype "Simpset" Current
+  , abstype "SkeletonState" Experimental
+  , abstype "Theorem" Current
+  , abstype "Uninterp" Deprecated
+  , abstype "YosysSequential" Experimental
+  , abstype "YosysTheorem" Experimental
+  ]
+  where
+    -- abstract type
+    abstype :: String -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype name lc = (name, info)
+      where
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.AbstractType
+          , primTypeLife = lc
+          }
+
+    -- concrete type (not currently used)
+    _conctype :: String -> String -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    _conctype name tystr lc = (name, info)
+      where
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.ConcreteType ty
+          , primTypeLife = lc
+          }
+        ty = case readSchema tystr of
+            SS.Forall [] ty' -> ty'
+            _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
+
 
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
@@ -4950,18 +5042,28 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
-filterAvail ::
+filterAvailTypes ::
+  Set PrimitiveLifecycle ->
+  Map SS.Name PrimType ->
+  Map SS.Name PrimType
+filterAvailTypes primsAvail =
+  Map.filter (\p -> primTypeLife p `Set.member` primsAvail)
+
+filterAvailPrims ::
   Set PrimitiveLifecycle ->
   Map SS.LName Primitive ->
   Map SS.LName Primitive
-filterAvail primsAvail =
+filterAvailPrims primsAvail =
   Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
-primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
+primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
+primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
+
+primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
+primNamedTypeEnv primsAvail = fmap primTypeType (filterAvailTypes primsAvail primTypes)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
-valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
+valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)
   where f p = (primitiveFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
@@ -4970,7 +5072,7 @@ primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
 primDocEnv primsAvail =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
-      prims = filterAvail primsAvail primitives
+      prims = filterAvailPrims primsAvail primitives
       tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]

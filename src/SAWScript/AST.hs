@@ -28,6 +28,7 @@ module SAWScript.AST
        , Type(..), TypeIndex
        , TyCon(..)
        , Schema(..)
+       , NamedType(..)
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
@@ -164,7 +165,7 @@ instance Positioned Pattern where
   getPos (PTuple pos _) = pos
 
 data Stmt
-  = StmtBind     Pos Pattern (Maybe Type) Expr
+  = StmtBind     Pos Pattern Expr
   | StmtLet      Pos DeclGroup
   | StmtCode     Pos (Located String)
   | StmtImport   Pos Import
@@ -172,7 +173,7 @@ data Stmt
   deriving Show
 
 instance Positioned Stmt where
-  getPos (StmtBind pos _ _ _)  = pos
+  getPos (StmtBind pos _ _)  = pos
   getPos (StmtLet pos _)       = pos
   getPos (StmtCode pos _)      = pos
   getPos (StmtImport pos _)    = pos
@@ -263,6 +264,13 @@ data TyCon
 data Schema = Forall [(Pos, Name)] Type
   deriving Show
 
+-- | The things a (named) TyVar can refer to by its name.
+--
+-- AbstractType is an opaque type whose only semantics are the
+-- operations available for it, if any. The name identifies it; the
+-- AbstractType constructor is a placeholder.
+data NamedType = ConcreteType Type | AbstractType
+
 -- }}}
 
 -- Pretty Printing {{{
@@ -332,9 +340,9 @@ instance Pretty Pattern where
 
 instance Pretty Stmt where
    pretty = \case
-      StmtBind _ (PWild _ _leftType) _rightType expr ->
+      StmtBind _ (PWild _ _ty) expr ->
          PP.pretty expr
-      StmtBind _ pat _rightType expr ->
+      StmtBind _ pat expr ->
          PP.pretty pat PP.<+> "<-" PP.<+> PP.align (PP.pretty expr)
       StmtLet _ (NonRecursive decl) ->
          "let" PP.<+> prettyDef decl
@@ -449,6 +457,11 @@ instance PrettyPrint Context where
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
     CrucibleSetup-> "CrucibleSetup"
+
+instance PrettyPrint NamedType where
+  pretty par ty = case ty of
+    ConcreteType ty' -> pretty par ty'
+    AbstractType -> "<opaque>"
 
 replicateDoc :: Integer -> PP.Doc ann -> PP.Doc ann
 replicateDoc n d

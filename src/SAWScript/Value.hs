@@ -505,8 +505,9 @@ extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv 
 extendLocal x mt md v env = LocalLet x mt md v : env
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw = rw { rwTypedef = M.insert name ty' (rwTypedef rw) }
-  where ty' = instantiate (rwTypedef rw) ty
+addTypedef name ty rw =
+  rw { rwNamedTypes = M.insert name (SS.ConcreteType ty') (rwNamedTypes rw) }
+  where ty' = instantiate (rwNamedTypes rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
@@ -551,12 +552,12 @@ data TopLevelRO =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValues  :: Map SS.LName Value
-  , rwTypes   :: Map SS.LName SS.Schema
-  , rwTypedef :: Map SS.Name SS.Type
-  , rwDocs    :: Map SS.Name String
-  , rwCryptol :: CEnv.CryptolEnv
-  , rwMonadify :: Monadify.MonadifyEnv
+  { rwValues     :: Map SS.LName Value
+  , rwValueTypes :: Map SS.LName SS.Schema
+  , rwNamedTypes :: Map SS.Name SS.NamedType
+  , rwDocs       :: Map SS.Name String
+  , rwCryptol    :: CEnv.CryptolEnv
+  , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
@@ -825,6 +826,8 @@ maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
 maybeInsert k (Just x) m = M.insert k x m
 
+-- XXX: under what circumstances can this be passed a value without
+-- a type, and why would we want to allow that?
 extendEnv ::
   SharedContext ->
   SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
@@ -849,7 +852,7 @@ extendEnv sc x mt md v rw =
            pure ce
      pure $
       rw { rwValues  = M.insert name v (rwValues rw)
-         , rwTypes   = maybeInsert name mt (rwTypes rw)
+         , rwValueTypes = maybeInsert name mt (rwValueTypes rw)
          , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
          , rwCryptol = ce'
          }

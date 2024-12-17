@@ -1774,7 +1774,7 @@ caseSatResultPrim sr vUnsat vSat = do
 
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwTypes <$> SV.getMergedEnv
+  m <- rwValueTypes <$> SV.getMergedEnv
   opts <- getOptions
   let showLName = getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]

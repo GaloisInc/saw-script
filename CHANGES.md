@@ -2,10 +2,22 @@
 
 ## New Features
 
+* Add a `:tenv` REPL command, which is like `:env` but prints the type
+  environment instead of the variable environment. `:t` is still short
+  for `:type`.
+
 * Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
   command for the MIR and JVM backends, respectively.
 
 ## Bug fixes
+
+* A number of SAWScript type checking problems have been fixed,
+including issue #2077.
+Some of these problems were partially mutually compensating; for
+example, in some cases nonexistent typedefs had been mishandled in
+ways that made them mostly work.
+Some previously accepted scripts and specs may be rejected and need
+(generally minor) adjustment.
 
 * Counterexamples including SMT arrays are now printed with the array
   contents instead of placeholder text.

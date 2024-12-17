@@ -138,8 +138,8 @@ mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
- : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) Nothing $1 }
- | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x Nothing $3) (toPattern $1) }
+ : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) $1 }
+ | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { StmtLet (maxSpan [tokPos $1, maxSpan $2]) (Recursive $2) }
  | 'let' Declaration                    { StmtLet (maxSpan [tokPos $1, getPos $2]) (NonRecursive $2) }
  | 'let' Code                           { StmtCode (maxSpan [tokPos $1, getPos $2]) $2 }
