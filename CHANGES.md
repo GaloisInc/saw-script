@@ -11,6 +11,19 @@
 
 ## Bug fixes
 
+* Unexpected special-case type behavior of monad binds in the
+syntactic top level has been removed.
+(This was _not_ specifically associated with the TopLevel monad, so
+top-level binds and binds in functions in TopLevel, or in nested
+do-blocks, would behave differently.)
+The primary visible consequence is that the repl no longer accepts
+non-monadic expressions.
+These can still be evaluated and printed; just prefix them with
+```return```.
+(Affordances specifically for the repl so this is not required there
+may be restored in the future.)
+See issue #2162.
+
 * A number of SAWScript type checking problems have been fixed,
 including issue #2077.
 Some previously accepted scripts and specs may be rejected and need

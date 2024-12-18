@@ -1,0 +1,3 @@
+// Running this at the top level should produce a type error.
+let h x = do { llvm_assert {{ True }}; return x; };
+a <- h 3;
