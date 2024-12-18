@@ -13,11 +13,15 @@
 
 * A number of SAWScript type checking problems have been fixed,
 including issue #2077.
-Some of these problems were partially mutually compensating; for
-example, in some cases nonexistent typedefs had been mishandled in
-ways that made them mostly work.
 Some previously accepted scripts and specs may be rejected and need
 (generally minor) adjustment.
+Prior to these changes the typechecker allowed unbound type variables
+in a number of places (such as on the right-hand side of typedefs, and
+in function signatures), so for example type names contaning typos
+would not necessarily have been caught and will now fail.
+These problems could trigger panics, but there does not appear to have
+been any way to produce unsoundness in the sense of false
+verifications.
 
 * Counterexamples including SMT arrays are now printed with the array
   contents instead of placeholder text.
