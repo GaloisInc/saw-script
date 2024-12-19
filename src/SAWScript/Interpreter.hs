@@ -372,13 +372,12 @@ processStmtBind printBinds pos pat expr = do -- mx mt
   when printBinds $ do
     let opts = rwPPOpts rw
 
-    -- Extract the variable and type from the pattern, if any. If
-    -- there isn't any single variable use "it".
-    let it itpos = SS.Located "it" "it" itpos
-    let lname = case pat of
-          SS.PWild patpos _t -> it patpos
-          SS.PVar _patpos x _t -> x
-          SS.PTuple patpos _pats -> it patpos
+    -- Extract the variable, if any, from the pattern. If there isn't
+    -- any single variable use "it".
+    let name = case pat of
+          SS.PWild _patpos _t -> "it"
+          SS.PVar _patpos x _t -> getVal x
+          SS.PTuple _patpos _pats -> "it"
 
     -- Print non-unit result if it was not bound to a variable
     case pat of
@@ -391,7 +390,7 @@ processStmtBind printBinds pos pat expr = do -- mx mt
     -- Print function type if result was a function
     case ty of
       SS.TyCon _ SS.FunCon _ ->
-        liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
+        liftTopLevel $ printOutLnTop Info $ name ++ " : " ++ SS.pShow ty
       _ -> return ()
 
   liftTopLevel $
