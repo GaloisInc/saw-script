@@ -16,12 +16,17 @@ syntactic top level has been removed.
 (This was _not_ specifically associated with the TopLevel monad, so
 top-level binds and binds in functions in TopLevel, or in nested
 do-blocks, would behave differently.)
-The primary visible consequence is that the repl no longer accepts
+There are two primary visible consequences.
+The first is that the repl no longer accepts
 non-monadic expressions.
 These can still be evaluated and printed; just prefix them with
 ```return```.
 (Affordances specifically for the repl so this is not required there
 may be restored in the future.)
+The second is that top-level statements of the form ```x <- e;```
+where ```e``` is a pure (non-monadic) term used to be (improperly)
+accepted.
+These are now rejected and need to be changed to ```let x = e;```.
 See issue #2162.
 
 * A number of SAWScript type checking problems have been fixed,

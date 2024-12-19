@@ -1,9 +1,9 @@
 include "sha512.saw";
 
-round_00_15 <- parse_core_mod "SHA512" "round_00_15";
-round_16_80 <- parse_core_mod "SHA512" "round_16_80";
-processBlock <- parse_core_mod "SHA512" "processBlock";
-processBlocks <- parse_core_mod "SHA512" "processBlocks";
+let round_00_15= parse_core_mod "SHA512" "round_00_15";
+let round_16_80 = parse_core_mod "SHA512" "round_16_80";
+let processBlock = parse_core_mod "SHA512" "processBlock";
+let processBlocks = parse_core_mod "SHA512" "processBlocks";
 
 // Test that every function refines itself
 // prove_extcore mrsolver (refines [] processBlocks processBlocks);

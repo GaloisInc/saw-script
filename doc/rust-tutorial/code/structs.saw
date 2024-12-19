@@ -2,9 +2,9 @@ enable_experimental;
 
 m <- mir_load_module "structs.linked-mir.json";
 
-s_adt <- mir_find_adt m "structs::S" [];
-t_adt <- mir_find_adt m "structs::T" [];
-foo_adt <- mir_find_adt m "structs::Foo" [mir_u32, mir_u64];
+let s_adt = mir_find_adt m "structs::S" [];
+let t_adt = mir_find_adt m "structs::T" [];
+let foo_adt = mir_find_adt m "structs::Foo" [mir_u32, mir_u64];
 
 let make_foo_spec = do {
   mir_execute_func [];
@@ -17,7 +17,7 @@ let make_foo_spec = do {
 
 mir_verify m "structs::make_foo" [] false make_foo_spec z3;
 
-bar_adt <- mir_find_adt m "structs::Bar" [];
+let bar_adt = mir_find_adt m "structs::Bar" [];
 
 let do_stuff_with_bar_spec1 = do {
   z1 <- mir_fresh_var "z1" mir_u32;
