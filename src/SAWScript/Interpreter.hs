@@ -190,6 +190,25 @@ bindPatternEnv pat ms v env =
                   Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
         _ -> error "bindPatternEnv: expected tuple value"
 
+-- Typechecker ----------------------------------------------------------------
+
+-- Process a typechecker result.
+-- Wraps the typechecker in the stuff needed to print its warnings and errors.
+--
+-- XXX: this code should probably live inside the typechecker.
+--
+-- Usage is typeCheck $ checkStmt ...
+type MsgList = [(SS.Pos, String)]
+processTypeCheck :: InteractiveMonad m => (Either MsgList a, MsgList) -> m a
+processTypeCheck (errs_or_output, warns) =
+  liftTopLevel $ do
+    opts <- getOptions
+    let issueWarning (pos, msg) =
+          -- XXX the print functions should be what knows how to show positions...
+          liftIO $ printOutLn opts Warn (show pos ++ ": Warning: " ++ msg)
+    mapM_ issueWarning warns
+    either failTypecheck return errs_or_output
+
 -- Interpretation of SAWScript -------------------------------------------------
 
 interpret :: SS.Expr -> TopLevel Value
@@ -415,9 +434,7 @@ interpretStmt printBinds stmt = do
 
   ctx <- getMonadContext
   rw <- liftTopLevel $ getTopLevelRW
-  stmt' <- liftTopLevel $
-    either failTypecheck return $
-           checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
+  stmt' <- processTypeCheck $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
 
   case stmt' of
 

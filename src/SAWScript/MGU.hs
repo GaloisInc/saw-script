@@ -379,12 +379,13 @@ data RW = RW
     -- | The unification var substitution we're accumulating
     subst :: Subst,
 
-    -- | Any type errors we've generated so far
-    errors :: [(Pos, String)]
+    -- | Any type errors and warnings we've generated so far
+    errors :: [(Pos, String)],
+    warnings :: [(Pos, String)]
   }
 
 emptyRW :: RW
-emptyRW = RW 0 emptySubst []
+emptyRW = RW 0 emptySubst [] []
 
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
@@ -416,6 +417,11 @@ getErrorTyVar pos = getFreshTyVar pos
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
   TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
+
+-- Add a warning message. (not yet used)
+_recordWarning :: Pos -> String -> TI ()
+_recordWarning pos msg = do
+  TI $ modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
 
 -- Apply the current substitution with appSubst.
 applyCurrentSubst :: AppSubst t => t -> TI t
@@ -1333,20 +1339,32 @@ checkType kind ty = case ty of
 ------------------------------------------------------------
 -- External interface {{{
 
+-- Some short names for use in the signatures below
+type MsgList = [(Pos, String)]
+type Result a = (Either MsgList a, MsgList)
+
 -- Run the TI monad.
-runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, [(Pos, String)])
-runTIWithEnv env tenv m = (a, subst rw, errors rw)
+--
+-- XXX: both the errors and warnings lists accumulate in reverse order
+-- (later messages are consed onto the head of the list) but for the
+-- moment I'm only correcting that for the warnings. Some things
+-- generate more than one warning at a time and having them come out
+-- backwards is a problem. It appears that the error list is just
+-- printed backwards; this should be investigated further when the
+-- anticipated printing cleanup comes through and fixed as needed.
+runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
+runTIWithEnv env tenv m = (a, subst rw, errors rw, reverse $ warnings rw)
   where
   m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
-evalTIWithEnv :: VarEnv -> TyEnv -> TI a -> Either [(Pos, String)] a
+evalTIWithEnv :: VarEnv -> TyEnv -> TI a -> Result a
 evalTIWithEnv env tenv m =
   case runTIWithEnv env tenv m of
-    (res, _, []) -> Right res
-    (_, _, errs) -> Left errs
+    (res, _, [], warns) -> (Right res, warns)
+    (_, _, errs, warns) -> (Left errs, warns)
 
 -- | Check a single statement. (This is an external interface.)
 --
@@ -1355,8 +1373,8 @@ evalTIWithEnv env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
-checkStmt :: VarEnv -> TyEnv -> Context -> Stmt -> Either [(Pos, String)] Stmt
-checkStmt env tenv ctx stmt = do
+checkStmt :: VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
+checkStmt env tenv ctx stmt =
   -- XXX: we shouldn't need this position here.
   -- The position is used for the following things:
   --
@@ -1389,24 +1407,29 @@ checkStmt env tenv ctx stmt = do
   -- But we don't have a good way of knowing here whether we're
   -- actually in the repl.
   let pos = getPos stmt
-  ln <- case ctx of
-       TopLevel -> return $ Located "<toplevel>" "<toplevel>" pos
-       ProofScript -> return $ Located "<proofscript>" "<proofscript>" pos
-       _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
-  let ctxtype = TyCon pos (ContextCon ctx) []
-  case evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt) of
-    Left errs -> Left errs
-    Right stmt' -> Right stmt'
+      ln = case ctx of
+          TopLevel -> Located "<toplevel>" "<toplevel>" pos
+          ProofScript -> Located "<proofscript>" "<proofscript>" pos
+          _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
+      ctxtype = TyCon pos (ContextCon ctx) []
+  in
+  --case
+  evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt)
+  --of
+  --  Left errs -> Left errs
+  --  Right stmt' -> Right stmt'
 
 -- | Check a single declaration. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
-checkDecl :: VarEnv -> TyEnv -> Decl -> Either [(Pos, String)] Decl
+checkDecl :: VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl env tenv decl =
-  case evalTIWithEnv env tenv (inferDecl decl) of
-    Left errs -> Left errs
-    Right decl' -> Right decl'
+  --case
+  evalTIWithEnv env tenv (inferDecl decl)
+  --of
+  --  Left errs -> Left errs
+  --  Right decl' -> Right decl'
 
 -- }}}
 

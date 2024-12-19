@@ -171,8 +171,14 @@ typeOfCmd str
      let pos = getPos expr
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
      rw <- getValueEnvironment
-     ~(SS.Decl _pos _ (Just schema) _expr') <-
-       either failTypecheck return $ checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
+     decl' <- do
+       let (errs_or_results, warns) = checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
+       let issueWarning (msgpos, msg) =
+             -- XXX the print functions should be what knows how to show positions...
+             putStrLn (show msgpos ++ ": Warning: " ++ msg)
+       io $ mapM_ issueWarning warns
+       either failTypecheck return $ errs_or_results
+     let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
      io $ putStrLn $ SS.pShow schema
 
 quitCmd :: REPL ()
