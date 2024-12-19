@@ -328,20 +328,8 @@ processStmtBind ::
   SS.Expr ->
   m ()
 processStmtBind printBinds pos pat expr = do -- mx mt
-  -- Extract the variable and type from the pattern, if any. If there
-  -- isn't any single variable use "it". We seem to get here only for
-  -- statements typed at the repl, so it apparently isn't wrong to use
-  -- "it".
-  -- XXX: that's not actually true, file loads come here via
-  -- interpretStmt and interpretFile.
-  let it itpos = SS.Located "it" "it" itpos
-  let lname = case pat of
-        SS.PWild patpos _t -> it patpos
-        SS.PVar _patpos x _t -> x
-        SS.PTuple patpos _pats -> it patpos
   ctx <- getMonadContext
   rw <- liftTopLevel getMergedEnv
-  let opts = rwPPOpts rw
 
   let stmt = SS.StmtBind pos pat expr
   stmt'' <- liftTopLevel $
@@ -380,19 +368,31 @@ processStmtBind printBinds pos pat expr = do -- mx mt
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 
-  -- Print non-unit result if it was not bound to a variable
-  case pat of
-    SS.PWild _ _ | printBinds && not (isVUnit result) ->
-      liftTopLevel $
-      do nenv <- io . scGetNamingEnv =<< getSharedContext
-         printOutLnTop Info (showsPrecValue opts nenv 0 result "")
-    _ -> return ()
+  -- When in the repl, print the result.
+  when printBinds $ do
+    let opts = rwPPOpts rw
 
-  -- Print function type if result was a function
-  case ty of
-    SS.TyCon _ SS.FunCon _ ->
-      liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
-    _ -> return ()
+    -- Extract the variable and type from the pattern, if any. If
+    -- there isn't any single variable use "it".
+    let it itpos = SS.Located "it" "it" itpos
+    let lname = case pat of
+          SS.PWild patpos _t -> it patpos
+          SS.PVar _patpos x _t -> x
+          SS.PTuple patpos _pats -> it patpos
+
+    -- Print non-unit result if it was not bound to a variable
+    case pat of
+      SS.PWild _ _ | not (isVUnit result) ->
+        liftTopLevel $
+        do nenv <- io . scGetNamingEnv =<< getSharedContext
+           printOutLnTop Info (showsPrecValue opts nenv 0 result "")
+      _ -> return ()
+
+    -- Print function type if result was a function
+    case ty of
+      SS.TyCon _ SS.FunCon _ ->
+        liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
+      _ -> return ()
 
   liftTopLevel $
    do rw' <- getTopLevelRW
