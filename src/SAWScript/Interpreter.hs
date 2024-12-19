@@ -405,49 +405,32 @@ instance InteractiveMonad ProofScript where
   actionFromValue = fromValue
   getMonadContext = return SS.ProofScript
 
--- | Interpret a block-level statement in the TopLevel monad.
+-- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
 interpretStmt :: InteractiveMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
   m ()
-interpretStmt printBinds stmt =
-  let ?fileReader = BS.readFile in
+interpretStmt printBinds stmt = do
+  let ?fileReader = BS.readFile
 
--- XXX: not yet. The code in processStmtBind that typechecks the
--- statement incrementally does extra things behind the typechecker's
--- back (it wraps each bind in a Decl so it passes through generalize)
--- and we need to figure out the correct way to make that happen
--- before typechecking up front.
-{-
-  rw <- getTopLevelRW
-  stmt' <- either failTypecheck return $
-           checkStmt (rwValueTypes rw) (rwNamedTypes rw) stmt
--}
+  ctx <- getMonadContext
+  rw <- liftTopLevel $ getTopLevelRW
+  stmt' <- liftTopLevel $
+    either failTypecheck return $
+           checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
 
-  case stmt of
+  case stmt' of
 
-    SS.StmtBind pos _pat _expr -> do
-      ctx <- getMonadContext
-      stmt' <- liftTopLevel $ do
-        rw <- getTopLevelRW
-        either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
-      let ~(SS.StmtBind _ pat' expr') = stmt'
+    SS.StmtBind pos pat expr -> do
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
 
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat' expr')
-
-    SS.StmtLet _pos _dg -> do
-      ctx <- getMonadContext
+    SS.StmtLet _pos dg -> do
       liftTopLevel $ do
-         rw <- getTopLevelRW
-         stmt' <- either failTypecheck return $
-                checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
-         let ~(SS.StmtLet _ dg') = stmt'
-         env <- interpretDeclGroup dg'
+         env <- interpretDeclGroup dg
          withLocalEnv env getMergedEnv >>= putTopLevelRW
 
     SS.StmtCode _ lstr ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          sc <- getSharedContext
          --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
          --showCryptolEnv
@@ -456,8 +439,7 @@ interpretStmt printBinds stmt =
          --showCryptolEnv
 
     SS.StmtImport _ imp ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          sc <- getSharedContext
          --showCryptolEnv
          let mLoc = iModule imp
@@ -467,14 +449,8 @@ interpretStmt printBinds stmt =
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
-    SS.StmtTypedef _ _ _ ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
-         ctx <- getMonadContext
-         -- XXX: hack this until such time as we can get it to work up front
-         stmt' <- either failTypecheck return $
-                  checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
-         let (SS.StmtTypedef _ name ty) = stmt'
+    SS.StmtTypedef _ name ty ->
+      liftTopLevel $ do
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
