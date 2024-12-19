@@ -43,6 +43,7 @@ import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -65,7 +66,7 @@ import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkDecl, checkDeclGroup, checkStmt)
+import SAWScript.MGU (checkDeclGroup, checkStmt)
 import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWScript.TopLevel
@@ -119,6 +120,41 @@ import qualified Prettyprinter.Render.Text as PP (putDoc)
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+
+
+-- Support ---------------------------------------------------------------------
+
+-- This is used to reject top-level execution of polymorphic
+-- expressions. Assumes we aren't inside an uninstantiated forall
+-- quantifier. Also assumes the typechecker has already approved the
+-- type. This means we know it doesn't contain unbound named type
+-- variables. Fail if we encounter a unification var.
+--
+-- XXX: this serves little purpose. A polymorphic expression must
+-- either be a partially applied (or unapplied) polymorphic function,
+-- in which case we aren't going to actually execute anything anyway,
+-- or be fully applied but have a polymorphic return type, and the
+-- only such functions we can have are those that don't return (like
+-- "fail") so we don't actually care what they produce. So this code
+-- and the check that calls it should probably be removed.
+--
+-- XXX: also, this is here transiently so that the rejection continues
+-- to work while the interaction between the interpreter and the
+-- typechecker is rationalized. In the long run, the rejection should
+-- really belong only to the repl for repl purposes and the
+-- polymorphism check should be part of the currently nonexistent
+-- incremental interface to the typechecker. Alternatively, if there
+-- are cases that really require rejection of polymorphic expressions
+-- at the top level, they also require rejection of polymorphic
+-- expressions in nested do-blocks that aren't inside functions, and
+-- it can and should all happen inside the typechecker.
+isPolymorphic :: SS.Type -> Bool
+isPolymorphic ty0 = case ty0 of
+    SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyRecord _pos fields -> any isPolymorphic fields
+    SS.TyVar _pos _a -> False
+    SS.TyUnifyVar _pos _ix -> True
+
 
 -- Environment -----------------------------------------------------------------
 
@@ -314,25 +350,43 @@ processStmtBind printBinds pat expr = do -- mx mt
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock pos tyctx t)
-  let decl = SS.Decl (SS.maxSpan' pat expr') pat Nothing expr'
   rw <- liftTopLevel getMergedEnv
   let opts = rwPPOpts rw
 
-  ~(SS.Decl _ _ (Just schema) expr'') <- liftTopLevel $
-    either failTypecheck return $ checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
+  let stmt = SS.StmtBind pos pat expr'
+  stmt'' <- liftTopLevel $
+    either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+  let ~(SS.StmtBind _ pat'' expr'') = stmt''
 
   val <- liftTopLevel $ interpret expr''
 
-  -- Run the resulting TopLevel action.
-  (result, ty) <-
-    case schema of
-      SS.Forall [] t ->
-        case t of
-          SS.TyCon _ SS.BlockCon [c, t'] | SS.isContext ctx c -> do
-            result <- actionFromValue val
-            return (result, t')
-          _ -> return (val, t)
-      _ -> fail $ "Not a monomorphic type: " ++ SS.pShow schema
+  -- While checkStmt could return the type of the _statement_, that'll
+  -- be unit. (Actually for the time being it is not, but that's a
+  -- side consequence of the way return values of do-blocks are
+  -- currently handled and we shouldn't rely on it.) We want the type
+  -- of the _expression_. Extract it from the updated pattern, since
+  -- the typechecker will have filled it in there.
+  --
+  -- Note that this type won't include the current monad type, because
+  -- it's the type of the value that the pattern on the left of <- is
+  -- trying to bind.
+  let ty =
+        let extract pat0 = case pat0 of
+              -- we have been through the typechecker and the types are filled in
+              SS.PWild _pos ~(Just t) -> t
+              SS.PVar _pos _x ~(Just t) -> t
+              SS.PTuple tuplepos pats ->
+                  SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map extract pats)
+        in
+        extract pat''
+
+  -- Reject polymorphic values. XXX: as noted above this should either
+  -- be inside the typechecker or restricted to the repl.
+  when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ SS.pShow ty
+
+  -- Run the resulting TopLevel (or ProofScript) action.
+  result <- actionFromValue val
+
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 

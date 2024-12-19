@@ -1,0 +1,14 @@
+// Create three monadic functions, one polymorphic in its monad and
+// the other two bound to TopLevel and LLVMSetup respectively.
+let f x = return x;
+let g x = do { disable_crucible_profiling; return x; };
+let h x = do { llvm_assert {{ True }}; return x; };
+
+// Using all three together in the same function should produce a type
+// error.
+let foo () = do {
+   b0 <- f 3;
+   b1 <- g 3;
+   b2 <- h 3;
+   return 0;
+};

@@ -21,8 +21,8 @@ let run_test name cry_term mon_term_expected =
               print_term mon_term_expected;
               exit 1; }; };
 
-my_abs <- unfold_term ["my_abs"] {{ my_abs }};
-my_abs_M <- parse_core_mod "CryptolM" "\
+let my_abs = unfold_term ["my_abs"] {{ my_abs }};
+let my_abs_M = parse_core_mod "CryptolM" "\
 \ \\(x : (mseq VoidEv (TCNum 64) Bool)) -> \
 \   bindS VoidEv (isFinite (TCNum 64)) \
 \         (mseq VoidEv (TCNum 64) Bool) \
@@ -45,8 +45,8 @@ my_abs_M <- parse_core_mod "CryptolM" "\
 \               (retS VoidEv (mseq VoidEv (TCNum 64) Bool) x)))";
 run_test "my_abs" my_abs my_abs_M;
 
-err_if_lt0 <- unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
-err_if_lt0_M <- parse_core_mod "CryptolM" "\
+let err_if_lt0 = unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
+let err_if_lt0_M = parse_core_mod "CryptolM" "\
 \ \\(x : (mseq VoidEv (TCNum 64) Bool)) -> \
 \   bindS VoidEv (isFinite (TCNum 64)) (mseq VoidEv (TCNum 64) Bool) (assertFiniteS VoidEv (TCNum 64)) \
 \     (\\(x' : (isFinite (TCNum 64))) -> \
@@ -77,8 +77,8 @@ print "Monadified term:";
 print_term sha1M;
 */
 
-fib <- unfold_term ["fib"] {{ fib }};
-fibM <- parse_core_mod "CryptolM" "\
+let fib = unfold_term ["fib"] {{ fib }};
+let fibM = parse_core_mod "CryptolM" "\
 \ \\(_x : Vec 64 Bool) -> \
 \    FixS VoidEv (Tp_Arr (Tp_bitvector 64) (Tp_M (Tp_bitvector 64))) \
 \      (\\(fib : (Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool))) -> \
@@ -115,12 +115,12 @@ fibM <- parse_core_mod "CryptolM" "\
 \      _x";
 run_test "fib" fib fibM;
 
-noErrors <- unfold_term ["noErrors"] {{ SpecPrims::noErrors }};
-noErrorsM <- parse_core_mod "CryptolM" "\\(a : sort 0) -> existsS VoidEv a";
+let noErrors = unfold_term ["noErrors"] {{ SpecPrims::noErrors }};
+let noErrorsM = parse_core_mod "CryptolM" "\\(a : sort 0) -> existsS VoidEv a";
 run_test "noErrors" noErrors noErrorsM;
 
-fibSpecNoErrors <- unfold_term ["fibSpecNoErrors"] {{ fibSpecNoErrors }};
-fibSpecNoErrorsM <- parse_core_mod "CryptolM" "\
+let fibSpecNoErrors = unfold_term ["fibSpecNoErrors"] {{ fibSpecNoErrors }};
+let fibSpecNoErrorsM = parse_core_mod "CryptolM" "\
 \ \\(__p1 : (mseq VoidEv (TCNum 64) Bool)) -> \
 \   existsS VoidEv (mseq VoidEv (TCNum 64) Bool)";
 run_test "fibSpecNoErrors" fibSpecNoErrors fibSpecNoErrorsM;

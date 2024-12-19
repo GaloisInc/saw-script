@@ -11,13 +11,35 @@
 
 ## Bug fixes
 
+* Unexpected special-case type behavior of monad binds in the
+syntactic top level has been removed.
+(This was _not_ specifically associated with the TopLevel monad, so
+top-level binds and binds in functions in TopLevel, or in nested
+do-blocks, would behave differently.)
+There are two primary visible consequences.
+The first is that the repl no longer accepts
+non-monadic expressions.
+These can still be evaluated and printed; just prefix them with
+```return```.
+(Affordances specifically for the repl so this is not required there
+may be restored in the future.)
+The second is that top-level statements of the form ```x <- e;```
+where ```e``` is a pure (non-monadic) term used to be (improperly)
+accepted.
+These are now rejected and need to be changed to ```let x = e;```.
+See issue #2162.
+
 * A number of SAWScript type checking problems have been fixed,
 including issue #2077.
-Some of these problems were partially mutually compensating; for
-example, in some cases nonexistent typedefs had been mishandled in
-ways that made them mostly work.
 Some previously accepted scripts and specs may be rejected and need
 (generally minor) adjustment.
+Prior to these changes the typechecker allowed unbound type variables
+in a number of places (such as on the right-hand side of typedefs, and
+in function signatures), so for example type names contaning typos
+would not necessarily have been caught and will now fail.
+These problems could trigger panics, but there does not appear to have
+been any way to produce unsoundness in the sense of false
+verifications.
 
 * Counterexamples including SMT arrays are now printed with the array
   contents instead of placeholder text.

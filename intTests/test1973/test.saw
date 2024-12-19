@@ -2,7 +2,7 @@ enable_experimental;
 
 m <- mir_load_module "test.linked-mir.json";
 
-s_adt <- mir_find_adt m "test::S" [];
+let s_adt = mir_find_adt m "test::S" [];
 
 let f_spec = do {
   s_ref <- mir_alloc (mir_adt s_adt);

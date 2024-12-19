@@ -1104,6 +1104,31 @@ inferStmts ln blockpos ctx stmts = case stmts of
                (more', t') <- wrapper $ inferStmts ln blockpos ctx more
                return (s' : more', t')
 
+-- Wrapper around inferStmt suitable for checking one statement at a
+-- time. This is temporary scaffolding for the interpreter while
+-- fixing it. (Currently the interpreter typechecks one statement at a
+-- time when executing, even when not at the repl, and this involves
+-- assorted messiness and technical debt. Eventually we'll get it into
+-- a state where we can always just typecheck immediately after
+-- parsing (including incrementally from the repl) but we're some
+-- distance from that. In the meantime the first step is to get it to
+-- typecheck one statement at a time without special-casing any of
+-- them, and this is how it does that.
+--
+-- Run inferStmt and then apply the current substitution before
+-- returning the updated statement. Ignore the wrapper returned for
+-- typechecking subsequent statements; the interpreter has its own
+-- (misbegotten) logic for handling that in its own way. (Which should
+-- be removed, but we need to get rid of these wrappers here first;
+-- any sane incremental typechecking interface requires updating the
+-- environment for sequential declarations, not pretending that
+-- subsequent statements in a block are nested inside prior ones.)
+inferSingleStmt :: LName -> Pos -> Type -> Stmt -> TI Stmt
+inferSingleStmt ln pos ctx s = do
+  (_wrapper, s', _ty') <- inferStmt ln pos ctx s
+  s'' <- applyCurrentSubst s'
+  return s''
+
 --
 -- decls
 --
@@ -1361,9 +1386,9 @@ checkStmt env tenv pos ctx stmt = do
        ProofScript -> return $ Located "<proofscript>" "<proofscript>" pos
        _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
   let ctxtype = TyCon pos (ContextCon ctx) []
-  case evalTIWithEnv env tenv (inferStmt ln pos ctxtype stmt) of
+  case evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt) of
     Left errs -> Left errs
-    Right (_wrapper, stmt', _type) -> Right stmt'
+    Right stmt' -> Right stmt'
 
 -- | Check a single declaration. (This is an external interface.)
 --

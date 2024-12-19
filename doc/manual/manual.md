@@ -3353,8 +3353,8 @@ look up `S<u8, u16>` and `S<u32, u64>` from the example above as `MIRAdt`s:
 ~~~~
 m <- mir_load_module "example.linked-mir.json";
 
-s_8_16  <- mir_find_adt m "example::S" [mir_u8,  mir_u16];
-s_32_64 <- mir_find_adt m "example::S" [mir_u32, mir_u64];
+let s_8_16  = mir_find_adt m "example::S" [mir_u8,  mir_u16];
+let s_32_64 = mir_find_adt m "example::S" [mir_u32, mir_u64];
 ~~~~
 
 The `mir_adt` command (for constructing a struct type), `mir_struct_value` (for
@@ -3384,7 +3384,7 @@ pub fn s(x: u32) -> Option<u32> {
 ~~~~
 m <- mir_load_module "example.linked-mir.json";
 
-option_u32 <- mir_find_adt m "core::option::Option" [mir_u32];
+let option_u32 = mir_find_adt m "core::option::Option" [mir_u32];
 
 let n_spec = do {
   mir_execute_func [];

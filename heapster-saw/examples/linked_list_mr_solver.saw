@@ -26,10 +26,10 @@ heapster_typecheck_fun env "is_head"
   "(). arg0:int64<>, arg1:List<int64<>,always,R> -o \
      \ arg0:true, arg1:true, ret:int64<>";
 
-is_head <- parse_core_mod "linked_list" "is_head";
+let is_head = parse_core_mod "linked_list" "is_head";
 prove_extcore mrsolver (refines [] is_head is_head);
 
-is_elem <- parse_core_mod "linked_list" "is_elem";
+let is_elem = parse_core_mod "linked_list" "is_elem";
 prove_extcore mrsolver (refines [] is_elem is_elem);
 
 is_elem_noErrorsSpec <- parse_core
@@ -61,5 +61,5 @@ monadify_term {{ Left }};
 monadify_term {{ nil }};
 monadify_term {{ cons }};
 
-sorted_insert_no_malloc <- parse_core_mod "linked_list" "sorted_insert_no_malloc";
+let sorted_insert_no_malloc = parse_core_mod "linked_list" "sorted_insert_no_malloc";
 prove_extcore mrsolver (refines [] sorted_insert_no_malloc {{ sorted_insert_spec }});

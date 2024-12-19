@@ -1,10 +1,10 @@
 include "arrays.saw";
 
 // Test that contains0 |= contains0
-contains0 <- parse_core_mod "arrays" "contains0";
+let contains0 = parse_core_mod "arrays" "contains0";
 prove_extcore mrsolver (refines [] contains0 contains0);
 
-noErrorsContains0 <- parse_core_mod "arrays" "noErrorsContains0";
+let noErrorsContains0 = parse_core_mod "arrays" "noErrorsContains0";
 prove_extcore mrsolver (refines [] contains0 noErrorsContains0);
 
 include "specPrims.saw";
@@ -13,6 +13,6 @@ import "arrays.cry";
 monadify_term {{ zero_array_spec }};
 
 // FIXME: Uncomment once FunStacks are removed
-zero_array <- parse_core_mod "arrays" "zero_array";
+let zero_array = parse_core_mod "arrays" "zero_array";
 prove_extcore mrsolver (refines [] zero_array {{ zero_array_loop_spec }});
 prove_extcore mrsolver (refines [] zero_array {{ zero_array_spec }});

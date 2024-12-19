@@ -7,7 +7,7 @@ rule_thm <- prove_print (admit "assume rule") rule;
 print "== Original version of rule:";
 print_term rule;
 let rule_ss = addsimps [rule_thm] empty_ss;
-t <- rewrite rule_ss rule;
+let t = rewrite rule_ss rule;
 print "== Rule rewritten with itself:";
 print_term t;
 print "== Proof result:";

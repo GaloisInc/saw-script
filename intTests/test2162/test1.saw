@@ -1,0 +1,25 @@
+// Create three monadic functions, one polymorphic in its monad and
+// the other two bound to TopLevel and LLVMSetup respectively.
+let f x = return x;
+let g x = do { disable_crucible_profiling; return x; };
+let h x = do { llvm_assert {{ True }}; return x; };
+
+// We should be able to run f and g at the top level, but not h.
+a0 <- f 3;
+a1 <- g 3;
+//a2 <- h 3;
+
+// We should be able to use b0 and b1 together in the same function.
+let foo () = do {
+   b0 <- f 3;
+   b1 <- g 3;
+   return 0;
+};
+
+// We should also be able to use b0 and b2 together in the same function.
+let bar () = do {
+   b0 <- f 3;
+   b2 <- h 3;
+   return 0;
+};
+

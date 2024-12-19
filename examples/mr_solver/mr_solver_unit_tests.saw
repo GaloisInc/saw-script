@@ -19,11 +19,11 @@ let run_test name test expected =
 // The constant 0 function const0 x = 0
 let ret0_core = "retS VoidEv (Vec 64 Bool) (bvNat 64 0)";
 let const0_core = str_concat "\\ (_:Vec 64 Bool) -> " ret0_core;
-const0 <- parse_core_mod "SpecM" const0_core;
+let const0 = parse_core_mod "SpecM" const0_core;
 
 // The constant 1 function const1 x = 1
 let const1_core = "\\ (_:Vec 64 Bool) -> retS VoidEv (Vec 64 Bool) (bvNat 64 1)";
-const1 <- parse_core_mod "SpecM" const1_core;
+let const1 = parse_core_mod "SpecM" const1_core;
 
 // const0 <= const0
 prove_extcore mrsolver (refines [] const0 const0);
@@ -41,7 +41,7 @@ run_test "refines [x] (const0 x) (const0 x)"
                                       (term_apply const0 [x]))) true;
 
 // The function test_fun0 <= const0
-test_fun0 <- parse_core_mod "test_funs" "test_fun0";
+let test_fun0 = parse_core_mod "test_funs" "test_fun0";
 prove_extcore mrsolver (refines [] const0 test_fun0);
 // (testing that "refines [] const0 test_fun0" is actually "const0 <= test_fun0")
 let const0_test_fun0_refines =
@@ -60,7 +60,7 @@ run_test "refines [] const0 const1" (is_convertible (parse_core_mod "SpecM" cons
                                                     (refines [] const0 const1)) true;
 
 // The function test_fun1 = const1
-test_fun1 <- parse_core_mod "test_funs" "test_fun1";
+let test_fun1 = parse_core_mod "test_funs" "test_fun1";
 prove_extcore mrsolver (refines [] const1 test_fun1);
 fails (prove_extcore mrsolver (refines [] const0 test_fun1));
 // (testing that "refines [] const1 test_fun1" is actually "const1 <= test_fun1")
@@ -82,7 +82,7 @@ let ifxEq0_core = "\\ (x:Vec 64 Bool) -> \
                        \     (bvEq 64 x (bvNat 64 0)) \
                        \     (retS VoidEv (Vec 64 Bool) x) \
                        \     (retS VoidEv (Vec 64 Bool) (bvNat 64 0))";
-ifxEq0 <- parse_core_mod "SpecM" ifxEq0_core;
+let ifxEq0 = parse_core_mod "SpecM" ifxEq0_core;
 
 // ifxEq0 <= const0
 prove_extcore mrsolver (refines [] ifxEq0 const0);
@@ -106,7 +106,7 @@ run_test "refines [] ifxEq0 const1" (is_convertible (parse_core_mod "SpecM" ifxE
 // noErrors1 x = existsS x. retS x
 let noErrors1_core =
   "\\ (_:Vec 64 Bool) -> existsS VoidEv (Vec 64 Bool)";
-noErrors1 <- parse_core_mod "SpecM" noErrors1_core;
+let noErrors1 = parse_core_mod "SpecM" noErrors1_core;
 
 // const0 <= noErrors
 prove_extcore mrsolver (refines [] noErrors1 noErrors1);
@@ -136,14 +136,14 @@ let noErrorsRec1_core =
               \ (Vec 64 Bool) \
               \ (existsS VoidEv (Vec 64 Bool)) \
               \ (f x))";
-noErrorsRec1 <- parse_core_mod "SpecM" noErrorsRec1_core;
+let noErrorsRec1 = parse_core_mod "SpecM" noErrorsRec1_core;
 
 // loop x = loop x
 let loop1_core =
   "FixS VoidEv (Tp_Arr (Tp_bitvector 64) (Tp_M (Tp_bitvector 64))) \
       \ (\\ (f: Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool)) \
           \ (x:Vec 64 Bool) -> f x)";
-loop1 <- parse_core_mod "SpecM" loop1_core;
+let loop1 = parse_core_mod "SpecM" loop1_core;
 
 // loop1 <= noErrorsRec1
 prove_extcore mrsolver (refines [] loop1 noErrorsRec1);
