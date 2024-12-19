@@ -323,10 +323,11 @@ stmtInterpreter ro rw stmts =
 processStmtBind ::
   InteractiveMonad m =>
   Bool ->
+  SS.Pos ->
   SS.Pattern ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pat expr = do -- mx mt
+processStmtBind printBinds pos pat expr = do -- mx mt
   -- Extract the variable and type from the pattern, if any. If there
   -- isn't any single variable use "it". We seem to get here only for
   -- statements typed at the repl, so it apparently isn't wrong to use
@@ -334,18 +335,12 @@ processStmtBind printBinds pat expr = do -- mx mt
   -- XXX: that's not actually true, file loads come here via
   -- interpretStmt and interpretFile.
   -- XXX: it seems problematic to discard the type for a tuple binding...
-  let it pos = SS.Located "it" "it" pos
+  let it itpos = SS.Located "it" "it" itpos
   let (lname, mt) = case pat of
-        SS.PWild pos t -> (it pos, t)
-        SS.PVar _pos x t -> (x, t)
-        SS.PTuple pos _pats -> (it pos, Nothing)
+        SS.PWild patpos t -> (it patpos, t)
+        SS.PVar _patpos x t -> (x, t)
+        SS.PTuple patpos _pats -> (it patpos, Nothing)
   ctx <- getMonadContext
-  -- XXX SS.PosREPL probably is not what we want
-  -- but the position we want for the block type isn't the position of
-  -- the pattern (perhaps we want the position of the "do" that makes
-  -- this a block context? but there isn't necessarily one in the
-  -- repl)
-  let pos = SS.PosREPL
   let tyctx = SS.tContext pos ctx
   let expr' = case mt of
                 Nothing -> expr
@@ -449,7 +444,7 @@ interpretStmt printBinds stmt =
   case stmt of
 
     SS.StmtBind pos pat expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
+      withTopLevel (withPosition pos) (processStmtBind printBinds pos pat expr)
 
     SS.StmtLet _ dg           ->
       liftTopLevel $
