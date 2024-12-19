@@ -17,7 +17,6 @@ Stability   : provisional
 
 module SAWScript.MGU
        ( checkDecl
-       , checkDeclGroup
        , checkStmt
        , instantiate
        ) where
@@ -1399,16 +1398,6 @@ checkDecl env tenv decl =
   case evalTIWithEnv env tenv (inferDecl decl) of
     Left errs -> Left errs
     Right decl' -> Right decl'
-
--- | Check a declgroup. (This is an external interface.)
---
--- The first two arguments are the starting variable and typedef
--- environments to use.
-checkDeclGroup :: VarEnv -> TyEnv -> DeclGroup -> Either [(Pos, String)] DeclGroup
-checkDeclGroup env tenv dg =
-  case evalTIWithEnv env tenv (inferDeclGroup dg) of
-    Left errs -> Left errs
-    Right dg' -> Right dg'
 
 -- }}}
 

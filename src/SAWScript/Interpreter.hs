@@ -66,7 +66,7 @@ import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkDeclGroup, checkStmt)
+import SAWScript.MGU (checkStmt)
 import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWScript.TopLevel
@@ -435,11 +435,13 @@ interpretStmt printBinds stmt =
 
       withTopLevel (withPosition pos) (processStmtBind printBinds pat' expr')
 
-    SS.StmtLet _ dg           ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
-         dg' <- either failTypecheck return $
-                checkDeclGroup (rwValueTypes rw) (rwNamedTypes rw) dg
+    SS.StmtLet pos _dg -> do
+      ctx <- getMonadContext
+      liftTopLevel $ do
+         rw <- getTopLevelRW
+         stmt' <- either failTypecheck return $
+                checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+         let ~(SS.StmtLet _ dg') = stmt'
          env <- interpretDeclGroup dg'
          withLocalEnv env getMergedEnv >>= putTopLevelRW
 
