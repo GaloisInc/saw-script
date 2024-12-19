@@ -334,21 +334,16 @@ processStmtBind printBinds pos pat expr = do -- mx mt
   -- "it".
   -- XXX: that's not actually true, file loads come here via
   -- interpretStmt and interpretFile.
-  -- XXX: it seems problematic to discard the type for a tuple binding...
   let it itpos = SS.Located "it" "it" itpos
-  let (lname, mt) = case pat of
-        SS.PWild patpos t -> (it patpos, t)
-        SS.PVar _patpos x t -> (x, t)
-        SS.PTuple patpos _pats -> (it patpos, Nothing)
+  let lname = case pat of
+        SS.PWild patpos _t -> it patpos
+        SS.PVar _patpos x _t -> x
+        SS.PTuple patpos _pats -> it patpos
   ctx <- getMonadContext
-  let tyctx = SS.tContext pos ctx
-  let expr' = case mt of
-                Nothing -> expr
-                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock pos tyctx t)
   rw <- liftTopLevel getMergedEnv
   let opts = rwPPOpts rw
 
-  let stmt = SS.StmtBind pos pat expr'
+  let stmt = SS.StmtBind pos pat expr
   stmt'' <- liftTopLevel $
     either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
   let ~(SS.StmtBind _ pat'' expr'') = stmt''
