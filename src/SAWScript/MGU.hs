@@ -1355,31 +1355,40 @@ evalTIWithEnv env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
-
--- (separate comment so this part doesn't appear in the Haddocks)
--- XXX: we shouldn't need a position here.
--- The position is used for the following things:
---
---    - to create ln, which is used as part of the error printing
---      scheme, but is no longer particularly useful after recent
---      improvements (especially here where it contains no real
---      information) and should be removed;
---
---    - to be the position associated with the monad context, which
---      in a tidy world should just be PosRepl (as in, the only
---      time we should be typechecking a single statement is when
---      it was just typed interactively, and which monad we're in
---      is a direct property of that context) but this is not
---      currently true and will require a good bit of interpreter
---      cleanup to make it true;
---
---    - to pass to inferStmt, which also uses it as part of the
---      position associated with the monad context. (This part is a
---      result of BlockCon existing and can go away when BlockCon is
---      removed.)
---
-checkStmt :: VarEnv -> TyEnv -> Pos -> Context -> Stmt -> Either [(Pos, String)] Stmt
-checkStmt env tenv pos ctx stmt = do
+checkStmt :: VarEnv -> TyEnv -> Context -> Stmt -> Either [(Pos, String)] Stmt
+checkStmt env tenv ctx stmt = do
+  -- XXX: we shouldn't need this position here.
+  -- The position is used for the following things:
+  --
+  --    - to create ln, which is used as part of the error printing
+  --      scheme, but is no longer particularly useful after recent
+  --      improvements (especially here where it contains no real
+  --      information) and should be removed;
+  --
+  --    - to be the position associated with the monad context, which
+  --      in a tidy world should just be PosRepl (as in, the only
+  --      time we should be typechecking a single statement is when
+  --      it was just typed interactively, and which monad we're in
+  --      is a direct property of that context) but this is not
+  --      currently true and will require a good bit of interpreter
+  --      cleanup to make it true;
+  --
+  --    - to pass to inferStmt, which also uses it as part of the
+  --      position associated with the monad context. (This part is a
+  --      result of BlockCon existing and can go away when BlockCon is
+  --      removed.)
+  --
+  -- XXX: using the position of the statement as the position
+  -- associated with the monad context is not correct (or at least,
+  -- will be confusing) and we should figure something else out if the
+  -- interpreter cleanup doesn't come through soon. Note that
+  -- currently we come through here only for syntactically top-level
+  -- statements in the interpreter; these are TopLevel except when in
+  -- the ProofScript repl. So perhaps we should use PosRepl when in
+  -- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?
+  -- But we don't have a good way of knowing here whether we're
+  -- actually in the repl.
+  let pos = getPos stmt
   ln <- case ctx of
        TopLevel -> return $ Located "<toplevel>" "<toplevel>" pos
        ProofScript -> return $ Located "<proofscript>" "<proofscript>" pos

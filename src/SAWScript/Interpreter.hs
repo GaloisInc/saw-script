@@ -430,17 +430,17 @@ interpretStmt printBinds stmt =
       ctx <- getMonadContext
       stmt' <- liftTopLevel $ do
         rw <- getTopLevelRW
-        either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+        either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
       let ~(SS.StmtBind _ pat' expr') = stmt'
 
       withTopLevel (withPosition pos) (processStmtBind printBinds pat' expr')
 
-    SS.StmtLet pos _dg -> do
+    SS.StmtLet _pos _dg -> do
       ctx <- getMonadContext
       liftTopLevel $ do
          rw <- getTopLevelRW
          stmt' <- either failTypecheck return $
-                checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+                checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
          let ~(SS.StmtLet _ dg') = stmt'
          env <- interpretDeclGroup dg'
          withLocalEnv env getMergedEnv >>= putTopLevelRW
@@ -471,10 +471,9 @@ interpretStmt printBinds stmt =
       liftTopLevel $
       do rw <- getTopLevelRW
          ctx <- getMonadContext
-         pos <- getPosition
          -- XXX: hack this until such time as we can get it to work up front
          stmt' <- either failTypecheck return $
-                  checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+                  checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
          let (SS.StmtTypedef _ name ty) = stmt'
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
