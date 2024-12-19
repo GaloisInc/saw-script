@@ -323,27 +323,16 @@ stmtInterpreter ro rw stmts =
 processStmtBind ::
   InteractiveMonad m =>
   Bool ->
-  SS.Pos ->
   SS.Pattern ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pos pat expr = do -- mx mt
-  ctx <- getMonadContext
+processStmtBind printBinds pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
 
-  let stmt = SS.StmtBind pos pat expr
-  stmt'' <- liftTopLevel $
-    either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
-  let ~(SS.StmtBind _ pat'' expr'') = stmt''
+  val <- liftTopLevel $ interpret expr
 
-  val <- liftTopLevel $ interpret expr''
-
-  -- While checkStmt could return the type of the _statement_, that'll
-  -- be unit. (Actually for the time being it is not, but that's a
-  -- side consequence of the way return values of do-blocks are
-  -- currently handled and we shouldn't rely on it.) We want the type
-  -- of the _expression_. Extract it from the updated pattern, since
-  -- the typechecker will have filled it in there.
+  -- Fetch the type from updated pattern, since the typechecker will
+  -- have filled it in there.
   --
   -- Note that this type won't include the current monad type, because
   -- it's the type of the value that the pattern on the left of <- is
@@ -356,7 +345,7 @@ processStmtBind printBinds pos pat expr = do -- mx mt
               SS.PTuple tuplepos pats ->
                   SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map extract pats)
         in
-        extract pat''
+        extract pat
 
   -- Reject polymorphic values. XXX: as noted above this should either
   -- be inside the typechecker or restricted to the repl.
@@ -437,8 +426,14 @@ interpretStmt printBinds stmt =
 
   case stmt of
 
-    SS.StmtBind pos pat expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pos pat expr)
+    SS.StmtBind pos _pat _expr -> do
+      ctx <- getMonadContext
+      stmt' <- liftTopLevel $ do
+        rw <- getTopLevelRW
+        either failTypecheck return $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) pos ctx stmt
+      let ~(SS.StmtBind _ pat' expr') = stmt'
+
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat' expr')
 
     SS.StmtLet _ dg           ->
       liftTopLevel $
