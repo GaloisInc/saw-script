@@ -1165,10 +1165,25 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
                                        "expression with return"
                   recordWarning spos $ "This will become an error in a " ++
                                        "future release of SAW"
-                  unify ln pty (getPos e') valty'
-                  -- Wrap the expression in "return" so the variable, if any,
-                  -- gets bound to a value of type m t instead of type t, which
-                  -- is the historic behavior.
+
+                  -- The historic behavior is that the pattern gets bound
+                  -- to a value of type m t instead of type t. This means:
+                  --    - we should unify pty, which is the type of the
+                  --      pattern, with m t, which is tBlock ctx' valty'
+                  --      (rather than tBlock ctx valty', which is the
+                  --      type we should be getting)
+                  --    - this will fail if the pattern includes a type
+                  --      signature with a non-monad type, but that's ok
+                  --      because that case also fails in old SAW
+                  --    - we do _not_ need to update pty before returning
+                  --      it out of inferStmt
+                  --    - we _do_ need to wrap the expression in "return"
+                  --      so that the ultimate results are well-typed and
+                  --      happen in the TopLevel monad
+                  unify ln pty (getPos e') (tBlock spos ctx' valty')
+
+                  -- Wrap the expression in "return" to produce an
+                  -- expression of type TopLevel (m t).
                   return $ wrapReturn e'
 
             -- Figure out which case applies.
@@ -1181,7 +1196,14 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
                         restrictToCorrect
                     else
                         case monadType ty' of
-                            Just (ctx', valty') -> allowWrongMonad ctx' valty'
+                            Just (ctx', valty') ->
+                               -- Allow it only for _ and a single var.
+                               -- Binding elements of a tuple this way
+                               -- failed typecheck in the old saw and
+                               -- doesn't need to be allowed now.
+                               case pat of
+                                   PTuple _ _ -> restrictToCorrect
+                                   _ -> allowWrongMonad ctx' valty'
                             Nothing ->
                                -- allow it only if actually binding something
                                -- (just proclaiming a value by itself is not a
