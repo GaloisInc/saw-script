@@ -418,9 +418,9 @@ recordError :: Pos -> String -> TI ()
 recordError pos err = do
   TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
 
--- Add a warning message. (not yet used)
-_recordWarning :: Pos -> String -> TI ()
-_recordWarning pos msg = do
+-- Add a warning message.
+recordWarning :: Pos -> String -> TI ()
+recordWarning pos msg = do
   TI $ modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
 
 -- Apply the current substitution with appSubst.
@@ -769,6 +769,22 @@ unify m t1 pos t2 = do
          -- Indent all but the first line by four spaces.
          morelines' = map (\msg -> "    " ++ msg) morelines
 
+-- Check if two types match but don't actually unify them
+-- (that is, on success throw away the substitution and on error
+-- throw away the complaints)
+--
+-- This is inelegant, and used for some workaround logic to decide
+-- which unifications to attempt to avoid failures on things we don't
+-- want to make fatal just yet. It should be removed when no longer
+-- needed.
+matches :: Type -> Type -> TI Bool
+matches t1 t2 = do
+  t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
+  t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
+  case mgu t1' t2' of
+    Right _ -> return True
+    Left _ -> return False
+
 -- }}}
 
 
@@ -1049,23 +1065,132 @@ legalEndOfBlock s = case s of
     StmtBind _spos (PWild _patpos _mt) _e -> True
     _ -> False
 
+-- break a monadic type down into its monad and value types, if it is one
+monadType  :: Type -> Maybe (Type, Type)
+monadType ty = case ty of
+  TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
+      Just (ctx, valty)
+  -- We don't currently ever generate this type, but be future-proof
+  TyCon pos (ContextCon ctx) [valty] ->
+      Just (TyCon pos (ContextCon ctx) [], valty)
+  _ ->
+      Nothing
+
+-- wrap an expression in "return"
+wrapReturn :: Expr -> Expr
+wrapReturn e =
+   let ePos = getPos e
+       retPos = PosInternal "<implicitly inserted return>"
+       ret = Var $ Located "return" "return" retPos 
+   in
+   Application ePos ret e
+
 -- type inference for a single statement
+--
+-- the boolean is whether we're at the syntactic top level, which is used
+-- for workaround logic for issue #2162
 --
 -- the passed-in position should be the position associated with the monad type
 -- the first type argument (ctx) is the monad type for any binds that occur
 --
 -- returns a wrapper for checking subsequent statements as well as
 -- an updated statement and a type.
-inferStmt :: LName -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt, Type)
-inferStmt ln blockpos ctx s =
+inferStmt :: LName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt, Type)
+inferStmt ln atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
             (pty, pat') <- inferPattern pat
-            -- The expression should be of monad type; unify both
-            -- the monad type (ctx) and the result type expected
-            -- by the pattern (pty).
-            e' <- checkExpr ln e (tBlock blockpos ctx pty)
-            let s' = StmtBind spos pat' e'
+            -- The expression should be of monad type. The
+            -- straightforward way to proceed here is to unify both
+            -- the monad type (ctx) and the result type expected by
+            -- the pattern (pty), like this:
+            --    e' <- checkExpr ln e (tBlock blockpos ctx pty)
+            --
+            -- However, historically when at the syntactic top level
+            -- (only), the monad type was left off, meaning that
+            -- various incorrect forms were silently accepted. Fixing
+            -- this in Dec 2024 triggered a lot of fallout, so for the
+            -- time being we want to check for, warn about, and allow
+            -- the following cases. (Again, only when at the syntactic
+            -- top level. Which is not when in the TopLevel monad.)
+            --    x <- e for non-monadic e
+            --    x <- e for e in the wrong monad
+            --
+            -- These should be made errors again at some point, but
+            -- definitely no earlier than the _second_ release after
+            -- December 2024, as the first such release should include
+            -- the warning behavior. Probably the explicit messages
+            -- should then in turn not be removed for at least one
+            -- further release.
+            --
+            -- To accomplish this, call inferExpr to get a type for
+            -- the expression, and examine it. If the special cases
+            -- apply, issue special-case warnings with explanations,
+            -- unify the type with only the pattern type, and patch up
+            -- the expression by wrapping it in "return".  (The latter
+            -- will restore the old behavior for both cases, so we
+            -- don't need to also gunk up the interpreter to handle
+            -- this problem.)
+            --
+            -- If the special cases don't apply, unify the result type
+            -- with the complete type.
+            (e', ty) <- inferExpr (ln, e)
+            ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
+
+            -- The correct, restricted case
+            let restrictToCorrect = do
+                  -- unify the type of e with the expected monad and
+                  -- pattern types
+                  unify ln (tBlock blockpos ctx pty) (getPos e') ty
+                  return e'
+
+            -- The special case for non-monadic values
+            let allowNonMonadic = do
+                  recordWarning spos $ "Monadic bind of non-monadic value; " ++
+                                       "rewrite as let-binding or use return"
+                  recordWarning spos $ "This will become an error in a " ++
+                                       "future release of SAW"
+                  unify ln pty (getPos e') ty
+                  -- Wrap the expression in "return" to correct the type
+                  return $ wrapReturn e'
+
+            -- The special case for the wrong monad
+            let allowWrongMonad ctx' valty' = do
+                  recordWarning spos $ "Monadic bind with the wrong monad; " ++
+                                       "found " ++ pShow ctx' ++
+                                       " but expected " ++ pShow ctx
+                  recordWarning spos $ "This was historically ignored and " ++
+                                       "will have no effect; if you really " ++
+                                       "want to do this, prefix the " ++
+                                       "expression with return"
+                  recordWarning spos $ "This will become an error in a " ++
+                                       "future release of SAW"
+                  unify ln pty (getPos e') valty'
+                  -- Wrap the expression in "return" so the variable, if any,
+                  -- gets bound to a value of type m t instead of type t, which
+                  -- is the historic behavior.
+                  return $ wrapReturn e'
+
+            -- Figure out which case applies.
+            e'' <-
+                if not atSyntacticTopLevel then
+                    restrictToCorrect
+                else do
+                    ok <- matches (tBlock blockpos ctx pty) ty
+                    if ok then
+                        restrictToCorrect
+                    else
+                        case monadType ty' of
+                            Just (ctx', valty') -> allowWrongMonad ctx' valty'
+                            Nothing ->
+                               -- allow it only if actually binding something
+                               -- (just proclaiming a value by itself is not a
+                               -- case we need to worry about)
+                               case pat of
+                                   PWild _ _ -> restrictToCorrect
+                                   _ -> allowNonMonadic
+
+            let s' = StmtBind spos pat' e''
             let wrapper = withPattern pat'
             return (wrapper, s', pty)
         StmtLet spos dg -> do
@@ -1094,7 +1219,8 @@ inferStmts ln blockpos ctx stmts = case stmts of
         return ([], t)
 
     s : more -> do
-        (wrapper, s', t) <- inferStmt ln blockpos ctx s
+        let atSyntacticTopLevel = False
+        (wrapper, s', t) <- inferStmt ln atSyntacticTopLevel blockpos ctx s
         case more of
             [] ->
                 if legalEndOfBlock s then
@@ -1130,7 +1256,10 @@ inferStmts ln blockpos ctx stmts = case stmts of
 -- subsequent statements in a block are nested inside prior ones.)
 inferSingleStmt :: LName -> Pos -> Type -> Stmt -> TI Stmt
 inferSingleStmt ln pos ctx s = do
-  (_wrapper, s', _ty') <- inferStmt ln pos ctx s
+  -- currently we are always at the syntactic top level here because
+  -- that's how the interpreter works
+  let atSyntacticTopLevel = True
+  (_wrapper, s', _ty') <- inferStmt ln atSyntacticTopLevel pos ctx s
   s'' <- applyCurrentSubst s'
   return s''
 

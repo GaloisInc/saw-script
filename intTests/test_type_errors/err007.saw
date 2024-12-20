@@ -1,0 +1,2 @@
+// This was allowed prior to Dec 2024 and now fails.
+[0];
