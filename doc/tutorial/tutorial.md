@@ -307,7 +307,7 @@ In addition to the `abc`, `z3`, and `yices` proof tactics used
 above, SAWScript can also invoke arbitrary external SAT solvers
 that read CNF files and produce results according to the SAT
 competition
-[input and output conventions](http://www.satcompetition.org/2009/format-solvers2009.html),
+[input and output conventions](https://jix.github.io/varisat/manual/0.2.0/formats/dimacs.html),
 using the `external_cnf_solver` tactic. For example, you can use
 [PicoSAT](http://fmv.jku.at/picosat/) to prove the theorem `thm` from
 the last example, with the following commands:
