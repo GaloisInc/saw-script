@@ -18,12 +18,17 @@ R3=$?
 EX=0
 
 # t1 should succeed; t2 and t3 should fail
+# (until #2167 gets done; until then t2 succeeds with a warning)
 if [ $R1 != 0 ]; then
     echo "*** test1.saw failed (exit $R1) ***"
     EX=1
 fi
-if [ $R2 == 0 ]; then
-    echo "*** test2.saw did not fail (exit $R2) ***"
+#if [ $R2 == 0 ]; then
+#    echo "*** test2.saw did not fail (exit $R2) ***"
+#    EX=1
+#fi
+if [ $R2 != 0 ]; then
+    echo "*** test2.saw failed (exit $R2) ***"
     EX=1
 fi
 if [ $R3 == 0 ]; then
