@@ -1974,7 +1974,7 @@ transcribing an English-language specification to executable Cryptol code is
 interesting in its own right, but it is not the primary focus of this tutorial.
 As such, we will save you some time by providing a pre-baked Cryptol
 implementation of the Salsa20 spec
-[here](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/src/Salsa20.cry).
+[here](https://github.com/GaloisInc/saw-script/blob/master/doc/rust-tutorial/code/salsa20/Salsa20.cry).
 (This implementation is
 [adapted](https://github.com/GaloisInc/cryptol-specs/blob/1366ccf71db9dca58b16ff04ca7d960a4fe20e34/Primitive/Symmetric/Cipher/Stream/Salsa20.cry)
 from the [`cryptol-specs`](https://github.com/GaloisInc/cryptol-specs) repo.)
