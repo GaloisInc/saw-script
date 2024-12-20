@@ -67,7 +67,7 @@ $include 19-26 code/ffs.c
 
 Another optimized version, in the following rather mysterious program
 (also in `ffs.c`), based on the `ffs` implementation in [musl
-libc](http://www.musl-libc.org/).
+libc](http://musl.libc.org/).
 
 ``` {.c}
 $include 69-76 code/ffs.c
