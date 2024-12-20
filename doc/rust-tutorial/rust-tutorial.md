@@ -1685,7 +1685,7 @@ so use it with caution.
 ## Static items
 
 Sometimes, Rust code makes use of [_static
-items_](https://doc.rust-lang.org/std/intrinsics/fn.ctpop.html), which are
+items_](https://doc.rust-lang.org/reference/items/static-items.html), which are
 definitions that are defined in a precise memory location for the entire
 duration of the program. As such, static items can be thought of as a form of
 global variables.
