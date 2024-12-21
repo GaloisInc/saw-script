@@ -1564,11 +1564,7 @@ checkStmt env tenv ctx stmt =
           _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
       ctxtype = TyCon pos (ContextCon ctx) []
   in
-  --case
   evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt)
-  --of
-  --  Left errs -> Left errs
-  --  Right stmt' -> Right stmt'
 
 -- | Check a single declaration. (This is an external interface.)
 --
@@ -1576,11 +1572,7 @@ checkStmt env tenv ctx stmt =
 -- environments to use.
 checkDecl :: VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl env tenv decl =
-  --case
   evalTIWithEnv env tenv (inferDecl decl)
-  --of
-  --  Left errs -> Left errs
-  --  Right decl' -> Right decl'
 
 -- }}}
 
