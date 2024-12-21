@@ -47,7 +47,7 @@
   ```llvm_assert``` is only meaningful within an LLVM specification.
 
 * A number of SAWScript type checking problems have been fixed,
-  including issue #2077.
+  including issues #2077 and #2105.
   Some previously accepted scripts and specs may be rejected and need
   (generally minor) adjustment.
   Prior to these changes the typechecker allowed unbound type variables

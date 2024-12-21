@@ -1,0 +1,10 @@
+// this should not be accepted, and was prior to fixing #2105
+
+typedef Stuff = {
+   foo: Int,
+   bar: String
+};
+
+let make (a: Int) (b: String) = { foo = a, baz = b };
+let get (t: Stuff) = t.bar;
+let go (a: Int) (b: String) = get (make a b);
