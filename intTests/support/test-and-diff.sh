@@ -167,11 +167,13 @@ good() {
     done
 
     # now actually do it
-    if ! [ -f $TEST.log.good ] || \
-       ! diff -q $TEST.log.good $TEST.log >/dev/null; then
-	    echo "cp $TEST.log $TEST.log.good"
-	    cp $TEST.log $TEST.log.good
-     fi
+    for TEST in $TESTS; do
+        if ! [ -f $TEST.log.good ] || \
+           ! diff -q $TEST.log.good $TEST.log >/dev/null; then
+	        echo "cp $TEST.log $TEST.log.good"
+	        cp $TEST.log $TEST.log.good
+        fi
+    done
 }
 
 # shell function for the clean op
