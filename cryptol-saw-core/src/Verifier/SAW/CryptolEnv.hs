@@ -363,8 +363,10 @@ genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
-  cryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv0 declGroups
-  traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
+      nominals   = ME.loadedNominalTypes modEnv
+  cryEnv1 <- C.genNominalConstructors sc nominals cryEnv0
+  cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
+  traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv2)
 
 --------------------------------------------------------------------------------
 
