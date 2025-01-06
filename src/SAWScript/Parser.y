@@ -214,7 +214,7 @@ Type :: { Type }
  | BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 FieldType :: { (Name, Type) }
-  : name ':' BaseType                   { (tokStr $1, $3)         }
+  : name ':' Type                       { (tokStr $1, $3)         }
 
 BaseType :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)  }

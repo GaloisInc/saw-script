@@ -11,6 +11,9 @@
 
 ## Bug fixes
 
+* Function types in records no longer require gratuitous parentheses.
+(#1994)
+
 * Unexpected special-case type behavior of monad binds in the
   syntactic top level has been removed.
   (This was _not_ specifically associated with the TopLevel monad, so
