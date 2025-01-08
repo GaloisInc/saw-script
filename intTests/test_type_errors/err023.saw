@@ -1,0 +1,5 @@
+// Trigger the "Tuple index out of bounds" message.
+
+typedef t = (Int, Int);
+
+let foo (x: t) = x.3;

@@ -1,0 +1,9 @@
+//
+// Specifically check for not enough arguments to a function.
+//
+// This is (has to be) a slightly contrived case with explicit type
+// signatures in order to trigger an explicit mismatch.
+
+let f x y z = concat x (concat y z);
+
+let xs : [Int] = f [1, 2] [3, 4];

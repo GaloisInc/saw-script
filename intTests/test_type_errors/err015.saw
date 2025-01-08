@@ -1,0 +1,65 @@
+// Trigger the "Record field names mismatch" message.
+//
+// Exercise multiple more complicated cases:
+//    - lots of record fields with one missing
+//    - lots of record fields with one extra
+//    - lots of record fields with one different
+//    - lots of record fields with half missing
+//    - lots of record fields with all of them different
+
+typedef t1 = {
+   amethyst: Int,
+   moonstone: Int,
+   obsidian: Int,
+   turquoise: Int
+};
+
+// one missing
+typedef t1a = {
+   amethyst: Int,
+   moonstone: Int,
+   obsidian: Int
+};
+
+// one extra
+typedef t1b = {
+   amethyst: Int,
+   moonstone: Int,
+   obsidian: Int,
+   sapphire: Int,
+   turquoise: Int
+};
+
+// one different
+typedef t1c = {
+   amethyst: Int,
+   moonstone: Int,
+   obsidian: Int,
+   tourmaline: Int
+};
+
+// half missing
+typedef t1d = {
+   amethyst: Int,
+   obsidian: Int
+};
+
+// all different
+typedef t2 = {
+   anise: Int,
+   cinnamon: Int,
+   sage: Int,
+   tarragon: Int
+};
+
+let x : t1 = { amethyst = 3, moonstone = 3, obsidian = 3, turquoise = 3 };
+
+let f1a (x: t1a) = x.amethyst;
+let f1b (x: t1b) = x.amethyst;
+let f1c (x: t1c) = x.amethyst;
+let f1d (x: t1d) = x.amethyst;
+let f2 (x: t2) = x.anise;
+
+// produce a tuple so we get all the messages at once
+// (otherwise the interpreter apparently bails after one failed let)
+let y = (f1a x, f1b x, f1c x, f1d x, f2 x);

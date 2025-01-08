@@ -1,0 +1,3 @@
+// Trigger the "Unbound variable" message
+
+let x = y;

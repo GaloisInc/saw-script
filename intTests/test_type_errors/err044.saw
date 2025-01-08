@@ -1,0 +1,12 @@
+//
+// Trigger the "Not a monomorphic type" message associated with
+// polymorphic binds.
+//
+// In this test, attempt to trigger it inside a let-binding. It
+// does not fail, because the let-binding gets generalized and
+// the polymorphism gets bound there.
+
+let f = do {
+    x <- return (\a -> a);
+    return x;
+};

@@ -1,0 +1,5 @@
+ Loading file "err022.saw"
+ err022.saw:3:20-3:23: Tuple lookup on non-tuple argument.
+Given index 3
+
+FAILED

@@ -1,0 +1,23 @@
+//
+// Exercise failure of the unify call in checkPattern. This is for
+// checking a pattern against the thing it binds.
+//
+// There are two ways to get to this; for the sake of completeness
+// this case goes via inferRecDecls (a collection of mutually
+// recursive lets) and there's another one that goes via inferDecl (a
+// single let).
+//
+// There's also two forms of let (pure and monadic) but for the moment
+// at least the typechecker behavior is shared such that there's
+// nothing to be gained by testing both.
+//
+// We don't need to test all the different kinds of patterns here;
+// those differ _in_ unify but not in the call _to_ unify, and the
+// goal of this test set is to make sure that the calls to unify
+// are correct and don't e.g. have found/expected backwards.
+//
+
+rec (x: Int) = 3
+and (y: Int) = "abc";
+
+

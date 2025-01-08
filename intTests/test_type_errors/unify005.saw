@@ -1,0 +1,11 @@
+//
+// Exercise failure of the second unify call (via checkExpr) in the
+// Application case of inferExpr. This is the check of the function
+// argument against the function's argument type.
+//
+
+let f (x : Int) = x;
+let x = f true;
+
+
+

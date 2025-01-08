@@ -1,0 +1,9 @@
+//
+// Not enough arguments for type constructor: arrays
+//
+// Currently this is a parser message; the kind mismatch message in
+// the typechecker is unreachable.
+
+let x : [] = [];
+
+
