@@ -9,6 +9,13 @@
 * Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
   command for the MIR and JVM backends, respectively.
 
+## Deprecations
+
+* `llvm_struct` has been marked deprecated.
+It is the same as `llvm_alias` and you should use this instead.
+(If you were looking for a function to create a struct type from its
+contents, that's `llvm_struct_type`.)
+
 ## Bug fixes
 
 * SAW now accepts Unicode input beyond characters 0..255, including in
