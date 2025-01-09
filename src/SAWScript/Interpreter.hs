@@ -231,12 +231,12 @@ interpret expr =
       SS.Array _ es            -> VArray <$> traverse interpret es
       SS.Block _ stmts         -> interpretStmts stmts
       SS.Tuple _ es            -> VTuple <$> traverse interpret es
-      SS.Record _ bs           -> VRecord <$> traverse interpret bs
+      SS.Record _ bs           -> VRecord <$> traverse interpret (Map.mapKeys Text.pack bs)
       SS.Index _ e1 e2         -> do a <- interpret e1
                                      i <- interpret e2
                                      return (indexValue a i)
       SS.Lookup _ e n          -> do a <- interpret e
-                                     return (lookupValue a n)
+                                     return (lookupValue a (Text.pack n))
       SS.TLookup _ e i         -> do a <- interpret e
                                      return (tupleLookupValue a i)
       SS.Var x                 -> do rw <- getMergedEnv
