@@ -17,7 +17,7 @@ module SAWScript.Parser
 
 import Data.List
 import qualified Data.Map as Map (fromList)
-import Data.Text (pack)
+import Data.Text (Text, pack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
@@ -192,11 +192,11 @@ AExpr :: { Expr }
  | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
  | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
 
-Code :: { Located String }
- : code                                 { Located (tokStr $1) (tokStr $1) (tokPos $1) }
+Code :: { Located Text }
+ : code                                 { Located (pack $ tokStr $1) (tokStr $1) (tokPos $1) }
 
-CType :: { Located String }
- : ctype                                { Located (tokStr $1) (tokStr $1) (tokPos $1) }
+CType :: { Located Text }
+ : ctype                                { Located (pack $ tokStr $1) (tokStr $1) (tokPos $1) }
 
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }

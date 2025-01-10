@@ -8,6 +8,8 @@
 
 module SAWScript.AutoMatch where
 
+import qualified Data.Text as Text
+import Data.Text(Text)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -427,8 +429,8 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   return ((leftIndex, name), (rightIndex, name))
          returning theoremName . tell $
             [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos theoremName Nothing) .
-                SAWScript.Code . locate .
-                   show . Cryptol.ppPrec 0 .
+                SAWScript.Code . locate' .
+                   Text.pack . show . Cryptol.ppPrec 0 .
                       cryptolAbstractNamesSAW leftArgs .
                          cryptolApplyFunction (Cryptol.EParens . Cryptol.EVar . nameCryptolFromSAW . locate $ "==") $
                             [ cryptolApplyFunctionSAW leftFunction  leftArgs
@@ -469,6 +471,11 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
 
       locate :: String -> SAWScript.LName
       locate name =
+         SAWScript.Located name "" triggerPos
+
+      -- temporary during migration to Text
+      locate' :: Text -> SAWScript.Located Text
+      locate' name =
          SAWScript.Located name "" triggerPos
 
       cryptolLocate :: String -> Cryptol.LPName

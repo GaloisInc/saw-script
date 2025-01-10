@@ -49,6 +49,7 @@ import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import qualified Data.Text as Text
+import Data.Text (Text)
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
@@ -259,7 +260,7 @@ interpret expr =
                                        VBool b -> interpret (if b then e2 else e3)
                                        _ -> fail $ "interpret IfThenElse: " ++ show v1
 
-locToInput :: Located String -> CEnv.InputText
+locToInput :: Located Text -> CEnv.InputText
 locToInput l = CEnv.InputText { CEnv.inpText = getVal l
                               , CEnv.inpFile = file
                               , CEnv.inpLine = ln

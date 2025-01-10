@@ -42,6 +42,7 @@ module SAWScript.AST
 import SAWScript.Token
 import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
+import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
@@ -112,8 +113,8 @@ data Expr
   = Bool Pos Bool
   | String Pos String
   | Int Pos Integer
-  | Code (Located String)
-  | CType (Located String)
+  | Code (Located Text)
+  | CType (Located Text)
   -- Structures
   | Array  Pos [Expr]
   | Block  Pos [Stmt]
@@ -167,7 +168,7 @@ instance Positioned Pattern where
 data Stmt
   = StmtBind     Pos Pattern Expr
   | StmtLet      Pos DeclGroup
-  | StmtCode     Pos (Located String)
+  | StmtCode     Pos (Located Text)
   | StmtImport   Pos Import
   | StmtTypedef  Pos (Located String) Type
   deriving Show
@@ -287,7 +288,7 @@ instance Pretty Expr where
     String _ s -> PP.dquotes (PP.pretty s)
     Int _ i    -> PP.pretty i
     Code ls    -> PP.braces . PP.braces $ PP.pretty (getVal ls)
-    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" ++ string ++ "|"
+    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" <> string <> "|"
     Array _ xs -> PP.list (map PP.pretty xs)
     Block _ stmts ->
       "do" PP.<+> PP.lbrace PP.<> PP.line' PP.<>
