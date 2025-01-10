@@ -179,31 +179,31 @@ AExprs :: { Expr }
 AExpr :: { Expr }
 : '(' ')'                               { Tuple (maxSpan [tokPos $1, tokPos $2]) [] }
  | '[' ']'                              { Array (maxSpan [tokPos $1, tokPos $2]) [] }
- | string                               { String (tokPos $1) (tokStr $1) }
+ | string                               { String (tokPos $1) (pack $ tokStr $1) }
  | Code                                 { Code $1 }
  | CType                                { CType $1 }
  | num                                  { Int (tokPos $1) (tokNum $1) }
- | name                                 { Var (Located (tokStr $1) (tokStr $1) (tokPos $1)) }
+ | name                                 { Var (Located (pack $ tokStr $1) (pack $ tokStr $1) (tokPos $1)) }
  | '(' Expression ')'                   { $2 } -- { Parens (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '(' commas2(Expression) ')'          { Tuple (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '[' commas(Expression) ']'           { Array (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '{' commas(Field) '}'                { Record (maxSpan [tokPos $1, tokPos $3]) (Map.fromList $2) }
  | 'do' '{' termBy(Stmt, ';') '}'       { Block (maxSpan [tokPos $1, tokPos $4]) $3 }
- | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
+ | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (pack $ tokStr $3) }
  | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
 
 Code :: { Located Text }
- : code                                 { Located (pack $ tokStr $1) (tokStr $1) (tokPos $1) }
+ : code                                 { Located (pack $ tokStr $1) (pack $ tokStr $1) (tokPos $1) }
 
 CType :: { Located Text }
- : ctype                                { Located (pack $ tokStr $1) (tokStr $1) (tokPos $1) }
+ : ctype                                { Located (pack $ tokStr $1) (pack $ tokStr $1) (tokPos $1) }
 
 Field :: { (Name, Expr) }
- : name '=' Expression                  { (tokStr $1, $3) }
+ : name '=' Expression                  { (pack $ tokStr $1, $3) }
 
 Names :: { [(Pos, Name)] }
- : name                                 { [(getPos $1, tokStr $1)] }
- | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
+ : name                                 { [(getPos $1, pack $ tokStr $1)] }
+ | name ',' Names                       { (getPos $1, pack $ tokStr $1) : $3 }
 
 PolyType :: { Schema }
  : Type                                 { tMono $1     }
@@ -214,10 +214,10 @@ Type :: { Type }
  | BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 FieldType :: { (Name, Type) }
-  : name ':' Type                       { (tokStr $1, $3)         }
+  : name ':' Type                       { (pack $ tokStr $1, $3)         }
 
 BaseType :: { Type }
- : name                                 { tVar (getPos $1) (tokStr $1)  }
+ : name                                 { tVar (getPos $1) (pack $ tokStr $1)  }
  | Context BaseType                     { tBlock (maxSpan' $1 $2) $1 $2 }
  | '(' ')'                              { tTuple (maxSpan [$1, $2]) []  }
  | 'Bool'                               { tBool (getPos $1)             }
@@ -245,7 +245,7 @@ Context :: { Type }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
- | name                                 { tVar (getPos $1) (tokStr $1)        }
+ | name                                 { tVar (getPos $1) (pack $ tokStr $1)        }
 
 -- Parameterized productions, most come directly from the Happy manual.
 fst(p, q)  : p q   { $1 }

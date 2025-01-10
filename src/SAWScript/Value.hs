@@ -137,7 +137,7 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VMaybe (Maybe Value)
-  | VRecord (Map {- SS.Name -} Text Value)  -- XXX: temporary; restore SS.Name after migration
+  | VRecord (Map SS.Name Value)
   | VLambda (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
@@ -860,8 +860,8 @@ extendEnv sc x mt md v rw =
   where
     name = x
     -- XXX why is this using getOrig?
-    ident = T.mkIdent (pack $ SS.getOrig x)
-    modname = T.packModName [pack $ SS.getOrig x]
+    ident = T.mkIdent (SS.getOrig x)
+    modname = T.packModName [SS.getOrig x]
     ce = rwCryptol rw
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm

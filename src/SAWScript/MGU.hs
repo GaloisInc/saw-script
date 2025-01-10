@@ -8,6 +8,7 @@ Stability   : provisional
 
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -29,6 +30,7 @@ import Control.Monad (zipWithM)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
+import qualified Data.Text as Text
 import Data.List (intercalate, genericTake)
 import Data.Map (Map)
 import Data.Either (partitionEithers)
@@ -954,12 +956,12 @@ inferExpr (ln, expr) = case expr of
                     | otherwise ->
                           do recordError pos $ unlines
                                 [ "Selecting a missing field."
-                                , "Field name: " ++ n
+                                , "Field name: " ++ Text.unpack n
                                 ]
                              getErrorTyVar typos
                  _ -> do recordError pos $ unlines
                             [ "Record lookup on non-record argument."
-                            , "Field name: " ++ n
+                            , "Field name: " ++ Text.unpack n
                             ]
                          getErrorTyVar pos
        return (Lookup pos e1 n, elTy)
@@ -1401,7 +1403,7 @@ generalize es0 ts0 = do
            _ -> pos
 
      -- generate names for the unification vars
-     let is3 = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is2 ]
+     let is3 = [ (i, adjustPos pos, "a." <> (Text.pack $ show i)) | (i, pos) <- is2 ]
 
      -- build a substitution
      let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
@@ -1552,7 +1554,7 @@ checkType kind ty = case ty of
       tyenv <- TI $ asks tyEnv
       case M.lookup x tyenv of
           Nothing -> do
-              recordError pos ("Unbound type variable " ++ x)
+              recordError pos ("Unbound type variable " ++ Text.unpack x)
               getErrorTyVar pos
           Just _ty' ->
               -- Assume ty' was checked when it was entered.

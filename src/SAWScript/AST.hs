@@ -36,12 +36,13 @@ module SAWScript.AST
        , tBlock, tContext, tVar
        , isContext
 
-       , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
+       , PrettyPrint(..), pShow, pShowText, commaSepAll, prettyWholeModule
        ) where
 
 import SAWScript.Token
 import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
+import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -53,13 +54,14 @@ import Data.Traversable (Traversable)
 #endif
 import qualified Prettyprinter as PP
 import           Prettyprinter (Pretty)
+import qualified Prettyprinter.Render.Text as PPT
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
 
 -- Names {{{
 
-type Name = String
+type Name = Text
 
 -- }}}
 
@@ -92,7 +94,7 @@ instance Ord a => Ord (Located a) where
 type LName = Located Name
 
 toLName :: Token Pos -> LName
-toLName p = Located (tokStr p) (tokStr p) (tokPos p)
+toLName p = Located (Text.pack $ tokStr p) (Text.pack $ tokStr p) (tokPos p)
 
 -- }}}
 
@@ -111,7 +113,7 @@ instance Positioned Import where
 data Expr
   -- Constants
   = Bool Pos Bool
-  | String Pos String
+  | String Pos Text
   | Int Pos Integer
   | Code (Located Text)
   | CType (Located Text)
@@ -170,7 +172,7 @@ data Stmt
   | StmtLet      Pos DeclGroup
   | StmtCode     Pos (Located Text)
   | StmtImport   Pos Import
-  | StmtTypedef  Pos (Located String) Type
+  | StmtTypedef  Pos (Located Text) Type
   deriving Show
 
 instance Positioned Stmt where
@@ -403,6 +405,9 @@ dissectLambda = \case
 
 pShow :: PrettyPrint a => a -> String
 pShow = show . pretty 0
+
+pShowText :: PrettyPrint a => a -> Text
+pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . pretty 0
 
 class PrettyPrint p where
   pretty :: Int -> p -> PP.Doc ann

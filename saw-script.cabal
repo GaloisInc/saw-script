@@ -254,6 +254,7 @@ executable saw
     , haskeline
     , mtl
     , QuickCheck
+    , text
     , transformers
     , saw-script
     , saw-core

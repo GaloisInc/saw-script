@@ -15,11 +15,12 @@ import qualified Data.ByteString as BS (readFile)
 import Data.List hiding (sort)
 import Data.Maybe
 import Data.Ord
+import Data.Text (Text)
 
 import Cryptol.Eval (EvalOpts(..))
 import qualified Cryptol.ModuleSystem as M
 import Cryptol.ModuleSystem.Name
-import Cryptol.Utils.Ident (unpackIdent)
+import Cryptol.Utils.Ident (identText)
 import Cryptol.Utils.Logger (quietLogger)
 import qualified Cryptol.TypeCheck.AST as AST
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
@@ -104,5 +105,5 @@ tupleFunctionType (AST.TCon (AST.TC AST.TCFun) [AST.TCon (AST.TC (AST.TCTuple _)
 tupleFunctionType _                                                                                = Nothing
 
 -- | Find the name from the source if one exists
-sourceName :: Name -> Maybe String
-sourceName nm = Just (unpackIdent (nameIdent nm))
+sourceName :: Name -> Maybe Text
+sourceName nm = Just (identText (nameIdent nm))

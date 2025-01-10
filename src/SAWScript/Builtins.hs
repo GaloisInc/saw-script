@@ -1776,7 +1776,7 @@ envCmd :: TopLevel ()
 envCmd = do
   m <- rwValueTypes <$> SV.getMergedEnv
   opts <- getOptions
-  let showLName = getVal
+  let showLName = Text.unpack . getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
 
 exitPrim :: Integer -> IO ()

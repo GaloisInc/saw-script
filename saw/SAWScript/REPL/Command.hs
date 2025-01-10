@@ -44,6 +44,7 @@ import Control.Monad (guard, void)
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
 import Data.List (intercalate, nub)
+import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
@@ -188,20 +189,20 @@ quitCmd  = stop
 envCmd :: REPL ()
 envCmd = do
   env <- getValueEnvironment
-  let showLName = SS.getVal
+  let showLName = Text.unpack . SS.getVal
   io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwValueTypes env) ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
   env <- getValueEnvironment
-  io $ sequence_ [ putStrLn (a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
+  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
     do env <- getEnvironment
-       case Map.lookup cmd (rwDocs env) of
+       case Map.lookup (Text.pack cmd) (rwDocs env) of
          Just d -> io $ putStr d
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =

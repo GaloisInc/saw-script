@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase    #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE CPP           #-}
 
@@ -6,6 +7,7 @@ module SAWScript.AutoMatch.LLVM where
 
 import Control.Monad (when)
 import Control.Monad.Free
+import qualified Data.Text as Text
 
 import qualified Data.AIG as AIG
 import Text.LLVM
@@ -31,8 +33,7 @@ getDeclsLLVM ::
   SharedContext ->
   LLVMModule arch ->
   IO (Interaction (Maybe [Decl]))
-getDeclsLLVM _proxy _sc lm = do
-    let symStr (Symbol s) = s
+getDeclsLLVM _proxy _sc lm =
     return $ do
       let (untranslateable, translations) =
             partitionEithers . for (modDefines (modAST lm)) $ \def ->
@@ -42,15 +43,16 @@ getDeclsLLVM _proxy _sc lm = do
       when (not . null $ untranslateable) $ do
          separator ThinSep
          liftF . flip Warning () $ "No translation for the following signatures in " ++ modFilePath lm ++ ":"
-         bulleted $ map (("'" ++) . (++ "'")) untranslateable
+         bulleted $ map Text.unpack $ map (("'" <>) . (<> "'")) untranslateable
 
       return $ Just translations
 
    where
+      symStr (Symbol s) = Text.pack s
 
       symDefineToDecl symDefine =
-         let Symbol name = defName symDefine
-             tidName (Typed _ (Ident n)) = n
+         let name = symStr $ defName symDefine
+             tidName (Typed _ (Ident n)) = Text.pack n
              args = mapM (\tid -> Arg (tidName tid) <$> memTypeToStdType (typedType tid)) $ defArgs symDefine
              retType = memTypeToStdType (defRetType symDefine)
          in Decl name <$> retType <*> args

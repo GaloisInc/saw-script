@@ -216,7 +216,7 @@ interpret expr =
     let ?fileReader = BS.readFile in
     case expr of
       SS.Bool _ b              -> return $ VBool b
-      SS.String _ s            -> return $ VString (Text.pack s)
+      SS.String _ s            -> return $ VString s
       SS.Int _ z               -> return $ VInteger z
       SS.Code str              -> do sc <- getSharedContext
                                      cenv <- fmap rwCryptol getMergedEnv
@@ -232,17 +232,17 @@ interpret expr =
       SS.Array _ es            -> VArray <$> traverse interpret es
       SS.Block _ stmts         -> interpretStmts stmts
       SS.Tuple _ es            -> VTuple <$> traverse interpret es
-      SS.Record _ bs           -> VRecord <$> traverse interpret (Map.mapKeys Text.pack bs)
+      SS.Record _ bs           -> VRecord <$> traverse interpret bs
       SS.Index _ e1 e2         -> do a <- interpret e1
                                      i <- interpret e2
                                      return (indexValue a i)
       SS.Lookup _ e n          -> do a <- interpret e
-                                     return (lookupValue a (Text.pack n))
+                                     return (lookupValue a n)
       SS.TLookup _ e i         -> do a <- interpret e
                                      return (tupleLookupValue a i)
       SS.Var x                 -> do rw <- getMergedEnv
                                      case Map.lookup x (rwValues rw) of
-                                       Nothing -> fail $ "unknown variable: " ++ SS.getVal x
+                                       Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
                                        Just v -> return (addTrace (show x) v)
       SS.Function _ pat e      -> do env <- getLocalEnv
                                      let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
@@ -406,7 +406,7 @@ processStmtBind printBinds pat expr = do -- mx mt
     -- Print function type if result was a function
     case ty of
       SS.TyCon _ SS.FunCon _ ->
-        liftTopLevel $ printOutLnTop Info $ name ++ " : " ++ SS.pShow ty
+        liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> SS.pShowText ty
       _ -> return ()
 
   liftTopLevel $
@@ -895,9 +895,9 @@ print_value v = do
   nenv <- io . scGetNamingEnv =<< getSharedContext
   printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
-readSchema :: String -> SS.Schema
+readSchema :: Text -> SS.Schema
 readSchema str =
-  case parseSchema (lexSAW "internal" str) of
+  case parseSchema (lexSAW "internal" $ Text.unpack str) of
     Left err -> error (show err)
     Right schema -> schema
 
@@ -958,7 +958,7 @@ primTypes = Map.fromList
   ]
   where
     -- abstract type
-    abstype :: String -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
     abstype name lc = (name, info)
       where
         info = PrimType
@@ -968,7 +968,7 @@ primTypes = Map.fromList
           }
 
     -- concrete type (not currently used)
-    _conctype :: String -> String -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
     _conctype name tystr lc = (name, info)
       where
         info = PrimType
@@ -5045,7 +5045,7 @@ primitives = Map.fromList
   ]
 
   where
-    prim :: String -> String -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
+    prim :: Text -> Text -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
                                      { primitiveName = qname
@@ -5122,9 +5122,9 @@ primDocEnv primsAvail =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primitiveType p)
+                [ "    " ++ (Text.unpack $ getVal n) ++ " : " ++ SS.pShow (primitiveType p)
                 , ""
                 ] ++ primitiveDoc p
 
-qualify :: String -> Located SS.Name
+qualify :: Text -> Located SS.Name
 qualify s = Located s s (SS.PosInternal "coreEnv")
