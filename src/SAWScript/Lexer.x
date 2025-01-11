@@ -89,29 +89,53 @@ $white+                          ;
 
 {
 
+-- token helpers
+
 cnst f p s   = f p s
 via  c g p s = c p s (g s)
 via' c g p s = c p (g s)
 
+-- drop the {{ }} or {| |} from Cryptol blocks
+readCode :: String -> String
+readCode = reverse . drop 2 . reverse . drop 2
 
+-- read a binary integer
+readBin :: String -> Integer
+readBin s = case readInt 2 isDigit cvt s' of
+              [(a, "")] -> a
+              _         -> error $ "Cannot read a binary number from: " ++ show s
+  where cvt c = ord c - ord '0'
+        isDigit = (`elem` "01")
+        s' | "0b" `isPrefixOf` s = drop 2 s
+           | "0B" `isPrefixOf` s = drop 2 s
+           | True                = s
+
+
+-- alex support and lexer mechanism
+
+-- current position
 data AlexPos = AlexPos {
     apLine :: !Int,
     apCol :: !Int
   }
 
+-- input state
 type AlexInput = (
     AlexPos,    -- ^ Current position
     String      -- ^ Remaining input
   )
 
+-- initial position
 startPos :: AlexPos
 startPos = AlexPos { apLine = 1, apCol = 1 }
 
+-- feed alex a byte describing the current char
 byteForChar :: Char -> Word8
 byteForChar c =
     if ord c < 256 then toEnum $ ord c
     else panic "Lexer" ["Out of range input character"]
 
+-- input handler for alex
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
 alexGetByte (pos, text) = case text of
   [] -> Nothing
@@ -121,9 +145,11 @@ alexGetByte (pos, text) = case text of
           '\n' -> AlexPos { apLine = apLine pos + 1, apCol = 1 }
           _ -> pos { apCol = apCol pos + 1 }
 
+-- the lexer we're generating doesn't use this hook
 alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 
+-- read the text of a file, passing in the filename for use in positions
 scanTokens :: FilePath -> String -> [Token Pos]
 scanTokens filename str = go (startPos, str)
   where
@@ -156,22 +182,7 @@ scanTokens filename str = go (startPos, str)
             in
             act pos' text : go inp'
 
-lexSAW :: FilePath -> String -> [Token Pos]
-lexSAW f text = dropComments $ scanTokens f text
-
-readCode :: String -> String
-readCode = reverse . drop 2 . reverse . drop 2
-
-readBin :: String -> Integer
-readBin s = case readInt 2 isDigit cvt s' of
-              [(a, "")] -> a
-              _         -> error $ "Cannot read a binary number from: " ++ show s
-  where cvt c = ord c - ord '0'
-        isDigit = (`elem` "01")
-        s' | "0b" `isPrefixOf` s = drop 2 s
-           | "0B" `isPrefixOf` s = drop 2 s
-           | True                = s
-
+-- postprocess to drop comments (this allows comments to be nested)
 dropComments :: [Token Pos] -> [Token Pos]
 dropComments = go 0
   where go :: Int -> [Token Pos] -> [Token Pos]
@@ -183,7 +194,11 @@ dropComments = go 0
          | i /= 0                = go i ts
          | True                  = t : go i ts
 
+-- entry point
+lexSAW :: FilePath -> String -> [Token Pos]
+lexSAW f text = dropComments $ scanTokens f text
 
+-- alternate monadic entry point (XXX: does this have any value?)
 scan :: Monad m => FilePath -> String -> m [Token Pos]
 scan f = return . lexSAW f
 }
