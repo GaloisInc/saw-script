@@ -19,25 +19,34 @@ import SAWScript.Utils
 
 import Numeric (readInt)
 import Data.Char (ord)
+import qualified Data.Char as Char
 import Data.List
 import Data.Word (Word8)
 
 }
 
+-- Caution: these must match the magic numbers in byteForChar below
+$uniupper       = \x1
+$unilower       = \x2
+$unidigit       = \x3
+$unisymbol      = \x4
+$unispace       = \x5
+$uniother       = \x6
+$unitick        = \x7
 
-$whitechar = [\ \t\n\r\f\v]
+$whitechar = [\ \t\n\r\f\v $unispace]
 $special   = [\(\)\,\;\[\]\`\{\}]
 $digit     = 0-9
-$large     = [A-Z]
-$small     = [a-z]
+$large     = [A-Z $uniupper]
+$small     = [a-z $unilower]
 $alpha     = [$small $large]
-$symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~] # [$special \_\:\"\']
+$symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~ $unisymbol] # [$special \_\:\"\']
 $graphic   = [$alpha $symbol $digit $special \:\"\'\_]
 $binit     = 0-1
 $octit     = 0-7
 $hexit     = [0-9 A-F a-f]
 $idfirst   = [$alpha \_]
-$idchar    = [$alpha $digit \' \_]
+$idchar    = [$alpha $digit $unidigit $unitick \' \_]
 $codechar  = [$graphic $whitechar]
 
 @reservedid  = import|and|let|rec|in|do|if|then|else|as|hiding|typedef
@@ -130,10 +139,47 @@ startPos :: AlexPos
 startPos = AlexPos { apLine = 1, apCol = 1 }
 
 -- feed alex a byte describing the current char
+-- this came from Cryptol's lexer, which came from LexerUtils, which
+-- adapted the technique used in GHC's lexer.
 byteForChar :: Char -> Word8
-byteForChar c =
-    if ord c < 256 then toEnum $ ord c
-    else panic "Lexer" ["Out of range input character"]
+byteForChar c
+  | c <= '\7' = non_graphic
+  | Char.isAscii c = fromIntegral (ord c)
+  | otherwise = case Char.generalCategory c of
+      Char.LowercaseLetter       -> lower
+      Char.OtherLetter           -> lower
+      Char.UppercaseLetter       -> upper
+      Char.TitlecaseLetter       -> upper
+      Char.DecimalNumber         -> digit
+      Char.OtherNumber           -> digit
+      Char.ConnectorPunctuation  -> symbol
+      Char.DashPunctuation       -> symbol
+      Char.OtherPunctuation      -> symbol
+      Char.MathSymbol            -> symbol
+      Char.CurrencySymbol        -> symbol
+      Char.ModifierSymbol        -> symbol
+      Char.OtherSymbol           -> symbol
+      Char.Space                 -> sp
+      Char.ModifierLetter        -> other
+      Char.NonSpacingMark        -> other
+      Char.SpacingCombiningMark  -> other
+      Char.EnclosingMark         -> other
+      Char.LetterNumber          -> other
+      Char.OpenPunctuation       -> other
+      Char.ClosePunctuation      -> other
+      Char.InitialQuote          -> other
+      Char.FinalQuote            -> tick
+      _                          -> non_graphic
+  where
+  -- CAUTION: these must match the $uni* values at the top of the file
+  non_graphic     = 0
+  upper           = 1
+  lower           = 2
+  digit           = 3
+  symbol          = 4
+  sp              = 5
+  other           = 6
+  tick            = 7
 
 -- input handler for alex
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
