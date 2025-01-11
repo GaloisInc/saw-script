@@ -7,6 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-matches     #-}
 {-# OPTIONS_GHC -fno-warn-tabs               #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Lexer
   ( scan
   , lexSAW
@@ -21,6 +22,7 @@ import Numeric (readInt)
 import Data.Char (ord)
 import qualified Data.Char as Char
 import Data.List
+import qualified Data.Text as Text
 import Data.Word (Word8)
 
 }
@@ -83,10 +85,10 @@ $white+                          ;
 "//".*                           ;
 "/*"                             { cnst TCmntS           }
 "*/"                             { cnst TCmntE           }
-@reservedid                      { TReserved             }
-@punct                           { TPunct                }
-@reservedop                      { TOp                   }
-@varid                           { TVar                  }
+@reservedid                      { cnst TReserved        }
+@punct                           { cnst TPunct           }
+@reservedop                      { cnst TOp              }
+@varid                           { cnst TVar             }
 \" @string* \"                   { TLit  `via'` read     }
 \{\{ @code* \}\}                 { TCode `via'` readCode }
 \{\| @ctype* \|\}                { TCType`via'` readCode }
@@ -94,15 +96,15 @@ $white+                          ;
 0[bB] @binary                    { TNum  `via`  readBin  }
 0[oO] @octal                     { TNum  `via`  read     }
 0[xX] @hexadecimal               { TNum  `via`  read     }
-.                                { TUnknown              }
+.                                { cnst TUnknown         }
 
 {
 
 -- token helpers
 
-cnst f p s   = f p s
-via  c g p s = c p s (g s)
-via' c g p s = c p (g s)
+cnst f p s   = f p (Text.pack s)
+via  c g p s = c p (Text.pack s) (g s)
+via' c g p s = c p (Text.pack $ g s)
 
 -- drop the {{ }} or {| |} from Cryptol blocks
 readCode :: String -> String
@@ -114,7 +116,7 @@ readBin s = case readInt 2 isDigit cvt s' of
               [(a, "")] -> a
               _         -> error $ "Cannot read a binary number from: " ++ show s
   where cvt c = ord c - ord '0'
-        isDigit = (`elem` "01")
+        isDigit c = c == '0' || c == '1'
         s' | "0b" `isPrefixOf` s = drop 2 s
            | "0B" `isPrefixOf` s = drop 2 s
            | True                = s

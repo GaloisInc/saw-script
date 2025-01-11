@@ -6,6 +6,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fno-warn-tabs                #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Parser
   ( parseModule
   , parseStmt
@@ -17,7 +18,8 @@ module SAWScript.Parser
 
 import Data.List
 import qualified Data.Map as Map (fromList)
-import Data.Text (Text, pack)
+import qualified Data.Text as Text
+import Data.Text (Text, pack, unpack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
@@ -25,7 +27,7 @@ import SAWScript.Position
 import SAWScript.Utils
 
 import qualified Cryptol.Parser.AST as P
-import qualified Cryptol.Utils.Ident as P (packIdent, packModName)
+import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
 
 import qualified Text.Show.Pretty as PP
 
@@ -125,16 +127,16 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { Import (Left (tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
+ : string mbAs mbImportSpec             { Import (Left (unpack $ tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
  -- TODO: allow imports by module name instead of path
 
 mbAs :: { (Maybe P.ModName, Pos) }
- : 'as' name                            { (Just (P.packModName [pack (tokStr $2)]), maxSpan [$1, $2]) }
+ : 'as' name                            { (Just (P.packModName [tokStr $2]), maxSpan [$1, $2]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
- : '(' list(name) ')'                   { (Just $ P.Only   [ P.packIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
- | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.packIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
+ : '(' list(name) ')'                   { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
+ | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
@@ -179,31 +181,31 @@ AExprs :: { Expr }
 AExpr :: { Expr }
 : '(' ')'                               { Tuple (maxSpan [tokPos $1, tokPos $2]) [] }
  | '[' ']'                              { Array (maxSpan [tokPos $1, tokPos $2]) [] }
- | string                               { String (tokPos $1) (pack $ tokStr $1) }
+ | string                               { String (tokPos $1) (tokStr $1) }
  | Code                                 { Code $1 }
  | CType                                { CType $1 }
  | num                                  { Int (tokPos $1) (tokNum $1) }
- | name                                 { Var (Located (pack $ tokStr $1) (pack $ tokStr $1) (tokPos $1)) }
+ | name                                 { Var (Located (tokStr $1) (tokStr $1) (tokPos $1)) }
  | '(' Expression ')'                   { $2 } -- { Parens (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '(' commas2(Expression) ')'          { Tuple (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '[' commas(Expression) ']'           { Array (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '{' commas(Field) '}'                { Record (maxSpan [tokPos $1, tokPos $3]) (Map.fromList $2) }
  | 'do' '{' termBy(Stmt, ';') '}'       { Block (maxSpan [tokPos $1, tokPos $4]) $3 }
- | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (pack $ tokStr $3) }
+ | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
  | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
 
 Code :: { Located Text }
- : code                                 { Located (pack $ tokStr $1) (pack $ tokStr $1) (tokPos $1) }
+ : code                                 { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
 CType :: { Located Text }
- : ctype                                { Located (pack $ tokStr $1) (pack $ tokStr $1) (tokPos $1) }
+ : ctype                                { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
 Field :: { (Name, Expr) }
- : name '=' Expression                  { (pack $ tokStr $1, $3) }
+ : name '=' Expression                  { (tokStr $1, $3) }
 
 Names :: { [(Pos, Name)] }
- : name                                 { [(getPos $1, pack $ tokStr $1)] }
- | name ',' Names                       { (getPos $1, pack $ tokStr $1) : $3 }
+ : name                                 { [(getPos $1, tokStr $1)] }
+ | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
 
 PolyType :: { Schema }
  : Type                                 { tMono $1     }
@@ -214,10 +216,10 @@ Type :: { Type }
  | BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 FieldType :: { (Name, Type) }
-  : name ':' Type                       { (pack $ tokStr $1, $3)         }
+  : name ':' Type                       { (tokStr $1, $3)         }
 
 BaseType :: { Type }
- : name                                 { tVar (getPos $1) (pack $ tokStr $1)  }
+ : name                                 { tVar (getPos $1) (tokStr $1)  }
  | Context BaseType                     { tBlock (maxSpan' $1 $2) $1 $2 }
  | '(' ')'                              { tTuple (maxSpan [$1, $2]) []  }
  | 'Bool'                               { tBool (getPos $1)             }
@@ -245,7 +247,7 @@ Context :: { Type }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
- | name                                 { tVar (getPos $1) (pack $ tokStr $1)        }
+ | name                                 { tVar (getPos $1) (tokStr $1)        }
 
 -- Parameterized productions, most come directly from the Happy manual.
 fst(p, q)  : p q   { $1 }
@@ -319,7 +321,7 @@ instance Show ParseError where
   show e =
     case e of
       UnexpectedEOF     -> "Parse error: unexpected end of file"
-      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ tokStr t ++ "'"
+      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ (unpack $ tokStr t) ++ "'"
         where Range _ sl sc el ec = tokPos t -- TODO show token span consistently
       InvalidPattern x  -> "Parse error: invalid pattern " ++ pShow x
 

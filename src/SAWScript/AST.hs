@@ -42,7 +42,6 @@ module SAWScript.AST
 import SAWScript.Token
 import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
-import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -94,7 +93,7 @@ instance Ord a => Ord (Located a) where
 type LName = Located Name
 
 toLName :: Token Pos -> LName
-toLName p = Located (Text.pack $ tokStr p) (Text.pack $ tokStr p) (tokPos p)
+toLName p = Located (tokStr p) (tokStr p) (tokPos p)
 
 -- }}}
 
