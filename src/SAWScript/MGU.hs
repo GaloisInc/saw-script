@@ -1505,15 +1505,11 @@ type Result a = (Either MsgList a, MsgList)
 
 -- Run the TI monad.
 --
--- XXX: both the errors and warnings lists accumulate in reverse order
--- (later messages are consed onto the head of the list) but for the
--- moment I'm only correcting that for the warnings. Some things
--- generate more than one warning at a time and having them come out
--- backwards is a problem. It appears that the error list is just
--- printed backwards; this should be investigated further when the
--- anticipated printing cleanup comes through and fixed as needed.
+-- Note that the error and warning lists accumulate in reverse order
+-- (later messages are consed onto the head of the list) so we
+-- reverse on the way out.
 runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
-runTIWithEnv env tenv m = (a, subst rw, errors rw, reverse $ warnings rw)
+runTIWithEnv env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
   where
   m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
