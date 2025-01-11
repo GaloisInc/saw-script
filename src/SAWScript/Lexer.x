@@ -8,22 +8,22 @@
 {-# OPTIONS_GHC -fno-warn-tabs               #-}
 {-# LANGUAGE BangPatterns #-}
 module SAWScript.Lexer
-  ( AlexPosn(..)
-  , scan
+  ( scan
   , lexSAW
   ) where
 
 import SAWScript.Token
+import SAWScript.Panic (panic)
 import SAWScript.Position
 import SAWScript.Utils
 
 import Numeric (readInt)
+import Data.Char (ord)
 import Data.List
+import Data.Word (Word8)
 
 }
 
-
-%wrapper "posn"
 
 $whitechar = [\ \t\n\r\f\v]
 $special   = [\(\)\,\;\[\]\`\{\}]
@@ -93,25 +93,71 @@ cnst f p s   = f p s
 via  c g p s = c p s (g s)
 via' c g p s = c p (g s)
 
-scanTokens :: String -> [Token AlexPosn]
-scanTokens str = go (alexStartPos, '\n', [], str)
-  where go inp@(pos, _, _, str) =
-            case alexScan inp 0 of
-              AlexEOF -> [TEOF pos "EOF"]
-              AlexError ((AlexPn _ line column),_,_,_) -> error $ "lexical error at " ++ (show line) ++ " line, " ++ (show column) ++ " column "
-              AlexSkip inp' len -> go inp'
-              AlexToken inp' len act -> act pos (take len str) :  go inp'
+
+data AlexPos = AlexPos {
+    apLine :: !Int,
+    apCol :: !Int
+  }
+
+type AlexInput = (
+    AlexPos,    -- ^ Current position
+    String      -- ^ Remaining input
+  )
+
+startPos :: AlexPos
+startPos = AlexPos { apLine = 1, apCol = 1 }
+
+byteForChar :: Char -> Word8
+byteForChar c =
+    if ord c < 256 then toEnum $ ord c
+    else panic "Lexer" ["Out of range input character"]
+
+alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
+alexGetByte (pos, text) = case text of
+  [] -> Nothing
+  c : text' -> Just (byteForChar c, (move pos c, text'))
+    where
+      move pos c = case c of
+          '\n' -> AlexPos { apLine = apLine pos + 1, apCol = 1 }
+          _ -> pos { apCol = apCol pos + 1 }
+
+alexInputPrevChar :: AlexInput -> Char
+alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
+
+scanTokens :: FilePath -> String -> [Token Pos]
+scanTokens filename str = go (startPos, str)
+  where
+    fillPos pos height width =
+        let startLine = apLine pos
+            startCol = apCol pos
+            endLine = startLine + height
+            endCol = startCol + width
+        in
+        Range filename startLine startCol endLine endCol
+
+    go inp@(pos, str) = case alexScan inp 0 of
+        AlexEOF ->
+            let pos' = fillPos pos 0 0 in
+            [TEOF pos' "EOF"]
+        AlexError (pos, _) ->
+            let line' = show $ apLine pos
+                col' = show $ apCol pos
+            in
+            error $ line' ++ ":" ++ col' ++ ": unspecified lexical error"
+        AlexSkip inp' len ->
+            go inp'
+        AlexToken inp' len act ->
+            let text = take len str
+                (height, width) = case reverse $ lines text of
+                    [] -> (0, 0)
+                    [line] -> (0, length line)
+                    last : lines -> (length lines, length last)
+                pos' = fillPos pos height width
+            in
+            act pos' text : go inp'
 
 lexSAW :: FilePath -> String -> [Token Pos]
-lexSAW f = dropComments . map fixPos . scanTokens --alexScanTokens
-  where fixPos tok =
-          let (AlexPn _ sl sc) = tokPos tok
-              pos = case lines (tokStr tok) of
-                      [] -> Range f sl sc sl sc
-                      [l] -> Range f sl sc sl (sc + length l)
-                      (l:ls) -> Range f sl sc (sl + length ls) (length (last (l:ls)))
-          in tok { tokPos = pos }
-
+lexSAW f text = dropComments $ scanTokens f text
 
 readCode :: String -> String
 readCode = reverse . drop 2 . reverse . drop 2
@@ -137,8 +183,6 @@ dropComments = go 0
          | i /= 0                = go i ts
          | True                  = t : go i ts
 
-
-alexEOF = (TEOF (error "alexEOF") "")
 
 scan :: Monad m => FilePath -> String -> m [Token Pos]
 scan f = return . lexSAW f
