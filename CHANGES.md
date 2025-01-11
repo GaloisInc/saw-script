@@ -19,11 +19,11 @@ do-blocks, would behave differently.)
 See issue #2162.
 
 There are three primary visible consequences.
-The first is that the repl no longer accepts
+The first is that the REPL no longer accepts
 non-monadic expressions.
 These can still be evaluated and printed; just prefix them with
 ```return```.
-(Affordances specifically for the repl so this is not required there
+(Affordances specifically for the REPL so this is not required there
 may be restored in the future.)
 
 The second is that statements of the form ```x <- e;``` where ```e```
@@ -32,6 +32,8 @@ top level of scripts.
 These statements now generate a warning.
 This will become an error in a future release and such statements
 should be rewritten as ```let x = e;```.
+For example, ```t <- unfold_term ["reverse"] {{ reverse 0b01 }};```
+should be changed to ```let t = unfold_term ["reverse"] {{ reverse 0b01 }};```.
 
 The third is that statements of the form ```x <- s;``` or just ```s;```
 where ```s``` is a term in the _wrong_ monad also used to be
@@ -40,6 +42,9 @@ These statements silently did nothing.
 They will now generate a warning.
 This will become an error in a future release.
 Such statements should be removed or rewritten.
+For example, it used to be possible to write ```llvm_assert {{ False }};```
+at the top level (outside any specification) and it would be ignored.
+```llvm_assert``` is only meaningful within an LLVM specification.
 
 * A number of SAWScript type checking problems have been fixed,
 including issue #2077.
@@ -49,6 +54,7 @@ Prior to these changes the typechecker allowed unbound type variables
 in a number of places (such as on the right-hand side of typedefs, and
 in function signatures), so for example type names contaning typos
 would not necessarily have been caught and will now fail.
+```typedef t = nonexistent``` was previously accepted and now is not.
 These problems could trigger panics, but there does not appear to have
 been any way to produce unsoundness in the sense of false
 verifications.

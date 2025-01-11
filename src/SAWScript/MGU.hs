@@ -385,7 +385,12 @@ data RW = RW
   }
 
 emptyRW :: RW
-emptyRW = RW 0 emptySubst [] []
+emptyRW = RW
+  { nextTypeIndex = 0
+  , subst = emptySubst
+  , errors = []
+  , warnings = []
+  }
 
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
@@ -1066,6 +1071,10 @@ legalEndOfBlock s = case s of
     _ -> False
 
 -- break a monadic type down into its monad and value types, if it is one
+--
+--    monadType (TopLevel Int) gives Just (TopLevel, Int)
+--    monadType Int gives Nothing
+--
 monadType  :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
   TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
@@ -1121,7 +1130,7 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
             -- December 2024, as the first such release should include
             -- the warning behavior. Probably the explicit messages
             -- should then in turn not be removed for at least one
-            -- further release.
+            -- further release. See #2167 and #2162.
             --
             -- To accomplish this, call inferExpr to get a type for
             -- the expression, and examine it. If the special cases

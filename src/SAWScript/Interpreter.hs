@@ -197,15 +197,14 @@ bindPatternEnv pat ms v env =
 --
 -- XXX: this code should probably live inside the typechecker.
 --
--- Usage is typeCheck $ checkStmt ...
+-- Usage is processTypeCheck $ checkStmt ...
 type MsgList = [(SS.Pos, String)]
 processTypeCheck :: InteractiveMonad m => (Either MsgList a, MsgList) -> m a
 processTypeCheck (errs_or_output, warns) =
   liftTopLevel $ do
-    opts <- getOptions
     let issueWarning (pos, msg) =
           -- XXX the print functions should be what knows how to show positions...
-          liftIO $ printOutLn opts Warn (show pos ++ ": Warning: " ++ msg)
+          printOutLnTop Warn (show pos ++ ": Warning: " ++ msg)
     mapM_ issueWarning warns
     either failTypecheck return errs_or_output
 
@@ -339,6 +338,22 @@ stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
   fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
 
+-- Get the type of an AST element. For now, only patterns because that's
+-- what we're using.
+--
+-- Assumes we have been through the typechecker and the types are filled in.
+--
+-- XXX: this should be a typeclass function with instances for all the AST
+-- types.
+---
+-- XXX: also it should be moved to ASTUtil once we have such a place.
+getType :: SS.Pattern -> SS.Type
+getType pat = case pat of
+    SS.PWild _pos ~(Just t) -> t
+    SS.PVar _pos _x ~(Just t) -> t
+    SS.PTuple tuplepos pats ->
+        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+
 processStmtBind ::
   InteractiveMonad m =>
   Bool ->
@@ -356,15 +371,7 @@ processStmtBind printBinds pat expr = do -- mx mt
   -- Note that this type won't include the current monad type, because
   -- it's the type of the value that the pattern on the left of <- is
   -- trying to bind.
-  let ty =
-        let extract pat0 = case pat0 of
-              -- we have been through the typechecker and the types are filled in
-              SS.PWild _pos ~(Just t) -> t
-              SS.PVar _pos _x ~(Just t) -> t
-              SS.PTuple tuplepos pats ->
-                  SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map extract pats)
-        in
-        extract pat
+  let ty = getType pat
 
   -- Reject polymorphic values. XXX: as noted above this should either
   -- be inside the typechecker or restricted to the repl.
@@ -438,10 +445,10 @@ interpretStmt printBinds stmt = do
 
   case stmt' of
 
-    SS.StmtBind pos pat expr -> do
+    SS.StmtBind pos pat expr ->
       withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
 
-    SS.StmtLet _pos dg -> do
+    SS.StmtLet _pos dg ->
       liftTopLevel $ do
          env <- interpretDeclGroup dg
          withLocalEnv env getMergedEnv >>= putTopLevelRW
