@@ -1168,9 +1168,9 @@ inferStmt ln atSyntacticTopLevel blockpos ctx s =
                   recordWarning spos $ "Monadic bind with the wrong monad; " ++
                                        "found " ++ pShow ctx' ++
                                        " but expected " ++ pShow ctx
-                  recordWarning spos $ "This was historically ignored and " ++
-                                       "will have no effect; if you really " ++
-                                       "want to do this, prefix the " ++
+                  recordWarning spos $ "This creates the action but does " ++
+                                       "not execute it; if you meant to do " ++
+                                       "that, prefix the " ++
                                        "expression with return"
                   recordWarning spos $ "This will become an error in a " ++
                                        "future release of SAW"
