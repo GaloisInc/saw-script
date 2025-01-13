@@ -17,7 +17,6 @@ Stability   : provisional
 
 module SAWScript.MGU
        ( checkDecl
-       , checkDeclGroup
        , checkStmt
        , instantiate
        ) where
@@ -380,12 +379,18 @@ data RW = RW
     -- | The unification var substitution we're accumulating
     subst :: Subst,
 
-    -- | Any type errors we've generated so far
-    errors :: [(Pos, String)]
+    -- | Any type errors and warnings we've generated so far
+    errors :: [(Pos, String)],
+    warnings :: [(Pos, String)]
   }
 
 emptyRW :: RW
-emptyRW = RW 0 emptySubst []
+emptyRW = RW
+  { nextTypeIndex = 0
+  , subst = emptySubst
+  , errors = []
+  , warnings = []
+  }
 
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
@@ -417,6 +422,11 @@ getErrorTyVar pos = getFreshTyVar pos
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
   TI $ modify $ \rw -> rw { errors = (pos, err) : errors rw }
+
+-- Add a warning message.
+recordWarning :: Pos -> String -> TI ()
+recordWarning pos msg = do
+  TI $ modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
 
 -- Apply the current substitution with appSubst.
 applyCurrentSubst :: AppSubst t => t -> TI t
@@ -764,6 +774,22 @@ unify m t1 pos t2 = do
          -- Indent all but the first line by four spaces.
          morelines' = map (\msg -> "    " ++ msg) morelines
 
+-- Check if two types match but don't actually unify them
+-- (that is, on success throw away the substitution and on error
+-- throw away the complaints)
+--
+-- This is inelegant, and used for some workaround logic to decide
+-- which unifications to attempt to avoid failures on things we don't
+-- want to make fatal just yet. It should be removed when no longer
+-- needed.
+matches :: Type -> Type -> TI Bool
+matches t1 t2 = do
+  t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
+  t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
+  case mgu t1' t2' of
+    Right _ -> return True
+    Left _ -> return False
+
 -- }}}
 
 
@@ -1044,23 +1070,158 @@ legalEndOfBlock s = case s of
     StmtBind _spos (PWild _patpos _mt) _e -> True
     _ -> False
 
+-- break a monadic type down into its monad and value types, if it is one
+--
+--    monadType (TopLevel Int) gives Just (TopLevel, Int)
+--    monadType Int gives Nothing
+--
+monadType  :: Type -> Maybe (Type, Type)
+monadType ty = case ty of
+  TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
+      Just (ctx, valty)
+  -- We don't currently ever generate this type, but be future-proof
+  TyCon pos (ContextCon ctx) [valty] ->
+      Just (TyCon pos (ContextCon ctx) [], valty)
+  _ ->
+      Nothing
+
+-- wrap an expression in "return"
+wrapReturn :: Expr -> Expr
+wrapReturn e =
+   let ePos = getPos e
+       retPos = PosInternal "<implicitly inserted return>"
+       ret = Var $ Located "return" "return" retPos 
+   in
+   Application ePos ret e
+
 -- type inference for a single statement
+--
+-- the boolean is whether we're at the syntactic top level, which is used
+-- for workaround logic for issue #2162
 --
 -- the passed-in position should be the position associated with the monad type
 -- the first type argument (ctx) is the monad type for any binds that occur
 --
 -- returns a wrapper for checking subsequent statements as well as
 -- an updated statement and a type.
-inferStmt :: LName -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt, Type)
-inferStmt ln blockpos ctx s =
+inferStmt :: LName -> Bool -> Pos -> Type -> Stmt -> TI (TI a -> TI a, Stmt, Type)
+inferStmt ln atSyntacticTopLevel blockpos ctx s =
     case s of
         StmtBind spos pat e -> do
             (pty, pat') <- inferPattern pat
-            -- The expression should be of monad type; unify both
-            -- the monad type (ctx) and the result type expected
-            -- by the pattern (pty).
-            e' <- checkExpr ln e (tBlock blockpos ctx pty)
-            let s' = StmtBind spos pat' e'
+            -- The expression should be of monad type. The
+            -- straightforward way to proceed here is to unify both
+            -- the monad type (ctx) and the result type expected by
+            -- the pattern (pty), like this:
+            --    e' <- checkExpr ln e (tBlock blockpos ctx pty)
+            --
+            -- However, historically when at the syntactic top level
+            -- (only), the monad type was left off, meaning that
+            -- various incorrect forms were silently accepted. Fixing
+            -- this in Dec 2024 triggered a lot of fallout, so for the
+            -- time being we want to check for, warn about, and allow
+            -- the following cases. (Again, only when at the syntactic
+            -- top level. Which is not when in the TopLevel monad.)
+            --    x <- e for non-monadic e
+            --    x <- e for e in the wrong monad
+            --
+            -- These should be made errors again at some point, but
+            -- definitely no earlier than the _second_ release after
+            -- December 2024, as the first such release should include
+            -- the warning behavior. Probably the explicit messages
+            -- should then in turn not be removed for at least one
+            -- further release. See #2167 and #2162.
+            --
+            -- To accomplish this, call inferExpr to get a type for
+            -- the expression, and examine it. If the special cases
+            -- apply, issue special-case warnings with explanations,
+            -- unify the type with only the pattern type, and patch up
+            -- the expression by wrapping it in "return".  (The latter
+            -- will restore the old behavior for both cases, so we
+            -- don't need to also gunk up the interpreter to handle
+            -- this problem.)
+            --
+            -- If the special cases don't apply, unify the result type
+            -- with the complete type.
+            (e', ty) <- inferExpr (ln, e)
+            ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
+
+            -- The correct, restricted case
+            let restrictToCorrect = do
+                  -- unify the type of e with the expected monad and
+                  -- pattern types
+                  unify ln (tBlock blockpos ctx pty) (getPos e') ty
+                  return e'
+
+            -- The special case for non-monadic values
+            let allowNonMonadic = do
+                  recordWarning spos $ "Monadic bind of non-monadic value; " ++
+                                       "rewrite as let-binding or use return"
+                  recordWarning spos $ "This will become an error in a " ++
+                                       "future release of SAW"
+                  unify ln pty (getPos e') ty
+                  -- Wrap the expression in "return" to correct the type
+                  return $ wrapReturn e'
+
+            -- The special case for the wrong monad
+            let allowWrongMonad ctx' valty' = do
+                  recordWarning spos $ "Monadic bind with the wrong monad; " ++
+                                       "found " ++ pShow ctx' ++
+                                       " but expected " ++ pShow ctx
+                  recordWarning spos $ "This creates the action but does " ++
+                                       "not execute it; if you meant to do " ++
+                                       "that, prefix the " ++
+                                       "expression with return"
+                  recordWarning spos $ "This will become an error in a " ++
+                                       "future release of SAW"
+
+                  -- The historic behavior is that the pattern gets bound
+                  -- to a value of type m t instead of type t. This means:
+                  --    - we should unify pty, which is the type of the
+                  --      pattern, with m t, which is tBlock ctx' valty'
+                  --      (rather than tBlock ctx valty', which is the
+                  --      type we should be getting)
+                  --    - this will fail if the pattern includes a type
+                  --      signature with a non-monad type, but that's ok
+                  --      because that case also fails in old SAW
+                  --    - we do _not_ need to update pty before returning
+                  --      it out of inferStmt
+                  --    - we _do_ need to wrap the expression in "return"
+                  --      so that the ultimate results are well-typed and
+                  --      happen in the TopLevel monad
+                  unify ln pty (getPos e') (tBlock spos ctx' valty')
+
+                  -- Wrap the expression in "return" to produce an
+                  -- expression of type TopLevel (m t).
+                  return $ wrapReturn e'
+
+            -- Figure out which case applies.
+            e'' <-
+                if not atSyntacticTopLevel then
+                    restrictToCorrect
+                else do
+                    ok <- matches (tBlock blockpos ctx pty) ty
+                    if ok then
+                        restrictToCorrect
+                    else
+                        case monadType ty' of
+                            Just (ctx', valty') ->
+                               -- Allow it only for _ and a single var.
+                               -- Binding elements of a tuple this way
+                               -- failed typecheck in the old saw and
+                               -- doesn't need to be allowed now.
+                               case pat of
+                                   PTuple _ _ -> restrictToCorrect
+                                   _ -> allowWrongMonad ctx' valty'
+                            Nothing ->
+                               -- allow it only if actually binding something
+                               -- (just proclaiming a value by itself is not a
+                               -- case we need to worry about)
+                               case pat of
+                                   PWild _ _ -> restrictToCorrect
+                                   _ -> allowNonMonadic
+
+            let s' = StmtBind spos pat' e''
             let wrapper = withPattern pat'
             return (wrapper, s', pty)
         StmtLet spos dg -> do
@@ -1089,7 +1250,8 @@ inferStmts ln blockpos ctx stmts = case stmts of
         return ([], t)
 
     s : more -> do
-        (wrapper, s', t) <- inferStmt ln blockpos ctx s
+        let atSyntacticTopLevel = False
+        (wrapper, s', t) <- inferStmt ln atSyntacticTopLevel blockpos ctx s
         case more of
             [] ->
                 if legalEndOfBlock s then
@@ -1103,6 +1265,34 @@ inferStmts ln blockpos ctx stmts = case stmts of
             _ : _ -> do
                (more', t') <- wrapper $ inferStmts ln blockpos ctx more
                return (s' : more', t')
+
+-- Wrapper around inferStmt suitable for checking one statement at a
+-- time. This is temporary scaffolding for the interpreter while
+-- fixing it. (Currently the interpreter typechecks one statement at a
+-- time when executing, even when not at the repl, and this involves
+-- assorted messiness and technical debt. Eventually we'll get it into
+-- a state where we can always just typecheck immediately after
+-- parsing (including incrementally from the repl) but we're some
+-- distance from that. In the meantime the first step is to get it to
+-- typecheck one statement at a time without special-casing any of
+-- them, and this is how it does that.
+--
+-- Run inferStmt and then apply the current substitution before
+-- returning the updated statement. Ignore the wrapper returned for
+-- typechecking subsequent statements; the interpreter has its own
+-- (misbegotten) logic for handling that in its own way. (Which should
+-- be removed, but we need to get rid of these wrappers here first;
+-- any sane incremental typechecking interface requires updating the
+-- environment for sequential declarations, not pretending that
+-- subsequent statements in a block are nested inside prior ones.)
+inferSingleStmt :: LName -> Pos -> Type -> Stmt -> TI Stmt
+inferSingleStmt ln pos ctx s = do
+  -- currently we are always at the syntactic top level here because
+  -- that's how the interpreter works
+  let atSyntacticTopLevel = True
+  (_wrapper, s', _ty') <- inferStmt ln atSyntacticTopLevel pos ctx s
+  s'' <- applyCurrentSubst s'
+  return s''
 
 --
 -- decls
@@ -1309,20 +1499,28 @@ checkType kind ty = case ty of
 ------------------------------------------------------------
 -- External interface {{{
 
+-- Some short names for use in the signatures below
+type MsgList = [(Pos, String)]
+type Result a = (Either MsgList a, MsgList)
+
 -- Run the TI monad.
-runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, [(Pos, String)])
-runTIWithEnv env tenv m = (a, subst rw, errors rw)
+--
+-- Note that the error and warning lists accumulate in reverse order
+-- (later messages are consed onto the head of the list) so we
+-- reverse on the way out.
+runTIWithEnv :: VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
+runTIWithEnv env tenv m = (a, subst rw, reverse $ errors rw, reverse $ warnings rw)
   where
   m' = runReaderT (unTI m) (RO env tenv)
   (a,rw) = runState m' emptyRW
 
 -- Run the TI monad and interpret/collect the results
 -- (failure if any errors were produced)
-evalTIWithEnv :: VarEnv -> TyEnv -> TI a -> Either [(Pos, String)] a
+evalTIWithEnv :: VarEnv -> TyEnv -> TI a -> Result a
 evalTIWithEnv env tenv m =
   case runTIWithEnv env tenv m of
-    (res, _, []) -> Right res
-    (_, _, errs) -> Left errs
+    (res, _, [], warns) -> (Right res, warns)
+    (_, _, errs, warns) -> (Left errs, warns)
 
 -- | Check a single statement. (This is an external interface.)
 --
@@ -1331,59 +1529,55 @@ evalTIWithEnv env tenv m =
 --
 -- The third is a current position, and the fourth is the
 -- context/monad type associated with the execution.
-
--- (separate comment so this part doesn't appear in the Haddocks)
--- XXX: we shouldn't need a position here.
--- The position is used for the following things:
---
---    - to create ln, which is used as part of the error printing
---      scheme, but is no longer particularly useful after recent
---      improvements (especially here where it contains no real
---      information) and should be removed;
---
---    - to be the position associated with the monad context, which
---      in a tidy world should just be PosRepl (as in, the only
---      time we should be typechecking a single statement is when
---      it was just typed interactively, and which monad we're in
---      is a direct property of that context) but this is not
---      currently true and will require a good bit of interpreter
---      cleanup to make it true;
---
---    - to pass to inferStmt, which also uses it as part of the
---      position associated with the monad context. (This part is a
---      result of BlockCon existing and can go away when BlockCon is
---      removed.)
---
-checkStmt :: VarEnv -> TyEnv -> Pos -> Context -> Stmt -> Either [(Pos, String)] Stmt
-checkStmt env tenv pos ctx stmt = do
-  ln <- case ctx of
-       TopLevel -> return $ Located "<toplevel>" "<toplevel>" pos
-       ProofScript -> return $ Located "<proofscript>" "<proofscript>" pos
-       _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
-  let ctxtype = TyCon pos (ContextCon ctx) []
-  case evalTIWithEnv env tenv (inferStmt ln pos ctxtype stmt) of
-    Left errs -> Left errs
-    Right (_wrapper, stmt', _type) -> Right stmt'
+checkStmt :: VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
+checkStmt env tenv ctx stmt =
+  -- XXX: we shouldn't need this position here.
+  -- The position is used for the following things:
+  --
+  --    - to create ln, which is used as part of the error printing
+  --      scheme, but is no longer particularly useful after recent
+  --      improvements (especially here where it contains no real
+  --      information) and should be removed;
+  --
+  --    - to be the position associated with the monad context, which
+  --      in a tidy world should just be PosRepl (as in, the only
+  --      time we should be typechecking a single statement is when
+  --      it was just typed interactively, and which monad we're in
+  --      is a direct property of that context) but this is not
+  --      currently true and will require a good bit of interpreter
+  --      cleanup to make it true;
+  --
+  --    - to pass to inferStmt, which also uses it as part of the
+  --      position associated with the monad context. (This part is a
+  --      result of BlockCon existing and can go away when BlockCon is
+  --      removed.)
+  --
+  -- XXX: using the position of the statement as the position
+  -- associated with the monad context is not correct (or at least,
+  -- will be confusing) and we should figure something else out if the
+  -- interpreter cleanup doesn't come through soon. Note that
+  -- currently we come through here only for syntactically top-level
+  -- statements in the interpreter; these are TopLevel except when in
+  -- the ProofScript repl. So perhaps we should use PosRepl when in
+  -- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?
+  -- But we don't have a good way of knowing here whether we're
+  -- actually in the repl.
+  let pos = getPos stmt
+      ln = case ctx of
+          TopLevel -> Located "<toplevel>" "<toplevel>" pos
+          ProofScript -> Located "<proofscript>" "<proofscript>" pos
+          _ -> panic "checkStmt" ["Invalid monad context " ++ pShow ctx]
+      ctxtype = TyCon pos (ContextCon ctx) []
+  in
+  evalTIWithEnv env tenv (inferSingleStmt ln pos ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
 -- environments to use.
-checkDecl :: VarEnv -> TyEnv -> Decl -> Either [(Pos, String)] Decl
+checkDecl :: VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl env tenv decl =
-  case evalTIWithEnv env tenv (inferDecl decl) of
-    Left errs -> Left errs
-    Right decl' -> Right decl'
-
--- | Check a declgroup. (This is an external interface.)
---
--- The first two arguments are the starting variable and typedef
--- environments to use.
-checkDeclGroup :: VarEnv -> TyEnv -> DeclGroup -> Either [(Pos, String)] DeclGroup
-checkDeclGroup env tenv dg =
-  case evalTIWithEnv env tenv (inferDeclGroup dg) of
-    Left errs -> Left errs
-    Right dg' -> Right dg'
+  evalTIWithEnv env tenv (inferDecl decl)
 
 -- }}}
 

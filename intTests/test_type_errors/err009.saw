@@ -1,0 +1,4 @@
+// This was allowed prior to Dec 2024 and is currently a warning;
+// should eventually become an error.
+enable_experimental;
+x <- llvm_fresh_cryptol_var "foo" {| [8] |};
