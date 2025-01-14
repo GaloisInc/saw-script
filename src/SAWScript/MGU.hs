@@ -33,7 +33,7 @@ import Data.List (intercalate, genericTake)
 import Data.Map (Map)
 import Data.Either (partitionEithers)
 import qualified Data.Map as M
---import qualified Data.Set as S
+import qualified Data.Set as S
 
 import qualified Prettyprinter as PP
 
@@ -481,12 +481,11 @@ unifyVarsInEnvs = do
   return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
 
 -- Get the named type vars that occur as keys in the current type name
--- environment. Returns a map to unit rather than a set for the
--- caller's convenience.
-namedVarDefinitions :: TI (M.Map Name ())
+-- environment.
+namedVarDefinitions :: TI (S.Set Name)
 namedVarDefinitions = do
    env <- TI $ asks tyEnv
-   return $ M.map (\_ -> ()) env
+   return $ M.keysSet env
 
 -- Get the position and name of the first binding in a pattern,
 -- for use as context info when printing messages. If there's a
@@ -1376,7 +1375,7 @@ generalize es0 ts0 = do
      envUnifyVars <- unifyVarsInEnvs
      knownNamedVars <- namedVarDefinitions
      let is' = is M.\\ envUnifyVars
-     let bs' = bs M.\\ knownNamedVars
+     let bs' = M.withoutKeys bs knownNamedVars
 
      -- convert to lists
      let is'' = M.toList is'
