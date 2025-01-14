@@ -83,28 +83,28 @@ sawTokens :-
 
 $white+                          ;
 "//".*                           ;
-"/*"                             { cnst TCmntS           }
-"*/"                             { cnst TCmntE           }
-@reservedid                      { cnst TReserved        }
-@punct                           { cnst TPunct           }
-@reservedop                      { cnst TOp              }
-@varid                           { cnst TVar             }
-\" @string* \"                   { TLit  `via'` read     }
-\{\{ @code* \}\}                 { TCode `via'` readCode }
-\{\| @ctype* \|\}                { TCType`via'` readCode }
-@decimal                         { TNum  `via`  read     }
-0[bB] @binary                    { TNum  `via`  readBin  }
-0[oO] @octal                     { TNum  `via`  read     }
-0[xX] @hexadecimal               { TNum  `via`  read     }
-.                                { cnst TUnknown         }
+"/*"                             { plain          TCmntS    }
+"*/"                             { plain          TCmntE    }
+@reservedid                      { plain          TReserved }
+@punct                           { plain          TPunct    }
+@reservedop                      { plain          TOp       }
+@varid                           { plain          TVar      }
+\" @string* \"                   { xform read     TLit      }
+\{\{ @code* \}\}                 { xform readCode TCode     }
+\{\| @ctype* \|\}                { xform readCode TCType    }
+@decimal                         { addon read     TNum      }
+0[bB] @binary                    { addon readBin  TNum      }
+0[oO] @octal                     { addon read     TNum      }
+0[xX] @hexadecimal               { addon read     TNum      }
+.                                { plain          TUnknown  }
 
 {
 
 -- token helpers
 
-cnst f p s   = f p (Text.pack s)
-via  c g p s = c p (Text.pack s) (g s)
-via' c g p s = c p (Text.pack $ g s)
+plain   tok pos txt = tok pos (Text.pack txt)         -- ^ just the contents
+xform f tok pos txt = tok pos (Text.pack $ f txt)     -- ^ transform contents
+addon f tok pos txt = tok pos (Text.pack txt) (f txt) -- ^ also variant contents
 
 -- drop the {{ }} or {| |} from Cryptol blocks
 readCode :: String -> String

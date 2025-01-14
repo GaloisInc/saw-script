@@ -12,6 +12,9 @@ import Data.Text (Text)
 
 import SAWScript.Position (Positioned(..))
 
+-- All tokens have tokStr carrying the matched text (even TEOF where
+-- it doesn't entirely make sense) so that tokStr can be applied to
+-- any variant of the type.
 data Token p = TVar      { tokPos :: p, tokStr :: Text                               }
              | TQVar     { tokPos :: p, tokStr :: Text, tokVars :: ([Text], Text)    }
              | TLit      { tokPos :: p, tokStr :: Text                               }
