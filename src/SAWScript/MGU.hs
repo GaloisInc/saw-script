@@ -1321,9 +1321,8 @@ inferSingleStmt ln pos ctx s = do
 -- decls
 --
 
--- Create a type schema for a declaration out of its free vars.
---
--- (actually for a list of declarations)
+-- Create a type schema for a list of mutually referential
+-- declarations out of their free vars.
 --
 -- (This creates names for any remaining unification vars, so
 -- potentially updates the expression.)
@@ -1336,8 +1335,8 @@ generalize es0 ts0 = do
 
      -- Extract lists of any unification vars and named type vars that
      -- still appear.
-     let is = unifyVars ts
-     let bs = namedVars ts
+     let is0 = unifyVars ts
+     let bs0 = namedVars ts
 
      -- Drop any unification vars and named type vars that we
      -- shouldn't forall-bind.
@@ -1374,12 +1373,12 @@ generalize es0 ts0 = do
 
      envUnifyVars <- unifyVarsInEnvs
      knownNamedVars <- namedVarDefinitions
-     let is' = is M.\\ envUnifyVars
-     let bs' = M.withoutKeys bs knownNamedVars
+     let is1 = is0 M.\\ envUnifyVars
+     let bs1 = M.withoutKeys bs0 knownNamedVars
 
      -- convert to lists
-     let is'' = M.toList is'
-     let bs'' = M.toList bs'
+     let is2 = M.toList is1
+     let bs2 = M.toList bs1
 
      -- if the position is "fresh" turn it into "inferred from term"
      let adjustPos pos = case pos of
@@ -1387,14 +1386,14 @@ generalize es0 ts0 = do
            _ -> pos
 
      -- generate names for the unification vars
-     let is''' = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is'' ]
+     let is3 = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is2 ]
 
      -- build a substitution
-     let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is''' ]
+     let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
 
      -- get the names for the Forall
-     let inames = [ (pos, n) | (_i, pos, n) <- is''' ]
-     let bnames = [ (pos, x) | (x, pos) <- bs'' ]
+     let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
+     let bnames = [ (pos, x) | (x, pos) <- bs2 ]
 
      let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
 
