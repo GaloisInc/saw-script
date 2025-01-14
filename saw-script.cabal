@@ -245,7 +245,7 @@ executable saw
   build-depends:
       base >= 4
     , ansi-terminal
-    , containers
+    , containers >= 0.5.8
     , cryptol
     , directory
     , either

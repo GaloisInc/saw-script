@@ -33,7 +33,7 @@ import Data.List (intercalate, genericTake)
 import Data.Map (Map)
 import Data.Either (partitionEithers)
 import qualified Data.Map as M
---import qualified Data.Set as S
+import qualified Data.Set as S
 
 import qualified Prettyprinter as PP
 
@@ -79,6 +79,11 @@ instance UnifyVars Type where
 
 instance UnifyVars Schema where
   unifyVars (Forall _ t) = unifyVars t
+
+instance UnifyVars NamedType where
+  unifyVars nt = case nt of
+    ConcreteType ty -> unifyVars ty
+    AbstractType -> M.empty
 
 --
 -- namedVars is a type-class-polymorphic function for extracting named
@@ -258,6 +263,11 @@ instance AppSubst Type where
 
 instance AppSubst Schema where
   appSubst s (Forall ns t) = Forall ns (appSubst s t)
+
+instance AppSubst NamedType where
+  appSubst s nt = case nt of
+    ConcreteType ty -> ConcreteType $ appSubst s ty
+    AbstractType -> AbstractType
 
 -- }}}
 
@@ -441,28 +451,41 @@ resolveCurrentTypedefs t = do
   return $ instantiate s t
 
 -- Get the unification vars that are used in the current variable typing
--- environment.
+-- and named type environments.
 --
 -- FIXME: This function may miss type variables that occur in the type
 -- of a binding that has been shadowed by another value with the same
 -- name. This could potentially cause a run-time type error if the
 -- type of a local function gets generalized too much. We can probably
 -- wait to fix it until someone finds a sawscript program that breaks.
-unifyVarsInEnv :: TI (M.Map TypeIndex Pos)
-unifyVarsInEnv = do
-  env <- TI $ asks varEnv
-  let ss = M.elems env
-  ss' <- mapM applyCurrentSubst ss
-  return $ unifyVars ss'
+--
+-- dholland 20241220: I don't think that's a problem. If there's a
+-- loose unification var somewhere that's been shadowed to the point
+-- where it's not accessible, we can't have accessed it in order to
+-- generate a reference to it in the current block. If it is somewhere
+-- accessible, we'll find it there. This might have broken in the past
+-- when it didn't search the named type environment, but that leak has
+-- been corrected.
+--
+-- Note that we apply the current substitution first. This means that
+-- the caller must also apply the current substitution before reasoning
+-- about what unification vars do and don't appear.
+--
+-- Returns a map of the index number to the occurrence position.
+unifyVarsInEnvs :: TI (M.Map TypeIndex Pos)
+unifyVarsInEnvs = do
+  venv <- TI $ asks varEnv
+  tenv <- TI $ asks tyEnv
+  vtys <- mapM applyCurrentSubst $ M.elems venv
+  ttys <- mapM applyCurrentSubst $ M.elems tenv
+  return $ M.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
 
--- Get the named typedef vars that occur in the current variable typing
+-- Get the named type vars that occur as keys in the current type name
 -- environment.
-namedVarsInEnv :: TI (M.Map Name Pos)
-namedVarsInEnv = do
-  env <- TI $ asks varEnv
-  let ss = M.elems env
-  ss' <- mapM applyCurrentSubst ss
-  return $ namedVars ss'
+namedVarDefinitions :: TI (S.Set Name)
+namedVarDefinitions = do
+   env <- TI $ asks tyEnv
+   return $ M.keysSet env
 
 -- Get the position and name of the first binding in a pattern,
 -- for use as context info when printing messages. If there's a
@@ -1298,19 +1321,64 @@ inferSingleStmt ln pos ctx s = do
 -- decls
 --
 
--- Create a type schema for a declaration out of its free vars.
+-- Create a type schema for a list of mutually referential
+-- declarations out of their free vars.
 --
 -- (This creates names for any remaining unification vars, so
 -- potentially updates the expression.)
 generalize :: [OutExpr] -> [Type] -> TI [(OutExpr,Schema)]
-generalize es0 ts0 =
-  do es <- applyCurrentSubst es0
+generalize es0 ts0 = do
+     -- first, substitute away any resolved unification variables
+     -- in both the expressions and types.
+     es <- applyCurrentSubst es0
      ts <- applyCurrentSubst ts0
 
-     envUnify <- unifyVarsInEnv
-     envNamed <- namedVarsInEnv
-     let is = M.toList (unifyVars ts M.\\ envUnify)
-     let bs = M.toList (namedVars ts M.\\ envNamed)
+     -- Extract lists of any unification vars and named type vars that
+     -- still appear.
+     let is0 = unifyVars ts
+     let bs0 = namedVars ts
+
+     -- Drop any unification vars and named type vars that we
+     -- shouldn't forall-bind.
+     --
+     -- For unification vars, any whose scope reaches beyond the
+     -- current declaration should be left alone; they should only be
+     -- bound when they eventually move out of scope. Get these by
+     -- examining the types used in the right-hand sides of both the
+     -- variable environment and the type environment.
+     --
+     -- For named vars, exclude any that appear that appear as keys
+     -- (on the left-hand side) of the type environment. Those are
+     -- already defined.
+     --
+     -- There should be no other named variables involved. We don't
+     -- allow referring to random unbound type names any more, and
+     -- we don't yet (though probably should, FUTURE) have a way of
+     -- explicitly forall-binding type variables in declarations.
+     --
+     -- It would be handy for scaling if we didn't have to examine
+     -- the entire variable environment (on the grounds that there
+     -- should be no loose unification vars at the top level where
+     -- most definitions will come from) but (a) we don't have the
+     -- structure to support that and (b) it is not absolutely clear
+     -- that there isn't a way to get such loose unification vars,
+     -- in which case we'd have to do something about it.
+     --
+     -- This code also used to exclude named vars used on the
+     -- right-hand side of the variable environment; this was to allow
+     -- the use of otherwise undefined type names in the primitives
+     -- table. There is no longer any need for such hackery, and
+     -- undefined type names are not allowed to appear in the variable
+     -- environment.
+
+     envUnifyVars <- unifyVarsInEnvs
+     knownNamedVars <- namedVarDefinitions
+     let is1 = is0 M.\\ envUnifyVars
+     let bs1 = M.withoutKeys bs0 knownNamedVars
+
+     -- convert to lists
+     let is2 = M.toList is1
+     let bs2 = M.toList bs1
 
      -- if the position is "fresh" turn it into "inferred from term"
      let adjustPos pos = case pos of
@@ -1318,14 +1386,14 @@ generalize es0 ts0 =
            _ -> pos
 
      -- generate names for the unification vars
-     let is' = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is ]
+     let is3 = [ (i, adjustPos pos, "a." ++ show i) | (i, pos) <- is2 ]
 
-     -- build the substitution
-     let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is' ]
+     -- build a substitution
+     let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
 
      -- get the names for the Forall
-     let inames = [ (pos, n) | (_i, pos, n) <- is' ]
-     let bnames = [ (pos, x) | (x, pos) <- bs ]
+     let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
+     let bnames = [ (pos, x) | (x, pos) <- bs2 ]
 
      let mk e t = (appSubst s e, Forall (inames ++ bnames) (appSubst s t))
 
