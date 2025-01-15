@@ -897,8 +897,18 @@ print_value v = do
 
 readSchema :: Text -> SS.Schema
 readSchema str =
-  case parseSchema (lexSAW "internal" str) of
-    Left err -> error (show err)
+  let croak what msg =
+        error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
+      tokens =
+        let (tokens', optmsg) = lexSAW "internal" str in
+        -- XXX clean this up when we clean out the message printing infrastructure
+        case optmsg of
+            Just (Error, _pos, msg) -> croak "Lexer" $ Text.unpack msg
+            Just (_, _pos, _msg) -> tokens'  -- ignore warnings for now
+            Nothing -> tokens'
+  in
+  case parseSchema tokens of
+    Left err -> croak "Parse" $ show err
     Right schema -> schema
 
 data PrimType

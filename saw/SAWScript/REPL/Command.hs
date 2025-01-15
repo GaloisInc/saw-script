@@ -165,7 +165,13 @@ typeOfCmd :: String -> REPL ()
 typeOfCmd str
   | null str = do io $ putStrLn $ "[error] :type requires an argument"
   | otherwise =
-  do let tokens = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+     case optmsg of
+       Nothing -> return ()
+       Just (_vrb, pos, msg) -> do
+         -- XXX wrap printing of positions in the message-printing infrastructure
+         let msg' = show pos ++ ": " ++ Text.unpack msg
+         io $ putStrLn msg'
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
@@ -247,7 +253,13 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
-  let tokens = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+  let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+  case optmsg of
+    Nothing -> return ()
+    Just (_vrb, pos, msg) -> do
+      -- XXX wrap printing of positions in the message-printing infrastructure
+      let msg' = show pos ++ ": " ++ Text.unpack msg
+      io $ putStrLn msg'
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->

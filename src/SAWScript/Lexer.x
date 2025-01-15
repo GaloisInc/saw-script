@@ -13,6 +13,7 @@ module SAWScript.Lexer
   , lexSAW
   ) where
 
+import SAWScript.Options (Verbosity(..))
 import SAWScript.Token
 import SAWScript.Panic (panic)
 import SAWScript.Position
@@ -22,6 +23,7 @@ import Numeric (readInt)
 import Data.Char (ord)
 import qualified Data.Char as Char
 import Data.List
+import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Word (Word8)
@@ -38,7 +40,8 @@ $unispace       = \x5
 $uniother       = \x6
 $unitick        = \x7
 
-$whitechar = [\ \t\n\r\f\v $unispace]
+$whitechar = [\ \t\r\f\v $unispace]
+$gapchar   = [$whitechar \n]
 $special   = [\(\)\,\;\[\]\`\{\}]
 $digit     = 0-9
 $large     = [A-Z $uniupper]
@@ -51,7 +54,7 @@ $octit     = 0-7
 $hexit     = [0-9 A-F a-f]
 $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
-$codechar  = [$graphic $whitechar]
+$codechar  = [$graphic $whitechar \n]
 
 @reservedid  = import|and|let|rec|in|do|if|then|else|as|hiding|typedef
              |CryptolSetup|JavaSetup|LLVMSetup|MIRSetup|ProofScript|TopLevel|CrucibleSetup
@@ -75,7 +78,7 @@ $cntrl       = [$large \@\[\\\]\^\_]
              | SUB | ESC | FS | GS | RS | US | SP | DEL
 $charesc     = [abfnrtv\\\"\'\&]
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hexadecimal)
-@gap         = \\ $whitechar+ \\
+@gap         = \\ $gapchar+ \\
 @string      = $graphic # [\"\\] | " " | @escape | @gap
 @code        = ($codechar # \}) | \} ($codechar # \})
 @ctype       = ($codechar # \|) | \| ($codechar # \})
@@ -83,10 +86,11 @@ $charesc     = [abfnrtv\\\"\'\&]
 
 sawTokens :-
 
-$white+                          ;
-"//".*                           ;
-"/*"                             { plain          TCmntS    }
-"*/"                             { plain          TCmntE    }
+\n                               { plain          TEOL      }
+"//"                             { plain          TCommentL }
+"/*"                             { plain          TCommentS }
+"*/"                             { plain          TCommentE }
+$whitechar+                      ;
 @reservedid                      { plain          TReserved }
 @punct                           { plain          TPunct    }
 @reservedop                      { plain          TOp       }
@@ -252,23 +256,88 @@ scanTokens filename str = go (startPos, str)
             in
             act pos' text : go inp'
 
+-- state for processing comments
+data CommentState = CNone | CBlock Pos !Int | CLine
+
+-- this should cease to be needed once we clean out the message
+-- printing infrastructure
+type OptMsg = Maybe (Verbosity, Pos, Text)
+
 -- postprocess to drop comments (this allows comments to be nested)
-dropComments :: [Token Pos] -> [Token Pos]
-dropComments = go 0
-  where go :: Int -> [Token Pos] -> [Token Pos]
-        go _  []                 = []
-        go !i (TCmntS _ _ : ts)  = go (i+1) ts
-        go !i (TCmntE _ _ : ts)
-         | i > 0                 = go (i-1) ts
-        go !i (t : ts)
-         | i /= 0                = go i ts
-         | True                  = t : go i ts
+dropComments :: [Token Pos] -> ([Token Pos], OptMsg)
+dropComments = go CNone
+  where go :: CommentState -> [Token Pos] -> ([Token Pos], OptMsg)
+        go state ts = case ts of
+          [] ->
+            -- should always see TEOF before we hit the end
+            panic "Lexer" ["dropComments: tokens ran out"]
+          TEOF _ _ : _ : _ ->
+            -- should only see TEOF at the end of the list
+            panic "Lexer" ["dropComments: misplaced EOF in tokens"]
+
+          t : ts' ->
+            let take state' =
+                    let (results, optmsg) = go state' ts' in
+                    (t : results, optmsg)
+                drop state' = go state' ts'
+                finish = ([t], Nothing)
+                finishWith msg = ([t], Just msg)
+            in
+            case state of
+              CNone -> case t of
+                TEOF _ _ ->
+                    -- plain EOF
+                    finish
+                TCommentS pos _ ->
+                    -- open block-comment
+                    drop (CBlock pos 0)
+                TCommentL _ _  ->
+                    -- begin line-comment
+                    drop CLine
+                TEOL _ _ ->
+                    -- ordinary EOL, doesn't need to be seen downstream; drop it
+                    drop CNone
+                _ ->
+                    -- uncommented token, keep it
+                    take CNone
+
+              CBlock startpos depth -> case t of
+                TEOF pos _ ->
+                    -- EOF in /**/-comment; unclosed, which is an error
+                    finishWith (Error, startpos, "Unclosed block comment")
+                TCommentS _ _ ->
+                    -- open nested comment, keep original start position
+                    drop (CBlock startpos (depth + 1))
+                TCommentE _ _
+                 | depth == 0 ->
+                     -- end outer block comment
+                     drop CNone
+                 | otherwise ->
+                     -- end nested block comment
+                     drop (CBlock startpos (depth - 1))
+                _ ->
+                     -- anything else in a block comment, drop it
+                     -- (this includes any TCommentLs that come through)
+                     drop state
+
+              CLine -> case t of
+                TEOF pos _ ->
+                    -- EOF in //-comment; missing a newline
+                    finishWith (Warn, pos, "Missing newline at end of file")
+                TEOL _ _ ->
+                    -- EOL ending a line comment, drop it
+                    -- (EOLs aren't sent downstream)
+                    drop CNone
+                _ ->
+                    -- anything else in a line comment, drop it
+                    -- (this includes any TCommentS/TCommentE that appear)
+                    drop CLine
 
 -- entry point
-lexSAW :: FilePath -> Text -> [Token Pos]
+lexSAW :: FilePath -> Text -> ([Token Pos], OptMsg)
 lexSAW f text = dropComments $ scanTokens f text
 
 -- alternate monadic entry point (XXX: does this have any value?)
-scan :: Monad m => FilePath -> Text -> m [Token Pos]
+scan :: Monad m => FilePath -> Text -> m ([Token Pos], OptMsg)
 scan f = return . lexSAW f
 }
