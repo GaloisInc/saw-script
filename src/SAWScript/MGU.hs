@@ -740,6 +740,19 @@ mgus t1s t2s = case (t1s, t2s) of
       -- XXX this is no good, it will always print one of the lengths as 0!
       -- (also, note that this is only reachable for type constructor args
       -- and not function args)
+      --
+      -- dholland 20250106: I believe this is currently unreachable.
+      -- mgus is called from two places above (record fields and type
+      -- constructor arguments); the record fields case always passes
+      -- lists of the same length. The situation with type constructor
+      -- arguments is murkier. However, there are only a handful of
+      -- builtin types whose constructors take arguments at all:
+      -- tuples, lists, functions, and monads/contexts/blocks. The
+      -- parser special-cases the syntax for all of these, so that you
+      -- apparently can't produce partially applied instances for
+      -- any. (And for tuples, the arity is part of the constructor,
+      -- so tuples of different arity won't get as far as trying to
+      -- unify the arguments.)
       failMGU' $ "Wrong number of arguments. Expected " ++ show (length t1s) ++
                  " but got " ++ show (length t2s)
 
@@ -923,6 +936,8 @@ inferExpr (ln, expr) = case expr of
        let ty = TyRecord (PosInferred InfTerm pos) $ M.fromList nts
        return (Record pos (M.fromList nes'), ty)
 
+  -- XXX this is currently unreachable because there's no concrete
+  -- syntax for it; the parser will never produce it.
   Index pos ar ix ->
     do (ar',at) <- inferExpr (ln,ar)
        ix'      <- checkExpr ln ix (tInt (PosInferred InfContext (getPos ix)))
@@ -1488,6 +1503,13 @@ checkType kind ty = case ty of
       let nparams = length params
           nargs = length args
           argsleft = kindNumArgs kind
+
+      -- XXX: the failures are all currently unreachable, because the
+      -- parser does not permit writing mis-kinded types. This should
+      -- probably be changed, both for ergonomic reasons (messages
+      -- about wrong type arguments are better than syntax errors) and
+      -- also because all the special cases in the parser are ugly.
+
       if nargs > nparams then do
           -- XXX special case for BlockCon (remove along with BlockCon)
           case (tycon, args) of
@@ -1507,11 +1529,14 @@ checkType kind ty = case ty of
                            " but found " ++ (pShow $ Kind (nparams - nargs)))
           getErrorTyVar pos
       else do
-          -- note that this will ignore the extra params
+          -- note that this will ignore the extra params, and return
+          -- a list of the same length as the args given
           args' <- zipWithM checkType params args
           return $ TyCon pos tycon args'
 
   TyRecord pos fields -> do
+      -- XXX as with TyCon the failure is currently unreachable
+      -- because the parser can't be made to produce mis-kinded types.
       if kind /= kindStar then do
           recordError pos ("Kind mismatch: expected " ++ pShow kind ++
                            " but found " ++ pShow kindStar)

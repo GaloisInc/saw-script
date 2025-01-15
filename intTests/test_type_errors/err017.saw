@@ -1,0 +1,28 @@
+// Trigger the "Mismatch of types" message.
+//
+// Most type mismatches generate the "Mismatch of type constructors"
+// message; to fall through to the default case that produces this
+// message, you have to have two types where
+//    - neither is a TyUnifyVar
+//    - they aren't both TyRecord
+//    - they aren't both TyCon
+//    - they aren't the same TyVar
+// which leaves the following cases:
+//    - TyRecord vs. TyCon
+//    - TyVar vs. TyRecord or TyCon
+//    - different TyVars
+//
+// At the moment producing arbitrary TyVars is difficult (we no
+// longer allow making them up just by mentioning them, but we don't
+// yet have a syntax for forall-binding them in decls) so use the
+// TyRecord vs. TyCon case
+
+typedef t = {
+   a: Int,
+   b: Int
+};
+
+let f (x: t) = x.a;
+
+let y = f 3;
+

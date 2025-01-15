@@ -1,0 +1,9 @@
+// Trigger the "occurs check failure" message
+//
+// This is produced if type inference results in a type that contains
+// itself.
+//
+// We can do this by doing something with a list and its element type
+// that require them to be the same.
+
+let paste xs = concat (head xs) xs;

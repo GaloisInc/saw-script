@@ -110,7 +110,7 @@ run-tests() {
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }
-            s,'"$CURDIR"'/,,
+            s,'"$CURDIR"'/,,g
         '
 
         # Check the output against the expected version.

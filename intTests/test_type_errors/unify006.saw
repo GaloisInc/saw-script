@@ -1,0 +1,11 @@
+//
+// Exercise failure of the first unify call (via checkExpr) in the
+// IfThenElse case of inferExpr. This is the check of the condition
+// against Bool.
+//
+
+let f (x : Int) = if x then 1 else 2;
+
+
+
+

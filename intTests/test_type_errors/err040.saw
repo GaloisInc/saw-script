@@ -1,0 +1,8 @@
+//
+// Check what happens when tuple members don't match.
+//
+// (This is to specifically trigger the selective refinement of the
+// printed mismatch.)
+
+let f (x : (Int, Int, Int)) = (x.1, x.2, x.0);
+let x = f (1, 2, "three");

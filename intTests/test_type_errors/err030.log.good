@@ -1,0 +1,3 @@
+ Loading file "err030.saw"
+ Parse error at err030.saw:7:14-7:17: Unexpected `Int'
+FAILED
