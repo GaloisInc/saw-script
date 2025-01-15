@@ -1,0 +1,1 @@
+let thing : { fn: Int -> Int } = { fn = \x -> x };
