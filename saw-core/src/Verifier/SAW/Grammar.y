@@ -13,11 +13,8 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Grammar
-  ( Decl(..)
-  , Term(..)
-  , parseSAW
+  ( parseSAW
   , parseSAWTerm
-  , lexer
   ) where
 
 import Control.Applicative ((<$>))
