@@ -259,56 +259,54 @@ newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State Ale
 addError :: Pos -> ParseError -> Parser a
 addError p err = Parser $ throwError (PosPair p err)
 
-setInput :: AlexInput -> Parser ()
-setInput inp = Parser $ put inp
-
 parsePos :: Parser Pos
 parsePos = Parser $ gets pos
 
 lexer :: (PosPair Token -> Parser a) -> Parser a
 lexer f = do
-  let go :: Maybe (Pos, [Word8]) -> (PosPair Token -> Parser ([(Pos, ParseError)], PosPair Token)) -> Parser ([(Pos, ParseError)], PosPair Token)
-      go prevErr next = do
+  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, ParseError)], PosPair Token)) -> Either () (AlexInput, [(Pos, ParseError)], PosPair Token)
+      go prevErr inp next = do
         let collectErrors errors =
               case prevErr of
                 Nothing -> errors
                 Just (pos, chars) -> (pos, UnexpectedLex (reverse chars)) : errors
-        s <- Parser get
-        let inp@(PosPair p (Buffer _ b)) = s
+        let (PosPair p (Buffer _ b)) = inp
             end = do
-              (errors, tok) <- next (PosPair p TEnd)
-              return (collectErrors errors, tok)
+              (inp', errors, tok) <- next inp (PosPair p TEnd)
+              return (inp', collectErrors errors, tok)
         case alexScan inp 0 of
           AlexEOF -> end
           AlexError _ ->
             case alexGetByte inp of
-              Just (w,inp') -> do
-                setInput inp'
+              Just (w, inp') -> do
                 case prevErr of
-                  Nothing -> go (Just (p,[w])) next
-                  Just (po,l) -> go (Just (po,w:l)) next
+                  Nothing -> go (Just (p,[w])) inp' next
+                  Just (po,l) -> go (Just (po,w:l)) inp' next
               Nothing -> end
           AlexSkip inp' _ -> do
-            setInput inp'
-            (errors, tok) <- go Nothing next
-            return (collectErrors errors, tok)
+            (inp'', errors, tok) <- go Nothing inp' next
+            return (inp'', collectErrors errors, tok)
           AlexToken inp' l act -> do
-            setInput inp'
             let v = act (B.toString (B.take (fromIntegral l) b))
-            (errors, tok) <- next (PosPair p v)
-            return (collectErrors errors, tok)
-  let read :: Integer -> PosPair Token -> Parser ([(Pos, ParseError)], PosPair Token)
-      read i tkn =
+            (inp'', errors, tok) <- next inp' (PosPair p v)
+            return (inp'', collectErrors errors, tok)
+  let read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, ParseError)], PosPair Token)
+      read i inp tkn =
         case val tkn of
-          TCmntS -> go Nothing (read (i+1))
-          TCmntE | i > 0 -> go Nothing (read (i-1))
+          TCmntS -> go Nothing inp (read (i+1))
+          TCmntE | i > 0 -> go Nothing inp (read (i-1))
                  | otherwise -> do
                      let err = (pos tkn, UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
-                     (errors, tok) <- go Nothing (read 0)
-                     return (err : errors, tok)
-          _ | i > 0 -> go Nothing (read i)
-            | otherwise -> return ([], tkn)
-  (errors, result) <- go Nothing (read (0::Integer))
+                     (inp', errors, tok) <- go Nothing inp (read 0)
+                     return (inp', err : errors, tok)
+          _ | i > 0 -> go Nothing inp (read i)
+            | otherwise -> return (inp, [], tkn)
+  s <- Parser get
+  let inp@(PosPair p (Buffer _ b)) = s
+  let (inp', errors, result) = case go Nothing inp (read (0::Integer)) of
+        Left () -> error "oops"
+        Right result -> result
+  Parser $ put inp'
   -- XXX: this can only actually throw one error. Fix this up when we
   -- clean out the error printing infrastructure.
   mapM (\(pos, err) -> addError pos err) (reverse errors)
