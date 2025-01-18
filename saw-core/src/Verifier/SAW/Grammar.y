@@ -267,15 +267,17 @@ parsePos = Parser $ gets pos
 
 lexer :: (PosPair Token -> Parser a) -> Parser a
 lexer f = do
-  let go :: Maybe (Pos, [Word8]) -> (PosPair Token -> Parser (PosPair Token)) -> Parser (PosPair Token)
+  let go :: Maybe (Pos, [Word8]) -> (PosPair Token -> Parser ([(Pos, ParseError)], PosPair Token)) -> Parser ([(Pos, ParseError)], PosPair Token)
       go prevErr next = do
-        let addErrors =
+        let collectErrors errors =
               case prevErr of
-                Nothing -> return ()
-                Just (po,l) -> addError po (UnexpectedLex (reverse l))
+                Nothing -> errors
+                Just (pos, chars) -> (pos, UnexpectedLex (reverse chars)) : errors
         s <- Parser get
         let inp@(PosPair p (Buffer _ b)) = s
-            end = addErrors >> next (PosPair p TEnd)
+            end = do
+              (errors, tok) <- next (PosPair p TEnd)
+              return (collectErrors errors, tok)
         case alexScan inp 0 of
           AlexEOF -> end
           AlexError _ ->
@@ -286,23 +288,30 @@ lexer f = do
                   Nothing -> go (Just (p,[w])) next
                   Just (po,l) -> go (Just (po,w:l)) next
               Nothing -> end
-          AlexSkip inp' _ -> addErrors >> setInput inp' >> go Nothing next
+          AlexSkip inp' _ -> do
+            setInput inp'
+            (errors, tok) <- go Nothing next
+            return (collectErrors errors, tok)
           AlexToken inp' l act -> do
-            addErrors
             setInput inp'
             let v = act (B.toString (B.take (fromIntegral l) b))
-            next (PosPair p v)
-  let read :: Integer -> PosPair Token -> Parser (PosPair Token)
+            (errors, tok) <- next (PosPair p v)
+            return (collectErrors errors, tok)
+  let read :: Integer -> PosPair Token -> Parser ([(Pos, ParseError)], PosPair Token)
       read i tkn =
         case val tkn of
           TCmntS -> go Nothing (read (i+1))
           TCmntE | i > 0 -> go Nothing (read (i-1))
                  | otherwise -> do
-                     addError (pos tkn) (UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
-                     go Nothing (read 0)
+                     let err = (pos tkn, UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
+                     (errors, tok) <- go Nothing (read 0)
+                     return (err : errors, tok)
           _ | i > 0 -> go Nothing (read i)
-            | otherwise -> return tkn
-  result <- go Nothing (read (0::Integer))
+            | otherwise -> return ([], tkn)
+  (errors, result) <- go Nothing (read (0::Integer))
+  -- XXX: this can only actually throw one error. Fix this up when we
+  -- clean out the error printing infrastructure.
+  mapM (\(pos, err) -> addError pos err) (reverse errors)
   f result
 
 -- | Run parser given a directory for the base (used for making pathname relative),
