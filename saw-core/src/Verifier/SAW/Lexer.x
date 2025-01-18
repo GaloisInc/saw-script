@@ -154,45 +154,62 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
                 p'    = if isNew then incLine p else incCol p
 
 lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-lexSAWCore inp0 = do
-  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)) -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
-      go prevErr inp next = do
+lexSAWCore inp0 =
+  let go :: Maybe (Pos, [Word8]) -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+      go prevErr inp = do
         let collectErrors errors =
               case prevErr of
                 Nothing -> errors
                 Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
         let (PosPair p (Buffer _ b)) = inp
             end = do
-              (inp', errors, tok) <- next inp (PosPair p TEnd)
-              return (inp', collectErrors errors, tok)
+              let tok = PosPair p TEnd
+              return (inp, collectErrors [], tok)
         case alexScan inp 0 of
           AlexEOF -> end
           AlexError _ ->
             case alexGetByte inp of
               Just (w, inp') -> do
                 case prevErr of
-                  Nothing -> go (Just (p,[w])) inp' next
-                  Just (po,l) -> go (Just (po,w:l)) inp' next
+                  Nothing -> go (Just (p,[w])) inp'
+                  Just (po,l) -> go (Just (po,w:l)) inp'
               Nothing -> end
           AlexSkip inp' _ -> do
-            (inp'', errors, tok) <- go Nothing inp' next
+            (inp'', errors, tok) <- go Nothing inp'
             return (inp'', collectErrors errors, tok)
           AlexToken inp' l act -> do
             let v = act (BU.toString (BU.take (fromIntegral l) b))
-            (inp'', errors, tok) <- next inp' (PosPair p v)
-            return (inp'', collectErrors errors, tok)
-  let read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+            let tok = PosPair p v
+            return (inp', collectErrors [], tok)
+      read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       read i inp tkn =
         case val tkn of
-          TCmntS -> go Nothing inp (read (i+1))
-          TCmntE | i > 0 -> go Nothing inp (read (i-1))
-                 | otherwise -> do
-                     let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
-                     (inp', errors, tok) <- go Nothing inp (read 0)
-                     return (inp', err : errors, tok)
-          _ | i > 0 -> go Nothing inp (read i)
-            | otherwise -> return (inp, [], tkn)
-  case go Nothing inp0 (read (0::Integer)) of
+          TCmntS -> do
+                (inp', errors, tok) <- go Nothing inp
+                (inp'', errors2, tok') <- read (i+1) inp' tok
+                return (inp'', errors ++ errors2, tok')
+          TCmntE
+            | i > 0 -> do
+                (inp', errors, tok) <- go Nothing inp
+                (inp'', errors2, tok') <- read (i-1) inp' tok
+                return (inp'', errors ++ errors2, tok')
+            | otherwise -> do
+                let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
+                (inp', errors, tok) <- go Nothing inp
+                (inp'', errors2, tok') <- read 0 inp' tok
+                return (inp'', err : errors ++ errors2, tok')
+          _ | i > 0 -> do
+                (inp', errors, tok) <- go Nothing inp
+                (inp'', errors2, tok') <- read i inp' tok
+                return (inp'', errors ++ errors2, tok')
+            | otherwise ->
+                return (inp, [], tkn)
+      result = do
+        (inp0', errors, tok) <- go Nothing inp0
+        (inp0'', errors2, tok') <- read (0::Integer) inp0' tok
+        return (inp0'', reverse (errors ++ errors2), tok')
+  in
+  case result of
       Left () -> error "oops"
-      Right (inp0', errors, tok) -> (inp0', reverse errors, tok)
+      Right result' -> result'
 }
