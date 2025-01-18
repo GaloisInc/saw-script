@@ -22,16 +22,10 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Lexer
-  ( module Verifier.SAW.Position
-  , Token(..)
-  , ppToken
-  , Buffer(..)
-  , AlexInput
-  , initialAlexInput
-  , alexScan
-  , alexGetByte
-  , AlexReturn(..)
+  ( Token(..)
   , LexerError(..)
+  , LexerState
+  , initialLexerState
   , lexSAWCore
   ) where
 
@@ -156,6 +150,11 @@ initialAlexInput base path b = PosPair pos input
                   }
         prevChar = error "internal: runLexer prev char undefined"
         input = Buffer prevChar b
+
+-- Wrap the input type for export, in case we end up wanting other state
+type LexerState = AlexInput
+initialLexerState :: FilePath -> FilePath -> B.ByteString -> LexerState
+initialLexerState = initialAlexInput
 
 alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar (val -> Buffer c _) = c

@@ -253,7 +253,7 @@ data ParseError
   | ParseError String
   deriving (Show)
 
-newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State AlexInput) a }
+newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State LexerState) a }
   deriving (Applicative, Functor, Monad)
 
 addError :: Pos -> ParseError -> Parser a
@@ -264,8 +264,7 @@ parsePos = Parser $ gets pos
 
 lexer :: (PosPair Token -> Parser a) -> Parser a
 lexer f = do
-  s <- Parser get
-  let inp@(PosPair p (Buffer _ b)) = s
+  inp <- Parser get
   let (inp', errors, result) = lexSAWCore inp
   Parser $ put inp'
   -- XXX: this can only actually throw one error. Fix this up when we
@@ -277,7 +276,7 @@ lexer f = do
 -- bytestring to parse, and parser to run.
 runParser :: Parser a -> FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) a
 runParser (Parser m) base path b = evalState (runExceptT m) initState
-  where initState = initialAlexInput base path b
+  where initState = initialLexerState base path b
 
 parseSAW :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Module
 parseSAW = runParser parseSAW2
