@@ -182,35 +182,30 @@ scanToken inp0 =
   go inp0 [] Nothing
 
 
-scanSkipComments :: AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+scanSkipComments :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 scanSkipComments inp0 =
-  let read :: Integer -> AlexInput -> [(Pos, LexerError)] -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
-      read i inp errors = do
+  let read :: Integer -> AlexInput -> [(Pos, LexerError)] -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+      read i inp errors =
         let (inp', moreErrors, tkn) = scanToken inp
             errors' = moreErrors ++ errors
-        case val tkn of
+        in case val tkn of
           TCmntS ->
                 read (i+1) inp' errors'
           TCmntE
             | i > 0 ->
                 read (i-1) inp' errors'
-            | otherwise -> do
-                let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
+            | otherwise ->
+                let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}")) in
                 read 0 inp' (err : errors')
           _ | i > 0 ->
                 read i inp' errors'
             | otherwise ->
-                return (inp', errors', tkn)
+                (inp', errors', tkn)
   in
-  read (0::Integer) inp0 []
+  let (inp0', errors, tok) = read (0::Integer) inp0 [] in
+  (inp0', reverse errors, tok)
 
 lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-lexSAWCore inp0 =
-  let result = do
-        (inp0', errors, tok) <- scanSkipComments inp0
-        return (inp0', reverse errors, tok)
-  in
-  case result of
-      Left () -> error "oops"
-      Right result' -> result'
+lexSAWCore inp = scanSkipComments inp
+
 }
