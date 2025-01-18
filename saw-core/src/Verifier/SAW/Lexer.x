@@ -153,8 +153,8 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
 
-lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-lexSAWCore inp0 =
+scanToken :: AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+scanToken inp0 =
   let go :: Maybe (Pos, [Word8]) -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       go prevErr inp = do
         let collectErrors errors =
@@ -181,9 +181,14 @@ lexSAWCore inp0 =
             let v = act (BU.toString (BU.take (fromIntegral l) b))
             let tok = PosPair p v
             return (inp', collectErrors [], tok)
-      read :: Integer -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+  in
+  go Nothing inp0
+
+lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+lexSAWCore inp0 =
+  let read :: Integer -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       read i inp = do
-        (inp', errors, tkn) <- go Nothing inp
+        (inp', errors, tkn) <- scanToken inp
         case val tkn of
           TCmntS -> do
                 (inp'', errors2, tok') <- read (i+1) inp'
