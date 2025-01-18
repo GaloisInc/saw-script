@@ -183,28 +183,25 @@ scanToken inp0 =
 
 lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 lexSAWCore inp0 =
-  let read :: Integer -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
-      read i inp = do
-        let (inp', errors, tkn) = scanToken inp
+  let read :: Integer -> AlexInput -> [(Pos, LexerError)] -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+      read i inp errors = do
+        let (inp', moreErrors, tkn) = scanToken inp
+            errors' = moreErrors ++ errors
         case val tkn of
-          TCmntS -> do
-                (inp'', errors2, tok') <- read (i+1) inp'
-                return (inp'', errors ++ errors2, tok')
+          TCmntS ->
+                read (i+1) inp' errors'
           TCmntE
-            | i > 0 -> do
-                (inp'', errors2, tok') <- read (i-1) inp'
-                return (inp'', errors ++ errors2, tok')
+            | i > 0 ->
+                read (i-1) inp' errors'
             | otherwise -> do
                 let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
-                (inp'', errors2, tok') <- read 0 inp'
-                return (inp'', errors ++ err : errors2, tok')
-          _ | i > 0 -> do
-                (inp'', errors2, tok') <- read i inp'
-                return (inp'', errors ++ errors2, tok')
+                read 0 inp' (err : errors')
+          _ | i > 0 ->
+                read i inp' errors'
             | otherwise ->
-                return (inp', errors, tkn)
+                return (inp', errors', tkn)
       result = do
-        (inp0', errors, tok) <- read (0::Integer) inp0
+        (inp0', errors, tok) <- read (0::Integer) inp0 []
         return (inp0', reverse errors, tok)
   in
   case result of
