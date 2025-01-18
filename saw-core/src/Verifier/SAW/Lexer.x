@@ -155,35 +155,31 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
 
 scanToken :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 scanToken inp0 =
-  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-      go prevErr inp =
+  let go :: AlexInput -> [(Pos, LexerError)] -> Maybe (Pos, [Word8]) -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+      go inp errors pendingError =
         let (PosPair p (Buffer _ b)) = inp
-            collectErrors errors =
-              case prevErr of
+            finishAnyError =
+              case pendingError of
                 Nothing -> errors
                 Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
             end =
-              (inp, collectErrors [], PosPair p TEnd)
+              (inp, finishAnyError, PosPair p TEnd)
         in case alexScan inp 0 of
           AlexEOF -> end
           AlexError _ ->
             case alexGetByte inp of
               Just (w, inp') ->
-                case prevErr of
-                  Nothing -> go (Just (p,[w])) inp'
-                  Just (po,l) -> go (Just (po,w:l)) inp'
+                case pendingError of
+                  Nothing -> go inp' errors (Just (p, [w]))
+                  Just (pos, l) -> go inp' errors (Just (pos, w:l))
               Nothing -> end
           AlexSkip inp' _ ->
-            let (inp'', errors, tok) = go Nothing inp'
-            in
-            (inp'', collectErrors errors, tok)
+            go inp' finishAnyError Nothing
           AlexToken inp' l act ->
-            let v = act (BU.toString (BU.take (fromIntegral l) b))
-                tok = PosPair p v
-            in
-            (inp', collectErrors [], tok)
+            let v = act (BU.toString (BU.take (fromIntegral l) b)) in
+            (inp', finishAnyError, PosPair p v)
   in
-  go Nothing inp0
+  go inp0 [] Nothing
 
 lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 lexSAWCore inp0 =
