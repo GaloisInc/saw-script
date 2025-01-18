@@ -153,10 +153,11 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
 
-scanToken :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-scanToken inp0 =
-  let go :: AlexInput -> [(Pos, LexerError)] -> Maybe (Pos, [Word8]) -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-      go inp errors pendingError =
+type ErrList = [(Pos, LexerError)]
+
+scanToken :: AlexInput -> ErrList -> (AlexInput, ErrList, PosPair Token)
+scanToken inp0 errors0 =
+  let go inp errors pendingError =
         let (PosPair p (Buffer _ b)) = inp
             finishAnyError =
               case pendingError of
@@ -179,30 +180,31 @@ scanToken inp0 =
             let v = act (BU.toString (BU.take (fromIntegral l) b)) in
             (inp', finishAnyError, PosPair p v)
   in
-  go inp0 [] Nothing
+  go inp0 errors0 Nothing
 
-
-scanSkipComments :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+scanSkipComments :: AlexInput -> (AlexInput, ErrList, PosPair Token)
 scanSkipComments inp0 =
-  let read :: Integer -> AlexInput -> [(Pos, LexerError)] -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-      read i inp errors =
-        let (inp', moreErrors, tkn) = scanToken inp
-            errors' = moreErrors ++ errors
-        in case val tkn of
+  let go i inp errors =
+        let (inp', errors', tok) = scanToken inp errors
+            again nextState = go nextState inp' errors'
+            againWith nextState err = go nextState inp' (err : errors')
+            accept = (inp', errors', tok)
+        in
+        case val tok of
           TCmntS ->
-                read (i+1) inp' errors'
+                again (i+1)
           TCmntE
             | i > 0 ->
-                read (i-1) inp' errors'
+                again (i-1)
             | otherwise ->
-                let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}")) in
-                read 0 inp' (err : errors')
+                let err = (pos tok, LexerError (fmap (fromIntegral . fromEnum) "-}")) in
+                againWith 0 err
           _ | i > 0 ->
-                read i inp' errors'
+                again i
             | otherwise ->
-                (inp', errors', tkn)
+                accept
   in
-  let (inp0', errors, tok) = read (0::Integer) inp0 [] in
+  let (inp0', errors, tok) = go (0::Integer) inp0 [] in
   (inp0', reverse errors, tok)
 
 lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
