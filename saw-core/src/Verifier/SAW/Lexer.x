@@ -181,8 +181,9 @@ scanToken inp0 =
   in
   go inp0 [] Nothing
 
-lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
-lexSAWCore inp0 =
+
+scanSkipComments :: AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+scanSkipComments inp0 =
   let read :: Integer -> AlexInput -> [(Pos, LexerError)] -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       read i inp errors = do
         let (inp', moreErrors, tkn) = scanToken inp
@@ -200,8 +201,13 @@ lexSAWCore inp0 =
                 read i inp' errors'
             | otherwise ->
                 return (inp', errors', tkn)
-      result = do
-        (inp0', errors, tok) <- read (0::Integer) inp0 []
+  in
+  read (0::Integer) inp0 []
+
+lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+lexSAWCore inp0 =
+  let result = do
+        (inp0', errors, tok) <- scanSkipComments inp0
         return (inp0', reverse errors, tok)
   in
   case result of
