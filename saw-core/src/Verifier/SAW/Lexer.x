@@ -108,6 +108,14 @@ data Token
   | TIllegal String -- ^ Illegal character
   deriving (Show)
 
+newtype LexerError = LexerError [Word8]
+
+data Buffer = Buffer Char !B.ByteString
+type AlexInput = PosPair Buffer
+
+-- Wrap the input type for export, in case we end up wanting other state
+type LexerState = AlexInput
+
 -- | Remove the "#rec" suffix of a recursor string
 dropRecSuffix :: String -> String
 dropRecSuffix str = take (length str - 4) str
@@ -122,10 +130,6 @@ readHexBV =
 readBinBV :: String -> [Bool]
 readBinBV = map (\c -> c == '1')
 
-data Buffer = Buffer Char !B.ByteString
-
-type AlexInput = PosPair Buffer
-
 initialAlexInput :: FilePath -> FilePath -> B.ByteString -> AlexInput
 initialAlexInput base path b = PosPair pos input
   where pos = Pos { posBase = base
@@ -136,8 +140,6 @@ initialAlexInput base path b = PosPair pos input
         prevChar = error "internal: runLexer prev char undefined"
         input = Buffer prevChar b
 
--- Wrap the input type for export, in case we end up wanting other state
-type LexerState = AlexInput
 initialLexerState :: FilePath -> FilePath -> B.ByteString -> LexerState
 initialLexerState = initialAlexInput
 
@@ -150,8 +152,6 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
           where c     = toEnum (fromIntegral w)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
-
-newtype LexerError = LexerError [Word8]
 
 lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 lexSAWCore inp0 = do
