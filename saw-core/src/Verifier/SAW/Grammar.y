@@ -267,7 +267,8 @@ parsePos = Parser $ gets pos
 
 lexer :: (PosPair Token -> Parser a) -> Parser a
 lexer f = do
-  let go prevErr next = do
+  let go :: Maybe (Pos, [Word8]) -> (PosPair Token -> Parser (PosPair Token)) -> Parser (PosPair Token)
+      go prevErr next = do
         let addErrors =
               case prevErr of
                 Nothing -> return ()
@@ -291,7 +292,8 @@ lexer f = do
             setInput inp'
             let v = act (B.toString (B.take (fromIntegral l) b))
             next (PosPair p v)
-  let read i tkn =
+  let read :: Integer -> PosPair Token -> Parser (PosPair Token)
+      read i tkn =
         case val tkn of
           TCmntS -> go Nothing (read (i+1))
           TCmntE | i > 0 -> go Nothing (read (i-1))
@@ -299,8 +301,9 @@ lexer f = do
                      addError (pos tkn) (UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
                      go Nothing (read 0)
           _ | i > 0 -> go Nothing (read i)
-            | otherwise -> f tkn
-  go Nothing (read (0::Integer))
+            | otherwise -> return tkn
+  result <- go Nothing (read (0::Integer))
+  f result
 
 -- | Run parser given a directory for the base (used for making pathname relative),
 -- bytestring to parse, and parser to run.
