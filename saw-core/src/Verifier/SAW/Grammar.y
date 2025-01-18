@@ -262,14 +262,16 @@ addError p err = Parser $ throwError (PosPair p err)
 parsePos :: Parser Pos
 parsePos = Parser $ gets pos
 
+newtype LexerError = LexerError [Word8]
+
 lexer :: (PosPair Token -> Parser a) -> Parser a
 lexer f = do
-  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, ParseError)], PosPair Token)) -> Either () (AlexInput, [(Pos, ParseError)], PosPair Token)
+  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)) -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       go prevErr inp next = do
         let collectErrors errors =
               case prevErr of
                 Nothing -> errors
-                Just (pos, chars) -> (pos, UnexpectedLex (reverse chars)) : errors
+                Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
         let (PosPair p (Buffer _ b)) = inp
             end = do
               (inp', errors, tok) <- next inp (PosPair p TEnd)
@@ -290,13 +292,13 @@ lexer f = do
             let v = act (B.toString (B.take (fromIntegral l) b))
             (inp'', errors, tok) <- next inp' (PosPair p v)
             return (inp'', collectErrors errors, tok)
-  let read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, ParseError)], PosPair Token)
+  let read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       read i inp tkn =
         case val tkn of
           TCmntS -> go Nothing inp (read (i+1))
           TCmntE | i > 0 -> go Nothing inp (read (i-1))
                  | otherwise -> do
-                     let err = (pos tkn, UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
+                     let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
                      (inp', errors, tok) <- go Nothing inp (read 0)
                      return (inp', err : errors, tok)
           _ | i > 0 -> go Nothing inp (read i)
@@ -309,7 +311,7 @@ lexer f = do
   Parser $ put inp'
   -- XXX: this can only actually throw one error. Fix this up when we
   -- clean out the error printing infrastructure.
-  mapM (\(pos, err) -> addError pos err) (reverse errors)
+  mapM (\(pos, LexerError chars) -> addError pos $ UnexpectedLex chars) (reverse errors)
   f result
 
 -- | Run parser given a directory for the base (used for making pathname relative),
