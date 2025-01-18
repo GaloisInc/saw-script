@@ -181,33 +181,29 @@ lexSAWCore inp0 =
             let v = act (BU.toString (BU.take (fromIntegral l) b))
             let tok = PosPair p v
             return (inp', collectErrors [], tok)
-      read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
-      read i inp tkn =
+      read :: Integer -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+      read i inp = do
+        (inp', errors, tkn) <- go Nothing inp
         case val tkn of
           TCmntS -> do
-                (inp', errors, tok) <- go Nothing inp
-                (inp'', errors2, tok') <- read (i+1) inp' tok
+                (inp'', errors2, tok') <- read (i+1) inp'
                 return (inp'', errors ++ errors2, tok')
           TCmntE
             | i > 0 -> do
-                (inp', errors, tok) <- go Nothing inp
-                (inp'', errors2, tok') <- read (i-1) inp' tok
+                (inp'', errors2, tok') <- read (i-1) inp'
                 return (inp'', errors ++ errors2, tok')
             | otherwise -> do
                 let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
-                (inp', errors, tok) <- go Nothing inp
-                (inp'', errors2, tok') <- read 0 inp' tok
-                return (inp'', err : errors ++ errors2, tok')
+                (inp'', errors2, tok') <- read 0 inp'
+                return (inp'', errors ++ err : errors2, tok')
           _ | i > 0 -> do
-                (inp', errors, tok) <- go Nothing inp
-                (inp'', errors2, tok') <- read i inp' tok
+                (inp'', errors2, tok') <- read i inp'
                 return (inp'', errors ++ errors2, tok')
             | otherwise ->
-                return (inp, [], tkn)
+                return (inp', errors, tkn)
       result = do
-        (inp0', errors, tok) <- go Nothing inp0
-        (inp0'', errors2, tok') <- read (0::Integer) inp0' tok
-        return (inp0'', reverse (errors ++ errors2), tok')
+        (inp0', errors, tok) <- read (0::Integer) inp0
+        return (inp0', reverse errors, tok)
   in
   case result of
       Left () -> error "oops"
