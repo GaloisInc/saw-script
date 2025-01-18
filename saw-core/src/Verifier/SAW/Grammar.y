@@ -269,7 +269,10 @@ lexer f = do
   Parser $ put inp'
   -- XXX: this can only actually throw one error. Fix this up when we
   -- clean out the error printing infrastructure.
-  mapM (\(pos, LexerError chars) -> addError pos $ UnexpectedLex chars) errors
+  let issue (pos, msg) = case msg of
+        InvalidInput chars -> addError pos $ UnexpectedLex chars
+        UnclosedComment -> addError pos $ ParseError "Unclosed Comment"
+  mapM issue errors
   f result
 
 -- | Run parser given a directory for the base (used for making pathname relative),

@@ -108,7 +108,7 @@ data Token
   | TIllegal String -- ^ Illegal character
   deriving (Show)
 
-newtype LexerError = LexerError [Word8]
+data LexerError = InvalidInput [Word8] | UnclosedComment
 
 data Buffer = Buffer Char !B.ByteString
 type AlexInput = PosPair Buffer
@@ -161,7 +161,7 @@ scanToken inp0 errors0 =
         let (PosPair p (Buffer _ b)) = inp
             finishAnyError = case pendingError of
                 Nothing -> errors
-                Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
+                Just (pos, chars) -> (pos, InvalidInput (reverse chars)) : errors
             end =
                 (inp, finishAnyError, PosPair p TEnd)
         in case alexScan inp 0 of
@@ -190,6 +190,7 @@ scanSkipComments inp0 =
             again nextState = go nextState inp' errors'
             againWith nextState err = go nextState inp' (err : errors')
             accept = (inp', errors', tok)
+            acceptWith err = (inp', err : errors', tok)
         in
         case val tok of
           TCmntS ->
@@ -198,8 +199,14 @@ scanSkipComments inp0 =
             | i > 0 ->
                 again (i-1)
             | otherwise ->
-                let err = (pos tok, LexerError (fmap (fromIntegral . fromEnum) "-}")) in
+                let err = (pos tok, InvalidInput (fmap (fromIntegral . fromEnum) "-}")) in
                 againWith 0 err
+          TEnd
+            | i > 0 ->
+                let err = (pos tok, UnclosedComment) in
+                acceptWith err
+            | otherwise ->
+                accept
           _ | i > 0 ->
                 again i
             | otherwise ->
