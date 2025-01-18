@@ -153,34 +153,35 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
 
-scanToken :: AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+scanToken :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 scanToken inp0 =
-  let go :: Maybe (Pos, [Word8]) -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
-      go prevErr inp = do
-        let collectErrors errors =
+  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+      go prevErr inp =
+        let (PosPair p (Buffer _ b)) = inp
+            collectErrors errors =
               case prevErr of
                 Nothing -> errors
                 Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
-        let (PosPair p (Buffer _ b)) = inp
-            end = do
-              let tok = PosPair p TEnd
-              return (inp, collectErrors [], tok)
-        case alexScan inp 0 of
+            end =
+              (inp, collectErrors [], PosPair p TEnd)
+        in case alexScan inp 0 of
           AlexEOF -> end
           AlexError _ ->
             case alexGetByte inp of
-              Just (w, inp') -> do
+              Just (w, inp') ->
                 case prevErr of
                   Nothing -> go (Just (p,[w])) inp'
                   Just (po,l) -> go (Just (po,w:l)) inp'
               Nothing -> end
-          AlexSkip inp' _ -> do
-            (inp'', errors, tok) <- go Nothing inp'
-            return (inp'', collectErrors errors, tok)
-          AlexToken inp' l act -> do
+          AlexSkip inp' _ ->
+            let (inp'', errors, tok) = go Nothing inp'
+            in
+            (inp'', collectErrors errors, tok)
+          AlexToken inp' l act ->
             let v = act (BU.toString (BU.take (fromIntegral l) b))
-            let tok = PosPair p v
-            return (inp', collectErrors [], tok)
+                tok = PosPair p v
+            in
+            (inp', collectErrors [], tok)
   in
   go Nothing inp0
 
@@ -188,7 +189,7 @@ lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
 lexSAWCore inp0 =
   let read :: Integer -> AlexInput -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
       read i inp = do
-        (inp', errors, tkn) <- scanToken inp
+        let (inp', errors, tkn) = scanToken inp
         case val tkn of
           TCmntS -> do
                 (inp'', errors2, tok') <- read (i+1) inp'
