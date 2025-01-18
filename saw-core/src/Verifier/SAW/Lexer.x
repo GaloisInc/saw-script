@@ -159,26 +159,27 @@ scanToken :: AlexInput -> ErrList -> (AlexInput, ErrList, PosPair Token)
 scanToken inp0 errors0 =
   let go inp errors pendingError =
         let (PosPair p (Buffer _ b)) = inp
-            finishAnyError =
-              case pendingError of
+            finishAnyError = case pendingError of
                 Nothing -> errors
                 Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
             end =
-              (inp, finishAnyError, PosPair p TEnd)
+                (inp, finishAnyError, PosPair p TEnd)
         in case alexScan inp 0 of
-          AlexEOF -> end
-          AlexError _ ->
-            case alexGetByte inp of
-              Just (w, inp') ->
-                case pendingError of
-                  Nothing -> go inp' errors (Just (p, [w]))
-                  Just (pos, l) -> go inp' errors (Just (pos, w:l))
-              Nothing -> end
-          AlexSkip inp' _ ->
-            go inp' finishAnyError Nothing
-          AlexToken inp' l act ->
-            let v = act (BU.toString (BU.take (fromIntegral l) b)) in
-            (inp', finishAnyError, PosPair p v)
+            AlexEOF ->
+                end
+            AlexError _ -> case alexGetByte inp of
+              Nothing ->
+                  end
+              Just (w, inp') -> case pendingError of
+                Nothing ->
+                    go inp' errors (Just (p, [w]))
+                Just (pos, l) ->
+                    go inp' errors (Just (pos, w:l))
+            AlexSkip inp' _ ->
+                go inp' finishAnyError Nothing
+            AlexToken inp' l act ->
+                let v = act (BU.toString (BU.take (fromIntegral l) b)) in
+                (inp', finishAnyError, PosPair p v)
   in
   go inp0 errors0 Nothing
 
