@@ -122,21 +122,6 @@ readHexBV =
 readBinBV :: String -> [Bool]
 readBinBV = map (\c -> c == '1')
 
-ppToken :: Token -> String
-ppToken tkn =
-  case tkn of
-    TIdent s -> s
-    TRecursor s -> s ++ "#rec"
-    TNat n -> show n
-    TBitvector bits ->
-      "0b" ++ map (\b -> if b then '1' else '0') bits
-    TString s -> show s
-    TKey s -> s
-    TEnd -> "END"
-    TCmntS -> "XXXS"
-    TCmntE -> "XXXE"
-    TIllegal s -> "illegal " ++ show s
-
 data Buffer = Buffer Char !B.ByteString
 
 type AlexInput = PosPair Buffer
