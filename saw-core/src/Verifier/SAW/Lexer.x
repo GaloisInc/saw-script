@@ -31,11 +31,14 @@ module Verifier.SAW.Lexer
   , alexScan
   , alexGetByte
   , AlexReturn(..)
+  , LexerError(..)
+  , lexSAWCore
   ) where
 
 import Codec.Binary.UTF8.Generic ()
 import Control.Monad.State.Strict
 import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString.Lazy.UTF8 as BU
 import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Word (Word8)
 import Data.Bits
@@ -163,4 +166,49 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
           where c     = toEnum (fromIntegral w)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
+
+newtype LexerError = LexerError [Word8]
+
+lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+lexSAWCore inp0 = do
+  let go :: Maybe (Pos, [Word8]) -> AlexInput -> (AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)) -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+      go prevErr inp next = do
+        let collectErrors errors =
+              case prevErr of
+                Nothing -> errors
+                Just (pos, chars) -> (pos, LexerError (reverse chars)) : errors
+        let (PosPair p (Buffer _ b)) = inp
+            end = do
+              (inp', errors, tok) <- next inp (PosPair p TEnd)
+              return (inp', collectErrors errors, tok)
+        case alexScan inp 0 of
+          AlexEOF -> end
+          AlexError _ ->
+            case alexGetByte inp of
+              Just (w, inp') -> do
+                case prevErr of
+                  Nothing -> go (Just (p,[w])) inp' next
+                  Just (po,l) -> go (Just (po,w:l)) inp' next
+              Nothing -> end
+          AlexSkip inp' _ -> do
+            (inp'', errors, tok) <- go Nothing inp' next
+            return (inp'', collectErrors errors, tok)
+          AlexToken inp' l act -> do
+            let v = act (BU.toString (BU.take (fromIntegral l) b))
+            (inp'', errors, tok) <- next inp' (PosPair p v)
+            return (inp'', collectErrors errors, tok)
+  let read :: Integer -> AlexInput -> PosPair Token -> Either () (AlexInput, [(Pos, LexerError)], PosPair Token)
+      read i inp tkn =
+        case val tkn of
+          TCmntS -> go Nothing inp (read (i+1))
+          TCmntE | i > 0 -> go Nothing inp (read (i-1))
+                 | otherwise -> do
+                     let err = (pos tkn, LexerError (fmap (fromIntegral . fromEnum) "-}"))
+                     (inp', errors, tok) <- go Nothing inp (read 0)
+                     return (inp', err : errors, tok)
+          _ | i > 0 -> go Nothing inp (read i)
+            | otherwise -> return (inp, [], tkn)
+  case go Nothing inp0 (read (0::Integer)) of
+      Left () -> error "oops"
+      Right (inp0', errors, tok) -> (inp0', reverse errors, tok)
 }
