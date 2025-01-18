@@ -897,7 +897,7 @@ print_value v = do
 
 readSchema :: Text -> SS.Schema
 readSchema str =
-  case parseSchema (lexSAW "internal" $ Text.unpack str) of
+  case parseSchema (lexSAW "internal" str) of
     Left err -> error (show err)
     Right schema -> schema
 
