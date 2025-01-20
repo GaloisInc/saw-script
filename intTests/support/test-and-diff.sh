@@ -106,11 +106,19 @@ run-tests() {
         # We also need to shorten pathnames that contain the current
         # directory, because saw feels the need to expand pathnames
         # (see also saw-script #2082).
+        #
+        # In addition to that we also need to remove the current
+        # directory when it appears in double quotes, at least for
+        # now, because many error prints at the saw-core level seem to
+        # use default Show instances and the saw-core positions carry
+        # the directory and filename separately. This becomes
+        # "interesting" from a quoting perspective...
         sed < $TEST.rawlog > $TEST.log '
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }
             s,'"$CURDIR"'/,,g
+            s,"'"$CURDIR"'",".",g
         '
 
         # Check the output against the expected version.
