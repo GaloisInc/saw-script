@@ -23,7 +23,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Lexer
   ( Token(..)
-  , LexerError(..)
+  , LexerMessage(..)
   , LexerState
   , initialLexerState
   , lexSAWCore
@@ -43,7 +43,8 @@ import Verifier.SAW.Position
 
 }
 
-$whitechar = [ \t\n\r\f\v]
+$whitechar = [\ \t\r\f\v]
+$gapchar   = [$whitechar \n]
 $special   = [\(\)\,\;\[\]\`\{\}]
 $digit     = 0-9
 $binit     = 0-1
@@ -76,15 +77,16 @@ $idchar    = [a-z A-Z 0-9 \' \_]
 @key = @punct | @keywords
 
 @escape      = \\ ($charesc | @ascii | @decimal | o @octal | x @hex)
-@gap         = \\ $whitechar+ \\
+@gap         = \\ $gapchar+ \\
 @string      = $graphic # [\"\\] | " " | @escape | @gap
 
 sawTokens :-
 
-$white+;
-"--".*;
-"{-"        { \_ -> TCmntS }
-"-}"        { \_ -> TCmntE }
+$whitechar+;
+\n          { \_ -> TEOL }
+"--"        { \_ -> TCommentL }
+"{-"        { \_ -> TCommentS }
+"-}"        { \_ -> TCommentE }
 \" @string* \" { TString . read   }
 @num        { TNat . read }
 "0x"@hex    { TBitvector . readHexBV . drop 2 }
@@ -103,12 +105,14 @@ data Token
   | TString { tokString :: String } -- ^ String literal
   | TKey String     -- ^ Keyword or predefined symbol
   | TEnd            -- ^ End of file.
-  | TCmntS          -- ^ Start of a block comment
-  | TCmntE          -- ^ End of a block comment.
+  | TCommentS       -- ^ Start of a block comment
+  | TCommentE       -- ^ End of a block comment
+  | TCommentL       -- ^ Start of a line comment
+  | TEOL            -- ^ End of line (ends a line comment)
   | TIllegal String -- ^ Illegal character
   deriving (Show)
 
-data LexerError = InvalidInput [Word8] | UnclosedComment
+data LexerMessage = InvalidInput [Word8] | UnclosedComment | MissingEOL
 
 data Buffer = Buffer Char !B.ByteString
 type AlexInput = PosPair Buffer
@@ -153,9 +157,9 @@ alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
                 isNew = c == '\n'
                 p'    = if isNew then incLine p else incCol p
 
-type ErrList = [(Pos, LexerError)]
+type MsgList = [(Pos, LexerMessage)]
 
-scanToken :: AlexInput -> ErrList -> (AlexInput, ErrList, PosPair Token)
+scanToken :: AlexInput -> MsgList -> (AlexInput, MsgList, PosPair Token)
 scanToken inp0 errors0 =
   let go inp errors pendingError =
         let (PosPair p (Buffer _ b)) = inp
@@ -183,39 +187,75 @@ scanToken inp0 errors0 =
   in
   go inp0 errors0 Nothing
 
-scanSkipComments :: AlexInput -> (AlexInput, ErrList, PosPair Token)
+-- state for processing comments
+data CommentState = CNone | CBlock Pos !Int | CLine
+
+scanSkipComments :: AlexInput -> (AlexInput, MsgList, PosPair Token)
 scanSkipComments inp0 =
-  let go i inp errors =
+  let go state inp errors =
         let (inp', errors', tok) = scanToken inp errors
             again nextState = go nextState inp' errors'
             againWith nextState err = go nextState inp' (err : errors')
             accept = (inp', errors', tok)
             acceptWith err = (inp', err : errors', tok)
         in
-        case val tok of
-          TCmntS ->
-                again (i+1)
-          TCmntE
-            | i > 0 ->
-                again (i-1)
-            | otherwise ->
+        case state of
+          CNone -> case val tok of
+            TEnd ->
+                -- plain EOF
+                accept
+            TCommentS ->
+                -- open block-comment
+                again (CBlock (pos tok) 0)
+            TCommentE ->
+                -- misplaced close-comment
                 let err = (pos tok, InvalidInput (fmap (fromIntegral . fromEnum) "-}")) in
-                againWith 0 err
-          TEnd
-            | i > 0 ->
-                let err = (pos tok, UnclosedComment) in
+                againWith CNone err
+            TCommentL ->
+                -- begin line-comment
+                again CLine
+            TEOL ->
+                -- ordinary end-of-line, doesn't need to be seen downstream
+                again CNone
+            _ ->
+                -- uncommented token, take it
+                accept
+
+          CBlock startpos depth -> case val tok of
+            TEnd ->
+                -- EOF in block comment
+                let err = (startpos, UnclosedComment) in
                 acceptWith err
-            | otherwise ->
-                accept
-          _ | i > 0 ->
-                again i
-            | otherwise ->
-                accept
+            TCommentS ->
+                -- nested open-comment; keep the original start position
+                again (CBlock startpos (depth + 1))
+            TCommentE
+             | depth == 0 ->
+                -- end outer block comment
+                again CNone
+             | otherwise ->
+                -- end nested block comment
+                again (CBlock startpos (depth - 1))
+            _ ->
+                -- anything else in a block comment; get another token
+                again state
+
+          CLine -> case val tok of
+            TEnd ->
+                -- EOF in line-comment; missing a newline, which is a warning
+                let err = (pos tok, MissingEOL) in
+                acceptWith err
+            TEOL ->
+                -- EOL ending the comment; drop it but end the comment
+                again CNone
+            _ ->
+                -- anything else in a line comment; drop it
+                again CLine
   in
-  let (inp0', errors, tok) = go (0::Integer) inp0 [] in
+  let (inp0', errors, tok) = go CNone inp0 [] in
   (inp0', reverse errors, tok)
 
-lexSAWCore :: AlexInput -> (AlexInput, [(Pos, LexerError)], PosPair Token)
+lexSAWCore :: AlexInput -> (AlexInput, MsgList, PosPair Token)
 lexSAWCore inp = scanSkipComments inp
 
 }

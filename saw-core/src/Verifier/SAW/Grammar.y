@@ -272,6 +272,10 @@ lexer f = do
   let issue (pos, msg) = case msg of
         InvalidInput chars -> addError pos $ UnexpectedLex chars
         UnclosedComment -> addError pos $ ParseError "Unclosed Comment"
+        MissingEOL ->
+          -- XXX: this should be a warning but we have no such ability here yet
+          --addWarning pos $ "No newline at end of file"
+          return ()
   mapM issue errors
   f result
 
