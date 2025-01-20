@@ -9,6 +9,7 @@ Portability : non-portable (language extensions)
 module Main where
 
 import System.Environment (getArgs)
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
 import Verifier.SAW
 
@@ -21,4 +22,6 @@ processFile file = do
   putStrLn $ "Tree size: " ++ show (scTreeSize tm)
 
 main :: IO ()
-main = mapM_ processFile =<< getArgs
+main = do
+  setLocaleEncoding utf8
+  mapM_ processFile =<< getArgs

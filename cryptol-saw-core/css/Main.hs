@@ -10,6 +10,8 @@ import qualified Data.ByteString as BS
 import           Data.Text ( pack )
 import           Data.Version
 
+import GHC.IO.Encoding (setLocaleEncoding)
+
 import qualified Cryptol.Eval as E
 import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.ModuleSystem as CM
@@ -75,6 +77,7 @@ header = "css [options] <input module> <function to simulate>"
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   args <- getArgs
   case getOpt RequireOrder options args of
     (flags,optArgs,[]) -> cssMain (foldr ($) emptyCSS flags) optArgs

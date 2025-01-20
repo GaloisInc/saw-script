@@ -63,7 +63,7 @@ executable css
   build-depends:
     aig,
     array,
-    base,
+    base >= 4.5,
     bytestring,
     containers,
     cryptol,

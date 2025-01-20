@@ -17,6 +17,8 @@ import System.Console.GetOpt
 import System.Environment
 import System.Directory
 
+import GHC.IO.Encoding (setLocaleEncoding)
+
 import SAWScript.Options
 import SAWScript.Utils
 import SAWScript.Interpreter (processFile)
@@ -31,6 +33,7 @@ import qualified Data.AIG.CompactGraph as AIG
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   hSetBuffering stdout LineBuffering
   argv <- getArgs
   case getOpt Permute options argv of

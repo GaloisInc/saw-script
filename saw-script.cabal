@@ -243,7 +243,7 @@ executable saw
     GitRev
 
   build-depends:
-      base >= 4
+      base >= 4.5
     , ansi-terminal
     , containers >= 0.5.8
     , cryptol

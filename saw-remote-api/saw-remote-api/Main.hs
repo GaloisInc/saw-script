@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
+
 import qualified Argo
 import qualified Argo.DefaultMain as Argo (defaultMain)
 import qualified Argo.Doc as Doc
@@ -56,6 +58,7 @@ import SAWServer.Yosys
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   theApp <- Argo.mkApp
                "SAW RPC Server"
                serverDocs
