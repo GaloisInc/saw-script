@@ -43,7 +43,7 @@ import Verifier.SAW.Lexer
 
 %tokentype { PosPair Token }
 %monad { Parser }
-%lexer { lexer } { PosPair _ TEnd }
+%lexer { lexer >>= } { PosPair _ TEnd }
 %error { parseError }
 %expect 0
 
@@ -262,8 +262,8 @@ addError p err = Parser $ throwError (PosPair p err)
 parsePos :: Parser Pos
 parsePos = Parser $ gets pos
 
-lexer :: (PosPair Token -> Parser a) -> Parser a
-lexer f = do
+lexer :: Parser (PosPair Token)
+lexer = do
   inp <- Parser get
   let (inp', errors, result) = lexSAWCore inp
   Parser $ put inp'
@@ -277,7 +277,7 @@ lexer f = do
           --addWarning pos $ "No newline at end of file"
           return ()
   mapM issue errors
-  f result
+  return result
 
 -- | Run parser given a directory for the base (used for making pathname relative),
 -- bytestring to parse, and parser to run.
