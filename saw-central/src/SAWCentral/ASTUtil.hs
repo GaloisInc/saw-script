@@ -1,11 +1,17 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWCentral.ASTUtil (
     namedTyVars,
     SubstituteTyVars(..)
  ) where
 
+import qualified Data.Text as Text
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as M
 
+import SAWCentral.Panic
 import SAWCentral.Position
 import SAWCentral.AST
 
@@ -48,30 +54,45 @@ instance NamedTyVars Schema where
 -- substituting named type variables (such as those declared with
 -- typedef) in a Type.
 --
--- Note: substituteTyVars is exposed from this module and reused by
--- the interpreter as part of its handling of typedefs during
--- execution.
+-- Panics if we try to substitute a definition that isn't visible.
+--
+-- Note: substituteTyVars is reused by the interpreter as part of its
+-- handling of typedefs during execution as well as by the
+-- typechecker.
+--
+-- XXX: it's not clear that the instances for Maybe and List warrant
+-- setting up the typeclass.
 --
 
 class SubstituteTyVars t where
   -- | @substituteTyVars m x@ applies the map @m@ to type variables in @x@.
-  substituteTyVars :: Map Name NamedType -> t -> t
+  substituteTyVars ::
+      Set PrimitiveLifecycle ->
+      Map Name (PrimitiveLifecycle, NamedType) ->
+      t -> t
 
 instance (SubstituteTyVars a) => SubstituteTyVars (Maybe a) where
-  substituteTyVars tyenv = fmap (substituteTyVars tyenv)
+  substituteTyVars avail tyenv = fmap (substituteTyVars avail tyenv)
 
 instance (SubstituteTyVars a) => SubstituteTyVars [a] where
-  substituteTyVars tyenv = map (substituteTyVars tyenv)
+  substituteTyVars avail tyenv = map (substituteTyVars avail tyenv)
 
 instance SubstituteTyVars Type where
-  substituteTyVars tyenv ty = case ty of
-    TyCon pos tc ts     -> TyCon pos tc (substituteTyVars tyenv ts)
-    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars tyenv) fs)
+  substituteTyVars avail tyenv ty = case ty of
+    TyCon pos tc ts     -> TyCon pos tc (substituteTyVars avail tyenv ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars avail tyenv) fs)
     TyUnifyVar _ _      -> ty
     TyVar _ n           ->
         case M.lookup n tyenv of
             Nothing -> ty
-            Just AbstractType -> ty
-            Just (ConcreteType ty') -> ty'
+            Just (lc, expansion) ->
+                if not (Set.member lc avail) then
+                    panic "substituteTyVars" [
+                        "Found reference to non-visible typedef: " <> n,
+                        "Lifecycle setting: " <> Text.pack (show lc)
+                    ]
+                else case expansion of
+                    AbstractType -> ty
+                    ConcreteType ty' -> ty'
 
 -- }}}

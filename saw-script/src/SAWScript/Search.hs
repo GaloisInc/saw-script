@@ -474,10 +474,14 @@ matchFragList ctx cand0 tgtType patTypes =
 
 -- short name for the environment type we use
 --
--- (XXX: this is pasted from the typechecker, and should probably be
--- either in its public interface or shared from somewhere else, but
--- sorting it out requires still-pending interpreter cleanup)
-type TyEnv = Map Name NamedType
+-- Let this be polymorphic in the things it carries because all we
+-- need from it is the keys.
+--
+-- (XXX: this type really belongs to the interpreter and should really
+-- be in its public interface or shared from somewhere else, but that
+-- requires the interpreter to have an interface, which requires
+-- still-pending interpreter cleanup)
+type TyEnv a = Map Name a
 
 -- | Check and compile a type schema pattern.
 --
@@ -489,7 +493,7 @@ type TyEnv = Map Name NamedType
 -- different match semantics from forall-bound type variables. See
 -- notes at the top of the file.
 --
-compileSearchPattern :: TyEnv -> SchemaPattern -> SearchPattern
+compileSearchPattern :: TyEnv a -> SchemaPattern -> SearchPattern
 compileSearchPattern tyEnv (SchemaPattern forallList tys) =
   let foralls = Set.fromList $ map (\(_pos, name) -> name) forallList
       boundVars = Map.keysSet tyEnv

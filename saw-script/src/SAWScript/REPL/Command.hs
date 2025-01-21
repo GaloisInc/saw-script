@@ -49,6 +49,7 @@ import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 -- SAWScript imports
 import qualified SAWCentral.Options (Verbosity(..))
@@ -64,6 +65,7 @@ import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 import SAWCentral.TopLevel (TopLevelRW(..))
+import SAWCentral.AST (PrimitiveLifecycle(..), everythingAvailable)
 
 
 -- Commands --------------------------------------------------------------------
@@ -184,7 +186,11 @@ typeOfCmd str
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
      rw <- getValueEnvironment
      decl' <- do
-       let (errs_or_results, warns) = checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
+       let primsAvail = rwPrimsAvail rw
+           valueInfo = rwValueInfo rw
+           valueInfo' = Map.map (\(lc, ty, _val) -> (lc, ty)) valueInfo
+           typeInfo = rwTypeInfo rw
+       let (errs_or_results, warns) = checkDecl primsAvail valueInfo' typeInfo decl
        let issueWarning (msgpos, msg) =
              -- XXX the print functions should be what knows how to show positions...
              putStrLn (show msgpos ++ ": Warning: " ++ msg)
@@ -211,21 +217,96 @@ searchCmd str
        Left err -> fail (show err)
        Right pat -> return pat
      rw <- getValueEnvironment
-     let valueTypes = rwValueTypes rw
-         namedTypes = rwNamedTypes rw
-         (errs_or_results, warns) = checkSchemaPattern valueTypes namedTypes pat
+
+     -- Always search the entire environment and recognize all type
+     -- names in the user's pattern, regardless of whether
+     -- enable_experimental or enable_deprecated is in effect. It is
+     -- definitely confusing to search for a hidden type and have
+     -- search treat that as a free type variable and match all kinds
+     -- of things you didn't intend. It is also better to retrieve
+     -- invisible/deprecated items and report their existence than to
+     -- hide them from the search.
+
+     -- FUTURE: it would be nice to be able to use the words
+     -- "experimental" and "deprecated" in the search term to match
+     -- against the lifecycle, to allow doing stuff like searching
+     -- for deprecated functions that take Terms.
+
+     let primsAvail = rwPrimsAvail rw
+         valueInfo = rwValueInfo rw
+         valueInfo' = Map.map (\(lc, ty, _val) -> (lc, ty)) valueInfo
+         typeInfo = rwTypeInfo rw
+         (errs_or_results, warns) = checkSchemaPattern everythingAvailable valueInfo' typeInfo pat
      let issueWarning (msgpos, msg) =
            -- XXX the print functions should be what knows how to show positions...
            putStrLn (show msgpos ++ ": Warning: " ++ msg)
      io $ mapM_ issueWarning warns
      pat' <- either failTypecheck return $ errs_or_results
-     let search = compileSearchPattern namedTypes pat'
-         matches = Map.assocs $ Map.filter (matchSearchPattern search) valueTypes
-         printMatch (lname, ty) = do
+     let search = compileSearchPattern typeInfo pat'
+         allMatches = Map.filter (\(_lc, ty) -> matchSearchPattern search ty) valueInfo'
+
+         -- Divide the results into visible, experimental-not-visible,
+         -- and deprecated-not-visible.
+         inspect name (lc, ty) (vis, ex, dep) =
+             if Set.member lc primsAvail then
+                 (Map.insert name (lc, ty) vis, ex, dep)
+             else if lc == Experimental then
+                 (vis, Map.insert name (lc, ty) ex, dep)
+             else if lc == Deprecated then
+                 (vis, ex, Map.insert name (lc, ty) dep)
+             else
+                 -- ?
+                 (vis, ex, dep)
+         (visMatches, expMatches, depMatches) =
+             Map.foldrWithKey inspect (Map.empty, Map.empty, Map.empty) allMatches
+
+         printMatch (lname, (lc, ty)) = do
            let name = Text.unpack $ SS.getVal lname
                ty' = SS.pShow ty
-           putStrLn (name ++ " : " ++ ty')
-     io $ mapM_ printMatch matches
+               lc' = case lc of
+                   Current -> ""
+                   Experimental -> "  (EXPERIMENTAL)"
+                   Deprecated -> "  (DEPRECATED)"
+           putStrLn (name ++ " : " ++ ty' ++ lc')
+         printMatches matches =
+           io $ mapM_ printMatch (Map.assocs matches)
+
+         moreMatches matches =
+             let n = Map.size matches in
+             if n == 1 then "1 more match"
+             else show n ++ " more matches"
+         alsoExperimental =
+             if not (Map.null expMatches) then
+                 io $ putStrLn $ moreMatches expMatches ++ " tagged " ++
+                                 "experimental; use enable_experimental to " ++
+                                 "see them"
+             else
+                 pure ()
+         alsoDeprecated =
+             if not (Map.null depMatches) then
+                 io $ putStrLn $ moreMatches depMatches ++ " tagged " ++
+                                 "deprecated; use enable_deprecated to " ++
+                                 "see them"
+             else
+                 pure ()
+
+     if not (Map.null visMatches) then do
+         printMatches visMatches
+         alsoExperimental
+         alsoDeprecated
+     else do
+         io $ putStrLn "No matches."
+         if not (Map.null expMatches) then do
+             io $ putStrLn $ "The following experimental matches require " ++
+                             "enable_experimental:"
+             printMatches expMatches
+             alsoDeprecated
+         else if not (Map.null depMatches) then do
+             io $ putStrLn $ "The following deprecated matches require " ++
+                             "enable_deprecated:"
+             printMatches depMatches
+         else
+             pure ()
 
 
 quitCmd :: REPL ()
@@ -234,14 +315,20 @@ quitCmd  = stop
 
 envCmd :: REPL ()
 envCmd = do
-  env <- getValueEnvironment
+  rw <- getValueEnvironment
   let showLName = Text.unpack . SS.getVal
-  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwValueTypes env) ]
+  let avail = rwPrimsAvail rw
+      valueInfo = rwValueInfo rw
+      valueInfo' = Map.filter (\(lc, _ty, _v) -> Set.member lc avail) valueInfo
+  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow ty) | (x, (_lc, ty, _val)) <- Map.assocs valueInfo' ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
-  env <- getValueEnvironment
-  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
+  rw <- getValueEnvironment
+  let avail = rwPrimsAvail rw
+      typeInfo = rwTypeInfo rw
+      typeInfo' = Map.filter (\(lc, _ty) -> Set.member lc avail) typeInfo
+  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow ty) | (a, (_lc, ty)) <- Map.assocs typeInfo' ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd

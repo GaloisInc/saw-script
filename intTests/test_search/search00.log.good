@@ -8,6 +8,7 @@ llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+10 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- (LLVMSpec -> [String])
 crucible_spec_solvers : LLVMSpec -> [String]
@@ -43,13 +44,17 @@ llvm_precond : Term -> LLVMSetup ()
 llvm_return : SetupValue -> LLVMSetup ()
 llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
 llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+18 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- Int String
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
+12 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- String Int
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
+12 more matches tagged experimental; use enable_experimental to see them
  --------------------------------
  -- (TopLevel Int)
+No matches.

@@ -498,10 +498,16 @@ emptyLocal = []
 extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
 extendLocal x mt md v env = LocalLet x mt md v : env
 
+-- Note that the expansion type should have already been through the
+-- typechecker, so it's ok to panic if it turns out to be broken.
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw =
-  rw { rwNamedTypes = M.insert name (SS.ConcreteType ty') (rwNamedTypes rw) }
-  where ty' = SS.substituteTyVars (rwNamedTypes rw) ty
+  let primsAvail = rwPrimsAvail rw
+      typeInfo = rwTypeInfo rw
+      ty' = SS.substituteTyVars primsAvail typeInfo ty
+      typeInfo' = M.insert name (SS.Current, SS.ConcreteType ty') typeInfo
+  in
+  rw { rwTypeInfo = typeInfo' }
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
@@ -546,9 +552,8 @@ data TopLevelRO =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValues     :: Map SS.LName Value
-  , rwValueTypes :: Map SS.LName SS.Schema
-  , rwNamedTypes :: Map SS.Name SS.NamedType
+  { rwValueInfo  :: Map SS.LName (SS.PrimitiveLifecycle, SS.Schema, Value)
+  , rwTypeInfo   :: Map SS.Name (SS.PrimitiveLifecycle, SS.NamedType)
   , rwDocs       :: Map SS.Name String
   , rwCryptol    :: CEnv.CryptolEnv
   , rwMonadify   :: Monadify.MonadifyEnv
@@ -839,9 +844,14 @@ extendEnv sc x mt md v rw =
               pure $ CEnv.bindTypedTerm (ident, tt) ce
          _ ->
            pure ce
+     let ty = case mt of
+           Just ty' -> ty'
+           Nothing ->
+             -- XXX for the time being use bottom, which is not a good
+             -- type for this but it's readily written down.
+             SS.Forall [(SS.getPos x, "aaa")] (SS.TyVar (SS.getPos x) "aaa")
      pure $
-      rw { rwValues  = M.insert name v (rwValues rw)
-         , rwValueTypes = maybeInsert name mt (rwValueTypes rw)
+      rw { rwValueInfo  = M.insert name (SS.Current, ty, v) (rwValueInfo rw)
          , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
          , rwCryptol = ce'
          }

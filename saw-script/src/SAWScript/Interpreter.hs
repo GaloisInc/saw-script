@@ -47,7 +47,6 @@ import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
-import Data.Set ( Set )
 import qualified Data.Text as Text
 import Data.Text (Text)
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
@@ -242,9 +241,13 @@ interpret expr =
       SS.TLookup _ e i         -> do a <- interpret e
                                      return (tupleLookupValue a i)
       SS.Var x                 -> do rw <- getMergedEnv
-                                     case Map.lookup x (rwValues rw) of
+                                     case Map.lookup x (rwValueInfo rw) of
                                        Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
-                                       Just v -> return (addTrace (show x) v)
+                                       Just (lc, _ty, v)
+                                         | Set.member lc (rwPrimsAvail rw) ->
+                                              return (addTrace (show x) v)
+                                         | otherwise ->
+                                              fail $ Text.unpack $ "inaccessible variable: " <> SS.getVal x
       SS.Function _ pat e      -> do env <- getLocalEnv
                                      let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
                                      return $ VLambda f
@@ -443,7 +446,9 @@ interpretStmt printBinds stmt = do
 
   ctx <- getMonadContext
   rw <- liftTopLevel getMergedEnv
-  stmt' <- processTypeCheck $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
+  let valueInfo = rwValueInfo rw
+      valueInfo' = Map.map (\(lc, ty, _v) -> (lc, ty)) valueInfo
+  stmt' <- processTypeCheck $ checkStmt (rwPrimsAvail rw) valueInfo' (rwTypeInfo rw) ctx stmt
 
   case stmt' of
 
@@ -506,9 +511,15 @@ interpretMain :: TopLevel ()
 interpretMain = do
   rw <- getTopLevelRW
   let mainName = Located "main" "main" (SS.PosInternal "entry")
-  case Map.lookup mainName (rwValues rw) of
+  case Map.lookup mainName (rwValueInfo rw) of
     Nothing -> return () -- fail "No 'main' defined"
-    Just v -> fromValue v
+    Just (Current, _ty, v) -> fromValue v
+    Just (lc, _ty, _v) ->
+      -- There is no way for things other than primitives to get marked
+      -- experimental or deprecated, so this isn't possible. If we allow
+      -- users to deprecate their own functions in the future, change
+      -- this message to an actual error that says something snarky :-)
+      panic "Interpreter" ["Unexpected lifecycle state " <> Text.pack (show lc) <> " for main"]
 
 buildTopLevelEnv :: AIGProxy
                  -> Options
@@ -567,10 +578,9 @@ buildTopLevelEnv proxy opts =
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwValues     = valueEnv primsAvail opts bic
-                   , rwValueTypes = primValueTypeEnv primsAvail
-                   , rwNamedTypes = primNamedTypeEnv primsAvail
-                   , rwDocs       = primDocEnv primsAvail
+                   { rwValueInfo  = primValueEnv opts bic
+                   , rwTypeInfo   = primNamedTypeEnv
+                   , rwDocs       = primDocEnv
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
@@ -626,15 +636,10 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
 -- Primitives ------------------------------------------------------------------
 
 add_primitives :: PrimitiveLifecycle -> BuiltinContext -> Options -> TopLevel ()
-add_primitives lc bic opts = do
+add_primitives lc _bic _opts = do
   rw <- getTopLevelRW
-  let lcs = Set.singleton lc
   putTopLevelRW rw {
-    rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
-  , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
-  , rwNamedTypes = rwNamedTypes rw `Map.union` primNamedTypeEnv lcs
-  , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
-  , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
+    rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
 
 enable_safety_proofs :: TopLevel ()
@@ -5222,37 +5227,20 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
-filterAvailTypes ::
-  Set PrimitiveLifecycle ->
-  Map SS.Name PrimType ->
-  Map SS.Name PrimType
-filterAvailTypes primsAvail =
-  Map.filter (\p -> primTypeLife p `Set.member` primsAvail)
+primNamedTypeEnv :: Map SS.Name (PrimitiveLifecycle, SS.NamedType)
+primNamedTypeEnv = fmap extract primTypes
+   where extract pt = (primTypeLife pt, primTypeType pt)
 
-filterAvailPrims ::
-  Set PrimitiveLifecycle ->
-  Map SS.LName Primitive ->
-  Map SS.LName Primitive
-filterAvailPrims primsAvail =
-  Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
-
-primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
-
-primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
-primNamedTypeEnv primsAvail = fmap primTypeType (filterAvailTypes primsAvail primTypes)
-
-valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
-valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)
-  where f p = (primitiveFn p) opts bic
+primValueEnv :: Options -> BuiltinContext -> Map SS.LName (PrimitiveLifecycle, SS.Schema, Value)
+primValueEnv opts bic = fmap extract primitives
+  where extract p = (primitiveLife p, primitiveType p, (primitiveFn p) opts bic)
 
 -- | Map containing the formatted documentation string for each
 -- saw-script primitive.
-primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
-primDocEnv primsAvail =
-  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
+primDocEnv :: Map SS.Name String
+primDocEnv =
+  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]
     where
-      prims = filterAvailPrims primsAvail primitives
       tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]

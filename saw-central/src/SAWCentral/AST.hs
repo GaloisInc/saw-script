@@ -16,6 +16,7 @@ Stability   : provisional
 
 module SAWCentral.AST
        ( PrimitiveLifecycle(..)
+       , everythingAvailable
        , Name
        , LName
        , Located(..)
@@ -43,6 +44,8 @@ module SAWCentral.AST
 import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
 import Data.Text (Text)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
@@ -68,6 +71,11 @@ data PrimitiveLifecycle
   | Experimental    {- ^ Will be made @Current@ soon, but available only by
                          request at the moment. -}
   deriving (Eq, Ord, Show)
+
+-- | Set of all lifecycle values.
+--   Keep this with its type to make sure it stays current.
+everythingAvailable :: Set PrimitiveLifecycle
+everythingAvailable = Set.fromList [Current, Deprecated, Experimental]
 
 -- }}}
 

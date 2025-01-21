@@ -1,0 +1,9 @@
+// Make sure experimental types are hidden by default, and test
+// the associated message.
+//
+// This can be anything experimental; if you need to change it because
+// the thing I picked ceases to be experimental, just update the
+// reference file accordingly.
+
+typedef t = BisimTheorem;
+
