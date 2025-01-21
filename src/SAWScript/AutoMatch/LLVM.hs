@@ -43,7 +43,7 @@ getDeclsLLVM _proxy _sc lm =
       when (not . null $ untranslateable) $ do
          separator ThinSep
          liftF . flip Warning () $ "No translation for the following signatures in " ++ modFilePath lm ++ ":"
-         bulleted $ map Text.unpack $ map (("'" <>) . (<> "'")) untranslateable
+         bulleted $ map (\u -> Text.unpack ("'" <> u <> "'")) untranslateable
 
       return $ Just translations
 

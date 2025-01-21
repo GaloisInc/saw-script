@@ -104,6 +104,10 @@ $white+                          ;
 
 -- token helpers
 
+plain ::                   (Pos -> Text -> Token Pos)   -> Pos -> Text -> Token Pos
+xform :: (Text -> Text) -> (Pos -> Text -> Token Pos)   -> Pos -> Text -> Token Pos
+addon :: (Text -> a) -> (Pos -> Text -> a -> Token Pos) -> Pos -> Text -> Token Pos
+
 plain   tok pos txt = tok pos txt         -- ^ just the contents
 xform f tok pos txt = tok pos (f txt)     -- ^ transform contents
 addon f tok pos txt = tok pos txt (f txt) -- ^ also variant contents

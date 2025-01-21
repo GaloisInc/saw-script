@@ -91,9 +91,9 @@ checkReturnTypeCompat = do
    when (declType left /= declType right) $
       failure True $
          "The declarations (" ++
-         (Text.unpack $ declName left) ++ " : ... " ++ show (declType left) ++
+         Text.unpack (declName left) ++ " : ... " ++ show (declType left) ++
          ") and (" ++
-         (Text.unpack $ declName right) ++ " : ... " ++ show (declType right) ++
+         Text.unpack (declName right) ++ " : ... " ++ show (declType right) ++
          ") do not match in return type, and so cannot be reconciled."
 
 -- | Fail matching if the two declarations have argument types which aren't permutations of each other
@@ -103,8 +103,8 @@ checkSignatureCompat = do
    r <- get
    when ((uncurry (/=) . both (fmap Set.size . typeBins)) r) $ do
       warning $
-         "The signatures for '" ++ (Text.unpack $ declName left) ++
-         "' and '" ++ (Text.unpack $ declName right) ++
+         "The signatures for '" ++ Text.unpack (declName left) ++
+         "' and '" ++ Text.unpack (declName right) ++
          "' cannot be aligned by permutation."
       confirmOrQuit "Proceed with matching anyway?"
 
@@ -225,7 +225,7 @@ matchModules leftModule rightModule =
 --   spaces, underscores, hyphens, and capitalization
 approximateName :: Name -> Name
 approximateName =
-   Text.filter (not . (`elem` ['_', '-', ' '])) . Text.toCaseFold
+   Text.filter (not . (`Text.elem` "_- ")) . Text.toCaseFold
 
 -- | Source langauges we support
 data SourceLanguage = Cryptol | JVM | LLVM deriving (Eq, Ord, Show)

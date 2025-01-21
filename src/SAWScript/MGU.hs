@@ -1403,7 +1403,7 @@ generalize es0 ts0 = do
            _ -> pos
 
      -- generate names for the unification vars
-     let is3 = [ (i, adjustPos pos, "a." <> (Text.pack $ show i)) | (i, pos) <- is2 ]
+     let is3 = [ (i, adjustPos pos, "a." <> Text.pack (show i)) | (i, pos) <- is2 ]
 
      -- build a substitution
      let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]

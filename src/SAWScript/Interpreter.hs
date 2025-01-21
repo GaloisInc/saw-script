@@ -5122,7 +5122,7 @@ primDocEnv primsAvail =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ (Text.unpack $ getVal n) ++ " : " ++ SS.pShow (primitiveType p)
+                [ "    " ++ Text.unpack (getVal n) ++ " : " ++ SS.pShow (primitiveType p)
                 , ""
                 ] ++ primitiveDoc p
 
