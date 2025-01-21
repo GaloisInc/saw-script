@@ -106,7 +106,7 @@ import qualified Cryptol.Eval.Concrete as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
-import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
+import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
@@ -347,10 +347,11 @@ showsPrecValue opts nenv p v =
     VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts nenv 0) vs
     VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
     VMaybe Nothing -> showString "Nothing"
-    VRecord m -> showBraces $ commaSep $ map showFld (M.toList m)
-                   where
-                     showFld (n, fv) =
-                       showString n . showString "=" . showsPrecValue opts nenv 0 fv
+    VRecord m ->
+      showBraces $ commaSep $ map showFld (M.toList m)
+        where
+          showFld (n, fv) =
+            showString (unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
     VLambda {} -> showString "<<function>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts' nenv (ttTerm t))
@@ -412,10 +413,10 @@ indexValue (VArray vs) (VInteger x)
     where i = fromInteger x
 indexValue _ _ = error "indexValue"
 
-lookupValue :: Value -> String -> Value
+lookupValue :: Value -> Text -> Value
 lookupValue (VRecord vm) name =
     case M.lookup name vm of
-      Nothing -> error $ "no such record field: " ++ name
+      Nothing -> error $ "no such record field: " ++ unpack name
       Just x -> x
 lookupValue _ _ = error "lookupValue"
 
@@ -858,8 +859,9 @@ extendEnv sc x mt md v rw =
          }
   where
     name = x
-    ident = T.packIdent (SS.getOrig x)
-    modname = T.packModName [pack (SS.getOrig x)]
+    -- XXX why is this using getOrig?
+    ident = T.mkIdent (SS.getOrig x)
+    modname = T.packModName [SS.getOrig x]
     ce = rwCryptol rw
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm

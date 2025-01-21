@@ -44,6 +44,7 @@ import Control.Monad (guard, void)
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
 import Data.List (intercalate, nub)
+import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
@@ -164,7 +165,7 @@ typeOfCmd :: String -> REPL ()
 typeOfCmd str
   | null str = do io $ putStrLn $ "[error] :type requires an argument"
   | otherwise =
-  do let tokens = SAWScript.Lexer.lexSAW replFileName str
+  do let tokens = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
@@ -188,20 +189,20 @@ quitCmd  = stop
 envCmd :: REPL ()
 envCmd = do
   env <- getValueEnvironment
-  let showLName = SS.getVal
+  let showLName = Text.unpack . SS.getVal
   io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwValueTypes env) ]
 
 tenvCmd :: REPL ()
 tenvCmd = do
   env <- getValueEnvironment
-  io $ sequence_ [ putStrLn (a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
+  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
     do env <- getEnvironment
-       case Map.lookup cmd (rwDocs env) of
+       case Map.lookup (Text.pack cmd) (rwDocs env) of
          Just d -> io $ putStr d
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =
@@ -246,7 +247,7 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
-  let tokens = SAWScript.Lexer.lexSAW replFileName str
+  let tokens = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->

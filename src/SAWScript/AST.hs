@@ -36,12 +36,13 @@ module SAWScript.AST
        , tBlock, tContext, tVar
        , isContext
 
-       , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
+       , PrettyPrint(..), pShow, pShowText, commaSepAll, prettyWholeModule
        ) where
 
 import SAWScript.Token
 import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
+import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
@@ -52,13 +53,14 @@ import Data.Traversable (Traversable)
 #endif
 import qualified Prettyprinter as PP
 import           Prettyprinter (Pretty)
+import qualified Prettyprinter.Render.Text as PPT
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
 
 -- Names {{{
 
-type Name = String
+type Name = Text
 
 -- }}}
 
@@ -110,10 +112,10 @@ instance Positioned Import where
 data Expr
   -- Constants
   = Bool Pos Bool
-  | String Pos String
+  | String Pos Text
   | Int Pos Integer
-  | Code (Located String)
-  | CType (Located String)
+  | Code (Located Text)
+  | CType (Located Text)
   -- Structures
   | Array  Pos [Expr]
   | Block  Pos [Stmt]
@@ -167,9 +169,9 @@ instance Positioned Pattern where
 data Stmt
   = StmtBind     Pos Pattern Expr
   | StmtLet      Pos DeclGroup
-  | StmtCode     Pos (Located String)
+  | StmtCode     Pos (Located Text)
   | StmtImport   Pos Import
-  | StmtTypedef  Pos (Located String) Type
+  | StmtTypedef  Pos (Located Text) Type
   deriving Show
 
 instance Positioned Stmt where
@@ -287,7 +289,7 @@ instance Pretty Expr where
     String _ s -> PP.dquotes (PP.pretty s)
     Int _ i    -> PP.pretty i
     Code ls    -> PP.braces . PP.braces $ PP.pretty (getVal ls)
-    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" ++ string ++ "|"
+    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" <> string <> "|"
     Array _ xs -> PP.list (map PP.pretty xs)
     Block _ stmts ->
       "do" PP.<+> PP.lbrace PP.<> PP.line' PP.<>
@@ -402,6 +404,9 @@ dissectLambda = \case
 
 pShow :: PrettyPrint a => a -> String
 pShow = show . pretty 0
+
+pShowText :: PrettyPrint a => a -> Text
+pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . pretty 0
 
 class PrettyPrint p where
   pretty :: Int -> p -> PP.Doc ann

@@ -80,6 +80,7 @@ import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Typeable (Typeable)
 import System.Console.ANSI (setTitle)
 import qualified Control.Exception as X
@@ -498,7 +499,7 @@ getSAWScriptNames :: REPL [String]
 getSAWScriptNames = do
   env <- getEnvironment
   let rnames = Map.keys (rwValues env)
-  return (map getVal rnames)
+  return (map (Text.unpack . getVal) rnames)
 
 -- User Environment Interaction ------------------------------------------------
 

@@ -1776,7 +1776,7 @@ envCmd :: TopLevel ()
 envCmd = do
   m <- rwValueTypes <$> SV.getMergedEnv
   opts <- getOptions
-  let showLName = getVal
+  let showLName = Text.unpack . getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
 
 exitPrim :: Integer -> IO ()
@@ -2107,7 +2107,7 @@ get_opt n = do
 cryptol_prims :: TopLevel CryptolModule
 cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim prims
   where
-    prims :: [(String, Ident, String)]
+    prims :: [(String, Ident, Text)]
     prims =
       [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
       , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
@@ -2119,7 +2119,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       ]
       -- TODO: sext, sdiv, srem, sshr
 
-    noLoc :: String -> CEnv.InputText
+    noLoc :: Text -> CEnv.InputText
     noLoc x = CEnv.InputText
                 { CEnv.inpText = x
                 , CEnv.inpFile = "(cryptol_prims)"
@@ -2127,7 +2127,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
                 , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
                 }
 
-    parsePrim :: (String, Ident, String) -> TopLevel (C.Name, TypedTerm)
+    parsePrim :: (String, Ident, Text) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do
       sc <- getSharedContext
       rw <- getTopLevelRW

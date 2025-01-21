@@ -7,6 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-matches     #-}
 {-# OPTIONS_GHC -fno-warn-tabs               #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Lexer
   ( scan
   , lexSAW
@@ -21,7 +22,10 @@ import Numeric (readInt)
 import Data.Char (ord)
 import qualified Data.Char as Char
 import Data.List
+import qualified Data.Text as Text
+import Data.Text (Text)
 import Data.Word (Word8)
+import Text.Read (readMaybe)
 
 }
 
@@ -81,43 +85,64 @@ sawTokens :-
 
 $white+                          ;
 "//".*                           ;
-"/*"                             { cnst TCmntS           }
-"*/"                             { cnst TCmntE           }
-@reservedid                      { TReserved             }
-@punct                           { TPunct                }
-@reservedop                      { TOp                   }
-@varid                           { TVar                  }
-\" @string* \"                   { TLit  `via'` read     }
-\{\{ @code* \}\}                 { TCode `via'` readCode }
-\{\| @ctype* \|\}                { TCType`via'` readCode }
-@decimal                         { TNum  `via`  read     }
-0[bB] @binary                    { TNum  `via`  readBin  }
-0[oO] @octal                     { TNum  `via`  read     }
-0[xX] @hexadecimal               { TNum  `via`  read     }
-.                                { TUnknown              }
+"/*"                             { plain          TCmntS    }
+"*/"                             { plain          TCmntE    }
+@reservedid                      { plain          TReserved }
+@punct                           { plain          TPunct    }
+@reservedop                      { plain          TOp       }
+@varid                           { plain          TVar      }
+\" @string* \"                   { xform read'    TLit      }
+\{\{ @code* \}\}                 { xform readCode TCode     }
+\{\| @ctype* \|\}                { xform readCode TCType    }
+@decimal                         { addon read'    TNum      }
+0[bB] @binary                    { addon readBin  TNum      }
+0[oO] @octal                     { addon read'    TNum      }
+0[xX] @hexadecimal               { addon read'    TNum      }
+.                                { plain          TUnknown  }
 
 {
 
 -- token helpers
 
-cnst f p s   = f p s
-via  c g p s = c p s (g s)
-via' c g p s = c p (g s)
+plain ::                   (Pos -> Text -> Token Pos)   -> Pos -> Text -> Token Pos
+xform :: (Text -> Text) -> (Pos -> Text -> Token Pos)   -> Pos -> Text -> Token Pos
+addon :: (Text -> a) -> (Pos -> Text -> a -> Token Pos) -> Pos -> Text -> Token Pos
+
+plain   tok pos txt = tok pos txt         -- ^ just the contents
+xform f tok pos txt = tok pos (f txt)     -- ^ transform contents
+addon f tok pos txt = tok pos txt (f txt) -- ^ also variant contents
+
+-- fetch a value via Read
+--
+-- XXX: we should not use this for string literals, because as much as
+-- it's convenient to have the stdlib decode escape sequences for us,
+-- the escape sequences available in SAWScript strings should properly
+-- be defined by SAWScript (that is, explicitly here) and not by
+-- what's in GHC's standard library.
+--
+-- FUTURE: it would be nice to get the source position into the panic
+-- message in case it ever actually happens, but that seems difficult
+-- to arrange.
+read' :: Read a => Text -> a
+read' txt = case readMaybe txt' of
+    Just x -> x
+    Nothing -> panic "Lexer" ["Failed to decode string or number literal", txt']
+  where txt' = Text.unpack txt
 
 -- drop the {{ }} or {| |} from Cryptol blocks
-readCode :: String -> String
-readCode = reverse . drop 2 . reverse . drop 2
+readCode :: Text -> Text
+readCode txt = Text.drop 2 $ Text.dropEnd 2 txt
 
 -- read a binary integer
-readBin :: String -> Integer
-readBin s = case readInt 2 isDigit cvt s' of
+readBin :: Text -> Integer
+readBin s = case readInt 2 isDigit cvt (Text.unpack s') of
               [(a, "")] -> a
               _         -> error $ "Cannot read a binary number from: " ++ show s
   where cvt c = ord c - ord '0'
-        isDigit = (`elem` "01")
-        s' | "0b" `isPrefixOf` s = drop 2 s
-           | "0B" `isPrefixOf` s = drop 2 s
-           | True                = s
+        isDigit c = c == '0' || c == '1'
+        s' | "0b" `Text.isPrefixOf` s = Text.drop 2 s
+           | "0B" `Text.isPrefixOf` s = Text.drop 2 s
+           | True                     = s
 
 
 -- alex support and lexer mechanism
@@ -131,7 +156,7 @@ data AlexPos = AlexPos {
 -- input state
 type AlexInput = (
     AlexPos,    -- ^ Current position
-    String      -- ^ Remaining input
+    Text        -- ^ Remaining input
   )
 
 -- initial position
@@ -183,10 +208,9 @@ byteForChar c
 
 -- input handler for alex
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte (pos, text) = case text of
-  [] -> Nothing
-  c : text' -> Just (byteForChar c, (move pos c, text'))
+alexGetByte (pos, text) = fmap doGet $ Text.uncons text
     where
+      doGet (c, text') = (byteForChar c, (move pos c, text'))
       move pos c = case c of
           '\n' -> AlexPos { apLine = apLine pos + 1, apCol = 1 }
           _ -> pos { apCol = apCol pos + 1 }
@@ -196,7 +220,7 @@ alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 
 -- read the text of a file, passing in the filename for use in positions
-scanTokens :: FilePath -> String -> [Token Pos]
+scanTokens :: FilePath -> Text -> [Token Pos]
 scanTokens filename str = go (startPos, str)
   where
     fillPos pos height width =
@@ -219,11 +243,11 @@ scanTokens filename str = go (startPos, str)
         AlexSkip inp' len ->
             go inp'
         AlexToken inp' len act ->
-            let text = take len str
-                (height, width) = case reverse $ lines text of
+            let text = Text.take len str
+                (height, width) = case reverse $ Text.lines text of
                     [] -> (0, 0)
-                    [line] -> (0, length line)
-                    last : lines -> (length lines, length last)
+                    [line] -> (0, Text.length line)
+                    last : lines -> (length lines, Text.length last)
                 pos' = fillPos pos height width
             in
             act pos' text : go inp'
@@ -241,10 +265,10 @@ dropComments = go 0
          | True                  = t : go i ts
 
 -- entry point
-lexSAW :: FilePath -> String -> [Token Pos]
+lexSAW :: FilePath -> Text -> [Token Pos]
 lexSAW f text = dropComments $ scanTokens f text
 
 -- alternate monadic entry point (XXX: does this have any value?)
-scan :: Monad m => FilePath -> String -> m [Token Pos]
+scan :: Monad m => FilePath -> Text -> m [Token Pos]
 scan f = return . lexSAW f
 }

@@ -8,21 +8,26 @@ Stability   : provisional
 {-# LANGUAGE DeriveFunctor #-}
 module SAWScript.Token where
 
+import Data.Text (Text)
+
 import SAWScript.Position (Positioned(..))
 
-data Token p = TVar      { tokPos :: p, tokStr :: String                               }
-             | TQVar     { tokPos :: p, tokStr :: String, tokVars :: ([String],String) }
-             | TLit      { tokPos :: p, tokStr :: String                               }
-             | TCode     { tokPos :: p, tokStr :: String                               }
-             | TCType    { tokPos :: p, tokStr :: String                               }
-             | TUnknown  { tokPos :: p, tokStr :: String                               }
-             | TPunct    { tokPos :: p, tokStr :: String                               }
-             | TReserved { tokPos :: p, tokStr :: String                               }
-             | TOp       { tokPos :: p, tokStr :: String                               }
-             | TNum      { tokPos :: p, tokStr :: String, tokNum :: Integer            }
-             | TCmntS    { tokPos :: p, tokStr :: String                               }
-             | TCmntE    { tokPos :: p, tokStr :: String                               }
-             | TEOF      { tokPos :: p, tokStr :: String                               }
+-- All tokens have tokStr carrying the matched text (even TEOF where
+-- it doesn't entirely make sense) so that tokStr can be applied to
+-- any variant of the type.
+data Token p = TVar      { tokPos :: p, tokStr :: Text                               }
+             | TQVar     { tokPos :: p, tokStr :: Text, tokVars :: ([Text], Text)    }
+             | TLit      { tokPos :: p, tokStr :: Text                               }
+             | TCode     { tokPos :: p, tokStr :: Text                               }
+             | TCType    { tokPos :: p, tokStr :: Text                               }
+             | TUnknown  { tokPos :: p, tokStr :: Text                               }
+             | TPunct    { tokPos :: p, tokStr :: Text                               }
+             | TReserved { tokPos :: p, tokStr :: Text                               }
+             | TOp       { tokPos :: p, tokStr :: Text                               }
+             | TNum      { tokPos :: p, tokStr :: Text, tokNum :: Integer            }
+             | TCmntS    { tokPos :: p, tokStr :: Text                               }
+             | TCmntE    { tokPos :: p, tokStr :: Text                               }
+             | TEOF      { tokPos :: p, tokStr :: Text                               }
              deriving (Show, Functor)
 
 instance Positioned p => Positioned (Token p) where
