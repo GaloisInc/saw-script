@@ -6,6 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 -- TODO RGS: Do better (or at least comment why we do this)
@@ -59,6 +60,8 @@ import qualified SAWCentral.AST as SS
      Decl(..),
      Pattern(..))
 import SAWCentral.Exceptions
+
+import SAWScript.Panic
 import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretStmt)
@@ -250,13 +253,19 @@ searchCmd str
          inspect name (lc, ty) (vis, ex, dep) =
              if Set.member lc primsAvail then
                  (Map.insert name (lc, ty) vis, ex, dep)
-             else if lc == Experimental then
-                 (vis, Map.insert name (lc, ty) ex, dep)
-             else if lc == Deprecated then
+             else case lc of
+               Current -> oops
+               WarnDeprecated -> oops
+               HideDeprecated ->
                  (vis, ex, Map.insert name (lc, ty) dep)
-             else
-                 -- ?
-                 (vis, ex, dep)
+               Experimental ->
+                 (vis, Map.insert name (lc, ty) ex, dep)
+             where
+               oops =
+                 panic "searchCmd" [
+                     "Found non-visible object " <> Text.pack (show name) <>
+                     " with unexpected lifecycle " <> Text.pack (show lc)
+                 ]
          (visMatches, expMatches, depMatches) =
              Map.foldrWithKey inspect (Map.empty, Map.empty, Map.empty) allMatches
 
@@ -265,8 +274,9 @@ searchCmd str
                ty' = SS.pShow ty
                lc' = case lc of
                    Current -> ""
+                   WarnDeprecated -> "  (DEPRECATED AND WILL WARN)"
+                   HideDeprecated -> "  (DEPRECATED AND UNAVAILABLE BY DEFAULT)"
                    Experimental -> "  (EXPERIMENTAL)"
-                   Deprecated -> "  (DEPRECATED)"
            putStrLn (name ++ " : " ++ ty' ++ lc')
          printMatches matches =
            io $ mapM_ printMatch (Map.assocs matches)

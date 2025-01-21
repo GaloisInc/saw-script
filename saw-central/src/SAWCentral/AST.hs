@@ -17,6 +17,7 @@ Stability   : provisional
 module SAWCentral.AST
        ( PrimitiveLifecycle(..)
        , everythingAvailable
+       , defaultAvailable
        , Name
        , LName
        , Located(..)
@@ -66,7 +67,8 @@ import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
 -- | Position in the life cycle of a primitive.
 data PrimitiveLifecycle
   = Current         {- ^ Currently available in all modes. -}
-  | Deprecated      {- ^ Will be removed soon, and available only when
+  | WarnDeprecated  {- ^ Removal planned, available but causes a warning -}
+  | HideDeprecated  {- ^ Will be removed soon, and available only when
                          requested. -}
   | Experimental    {- ^ Will be made @Current@ soon, but available only by
                          request at the moment. -}
@@ -75,7 +77,12 @@ data PrimitiveLifecycle
 -- | Set of all lifecycle values.
 --   Keep this with its type to make sure it stays current.
 everythingAvailable :: Set PrimitiveLifecycle
-everythingAvailable = Set.fromList [Current, Deprecated, Experimental]
+everythingAvailable = Set.fromList [Current, WarnDeprecated, HideDeprecated, Experimental]
+
+-- | Default set of lifecycle values.
+--   Keep this with its type to make sure it stays current.
+defaultAvailable :: Set PrimitiveLifecycle
+defaultAvailable = Set.fromList [Current, WarnDeprecated]
 
 -- }}}
 

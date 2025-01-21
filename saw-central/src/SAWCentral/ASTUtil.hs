@@ -2,7 +2,8 @@
 
 module SAWCentral.ASTUtil (
     namedTyVars,
-    SubstituteTyVars(..)
+    SubstituteTyVars(..),
+    isDeprecated
  ) where
 
 import qualified Data.Text as Text
@@ -94,5 +95,19 @@ instance SubstituteTyVars Type where
                 else case expansion of
                     AbstractType -> ty
                     ConcreteType ty' -> ty'
+
+-- }}}
+
+
+------------------------------------------------------------
+-- Deprecation {{{
+
+isDeprecated :: PrimitiveLifecycle -> Bool
+isDeprecated lc = case lc of
+    Current -> False
+    WarnDeprecated -> True
+    HideDeprecated -> True
+    Experimental -> False
+
 
 -- }}}

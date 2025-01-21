@@ -27,7 +27,7 @@ module SAWScript.Typechecker
 import Control.Applicative
 #endif
 
-import Control.Monad (zipWithM, zipWithM_)
+import Control.Monad (when, zipWithM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
@@ -42,7 +42,7 @@ import qualified Data.Set as S
 import qualified Prettyprinter as PP
 
 import SAWCentral.AST
-import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..))
+import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), isDeprecated)
 import SAWScript.Panic (panic)
 import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -1047,7 +1047,12 @@ inferExpr (ln, expr) = case expr of
            return (Var x, t)
          Just (lc, Forall as t)
           | S.member lc avail -> do
-           -- FUTURE: here is where we warn if lc justifies a warning
+           when (isDeprecated lc) $
+               case t of
+                   TyCon _typos FunCon _args ->
+                       recordWarning (getPos x) $ "Function is deprecated: " <> show x
+                   _ ->
+                       recordWarning (getPos x) $ "Value is deprecated: " <> show x
 
            -- get a fresh tyvar for each quantifier binding, convert
            -- to a name -> ty map, and substitute the fresh tyvars
@@ -1059,7 +1064,7 @@ inferExpr (ln, expr) = case expr of
            return (Var x, t')
           | otherwise -> do
            recordError (getPos x) $ "Inaccessible variable: " ++ show x
-           let how = if lc == Deprecated then "deprecated" else "experimental"
+           let how = if lc == HideDeprecated then "deprecated" else "experimental"
            recordError (getPos x) $ "This command is available only after running " ++
                                     "`enable_" ++ how ++ "`."
            t' <- getFreshTyVar (getPos x)
@@ -1675,6 +1680,8 @@ checkType kind ty = case ty of
               getErrorTyVar pos
           Just (lc, _ty')
            | S.member lc avail -> do
+              when (isDeprecated lc) $
+                  recordWarning pos $ "Type is deprecated: " <> Text.unpack x
               -- Assume ty' was checked when it was entered.
               -- (If we entered it that's true, if it was in the
               -- initial environment we were given that depends on the
@@ -1698,7 +1705,7 @@ checkType kind ty = case ty of
                   return ty
            | otherwise -> do
                   recordError pos $ "Inaccessible type: " ++ show x
-                  let how = if lc == Deprecated then "deprecated" else "experimental"
+                  let how = if lc == HideDeprecated then "deprecated" else "experimental"
                   recordError pos $ "This type is available only after running " ++
                                     "`enable_" ++ how ++ "`."
                   t' <- getFreshTyVar pos

@@ -56,7 +56,7 @@ import System.Process (readProcess)
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
-import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..))
+import SAWCentral.AST (Located(..), Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
@@ -622,7 +622,6 @@ buildTopLevelEnv proxy opts =
                    biSharedContext = sc
                  , biBasicSS = ss
                  }
-           primsAvail = Set.fromList [Current]
        ce0 <- CEnv.initCryptolEnv sc
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
@@ -640,7 +639,7 @@ buildTopLevelEnv proxy opts =
                    , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
-                   , rwPrimsAvail = primsAvail
+                   , rwPrimsAvail = defaultAvailable
                    , rwSMTArrayMemoryModel = False
                    , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
@@ -1059,7 +1058,7 @@ primTypes = Map.fromList
   , abstype "Simpset" Current
   , abstype "SkeletonState" Experimental
   , abstype "Theorem" Current
-  , abstype "Uninterp" Deprecated
+  , abstype "Uninterp" HideDeprecated
   , abstype "YosysSequential" Experimental
   , abstype "YosysTheorem" Experimental
   ]
@@ -1254,7 +1253,7 @@ primitives = Map.fromList
     [ "Execute the given SAWScript file." ]
 
   , prim "enable_deprecated"   "TopLevel ()"
-    (bicVal (add_primitives Deprecated))
+    (bicVal (add_primitives HideDeprecated))
     Current
     [ "Enable the use of deprecated commands." ]
 
@@ -1692,7 +1691,7 @@ primitives = Map.fromList
 
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
-    Deprecated
+    HideDeprecated
     [ "Indicate that the given term should be used as the definition of the"
     , "named function when loading an SBV file. This command returns an"
     , "object that can be passed to 'read_sbv'."
@@ -1727,7 +1726,7 @@ primitives = Map.fromList
 
   , prim "read_sbv"            "String -> [Uninterp] -> TopLevel Term"
     (pureVal readSBV)
-    Deprecated
+    HideDeprecated
     [ "Read an SBV file produced by Cryptol 1, using the given set of"
     , "overrides for any uninterpreted functions that appear in the file."
     ]
@@ -2771,14 +2770,14 @@ primitives = Map.fromList
 
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
     (funVal2 addsimp')
-    Deprecated
+    HideDeprecated
     [ "Add an arbitrary equality term to a given simplification rule set."
     , "Use `admit` or `core_axiom` and `addsimp` instead."
     ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (funVal2 addsimps')
-    Deprecated
+    HideDeprecated
     [ "Add arbitrary equality terms to a given simplification rule set."
     , "Use `admit` or `core_axiom` and `addsimps` instead."
     ]
@@ -4017,7 +4016,7 @@ primitives = Map.fromList
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (pureVal crucible_setup_val_to_typed_term)
-    Deprecated
+    HideDeprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
     ]
@@ -5293,7 +5292,8 @@ primDocEnv =
     where
       tag p = case primitiveLife p of
                 Current -> []
-                Deprecated -> ["DEPRECATED", ""]
+                WarnDeprecated -> ["DEPRECATED AND WILL WARN", ""]
+                HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
                 Experimental -> ["EXPERIMENTAL", ""]
       doc n p = unlines $
                 [ "Description"
