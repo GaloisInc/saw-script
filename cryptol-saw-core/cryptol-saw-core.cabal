@@ -91,6 +91,7 @@ test-suite cryptol-saw-core-tc-test
     cryptol,
     cryptol-saw-core,
     heredoc >= 0.2,
-    saw-core
+    saw-core,
+    text
 
   GHC-options: -threaded
