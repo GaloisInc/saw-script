@@ -44,6 +44,7 @@ import Control.Exception
 %error { parseError }
 %tokentype { Token Pos }
 %monad { Either ParseError }
+%expect 0
 
 %token
   'import'       { TReserved _ "import"         }
