@@ -35,8 +35,8 @@ import SAWScript.Position (Positioned(..))
 --   TCommentS  Start of a block comment
 --   TCommentE  End of a block comment
 --   TCommentL  Start of a line comment
---   EOL        End of line
---   EOF        End of file/input
+--   TEOL       End of line
+--   TEOF       End of file/input
 --
 -- FUTURE: many of these could stand to be renamed
 --
