@@ -2330,7 +2330,7 @@ LLVM types are built with this set of functions:
 * `llvm_float : LLVMType`
 * `llvm_double : LLVMType`
 * `llvm_packed_struct : [LLVMType] -> LLVMType`
-* `llvm_struct : [LLVMType] -> LLVMType`
+* `llvm_struct_type : [LLVMType] -> LLVMType`
 
 Java types are built up using the following functions:
 
@@ -2440,7 +2440,7 @@ The following LLVM types correspond to Cryptol types:
 * `llvm_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
   where `<cty>` is the Cryptol type corresponding to `<ty>`.
 * `llvm_int <n>`: Corresponds to the Cryptol word `[<n>]`.
-* `llvm_struct [<ty_1>, ..., <ty_n>]` and `llvm_packed_struct [<ty_1>, ..., <ty_n>]`:
+* `llvm_struct_type [<ty_1>, ..., <ty_n>]` and `llvm_packed_struct [<ty_1>, ..., <ty_n>]`:
   Corresponds to the Cryptol tuple `(<cty_1>, ..., <cty_n>)`, where `<cty_i>`
   is the Cryptol type corresponding to `<ty_i>` for each `i` ranging from `1`
   to `n`.
