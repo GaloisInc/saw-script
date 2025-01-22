@@ -256,14 +256,31 @@ scanTokens filename str = go (startPos, str)
             in
             act pos' text : go inp'
 
--- state for processing comments
+-- | State for processing comments.
+--
+-- CNone is the ground state (not in a comment)
+--
+-- CBlock startpos n is when we're within a block comment starting at
+-- startpos, and n is the number of additional nested block comments
+-- that have been opened.
+--
+-- CLine is when we're in a line (//-type) comment.
 data CommentState = CNone | CBlock Pos !Int | CLine
 
--- this should cease to be needed once we clean out the message
--- printing infrastructure
+-- | Type to hold a diagnostic message (error or warning).
+--
+-- This should cease to be needed once we clean out the message
+-- printing infrastructure. It's here only to shorten the type
+-- signatures below, and represents the possibility of having
+-- generated a message.
 type OptMsg = Maybe (Verbosity, Pos, Text)
 
--- postprocess to drop comments (this allows comments to be nested)
+-- | Postprocess to drop comments; this allows block comments to nest.
+--
+-- Also returns a message (error or warning) along with the updated
+-- token list if there's an unclosed comment when we reach EOF. Since
+-- we aren't in a monad here and can't print, dispatching the message
+-- is the caller's responsibility.
 dropComments :: [Token Pos] -> ([Token Pos], OptMsg)
 dropComments = go CNone
   where go :: CommentState -> [Token Pos] -> ([Token Pos], OptMsg)
