@@ -4,7 +4,7 @@ import "Point.cry";
 m <- llvm_load_module "point.bc";
 
 let fresh_point_readonly name = do {
-    p_ptr <- llvm_alloc_readonly (llvm_struct "struct.point");
+    p_ptr <- llvm_alloc_readonly (llvm_alias "struct.point");
     p_x <- llvm_fresh_var (str_concat name ".x") (llvm_int 32);
     p_y <- llvm_fresh_var (str_concat name ".y") (llvm_int 32);
     llvm_points_to p_ptr (llvm_struct_value [ llvm_term p_x, llvm_term p_y]);
@@ -28,7 +28,7 @@ point_eq_ov <- llvm_verify m "point_eq" [] true
     (w4_unint_z3 []);
 
 let alloc_assign_point p = do {
-    p_ptr <- llvm_alloc (llvm_struct "struct.point");
+    p_ptr <- llvm_alloc (llvm_alias "struct.point");
     llvm_points_to p_ptr (llvm_struct_value [ llvm_term {{ p.x }}, llvm_term {{ p.y }}]);
     return p_ptr;
 };

@@ -11,8 +11,8 @@ include "../../common/helpers.saw";
 // Write memory safety specs and proofs for point_eq, point_new, and point_copy.
 // Use the override your point_new proof returns in your point_copy proof.
 
-// Remember: You can declare struct types with:
-//    llvm_struct "struct.<name>"
+// Remember: You can refer to struct types with:
+//    llvm_alias "struct.<name>"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Part 2: Global Variables
