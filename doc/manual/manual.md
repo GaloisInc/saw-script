@@ -4983,7 +4983,7 @@ in `COMPOSITION SIDE CONDITION` are:
 The `COMPOSITION SIDE CONDITION` exists to verify that the terms in the
 bisimulation relation properly set up valid states for subterms they contain.
 
-## Limitiations
+## Limitations
 
 For now, the `prove_bisim` command has a couple limitations:
 
