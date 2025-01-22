@@ -30,12 +30,10 @@ import Control.Applicative
 import Control.Monad (forM_)
 import Control.Monad.State (StateT, execStateT, modify)
 import Control.Monad.Trans.Class (MonadTrans(..))
-import qualified Data.ByteString.Lazy as BL
-#if !MIN_VERSION_template_haskell(2,8,0)
-import qualified Data.ByteString.Lazy.UTF8 as UTF8
-#endif
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.IO as TLIO
 import Language.Haskell.TH
 #if MIN_VERSION_template_haskell(2,7,0)
 import Language.Haskell.TH.Syntax (qAddDependentFile)
@@ -49,8 +47,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Typechecker (tcInsertModule)
 
--- | Parse an untyped module declaration from a byte-string
-readModule :: FilePath -> FilePath -> BL.ByteString -> Un.Module
+-- | Parse an untyped module declaration from a (lazy) Text
+readModule :: FilePath -> FilePath -> TL.Text -> Un.Module
 readModule base path b =
   case Un.parseSAW base path b of
     Right m -> m
@@ -60,8 +58,8 @@ readModule base path b =
 readModuleFromFile :: FilePath -> IO Un.Module
 readModuleFromFile path = do
   base <- getCurrentDirectory
-  b <- BL.readFile path
-  return $ readModule base path b
+  txt <- TLIO.readFile path
+  return $ readModule base path txt
 
 
 -- | Monad for defining TH declarations

@@ -31,32 +31,40 @@ module Verifier.SAW.Lexer
 
 import Codec.Binary.UTF8.Generic ()
 import Control.Monad.State.Strict
-import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString.Lazy.UTF8 as BU
-import Data.ByteString.Lazy.UTF8 (toString)
+import qualified Data.Text.Lazy as LText
+import Data.Text.Lazy (Text)
 import Data.Word (Word8)
 import Data.Bits
-import Data.Char (digitToInt)
+import qualified Data.Char as Char
 import Numeric.Natural
 
 import Verifier.SAW.Position
 
 }
 
-$whitechar = [\ \t\r\f\v]
+-- Caution: these must match the magic numbers in byteForChar below
+$uniupper       = \x1
+$unilower       = \x2
+$unidigit       = \x3
+$unisymbol      = \x4
+$unispace       = \x5
+$uniother       = \x6
+$unitick        = \x7
+
+$whitechar = [\ \t\r\f\v $unispace]
 $gapchar   = [$whitechar \n]
 $special   = [\(\)\,\;\[\]\`\{\}]
 $digit     = 0-9
 $binit     = 0-1
 $octit     = 0-7
 $hexit     = [0-9 A-F a-f]
-$large     = [A-Z]
-$small     = [a-z]
+$large     = [A-Z $uniupper]
+$small     = [a-z $unilower]
 $alpha     = [$small $large]
-$symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~] # [$special \_\:\"\']
+$symbol    = [\!\#\$\%\&\*\+\.\/\<\=\>\?\@\\\^\|\-\~ $unisymbol] # [$special \_\:\"\']
 $graphic   = [$alpha $symbol $digit $special \:\"\'\_]
 $charesc   = [abfnrtv\\\"\'\&]
-$cntrl     = [$large \@\[\\\]\^\_]
+$cntrl     = [A-Z \@\[\\\]\^\_]
 @ascii     = \^ $cntrl | NUL | SOH | STX | ETX | EOT | ENQ | ACK
            | BEL | BS | HT | LF | VT | FF | CR | SO | SI | DLE
            | DC1 | DC2 | DC3 | DC4 | NAK | SYN | ETB | CAN | EM
@@ -66,8 +74,9 @@ $cntrl     = [$large \@\[\\\]\^\_]
 @binary    = $binit+
 @octal     = $octit+
 @hex       = $hexit+
-$idchar    = [a-z A-Z 0-9 \' \_]
-@ident     = [a-z A-Z \_] $idchar*
+$idfirst   = [$alpha \_]
+$idchar    = [$alpha $digit $unidigit $unitick \' \_]
+@ident     = $idfirst $idchar*
 
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
@@ -114,7 +123,7 @@ data Token
 
 data LexerMessage = InvalidInput [Word8] | UnclosedComment | MissingEOL
 
-data Buffer = Buffer Char !B.ByteString
+data Buffer = Buffer Char !Text
 type AlexInput = PosPair Buffer
 
 -- Wrap the input type for export, in case we end up wanting other state
@@ -127,14 +136,14 @@ dropRecSuffix str = take (length str - 4) str
 -- | Convert a hexadecimal string to a big endian list of bits
 readHexBV :: String -> [Bool]
 readHexBV =
-  concatMap (\c -> let i = digitToInt c in
+  concatMap (\c -> let i = Char.digitToInt c in
                    [testBit i 3, testBit i 2, testBit i 1, testBit i 0])
 
 -- | Convert a binary string to a big endian list of bits
 readBinBV :: String -> [Bool]
 readBinBV = map (\c -> c == '1')
 
-initialAlexInput :: FilePath -> FilePath -> B.ByteString -> AlexInput
+initialAlexInput :: FilePath -> FilePath -> Text -> AlexInput
 initialAlexInput base path b = PosPair pos input
   where pos = Pos { posBase = base
                   , posPath = path
@@ -144,25 +153,71 @@ initialAlexInput base path b = PosPair pos input
         prevChar = error "internal: runLexer prev char undefined"
         input = Buffer prevChar b
 
-initialLexerState :: FilePath -> FilePath -> B.ByteString -> LexerState
+initialLexerState :: FilePath -> FilePath -> Text -> LexerState
 initialLexerState = initialAlexInput
 
 alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar (val -> Buffer c _) = c
 
+-- feed alex a byte describing the current char
+-- this came from Cryptol's lexer, which came from LexerUtils, which
+-- adapted the technique used in GHC's lexer.
+--
+-- FUTURE: it would be nice to share this with the saw-script lexer
+-- (and maybe also the Cryptol lexer) instead of pasting it repeatedly
+byteForChar :: Char -> Word8
+byteForChar c
+  | c <= '\7' = non_graphic
+  | Char.isAscii c = fromIntegral (Char.ord c)
+  | otherwise = case Char.generalCategory c of
+      Char.LowercaseLetter       -> lower
+      Char.OtherLetter           -> lower
+      Char.UppercaseLetter       -> upper
+      Char.TitlecaseLetter       -> upper
+      Char.DecimalNumber         -> digit
+      Char.OtherNumber           -> digit
+      Char.ConnectorPunctuation  -> symbol
+      Char.DashPunctuation       -> symbol
+      Char.OtherPunctuation      -> symbol
+      Char.MathSymbol            -> symbol
+      Char.CurrencySymbol        -> symbol
+      Char.ModifierSymbol        -> symbol
+      Char.OtherSymbol           -> symbol
+      Char.Space                 -> sp
+      Char.ModifierLetter        -> other
+      Char.NonSpacingMark        -> other
+      Char.SpacingCombiningMark  -> other
+      Char.EnclosingMark         -> other
+      Char.LetterNumber          -> other
+      Char.OpenPunctuation       -> other
+      Char.ClosePunctuation      -> other
+      Char.InitialQuote          -> other
+      Char.FinalQuote            -> tick
+      _                          -> non_graphic
+  where
+  -- CAUTION: these must match the $uni* values at the top of the file
+  non_graphic     = 0
+  upper           = 1
+  lower           = 2
+  digit           = 3
+  symbol          = 4
+  sp              = 5
+  other           = 6
+  tick            = 7
+
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte (PosPair p (Buffer _ b)) = fmap fn (B.uncons b)
-  where fn (w,b') = (w, PosPair p' (Buffer c b'))
-          where c     = toEnum (fromIntegral w)
+alexGetByte (PosPair pos (Buffer _ txt)) = fmap fn (LText.uncons txt)
+  where fn (c, txt') = (byte, PosPair pos' (Buffer c txt'))
+          where byte  = byteForChar c
                 isNew = c == '\n'
-                p'    = if isNew then incLine p else incCol p
+                pos'  = if isNew then incLine pos else incCol pos
 
 type MsgList = [(Pos, LexerMessage)]
 
 scanToken :: AlexInput -> MsgList -> (AlexInput, MsgList, PosPair Token)
 scanToken inp0 errors0 =
   let go inp errors pendingError =
-        let (PosPair p (Buffer _ b)) = inp
+        let (PosPair p (Buffer _ txt)) = inp
             finishAnyError = case pendingError of
                 Nothing -> errors
                 Just (pos, chars) -> (pos, InvalidInput (reverse chars)) : errors
@@ -182,7 +237,7 @@ scanToken inp0 errors0 =
             AlexSkip inp' _ ->
                 go inp' finishAnyError Nothing
             AlexToken inp' l act ->
-                let v = act (BU.toString (BU.take (fromIntegral l) b)) in
+                let v = act (LText.unpack (LText.take (fromIntegral l) txt)) in
                 (inp', finishAnyError, PosPair p v)
   in
   go inp0 errors0 Nothing

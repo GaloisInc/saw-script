@@ -25,6 +25,7 @@ import qualified Data.ByteString.Lazy.UTF8 as B
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Traversable
 import Data.Word
 import Numeric.Natural
@@ -281,14 +282,14 @@ lexer = do
 
 -- | Run parser given a directory for the base (used for making pathname relative),
 -- bytestring to parse, and parser to run.
-runParser :: Parser a -> FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) a
-runParser (Parser m) base path b = evalState (runExceptT m) initState
-  where initState = initialLexerState base path b
+runParser :: Parser a -> FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) a
+runParser (Parser m) base path txt = evalState (runExceptT m) initState
+  where initState = initialLexerState base path txt
 
-parseSAW :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Module
+parseSAW :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) Module
 parseSAW = runParser parseSAW2
 
-parseSAWTerm :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Term
+parseSAWTerm :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) Term
 parseSAWTerm = runParser parseSAWTerm2
 
 parseError :: PosPair Token -> Parser a

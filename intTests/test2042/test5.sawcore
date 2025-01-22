@@ -1,0 +1,5 @@
+-- However, we shouldn't be able to use just anything as an identifier.
+module test5 where
+import Prelude;
+😸 : Bool;
+😸 = True;

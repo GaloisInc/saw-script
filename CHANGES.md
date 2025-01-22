@@ -12,8 +12,8 @@
 ## Bug fixes
 
 * SAW now accepts Unicode input beyond characters 0..255, including in
-  embedded Cryptol fragments, and allows the same Unicode code points
-  in identifiers as Cryptol.
+  embedded Cryptol fragments and saw-core modules, and allows the same
+  Unicode code points in identifiers as Cryptol.
   It is thus now possible to refer to Cryptol objects whose names
   include extended characters.
   (#2042)

@@ -170,6 +170,9 @@ startPos = AlexPos { apLine = 1, apCol = 1 }
 -- feed alex a byte describing the current char
 -- this came from Cryptol's lexer, which came from LexerUtils, which
 -- adapted the technique used in GHC's lexer.
+--
+-- FUTURE: it would be nice to share this with the saw-core lexer
+-- (and maybe also the Cryptol lexer) instead of pasting it repeatedly
 byteForChar :: Char -> Word8
 byteForChar c
   | c <= '\7' = non_graphic
