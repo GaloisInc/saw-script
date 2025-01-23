@@ -40,6 +40,7 @@ import qualified Data.Set as S
 import qualified Prettyprinter as PP
 
 import SAWScript.AST
+import SAWScript.ASTUtil (namedVars)
 import SAWScript.Panic (panic)
 import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -54,7 +55,7 @@ type TyEnv = Map Name NamedType
 
 
 ------------------------------------------------------------
--- UnifyVars, NamedVars {{{
+-- UnifyVars {{{
 
 --
 -- unifyVars is a type-class-polymorphic function for extracting
@@ -86,33 +87,6 @@ instance UnifyVars NamedType where
   unifyVars nt = case nt of
     ConcreteType ty -> unifyVars ty
     AbstractType -> M.empty
-
---
--- namedVars is a type-class-polymorphic function for extracting named
--- type variables from a type or type schema. It returns a set of Name
--- (Name is just String) manifested as a map from those Names to their
--- positions/provenance.
---
-
-class NamedVars t where
-  namedVars :: t -> M.Map Name Pos
-
-instance (Ord k, NamedVars a) => NamedVars (M.Map k a) where
-  namedVars = namedVars . M.elems
-
-instance (NamedVars a) => NamedVars [a] where
-  namedVars = M.unionsWith choosePos . map namedVars
-
-instance NamedVars Type where
-  namedVars t = case t of
-    TyCon _ _ ts      -> namedVars ts
-    TyRecord _ tm     -> namedVars tm
-    TyVar pos n       -> M.singleton n pos
-    TyUnifyVar _ _    -> M.empty
-
-instance NamedVars Schema where
-  namedVars (Forall ns t) = namedVars t M.\\ M.fromList ns'
-    where ns' = map (\(pos, n) -> (n, pos)) ns
 
 -- }}}
 
