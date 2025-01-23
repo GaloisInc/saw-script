@@ -39,7 +39,8 @@ import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
 
-import Control.Monad (guard, void)
+import Control.Exception (throwIO)
+import Control.Monad (guard, void, when)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
@@ -50,16 +51,18 @@ import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory
 import qualified Data.Map as Map
 
 -- SAWScript imports
+import qualified SAWScript.Options (Verbosity(..))
 import qualified SAWScript.AST as SS
     (pShow,
      Located(..),
      Decl(..),
      Pattern(..))
 import SAWScript.Exceptions
-import SAWScript.MGU (checkDecl)
+import SAWScript.MGU (checkDecl, checkSchemaPattern)
+import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
-import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
+import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
 import SAWScript.TopLevel (TopLevelRW(..))
 
 
@@ -117,6 +120,8 @@ nbCommandList :: [CommandDescr]
 nbCommandList  =
   [ CommandDescr ":env"  []      (NoArg envCmd)
     "display the current sawscript environment"
+  , CommandDescr ":search" []    (ExprArg searchCmd)
+    "search the environment by type"
   , CommandDescr ":tenv" []      (NoArg tenvCmd)
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
@@ -187,6 +192,41 @@ typeOfCmd str
        either failTypecheck return $ errs_or_results
      let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
      io $ putStrLn $ SS.pShow schema
+
+searchCmd :: String -> REPL ()
+searchCmd str
+  | null str = do io $ putStrLn $ "[error] :search requires at least one argument"
+  | otherwise =
+  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+     case optmsg of
+       Nothing -> return ()
+       Just (vrb, pos, msg) -> do
+         -- XXX wrap printing of positions in the message-printing infrastructure
+         let msg' = show pos ++ ": " ++ Text.unpack msg
+         io $ putStrLn msg'
+         -- XXX this prints twice, fix it up when we do the message-printing cleanup
+         when (vrb == SAWScript.Options.Error) $
+             io $ throwIO $ userError msg'
+     pat <- case SAWScript.Parser.parseSchemaPattern tokens of
+       Left err -> fail (show err)
+       Right pat -> return pat
+     rw <- getValueEnvironment
+     let valueTypes = rwValueTypes rw
+         namedTypes = rwNamedTypes rw
+         (errs_or_results, warns) = checkSchemaPattern valueTypes namedTypes pat
+     let issueWarning (msgpos, msg) =
+           -- XXX the print functions should be what knows how to show positions...
+           putStrLn (show msgpos ++ ": Warning: " ++ msg)
+     io $ mapM_ issueWarning warns
+     pat' <- either failTypecheck return $ errs_or_results
+     let search = compileSearchPattern namedTypes pat'
+         matches = Map.assocs $ Map.filter (matchSearchPattern search) valueTypes
+         printMatch (lname, ty) = do
+           let name = Text.unpack $ SS.getVal lname
+               ty' = SS.pShow ty
+           putStrLn (name ++ " : " ++ ty')
+     io $ mapM_ printMatch matches
+
 
 quitCmd :: REPL ()
 quitCmd  = stop

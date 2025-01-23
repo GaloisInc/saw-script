@@ -19,6 +19,7 @@ Stability   : provisional
 module SAWScript.MGU
        ( checkDecl
        , checkStmt
+       , checkSchemaPattern
        , instantiate
        ) where
 
@@ -1669,12 +1670,11 @@ checkType kind ty = case ty of
 
   TyUnifyVar _pos _ix ->
       -- for now at least we don't track the kinds of unification vars
-      -- (types of mismatch kinds can't be the same types, so they
+      -- (types of mismatched kinds can't be the same types, so they
       -- won't ever unify, so the possible mischief is limited) and all
       -- possible unification var numbers are well formed, so we don't
       -- need to do anything.
       return ty
-
 
 -- }}}
 
@@ -1761,6 +1761,29 @@ checkStmt env tenv ctx stmt =
 checkDecl :: VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl env tenv decl =
   evalTIWithEnv env tenv (inferDecl decl)
+
+-- | Check a schema (type) pattern as used by :search. (This is an
+-- external interface.)
+--
+-- The first two arguments are the starting variable and typedef
+-- environments to use. The third argument is the pattern.
+--
+-- Returns a possibly updated pattern.
+--
+checkSchemaPattern :: VarEnv -> TyEnv -> SchemaPattern -> Result SchemaPattern
+checkSchemaPattern _env _tenv pat =
+    -- For the time being, do nothing -- we specifically don't want it
+    -- to reject unbound/free type variables (see Search.hs for a
+    -- discussion of why) or underapplied type constructors, so the
+    -- only check in checkType that makes sense to apply is the one
+    -- for _overapplied_ type constructors, and that is (a) not
+    -- critical (an overapplied type constructor will never match
+    -- anything valid) and (b) as noted in checkType not currently
+    -- actually reasonable because of limitations in the concrete
+    -- syntax. Point (b) will probably change eventually, so we want
+    -- to keep this hook and keep knowledge of its internals private
+    -- here even though for now it's a nop.
+    (Right pat, [])
 
 -- }}}
 

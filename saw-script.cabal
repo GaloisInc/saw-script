@@ -134,6 +134,7 @@ library
     SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
+    SAWScript.Search
     SAWScript.SolverCache
     SAWScript.SolverVersions
     SAWScript.Token

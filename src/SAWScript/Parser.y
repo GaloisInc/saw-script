@@ -13,6 +13,7 @@ module SAWScript.Parser
   , parseStmtSemi
   , parseExpression
   , parseSchema
+  , parseSchemaPattern
   , ParseError(..)
   ) where
 
@@ -41,6 +42,7 @@ import Control.Exception
 %name parseStmtSemi StmtSemiEOF
 %name parseExpression ExpressionEOF
 %name parseSchema PolyTypeEOF
+%name parseSchemaPattern SchemaPatternEOF
 %error { parseError }
 %tokentype { Token Pos }
 %monad { Either ParseError }
@@ -120,6 +122,9 @@ ExpressionEOF :: { Expr }
 
 PolyTypeEOF :: { Schema }
  : PolyType EOF                         { $1 }
+
+SchemaPatternEOF :: { SchemaPattern }
+ : SchemaPattern EOF                    { $1 }
 
 Stmts :: { [Stmt] }
  : termBy(Stmt, ';')                    { $1 }
@@ -212,16 +217,29 @@ PolyType :: { Schema }
  : Type                                 { tMono $1     }
  | '{' Names '}' Type                   { Forall $2 $4 }
 
-Type :: { Type }
- : BaseType                             { $1                      }
- | BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
+-- this is used by :search so you can write multiple match criteria:
+-- it allows either t1 -> t2 -> ... or t1 t2 t3, including (t1 -> t1') t2 t3
+SchemaPattern :: { SchemaPattern }
+ : BaseFunType                          { SchemaPattern [] [$1]       }
+ | BaseType list(BaseType)              { SchemaPattern [] ($1 : $2)  }
+ | '{' Names '}' BaseFunType            { SchemaPattern $2 [$4]       }
+ | '{' Names '}' BaseType list(BaseType) { SchemaPattern $2 ($4 : $5) }
 
-FieldType :: { (Name, Type) }
-  : name ':' Type                       { (tokStr $1, $3)         }
+Type :: { Type }
+ : AppliedType                          { $1                      }
+ | AppliedType '->' Type                { tFun (maxSpan [$1, $3]) $1 $3 }
+
+AppliedType :: { Type }
+ : BaseType                             { $1                      }
+ | Context AppliedType                  { tBlock (maxSpan' $1 $2) $1 $2 }
+
+-- special case of function type that can be followed by more base types
+-- without requiring parens
+BaseFunType :: { Type }
+ : BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 BaseType :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)  }
- | Context BaseType                     { tBlock (maxSpan' $1 $2) $1 $2 }
  | '(' ')'                              { tTuple (maxSpan [$1, $2]) []  }
  | 'Bool'                               { tBool (getPos $1)             }
  | 'Int'                                { tInt (getPos $1)              }
@@ -249,6 +267,9 @@ Context :: { Type }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
  | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
  | name                                 { tVar (getPos $1) (tokStr $1)        }
+
+FieldType :: { (Name, Type) }
+  : name ':' Type                       { (tokStr $1, $3)         }
 
 -- Parameterized productions, most come directly from the Happy manual.
 fst(p, q)  : p q   { $1 }
