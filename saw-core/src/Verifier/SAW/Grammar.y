@@ -249,7 +249,7 @@ rlist1(p) :: { [p] }
 
 {
 data ParseError
-  = UnexpectedLex [Word8]
+  = UnexpectedLex Text
   | UnexpectedToken Token
   | ParseError String
   deriving (Show)

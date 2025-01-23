@@ -2,6 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -31,8 +32,8 @@ module Verifier.SAW.Lexer
 
 import Codec.Binary.UTF8.Generic ()
 import Control.Monad.State.Strict
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
-import Data.Text.Lazy (Text)
 import Data.Word (Word8)
 import Data.Bits
 import qualified Data.Char as Char
@@ -121,9 +122,9 @@ data Token
   | TIllegal String -- ^ Illegal character
   deriving (Show)
 
-data LexerMessage = InvalidInput [Word8] | UnclosedComment | MissingEOL
+data LexerMessage = InvalidInput Text.Text | UnclosedComment | MissingEOL
 
-data Buffer = Buffer Char !Text
+data Buffer = Buffer Char !LText.Text
 type AlexInput = PosPair Buffer
 
 -- Wrap the input type for export, in case we end up wanting other state
@@ -143,7 +144,7 @@ readHexBV =
 readBinBV :: String -> [Bool]
 readBinBV = map (\c -> c == '1')
 
-initialAlexInput :: FilePath -> FilePath -> Text -> AlexInput
+initialAlexInput :: FilePath -> FilePath -> LText.Text -> AlexInput
 initialAlexInput base path b = PosPair pos input
   where pos = Pos { posBase = base
                   , posPath = path
@@ -153,7 +154,7 @@ initialAlexInput base path b = PosPair pos input
         prevChar = error "internal: runLexer prev char undefined"
         input = Buffer prevChar b
 
-initialLexerState :: FilePath -> FilePath -> Text -> LexerState
+initialLexerState :: FilePath -> FilePath -> LText.Text -> LexerState
 initialLexerState = initialAlexInput
 
 alexInputPrevChar :: AlexInput -> Char
@@ -205,6 +206,9 @@ byteForChar c
   other           = 6
   tick            = 7
 
+-- Get the next byte to feed alex, where the byte is a character class
+-- describing the current character as generated above. Update the
+-- input state accordingly.
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
 alexGetByte (PosPair pos (Buffer _ txt)) = fmap fn (LText.uncons txt)
   where fn (c, txt') = (byte, PosPair pos' (Buffer c txt'))
@@ -212,15 +216,24 @@ alexGetByte (PosPair pos (Buffer _ txt)) = fmap fn (LText.uncons txt)
                 isNew = c == '\n'
                 pos'  = if isNew then incLine pos else incCol pos
 
+-- this is here mostly to shorten the type signatures
 type MsgList = [(Pos, LexerMessage)]
 
+-- Get the next token.
+--
+-- Recurses until we have one. If we get AlexError, concatenate all the
+-- adjacent invalid characters into a single error message.
+--
+-- Returns the updated input state, a list of messages, and the token.
 scanToken :: AlexInput -> MsgList -> (AlexInput, MsgList, PosPair Token)
 scanToken inp0 errors0 =
   let go inp errors pendingError =
         let (PosPair p (Buffer _ txt)) = inp
             finishAnyError = case pendingError of
                 Nothing -> errors
-                Just (pos, chars) -> (pos, InvalidInput (reverse chars)) : errors
+                Just (pos, chars) ->
+                    let badText = Text.pack $ reverse chars in
+                    (pos, InvalidInput badText) : errors
             end =
                 (inp, finishAnyError, PosPair p TEnd)
         in case alexScan inp 0 of
@@ -229,11 +242,14 @@ scanToken inp0 errors0 =
             AlexError _ -> case alexGetByte inp of
               Nothing ->
                   end
-              Just (w, inp') -> case pendingError of
-                Nothing ->
-                    go inp' errors (Just (p, [w]))
-                Just (pos, l) ->
-                    go inp' errors (Just (pos, w:l))
+              Just (_byte, inp') ->
+                -- ignore the classification byte; get the actual failing char
+                let badChar = alexInputPrevChar inp' in
+                case pendingError of
+                    Nothing ->
+                        go inp' errors (Just (p, [badChar]))
+                    Just (pos, badChars) ->
+                        go inp' errors (Just (pos, badChar : badChars))
             AlexSkip inp' _ ->
                 go inp' finishAnyError Nothing
             AlexToken inp' l act ->
@@ -242,9 +258,22 @@ scanToken inp0 errors0 =
   in
   go inp0 errors0 Nothing
 
--- state for processing comments
+-- | State for processing comments.
+--
+-- CNone is the ground state (not in a comment)
+--
+-- CBlock startpos n is when we're within a block comment starting at
+-- startpos, and n is the number of additional nested block comments
+-- that have been opened.
+--
+-- CLine is when we're in a line (-- type) comment.
 data CommentState = CNone | CBlock Pos !Int | CLine
 
+-- Get the next token, dropping comments.
+--
+-- Recurses until we get one.
+--
+-- Returns the updated input state, a list of messages, and the token.
 scanSkipComments :: AlexInput -> (AlexInput, MsgList, PosPair Token)
 scanSkipComments inp0 =
   let go state inp errors =
@@ -264,7 +293,7 @@ scanSkipComments inp0 =
                 again (CBlock (pos tok) 0)
             TCommentE ->
                 -- misplaced close-comment
-                let err = (pos tok, InvalidInput (fmap (fromIntegral . fromEnum) "-}")) in
+                let err = (pos tok, InvalidInput "-}") in
                 againWith CNone err
             TCommentL ->
                 -- begin line-comment
@@ -310,6 +339,8 @@ scanSkipComments inp0 =
   let (inp0', errors, tok) = go CNone inp0 [] in
   (inp0', reverse errors, tok)
 
+-- Entry point, which has become vacuous (but that might change in the
+-- future, so keep it around)
 lexSAWCore :: AlexInput -> (AlexInput, MsgList, PosPair Token)
 lexSAWCore inp = scanSkipComments inp
 
