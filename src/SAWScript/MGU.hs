@@ -40,7 +40,7 @@ import qualified Data.Set as S
 import qualified Prettyprinter as PP
 
 import SAWScript.AST
-import SAWScript.ASTUtil (namedVars)
+import SAWScript.ASTUtil (namedTyVars)
 import SAWScript.Panic (panic)
 import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -1425,7 +1425,7 @@ generalize foralls es0 ts0 = do
      -- Extract lists of any unification vars and named type vars that
      -- still appear.
      let is0 = unifyVars ts
-     let bs0 = namedVars ts
+     let bs0 = namedTyVars ts
 
      -- Drop any unification vars and named type vars that we
      -- shouldn't forall-bind.
