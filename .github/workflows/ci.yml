@@ -628,13 +628,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: all-html
 
       - name: Deploy to github pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
 
   build-push-image:
     runs-on: ubuntu-22.04

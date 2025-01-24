@@ -1910,7 +1910,7 @@ exportValue ty v = case ty of
     case v of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) <$>
+        | TV.isTBit e -> V.VWord <$>
             V.bitmapWordVal V.Concrete (toInteger (Vector.length xs))
                  (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
         | otherwise   -> pure . V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
@@ -1977,7 +1977,7 @@ exportFirstOrderValue fv =
     FOVIntMod _ i -> pure (V.VInteger i)
     FOVWord w x   -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len <$> (V.bitmapWordVal V.Concrete len
+      | t == FOTBit -> V.VWord <$> (V.bitmapWordVal V.Concrete len
                           (V.finiteSeqMap V.Concrete . map (V.ready . fvAsBool) $ vs))
       | otherwise   -> pure (V.VSeq len (V.finiteSeqMap V.Concrete (map exportFirstOrderValue vs)))
       where len = toInteger (length vs)
@@ -1994,7 +1994,7 @@ importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   go t v = case (t,v) of
     (FOTBit         , V.VBit b)        -> return (FOVBit b)
     (FOTInt         , V.VInteger i)    -> return (FOVInt i)
-    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete wv)
+    (FOTVec _ FOTBit, V.VWord wv)      -> FOVWord (fromIntegral (V.wordValWidth wv)) . V.bvVal <$> (V.asWordVal V.Concrete wv)
     (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->
