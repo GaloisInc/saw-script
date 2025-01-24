@@ -268,8 +268,6 @@ lexer = do
   inp <- Parser get
   let (inp', errors, result) = lexSAWCore inp
   Parser $ put inp'
-  -- XXX: this can only actually throw one error. Fix this up when we
-  -- clean out the error printing infrastructure.
   let issue (pos, msg) = case msg of
         InvalidInput chars -> addError pos $ UnexpectedLex chars
         UnclosedComment -> addError pos $ ParseError "Unclosed Comment"
@@ -277,6 +275,8 @@ lexer = do
           -- XXX: this should be a warning but we have no such ability here yet
           --addWarning pos $ "No newline at end of file"
           return ()
+  -- XXX: this can only actually throw one error. Fix this up when we
+  -- clean out the error printing infrastructure.
   mapM issue errors
   return result
 
