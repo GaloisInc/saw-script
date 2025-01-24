@@ -37,7 +37,6 @@ import qualified Control.Exception as Ex
 import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.List (isPrefixOf, isInfixOf, sort)
@@ -48,6 +47,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Time.Clock
 import Data.Typeable
 
@@ -2013,7 +2013,7 @@ parseCoreMod mnm_str input =
      let base = "<interactive>"
          path = "<interactive>"
      uterm <-
-       case parseSAWTerm base path (B.fromString input) of
+       case parseSAWTerm base path (LText.pack input) of
          Right uterm -> return uterm
          Left err ->
            do let msg = show err

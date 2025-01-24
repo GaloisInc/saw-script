@@ -1,0 +1,7 @@
+-- Nor should we be able to use just anything _in_ an identifier.
+module test5 where
+import Prelude;
+thingy_hook : Bool;
+thingy_hook = True;
+thingy_🪝 : Bool;
+thingy_🪝 = False;
