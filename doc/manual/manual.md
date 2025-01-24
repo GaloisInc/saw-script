@@ -1212,10 +1212,10 @@ sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
 ~~~~
 
-In addition to these, the `boolector`, `cvc4`, `cvc5`, `mathsat`, and `yices`
-provers are available. The internal decision procedure `rme`, short for
-Reed-Muller Expansion, is an automated prover that works particularly
-well on the Galois field operations that show up, for example, in AES.
+In addition to these, the `bitwuzla`, `boolector`, `cvc4`, `cvc5`, `mathsat`,
+and `yices` provers are available. The internal decision procedure `rme`, short
+for Reed-Muller Expansion, is an automated prover that works particularly well
+on the Galois field operations that show up, for example, in AES.
 
 In more complex cases, some pre-processing can be helpful or necessary
 before handing the problem off to an automated prover. The
@@ -1278,6 +1278,8 @@ provers is to unfold everything before sending a goal to a prover.
 However, with some provers it is possible to indicate that specific
 named subterms should be represented as uninterpreted functions.
 
+* `unint_bitwuzla : [String] -> ProofScript ()`
+
 * `unint_cvc4 : [String] -> ProofScript ()`
 
 * `unint_cvc5 : [String] -> ProofScript ()`
@@ -1299,6 +1301,8 @@ Note that each of the `unint_*` tactics have variants that are prefixed
 with `sbv_` and `w4_`. The `sbv_`-prefixed tactics make use of the SBV
 library to represent and solve SMT queries:
 
+* `sbv_unint_bitwuzla : [String] -> ProofScript ()`
+
 * `sbv_unint_cvc4 : [String] -> ProofScript ()`
 
 * `sbv_unint_cvc5 : [String] -> ProofScript ()`
@@ -1308,6 +1312,8 @@ library to represent and solve SMT queries:
 * `sbv_unint_z3 : [String] -> ProofScript ()`
 
 The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
+
+* `w4_unint_bitwuzla : [String] -> ProofScript ()`
 
 * `w4_unint_cvc4 : [String] -> ProofScript ()`
 

@@ -122,7 +122,8 @@ proveExportWhat4_sym solver hashConsing outFilePath satq = do
      -- Assume unsat
      return (Nothing, solver_name)
 
-proveWhat4_z3, proveWhat4_boolector,
+proveWhat4_z3,
+  proveWhat4_bitwuzla, proveWhat4_boolector,
   proveWhat4_cvc4, proveWhat4_cvc5,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
   proveWhat4_abc ::
@@ -131,6 +132,7 @@ proveWhat4_z3, proveWhat4_boolector,
   TopLevel (Maybe CEX, String)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
+proveWhat4_bitwuzla  = proveWhat4_sym bitwuzlaAdapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
 proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
 proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter
@@ -154,7 +156,8 @@ proveWhat4_z3_using tactic hashConsing satq = do
           _ <- setOpt z3TacticSetting $ Text.pack tactic
           return ()
 
-proveExportWhat4_z3, proveExportWhat4_boolector,
+proveExportWhat4_z3,
+  proveExportWhat4_bitwuzla, proveExportWhat4_boolector,
   proveExportWhat4_cvc4, proveExportWhat4_cvc5,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
@@ -163,6 +166,7 @@ proveExportWhat4_z3, proveExportWhat4_boolector,
   TopLevel (Maybe CEX, String)
 
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
+proveExportWhat4_bitwuzla  = proveExportWhat4_sym bitwuzlaAdapter
 proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter
 proveExportWhat4_cvc4      = proveExportWhat4_sym cvc4Adapter
 proveExportWhat4_cvc5      = proveExportWhat4_sym cvc5Adapter

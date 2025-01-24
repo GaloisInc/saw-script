@@ -295,8 +295,9 @@ this automatically, but for flexibility the `write_smtlib2` primitive
 passes the given term through unchanged, because it might be used for
 either satisfiability or validity checking.
 
-The SMT-Lib export capabilities in SAWScript make use of the Haskell
-SBV package, and support ABC, Boolector, CVC4, CVC5, MathSAT, Yices, and Z3.
+The SMT-Lib export capabilities in SAWScript make use of the Haskell SBV
+package, and support ABC, Bitwuzla, Boolector, CVC4, CVC5, MathSAT, Yices, and
+Z3.
 
 \newpage
 

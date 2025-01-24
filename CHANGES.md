@@ -2,6 +2,8 @@
 
 ## New Features
 
+* Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
+
 * Add a `:tenv` REPL command, which is like `:env` but prints the type
   environment instead of the variable environment. `:t` is still short
   for `:type`.
