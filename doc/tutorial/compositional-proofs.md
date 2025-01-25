@@ -11,8 +11,9 @@ functions that use heap data structures.
 As a simple example of compositional reasoning on imperative programs,
 consider the following Java code.
 
-```java
-$include all code/Add.java
+```{literalinclude} code/Add.java
+:linenos:
+:language: java
 ```
 
 Here, the `add` function computes the sum of its arguments. The `dbl`
@@ -22,8 +23,9 @@ it's also possible in SAWScript to prove something about `add` first,
 and then use the results of that proof in the proof of `dbl`, as in the
 following SAWScript code (`java_add.saw` on GitHub).
 
-```sawscript
-$include all code/java_add.saw
+```{literalinclude} code/java_add.saw
+:linenos:
+:language: sawscript
 ```
 
 This can be run as follows:

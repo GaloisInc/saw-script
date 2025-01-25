@@ -18,8 +18,10 @@ shift the mask to the left. Then we can use a bitwise "and" operation to
 test the bit at the index indicated by the index variable. The following
 C code (which is also in the `ffs.c` file on GitHub) uses this approach.
 
-```c
-$include 9-17 code/ffs.c
+```{literalinclude} code/ffs.c
+:lines: 9-17
+:lineno-start: 9
+:language: c
 ```
 
 This implementation is relatively straightforward, and a proficient C
@@ -35,16 +37,20 @@ An alternative implementation, taken by the following function (also in
 `ffs.c`), treats the bits of the input word in chunks, allowing
 sequences of zero bits to be skipped over more quickly.
 
-```c
-$include 19-26 code/ffs.c
+```{literalinclude} code/ffs.c
+:lines: 19-26
+:lineno-start: 19
+:language: c
 ```
 
 Another optimized version, in the following rather mysterious program
 (also in `ffs.c`), based on the `ffs` implementation in [musl
 libc](http://musl.libc.org/).
 
-```c
-$include 69-76 code/ffs.c
+```{literalinclude} code/ffs.c
+:lines: 69-76
+:lineno-start: 69
+:language: c
 ```
 
 These optimized versions are much less obvious than the reference
@@ -56,8 +62,10 @@ possible input (also in `ffs.c`). Although contrived, this program
 represents a case where traditional testing -- as opposed to
 verification -- is unlikely to be helpful.
 
-```c
-$include 43-47 code/ffs.c
+```{literalinclude} code/ffs.c
+:lines: 43-47
+:lineno-start: 43
+:language: c
 ```
 
 SAWScript allows us to state these problems concisely, and to quickly
@@ -108,8 +116,9 @@ The following script (in `ffs_llvm.saw`) is sufficient to automatically
 prove the equivalence of `ffs_ref` with `ffs_imp` and `ffs_musl`, and
 identify the bug in `ffs_bug`.
 
-```sawscript
-$include all code/ffs_llvm.saw
+```{literalinclude} code/ffs_llvm.saw
+:linenos:
+:language: sawscript
 ```
 
 In this script, the `print` commands simply display text for the user.
@@ -175,15 +184,19 @@ to the C version.
 
 The reference version (in `FFS.java`) uses a loop, like the C version:
 
-```java
-$include 2-10 code/FFS.java
+```{literalinclude} code/FFS.java
+:lines: 2-10
+:lineno-start: 2
+:language: java
 ```
 
 And the efficient implementation uses a fixed sequence of masking and
 shifting operations:
 
-```java
-$include 12-19 code/FFS.java
+```{literalinclude} code/FFS.java
+:lines: 12-19
+:lineno-start: 12
+:language: java
 ```
 
 Although in this case we can look at the C and Java code and see that
@@ -225,8 +238,9 @@ to [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 Now we can do the proof both within and across languages (from
 `ffs_compare.saw`):
 
-```sawscript
-$include all code/ffs_compare.saw
+```{literalinclude} code/ffs_compare.saw
+:linenos:
+:language: sawscript
 ```
 
 Here, the `jvm_extract` function works like `llvm_extract`, but on a

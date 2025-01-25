@@ -14,8 +14,9 @@ implementations, and cross-language comparisons between Cryptol, Java,
 and LLVM. The script in `ffs_java.saw` compares two different Java
 implementations, instead.
 
-```sawscript
-$include all code/ffs_java.saw
+```{literalinclude} code/ffs_java.saw
+:linenos:
+:language: sawscript
 ```
 
 As with previous Java examples, this one needs to be run with the `-b`
@@ -37,15 +38,17 @@ directly to a file, in [AIGER format](http://fmv.jku.at/aiger/), for
 later processing by external tools, as shown in
 `code/ffs_gen_aig.saw`.
 
-```sawscript
-$include all code/ffs_gen_aig.saw
+```{literalinclude} code/ffs_gen_aig.saw
+:linenos:
+:language: sawscript
 ```
 
 Conversely, the `read_aig` command can construct an internal term from
 an existing AIG file, as shown in `ffs_compare_aig.saw`.
 
-```sawscript
-$include all code/ffs_compare_aig.saw
+```{literalinclude} code/ffs_compare_aig.saw
+:linenos:
+:language: sawscript
 ```
 
 We can use external AIGs to verify the equivalence as follows,

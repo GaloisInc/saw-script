@@ -32,8 +32,10 @@ specification of the problem of placing a specific number of queens on
 a chess board in such a way that none of them threaten any of the
 others.
 
-```cryptol
-$include 21-56 code/NQueens.cry
+```{literalinclude} code/NQueens.cry
+:lines: 21-56
+:lineno-start: 21
+:language: cryptol
 ```
 
 This example gives us the opportunity to use the satisfiability

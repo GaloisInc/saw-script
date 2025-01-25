@@ -11,8 +11,9 @@ SMT solver.
 
 Consider the following C file:
 
-```c
-$include all code/double.c
+```{literalinclude} code/double.c
+:linenos:
+:language: c
 ```
 
 In this trivial example, an integer can be doubled either using
@@ -21,8 +22,9 @@ multiplication or shifting. The following SAWScript program (in
 Yices and Z3 modes, and by exporting an SMT-Lib theorem to be
 checked later, by an external SAT solver.
 
-```sawscript
-$include all code/double.saw
+```{literalinclude} code/double.saw
+:linenos:
+:language: sawscript
 ```
 
 The new primitives introduced here are the tilde operator, `~`, which
