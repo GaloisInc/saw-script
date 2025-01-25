@@ -1,5 +1,4 @@
-Example: Find First Set
-=======================
+# Example: Find First Set
 
 As a first example, we consider showing the equivalence of several quite
 different implementations of the POSIX `ffs` function, which identifies
@@ -10,8 +9,7 @@ least significant). This function can be implemented in several ways
 with different performance and code clarity tradeoffs, and we would like
 to show those different implementations are equivalent.
 
-Reference Implementation
--------------------------
+## Reference Implementation
 
 One simple implementation takes the form of a loop with an index
 initialized to zero, and a mask initialized to have the least
@@ -31,8 +29,7 @@ could be as many as 32, depending on the input value. It's possible to
 implement the same algorithm with significantly fewer branches, and no
 backward branches.
 
-Alternative Implementations
----------------------------
+## Alternative Implementations
 
 An alternative implementation, taken by the following function (also in
 `ffs.c`), treats the bits of the input word in chunks, allowing
@@ -68,8 +65,7 @@ and automatically 1) prove the equivalence of the reference and
 optimized implementations on all possible inputs, and 2) find an input
 exhibiting the bug in the third version.
 
-Generating LLVM Code
---------------------
+## Generating LLVM Code
 
 SAW can analyze LLVM code, but most programs are originally written in a
 higher-level language such as C, as in our example. Therefore, the C
@@ -96,8 +92,7 @@ previous command by running:
 
 \newpage
 
-Equivalence Proof
------------------
+## Equivalence Proof
 
 We now show how to use SAWScript to prove the equivalence of the
 reference and implementation versions of the FFS algorithm, and
@@ -169,8 +164,7 @@ corresponding disequality is unsatisfiable. Indeed, this exactly what
 happens behind the scenes: `prove abc <goal>` is essentially `not (sat
 abc (not <goal>))`.
 
-Cross-Language Proofs
----------------------
+## Cross-Language Proofs
 
 We can implement the FFS algorithm in Java with code almost identical
 to the C version.

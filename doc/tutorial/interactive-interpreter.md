@@ -1,5 +1,4 @@
-Interactive Interpreter
-=======================
+# Interactive Interpreter
 
 The examples so far have used SAWScript in batch mode on complete
 script files. It also has an interactive Read-Eval-Print Loop (REPL)

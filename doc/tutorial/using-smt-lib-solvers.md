@@ -1,5 +1,4 @@
-Using SMT-Lib Solvers
-=====================
+# Using SMT-Lib Solvers
 
 The examples presented so far have used the internal proof system
 provided by SAWScript, based primarily on a version of the ABC tool

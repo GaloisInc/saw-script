@@ -1,5 +1,4 @@
-Introduction
-============
+# Introduction
 
 SAWScript is a special-purpose programming language developed by
 Galois to help orchestrate and track the results of the large

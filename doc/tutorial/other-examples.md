@@ -1,5 +1,4 @@
-Other Examples
-==============
+# Other Examples
 
 The `code` directory [on
 GitHub](https://github.com/GaloisInc/saw-script/tree/master/doc/tutorial/code)
@@ -8,8 +7,7 @@ examples don't cover significant new material, but help fill in some
 extra use cases that are similar, but not identical to those already
 covered.
 
-Java Equivalence Checking
--------------------------
+## Java Equivalence Checking
 
 The previous examples showed comparison between two different LLVM
 implementations, and cross-language comparisons between Cryptol, Java,
@@ -25,8 +23,7 @@ flag to tell the interpreter where to find Java:
 
     > saw -b <path to directory where Java lives> ffs_java.saw
 
-AIG Export and Import
----------------------
+## AIG Export and Import
 
 Most of the previous examples have used the `abc` tactic to discharge
 theorems. This tactic works by translating the given term to

@@ -1,5 +1,4 @@
-External SAT Solvers
-====================
+# External SAT Solvers
 
 In addition to the `abc`, `z3`, and `yices` proof tactics used
 above, SAWScript can also invoke arbitrary external SAT solvers

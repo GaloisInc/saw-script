@@ -1,5 +1,4 @@
-Compositional Proofs
-====================
+# Compositional Proofs
 
 The examples shown so far treat programs as monolithic entities. A
 Java method or C function, along with all of its callees, is
@@ -7,8 +6,7 @@ translated into a single mathematical model. SAWScript also has
 support for more compositional proofs, as well as proofs about
 functions that use heap data structures.
 
-Compositional Imperative Proofs
--------------------------------
+## Compositional Imperative Proofs
 
 As a simple example of compositional reasoning on imperative programs,
 consider the following Java code.
