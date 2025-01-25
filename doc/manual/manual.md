@@ -1602,7 +1602,7 @@ of possible concrete executions.
 As a concrete example, consider the following C program that returns
 the maximum of two values:
 
-~~~~ {.c}
+~~~~ c
 unsigned int max(unsigned int x, unsigned int y) {
     if (y > x) {
         return y;
@@ -1614,14 +1614,14 @@ unsigned int max(unsigned int x, unsigned int y) {
 
 If you call this function with two concrete inputs, like this:
 
-~~~~ {.c}
+~~~~ c
 int r = max(5, 4);
 ~~~~
 
 then it will assign the value `5` to `r`. However, we can also consider what
 it will do for *arbitrary* inputs. Consider the following example:
 
-~~~~ {.c}
+~~~~ c
 int r = max(a, b);
 ~~~~
 
@@ -1700,7 +1700,7 @@ Directly comparing the branch condition to a constant can sometimes be
 enough to ensure termination. For example, in simple, bounded loops like
 the following, comparison with a constant is sufficient.
 
-~~~~ {.c}
+~~~~ c
 for (int i = 0; i < 10; i++) {
     // do something
 }
@@ -1712,7 +1712,7 @@ continuing the loop will be infeasible.
 
 As a more complex example, consider the following function:
 
-~~~~ {.c}
+~~~~ c
 uint8_t f(uint8_t i) {
   int done = 0;
   while (!done) {
@@ -2620,7 +2620,7 @@ lengths to check for this.
 
 Here is an example of this pitfall in an LLVM verification. Given this C code:
 
-~~~ .c
+~~~ c
 void side_effect(uint32_t *a) {
   *a = 0;
 }
@@ -2715,7 +2715,7 @@ The same pitfalls apply to compositional MIR verification, with a couple of key
 differences. In MIR verification, mutable references are allocated using
 `mir_alloc_mut`. Here is a Rust version of the pitfall program above:
 
-~~~ .rs
+~~~ rust
 pub fn side_effect(a: &mut u32) {
     *a = 0;
 }
@@ -2769,7 +2769,7 @@ _even if the function that calls the override never uses the allocations_.
 To illustrate this point more finely, suppose that the `foo` function had
 instead been defined like this:
 
-~~~ .rs
+~~~ rust
 pub fn foo(x: u32) -> u32 {
     let mut b: u32 = x;
     side_effect(&mut b);
@@ -2794,7 +2794,7 @@ mutable global variables in their postconditions. To illustrate this using LLVM
 verification, here is a variant of the C program from the previous example that
 uses a mutable global variable `a`:
 
-~~~ .c
+~~~ c
 
 uint32_t a = 42;
 
@@ -2844,7 +2844,7 @@ referred to as `static mut` items. (See the [MIR static
 items](#mir-static-items) section for more information). Here is a Rust version
 of the program above:
 
-~~~ .rs
+~~~ rust
 static mut A: u32 = 42;
 
 pub fn side_effect() {
@@ -2890,7 +2890,7 @@ postconditions, _even if the function that calls the override never uses the
 static items_. For example, if the `foo` function were instead defined like
 this:
 
-~~~ .rs
+~~~ rust
 pub fn foo() -> u32 {
     side_effect();
     42
@@ -3195,7 +3195,7 @@ The following commands are used to construct slices of arrays:
 As an example of how to use these functions, consider this Rust function, which
 accepts an arbitrary slice as an argument:
 
-~~~~ .rs
+~~~~ rust
 pub fn f(s: &[u32]) -> u32 {
     s[0] + s[1]
 }
@@ -3313,7 +3313,7 @@ where a `&[u8]` value is expected (and vice versa).
 As an example of how to write specifications involving string slices,
 consider this Rust function:
 
-~~~ .rs
+~~~ rust
 pub fn my_len(s: &str) -> usize {
     s.len()
 }
@@ -3345,7 +3345,7 @@ SAW makes no attempt to ensure that string slices over a particular range
 aligns with UTF-8 character boundaries. For example, the following Rust code
 would panic:
 
-~~~ .rs
+~~~ rust
     let rosu: &str = "roșu";
     let s: &str = &rosu[0..3];
     println!("{:?}", s);
@@ -3366,7 +3366,7 @@ types_, or ADTs for short. ADTs have identifiers to tell them apart, and a
 single ADT declaration can give rise to multiple identifiers depending on how
 the declaration is used. For example:
 
-~~~~ .rs
+~~~~ rust
 pub struct S<A, B> {
     pub x: A,
     pub y: B,
@@ -3436,7 +3436,7 @@ enum's variants, so SAW will use this information to look up a variant's
 identifier from a short name. Here is an example of using `mir_enum_value` in
 practice:
 
-~~~~ .rs
+~~~~ rust
 pub fn n() -> Option<u32> {
     None
 }
@@ -3475,7 +3475,7 @@ Rust ADTs can have both type parameters as well as _lifetime_ parameters. The
 following Rust code declares a lifetime parameter `'a` on the struct `S`, as
 well on the function `f` that computes an `S` value:
 
-~~~~ .rs
+~~~~ rust
 pub struct S<'a> {
     pub x: &'a u32,
 }
@@ -3508,7 +3508,7 @@ discussion on this point. If that issue is fixed, then we will likely remove
 SAW has experimental support for specifying `struct`s with bitfields, such as
 in the following example:
 
-~~~~ .c
+~~~~ c
 struct s {
   uint8_t x:1;
   uint8_t y:1;
@@ -3713,7 +3713,7 @@ supplied as an argument must be a valid identifier:
 As an example of how to use these functions, here is a Rust program involving
 static items:
 
-~~~ .rs
+~~~ rust
 // statics.rs
 static     S1: u8 = 1;
 static mut S2: u8 = 2;
@@ -3825,7 +3825,7 @@ dotprod xs ys = sum (zip (*) xs ys)
 
 To implement this in C, let's first consider the type of vectors:
 
-~~~~ .c
+~~~~ c
 typedef struct {
     uint32_t *elts;
     uint32_t size;
@@ -3839,7 +3839,7 @@ We can compute the dot product of two of these vectors with the
 following C code (which uses the size of the shorter vector if they
 differ in size).
 
-~~~~ .c
+~~~~ c
 uint32_t dotprod_struct(vec_t *x, vec_t *y) {
     uint32_t size = MIN(x->size, y->size);
     uint32_t res = 0;

@@ -72,7 +72,7 @@ study that involves a `cargo`-based project, which will use `cargo-saw-build`.
 Let's try out `saw-rustc` on a small example file, which we'll name
 `first-example.rs`:
 
-``` {.rs}
+``` rust
 $include all code/first-example.rs
 ```
 
@@ -170,7 +170,7 @@ The `id_u8` function above is likely not how most Rust programmers would define
 the identity function. Instead, it would seem more natural to define it
 generically, that is, by parameterizing the function by a type parameter:
 
-``` {.rs}
+``` rust
 $include all code/generics-take-1.rs
 ```
 
@@ -202,7 +202,7 @@ In order to verify a function using generics in your Rust code, you must
 provide a separate, monomorphic function that calls into the generic function.
 For example, you can rewrite the example above like so:
 
-``` {.rs}
+``` rust
 $include all code/generics-take-2.rs
 ```
 
@@ -333,7 +333,7 @@ suitable for SAW. Let's put our skills to the test and verify something! We will
 build on the example from above, which we will put into a file named
 `saw-basics.rs`:
 
-``` {.rs}
+``` rust
 $include all code/saw-basics.rs
 ```
 
@@ -450,7 +450,7 @@ not always so clear.
 
 For example, consider this function, which multiplies a number by two:
 
-``` {.rs}
+``` rust
 $include 1-3 code/times-two.rs
 ```
 
@@ -569,7 +569,7 @@ our earlier `{{ 2 * x }}` example works, as `x` is of type `Term`.
 As a sanity check, let's write a naïve version of `times_two` that explicitly
 returns `2 * x`:
 
-``` {.rs}
+``` rust
 $include 5-7 code/times-two.rs
 ```
 
@@ -711,7 +711,7 @@ such as `u8` and `u32`. While these are useful, Rust's type system features
 much more than just integers. A key part of Rust's type system are its
 reference types. For example, in this `read_ref` function:
 
-``` {.rs}
+``` rust
 $include 1-3 code/ref-basics.rs
 ```
 
@@ -803,7 +803,7 @@ the function is not allowed to modify the memory that the argument points to.
 Rust also features mutable references that do permit modifying the underlying
 memory, as seen in this `swap` function:
 
-``` {.rs}
+``` rust
 $include 5-11 code/ref-basics.rs
 ```
 
@@ -839,7 +839,7 @@ Rust includes array types where the length of the array is known ahead of time.
 For instance, this `index` function takes an `arr` argument that must contain
 exactly three `u32` values:
 
-``` {.rs}
+``` rust
 $include 1-3 code/arrays.rs
 ```
 
@@ -920,7 +920,7 @@ and combining them with `mir_array_value`.
 There are some situations where `mir_array_value` is the only viable choice,
 however. Consider this variant of the `index` function:
 
-``` {.rs}
+``` rust
 $include 5-7 code/arrays.rs
 ```
 
@@ -936,7 +936,7 @@ verifying a spec for `index_ref_arr`).
 Rust includes tuple types where the elements of the tuple can be of different
 types. For example:
 
-``` {.rs}
+``` rust
 $include 1-3 code/tuples.rs
 ```
 
@@ -965,7 +965,7 @@ arrays.
 Rust supports the ability for users to define custom struct types. Structs are
 uniquely identified by their names, so if you have two structs like these:
 
-``` {.rs}
+``` rust
 $include 1-2 code/structs.rs
 ```
 
@@ -1013,7 +1013,7 @@ We pass an empty list of `MIRType`s to each use of `mir_find_adt`, as neither
 `S` nor `T` have any type parameters. An example of a struct that does include
 type parameters can be seen here:
 
-``` {.rs}
+``` rust
 $include 12-12 code/structs.rs
 ```
 
@@ -1022,7 +1022,7 @@ the only way that we can make use of the `Foo` struct is by looking up a
 particular instantiation of `Foo`'s type parameters. If we define a function
 like this, for example:
 
-``` {.rs}
+``` rust
 $include 14-16 code/structs.rs
 ```
 
@@ -1055,7 +1055,7 @@ explicit type annotation. For instance, the expression `27 : [32]` means that
 
 Let's now verify a function that takes a struct value as an argument:
 
-``` {.rs}
+``` rust
 $include 18-22 code/structs.rs
 ```
 
@@ -1105,7 +1105,7 @@ has a number of different _variants_ that describe the different ways that an
 enum value can look like. A famous example of a Rust enum is the `Option` type,
 which is defined by the standard library like so:
 
-``` {.rs}
+``` rust
 enum Option<T> {
     None,
     Some(T),
@@ -1119,7 +1119,7 @@ motivating example of an enum in this section.
 First, let's start by defining some functions that make use of `Option`'s
 variants:
 
-``` {.rs}
+``` rust
 $include 1-7 code/enums.rs
 ```
 
@@ -1177,7 +1177,7 @@ Just as `mir_fresh_expanded_value` supports creating symbolic structs,
 example, given this function that accepts an `Option<u32>` value as an
 argument:
 
-``` {.rs}
+``` rust
 $include 9-11 code/enums.rs
 ```
 
@@ -1199,7 +1199,7 @@ references (e.g., `&u32`), SAW does not permit allocating a slice directly.
 Instead, one must take a slice of an existing reference. To better illustrate
 this distinction, consider this function:
 
-``` {.rs}
+``` rust
 $include 1-3 code/slices.rs
 ```
 
@@ -1209,20 +1209,20 @@ many possible ways we can write a spec for this function, as the slice argument
 may be backed by many different sequences. For example, the slice might be
 backed by an array whose length is exactly two:
 
-``` {.rs}
+``` rust
 $include 6-8 code/slices.rs
 ```
 
 We could also make a slice whose length is longer than two:
 
-``` {.rs}
+``` rust
 $include 10-12 code/slices.rs
 ```
 
 Alternatively, the slice might be a subset of an array whose length is longer
 than two:
 
-``` {.rs}
+``` rust
 $include 14-16 code/slices.rs
 ```
 
@@ -1340,7 +1340,7 @@ callee function and verify its behavior alongside the behavior of the callee
 function. This is a fine thing to do, but it can be inefficient. For example,
 consider a function like this:
 
-``` {.rs}
+``` rust
 $include 5-9 code/overrides.rs
 ```
 
@@ -1374,7 +1374,7 @@ Let's now try compositional verification in practice. To do so, we will first
 prove a spec for the `g` function above. For demonstration purposes, we will
 pick a simplistic implementation of `g`:
 
-``` {.rs}
+``` rust
 $include 1-3 code/overrides.rs
 ```
 
@@ -1539,7 +1539,7 @@ mutable reference, it could potentially lead to incorrect proofs.
 This is the sort of thing that is best explained with an example, so consider
 these two functions:
 
-``` {.rs}
+``` rust
 $include 1-9 code/overrides-mut.rs
 ```
 
@@ -1697,7 +1697,7 @@ There are two kinds of static items in Rust: mutable static items (which have a
 items are much easier to deal with, so let's start by looking at an example of
 a program that uses immutable static data:
 
-``` {.rs}
+``` rust
 $include 1-5 code/statics.rs
 ```
 
@@ -1742,7 +1742,7 @@ Here is one situation in which you would need to use a _reference_ to a static
 item (which `mir_static` computes) rather than the _value_ of a static item
 (which `mir_static_initializer` computes):
 
-``` {.rs}
+``` rust
 $include 7-9 code/statics.rs
 ```
 
@@ -1762,7 +1762,7 @@ state that any function can access and modify. They are so tricky, in fact,
 that Rust does not even allow you to use them unless you surround them in an
 `unsafe` block:
 
-``` {.rs}
+``` rust
 $include 11-15 code/statics.rs
 ```
 
@@ -1825,7 +1825,7 @@ careful in specifying what a mutable static value is at the start of a
 function. For example, consider a slightly extended version of the earlier Rust
 code we saw:
 
-``` {.rs}
+``` rust
 $include 11-22 code/statics.rs
 ```
 
@@ -1847,7 +1847,7 @@ pitfalls of using mutable references in compositional overrides. Mutable static
 items are also mutable values that are backed by references, and as such, they
 are also subject to the same pitfalls. Let's see an example of this:
 
-``` {.rs}
+``` rust
 $include 1-12 code/statics-compositional.rs
 ```
 
@@ -1899,7 +1899,7 @@ is in its postconditions. This applies _even if the override does not directly
 use the mutable static items_. For example, if we had declared a second mutable
 static item alongside `A`:
 
-``` {.rs}
+``` rust
 static mut A: u32 = 42;
 static mut B: u32 = 27;
 ```
@@ -2007,7 +2007,7 @@ interesting code lives in
 [`src/core.rs`](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/src/core.rs).
 At the top of this file, we have the `Core` struct:
 
-``` {.rs}
+``` rust
 $include 8-14 code/salsa20/src/core.rs
 ```
 
@@ -2016,7 +2016,7 @@ Let's walk through this:
 * The `state` field is an array that is `STATE_WORDS` elements long, where
   `STATE_WORDS` is a commonly used alias for `16`:
 
-  ``` {.rs}
+  ``` rust
   $include 88-89 code/salsa20/src/lib.rs
   ```
 
@@ -2030,7 +2030,7 @@ Let's walk through this:
 The reason that `Core` needs a `PhantomData<R>` field is because `R`
 implements the `Rounds` trait:
 
-``` {.rs}
+``` rust
 $include 1-5 code/salsa20/src/rounds.rs
 ```
 
@@ -2038,14 +2038,14 @@ A core operation in Salsa20 is hashing its input through a series of
 _rounds_. The `COUNT` constant indicates how many rounds should be performed.
 The Salsa20 spec assumes 20 rounds:
 
-``` {.rs}
+``` rust
 $include 23-29 code/salsa20/src/rounds.rs
 ```
 
 However, there are also reduced-round variants that perform 8 and 12 rounds,
 respectively:
 
-``` {.rs}
+``` rust
 $include 7-21 code/salsa20/src/rounds.rs
 ```
 
@@ -2055,7 +2055,7 @@ cipher. Here is the typical use case for a `Core` value:
 
 * A `Core` value is created using the `new` function:
 
-  ``` {.rs}
+  ``` rust
   $include 18-18 code/salsa20/src/core.rs
   ```
 
@@ -2066,10 +2066,10 @@ cipher. Here is the typical use case for a `Core` value:
 * After creating a `Core` value, the `counter_setup` and `rounds` functions are
   used to produce the Salsa20 keystream:
 
-  ``` {.rs}
+  ``` rust
   $include 83-83 code/salsa20/src/core.rs
   ```
-  ``` {.rs}
+  ``` rust
   $include 90-90 code/salsa20/src/core.rs
   ```
 
@@ -2079,7 +2079,7 @@ cipher. Here is the typical use case for a `Core` value:
   newly created `Core` value, produces its keystream, and applies it to a
   message to produce the `output`:
 
-  ``` {.rs}
+  ``` rust
   $include 68-68 code/salsa20/src/core.rs
   ```
 
@@ -2170,7 +2170,7 @@ the problem into smaller pieces that are easier to understand in isolation.
 If we look at the implementation of `apply_keystream`, we see that it invokes
 the `round` function, which in turn invokes the `quarter_round` function:
 
-``` {.rs}
+``` rust
 $include 122-142 code/salsa20/src/core.rs
 ```
 
@@ -2364,7 +2364,7 @@ are not encoding into `quarter_round_spec`'s preconditions.
 At this point, it can be helpful to observe _how_ the `quarter_round` function
 is used in practice. The call sites are found in the `rounds` function:
 
-``` {.rs}
+``` rust
 $include 92-102 code/salsa20/src/core.rs
 ```
 
@@ -2416,7 +2416,7 @@ Once we are done with the entire proof, we can come back and remove this use of
 Now that we've warmed up, let's try verifying the `rounds` function, which is
 where `quarter_round` is invoked. Here is the full definition of `rounds`:
 
-``` {.rs}
+``` rust
 $include 90-108 code/salsa20/src/core.rs
 ```
 
@@ -2621,7 +2621,7 @@ Before we do, however, there is one more function that `apply_keystream` calls,
 which we ought to verify first: `counter_setup`. Thankfully, the implementation
 of `counter_setup` is short and sweet:
 
-``` {.rs}
+``` rust
 $include 83-86 code/salsa20/src/core.rs
 ```
 
@@ -2694,7 +2694,7 @@ will become apparent later why this needed to be done.
 It's time. Now that we've verified `rounds` and `counter_setup`, it's time to
 tackle the topmost function in the call stack: `apply_keystream`:
 
-``` {.rs}
+``` rust
 $include 68-80 code/salsa20/src/core.rs
 ```
 
@@ -2706,13 +2706,13 @@ quite a bit going on. Let's walk through `apply_keystream` in more detail:
    length. That being said, the first line of `apply_keystream`'s implementation
    checks that `output`'s length is equal to `BLOCK_SIZE`:
 
-   ``` {.rs}
+   ``` rust
    $include 69-69 code/salsa20/src/core.rs
    ```
 
    Where `BLOCK_SIZE` is defined here:
 
-   ``` {.rs}
+   ``` rust
    $include 82-83 code/salsa20/src/lib.rs
    ```
 
@@ -2817,7 +2817,7 @@ internal state that is used to compute the keystream to apply when hashing. In
 order to use this internal state, however, we must first initialize it. The
 `new` function that is responsible for this initialization:
 
-``` {.rs}
+``` rust
 $include 17-20 code/salsa20/src/core.rs
 ```
 
@@ -2838,7 +2838,7 @@ All that being said, we probably to verify `new_raw` (a lower-level helper
 function) rather than `new` itself. This is because the definitions of `Key`
 and `Nonce` are somewhat involved. For instance, `Key` is defined as:
 
-``` {.rs}
+``` rust
 $include 27-27 code/salsa20/src/salsa.rs
 ```
 
@@ -2847,7 +2847,7 @@ is a somewhat complicated abstraction. Luckily, we don't really _need_ to deal
 with it, since `new_raw` deals with simple array references rather than
 `GenericArray`s:
 
-``` {.rs}
+``` rust
 $include 22-23 code/salsa20/src/core.rs
 ```
 
@@ -2858,7 +2858,7 @@ elements of the array are populated with `key`, some parts are populated with
 `iv` (i.e., the nonce), and other parts are populated with an array named
 `CONSTANTS`:
 
-``` {.rs}
+``` rust
 $include 91-92 code/salsa20/src/lib.rs
 ```
 
@@ -2925,7 +2925,7 @@ the remaining 8 elements from?
 The answer to this question can be found by looking at the implementation of
 `new_raw` more closely. Let's start at this code:
 
-``` {.rs}
+``` rust
 $include 35-36 code/salsa20/src/core.rs
 ```
 
@@ -2933,7 +2933,7 @@ This will chunk up `iv` (the nonce) into two 4-byte chunks and copies them over
 to the elements of `state` array at indices `6` and `7`. This is immediately
 followed by two updates at indices `8` and `9`, which are updated to be `0`:
 
-``` {.rs}
+``` rust
 $include 39-40 code/salsa20/src/core.rs
 ```
 
@@ -2968,7 +2968,7 @@ type `[u32; 16]`. These types are very close, as they both contain the same
 number of bytes, but they are chunked up differently. Recall the code that
 copies the nonce value over to `self.state`:
 
-``` {.rs}
+``` rust
 $include 35-36 code/salsa20/src/core.rs
 ```
 

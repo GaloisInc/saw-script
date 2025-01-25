@@ -43,7 +43,7 @@ shift the mask to the left. Then we can use a bitwise "and" operation to
 test the bit at the index indicated by the index variable. The following
 C code (which is also in the `ffs.c` file on GitHub) uses this approach.
 
-``` {.c}
+``` c
 $include 9-17 code/ffs.c
 ```
 
@@ -61,7 +61,7 @@ An alternative implementation, taken by the following function (also in
 `ffs.c`), treats the bits of the input word in chunks, allowing
 sequences of zero bits to be skipped over more quickly.
 
-``` {.c}
+``` c
 $include 19-26 code/ffs.c
 ```
 
@@ -69,7 +69,7 @@ Another optimized version, in the following rather mysterious program
 (also in `ffs.c`), based on the `ffs` implementation in [musl
 libc](http://musl.libc.org/).
 
-``` {.c}
+``` c
 $include 69-76 code/ffs.c
 ```
 
@@ -82,7 +82,7 @@ possible input (also in `ffs.c`). Although contrived, this program
 represents a case where traditional testing -- as opposed to
 verification -- is unlikely to be helpful.
 
-``` {.c}
+``` c
 $include 43-47 code/ffs.c
 ```
 
@@ -200,14 +200,14 @@ to the C version.
 
 The reference version (in `FFS.java`) uses a loop, like the C version:
 
-``` {.java}
+``` java
 $include 2-10 code/FFS.java
 ```
 
 And the efficient implementation uses a fixed sequence of masking and
 shifting operations:
 
-``` {.java}
+``` java
 $include 12-19 code/FFS.java
 ```
 
@@ -269,7 +269,7 @@ SMT solver.
 
 Consider the following C file:
 
-``` {.c}
+``` c
 $include all code/double.c
 ```
 
@@ -350,7 +350,7 @@ Compositional Imperative Proofs
 As a simple example of compositional reasoning on imperative programs,
 consider the following Java code.
 
-``` {.java}
+``` java
 $include all code/Add.java
 ```
 
