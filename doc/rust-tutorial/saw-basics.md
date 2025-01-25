@@ -329,6 +329,7 @@ defined. SAW will confirm this if we run it:
 ```
 $include 20-20 code/times-two.saw
 ```
+
 ```
 [19:23:53.480] Verifying times_two/56182919::times_two_ref[0] ...
 [19:23:53.496] Simulating times_two/56182919::times_two_ref[0] ...

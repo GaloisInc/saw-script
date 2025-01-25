@@ -104,13 +104,13 @@ the output of SAW:
 
 We've now proven `f` compositionally! The first two lines ("`Verifying ...`"
 and "`Simulating ...`") and the last two lines ("`Checking proof obligations
-...`" and "`Proof succeeded! ..."`) are the same as before, but this time, we
+...`" and "`Proof succeeded! ...`") are the same as before, but this time, we
 have some additional lines of output in between:
 
 * Whenever SAW prints "`Matching <N> overrides of <function>`", that's when you
   know that SAW is about to simulate a call to `<function>`. At that point, SAW
   will check to see how many overrides (`<N>`) for `<function>` are available.
-* Whenever SAW prints "`Brancing on <N> override variants of <function>", SAW is
+* Whenever SAW prints "`Brancing on <N> override variants of <function>`", SAW is
   trying to figure out which of the `<N>` overrides to apply. In this example,
   there is only a single override, so the choice is easy. In cases where there
   are multiple overrides, however, SAW may have to work harder (possibly even
