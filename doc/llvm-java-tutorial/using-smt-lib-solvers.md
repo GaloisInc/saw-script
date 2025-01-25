@@ -11,10 +11,9 @@ SMT solver.
 
 Consider the following C file:
 
-```{literalinclude} code/double.c
-:linenos:
+:::{literalinclude} code/double.c
 :language: c
-```
+:::
 
 In this trivial example, an integer can be doubled either using
 multiplication or shifting. The following SAWScript program (in
@@ -22,10 +21,9 @@ multiplication or shifting. The following SAWScript program (in
 Yices and Z3 modes, and by exporting an SMT-Lib theorem to be
 checked later, by an external SAT solver.
 
-```{literalinclude} code/double.saw
-:linenos:
+:::{literalinclude} code/double.saw
 :language: sawscript
-```
+:::
 
 The new primitives introduced here are the tilde operator, `~`, which
 constructs the logical negation of a term, and `write_smtlib2`, which
