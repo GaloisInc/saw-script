@@ -1,4 +1,4 @@
-# A tutorial on Rust verification with SAW
+# Introduction
 
 SAW is a special-purpose programming environment developed by Galois to help
 orchestrate and track the results of the large collection of proof tools
