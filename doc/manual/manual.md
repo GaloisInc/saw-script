@@ -552,7 +552,7 @@ command.
 
 Other primitives are considered deprecated.
 Some of these, as the
-[deprecation process]("formal-deprecation-process") proceeds, are
+[deprecation process](#formal-deprecation-process) proceeds, are
 unavailable by default.
 
 They can be made visible with the `enable_deprecated` command.
@@ -3794,7 +3794,7 @@ Normally, a `MethodSpec` is the result of both simulation and proof of
 the target code. However, in some cases, it can be useful to use a
 `MethodSpec` to specify some code that either doesn't exist or is hard
 to prove. The previously-mentioned [`assume_unsat`
-tactic](#miscellaneous-tactics) omits proof but does not prevent
+tactic](#finishing-proofs-without-external-solvers) omits proof but does not prevent
 simulation of the function. To skip simulation altogether, one can use
 one of the following commands:
 
