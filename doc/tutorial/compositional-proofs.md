@@ -11,7 +11,7 @@ functions that use heap data structures.
 As a simple example of compositional reasoning on imperative programs,
 consider the following Java code.
 
-``` java
+```java
 $include all code/Add.java
 ```
 
@@ -22,15 +22,15 @@ it's also possible in SAWScript to prove something about `add` first,
 and then use the results of that proof in the proof of `dbl`, as in the
 following SAWScript code (`java_add.saw` on GitHub).
 
-\newpage
-
-````
+```sawscript
 $include all code/java_add.saw
-````
+```
 
 This can be run as follows:
 
-    > saw -b <path to directory where Java lives> java_add.saw
+```console
+> saw -b <path to directory where Java lives> java_add.saw
+```
 
 In this example, the definitions of `add_spec` and `dbl_spec` provide
 extra information about how to configure the symbolic simulator when

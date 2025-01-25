@@ -11,7 +11,7 @@ SMT solver.
 
 Consider the following C file:
 
-``` c
+```c
 $include all code/double.c
 ```
 
@@ -21,7 +21,7 @@ multiplication or shifting. The following SAWScript program (in
 Yices and Z3 modes, and by exporting an SMT-Lib theorem to be
 checked later, by an external SAT solver.
 
-```
+```sawscript
 $include all code/double.saw
 ```
 

@@ -9,13 +9,17 @@ using the `external_cnf_solver` tactic. For example, you can use
 [PicoSAT](http://fmv.jku.at/picosat/) to prove the theorem `thm` from
 the last example, with the following commands:
 
-    let picosat = external_cnf_solver "picosat" ["%f"];
-    prove_print picosat thm;
+```sawscript
+let picosat = external_cnf_solver "picosat" ["%f"];
+prove_print picosat thm;x
+```
 
 The use of `let` is simply a convenient abbreviation. The following
 would be equivalent:
 
-    prove_print (external_cnf_solver "picosat" ["%f"]) thm;
+```sawscript
+prove_print (external_cnf_solver "picosat" ["%f"]) thm;
+```
 
 The first argument to `external_cnf_solver` is the name of the
 executable. It can be a fully-qualified name, or simply the bare

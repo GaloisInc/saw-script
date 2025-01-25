@@ -18,7 +18,7 @@ shift the mask to the left. Then we can use a bitwise "and" operation to
 test the bit at the index indicated by the index variable. The following
 C code (which is also in the `ffs.c` file on GitHub) uses this approach.
 
-``` c
+```c
 $include 9-17 code/ffs.c
 ```
 
@@ -35,7 +35,7 @@ An alternative implementation, taken by the following function (also in
 `ffs.c`), treats the bits of the input word in chunks, allowing
 sequences of zero bits to be skipped over more quickly.
 
-``` c
+```c
 $include 19-26 code/ffs.c
 ```
 
@@ -43,7 +43,7 @@ Another optimized version, in the following rather mysterious program
 (also in `ffs.c`), based on the `ffs` implementation in [musl
 libc](http://musl.libc.org/).
 
-``` c
+```c
 $include 69-76 code/ffs.c
 ```
 
@@ -56,7 +56,7 @@ possible input (also in `ffs.c`). Although contrived, this program
 represents a case where traditional testing -- as opposed to
 verification -- is unlikely to be helpful.
 
-``` c
+```c
 $include 43-47 code/ffs.c
 ```
 
@@ -72,7 +72,9 @@ higher-level language such as C, as in our example. Therefore, the C
 code must be translated to LLVM, using something like the following
 command:
 
-    > clang -g -c -emit-llvm -o ffs.bc ffs.c
+```console
+> clang -g -c -emit-llvm -o ffs.bc ffs.c
+```
 
 The `-g` flag instructs `clang` to include debugging information, which
 is useful in SAW to refer to variables and struct fields using the same
@@ -88,9 +90,9 @@ A `Makefile` also exists in that directory, providing quick shortcuts
 for tasks like this. For instance, we can get the same effect as the
 previous command by running:
 
-    > make ffs.bc
-
-\newpage
+```console
+> make ffs.bc
+```
 
 ## Equivalence Proof
 
@@ -106,7 +108,7 @@ The following script (in `ffs_llvm.saw`) is sufficient to automatically
 prove the equivalence of `ffs_ref` with `ffs_imp` and `ffs_musl`, and
 identify the bug in `ffs_bug`.
 
-```
+```sawscript
 $include all code/ffs_llvm.saw
 ```
 
@@ -134,11 +136,13 @@ fails if there is no such value.
 
 If the `saw` executable is in your PATH, you can run the script above with
 
-    > saw ffs_llvm.saw
+```console
+> saw ffs_llvm.saw
+```
 
 producing the output
 
-```
+```output
 Loading file "ffs_llvm.saw"
 Extracting reference term: ffs_ref
 Extracting implementation term: ffs_imp
@@ -171,14 +175,14 @@ to the C version.
 
 The reference version (in `FFS.java`) uses a loop, like the C version:
 
-``` java
+```java
 $include 2-10 code/FFS.java
 ```
 
 And the efficient implementation uses a fixed sequence of masking and
 shifting operations:
 
-``` java
+```java
 $include 12-19 code/FFS.java
 ```
 
@@ -194,7 +198,9 @@ language.
 
 First, we compile the Java code to a JVM class file.
 
-    > javac -g FFS.java
+```console
+> javac -g FFS.java
+```
 
 Like with `clang`, the `-g` flag instructs `javac` to include debugging
 information, which can be useful to preserve variable names.
@@ -202,7 +208,9 @@ information, which can be useful to preserve variable names.
 Using `saw` with Java code requires a command-line option `-b` that
 locates Java. Run the code in this section with the command:
 
-    > saw -b <path to directory where Java lives> ffs_compare.saw
+```console
+> saw -b <path to directory where Java lives> ffs_compare.saw
+```
 
 Alternatively, if Java is located on your `PATH`, you can omit the `-b`
 option entirely.
@@ -217,7 +225,7 @@ to [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 Now we can do the proof both within and across languages (from
 `ffs_compare.saw`):
 
-```
+```sawscript
 $include all code/ffs_compare.saw
 ```
 
