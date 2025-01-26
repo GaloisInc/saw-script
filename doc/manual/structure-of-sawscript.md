@@ -386,6 +386,7 @@ aliases, including those that are built in.
 
 * `:type` or `:t` checks and prints the type of an arbitrary SAWScript
 expression:
+
 ~~~~
 sawscript> :t show
 {a.0} a.0 -> String
@@ -393,6 +394,7 @@ sawscript> :t show
 
 * `:help` or `:h` prints the help text for a built-in function or
 command:
+
 ~~~~
 sawscript> :h show
 Description
@@ -422,7 +424,7 @@ command.
 
 Other primitives are considered deprecated.
 Some of these, as the
-[deprecation process](#formal-deprecation-process) proceeds, are
+[deprecation process](formal-deprecation-process.md) proceeds, are
 unavailable by default.
 
 They can be made visible with the `enable_deprecated` command.

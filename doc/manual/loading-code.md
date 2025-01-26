@@ -113,7 +113,7 @@ behavior, and SAW currently does not have built in support for these
 functions (though you could manually create overrides for them in a
 verification script).
 
-[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+[^1]: <https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation>
 
 ### Compiling Java
 
@@ -248,5 +248,5 @@ Finally, there is no support for calling constructors in specifications,
 so you will need to construct objects piece-by-piece using, *e.g.*,
 `llvm_alloc` and `llvm_points_to`.
 
-[^2]: https://libcxx.llvm.org/docs/BuildingLibcxx.html
-[^3]: https://github.com/travitch/whole-program-llvm
+[^2]: <https://libcxx.llvm.org/docs/BuildingLibcxx.html>
+[^3]: <https://github.com/travitch/whole-program-llvm>

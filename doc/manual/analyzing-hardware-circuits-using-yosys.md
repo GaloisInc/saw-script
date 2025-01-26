@@ -1,8 +1,10 @@
 # Analyzing Hardware Circuits using Yosys
+
 SAW has experimental support for analysis of hardware descriptions written in VHDL ([via GHDL](https://github.com/ghdl/ghdl-yosys-plugin)) through an intermediate representation produced by [Yosys](https://yosyshq.net/yosys/).
 This generally follows the same conventions and idioms used in the rest of SAWScript.
 
 ## Processing VHDL With Yosys
+
 Given a VHDL file `test.vhd` containing an entity `test`, one can generate an intermediate representation `test.json` suitable for loading into SAW:
 
 ~~~~
@@ -26,6 +28,7 @@ Yosys is able to convert `$pmux` cells into trees of `$mux` cells using the `pmu
 We expect there are many other situations where Yosys' considerable library of commands is valuable for pre-processing.
 
 ## Example: Ripple-Carry Adder
+
 Consider three VHDL entities.
 First, a half-adder:
 
@@ -197,12 +200,14 @@ sawscript> full_nocarry_spec <- yosys_verify {{ adderm.full }} [{{\(inp : {a : [
 The resulting override `full_nocarry_spec` may still be used in the proof for `add4` (this is accomplished by rewriting to a conditional expression).
 
 ## API Reference
+
 N.B: The following commands must first be enabled using `enable_experimental`.
 
 * `yosys_import : String -> TopLevel Term` produces a `Term` given the path to a JSON file produced by the Yosys `write_json` command.
   The resulting term is a Cryptol record, where each field corresponds to one HDL module exported by Yosys.
   Each HDL module is in turn represented by a function from a record of input port values to a record of output port values.
   For example, consider a Yosys JSON file derived from the following VHDL entities:
+
   ~~~~vhdl
   entity half is
     port (
@@ -223,12 +228,15 @@ N.B: The following commands must first be enabled using `enable_experimental`.
     );
   end full;
   ~~~~
+
   The resulting `Term` will have the type:
+
   ~~~~
   { half : {a : [1], b : [1]} -> {c : [1], s : [1]}
   , full : {a : [1], b : [1], cin : [1]} -> {cout : [1], s : [1]}
   }
   ~~~~
+
 * `yosys_verify : Term -> [Term] -> Term -> [YosysTheorem] -> ProofScript () -> TopLevel YosysTheorem` proves equality between an HDL module and a specification.
   The first parameter is the HDL module - given a record `m` from `yosys_import`, this will typically look something like `{{ m.foo }}`.
   The second parameter is a list of preconditions for the equality.

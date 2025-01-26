@@ -1,7 +1,7 @@
 # Transforming Term Values
 
-The three primary functions of SAW are *extracting* models (`Term`
-values) from programs, *transforming* those models, and *proving*
+The three primary functions of SAW are _extracting_ models (`Term`
+values) from programs, _transforming_ those models, and _proving_
 properties about models using external provers. So far we've shown how
 to construct `Term` values from Cryptol programs; later sections
 will describe how to extract them from other programs. Now we show how
@@ -9,7 +9,7 @@ to use the various term transformation features available in SAW.
 
 ## Rewriting
 
-Rewriting a `Term` consists of applying one or more *rewrite rules* to
+Rewriting a `Term` consists of applying one or more _rewrite rules_ to
 it, resulting in a new `Term`. A rewrite rule in SAW can be specified in
 multiple ways:
 
@@ -22,7 +22,7 @@ multiple ways:
 In each case the term logically consists of two sides and describes a
 way to transform the left side into the right side. Each side may
 contain variables (bound by enclosing lambda expressions) and is
-therefore a *pattern* which can match any term in which each variable
+therefore a _pattern_ which can match any term in which each variable
 represents an arbitrary sub-term. The left-hand pattern describes a term
 to match (which may be a sub-term of the full term being rewritten), and
 the right-hand pattern describes a term to replace it with. Any variable
@@ -157,7 +157,7 @@ values to a `Simpset`.
 A `Theorem` is essentially a `Term` that is proven correct in some way.
 In general, a `Theorem` can be any statement, and may not be useful as a
 rewrite rule. However, if it has an appropriate shape it can be used for
-rewriting. In the ["Proofs about Terms"](#proofs-about-terms) section,
+rewriting. In the ["Proofs about Terms"](proofs-about-terms.md) section,
 we'll describe how to construct `Theorem` values from `Term` values.
 
 In the absence of user-constructed `Theorem` values, there are some
@@ -167,7 +167,7 @@ sometimes be helpful or essential. The `cryptol_ss` simpset includes
 rewrite rules to unfold all definitions in the `Cryptol` SAWCore module,
 but does not include any of the terms of equality type.
 
-* `add_cryptol_defs : `[String] -> Simpset -> Simpset` adds unfolding
+* `add_cryptol_defs : [String] -> Simpset -> Simpset` adds unfolding
 rules for functions with the given names from the SAWCore `Cryptol` module
 to the given `Simpset`.
 
@@ -234,8 +234,8 @@ t'
 ~~~~
 
 This illustrates that a bare expression in Cryptol braces gets
-translated directly to a SAWCore term. However, a Cryptol *definition*
-gets translated into a *folded* SAWCore term. In addition, because the
+translated directly to a SAWCore term. However, a Cryptol _definition_
+gets translated into a _folded_ SAWCore term. In addition, because the
 second definition of `t` occurs at the Cryptol level, rather than the
 SAWScript level, it is visible only inside Cryptol braces. Definitions
 imported from Cryptol source files are also initially folded and can be

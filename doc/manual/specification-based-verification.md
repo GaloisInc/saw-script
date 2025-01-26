@@ -806,7 +806,7 @@ such as those that are intended to initialize data structures (writing to the
 memory pointed to, but never reading from it), this sort of uninitialized
 memory is appropriate. In most cases, however, it's more useful to state that a
 pointer points to some specific (usually symbolic) value, which you can do with
-the *points-to* family of commands.
+the _points-to_ family of commands.
 
 ### LLVM heap values
 
@@ -819,7 +819,7 @@ value given in the second argument (which may be any type of
 `SetupValue`).
 
 When used in the final state, `llvm_points_to` specifies that the
-given pointer *should* point to the given value when the function
+given pointer _should_ point to the given value when the function
 finishes.
 
 Occasionally, because C programs frequently reinterpret memory of one
@@ -941,7 +941,6 @@ symbols must be included; moreover, the process of correlating LLVM
 type information with information contained in debug symbols is a bit
 heuristic. If `llvm_union` cannot figure out how to cast a pointer,
 one can fall back on the more manual `llvm_cast_pointer` instead.
-
 
 In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
@@ -1186,6 +1185,7 @@ would panic:
     let s: &str = &rosu[0..3];
     println!("{:?}", s);
 ~~~
+
 ~~~
 thread 'main' panicked at 'byte index 3 is not a char boundary; it is inside 'ș' (bytes 2..4) of `roșu`'
 ~~~
@@ -1281,6 +1281,7 @@ pub fn s(x: u32) -> Option<u32> {
     Some(x)
 }
 ~~~~
+
 ~~~~
 m <- mir_load_module "example.linked-mir.json";
 
@@ -1537,7 +1538,7 @@ References to static values can be initialized with the `mir_points_to`
 command, just like with other forms of references. Immutable static items
 (e.g., `static X: u8 = 42`) are initialized implicitly in every SAW
 specification, so there is no need for users to do so manually. Mutable static
-items (e.g., `static mut Y: u8 = 27`), on the other hand, are *not* initialized
+items (e.g., `static mut Y: u8 = 27`), on the other hand, are _not_ initialized
 implicitly, and users must explicitly pick a value to initialize them with.
 
 The `mir_static_initializer` function can be used to access the initial value
@@ -2038,7 +2039,7 @@ let main : TopLevel () = do {
 };
 ~~~~
 
-[^4]: https://en.wikipedia.org/wiki/Salsa20
+[^4]: <https://en.wikipedia.org/wiki/Salsa20>
 
 ## Verifying Cryptol FFI functions
 
@@ -2054,6 +2055,7 @@ generate a `LLVMSetup ()` spec directly from the type of a Cryptol
 `foreign` function. This is done with the `llvm_ffi_setup` command,
 which is experimental and requires `enable_experimental;` to be run
 beforehand.
+
 ```
 llvm_ffi_setup : Term -> LLVMSetup ()
 ```
@@ -2061,10 +2063,13 @@ llvm_ffi_setup : Term -> LLVMSetup ()
 For instance, for the simple imported Cryptol foreign function `foreign
 add : [32] -> [32] -> [32]` we can obtain a `LLVMSetup` spec simply by
 writing
+
 ```
 let add_setup = llvm_ffi_setup {{ add }};
 ```
+
 which behind the scenes expands to something like
+
 ```
 let add_setup = do {
   in0 <- llvm_fresh_var "in0" (llvm_int 32);
@@ -2086,9 +2091,11 @@ resulting term is monomorphic. The user can then define a parameterized
 specification simply as a SAWScript function in the usual way. For
 example, for a function `foreign f : {n, m} (fin n, fin m) => [n][32] ->
 [m][32]`, we can obtain a parameterized `LLVMSetup` spec by
+
 ```
 let f_setup (n : Int) (m : Int) = llvm_ffi_setup {{ f`{n, m} }};
 ```
+
 Note that the `Term` parameter that `llvm_ffi_setup` takes is restricted
 syntactically to the format described above (``{{ fun`{tyArg0, tyArg1,
 ..., tyArgN} }}``), and cannot be any arbitrary term.
@@ -2112,6 +2119,7 @@ The resulting `LLVMSetup ()` spec can be used with the existing
 `llvm_verify` function to perform the actual verification. And the
 `LLVMSpec` output from that can be used as an override as usual for
 further compositional verification.
+
 ```
 f_ov <- llvm_verify mod "f" [] true (f_setup 3 5) z3;
 ```

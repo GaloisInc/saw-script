@@ -213,6 +213,5 @@ work out. However, if Coq typechecking of generated code fails with
 errors about `Inhabited` class instances, it likely represents some
 problem with this aspect of the translation.
 
-
-[^5]: https://coq.inria.fr
-[^6]: https://github.com/mit-plv/fiat-crypto
+[^5]: <https://coq.inria.fr>
+[^6]: <https://github.com/mit-plv/fiat-crypto>
