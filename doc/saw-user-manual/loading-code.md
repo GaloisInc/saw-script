@@ -61,6 +61,7 @@ unresolved issues in verifying code involving classes such as `String`. For
 more information on these issues, refer to
 [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
+(loading-mir)=
 ## Loading MIR
 
 To load a piece of Rust code, first compile it to a MIR JSON file, as described
@@ -121,6 +122,7 @@ For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
 
+(compiling-mir)=
 ### Compiling MIR
 
 In order to verify Rust code, SAW analyzes Rust's MIR (mid-level intermediate

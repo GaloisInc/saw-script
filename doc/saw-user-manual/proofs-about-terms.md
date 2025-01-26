@@ -314,6 +314,7 @@ repository](https://github.com/GaloisInc/saw-script/blob/master/doc/extcore.md).
 The `offline_unint_smtlib2` command represents the folded subterms
 listed in its first argument as uninterpreted functions.
 
+(finishing-proofs-without-external-solvers)=
 ## Finishing Proofs without External Solvers
 
 Some proofs can be completed using unsound placeholders, or using

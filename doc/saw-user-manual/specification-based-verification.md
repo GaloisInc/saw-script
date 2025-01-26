@@ -390,6 +390,7 @@ m <- llvm_load_module "add.bc";
 add_ms <- llvm_verify m "add" [] false add_setup abc;
 :::
 
+(compositional-verification)=
 ## Compositional Verification
 
 The primary advantage of the specification-based approach to
@@ -622,6 +623,7 @@ by this. This is in contrast with LLVM verification, where one could get away
 without specifying `side_effect`'s argument in this example, as the invalidated
 memory in `b` would never be read.
 
+(compositional-verification-and-mutable-global-variables)=
 ### Compositional Verification and Mutable Global Variables
 
 Just like with local mutable allocations (see the previous section),
@@ -1523,6 +1525,7 @@ point of a call to `f`. This specification also constrains `y` to prevent
 signed integer overflow resulting from the `x + y` expression in `f`,
 which is undefined behavior in C.
 
+(mir-static-items)=
 ### MIR static items
 
 Rust's static items are the MIR version of global variables. A reference to a
@@ -1630,7 +1633,7 @@ Normally, a `MethodSpec` is the result of both simulation and proof of
 the target code. However, in some cases, it can be useful to use a
 `MethodSpec` to specify some code that either doesn't exist or is hard
 to prove. The previously-mentioned [`assume_unsat`
-tactic](proofs-about-terms.md#finishing-proofs-without-external-solvers) omits proof but does not prevent
+tactic](#finishing-proofs-without-external-solvers) omits proof but does not prevent
 simulation of the function. To skip simulation altogether, one can use
 one of the following commands:
 

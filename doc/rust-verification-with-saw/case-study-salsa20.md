@@ -193,7 +193,7 @@ up to this point, which have been self-contained Rust files, `salsa20` is a
 saw-build`, an extension to the `cargo` package manager that integrates with
 `mir-json`. Before you proceed, make sure that you have defined the
 `SAW_RUST_LIBRARY_PATH` environment variable as described in [this
-section](./about-mir-json.md#the-saw_rust_library_path-environment-variable).
+section](#saw-rust-lib-path-env-var).
 
 To build the `salsa20` crate, perform the following steps:
 

@@ -69,6 +69,7 @@ important to understand everything that is going on there. This is
 machine-generated JSON, and as such, it is not meant to be particularly
 readable by human eyes.
 
+(saw-rust-lib-path-env-var)=
 ## The `SAW_RUST_LIBRARY_PATH` environment variable
 
 Rust has a large set of standard libraries that ship with the compiler, and
