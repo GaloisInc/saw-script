@@ -7,7 +7,7 @@ The first step in analyzing any code is to load it into the system.
 To load LLVM code, simply provide the location of a valid bitcode file
 to the `llvm_load_module` function.
 
-* `llvm_load_module : String -> TopLevel LLVMModule`
+- `llvm_load_module : String -> TopLevel LLVMModule`
 
 The resulting `LLVMModule` can be passed into the various functions
 described below to perform analysis of specific LLVM functions.
@@ -25,15 +25,15 @@ Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, three flags
 control where to look for classes:
 
-* The `-b` flag takes the path where the `java` executable lives, which is used
+- The `-b` flag takes the path where the `java` executable lives, which is used
   to locate the Java standard library classes and add them to the class
   database. Alternatively, one can put the directory where `java` lives on the
   `PATH`, which SAW will search if `-b` is not set.
 
-* The `-j` flag takes the name of a JAR file as an argument and adds the
+- The `-j` flag takes the name of a JAR file as an argument and adds the
   contents of that file to the class database.
 
-* The `-c` flag takes the name of a directory as an argument and adds all class
+- The `-c` flag takes the name of a directory as an argument and adds all class
   files found in that directory (and its subdirectories) to the class database.
   By default, the current directory is included in the class path.
 
@@ -49,7 +49,7 @@ flag (or, alternatively, with the `SAW_JDK_JAR` environment variable).
 Once the class path is configured, you can pass the name of a class to
 the `java_load_class` function.
 
-* `java_load_class : String -> TopLevel JavaClass`
+- `java_load_class : String -> TopLevel JavaClass`
 
 The resulting `JavaClass` can be passed into the various functions
 described below to perform analysis of specific Java methods.
@@ -67,7 +67,7 @@ To load a piece of Rust code, first compile it to a MIR JSON file, as described
 in [this section](#compiling-mir), and then provide the location of the JSON
 file to the `mir_load_module` function:
 
-* `mir_load_module : String -> TopLevel MIRModule`
+- `mir_load_module : String -> TopLevel MIRModule`
 
 SAW currently supports Rust code that can be built with a [January 23, 2023
 Rust nightly](https://static.rust-lang.org/dist/2023-01-23/).  If you encounter
@@ -84,16 +84,16 @@ more likely to succeed.
 
 For generating LLVM with `clang`, it can be helpful to:
 
-* Turn on debugging symbols with `-g` so that SAW can find source
+- Turn on debugging symbols with `-g` so that SAW can find source
   locations of functions, names of variables, etc.
 
-* Optimize with `-O1` so that the generated bitcode more closely matches
+- Optimize with `-O1` so that the generated bitcode more closely matches
   the C/C++ source, making the results more comprehensible.
 
-* Use `-fno-threadsafe-statics` to prevent `clang` from emitting
+- Use `-fno-threadsafe-statics` to prevent `clang` from emitting
   unnecessary pthread code.
 
-* Link all relevant bitcode with `llvm-link` (including, *e.g.*, the C++
+- Link all relevant bitcode with `llvm-link` (including, _e.g._, the C++
   standard library when analyzing C++ code).
 
 All SAW proofs include side conditions to rule out undefined behavior,
@@ -138,15 +138,15 @@ following steps:
 1. Clone the [`crucible`](https://github.com/GaloisInc/crucible) and `mir-json`
    submodules like so:
 
-   ```
+   :::{code-block} console
    $ git submodule update deps/crucible deps/mir-json
-   ```
+   :::
 
 2. Navigate to the `mir-json` submodule:
 
-   ```
+   :::{code-block} console
    $ cd deps/mir-json
-   ```
+   :::
 
 3. Follow the instructions laid out in the [`mir-json` installation
    instructions](https://github.com/GaloisInc/mir-json#installation-instructions)
@@ -156,15 +156,15 @@ following steps:
    [`crux-mir`](https://github.com/GaloisInc/crucible/tree/master/crux-mir)
    subdirectory of the `crucible` submodule:
 
-   ```
+   :::{code-block} console
    $ cd ../crucible/crux-mir/
-   ```
+   :::
 
 5. Run the `translate_libs.sh` script:
 
-   ```
+   :::{code-block} console
    $ ./translate_libs.sh
-   ```
+   :::
 
    This will compile the custom versions of the Rust standard libraries using
    `mir-json`, placing the results under the `rlibs` subdirectory.
@@ -172,42 +172,42 @@ following steps:
 6. Finally, define a `SAW_RUST_LIBRARY_PATH` environment variable that points
    to the newly created `rlibs` subdirectory:
 
-   ```
+   :::{code-block} console
    $ export SAW_RUST_LIBRARY_PATH=<...>/crucible/crux-mir/rlibs
-   ```
+   :::
 
 For `cargo`-based projects, `mir-json` provides a `cargo` subcommand called
 `cargo saw-build` that builds a JSON file suitable for use with SAW. `cargo
 saw-build` integrates directly with `cargo`, so you can pass flags to it like
 any other `cargo` subcommand. For example:
 
-```
+:::{code-block} console
 # Make sure that SAW_RUST_LIBRARY_PATH is defined, as described above
 $ cargo saw-build <other cargo flags>
 <snip>
 linking 11 mir files into <...>/example-364cf2df365c7055.linked-mir.json
 <snip>
-```
+:::
 
 Note that:
 
-* The full output of `cargo saw-build` here is omitted. The important part is
+- The full output of `cargo saw-build` here is omitted. The important part is
   the `.linked-mir.json` file that appears after `linking X mir files into`, as
   that is the JSON file that must be loaded with SAW.
-* `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
+- `SAW_RUST_LIBRARY_PATH` should point to the the MIR JSON files for the Rust
   standard library.
 
 `mir-json` also supports compiling individual `.rs` files through `mir-json`'s
 `saw-rustc` command. As the name suggests, it accepts all of the flags that
 `rustc` accepts. For example:
 
-```
+:::{code-block} console
 # Make sure that SAW_RUST_LIBRARY_PATH is defined, as described above
 $ saw-rustc example.rs <other rustc flags>
 <snip>
 linking 11 mir files into <...>/example.linked-mir.json
 <snip>
-```
+:::
 
 ## Notes on C++ Analysis
 
@@ -234,19 +234,19 @@ identifying the symbol you want to refer to. In addition, C++ names from
 namespaces can sometimes include quote marks in their LLVM encoding. For
 example:
 
-~~~~
+:::{code-block} llvm
 %"class.quux::Foo" = type { i32, i32 }
-~~~~
+:::
 
 This can be mentioned in SAW by saying:
 
-~~~~
+:::{code-block} sawscript
 llvm_type "%\"class.quux::Foo\""
-~~~~
+:::
 
 Finally, there is no support for calling constructors in specifications,
-so you will need to construct objects piece-by-piece using, *e.g.*,
+so you will need to construct objects piece-by-piece using, _e.g._,
 `llvm_alloc` and `llvm_points_to`.
 
-[^2]: <https://libcxx.llvm.org/docs/BuildingLibcxx.html>
+[^2]: <https://libcxx.llvm.org/index.html>
 [^3]: <https://github.com/travitch/whole-program-llvm>

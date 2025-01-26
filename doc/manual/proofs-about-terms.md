@@ -6,10 +6,10 @@ rule in later proofs, but ultimately these rewrite rules come together
 into a proof of some higher-level property about a software system.
 
 Whether proving small lemmas (in the form of rewrite rules) or a
-top-level theorem, the process builds on the idea of a *proof script*
+top-level theorem, the process builds on the idea of a _proof script_
 that is run by one of the top level proof commands.
 
-* `prove_print : ProofScript () -> Term -> TopLevel Theorem`
+- `prove_print : ProofScript () -> Term -> TopLevel Theorem`
 takes a proof script (which we'll describe next) and a `Term`. The
 `Term` should be of function type with a return value of `Bool` (`Bit`
 at the Cryptol level). It will then use the proof script to attempt to
@@ -17,11 +17,11 @@ show that the `Term` returns `True` for all possible inputs. If it is
 successful, it will print `Valid` and return a `Theorem`. If not, it
 will abort.
 
-* `sat_print : ProofScript () -> Term -> TopLevel ()` is similar
-except that it looks for a *single* value for which the `Term` evaluates
+- `sat_print : ProofScript () -> Term -> TopLevel ()` is similar
+except that it looks for a _single_ value for which the `Term` evaluates
 to `True` and prints out that value, returning nothing.
 
-* `prove_core : ProofScript () -> String -> TopLevel Theorem`
+- `prove_core : ProofScript () -> String -> TopLevel Theorem`
 proves and returns a `Theorem` from a string in SAWCore syntax.
 
 ## Automated Tactics
@@ -32,7 +32,7 @@ provers, respectively, and are typically good choices.
 
 For example, combining `prove_print` with `abc`:
 
-~~~~
+:::{code-block} console
 sawscript> t <- prove_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Valid
 sawscript> t
@@ -47,16 +47,16 @@ Theorem (let { x@1 = Prelude.Vec 8 Prelude.Bool
         (Cryptol.ecMul x@1 x@3 x
            (Cryptol.ecNumber (Cryptol.TCNum 2) x@1
               (Cryptol.PLiteralSeqBool x@2)))))
-~~~~
+:::
 
 Similarly, `sat_print` will show that the function returns `True` for
 one specific input (which it should, since we already know it returns
 `True` for all inputs):
 
-~~~~
+:::{code-block} console
 sawscript> sat_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Sat: [x = 0]
-~~~~
+:::
 
 In addition to these, the `bitwuzla`, `boolector`, `cvc4`, `cvc5`, `mathsat`,
 and `yices` provers are available. The internal decision procedure `rme`, short
@@ -75,17 +75,17 @@ During development of a proof, it can be useful to print various
 information about the current goal. The following tactics are useful in
 that context.
 
-* `print_goal : ProofScript ()` prints the entire goal in SAWCore
+- `print_goal : ProofScript ()` prints the entire goal in SAWCore
 syntax.
 
-* `print_goal_consts : ProofScript ()` prints a list of unfoldable constants
+- `print_goal_consts : ProofScript ()` prints a list of unfoldable constants
 in the current goal.
 
-* `print_goal_depth : Int -> ProofScript ()` takes an integer argument, `n`,
+- `print_goal_depth : Int -> ProofScript ()` takes an integer argument, `n`,
 and prints the goal up to depth `n`. Any elided subterms are printed
 with a `...` notation.
 
-* `print_goal_size : ProofScript ()` prints the number of nodes in the
+- `print_goal_size : ProofScript ()` prints the number of nodes in the
 DAG representation of the goal.
 
 ## Rewriting in Proof Scripts
@@ -94,15 +94,15 @@ One of the key techniques available for completing proofs in SAWScript
 is the use of rewriting or transformation. The following commands
 support this approach.
 
-* `simplify : Simpset -> ProofScript ()` works just like `rewrite`,
+- `simplify : Simpset -> ProofScript ()` works just like `rewrite`,
 except that it works in a `ProofScript` context and implicitly
 transforms the current (unnamed) goal rather than taking a `Term` as a
 parameter.
 
-* `goal_eval : ProofScript ()` will evaluate the current proof goal to a
+- `goal_eval : ProofScript ()` will evaluate the current proof goal to a
 first-order combination of primitives.
 
-* `goal_eval_unint : [String] -> ProofScript ()` works like `goal_eval`
+- `goal_eval_unint : [String] -> ProofScript ()` works like `goal_eval`
 but avoids expanding or simplifying the given names.
 
 ## Other Transformations
@@ -110,12 +110,12 @@ but avoids expanding or simplifying the given names.
 Some useful transformations are not easily specified using equality
 statements, and instead have special tactics.
 
-* `beta_reduce_goal : ProofScript ()` works like `beta_reduce_term` but
+- `beta_reduce_goal : ProofScript ()` works like `beta_reduce_term` but
 on the current goal. It takes any sub-expression of the form `(\x -> t)
 v` and replaces it with a transformed version of `t` in which all
 instances of `x` are replaced by `v`.
 
-* `unfolding : [String] -> ProofScript ()` works like `unfold_term` but
+- `unfolding : [String] -> ProofScript ()` works like `unfold_term` but
 on the current goal.
 
 Using `unfolding` is mostly valuable for proofs
@@ -124,15 +124,15 @@ provers is to unfold everything before sending a goal to a prover.
 However, with some provers it is possible to indicate that specific
 named subterms should be represented as uninterpreted functions.
 
-* `unint_bitwuzla : [String] -> ProofScript ()`
+- `unint_bitwuzla : [String] -> ProofScript ()`
 
-* `unint_cvc4 : [String] -> ProofScript ()`
+- `unint_cvc4 : [String] -> ProofScript ()`
 
-* `unint_cvc5 : [String] -> ProofScript ()`
+- `unint_cvc5 : [String] -> ProofScript ()`
 
-* `unint_yices : [String] -> ProofScript ()`
+- `unint_yices : [String] -> ProofScript ()`
 
-* `unint_z3 : [String] -> ProofScript ()`
+- `unint_z3 : [String] -> ProofScript ()`
 
 The list of `String` arguments in these cases indicates the names of the
 subterms to leave folded, and therefore present as uninterpreted
@@ -147,27 +147,27 @@ Note that each of the `unint_*` tactics have variants that are prefixed
 with `sbv_` and `w4_`. The `sbv_`-prefixed tactics make use of the SBV
 library to represent and solve SMT queries:
 
-* `sbv_unint_bitwuzla : [String] -> ProofScript ()`
+- `sbv_unint_bitwuzla : [String] -> ProofScript ()`
 
-* `sbv_unint_cvc4 : [String] -> ProofScript ()`
+- `sbv_unint_cvc4 : [String] -> ProofScript ()`
 
-* `sbv_unint_cvc5 : [String] -> ProofScript ()`
+- `sbv_unint_cvc5 : [String] -> ProofScript ()`
 
-* `sbv_unint_yices : [String] -> ProofScript ()`
+- `sbv_unint_yices : [String] -> ProofScript ()`
 
-* `sbv_unint_z3 : [String] -> ProofScript ()`
+- `sbv_unint_z3 : [String] -> ProofScript ()`
 
 The `w4_`-prefixed tactics make use of the What4 library instead of SBV:
 
-* `w4_unint_bitwuzla : [String] -> ProofScript ()`
+- `w4_unint_bitwuzla : [String] -> ProofScript ()`
 
-* `w4_unint_cvc4 : [String] -> ProofScript ()`
+- `w4_unint_cvc4 : [String] -> ProofScript ()`
 
-* `w4_unint_cvc5 : [String] -> ProofScript ()`
+- `w4_unint_cvc5 : [String] -> ProofScript ()`
 
-* `w4_unint_yices : [String] -> ProofScript ()`
+- `w4_unint_yices : [String] -> ProofScript ()`
 
-* `w4_unint_z3 : [String] -> ProofScript ()`
+- `w4_unint_z3 : [String] -> ProofScript ()`
 
 In most specifications, the choice of SBV versus What4 is not important, as
 both libraries are broadly compatible in terms of functionality. There are some
@@ -208,7 +208,7 @@ a cache at the specified path until it is actually needed.
 
 There are also a number of SAW commands related to solver caching.
 
-* `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
+- `set_solver_cache_path` is like setting `SAW_SOLVER_CACHE_PATH` for the
   remainder of the current session, but opens an LMDB database at the specified
   path immediately. If a cache is already in use in the current session
   (i.e. through a prior call to `set_solver_cache_path` or through
@@ -216,18 +216,18 @@ There are also a number of SAW commands related to solver caching.
   then all entries in the cache already in use will be copied to the new cache
   being opened.
 
-* `clean_mismatched_versions_solver_cache` will remove all entries in the
+- `clean_mismatched_versions_solver_cache` will remove all entries in the
   solver result cache which were created using solver backend versions which do
   not match the versions in the current environment. This can be run after an
   update to clear out any old, unusable entries from the solver cache. This
   command can also be run directly from the command line through the
   `--clean-mismatched-versions-solver-cache` command-line option.
 
-* `print_solver_cache` prints to the console all entries in the cache whose
+- `print_solver_cache` prints to the console all entries in the cache whose
   SHA256 hash keys start with the given hex string. Providing an empty string
   results in all entries in the cache being printed.
 
-* `print_solver_cache_stats` prints to the console statistics including the
+- `print_solver_cache_stats` prints to the console statistics including the
   size of the solver cache, where on disk it is stored, and some counts of how
   often it has been used during the current session.
 
@@ -239,7 +239,7 @@ interacting with the LMDB databases kept by SAW for solver caching.
 Below is an example of using solver caching with `saw -v Debug`. Only the
 relevant output is shown, the rest abbreviated with "...".
 
-~~~~
+:::{code-block} console
 sawscript> set_solver_cache_path "example.cache"
 sawscript> prove_print z3 {{ \(x:[8]) -> x+x == x*2 }}
 [22:13:00.832] Caching result: d1f5a76e7a0b7c01 (SBV 9.2, Z3 4.8.7 - 64 bit)
@@ -270,7 +270,7 @@ sawscript> print_solver_cache_stats
 [22:13:20.585] - 2 results cached in example.cache
 [22:13:20.585] - 2 insertions into the cache so far this run (0 failed attempts)
 [22:13:20.585] - 1 usage of cached results so far this run (0 failed attempts)
-~~~~
+:::
 
 ## Other External Provers
 
@@ -278,7 +278,7 @@ In addition to the built-in automated provers already discussed, SAW
 supports more generic interfaces to other arbitrary theorem provers
 supporting specific interfaces.
 
-* `external_aig_solver : String -> [String] -> ProofScript ()`
+- `external_aig_solver : String -> [String] -> ProofScript ()`
 supports theorem provers that can take input as a single-output AIGER
 file. The first argument is the name of the executable to run. The
 second argument is the list of command-line parameters to pass to that
@@ -286,7 +286,7 @@ executable. Any element of this list equal to `"%f"` will be replaced
 with the name of the temporary AIGER file generated for the proof goal.
 The output from the solver is expected to be in DIMACS solution format.
 
-* `external_cnf_solver : String -> [String] -> ProofScript ()`
+- `external_cnf_solver : String -> [String] -> ProofScript ()`
 works similarly but for SAT solvers that take input in DIMACS CNF format
 and produce output in DIMACS solution format.
 
@@ -297,15 +297,15 @@ until a later time, there are functions to write the current goal to a
 file in various formats, and then assume that the goal is valid through
 the rest of the script.
 
-* `offline_aig : String -> ProofScript ()`
+- `offline_aig : String -> ProofScript ()`
 
-* `offline_cnf : String -> ProofScript ()`
+- `offline_cnf : String -> ProofScript ()`
 
-* `offline_extcore : String -> ProofScript ()`
+- `offline_extcore : String -> ProofScript ()`
 
-* `offline_smtlib2 : String -> ProofScript ()`
+- `offline_smtlib2 : String -> ProofScript ()`
 
-* `offline_unint_smtlib2 : [String] -> String -> ProofScript ()`
+- `offline_unint_smtlib2 : [String] -> String -> ProofScript ()`
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
@@ -319,26 +319,26 @@ listed in its first argument as uninterpreted functions.
 Some proofs can be completed using unsound placeholders, or using
 techniques that do not require significant computation.
 
-* `assume_unsat : ProofScript ()` indicates that the current goal
+- `assume_unsat : ProofScript ()` indicates that the current goal
 should be assumed to be unsatisfiable. This is an alias for
 `assume_valid`. Users should prefer to use `admit` instead.
 
-* `assume_valid : ProofScript ()` indicates that the current
+- `assume_valid : ProofScript ()` indicates that the current
 goal should be assumed to be valid.  Users should prefer to
 use `admit` instead
 
-* `admit : String -> ProofScript ()` indicates that the current
+- `admit : String -> ProofScript ()` indicates that the current
 goal should be assumed to be valid without proof. The given
 string should be used to record why the user has decided to
 assume this proof goal.
 
-* `quickcheck : Int -> ProofScript ()` runs the goal on the given
+- `quickcheck : Int -> ProofScript ()` runs the goal on the given
 number of random inputs, and succeeds if the result of evaluation is
 always `True`. This is unsound, but can be helpful during proof
 development, or as a way to provide some evidence for the validity of a
 specification believed to be true but difficult or infeasible to prove.
 
-* `trivial : ProofScript ()` states that the current goal should
+- `trivial : ProofScript ()` states that the current goal should
 be trivially true. This tactic recognizes instances of equality
 that can be demonstrated by conversion alone. In particular
 it is able to prove `EqTrue x` goals where `x` reduces to
@@ -352,28 +352,28 @@ multiple goals. The following commands can introduce or work with
 multiple goals. These are experimental and can be used only after
 `enable_experimental` has been called.
 
-* `goal_apply : Theorem -> ProofScript ()` will apply a given
+- `goal_apply : Theorem -> ProofScript ()` will apply a given
 introduction rule to the current goal. This will result in zero or more
 new subgoals.
 
-* `goal_assume : ProofScript Theorem` will convert the first hypothesis
+- `goal_assume : ProofScript Theorem` will convert the first hypothesis
 in the current proof goal into a local `Theorem`
 
-* `goal_insert : Theorem -> ProofScript ()` will insert a given
+- `goal_insert : Theorem -> ProofScript ()` will insert a given
 `Theorem` as a new hypothesis in the current proof goal.
 
-* `goal_intro : String -> ProofScript Term` will introduce a quantified
+- `goal_intro : String -> ProofScript Term` will introduce a quantified
 variable in the current proof goal, returning the variable as a `Term`.
 
-* `goal_when : String -> ProofScript () -> ProofScript ()` will run the
+- `goal_when : String -> ProofScript () -> ProofScript ()` will run the
 given proof script only when the goal name contains the given string.
 
-* `goal_exact : Term -> ProofScript ()` will attempt to use the given
+- `goal_exact : Term -> ProofScript ()` will attempt to use the given
 term as an exact proof for the current goal. This tactic will succeed
 whever the type of the given term exactly matches the current goal,
 and will fail otherwise.
 
-* `split_goal : ProofScript ()` will split a goal of the form
+- `split_goal : ProofScript ()` will split a goal of the form
 `Prelude.and prop1 prop2` into two separate goals `prop1` and `prop2`.
 
 ## Proof Failure and Satisfying Assignments
@@ -391,17 +391,17 @@ In the case of `ProofResult`, a statement may be valid or there may be a
 counter-example. In the case of `SatResult`, there may be a satisfying
 assignment or the statement may be unsatisfiable.
 
-* `prove : ProofScript SatResult -> Term -> TopLevel ProofResult`
+- `prove : ProofScript SatResult -> Term -> TopLevel ProofResult`
 
-* `sat : ProofScript SatResult -> Term -> TopLevel SatResult`
+- `sat : ProofScript SatResult -> Term -> TopLevel SatResult`
 
 To operate on these new types, SAWScript includes a pair of functions:
 
-* `caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b` takes a
+- `caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b` takes a
 `ProofResult`, a value to return in the case that the statement is
 valid, and a function to run on the counter-example, if there is one.
 
-* `caseSatResult : {b} SatResult -> b -> (Term -> b) -> b` has the same
+- `caseSatResult : {b} SatResult -> b -> (Term -> b) -> b` has the same
 shape: it returns its first argument if the result represents an
 unsatisfiable statement, or its second argument applied to a satisfying
 assignment if it finds one.
@@ -420,15 +420,15 @@ particularly equivalence checking on AIGs.
 To take advantage of this capability, a handful of built-in commands can
 operate on AIGs.
 
-* `bitblast : Term -> TopLevel AIG` represents a `Term` as an `AIG` by
+- `bitblast : Term -> TopLevel AIG` represents a `Term` as an `AIG` by
 "blasting" all of its primitive operations (things like bit-vector
 addition) down to the level of individual bits.
 
-* `load_aig : String -> TopLevel AIG` loads an `AIG` from an external
+- `load_aig : String -> TopLevel AIG` loads an `AIG` from an external
 AIGER file.
 
-* `save_aig : String -> AIG -> TopLevel ()` saves an `AIG` to an
+- `save_aig : String -> AIG -> TopLevel ()` saves an `AIG` to an
 external AIGER file.
 
-* `save_aig_as_cnf : String -> AIG -> TopLevel ()` writes an `AIG` out
+- `save_aig_as_cnf : String -> AIG -> TopLevel ()` writes an `AIG` out
 in CNF format for input into a standard SAT solver.

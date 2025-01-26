@@ -13,7 +13,7 @@ of possible concrete executions.
 As a concrete example, consider the following C program that returns
 the maximum of two values:
 
-~~~~ c
+:::{code-block} c
 unsigned int max(unsigned int x, unsigned int y) {
     if (y > x) {
         return y;
@@ -21,28 +21,28 @@ unsigned int max(unsigned int x, unsigned int y) {
         return x;
     }
 }
-~~~~
+:::
 
 If you call this function with two concrete inputs, like this:
 
-~~~~ c
+:::{code-block} c
 int r = max(5, 4);
-~~~~
+:::
 
 then it will assign the value `5` to `r`. However, we can also consider what
 it will do for *arbitrary* inputs. Consider the following example:
 
-~~~~ c
+:::{code-block} c
 int r = max(a, b);
-~~~~
+:::
 
 where `a` and `b` are variables with unknown values. It is still
 possible to describe the result of the `max` function in terms of `a`
 and `b`. The following expression describes the value of `r`:
 
-~~~~
+:::{code-block} text
 ite (b > a) b a
-~~~~
+:::
 
 where `ite` is the "if-then-else" mathematical function, which based on
 the value of the first argument returns either the second or third. One
@@ -65,24 +65,24 @@ is similar to building a test harness for that same code.
 More specifically, the setup process for a test harness typically takes
 the following form:
 
-* Initialize or allocate any resources needed by the code. For Java and
-  LLVM code, this typically means allocating memory and setting the
-  initial values of variables.
+1. Initialize or allocate any resources needed by the code. For Java and
+   LLVM code, this typically means allocating memory and setting the
+   initial values of variables.
 
-* Execute the code.
+2. Execute the code.
 
-* Check the desired properties of the system state after the code
-  completes.
+3. Check the desired properties of the system state after the code
+   completes.
 
 Accordingly, three pieces of information are particularly relevant to
 the symbolic execution process, and are therefore needed as input to the
 symbolic execution system:
 
-* The initial (potentially symbolic) state of the system.
+- The initial (potentially symbolic) state of the system.
 
-* The code to execute.
+- The code to execute.
 
-* The final state of the system, and which parts of it are relevant to
+- The final state of the system, and which parts of it are relevant to
   the properties being tested.
 
 In the following sections, we describe how the Java and LLVM analysis

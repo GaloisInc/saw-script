@@ -15,7 +15,7 @@ verifications, allowing the proof process to be decomposed.
 
 Verification of LLVM is controlled by the `llvm_verify` command.
 
-~~~~
+:::{code-block} sawscript
 llvm_verify :
   LLVMModule ->
   String ->
@@ -24,7 +24,7 @@ llvm_verify :
   LLVMSetup () ->
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpec
-~~~~
+:::
 
 The first two arguments specify the module and function name to verify,
 as with `llvm_verify`. The third argument specifies the list of
@@ -38,7 +38,7 @@ that call this one.
 
 Similar commands are available for JVM programs:
 
-~~~~
+:::{code-block} sawscript
 jvm_verify :
   JavaClass ->
   String ->
@@ -47,11 +47,11 @@ jvm_verify :
   JVMSetup () ->
   ProofScript SatResult ->
   TopLevel JVMMethodSpec
-~~~~
+:::
 
 And for MIR programs:
 
-~~~~
+:::{code-block} sawscript
 mir_verify :
   MIRModule ->
   String ->
@@ -60,7 +60,7 @@ mir_verify :
   MIRSetup () ->
   ProofScript () ->
   TopLevel MIRSpec
-~~~~
+:::
 
 ### Running a MIR-based verification
 
@@ -72,16 +72,16 @@ The `String` supplied as an argument to `mir_verify` is expected to be a
 function _identifier_. An identifier is expected adhere to one of the following
 conventions:
 
-* `<crate name>/<disambiguator>::<function path>`
-* `<crate name>::<function path>`
+- `<crate name>/<disambiguator>::<function path>`
+- `<crate name>::<function path>`
 
 Where:
 
-* `<crate name>` is the name of the crate in which the function is defined. (If
+- `<crate name>` is the name of the crate in which the function is defined. (If
   you produced your MIR JSON file by compiling a single `.rs` file with
   `saw-rustc`, then the crate name is the same as the name of the file, but
   without the `.rs` file extension.)
-* `<disambiguator>` is a hash of the crate and its dependencies. In extreme
+- `<disambiguator>` is a hash of the crate and its dependencies. In extreme
   cases, it is possible for two different crates to have identical crate names,
   in which case the disambiguator must be used to distinguish between the two
   crates. In the common case, however, most crate names will correspond to
@@ -89,15 +89,15 @@ Where:
   `/<disambiguator>` part of the `String` in this case. If you supply an
   identifier with an ambiguous crate name and omit the disambiguator, then SAW
   will raise an error.
-* `<function path>` is the path to the function within the crate. Sometimes,
+- `<function path>` is the path to the function within the crate. Sometimes,
   this is as simple as the function name itself. In other cases, a function
   path may involve multiple _segments_, depending on the module hierarchy for
   the program being verified. For instance, a `read` function located in
   `core/src/ptr/mod.rs` will have the identifier:
 
-  ```
+  :::{code-block} text
   core::ptr::read
-  ```
+  :::
 
   Where `core` is the crate name and `ptr::read` is the function path, which
   has two segments `ptr` and `read`. There are also some special forms of
@@ -105,9 +105,9 @@ Where:
   For instance, if a function is defined in an `impl` block, then it will have
   `{impl}` as one of its segments, e.g.,
 
-  ```
+  :::{code-block} text
   core::ptr::const_ptr::{impl}::offset
-  ```
+  :::
 
   If you are in doubt about what the full identifier for a given function is,
   consult the MIR JSON file for your program.
@@ -121,11 +121,11 @@ or `MIRSetup ()`.
 
 A specifications for Crucible consists of three logical components:
 
-* A specification of the initial state before execution of the function.
+- A specification of the initial state before execution of the function.
 
-* A description of how to call the function within that state.
+- A description of how to call the function within that state.
 
-* A specification of the expected final value of the program state.
+- A specification of the expected final value of the program state.
 
 These three portions of the specification are written in sequence within a `do`
 block of type `{LLVM,JVM,MIR}Setup`. The command `{llvm,jvm,mir}_execute_func`
@@ -143,11 +143,11 @@ values of at least some elements of the program state must contain fresh
 variables. These are created in a specification with the
 `{llvm,jvm,mir}_fresh_var` commands rather than `fresh_symbolic`.
 
-* `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
+- `llvm_fresh_var : String -> LLVMType -> LLVMSetup Term`
 
-* `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
+- `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
-* `mir_fresh_var : String -> MIRType -> MIRSetup Term`
+- `mir_fresh_var : String -> MIRType -> MIRSetup Term`
 
 The first parameter to both functions is a name, used only for
 presentation. It's possible (though not recommended) to create multiple
@@ -166,53 +166,53 @@ function such as `llvm_fresh_expanded_val` (for LLVM verification) or
 
 LLVM types are built with this set of functions:
 
-* `llvm_int : Int -> LLVMType`
-* `llvm_alias : String -> LLVMType`
-* `llvm_array : Int -> LLVMType -> LLVMType`
-* `llvm_float : LLVMType`
-* `llvm_double : LLVMType`
-* `llvm_packed_struct : [LLVMType] -> LLVMType`
-* `llvm_struct_type : [LLVMType] -> LLVMType`
+- `llvm_int : Int -> LLVMType`
+- `llvm_alias : String -> LLVMType`
+- `llvm_array : Int -> LLVMType -> LLVMType`
+- `llvm_float : LLVMType`
+- `llvm_double : LLVMType`
+- `llvm_packed_struct : [LLVMType] -> LLVMType`
+- `llvm_struct_type : [LLVMType] -> LLVMType`
 
 Java types are built up using the following functions:
 
-* `java_bool : JavaType`
-* `java_byte : JavaType`
-* `java_char : JavaType`
-* `java_short : JavaType`
-* `java_int : JavaType`
-* `java_long : JavaType`
-* `java_float : JavaType`
-* `java_double : JavaType`
-* `java_class : String -> JavaType`
-* `java_array : Int -> JavaType -> JavaType`
+- `java_bool : JavaType`
+- `java_byte : JavaType`
+- `java_char : JavaType`
+- `java_short : JavaType`
+- `java_int : JavaType`
+- `java_long : JavaType`
+- `java_float : JavaType`
+- `java_double : JavaType`
+- `java_class : String -> JavaType`
+- `java_array : Int -> JavaType -> JavaType`
 
 MIR types are built up using the following functions:
 
-* `mir_adt : MIRAdt -> MIRType`
-* `mir_array : Int -> MIRType -> MIRType`
-* `mir_bool : MIRType`
-* `mir_char : MIRType`
-* `mir_i8 : MIRType`
-* `mir_i6 : MIRType`
-* `mir_i32 : MIRType`
-* `mir_i64 : MIRType`
-* `mir_i128 : MIRType`
-* `mir_isize : MIRType`
-* `mir_f32 : MIRType`
-* `mir_f64 : MIRType`
-* `mir_lifetime : MIRType`
-* `mir_ref : MIRType -> MIRType`
-* `mir_ref_mut : MIRType -> MIRType`
-* `mir_slice : MIRType -> MIRType`
-* `mir_str : MIRType`
-* `mir_tuple : [MIRType] -> MIRType`
-* `mir_u8 : MIRType`
-* `mir_u6 : MIRType`
-* `mir_u32 : MIRType`
-* `mir_u64 : MIRType`
-* `mir_u128 : MIRType`
-* `mir_usize : MIRType`
+- `mir_adt : MIRAdt -> MIRType`
+- `mir_array : Int -> MIRType -> MIRType`
+- `mir_bool : MIRType`
+- `mir_char : MIRType`
+- `mir_i8 : MIRType`
+- `mir_i6 : MIRType`
+- `mir_i32 : MIRType`
+- `mir_i64 : MIRType`
+- `mir_i128 : MIRType`
+- `mir_isize : MIRType`
+- `mir_f32 : MIRType`
+- `mir_f64 : MIRType`
+- `mir_lifetime : MIRType`
+- `mir_ref : MIRType -> MIRType`
+- `mir_ref_mut : MIRType -> MIRType`
+- `mir_slice : MIRType -> MIRType`
+- `mir_str : MIRType`
+- `mir_tuple : [MIRType] -> MIRType`
+- `mir_u8 : MIRType`
+- `mir_u6 : MIRType`
+- `mir_u32 : MIRType`
+- `mir_u64 : MIRType`
+- `mir_u128 : MIRType`
+- `mir_usize : MIRType`
 
 Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
@@ -232,7 +232,7 @@ bitcode by compiling your code with `clang -S -emit-llvm`.
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
 
-* `llvm_type : String -> LLVMType`
+- `llvm_type : String -> LLVMType`
 
 For example, `llvm_type "i32"` yields the same result as `llvm_int 32`.
 
@@ -255,9 +255,9 @@ these (both structures and arrays).
 The `llvm_term`, `jvm_term`, and `mir_term` functions create a `SetupValue`,
 `JVMValue`, or `MIRValue`, respectively, from a `Term`:
 
-* `llvm_term : Term -> SetupValue`
-* `jvm_term : Term -> JVMValue`
-* `mir_term : Term -> MIRValue`
+- `llvm_term : Term -> SetupValue`
+- `jvm_term : Term -> JVMValue`
+- `mir_term : Term -> MIRValue`
 
 The value that these functions return will have an LLVM, JVM, or MIR type
 corresponding to the Cryptol type of the `Term` argument. (For more information
@@ -277,67 +277,67 @@ Cryptol types (and vice versa) in this way.
 
 The following LLVM types correspond to Cryptol types:
 
-* `llvm_alias <name>`: Corresponds to the same Cryptol type as the type used
+- `llvm_alias <name>`: Corresponds to the same Cryptol type as the type used
   in the definition of `<name>`.
-* `llvm_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+- `llvm_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
   where `<cty>` is the Cryptol type corresponding to `<ty>`.
-* `llvm_int <n>`: Corresponds to the Cryptol word `[<n>]`.
-* `llvm_struct_type [<ty_1>, ..., <ty_n>]` and `llvm_packed_struct [<ty_1>, ..., <ty_n>]`:
+- `llvm_int <n>`: Corresponds to the Cryptol word `[<n>]`.
+- `llvm_struct_type [<ty_1>, ..., <ty_n>]` and `llvm_packed_struct [<ty_1>, ..., <ty_n>]`:
   Corresponds to the Cryptol tuple `(<cty_1>, ..., <cty_n>)`, where `<cty_i>`
   is the Cryptol type corresponding to `<ty_i>` for each `i` ranging from `1`
   to `n`.
 
 The following LLVM types do _not_ correspond to Cryptol types:
 
-* `llvm_double`
-* `llvm_float`
-* `llvm_pointer`
+- `llvm_double`
+- `llvm_float`
+- `llvm_pointer`
 
 #### JVM verification
 
 The following Java types correspond to Cryptol types:
 
-* `java_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+- `java_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
   where `<cty>` is the Cryptol type corresponding to `<ty>`.
-* `java_bool`: Corresponds to the Cryptol `Bit` type.
-* `java_byte`: Corresponds to the Cryptol `[8]` type.
-* `java_char`: Corresponds to the Cryptol `[16]` type.
-* `java_int`: Corresponds to the Cryptol `[32]` type.
-* `java_long`: Corresponds to the Cryptol `[64]` type.
-* `java_short`: Corresponds to the Cryptol `[16]` type.
+- `java_bool`: Corresponds to the Cryptol `Bit` type.
+- `java_byte`: Corresponds to the Cryptol `[8]` type.
+- `java_char`: Corresponds to the Cryptol `[16]` type.
+- `java_int`: Corresponds to the Cryptol `[32]` type.
+- `java_long`: Corresponds to the Cryptol `[64]` type.
+- `java_short`: Corresponds to the Cryptol `[16]` type.
 
 The following Java types do _not_ correspond to Cryptol types:
 
-* `java_class`
-* `java_double`
-* `java_float`
+- `java_class`
+- `java_double`
+- `java_float`
 
 #### MIR verification
 
 The following MIR types correspond to Cryptol types:
 
-* `mir_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
+- `mir_array <n> <ty>`: Corresponds to the Cryptol sequence `[<n>][<cty>]`,
   where `<cty>` is the Cryptol type corresponding to `<ty>`.
-* `mir_bool`: Corresponds to the Cryptol `Bit` type.
-* `mir_char`: Corresponds to the Cryptol `[32]` type.
-* `mir_i8` and `mir_u8`: Corresponds to the Cryptol `[8]` type.
-* `mir_i16` and `mir_u16`: Corresponds to the Cryptol `[16]` type.
-* `mir_i32` and `mir_u32`: Corresponds to the Cryptol `[32]` type.
-* `mir_i64` and `mir_u64`: Corresponds to the Cryptol `[64]` type.
-* `mir_i128` and `mir_u128`: Corresponds to the Cryptol `[128]` type.
-* `mir_isize` and `mir_usize`: Corresponds to the Cryptol `[32]` type.
-* `mir_tuple [<ty_1>, ..., <ty_n>]`: Corresponds to the Cryptol tuple
+- `mir_bool`: Corresponds to the Cryptol `Bit` type.
+- `mir_char`: Corresponds to the Cryptol `[32]` type.
+- `mir_i8` and `mir_u8`: Corresponds to the Cryptol `[8]` type.
+- `mir_i16` and `mir_u16`: Corresponds to the Cryptol `[16]` type.
+- `mir_i32` and `mir_u32`: Corresponds to the Cryptol `[32]` type.
+- `mir_i64` and `mir_u64`: Corresponds to the Cryptol `[64]` type.
+- `mir_i128` and `mir_u128`: Corresponds to the Cryptol `[128]` type.
+- `mir_isize` and `mir_usize`: Corresponds to the Cryptol `[32]` type.
+- `mir_tuple [<ty_1>, ..., <ty_n>]`: Corresponds to the Cryptol tuple
   `(<cty_1>, ..., <cty_n>)`, where `<cty_i>` is the Cryptol type corresponding
   to `<ty_i>` for each `i` ranging from `1` to `n`.
 
 The following MIR types do _not_ correspond to Cryptol types:
 
-* `mir_adt`
-* `mir_f32`
-* `mir_f64`
-* `mir_ref` and `mir_ref_mut`
-* `mir_slice`
-* `mir_str`
+- `mir_adt`
+- `mir_f32`
+- `mir_f64`
+- `mir_ref` and `mir_ref_mut`
+- `mir_slice`
+- `mir_str`
 
 ## Executing
 
@@ -345,18 +345,18 @@ Once the initial state has been configured, the `{llvm,jvm,mir}_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
-* `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
-* `jvm_execute_func : [JVMValue] -> JVMSetup ()`
-* `mir_execute_func : [MIRValue] -> MIRSetup ()`
+- `llvm_execute_func : [SetupValue] -> LLVMSetup ()`
+- `jvm_execute_func : [JVMValue] -> JVMSetup ()`
+- `mir_execute_func : [MIRValue] -> MIRSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
 verified use the `{llvm,jvm,mir}_return` command.
 
-* `llvm_return : SetupValue -> LLVMSetup ()`
-* `jvm_return : JVMValue -> JVMSetup ()`
-* `mir_return : MIRValue -> MIRSetup ()`
+- `llvm_return : SetupValue -> LLVMSetup ()`
+- `jvm_return : JVMValue -> JVMSetup ()`
+- `mir_return : MIRValue -> MIRSetup ()`
 
 ## A First Simple Example
 
@@ -364,31 +364,31 @@ The commands introuduced so far are sufficient to verify simple programs
 that do not use pointers (or that use them only internally). Consider,
 for instance the C program that adds its two arguments together:
 
-~~~~
+:::{code-block} c
 #include <stdint.h>
 uint32_t add(uint32_t x, uint32_t y) {
     return x + y;
 }
-~~~~
+:::
 
 We can specify this function's expected behavior as follows:
 
-~~~~
+:::{code-block} sawscript
 let add_setup = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
     y <- llvm_fresh_var "y" (llvm_int 32);
     llvm_execute_func [llvm_term x, llvm_term y];
     llvm_return (llvm_term {{ x + y : [32] }});
 };
-~~~~
+:::
 
 We can then compile the C file `add.c` into the bitcode file `add.bc`
 and verify it with ABC:
 
-~~~~
+:::{code-block} sawscript
 m <- llvm_load_module "add.bc";
 add_ms <- llvm_verify m "add" [] false add_setup abc;
-~~~~
+:::
 
 ## Compositional Verification
 
@@ -411,37 +411,37 @@ specified by one of these parameters, the simulator will not follow
 calls to the associated target. Instead, it will perform the following
 steps:
 
-* Check that all `llvm_points_to` and `llvm_precond` statements
+- Check that all `llvm_points_to` and `llvm_precond` statements
   (or the corresponding JVM or MIR statements) in the specification are
   satisfied.
 
-* Update the simulator state and optionally construct a return value as
+- Update the simulator state and optionally construct a return value as
   described in the specification.
 
 More concretely, building on the previous example, say we have a
 doubling function written in terms of `add`:
 
-~~~~
+:::{code-block} c
 uint32_t dbl(uint32_t x) {
     return add(x, x);
 }
-~~~~
+:::
 
 It has a similar specification to `add`:
 
-~~~~
+:::{code-block} sawscript
 let dbl_setup = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
     llvm_execute_func [llvm_term x];
     llvm_return (llvm_term {{ x + x : [32] }});
 };
-~~~~
+:::
 
 And we can verify it using what we've already proved about `add`:
 
-~~~~
+:::{code-block} sawscript
 llvm_verify m "dbl" [add_ms] false dbl_setup abc;
-~~~~
+:::
 
 In this case, doing the verification compositionally doesn't save
 computational effort, since the functions are so simple, but it
@@ -456,7 +456,7 @@ lengths to check for this.
 
 Here is an example of this pitfall in an LLVM verification. Given this C code:
 
-~~~ c
+::: c
 void side_effect(uint32_t *a) {
   *a = 0;
 }
@@ -466,11 +466,11 @@ uint32_t foo(uint32_t x) {
   side_effect(&b);
   return b;
 }
-~~~
+:::
 
 And the following SAW specifications:
 
-~~~
+:::{code-block} sawscript
 let side_effect_spec = do {
   a_ptr <- llvm_alloc (llvm_int 32);
   a_val <- llvm_fresh_var "a_val" (llvm_int 32);
@@ -486,15 +486,15 @@ let foo_spec = do {
 
   llvm_return (llvm_term x);
 };
-~~~
+:::
 
 Should SAW be able to verify the `foo` function against `foo_spec` using
 compositional verification? That is, should the following be expected to work?
 
-~~~
+:::{code-block} sawscript
 side_effect_ov <- llvm_verify m "side_effect" [] false side_effect_spec z3;
 llvm_verify m "foo" [side_effect_ov] false foo_spec z3;
-~~~
+:::
 
 A literal reading of `side_effect_spec` would suggest that the `side_effect`
 function allocates `a_ptr` but then does nothing with it, implying that `foo`
@@ -514,14 +514,14 @@ postconditions. Attempting to read from invalidated memory constitutes an
 error, as can be seen in this portion of the error message when attempting to
 verify `foo` against `foo_spec`:
 
-~~~
+:::{code-block} console
 invalidate (state of memory allocated in precondition (at side.saw:3:12) not described in postcondition)
-~~~
+:::
 
 To fix this particular issue, add an `llvm_points_to` statement to
 `side_effect_spec`:
 
-~~~
+:::{code-block} sawscript
 let side_effect_spec = do {
   a_ptr <- llvm_alloc (llvm_int 32);
   a_val <- llvm_fresh_var "a_val" (llvm_int 32);
@@ -532,7 +532,7 @@ let side_effect_spec = do {
   // This is new
   llvm_points_to a_ptr (llvm_term {{ 0 : [32] }});
 };
-~~~
+:::
 
 After making this change, SAW will reject `foo_spec` for a different reason, as
 it claims that `foo` returns its argument unchanged when it actually returns
@@ -551,7 +551,7 @@ The same pitfalls apply to compositional MIR verification, with a couple of key
 differences. In MIR verification, mutable references are allocated using
 `mir_alloc_mut`. Here is a Rust version of the pitfall program above:
 
-~~~ rust
+:::{code-block} rust
 pub fn side_effect(a: &mut u32) {
     *a = 0;
 }
@@ -561,9 +561,9 @@ pub fn foo(x: u32) -> u32 {
     side_effect(&mut b);
     b
 }
-~~~
+:::
 
-~~~
+:::{code-block} sawscript
 let side_effect_spec = do {
   a_ref <- mir_alloc_mut mir_u32;
   a_val <- mir_fresh_var "a_val" mir_u32;
@@ -579,15 +579,15 @@ let foo_spec = do {
 
   mir_return (mir_term {{ x }});
 };
-~~~
+:::
 
 Just like above, if you attempted to prove `foo` against `foo_spec` using
 compositional verification:
 
-~~~
+:::{code-block} sawscript
 side_effect_ov <- mir_verify m "test::side_effect" [] false side_effect_spec z3;
 mir_verify m "test::foo" [side_effect_ov] false foo_spec z3;
-~~~
+:::
 
 Then SAW would throw an error, as `side_effect_spec` underspecifies the value
 of `a_ref` in its postconditions. `side_effect_spec` can similarly be repaired
@@ -605,13 +605,13 @@ _even if the function that calls the override never uses the allocations_.
 To illustrate this point more finely, suppose that the `foo` function had
 instead been defined like this:
 
-~~~ rust
+:::{code-block} rust
 pub fn foo(x: u32) -> u32 {
     let mut b: u32 = x;
     side_effect(&mut b);
     42
 }
-~~~
+:::
 
 Here, it does not particularly matter what effects the `side_effect` function
 has on its argument, as `foo` will now return `42` regardless. Still, if you
@@ -630,8 +630,7 @@ mutable global variables in their postconditions. To illustrate this using LLVM
 verification, here is a variant of the C program from the previous example that
 uses a mutable global variable `a`:
 
-~~~ c
-
+:::{code-block} c
 uint32_t a = 42;
 
 void side_effect(void) {
@@ -642,12 +641,12 @@ uint32_t foo(void) {
   side_effect();
   return a;
 }
-~~~
+:::
 
 If we attempted to verify `foo` against this `foo_spec` specification using
 compositional verification:
 
-~~~
+:::{code-block} sawscript
 let side_effect_spec = do {
   llvm_alloc_global "a";
   llvm_points_to (llvm_global "a") (llvm_global_initializer "a");
@@ -666,7 +665,7 @@ let foo_spec = do {
 
 side_effect_ov <- llvm_verify m "side_effect" [] false side_effect_spec z3;
 llvm_verify m "foo" [side_effect_ov] false foo_spec z3;
-~~~
+:::
 
 Then SAW would reject it, as `side_effect_spec` does not specify what `a`'s
 value should be in its postconditions. Just as with local mutable allocations,
@@ -680,7 +679,7 @@ referred to as `static mut` items. (See the [MIR static
 items](#mir-static-items) section for more information). Here is a Rust version
 of the program above:
 
-~~~ rust
+:::{code-block} rust
 static mut A: u32 = 42;
 
 pub fn side_effect() {
@@ -693,9 +692,9 @@ pub fn foo() -> u32 {
     side_effect();
     unsafe { A }
 }
-~~~
+:::
 
-~~~
+:::{code-block} sawscript
 let side_effect_spec = do {
   mir_points_to (mir_static "test::A") (mir_static_initializer "test::A");
 
@@ -712,7 +711,7 @@ let foo_spec = do {
 
 side_effect_ov <- mir_verify m "side_effect" [] false side_effect_spec z3;
 mir_verify m "foo" [side_effect_ov] false foo_spec z3;
-~~~
+:::
 
 Just as above, we can repair this by adding a `mir_points_to` statement in
 `side_effect_spec`'s postconditions that specifies that `A` is set to `0`.
@@ -726,12 +725,12 @@ postconditions, _even if the function that calls the override never uses the
 static items_. For example, if the `foo` function were instead defined like
 this:
 
-~~~ rust
+:::{code-block} rust
 pub fn foo() -> u32 {
     side_effect();
     42
 }
-~~~
+:::
 
 Then it is still required for `side_effect_spec` to specify what `A`'s value
 will be in its postconditions, despite the fact that this has no effect on the
@@ -744,7 +743,7 @@ point to allocated memory before they are called. The `llvm_alloc`
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.
 
-* `llvm_alloc : LLVMType -> LLVMSetup SetupValue`
+- `llvm_alloc : LLVMType -> LLVMSetup SetupValue`
 
 This command returns a `SetupValue` consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
@@ -757,19 +756,19 @@ specifies that the function itself performs an allocation.
 When using the experimental Java implementation, separate functions
 exist for specifying that arrays or objects are allocated:
 
-* `jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue` specifies an
+- `jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue` specifies an
 array of the given concrete size, with elements of the given type.
 
-* `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
+- `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
 of the given class name.
 
 The experimental MIR implementation also has a `mir_alloc` function, which
 behaves similarly to `llvm_alloc`. `mir_alloc` creates an immutable reference,
 but there is also a `mir_alloc_mut` function for creating a mutable reference:
 
-* `mir_alloc : MIRType -> MIRSetup MIRValue`
+- `mir_alloc : MIRType -> MIRSetup MIRValue`
 
-* `mir_alloc_mut : MIRType -> MIRSetup MIRValue`
+- `mir_alloc_mut : MIRType -> MIRSetup MIRValue`
 
 MIR tracks whether references are mutable or immutable at the type level, so it
 is important to use the right allocation command for a given reference type.
@@ -778,17 +777,17 @@ In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
 
-* `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
+- `llvm_fresh_pointer : LLVMType -> LLVMSetup SetupValue`
 
 The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
 JVM:
 
-* `llvm_null : SetupValue`
-* `jvm_null : JVMValue`
+- `llvm_null : SetupValue`
+- `jvm_null : JVMValue`
 
 One final, slightly more obscure command is the following:
 
-* `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
+- `llvm_alloc_readonly : LLVMType -> LLVMSetup SetupValue`
 
 This works like `llvm_alloc` except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
@@ -812,7 +811,7 @@ the _points-to_ family of commands.
 
 LLVM verification primarily uses the `llvm_points_to` command:
 
-* `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
+- `llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
 and states that the memory specified by that pointer should contain the
 value given in the second argument (which may be any type of
@@ -826,7 +825,7 @@ Occasionally, because C programs frequently reinterpret memory of one
 type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
-* `llvm_points_to_untyped : SetupValue -> SetupValue ->
+- `llvm_points_to_untyped : SetupValue -> SetupValue ->
 LLVMSetup ()` works like `llvm_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
@@ -840,15 +839,15 @@ One category consists of the `jvm_*_is` commands, which allow users to directly
 specify what value a heap object points to. There are specific commands for
 each type of JVM heap object:
 
-* `jvm_array_is : JVMValue -> Term -> JVMSetup ()` declares that an array (the
+- `jvm_array_is : JVMValue -> Term -> JVMSetup ()` declares that an array (the
   first argument) contains a sequence of values (the second argument).
-* `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` declares that an
+- `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` declares that an
   array (the first argument) has an element at the given index (the second
   argument) containing the given value (the third argument).
-* `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()` declares that
+- `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()` declares that
   an object (the first argument) has a field (the second argument) containing
   the given value (the third argument).
-* `jvm_static_field_is : String -> JVMValue -> JVMSetup ()` declares that a
+- `jvm_static_field_is : String -> JVMValue -> JVMSetup ()` declares that a
   named static field (the first argument) contains the given value (the second
   argument). By default, the field name is assumed to belong to the same class
   as the method being specified. Static fields belonging to other classes can
@@ -861,16 +860,16 @@ unspecified. These are useful for writing partial specifications for methods
 that modify some heap value, but without saying anything specific about the new
 value.
 
-* `jvm_modifies_array : JVMValue -> JVMSetup ()`
-* `jvm_modifies_elem : JVMValue -> Int -> JVMSetup ()`
-* `jvm_modifies_field : JVMValue -> String -> JVMSetup ()`
-* `jvm_modifies_static_field : String -> JVMSetup ()`
+- `jvm_modifies_array : JVMValue -> JVMSetup ()`
+- `jvm_modifies_elem : JVMValue -> Int -> JVMSetup ()`
+- `jvm_modifies_field : JVMValue -> String -> JVMSetup ()`
+- `jvm_modifies_static_field : String -> JVMSetup ()`
 
 ### MIR heap values
 
 MIR verification has a single `mir_points_to` command:
 
-* `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
+- `mir_points_to : MIRValue -> MIRValue -> MIRSetup ()`
 takes two `SetupValue` arguments, the first of which must be a reference,
 and states that the memory specified by that reference should contain the
 value given in the second argument (which may be any type of
@@ -882,11 +881,11 @@ The commands mentioned so far give us no way to specify the values of
 compound types (arrays or `struct`s). Compound values can be dealt with
 either piecewise or in their entirety.
 
-* `llvm_elem : SetupValue -> Int -> SetupValue` yields a pointer to
+- `llvm_elem : SetupValue -> Int -> SetupValue` yields a pointer to
 an internal element of a compound value. For arrays, the `Int` parameter
 is the array index. For `struct` values, it is the field index.
 
-* `llvm_field : SetupValue -> String -> SetupValue` yields a pointer
+- `llvm_field : SetupValue -> String -> SetupValue` yields a pointer
 to a particular named `struct` field, if debugging information is
 available in the bitcode.
 
@@ -896,8 +895,8 @@ Sometimes, however, it is more convenient to specify all array elements
 or field values at once. The `llvm_array_value` and `llvm_struct_value`
 functions construct compound values from lists of element values.
 
-* `llvm_array_value : [SetupValue] -> SetupValue`
-* `llvm_struct_value : [SetupValue] -> SetupValue`
+- `llvm_array_value : [SetupValue] -> SetupValue`
+- `llvm_struct_value : [SetupValue] -> SetupValue`
 
 To specify an array or struct in which each element or field is
 symbolic, it would be possible, but tedious, to use a large combination
@@ -905,7 +904,7 @@ of `llvm_fresh_var` and `llvm_elem` or `llvm_field` commands.
 However, the following function can simplify the common case
 where you want every element or field to have a fresh value.
 
-* `llvm_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue`
+- `llvm_fresh_expanded_val : LLVMType -> LLVMSetup SetupValue`
 
 The `llvm_struct_value` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
@@ -913,14 +912,14 @@ being analyzed. Structs in LLVM can explicitly be "packed", however, so
 that every field immediately follows the previous in memory. The
 following command will create values of such types:
 
-* `llvm_packed_struct_value : [SetupValue] -> SetupValue`
+- `llvm_packed_struct_value : [SetupValue] -> SetupValue`
 
 C programs will sometimes make use of pointer casting to implement
 various kinds of polymorphic behaviors, either via direct pointer
 casts, or by using `union` types to codify the pattern. To reason
 about such cases, the following operation is useful.
 
-* `llvm_cast_pointer : SetupValue -> LLVMType -> SetupValue`
+- `llvm_cast_pointer : SetupValue -> LLVMType -> SetupValue`
 
 This function function casts the type of the input value (which must be a
 pointer) so that it points to values of the given type.  This mainly
@@ -933,7 +932,7 @@ cases.
 We can automate the process of applying pointer casts if we have debug
 information avaliable:
 
-* `llvm_union : SetupValue -> String -> SetupValue`
+- `llvm_union : SetupValue -> String -> SetupValue`
 
 Given a pointer setup value, this attempts to select the named union
 branch and cast the type of the pointer. For this to work, debug
@@ -946,19 +945,19 @@ In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
 `llvm_points_to` and either `llvm_elem` or `llvm_field`.
 
-* `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` specifies
+- `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` specifies
 the value of an array element.
 
-* `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
+- `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
 specifies the name of an object field.
 
 In the experimental MIR verification implementation, the following functions
 construct compound values:
 
-* `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
+- `mir_array_value : MIRType -> [MIRValue] -> MIRValue` constructs an array
   of the given type whose elements consist of the given values. Supplying the
   element type is necessary to support length-0 arrays.
-* `mir_enum_value : MIRAdt -> String -> [MIRValue] -> MIRValue` constructs an
+- `mir_enum_value : MIRAdt -> String -> [MIRValue] -> MIRValue` constructs an
   enum using a particular enum variant. The `MIRAdt` arguments determines what
   enum type to create, the `String` value determines the name of the variant to
   use, and the `[MIRValue]` list are the values to use as elements in the
@@ -967,20 +966,20 @@ construct compound values:
   See the "Finding MIR algebraic data types" section (as well as the "Enums"
   subsection) for more information on how to compute a `MIRAdt` value to pass
   to `mir_enum_value`.
-* `mir_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section below.
-* `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
+- `mir_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section below.
+- `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
   "MIR slices" section below.
-* `mir_str_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section
+- `mir_str_slice_value : MIRValue -> MIRValue`: see the "MIR slices" section
   below.
-* `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
+- `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: see the
   "MIR slices" section below.
-* `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
+- `mir_struct_value : MIRAdt -> [MIRValue] -> MIRValue` construct a struct
   with the given list of values as elements. The `MIRAdt` argument determines
   what struct type to create.
 
   See the "Finding MIR algebraic data types" section for more information on how
   to compute a `MIRAdt` value to pass to `mir_struct_value`.
-* `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
+- `mir_tuple_value : [MIRValue] -> MIRValue` construct a tuple with the given
   list of values as elements.
 
 To specify a compound value in which each element or field is symbolic, it
@@ -989,7 +988,7 @@ invocations in conjunction with the commands above. However, the following
 function can simplify the common case where you want every element or field to
 have a fresh value:
 
-* `mir_fresh_expanded_value : String -> MIRType -> MIRSetup MIRValue`
+- `mir_fresh_expanded_value : String -> MIRType -> MIRSetup MIRValue`
 
 The `String` argument denotes a prefix to use when generating the names of
 fresh symbolic variables. The `MIRType` can be any type, with the exception of
@@ -1009,13 +1008,13 @@ SAW currently supports taking slices of arrays and strings.
 
 The following commands are used to construct slices of arrays:
 
-* `mir_slice_value : MIRValue -> MIRValue`: the SAWScript expression
+- `mir_slice_value : MIRValue -> MIRValue`: the SAWScript expression
   `mir_slice_value base` is equivalent to the Rust expression `&base[..]`,
   i.e., a slice of the entirety of `base`. `base` must be a reference to an
   array value (`&[T; N]` or `&mut [T; N]`), not an array itself. The type of
   `mir_slice_value base` will be `&[T]` (if `base` is an immutable reference)
   or `&mut [T]` (if `base` is a mutable reference).
-* `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the SAWScript
+- `mir_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the SAWScript
   expression `mir_slice_range_value base start end` is equivalent to the Rust
   expression `&base[start..end]`, i.e., a slice over a part of `base` which
   ranges from `start` to `end`. `base` must be a reference to an array value
@@ -1030,16 +1029,16 @@ The following commands are used to construct slices of arrays:
 As an example of how to use these functions, consider this Rust function, which
 accepts an arbitrary slice as an argument:
 
-~~~~ rust
+:::{code-block} rust
 pub fn f(s: &[u32]) -> u32 {
     s[0] + s[1]
 }
-~~~~
+:::
 
 We can write a specification that passes a slice to the array `[1, 2, 3, 4, 5]`
 as an argument to `f`:
 
-~~~~
+:::{code-block} sawscript
 let f_spec_1 = do {
   a <- mir_alloc (mir_array 5 mir_u32);
   mir_points_to a (mir_term {{ [1, 2, 3, 4, 5] : [5][32] }});
@@ -1048,13 +1047,13 @@ let f_spec_1 = do {
 
   mir_return (mir_term {{ 3 : [32] }});
 };
-~~~~
+:::
 
 Alternatively, we can write a specification that passes a part of this array
 over the range `[1..3]`, i.e., ranging from second element to the fourth.
 Because this is a half-open range, the resulting slice has length 2:
 
-~~~~
+:::{code-block} sawscript
 let f_spec_2 = do {
   a <- mir_alloc (mir_array 5 mir_u32);
   mir_points_to a (mir_term {{ [1, 2, 3, 4, 5] : [5][32] }});
@@ -1063,13 +1062,13 @@ let f_spec_2 = do {
 
   mir_return (mir_term {{ 5 : [32] }});
 };
-~~~~
+:::
 
 Note that we are passing _references_ of arrays to `mir_slice_value` and
 `mir_slice_range_value`. It would be an error to pass a bare array to these
 functions, so the following specification would be invalid:
 
-~~~~
+:::
 let f_fail_spec_ = do {
   let arr = mir_term {{ [1, 2, 3, 4, 5] : [5][32] }};
 
@@ -1077,7 +1076,7 @@ let f_fail_spec_ = do {
 
   mir_return (mir_term {{ 3 : [32] }});
 };
-~~~~
+:::
 
 Note that The `mir_slice_range_value` function must accept bare `Int` arguments
 to specify the lower and upper bounds of the range. A consequence of this
@@ -1090,13 +1089,13 @@ GitHub](https://github.com/GaloisInc/saw-script/issues).
 In addition to slices of arrays (i.e., of type `&[T]`), SAW also supports
 slices of strings (i.e., of type `&str`) through the following commands:
 
-* `mir_str_slice_value : MIRValue -> MIRValue`: the SAWScript expression
+- `mir_str_slice_value : MIRValue -> MIRValue`: the SAWScript expression
   `mir_str_slice_value base` is equivalent to the Rust expression `&base[..]`,
   i.e., a slice of the entirety of `base`. `base` must be a reference to an
   array of bytes (`&[u8; N]` or `&mut [u8; N]`), not an array itself. The type
   of `mir_str_slice_value base` will be `&str` (if `base` is an immutable
   reference) or `&mut str` (if `base` is a mutable reference).
-* `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the
+- `mir_str_slice_range_value : MIRValue -> Int -> Int -> MIRValue`: the
   SAWScript expression `mir_slice_range_value base start end` is equivalent to
   the Rust expression `&base[start..end]`, i.e., a slice over a part of `base`
   which ranges from `start` to `end`. `base` must be a reference to an array of
@@ -1113,22 +1112,22 @@ One unusual requirement about `mir_str_slice_value` and
 `&[u8; N]`, i.e., a reference to an array of bytes. This is an artifact of the
 way that strings are encoded in Cryptol. The following Cryptol expressions:
 
-* `"A"`
-* `"123"`
-* `"Hello World"`
+- `"A"`
+- `"123"`
+- `"Hello World"`
 
 Have the following types:
 
-* `[1][8]`
-* `[3][8]`
-* `[11][8]`
+- `[1][8]`
+- `[3][8]`
+- `[11][8]`
 
 This is because Cryptol strings are syntactic shorthand for sequences of bytes.
 The following Cryptol expressions are wholly equivalent:
 
-* `[0x41]`
-* `[0x31, 0x32, 0x33]`
-* `[0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64]`
+- `[0x41]`
+- `[0x31, 0x32, 0x33]`
+- `[0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64]`
 
 These represent the strings in the extended ASCII character encoding. The
 Cryptol sequence type `[N][8]` is equivalent to the Rust type `[u8; N]`, so the
@@ -1148,16 +1147,16 @@ where a `&[u8]` value is expected (and vice versa).
 As an example of how to write specifications involving string slices,
 consider this Rust function:
 
-~~~ rust
+:::{code-block} rust
 pub fn my_len(s: &str) -> usize {
     s.len()
 }
-~~~
+:::
 
 We can use `mir_str_slice_value` to write a specification for `my_len` when it
 is given the string `"hello"` as an argument:
 
-~~~
+:::{code-block} sawscript
 let my_len_spec = do {
   s <- mir_alloc (mir_array 5 mir_u8);
   mir_points_to s (mir_term {{ "hello" }});
@@ -1166,7 +1165,7 @@ let my_len_spec = do {
 
   mir_return (mir_term {{ 5 : [32] }});
 };
-~~~
+:::
 
 Currently, Cryptol only supports characters that can be encoded in a single
 byte. As a result, it is not currently possible to take slices of strings with
@@ -1180,15 +1179,15 @@ SAW makes no attempt to ensure that string slices over a particular range
 aligns with UTF-8 character boundaries. For example, the following Rust code
 would panic:
 
-~~~ rust
+:::{code-block} rust
     let rosu: &str = "roșu";
     let s: &str = &rosu[0..3];
     println!("{:?}", s);
-~~~
+:::
 
-~~~
+:::{code-block} console
 thread 'main' panicked at 'byte index 3 is not a char boundary; it is inside 'ș' (bytes 2..4) of `roșu`'
-~~~
+:::
 
 On the other hand, SAW will allow you define a slice of the form
 `mir_str_slice_range r 0 3`, where `r` is a reference to `"ro\200\153u"`. It is
@@ -1202,7 +1201,7 @@ types_, or ADTs for short. ADTs have identifiers to tell them apart, and a
 single ADT declaration can give rise to multiple identifiers depending on how
 the declaration is used. For example:
 
-~~~~ rust
+:::{code-block} rust
 pub struct S<A, B> {
     pub x: A,
     pub y: B,
@@ -1221,7 +1220,7 @@ pub fn g() -> S<u32, u64> {
         y: 4,
     }
 }
-~~~~
+:::
 
 This program as a single `struct` declaration `S`, which is used in the
 functions `f` and `g`. Note that `S`'s declaration is _polymorphic_, as it uses
@@ -1231,14 +1230,14 @@ of an ADT gives rise to its own identifier. In the example above, this might
 mean that the following identifiers are created when this code is compiled with
 `mir-json`:
 
-* `S<u8, u16>` gives rise to `example/abcd123::S::_adt456`
-* `S<u32, u64>` gives rise to `example/abcd123::S::_adt789`
+- `S<u8, u16>` gives rise to `example/abcd123::S::_adt456`
+- `S<u32, u64>` gives rise to `example/abcd123::S::_adt789`
 
 The suffix `_adt<number>` is autogenerated by `mir-json` and is typically
 difficult for humans to guess. For this reason, we offer a command to look up
 an ADT more easily:
 
-* `mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt` consults the
+- `mir_find_adt : MIRModule -> String -> [MIRType] -> MIRAdt` consults the
   given `MIRModule` to find an algebraic data type (`MIRAdt`). It uses the given
   `String` as an identifier and the given MIRTypes as the types to instantiate
   the type parameters of the ADT. If such a `MIRAdt` cannot be found in the
@@ -1250,12 +1249,12 @@ is expected to adhere to the identifier conventions described in the "Running a
 MIR-based verification" section. For instance, the following two lines will
 look up `S<u8, u16>` and `S<u32, u64>` from the example above as `MIRAdt`s:
 
-~~~~
+:::{code-block} sawscript
 m <- mir_load_module "example.linked-mir.json";
 
 let s_8_16  = mir_find_adt m "example::S" [mir_u8,  mir_u16];
 let s_32_64 = mir_find_adt m "example::S" [mir_u32, mir_u64];
-~~~~
+:::
 
 The `mir_adt` command (for constructing a struct type), `mir_struct_value` (for
 constructing a struct value), and `mir_enum_value` (for constructing an enum
@@ -1272,7 +1271,7 @@ enum's variants, so SAW will use this information to look up a variant's
 identifier from a short name. Here is an example of using `mir_enum_value` in
 practice:
 
-~~~~ rust
+:::{code-block} rust
 pub fn n() -> Option<u32> {
     None
 }
@@ -1280,9 +1279,9 @@ pub fn n() -> Option<u32> {
 pub fn s(x: u32) -> Option<u32> {
     Some(x)
 }
-~~~~
+:::
 
-~~~~
+:::{code-block} sawscript
 m <- mir_load_module "example.linked-mir.json";
 
 let option_u32 = mir_find_adt m "core::option::Option" [mir_u32];
@@ -1300,7 +1299,7 @@ let s_spec = do {
 
   mir_return (mir_enum_value option_u32 "Some" [mir_term x]);
 };
-~~~~
+:::
 
 Note that `mir_enum_value` can only be used to construct a specific variant. If
 you need to construct a symbolic enum value that can range over many potential
@@ -1312,7 +1311,7 @@ Rust ADTs can have both type parameters as well as _lifetime_ parameters. The
 following Rust code declares a lifetime parameter `'a` on the struct `S`, as
 well on the function `f` that computes an `S` value:
 
-~~~~ rust
+:::{code-block} rust
 pub struct S<'a> {
     pub x: &'a u32,
 }
@@ -1320,7 +1319,7 @@ pub struct S<'a> {
 pub fn f<'a>(y: &'a u32) -> S<'a> {
     S { x: y }
 }
-~~~~
+:::
 
 When `mir-json` compiles a piece of Rust code that contains lifetime
 parameters, it will instantiate all of the lifetime parameters with a
@@ -1330,9 +1329,9 @@ indicate to SAW that the lifetime parameter is instantiated with `lifetime`. In
 order to do so, use `mir_lifetime`. For example, here is how to look up `S`
 with `'a` instantiated to `lifetime`:
 
-~~~~
+:::{code-block} sawscript
 s_adt = mir_find_adt m "example::S" [mir_lifetime]
-~~~~
+:::
 
 Note that this part of SAW's design is subject to change in the future.
 Ideally, users would not have to care about lifetimes at all at the MIR level;
@@ -1345,12 +1344,12 @@ discussion on this point. If that issue is fixed, then we will likely remove
 SAW has experimental support for specifying `struct`s with bitfields, such as
 in the following example:
 
-~~~~ c
+:::{code-block} c
 struct s {
   uint8_t x:1;
   uint8_t y:1;
 };
-~~~~
+:::
 
 Normally, a `struct` with two `uint8_t` fields would have an overall size of
 two bytes. However, because the `x` and `y` fields are declared with bitfield
@@ -1361,17 +1360,17 @@ special care is required to write SAW specifications involving bitfields. For
 this reason, there is a dedicated `llvm_points_to_bitfield` function for this
 purpose:
 
-* `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> LLVMSetup ()`
+- `llvm_points_to_bitfield : SetupValue -> String -> SetupValue -> LLVMSetup ()`
 
 The type of `llvm_points_to_bitfield` is similar that of `llvm_points_to`,
 except that it takes the name of a field within a bitfield as an additional
 argument. For example, here is how to assert that the `y` field in the `struct`
 example above should be `0`:
 
-~~~~
+:::{code-block} sawscript
 ss <- llvm_alloc (llvm_alias "struct.s");
 llvm_points_to_bitfield ss "y" (llvm_term {{ 0 : [1] }});
-~~~~
+:::
 
 Note that the type of the right-hand side value (`0`, in this example) must
 be a bitvector whose length is equal to the size of the field within the
@@ -1380,10 +1379,10 @@ must be of type `[1]`.
 
 Note that the following specification is _not_ equivalent to the one above:
 
-~~~~
+:::{code-block} sawscript
 ss <- llvm_alloc (llvm_alias "struct.s");
 llvm_points_to (llvm_field ss "y") (llvm_term {{ 0 : [1] }});
-~~~~
+:::
 
 `llvm_points_to` works quite differently from `llvm_points_to_bitfield` under
 the hood, so using `llvm_points_to` on bitfields will almost certainly not work
@@ -1392,7 +1391,7 @@ as expected.
 In order to use `llvm_points_to_bitfield`, one must also use the
 `enable_lax_loads_and_stores` command:
 
-* `enable_lax_loads_and_stores: TopLevel ()`
+- `enable_lax_loads_and_stores: TopLevel ()`
 
 Both `llvm_points_to_bitfield` and `enable_lax_loads_and_stores` are
 experimental commands, so these also require using `enable_experimental` before
@@ -1421,7 +1420,7 @@ SAW supports verifying LLVM and MIR specifications involving global variables.
 Mutable global variables that are accessed in a function must first be allocated
 by calling `llvm_alloc_global` on the name of the global.
 
-* `llvm_alloc_global : String -> LLVMSetup ()`
+- `llvm_alloc_global : String -> LLVMSetup ()`
 
 This ensures that all global variables that might influence the function are
 accounted for explicitly in the specification: if `llvm_alloc_global` is
@@ -1438,7 +1437,7 @@ require a call to `llvm_alloc_global`.
 Pointers to global variables or functions can be accessed with
 `llvm_global`:
 
-* `llvm_global : String -> SetupValue`
+- `llvm_global : String -> SetupValue`
 
 Like the pointers returned by `llvm_alloc`, however, these aren't
 initialized at the beginning of symbolic -- setting global variables may
@@ -1449,7 +1448,7 @@ To understand the issues surrounding global variables, consider the following C
 code:
 
 <!-- This matches intTests/test0036_globals/test-signed.c -->
-~~~
+:::{code-block} c
 int x = 0;
 
 int f(int y) {
@@ -1461,12 +1460,12 @@ int g(int z) {
   x = x + 2;
   return x + z;
 }
-~~~
+:::
 
 One might initially write the following specifications for `f` and `g`:
 
 <!-- This matches intTests/test0036_globals/test-signed-fail.saw -->
-~~~
+:::{code-block} sawscript
 m <- llvm_load_module "./test.bc";
 
 f_spec <- llvm_verify m "f" [] true (do {
@@ -1480,7 +1479,7 @@ g_spec <- llvm_llvm_verify m "g" [] true (do {
     llvm_execute_func [llvm_term z];
     llvm_return (llvm_term {{ 2 + z : [32] }});
 }) abc;
-~~~
+:::
 
 If globals were always initialized at the beginning of verification,
 both of these specs would be provable. However, the results wouldn't
@@ -1490,14 +1489,14 @@ z + 3` for all `z`, because both `f` and `g` modify the global variable
 
 To deal with this, we can use the following function:
 
-* `llvm_global_initializer : String -> SetupValue` returns the value
+- `llvm_global_initializer : String -> SetupValue` returns the value
   of the constant global initializer for the named global variable.
 
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
 
 <!-- This matches intTests/test0036_globals/test-signed.saw -->
-~~~
+:::{code-block} sawscript
 m <- llvm_load_module "./test.bc";
 
 
@@ -1514,7 +1513,7 @@ f_spec <- llvm_verify m "f" [] true (do {
     llvm_execute_func [llvm_term y];
     llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
-~~~
+:::
 
 which initializes `x` to whatever it is initialized to in the C code at
 the beginning of verification. This specification is now safe for
@@ -1532,7 +1531,7 @@ a `String` representing a static item's identifier, and this identifier is
 expected to adhere to the naming conventions outlined in the "Running a
 MIR-based verification" section:
 
-* `mir_static : String -> MIRValue`
+- `mir_static : String -> MIRValue`
 
 References to static values can be initialized with the `mir_points_to`
 command, just like with other forms of references. Immutable static items
@@ -1545,12 +1544,12 @@ The `mir_static_initializer` function can be used to access the initial value
 of a static item in a MIR program. Like with `mir_static`, the `String`
 supplied as an argument must be a valid identifier:
 
-* `mir_static_initializer : String -> MIRValue`.
+- `mir_static_initializer : String -> MIRValue`.
 
 As an example of how to use these functions, here is a Rust program involving
 static items:
 
-~~~ rust
+:::{code-block} rust
 // statics.rs
 static     S1: u8 = 1;
 static mut S2: u8 = 2;
@@ -1562,11 +1561,11 @@ pub fn f() -> u8 {
     let s2 = unsafe { S2 };
     S1 + s2
 }
-~~~
+:::
 
 We can write a specification for `f` like so:
 
-~~~
+:::{code-block} sawscript
 // statics.saw
 enable_experimental;
 
@@ -1584,7 +1583,7 @@ let f_spec = do {
 m <- mir_load_module "statics.linked-mir.json";
 
 mir_verify m "statics::f" [] false f_spec z3;
-~~~
+:::
 
 In order to use a specification involving mutable static items for
 compositional verification, it is required to specify the value of all mutable
@@ -1601,15 +1600,15 @@ rise to specific final conditions. For these cases, you can specify an
 arbitrary predicate as a precondition or post-condition, using any
 values in scope at the time.
 
-* `llvm_precond : Term -> LLVMSetup ()`
-* `llvm_postcond : Term -> LLVMSetup ()`
-* `llvm_assert : Term -> LLVMSetup ()`
-* `jvm_precond : Term -> JVMSetup ()`
-* `jvm_postcond : Term -> JVMSetup ()`
-* `jvm_assert : Term -> JVMSetup ()`
-* `mir_precond : Term -> MIRSetup ()`
-* `mir_postcond : Term -> MIRSetup ()`
-* `mir_assert : Term -> MIRSetup ()`
+- `llvm_precond : Term -> LLVMSetup ()`
+- `llvm_postcond : Term -> LLVMSetup ()`
+- `llvm_assert : Term -> LLVMSetup ()`
+- `jvm_precond : Term -> JVMSetup ()`
+- `jvm_postcond : Term -> JVMSetup ()`
+- `jvm_assert : Term -> JVMSetup ()`
+- `mir_precond : Term -> MIRSetup ()`
+- `mir_postcond : Term -> MIRSetup ()`
+- `mir_assert : Term -> MIRSetup ()`
 
 These commands take `Term` arguments, and therefore cannot describe the values
 of pointers. The "assert" variants will work in either pre- or post-conditions,
@@ -1618,9 +1617,9 @@ invariants that make sense in both phases.  The `{llvm,jvm,mir}_equal` commands
 state that two values should be equal, and can be used in either the initial or
 the final state.
 
-* `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
-* `jvm_equal : JVMValue -> JVMValue -> JVMSetup ()`
-* `mir_equal : MIRValue -> MIRValue -> MIRSetup ()`
+- `llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()`
+- `jvm_equal : JVMValue -> JVMValue -> JVMSetup ()`
+- `mir_equal : MIRValue -> MIRValue -> MIRSetup ()`
 
 The use of `{llvm,jvm,mir}_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
@@ -1635,16 +1634,10 @@ tactic](proofs-about-terms.md#finishing-proofs-without-external-solvers) omits p
 simulation of the function. To skip simulation altogether, one can use
 one of the following commands:
 
-~~~
-llvm_unsafe_assume_spec :
-  LLVMModule -> String -> LLVMSetup () -> TopLevel CrucibleMethodSpec
 
-jvm_unsafe_assume_spec :
-  JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec
-
-mir_unsafe_assume_spec :
-  MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
-~~~
+- `llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel CrucibleMethodSpec`
+- `jvm_unsafe_assume_spec : JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec`
+- `mir_unsafe_assume_spec : MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec`
 
 ## A Heap-Based Example
 
@@ -1655,19 +1648,19 @@ of each vector are encapsulated together in a `struct`.
 
 The dot product can be concisely specified in Cryptol as follows:
 
-~~~~
+:::{code-block} cryptol
 dotprod : {n, a} (fin n, fin a) => [n][a] -> [n][a] -> [a]
 dotprod xs ys = sum (zip (*) xs ys)
-~~~~
+:::
 
 To implement this in C, let's first consider the type of vectors:
 
-~~~~ c
+:::{code-block} c
 typedef struct {
     uint32_t *elts;
     uint32_t size;
 } vec_t;
-~~~~
+:::
 
 This struct contains a pointer to an array of 32-bit elements, and a
 32-bit value indicating how many elements that array has.
@@ -1676,7 +1669,7 @@ We can compute the dot product of two of these vectors with the
 following C code (which uses the size of the shorter vector if they
 differ in size).
 
-~~~~ c
+:::{code-block} c
 uint32_t dotprod_struct(vec_t *x, vec_t *y) {
     uint32_t size = MIN(x->size, y->size);
     uint32_t res = 0;
@@ -1685,7 +1678,7 @@ uint32_t dotprod_struct(vec_t *x, vec_t *y) {
     }
     return res;
 }
-~~~~
+:::
 
 The entirety of this implementation can be found in the
 `examples/llvm/dotprod_struct.c` file in the `saw-script` repository.
@@ -1695,13 +1688,13 @@ of utility functions (which are generally useful for many
 heap-manipulating programs). First, combining allocation and
 initialization to a specific value can make many scripts more concise:
 
-~~~~
+:::{code-block} sawscript
 let alloc_init ty v = do {
     p <- llvm_alloc ty;
     llvm_points_to p v;
     return p;
 };
-~~~~
+:::
 
 This creates a pointer `p` pointing to enough space to store type `ty`,
 and then indicates that the pointer points to value `v` (which should be
@@ -1710,13 +1703,13 @@ of that same type).
 A common case for allocation and initialization together is when the
 initial value should be entirely symbolic.
 
-~~~~
+:::{code-block} sawscript
 let ptr_to_fresh n ty = do {
     x <- llvm_fresh_var n ty;
     p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
-~~~~
+:::
 
 This function returns the pointer just allocated along with the fresh
 symbolic value it points to.
@@ -1724,7 +1717,7 @@ symbolic value it points to.
 Given these two utility functions, the `dotprod_struct` function can be
 specified as follows:
 
-~~~~
+:::{code-block} sawscript
 let dotprod_spec n = do {
     let nt = llvm_term {{ `n : [32] }};
     (xs, xsp) <- ptr_to_fresh "xs" (llvm_array n (llvm_int 32));
@@ -1736,7 +1729,7 @@ let dotprod_spec n = do {
     llvm_execute_func [xp, yp];
     llvm_return (llvm_term {{ dotprod xs ys }});
 };
-~~~~
+:::
 
 Any instantiation of this specification is for a specific vector length
 `n`, and assumes that both input vectors have that length. That length
@@ -1749,14 +1742,14 @@ alongside `dotprod_struct.c`.
 
 Running this script results in the following:
 
-~~~~
+:::{code-block} console
 Loading file "dotprod_struct.saw"
 Proof succeeded! dotprod_struct
 Registering override for `dotprod_struct`
   variant `dotprod_struct`
 Symbolic simulation completed with side conditions.
 Proof succeeded! dotprod_wrap
-~~~~
+:::
 
 ## Using Ghost State
 
@@ -1764,11 +1757,11 @@ In some cases, information relevant to verification is not directly
 present in the concrete state of the program being verified. This can
 happen for at least two reasons:
 
-* When providing specifications for external functions, for which source
+- When providing specifications for external functions, for which source
   code is not present. The external code may read and write global state
   that is not directly accessible from the code being verified.
 
-* When the abstract specification of the program naturally uses a
+- When the abstract specification of the program naturally uses a
   different representation for some data than the concrete
   implementation in the code being verified does.
 
@@ -1777,15 +1770,15 @@ thought of as additional global state that is visible only to the
 verifier. Ghost state with a given name can be declared at the top level
 with the following function:
 
-* `declare_ghost_state : String -> TopLevel Ghost`
+- `declare_ghost_state : String -> TopLevel Ghost`
 
 Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
 functions can be used to specify its value:
 
-* `llvm_ghost_value : Ghost -> Term -> LLVMSetup ()`
-* `jvm_ghost_value  : Ghost -> Term -> JVMSetup  ()`
-* `mir_ghost_value  : Ghost -> Term -> MIRSetup  ()`
+- `llvm_ghost_value : Ghost -> Term -> LLVMSetup ()`
+- `jvm_ghost_value  : Ghost -> Term -> JVMSetup  ()`
+- `mir_ghost_value  : Ghost -> Term -> MIRSetup  ()`
 
 These can be used in either the pre state or the post state, to specify the
 value of ghost state either before or after the execution of the function,
@@ -1835,7 +1828,7 @@ We first define the function
 allocated and initialized to a value `v` of type `ty`. `alloc_init_readonly`
 does the same, except the memory allocated cannot be written to.
 
-~~~~
+:::{code-block} sawscript
 import "Salsa20.cry";
 
 let alloc_init ty v = do {
@@ -1849,7 +1842,7 @@ let alloc_init_readonly ty v = do {
     llvm_points_to p (llvm_term v);
     return p;
 };
-~~~~
+:::
 
 We now define
 `ptr_to_fresh : String -> LLVMType -> LLVMSetup (Term, SetupValue)`.
@@ -1859,7 +1852,7 @@ variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
 name that SAW should use when printing `x`. `ptr_to_fresh_readonly` does the
 same, but returns a pointer to space that cannot be written to.
 
-~~~~
+:::{code-block} sawscript
 let ptr_to_fresh n ty = do {
     x <- llvm_fresh_var n ty;
     p <- alloc_init ty x;
@@ -1871,7 +1864,7 @@ let ptr_to_fresh_readonly n ty = do {
     p <- alloc_init_readonly ty x;
     return (x, p);
 };
-~~~~
+:::
 
 Finally, we define
 `oneptr_update_func : String -> LLVMType -> Term -> LLVMSetup ()`.
@@ -1882,13 +1875,13 @@ value of type `ty` and mutates the contents of that memory. The specification
 asserts that the contents of this memory after execution are equal to the value
 given by the application of `f` to the value in that memory before execution.
 
-~~~~
+:::{code-block} sawscript
 let oneptr_update_func n ty f = do {
     (x, p) <- ptr_to_fresh n ty;
     llvm_execute_func [p];
     llvm_points_to p (llvm_term {{ f x }});
 };
-~~~~
+:::
 
 #### The `quarterround` operation
 
@@ -1902,7 +1895,7 @@ postcondition/return stage, the expected values are computed using the trusted
 Cryptol implementation and it is asserted that the pointers do in fact point to
 these expected values.
 
-~~~~
+:::{code-block} sawscript
 let quarterround_setup : LLVMSetup () = do {
     (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
     (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
@@ -1917,7 +1910,7 @@ let quarterround_setup : LLVMSetup () = do {
     llvm_points_to p2 (llvm_term {{ zs@2 }});
     llvm_points_to p3 (llvm_term {{ zs@3 }});
 };
-~~~~
+:::
 
 #### Simple Updating Functions
 
@@ -1925,7 +1918,7 @@ The following functions can all have their specifications given by the utility
 function `oneptr_update_func` implemented above, so there isn't much to say
 about them.
 
-~~~~
+:::{code-block} sawscript
 let rowround_setup =
     oneptr_update_func "y" (llvm_array 16 (llvm_int 32)) {{ rowround }};
 
@@ -1937,19 +1930,19 @@ let doubleround_setup =
 
 let salsa20_setup =
     oneptr_update_func "seq" (llvm_array 64 (llvm_int 8)) {{ Salsa20 }};
-~~~~
+:::
 
 #### 32-Bit Key Expansion
 
 The next function of substantial behavior that we wish to verify has the
 following prototype:
 
-~~~~c
+:::{code-block} c
 void s20_expand32( uint8_t *k
                  , uint8_t n[static 16]
                  , uint8_t keystream[static 64]
                  )
-~~~~
+:::
 
 This function's specification follows a similar pattern to that of
 `s20_quarterround`, though for extra assurance we can make sure that the
@@ -1960,7 +1953,7 @@ implementation specialized to `a=2`, which does 32-bit key expansion (since the
 Cryptol implementation can also specialize to `a=1` for 16-bit keys). This
 specification can easily be changed to work with 16-bit keys.
 
-~~~~
+:::{code-block} sawscript
 let salsa20_expansion_32 = do {
     (k, pk) <- ptr_to_fresh_readonly "k" (llvm_array 32 (llvm_int 8));
     (n, pn) <- ptr_to_fresh_readonly "n" (llvm_array 16 (llvm_int 8));
@@ -1972,21 +1965,21 @@ let salsa20_expansion_32 = do {
     let rks = {{ Salsa20_expansion`{a=2}(k, n) }};
     llvm_points_to pks (llvm_term rks);
 };
-~~~~
+:::
 
 #### 32-bit Key Encryption
 
 Finally, we write a specification for the encryption function itself, which has
 type
 
-~~~~c
+:::{code-block} c
 enum s20_status_t s20_crypt32( uint8_t *key
                              , uint8_t nonce[static 8]
                              , uint32_t si
                              , uint8_t *buf
                              , uint32_t buflen
                              )
-~~~~
+:::
 
 As before, we can ensure this function does not modify the memory pointed to by
 `key` or `nonce`. We take `si`, the stream index, to be 0. The specification is
@@ -1995,7 +1988,7 @@ with the fact that this function returns a status code, we simply specify that
 we expect a success (status code 0) as the return value in the postcondition
 stage of the specification.
 
-~~~~
+:::{code-block} sawscript
 let s20_encrypt32 n = do {
     (key, pkey) <- ptr_to_fresh_readonly "key" (llvm_array 32 (llvm_int 8));
     (v, pv) <- ptr_to_fresh_readonly "nonce" (llvm_array 8 (llvm_int 8));
@@ -2011,7 +2004,7 @@ let s20_encrypt32 n = do {
     llvm_points_to pm (llvm_term {{ Salsa20_encrypt (key, v, m) }});
     llvm_return (llvm_term {{ 0 : [32] }});
 };
-~~~~
+:::
 
 ### Verifying Everything
 
@@ -2022,7 +2015,7 @@ the top-level function for several sizes; this is due to the limitation that
 SAW can only operate on finite programs (while Salsa20 can operate on any input
 size.)
 
-~~~~
+:::{code-block} sawscript
 let main : TopLevel () = do {
     m      <- llvm_load_module "salsa20.bc";
     qr     <- llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
@@ -2037,7 +2030,7 @@ let main : TopLevel () = do {
 
     print "Done!";
 };
-~~~~
+:::
 
 [^4]: <https://en.wikipedia.org/wiki/Salsa20>
 
@@ -2056,28 +2049,26 @@ generate a `LLVMSetup ()` spec directly from the type of a Cryptol
 which is experimental and requires `enable_experimental;` to be run
 beforehand.
 
-```
-llvm_ffi_setup : Term -> LLVMSetup ()
-```
+- `llvm_ffi_setup : Term -> LLVMSetup ()`
 
 For instance, for the simple imported Cryptol foreign function `foreign
 add : [32] -> [32] -> [32]` we can obtain a `LLVMSetup` spec simply by
 writing
 
-```
+:::{code-block} sawscript
 let add_setup = llvm_ffi_setup {{ add }};
-```
+:::
 
 which behind the scenes expands to something like
 
-```
+:::{code-block} sawscript
 let add_setup = do {
   in0 <- llvm_fresh_var "in0" (llvm_int 32);
   in1 <- llvm_fresh_var "in1" (llvm_int 32);
   llvm_execute_func [llvm_term in0, llvm_term in1];
   llvm_return (llvm_term {{ add in0 in1 }});
 };
-```
+:::
 
 ### Polymorphism
 
@@ -2092,9 +2083,9 @@ specification simply as a SAWScript function in the usual way. For
 example, for a function `foreign f : {n, m} (fin n, fin m) => [n][32] ->
 [m][32]`, we can obtain a parameterized `LLVMSetup` spec by
 
-```
+:::{code-block} sawscript
 let f_setup (n : Int) (m : Int) = llvm_ffi_setup {{ f`{n, m} }};
-```
+:::
 
 Note that the `Term` parameter that `llvm_ffi_setup` takes is restricted
 syntactically to the format described above (``{{ fun`{tyArg0, tyArg1,
@@ -2120,9 +2111,9 @@ The resulting `LLVMSetup ()` spec can be used with the existing
 `LLVMSpec` output from that can be used as an override as usual for
 further compositional verification.
 
-```
+:::{code-block} sawscript
 f_ov <- llvm_verify mod "f" [] true (f_setup 3 5) z3;
-```
+:::
 
 As with the Cryptol FFI itself, SAW does not manage the compilation of
 the C source implementations of `foreign` functions to LLVM bitcode. For

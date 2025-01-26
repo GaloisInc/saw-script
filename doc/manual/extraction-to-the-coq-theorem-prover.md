@@ -42,10 +42,10 @@ Once the library is compiled, the recommended way to import
 it into your subsequent development is by adding the following
 lines to your `_CoqProject` file:
 
-```
+:::{code-block} text
 -Q <SAWDIR>/saw-core-coq/coq/generated/CryptolToCoq CryptolToCoq
 -Q <SAWDIR>/saw-core-coq/coq/handwritten/CryptolToCoq CryptolToCoq
-```
+:::
 
 Here `<SAWDIR>` refers to the location on your system where the
 SAWScript source tree is checked out. This will add the relevant
@@ -93,10 +93,10 @@ to generate a Coq file named `output.v`.  We can accomplish this by
 running the following commands in saw (either directly from the `saw`
 command prompt, or via a script file)
 
-```
+:::{code-block} sawscript
 enable_experimental;
 write_coq_cryptol_module "source.cry" "output.v" [] [];
-```
+:::
 
 In this default mode, identifiers in the Cryptol source will be
 directly translated into identifiers in Coq. This may occasionally
@@ -133,18 +133,18 @@ both to provide specifications for functions to be verified with
 
 For example, if I write the following Cryptol source file:
 
-```
+:::{code-block} cryptol
 primitive f : Integer -> Integer
 
 g : Integer -> Bool
 g x = f (f x) > 0
-```
+:::
 
 After extraction, the generated term `g` will have Coq type:
 
-```
+:::{code-block} coq
 (Integer -> Integer) -> Integer -> Bool
-```
+:::
 
 ## Translation limitations and caveats
 
