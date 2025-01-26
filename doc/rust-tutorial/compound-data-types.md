@@ -10,9 +10,10 @@ Rust includes array types where the length of the array is known ahead of time.
 For instance, this `index` function takes an `arr` argument that must contain
 exactly three `u32` values:
 
-``` rust
-$include 1-3 code/arrays.rs
-```
+:::{literalinclude} code/arrays.rs
+:lines: 1-3
+:language: rust
+:::
 
 While Rust is good at catching many classes of programmer errors at compile
 time, one thing that it cannot catch in general is out-of-bounds array
@@ -23,9 +24,10 @@ program to crash, since the `idx` will be out of the bounds of `arr`.
 SAW is suited to checking for these sorts of out-of-bound accesses. Let's write
 an incorrect spec for `index` to illustrate this:
 
-```
-$include 3-14 code/arrays-fail.saw
-```
+:::{literalinclude} code/arrays-fail.saw
+:lines: 3-14
+:language: sawscript
+:::
 
 Before we run this with SAW, let's highlight some of the new concepts that this
 spec uses:
@@ -41,7 +43,7 @@ spec uses:
 As we hinted above, this spec is wrong, as it says that this should work for
 _any_ possible values of `idx`. SAW will catch this mistake:
 
-```
+:::{code-block} console
 $ saw arrays-fail.saw
 
 
@@ -57,29 +59,31 @@ $ saw arrays-fail.saw
 [21:03:05.445] Stack trace:
 "mir_verify" (arrays-fail.saw:14:1-14:11)
 Proof failed.
-```
+:::
 
 We can repair this spec by adding some preconditions:
 
-```
-$include 3-12 code/arrays.saw
-```
+:::{literalinclude} code/arrays.saw
+:lines: 3-12
+:language: sawscript
+:::
 
 An alternative way of writing this spec is by using SAW's `mir_array_value`
 command:
 
-```
+:::{code-block} console
 sawscript> :type mir_array_value
 MIRType -> [MIRValue] -> MIRValue
-```
+:::
 
 Here, the `MIRType` argument represents the element type, and the list of
 `MIRValue` arguments are the element values of the array. We can rewrite
 `index_spec` using `mir_array_value` like so:
 
-```
-$include 18-30 code/arrays.saw
-```
+:::{literalinclude} code/arrays.saw
+:lines: 18-30
+:language: sawscript
+:::
 
 Here, `[arr0, arr1, arr2]` is Cryptol notation for constructing a length-3
 sequence consisting of `arr0`, `arr1`, and `arr2` as the elements.
@@ -91,9 +95,10 @@ and combining them with `mir_array_value`.
 There are some situations where `mir_array_value` is the only viable choice,
 however. Consider this variant of the `index` function:
 
-``` rust
-$include 5-7 code/arrays.rs
-```
+:::{literalinclude} code/arrays.rs
+:lines: 5-7
+:language: rust
+:::
 
 When writing a SAW spec for `index_ref_arr`, we can't just create a symbolic
 variable for `arr` using `mir_alloc (mir_array 3 ...)`, as the reference values
@@ -107,26 +112,28 @@ verifying a spec for `index_ref_arr`).
 Rust includes tuple types where the elements of the tuple can be of different
 types. For example:
 
-``` rust
-$include 1-3 code/tuples.rs
-```
+:::{literalinclude} code/tuples.rs
+:lines: 1-3
+:language: rust
+:::
 
 SAW includes a `mir_tuple` function for specifying the type of a tuple value.
 In addition, one can embed MIR tuples into Cryptol, as Cryptol also includes
 tuple types whose fields can be indexed with `.0`, `.1`, etc. Here is a spec
 for `flip` that makes use of all these features:
 
-```
-$include 3-9 code/tuples.saw
-```
+:::{literalinclude} code/tuples.saw
+:lines: 3-9
+:language: sawscript
+:::
 
 SAW also includes a `mir_tuple_value` function for constructing a tuple value
 from other `MIRValue`s:
 
-```
+:::{code-block} console
 sawscript> :type mir_tuple_value
 [MIRValue] -> MIRValue
-```
+:::
 
 `mir_tuple_value` plays a similar role for tuples as `mir_array_value` does for
 arrays.
@@ -136,9 +143,10 @@ arrays.
 Rust supports the ability for users to define custom struct types. Structs are
 uniquely identified by their names, so if you have two structs like these:
 
-``` rust
-$include 1-2 code/structs.rs
-```
+:::{literalinclude} code/structs.rs
+:lines: 1-2
+:language: rust
+:::
 
 Then even though the fields of the `S` and `T` structs are the same, they are
 _not_ the same struct. This is a type system feature that Cryptol does not
@@ -146,10 +154,10 @@ have, and for this reason, it is not possible to embed MIR struct values into
 Cryptol. It is also not possible to use `mir_fresh_var` to create a symbolic
 struct value. Instead, one can use the `mir_struct_value` command:
 
-```
+:::{code-block} console
 sawscript> :type mir_struct_value
 MIRAdt -> [MIRValue] -> MIRValue
-```
+:::
 
 Like with `mir_array_value` and `mir_tuple_value`, the `mir_struct_value`
 function takes a list of `MIRValue`s as arguments. What makes
@@ -164,10 +172,10 @@ the MIR JSON file in which they are defined. Looking up these identifiers can
 be somewhat error-prone, so SAW offers a `mir_find_adt` command that computes
 an ADT's identifier and returns the `MIRAdt` associated with it:
 
-```
+:::{code-block} console
 sawscript> :type mir_find_adt
 MIRModule -> String -> [MIRType] -> MIRAdt
-```
+:::
 
 Here, `MIRModule` correspond to the MIR JSON file containing the ADT
 definition, and the `String` is the name of the ADT whose identifier we want to
@@ -176,34 +184,38 @@ parameters to the struct (more on this in a bit).
 
 As an example, we can look up the `S` and `T` structs from above like so:
 
-```
-$include 3-6 code/structs.saw
-```
+:::{literalinclude} code/structs.saw
+:lines: 3-6
+:language: sawscript
+:::
 
 We pass an empty list of `MIRType`s to each use of `mir_find_adt`, as neither
 `S` nor `T` have any type parameters. An example of a struct that does include
 type parameters can be seen here:
 
-``` rust
-$include 12-12 code/structs.rs
-```
+:::{literalinclude} code/structs.rs
+:lines: 12
+:language: rust
+:::
 
 As mentioned before, SAW doesn't support generic definitions out of the box, so
 the only way that we can make use of the `Foo` struct is by looking up a
 particular instantiation of `Foo`'s type parameters. If we define a function
 like this, for example:
 
-``` rust
-$include 14-16 code/structs.rs
-```
+:::{literalinclude} code/structs.rs
+:lines: 14-16
+:language: rust
+:::
 
 Then this function instantiates `Foo`'s `A` type parameter with `u32` and the
 `B` type parameter with `u64`. We can use `mir_find_adt` to look up this
 particular instantiation of `Foo` like so:
 
-```
-$include 7-7 code/structs.saw
-```
+:::{literalinclude} code/structs.saw
+:lines: 7
+:language: sawscript
+:::
 
 In general, a MIR JSON file can have many separate instantiations of a single
 struct's type parameters, and each instantiation must be looked up separately
@@ -212,9 +224,10 @@ using `mir_find_adt`.
 Having looked up `Foo<u32, u64>` using `mir_find_adt`, let's use the resulting
 `MIRAdt` in a spec:
 
-```
-$include 9-18 code/structs.saw
-```
+:::{literalinclude} code/structs.saw
+:lines: 9-18
+:language: sawscript
+:::
 
 Note that we are directly writing out the values `27` and `42` in Cryptol.
 Cryptol's numeric literals can take on many different types, so in order to
@@ -226,17 +239,19 @@ explicit type annotation. For instance, the expression `27 : [32]` means that
 
 Let's now verify a function that takes a struct value as an argument:
 
-``` rust
-$include 18-22 code/structs.rs
-```
+:::{literalinclude} code/structs.rs
+:lines: 18-22
+:language: rust
+:::
 
 Moreover, let's verify this function for all possible `Bar` values. One way to
 do this is to write a SAW spec that constructs a struct value whose fields are
 themselves symbolic:
 
-```
-$include 20-38 code/structs.saw
-```
+:::{literalinclude} code/structs.saw
+:lines: 20-38
+:language: sawscript
+:::
 
 This is a rather tedious process, however, as we had to repeatedly use
 `mir_fresh_var` to create a fresh, symbolic value for each field. Moreover,
@@ -254,9 +269,10 @@ recursively for struct fields, such as the `Foo` field in `Bar`.
 As an example, a much shorter way to write the spec above using
 `mir_fresh_expanded_value` is:
 
-```
-$include 42-48 code/structs.saw
-```
+:::{literalinclude} code/structs.saw
+:lines: 42-48
+:language: sawscript
+:::
 
 That's it! Note that the string `"b"` is used as a prefix for all fresh names
 that `mir_fresh_expanded_value` generates, so if SAW produces a counterexample
@@ -276,12 +292,12 @@ has a number of different _variants_ that describe the different ways that an
 enum value can look like. A famous example of a Rust enum is the `Option` type,
 which is defined by the standard library like so:
 
-``` rust
+:::{code-block} rust
 enum Option<T> {
     None,
     Some(T),
 }
-```
+:::
 
 `Option` is commonly used in Rust code to represent a value that may be present
 (`Some`) or absent (`None`). For this reason, we will use `Option` as our
@@ -290,19 +306,20 @@ motivating example of an enum in this section.
 First, let's start by defining some functions that make use of `Option`'s
 variants:
 
-``` rust
-$include 1-7 code/enums.rs
-```
+:::{literalinclude} code/enums.rs
+:lines: 1-7
+:language: rust
+:::
 
 Both functions return an `Option<u32>` value, but each function returns a
 different variant. In order to tell these variants apart, we need a SAW
 function which can construct an enum value that allows the user to pick which
 variant they want to construct. The `mir_enum_value function does exactly that:
 
-```
+:::{code-block} console
 sawscript> :type mir_enum_value
 MIRAdt -> String -> [MIRValue] -> MIRValue
-```
+:::
 
 Like `mir_struct_value`, `mir_enum_value` also requires a `MIRAdt` argument in
 order to discern which particular enum you want. Unlike `mir_struct_value`,
@@ -313,16 +330,18 @@ the `[MIRValue]` arguments represent the fields of the enum variant.
 Let's now verify some enum-related code with SAW. First, we must look up the
 `Option<u32>` ADT, which works just as if you had a struct type:
 
-```
-$include 5-5 code/enums.saw
-```
+:::{literalinclude} code/enums.saw
+:lines: 5
+:language: sawscript
+:::
 
 Next, we can use this ADT to construct enum values. We shall use
 `mir_enum_value` to create a `Some` value in the spec for `i_found_something`:
 
-```
-$include 7-16 code/enums.saw
-```
+:::{literalinclude} code/enums.saw
+:lines: 7-16
+:language: sawscript
+:::
 
 Note that while we used the full identifier `core::option::Option` to look up
 the `Option` ADT, we do not need to use the `core::option` prefix when
@@ -332,9 +351,10 @@ prefix should be from the `option_u32` ADT, so the `"Some"` shorthand suffices.
 Similarly, we can also write a spec for `i_got_nothing`, which uses the `None`
 variant:
 
-```
-$include 18-25 code/enums.saw
-```
+:::{literalinclude} code/enums.saw
+:lines: 18-25
+:language: sawscript
+:::
 
 ### Symbolic enums
 
@@ -348,16 +368,18 @@ Just as `mir_fresh_expanded_value` supports creating symbolic structs,
 example, given this function that accepts an `Option<u32>` value as an
 argument:
 
-``` rust
-$include 9-11 code/enums.rs
-```
+:::{literalinclude} code/enums.rs
+:lines: 9-11
+:language: rust
+:::
 
 We can write a spec for this function that considers all possible `Option<u32>`
 values like so:
 
-```
-$include 27-33 code/enums.saw
-```
+:::{literalinclude} code/enums.saw
+:lines: 27-33
+:language: sawscript
+:::
 
 Here, `o` can be a `None` value, or it can be a `Some` value with a symbolic
 field.
@@ -370,9 +392,10 @@ references (e.g., `&u32`), SAW does not permit allocating a slice directly.
 Instead, one must take a slice of an existing reference. To better illustrate
 this distinction, consider this function:
 
-``` rust
-$include 1-3 code/slices.rs
-```
+:::{literalinclude} code/slices.rs
+:lines: 1-3
+:language: rust
+:::
 
 `sum_of_prefix` takes a slice to a sequence of `u32`s as an argument, indexes
 into the first two elements in the sequence, and adds them together. There are
@@ -380,22 +403,25 @@ many possible ways we can write a spec for this function, as the slice argument
 may be backed by many different sequences. For example, the slice might be
 backed by an array whose length is exactly two:
 
-``` rust
-$include 6-8 code/slices.rs
-```
+:::{literalinclude} code/slices.rs
+:lines: 6-8
+:language: rust
+:::
 
 We could also make a slice whose length is longer than two:
 
-``` rust
-$include 10-12 code/slices.rs
-```
+:::{literalinclude} code/slices.rs
+:lines: 10-12
+:language: rust
+:::
 
 Alternatively, the slice might be a subset of an array whose length is longer
 than two:
 
-``` rust
-$include 14-16 code/slices.rs
-```
+:::{literalinclude} code/slices.rs
+:lines: 14-16
+:language: rust
+:::
 
 All of these are valid ways of building the slice argument to `sum_of_prefix`.
 Let's try to write SAW specifications that construct these different forms of
@@ -403,10 +429,10 @@ slices. To do so, we will need SAW functions that take a reference to a
 collection (e.g., an array) and converts them into a slice reference. The
 `mir_slice_value` function is one such function:
 
-```
+:::{code-block} console
 sawscript> :type mir_slice_value
 MIRValue -> MIRValue
-```
+:::
 
 `mir_slice_value arr_ref` is the SAW equivalent of writing `arr_ref[..]`. That
 is, if `arr_ref` is of type `&[T; N]`, then `mir_slice_value arr_ref` is of
@@ -416,9 +442,10 @@ array itself.
 Let's use `mir_slice_value` to write a spec for `sum_of_prefix` when the slice
 argument is backed by an array of length two:
 
-```
-$include 5-15 code/slices.saw
-```
+:::{literalinclude} code/slices.saw
+:lines: 5-15
+:language: sawscript
+:::
 
 The first part of this spec allocates an array reference `a_ref` and declares
 that it points to a fresh array value `a_val`. The next part declares a slice
@@ -431,9 +458,10 @@ As noted above, the `sum_of_prefix` function can work with slices of many
 different lengths. Here is a slight modification to this spec that declares it
 to take a slice of length 5 rather than a slice of length 2:
 
-```
-$include 19-29 code/slices.saw
-```
+:::{literalinclude} code/slices.saw
+:lines: 19-29
+:language: sawscript
+:::
 
 Both of these examples declare a slice whose length matches the length of the
 underlying array. In general, there is no reason that these have to be the
@@ -442,10 +470,10 @@ length of the underlying array. In Rust, for example, we can write a slice of a
 subset of an array by writing `&arr_ref[0..2]`. The SAW equivalent of this can
 be achieved with the `mir_slice_range_value` function:
 
-```
+:::{code-block} console
 sawscript> :type mir_slice_range_value
 MIRValue -> Int -> Int -> MIRValue
-```
+:::
 
 `mir_slice_range_value` takes takes two additional `Int` arguments that
 represent (1) the index to start the slice from, and (2) the index at which the
@@ -457,9 +485,10 @@ does _not_ include the third element (index `2`).
 For example, here is how to write a spec for `sum_of_prefix` where the slice is
 a length-2 subset of the original array:
 
-```
-$include 33-43 code/slices.saw
-```
+:::{literalinclude} code/slices.saw
+:lines: 33-43
+:language: sawscript
+:::
 
 Note that both `Int` arguments to `mir_slice_range_value` must be concrete
 (i.e., not symbolic). (See the section below if you want an explanation for why

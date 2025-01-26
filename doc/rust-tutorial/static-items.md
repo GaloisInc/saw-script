@@ -13,16 +13,18 @@ There are two kinds of static items in Rust: mutable static items (which have a
 items are much easier to deal with, so let's start by looking at an example of
 a program that uses immutable static data:
 
-``` rust
-$include 1-5 code/statics.rs
-```
+:::{literalinclude} code/statics.rs
+:lines: 1-5
+:language: rust
+:::
 
 This function will return `ANSWER`, i.e., `42`. We can write a spec that says
 as much:
 
-```
-$include 5-9 code/statics.saw
-```
+:::{literalinclude} code/statics.saw
+:lines: 5-9
+:language: sawscript
+:::
 
 This works, but it is somewhat unsatisfying, as it requires hard-coding the
 value of `ANSWER` into the spec. Ideally, we'd not have to think about the
@@ -30,17 +32,18 @@ precise implementation of static items like `ANSWER`. Fortunately, SAW makes
 this possible by providing a `mir_static_initializer` function which computes
 the initial value of a static item at the start of the program:
 
-```
+:::{code-block} console
 sawscript> :type mir_static_initializer
 String -> MIRValue
-```
+:::
 
 In this case, `mir_static_initializer "statics::ANSWER"` is equivalent to
 writing `mir_term {{ 42 : [32] }}`, so this spec is also valid:
 
-```
-$include 14-18 code/statics.saw
-```
+:::{literalinclude} code/statics.saw
+:lines: 14-18
+:language: sawscript
+:::
 
 Like `mir_verify`, the `mir_static_initializer` function expects a full
 identifier as an argument, so we must write `"statics::ANSWER"` instead of
@@ -49,24 +52,26 @@ just `"ANSWER".
 At the MIR level, there is a unique reference to every static item. You can
 obtain this reference by using the `mir_static` function:
 
-```
+:::{code-block} console
 sawscript> :type mir_static
 String -> MIRValue
-```
+:::
 
 Here is one situation in which you would need to use a _reference_ to a static
 item (which `mir_static` computes) rather than the _value_ of a static item
 (which `mir_static_initializer` computes):
 
-``` rust
-$include 7-9 code/statics.rs
-```
+:::{literalinclude} code/statics.rs
+:lines: 7-9
+:language: rust
+:::
 
 A spec for this function would look like this:
 
-```
-$include 23-27 code/statics.saw
-```
+:::{literalinclude} code/statics.saw
+:lines: 23-27
+:language: sawscript
+:::
 
 That's about all there is to say regarding immutable static items.
 
@@ -78,9 +83,10 @@ state that any function can access and modify. They are so tricky, in fact,
 that Rust does not even allow you to use them unless you surround them in an
 `unsafe` block:
 
-``` rust
-$include 11-15 code/statics.rs
-```
+:::{literalinclude} code/statics.rs
+:lines: 11-15
+:language: rust
+:::
 
 The `mir_static_initializer` and `mut_static` functions work both immutable and
 mutable static items, so we can write specs for mutable items using mostly the
@@ -90,13 +96,14 @@ mutable static items. For example, here is naïve attempt at porting the spec
 for `answer_to_the_ultimate_question` over to its mutable static counterpart,
 `mut_answer_to_the_ultimate_question`:
 
-```
-$include 5-9 code/statics-fail.saw
-```
+:::{literalinclude} code/statics-fail.saw
+:lines: 5-9
+:language: sawscript
+:::
 
 This looks plausible, but SAW will fail to verify it:
 
-```
+:::{code-block} console
 [21:52:32.738] Verifying statics/28a97e47::mut_answer_to_the_ultimate_question[0] ...
 [21:52:32.745] Simulating statics/28a97e47::mut_answer_to_the_ultimate_question[0] ...
 ...
@@ -104,7 +111,7 @@ Symbolic execution failed.
 Abort due to assertion failure:
   statics.rs:14:14: 14:24: error: in statics/28a97e47::mut_answer_to_the_ultimate_question[0]
   attempted to read empty mux tree
-```
+:::
 
 Oh no! Recall that we have seen this "`attempted to read empty mux tree`" error
 message once before when discussing reference types. This error arose when we
@@ -119,17 +126,19 @@ The solution to this problem is to perform this initialization explicitly using
 `mir_points_to` in the preconditions of the spec. For example, this is a valid
 spec:
 
-```
-$include 32-40 code/statics-fail.saw
-```
+:::{literalinclude} code/statics.saw
+:lines: 32-40
+:language: sawscript
+:::
 
 We don't necessarily have to use `mir_static_initializer` as the starting value
 for `MUT_ANSWER`, however. This spec, which uses `27` as the starting value, is
 equally valid:
 
-```
-$include 45-52 code/statics-fail.saw
-```
+:::{literalinclude} code/statics.saw
+:lines: 45-52
+:language: sawscript
+:::
 
 At this point, you are likely wondering: why do we need to explicitly
 initialize mutable static references but not immutable static references? After
@@ -141,9 +150,10 @@ careful in specifying what a mutable static value is at the start of a
 function. For example, consider a slightly extended version of the earlier Rust
 code we saw:
 
-``` rust
-$include 11-22 code/statics.rs
-```
+:::{literalinclude} code/statics.rs
+:lines: 11-22
+:language: rust
+:::
 
 Suppose someone were to ask you "what value does
 `mut_answer_to_the_ultimate_question` return?" This is not a straightforward
@@ -163,18 +173,20 @@ pitfalls of using mutable references in compositional overrides. Mutable static
 items are also mutable values that are backed by references, and as such, they
 are also subject to the same pitfalls. Let's see an example of this:
 
-``` rust
-$include 1-12 code/statics-compositional.rs
-```
+:::{literalinclude} code/statics-compositional.rs
+:lines: 1-12
+:language: rust
+:::
 
 The setup is almost the same, except that instead of passing a mutable
 reference as an argument to `side_effect`, we instead declare a mutable static
 item `A` that is shared between `side_effect` and `foo`. We could potentially
 write SAW specs for `side_effect` and `foo` like these:
 
-```
-$include 5-20 code/statics-compositional-fail.saw
-```
+:::{literalinclude} code/statics-compositional-fail.saw
+:lines: 5-20
+:language: sawscript
+:::
 
 Note that we have once again underspecified the behavior of `side_effect`, as
 we do not say what `A`'s value should be in the postconditions of
@@ -183,7 +195,7 @@ rather than the initial value of `A`. By similar reasoning as before, we run
 the risk that using `side_effect_ov` could lead use to prove something
 incorrect. Thankfully, SAW can also catch this sort of mistake:
 
-```
+:::{code-block} console
 [15:46:38.525] Verifying statics_compositional/16fea9c0::side_effect[0] ...
 [15:46:38.533] Simulating statics_compositional/16fea9c0::side_effect[0] ...
 [15:46:38.533] Checking proof obligations statics_compositional/16fea9c0::side_effect[0] ...
@@ -194,20 +206,22 @@ incorrect. Thankfully, SAW can also catch this sort of mistake:
 [15:46:38.542] Branching on 1 override variants of statics_compositional/16fea9c0::side_effect[0] ...
 ...
 State of mutable static variable "statics_compositional/16fea9c0::A[0]" not described in postcondition
-```
+:::
 
 To repair this proof, add a `mir_points_to` statement in the postconditions of
 `side_effect_spec`:
 
-```
-$include 7-13 code/statics-compositional.saw
-```
+:::{literalinclude} code/statics-compositional.saw
+:lines: 7-13
+:language: sawscript
+:::
 
 And then correct the behavior of `foo_spec`:
 
-```
-$include 15-22 code/statics-compositional.saw
-```
+:::{literalinclude} code/statics-compositional.saw
+:lines: 15-22
+:language: sawscript
+:::
 
 Be warned that if your program declares any mutable static items, then any
 compositional override _must_ state what the value of each mutable static item
@@ -215,10 +229,10 @@ is in its postconditions. This applies _even if the override does not directly
 use the mutable static items_. For example, if we had declared a second mutable
 static item alongside `A`:
 
-``` rust
+:::{code-block} rust
 static mut A: u32 = 42;
 static mut B: u32 = 27;
-```
+:::
 
 Then `side_effect_spec` would need an additional `mir_points_to` statement
 involving `B` to satisfy this requirement. This requirement is somewhat

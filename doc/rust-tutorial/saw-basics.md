@@ -7,9 +7,9 @@ suitable for SAW. Let's put our skills to the test and verify something! We will
 build on the example from above, which we will put into a file named
 `saw-basics.rs`:
 
-``` rust
-$include all code/saw-basics.rs
-```
+:::{literalinclude} code/saw-basics.rs
+:language: rust
+:::
 
 Our goal is to verify the correctness of the `id_u8` function. However, it is
 meaningless to talk about whether a function is correct without having a
@@ -19,9 +19,10 @@ you to write a precise specification for describing a function's behavior. For
 example, here is a specification that captures the intended behavior of
 `id_u8`:
 
-```
-$include 3-7 code/saw-basics.saw
-```
+:::{literalinclude} code/saw-basics.saw
+:lines: 3-7
+:language: sawscript
+:::
 
 At a high level, this specification says that `id_u8` is a function that accepts
 a single argument of type `u8`, and it returns its argument unchanged. Nothing
@@ -57,17 +58,19 @@ Now that we have a specification in hand, it's time to prove that `id_u8`
 actually adheres to the spec. To do so, we need to load the MIR JSON version of
 `id_u8` into SAW, which is done with the `mir_load_module` command:
 
-```
-$include 9-9 code/saw-basics.saw
-```
+:::{literalinclude} code/saw-basics.saw
+:lines: 9
+:language: sawscript
+:::
 
 This `m` variable contains the definition of `id_u8`, as well as the other code
 defined in the program. We can then pass `m` to the `mir_verify` command, which
 actually verifies that `id_u8` behaves according to `id_u8_spec`:
 
-```
-$include 11-11 code/saw-basics.saw
-```
+:::{literalinclude} code/saw-basics.saw
+:lines: 11
+:language: sawscript
+:::
 
 Here is what is going on in this command:
 
@@ -90,9 +93,9 @@ Here is what is going on in this command:
 
 Putting this all together, our complete `saw-basics.saw` file is:
 
-```
-$include all code/saw-basics.saw
-```
+:::{literalinclude} code/saw-basics.saw
+:language: sawscript
+:::
 
 One minor detail that we left out until just now is that the SAW's interface to
 MIR is still experimental, so you must explicitly opt into it with the
@@ -100,7 +103,7 @@ MIR is still experimental, so you must explicitly opt into it with the
 
 Now that everything is in place, we can check this proof like so:
 
-```
+:::{code-block} console
 $ saw saw-basics.saw
 
 
@@ -110,7 +113,7 @@ $ saw saw-basics.saw
 [16:14:07.017] Simulating saw_basics/f77ebf43::id_u8[0] ...
 [16:14:07.017] Checking proof obligations saw_basics/f77ebf43::id_u8[0] ...
 [16:14:07.017] Proof succeeded! saw_basics/f77ebf43::id_u8[0]
-```
+:::
 
 Tada! SAW was successfully able to prove that `id_u8` adheres to its spec.
 
@@ -124,9 +127,10 @@ not always so clear.
 
 For example, consider this function, which multiplies a number by two:
 
-``` rust
-$include 1-3 code/times-two.rs
-```
+:::{literalinclude} code/times-two.rs
+:lines: 1-3
+:language: rust
+:::
 
 The straightforward way to implement this function would be to return `2 * x`,
 but the author of this function _really_ cared about performance. As such, the
@@ -137,9 +141,10 @@ but it would be nice for SAW to check this.
 
 Let's write a specification for the `times_two` function:
 
-```
-$include 3-7 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 3-7
+:language: sawscript
+:::
 
 This spec introduces code delimited by double curly braces `{{ ... }}`, which
 is a piece of syntax that we haven't seen before. The code in between the curly
@@ -160,13 +165,14 @@ the function against a spec that is as simple and readable as possible.
 
 Our full SAW file is:
 
-```
-$include 1-11 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 1-11
+:language: sawscript
+:::
 
 Which we can verify is correct like so:
 
-```
+:::{code-block} console
 $ saw times-two.saw
 
 
@@ -176,7 +182,7 @@ $ saw times-two.saw
 [17:51:35.512] Simulating times_two/6f4e41af::times_two[0] ...
 [17:51:35.513] Checking proof obligations times_two/6f4e41af::times_two[0] ...
 [17:51:35.527] Proof succeeded! times_two/6f4e41af::times_two[0]
-```
+:::
 
 Nice! Even though the `times_two` function does not literally return `2 * x`,
 SAW is able to confirm that the function behaves as if it were implemented that
@@ -189,18 +195,18 @@ what the `mir_term` function does. It is helpful to examine the type of
 `mir_term` by using SAW's interactive mode. To do so, run the `saw` binary
 without any other arguments:
 
-```
+:::{code-block} console
 $ saw
-```
+:::
 
 Then run `enable_experimental` (to enable MIR-related commands) and run `:type
 mir_term`:
 
-```
+:::{code-block} console
 sawscript> enable_experimental
 sawscript> :type mir_term
 Term -> MIRValue
-```
+:::
 
 Here, we see that `mir_term` accepts a `Term` as an argument and returns a
 `MIRValue`. In this context, the `Term` type represents a Cryptol value, and
@@ -211,12 +217,12 @@ of as a subset of `MIRValue`s, and the `mir_term` function is used to promote a
 Most other MIR-related commands work over `MIRValue`s, as can be seen with
 SAW's `:type` command:
 
-```
+:::{code-block} console
 sawscript> :type mir_execute_func
 [MIRValue] -> MIRSetup ()
 sawscript> :type mir_return
 MIRValue -> MIRSetup ()
-```
+:::
 
 Note that `MIRSetup` is the type of statements in a MIR specification, and two
 `MIRSetup`-typed commands can be chained together by using `do`-notation.
@@ -225,10 +231,10 @@ interesting, and the use of `()` here is very much analogous to how `()` is
 used in Rust. There are other `MIRSetup`-typed commands that _do_ return
 something interesting, as is the case with `mir_fresh_var`:
 
-```
+:::{code-block} console
 sawscript> :type mir_fresh_var
 String -> MIRType -> MIRSetup Term
-```
+:::
 
 This command returns a `MIRSetup Term`, which means that when you write `x <-
 mir_fresh_var ... ...` in a MIR specification, then `x` will be bound at type
@@ -243,20 +249,22 @@ our earlier `{{ 2 * x }}` example works, as `x` is of type `Term`.
 As a sanity check, let's write a naïve version of `times_two` that explicitly
 returns `2 * x`:
 
-``` rust
-$include 5-7 code/times-two.rs
-```
+:::{literalinclude} code/times-two.rs
+:lines: 5-7
+:language: rust
+:::
 
 It seems like we should be able to verify this `times_two_ref` function using
 the same spec that we used for `times_two`:
 
-```
-$include 11-11 code/times-two-ref-fail.saw
-```
+:::{literalinclude} code/times-two-ref-fail.saw
+:lines: 11
+:language: sawscript
+:::
 
 Somewhat surprisingly, SAW fails to verify this function:
 
-```
+:::{code-block} console
 $ saw times-two-ref-fail.saw
 
 
@@ -272,7 +280,7 @@ $ saw times-two-ref-fail.saw
 [18:58:22.640] Stack trace:
 "mir_verify" (times-two-ref-fail.saw:11:1-11:11)
 Proof failed.
-```
+:::
 
 The "`which would overflow`" portion of the error message suggests what went
 wrong. When a Rust program is compiled with debug settings (which is the
@@ -311,9 +319,10 @@ perfectly fine for inputs smaller than `2^^31`. We can encode such an
 assumption in SAW by adding a _precondition_. To do so, we write a slightly
 modified version of `times_two_spec`:
 
-```
-$include 13-18 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 13-18
+:language: sawscript
+:::
 
 The most notable change is the `mir_precond {{ x < 2^^31 }};` line.
 `mir_precond` (where "`precond`" is short for "precondition") is a command that
@@ -326,24 +335,26 @@ By doing this, we have limited the range of the function from `0` to `2^^31 -
 1`, which is exactly the range of values for which `times_two_ref` is well
 defined. SAW will confirm this if we run it:
 
-```
-$include 20-20 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 20
+:language: sawscript
+:::
 
-```
+:::{code-block} console
 [19:23:53.480] Verifying times_two/56182919::times_two_ref[0] ...
 [19:23:53.496] Simulating times_two/56182919::times_two_ref[0] ...
 [19:23:53.497] Checking proof obligations times_two/56182919::times_two_ref[0] ...
 [19:23:53.531] Proof succeeded! times_two/56182919::times_two_ref[0]
-```
+:::
 
 We can add as many preconditions to a spec as we see fit. For instance, if we
 only want to verify `times_two_ref` for positive integers, we could add an
 additional assumption:
 
-```
-$include 22-28 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 22-28
+:language: sawscript
+:::
 
 In addition to preconditions, SAW also supports postconditions. Whereas
 preconditions represent conditions that must hold _before_ invoking a function,
@@ -357,9 +368,10 @@ For example, if we call `times_two_ref` with a positive argument, then it
 should be the case that the return value should be strictly greater than the
 argument value. We can check for this using `mir_postcond` like so:
 
-```
-$include 32-39 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 32-39
+:language: sawscript
+:::
 
 An additional convenience that SAW offers is the `mir_assert` command.
 `mir_assert` has the same type as `mir_precond` and `mir_postcond`, but
@@ -372,9 +384,10 @@ then it declares a postcondition.
 For example, we can rewrite `times_two_ref_positive_postcond_spec` to use
 `mir_assert`s like so:
 
-```
-$include 43-50 code/times-two.saw
-```
+:::{literalinclude} code/times-two.saw
+:lines: 43-50
+:language: sawscript
+:::
 
 The choice of whether to use `mir_precond`/`mir_postcond` versus `mir_assert` is
 mostly a matter personal taste.

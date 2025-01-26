@@ -7,9 +7,10 @@ callee function and verify its behavior alongside the behavior of the callee
 function. This is a fine thing to do, but it can be inefficient. For example,
 consider a function like this:
 
-``` rust
-$include 5-9 code/overrides.rs
-```
+:::{literalinclude} code/overrides.rs
+:lines: 5-9
+:language: rust
+:::
 
 Here, the caller function `f` invokes the callee function `g` three separate
 times. If we verify `f` with `mir_verify` as we have done up until this point,
@@ -28,10 +29,10 @@ As it turns out, the command needed to produce an override specification is
 already familiar to us—it's `mir_verify`! If you examine the type of this
 command:
 
-```
+:::{code-block} console
 sawscript> :type mir_verify
 MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec
-```
+:::
 
 The returned value is a `MIRSpec`, which captures the behavior of the function
 that was verified as an override spec. This override can then be passed to
@@ -41,9 +42,10 @@ Let's now try compositional verification in practice. To do so, we will first
 prove a spec for the `g` function above. For demonstration purposes, we will
 pick a simplistic implementation of `g`:
 
-``` rust
-$include 1-3 code/overrides.rs
-```
+:::{literalinclude} code/overrides.rs
+:lines: 1-3
+:language: rust
+:::
 
 Note that we don't really _have_ to use compositional verification when `g` is
 this simple, as SAW is capable of reasoning about `g`'s behavior directly when
@@ -54,9 +56,10 @@ implementation of `g` is small or large.
 The first step of compositional verification is to prove a spec for `g`, the
 callee function:
 
-```
-$include 5-13 code/overrides.saw
-```
+:::{literalinclude} code/overrides.saw
+:lines: 5-13
+:language: sawscript
+:::
 
 There's nothing that different about this particular proof from the proofs
 we've seen before. The only notable difference is that we bind the result of
@@ -66,16 +69,18 @@ override"). This part is important, as we will need to use `g_ov` shortly.
 The next step is to write a spec for `f`. Since `g` adds `1` to its argument,
 `f` will add `3` to its argument:
 
-```
-$include 15-21 code/overrides.saw
-```
+:::{literalinclude} code/overrides.saw
+:lines: 15-21
+:language: sawscript
+:::
 
 Again, nothing too surprising. Now let's prove `f` against `f_spec` by using
 `g_ov` as a compositional override:
 
-```
-$include 23-23 code/overrides.saw
-```
+:::{literalinclude} code/overrides.saw
+:lines: 23
+:language: sawscript
+:::
 
 Here, note that instead of passing an empty list (`[]`) as we have done before,
 we now pass a list containing `g_ov`. This informs `mir_verify` that whenever
@@ -86,7 +91,7 @@ this later in the tutorial), but for now, one override will suffice.
 Let's run the proof of `f` against `f_spec`, making sure to pay attention to
 the output of SAW:
 
-```
+:::{code-block} console
 [19:06:17.392] Verifying overrides/96c5af24::f[0] ...
 [19:06:17.406] Simulating overrides/96c5af24::f[0] ...
 [19:06:17.407] Matching 1 overrides of  overrides/96c5af24::g[0] ...
@@ -100,7 +105,7 @@ the output of SAW:
 [19:06:17.407] Applied override! overrides/96c5af24::g[0]
 [19:06:17.407] Checking proof obligations overrides/96c5af24::f[0] ...
 [19:06:17.422] Proof succeeded! overrides/96c5af24::f[0]
-```
+:::
 
 We've now proven `f` compositionally! The first two lines ("`Verifying ...`"
 and "`Simulating ...`") and the last two lines ("`Checking proof obligations
@@ -130,27 +135,29 @@ function being overridden.
 For example, let's suppose that we wrote different `g` specs, one where the
 argument to `g` is even, and another where the argument to `g` is odd:
 
-```
-$include 25-44 code/overrides.saw
-```
+:::{literalinclude} code/overrides.saw
+:lines: 25-44
+:language: sawscript
+:::
 
 We can then prove `f` compositionally by passing both of the `g` overrides to
 `mir_verify`:
 
-```
-$include 45-45 code/overrides.saw
-```
+:::{literalinclude} code/overrides.saw
+:lines: 45
+:language: sawscript
+:::
 
 Like before, this will successfully verify. The only different now is that SAW
 will print output involving two overrides instead of just one:
 
-```
+:::{code-block} console
 [20:48:07.649] Simulating overrides/96c5af24::f[0] ...
 [20:48:07.650] Matching 2 overrides of  overrides/96c5af24::g[0] ...
 [20:48:07.650] Branching on 2 override variants of overrides/96c5af24::g[0] ...
 [20:48:07.652] Applied override! overrides/96c5af24::g[0]
 ...
-```
+:::
 
 Keep in mind that if you provide at least one override for a function as part
 of a compositional verification, then SAW _must_ apply an override whenever it
@@ -158,15 +165,16 @@ invokes that function during simulation. If SAW cannot find a matching
 override, then the verification will fail. For instance, consider what would
 happen if you tried proving `f` like so:
 
-```
-$include 33-33 code/overrides-fail.saw
-```
+:::{literalinclude} code/overrides-fail.saw
+:lines: 33
+:language: sawscript
+:::
 
 This time, we supply one override for `g` that only matches when the argument
 is even. This is a problem, as SAW will not be able to find a matching override
 when the argument is odd. Indeed, SAW will fail to verify this:
 
-```
+:::{code-block} console
 [20:53:29.588] Verifying overrides/96c5af24::f[0] ...
 [20:53:29.602] Simulating overrides/96c5af24::f[0] ...
 [20:53:29.602] Matching 1 overrides of  overrides/96c5af24::g[0] ...
@@ -189,7 +197,7 @@ Run SAW with --sim-verbose=3 to see a description of each override.
 [20:53:29.624]   x: 1
 ...
 Proof failed.
-```
+:::
 
 Here, we can see that `No override specification applies`, and SAW also
 generates a counterexample of `x: 1`. Sure enough, `1` is an odd number!
@@ -206,9 +214,10 @@ mutable reference, it could potentially lead to incorrect proofs.
 This is the sort of thing that is best explained with an example, so consider
 these two functions:
 
-``` rust
-$include 1-9 code/overrides-mut.rs
-```
+:::{literalinclude} code/overrides-mut.rs
+:lines: 1-9
+:language: rust
+:::
 
 The `side_effect` function does not return anything interesting; it is only
 ever invoked to perform a side effect of changing the mutable reference `a` to
@@ -219,9 +228,10 @@ surprises just yet.
 Now let's make a first attempt at verifying `foo` using compositional
 verification. First, we will write a spec for `side_effect`:
 
-```
-$include 5-10 code/overrides-mut-fail.saw
-```
+:::{literalinclude} code/overrides-mut-fail.saw
+:lines: 5-10
+:language: sawscript
+:::
 
 `side_effect_spec` is somewhat odd. Although it goes through the effort of
 allocating a mutable reference `a_ref` and initializing it, nothing about this
@@ -230,24 +240,27 @@ This omission is strange, but not outright wrong—the spec just underspecifies
 what the behavior of the function is. Indeed, SAW will successfully verify this
 spec using `mir_verify`:
 
-```
-$include 18-18 code/overrides-mut-fail.saw
-```
+:::{literalinclude} code/overrides-mut-fail.saw
+:lines: 18
+:language: sawscript
+:::
 
 Next, let's try to write a spec for `foo`:
 
-```
-$include 12-16 code/overrides-mut-fail.saw
-```
+:::{literalinclude} code/overrides-mut-fail.saw
+:lines: 12-16
+:language: sawscript
+:::
 
 At this point, alarm bells should be going off in your head. This spec
 incorrectly states that `foo(x)` should return `x`, but it should actually
 return `0`! This looks wrong, but consider what would happen if you tried to
 verify this compositionally using our `side_effect_ov` override:
 
-```
-$include 19-19 code/overrides-mut-fail.saw
-```
+:::{literalinclude} code/overrides-mut-fail.saw
+:lines: 19
+:language: sawscript
+:::
 
 If SAW were to simulate `foo(x)`, it would invoke create a temporary variable
 `b` and assign it to the value `x`, and then it would invoke `side_effect(&mut
@@ -261,21 +274,22 @@ Now that we've made you sweat a little bit, it's time for some good news: SAW
 won't _actually_ let you prove `foo_spec`. If you try this compositional proof
 in practice, SAW will catch your mistake:
 
-```
+:::{code-block} console
 [14:50:29.170] Verifying overrides_mut/11e47708::foo[0] ...
 [14:50:29.181] Simulating overrides_mut/11e47708::foo[0] ...
 [14:50:29.181] Matching 1 overrides of  overrides_mut/11e47708::side_effect[0] ...
 [14:50:29.181] Branching on 1 override variants of overrides_mut/11e47708::side_effect[0] ...
 ...
 State of memory allocated in precondition (at overrides-mut-fail.saw:6:12) not described in postcondition
-```
+:::
 
 The line of code that SAW points to in the "`State of memory ...`" error
 message is:
 
-```
-$include 6-6 code/overrides-mut-fail.saw
-```
+:::{literalinclude} code/overrides-mut-fail.saw
+:lines: 6
+:language: sawscript
+:::
 
 SAW informs us that although we allocated the mutable reference `a_ref`, we
 never indicated what it should point to after the function has returned. This
@@ -289,15 +303,17 @@ exceptions.
 Thankfully, repairing this spec is relatively straightforward. Simply add a
 `mir_points_to` statement in the postconditions of `side_effect_spec`:
 
-```
-$include 5-13 code/overrides-mut.saw
-```
+:::{literalinclude} code/overrides-mut.saw
+:lines: 5-13
+:language: sawscript
+:::
 
 Then use the correct return value in `foo_spec`:
 
-```
-$include 15-21 code/overrides-mut.saw
-```
+:::{literalinclude} code/overrides-mut.saw
+:lines: 15-21
+:language: sawscript
+:::
 
 And now the compositional proof of `foo_spec` works!
 
@@ -310,10 +326,10 @@ from a formal verification tool. In certain circumstances, however, it can be
 useful to say "I know what I'm doing, SAW—just believe me when I say this spec
 is valid!" In order to say this, you can use `mir_unsafe_assume_spec`:
 
-```
+:::{code-block} console
 sawscript> :type mir_unsafe_assume_spec
 MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec
-```
+:::
 
 `mir_unsafe_assume_spec` is `mir_verify`'s cousin who likes to live a little
 more dangerously. Unlike `mir_verify`, the specification that you pass to
@@ -341,9 +357,10 @@ later, but it can be nice to try something else first.
 For example, here is how one can unsafely assume `g_spec` and use it in a
 compositional proof of `f_spec`:
 
-```
-$include 21-22 code/overrides-unsafe.saw
-```
+:::{literalinclude} code/overrides-unsafe.saw
+:lines: 21-22
+:language: sawscript
+:::
 
 It should be emphasized that when we say "`unsafe`", we really mean it.
 `mir_unsafe_assume_spec` can be used to prove specs that are blatantly wrong,

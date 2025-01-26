@@ -34,21 +34,21 @@ study that involves a `cargo`-based project, which will use `cargo-saw-build`.
 Let's try out `saw-rustc` on a small example file, which we'll name
 `first-example.rs`:
 
-``` rust
-$include all code/first-example.rs
-```
+:::{literalinclude} code/first-example.rs
+:language: rust
+:::
 
 This is the identity function, but specialized to the type `u8`. We can compile
 this with `saw-rustc` like so:
 
-```
+:::{code-block} console
 $ saw-rustc first-example.rs
 <snip>
 note: Emitting MIR for first_example/abef32c5::id_u8
 
 linking 1 mir files into first-example.linked-mir.json
 <snip>
-```
+:::
 
 `saw-rustc` prints out some additional information that `rustc` alone does not
 print, and we have displayed the parts of this information that are most
@@ -93,23 +93,23 @@ libraries is to perform the following steps:
 
 1. Clone the [`crucible`](https://github.com/GaloisInc/crucible) repo like so:
 
-   ```
+   :::{code-block} console
    $ git clone https://github.com/GaloisInc/crucible
-   ```
+   :::
 
 2. Navigate to the
    [`crux-mir`](https://github.com/GaloisInc/crucible/tree/master/crux-mir)
    subdirectory of the `crucible` checkout:
 
-   ```
+   :::{code-block} console
    $ cd crucible/crux-mir/
-   ```
+   :::
 
 3. Run the `translate_libs.sh` script:
 
-   ```
+   :::{code-block} console
    $ ./translate_libs.sh
-   ```
+   :::
 
    This will compile the custom versions of the Rust standard libraries using
    `mir-json`, placing the results under the `rlibs` subdirectory.
@@ -117,9 +117,9 @@ libraries is to perform the following steps:
 4. Finally, define a `SAW_RUST_LIBRARY_PATH` environment variable that points
    to the newly created `rlibs` subdirectory:
 
-   ```
+   :::{code-block} console
    $ export SAW_RUST_LIBRARY_PATH=<...>/crucible/crux-mir/rlibs
-   ```
+   :::
 
 An upcoming release of SAW will include these custom libraries pre-built, which
 will greatly simplify the steps above. Either way, you will need to set the
@@ -132,14 +132,14 @@ The `id_u8` function above is likely not how most Rust programmers would define
 the identity function. Instead, it would seem more natural to define it
 generically, that is, by parameterizing the function by a type parameter:
 
-``` rust
-$include all code/generics-take-1.rs
-```
+:::{literalinclude} code/generics-take-1.rs
+:language: rust
+:::
 
 If you compile this with `saw-rustc`, however, the resulting JSON file will
 lack a definition for `id`! We can see this by using `jq`:
 
-```
+:::{code-block} console
 $ saw-rustc generics-take-1.rs
 <snip>
 $ jq . generics-take-1.linked-mir.json
@@ -153,7 +153,7 @@ $ jq . generics-take-1.linked-mir.json
   "tys": [],
   "roots": []
 }
-```
+:::
 
 What is going on here? This is the result of an important design choice that
 SAW makes: _SAW only supports verifying monomorphic functions_. To be more
@@ -164,13 +164,13 @@ In order to verify a function using generics in your Rust code, you must
 provide a separate, monomorphic function that calls into the generic function.
 For example, you can rewrite the example above like so:
 
-``` rust
-$include all code/generics-take-2.rs
-```
+:::{literalinclude} code/generics-take-2.rs
+:language: rust
+:::
 
 If you compile this version with `saw-rustc`, you'll see:
 
-```
+:::{code-block} console
 $ saw-rustc generics-take-2.rs
 <snip>
 note: Emitting MIR for generics_take_2/8b1bf337::id_u8
@@ -179,7 +179,7 @@ note: Emitting MIR for generics_take_2/8b1bf337::id::_instaddce72e1232152c[0]
 
 linking 1 mir files into generics-take-2.linked-mir.json
 <snip>
-```
+:::
 
 This time, the resulting JSON file contains a definition for `id_u8`. The
 reason that this works is because when `id_u8` calls `id`, the Rust compile
@@ -194,13 +194,13 @@ only be able to verify the `id_u8` function from this file. If you are ever in
 doubt about which functions are accessible for verification with SAW, you can
 check this with `jq` like so:
 
-```
+:::{code-block} console
 $ jq '.intrinsics | map(.name)' generics-take-2.linked-mir.json
 [
   "generics_take_2/8b1bf337::id_u8",
   "generics_take_2/8b1bf337::id::_instaddce72e1232152c[0]"
 ]
-```
+:::
 
 Here, "intrinsics" are monomorphic functions that are visible to SAW. Note that
 `saw-rustc` will optimize away all definitions that are not accessible from one
@@ -231,7 +231,9 @@ identifiers provide us the mechanism for doing so.
 Let's take a closer look at what goes into an identifier. In general, an identifier
 will look like the following:
 
-* `<crate name>/<disambiguator>::<function path>`
+:::{code-block}
+<crate name>/<disambiguator>::<function path>
+:::
 
 `<crate name>` is the name of the crate in which the function is defined. All
 of the examples we've seen up to this point have been defined in standalone
@@ -252,9 +254,9 @@ involve multiple _segments_, depending on the module hierarchy for the program
 being verified. For instance, a `read` function located in
 `core/src/ptr/mod.rs` will have the identifier:
 
-```
+:::{code-block}
 core/<disambiguator>::ptr::read
-```
+:::
 
 Where `core` is the crate name and `ptr::read` is the function path, which
 has two segments `ptr` and `read`. There are also some special forms of
@@ -262,9 +264,9 @@ segments that appear for functions defined in certain language constructs.
 For instance, if a function is defined in an `impl` block, then it will have
 `{impl}` as one of its segments, e.g.,
 
-```
+:::{code-block}
 core/<disambiguator>::ptr::const_ptr::{impl}::offset
-```
+:::
 
 The most cumbersome part of writing an identifier is the disambiguator, as it
 is extremely sensitive to changes in the code (not to mention hard to remember
@@ -272,15 +274,15 @@ and type). Luckily, the vast majority of crate names correspond to exactly one
 disambiguator, and we can exploit this fact to abbreviate identifiers that live
 in such crates. For instance, we can abbreviate this identifier:
 
-```
+:::{code-block}
 core/<disambiguator>::ptr::read
-```
+:::
 
 To simply:
 
-```
+:::{code-block}
 core::ptr::read
-```
+:::
 
 We will adopt the latter, shorter notation throughout the rest of the tutorial.
 SAW also understands this shorthand, so we will also use this notation when

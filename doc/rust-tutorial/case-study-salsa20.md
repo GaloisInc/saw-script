@@ -96,18 +96,20 @@ interesting code lives in
 [`src/core.rs`](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/src/core.rs).
 At the top of this file, we have the `Core` struct:
 
-``` rust
-$include 8-14 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 8-14
+:language: rust
+:::
 
 Let's walk through this:
 
 * The `state` field is an array that is `STATE_WORDS` elements long, where
   `STATE_WORDS` is a commonly used alias for `16`:
 
-  ``` rust
-  $include 88-89 code/salsa20/src/lib.rs
-  ```
+  :::{literalinclude} code/salsa20/src/lib.rs
+  :lines: 88-89
+  :language: rust
+  :::
 
 * The `rounds` field is of type `PhantomData<R>`. If you haven't seen it
   before,
@@ -119,24 +121,27 @@ Let's walk through this:
 The reason that `Core` needs a `PhantomData<R>` field is because `R`
 implements the `Rounds` trait:
 
-``` rust
-$include 1-5 code/salsa20/src/rounds.rs
-```
+:::{literalinclude} code/salsa20/src/rounds.rs
+:lines: 1-5
+:language: rust
+:::
 
 A core operation in Salsa20 is hashing its input through a series of
 _rounds_. The `COUNT` constant indicates how many rounds should be performed.
 The Salsa20 spec assumes 20 rounds:
 
-``` rust
-$include 23-29 code/salsa20/src/rounds.rs
-```
+:::{literalinclude} code/salsa20/src/rounds.rs
+:lines: 23-29
+:language: rust
+:::
 
 However, there are also reduced-round variants that perform 8 and 12 rounds,
 respectively:
 
-``` rust
-$include 7-21 code/salsa20/src/rounds.rs
-```
+:::{literalinclude} code/salsa20/src/rounds.rs
+:lines: 7-21
+:language: rust
+:::
 
 Each number of rounds has a corresponding struct whose names begins with the
 letter `R`. For instance, a `Core<R20>` value represents a 20-round Salsa20
@@ -144,9 +149,10 @@ cipher. Here is the typical use case for a `Core` value:
 
 * A `Core` value is created using the `new` function:
 
-  ``` rust
-  $include 18-18 code/salsa20/src/core.rs
-  ```
+  :::{literalinclude} code/salsa20/src/core.rs
+  :lines: 18
+  :language: rust
+  :::
 
   We'll omit the implementation for now. This function takes a secret `Key`
   value and a unique `Nonce` value and uses them to produce the initial `state`
@@ -155,13 +161,15 @@ cipher. Here is the typical use case for a `Core` value:
 * After creating a `Core` value, the `counter_setup` and `rounds` functions are
   used to produce the Salsa20 keystream:
 
-  ``` rust
-  $include 83-83 code/salsa20/src/core.rs
-  ```
+  :::{literalinclude} code/salsa20/src/core.rs
+  :lines: 83
+  :language: rust
+  :::
 
-  ``` rust
-  $include 90-90 code/salsa20/src/core.rs
-  ```
+  :::{literalinclude} code/salsa20/src/core.rs
+  :lines: 90
+  :language: rust
+  :::
 
   We'll have more to say about these functions later.
 
@@ -169,9 +177,10 @@ cipher. Here is the typical use case for a `Core` value:
   newly created `Core` value, produces its keystream, and applies it to a
   message to produce the `output`:
 
-  ``` rust
-  $include 68-68 code/salsa20/src/core.rs
-  ```
+  :::{literalinclude} code/salsa20/src/core.rs
+  :lines: 68
+  :language: rust
+  :::
 
 Our ultimate goal is to verify the `apply_keystream` function, which is the
 Rust equivalent of the Salsa20 encryption function described in the spec.
@@ -188,16 +197,16 @@ section](./about-mir-json.md#the-saw_rust_library_path-environment-variable).
 
 To build the `salsa20` crate, perform the following steps:
 
-```
+:::{code-block} console
 $ cd code/salsa20/
 $ cargo saw-build
-```
+:::
 
 Near the end of the build output, you will see a line that looks like this:
 
-```
+:::{code-block} console
 linking 9 mir files into <...>/saw-script/doc/rust-tutorial/code/salsa20/target/x86_64-unknown-linux-gnu/debug/deps/salsa20-dd0d90f28492b9cb.linked-mir.json
-```
+:::
 
 This is the location of the MIR JSON file that we will need to provide to SAW.
 (When we tried it, the hash in the file name was `dd0d90f28492b9cb`, but it
@@ -205,9 +214,9 @@ could very well be different on your machine.) Due to how `cargo` works, the
 location of this file is in a rather verbose, hard-to-remember location. For
 this reason, we recommend copying this file to a different path, e.g.,
 
-```
+:::{code-block} console
 $ cp <...>/saw-script/doc/rust-tutorial/code/salsa20/target/x86_64-unknown-linux-gnu/debug/deps/salsa20-dd0d90f28492b9cb.linked-mir.json code/salsa20/salsa20.linked-mir.json
-```
+:::
 
 As a safeguard, we have also checked in a compressed version of this MIR JSON
 file as
@@ -221,9 +230,10 @@ Now that we've built the `salsa20` crate, it's time to start writing some
 proofs! Let's start a new `code/salsa20/salsa20.saw` file as fill it in with
 the usual preamble:
 
-```
-$include 1-3 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 1-3
+:language: sawscript
+:::
 
 We are also going to need to make use of the Cryptol implementation of the
 Salsa20 spec, which is defined in
@@ -231,9 +241,10 @@ Salsa20 spec, which is defined in
 SAW allows you to import standalone Cryptol `.cry` files by using the `import`
 command:
 
-```
-$include 4-4 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 4
+:language: sawscript
+:::
 
 As an aside, note that we have also checked in a
 [`code/salsa20/salsa20-reference.saw`](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/salsa20-reference.saw),
@@ -260,9 +271,10 @@ the problem into smaller pieces that are easier to understand in isolation.
 If we look at the implementation of `apply_keystream`, we see that it invokes
 the `round` function, which in turn invokes the `quarter_round` function:
 
-``` rust
-$include 122-142 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 122-142
+:language: rust
+:::
 
 `quarter_round` is built on top of the standard library functions
 [`wrapping_add`](https://doc.rust-lang.org/std/primitive.usize.html#method.wrapping_add)
@@ -274,9 +286,10 @@ so we have finally reached the bottom of the call stack. This makes
 The implementation of the Rust `quarter_round` function is quite similar to the
 Cryptol `quarterround` function in `Salsa20.cry`:
 
-```
-$include 10-16 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 10-16
+:language: cryptol
+:::
 
 The Cryptol `quarterround` function doesn't have anything like the `state`
 argument in the Rust `quarter_round` function, but let's not fret about that
@@ -285,29 +298,33 @@ have to figure out how to make it fit.
 
 Let's start filling out the SAW spec for `quarter_round`:
 
-```
-$include 6-6 code/salsa20/salsa20-quarter_round-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
+:lines: 6
+:language: sawscript
+:::
 
 We are going to need some fresh variables for the `a`, `b`, `c`, and `d`
 arguments:
 
-```
-$include 7-10 code/salsa20/salsa20-quarter_round-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
+:lines: 7-10
+:language: sawscript
+:::
 
 We will also need to allocate a reference for the `state` argument. The
 reference's underlying type is `STATE_WORDS` (`16`) elements long:
 
-```
-$include 11-13 code/salsa20/salsa20-quarter_round-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
+:lines: 11-13
+:language: sawscript
+:::
 
 Finally, we will need to pass these arguments to the function:
 
-```
-$include 15-21 code/salsa20/salsa20-quarter_round-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail1.saw
+:lines: 15-21
+:language: sawscript
+:::
 
 With that, we have a spec for `quarter_round`! It's not very interesting just
 yet, as we don't specify what `state_ref` should point to after the function
@@ -319,7 +336,7 @@ as expected.
 
 Let's check our progress thus far by running this through SAW:
 
-```
+:::{code-block} console
 $ saw salsa20.saw
 ...
 [23:16:05.080] Type errors:
@@ -330,7 +347,7 @@ either `enable_deprecated` or `enable_experimental`.
   salsa20/salsa20.saw:11:31-11:60: Unbound variable: "STATE_WORDS" (salsa20.saw:11:41-11:52)
 Note that some built-in commands are available only after running
 either `enable_deprecated` or `enable_experimental`.
-```
+:::
 
 We've already run into some type errors. Not too surprising, considering this
 was our first attempt. The error message contains that `STATE_WORDS` is
@@ -338,9 +355,10 @@ unbound. This makes sense if you think about it, as `STATE_WORDS` is defined in
 the Rust code, but not in the SAW file itself. Let's fix that by adding this
 line to `salsa20.saw`:
 
-```
-$include 6-6 code/salsa20/salsa20-quarter_round-fail2.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail2.saw
+:lines: 6
+:language: sawscript
+:::
 
 That change fixes the type errors in `quarter_round_spec`. Hooray! Let's press
 on.
@@ -350,17 +368,18 @@ know what the full identifier for the `quarter_round` function is. Because it
 is defined in the `salsa20` crate and in the `core.rs` file, so we would expect
 the identifier to be named `salsa20::core::quarter_round`:
 
-```
-$include 25-26 code/salsa20/salsa20-quarter_round-fail2.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail2.saw
+:lines: 25-26
+:language: sawscript
+:::
 
 However, SAW disagrees:
 
-```
+:::{code-block} console
 [00:22:56.970] Stack trace:
 "mir_verify" (salsa20.saw:26:3-26:13)
 Couldn't find MIR function named: salsa20::core::quarter_round
-```
+:::
 
 Ugh. This is a consequence of how `mir-json` disambiguates identifiers. Because
 there is a separate `core` crate in the Rust standard libraries, `mir-json`
@@ -371,13 +390,14 @@ up](https://github.com/GaloisInc/saw-script/issues/1980) more easily.)
 
 Once we change the identifier:
 
-```
-$include 25-26 code/salsa20/salsa20-quarter_round-fail3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail3.saw
+:lines: 25-26
+:language: sawscript
+:::
 
 We can run SAW once more. This time, SAW complains about a different thing:
 
-```
+:::{code-block} console
 [01:00:19.697] Verifying salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [01:00:19.714] Simulating salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [01:00:19.717] Checking proof obligations salsa20/10e438b3::core#1[0]::quarter_round[0] ...
@@ -385,7 +405,7 @@ We can run SAW once more. This time, SAW complains about a different thing:
 [01:00:19.739] SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = 53}
 [01:00:19.739] ----------Counterexample----------
 [01:00:19.739]   a: 2147483648
-```
+:::
 
 Here, SAW complains that we have an `index out of bounds`. Recall that we are
 indexing into the `state` array, which is of length 16, using the
@@ -397,9 +417,10 @@ out of bounds.
 In practice, however, the only values of `a`/`b`/`c`/`d` that we will use are
 less than 16. We can express this fact as a precondition:
 
-```
-$include 13-16 code/salsa20/salsa20-quarter_round-fail4.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail4.saw
+:lines: 13-16
+:language: sawscript
+:::
 
 That is enough to finally get SAW to verify this very stripped-down version of
 `quarter_round_spec`. Some good progress! But we aren't done yet, as we don't
@@ -421,13 +442,14 @@ In Cryptol, one can look up elements of an array using the `(@@)` function,
 and one can perform in-place array updates using the `updates` function.
 This translates into a postcondition that looks like this:
 
-```
-$include 28-30 code/salsa20/salsa20-quarter_round-fail4.saw
-```
+:::{literalinclude} code/salsa20/salsa20-quarter_round-fail4.saw
+:lines: 28-30
+:language: sawscript
+:::
 
 What does SAW think of this? Someone surprisingly, SAW finds a counterexample:
 
-```
+:::{code-block} console
 [01:43:30.065] Verifying salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [01:43:30.078] Simulating salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [01:43:30.084] Checking proof obligations salsa20/10e438b3::core#1[0]::quarter_round[0] ...
@@ -440,7 +462,7 @@ What does SAW think of this? Someone surprisingly, SAW finds a counterexample:
 [01:43:30.802]   c: 0
 [01:43:30.802]   d: 0
 [01:43:30.802]   state: [3788509705, 0, 0, 3223325776, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1074561051, 0, 0]
-```
+:::
 
 Note that in this counterexample, the values of `c` and `d` are the same. In
 the Rust version of the function, each element in `state` is updated
@@ -454,18 +476,20 @@ are not encoding into `quarter_round_spec`'s preconditions.
 At this point, it can be helpful to observe _how_ the `quarter_round` function
 is used in practice. The call sites are found in the `rounds` function:
 
-``` rust
-$include 92-102 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 92-102
+:language: rust
+:::
 
 Here, we can see that the values of `a`/`b`/`c`/`d` will only ever be chosen
 from a set of eight possible options. We can take advantage of this fact to
 constrain the possible set of values for `a`/`b`/`c`/`d`. The latest iteration
 of the `quarter_round_spec` is now:
 
-```
-$include 10-38 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 10-28
+:language: sawscript
+:::
 
 Note that:
 
@@ -480,12 +504,12 @@ Note that:
 
 With this in place, will SAW verify `quarter_round_spec` now?
 
-```
+:::{code-block} console
 [02:14:02.037] Verifying salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [02:14:02.051] Simulating salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [02:14:02.057] Checking proof obligations salsa20/10e438b3::core#1[0]::quarter_round[0] ...
 [02:14:18.616] Proof succeeded! salsa20/10e438b3::core#1[0]::quarter_round[0]
-```
+:::
 
 At long last, it succeeds. Hooray! SAW does have to think for a while, however,
 as this proof takes about 17 seconds to complete. It would be unfortunate to
@@ -494,9 +518,10 @@ still have other functions to verify, this is a very real possibility. For this
 reason, it can be helpful to temporarily turn this use of `mir_verify` into a
 `mir_unsafe_assume_spec`:
 
-```
-$include 40-44 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 40-44
+:language: sawscript
+:::
 
 Once we are done with the entire proof, we can come back and remove this use of
 `mir_unsafe_assume_spec`, as we're only using it as a time-saving measure.
@@ -506,9 +531,10 @@ Once we are done with the entire proof, we can come back and remove this use of
 Now that we've warmed up, let's try verifying the `rounds` function, which is
 where `quarter_round` is invoked. Here is the full definition of `rounds`:
 
-``` rust
-$include 90-108 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 90-108
+:language: rust
+:::
 
 First, `rounds` performs `COUNT` rounds on the `state` argument. After this, it
 takes each element of `self.state` and adds it to the corresponding element in
@@ -520,9 +546,10 @@ difference is that while the Salsa20(x) hash function converts the results to
 little-endian form, the `rounds` function does not. `Salsa20.cry` implements
 this part of the spec here:
 
-```
-$include 139-147 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 139-147
+:language: cryptol
+:::
 
 Where `Salsa20` is the hash function, and `Salsa20_rounds` is the part of the
 hash function that excludes the little-endian conversions. In other words,
@@ -544,59 +571,67 @@ Alright, enough chatter—time to start writing a proof. First, let's look up th
 `R8` ADT. This is defined in the `salsa20` crate in the `rounds.rs` file, so
 its identifier becomes `salsa20::rounds::R8`:
 
-```
-$include 46-46 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 46
+:language: sawscript
+:::
 
 Next, we need to look up the `PhantomData<R8>` ADT, which is used in the
 `rounds` field of the `Core<R8>` struct. This is defined in `core::marker`:
 
-```
-$include 47-47 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 47
+:language: sawscript
+:::
 
 Finally, we must look up `Core<R8>` itself. Like `quarter_round`, the `Core`
-struct` is defined in `salsa20::core#1`:
+struct is defined in `salsa20::core#1`:
 
-```
-$include 48-48 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 48
+:language: sawscript
+:::
 
 Now that we have the necessary prerequisites, let's write a spec for the
 `rounds` function. First, we need to allocate a reference for the `self`
 argument:
 
-```
-$include 50-51 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 50-51
+:language: sawscript
+:::
 
 Next, we need to create symbolic values for the fields of the `Core` struct,
 which `self_ref` will point to. The `self.state` field will be a fresh array,
 and the `self.rounds` field will be a simple, empty struct value:
 
-```
-$include 52-53 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 52-53
+:language: sawscript
+:::
 
 Finally, putting all of the `self` values together:
 
-```
-$include 54-55 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 54-55
+:language: sawscript
+:::
 
 Next, we need a `state` argument (not to be confused with the `self.state`
 field in `Core`). This is handled much the same as it was in
 `quarter_round_spec`:
 
-```
-$include 57-59 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 57-59
+:language: sawscript
+:::
 
 Lastly, we cap it off with a call to `mir_execute_func`:
 
-```
-$include 61-62 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 61-62
+:language: sawscript
+:::
 
 (Again, we're missing some postconditions describing what `self_ref` and
 `state_ref` point to after the function returns, but we'll return to that in a
@@ -614,16 +649,17 @@ for instantiations of generic functions are (there [will be in the
 future](https://github.com/GaloisInc/saw-script/issues/1980)), but it turns out
 that the identifier for `rounds::<R8>` is this:
 
-```
-$include 64-65 code/salsa20/salsa20-rounds-take-1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-1.saw
+:lines: 64-65
+:language: sawscript
+:::
 
 Note that we are using `quarter_round_ov` as a compositional override. Once
 again, SAW is happy with our work thus far:
 
-```
+:::{code-block} console
 [03:12:35.990] Proof succeeded! salsa20/10e438b3::core#1[0]::{impl#0}[0]::rounds[0]::_inst6e4a2d7250998ef7[0]
-```
+:::
 
 Nice. Now let's go back and fill in the missing postconditions in
 `rounds_spec`. In particular, we must declare what happens to both `self_ref`
@@ -631,18 +667,20 @@ and `state_ref`. A closer examination of the code in the Rust `rounds` function
 reveals that the `self` argument is never modified at all, so that part is
 easy:
 
-```
-$include 63-63 code/salsa20/salsa20-rounds-take-2.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-2.saw
+:lines: 63
+:language: sawscript
+:::
 
 The `state` argument, on the other hand, is modified in-place. This time, our
 job is made easier by the fact that `Salsa20_rounds` implements _exactly_ what
 we need. Because we are instantiating `rounds` at type `R8`, we must explicitly
 state that we are using 8 rounds:
 
-```
-$include 64-64 code/salsa20/salsa20-rounds-take-2.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-2.saw
+:lines: 64
+:language: sawscript
+:::
 
 Once again, SAW is happy with our work. We're on a roll!
 
@@ -653,53 +691,59 @@ the `r_adt` definition, which is response for looking up `R8`. We want to turn
 this into a function that, depending on the user input, will look up `R8`,
 `R12`, or `R20`:
 
-```
-$include 46-46 code/salsa20/salsa20-rounds-take-3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
+:lines: 46
+:language: sawscript
+:::
 
 Where `str_concat` is a SAW function for concatenating strings together:
 
-```
+:::{code-block} console
 sawscript> :type str_concat
 String -> String -> String
-```
+:::
 
 We also want to parameterize `phantom_data_adt` and `core_adt`:
 
-```
-$include 47-48 code/salsa20/salsa20-rounds-take-3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
+:lines: 47-48
+:language: sawscript
+:::
 
 Next, we need to parameterize `rounds_spec` by the number of rounds. This will
 require changes in both the preconditions and postconditions. On the
 preconditions side, we must pass the number of rounds to the relevant
 functions:
 
-```
-$include 50-56 code/salsa20/salsa20-rounds-take-3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
+:lines: 50-56
+:language: sawscript
+:::
 
 And on the postconditions side, we must pass the number of rounds to the
 Cryptol `Salsa20_rounds` function:
 
-```
-$include 66-67 code/salsa20/salsa20-rounds-take-3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
+:lines: 66-67
+:language: sawscript
+:::
 
 Finally, we must adjust the call to `rounds_spec` in the context of
 `mir_verify` so that we pick `8` as the number of rounds:
 
-```
-$include 69-70 code/salsa20/salsa20-rounds-take-3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
+:lines: 69-70
+:language: sawscript
+:::
 
 SAW is happy with this generalization. To demonstrate that we have generalized
 things correctly, we can also verify the same function at `R20` instead of
 `R8`:
 
-```
-$include 71-72 code/salsa20/salsa20-rounds-take-3.saw
-```
+:::{literalinclude} code/salsa20/salsa20-rounds-take-3.saw
+:lines: 71-72
+:language: sawscript
+:::
 
 The only things that we had to change were the identifier and the argument to
 `rounds_spec`. Not bad!
@@ -711,9 +755,10 @@ Before we do, however, there is one more function that `apply_keystream` calls,
 which we ought to verify first: `counter_setup`. Thankfully, the implementation
 of `counter_setup` is short and sweet:
 
-``` rust
-$include 83-86 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 83-86
+:language: rust
+:::
 
 This updates the elements of the `state` array at indices `8` and `9` with the
 lower 32 bits and the upper 32 bits of the `counter` argument, respecitvely.
@@ -726,16 +771,18 @@ For now, we should take matters into our own hands and write our own Cryptol
 spec for `counter_setup`. To do this, we will create a new Cryptol file named
 `Salsa20Extras.cry`, which imports from `Salsa20.cry`:
 
-```
-$include 1-3 code/salsa20/Salsa20Extras.cry
-```
+:::{literalinclude} code/salsa20/Salsa20Extras.cry
+:lines: 1-3
+:language: cryptol
+:::
 
 The Cryptol implementation of `counter_setup` will need arrays of length
 `STATE_WORDS`, so we shall define `STATE_WORDS` first:
 
-```
-$include 5-5 code/salsa20/Salsa20Extras.cry
-```
+:::{literalinclude} code/salsa20/Salsa20Extras.cry
+:lines: 5
+:language: cryptol
+:::
 
 Note that we preceded this definition with the `type` keyword. In Cryptol,
 sequence lengths are encoded at the type level, so if we want to use
@@ -744,9 +791,10 @@ sequence lengths are encoded at the type level, so if we want to use
 Finally, we can write a Cryptol version of `counter_setup` using our old friend
 `updates` to perform a bulk sequence update:
 
-```
-$include 8-10 code/salsa20/Salsa20Extras.cry
-```
+:::{literalinclude} code/salsa20/Salsa20Extras.cry
+:lines: 8-10
+:language: cryptol
+:::
 
 Note that `counter` is a 64-bit word, but the elements of the `state` sequence
 are 32-bit words. As a result, we have to explicitly truncate `counter` and
@@ -756,24 +804,27 @@ first 32 bits from each word.
 Returning to `salsa20.saw`, we must now make use of our new Cryptol file by
 `import`ing it at the top:
 
-```
-$include 5-5 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 5
+:language: sawscript
+:::
 
 With the `counter_setup` Cryptol implementation in scope, we can now write
 a spec for the Rust `counter_setup` function. There's not too much to remark
 on here, as the spec proves relatively straightforward to write:
 
-```
-$include 74-90 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 74-90
+:language: sawscript
+:::
 
 We can now verify `counter_setup` against `counter_setup_spec` at lengths `8`
 and `20`:
 
-```
-$include 92-95 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 92-95
+:language: sawscript
+:::
 
 That wasn't so bad. It's a bit unsatisfying that we had to resort to writing a
 Cryptol function not found in `Salsa20.cry`, but go along with this for now—it
@@ -784,9 +835,10 @@ will become apparent later why this needed to be done.
 It's time. Now that we've verified `rounds` and `counter_setup`, it's time to
 tackle the topmost function in the call stack: `apply_keystream`:
 
-``` rust
-$include 68-80 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 68-80
+:language: rust
+:::
 
 There aren't _that_ many lines of code in this function, but there is still
 quite a bit going on. Let's walk through `apply_keystream` in more detail:
@@ -796,15 +848,17 @@ quite a bit going on. Let's walk through `apply_keystream` in more detail:
    length. That being said, the first line of `apply_keystream`'s implementation
    checks that `output`'s length is equal to `BLOCK_SIZE`:
 
-   ``` rust
-   $include 69-69 code/salsa20/src/core.rs
-   ```
+   :::{literalinclude} code/salsa20/src/core.rs
+   :lines: 69
+   :language: rust
+   :::
 
    Where `BLOCK_SIZE` is defined here:
 
-   ``` rust
-   $include 82-83 code/salsa20/src/lib.rs
-   ```
+   :::{literalinclude} code/salsa20/src/lib.rs
+   :lines: 82-83
+   :language: rust
+   :::
 
    So in practice, `output` must have exactly 64 elements.
 
@@ -831,33 +885,37 @@ nonce as an argument, it's not immediately clear how we'd tie this back to
 `apply_keystream`. But no matter: we can do what we did before and define our
 own Cryptol version of `apply_keystream` in `Salsa20Extras.cry`:
 
-```
-$include 12-17 code/salsa20/Salsa20Extras.cry
-```
+:::{literalinclude} code/salsa20/Salsa20Extras.cry
+:lines: 12-17
+:language: cryptol
+:::
 
 This implementation builds on top of the Cryptol `counter_setup` and
 `Salsa20_rounds` functions, which we used as the reference implementations for
 the Rust `counter_setup` and `rounds` functions, respectively. We also make
 sure to define a `BLOCK_SIZE` type alias at the top of the file:
 
-```
-$include 6-6 code/salsa20/Salsa20Extras.cry
-```
+:::{literalinclude} code/salsa20/Salsa20Extras.cry
+:lines: 6
+:language: cryptol
+:::
 
 Now let's write a SAW spec for `apply_keystream`. Once again, we will need to
 reference `BLOCK_SIZE` when talking about the `output`-related parts of the
 spec, so make sure to define `BLOCK_SIZE` at the top of the `.saw` file:
 
-```
-$include 8-8 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 8
+:language: sawscript
+:::
 
 First, we need to declare all of our arguments, which proceeds as you would
 expect:
 
-```
-$include 120-136 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 120-136
+:language: sawscript
+:::
 
 What about the postconditions? We have two mutable references to contend with:
 `self_ref` and `output_ref`. The postcondition for `self_ref` is fairly
@@ -866,24 +924,27 @@ called. This means that after the `apply_keystream` function has returned,
 `self_ref` will point to the results of calling the `counter_setup` Cryptol
 function:
 
-```
-$include 138-140 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 138-140
+:language: sawscript
+:::
 
 `output_ref` is where the interesting work happenings. After the Rust
 `apply_keystream` function has returned, it will point to the results of
 calling the Cryptol `apply_keystream` function that we just defined:
 
-```
-$include 141-142 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 141-142
+:language: sawscript
+:::
 
 Finally, we can put this all together and verify `apply_keystream` against
 `apply_keystream_spec` at lengths `8` and `20`:
 
-```
-$include 144-148 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 144-148
+:language: sawscript
+:::
 
 SAW will successfully verify these. We've achieved victory... or have we?
 Recall that we had to tailor the Cryptol `apply_keystream` function to
@@ -907,9 +968,10 @@ internal state that is used to compute the keystream to apply when hashing. In
 order to use this internal state, however, we must first initialize it. The
 `new` function that is responsible for this initialization:
 
-``` rust
-$include 17-20 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 17-20
+:language: rust
+:::
 
 Sure enough, this function takes a key and a nonce as an argument! This is a
 critical point that we overlooked. When using the `salsa20` crate, you wouldn't
@@ -928,18 +990,20 @@ All that being said, we probably to verify `new_raw` (a lower-level helper
 function) rather than `new` itself. This is because the definitions of `Key`
 and `Nonce` are somewhat involved. For instance, `Key` is defined as:
 
-``` rust
-$include 27-27 code/salsa20/src/salsa.rs
-```
+:::{literalinclude} code/salsa20/src/salsa.rs
+:lines: 27
+:language: rust
+:::
 
 [`GenericArray`](https://docs.rs/generic-array/latest/generic_array/struct.GenericArray.html)
 is a somewhat complicated abstraction. Luckily, we don't really _need_ to deal
 with it, since `new_raw` deals with simple array references rather than
 `GenericArray`s:
 
-``` rust
-$include 22-23 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 22-23
+:language: rust
+:::
 
 The full implementation of `new_raw` is rather long, so we won't inline the
 whole thing here. At a high level, it initializes the `state` array of a `Core`
@@ -948,9 +1012,10 @@ elements of the array are populated with `key`, some parts are populated with
 `iv` (i.e., the nonce), and other parts are populated with an array named
 `CONSTANTS`:
 
-``` rust
-$include 91-92 code/salsa20/src/lib.rs
-```
+:::{literalinclude} code/salsa20/src/lib.rs
+:lines: 91-92
+:language: rust
+:::
 
 The comment about `"expand 32-byte k"` is a strong hint that `new_raw` is
 implementing a portion of the Salsa20 expansion function from the spec. (No
@@ -958,17 +1023,19 @@ really, the spec literally says to use the exact string `"expand 32-byte
 k"`—look it up!) The `Salsa20.cry` Cryptol file has an implementation of this
 portion of the expansion function, which is named `Salsa20_init`:
 
-```
-$include 182-189 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 182-189
+:language: cryptol
+:::
 
 Note that we were careful to say a _portion_ of the Salsa20 expansion function.
 There is also a Cryptol implementation of the full expansion function, named
 `Salsa20_expansion`:
 
-```
-$include 179-180 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 179-180
+:language: cryptol
+:::
 
 This calls `Salsa20_init` followed by `Salsa20`, the latter of which performs
 hashing. Importantly, `new_raw` does _not_ do any hashing on its own, just
@@ -977,27 +1044,30 @@ implementation of `new_raw`, not `Salsa20_expansion`.
 
 Alright, time to write a SAW spec. The first part of the spec is straightforward:
 
-```
-$include 97-106 code/salsa20/salsa20-new_raw-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-new_raw-fail1.saw
+:lines: 97-106
+:language: sawscript
+:::
 
 As is usually the case, the postconditions are the tricky part. We know that
 the behavior of `new_raw` will roughly coincide with the `Salsa20_init`
 function, so let's try that first:
 
-```
-$include 108-112 code/salsa20/salsa20-new_raw-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-new_raw-fail1.saw
+:lines: 108-112
+:language: sawscript
+:::
 
 If we attempt to verify this using `mir_verify`:
 
-```
-$include 115-118 code/salsa20/salsa20-new_raw-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-new_raw-fail1.saw
+:lines: 115-118
+:language: sawscript
+:::
 
 SAW complains thusly:
 
-```
+:::{code-block} console
 Cryptol error:
 [error] at salsa20.saw:109:45--109:54:
   Type mismatch:
@@ -1005,7 +1075,7 @@ Cryptol error:
     Inferred type: 8
     Context: [ERROR] _
     When checking type of 2nd tuple field
-```
+:::
 
 Here, the 2nd tuple field is the `nonce_arr` in `Salsa20_init(key_arr,
 nonce_arr)`. And sure enough, `Salsa20_init` expects the 2nd tuple field to be
@@ -1015,42 +1085,45 @@ the remaining 8 elements from?
 The answer to this question can be found by looking at the implementation of
 `new_raw` more closely. Let's start at this code:
 
-``` rust
-$include 35-36 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 35-36
+:language: rust
+:::
 
 This will chunk up `iv` (the nonce) into two 4-byte chunks and copies them over
 to the elements of `state` array at indices `6` and `7`. This is immediately
 followed by two updates at indices `8` and `9`, which are updated to be `0`:
 
-``` rust
-$include 39-40 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 39-40
+:language: rust
+:::
 
 If you take the two 4-bytes chunks of `iv` and put two 4-byte `0` values after
 them, then you would have a total of 16 bytes. This suggests that the nonce
 value that `Salsa20_init` expects is actually this:
 
-```
+:::{code-block} cryptol
 nonce_arr # zero : [16][8]
-```
+:::
 
 Where `zero : [8][8]` is a Cryptol expression that returns all zeroes, and
 `(#)` is the Cryptol operator for concatenating two sequences together. Let's
 update `new_raw_spec` to reflect this:
 
-```
-$include 109-109 code/salsa20/salsa20-new_raw-fail2.saw
-```
+:::{literalinclude} code/salsa20/salsa20-new_raw-fail2.saw
+:lines: 109
+:language: sawscript
+:::
 
 This is closer to what we want, but not quite. SAW still complains:
 
-```
+:::{code-block} console
 could not match specified value with actual value:
   ...
   type of actual value:    [u32; 16]
   type of specified value: [u8; 64]
-```
+:::
 
 This is because `Salsa20_init` returns something of type `[64][8]`, which
 corresponds to the Rust type `[u8; 64]`. `self.state`, on the other hand, is of
@@ -1058,9 +1131,10 @@ type `[u32; 16]`. These types are very close, as they both contain the same
 number of bytes, but they are chunked up differently. Recall the code that
 copies the nonce value over to `self.state`:
 
-``` rust
-$include 35-36 code/salsa20/src/core.rs
-```
+:::{literalinclude} code/salsa20/src/core.rs
+:lines: 35-36
+:language: rust
+:::
 
 In order to resolve the type differences between `iv` and `state`, this code
 needed to explicitly convert `iv` to little-endian form using the
@@ -1068,17 +1142,19 @@ needed to explicitly convert `iv` to little-endian form using the
 function. There is a similar Cryptol function in `Salsa20.cry` named
 `littleendian_state`:
 
-```
-$include 131-132 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 131-132
+:language: cryptol
+:::
 
 Note that `[64][8]` is the Cryptol equivalent of `[u8; 64]`, and `[16][32]` is
 the Cryptol equivalent of `[u32; 16]`. As such, this is exactly the function
 that we need to resolve the differences in types:
 
-```
-$include 109-109 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 109
+:language: sawscript
+:::
 
 With that change, SAW is finally happy with `new_raw_spec` and successfully
 verifies it.
@@ -1092,9 +1168,9 @@ converting `counter` to little-endian form). This means that if you invoke
 `0` values with the `counter` argument. In order words, it would be tantamount
 to initializing `state` like so:
 
-```
+:::{code-block} cryptol
 littleendian_state (Salsa20_init(key, nonce # littleendian_inverse counter))
-```
+:::
 
 Where `littleendian_inverse` (a sibling of `littleendian_state`) converts a
 `[64]` value to a `[8][8]` one. This pattern is a curious one...
@@ -1105,9 +1181,10 @@ Let's now return to the problem of linking `apply_keystream` up to
 `Salsa20_encrypt`. In particular, let's take a closer look at the definition of
 `Salsa20_encrypt` itself:
 
-```
-$include 198-201 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 198-201
+:language: cryptol
+:::
 
 Does anything about this definition strike you as interesting? Take a look at
 the `v#(littleendian_inverse i)` part—we _just_ saw a use of
@@ -1132,9 +1209,9 @@ invoke `Salsa20_expansion` once with a nonce value where the lower 32 bits are
 set to `0`. That is, it will perform encryption with an initial state derived
 from:
 
-```
+:::{code-block} cryptol
 Salsa20_init(k, v#(littleendian_inverse zero))
-```
+:::
 
 Which can be further simplified to `Salsa20_init(k, v # zero)`. This is very
 nearly what we want, as this gives us the behavior of the Rust `new_raw`
@@ -1148,9 +1225,10 @@ of `Salsa20_encrypt` in the same file named `Salsa20_encrypt_with_offset`,
 where the offset argument `o` serves the same role that `counter` does in
 `counter_setup`:
 
-```
-$include 191-196 code/salsa20/Salsa20.cry
-```
+:::{literalinclude} code/salsa20/Salsa20.cry
+:lines: 191-196
+:language: cryptol
+:::
 
 (Observe that `Salsa20_encrypt(count, k, v, m)` is equivalent to
 `Salsa20_encrypt_with_offset(count, k, v, 0, m)`.)
@@ -1161,9 +1239,10 @@ behavior of `apply_keystream` corresponds exactly to that of
 `Salsa20_encrypt_with_offset`. This insight will inform us how to write an
 alternative SAW spec for `apply_keystream`:
 
-```
-$include 149-160 code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
+:lines: 149-160
+:language: sawscript
+:::
 
 Observe the following differences between `apply_keystream_alt_spec` and our
 earlier `apply_keystream_spec`:
@@ -1179,30 +1258,33 @@ earlier `apply_keystream_spec`:
 
 The parts of the spec relating to `output` remain unchanged:
 
-```
-$include 162-167 code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
+:lines: 162-167
+:language: sawscript
+:::
 
 The postconditions are slightly different in `apply_keystream_alt_spec`. While
 the parts relating to `self_ref` remain unchanged, we now have `output_ref`
 point to the results of calling `Salsa20_encrypt_with_offset`:
 
-```
-$include 169-172 code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
+:lines: 169-172
+:language: sawscript
+:::
 
 Tying this all together, we call `mir_verify`, making sure to use compositional
 overrides involving `counter_setup` and `rounds`:
 
-```
-$include 175-178 code/salsa20/salsa20-apply_keystream_alt-fail1.saw
-```
+:::{literalinclude} code/salsa20/salsa20-apply_keystream_alt-fail1.saw
+:lines: 175-178
+:language: sawscript
+:::
 
 At long last, it is time to run SAW on this. When we do, we see this:
 
-```
+:::{code-block} console
 [15:11:44.576] Checking proof obligations salsa20/10e438b3::core#1[0]::{impl#0}[0]::apply_keystream[0]::_inst6e4a2d7250998ef7[0] ...
-```
+:::
 
 After this, SAW loops forever. Oh no! While somewhat disheartening, this is a
 reality of SMT-based verification that we must content with. SMT solvers are
@@ -1231,16 +1313,17 @@ Yices (a different SMT solver) _can_ spot the patterns needed to prove
 both Z3 and Yices. In order to switch from Z3 to Yices, swap out the `z3` proof
 script with `yices`:
 
-```
-$include 175-178 code/salsa20/salsa20-reference.saw
-```
+:::{literalinclude} code/salsa20/salsa20-reference.saw
+:lines: 175-178
+:language: sawscript
+:::
 
 After doing this, SAW is leverage Yices to solve the proof goals almost
 immediately:
 
-```
+:::{code-block} console
 [15:22:00.745] Proof succeeded! salsa20/10e438b3::core#1[0]::{impl#0}[0]::apply_keystream[0]::_instfa33e77d840484a0[0]
-```
+:::
 
 And with that, we're finally done! You've successfully completed a non-trivial
 SAW exercise in writing some interesting proofs. Give yourself a well-deserved
