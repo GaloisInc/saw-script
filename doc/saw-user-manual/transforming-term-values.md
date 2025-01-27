@@ -279,6 +279,7 @@ SAWCore type checker.
 can then be used to, for example, construct a new fresh variable with
 `fresh_symbolic`.
 
+(loading-and-storing-terms)=
 ## Loading and Storing Terms
 
 Most frequently, `Term` values in SAWScript come from Cryptol, JVM, or
