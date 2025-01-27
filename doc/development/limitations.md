@@ -1,21 +1,5 @@
 # Limitations
 
-<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
-**Table of Contents**
-
-- [Limitations](#limitations)
-    - [Overview](#overview)
-    - [Finite Loops](#finite-loops)
-    - [Identifying and Resolving Non-Termination](#identifying-and-resolving-non-termination)
-    - [Fixed-size Inputs and Outputs](#fixed-size-inputs-and-outputs)
-    - [Other Generic Limitations](#other-generic-limitations)
-    - [Other Java Limitations](#other-java-limitations)
-    - [Other LLVM Limitations](#other-llvm-limitations)
-    - [Crucible LLVM Limitations](#crucible-llvm-limitations)
-
-<!-- markdown-toc end -->
-
-
 ## Overview
 
 There are a few limitations on the types of code that SAW can process.
