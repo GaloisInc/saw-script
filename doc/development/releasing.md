@@ -22,22 +22,23 @@ environment of a release consistent.
 The release process is:
 
 1. Make sure the `release-n.n` branch is in a release/ready state, including:
+
    - successful build artifacts across all platforms,
    - successful tests on all test suites, and
    - an up-to-date [CHANGES.md](changes) file.
-1. Create a draft release on GitHub
-1. Make a commit on the `release-n.n` branch updating the version in the
+
+2. Create a draft release on GitHub
+3. Make a commit on the `release-n.n` branch updating the version in the
    `saw-script.cabal` file to `n.n`. This will trigger a build.
-1. Once the build is done, download the release artifacts from the
+4. Once the build is done, download the release artifacts from the
    outputs of the build. These are `.zip` files containing `.tar.gz` and
    `.sig` files.
-1. Unpack the `.zip` files and attach the `.tar.gz` and `.sig` files to
+5. Unpack the `.zip` files and attach the `.tar.gz` and `.sig` files to
    the draft release.
-1. Publish the release. This will add a tag to the release branch, as
+6. Publish the release. This will add a tag to the release branch, as
    well.
-1. Announce the release and update release-relevant information in the following places:
+7. Announce the release and update release-relevant information in the following places:
 
-    - <http://saw.galois.com>
-    - <saw@galois.com>
-    - <saw-users@galois.com>
-    - @galois on Twitter (for major releases)
+   - <saw@galois.com>
+   - <saw-users@galois.com>
+   - @galois on Twitter (for major releases)
