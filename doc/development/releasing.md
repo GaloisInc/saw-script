@@ -24,7 +24,7 @@ The release process is:
 1. Make sure the `release-n.n` branch is in a release/ready state, including:
    - successful build artifacts across all platforms,
    - successful tests on all test suites, and
-   - an up-to-date [CHANGES.md](CHANGES.md) file.
+   - an up-to-date [CHANGES.md](changes) file.
 1. Create a draft release on GitHub
 1. Make a commit on the `release-n.n` branch updating the version in the
    `saw-script.cabal` file to `n.n`. This will trigger a build.
