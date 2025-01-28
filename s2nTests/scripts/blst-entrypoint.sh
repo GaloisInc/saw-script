@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -xe
 
+export IN_SAW_CI=yes
+
 cd /workdir
 ./scripts/install.sh
 cp /saw-bin/cryptol bin/cryptol
