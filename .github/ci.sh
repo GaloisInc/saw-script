@@ -84,15 +84,17 @@ build_cryptol() {
 
 bundle_files() {
   mkdir -p dist dist/{bin,deps,doc,examples,include,lib}
+  mkdir -p dist/doc/{llvm-java-verification-with-saw,rust-verification-with-saw,saw-user-manual}
 
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 
   (cd deps/cryptol-specs && git archive --prefix=cryptol-specs/ --format=tar HEAD) | (cd dist/deps && tar x)
-  cp doc/extcore.md dist/doc
-  cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
-  cp doc/manual/manual.pdf dist/doc/manual.pdf
-  cp -r doc/tutorial/code dist/doc
+  cp doc/pdfs/llvm-java-verification-with-saw.pdf dist/doc/llvm-java-verification-with-saw
+  cp doc/pdfs/rust-verification-with-saw.pdf dist/doc/rust-verification-with-saw
+  cp doc/pdfs/saw-user-manual.pdf dist/doc/saw-user-manual
+  cp -r doc/llvm-java-verification-with-saw/code dist/doc/llvm-java-verification-with-saw
+  cp -r doc/rust-verification-with-saw/code dist/doc/rust-verification-with-saw
   cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
