@@ -1078,15 +1078,11 @@ inferPattern pat =
 
 -- Check the type of a pattern, by inferring and then unifying the
 -- result.
---
--- XXX: it doesn't seem like there's any guarantee that fresh tyvars
--- produced by inferPattern will necessarily be resolved by the
--- unification, and therefore it seems that dropping the possibly
--- updated pattern is a bug.
-checkPattern :: LName -> Type -> Pattern -> TI ()
+checkPattern :: LName -> Type -> Pattern -> TI Pattern
 checkPattern ln t pat =
-  do (pt, _pat') <- inferPattern pat
+  do (pt, pat') <- inferPattern pat
      unify ln t (getPos pat) pt
+     return pat'
 
 --
 -- statements
@@ -1425,9 +1421,9 @@ inferDecl :: Decl -> TI Decl
 inferDecl (Decl pos pat _ e) = do
   let n = patternLName pat
   (e',t) <- inferExpr (n, e)
-  checkPattern n t pat
+  pat' <- checkPattern n t pat
   ~[(e1,s)] <- generalize [e'] [t]
-  return (Decl pos pat (Just s) e1)
+  return (Decl pos pat' (Just s) e1)
 
 -- Type inference for a system of mutually recursive declarations.
 --
@@ -1438,7 +1434,7 @@ inferDecl (Decl pos pat _ e) = do
 inferRecDecls :: [Decl] -> TI [Decl]
 inferRecDecls ds =
   do let pats = map dPat ds
-         pat =
+         firstPat =
            case pats of
              p:_ -> p
              [] -> panic
@@ -1450,10 +1446,15 @@ inferRecDecls ds =
                  $ sequence [ inferExpr (patternLName p, e)
                             | Decl _pos p _ e <- ds
                             ]
-     sequence_ $ zipWith (checkPattern (patternLName pat)) ts pats'
+
+     -- pats' has already been checked once, which will have inserted
+     -- unification vars for any missing types. Running it through
+     -- again will have no further effect, so we can ignore the
+     -- theoretically-updated-again patterns returned by checkPattern.
+     sequence_ $ zipWith (checkPattern (patternLName firstPat)) ts pats'
      ess <- generalize es ts
      return [ Decl pos p (Just s) e1
-            | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess
+            | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats' ess
             ]
 
 -- Type inference for a decl group.
