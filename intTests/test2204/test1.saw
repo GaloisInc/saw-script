@@ -1,0 +1,6 @@
+let f (x : a) : a = x;
+let g (x : a) (y : b) : (a, b) = (x, y);
+
+let h (x : a) : m a = do {
+   return x;
+};
