@@ -1,0 +1,15 @@
+// Test an inexact postcondition.
+
+mod <- llvm_load_module "test.bc";
+
+let spec = do {
+   llvm_alloc_global "y";
+   y <- llvm_fresh_var "y" (llvm_int 8); 
+   llvm_points_to (llvm_global "y") (llvm_term y); 
+   llvm_execute_func [];
+   y_new <- llvm_fresh_var "y_new" (llvm_int 8);
+   llvm_points_to (llvm_global "y") (llvm_term y_new);
+   llvm_postcond {{ y_new > 0 }};
+};
+
+llvm_verify mod "f" [] false spec abc;
