@@ -212,6 +212,13 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
+      # Restrict these steps so they're only run when the secrets
+      # needed are available. It's insufficient to just check whether
+      # we're working on a pull request in a fork because we might be
+      # working on master in a fork. We have scheduled runs, and it's
+      # apparently impossible to restrict scheduled runs to the
+      # original repository; they will also always run in forks.
+      # See https://github.com/orgs/community/discussions/16109.
       - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
         shell: bash
         env:
@@ -639,6 +646,10 @@ jobs:
   build-push-image:
     runs-on: ubuntu-22.04
     needs: [config]
+    # Restrict this to the main repository where the needed secrets
+    # will be available. As noted above, scheduled runs also happen in
+    # forks. It would be nice to run all of it but the final push step,
+    # but we appear to need docker login to build.
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') && github.repository_owner == 'GaloisInc'
     strategy:
       fail-fast: false
