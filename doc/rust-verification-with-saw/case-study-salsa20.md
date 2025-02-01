@@ -497,7 +497,7 @@ Note that:
   of values that is chosen in the `rounds` function. (Note that `\/` is the
   logical-or function in Cryptol.) Each of these are concrete values that are
   less than `STATE_WORDS` (`16`), so we no longer need a precondition stating
-  `a < STATE_WORDS /\ ...`.
+  ``a < `STATE_WORDS /\ ...``.
 
 * Because we now reference `indices` in the preconditions, we have moved its
   definition up. (Previously, it was defined in the postconditions section.)
