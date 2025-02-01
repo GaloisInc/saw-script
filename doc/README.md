@@ -31,9 +31,10 @@ This will require a suitable TeX distribution.
 ### `make_docs.sh`
 
 `doc/make_docs.sh` is a bash script wrapping up all of the Python environment
-and Sphinx build management.
+and Sphinx build management, via [a separately-runnable script we
+provide](#the-python-environment).
 Using this, you'll almost never need to think about anything related to the
-Python behind the curtain.
+Python behind the curtain, as long as you have a Python >=3.9 installation.
 
 ```console
 $ ./make_docs.sh
