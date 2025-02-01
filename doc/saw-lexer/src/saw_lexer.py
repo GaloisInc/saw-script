@@ -1,8 +1,3 @@
-import sys
-import re
-
-
-import pygments
 from pygments.lexer import RegexLexer, bygroups, using
 from pygments.lexers.haskell import CryptolLexer
 from pygments.token import (
