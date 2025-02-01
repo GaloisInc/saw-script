@@ -114,7 +114,7 @@ This directory is the intended source root for all SAW documentation.
   official `pygments` release.
 
 The remaining directories correspond to individual SAW documentation resources
-currently manged as part of this documentation ecosystem:
+currently managed as part of this documentation ecosystem:
 
 - `llvm-java-verification-with-saw/`
   "LLVM/Java Verification with SAW"
@@ -174,7 +174,7 @@ That said, to add new documentation material:
    This is how we maintain the directory structure / document hierarchy
    correspondence.
 
-Note that your documentaiton doesn't necessarily _need_ its own directory; if
+Note that your documentation doesn't necessarily _need_ its own directory; if
 it's a single page, consider adding it as a single `.md` file to the most
 appropriate directory, and adding an entry to the corresponding `toctree` (for
 some examples of this, see `doc/development/`).
