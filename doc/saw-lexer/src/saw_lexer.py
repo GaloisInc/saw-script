@@ -49,16 +49,6 @@ class SAWScriptLexer(RegexLexer):
                 bygroups(Keyword.Type, Whitespace),
             ),
             (r"(true|false|abc|z3)(\s+)", bygroups(Keyword.Constant, Whitespace)),
-            # N.b. The following is very liberal, but also missing many things.
-            # There is no centralized list of all builtins/primitives/initial
-            # basis elements...
-            (
-                (
-                    r"((?:assume|external|goal|offline|load|print|prove|read|sat|save|write|llvm|jvm|mir|crucible|w4|sbv|unint)_?\w*|"
-                    r"admit|beta_reduce_goal|enable_experimental|java_load_class|quickcheck|return|simplify|split_goal|trivial|unfolding)(\s+)"
-                ),
-                bygroups(Name.Builtin, Whitespace),
-            ),
             # All other identifiers
             (r"[a-zA-Z_][\w']*", Name),
             # Number literals
