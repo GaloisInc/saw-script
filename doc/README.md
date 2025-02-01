@@ -109,10 +109,8 @@ This directory is the intended source root for all SAW documentation.
   part of CI.
 
 - `saw-lexer` is a small Python package implementing a SAWScript `pygments`
-  lexer, so our documentation understands and properly renders `sawscript` code
-  blocks.
-  See f80862856: This can eventually be removed, once the lexer is added to an
-  official `pygments` release.
+  lexer, so our documentation understands and properly renders fenced code
+  blocks labeled ```````sawscript````.
 
 The remaining directories correspond to individual SAW documentation resources
 currently managed as part of this documentation ecosystem:
