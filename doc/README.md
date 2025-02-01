@@ -97,6 +97,9 @@ This directory is the intended source root for all SAW documentation.
 - `index.md` defines the top-level document hierarchy, and is the intended home
   page of <https://galoisinc.github.io/saw-script>.
 
+- The `bibliography/` directory contains BibTeX (and possibly other)
+  bibliographies.
+
 - The `figures/` directory is used to store image files / similar resources used
   throughout SAW documentation.
 
