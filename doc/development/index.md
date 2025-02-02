@@ -5,7 +5,7 @@ These resources are mainly intended for developers working on the internals of
 
 Currently, we document:
 
-- The [SAWCore external format, `extcore`](sawcore-external-format/index), which
+- The [SAWCore external format, `extcore`](extcore), which
   is a text-based serialization of the low-level representation of SAWScript
   `Term`s.
 
@@ -25,7 +25,7 @@ Currently, we document:
 :::{toctree}
 :hidden:
 
-sawcore-external-format/index
+extcore
 limitations
 releasing
 :::
