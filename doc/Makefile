@@ -33,7 +33,7 @@ pdf: latexpdf
 
 install-pdf: latexpdf
 	mkdir -p pdfs
-	cp -f $$(ls _build/latex/*.pdf | sed '/\/galois\.pdf$$/d') pdfs
+	cp -f $(shell ls _build/latex/*.pdf | sed '/\/galois\.pdf$$/d') pdfs
 
 mostlyclean:
 	rm -rf _build
