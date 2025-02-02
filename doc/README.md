@@ -165,6 +165,8 @@ That said, to add new documentation material:
    their `index.md` (other than the hierarchical information) will **not**
    render in the PDF - this is an intentional choice to allow for some
    "HTML-only" content in the front-matter (e.g. code downloads for tutorials).
+   See [below](#pdf-generation) for information about setting the title of
+   generated PDFs given this rendering quirk.
 2. Create additional `.md` files for your content, organizing them using
    `toctree`s as appropriate.
    Ideally, for every entry in the top-level `toctree` of your material, there
