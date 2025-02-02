@@ -101,6 +101,14 @@ This directory is the intended source root for all SAW documentation.
 - The `bibliography/` directory contains BibTeX (and possibly other)
   bibliographies.
 
+- The `developer/` directory is an assortment of documentation mostly relevant
+  to developers of `saw-script`, including:
+
+  - Documentation of the SAWCore `extcore` format
+  - Limitations of SAW and its use
+  - The `saw-script` release process
+
+
 - The `figures/` directory is used to store image files / similar resources used
   throughout SAW documentation.
 
@@ -124,14 +132,6 @@ currently managed as part of this documentation ecosystem:
 - `saw-user-manual/`
   "SAW User Manual"
   The only 'complete' SAW reference right now
-- `development/`
-  An assortment of documentation mostly relevant to developers of `saw-script`,
-  including::
-
-  - Documentation of the SAWCore `extcore` format
-  - Limitations of SAW and its use
-  - The `saw-script` release process
-  - A mirror of [the repository changelog](../CHANGES.md)
 
 ### Non-contents
 
@@ -178,7 +178,7 @@ That said, to add new documentation material:
 Note that your documentation doesn't necessarily _need_ its own directory; if
 it's a single page, consider adding it as a single `.md` file to the most
 appropriate directory, and adding an entry to the corresponding `toctree` (for
-some examples of this, see `doc/development/`).
+some examples of this, see `doc/developer/`).
 
 #### Code examples
 

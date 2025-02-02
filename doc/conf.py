@@ -38,7 +38,7 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     ".venv",
-    "development",
+    "developer",
     "**/code",
     "README.md",
 ]
