@@ -20,12 +20,6 @@ If you are looking for SAW/SAWScript reference materials:
   reading or writing SAWScript, it is worth searching the manual to see if it is
   covered there.
 
-If you are a SAW developer:
-
-- [**SAW Developer Documentation**](development/index) is the home of a few
-  resources related to the development/maintenance of SAW, such as an overview
-  of the SAWCore external format and our release process.
-
 If you encounter any bugs, please [open an
 issue](https://github.com/GaloisInc/saw-script/issues) following the
 [contributing
@@ -37,5 +31,4 @@ guidelines](https://github.com/GaloisInc/saw-script/blob/master/CONTRIBUTING.md#
 llvm-java-verification-with-saw/index
 rust-verification-with-saw/index
 saw-user-manual/index
-development/index
 :::
