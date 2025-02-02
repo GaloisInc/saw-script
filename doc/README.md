@@ -28,17 +28,17 @@ If you want to generate the PDFs that can be found in `doc/pdfs`, you'll also
 need `xelatex`.
 This will require a suitable TeX distribution.
 
-### `make_docs.sh`
+### `scripts/make_docs.sh`
 
-`doc/make_docs.sh` is a bash script wrapping up all of the Python environment
-and Sphinx build management, via [a separately-runnable script we
+`scripts/make_docs.sh` is a bash script wrapping up all of the Python
+environment and Sphinx build management, via [a separately-runnable script we
 provide](#the-python-environment).
 Using this, you'll almost never need to think about anything related to the
 Python behind the curtain, as long as you have a Python >=3.9 installation.
 
 ```console
-$ ./make_docs.sh
-Usage: ./make_docs.sh <html|latexpdf|clean>
+$ scripts/make_docs.sh
+Usage: scripts/make_docs.sh <html|latexpdf|clean>
 ```
 
 Running the script with a documentation format does exactly what you expect:
@@ -52,23 +52,23 @@ if necessary.
 The `clean` target wipes out the Sphinx outputs, as well as any code example
 archives that were generated.
 
-#### `setup_env.sh`
+#### `scripts/setup_env.sh`
 
-There is another script, `setup_env.sh`, that specifically handles the creation
-and validation of a suitable Python environment without building the
+There is another script, `scripts/setup_env.sh`, that specifically handles the
+creation and validation of a suitable Python environment without building the
 documentation / code examples.
 
-This uses the sibling `requirements.txt` file, and can be run anywhere you would
-like to create a SAW-documentation-building Python environment.
+This uses the sibling `scripts/requirements.txt` file, and can be run anywhere
+you would like to create a SAW-documentation-building Python environment.
 
-You can run this separately from `make_docs.sh` if you'd like.
+You can run this separately from `scripts/make_docs.sh` if you'd like.
 
 ### Troubleshooting
 
 1. If the build succeeds, but you aren't seeing all of the expected changes:
 
-   Try running `./make_docs.sh clean` before rebuilding; Sphinx may have failed
-   to detect the changes you made, and you're seeing stale/cached output.
+   Try running `scripts/make_docs.sh clean` before rebuilding; Sphinx may have
+   failed to detect the changes you made, and you're seeing stale/cached output.
 2. If you have unresolved reference warnings:
 
    Sphinx has an incredibly robust cross-reference system, but it is easy to
@@ -78,7 +78,8 @@ You can run this separately from `make_docs.sh` if you'd like.
 3. If the build fails:
 
    Try removing the `.venv/` directory, forcing a fresh Python environment to be
-   created the next time you run `./make_docs.sh ...` or `./setup_env.sh`.
+   created the next time you run `scripts/make_docs.sh ...` or
+   `scripts/setup_env.sh`.
 
 If you still have trouble, you've likely uncovered a bug in the system.
 Please [open an issue](https://github.com/GaloisInc/saw-script/issues) detailing
@@ -94,9 +95,6 @@ This directory is the intended source root for all SAW documentation.
 - The `Makefile` and `conf.py` come from Sphinx; the former is the default one
   gets when starting a new Sphinx project, the latter has been heavily
   customized for SAW's needs.
-
-- `requirements.txt` captures a working set of Python dependencies in an attempt
-  to make documentation builds more reproducible.
 
 - `index.md` defines the top-level document hierarchy, and is the intended home
   page of <https://galoisinc.github.io/saw-script>.
@@ -118,6 +116,10 @@ This directory is the intended source root for all SAW documentation.
 - The `pdfs/` directory is where committed versions of PDF renderings live.
   This may eventually be removed in favor of generating and distrubiting PDFs as
   part of CI.
+
+- The `scripts/` directory is where scripts relevant to building the
+  documentation are located.
+  This includes a `requirements.txt` pinning dependencies for the Sphinx build.
 
 - `saw-lexer` is a small Python package implementing a SAWScript `pygments`
   lexer, so our documentation understands and properly renders fenced code
@@ -188,8 +190,8 @@ some examples of this, see `doc/developer/`).
 It is useful to provide code sample downloads when writing tutorial-style
 documentation materials, so readers can easily follow along.
 
-When building with the `make_docs.sh` helper script, `doc/` is set up to easily
-allow code samples to be added anywhere they are needed.
+When building with the `scripts/make_docs.sh` helper script, `doc/` is set up to
+easily allow code samples to be added anywhere they are needed.
 
 Note that this works best for materials that have their own dedicated directory:
 If you are adding a document to a directory already containing code samples,
@@ -213,7 +215,7 @@ To add code samples to your own material:
    ```
 
 **Important!** This convenience is **not** a built-in Sphinx feature, but a
-feature provided by our higher-level `make_docs.sh` wrapper.
+feature provided by our higher-level `scripts/make_docs.sh` wrapper.
 If you want to use Sphinx to build directly (e.g. with `make`), you will need
 to generate the `code.tar.gz` files yourself, which will _not_ be validated as
 'true' archives of the sibling `code/` directories.
@@ -280,7 +282,8 @@ example, heading levels.
 
 If you are hacking on the documentation build itself (e.g. configuring Sphinx,
 playing with new extensions, or even simply upgrading the pinned dependencies in
-<./requirements.txt>), you can manually activate the Python virtual environment
-with `.venv/bin/activate`, and deactivate it again with `deactivate`.
+<scripts/requirements.txt>), you can manually activate the Python virtual
+environment with `.venv/bin/activate`, and deactivate it again with
+`deactivate`.
 
 This ought not be necessary for most work on documentation.
