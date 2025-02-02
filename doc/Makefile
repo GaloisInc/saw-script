@@ -1,5 +1,6 @@
 # SAW Documentation Makefile
 # This is derived from Sphinx's default Makefile
+include .env
 
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
@@ -42,7 +43,7 @@ clean: mostlyclean
 	rm -rf .venv
 
 $(SUPPORTED_DOCS): package-code setup-env
-	@. .venv/bin/activate && $(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} . .venv/bin/activate && $(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 %:
 	$(error "Target '$@' unknown; try 'make help'.")

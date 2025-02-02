@@ -24,7 +24,9 @@ The release process is:
 1. Make sure the `release-n.n` branch is in a release/ready state, including:
 
    - successful build artifacts across all platforms,
-   - successful tests on all test suites, and
+   - successful tests on all test suites,
+   - an up-to-date [`SOURCE_DATE_EPOCH`](../.env) for documentation builds,
+   - up-to-date [documentation PDFs](../pdfs), and
    - an up-to-date [CHANGES.md](../../CHANGES.md) file.
 
 2. Create a draft release on GitHub
