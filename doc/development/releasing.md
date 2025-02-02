@@ -25,7 +25,7 @@ The release process is:
 
    - successful build artifacts across all platforms,
    - successful tests on all test suites, and
-   - an up-to-date [CHANGES.md](changes) file.
+   - an up-to-date [CHANGES.md](../../CHANGES.md) file.
 
 2. Create a draft release on GitHub
 3. Make a commit on the `release-n.n` branch updating the version in the

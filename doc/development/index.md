@@ -21,7 +21,6 @@ Currently, we document:
   :::
 - The `saw-script` [release process](releasing), such that any developer with
   merge-to-default access can easily create and reproduce SAW releases.
-- [Changes](changes) to `saw-script`.
 
 :::{toctree}
 :hidden:
@@ -29,5 +28,4 @@ Currently, we document:
 sawcore-external-format/index
 limitations
 releasing
-changes
 :::
