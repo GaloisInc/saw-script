@@ -19,7 +19,7 @@ interested in modifying the documentation _content_.
 
 The only _strict_ requirement to build the documentation locally is a relatively
 recent Python (>=3.9, to be safe - we aren't prioritizing making this work on
-every Python under the sun).
+every Python under the sun), and `make`.
 
 This is enough to generate the HTML versions of documentation, which is what is
 deployed to <https://galoisinc.github.io/saw-script>.
@@ -28,58 +28,65 @@ If you want to generate the PDFs that can be found in `doc/pdfs`, you'll also
 need `xelatex`.
 This will require a suitable TeX distribution.
 
-### `scripts/make_docs.sh`
+### `Makefile`
 
-`scripts/make_docs.sh` is a bash script wrapping up all of the Python
-environment and Sphinx build management, via [a separately-runnable script we
-provide](#the-python-environment).
-Using this, you'll almost never need to think about anything related to the
-Python behind the curtain, as long as you have a Python >=3.9 installation.
+As is typical for Sphinx projects, SAW's documentation is built using `make`.
 
-```console
-$ scripts/make_docs.sh
-Usage: scripts/make_docs.sh <html|latexpdf|clean>
-```
+Our `Makefile` is a tailored version of that which is generated when starting a
+new Sphinx project, in particular restricting the document formats that can be
+targeted, and handling the setup of an appropriate Python environment in which
+to run the Sphinx build.
 
-Running the script with a documentation format does exactly what you expect:
-A suitable Python environment is created, any probable code examples are
-packaged (see [below](#code-examples)), and the actual Sphinx build is run.
+Typing `make help` is the easiest way to get started.
+The following targets are available:
 
-For the `latexpdf` target, in addition to the above, the
-[generated PDFs](#pdf-generation) are copied to `pdfs/` so they can be committed
-if necessary.
+- `help`: Display all of the most useful targets
+- `sphinx-help`: Display Sphinx's built-in help (**NOTE:** Most of these targets
+  are purposefully made unavailable and won't do anything!)
+- `setup-env`: Create a Python venv (in `doc/.venv/`) suitable for building the
+  documentation.
+  This tries not to do unnecessary work: If you already have a `doc/.venv/`, it
+  will simply install the dependencies the build requires.
+- `package-code`: Create tar.gz archives of all `doc/**/code/` directories.
+  This can be used to provide downloads in the HTML rendering of the
+  documentation (see [below](#code-examples)).
+- `install-pdf`: Build and install PDF renderings to `doc/pdfs/`.
+- `mostlyclean`: Clear out all packaged code and Sphinx-generated files.
+- `clean`: All of the above, plus the Python environment.
 
-The `clean` target wipes out the Sphinx outputs, as well as any code example
-archives that were generated.
+`make help` always shows the most up-to-date list of supported document targets.
 
-#### `scripts/setup_env.sh`
+#### `scripts/`
 
-There is another script, `scripts/setup_env.sh`, that specifically handles the
-creation and validation of a suitable Python environment without building the
-documentation / code examples.
+This directory contains utility scripts (and the documentation's
+`requirements.txt`) used to implement the `make` targets above.
 
-This uses the sibling `scripts/requirements.txt` file, and can be run anywhere
-you would like to create a SAW-documentation-building Python environment.
-
-You can run this separately from `scripts/make_docs.sh` if you'd like.
+- `scripts/setup_env.sh` creates and validates a suitable Python environment,
+  independent of the documentation build.
+  It uses the sibling `requirements.txt` file, and can be run anywhere you want
+  to create a `.venv/` suitable for building SAW documentation (though in most
+  cases, you'll just be running `make setup-env` in `doc/`).
+- `scripts/package_code.sh` finds all directories named `code` in the file tree,
+  and if there is no sibling `code.tar.gz`, creates it.
+  This is the implementation of `make package-code`, but like
+  `scripts/setup_env.sh` can be run anywhere.
 
 ### Troubleshooting
 
 1. If the build succeeds, but you aren't seeing all of the expected changes:
 
-   Try running `scripts/make_docs.sh clean` before rebuilding; Sphinx may have
-   failed to detect the changes you made, and you're seeing stale/cached output.
+   Try running `make mostlyclean` before rebuilding; Sphinx may have failed to
+   detect the changes you made, and you're seeing stale/cached output.
 2. If you have unresolved reference warnings:
 
-   Sphinx has an incredibly robust cross-reference system, but it is easy to
-   get "wrong".
+   Sphinx has an incredibly robust cross-reference system, but it is easy to get
+   "wrong".
    If using Markdown/MyST, make sure you are using references according to [this
    documentation](https://myst-parser.readthedocs.io/en/latest/syntax/cross-referencing.html).
 3. If the build fails:
 
-   Try removing the `.venv/` directory, forcing a fresh Python environment to be
-   created the next time you run `scripts/make_docs.sh ...` or
-   `scripts/setup_env.sh`.
+   Try a full `make clean` to wipe out the `.venv/` directory and start again in
+   a fresh environment.
 
 If you still have trouble, you've likely uncovered a bug in the system.
 Please [open an issue](https://github.com/GaloisInc/saw-script/issues) detailing
@@ -92,9 +99,9 @@ This directory is the intended source root for all SAW documentation.
 
 ### Contents
 
-- The `Makefile` and `conf.py` come from Sphinx; the former is the default one
-  gets when starting a new Sphinx project, the latter has been heavily
-  customized for SAW's needs.
+- The `Makefile` is explained in more detail [above](#makefile).
+- `conf.py` is our Sphinx configuration, which has been heavily customized from
+  the default Sphinx provides.
 
 - `index.md` defines the top-level document hierarchy, and is the intended home
   page of <https://galoisinc.github.io/saw-script>.
@@ -114,8 +121,6 @@ This directory is the intended source root for all SAW documentation.
   throughout SAW documentation.
 
 - The `pdfs/` directory is where committed versions of PDF renderings live.
-  This may eventually be removed in favor of generating and distrubiting PDFs as
-  part of CI.
 
 - The `scripts/` directory is where scripts relevant to building the
   documentation are located.
@@ -190,8 +195,8 @@ some examples of this, see `doc/developer/`).
 It is useful to provide code sample downloads when writing tutorial-style
 documentation materials, so readers can easily follow along.
 
-When building with the `scripts/make_docs.sh` helper script, `doc/` is set up to
-easily allow code samples to be added anywhere they are needed.
+When building with `make`, `doc/` is set up to easily allow code samples to be
+added anywhere they are needed.
 
 Note that this works best for materials that have their own dedicated directory:
 If you are adding a document to a directory already containing code samples,
@@ -213,14 +218,6 @@ To add code samples to your own material:
    ```markdown
    Download sample files: <path:code.tar.gz>
    ```
-
-**Important!** This convenience is **not** a built-in Sphinx feature, but a
-feature provided by our higher-level `scripts/make_docs.sh` wrapper.
-If you want to use Sphinx to build directly (e.g. with `make`), you will need
-to generate the `code.tar.gz` files yourself, which will _not_ be validated as
-'true' archives of the sibling `code/` directories.
-For this reason, we strongly recommend that you _always_ build SAW documentation
-using the helper scripts.
 
 #### PDF generation
 
