@@ -1,0 +1,4 @@
+rec f (x : a) : b = g x
+and g (y : a) : b = h y
+and h (z : a) : b = f z
+;
