@@ -58,6 +58,9 @@ There is another script, `setup_env.sh`, that specifically handles the creation
 and validation of a suitable Python environment without building the
 documentation / code examples.
 
+This uses the sibling `requirements.txt` file, and can be run anywhere you would
+like to create a SAW-documentation-building Python environment.
+
 You can run this separately from `make_docs.sh` if you'd like.
 
 ### Troubleshooting
