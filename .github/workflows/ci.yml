@@ -366,7 +366,7 @@ jobs:
 
         # If you change the entree-specs commit below, make sure you update the
         # documentation in saw-core-coq/README.md accordingly.
-      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#d871d0af37ffee757e3be1f8d776bd7e84399712
+      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#f104f6b3e6fe5987d543d90265cdc52f532de5fe
 
       # FIXME: the following steps generate Coq libraries for the SAW core to
       # Coq translator and builds them; if we do other Coq tests, these steps
