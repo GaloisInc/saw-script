@@ -8,6 +8,7 @@ author = "The SAW Development Team"
 
 extensions = [
     "sphinx_copybutton",
+    "sphinx_download_dir",
     "hoverxref.extension",
     "notfound.extension",
     "myst_parser",

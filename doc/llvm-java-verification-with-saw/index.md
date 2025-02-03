@@ -9,7 +9,7 @@ After completing this tutorial, you will be able to:
 - Write proofs in SAW _compositionally_
 - Use the SAW REPL to interactively run proofs
 
-You can download the tutorial files: <path:code.tar.gz>
+You can download {download-dir}`the tutorial files <code>`.
 
 ```{toctree}
 :maxdepth: 2

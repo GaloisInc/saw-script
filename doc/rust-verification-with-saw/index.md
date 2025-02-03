@@ -14,7 +14,7 @@ Additionally, you will step through the process of verifying an implementation
 of the Salsa20 stream cipher against a Cryptol reference specification, showing
 how SAW's MIR capabilities may be used on a more realistic codebase.
 
-You can download the tutorial files: <path:code.tar.gz>
+You can download {download-dir}`the tutorial files <code>`.
 
 ```{toctree}
 :maxdepth: 2
