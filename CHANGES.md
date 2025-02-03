@@ -2,6 +2,12 @@
 
 ## New Features
 
+* SAW documentation is now under a single Sphinx umbrella, resulting in a
+  complete overhaul of the `doc/` directory (#1723). Generally speaking, all
+  _content_ has stayed the same, and only organization has changed. Most
+  importantly for users, the PDF artifacts included in CI-generated releases
+  have different names and render with Sphinx styling.
+
 * Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
 
 * Add a `:tenv` REPL command, which is like `:env` but prints the type
