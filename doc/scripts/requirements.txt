@@ -31,5 +31,5 @@ sphinxcontrib-qthelp==2.0.0
 sphinxcontrib-serializinghtml==2.0.0
 urllib3==2.3.0
 
-# Until we get SAWScriptLexer added to pygments
 -e ./saw-lexer
+-e ./sphinx-download-dir
