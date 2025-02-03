@@ -100,6 +100,7 @@ This directory is the intended source root for all SAW documentation.
 ### Contents
 
 - The `Makefile` is explained in more detail [above](#makefile).
+
 - `conf.py` is our Sphinx configuration, which has been heavily customized from
   the default Sphinx provides.
 
@@ -129,6 +130,12 @@ This directory is the intended source root for all SAW documentation.
 - `saw-lexer` is a small Python package implementing a SAWScript `pygments`
   lexer, so our documentation understands and properly renders fenced code
   blocks labeled ```````sawscript````.
+
+- `sphinx-download-dir` is a Python package implementing an extension for Sphinx
+  in the form of a _role_ (essentially, an inline element with some semantics)
+  for creating full-directory downloads more easily.
+  See [below](#code-examples) for usage detail.
+
 
 The remaining directories correspond to individual SAW documentation resources
 currently managed as part of this documentation ecosystem:
@@ -195,29 +202,28 @@ some examples of this, see `doc/developer/`).
 It is useful to provide code sample downloads when writing tutorial-style
 documentation materials, so readers can easily follow along.
 
-When building with `make`, `doc/` is set up to easily allow code samples to be
-added anywhere they are needed.
+We have implemented a small Sphinx extension, `sphinx-download-dir`, to make it
+easier to provide full-directory downloads in your documents.
 
-Note that this works best for materials that have their own dedicated directory:
-If you are adding a document to a directory already containing code samples,
-you'll need to determine whether it is appropriate to reorganize your document
-so it can have its own downloadable code, or add to the code samples already
-provided.
+To use this feature:
 
-To add code samples to your own material:
-
-1. Taking the note above into consideration, find/create the appropriate `code/`
-   directory.
-2. Add your code/other materials to include in the package to it.
-3. When you need to add a download link for the directory, use the path to the
-   `code/` directory, but add `.tar.gz`.
-   For example, if you've added `doc/my-cool-saw-tutorial` with code in
-   `doc/my-cool-saw-tutorial/code`, if you want to add a download link in
-   `doc/my-cool-saw-tutorial/index.md` you would write:
+1. Create your directory that should be downloadable somewhere in `doc/` (as
+   long as it's somewhere in the tree, you'll be able to create a download
+   link).
+2. Take note of the directory's location, either relative to `doc/` or relative
+   to the document where you would like to create a download link (either will
+   work).
+3. Add the link:
 
    ```markdown
-   Download sample files: <path:code.tar.gz>
+   Check out my cool {download-dir}`download<path/to/dir>`!
    ```
+   
+   This will look for `path/to/dir` relative to this document; to look for it
+   relative to `doc/`, prefix with a `/`
+   (i.e. ``{download-dir}</path/to/dir>``).
+   
+That's it!
 
 #### PDF generation
 
