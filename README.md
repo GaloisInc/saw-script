@@ -31,8 +31,8 @@ page](https://github.com/GaloisInc/saw-script/releases).
 
 ## Docker Images
 
-Alternatively, there are Docker images available from the [packages
-page](https://github.com/orgs/GaloisInc/packages?repo_name=saw-script).
+Alternatively, there is a Docker image available from the [packages
+page](https://github.com/orgs/GaloisInc/packages/container/package/saw).
 
 ## Getting Z3
 
