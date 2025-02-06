@@ -1045,40 +1045,45 @@ inferExpr (ln, expr) = case expr of
     do (e1,t) <- inferExpr (ln, e)
        t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
        elTy <- case t1 of
-                 TyRecord typos fs
-                    | Just ty <- M.lookup n fs -> return ty
-                    | otherwise ->
-                          do recordError pos $ unlines
-                                [ "Selecting a missing field."
-                                , "Field name: " ++ Text.unpack n
-                                ]
-                             getErrorTyVar typos
-                 _ -> do recordError pos $ unlines
-                            [ "Record lookup on non-record argument."
-                            , "Field name: " ++ Text.unpack n
-                            ]
-                         getErrorTyVar pos
+           TyRecord typos fs
+            | Just ty <- M.lookup n fs -> do
+               return ty
+            | otherwise -> do
+               recordError pos $
+                   "Record type has no field named " ++ Text.unpack n
+               getErrorTyVar typos
+           TyUnifyVar _ _ -> do
+               recordError pos $
+                   "Cannot infer a record type for field " ++
+                   Text.unpack n ++ "; please use a type annotation"
+               getErrorTyVar pos
+           _ -> do
+               recordError pos $
+                   "Record lookup on non-record value of type " ++ pShow t1
+               getErrorTyVar pos
        return (Lookup pos e1 n, elTy)
 
   TLookup pos e i ->
     do (e1,t) <- inferExpr (ln,e)
        t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
        elTy <- case t1 of
-                 TyCon typos (TupleCon n) tys
-                   | i < n -> return (tys !! fromIntegral i)
-                   | otherwise ->
-                          do recordError pos $ unlines
-                                [ "Tuple index out of bounds."
-                                , "Given index " ++ show i ++
-                                  " is too large for tuple size of " ++
-                                  show n
-                                ]
-                             getErrorTyVar typos
-                 _ -> do recordError pos $ unlines
-                            [ "Tuple lookup on non-tuple argument."
-                            , "Given index " ++ show i
-                            ]
-                         getErrorTyVar pos
+           TyCon typos (TupleCon n) tys
+            | i < n ->
+               return (tys !! fromIntegral i)
+            | otherwise -> do
+               recordError pos $
+                   "Tuple index " ++ show i ++ " out of bounds; limit is " ++
+                   show n
+               getErrorTyVar typos
+           TyUnifyVar _ _ -> do
+               recordError pos $
+                   "Cannot infer tuple arity for lookup of element " ++
+                   show i ++ "; please use a type annotation"
+               getErrorTyVar pos
+           _ -> do
+               recordError pos $ 
+                   "Tuple lookup on non-tuple value of type " ++ pShow t1
+               getErrorTyVar pos
        return (TLookup pos e1 i, elTy)
 
   Var x ->
