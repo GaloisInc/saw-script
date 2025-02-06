@@ -1,5 +1,3 @@
  Loading file "err021.saw"
- err021.saw:8:18-8:31: Selecting a missing field.
-Field name: nonexistent
-
+ err021.saw:8:18-8:31: Record type has no field named nonexistent
 FAILED
