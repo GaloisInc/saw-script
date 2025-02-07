@@ -14,9 +14,9 @@ incomplete support for the Rust language.
 There are two SAWScript tutorials that give an introduction to using the
 SAWScript interpreter:
 
-* [This tutorial](https://saw.galois.com/tutorial.html) gives an
+* [This tutorial](https://tools.galois.com/saw/documentation/tutorials-and-publications/tutorial-llvm-java) gives an
   introduction to verifying C code (using LLVM) and Java code (using JVM).
-* [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/rust-tutorial/rust-tutorial.md)
+* [This tutorial](https://tools.galois.com/saw/documentation/tutorials-and-publications/tutorial-rust)
   gives an introduction to verifying Rust code (using MIR).
 
 There is also a longer
