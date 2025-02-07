@@ -542,6 +542,11 @@ jobs:
     name: "Run integration tests with coverage reporting"
     needs: build
     runs-on: ${{ matrix.os }}
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    # (as recommended in https://github.com/actions/deploy-pages/blob/854d7aa1b99e4509c4d1b53d69b7ba4eaf39215a/README.md#usage)
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
     if: github.event_name == 'pull_request'
     permissions:
       pages: write
