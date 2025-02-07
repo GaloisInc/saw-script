@@ -29,6 +29,11 @@ Precompiled SAWScript binaries for a variety of platforms are available
 on the [releases
 page](https://github.com/GaloisInc/saw-script/releases).
 
+## Docker Images
+
+Alternatively, there is a Docker image available from the [packages
+page](https://github.com/orgs/GaloisInc/packages/container/package/saw).
+
 ## Getting Z3
 
 SAW can use many theorem provers, but because of its use of Cryptol it

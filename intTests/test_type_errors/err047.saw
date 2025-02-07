@@ -1,0 +1,3 @@
+// Trigger the message about not supporting tuple arity inference.
+
+let foo x = x.3;

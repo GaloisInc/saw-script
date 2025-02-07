@@ -1,0 +1,3 @@
+// Trigger the message about not supporting record inference.
+
+let foo x = x.someField;
