@@ -48,7 +48,6 @@ data Verbosity
   | Warn
   | Info
   | Debug
-  | ExtraDebug
     deriving (Show,Eq,Ord)
 
 data SummaryFormat
