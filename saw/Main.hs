@@ -111,58 +111,38 @@ options =
               hPutStrLn stderr $ "Error: the argument of the '-f' option" ++
                                  " must be either 'json' or 'pretty'"
               exitFailure
+
+      -- wrappers for constructing the table entries more concisely
+      noArg short long dispatch descr =
+          Option short [long] (NoArg dispatch) descr
+      optArg short long argdesc dispatch descr =
+          Option short [long] (OptArg dispatch argdesc) descr
+      reqArg short long argdesc dispatch descr =
+          Option short [long] (ReqArg dispatch argdesc) descr
   in
-  [ Option "h?" ["help"]
-    (NoArg setShowHelp)
-    "Print this help message"
-  , Option "V" ["version"]
-    (NoArg setShowVersion)
-    "Show the version of the SAWScript interpreter"
-  , Option "c" ["classpath"]
-    (ReqArg addClassPath "path")
-    pathDesc
-  , Option "i" ["import-path"]
-    (ReqArg addImportPath "path")
-    pathDesc
-  , Option "" ["detect-vacuity"]
-    (NoArg setDetectVacuity)
-    "Checks and warns the user about contradictory assumptions. (default: false)"
-  , Option "t" ["extra-type-checking"]
-    (NoArg setExtraChecks)
-    "Perform extra type checking of intermediate values"
-  , Option "I" ["interactive"]
-    (NoArg setRunInteractively)
-    "Run interactively (with a REPL)"
-  , Option "j" ["jars"]
-    (ReqArg addJarList "path")
-    pathDesc
-  , Option "b" ["java-bin-dirs"]
-    (ReqArg addJavaBinDirs "path")
-    pathDesc
-  , Option [] ["output-locations"]
-    (NoArg setPrintShowPos)
-     "Show the source locations that are responsible for output."
-  , Option "d" ["sim-verbose"]
-    (ReqArg setSimVerbose "num")
-    "Set simulator verbosity level"
-  , Option "v" ["verbose"]
-    (ReqArg setVerbosity
-     "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
-    )
-    "Set verbosity level"
-  , Option [] ["no-color"]
-    (NoArg clearUseColor)
-    "Disable ANSI color and Unicode output"
-  , Option [] ["clean-mismatched-versions-solver-cache"]
-    (OptArg setCleanMisVsCache "path")
-    "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit"
-  , Option "s" ["summary"]
-    (ReqArg setSummaryFile "filename")
-    "Write a verification summary to the provided filename"
-  , Option "f" ["summary-format"]
-    (ReqArg setSummaryFormat
-     "either 'json' or 'pretty'")
-    "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
+  [
+    noArg "h?" "help"    setShowHelp "Print this help message",
+    noArg "V"  "version" setShowVersion "Show the version of the SAWScript interpreter",
+    reqArg "c" "classpath" "path" addClassPath pathDesc,
+    reqArg "i" "import-path" "path" addImportPath pathDesc,
+    noArg "" "detect-vacuity" setDetectVacuity "Checks and warns the user about contradictory assumptions. (default: false)",
+    noArg "t" "extra-type-checking" setExtraChecks "Perform extra type checking of intermediate values",
+    noArg "I" "interactive" setRunInteractively "Run interactively (with a REPL)",
+    reqArg "j" "jars" "path" addJarList pathDesc,
+    reqArg "b" "java-bin-dirs" "path" addJavaBinDirs pathDesc,
+    noArg "" "output-locations" setPrintShowPos "Show the source locations that are responsible for output.",
+    reqArg "d" "sim-verbose" "num" setSimVerbose "Set simulator verbosity level",
+    reqArg "v" "verbose"
+      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
+      setVerbosity
+      "Set verbosity level",
+    noArg "" "no-color" clearUseColor "Disable ANSI color and Unicode output",
+    optArg "" "clean-mismatched-versions-solver-cache" "path"
+      setCleanMisVsCache
+      "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit",
+    reqArg "s" "summary" "filename" setSummaryFile "Write a verification summary to the provided filename",
+    reqArg "f" "summary-format" "either 'json' or 'pretty'" setSummaryFormat
+       "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
   ]
 
 main :: IO ()
