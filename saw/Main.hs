@@ -70,93 +70,97 @@ readVerbosity s =
         "debug"               -> Debug
         _                     -> Debug
 
-options :: [OptDescr (Options -> IO Options)] -- added IO to do validation here instead of later
+-- | Table of option descriptions.
+--
+-- Uses IO so it can fail on invalid option arguments, and also so it
+-- can get at the process environment.
+--
+options :: [OptDescr (Options -> IO Options)]
 options =
+  let
+      addImportPath p opts =
+          return opts { importPath = importPath opts ++ splitSearchPath p }
+      addClassPath p opts =
+          return opts { classPath = classPath opts ++ splitSearchPath p }
+      addJarList p opts =
+          return opts { jarList = jarList opts ++ splitSearchPath p }
+      addJavaBinDirs p opts =
+          return opts { javaBinDirs = javaBinDirs opts ++ splitSearchPath p }
+      setVerbosity v opts =
+          -- TODO: now that we're in IO we can do something if a bogus
+          -- verbosity is given
+          let verb = readVerbosity v in
+          return opts { verbLevel = verb, printOutFn = printOutWith verb }
+      setSimVerbose v opts = return opts { simVerbose = read v }
+      setDetectVacuity opts = return opts { detectVacuity = True }
+      setExtraChecks opts = return opts { extraChecks = True }
+      setRunInteractively opts = return opts { runInteractively = True }
+      setShowHelp opts = return opts { showHelp = True }
+      setShowVersion opts = return opts { showVersion = True }
+      setPrintShowPos opts = return opts { printShowPos = True }
+      clearUseColor opts = return opts { useColor = False }
+      setCleanMisVsCache mb_path opts = do
+          mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
+          let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
+          return opts { cleanMisVsCache = Just path }
+      setSummaryFile file opts = return opts { summaryFile = Just file }
+      setSummaryFormat fmt opts = case fmt of
+          "json" -> return opts { summaryFormat = JSON }
+          "pretty" -> return opts { summaryFormat = Pretty }
+          _ -> do
+              hPutStrLn stderr $ "Error: the argument of the '-f' option" ++
+                                 " must be either 'json' or 'pretty'"
+              exitFailure
+  in
   [ Option "h?" ["help"]
-    (NoArg (\opts -> return opts { showHelp = True }))
+    (NoArg setShowHelp)
     "Print this help message"
   , Option "V" ["version"]
-    (NoArg (\opts -> return opts { showVersion = True }))
+    (NoArg setShowVersion)
     "Show the version of the SAWScript interpreter"
   , Option "c" ["classpath"]
-    (ReqArg
-     (\p opts -> return opts { classPath = classPath opts ++ splitSearchPath p })
-     "path"
-    )
+    (ReqArg addClassPath "path")
     pathDesc
   , Option "i" ["import-path"]
-    (ReqArg
-     (\p opts -> return opts { importPath = importPath opts ++ splitSearchPath p })
-     "path"
-    )
+    (ReqArg addImportPath "path")
     pathDesc
   , Option "" ["detect-vacuity"]
-    (NoArg
-     (\opts -> return opts { detectVacuity = True }))
+    (NoArg setDetectVacuity)
     "Checks and warns the user about contradictory assumptions. (default: false)"
   , Option "t" ["extra-type-checking"]
-    (NoArg
-     (\opts -> return opts { extraChecks = True }))
+    (NoArg setExtraChecks)
     "Perform extra type checking of intermediate values"
   , Option "I" ["interactive"]
-    (NoArg
-     (\opts -> return opts { runInteractively = True }))
+    (NoArg setRunInteractively)
     "Run interactively (with a REPL)"
   , Option "j" ["jars"]
-    (ReqArg
-     (\p opts -> return opts { jarList = jarList opts ++ splitSearchPath p })
-     "path"
-    )
+    (ReqArg addJarList "path")
     pathDesc
   , Option "b" ["java-bin-dirs"]
-    (ReqArg
-     (\p opts -> return opts { javaBinDirs = javaBinDirs opts ++ splitSearchPath p })
-     "path"
-    )
+    (ReqArg addJavaBinDirs "path")
     pathDesc
   , Option [] ["output-locations"]
-    (NoArg
-     (\opts -> return opts { printShowPos = True }))
+    (NoArg setPrintShowPos)
      "Show the source locations that are responsible for output."
   , Option "d" ["sim-verbose"]
-    (ReqArg
-     (\v opts -> return opts { simVerbose = read v })
-     "num"
-    )
+    (ReqArg setSimVerbose "num")
     "Set simulator verbosity level"
   , Option "v" ["verbose"]
-    (ReqArg
-      (\v opts -> let verb = readVerbosity v -- TODO: now that we're in IO we can do something if a bogus verbosity is given
-                 in return opts { verbLevel = verb
-                         , printOutFn = printOutWith verb } )
+    (ReqArg setVerbosity
      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
     )
     "Set verbosity level"
   , Option [] ["no-color"]
-    (NoArg (\opts -> return opts { useColor = False }))
+    (NoArg clearUseColor)
     "Disable ANSI color and Unicode output"
   , Option [] ["clean-mismatched-versions-solver-cache"]
-    (OptArg
-     (\mb_path opts -> do
-        mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
-        let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
-        return opts { cleanMisVsCache = Just path })
-     "path")
+    (OptArg setCleanMisVsCache "path")
     "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit"
   , Option "s" ["summary"]
-    (ReqArg
-     (\file opts -> return opts { summaryFile = Just file })
-     "filename")
+    (ReqArg setSummaryFile "filename")
     "Write a verification summary to the provided filename"
   , Option "f" ["summary-format"]
-    (ReqArg
-     (\fmt opts -> case fmt of
-        "json" -> return opts { summaryFormat = JSON }
-        "pretty" -> return opts { summaryFormat = Pretty }
-        _ -> do
-          hPutStrLn stderr "Error: the argument of the '-f' option must be either 'json' or 'pretty'"
-          exitFailure
-     )
+    (ReqArg setSummaryFormat
      "either 'json' or 'pretty'")
     "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
   ]
