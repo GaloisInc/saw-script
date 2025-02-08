@@ -99,7 +99,7 @@ options =
       setShowVersion opts = return opts { showVersion = True }
       setPrintShowPos opts = return opts { printShowPos = True }
       clearUseColor opts = return opts { useColor = False }
-      setCleanMisVsCache mb_path opts = do
+      setCleanCache mb_path opts = do
           mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
           let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
           return opts { cleanMisVsCache = Just path }
@@ -113,33 +113,63 @@ options =
               exitFailure
 
       -- wrappers for constructing the table entries more concisely
-      noArg short long dispatch descr =
+      noArg dispatch short long descr =
           Option short [long] (NoArg dispatch) descr
-      optArg short long argdesc dispatch descr =
-          Option short [long] (OptArg dispatch argdesc) descr
-      reqArg short long argdesc dispatch descr =
-          Option short [long] (ReqArg dispatch argdesc) descr
+      optArg dispatch short long argname descr =
+          Option short [long] (OptArg dispatch argname) descr
+      reqArg dispatch short long argname descr =
+          Option short [long] (ReqArg dispatch argname) descr
   in
   [
-    noArg "h?" "help"    setShowHelp "Print this help message",
-    noArg "V"  "version" setShowVersion "Print the SAWScript version and exit",
-    reqArg "c" "classpath" "<path>" addClassPath "Add <path> to the Java classpath",
-    reqArg "i" "import-path" "<path>" addImportPath "Add <path> to the SAWScript import path",
-    noArg "" "detect-vacuity" setDetectVacuity "Check for contradictory assumptions\n  (default false)",
-    noArg "t" "extra-type-checking" setExtraChecks "Perform extra type checking of intermediate values\n  (default false)",
-    noArg "I" "interactive" setRunInteractively "Run interactively (with a REPL)",
-    reqArg "j" "jars" "<path>" addJarList "Add <path> to the Java JAR list",
-    reqArg "b" "java-bin-dirs" "<path>" addJavaBinDirs "Add <path> to the Java binary directory path",
-    noArg "" "output-locations" setPrintShowPos "Show source locations triggering output",
-    reqArg "d" "sim-verbose" "<num>" setSimVerbose "Set simulator verbosity level",
-    reqArg "v" "verbose" "<verbosity>" setVerbosity "Set SAWScript verbosity level",
-    noArg "" "no-color" clearUseColor "Disable ANSI color and Unicode output",
-    optArg "" "clean-mismatched-versions-solver-cache" "<dir>"
-      setCleanMisVsCache
-      "Purge the solver cache and exit",
-    reqArg "s" "summary" "<filename>" setSummaryFile "Write a verification summary to the given file",
-    reqArg "f" "summary-format" "json|pretty" setSummaryFormat
-       "Format for verification summary; default is 'json'"
+    noArg setShowHelp "h?" "help"
+            "Print this help message",
+
+    noArg setShowVersion "V" "version"
+            "Print the SAWScript version and exit",
+
+    reqArg addClassPath "c" "classpath" "<path>"
+            "Add <path> to the Java classpath",
+
+    reqArg addImportPath "i" "import-path" "<path>"
+            "Add <path> to the SAWScript import path",
+
+    noArg setDetectVacuity "" "detect-vacuity" $
+            "Check for contradictory assumptions\n" ++
+            "  (default false)",
+
+    noArg setExtraChecks "t" "extra-type-checking" $
+            "Perform extra type checking of intermediate values\n" ++
+            "  (default false)",
+
+    noArg setRunInteractively "I" "interactive"
+            "Run interactively (with a REPL)",
+
+    reqArg addJarList "j" "jars" "<path>"
+            "Add <path> to the Java JAR list",
+
+    reqArg addJavaBinDirs "b" "java-bin-dirs" "<path>"
+            "Add <path> to the Java binary directory path",
+
+    noArg setPrintShowPos "" "output-locations"
+            "Show source locations triggering output",
+
+    reqArg setSimVerbose "d" "sim-verbose" "<num>"
+            "Set simulator verbosity level",
+
+    reqArg setVerbosity "v" "verbose" "<verbosity>"
+            "Set SAWScript verbosity level",
+
+    noArg clearUseColor "" "no-color"
+            "Disable ANSI color and Unicode output",
+
+    optArg setCleanCache "" "clean-mismatched-versions-solver-cache" "<dir>"
+            "Purge the solver cache and exit",
+
+    reqArg setSummaryFile "s" "summary" "<filename>"
+            "Write a verification summary to the given file",
+
+    reqArg setSummaryFormat "f" "summary-format" "json|pretty"
+            "Format for verification summary; default is 'json'"
   ]
 
 usageInfo' :: String
@@ -163,12 +193,12 @@ usageInfo' =
                 -- First generate the option strings for the left column.
                 printShort c = case optinfo of
                     NoArg _ -> ['-', c]
-                    OptArg _ optdesc -> ['-', c, ' ', '['] ++ optdesc ++ "]"
-                    ReqArg _ optdesc -> ['-', c, ' '] ++ optdesc
+                    OptArg _ argname -> ['-', c, ' ', '['] ++ argname ++ "]"
+                    ReqArg _ argname -> ['-', c, ' '] ++ argname
                 printLong txt = case optinfo of
                     NoArg _ -> "--" ++ txt
-                    OptArg _ optdesc -> "--" ++ txt ++ "[=" ++ optdesc ++ "]"
-                    ReqArg _ optdesc -> "--" ++ txt ++ "=" ++ optdesc
+                    OptArg _ argname -> "--" ++ txt ++ "[=" ++ argname ++ "]"
+                    ReqArg _ argname -> "--" ++ txt ++ "=" ++ argname
                 shorts' = map printShort shorts
                 longs' = map printLong longs
                 -- Group as many as will fit in the column at once.
