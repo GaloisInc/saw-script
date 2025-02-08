@@ -38,6 +38,38 @@ import SAWScript.SolverVersions
 import qualified Data.AIG.CompactGraph as AIG
 
 
+pathDesc, pathDelim :: String
+
+#ifdef mingw32_HOST_OS
+pathDesc = "Semicolon-delimited list of paths"
+pathDelim = ";"
+#else
+pathDesc = "Colon-delimited list of paths"
+pathDelim = ":"
+#endif
+
+-- Try to read verbosity as either a string or number and default to 'Debug'.
+readVerbosity :: String -> Verbosity
+readVerbosity s | Just (n::Integer) <- readMaybe s =
+     case n of
+         0 -> Silent
+         1 -> OnlyCounterExamples
+         2 -> Error
+         3 -> Warn
+         4 -> Info
+         _ -> Debug
+readVerbosity s =
+    case map toLower s of
+        "silent"              -> Silent
+        "counterexamples"     -> OnlyCounterExamples
+        "onlycounterexamples" -> OnlyCounterExamples
+        "error"               -> Error
+        "warn"                -> Warn
+        "warning"             -> Warn
+        "info"                -> Info
+        "debug"               -> Debug
+        _                     -> Debug
+
 options :: [OptDescr (Options -> IO Options)] -- added IO to do validation here instead of later
 options =
   [ Option "h?" ["help"]
@@ -128,38 +160,6 @@ options =
      "either 'json' or 'pretty'")
     "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
   ]
-
--- Try to read verbosity as either a string or number and default to 'Debug'.
-readVerbosity :: String -> Verbosity
-readVerbosity s | Just (n::Integer) <- readMaybe s =
-     case n of
-         0 -> Silent
-         1 -> OnlyCounterExamples
-         2 -> Error
-         3 -> Warn
-         4 -> Info
-         _ -> Debug
-readVerbosity s =
-    case map toLower s of
-        "silent"              -> Silent
-        "counterexamples"     -> OnlyCounterExamples
-        "onlycounterexamples" -> OnlyCounterExamples
-        "error"               -> Error
-        "warn"                -> Warn
-        "warning"             -> Warn
-        "info"                -> Info
-        "debug"               -> Debug
-        _                     -> Debug
-
-pathDesc, pathDelim :: String
-
-#ifdef mingw32_HOST_OS
-pathDesc = "Semicolon-delimited list of paths"
-pathDelim = ";"
-#else
-pathDesc = "Colon-delimited list of paths"
-pathDelim = ":"
-#endif
 
 main :: IO ()
 main = do
