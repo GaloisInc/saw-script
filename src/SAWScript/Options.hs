@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns      #-}
 {- |
 Module      : SAWScript.Options
 Description : Datatype for saw command-line options.
@@ -5,27 +6,19 @@ License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWScript.Options where
 
-import Data.Char (toLower)
 import Data.List (partition)
-import Data.Maybe (fromMaybe)
 import Data.Time
-import System.Console.GetOpt
+import Text.Show.Functions ()
+
 import System.Environment
 import System.FilePath
-import System.Exit
-import System.IO
-import Text.Read (readMaybe)
-import Text.Show.Functions ()
 
 import Lang.JVM.JavaTools
 
--- TODO: wouldn't it be better to extract the options-processing code from this file and put it in saw/Main.hs (which already does part of the options processing)? It seems that other parts of SAW only need the datatype definition below, and not the rest.
+-- | Type we use to track the command-line option settings.
 data Options = Options
   { importPath       :: [FilePath]
   , classPath        :: [FilePath]
@@ -94,121 +87,13 @@ printOutWith setting level msg
 printOutLn :: Options -> Verbosity -> String -> IO ()
 printOutLn o v s = printOutFn o v (s ++ "\n")
 
-options :: [OptDescr (Options -> IO Options)] -- added IO to do validation here instead of later
-options =
-  [ Option "h?" ["help"]
-    (NoArg (\opts -> return opts { showHelp = True }))
-    "Print this help message"
-  , Option "V" ["version"]
-    (NoArg (\opts -> return opts { showVersion = True }))
-    "Show the version of the SAWScript interpreter"
-  , Option "c" ["classpath"]
-    (ReqArg
-     (\p opts -> return opts { classPath = classPath opts ++ splitSearchPath p })
-     "path"
-    )
-    pathDesc
-  , Option "i" ["import-path"]
-    (ReqArg
-     (\p opts -> return opts { importPath = importPath opts ++ splitSearchPath p })
-     "path"
-    )
-    pathDesc
-  , Option "" ["detect-vacuity"]
-    (NoArg
-     (\opts -> return opts { detectVacuity = True }))
-    "Checks and warns the user about contradictory assumptions. (default: false)"
-  , Option "t" ["extra-type-checking"]
-    (NoArg
-     (\opts -> return opts { extraChecks = True }))
-    "Perform extra type checking of intermediate values"
-  , Option "I" ["interactive"]
-    (NoArg
-     (\opts -> return opts { runInteractively = True }))
-    "Run interactively (with a REPL)"
-  , Option "j" ["jars"]
-    (ReqArg
-     (\p opts -> return opts { jarList = jarList opts ++ splitSearchPath p })
-     "path"
-    )
-    pathDesc
-  , Option "b" ["java-bin-dirs"]
-    (ReqArg
-     (\p opts -> return opts { javaBinDirs = javaBinDirs opts ++ splitSearchPath p })
-     "path"
-    )
-    pathDesc
-  , Option [] ["output-locations"]
-    (NoArg
-     (\opts -> return opts { printShowPos = True }))
-     "Show the source locations that are responsible for output."
-  , Option "d" ["sim-verbose"]
-    (ReqArg
-     (\v opts -> return opts { simVerbose = read v })
-     "num"
-    )
-    "Set simulator verbosity level"
-  , Option "v" ["verbose"]
-    (ReqArg
-      (\v opts -> let verb = readVerbosity v -- TODO: now that we're in IO we can do something if a bogus verbosity is given
-                 in return opts { verbLevel = verb
-                         , printOutFn = printOutWith verb } )
-     "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
-    )
-    "Set verbosity level"
-  , Option [] ["no-color"]
-    (NoArg (\opts -> return opts { useColor = False }))
-    "Disable ANSI color and Unicode output"
-  , Option [] ["clean-mismatched-versions-solver-cache"]
-    (OptArg
-     (\mb_path opts -> do
-        mb_env_path <- lookupEnv "SAW_SOLVER_CACHE_PATH"
-        let path = fromMaybe (fromMaybe "" mb_env_path) mb_path
-        return opts { cleanMisVsCache = Just path })
-     "path")
-    "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit"
-  , Option "s" ["summary"]
-    (ReqArg
-     (\file opts -> return opts { summaryFile = Just file })
-     "filename")
-    "Write a verification summary to the provided filename"
-  , Option "f" ["summary-format"]
-    (ReqArg
-     (\fmt opts -> case fmt of
-        "json" -> return opts { summaryFormat = JSON }
-        "pretty" -> return opts { summaryFormat = Pretty }
-        _ -> do
-          hPutStrLn stderr "Error: the argument of the '-f' option must be either 'json' or 'pretty'"
-          exitFailure
-     )
-     "either 'json' or 'pretty'")
-    "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
-  ]
-
--- Try to read verbosity as either a string or number and default to 'Debug'.
-readVerbosity :: String -> Verbosity
-readVerbosity s | Just (n::Integer) <- readMaybe s =
-     case n of
-         0 -> Silent
-         1 -> OnlyCounterExamples
-         2 -> Error
-         3 -> Warn
-         4 -> Info
-         _ -> Debug
-readVerbosity s =
-    case map toLower s of
-        "silent"              -> Silent
-        "counterexamples"     -> OnlyCounterExamples
-        "onlycounterexamples" -> OnlyCounterExamples
-        "error"               -> Error
-        "warn"                -> Warn
-        "warning"             -> Warn
-        "info"                -> Info
-        "debug"               -> Debug
-        _                     -> Debug
-
 -- | Perform some additional post-processing on an 'Options' value based on
 -- whether certain environment variables are defined.
+--
+-- XXX: this does not belong in Options.hs; it is a top-level
+-- operation that's really part of main. But it's shared between saw
+-- and saw-remote-api so it has to live somewhere shared, and for the
+-- time being there isn't anywhere else.
 processEnv :: Options -> IO Options
 processEnv opts = do
   curEnv <- getEnvironment
@@ -255,13 +140,3 @@ processEnv opts = do
                                       es = splitSearchPath p
                                       (jars, dirs) = partition (".jar" `isExtensionOf`) es
     addSawOpt _ os = os
-
-pathDesc, pathDelim :: String
-
-#ifdef mingw32_HOST_OS
-pathDesc = "Semicolon-delimited list of paths"
-pathDelim = ";"
-#else
-pathDesc = "Colon-delimited list of paths"
-pathDelim = ":"
-#endif
