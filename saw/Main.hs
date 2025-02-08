@@ -48,27 +48,28 @@ pathDesc = "colon-delimited list of directories"
 pathDelim = ":"
 #endif
 
--- Try to read verbosity as either a string or number and default to 'Debug'.
-readVerbosity :: String -> Verbosity
+-- Try to read verbosity as either a string or number.
+readVerbosity :: String -> Maybe Verbosity
 readVerbosity s | Just (n::Integer) <- readMaybe s =
      case n of
-         0 -> Silent
-         1 -> OnlyCounterExamples
-         2 -> Error
-         3 -> Warn
-         4 -> Info
-         _ -> Debug
+         0 -> Just Silent
+         1 -> Just OnlyCounterExamples
+         2 -> Just Error
+         3 -> Just Warn
+         4 -> Just Info
+         5 -> Just Debug
+         _ -> Nothing
 readVerbosity s =
     case map toLower s of
-        "silent"              -> Silent
-        "counterexamples"     -> OnlyCounterExamples
-        "onlycounterexamples" -> OnlyCounterExamples
-        "error"               -> Error
-        "warn"                -> Warn
-        "warning"             -> Warn
-        "info"                -> Info
-        "debug"               -> Debug
-        _                     -> Debug
+        "silent"              -> Just Silent
+        "counterexamples"     -> Just OnlyCounterExamples
+        "onlycounterexamples" -> Just OnlyCounterExamples
+        "error"               -> Just Error
+        "warn"                -> Just Warn
+        "warning"             -> Just Warn
+        "info"                -> Just Info
+        "debug"               -> Just Debug
+        _                     -> Nothing
 
 -- | Table of option descriptions.
 --
@@ -86,12 +87,23 @@ options =
           return opts { jarList = jarList opts ++ splitSearchPath p }
       addJavaBinDirs p opts =
           return opts { javaBinDirs = javaBinDirs opts ++ splitSearchPath p }
-      setVerbosity v opts =
-          -- TODO: now that we're in IO we can do something if a bogus
-          -- verbosity is given
-          let verb = readVerbosity v in
-          return opts { verbLevel = verb, printOutFn = printOutWith verb }
-      setSimVerbose v opts = return opts { simVerbose = read v }
+      setVerbosity v opts = case readVerbosity v of
+          Nothing -> do
+              hPutStrLn stderr $ "-v: Invalid verbosity level " ++ v ++
+                                 "; try --help"
+              exitFailure
+          Just verb ->
+              return opts { verbLevel = verb, printOutFn = printOutWith verb }
+      setSimVerbose v opts = case readMaybe v of
+          Nothing -> do
+              hPutStrLn stderr $ "-d: Invalid number " ++ v
+              exitFailure
+          Just verb
+           | verb < 0 -> do
+              hPutStrLn stderr $ "-d: Invalid verbosity " ++ v
+              exitFailure
+           | otherwise ->
+              return opts { simVerbose = verb }
       setDetectVacuity opts = return opts { detectVacuity = True }
       setExtraChecks opts = return opts { extraChecks = True }
       setRunInteractively opts = return opts { runInteractively = True }
@@ -108,8 +120,8 @@ options =
           "json" -> return opts { summaryFormat = JSON }
           "pretty" -> return opts { summaryFormat = Pretty }
           _ -> do
-              hPutStrLn stderr $ "Error: the argument of the '-f' option" ++
-                                 " must be either 'json' or 'pretty'"
+              hPutStrLn stderr $ "-f: Invalid format " ++ fmt ++ "; expected" ++
+                                 " either 'json' or 'pretty'"
               exitFailure
 
       -- wrappers for constructing the table entries more concisely
