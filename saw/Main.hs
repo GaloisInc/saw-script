@@ -123,13 +123,13 @@ options =
   [
     noArg "h?" "help"    setShowHelp "Print this help message",
     noArg "V"  "version" setShowVersion "Print the SAWScript version and exit",
-    reqArg "c" "classpath" "<path>" addClassPath "Add to the Java classpath",
-    reqArg "i" "import-path" "<path>" addImportPath "Add to the SAWScript import path",
-    noArg "" "detect-vacuity" setDetectVacuity "Check for contradictory assumptions",
-    noArg "t" "extra-type-checking" setExtraChecks "Perform extra type checking of intermediate values",
+    reqArg "c" "classpath" "<path>" addClassPath "Add <path> to the Java classpath",
+    reqArg "i" "import-path" "<path>" addImportPath "Add <path> to the SAWScript import path",
+    noArg "" "detect-vacuity" setDetectVacuity "Check for contradictory assumptions\n  (default false)",
+    noArg "t" "extra-type-checking" setExtraChecks "Perform extra type checking of intermediate values\n  (default false)",
     noArg "I" "interactive" setRunInteractively "Run interactively (with a REPL)",
-    reqArg "j" "jars" "<path>" addJarList "Add to the Java JAR list",
-    reqArg "b" "java-bin-dirs" "<path>" addJavaBinDirs "Add to the Java binary directory path",
+    reqArg "j" "jars" "<path>" addJarList "Add <path> to the Java JAR list",
+    reqArg "b" "java-bin-dirs" "<path>" addJavaBinDirs "Add <path> to the Java binary directory path",
     noArg "" "output-locations" setPrintShowPos "Show source locations triggering output",
     reqArg "d" "sim-verbose" "<num>" setSimVerbose "Set simulator verbosity level",
     reqArg "v" "verbose" "<verbosity>" setVerbosity "Set SAWScript verbosity level",
@@ -139,7 +139,7 @@ options =
       "Purge the solver cache and exit",
     reqArg "s" "summary" "<filename>" setSummaryFile "Write a verification summary to the given file",
     reqArg "f" "summary-format" "json|pretty" setSummaryFormat
-       "Verification summary format to use; default is 'json'"
+       "Format for verification summary; default is 'json'"
   ]
 
 usageInfo' :: String
