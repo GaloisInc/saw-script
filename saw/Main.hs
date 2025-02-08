@@ -41,10 +41,10 @@ import qualified Data.AIG.CompactGraph as AIG
 pathDesc, pathDelim :: String
 
 #ifdef mingw32_HOST_OS
-pathDesc = "Semicolon-delimited list of paths"
+pathDesc = "semicolon-delimited list of directories"
 pathDelim = ";"
 #else
-pathDesc = "Colon-delimited list of paths"
+pathDesc = "colon-delimited list of directories"
 pathDelim = ":"
 #endif
 
@@ -122,34 +122,46 @@ options =
   in
   [
     noArg "h?" "help"    setShowHelp "Print this help message",
-    noArg "V"  "version" setShowVersion "Show the version of the SAWScript interpreter",
-    reqArg "c" "classpath" "path" addClassPath pathDesc,
-    reqArg "i" "import-path" "path" addImportPath pathDesc,
-    noArg "" "detect-vacuity" setDetectVacuity "Checks and warns the user about contradictory assumptions. (default: false)",
+    noArg "V"  "version" setShowVersion "Print the SAWScript version and exit",
+    reqArg "c" "classpath" "<path>" addClassPath "Add to the Java classpath",
+    reqArg "i" "import-path" "<path>" addImportPath "Add to the SAWScript import path",
+    noArg "" "detect-vacuity" setDetectVacuity "Check for contradictory assumptions",
     noArg "t" "extra-type-checking" setExtraChecks "Perform extra type checking of intermediate values",
     noArg "I" "interactive" setRunInteractively "Run interactively (with a REPL)",
-    reqArg "j" "jars" "path" addJarList pathDesc,
-    reqArg "b" "java-bin-dirs" "path" addJavaBinDirs pathDesc,
-    noArg "" "output-locations" setPrintShowPos "Show the source locations that are responsible for output.",
+    reqArg "j" "jars" "<path>" addJarList "Add to the Java JAR list",
+    reqArg "b" "java-bin-dirs" "<path>" addJavaBinDirs "Add to the Java binary directory path",
+    noArg "" "output-locations" setPrintShowPos "Show source locations triggering output",
     reqArg "d" "sim-verbose" "num" setSimVerbose "Set simulator verbosity level",
-    reqArg "v" "verbose"
-      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
-      setVerbosity
-      "Set verbosity level",
+    reqArg "v" "verbose" "<verbosity>" setVerbosity "Set SAWScript verbosity level",
     noArg "" "no-color" clearUseColor "Disable ANSI color and Unicode output",
-    optArg "" "clean-mismatched-versions-solver-cache" "path"
+    optArg "" "clean-mismatched-versions-solver-cache" "<dir>"
       setCleanMisVsCache
-      "Run clean_mismatched_versions_solver_cache with the cache given, or else the value of SAW_SOLVER_CACHE_PATH, then exit",
-    reqArg "s" "summary" "filename" setSummaryFile "Write a verification summary to the provided filename",
-    reqArg "f" "summary-format" "either 'json' or 'pretty'" setSummaryFormat
-       "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
+      "Purge the solver cache and exit",
+    reqArg "s" "summary" "<filename>" setSummaryFile "Write a verification summary to the given file",
+    reqArg "f" "summary-format" "json|pretty" setSummaryFormat
+       "Verification summary format to use; default is 'json'"
   ]
 
 usageInfo' :: String
 usageInfo' =
     let header = "Usage: saw [OPTION...] [-I | file]"
         baseInfo = usageInfo header options
-        footer = []
+        -- Note: the second text column begins on column 28.
+        footer = [
+          "where",
+          "  <path> is a " ++ pathDesc,
+          "  <verbosity> is 0-5 or one of:",
+          "      silent (0)            Suppress output",
+          "      counterexamples (1)   Print counterexamples only",
+          "      error (2)             Include error messages",
+          "      warn (3)              Include warnings",
+          "      info (4)              Include informational messages",
+          "      debug (5)             Include debug messages",
+          "",
+          "The --clean-mismatched-versions-solver-cache option removes entries",
+          "from the given solver cache that aren't the current solver cache",
+          "format version. The default cache is given by SAW_SOLVER_CACHE_PATH."
+         ]
     in
     baseInfo ++ unlines footer
 
