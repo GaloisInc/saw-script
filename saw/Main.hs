@@ -124,52 +124,52 @@ options =
     noArg setShowHelp "h?" "help"
             "Print this help message",
 
-    noArg setShowVersion "V" "version"
-            "Print the SAWScript version and exit",
+    reqArg addJavaBinDirs "b" "java-bin-dirs" "<path>"
+            "Add <path> to the Java binary directory path",
 
     reqArg addClassPath "c" "classpath" "<path>"
             "Add <path> to the Java classpath",
 
+    reqArg setSimVerbose "d" "sim-verbose" "<num>"
+            "Set simulator verbosity level",
+
+    reqArg setSummaryFormat "f" "summary-format" "json|pretty"
+            "Format for verification summary; default is 'json'",
+
+    noArg setRunInteractively "I" "interactive"
+            "Run interactively (with a REPL)",
+
     reqArg addImportPath "i" "import-path" "<path>"
             "Add <path> to the SAWScript import path",
 
-    noArg setDetectVacuity "" "detect-vacuity" $
-            "Check for contradictory assumptions\n" ++
-            "  (default false)",
+    reqArg addJarList "j" "jars" "<path>"
+            "Add <path> to the Java JAR list",
+
+    reqArg setSummaryFile "s" "summary" "<filename>"
+            "Write a verification summary to the given file",
 
     noArg setExtraChecks "t" "extra-type-checking" $
             "Perform extra type checking of intermediate values\n" ++
             "  (default false)",
 
-    noArg setRunInteractively "I" "interactive"
-            "Run interactively (with a REPL)",
-
-    reqArg addJarList "j" "jars" "<path>"
-            "Add <path> to the Java JAR list",
-
-    reqArg addJavaBinDirs "b" "java-bin-dirs" "<path>"
-            "Add <path> to the Java binary directory path",
-
-    noArg setPrintShowPos "" "output-locations"
-            "Show source locations triggering output",
-
-    reqArg setSimVerbose "d" "sim-verbose" "<num>"
-            "Set simulator verbosity level",
+    noArg setShowVersion "V" "version"
+            "Print the SAWScript version and exit",
 
     reqArg setVerbosity "v" "verbose" "<verbosity>"
             "Set SAWScript verbosity level",
 
-    noArg clearUseColor "" "no-color"
-            "Disable ANSI color and Unicode output",
-
     optArg setCleanCache "" "clean-mismatched-versions-solver-cache" "<dir>"
             "Purge the solver cache and exit",
 
-    reqArg setSummaryFile "s" "summary" "<filename>"
-            "Write a verification summary to the given file",
+    noArg setDetectVacuity "" "detect-vacuity" $
+            "Check for contradictory assumptions\n" ++
+            "  (default false)",
 
-    reqArg setSummaryFormat "f" "summary-format" "json|pretty"
-            "Format for verification summary; default is 'json'"
+    noArg clearUseColor "" "no-color"
+            "Disable ANSI color and Unicode output",
+
+    noArg setPrintShowPos "" "output-locations"
+            "Show source locations triggering output"
   ]
 
 usageInfo' :: String
