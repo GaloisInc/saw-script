@@ -145,6 +145,14 @@ options =
        "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
   ]
 
+usageInfo' :: String
+usageInfo' =
+    let header = "Usage: saw [OPTION...] [-I | file]"
+        baseInfo = usageInfo header options
+        footer = []
+    in
+    baseInfo ++ unlines footer
+
 main :: IO ()
 main = do
   setLocaleEncoding utf8
@@ -158,7 +166,7 @@ main = do
       'SAWScript.ProcessFile', and a REPL, defined in 'SAWScript.REPL'. -}
       case files of
         _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
-        _ | showHelp opts'' -> err opts'' (usageInfo header options)
+        _ | showHelp opts'' -> err opts'' usageInfo'
         _ | Just path <- cleanMisVsCache opts'' -> doCleanMisVsCache opts'' path
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
@@ -166,11 +174,10 @@ main = do
           processFile (AIGProxy AIG.compactProxy) opts'' file subsh proofSubsh`catch`
           (\(ErrorCall msg) -> err opts'' msg)
         (_:_) -> err opts'' "Multiple files not yet supported."
-    (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo header options)
+    (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo')
                        exitProofUnknown
   where subsh = Just (REPL.subshell (REPL.replBody Nothing (return ())))
         proofSubsh = Just (REPL.proof_subshell (REPL.replBody Nothing (return ())))
-        header = "Usage: saw [OPTION...] [-I | file]"
         checkZ3 opts = do
           p <- findExecutable "z3"
           unless (isJust p)
