@@ -131,7 +131,7 @@ options =
     reqArg "j" "jars" "<path>" addJarList "Add to the Java JAR list",
     reqArg "b" "java-bin-dirs" "<path>" addJavaBinDirs "Add to the Java binary directory path",
     noArg "" "output-locations" setPrintShowPos "Show source locations triggering output",
-    reqArg "d" "sim-verbose" "num" setSimVerbose "Set simulator verbosity level",
+    reqArg "d" "sim-verbose" "<num>" setSimVerbose "Set simulator verbosity level",
     reqArg "v" "verbose" "<verbosity>" setVerbosity "Set SAWScript verbosity level",
     noArg "" "no-color" clearUseColor "Disable ANSI color and Unicode output",
     optArg "" "clean-mismatched-versions-solver-cache" "<dir>"
@@ -144,9 +144,71 @@ options =
 
 usageInfo' :: String
 usageInfo' =
-    let header = "Usage: saw [OPTION...] [-I | file]"
-        baseInfo = usageInfo header options
-        -- Note: the second text column begins on column 28.
+    -- Note: the second text column begins on column 28, which leaves
+    -- enough room for the verbosity descriptions while leaving as
+    -- much space as possible on the right.
+    let leftMax = 26
+        rightPos = 28
+        indent txt = (take rightPos $ repeat ' ') ++ txt
+        pad txt = take rightPos (txt ++ repeat ' ')
+
+        header = "Usage: saw [OPTION...] [-I | file]"
+        -- Don't use the usage message produced by System.Console.GetOpt
+        -- (usageInfo). It tries to print in three columns (short option,
+        -- long option, description) and this comes out irretrievably too
+        -- wide given --clean-mismatched-versions-solver-cache. Extract
+        -- our own from the options table instead.
+        printOption (Option shorts longs optinfo descr) =
+            let
+                -- First generate the option strings for the left column.
+                printShort c = case optinfo of
+                    NoArg _ -> ['-', c]
+                    OptArg _ optdesc -> ['-', c, ' ', '['] ++ optdesc ++ "]"
+                    ReqArg _ optdesc -> ['-', c, ' '] ++ optdesc
+                printLong txt = case optinfo of
+                    NoArg _ -> "--" ++ txt
+                    OptArg _ optdesc -> "--" ++ txt ++ "[=" ++ optdesc ++ "]"
+                    ReqArg _ optdesc -> "--" ++ txt ++ "=" ++ optdesc
+                shorts' = map printShort shorts
+                longs' = map printLong longs
+                -- Group as many as will fit in the column at once.
+                collect (groups, current) txt =
+                    if current == "" then
+                        (groups, "  " ++ txt)
+                    else if length current + 2 + length txt <= leftMax then
+                        (groups, current ++ ", " ++ txt)
+                    else
+                        (current : groups, "    " ++ txt)
+                (firstgroups, lastgroup) =
+                    foldl collect ([], "") $ shorts' ++ longs'
+                optlines = reverse $
+                    if lastgroup == "" then firstgroups
+                    else lastgroup : firstgroups
+
+                -- Split the description on \n so we can have long descriptions.
+                desclines = lines descr
+
+                -- Pad the shorter column with blanks.
+                numlines = max (length optlines) (length desclines)
+                optlines' = take numlines $ optlines ++ repeat ""
+                desclines' = take numlines $ desclines ++ repeat ""
+
+                -- Try to paste columns together.
+                tryPasteColumns opt desc =
+                    if desc == "" then Just opt
+                    else if length opt <= leftMax then Just (pad opt ++ desc)
+                    else Nothing
+            in
+            -- See if we can paste the columns successfully.
+            case zipWithM tryPasteColumns optlines' desclines' of
+                Nothing ->
+                    -- No. Emit the option names in the left column
+                    -- followed by the description in the right column.
+                    optlines ++ map indent desclines
+                Just someLines ->
+                    -- Yes. Run with it
+                    someLines
+        optionLines = concatMap printOption options
         footer = [
           "where",
           "  <path> is a " ++ pathDesc,
@@ -163,7 +225,7 @@ usageInfo' =
           "format version. The default cache is given by SAW_SOLVER_CACHE_PATH."
          ]
     in
-    baseInfo ++ unlines footer
+    unlines $ header : optionLines ++ footer
 
 main :: IO ()
 main = do
