@@ -55,8 +55,8 @@ The following targets are available:
   This can be used to provide downloads in the HTML rendering of the
   documentation (see [below](#code-examples)).
 - `install-pdf`: Build and install PDF renderings to `doc/pdfs/`.
-- `mostlyclean`: Clear out all packaged code and Sphinx-generated files.
-- `clean`: All of the above, plus the Python environment.
+- `clean`: Clear out all packaged code and Sphinx-generated files.
+- `distclean`: All of the above, plus the Python environment.
 
 `make help` always shows the most up-to-date list of supported document targets.
 
