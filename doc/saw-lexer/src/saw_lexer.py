@@ -48,7 +48,7 @@ class SAWScriptLexer(RegexLexer):
                 ),
                 bygroups(Keyword.Type, Whitespace),
             ),
-            (r"(true|false|abc|z3)(\s+)", bygroups(Keyword.Constant, Whitespace)),
+            (r"(true|false)(\s+)", bygroups(Keyword.Constant, Whitespace)),
             # All other identifiers
             (r"[a-zA-Z_][\w']*", Name),
             # Number literals
