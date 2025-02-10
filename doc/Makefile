@@ -31,11 +31,11 @@ install-pdf: latexpdf
 	mkdir -p pdfs
 	cp -f $(shell ls _build/latex/*.pdf | sed '/\/galois\.pdf$$/d') pdfs
 
-mostlyclean:
+clean:
 	rm -i $(shell find . -path ./$(BUILDDIR) -prune -o -name '*.tar.gz' -print)
 	rm -rf _build
 
-clean: mostlyclean
+distclean: clean
 	rm -rf .venv
 
 $(SUPPORTED_DOCS): setup-env
