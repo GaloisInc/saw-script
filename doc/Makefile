@@ -1,6 +1,6 @@
 # SAW Documentation Makefile
 # This is derived from Sphinx's default Makefile
-include .env
+include scripts/epoch.mk
 
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
