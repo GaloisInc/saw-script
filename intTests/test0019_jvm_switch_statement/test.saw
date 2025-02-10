@@ -1,4 +1,4 @@
-import "../../doc/tutorial/code/ffs.cry";
+import "../../doc/llvm-java-verification-with-saw/code/ffs.cry";
 FFS <- java_load_class "FFS";
 java_ffs_imp <- jvm_extract FFS "ffs_imp";
 prove_print abc {{ \x -> java_ffs_imp x == ffs_ref x }};
