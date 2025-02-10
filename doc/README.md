@@ -28,6 +28,10 @@ If you want to generate the PDFs that can be found in `doc/pdfs`, you'll also
 need `xelatex`.
 This will require a suitable TeX distribution.
 
+Note that the build will create a Python virtual environment and download the
+necessary dependencies via `pip` (see `doc/scripts/requirements.txt`).
+You can explicitly run this step with `make setup-env`.
+
 ### `Makefile`
 
 As is typical for Sphinx projects, SAW's documentation is built using `make`.
