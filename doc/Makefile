@@ -18,7 +18,7 @@ help:
 	$(info Tidy everything, including Python venv: 'make clean')
 
 sphinx-help: setup-env
-	@. .venv/bin/activate && $(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@(. .venv/bin/activate && $(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O))
 
 .PHONY: setup-env pdf install-pdf mostlyclean clean help $(SUPPORTED_DOCS)
 
@@ -39,7 +39,7 @@ clean: mostlyclean
 	rm -rf .venv
 
 $(SUPPORTED_DOCS): setup-env
-	@SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} . .venv/bin/activate && $(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@(SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} . .venv/bin/activate && $(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O))
 
 %:
 	$(error "Target '$@' unknown; try 'make help'.")
