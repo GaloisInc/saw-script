@@ -1,5 +1,6 @@
 __pycache__
 *.egg-info
+.venv
 
 _build
 *.tar.gz
