@@ -220,7 +220,7 @@ $ cp <...>/saw-script/doc/rust-tutorial/code/salsa20/target/x86_64-unknown-linux
 
 As a safeguard, we have also checked in a compressed version of this MIR JSON
 file as
-[`code/salsa20/salsa/salsa20.linked-mir.json.tar.gz`](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-tutorial/code/salsa20/salsa20.linked-mir.json.tar.gz).
+[`code/salsa20/salsa/salsa20.linked-mir.json.gz`](https://github.com/GaloisInc/saw-script/tree/master/doc/rust-verification-with-saw/code/salsa20/salsa20.linked-mir.json.gz).
 In a pinch, you can extract this archive to obtain a copy of the MIR JSON file,
 which is approximately 4.6 megabytes when uncompressed.
 

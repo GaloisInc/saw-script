@@ -32,7 +32,6 @@ install-pdf: latexpdf
 	cp -f $(shell ls _build/latex/*.pdf | sed '/\/galois\.pdf$$/d') pdfs
 
 clean:
-	rm -i $(shell find . -path ./$(BUILDDIR) -prune -o -name '*.tar.gz' -print)
 	rm -rf _build
 
 distclean: clean
