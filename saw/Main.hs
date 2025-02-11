@@ -184,22 +184,44 @@ options =
             "Show source locations triggering output"
   ]
 
-usageInfo' :: String
-usageInfo' =
-    -- Note: the second text column begins on column 28, which leaves
-    -- enough room for the verbosity descriptions while leaving as
-    -- much space as possible on the right.
-    let leftMax = 26
-        rightPos = 28
-        indent txt = (take rightPos $ repeat ' ') ++ txt
+-- | Variant version of System.Console.GetOpt.usageInfo. Should be
+-- fully general if anyone wants to reuse it elsewhere.
+--
+-- The option descriptions are generated in a two-column format with
+-- options on the left and descriptions on the right. (This differs
+-- from the standard usageInfo, which generates three columns.)
+--
+-- Oversize options that spill into the right-hand column are
+-- specifically tolerated.
+--
+-- Newlines in the option description text will be honored.
+--
+-- The second argument rightPos is column position where the
+-- right-hand column starts. 32 is a good default to use in the
+-- absence of other criteria.
+--
+-- The third argument optionDescs is the program's list of option
+-- descriptions.
+--
+-- The first argument header and last argument footer are each zero or
+-- more lines to prepend before, or append after, the generated option
+-- descriptions, respectively.
+--
+usageInfo' :: [String] -> Int -> [OptDescr a] -> [String] -> String
+usageInfo' header rightPos optionDescs footer =
+    let
+        -- Allow two characters as a gutter between columns.
+        leftMax = rightPos - 2
+
+        -- Indent some right-column text for when we have nothing in
+        -- the left column.
+        indent txt = take rightPos (repeat ' ') ++ txt
+
+        -- Pad some left-column text for appending the right-column
+        -- text.
         pad txt = take rightPos (txt ++ repeat ' ')
 
-        header = "Usage: saw [OPTION...] [-I | file]"
-        -- Don't use the usage message produced by System.Console.GetOpt
-        -- (usageInfo). It tries to print in three columns (short option,
-        -- long option, description) and this comes out irretrievably too
-        -- wide given --clean-mismatched-versions-solver-cache. Extract
-        -- our own from the options table instead.
+        -- Generate the text lines for an option.
         printOption (Option shorts longs optinfo descr) =
             let
                 -- First generate the option strings for the left column.
@@ -216,10 +238,13 @@ usageInfo' =
                 -- Group as many as will fit in the column at once.
                 collect (groups, current) txt =
                     if current == "" then
+                        -- first line, prepend two spaces
                         (groups, "  " ++ txt)
                     else if length current + 2 + length txt <= leftMax then
+                        -- this option (including a comma) will fit on this line
                         (groups, current ++ ", " ++ txt)
                     else
+                        -- start a new line, prepend four spaces
                         (current : groups, "    " ++ txt)
                 (firstgroups, lastgroup) =
                     foldl collect ([], "") $ shorts' ++ longs'
@@ -228,6 +253,7 @@ usageInfo' =
                     else lastgroup : firstgroups
 
                 -- Split the description on \n so we can have long descriptions.
+                -- (These are the lines for the right column.)
                 desclines = lines descr
 
                 -- Pad the shorter column with blanks.
@@ -235,7 +261,10 @@ usageInfo' =
                 optlines' = take numlines $ optlines ++ repeat ""
                 desclines' = take numlines $ desclines ++ repeat ""
 
-                -- Try to paste columns together.
+                -- Try to paste columns together. Fail only if the
+                -- left column intrudes into the right column in a
+                -- line where there's actually text in the right
+                -- column.
                 tryPasteColumns opt desc =
                     if desc == "" then Just opt
                     else if length opt <= leftMax then Just (pad opt ++ desc)
@@ -250,7 +279,25 @@ usageInfo' =
                 Just someLines ->
                     -- Yes. Run with it
                     someLines
-        optionLines = concatMap printOption options
+
+        -- Collect all the option lines.
+        optionLines = concatMap printOption optionDescs
+    in
+    -- Wrap in the header and footer.
+    unlines $ header ++ optionLines ++ footer
+
+-- | Construct the usage message.
+--
+-- Don't use the usage message produced by System.Console.GetOpt
+-- (usageInfo). It tries to print in three columns (short option, long
+-- option, description) and this comes out irretrievably too wide
+-- given --clean-mismatched-versions-solver-cache. Use our own variant
+-- version instead.
+usageText :: String
+usageText =
+    let header = [
+          "Usage: saw [OPTION...] [-I | file]"
+         ]
         footer = [
           "where",
           "  <path> is a " ++ pathDesc,
@@ -267,7 +314,10 @@ usageInfo' =
           "format version. The default cache is given by SAW_SOLVER_CACHE_PATH."
          ]
     in
-    unlines $ header : optionLines ++ footer
+    -- Use 28 as the left-hand column width. This was chosen partly by
+    -- eyeballing the results and partly based on the width of the
+    -- verbosity descriptions in the footer above.
+    usageInfo' header 28 options footer
 
 main :: IO ()
 main = do
@@ -282,7 +332,7 @@ main = do
       'SAWScript.ProcessFile', and a REPL, defined in 'SAWScript.REPL'. -}
       case files of
         _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
-        _ | showHelp opts'' -> err opts'' usageInfo'
+        _ | showHelp opts'' -> err opts'' usageText
         _ | Just path <- cleanMisVsCache opts'' -> doCleanMisVsCache opts'' path
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
@@ -290,7 +340,7 @@ main = do
           processFile (AIGProxy AIG.compactProxy) opts'' file subsh proofSubsh`catch`
           (\(ErrorCall msg) -> err opts'' msg)
         (_:_) -> err opts'' "Multiple files not yet supported."
-    (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo')
+    (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageText)
                        exitProofUnknown
   where subsh = Just (REPL.subshell (REPL.replBody Nothing (return ())))
         proofSubsh = Just (REPL.proof_subshell (REPL.replBody Nothing (return ())))
