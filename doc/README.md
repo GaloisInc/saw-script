@@ -51,9 +51,6 @@ The following targets are available:
   documentation.
   This tries not to do unnecessary work: If you already have a `doc/.venv/`, it
   will simply install the dependencies the build requires.
-- `package-code`: Create tar.gz archives of all `doc/**/code/` directories.
-  This can be used to provide downloads in the HTML rendering of the
-  documentation (see [below](#code-examples)).
 - `install-pdf`: Build and install PDF renderings to `doc/pdfs/`.
 - `clean`: Clear out all packaged code and Sphinx-generated files.
 - `distclean`: All of the above, plus the Python environment.
@@ -70,16 +67,12 @@ This directory contains utility scripts (and the documentation's
   It uses the sibling `requirements.txt` file, and can be run anywhere you want
   to create a `.venv/` suitable for building SAW documentation (though in most
   cases, you'll just be running `make setup-env` in `doc/`).
-- `scripts/package_code.sh` finds all directories named `code` in the file tree,
-  and if there is no sibling `code.tar.gz`, creates it.
-  This is the implementation of `make package-code`, but like
-  `scripts/setup_env.sh` can be run anywhere.
 
 ### Troubleshooting
 
 1. If the build succeeds, but you aren't seeing all of the expected changes:
 
-   Try running `make mostlyclean` before rebuilding; Sphinx may have failed to
+   Try running `make clean` before rebuilding; Sphinx may have failed to
    detect the changes you made, and you're seeing stale/cached output.
 2. If you have unresolved reference warnings:
 
@@ -89,7 +82,7 @@ This directory contains utility scripts (and the documentation's
    documentation](https://myst-parser.readthedocs.io/en/latest/syntax/cross-referencing.html).
 3. If the build fails:
 
-   Try a full `make clean` to wipe out the `.venv/` directory and start again in
+   Try a full `make distclean` to wipe out the `.venv/` directory and start again in
    a fresh environment.
 
 If you still have trouble, you've likely uncovered a bug in the system.
