@@ -25,7 +25,7 @@ The release process is:
 
    - successful build artifacts across all platforms,
    - successful tests on all test suites,
-   - an up-to-date [`SOURCE_DATE_EPOCH`](../.env) for documentation builds,
+   - an up-to-date [`SOURCE_DATE_EPOCH`](../scripts/epoch.mk) for documentation builds,
    - up-to-date [documentation PDFs](../pdfs), and
    - an up-to-date [CHANGES.md](../../CHANGES.md) file.
 
