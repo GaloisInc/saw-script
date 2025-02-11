@@ -72,7 +72,7 @@ This directory contains utility scripts (and the documentation's
 
 1. If the build succeeds, but you aren't seeing all of the expected changes:
 
-   Try running `make mostlyclean` before rebuilding; Sphinx may have failed to
+   Try running `make clean` before rebuilding; Sphinx may have failed to
    detect the changes you made, and you're seeing stale/cached output.
 2. If you have unresolved reference warnings:
 
@@ -82,7 +82,7 @@ This directory contains utility scripts (and the documentation's
    documentation](https://myst-parser.readthedocs.io/en/latest/syntax/cross-referencing.html).
 3. If the build fails:
 
-   Try a full `make clean` to wipe out the `.venv/` directory and start again in
+   Try a full `make distclean` to wipe out the `.venv/` directory and start again in
    a fresh environment.
 
 If you still have trouble, you've likely uncovered a bug in the system.
