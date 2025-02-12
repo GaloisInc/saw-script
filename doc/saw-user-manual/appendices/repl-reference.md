@@ -1,5 +1,5 @@
-(appendix-repl-reference)=
-# Appendix: REPL Reference
+(repl-reference)=
+# REPL Reference
 
 The primary mechanism for interacting with SAW is through the `saw`
 executable included as part of the standard binary distribution. With no
