@@ -22,6 +22,7 @@ packages:
     deps/language-sally
     deps/crucible/crucible
     deps/crucible/crucible-concurrency
+    deps/crucible/crucible-debug
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
     deps/crucible/crucible-mir
