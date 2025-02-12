@@ -21,7 +21,6 @@ structure-of-sawscript
 invoking-saw
 cryptol-and-its-role-in-saw
 loading-code
-direct-extraction
 analyzing-hardware-circuits-using-yosys
 creating-symbolic-variables
 symbolic-execution
