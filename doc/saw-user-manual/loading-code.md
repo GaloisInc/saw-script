@@ -213,8 +213,8 @@ linking 11 mir files into <...>/example.linked-mir.json
 
 ## Direct Extraction
 
-In the case of the `max` function described earlier, the relevant inputs
-and outputs are immediately apparent. The function takes two integer
+In many simple cases (such as the mathematical `max` function), the relevant
+inputs and outputs are immediately apparent. The function takes two integer
 arguments, always uses both of them, and returns a single integer value,
 making no other changes to the program state.
 
