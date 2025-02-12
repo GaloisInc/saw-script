@@ -62,6 +62,7 @@ side effects will occur during import.
 This section is under construction!
 :::
 
+(first-simple-example)=
 ## A First Simple Example
 
 :::{warning}

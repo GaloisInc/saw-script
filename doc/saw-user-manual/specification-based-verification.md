@@ -358,6 +358,12 @@ verified use the `{llvm,jvm,mir}_return` command.
 - `jvm_return : JVMValue -> JVMSetup ()`
 - `mir_return : MIRValue -> MIRSetup ()`
 
+## A First Simple Example (Revisited)
+
+:::{warning}
+This section is under construction!
+:::
+
 (compositional-verification)=
 ## Compositional Verification
 
