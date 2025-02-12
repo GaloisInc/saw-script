@@ -32,4 +32,5 @@ proofs-about-terms
 transforming-term-values
 extraction-to-the-coq-theorem-prover
 formal-deprecation-process
+appendix-repl-reference
 ```
