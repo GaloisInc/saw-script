@@ -16,7 +16,7 @@ Thanks for helping to make SAW better for everyone!
 :maxdepth: 2
 :caption: Contents
 
-introduction
+overview
 structure-of-sawscript
 invoking-saw
 cryptol-and-its-role-in-saw
