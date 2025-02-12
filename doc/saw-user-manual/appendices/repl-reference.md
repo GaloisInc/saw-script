@@ -12,51 +12,40 @@ In addition to a file name, the `saw` executable accepts several
 command-line options:
 
 `-h, -?, --help`
-
-  ~ Print a help message.
+: Print a help message.
 
 `-V, --version`
-
-  ~ Show the version of the SAWScript interpreter.
+: Show the version of the SAWScript interpreter.
 
 `-c path, --classpath=path`
-
-  ~ Specify a colon-delimited list of paths to search for Java classes.
+: Specify a colon-delimited list of paths to search for Java classes.
 
 `-i path, --import-path=path`
-
-  ~ Specify a colon-delimited list of paths to search for imports.
+: Specify a colon-delimited list of paths to search for imports.
 
 `-t, --extra-type-checking`
-
-  ~ Perform extra type checking of intermediate values.
+: Perform extra type checking of intermediate values.
 
 `-I, --interactive`
-
-  ~ Run interactively (with a REPL). This is the default if no other
+: Run interactively (with a REPL). This is the default if no other
   arguments are specified.
 
 `-j path, --jars=path`
-
-  ~ Specify a colon-delimited list of paths to `.jar` files to search
+: Specify a colon-delimited list of paths to `.jar` files to search
   for Java classes.
 
 `-b path, --java-bin-dirs`
-
-  ~ Specify a colon-delimited list of paths to search for a Java
-    executable.
+: Specify a colon-delimited list of paths to search for a Java
+  executable.
 
 `-d num, --sim-verbose=num`
-
-  ~ Set the verbosity level of the Java and LLVM simulators.
+: Set the verbosity level of the Java and LLVM simulators.
 
 `-v num, --verbose=num`
-
-  ~ Set the verbosity level of the SAWScript interpreter.
+: Set the verbosity level of the SAWScript interpreter.
 
 `--clean-mismatched-versions-solver-cache[=path]`
-
-  ~ Run the `clean_mismatched_versions_solver_cache` command on the solver
+: Run the `clean_mismatched_versions_solver_cache` command on the solver
   cache at the given path, or if no path is given, the solver cache at the
   value of the `SAW_SOLVER_CACHE_PATH` environment variable, then exit. See
   the section **Caching Solver Results** for a description of the
@@ -65,30 +54,26 @@ command-line options:
 
 SAW also uses several environment variables for configuration:
 
+{.glossary}
 `CRYPTOLPATH`
-
-  ~ Specify a colon-delimited list of directory paths to search for Cryptol
+: Specify a colon-delimited list of directory paths to search for Cryptol
   imports (including the Cryptol prelude).
 
 `PATH`
-
-  ~ If the `--java-bin-dirs` option is not set, then the `PATH` will be
-    searched to find a Java executable.
+: If the `--java-bin-dirs` option is not set, then the `PATH` will be
+  searched to find a Java executable.
 
 `SAW_IMPORT_PATH`
-
-  ~ Specify a colon-delimited list of directory paths to search for imports.
+: Specify a colon-delimited list of directory paths to search for imports.
 
 `SAW_JDK_JAR`
-
-  ~ Specify the path of the `.jar` file containing the core Java
+: Specify the path of the `.jar` file containing the core Java
   libraries. Note that that is not necessary if the `--java-bin-dirs` option
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
 `SAW_SOLVER_CACHE_PATH`
-
-  ~ Specify a path at which to keep a cache of solver results obtained during
+: Specify a path at which to keep a cache of solver results obtained during
   calls to certain tactics. A cache is not created at this path until it is
   needed. See the section **Caching Solver Results** for more detail about this
   feature.
