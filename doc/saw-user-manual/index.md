@@ -28,8 +28,8 @@ symbolic-termination
 the-term-type
 specification-based-verification
 bisimulation-prover
-proofs-about-terms
 transforming-term-values
+proofs-about-terms
 extraction-to-the-coq-theorem-prover
 formal-deprecation-process
 appendices/index
