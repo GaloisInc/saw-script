@@ -77,7 +77,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.MGU (instantiate)
-import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
+import SAWScript.Options (Options, printOutLn, Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
@@ -762,11 +762,6 @@ printOutLnTop :: Verbosity -> String -> TopLevel ()
 printOutLnTop v s =
     do opts <- getOptions
        io $ printOutLn opts v s
-
-printOutTop :: Verbosity -> String -> TopLevel ()
-printOutTop v s =
-    do opts <- getOptions
-       io $ printOutFn opts v s
 
 getHandleAlloc :: TopLevel Crucible.HandleAllocator
 getHandleAlloc = TopLevel_ (asks roHandleAlloc)

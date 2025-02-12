@@ -19,6 +19,15 @@
 
 ## Bug fixes
 
+* The saw executable's usage message now fits into a terminal. (#405)
+
+* Invalid verbosity level specifications passed to the saw
+  executable's -v (SAWScript verbosity) and -d (simulator verbosity)
+  options are now rejected.
+  (The previous behavior for -v was to select maximum debug output.
+  It is unclear what effect negative verbosity levels might have had
+  with -d.)
+
 * SAW now accepts Unicode input beyond characters 0..255, including in
   embedded Cryptol fragments and saw-core modules, and allows the same
   Unicode code points in identifiers as Cryptol.
