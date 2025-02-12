@@ -56,6 +56,12 @@ side effects like printing. However, as you can see, if any commands
 with side effects occur at the top level of the imported file, those
 side effects will occur during import.
 
+## Parts of a SAW Script
+
+:::{warning}
+This section is under construction!
+:::
+
 ## Syntax
 
 The syntax of SAWScript is reminiscent of functional languages such as
