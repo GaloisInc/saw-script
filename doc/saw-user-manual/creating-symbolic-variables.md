@@ -1,6 +1,6 @@
 # Creating Symbolic Variables
 
-The direct extraction process just discussed automatically introduces
+The direct extraction process discussed previously introduces
 symbolic variables and then abstracts over them, yielding a SAWScript
 `Term` that reflects the semantics of the original Java, LLVM, or MIR code.
 For simple functions, this is often the most convenient interface. For

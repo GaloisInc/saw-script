@@ -3,7 +3,7 @@
 The three primary functions of SAW are _extracting_ models (`Term`
 values) from programs, _transforming_ those models, and _proving_
 properties about models using external provers. So far we've shown how
-to construct `Term` values from Cryptol programs; later sections
+to construct `Term` values from programs; later sections
 will describe how to extract them from other programs. Now we show how
 to use the various term transformation features available in SAW.
 

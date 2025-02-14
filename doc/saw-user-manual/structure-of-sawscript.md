@@ -56,6 +56,49 @@ side effects like printing. However, as you can see, if any commands
 with side effects occur at the top level of the imported file, those
 side effects will occur during import.
 
+## Parts of a SAW Script
+
+:::{warning}
+This section is under construction!
+:::
+
+(first-simple-example)=
+## A First Simple Example
+
+:::{warning}
+This section is under construction!
+:::
+
+To get started with SAW, let's see what it takes to verify simple programs
+that do not use pointers (or that use them only internally). Consider,
+for instance the C program that adds its two arguments together:
+
+:::{code-block} c
+#include <stdint.h>
+uint32_t add(uint32_t x, uint32_t y) {
+    return x + y;
+}
+:::
+
+We can specify this function's expected behavior as follows:
+
+:::{code-block} sawscript
+let add_setup = do {
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    y <- llvm_fresh_var "y" (llvm_int 32);
+    llvm_execute_func [llvm_term x, llvm_term y];
+    llvm_return (llvm_term {{ x + y : [32] }});
+};
+:::
+
+We can then compile the C file `add.c` into the bitcode file `add.bc`
+and verify it with ABC:
+
+:::{code-block} sawscript
+m <- llvm_load_module "add.bc";
+add_ms <- llvm_verify m "add" [] false add_setup abc;
+:::
+
 ## Syntax
 
 The syntax of SAWScript is reminiscent of functional languages such as

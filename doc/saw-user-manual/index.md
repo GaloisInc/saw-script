@@ -16,21 +16,21 @@ Thanks for helping to make SAW better for everyone!
 :maxdepth: 2
 :caption: Contents
 
-introduction
-invoking-saw
+overview
 structure-of-sawscript
-the-term-type
+invoking-saw
 cryptol-and-its-role-in-saw
-transforming-term-values
-proofs-about-terms
+loading-code
+analyzing-hardware-circuits-using-yosys
+creating-symbolic-variables
 symbolic-execution
 symbolic-termination
-loading-code
-direct-extraction
-creating-symbolic-variables
+the-term-type
 specification-based-verification
-extraction-to-the-coq-theorem-prover
-analyzing-hardware-circuits-using-yosys
 bisimulation-prover
+transforming-term-values
+proofs-about-terms
+extraction-to-the-coq-theorem-prover
 formal-deprecation-process
+appendices/index
 ```
