@@ -43,7 +43,7 @@ module Verifier.SAW.Cryptol
 
   ) where
 
-import Control.Monad (foldM, join, forM)
+import Control.Monad (foldM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -97,6 +97,9 @@ import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 -- local modules:
 import Verifier.SAW.Cryptol.Panic
 
+
+-- MT: Debugging:
+-- import Text.Show.Pretty
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
@@ -1958,31 +1961,34 @@ exportRecordValue fields v =
 -- Abstract types do not produce any functions.
 genNominalConstructors :: SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genNominalConstructors sc nominal env0 =
-  foldM genConstr env0 nominal
+  foldM updateEnvFromNominal env0 nominal
   where
-    genConstr :: Env -> NominalType -> IO Env
-    genConstr env nt = do
+    updateEnvFromNominal :: Env -> NominalType -> IO Env
+    updateEnvFromNominal env nt = do
+      ns <- newDefsFromNominal env nt
       let conTs = C.nominalTypeConTypes nt
-      constrs <- forM (nominalConstrs nt) $ \(x,e) ->
-        do e' <- importExpr sc env e
-           pure (x,(e',0))
+          constrs = map (\(x,e) -> (x,(e,0))) ns
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
       return env'
 
-    nominalConstrs :: NominalType -> [(C.Name,C.Expr)]
-    nominalConstrs nt =
+    -- | Create functions/constructors for Nominal Types.
+    newDefsFromNominal :: Env -> NominalType -> IO [(C.Name,Term)]
+    newDefsFromNominal env nt =
       case C.ntDef nt of
-        C.Struct fs ->
-          let recTy = C.TRec (C.ntFields fs)
-              fn    = C.EAbs paramName recTy (C.EVar paramName)
-              con   = C.ntConName fs
-              paramName = C.asLocal C.NSValue con
-           in [(con, foldr tFn fn (C.ntParams nt))]
-        C.Abstract -> []
-        C.Enum {} -> error "genNominalConstrurctors: `enum` is not yet supported"
+        C.Struct fs -> do
+            let recTy     = C.TRec (C.ntFields fs)
+                con       = C.ntConName fs
+                paramName = C.asLocal C.NSValue con
+                fn        = C.EAbs paramName recTy (C.EVar paramName)
+            e <- importExpr sc env (addTypeParams fn)
+            return [(con, e)]
+        C.Abstract -> return []
+        C.Enum {} -> error "genNominalConstructors: `enum` is not yet supported"
       where
+        addTypeParams :: C.Expr -> C.Expr
+        addTypeParams fn = foldr tFn fn (C.ntParams nt)
 
         tFn tp body =
           if elem (C.tpKind tp) [C.KType, C.KNum]
