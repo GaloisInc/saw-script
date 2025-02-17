@@ -52,3 +52,6 @@
 [submodule "deps/mir-json"]
 	path = deps/mir-json
 	url = https://github.com/GaloisInc/mir-json.git
+[submodule "deps/macaw-loader"]
+	path = deps/macaw-loader
+	url = https://github.com/GaloisInc/macaw-loader.git
