@@ -362,6 +362,8 @@ verified use the `{llvm,jvm,mir}_return` command.
 
 :::{warning}
 This section is under construction!
+
+See [the example's introduction](first-simple-example).
 :::
 
 (compositional-verification)=
