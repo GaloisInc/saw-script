@@ -70,6 +70,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
@@ -1879,7 +1880,7 @@ exportValue ty v = case ty of
         | TV.isTBit e -> V.VWord <$>
             V.bitmapWordVal V.Concrete (toInteger (Vector.length xs))
                  (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
-        | otherwise   -> pure . V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
+        | otherwise   -> V.mkSeq V.Concrete (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap V.Concrete $
                             map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
