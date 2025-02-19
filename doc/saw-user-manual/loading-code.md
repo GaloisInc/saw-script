@@ -28,7 +28,7 @@ control where to look for classes:
 - The `-b` flag takes the path where the `java` executable lives, which is used
   to locate the Java standard library classes and add them to the class
   database. Alternatively, one can put the directory where `java` lives on the
-  {term}`PATH`, which SAW will search if `-b` is not set.
+ [`PATH`](path-definition), which SAW will search if `-b` is not set.
 
 - The `-j` flag takes the name of a JAR file as an argument and adds the
   contents of that file to the class database.

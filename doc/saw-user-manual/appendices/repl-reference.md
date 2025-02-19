@@ -54,11 +54,11 @@ command-line options:
 
 SAW also uses several environment variables for configuration:
 
-{.glossary}
 `CRYPTOLPATH`
 : Specify a colon-delimited list of directory paths to search for Cryptol
   imports (including the Cryptol prelude).
 
+(path-definition)=
 `PATH`
 : If the `--java-bin-dirs` option is not set, then the `PATH` will be
   searched to find a Java executable.
@@ -72,6 +72,7 @@ SAW also uses several environment variables for configuration:
   or the `PATH` environment variable is used, as SAW can use this information
   to determine the location of the core Java libraries' `.jar` file.
 
+(saw-solver-cache-path-definition)=
 `SAW_SOLVER_CACHE_PATH`
 : Specify a path at which to keep a cache of solver results obtained during
   calls to certain tactics. A cache is not created at this path until it is
