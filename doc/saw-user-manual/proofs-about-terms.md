@@ -198,7 +198,7 @@ results are only used when they would be identical to the result of actually
 running the tactic.
 
 The simplest way to enable solver caching is to set the environment variable
-`SAW_SOLVER_CACHE_PATH`. With this environment variable set, `saw` and
+[`SAW_SOLVER_CACHE_PATH`](saw-solver-cache-path-definition). With this environment variable set, `saw` and
 `saw-remote-api` will automatically keep an [LMDB](http://www.lmdb.tech/doc/)
 database at the given path containing the solver result cache. Setting this
 environment variable globally therefore creates a global, concurrency-safe

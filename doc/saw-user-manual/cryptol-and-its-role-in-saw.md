@@ -6,9 +6,10 @@ enough, however, to describe a wide variety of programs, and is
 particularly applicable to describing computations that operate on
 streams of data of some fixed size.
 
+<!-- N.b. Update the Cryptol repository to publish a canonical version of this. -->
 In addition to being integrated into SAW, Cryptol is a standalone
 language with [its own
-manual](http://cryptol.net/files/ProgrammingCryptol.pdf).
+manual](https://cdn.prod.website-files.com/673b407e535dbf3b547179dd/677c422f88a92701db5a834d_ProgrammingCryptol.pdf).
 
 SAW includes deep support for Cryptol, and in fact requires the use of
 Cryptol for most non-trivial tasks. To fully understand the rest of

@@ -10,4 +10,5 @@ will say more later about exactly what it means for two terms to be
 equivalent, and how to determine whether two terms are equivalent.
 
 Before exploring the `Term` type more deeply, it is important to
-understand the role of the Cryptol language in SAW.
+understand the role of the Cryptol language in SAW -- make sure to read
+[that section of the manual](./cryptol-and-its-role-in-saw) before continuing.
