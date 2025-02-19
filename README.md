@@ -14,13 +14,13 @@ incomplete support for the Rust language.
 There are two SAWScript tutorials that give an introduction to using the
 SAWScript interpreter:
 
-* [This tutorial](https://tools.galois.com/saw/documentation/tutorials-and-publications/tutorial-llvm-java) gives an
+* [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/llvm-java-verification-with-saw.pdf) gives an
   introduction to verifying C code (using LLVM) and Java code (using JVM).
-* [This tutorial](https://tools.galois.com/saw/documentation/tutorials-and-publications/tutorial-rust)
+* [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/rust-verification-with-saw.pdf)
   gives an introduction to verifying Rust code (using MIR).
 
 There is also a longer
-[manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md)
+[manual](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/saw-user-manual.pdf)
 that describes the breadth of SAWScript's features.
 
 ## Precompiled Binaries
