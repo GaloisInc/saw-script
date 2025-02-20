@@ -714,7 +714,7 @@ scBuildCtor ::
   IO Ctor
 scBuildCtor sc d c arg_struct =
   do
-    -- Step 0: allocate a fresh unique varaible index for this constructor
+    -- Step 0: allocate a fresh unique variable index for this constructor
     -- and register its name in the naming environment
     varidx <- scFreshGlobalVar sc
     scRegisterName sc varidx (ModuleIdentifier c)
