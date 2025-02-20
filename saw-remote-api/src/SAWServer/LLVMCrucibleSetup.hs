@@ -21,6 +21,7 @@ module SAWServer.LLVMCrucibleSetup
 
 import Control.Exception (throw)
 import Control.Lens ( view )
+import Control.Monad (unless)
 import Control.Monad.IO.Class
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
@@ -260,7 +261,11 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
             loaded <- liftIO (CMS.loadLLVMModule fileName halloc)
             case loaded of
               Left err -> Argo.raise (cantLoadLLVMModule (LLVM.formatError err))
-              Right llvmMod ->
-                do setServerVal serverName llvmMod
+              Right (llvmMod, warnings) ->
+                do -- TODO: Printing warnings directly to stdout here is
+                   -- questionable (#2129)
+                   unless (null warnings) $
+                     liftIO $ print $ LLVM.ppParseWarnings warnings
+                   setServerVal serverName llvmMod
                    trackFile fileName
                    ok
