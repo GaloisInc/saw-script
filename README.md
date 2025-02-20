@@ -98,15 +98,24 @@ any failure during `llvm_load_module` should be considered a bug.
 SAW has experimental support for analyzing Rust programs. To do so, one must
 compile Rust code using [`mir-json`](https://github.com/GaloisInc/mir-json), a
 tool which compiles Rust code to a machine-readable, JSON-based format.
-Note that:
 
-* Each version of SAW understands the JSON output of a particular version of
-  `mir-json`, so make sure that you build the version `mir-json` that is
-  included in the `mir-json` submodule (located in `deps/mir-json`).
-* Moreover, SAW requires slightly modified versions of the Rust standard
-  libraries that are suited to verification purposes. SAW consults the value
-  of the `SAW_RUST_LIBRARY_PATH` environment variable to determine where to
-  look for these modified standard libraries.
+Currently, SAW supports [version
+1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
+`mir-json`'s schema. Note that the schema versions produced by `mir-json` can
+change over time as dictated by internal requirements and upstream changes. To
+help smooth this over:
+
+* We intend that once SAW introduces support for any given schema version, it
+  will retain that support across at least two releases.
+* An exception to this rule is when `mir-json` updates to support a new Rust
+  toolchain version. In general, we cannot promise backwards compatibility
+  across Rust toolchains, as the changes are often significant enough to
+  impeded any ability to reasonably provide backwards-compatibility guarantees.
+
+Moreover, SAW requires slightly modified versions of the Rust standard
+libraries that are suited to verification purposes. SAW consults the value of
+the `SAW_RUST_LIBRARY_PATH` environment variable to determine where to look for
+these modified standard libraries.
 
 For complete instructions on how to install `mir-json`, the modified Rust
 standard libraries, and how to defined the `SAW_RUST_LIBRARY_PATH` environment

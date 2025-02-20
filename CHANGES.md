@@ -1,5 +1,9 @@
 # next -- TBA
 
+This release supports [version
+1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
+`mir-json`'s schema.
+
 ## New Features
 
 * SAW documentation is now under a single Sphinx umbrella, resulting in a
@@ -16,6 +20,11 @@
 
 * Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
   command for the MIR and JVM backends, respectively.
+
+* Explicitly check that the `mir-json` schema version is supported when parsing
+  a MIR JSON file. If the version is not supported, it will be rejected. This
+  helps ensure that unsupported `mir-json` files do not cause unintended
+  results.
 
 ## Bug fixes
 
