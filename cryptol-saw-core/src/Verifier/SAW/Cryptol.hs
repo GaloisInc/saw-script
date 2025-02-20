@@ -1657,6 +1657,8 @@ proveEq sc env t1 t2
       -- the fields, into a proof for equality of the whole type
       -- for sums
 
+      -- FIXME:MT:TODO - requires some thought here.
+
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
 
@@ -1961,11 +1963,12 @@ exportRecordValue fields v =
 -- Abstract types do not produce any functions.
 genNominalConstructors :: SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genNominalConstructors sc nominal env0 =
-  foldM updateEnvFromNominal env0 nominal
+  foldM updateEnvForNominal env0 nominal
+
   where
-    updateEnvFromNominal :: Env -> NominalType -> IO Env
-    updateEnvFromNominal env nt = do
-      ns <- newDefsFromNominal env nt
+    updateEnvForNominal :: Env -> NominalType -> IO Env
+    updateEnvForNominal env nt = do
+      ns <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
           constrs = map (\(x,e) -> (x,(e,0))) ns
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
@@ -1974,8 +1977,8 @@ genNominalConstructors sc nominal env0 =
       return env'
 
     -- | Create functions/constructors for Nominal Types.
-    newDefsFromNominal :: Env -> NominalType -> IO [(C.Name,Term)]
-    newDefsFromNominal env nt =
+    newDefsForNominal :: Env -> NominalType -> IO [(C.Name,Term)]
+    newDefsForNominal env nt =
       case C.ntDef nt of
         C.Struct fs -> do
             let recTy     = C.TRec (C.ntFields fs)
