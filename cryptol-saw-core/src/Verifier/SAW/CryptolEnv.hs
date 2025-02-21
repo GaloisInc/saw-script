@@ -128,8 +128,11 @@ data ImportVisibility
   = OnlyPublic
   | PublicAndPrivate
 
+-- | The environment for capturing the cryptol interpreter state as well as the
+--   SAWCore translations and associated state.
 data CryptolEnv = CryptolEnv
-  { eImports    :: [(ImportVisibility, P.Import)]           -- ^ Declarations of imported Cryptol modules
+  { eImports    :: [(ImportVisibility, P.Import)]
+                                        -- ^ Declarations of imported Cryptol modules
   , eModuleEnv  :: ME.ModuleEnv         -- ^ Imported modules, and state for the ModuleM monad
   , eExtraNames :: MR.NamingEnv         -- ^ Context for the Cryptol renamer
   , eExtraTypes :: Map T.Name T.Schema  -- ^ Cryptol types for extra names in scope
@@ -178,6 +181,12 @@ nameMatcher xs =
                        init cs == C.modNameChunksText top ++ map identText ns
 
 -- Initialize ------------------------------------------------------------------
+
+-- FIXME: Code duplication, these three functions are relatively similar (and last 2 are 85% similar):
+--  - initCryptolEnv
+--  - loadCryptolModule
+--  - importModule
+--- TODO: common up the common code.
 
 initCryptolEnv ::
   (?fileReader :: FilePath -> IO ByteString) =>
@@ -363,8 +372,10 @@ genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
-  cryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv0 declGroups
-  traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
+      nominals   = ME.loadedNominalTypes modEnv
+  cryEnv1 <- C.genNominalConstructors sc nominals cryEnv0
+  cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
+  traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv2)
 
 --------------------------------------------------------------------------------
 
@@ -508,7 +519,7 @@ importModule sc env src as vis imps = do
   m <- case mtop of
          T.TCTopModule m -> pure m
          T.TCTopSignature {} ->
-            fail "Expected a moodule but found an interface."
+            fail "Expected a module but found an interface."
   checkNotParameterized m
 
   -- Regenerate SharedTerm environment.
