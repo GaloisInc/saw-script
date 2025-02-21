@@ -84,6 +84,7 @@ import           Control.Lens
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import           Data.Maybe
+import           Data.Sequence (Seq)
 import qualified Data.Text as Text
 import           Data.Type.Equality (TestEquality(..))
 import           Data.Void (Void)
@@ -215,15 +216,15 @@ loadLLVMModule ::
   (?transOpts :: CL.TranslationOptions) =>
   FilePath ->
   Crucible.HandleAllocator ->
-  IO (Either LLVM.Error (Some LLVMModule))
+  IO (Either LLVM.Error (Some LLVMModule, Seq LLVM.ParseWarning))
 loadLLVMModule file halloc =
-  do parseResult <- LLVM.parseBitCodeFromFile file
+  do parseResult <- LLVM.parseBitCodeFromFileWithWarnings file
      case parseResult of
        Left err -> return (Left err)
-       Right llvm_mod ->
+       Right (llvm_mod, warnings) ->
          do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
             Some mtrans <- CL.translateModule halloc memVar llvm_mod
-            return (Right (Some (LLVMModule file llvm_mod mtrans)))
+            return (Right (Some (LLVMModule file llvm_mod mtrans), warnings))
 
 instance TestEquality LLVMModule where
   -- As 'LLVMModule' is an abstract type, we know that the values must
