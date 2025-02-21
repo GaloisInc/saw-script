@@ -1958,9 +1958,17 @@ exportRecordValue fields v =
   where
     run = SC.runIdentity . force
 
--- | Generate functions to construct nominal values in the term environment.
--- For structs, make identity functions that take the record the newtype wraps.
--- Abstract types do not produce any functions.
+-- | Generate functions, required by nominal types, to insert into the
+--   term environment.
+--
+--   - For structs, make identity functions that take the record the newtype
+--     wraps.
+--   - Enum types create
+--     - multiple constructor functions
+--     - a case function for the type
+--   - Abstract types do not produce any functions.
+
+-- FIXME: names no longer accurate; extendEnvWithNominalTypes, and ...
 genNominalConstructors :: SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genNominalConstructors sc nominal env0 =
   foldM updateEnvForNominal env0 nominal
@@ -2025,4 +2033,5 @@ genNominalConstructors sc nominal env0 =
         tFn tp body =
           if elem (C.tpKind tp) [C.KType, C.KNum]
             then C.ETAbs tp body
-            else panic "genNominalConstructors" ["illegal nominal type parameter kind", show (C.tpKind tp)]
+            else panic "genNominalConstructors"
+                  ["illegal nominal type parameter kind", show (C.tpKind tp)]
