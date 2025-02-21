@@ -302,8 +302,8 @@ importType sc env ty =
            C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
            C.Enum {} -> error "importType: `enum` is not yet supported"
            C.Abstract
-             | Just prim <- C.asPrim n
-             , Just t <- Map.lookup prim (envPrimTypes env) ->
+             | Just prim' <- C.asPrim n
+             , Just t <- Map.lookup prim' (envPrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
              | True -> panic ("importType: unknown primitive type: " ++ show n) []
 
@@ -2005,6 +2005,7 @@ exportFirstOrderValue fv =
       do let vm' = fmap exportFirstOrderValue vm
          pure $ V.VRecord $ C.recordFromFields [ (C.mkIdent n, v) | (n, v) <- Map.assocs vm' ]
 
+    FOVOpaqueArray{} -> error $ "exportFirstOrderValue: unsupported FOT OpaqueArray"
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   where
