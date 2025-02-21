@@ -41,7 +41,7 @@ data TypedTerm =
 
 
 -- | The different notion of Cryptol types that
---   as SAWCore term might have.
+--   a SAWCore term might have.
 data TypedTermType
   = TypedTermSchema C.Schema
   | TypedTermKind   C.Kind

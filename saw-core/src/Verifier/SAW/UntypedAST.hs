@@ -6,7 +6,7 @@
 
 {- |
 Module      : Verifier.SAW.UntypedAST
-Copyright   : Galois, Inc. 2012-2015
+Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : jhendrix@galois.com
 Stability   : experimental
