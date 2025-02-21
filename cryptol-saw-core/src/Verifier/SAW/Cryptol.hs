@@ -10,11 +10,14 @@
 
 {- |
 Module      : Verifier.SAW.Cryptol
-Copyright   : Galois, Inc. 2012-2015
+Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+This module 'imports' various Cryptol elements (Name,Expr,...),
+translating each to the comparable element of SawCore.
 -}
 
 module Verifier.SAW.Cryptol
@@ -24,7 +27,6 @@ module Verifier.SAW.Cryptol
 
   , isErasedProp
   , proveProp
-
 
   , ImportPrimitiveOptions(..)
   , importName
@@ -38,6 +40,17 @@ module Verifier.SAW.Cryptol
   , defaultPrimitiveOptions
   , genNominalConstructors
   , exportValueWithSchema
+
+  -- FIXME: the following are unused in the project; currently we export
+  -- to turn off warnings, but ...
+  --   Q. Are these detritus or,
+  --      are these here for future clients of this module?
+  , isCryptolModuleName
+  , isCryptolInteractiveName
+  , pIsNeq
+  , fvAsBool
+  , exportFirstOrderValue
+  , importFirstOrderValue
   ) where
 
 import Control.Monad (foldM, join, unless,forM)
@@ -58,6 +71,7 @@ import Prelude ()
 import Prelude.Compat
 import Text.URI
 
+-- cryptol package:
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Backend.SeqMap as V
@@ -81,7 +95,7 @@ import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
-import Verifier.SAW.Cryptol.Panic
+-- saw-core package:
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
@@ -89,6 +103,9 @@ import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
+
+-- local modules:
+import Verifier.SAW.Cryptol.Panic
 
 import GHC.Stack
 
@@ -101,7 +118,6 @@ import Verifier.SAW.Cryptol.PreludeM
 $(runIO (mkSharedContext >>= \sc ->
           scLoadPreludeModule sc >> scLoadCryptolModule sc >>
           scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
-
 
 --------------------------------------------------------------------------------
 -- Type Environments
@@ -159,7 +175,8 @@ bindName sc name schema env = do
   t <- importSchema sc env schema
   return $ env' { envE = Map.insert name (v, 0) (envE env')
                 , envC = Map.insert name schema (envC env')
-                , envS = t : envS env' }
+                , envS = t : envS env'
+                }
 
 bindProp :: SharedContext -> C.Prop -> Env -> IO Env
 bindProp sc prop env = do
@@ -170,7 +187,7 @@ bindProp sc prop env = do
                 , envS = k : envS env'
                 }
 
--- | When we insert a nonerasable prop into the environment, make
+-- | When we insert a non-erasable prop into the environment, make
 --   sure to also insert all its superclasses.  We arrange it so
 --   that every class dictionary contains the implementation of its
 --   superclass dictionaries, which can be extracted via field projections.
@@ -274,7 +291,7 @@ importType sc env ty =
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> panic "importType TVBound" []
-    C.TUser _ _ t  -> go t
+    C.TUser _ _ t  -> go t -- ignore type synonym annotation.
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
@@ -299,7 +316,7 @@ importType sc env ty =
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
             C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
-            C.TCFloat    -> scGlobalApply sc "Cryptol.TCFloat" =<< traverse go tyargs
+            C.TCFloat    -> scGlobalApply sc "Cryptol.TCFloat"   =<< traverse go tyargs
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
@@ -1532,14 +1549,15 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
       let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
-                    , envC = Map.union (fmap C.dSignature dm) (envC env)
-                    }
+                     , envC = Map.union (fmap C.dSignature dm) (envC env)
+                     }
       return env'
 
   where
   panicForeignNoExpr decl = panic "importDeclGroup"
     [ "Foreign declaration without Cryptol body in recursive group:"
-    , show (C.dName decl) ]
+    , show (C.dName decl)
+    ]
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
 
