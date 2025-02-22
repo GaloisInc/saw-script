@@ -41,19 +41,9 @@ module Verifier.SAW.Cryptol
   , genNominalConstructors
   , exportValueWithSchema
 
-  -- FIXME: the following are unused in the project; currently we export
-  -- to turn off warnings, but ...
-  --   Q. Are these detritus or,
-  --      are these here for future clients of this module?
-  , isCryptolModuleName
-  , isCryptolInteractiveName
-  , pIsNeq
-  , fvAsBool
-  , exportFirstOrderValue
-  , importFirstOrderValue
   ) where
 
-import Control.Monad (foldM, join, unless,forM)
+import Control.Monad (foldM, join, forM)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -63,7 +53,6 @@ import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
@@ -84,9 +73,9 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, single
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), mkIdent
+  ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
-  , ModName, modNameToText, identText, interactiveName
+  , identText, interactiveName
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
   )
@@ -96,7 +85,6 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
 -- saw-core
-import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
@@ -1373,44 +1361,6 @@ cryptolURI (p:ps) (Just uniq) =
        , uriFragment = Just frag
        }
 
--- | Tests if the given 'NameInfo' represents a name imported
---   from the given Cryptol module name.  If so, it returns
---   the identifier within that module.  Note, this does
---   not match dynamic identifiers from the \"\<interactive\>\"
---   pseudo-module.
-isCryptolModuleName :: C.ModName -> NameInfo -> Maybe Text
-isCryptolModuleName modNm (ImportedName uri _)
-  | Just sch <- uriScheme uri
-  , unRText sch == "cryptol"
-  , Left True <- uriAuthority uri
-  , Just (False, x :| xs) <- uriPath uri
-  , [] <- uriQuery uri
-  , Nothing <- uriFragment uri
-  = checkModName (x:xs) (Text.splitOn "::" (C.modNameToText modNm))
-
- where
- checkModName [i] [] = Just (unRText i)
- checkModName (x:xs) (m:ms) | unRText x == m = checkModName xs ms
- checkModName _ _ = Nothing
-
-isCryptolModuleName _ _ = Nothing
-
-
--- | Tests if the given `NameInfo` represents a name
---   from the special \<interactive\> cryptol module.
---   If so, returns the base identifier name.
-isCryptolInteractiveName :: NameInfo -> Maybe Text
-isCryptolInteractiveName (ImportedName uri _)
-  | Just sch <- uriScheme uri
-  , unRText sch == "cryptol"
-  , Left False <- uriAuthority uri
-  , Just (False, i :| []) <- uriPath uri
-  , [] <- uriQuery uri
-  , Just _ <- uriFragment uri
-  = Just (unRText i)
-
-isCryptolInteractiveName _ = Nothing
-
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
@@ -1831,10 +1781,6 @@ importMatches sc env (C.Let decl : matches) =
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
-pIsNeq :: C.Type -> Maybe (C.Type, C.Type)
-pIsNeq ty = case C.tNoUser ty of
-              C.TCon (C.PC C.PNeq) [t1, t2] -> Just (t1, t2)
-              _                             -> Nothing
 
 --------------------------------------------------------------------------------
 -- Utilities
@@ -1982,57 +1928,6 @@ exportRecordValue fields v =
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
-
-fvAsBool :: FirstOrderValue -> Bool
-fvAsBool (FOVBit b) = b
-fvAsBool _ = error "fvAsBool: expected FOVBit value"
-
-exportFirstOrderValue :: FirstOrderValue -> V.Eval V.Value
-exportFirstOrderValue fv =
-  case fv of
-    FOVBit b      -> pure (V.VBit b)
-    FOVInt i      -> pure (V.VInteger i)
-    FOVIntMod _ i -> pure (V.VInteger i)
-    FOVWord w x   -> V.word V.Concrete (toInteger w) x
-    FOVVec t vs
-      | t == FOTBit -> V.VWord <$> (V.bitmapWordVal V.Concrete len
-                          (V.finiteSeqMap V.Concrete . map (V.ready . fvAsBool) $ vs))
-      | otherwise   -> pure (V.VSeq len (V.finiteSeqMap V.Concrete (map exportFirstOrderValue vs)))
-      where len = toInteger (length vs)
-    FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
-    FOVTuple vs -> pure $ V.VTuple $ map exportFirstOrderValue vs
-    FOVRec vm   ->
-      do let vm' = fmap exportFirstOrderValue vm
-         pure $ V.VRecord $ C.recordFromFields [ (C.mkIdent n, v) | (n, v) <- Map.assocs vm' ]
-
-    FOVOpaqueArray{} -> error "exportFirstOrderValue: unsupported FOT OpaqueArray"
-importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
-importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
-  where
-  go :: FirstOrderType -> V.Value -> V.Eval FirstOrderValue
-  go t v = case (t,v) of
-    (FOTBit         , V.VBit b)        -> return (FOVBit b)
-    (FOTInt         , V.VInteger i)    -> return (FOVInt i)
-    (FOTVec _ FOTBit, V.VWord wv)      -> FOVWord (fromIntegral (V.wordValWidth wv)) . V.bvVal <$> (V.asWordVal V.Concrete wv)
-    (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
-    (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
-    (FOTRec fs      , V.VRecord xs)    ->
-        do xs' <- Map.fromList <$> mapM importField (C.canonicalFields xs)
-           let missing = Set.difference (Map.keysSet fs) (Set.fromList (map C.identText (C.displayOrder xs)))
-           unless (Set.null missing)
-                  (panic "importFirstOrderValue" $
-                         ["Missing fields while importing finite value:"] ++ (map show (Set.toList missing)))
-           return $ FOVRec $ xs'
-      where
-       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (FieldName, FirstOrderValue)
-       importField (C.identText -> nm, x)
-         | Just ty <- Map.lookup nm fs = do
-                x' <- go ty =<< x
-                return (nm, x')
-         | otherwise = panic "importFirstOrderValue" ["Unexpected field name while importing finite value:", show nm]
-
-    _ -> panic "importFirstOrderValue"
-                ["Expected finite value of type:", show t, "but got", show v]
 
 -- | Generate functions to construct nominal values in the term environment.
 -- For structs, make identity functions that take the record the newtype wraps.
