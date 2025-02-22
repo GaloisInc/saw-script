@@ -16,8 +16,8 @@ Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 
-This module 'imports' various Cryptol elements (Name,Expr,...),
-translating each to the comparable element of SawCore.
+This module \'imports\' various Cryptol elements (Name,Expr,...),
+translating each to the comparable element of SAWCore.
 -}
 
 module Verifier.SAW.Cryptol
@@ -71,7 +71,7 @@ import Prelude ()
 import Prelude.Compat
 import Text.URI
 
--- cryptol package:
+-- cryptol
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Backend.SeqMap as V
@@ -95,7 +95,7 @@ import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
--- saw-core package:
+-- saw-core
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
@@ -291,7 +291,7 @@ importType sc env ty =
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> panic "importType TVBound" []
-    C.TUser _ _ t  -> go t -- ignore type synonym annotation.
+    C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
@@ -2005,7 +2005,7 @@ exportFirstOrderValue fv =
       do let vm' = fmap exportFirstOrderValue vm
          pure $ V.VRecord $ C.recordFromFields [ (C.mkIdent n, v) | (n, v) <- Map.assocs vm' ]
 
-    FOVOpaqueArray{} -> error $ "exportFirstOrderValue: unsupported FOT OpaqueArray"
+    FOVOpaqueArray{} -> error "exportFirstOrderValue: unsupported FOT OpaqueArray"
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   where
