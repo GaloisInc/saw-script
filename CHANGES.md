@@ -26,6 +26,11 @@ This release supports [version
   helps ensure that unsupported `mir-json` files do not cause unintended
   results.
 
+* Emit a warning when parsing an LLVM bitcode metadata record that SAW
+  does not support. (Previously, SAW would throw a fatal error if this
+  occurred, so this change makes SAW more permissive with respect to
+  unsupported LLVM versions.)
+
 ## Bug fixes
 
 * The saw executable's usage message now fits into a terminal. (#405)
