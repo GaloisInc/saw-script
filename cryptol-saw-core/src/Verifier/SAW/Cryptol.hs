@@ -56,6 +56,7 @@ import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
+import GHC.Stack
 import Prelude ()
 import Prelude.Compat
 import Text.URI
@@ -95,8 +96,6 @@ import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 -- local modules:
 import Verifier.SAW.Cryptol.Panic
 
-import GHC.Stack
-
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
@@ -106,6 +105,7 @@ import Verifier.SAW.Cryptol.PreludeM
 $(runIO (mkSharedContext >>= \sc ->
           scLoadPreludeModule sc >> scLoadCryptolModule sc >>
           scLoadSpecMModule sc >> scLoadCryptolMModule sc >> return []))
+
 
 --------------------------------------------------------------------------------
 -- Type Environments
@@ -216,6 +216,7 @@ normalizeProp prop
   | Just (_, a) <- C.pIsLiteral prop = C.pLiteral C.tInf a
   | Just (_, a) <- C.pIsLiteralLessThan prop = C.pLiteralLessThan C.tInf a
   | otherwise = prop
+
 
 --------------------------------------------------------------------------------
 
@@ -1656,6 +1657,7 @@ tIsPair t =
        [] -> Nothing
        [t1, t2] -> Just (t1, t2)
        t1 : ts' -> Just (t1, C.tTuple ts')
+
 
 --------------------------------------------------------------------------------
 -- List comprehensions
