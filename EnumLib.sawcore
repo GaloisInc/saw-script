@@ -1,0 +1,28 @@
+module EnumLib where
+import Prelude;
+
+
+SumOf2 : (a1 a2       : sort 0) -> sort 0;
+SumOf2 a1 a2 = Either a1 a2;
+
+SumOf3 : (a1 a2 a3    : sort 0) -> sort 0;
+SumOf3 a1 a2 a3 = Either a1 (SumOf2 a2 a3);
+
+SumOf4 : (a1 a2 a3 a4 : sort 0) -> sort 0;
+SumOf4 a1 a2 a3 a4 = Either a1 (SumOf3 a2 a3 a4);
+
+inj1 : (a1 b : sort 0) -> a1 -> SumOf2 a1 b;
+inj1 a1 b x = Left a1 b x;
+
+inj2 : (a1 a2 b : sort 0) -> a2 -> SumOf3 a1 a2 b;
+inj2 a1 a2 b x    = Right a1 (Either a2 b) (inj1 a2 b x);
+
+inj3 : (a1 a2 a3 b : sort 0) -> a3 -> SumOf4 a1 a2 a3 b;
+inj3 a1 a2 a3 b x = Right a1 (SumOf3 a2 a3 b) (inj2 a2 a3 b x);
+
+case2 : (a b c : sort 0) -> (a -> c) -> (b -> c) -> Either a b -> c;
+case2 = either;
+
+-- case3
+-- ...
+-- TODO: figure how to do all this with SAWCore.Prelude Eithers and eithers
