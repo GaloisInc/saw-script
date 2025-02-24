@@ -1,0 +1,53 @@
+module Test where
+import Prelude;
+
+data Either2 (s t : sort 0) : sort 0 where {
+    Left2  : s -> Either2 s t;
+    Right2 : t -> Either2 s t;
+  }
+
+-- x : Bool
+-- x = ?
+
+
+-- eta-expanded version of the Left constructor
+left2 : (a b : sort 0) -> a -> Either2 a b;
+left2 a b x = Left2 a b x;
+
+  -- AHA: one can curry this, but cannot curry Left2.
+
+data Maybe2 (a : sort 0) : sort 0 where {
+    Nothing2 : Maybe2 a;
+    Just2 : a -> Maybe2 a;
+  }
+
+Maybe2__rec : (a : sort 0)
+           -> (p : (Maybe2 a) -> sort 0)
+           -> p (Nothing2 a)
+           -> ((x:a) -> p (Just2 a x))
+           -> (m : Maybe2 a)
+           -> p m;
+Maybe2__rec a p f1 f2 m = Maybe2#rec a p f1 f2 m;
+
+
+ -- HMMM: something more general than case, ...
+ -- TODO: how to use to generate the case?
+ --   - See defn of 'either' in Prelude.
+
+myTypes : ListSort;
+myTypes = LS_Cons UnitType (LS_Cons Bool LS_Nil);
+
+mySum : sort 0;
+mySum = Eithers myTypes;
+
+x : mySum;
+x = Right UnitType Bool True;
+
+MyResTy  : sort 0;
+MyResTy  = Vec 8 Bool;
+
+myFuns : FunsTo MyResTy;
+myFuns = FunsTo_Cons MyResTy UnitType (\(_:UnitType) -> (0x01 : MyResTy))
+          (FunsTo_Cons MyResTy Bool  (\(_:Bool)      -> (0x02 : MyResTy))
+           (FunsTo_Nil MyResTy)
+          );
