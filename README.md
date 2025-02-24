@@ -48,6 +48,14 @@ checking, you'll also need Yices version 2.6.1 or newer.
 After installation, make sure that `z3` (or `z3.exe` on Windows)
 is on your PATH.
 
+## Cloning the Repository
+
+After cloning the saw-script repository, you need to also clone
+submodules.
+Run `git submodule update --init` _without_ `--recursive`.
+Alas, if you use `--recursive` the checkout will not terminate.
+See [macaw #283](https://github.com/GaloisInc/macaw/issues/283).
+
 ## Manual Installation
 
 To build SAWScript and related utilities from source:
@@ -65,6 +73,10 @@ To build SAWScript and related utilities from source:
   * Ensure that you have the programs `javac` and `z3` on your
     `PATH`. Z3 binaries are available at
     https://github.com/Z3Prover/z3/releases
+
+    On MacOS you need an actual JDK; the placeholder `javac` that
+    comes with the system by default, unfortunately, breaks SAW.
+    See issue [#1709](https://github.com/GaloisInc/saw-script/issues/1709).
 
   * Optionally, put in place dependency version freeze files:
 
