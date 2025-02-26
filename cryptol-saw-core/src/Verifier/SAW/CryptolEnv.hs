@@ -128,7 +128,7 @@ data ImportVisibility
   = OnlyPublic
   | PublicAndPrivate
 
--- | The environment for capturing the cryptol interpreter state as well as the
+-- | The environment for capturing the Cryptol interpreter state as well as the
 --   SAWCore translations and associated state.
 data CryptolEnv = CryptolEnv
   { eImports    :: [(ImportVisibility, P.Import)]
