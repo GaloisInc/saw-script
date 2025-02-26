@@ -72,10 +72,10 @@ import Control.Monad
 import Control.Monad.Reader
 import qualified Control.Monad.Fail as Fail
 import System.Directory
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.UTF8 as BL
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.IO as TLIO
 
 import Data.Binding.Hobbits hiding (sym)
 
@@ -274,8 +274,8 @@ heapster_default_env = emptyPermEnv
 readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
 readModuleFromFile path = do
   base <- liftIO getCurrentDirectory
-  b <- liftIO $ BL.readFile path
-  case Un.parseSAW base path b of
+  txt <- liftIO $ TLIO.readFile path
+  case Un.parseSAW base path txt of
     Right m@(Un.Module (Un.PosPair _ mnm) _ _) -> pure (m, mnm)
     Left err -> fail $ "Module parsing failed:\n" ++ show err
 
@@ -285,7 +285,7 @@ parseTermFromString :: String -> String -> TopLevel Un.Term
 parseTermFromString nm term_string = do
   let base = ""
       path = "<" ++ nm ++ ">"
-  case Un.parseSAWTerm base path (BL.fromString term_string) of
+  case Un.parseSAWTerm base path (TL.pack term_string) of
     Right term -> pure term
     Left err -> fail $ "Term parsing failed:\n" ++ show err
 

@@ -43,11 +43,13 @@ import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import qualified Data.Text as Text
+import Data.Text (Text)
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
@@ -65,8 +67,9 @@ import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkDecl, checkDeclGroup)
+import SAWScript.MGU (checkStmt)
 import SAWScript.Parser (parseSchema)
+import SAWScript.Panic (panic)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
@@ -119,6 +122,41 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
+
+-- Support ---------------------------------------------------------------------
+
+-- This is used to reject top-level execution of polymorphic
+-- expressions. Assumes we aren't inside an uninstantiated forall
+-- quantifier. Also assumes the typechecker has already approved the
+-- type. This means we know it doesn't contain unbound named type
+-- variables. Fail if we encounter a unification var.
+--
+-- XXX: this serves little purpose. A polymorphic expression must
+-- either be a partially applied (or unapplied) polymorphic function,
+-- in which case we aren't going to actually execute anything anyway,
+-- or be fully applied but have a polymorphic return type, and the
+-- only such functions we can have are those that don't return (like
+-- "fail") so we don't actually care what they produce. So this code
+-- and the check that calls it should probably be removed.
+--
+-- XXX: also, this is here transiently so that the rejection continues
+-- to work while the interaction between the interpreter and the
+-- typechecker is rationalized. In the long run, the rejection should
+-- really belong only to the repl for repl purposes and the
+-- polymorphism check should be part of the currently nonexistent
+-- incremental interface to the typechecker. Alternatively, if there
+-- are cases that really require rejection of polymorphic expressions
+-- at the top level, they also require rejection of polymorphic
+-- expressions in nested do-blocks that aren't inside functions, and
+-- it can and should all happen inside the typechecker.
+isPolymorphic :: SS.Type -> Bool
+isPolymorphic ty0 = case ty0 of
+    SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyRecord _pos fields -> any isPolymorphic fields
+    SS.TyVar _pos _a -> False
+    SS.TyUnifyVar _pos _ix -> True
+
+
 -- Environment -----------------------------------------------------------------
 
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
@@ -153,6 +191,24 @@ bindPatternEnv pat ms v env =
                   Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
         _ -> error "bindPatternEnv: expected tuple value"
 
+-- Typechecker ----------------------------------------------------------------
+
+-- Process a typechecker result.
+-- Wraps the typechecker in the stuff needed to print its warnings and errors.
+--
+-- XXX: this code should probably live inside the typechecker.
+--
+-- Usage is processTypeCheck $ checkStmt ...
+type MsgList = [(SS.Pos, String)]
+processTypeCheck :: InteractiveMonad m => (Either MsgList a, MsgList) -> m a
+processTypeCheck (errs_or_output, warns) =
+  liftTopLevel $ do
+    let issueWarning (pos, msg) =
+          -- XXX the print functions should be what knows how to show positions...
+          printOutLnTop Warn (show pos ++ ": Warning: " ++ msg)
+    mapM_ issueWarning warns
+    either failTypecheck return errs_or_output
+
 -- Interpretation of SAWScript -------------------------------------------------
 
 interpret :: SS.Expr -> TopLevel Value
@@ -160,7 +216,7 @@ interpret expr =
     let ?fileReader = BS.readFile in
     case expr of
       SS.Bool _ b              -> return $ VBool b
-      SS.String _ s            -> return $ VString (Text.pack s)
+      SS.String _ s            -> return $ VString s
       SS.Int _ z               -> return $ VInteger z
       SS.Code str              -> do sc <- getSharedContext
                                      cenv <- fmap rwCryptol getMergedEnv
@@ -186,7 +242,7 @@ interpret expr =
                                      return (tupleLookupValue a i)
       SS.Var x                 -> do rw <- getMergedEnv
                                      case Map.lookup x (rwValues rw) of
-                                       Nothing -> fail $ "unknown variable: " ++ SS.getVal x
+                                       Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
                                        Just v -> return (addTrace (show x) v)
       SS.Function _ pat e      -> do env <- getLocalEnv
                                      let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
@@ -204,7 +260,7 @@ interpret expr =
                                        VBool b -> interpret (if b then e2 else e3)
                                        _ -> fail $ "interpret IfThenElse: " ++ show v1
 
-locToInput :: Located String -> CEnv.InputText
+locToInput :: Located Text -> CEnv.InputText
 locToInput l = CEnv.InputText { CEnv.inpText = getVal l
                               , CEnv.inpFile = file
                               , CEnv.inpLine = ln
@@ -250,8 +306,8 @@ interpretStmts stmts =
     -- XXX are the uses of withPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _patpos _) _ e] -> withPosition pos (interpret e)
-      SS.StmtBind pos pat _mcxt e : ss ->
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> withPosition pos (interpret e)
+      SS.StmtBind pos pat e : ss ->
           do env <- getLocalEnv
              v1 <- withPosition pos (interpret e)
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
@@ -283,70 +339,75 @@ stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
   fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
 
+-- Get the type of an AST element. For now, only patterns because that's
+-- what we're using.
+--
+-- Assumes we have been through the typechecker and the types are filled in.
+--
+-- XXX: this should be a typeclass function with instances for all the AST
+-- types.
+---
+-- XXX: also it should be moved to ASTUtil once we have such a place.
+getType :: SS.Pattern -> SS.Type
+getType pat = case pat of
+    SS.PWild _pos ~(Just t) -> t
+    SS.PVar _pos _x ~(Just t) -> t
+    SS.PTuple tuplepos pats ->
+        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+
 processStmtBind ::
   InteractiveMonad m =>
   Bool ->
   SS.Pattern ->
-  Maybe SS.Type ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pat _mc expr = do -- mx mt
-  -- Extract the variable and type from the pattern, if any. If there
-  -- isn't any single variable use "it". We seem to get here only for
-  -- statements typed at the repl, so it apparently isn't wrong to use
-  -- "it".
-  -- XXX: it seems problematic to discard the type for a tuple binding...
-  let it pos = SS.Located "it" "it" pos
-  let (lname, mt) = case pat of
-        SS.PWild pos t -> (it pos, t)
-        SS.PVar _pos x t -> (x, t)
-        SS.PTuple pos _pats -> (it pos, Nothing)
-  ctx <- getMonadContext
-  -- XXX SS.PosREPL probably is not what we want
-  -- but the position we want for the block type isn't the position of
-  -- the pattern (perhaps we want the position of the "do" that makes
-  -- this a block context? but there isn't necessarily one in the
-  -- repl)
-  let pos = SS.PosREPL
-  let tyctx = SS.tContext pos ctx
-  let expr' = case mt of
-                Nothing -> expr
-                Just t -> SS.TSig (SS.maxSpan' expr t) expr (SS.tBlock pos tyctx t)
-  let decl = SS.Decl (SS.maxSpan' pat expr') pat Nothing expr'
+processStmtBind printBinds pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
-  let opts = rwPPOpts rw
 
-  ~(SS.Decl _ _ (Just schema) expr'') <- liftTopLevel $
-    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+  val <- liftTopLevel $ interpret expr
 
-  val <- liftTopLevel $ interpret expr''
+  -- Fetch the type from updated pattern, since the typechecker will
+  -- have filled it in there.
+  --
+  -- Note that this type won't include the current monad type, because
+  -- it's the type of the value that the pattern on the left of <- is
+  -- trying to bind.
+  let ty = getType pat
 
-  -- Run the resulting TopLevel action.
-  (result, ty) <-
-    case schema of
-      SS.Forall [] t ->
-        case t of
-          SS.TyCon _ SS.BlockCon [c, t'] | SS.isContext ctx c -> do
-            result <- actionFromValue val
-            return (result, t')
-          _ -> return (val, t)
-      _ -> fail $ "Not a monomorphic type: " ++ SS.pShow schema
+  -- Reject polymorphic values. XXX: as noted above this should either
+  -- be inside the typechecker or restricted to the repl.
+  when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ SS.pShow ty
+
+  -- Run the resulting TopLevel (or ProofScript) action.
+  result <- actionFromValue val
+
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 
-  -- Print non-unit result if it was not bound to a variable
-  case pat of
-    SS.PWild _ _ | printBinds && not (isVUnit result) ->
-      liftTopLevel $
-      do nenv <- io . scGetNamingEnv =<< getSharedContext
-         printOutLnTop Info (showsPrecValue opts nenv 0 result "")
-    _ -> return ()
+  -- When in the repl, print the result.
+  when printBinds $ do
+    let opts = rwPPOpts rw
 
-  -- Print function type if result was a function
-  case ty of
-    SS.TyCon _ SS.FunCon _ ->
-      liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
-    _ -> return ()
+    -- Extract the variable, if any, from the pattern. If there isn't
+    -- any single variable use "it".
+    let name = case pat of
+          SS.PWild _patpos _t -> "it"
+          SS.PVar _patpos x _t -> getVal x
+          SS.PTuple _patpos _pats -> "it"
+
+    -- Print non-unit result if it was not bound to a variable
+    case pat of
+      SS.PWild _ _ | not (isVUnit result) ->
+        liftTopLevel $
+        do nenv <- io . scGetNamingEnv =<< getSharedContext
+           printOutLnTop Info (showsPrecValue opts nenv 0 result "")
+      _ -> return ()
+
+    -- Print function type if result was a function
+    case ty of
+      SS.TyCon _ SS.FunCon _ ->
+        liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> SS.pShowText ty
+      _ -> return ()
 
   liftTopLevel $
    do rw' <- getTopLevelRW
@@ -371,29 +432,30 @@ instance InteractiveMonad ProofScript where
   actionFromValue = fromValue
   getMonadContext = return SS.ProofScript
 
--- | Interpret a block-level statement in the TopLevel monad.
+-- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
 interpretStmt :: InteractiveMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
   m ()
-interpretStmt printBinds stmt =
-  let ?fileReader = BS.readFile in
-  case stmt of
+interpretStmt printBinds stmt = do
+  let ?fileReader = BS.readFile
 
-    SS.StmtBind pos pat mc expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat mc expr)
+  ctx <- getMonadContext
+  rw <- liftTopLevel $ getTopLevelRW
+  stmt' <- processTypeCheck $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
 
-    SS.StmtLet _ dg           ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
-         dg' <- either failTypecheck return $
-                checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
-         env <- interpretDeclGroup dg'
+  case stmt' of
+
+    SS.StmtBind pos pat expr ->
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
+
+    SS.StmtLet _pos dg ->
+      liftTopLevel $ do
+         env <- interpretDeclGroup dg
          withLocalEnv env getMergedEnv >>= putTopLevelRW
 
     SS.StmtCode _ lstr ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          sc <- getSharedContext
          --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
          --showCryptolEnv
@@ -402,8 +464,7 @@ interpretStmt printBinds stmt =
          --showCryptolEnv
 
     SS.StmtImport _ imp ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          sc <- getSharedContext
          --showCryptolEnv
          let mLoc = iModule imp
@@ -414,8 +475,7 @@ interpretStmt printBinds stmt =
          --showCryptolEnv
 
     SS.StmtTypedef _ name ty ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
@@ -507,8 +567,8 @@ buildTopLevelEnv proxy opts =
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
-                   , rwTypes      = primTypeEnv primsAvail
-                   , rwTypedef    = Map.empty
+                   , rwValueTypes = primValueTypeEnv primsAvail
+                   , rwNamedTypes = primNamedTypeEnv primsAvail
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
@@ -571,7 +631,8 @@ add_primitives lc bic opts = do
   let lcs = Set.singleton lc
   putTopLevelRW rw {
     rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
-  , rwTypes      = rwTypes rw `Map.union` primTypeEnv lcs
+  , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
+  , rwNamedTypes = rwNamedTypes rw `Map.union` primNamedTypeEnv lcs
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
@@ -834,11 +895,29 @@ print_value v = do
   nenv <- io . scGetNamingEnv =<< getSharedContext
   printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
-readSchema :: String -> SS.Schema
+readSchema :: Text -> SS.Schema
 readSchema str =
-  case parseSchema (lexSAW "internal" str) of
-    Left err -> error (show err)
+  let croak what msg =
+        error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
+      tokens =
+        let (tokens', optmsg) = lexSAW "internal" str in
+        -- XXX clean this up when we clean out the message printing infrastructure
+        case optmsg of
+            Just (Error, _pos, msg) -> croak "Lexer" $ Text.unpack msg
+            Just (_, _pos, _msg) -> tokens'  -- ignore warnings for now
+            Nothing -> tokens'
+  in
+  case parseSchema tokens of
+    Left err -> croak "Parse" $ show err
     Right schema -> schema
+
+data PrimType
+  = PrimType
+    { primTypeName :: SS.Name
+    , primTypeType :: SS.NamedType
+    , primTypeLife :: PrimitiveLifecycle
+    -- FUTURE: add doc strings for these?
+    }
 
 data Primitive
   = Primitive
@@ -848,6 +927,69 @@ data Primitive
     , primitiveDoc  :: [String]
     , primitiveFn   :: Options -> BuiltinContext -> Value
     }
+
+-- | Primitive types, that is, builtin types used by the primitives.
+--
+-- This excludes certain types that are built in more deeply and
+-- appear as entries in @TyCon in AST.hs. Note that those are also
+-- handled as reserved words in the lexer and parser. XXX: and there's
+-- no particular system to which are there and which are here; some of
+-- the ones there have no special syntax or semantics and should
+-- probably be moved here at some point.
+primTypes :: Map SS.Name PrimType
+primTypes = Map.fromList
+  [ abstype "BisimTheorem" Experimental
+  , abstype "CryptolModule" Current
+  , abstype "FunctionProfile" Experimental
+  , abstype "FunctionSkeleton" Experimental
+  , abstype "Ghost" Current
+  , abstype "HeapsterEnv" Experimental
+  , abstype "JVMSetup" Current
+  , abstype "JVMValue" Current
+  , abstype "JavaClass" Current
+  , abstype "JavaType" Current
+  , abstype "LLVMModule" Current
+  , abstype "LLVMType" Current
+  , abstype "MIRAdt" Experimental
+  , abstype "MIRModule" Experimental
+  , abstype "MIRType" Experimental
+  , abstype "MIRValue" Experimental
+  , abstype "ModuleSkeleton" Experimental
+  , abstype "ProofResult" Current
+  , abstype "Refnset" Experimental
+  , abstype "SatResult" Current
+  , abstype "SetupValue" Current
+  , abstype "Simpset" Current
+  , abstype "SkeletonState" Experimental
+  , abstype "Theorem" Current
+  , abstype "Uninterp" Deprecated
+  , abstype "YosysSequential" Experimental
+  , abstype "YosysTheorem" Experimental
+  ]
+  where
+    -- abstract type
+    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype name lc = (name, info)
+      where
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.AbstractType
+          , primTypeLife = lc
+          }
+
+    -- concrete type (not currently used)
+    _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    _conctype name tystr lc = (name, info)
+      where
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.ConcreteType ty
+          , primTypeLife = lc
+          }
+        ty = case readSchema tystr of
+            SS.Forall [] ty' -> ty'
+            _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
+
 
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
@@ -2092,6 +2234,11 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+  , prim "bitwuzla"            "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
+
   , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
     Current
@@ -2122,6 +2269,13 @@ primitives = Map.fromList
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
+  , prim "unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal proveUnintBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "unint_z3"            "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
     Current
@@ -2149,6 +2303,11 @@ primitives = Map.fromList
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
+
+  , prim "sbv_bitwuzla"        "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
 
   , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)
@@ -2179,6 +2338,13 @@ primitives = Map.fromList
     (pureVal proveYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
+
+  , prim "sbv_unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal proveUnintBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
 
   , prim "sbv_unint_z3"        "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
@@ -2296,6 +2462,13 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
+  , prim "w4_unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal w4_unint_bitwuzla)
+    Current
+    [ "Prove the current goal using What4 (Bitwuzla backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "w4_unint_z3"         "[String] -> ProofScript ()"
     (pureVal w4_unint_z3)
     Current
@@ -2353,6 +2526,13 @@ primitives = Map.fromList
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format, generated"
     , "using the What4 backend."
+    ]
+
+  , prim "offline_w4_unint_bitwuzla" "[String] -> String -> ProofScript ()"
+    (pureVal offline_w4_unint_bitwuzla)
+    Current
+    [ "Write the current goal to the given file using What4 (Bitwuzla backend)"
+    , " in SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript ()"
@@ -4924,7 +5104,7 @@ primitives = Map.fromList
   ]
 
   where
-    prim :: String -> String -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
+    prim :: Text -> Text -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
                                      { primitiveName = qname
@@ -4961,18 +5141,28 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
-filterAvail ::
+filterAvailTypes ::
+  Set PrimitiveLifecycle ->
+  Map SS.Name PrimType ->
+  Map SS.Name PrimType
+filterAvailTypes primsAvail =
+  Map.filter (\p -> primTypeLife p `Set.member` primsAvail)
+
+filterAvailPrims ::
   Set PrimitiveLifecycle ->
   Map SS.LName Primitive ->
   Map SS.LName Primitive
-filterAvail primsAvail =
+filterAvailPrims primsAvail =
   Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
-primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
+primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
+primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
+
+primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
+primNamedTypeEnv primsAvail = fmap primTypeType (filterAvailTypes primsAvail primTypes)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
-valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
+valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)
   where f p = (primitiveFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
@@ -4981,7 +5171,7 @@ primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
 primDocEnv primsAvail =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
-      prims = filterAvail primsAvail primitives
+      prims = filterAvailPrims primsAvail primitives
       tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]
@@ -4991,9 +5181,9 @@ primDocEnv primsAvail =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primitiveType p)
+                [ "    " ++ Text.unpack (getVal n) ++ " : " ++ SS.pShow (primitiveType p)
                 , ""
                 ] ++ primitiveDoc p
 
-qualify :: String -> Located SS.Name
+qualify :: Text -> Located SS.Name
 qualify s = Located s s (SS.PosInternal "coreEnv")

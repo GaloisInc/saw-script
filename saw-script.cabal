@@ -243,9 +243,9 @@ executable saw
     GitRev
 
   build-depends:
-      base >= 4
+      base >= 4.5
     , ansi-terminal
-    , containers
+    , containers >= 0.5.8
     , cryptol
     , directory
     , either
@@ -254,6 +254,7 @@ executable saw
     , haskeline
     , mtl
     , QuickCheck
+    , text
     , transformers
     , saw-script
     , saw-core

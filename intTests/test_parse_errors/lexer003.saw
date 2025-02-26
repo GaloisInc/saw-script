@@ -1,0 +1,11 @@
+// Currently comment delimiters in Cryptol blocks are not recognized
+// by the saw-script lexer; they're treated as part of the block and
+// handled by the Cryptol lexer downstream. This has some odd
+// consequences. See issue #2189.
+//
+// This currently fails with an unexpected end-of-comment because the
+// open-comment isn't seen.
+
+let x = {{ /* 3 }} */;
+
+

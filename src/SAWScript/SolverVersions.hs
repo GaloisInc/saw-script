@@ -59,8 +59,8 @@ getSolverBackendVersion backend = case backend of
   -- We use individual cases for the remaining constructors to ensure that if
   -- a new backend is added, a warning is generated for this pattern match
   ABC       -> getSolverVersion SBV.ABC
-  Boolector -> getSolverVersion SBV.Boolector
   Bitwuzla  -> getSolverVersion SBV.Bitwuzla
+  Boolector -> getSolverVersion SBV.Boolector
   CVC4      -> getSolverVersion SBV.CVC4
   CVC5      -> getSolverVersion SBV.CVC5
   DReal     -> getSolverVersion SBV.DReal

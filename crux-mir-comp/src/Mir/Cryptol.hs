@@ -236,7 +236,7 @@ loadCryptolFunc col sig modulePath name = do
     -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
     -- tt <- liftIO $ SAW.lookupCryptolModule m (Text.unpack name)
     tt <- liftIO $ SAW.parseTypedTerm sc ce' $
-        SAW.InputText (Text.unpack name) "<string>" 1 1
+        SAW.InputText name "<string>" 1 1
 
     case typecheckFnSig sig (toListFC Some argShps) (Some retShp) (SAW.ttType tt) of
         Left err -> fail $ "error loading " ++ show name ++ ": " ++ err

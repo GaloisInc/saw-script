@@ -1,0 +1,10 @@
+//
+// Check for not enough arguments to a function.
+//
+// This is the general case (without explicit signatures) where you
+// get an expected/unwanted function type that fails downstream.
+
+let f x y z = concat x (concat y z);
+
+let s = f [1, 2] [3, 4];
+let t = concat s [5, 6];

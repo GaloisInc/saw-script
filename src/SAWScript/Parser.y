@@ -6,6 +6,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fno-warn-tabs                #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Parser
   ( parseModule
   , parseStmt
@@ -17,7 +18,8 @@ module SAWScript.Parser
 
 import Data.List
 import qualified Data.Map as Map (fromList)
-import Data.Text (pack)
+import qualified Data.Text as Text
+import Data.Text (Text, pack, unpack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
@@ -25,7 +27,7 @@ import SAWScript.Position
 import SAWScript.Utils
 
 import qualified Cryptol.Parser.AST as P
-import qualified Cryptol.Utils.Ident as P (packIdent, packModName)
+import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
 
 import qualified Text.Show.Pretty as PP
 
@@ -125,21 +127,21 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { Import (Left (tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
+ : string mbAs mbImportSpec             { Import (Left (unpack $ tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
  -- TODO: allow imports by module name instead of path
 
 mbAs :: { (Maybe P.ModName, Pos) }
- : 'as' name                            { (Just (P.packModName [pack (tokStr $2)]), maxSpan [$1, $2]) }
+ : 'as' name                            { (Just (P.packModName [tokStr $2]), maxSpan [$1, $2]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
- : '(' list(name) ')'                   { (Just $ P.Only   [ P.packIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
- | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.packIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
+ : '(' list(name) ')'                   { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
+ | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
- : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) Nothing $1 }
- | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x Nothing $3) (toPattern $1) }
+ : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) $1 }
+ | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { StmtLet (maxSpan [tokPos $1, maxSpan $2]) (Recursive $2) }
  | 'let' Declaration                    { StmtLet (maxSpan [tokPos $1, getPos $2]) (NonRecursive $2) }
  | 'let' Code                           { StmtCode (maxSpan [tokPos $1, getPos $2]) $2 }
@@ -192,10 +194,10 @@ AExpr :: { Expr }
  | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
  | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
 
-Code :: { Located String }
+Code :: { Located Text }
  : code                                 { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
-CType :: { Located String }
+CType :: { Located Text }
  : ctype                                { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
 Field :: { (Name, Expr) }
@@ -214,7 +216,7 @@ Type :: { Type }
  | BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 FieldType :: { (Name, Type) }
-  : name ':' BaseType                   { (tokStr $1, $3)         }
+  : name ':' Type                       { (tokStr $1, $3)         }
 
 BaseType :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)  }
@@ -319,7 +321,7 @@ instance Show ParseError where
   show e =
     case e of
       UnexpectedEOF     -> "Parse error: unexpected end of file"
-      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ tokStr t ++ "'"
+      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ unpack (tokStr t) ++ "'"
         where Range _ sl sc el ec = tokPos t -- TODO show token span consistently
       InvalidPattern x  -> "Parse error: invalid pattern " ++ pShow x
 

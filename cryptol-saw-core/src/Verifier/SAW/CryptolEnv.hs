@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Verifier.SAW.CryptolEnv
@@ -42,6 +43,7 @@ module Verifier.SAW.CryptolEnv
 
 --import qualified Control.Exception as X
 import Data.ByteString (ByteString)
+import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -108,7 +110,7 @@ import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 
 -- | Parse input, together with information about where it came from.
 data InputText = InputText
-  { inpText :: String -- ^ Parse this
+  { inpText :: Text   -- ^ Parse this
   , inpFile :: String -- ^ It came from this file (or thing)
   , inpLine :: Int    -- ^ On this line number
   , inpCol  :: Int    -- ^ On this column number
@@ -252,12 +254,14 @@ ioParseSchema = ioParseGeneric P.parseSchemaWith
 
 ioParseGeneric ::
   (P.Config -> Text -> Either P.ParseError a) -> InputText -> IO a
-ioParseGeneric parse inp = ioParseResult (parse cfg (pack str))
+ioParseGeneric parse inp = ioParseResult (parse cfg str)
   where
   cfg = P.defaultConfig { P.cfgSource = inpFile inp }
-  str = concat [ replicate (inpLine inp - 1) '\n'
-               , replicate (inpCol inp - 1) ' '
-               , inpText inp ]
+  -- XXX this is kind of gross; maybe sometime we get a second parser
+  -- entry point that takes a start position... (this is saw-script #2175)
+  str = Text.concat [ Text.replicate (inpLine inp - 1) "\n"
+                    , Text.replicate (inpCol inp - 1) " "
+                    , inpText inp ]
 
 ioParseResult :: Either P.ParseError a -> IO a
 ioParseResult res = case res of

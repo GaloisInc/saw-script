@@ -75,7 +75,7 @@ install_system_deps() {
   cp $BIN/yices_smt2$EXT $BIN/yices-smt2$EXT
   export PATH="$BIN:$PATH"
   echo "$BIN" >> "$GITHUB_PATH"
-  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" cvc5 && is_exe "$BIN" yices
+  is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" cvc5 && is_exe "$BIN" yices && is_exe "$BIN" bitwuzla && is_exe "$BIN" boolector
 }
 
 build_cryptol() {
@@ -84,15 +84,17 @@ build_cryptol() {
 
 bundle_files() {
   mkdir -p dist dist/{bin,deps,doc,examples,include,lib}
+  mkdir -p dist/doc/{llvm-java-verification-with-saw,rust-verification-with-saw,saw-user-manual}
 
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
 
   (cd deps/cryptol-specs && git archive --prefix=cryptol-specs/ --format=tar HEAD) | (cd dist/deps && tar x)
-  cp doc/extcore.md dist/doc
-  cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
-  cp doc/manual/manual.pdf dist/doc/manual.pdf
-  cp -r doc/tutorial/code dist/doc
+  cp doc/pdfs/llvm-java-verification-with-saw.pdf dist/doc/llvm-java-verification-with-saw
+  cp doc/pdfs/rust-verification-with-saw.pdf dist/doc/rust-verification-with-saw
+  cp doc/pdfs/saw-user-manual.pdf dist/doc/saw-user-manual
+  cp -r doc/llvm-java-verification-with-saw/code dist/doc/llvm-java-verification-with-saw
+  cp -r doc/rust-verification-with-saw/code dist/doc/rust-verification-with-saw
   cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
@@ -121,6 +123,8 @@ zip_dist_with_solvers() {
   # should be at least as portable (in terms of dynamic library
   # dependencies) as the SAW binaries.
   cp "$BIN/abc"        dist/bin/
+  cp "$BIN/bitwuzla"   dist/bin/
+  cp "$BIN/boolector"  dist/bin/
   cp "$BIN/cvc4"       dist/bin/
   cp "$BIN/cvc5"       dist/bin/
   cp "$BIN/yices"      dist/bin/

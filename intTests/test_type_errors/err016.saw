@@ -1,0 +1,5 @@
+// Trigger the message "Term is not a function. (Maybe a function is
+// applied to too many arguments?)"
+
+let f x = x;
+let y = f 3 4;

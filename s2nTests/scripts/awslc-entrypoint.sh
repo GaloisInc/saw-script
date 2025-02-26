@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -xe
 
+export IN_SAW_CI=yes
+
 cd /saw-script/aws-lc-verification/SAW
 ./scripts/install.sh
-rm bin/saw
+rm -f bin/saw
 cp /saw-bin/saw bin/saw
 cp /saw-bin/abc bin/abc
 cp /saw-bin/yices bin/yices

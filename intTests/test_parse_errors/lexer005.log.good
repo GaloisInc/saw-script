@@ -1,0 +1,5 @@
+ Loading file "lexer005.saw"
+ Stack trace:
+lexer005.saw:9:9-9:11: Unclosed block comment
+
+FAILED

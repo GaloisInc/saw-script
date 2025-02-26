@@ -139,8 +139,9 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
                  _ -> fail "parseSBVExpr: expected function type"
              unless (sum (typSizes inTyp) == sum (map fromIntegral inSizes)) $ do
                printOutLn opts Error ("ERROR parseSBVPgm: input size mismatch in " ++ name)
-               printOutFn opts Error (show inTyp)
-               printOutFn opts Error (show inSizes)
+               -- these used to print without newlines but that seems totally wrong
+               printOutLn opts Error (show inTyp)
+               printOutLn opts Error (show inSizes)
              argument <- combineOutputs sc inTyp args
              result <- scApply sc t argument
              results <- splitInputs sc outTyp result

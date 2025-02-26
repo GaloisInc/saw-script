@@ -43,7 +43,8 @@ import Control.Monad (guard, void)
 
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
-import Data.List (intercalate)
+import Data.List (intercalate, nub)
+import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
 import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
@@ -74,6 +75,7 @@ data Command
 -- | Command builder.
 data CommandDescr = CommandDescr
   { cName :: String
+  , cAliases :: [String]
   , cBody :: CommandBody
   , cHelp :: String
   }
@@ -94,39 +96,45 @@ data CommandBody
   | NoArg       (REPL ())
 
 
+-- | Convert the command list to a Trie, expanding aliases.
+makeCommands :: [CommandDescr] -> CommandMap
+makeCommands list  = foldl insert emptyTrie (concatMap expandAliases list)
+  where
+  insert m (name, d) = insertTrie name d m
+  expandAliases :: CommandDescr -> [(String, CommandDescr)]
+  expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)
+
 -- | REPL command parsing.
 commands :: CommandMap
-commands  = foldl insert emptyTrie commandList
-  where
-  insert m d = insertTrie (cName d) d m
+commands = makeCommands commandList
 
 -- | Notebook command parsing.
 nbCommands :: CommandMap
-nbCommands  = foldl insert emptyTrie nbCommandList
-  where
-  insert m d = insertTrie (cName d) d m
+nbCommands = makeCommands nbCommandList
 
 -- | A subset of commands safe for Notebook execution
 nbCommandList :: [CommandDescr]
 nbCommandList  =
-  [ CommandDescr ":env"    (NoArg envCmd)
+  [ CommandDescr ":env"  []      (NoArg envCmd)
     "display the current sawscript environment"
-  , CommandDescr ":type"   (ExprArg typeOfCmd)
+  , CommandDescr ":tenv" []      (NoArg tenvCmd)
+    "display the current sawscript type environment"
+  , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
-  , CommandDescr ":?"      (ExprArg helpCmd)
+  , CommandDescr ":?"    []      (ExprArg helpCmd)
     "display a brief description about a built-in operator"
-  , CommandDescr ":help"   (ExprArg helpCmd)
+  , CommandDescr ":help" []      (ExprArg helpCmd)
     "display a brief description about a built-in operator"
   ]
 
 commandList :: [CommandDescr]
 commandList  =
   nbCommandList ++
-  [ CommandDescr ":quit"   (NoArg quitCmd)
+  [ CommandDescr ":quit" []   (NoArg quitCmd)
     "exit the REPL"
-  , CommandDescr ":cd" (FilenameArg cdCmd)
+  , CommandDescr ":cd"   []   (FilenameArg cdCmd)
     "set the current working directory"
-  , CommandDescr ":pwd" (NoArg pwdCmd)
+  , CommandDescr ":pwd"  []   (NoArg pwdCmd)
     "display the current working directory"
   ]
 
@@ -157,15 +165,27 @@ typeOfCmd :: String -> REPL ()
 typeOfCmd str
   | null str = do io $ putStrLn $ "[error] :type requires an argument"
   | otherwise =
-  do let tokens = SAWScript.Lexer.lexSAW replFileName str
+  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+     case optmsg of
+       Nothing -> return ()
+       Just (_vrb, pos, msg) -> do
+         -- XXX wrap printing of positions in the message-printing infrastructure
+         let msg' = show pos ++ ": " ++ Text.unpack msg
+         io $ putStrLn msg'
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
      let pos = getPos expr
          decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
      rw <- getValueEnvironment
-     ~(SS.Decl _pos _ (Just schema) _expr') <-
-       either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+     decl' <- do
+       let (errs_or_results, warns) = checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
+       let issueWarning (msgpos, msg) =
+             -- XXX the print functions should be what knows how to show positions...
+             putStrLn (show msgpos ++ ": Warning: " ++ msg)
+       io $ mapM_ issueWarning warns
+       either failTypecheck return $ errs_or_results
+     let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
      io $ putStrLn $ SS.pShow schema
 
 quitCmd :: REPL ()
@@ -175,15 +195,20 @@ quitCmd  = stop
 envCmd :: REPL ()
 envCmd = do
   env <- getValueEnvironment
-  let showLName = SS.getVal
-  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
+  let showLName = Text.unpack . SS.getVal
+  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwValueTypes env) ]
+
+tenvCmd :: REPL ()
+tenvCmd = do
+  env <- getValueEnvironment
+  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
     do env <- getEnvironment
-       case Map.lookup cmd (rwDocs env) of
+       case Map.lookup (Text.pack cmd) (rwDocs env) of
          Just d -> io $ putStr d
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =
@@ -228,7 +253,13 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
-  let tokens = SAWScript.Lexer.lexSAW replFileName str
+  let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+  case optmsg of
+    Nothing -> return ()
+    Just (_vrb, pos, msg) -> do
+      -- XXX wrap printing of positions in the message-printing infrastructure
+      let msg' = show pos ++ ": " ++ Text.unpack msg
+      io $ putStrLn msg'
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->
@@ -283,13 +314,20 @@ splitCommand txt =
 
     expr -> guard (not (null expr)) >> return (expr,[])
 
--- | Lookup a string in the command list.
-findCommand :: String -> [CommandDescr]
-findCommand str = lookupTrie str commands
+-- | Look up a string in a command list. If given a string that's both
+-- itself a command and a prefix of something else, choose that
+-- command; otherwise such commands are inaccessible. Also, deduplicate
+-- the list of results to avoid silliness with command aliases.
+findSomeCommand :: String -> CommandMap -> [CommandDescr]
+findSomeCommand str commandTable = nub $ lookupTrieWithExact str commandTable
 
--- | Lookup a string in the notebook-safe command list.
+-- | Look up a string in the command list.
+findCommand :: String -> [CommandDescr]
+findCommand str = findSomeCommand str commands
+
+-- | Look up a string in the notebook-safe command list.
 findNbCommand :: String -> [CommandDescr]
-findNbCommand str = lookupTrie str nbCommands
+findNbCommand str = findSomeCommand str nbCommands
 
 -- | Parse a line as a command.
 parseCommand :: (String -> [CommandDescr]) -> String -> Maybe Command

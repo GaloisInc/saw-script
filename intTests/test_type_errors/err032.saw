@@ -1,0 +1,10 @@
+//
+// Too many arguments for type constructor: Int
+//
+// Currently this is a parser message; the kind mismatch message in
+// the typechecker is unreachable.
+
+let x : Int Bool = false;
+
+
+

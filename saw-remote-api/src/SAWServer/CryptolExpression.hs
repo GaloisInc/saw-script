@@ -90,7 +90,8 @@ getTypedTermOfCExp fileReader sc cenv expr =
 
 moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =
-  do mapM_ (liftIO . print . pp) warnings
+  do -- TODO: Printing warnings directly to stdout here is questionable (#2129)
+     mapM_ (liftIO . print . pp) warnings
      case result of
        Right (a, me) -> return (a, me)
        Left err      -> Argo.raise $ cryptolError err warnings

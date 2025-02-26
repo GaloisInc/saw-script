@@ -10,11 +10,14 @@
 
 {- |
 Module      : Verifier.SAW.Cryptol
-Copyright   : Galois, Inc. 2012-2015
+Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
+
+This module \'imports\' various Cryptol elements (Name,Expr,...),
+translating each to the comparable element of SAWCore.
 -}
 
 module Verifier.SAW.Cryptol
@@ -24,7 +27,6 @@ module Verifier.SAW.Cryptol
 
   , isErasedProp
   , proveProp
-
 
   , ImportPrimitiveOptions(..)
   , importName
@@ -38,9 +40,10 @@ module Verifier.SAW.Cryptol
   , defaultPrimitiveOptions
   , genNominalConstructors
   , exportValueWithSchema
+
   ) where
 
-import Control.Monad (foldM, join, unless,forM)
+import Control.Monad (foldM, join, forM)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -50,14 +53,15 @@ import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
+import GHC.Stack
 import Prelude ()
 import Prelude.Compat
 import Text.URI
 
+-- cryptol
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Backend.SeqMap as V
@@ -66,13 +70,14 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..), asLocal)
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), mkIdent
+  ( Ident, PrimIdent(..)
   , prelPrim, floatPrim, arrayPrim, suiteBPrim, primeECPrim
-  , ModName, modNameToText, identText, interactiveName
+  , identText, interactiveName
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
   )
@@ -81,8 +86,7 @@ import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
-import Verifier.SAW.Cryptol.Panic
-import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
+-- saw-core
 import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
@@ -90,7 +94,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
-import GHC.Stack
+-- local modules:
+import Verifier.SAW.Cryptol.Panic
 
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
@@ -159,7 +164,8 @@ bindName sc name schema env = do
   t <- importSchema sc env schema
   return $ env' { envE = Map.insert name (v, 0) (envE env')
                 , envC = Map.insert name schema (envC env')
-                , envS = t : envS env' }
+                , envS = t : envS env'
+                }
 
 bindProp :: SharedContext -> C.Prop -> Env -> IO Env
 bindProp sc prop env = do
@@ -170,7 +176,7 @@ bindProp sc prop env = do
                 , envS = k : envS env'
                 }
 
--- | When we insert a nonerasable prop into the environment, make
+-- | When we insert a non-erasable prop into the environment, make
 --   sure to also insert all its superclasses.  We arrange it so
 --   that every class dictionary contains the implementation of its
 --   superclass dictionaries, which can be extracted via field projections.
@@ -211,6 +217,7 @@ normalizeProp prop
   | Just (_, a) <- C.pIsLiteral prop = C.pLiteral C.tInf a
   | Just (_, a) <- C.pIsLiteralLessThan prop = C.pLiteralLessThan C.tInf a
   | otherwise = prop
+
 
 --------------------------------------------------------------------------------
 
@@ -274,7 +281,7 @@ importType sc env ty =
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> panic "importType TVBound" []
-    C.TUser _ _ t  -> go t
+    C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
@@ -285,8 +292,8 @@ importType sc env ty =
            C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
            C.Enum {} -> error "importType: `enum` is not yet supported"
            C.Abstract
-             | Just prim <- C.asPrim n
-             , Just t <- Map.lookup prim (envPrimTypes env) ->
+             | Just prim' <- C.asPrim n
+             , Just t <- Map.lookup prim' (envPrimTypes env) ->
                scApplyAllBeta sc t =<< traverse go ts
              | True -> panic ("importType: unknown primitive type: " ++ show n) []
 
@@ -299,7 +306,7 @@ importType sc env ty =
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
             C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
-            C.TCFloat    -> scGlobalApply sc "Cryptol.TCFloat" =<< traverse go tyargs
+            C.TCFloat    -> scGlobalApply sc "Cryptol.TCFloat"   =<< traverse go tyargs
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
@@ -1356,44 +1363,6 @@ cryptolURI (p:ps) (Just uniq) =
        , uriFragment = Just frag
        }
 
--- | Tests if the given 'NameInfo' represents a name imported
---   from the given Cryptol module name.  If so, it returns
---   the identifier within that module.  Note, this does
---   not match dynamic identifiers from the \"\<interactive\>\"
---   pseudo-module.
-isCryptolModuleName :: C.ModName -> NameInfo -> Maybe Text
-isCryptolModuleName modNm (ImportedName uri _)
-  | Just sch <- uriScheme uri
-  , unRText sch == "cryptol"
-  , Left True <- uriAuthority uri
-  , Just (False, x :| xs) <- uriPath uri
-  , [] <- uriQuery uri
-  , Nothing <- uriFragment uri
-  = checkModName (x:xs) (Text.splitOn "::" (C.modNameToText modNm))
-
- where
- checkModName [i] [] = Just (unRText i)
- checkModName (x:xs) (m:ms) | unRText x == m = checkModName xs ms
- checkModName _ _ = Nothing
-
-isCryptolModuleName _ _ = Nothing
-
-
--- | Tests if the given `NameInfo` represents a name
---   from the special \<interactive\> cryptol module.
---   If so, returns the base identifier name.
-isCryptolInteractiveName :: NameInfo -> Maybe Text
-isCryptolInteractiveName (ImportedName uri _)
-  | Just sch <- uriScheme uri
-  , unRText sch == "cryptol"
-  , Left False <- uriAuthority uri
-  , Just (False, i :| []) <- uriPath uri
-  , [] <- uriQuery uri
-  , Just _ <- uriFragment uri
-  = Just (unRText i)
-
-isCryptolInteractiveName _ = Nothing
-
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
@@ -1532,14 +1501,15 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
       let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
-                    , envC = Map.union (fmap C.dSignature dm) (envC env)
-                    }
+                     , envC = Map.union (fmap C.dSignature dm) (envC env)
+                     }
       return env'
 
   where
   panicForeignNoExpr decl = panic "importDeclGroup"
     [ "Foreign declaration without Cryptol body in recursive group:"
-    , show (C.dName decl) ]
+    , show (C.dName decl)
+    ]
 
 importDeclGroup declOpts sc env (C.NonRecursive decl) = do
 
@@ -1689,6 +1659,7 @@ tIsPair t =
        [t1, t2] -> Just (t1, t2)
        t1 : ts' -> Just (t1, C.tTuple ts')
 
+
 --------------------------------------------------------------------------------
 -- List comprehensions
 
@@ -1813,10 +1784,6 @@ importMatches sc env (C.Let decl : matches) =
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
-pIsNeq :: C.Type -> Maybe (C.Type, C.Type)
-pIsNeq ty = case C.tNoUser ty of
-              C.TCon (C.PC C.PNeq) [t1, t2] -> Just (t1, t2)
-              _                             -> Nothing
 
 --------------------------------------------------------------------------------
 -- Utilities
@@ -1910,10 +1877,10 @@ exportValue ty v = case ty of
     case v of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
-        | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) <$>
+        | TV.isTBit e -> V.VWord <$>
             V.bitmapWordVal V.Concrete (toInteger (Vector.length xs))
                  (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
-        | otherwise   -> pure . V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
+        | otherwise   -> V.mkSeq V.Concrete (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap V.Concrete $
                             map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
@@ -1964,56 +1931,6 @@ exportRecordValue fields v =
     _                              -> error $ "exportValue: expected record"
   where
     run = SC.runIdentity . force
-
-fvAsBool :: FirstOrderValue -> Bool
-fvAsBool (FOVBit b) = b
-fvAsBool _ = error "fvAsBool: expected FOVBit value"
-
-exportFirstOrderValue :: FirstOrderValue -> V.Eval V.Value
-exportFirstOrderValue fv =
-  case fv of
-    FOVBit b      -> pure (V.VBit b)
-    FOVInt i      -> pure (V.VInteger i)
-    FOVIntMod _ i -> pure (V.VInteger i)
-    FOVWord w x   -> V.word V.Concrete (toInteger w) x
-    FOVVec t vs
-      | t == FOTBit -> V.VWord len <$> (V.bitmapWordVal V.Concrete len
-                          (V.finiteSeqMap V.Concrete . map (V.ready . fvAsBool) $ vs))
-      | otherwise   -> pure (V.VSeq len (V.finiteSeqMap V.Concrete (map exportFirstOrderValue vs)))
-      where len = toInteger (length vs)
-    FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
-    FOVTuple vs -> pure $ V.VTuple $ map exportFirstOrderValue vs
-    FOVRec vm   ->
-      do let vm' = fmap exportFirstOrderValue vm
-         pure $ V.VRecord $ C.recordFromFields [ (C.mkIdent n, v) | (n, v) <- Map.assocs vm' ]
-
-importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
-importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
-  where
-  go :: FirstOrderType -> V.Value -> V.Eval FirstOrderValue
-  go t v = case (t,v) of
-    (FOTBit         , V.VBit b)        -> return (FOVBit b)
-    (FOTInt         , V.VInteger i)    -> return (FOVInt i)
-    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete wv)
-    (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
-    (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
-    (FOTRec fs      , V.VRecord xs)    ->
-        do xs' <- Map.fromList <$> mapM importField (C.canonicalFields xs)
-           let missing = Set.difference (Map.keysSet fs) (Set.fromList (map C.identText (C.displayOrder xs)))
-           unless (Set.null missing)
-                  (panic "importFirstOrderValue" $
-                         ["Missing fields while importing finite value:"] ++ (map show (Set.toList missing)))
-           return $ FOVRec $ xs'
-      where
-       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (FieldName, FirstOrderValue)
-       importField (C.identText -> nm, x)
-         | Just ty <- Map.lookup nm fs = do
-                x' <- go ty =<< x
-                return (nm, x')
-         | otherwise = panic "importFirstOrderValue" ["Unexpected field name while importing finite value:", show nm]
-
-    _ -> panic "importFirstOrderValue"
-                ["Expected finite value of type:", show t, "but got", show v]
 
 -- | Generate functions to construct nominal values in the term environment.
 -- For structs, make identity functions that take the record the newtype wraps.

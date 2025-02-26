@@ -1,0 +1,8 @@
+//
+// Exercise failure of the unify call (via checkExpr) in the Array
+// case of inferExpr. This is the check of the second and subsequent
+// elements against the first.
+//
+
+let x = [1, "abc", 2, True];
+

@@ -77,7 +77,7 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
 import SAWScript.MGU (instantiate)
-import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity(..))
+import SAWScript.Options (Options, printOutLn, Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
@@ -106,7 +106,7 @@ import qualified Cryptol.Eval.Concrete as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
-import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
+import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
@@ -347,10 +347,11 @@ showsPrecValue opts nenv p v =
     VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts nenv 0) vs
     VMaybe (Just v') -> showString "(Just " . showsPrecValue opts nenv 0 v' . showString ")"
     VMaybe Nothing -> showString "Nothing"
-    VRecord m -> showBraces $ commaSep $ map showFld (M.toList m)
-                   where
-                     showFld (n, fv) =
-                       showString n . showString "=" . showsPrecValue opts nenv 0 fv
+    VRecord m ->
+      showBraces $ commaSep $ map showFld (M.toList m)
+        where
+          showFld (n, fv) =
+            showString (unpack n) . showString "=" . showsPrecValue opts nenv 0 fv
 
     VLambda {} -> showString "<<function>>"
     VTerm t -> showString (SAWCorePP.showTermWithNames opts' nenv (ttTerm t))
@@ -412,10 +413,10 @@ indexValue (VArray vs) (VInteger x)
     where i = fromInteger x
 indexValue _ _ = error "indexValue"
 
-lookupValue :: Value -> String -> Value
+lookupValue :: Value -> Text -> Value
 lookupValue (VRecord vm) name =
     case M.lookup name vm of
-      Nothing -> error $ "no such record field: " ++ name
+      Nothing -> error $ "no such record field: " ++ unpack name
       Just x -> x
 lookupValue _ _ = error "lookupValue"
 
@@ -505,8 +506,9 @@ extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv 
 extendLocal x mt md v env = LocalLet x mt md v : env
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
-addTypedef name ty rw = rw { rwTypedef = M.insert name ty' (rwTypedef rw) }
-  where ty' = instantiate (rwTypedef rw) ty
+addTypedef name ty rw =
+  rw { rwNamedTypes = M.insert name (SS.ConcreteType ty') (rwNamedTypes rw) }
+  where ty' = instantiate (rwNamedTypes rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
@@ -551,12 +553,12 @@ data TopLevelRO =
 
 data TopLevelRW =
   TopLevelRW
-  { rwValues  :: Map SS.LName Value
-  , rwTypes   :: Map SS.LName SS.Schema
-  , rwTypedef :: Map SS.Name SS.Type
-  , rwDocs    :: Map SS.Name String
-  , rwCryptol :: CEnv.CryptolEnv
-  , rwMonadify :: Monadify.MonadifyEnv
+  { rwValues     :: Map SS.LName Value
+  , rwValueTypes :: Map SS.LName SS.Schema
+  , rwNamedTypes :: Map SS.Name SS.NamedType
+  , rwDocs       :: Map SS.Name String
+  , rwCryptol    :: CEnv.CryptolEnv
+  , rwMonadify   :: Monadify.MonadifyEnv
   , rwMRSolverEnv :: MRSolver.MREnv
   , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
@@ -761,11 +763,6 @@ printOutLnTop v s =
     do opts <- getOptions
        io $ printOutLn opts v s
 
-printOutTop :: Verbosity -> String -> TopLevel ()
-printOutTop v s =
-    do opts <- getOptions
-       io $ printOutFn opts v s
-
 getHandleAlloc :: TopLevel Crucible.HandleAllocator
 getHandleAlloc = TopLevel_ (asks roHandleAlloc)
 
@@ -825,6 +822,8 @@ maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
 maybeInsert k (Just x) m = M.insert k x m
 
+-- XXX: under what circumstances can this be passed a value without
+-- a type, and why would we want to allow that?
 extendEnv ::
   SharedContext ->
   SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
@@ -849,14 +848,15 @@ extendEnv sc x mt md v rw =
            pure ce
      pure $
       rw { rwValues  = M.insert name v (rwValues rw)
-         , rwTypes   = maybeInsert name mt (rwTypes rw)
+         , rwValueTypes = maybeInsert name mt (rwValueTypes rw)
          , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
          , rwCryptol = ce'
          }
   where
     name = x
-    ident = T.packIdent (SS.getOrig x)
-    modname = T.packModName [pack (SS.getOrig x)]
+    -- XXX why is this using getOrig?
+    ident = T.mkIdent (SS.getOrig x)
+    modname = T.packModName [SS.getOrig x]
     ce = rwCryptol rw
 
 typedTermOfString :: SharedContext -> String -> IO TypedTerm

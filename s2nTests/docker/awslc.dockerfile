@@ -6,11 +6,24 @@ RUN curl -OL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0
     tar xf clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
     cp -r clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04/* /usr
 
+# The commit we check out is now the head of the saw-test-runs branch,
+# because we added that commit (and branch) specifically to fix up
+# some problems with this test run. Prior to that the commit was the
+# head of the sb/functors-ci-pin branch. It is no longer clear at this
+# point (January 2025) why that particular branch was chosen (there
+# are many) or how it relates to the upstream state of the repository
+# (our copy in GaloisInc is a fork repo).
+#
+# We're using the specific commit hash rather than the branch (even
+# though the branch is now specific to what we're doing here) so it
+# doesn't silently update on us if/when we start tidying up over
+# there.
+
 WORKDIR /saw-script
 RUN mkdir -p /saw-script && \
     git clone https://github.com/GaloisInc/aws-lc-verification.git && \
     cd aws-lc-verification && \
-    git checkout 9e9dde6882ade1f5d01c6d088e6dcca181358a74 && \
+    git checkout f2570467f0d8ce21df00b3cf3ccc325656d77b4e && \
     git config --file=.gitmodules submodule.src.url https://github.com/awslabs/aws-lc && \
     git submodule sync && \
     git submodule update --init

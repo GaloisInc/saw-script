@@ -29,7 +29,7 @@ let SHA512_CBLOCK = 128;
 let SHA512_DIGEST_LENGTH = 64;
 
 // Size of the SHA512 context struct
-let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
+let SHA512_CTX_SIZE = llvm_sizeof m (llvm_alias "struct.sha512_state_st");
 
 ////////////////////////////////////////////////////////////////////////////////
 // BEGIN Part 1
@@ -98,7 +98,7 @@ let pointer_to_fresh_sha512_state_st name n = do {
   let state = {{ { h = h, block = (block # zero) : [SHA512_CBLOCK][8], n = `n : [32], sz = sz } }};
 
   // `ptr` is a pointer to a `sha512_state_st` struct
-  ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+  ptr <- llvm_alloc (llvm_alias "struct.sha512_state_st");
   points_to_sha512_state_st_common ptr (h, sz, block, {{ `n : [32]}}) n;
 
   return (state, ptr);

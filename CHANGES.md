@@ -1,11 +1,104 @@
 # next -- TBA
 
+This release supports [version
+1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
+`mir-json`'s schema.
+
 ## New Features
+
+* SAW documentation is now under a single Sphinx umbrella, resulting in a
+  complete overhaul of the `doc/` directory (#1723). Generally speaking, all
+  _content_ has stayed the same, and only organization has changed. Most
+  importantly for users, the PDF artifacts included in CI-generated releases
+  have different names and render with Sphinx styling.
+
+* Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
+
+* Add a `:tenv` REPL command, which is like `:env` but prints the type
+  environment instead of the variable environment. `:t` is still short
+  for `:type`.
 
 * Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
   command for the MIR and JVM backends, respectively.
 
+* Explicitly check that the `mir-json` schema version is supported when parsing
+  a MIR JSON file. If the version is not supported, it will be rejected. This
+  helps ensure that unsupported `mir-json` files do not cause unintended
+  results.
+
+* Emit a warning when parsing an LLVM bitcode metadata record that SAW
+  does not support. (Previously, SAW would throw a fatal error if this
+  occurred, so this change makes SAW more permissive with respect to
+  unsupported LLVM versions.)
+
 ## Bug fixes
+
+* The saw executable's usage message now fits into a terminal. (#405)
+
+* Invalid verbosity level specifications passed to the saw
+  executable's -v (SAWScript verbosity) and -d (simulator verbosity)
+  options are now rejected.
+  (The previous behavior for -v was to select maximum debug output.
+  It is unclear what effect negative verbosity levels might have had
+  with -d.)
+
+* SAW now accepts Unicode input beyond characters 0..255, including in
+  embedded Cryptol fragments and saw-core modules, and allows the same
+  Unicode code points in identifiers as Cryptol.
+  It is thus now possible to refer to Cryptol objects whose names
+  include extended characters.
+  (#2042)
+
+* Function types in records no longer require gratuitous parentheses.
+  (#1994)
+
+* Unexpected special-case type behavior of monad binds in the
+  syntactic top level has been removed.
+  (This was _not_ specifically associated with the TopLevel monad, so
+  top-level binds and binds in functions in TopLevel, or in nested
+  do-blocks, would behave differently.)
+  See issue #2162.
+
+  There are three primary visible consequences.
+  The first is that the REPL no longer accepts
+  non-monadic expressions.
+  These can still be evaluated and printed; just prefix them with
+  ```return```.
+  (Affordances specifically for the REPL so this is not required there
+  may be restored in the future.)
+
+  The second is that statements of the form ```x <- e;``` where ```e```
+  is a pure (non-monadic) term used to be (improperly) accepted at the
+  top level of scripts.
+  These statements now generate a warning.
+  This will become an error in a future release and such statements
+  should be rewritten as ```let x = e;```.
+  For example, ```t <- unfold_term ["reverse"] {{ reverse 0b01 }};```
+  should be changed to ```let t = unfold_term ["reverse"] {{ reverse 0b01 }};```.
+
+  The third is that statements of the form ```x <- s;``` or just ```s;```
+  where ```s``` is a term in the _wrong_ monad also used to be
+  improperly accepted at the top level of scripts.
+  These statements silently did nothing.
+  They will now generate a warning.
+  This will become an error in a future release.
+  Such statements should be removed or rewritten.
+  For example, it used to be possible to write ```llvm_assert {{ False }};```
+  at the top level (outside any specification) and it would be ignored.
+  ```llvm_assert``` is only meaningful within an LLVM specification.
+
+* A number of SAWScript type checking problems have been fixed,
+  including issues #2077 and #2105.
+  Some previously accepted scripts and specs may be rejected and need
+  (generally minor) adjustment.
+  Prior to these changes the typechecker allowed unbound type variables
+  in a number of places (such as on the right-hand side of typedefs, and
+  in function signatures), so for example type names contaning typos
+  would not necessarily have been caught and will now fail.
+  ```typedef t = nonexistent``` was previously accepted and now is not.
+  These problems could trigger panics, but there does not appear to have
+  been any way to produce unsoundness in the sense of false
+  verifications.
 
 * Counterexamples including SMT arrays are now printed with the array
   contents instead of placeholder text.

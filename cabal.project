@@ -22,6 +22,7 @@ packages:
     deps/language-sally
     deps/crucible/crucible
     deps/crucible/crucible-concurrency
+    deps/crucible/crucible-debug
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
     deps/crucible/crucible-mir
@@ -35,6 +36,9 @@ packages:
     deps/lmdb/lmdb
     deps/lmdb/lmdb-simple
     deps/macaw/base
+    deps/macaw/macaw-dump
+    deps/macaw/macaw-loader
+    deps/macaw/macaw-loader-x86
     deps/macaw/symbolic
     deps/macaw/x86
     deps/macaw/x86_symbolic

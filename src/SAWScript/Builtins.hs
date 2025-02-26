@@ -37,7 +37,6 @@ import qualified Control.Exception as Ex
 import Data.Char (toLower)
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.IORef
 import Data.List (isPrefixOf, isInfixOf, sort)
@@ -48,6 +47,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Time.Clock
 import Data.Typeable
 
@@ -1055,6 +1055,9 @@ wrapW4ProveExporter f unints path ext = do
 proveABC_SBV :: ProofScript ()
 proveABC_SBV = proveSBV SBV.abc
 
+proveBitwuzla :: ProofScript ()
+proveBitwuzla = proveSBV SBV.bitwuzla
+
 proveBoolector :: ProofScript ()
 proveBoolector = proveSBV SBV.boolector
 
@@ -1072,6 +1075,9 @@ proveMathSAT = proveSBV SBV.mathSAT
 
 proveYices :: ProofScript ()
 proveYices = proveSBV SBV.yices
+
+proveUnintBitwuzla :: [String] -> ProofScript ()
+proveUnintBitwuzla = proveUnintSBV SBV.bitwuzla
 
 proveUnintBoolector :: [String] -> ProofScript ()
 proveUnintBoolector = proveUnintSBV SBV.boolector
@@ -1096,6 +1102,9 @@ proveUnintYices = proveUnintSBV SBV.yices
 w4_abc_smtlib2 :: ProofScript ()
 w4_abc_smtlib2 = wrapW4Prover ABC [W4_SMTLib2] Prover.proveWhat4_abc []
 
+w4_bitwuzla :: ProofScript ()
+w4_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla []
+
 w4_boolector :: ProofScript ()
 w4_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector []
 
@@ -1110,6 +1119,9 @@ w4_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5 []
 
 w4_yices :: ProofScript ()
 w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []
+
+w4_unint_bitwuzla :: [String] -> ProofScript ()
+w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla
 
 w4_unint_boolector :: [String] -> ProofScript ()
 w4_unint_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector
@@ -1128,6 +1140,10 @@ w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5
 
 w4_unint_yices :: [String] -> ProofScript ()
 w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices
+
+offline_w4_unint_bitwuzla :: [String] -> String -> ProofScript ()
+offline_w4_unint_bitwuzla unints path =
+     wrapW4ProveExporter Prover.proveExportWhat4_bitwuzla unints path ".smt2"
 
 offline_w4_unint_z3 :: [String] -> String -> ProofScript ()
 offline_w4_unint_z3 unints path =
@@ -1788,9 +1804,9 @@ caseSatResultPrim sr vUnsat vSat = do
 
 envCmd :: TopLevel ()
 envCmd = do
-  m <- rwTypes <$> SV.getMergedEnv
+  m <- rwValueTypes <$> SV.getMergedEnv
   opts <- getOptions
-  let showLName = getVal
+  let showLName = Text.unpack . getVal
   io $ sequence_ [ printOutLn opts Info (showLName x ++ " : " ++ pShow v) | (x, v) <- Map.assocs m ]
 
 exitPrim :: Integer -> IO ()
@@ -2027,7 +2043,7 @@ parseCoreMod mnm_str input =
      let base = "<interactive>"
          path = "<interactive>"
      uterm <-
-       case parseSAWTerm base path (B.fromString input) of
+       case parseSAWTerm base path (LText.pack input) of
          Right uterm -> return uterm
          Left err ->
            do let msg = show err
@@ -2121,7 +2137,7 @@ get_opt n = do
 cryptol_prims :: TopLevel CryptolModule
 cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim prims
   where
-    prims :: [(String, Ident, String)]
+    prims :: [(String, Ident, Text)]
     prims =
       [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
       , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
@@ -2133,7 +2149,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       ]
       -- TODO: sext, sdiv, srem, sshr
 
-    noLoc :: String -> CEnv.InputText
+    noLoc :: Text -> CEnv.InputText
     noLoc x = CEnv.InputText
                 { CEnv.inpText = x
                 , CEnv.inpFile = "(cryptol_prims)"
@@ -2141,7 +2157,7 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
                 , CEnv.inpCol  = 1 + 2 -- add 2 for dropped {{
                 }
 
-    parsePrim :: (String, Ident, String) -> TopLevel (C.Name, TypedTerm)
+    parsePrim :: (String, Ident, Text) -> TopLevel (C.Name, TypedTerm)
     parsePrim (n, i, s) = do
       sc <- getSharedContext
       rw <- getTopLevelRW

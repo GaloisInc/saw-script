@@ -28,6 +28,7 @@ module SAWScript.AST
        , Type(..), TypeIndex
        , TyCon(..)
        , Schema(..)
+       , NamedType(..)
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
@@ -35,12 +36,13 @@ module SAWScript.AST
        , tBlock, tContext, tVar
        , isContext
 
-       , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
+       , PrettyPrint(..), pShow, pShowText, commaSepAll, prettyWholeModule
        ) where
 
 import SAWScript.Token
 import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
+import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
@@ -51,13 +53,14 @@ import Data.Traversable (Traversable)
 #endif
 import qualified Prettyprinter as PP
 import           Prettyprinter (Pretty)
+import qualified Prettyprinter.Render.Text as PPT
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
 
 -- Names {{{
 
-type Name = String
+type Name = Text
 
 -- }}}
 
@@ -109,10 +112,10 @@ instance Positioned Import where
 data Expr
   -- Constants
   = Bool Pos Bool
-  | String Pos String
+  | String Pos Text
   | Int Pos Integer
-  | Code (Located String)
-  | CType (Located String)
+  | Code (Located Text)
+  | CType (Located Text)
   -- Structures
   | Array  Pos [Expr]
   | Block  Pos [Stmt]
@@ -164,15 +167,15 @@ instance Positioned Pattern where
   getPos (PTuple pos _) = pos
 
 data Stmt
-  = StmtBind     Pos Pattern (Maybe Type) Expr
+  = StmtBind     Pos Pattern Expr
   | StmtLet      Pos DeclGroup
-  | StmtCode     Pos (Located String)
+  | StmtCode     Pos (Located Text)
   | StmtImport   Pos Import
-  | StmtTypedef  Pos (Located String) Type
+  | StmtTypedef  Pos (Located Text) Type
   deriving Show
 
 instance Positioned Stmt where
-  getPos (StmtBind pos _ _ _)  = pos
+  getPos (StmtBind pos _ _)  = pos
   getPos (StmtLet pos _)       = pos
   getPos (StmtCode pos _)      = pos
   getPos (StmtImport pos _)    = pos
@@ -263,6 +266,13 @@ data TyCon
 data Schema = Forall [(Pos, Name)] Type
   deriving Show
 
+-- | The things a (named) TyVar can refer to by its name.
+--
+-- AbstractType is an opaque type whose only semantics are the
+-- operations available for it, if any. The name identifies it; the
+-- AbstractType constructor is a placeholder.
+data NamedType = ConcreteType Type | AbstractType
+
 -- }}}
 
 -- Pretty Printing {{{
@@ -279,7 +289,7 @@ instance Pretty Expr where
     String _ s -> PP.dquotes (PP.pretty s)
     Int _ i    -> PP.pretty i
     Code ls    -> PP.braces . PP.braces $ PP.pretty (getVal ls)
-    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" ++ string ++ "|"
+    CType (Located string _ _) -> PP.braces . PP.pretty $ "|" <> string <> "|"
     Array _ xs -> PP.list (map PP.pretty xs)
     Block _ stmts ->
       "do" PP.<+> PP.lbrace PP.<> PP.line' PP.<>
@@ -332,9 +342,9 @@ instance Pretty Pattern where
 
 instance Pretty Stmt where
    pretty = \case
-      StmtBind _ (PWild _ _leftType) _rightType expr ->
+      StmtBind _ (PWild _ _ty) expr ->
          PP.pretty expr
-      StmtBind _ pat _rightType expr ->
+      StmtBind _ pat expr ->
          PP.pretty pat PP.<+> "<-" PP.<+> PP.align (PP.pretty expr)
       StmtLet _ (NonRecursive decl) ->
          "let" PP.<+> prettyDef decl
@@ -395,6 +405,9 @@ dissectLambda = \case
 pShow :: PrettyPrint a => a -> String
 pShow = show . pretty 0
 
+pShowText :: PrettyPrint a => a -> Text
+pShowText = PPT.renderStrict . PP.layoutPretty PP.defaultLayoutOptions . pretty 0
+
 class PrettyPrint p where
   pretty :: Int -> p -> PP.Doc ann
 
@@ -449,6 +462,11 @@ instance PrettyPrint Context where
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
     CrucibleSetup-> "CrucibleSetup"
+
+instance PrettyPrint NamedType where
+  pretty par ty = case ty of
+    ConcreteType ty' -> pretty par ty'
+    AbstractType -> "<opaque>"
 
 replicateDoc :: Integer -> PP.Doc ann -> PP.Doc ann
 replicateDoc n d
