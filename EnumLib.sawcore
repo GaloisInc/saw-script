@@ -14,12 +14,37 @@ Eithers' = ListSort__rec
 myTypes3 : ListSort;
 myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
 
-y3 : Eithers myTypes3;
-y3 = Left UnitType (Eithers  SumOf2 UnitType Bool) Unit;
+myTypes2 : ListSort;
+myTypes2 = listSortDrop myTypes3 (0 : Nat);
+  -- TODO: error in `listSortDrop` or its documentation.
 
-inj1 : r -> Either r a
-inj2 : r -> Either b1 (Either r a)
-inj3 : r -> Either b2 (Either b1 (Either r a))
+testA : sort 0;
+testA = listSortGet myTypes3 (1 : Nat); -- works as expected.
+
+y3 : Eithers myTypes3;
+y3 = Left UnitType (Eithers myTypes2) Unit;
+
+{-
+- alternatives
+  A. see below: for code savings , split constructor and generic injN
+  B. just forget the code savings and generate full code for each constructor!
+    - TODO: look at this!
+
+- designing constructors
+enum TY <as> = C1 CT1
+             | C2 CT2
+
+MyC1 {as} v = inj1 {CT1} {{CT2}} v
+                         ---------- this is the rest of translated type
+MyC2 {as} v = inj2 {CT2} {{ Void }} v
+
+  - can you setup with two lists: types before, r type, types after.
+
+- designing injections
+  A.
+inj1 : {r,a}    r -> Either r a
+inj2 : {r,a,b1} r -> Either b1 (Either r a)
+inj3 : {...}    r -> Either b2 (Either b1 (Either r a))
 
 inj1 : r ->   Eithers [r,a]
 inj2 : r ->   Eithers [b1,r,a]
@@ -27,6 +52,7 @@ inj3 : r ->   Eithers [b2,b1,r,a]
 
 case1 : FunsTo
 case2 : FunsTo
+-}
 
 --------------------------------------------------------
 -- old, ...
