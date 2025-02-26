@@ -37,11 +37,11 @@ packages:
     deps/lmdb/lmdb-simple
     deps/macaw/base
     deps/macaw/macaw-dump
+    deps/macaw/macaw-loader
+    deps/macaw/macaw-loader-x86
     deps/macaw/symbolic
     deps/macaw/x86
     deps/macaw/x86_symbolic
-    deps/macaw-loader/macaw-loader
-    deps/macaw-loader/macaw-loader-x86
     deps/elf-edit
     deps/dwarf
     deps/argo/argo
