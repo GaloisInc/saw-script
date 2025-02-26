@@ -1,0 +1,81 @@
+module EnumLib2 where
+import Prelude;
+
+-- A right-nested sequence of Either types, defined as
+--   Eithers' [] = Void
+--   Eithers' (tp:tps) = Either tp (Eithers' tps)
+Eithers' : ListSort -> sort 0;
+Eithers' = ListSort__rec
+            (\ (_:ListSort) -> sort 0)
+            Void
+            (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (Either tp rec));
+
+{-
+- Cryptol
+enum EnumType as = C1 CT1
+                 | C2 CT2
+                 -- 'as' can be free in CT1, CT2 types
+-}
+
+---- SawCore: ------------------------------------------------------
+-- types:
+CT2 : sort 0;
+CT2 = Bool;
+
+TypeList_EnumType : sort 0 -> ListSort;
+TypeList_EnumType as = LS_Cons as (LS_Cons CT2 LS_Nil);
+
+EnumType : (as : sort 0) -> sort 0;
+EnumType as = Eithers' (TypeList_EnumType as);
+
+-- constructors:
+C1_EnumType : (as : sort 0) -> as -> EnumType  as;
+C1_EnumType as x = Left as (Eithers' (LS_Cons CT2 LS_Nil)) x;
+
+C2_EnumType : (as : sort 0) -> CT2 -> EnumType  as;
+C2_EnumType as x = Right as (Eithers' (LS_Cons CT2 LS_Nil))
+                   (Left CT2 (Eithers' LS_Nil)
+                   x);
+
+-- examples:
+val1 : EnumType  Nat;
+val1 = C1_EnumType  Nat 5;
+
+val2 : (as : sort 0) -> EnumType  as;
+val2 as = C2_EnumType  as True;
+
+-- case for EnumType:
+{-
+eithers_EnumType  :  (b: sort 0)
+               -> MapRightArrow b TypeList_EnumType
+               -> Eithers TypeList_EnumType  -- AKA EnumType
+               -> b;
+
+eithers_EnumType = eithers' TypeList_EnumType
+-}
+
+---- new generic eithers -------------------------------------------
+{-
+eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
+         -> (b: sort 0)
+         -> MapRightArrow b ts
+         -> Eithers ts
+         -> b;
+
+MapRightArrow (b : sort 0) -> ListSort -> ListSort;
+MapRightArrow (b : sort 0) tys =
+  ListSort__rec
+-}
+
+{-
+REFERENCE:
+
+ListSort__rec : (P : ListSort -> sort 1)  --
+             -> P LS_Nil
+             -> ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l))
+             -> (l:ListSort)
+             -> P l;
+
+eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
+-}
