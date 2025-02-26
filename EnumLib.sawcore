@@ -1,7 +1,35 @@
 module EnumLib where
 import Prelude;
 
+-- A right-nested sequence of Either types, defined as
+--   Eithers' [] = Void
+--   Eithers' (tp:tps) = Either tp (Eithers' tps)
+Eithers' : ListSort -> sort 0;
+Eithers' = ListSort__rec
+            (\ (_:ListSort) -> sort 0)
+            Void
+            (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (Either tp rec));
 
+myTypes3 : ListSort;
+myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+
+y3 : Eithers myTypes3;
+y3 = Left UnitType (Eithers  SumOf2 UnitType Bool) Unit;
+
+inj1 : r -> Either r a
+inj2 : r -> Either b1 (Either r a)
+inj3 : r -> Either b2 (Either b1 (Either r a))
+
+inj1 : r ->   Eithers [r,a]
+inj2 : r ->   Eithers [b1,r,a]
+inj3 : r ->   Eithers [b2,b1,r,a]
+
+case1 : FunsTo
+case2 : FunsTo
+
+--------------------------------------------------------
+-- old, ...
 SumOf2 : (a1 a2       : sort 0) -> sort 0;
 SumOf2 a1 a2 = Either a1 a2;
 
