@@ -22,22 +22,90 @@ ListSort__rec : (P : ListSort -> sort 1)  --
              -> P l;
 
 eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
+
+
+data List (a : sort 0) : sort 0
+  where {
+    Nil : List a;
+    Cons : a -> List a -> List a;
+  }
+
+-- The type List1 itself
+data List1 (a:sort 1) : sort 1 where {
+  Nil1 : List1 a;
+  Cons1 : a -> List1 a -> List1 a;
+}
+
+-- A list of types, i.e. `List (sort 0)` if `List` was universe polymorphic
+data ListSort : sort 1
+  where {
+    LS_Nil : ListSort;
+    LS_Cons : sort 0 -> ListSort -> ListSort;
+
+-- The type of a list of functions to a particular output type a
+data FunsTo (a:sort 0) : sort 1 where {
+  FunsTo_Nil : FunsTo a;
+  FunsTo_Cons : (tp:sort 0) -> (tp -> a) -> FunsTo a -> FunsTo a;
+}
+
+-- The type of a list of values
+data NTuple : sort 1 where {
+  NTuple_Nil : NTuple;
+  NTuple_Cons : (tp:sort 0) -> tp -> NTuple -> NTuple;
+}
+
+
 -}
+
+-- The type of a list of values
+data NTuple : sort 1 where {
+  NTuple_Nil : NTuple;
+  NTuple_Cons : (tp:sort 0) -> tp -> NTuple -> NTuple;
+}
+
+{-
+-- The recursor for NTuple
+NTuple__rec : (P : FunsTo a -> sort 1)
+          -> P (FunsTo_Nil a) ->
+              ((tp:sort 0) -> (f:tp -> a) -> (es:FunsTo a) ->
+               P es -> P (FunsTo_Cons a tp f es)) ->
+              (es:FunsTo a) -> P es;
+NTuple__rec a P f1 f2 es = NTuple#rec a P f1 f2 es;
+
+Tuple :: ListSort -> Ntuple
+Tuple ls =
+-}
+
+
+-- NTuple__rec : Bool;
+-- NTuple__rec P f1 f2 es = NTuple#rec P f1 f2 es;
+
+-- xx : Nat;
+xx : Nat = 1;
+
+test1 : List1 Nat;
+test1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
 
 MapRightArrow : (b : sort 0) -> ListSort -> ListSort;
 MapRightArrow b =
   ListSort__rec
     (\ (_:ListSort) -> ListSort)
     LS_Nil
-    -- (\ (tp:sort 0) (_:tp -> a) (_:FunsTo a) (rec:ListSort) -> LS_Cons tp rec);
-    (\ (tp:sort 0) (_:ListSort) (rec:ListSort) -> LS_Cons b rec);
-
+    (\ (tp:sort 0) (_:ListSort) (rec:ListSort) -> LS_Cons (tp->b) rec);
 
 ls1 : ListSort;
 ls1 = LS_Cons Bool (LS_Cons UnitType LS_Nil);
 
 test : ListSort;
 test = MapRightArrow Bool ls1;
+
+{-
+eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
+         -> (b: sort 0)
+         -> ArrowsType (MapRightArrow b ts)
+                       (Eithers' ts -> b);
+eithers' ts b
+-}
 
 -------------------------------------------------------------------
 -- Translation
@@ -59,6 +127,8 @@ CT2 = Bool;
 TypeList_EnumType : sort 0 -> ListSort;
 TypeList_EnumType as = LS_Cons as (LS_Cons CT2 LS_Nil);
 
+ -- TODO: all the 'base types' (elements of this ^) should all be parameterized by 'as'
+
 EnumType : (as : sort 0) -> sort 0;
 EnumType as = Eithers' (TypeList_EnumType as);
 
@@ -78,6 +148,16 @@ val1 = C1_EnumType  Nat 5;
 val2 : (as : sort 0) -> EnumType  as;
 val2 as = C2_EnumType  as True;
 
+eithers_EnumType : (as : sort 0)
+                -> (b: sort 0)
+                -> (as -> b) -> (CT2 -> b)
+                -> EnumType as
+                -> b;
+eithers_EnumType as b f1 f2 =
+  either as (Eithers' (LS_Cons CT2 LS_Nil)) b f1
+    (either CT2 Void b f2
+       (elimVoid b));
+
 -- case for EnumType:
 {-
 eithers_EnumType  :  (b: sort 0)
@@ -86,13 +166,4 @@ eithers_EnumType  :  (b: sort 0)
                -> b;
 
 eithers_EnumType = eithers' TypeList_EnumType
--}
-
-{-
-eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
-         -> (b: sort 0)
-         -> MapRightArrow b ts
-         -> Eithers ts
-         -> b;
-
 -}
