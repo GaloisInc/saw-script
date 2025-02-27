@@ -11,6 +11,39 @@ Eithers' = ListSort__rec
             (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
                (Either tp rec));
 
+---- new generic eithers -------------------------------------------
+{-
+REFERENCE:
+
+ListSort__rec : (P : ListSort -> sort 1)  --
+             -> P LS_Nil
+             -> ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l))
+             -> (l:ListSort)
+             -> P l;
+
+eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
+-}
+
+MapRightArrow : (b : sort 0) -> ListSort -> ListSort;
+MapRightArrow b =
+  ListSort__rec
+    (\ (_:ListSort) -> ListSort)
+    LS_Nil
+    -- (\ (tp:sort 0) (_:tp -> a) (_:FunsTo a) (rec:ListSort) -> LS_Cons tp rec);
+    (\ (tp:sort 0) (_:ListSort) (rec:ListSort) -> LS_Cons b rec);
+
+
+ls1 : ListSort;
+ls1 = LS_Cons Bool (LS_Cons UnitType LS_Nil);
+
+test : ListSort;
+test = MapRightArrow Bool ls1;
+
+-------------------------------------------------------------------
+-- Translation
+-------------------------------------------------------------------
+
+---- Cryptol: ------------------------------------------------------
 {-
 - Cryptol
 enum EnumType as = C1 CT1
@@ -55,7 +88,6 @@ eithers_EnumType  :  (b: sort 0)
 eithers_EnumType = eithers' TypeList_EnumType
 -}
 
----- new generic eithers -------------------------------------------
 {-
 eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
          -> (b: sort 0)
@@ -63,19 +95,4 @@ eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
          -> Eithers ts
          -> b;
 
-MapRightArrow (b : sort 0) -> ListSort -> ListSort;
-MapRightArrow (b : sort 0) tys =
-  ListSort__rec
--}
-
-{-
-REFERENCE:
-
-ListSort__rec : (P : ListSort -> sort 1)  --
-             -> P LS_Nil
-             -> ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l))
-             -> (l:ListSort)
-             -> P l;
-
-eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
 -}
