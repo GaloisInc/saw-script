@@ -121,41 +121,42 @@ enum EnumType as = C1 CT1
 
 ---- SawCore: ------------------------------------------------------
 -- types:
-CT2 : sort 0;
-CT2 = Bool;
+
+-- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
+CT1 (as : sort 0) : sort 0 = as;
+CT2 (as : sort 0) : sort 0 = Bool;
 
 TypeList_EnumType : sort 0 -> ListSort;
-TypeList_EnumType as = LS_Cons as (LS_Cons CT2 LS_Nil);
+TypeList_EnumType as = LS_Cons (CT1 as) (LS_Cons (CT2 as) LS_Nil);
 
- -- TODO: all the 'base types' (elements of this ^) should all be parameterized by 'as'
 
 EnumType : (as : sort 0) -> sort 0;
 EnumType as = Eithers' (TypeList_EnumType as);
 
 -- constructors:
-C1_EnumType : (as : sort 0) -> as -> EnumType  as;
-C1_EnumType as x = Left as (Eithers' (LS_Cons CT2 LS_Nil)) x;
+C1_EnumType : (as : sort 0) -> CT1 as -> EnumType as;
+C1_EnumType as x = Left (CT1 as) (Eithers' (LS_Cons (CT2 as) LS_Nil)) x;
 
-C2_EnumType : (as : sort 0) -> CT2 -> EnumType  as;
-C2_EnumType as x = Right as (Eithers' (LS_Cons CT2 LS_Nil))
-                   (Left CT2 (Eithers' LS_Nil)
-                   x);
+C2_EnumType : (as : sort 0) -> CT2 as -> EnumType as;
+C2_EnumType as x = Right (CT1 as) (Eithers' (LS_Cons (CT2 as) LS_Nil))
+                    (Left (CT2 as) (Eithers' LS_Nil)
+                      x);
 
 -- examples:
 val1 : EnumType  Nat;
-val1 = C1_EnumType  Nat 5;
+val1 = C1_EnumType Nat 5;
 
 val2 : (as : sort 0) -> EnumType  as;
-val2 as = C2_EnumType  as True;
+val2 as = C2_EnumType as True;
 
 eithers_EnumType : (as : sort 0)
                 -> (b: sort 0)
-                -> (as -> b) -> (CT2 -> b)
+                -> (CT1 as -> b) -> (CT2 as -> b)
                 -> EnumType as
                 -> b;
 eithers_EnumType as b f1 f2 =
-  either as (Eithers' (LS_Cons CT2 LS_Nil)) b f1
-    (either CT2 Void b f2
+  either (CT1 as) (Eithers' (LS_Cons (CT2 as) LS_Nil)) b f1
+    (either (CT2 as) Void b f2
        (elimVoid b));
 
 -- case for EnumType:
