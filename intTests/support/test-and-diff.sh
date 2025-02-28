@@ -24,7 +24,7 @@
 #    - diff T.log against T.log.good to produce T.diff
 #
 # It will also test all SAW repl scripts (*.isaw) it finds:
-#    - run "saw -B T.saw"
+#    - run "saw -B T.isaw"
 #    - produce T.rawlog
 #    - produce T.log with timestamps stripped out
 #    - diff T.log against T.log.good to produce T.diff

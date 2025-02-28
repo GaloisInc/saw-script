@@ -401,9 +401,6 @@ main = do
   --    by loading a file through the REPL's command processor ("batch mode");
   --    by loading a saw-script file directly.
   --
-  -- XXX: if we get both -I and a filename we ignore the filename; it would
-  -- be better to 
-  --
 
   case batchFile opts of
       Nothing

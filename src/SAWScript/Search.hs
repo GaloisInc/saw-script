@@ -217,9 +217,9 @@ type Candidates = Set Candidate
 -- a bundle to keep things simpler.
 --
 data Match = Match {
-    mPatForalls :: Set Name,
-    mPatFreeVars :: Set Name,
-    mTgtForalls :: Set Name
+    mPatForalls :: Set Name,  -- ^ forall-bound tyvars in the match pattern
+    mPatFreeVars :: Set Name, -- ^ free tyvars in the match pattern
+    mTgtForalls :: Set Name   -- ^ forall-bound tyvars in the match target
  }
 
 -- }}}

@@ -168,7 +168,7 @@ runCommand c = case c of
 
 typeOfCmd :: String -> REPL ()
 typeOfCmd str
-  | null str = do io $ putStrLn $ "[error] :type requires an argument"
+  | null str = do io $ putStrLn "[error] :type requires an argument"
   | otherwise =
   do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
      case optmsg of
@@ -189,7 +189,7 @@ typeOfCmd str
              -- XXX the print functions should be what knows how to show positions...
              putStrLn (show msgpos ++ ": Warning: " ++ msg)
        io $ mapM_ issueWarning warns
-       either failTypecheck return $ errs_or_results
+       either failTypecheck return errs_or_results
      let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
      io $ putStrLn $ SS.pShow schema
 
