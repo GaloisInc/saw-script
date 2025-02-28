@@ -21,9 +21,6 @@ ListSort__rec : (P : ListSort -> sort 1)  --
              -> (l:ListSort)
              -> P l;
 
-eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
-
-
 data List (a : sort 0) : sort 0
   where {
     Nil : List a;
@@ -54,14 +51,22 @@ data NTuple : sort 1 where {
   NTuple_Cons : (tp:sort 0) -> tp -> NTuple -> NTuple;
 }
 
-
 -}
 
--- The type of a list of values
+xx : Nat = 1;
+
+test1 : List1 Nat;
+test1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
+
+
+-- A list of types and values.
 data NTuple : sort 1 where {
   NTuple_Nil : NTuple;
   NTuple_Cons : (tp:sort 0) -> tp -> NTuple -> NTuple;
 }
+
+ntup1 : NTuple = NTuple_Cons Bool True NTuple_Nil;
+ntup2 : NTuple = NTuple_Cons Bool True (NTuple_Cons Bool True NTuple_Nil);
 
 {-
 -- The recursor for NTuple
@@ -72,19 +77,12 @@ NTuple__rec : (P : FunsTo a -> sort 1)
               (es:FunsTo a) -> P es;
 NTuple__rec a P f1 f2 es = NTuple#rec a P f1 f2 es;
 
-Tuple :: ListSort -> Ntuple
+Tuple :: ListSort -> sort 0
 Tuple ls =
 -}
 
-
 -- NTuple__rec : Bool;
 -- NTuple__rec P f1 f2 es = NTuple#rec P f1 f2 es;
-
--- xx : Nat;
-xx : Nat = 1;
-
-test1 : List1 Nat;
-test1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
 
 MapRightArrow : (b : sort 0) -> ListSort -> ListSort;
 MapRightArrow b =
@@ -99,13 +97,41 @@ ls1 = LS_Cons Bool (LS_Cons UnitType LS_Nil);
 test : ListSort;
 test = MapRightArrow Bool ls1;
 
+---- thinking about eithers ----------------------------------------
 {-
+eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
+
+-- ZIPCALC:
+eithers' : (a:sort 0) -> (xs : ListSort) -> *<#i xs.i -> a> -> +xs -> a
+
+
+
 eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
          -> (b: sort 0)
          -> ArrowsType (MapRightArrow b ts)
                        (Eithers' ts -> b);
 eithers' ts b
+
+eithers_EnumType : (as : sort 0)
+                -> (b: sort 0)
+                -> (CT1 as -> b) -> (CT2 as -> b)
+                -> EnumType as
+                -> b;
+
+---
+
+- a list with a type and a value.
+  - can extract types
+
+    <i: t, v : t >
+ ->
+
+  (a: sort 0) -> (ts: TList) -> Tuple(MapRightArrow ts) -> Eithers ts -> a
+
+  (elims: TVList) ->
+
 -}
+
 
 -------------------------------------------------------------------
 -- Translation
