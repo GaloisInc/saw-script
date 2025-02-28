@@ -28,6 +28,7 @@ data Options = Options
   , simVerbose       :: Int
   , detectVacuity    :: Bool
   , extraChecks      :: Bool
+  , batchFile        :: Maybe String
   , runInteractively :: Bool
   , showHelp         :: Bool
   , showVersion      :: Bool
@@ -67,6 +68,7 @@ defaultOptions
     , simVerbose = 1
     , detectVacuity = False
     , extraChecks = False
+    , batchFile = Nothing
     , runInteractively = False
     , showHelp = False
     , showVersion = False

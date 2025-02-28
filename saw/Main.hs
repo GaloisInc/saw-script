@@ -106,6 +106,7 @@ options =
               return opts { simVerbose = verb }
       setDetectVacuity opts = return opts { detectVacuity = True }
       setExtraChecks opts = return opts { extraChecks = True }
+      setBatchFile f opts = return opts { batchFile = Just f }
       setRunInteractively opts = return opts { runInteractively = True }
       setShowHelp opts = return opts { showHelp = True }
       setShowVersion opts = return opts { showVersion = True }
@@ -135,6 +136,9 @@ options =
   [
     noArg setShowHelp "h?" "help"
             "Print this help message",
+
+    reqArg setBatchFile "B" "batch" "<filename>"
+            "Run <filename> as if it were typed into the REPL",
 
     reqArg addJavaBinDirs "b" "java-bin-dirs" "<path>"
             "Add <path> to the Java binary directory path",
@@ -334,6 +338,7 @@ main = do
         _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
         _ | showHelp opts'' -> err opts'' usageText
         _ | Just path <- cleanMisVsCache opts'' -> doCleanMisVsCache opts'' path
+        _ | Just f <- batchFile opts'' -> checkZ3 opts'' *> REPL.runFromFile f opts''
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
         [file] -> checkZ3 opts'' *>
