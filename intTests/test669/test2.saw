@@ -1,0 +1,9 @@
+let {{
+   type t = { x : Integer, y : Integer }
+
+   f (a : t) = { x = a.x + 1, y = a.y + 1 }
+   g (a : t) (b : t) = (a.x < b.x) && (a.y < b.y)
+}};
+
+prove (quickcheck 100) {{ \x -> g x (f x) }};
+
