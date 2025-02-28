@@ -11,7 +11,7 @@ Eithers' = ListSort__rec
             (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
                (Either tp rec));
 
----- new generic eithers -------------------------------------------
+---- The various Sawcore Lists -------------------------------------
 {-
 REFERENCE:
 
@@ -38,6 +38,7 @@ data ListSort : sort 1
   where {
     LS_Nil : ListSort;
     LS_Cons : sort 0 -> ListSort -> ListSort;
+}
 
 -- The type of a list of functions to a particular output type a
 data FunsTo (a:sort 0) : sort 1 where {
@@ -58,6 +59,7 @@ xx : Nat = 1;
 test1 : List1 Nat;
 test1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
 
+---- NTuples: useful?? ---------------------------------------------
 
 -- A list of types and values.
 data NTuple : sort 1 where {
@@ -77,12 +79,32 @@ NTuple__rec : (P : FunsTo a -> sort 1)
               (es:FunsTo a) -> P es;
 NTuple__rec a P f1 f2 es = NTuple#rec a P f1 f2 es;
 
+
+-- This very much like arrows, except you have no
 Tuple :: ListSort -> sort 0
 Tuple ls =
--}
 
 -- NTuple__rec : Bool;
 -- NTuple__rec P f1 f2 es = NTuple#rec P f1 f2 es;
+
+-}
+
+{-
+eithers2' : (ts: ListSort)  -- the 'as' are in the 'ts'
+        -> (b: sort 0)
+        -> arrowsSort (MapRightArrow b ts)
+                      (Eithers' ts -> b);
+eithers2' ts b = ListSort__rec ...
+
+eithers3' : (ts: ListSort)  -- the 'as' are in the 'ts'
+         -> (b: sort 0)
+         -> List_Cases b ts
+         -> Eithers' ts
+         -> b
+eithers3' ts b = ListSort__
+-}
+
+---- MapRightArrow -------------------------------------------------
 
 MapRightArrow : (b : sort 0) -> ListSort -> ListSort;
 MapRightArrow b =
@@ -99,37 +121,17 @@ test = MapRightArrow Bool ls1;
 
 ---- thinking about eithers ----------------------------------------
 {-
-eithers : (a:sort 0) -> (elims:FunsTo a) -> Eithers (FunsToIns a elims) -> a;
-
--- ZIPCALC:
-eithers' : (a:sort 0) -> (xs : ListSort) -> *<#i xs.i -> a> -> +xs -> a
-
-
-
 eithers' :  (ts: ListSort)  -- the 'as' are in the 'ts'
          -> (b: sort 0)
          -> ArrowsType (MapRightArrow b ts)
                        (Eithers' ts -> b);
-eithers' ts b
+
 
 eithers_EnumType : (as : sort 0)
                 -> (b: sort 0)
                 -> (CT1 as -> b) -> (CT2 as -> b)
                 -> EnumType as
                 -> b;
-
----
-
-- a list with a type and a value.
-  - can extract types
-
-    <i: t, v : t >
- ->
-
-  (a: sort 0) -> (ts: TList) -> Tuple(MapRightArrow ts) -> Eithers ts -> a
-
-  (elims: TVList) ->
-
 -}
 
 
