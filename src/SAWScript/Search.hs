@@ -174,36 +174,41 @@ instance Eq Candidate where
 -- there's no Ord for types we end up needing to make one up. The
 -- semantics of the ordering doesn't matter; it just needs to be
 -- self-consistent. (Also we need to not accidentally expose it;
--- can't make an Ord instance for Type directly.)
+-- we can't just make an Ord instance for Type.)
+--
+-- Note that the Type ordering needs to be (and is supposed to be)
+-- consistent with matchExact. That is:
+--    forall ty1 ty2. compareType ty1 ty2 == Eq <-> matchExact ty1 ty2
+-- so that
+--    forall c1 c2. compare c1 c2 == Eq <-> c1 == c2
+--
 instance Ord Candidate where
     compare c1 c2 =
-        if c1 == c2 then EQ
-        else
-            compare (cForallSubst c1) (cForallSubst c2) <>
-            liftCompare compareType (cFreeVarSubst c1) (cFreeVarSubst c2)
-              where
-                compareType ty1 ty2 = case (ty1, ty2) of
-                    (TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) ->
-                        compare ctor1 ctor2 <>
-                        liftCompare compareType args1 args2
-                    (TyCon _ _ _, TyRecord _ _) -> LT
-                    (TyCon _ _ _, TyVar _ _) -> LT
-                    (TyCon _ _ _, TyUnifyVar _ _) -> LT
-                    (TyRecord _ _, TyCon _ _ _) -> GT
-                    (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
-                        liftCompare compareType fields1 fields2
-                    (TyRecord _ _, TyVar _ _) -> LT
-                    (TyRecord _ _, TyUnifyVar _ _) -> LT
-                    (TyVar _ _, TyCon _ _ _) -> GT
-                    (TyVar _ _, TyRecord _ _) -> GT
-                    (TyVar _pos1 x1, TyVar _pos2 x2) ->
-                        compare x1 x2
-                    (TyVar _ _, TyUnifyVar _ _) -> LT
-                    (TyUnifyVar _ _, TyCon _ _ _) -> GT
-                    (TyUnifyVar _ _, TyRecord _ _) -> GT
-                    (TyUnifyVar _ _, TyVar _ _) -> GT
-                    (TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) ->
-                        compare x1 x2
+        compare (cForallSubst c1) (cForallSubst c2) <>
+        liftCompare compareType (cFreeVarSubst c1) (cFreeVarSubst c2)
+          where
+            compareType ty1 ty2 = case (ty1, ty2) of
+                (TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) ->
+                    compare ctor1 ctor2 <>
+                    liftCompare compareType args1 args2
+                (TyCon _ _ _, TyRecord _ _) -> LT
+                (TyCon _ _ _, TyVar _ _) -> LT
+                (TyCon _ _ _, TyUnifyVar _ _) -> LT
+                (TyRecord _ _, TyCon _ _ _) -> GT
+                (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
+                    liftCompare compareType fields1 fields2
+                (TyRecord _ _, TyVar _ _) -> LT
+                (TyRecord _ _, TyUnifyVar _ _) -> LT
+                (TyVar _ _, TyCon _ _ _) -> GT
+                (TyVar _ _, TyRecord _ _) -> GT
+                (TyVar _pos1 x1, TyVar _pos2 x2) ->
+                    compare x1 x2
+                (TyVar _ _, TyUnifyVar _ _) -> LT
+                (TyUnifyVar _ _, TyCon _ _ _) -> GT
+                (TyUnifyVar _ _, TyRecord _ _) -> GT
+                (TyUnifyVar _ _, TyVar _ _) -> GT
+                (TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) ->
+                    compare x1 x2
 
 
 -- | For a group of match candidates, use Set. This is not free, since
