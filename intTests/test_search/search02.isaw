@@ -1,0 +1,13 @@
+return ()    // polymorphic searches
+
+print "--------------------------------"
+print "-- (a -> a)"
+:search (a -> a)
+
+print "--------------------------------"
+print "-- {a} (a -> String)"
+:search {a} (a -> String)
+
+print "--------------------------------"
+print "-- {m} (a -> m b)"
+:search {m} (a -> m b)
