@@ -17,7 +17,5 @@
 // are correct and don't e.g. have found/expected backwards.
 //
 
-rec (x: Int) = 3
-and (y: Int) = "abc";
-
-
+rec (x: Int -> Int) (k : Int) = 3
+and (y: Int -> Int) (k : Int) = "abc";
