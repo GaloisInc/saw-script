@@ -12,7 +12,14 @@ This release supports [version
   importantly for users, the PDF artifacts included in CI-generated releases
   have different names and render with Sphinx styling.
 
+* The saw executable now accepts a -B or --batch option to run a file of
+  REPL commands, similar to the -b option in Cryptol.
+
 * Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
+
+* Add a `:search` REPL command, which searches the value environment by type.
+  For example, to find everything involving the LLVMSetup monad you can do
+  `:search (LLVMSetup _)`.
 
 * Add a `:tenv` REPL command, which is like `:env` but prints the type
   environment instead of the variable environment. `:t` is still short

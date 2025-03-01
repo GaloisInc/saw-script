@@ -1,0 +1,9 @@
+return ()    // these don't work because of parser shortcomings
+
+print "--------------------------------"
+print "-- ProofScript"
+:search ProofScript
+
+print "--------------------------------"
+print "-- (ProofScript)"
+:search (ProofScript)

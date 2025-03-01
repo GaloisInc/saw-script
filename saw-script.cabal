@@ -106,6 +106,7 @@ library
 
   exposed-modules:
     SAWScript.AST
+    SAWScript.ASTUtil
     SAWScript.AutoMatch
     SAWScript.AutoMatch.Interaction
     SAWScript.AutoMatch.ArgMapping
@@ -133,6 +134,7 @@ library
     SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
+    SAWScript.Search
     SAWScript.SolverCache
     SAWScript.SolverVersions
     SAWScript.Token

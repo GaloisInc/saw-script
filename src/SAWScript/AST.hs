@@ -28,6 +28,7 @@ module SAWScript.AST
        , Type(..), TypeIndex
        , TyCon(..)
        , Schema(..)
+       , SchemaPattern(..)
        , NamedType(..)
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
@@ -209,7 +210,7 @@ data Context
   | ProofScript
   | TopLevel
   | CrucibleSetup
-  deriving (Eq,Show)
+  deriving (Eq, Ord, Show)
 
 -- The position information in a type should be thought of as its
 -- provenance; for a type annotation in the input it'll be a concrete
@@ -261,10 +262,16 @@ data TyCon
   | LLVMSpecCon
   | MIRSpecCon
   | ContextCon Context
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data Schema = Forall [(Pos, Name)] Type
   deriving Show
+
+-- | A schema pattern is like a schema but has potentially multiple
+-- type entries that are meant to match fragments of a complete
+-- schema. (We don't, for now at least, need a separate type for type
+-- patterns and can just use Type.)
+data SchemaPattern = SchemaPattern [(Pos, Name)] [Type]
 
 -- | The things a (named) TyVar can refer to by its name.
 --
