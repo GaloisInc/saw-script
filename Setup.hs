@@ -27,9 +27,17 @@ myBuild pd lbi uh flags = do
                     `catch` gitfailure on_fail
         Nothing -> return on_no_exe
 
+  let gitbranch dir m on_no_exe on_fail = case hasGit of
+        Just exe -> withCurrentDirectory dir (m <$>
+                      readProcess "git" ["branch", "--points-at", "HEAD"] "")
+                    `catch` gitfailure on_fail
+        Nothing -> return on_no_exe
+
   desc     <- gitdescribe "." init "<VCS-less build>" "<non-dev-build>"
   aig_desc <- gitdescribe "deps/aig" (Just . init) Nothing Nothing
   w4_desc  <- gitdescribe "deps/what4" (Just . init) Nothing Nothing
+
+  branch <- gitbranch "." (drop 2 . init) "<VCS-less build>" "<non-dev-build>"
 
   rme_desc <- case hasGit of
     Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
@@ -38,9 +46,11 @@ myBuild pd lbi uh flags = do
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
-    , "-- | String describing the HEAD of saw-script at compile-time"
+    , "-- | Strings describing the HEAD of saw-script at compile-time"
     , "hash :: String"
     , "hash = " ++ show desc
+    , "branch :: String"
+    , "branch = " ++ show branch
     , "-- | String describing the HEAD of the deps/aig submodule at compile-time"
     , "aigHash :: Maybe String"
     , "aigHash = " ++ show aig_desc

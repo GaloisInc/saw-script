@@ -15,11 +15,11 @@ module SAWScript.Version (
   ) where
 
 import Paths_saw_script (version)
-import GitRev (hash)
+import GitRev (hash, branch)
 import Data.Version (showVersion)
 
 hashText :: String
-hashText = " (" ++ hash ++ ")"
+hashText = " (" ++ hash ++ " " ++ branch ++ ")"
 
 versionText :: String
 versionText = "version " ++ shortVersionText
