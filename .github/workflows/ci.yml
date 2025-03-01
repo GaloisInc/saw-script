@@ -23,7 +23,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 3
+  CABAL_CACHE_VERSION: 4
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -77,6 +77,7 @@ jobs:
         os: [ubuntu-22.04]
         cabal: ["3.10.3.0"]
         ghc: ["9.4.8", "9.6.6", "9.8.2"]
+        haddock: [true]
         run-tests: [true]
         hpc: [false]
         include:
@@ -86,12 +87,14 @@ jobs:
           - os: ubuntu-20.04
             ghc: "9.4.8"
             cabal: "3.10.3.0"
+            haddock: false
             run-tests: false
             hpc: false
           # Include one job with HPC enabled
           - os: ubuntu-22.04
             ghc: "9.4.8"
             cabal: "3.10.3.0"
+            haddock: false
             run-tests: true
             hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
@@ -100,14 +103,17 @@ jobs:
           # macOS runner (macos-14).
           - os: windows-2019
             ghc: 9.4.8
+            haddock: false
             run-tests: true
             hpc: false
           - os: macos-13
             ghc: 9.4.8
+            haddock: false
             run-tests: true
             hpc: false
           - os: macos-14
             ghc: 9.4.8
+            haddock: false
             run-tests: true
             hpc: false
     outputs:
@@ -169,11 +175,14 @@ jobs:
         env:
           ENABLE_HPC: ${{ matrix.hpc }}
 
-
       - shell: bash
         env:
           RELEASE: ${{ needs.config.outputs.release }}
         run: .github/ci.sh build_cryptol
+
+      - if: matrix.haddock == true
+        shell: bash
+        run: .github/ci.sh haddock
 
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         id: cabal-test-suites
