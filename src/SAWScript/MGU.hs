@@ -27,7 +27,7 @@ module SAWScript.MGU
 import Control.Applicative
 #endif
 
-import Control.Monad (zipWithM)
+import Control.Monad (zipWithM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
@@ -1496,6 +1496,44 @@ generalize foralls es0 ts0 = do
 
      return $ zipWith mk es ts
 
+
+-- Check that a type is a function and isn't a plain value, in order
+-- to reject recursive values in "rec" definitions. Otherwise they
+-- crash the interpreter downstream. See issue #2203.
+--
+-- There are cases where it might be convenient to include a plain
+-- value within a system of recursive declarations. For example, if
+-- you have something like
+--    rec foo x = ...
+--    and foo0 = foo 0
+--    and foo1 = foo 1
+--    and bar x = ...
+--    and bar0 = bar 0
+--    and bar1 = bar 1
+--    and baz x = ...
+--    and baz0 = baz 0
+--    and baz1 = baz 1
+-- then depending on what the code is, it might be logically
+-- reasonable to place the values like this and ugly to need to move
+-- them out of the flow. If this ever comes up it might make sense to
+-- loosen this check (e.g. to check whether the value is actually
+-- recursive) and also fix the interpreter to not choke. However,
+-- provided the values actually aren't recursive it is _possible_ to
+-- move them out, so this is only worth chasing after given a fairly
+-- compelling use case.
+--
+-- Note that actual recursively defined values are always bottom (in
+-- the absence of mutable variables) and are best not allowed.
+--
+requireFunction :: Pos -> Type -> TI ()
+requireFunction pos ty = do
+    ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
+    case ty' of
+        TyCon _pos FunCon _args ->
+            return ()
+        _ ->
+            recordError pos $ "Only functions may be recursive."
+
 -- Type inference for a declaration.
 --
 -- Note that the type schema slot in Decl is always Nothing as we get
@@ -1534,6 +1572,9 @@ inferRecDecls ds =
                    $ sequence [ inferExpr (patternLName p, e)
                               | Decl _pos p _ e <- ds
                               ]
+
+       -- Only functions can be recursive.
+       zipWithM_ (\d t -> requireFunction (getPos d) t) ds ts
 
        -- pats' has already been checked once, which will have inserted
        -- unification vars for any missing types. Running it through
