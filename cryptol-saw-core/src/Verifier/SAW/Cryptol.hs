@@ -1996,42 +1996,48 @@ genNominalConstructors sc nominal env0 =
             e <- importExpr sc env (addTypeParams fn)
             return [(con, e)]
         C.Abstract -> return []
-        C.Enum cs  -> mapM genEnumConstr cs
+        C.Enum cs  -> newDefsForEnum cs
 
       where
-
-        -- MT:TODO
-        genEnumConstr :: C.EnumCon -> IO (C.Name, Term)
-        genEnumConstr c =
-          do
-          let
-            n         = length (C.ecFields c)
-            ty        = C.TCon (C.TC (C.TCTuple n))
-                               (C.ecFields c)
-            conName   = C.ecName c
-            paramName = C.asLocal C.NSValue conName
-          -- ty' <- importType sc env ty
-          --   -- this causes
-          --        panic, called at src/Verifier/SAW/Cryptol.hs:297:37
-          -- TODO: Alternatives:
-          --  A. bring the EnumLib.sawcore in as cryptol names, call addTypeParams
-          --     like C.Struct does
-          --  B. (better) directly reference EnumLib.sawcore
-          --  C. (future) dynamically update, as needed the code there
-          x  <- scTuple sc []
-                -- MT:FIXME: implement with real thing, e.g., this sawcore
-                --   name <typeParams> x = inj_<n> ts x
-                --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
-                -- where
-                --  let x = paramName
-                --  ts <- instantiations for the N-Sums for this branch.
-          return (conName, x)
 
         addTypeParams :: C.Expr -> C.Expr
         addTypeParams fn = foldr tFn fn (C.ntParams nt)
 
-        tFn tp body =
-          if elem (C.tpKind tp) [C.KType, C.KNum]
-            then C.ETAbs tp body
-            else panic "genNominalConstructors"
-                  ["illegal nominal type parameter kind", show (C.tpKind tp)]
+          where
+          tFn tp body =
+            if elem (C.tpKind tp) [C.KType, C.KNum]
+              then C.ETAbs tp body
+              else panic "genNominalConstructors"
+                   ["illegal nominal type parameter kind", show (C.tpKind tp)]
+
+        newDefsForEnum cs =
+          do
+          e1 <- mapM genEnumConstructor cs
+          return e1
+
+          where
+          genEnumConstructor :: C.EnumCon -> IO (C.Name, Term)
+          genEnumConstructor c =
+            do
+            let
+              n         = length (C.ecFields c)
+              ty        = C.TCon (C.TC (C.TCTuple n))
+                                 (C.ecFields c)
+              conName   = C.ecName c
+              paramName = C.asLocal C.NSValue conName
+            -- ty' <- importType sc env ty
+            --   -- this causes
+            --        panic, called at src/Verifier/SAW/Cryptol.hs:297:37
+            -- TODO: Alternatives:
+            --  A. bring the EnumLib.sawcore in as cryptol names, call addTypeParams
+            --     like C.Struct does
+            --  B. (better) directly reference EnumLib.sawcore
+            --  C. (future) dynamically update, as needed the code there
+            x  <- scTuple sc []
+                  -- MT:FIXME: implement with real thing, e.g., this sawcore
+                  --   name <typeParams> x = inj_<n> ts x
+                  --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
+                  -- where
+                  --  let x = paramName
+                  --  ts <- instantiations for the N-Sums for this branch.
+            return (conName, x)
