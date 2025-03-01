@@ -895,12 +895,24 @@ print_value v = do
   nenv <- io . scGetNamingEnv =<< getSharedContext
   printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
-readSchema :: Text -> SS.Schema
-readSchema str =
+-- | Read a type schema. This is used to digest the type signatures
+-- for builtins, and the expansions for builtin typedefs.
+--
+-- The first argument (fakeFileName) is a string to pass as the
+-- filename for the lexer, which (complete with line and column
+-- numbering of dubious value) will go into the positions of the
+-- elements of the resulting type.
+--
+-- FUTURE: we should figure out how to generate more meaningful
+-- positions (like "third argument of concat") but this at least
+-- allows telling the user which builtin the type came from.
+--
+readSchema :: FilePath -> Text -> SS.Schema
+readSchema fakeFileName str =
   let croak what msg =
         error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
       tokens =
-        let (tokens', optmsg) = lexSAW "internal" str in
+        let (tokens', optmsg) = lexSAW fakeFileName str in
         -- XXX clean this up when we clean out the message printing infrastructure
         case optmsg of
             Just (Error, _pos, msg) -> croak "Lexer" $ Text.unpack msg
@@ -986,7 +998,8 @@ primTypes = Map.fromList
           , primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
-        ty = case readSchema tystr of
+        fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
+        ty = case readSchema fakeFileName tystr of
             SS.Forall [] ty' -> ty'
             _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
 
@@ -5097,12 +5110,13 @@ primitives = Map.fromList
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
                                      { primitiveName = qname
-                                     , primitiveType = readSchema ty
+                                     , primitiveType = readSchema fakeFileName ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn
                                      , primitiveLife = lc
                                      })
       where qname = qualify name
+            fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
     pureVal x _ _ = toValue x
