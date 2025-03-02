@@ -294,6 +294,7 @@ importType sc env ty =
          case ntDef nt of
            C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
            C.Enum {} -> error "importType: `enum` is not yet supported"
+             -- MT:FIXME: implement
            C.Abstract
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' (envPrimTypes env) ->
@@ -1186,6 +1187,7 @@ importExpr sc env expr =
 
     C.ECase {} -> panic "importExpr"
                     ["`case` expressions are not yet supported"]
+                  -- MT:FIXME: implement
 
   where
     the :: String -> Maybe a -> IO a
@@ -1814,6 +1816,7 @@ importMatches sc env (C.Let decl : matches) =
 --------------------------------------------------------------------------------
 -- Utilities
 
+--- MT:FIXME: add doc.
 asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe (Either C.Kind C.Type)
 asCryptolTypeValue v =
   case v of
@@ -1932,6 +1935,7 @@ exportValue ty v = case ty of
     case fields of
       TV.TVStruct fs   -> exportValue (TV.TVRec fs) v
       TV.TVEnum {}     -> error "exportValue: TODO enum"
+                          -- MT:FIXME: this needed?!
       TV.TVAbstract {} -> error "exportValue: TODO abstract types"
 
 
@@ -2000,24 +2004,48 @@ genNominalConstructors sc nominal env0 =
 
       where
 
+        stub = error "stub" -- FIXME
+
         addTypeParams :: C.Expr -> C.Expr
         addTypeParams fn = foldr tFn fn (C.ntParams nt)
 
           where
           tFn tp body =
             if elem (C.tpKind tp) [C.KType, C.KNum]
-              then C.ETAbs tp body
+              then C.ETAbs tp body;i
               else panic "genNominalConstructors"
                    ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
+        -- TODO: hmm: these need to be ordered in dependency order?
         newDefsForEnum cs =
           do
-          e1 <- mapM genEnumConstructor cs
-          return e1
+          (nmConstrs,argTypes,constrs) <- unzip <$>
+                                mapM mkArgTypeAndConstructor cs
+
+          -- Create TypeList for the Enum
+          tlist <- stub argTypes -- TODO
+
+          -- TODO: create type definition (synonym)
+          tsyn  <- mkTypeSynonym
+            -- TODO: use this to do the importType. ?
+
+          -- TODO: add deconstructor (case/either):
+          case' <- mkCase stub
+          return $ zip stub
 
           where
-          genEnumConstructor :: C.EnumCon -> IO (C.Name, Term)
-          genEnumConstructor c =
+
+          mkCase :: _
+          mkEnumNames :: C.Name -> (C.Name, C.Name, ?)
+            -- NOT LIKELY!
+
+          (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
+            -- define our naming conventions
+
+          -- FIXME[F]: support 2+ args and curried constructors!
+          -- | generate ArgType and Constructor definitions:
+          mkArgTypeAndConstructor :: C.EnumCon -> IO (Term, Term)
+          mkArgTypeAndConstructor c =
             do
             let
               n         = length (C.ecFields c)
@@ -2025,6 +2053,17 @@ genNominalConstructors sc nominal env0 =
                                  (C.ecFields c)
               conName   = C.ecName c
               paramName = C.asLocal C.NSValue conName
+
+            argType <- scTuple sc []
+                  -- MT:FIXME: implement with real thing, e.g., this sawcore
+                  --   name <typeParams> x = inj_<n> ts x
+                  --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
+                  -- where
+                  --  let x = paramName
+                  --  ts <- instantiations for the N-Sums for this branch.
+            constructor <- scTuple sc []
+            return (argType,constructor)
+
             -- ty' <- importType sc env ty
             --   -- this causes
             --        panic, called at src/Verifier/SAW/Cryptol.hs:297:37
@@ -2033,11 +2072,3 @@ genNominalConstructors sc nominal env0 =
             --     like C.Struct does
             --  B. (better) directly reference EnumLib.sawcore
             --  C. (future) dynamically update, as needed the code there
-            x  <- scTuple sc []
-                  -- MT:FIXME: implement with real thing, e.g., this sawcore
-                  --   name <typeParams> x = inj_<n> ts x
-                  --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
-                  -- where
-                  --  let x = paramName
-                  --  ts <- instantiations for the N-Sums for this branch.
-            return (conName, x)
