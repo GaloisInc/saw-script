@@ -151,33 +151,33 @@ enum EnumType as = C1 CT1
 -- types:
 
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
-EnumType__C1_ArgType (as : sort 0) : sort 0 = as;
-EnumType__C2_ArgType (as : sort 0) : sort 0 = Bool;
+EnumType__ArgType_C1 (as : sort 0) : sort 0 = as;
+EnumType__ArgType_C2 (as : sort 0) : sort 0 = Bool;
 
 EnumType__TypeList : sort 0 -> ListSort;
-EnumType__TypeList as = LS_Cons (EnumType__C1_ArgType as) (LS_Cons (EnumType__C2_ArgType as) LS_Nil);
+EnumType__TypeList as = LS_Cons (EnumType__ArgType_C1 as) (LS_Cons (EnumType__ArgType_C2 as) LS_Nil);
 
 -- Define the type:
 EnumType : (as : sort 0) -> sort 0;
 EnumType as = Eithers' (EnumType__TypeList as);
 
 -- constructors:
-EnumType__C1 : (as : sort 0) -> EnumType__C1_ArgType as -> EnumType as;
-EnumType__C1 as x = Left (EnumType__C1_ArgType as) (Eithers' (LS_Cons (EnumType__C2_ArgType as) LS_Nil)) x;
+EnumType__C1 : (as : sort 0) -> EnumType__ArgType_C1 as -> EnumType as;
+EnumType__C1 as x = Left (EnumType__ArgType_C1 as) (Eithers' (LS_Cons (EnumType__ArgType_C2 as) LS_Nil)) x;
 
-EnumType__C2 : (as : sort 0) -> EnumType__C2_ArgType as -> EnumType as;
-EnumType__C2 as x = Right (EnumType__C1_ArgType as) (Eithers' (LS_Cons (EnumType__C2_ArgType as) LS_Nil))
-                    (Left (EnumType__C2_ArgType as) (Eithers' LS_Nil)
+EnumType__C2 : (as : sort 0) -> EnumType__ArgType_C2 as -> EnumType as;
+EnumType__C2 as x = Right (EnumType__ArgType_C1 as) (Eithers' (LS_Cons (EnumType__ArgType_C2 as) LS_Nil))
+                    (Left (EnumType__ArgType_C2 as) (Eithers' LS_Nil)
                       x);
 
 EnumType_eithers : (as : sort 0)
                 -> (b: sort 0)
-                -> (EnumType__C1_ArgType as -> b) -> (EnumType__C2_ArgType as -> b)
+                -> (EnumType__ArgType_C1 as -> b) -> (EnumType__ArgType_C2 as -> b)
                 -> EnumType as
                 -> b;
 EnumType_eithers as b f1 f2 =
-  either (EnumType__C1_ArgType as) (Eithers' (LS_Cons (EnumType__C2_ArgType as) LS_Nil)) b f1
-    (either (EnumType__C2_ArgType as) Void b f2
+  either (EnumType__ArgType_C1 as) (Eithers' (LS_Cons (EnumType__ArgType_C2 as) LS_Nil)) b f1
+    (either (EnumType__ArgType_C2 as) Void b f2
        (elimVoid b));
 
 -- case for EnumType:
