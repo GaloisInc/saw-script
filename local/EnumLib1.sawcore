@@ -1,4 +1,4 @@
-module EnumLib where
+module EnumLib1 where
 import Prelude;
 
 -- A right-nested sequence of Either types, defined as

@@ -1,4 +1,4 @@
-module EnumLib2 where
+module EnumLib3 where
 import Prelude;
 
 -- A right-nested sequence of Either types, defined as
@@ -150,16 +150,21 @@ enum EnumType as = C1 CT1
 ---- SawCore: ------------------------------------------------------
 -- types:
 
+-- Just Like EnumLib3, but let's inline things:
+
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
 EnumType__ArgType_C1 (as : sort 0) : sort 0 = as;
 EnumType__ArgType_C2 (as : sort 0) : sort 0 = Bool;
 
+--
 EnumType__TypeList : sort 0 -> ListSort;
 EnumType__TypeList as = LS_Cons (EnumType__ArgType_C1 as) (LS_Cons (EnumType__ArgType_C2 as) LS_Nil);
 
 -- Define the type:
 EnumType : (as : sort 0) -> sort 0;
-EnumType as = Eithers' (EnumType__TypeList as);
+EnumType as = Eithers' (
+   LS_Cons (EnumType__ArgType_C1 as) (LS_Cons (EnumType__ArgType_C2 as) LS_Nil)
+                       );
 
 -- constructors (these aren't new, already in Cryptol, and AFAIK mapped into SawCore),
 -- thus straightforward names.
