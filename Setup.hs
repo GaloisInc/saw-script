@@ -19,29 +19,43 @@ myBuild pd lbi uh flags = do
 
   hasGit <- findExecutable "git"
 
-  let runGit m args = case hasGit of
+  let runGit args = case hasGit of
         Nothing ->
             return Nothing
         Just exe -> do
             let gitfailure :: SomeException -> IO (Maybe a)
                 gitfailure _e = return Nothing
             output <- do
-                text <- readProcess "git" args ""
-                return $ Just $ m text
+                Just <$> readProcess "git" args ""
               `catch` gitfailure
             return output
 
-  let gitdescribe m = runGit m ["describe", "--always", "--dirty"]
-  let gitbranch m = runGit m ["branch", "--points-at", "HEAD"]
-  let gitlog m args = runGit m ("log" : args)
+  let gitdescribe = do
+        output <- runGit ["describe", "--always", "--dirty"]
+        return $ case output of
+            Nothing -> Nothing
+            Just txt ->
+                -- remove the trailing newline
+                Just $ init txt
 
-  desc     <- gitdescribe init
-  aig_desc <- withCurrentDirectory "deps/aig" $ gitdescribe init
-  w4_desc  <- withCurrentDirectory "deps/what4" $ gitdescribe init
+  let gitbranch = do
+        output <- runGit ["branch", "--points-at", "HEAD"]
+        return $ case output of
+            Nothing -> Nothing
+            Just txt ->
+                -- remove the trailing newline and leading "* "
+                Just $ drop 2 $ init txt
 
-  branch <- gitbranch (drop 2 . init)
+  let gitlog args =
+        runGit ("log" : args)
 
-  rme_desc <- gitlog id ["--max-count=1", "--pretty=format:%h", "--", "rme"]
+  desc     <- gitdescribe
+  aig_desc <- withCurrentDirectory "deps/aig" $ gitdescribe
+  w4_desc  <- withCurrentDirectory "deps/what4" $ gitdescribe
+
+  branch <- gitbranch
+
+  rme_desc <- gitlog ["--max-count=1", "--pretty=format:%h", "--", "rme"]
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
