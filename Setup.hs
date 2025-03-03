@@ -22,23 +22,23 @@ myBuild pd lbi uh flags = do
   let gitfailure :: a -> SomeException -> IO a
       gitfailure a _e = return a
 
-  let gitdescribe dir m on_no_exe on_fail = case hasGit of
-        Just exe -> withCurrentDirectory dir (m <$>
+  let gitdescribe dir m = case hasGit of
+        Just exe -> withCurrentDirectory dir ((Just . m) <$>
                       readProcess "git" ["describe", "--always", "--dirty"] "")
-                    `catch` gitfailure on_fail
-        Nothing -> return on_no_exe
+                    `catch` gitfailure Nothing
+        Nothing -> return Nothing
 
-  let gitbranch dir m on_no_exe on_fail = case hasGit of
-        Just exe -> withCurrentDirectory dir (m <$>
+  let gitbranch dir m = case hasGit of
+        Just exe -> withCurrentDirectory dir ((Just . m) <$>
                       readProcess "git" ["branch", "--points-at", "HEAD"] "")
-                    `catch` gitfailure on_fail
-        Nothing -> return on_no_exe
+                    `catch` gitfailure Nothing
+        Nothing -> return Nothing
 
-  desc     <- gitdescribe "." (Just . init) Nothing Nothing
-  aig_desc <- gitdescribe "deps/aig" (Just . init) Nothing Nothing
-  w4_desc  <- gitdescribe "deps/what4" (Just . init) Nothing Nothing
+  desc     <- gitdescribe "." init
+  aig_desc <- gitdescribe "deps/aig" init
+  w4_desc  <- gitdescribe "deps/what4" init
 
-  branch <- gitbranch "." (Just . drop 2 . init) Nothing Nothing
+  branch <- gitbranch "." (drop 2 . init)
 
   rme_desc <- case hasGit of
     Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
