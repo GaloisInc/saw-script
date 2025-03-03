@@ -1,7 +1,7 @@
 import Control.Exception
 import Control.Monad (unless)
 import Data.Maybe (isJust)
-import Data.List (break)
+import Data.List (intercalate)
 import Distribution.Simple
 import Distribution.Simple.BuildPaths (autogenPackageModulesDir)
 import Distribution.PackageDescription (emptyHookedBuildInfo, allBuildInfo)
@@ -9,14 +9,6 @@ import System.Directory
 import System.FilePath ((</>))
 import System.Process (readProcess, callProcess)
 import System.Exit
-
--- delete every \n and the character following it from a string
-dropNewlines :: String -> String
-dropNewlines txt =
-      case break (== '\n') txt of
-          (all, "") -> all
-          (some, "\n") -> some
-          (some, '\n' : _ : rest) -> some ++ dropNewlines rest
 
 main = defaultMainWithHooks myHooks
   where myHooks = simpleUserHooks { buildHook = myBuild }
@@ -40,25 +32,23 @@ myBuild pd lbi uh flags = do
 
   let gitdescribe = do
         output <- runGit ["describe", "--always", "--dirty"]
-        return $ case output of
-            Nothing -> Nothing
-            Just txt ->
-                -- remove the trailing newline
-                Just $ init txt
+        return $ do -- in Maybe
+            txt <- output
+            -- remove the trailing newline
+            return $ init txt
 
   let gitbranch = do
         output <- runGit ["branch", "--points-at", "HEAD"]
-        return $ case output of
-            Nothing -> Nothing
-            Just txt ->
-                -- Remove the trailing newline and leading "* ".
-                -- Also, if we're at the tip of multiple branches
-                -- we'll get multiple lines, each indented with
-                -- "  " or "* ", so drop all newlines and the
-                -- first character after each.
-                Just $ dropNewlines $ drop 2 $ init txt
+        return $ do -- in Maybe
+            txt <- output
+            -- We get one or more lines indented by either two spaces
+            -- or "* ". Split the lines, drop the prefix, and concat
+            -- with a space to separate.
+            return $ intercalate " " $ map (drop 2) $ lines txt
 
   let gitlog args =
+        -- This apparently doesn't produce a newline if the
+        -- output isn't a tty.
         runGit ("log" : args)
 
   desc     <- gitdescribe
@@ -71,11 +61,14 @@ myBuild pd lbi uh flags = do
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
-    , "-- | Strings describing the HEAD of saw-script at compile-time"
+    , "-- | Whether git was found at compile time, which affects how we"
+    , "--   interpret Nothing in the data below"
     , "foundGit :: Bool"
     , "foundGit = " ++ show (isJust hasGit)
+    , "-- | The git commit hash for the HEAD of saw-script at compile-time"
     , "hash :: Maybe String"
     , "hash = " ++ show desc
+    , "-- | The git branch string for the HEAD of saw-script at compile-time"
     , "branch :: Maybe String"
     , "branch = " ++ show branch
     , "-- | String describing the HEAD of the deps/aig submodule at compile-time"
