@@ -52,9 +52,10 @@ is on your PATH.
 
 After cloning the saw-script repository, you need to also clone
 submodules.
-Run `git submodule update --init` _without_ `--recursive`.
-Alas, if you use `--recursive` the checkout will not terminate.
-See [macaw #283](https://github.com/GaloisInc/macaw/issues/283).
+Run `git submodule update --init`.
+The commonly used `--recursive` option is not required, and also not
+recommended as it results in cloning a considerable number of
+additional unused subtrees.
 
 ## Manual Installation
 
