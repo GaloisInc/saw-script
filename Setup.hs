@@ -22,23 +22,23 @@ myBuild pd lbi uh flags = do
   let gitfailure :: a -> SomeException -> IO a
       gitfailure a _e = return a
 
-  let gitdescribe dir m = case hasGit of
-        Just exe -> withCurrentDirectory dir ((Just . m) <$>
+  let gitdescribe m = case hasGit of
+        Just exe -> ((Just . m) <$>
                       readProcess "git" ["describe", "--always", "--dirty"] "")
                     `catch` gitfailure Nothing
         Nothing -> return Nothing
 
-  let gitbranch dir m = case hasGit of
-        Just exe -> withCurrentDirectory dir ((Just . m) <$>
+  let gitbranch m = case hasGit of
+        Just exe -> ((Just . m) <$>
                       readProcess "git" ["branch", "--points-at", "HEAD"] "")
                     `catch` gitfailure Nothing
         Nothing -> return Nothing
 
-  desc     <- gitdescribe "." init
-  aig_desc <- gitdescribe "deps/aig" init
-  w4_desc  <- gitdescribe "deps/what4" init
+  desc     <- gitdescribe init
+  aig_desc <- withCurrentDirectory "deps/aig" $ gitdescribe init
+  w4_desc  <- withCurrentDirectory "deps/what4" $ gitdescribe init
 
-  branch <- gitbranch "." (drop 2 . init)
+  branch <- gitbranch (drop 2 . init)
 
   rme_desc <- case hasGit of
     Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
