@@ -1,5 +1,6 @@
 import Control.Exception
 import Control.Monad (unless)
+import Data.Maybe (isJust)
 import Data.List (find)
 import Distribution.Simple
 import Distribution.Simple.BuildPaths (autogenPackageModulesDir)
@@ -33,11 +34,11 @@ myBuild pd lbi uh flags = do
                     `catch` gitfailure on_fail
         Nothing -> return on_no_exe
 
-  desc     <- gitdescribe "." init "<VCS-less build>" "<non-dev-build>"
+  desc     <- gitdescribe "." (Just . init) Nothing Nothing
   aig_desc <- gitdescribe "deps/aig" (Just . init) Nothing Nothing
   w4_desc  <- gitdescribe "deps/what4" (Just . init) Nothing Nothing
 
-  branch <- gitbranch "." (drop 2 . init) "<VCS-less build>" "<non-dev-build>"
+  branch <- gitbranch "." (Just . drop 2 . init) Nothing Nothing
 
   rme_desc <- case hasGit of
     Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
@@ -47,9 +48,11 @@ myBuild pd lbi uh flags = do
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
     , "-- | Strings describing the HEAD of saw-script at compile-time"
-    , "hash :: String"
+    , "foundGit :: Bool"
+    , "foundGit = " ++ show (isJust hasGit)
+    , "hash :: Maybe String"
     , "hash = " ++ show desc
-    , "branch :: String"
+    , "branch :: Maybe String"
     , "branch = " ++ show branch
     , "-- | String describing the HEAD of the deps/aig submodule at compile-time"
     , "aigHash :: Maybe String"
