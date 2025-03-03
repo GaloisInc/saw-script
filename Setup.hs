@@ -19,20 +19,21 @@ myBuild pd lbi uh flags = do
 
   hasGit <- findExecutable "git"
 
-  let gitfailure :: a -> SomeException -> IO a
-      gitfailure a _e = return a
+  let runGit m args = case hasGit of
+        Nothing ->
+            return Nothing
+        Just exe -> do
+            let gitfailure :: SomeException -> IO (Maybe a)
+                gitfailure _e = return Nothing
+            output <- do
+                text <- readProcess "git" args ""
+                return $ Just $ m text
+              `catch` gitfailure
+            return output
 
-  let gitdescribe m = case hasGit of
-        Just exe -> ((Just . m) <$>
-                      readProcess "git" ["describe", "--always", "--dirty"] "")
-                    `catch` gitfailure Nothing
-        Nothing -> return Nothing
-
-  let gitbranch m = case hasGit of
-        Just exe -> ((Just . m) <$>
-                      readProcess "git" ["branch", "--points-at", "HEAD"] "")
-                    `catch` gitfailure Nothing
-        Nothing -> return Nothing
+  let gitdescribe m = runGit m ["describe", "--always", "--dirty"]
+  let gitbranch m = runGit m ["branch", "--points-at", "HEAD"]
+  let gitlog m args = runGit m ("log" : args)
 
   desc     <- gitdescribe init
   aig_desc <- withCurrentDirectory "deps/aig" $ gitdescribe init
@@ -40,10 +41,7 @@ myBuild pd lbi uh flags = do
 
   branch <- gitbranch (drop 2 . init)
 
-  rme_desc <- case hasGit of
-    Just exe -> (Just <$> readProcess "git" ["log", "--max-count=1", "--pretty=format:%h", "--", "rme"] "")
-                `catch` gitfailure Nothing
-    Nothing -> return Nothing
+  rme_desc <- gitlog id ["--max-count=1", "--pretty=format:%h", "--", "rme"]
 
   writeFile (dir </> "GitRev.hs") $ unlines
     [ "module GitRev where"
