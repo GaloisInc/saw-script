@@ -1,7 +1,7 @@
 import Control.Exception
 import Control.Monad (unless)
 import Data.Maybe (isJust)
-import Data.List (find)
+import Data.List (break)
 import Distribution.Simple
 import Distribution.Simple.BuildPaths (autogenPackageModulesDir)
 import Distribution.PackageDescription (emptyHookedBuildInfo, allBuildInfo)
@@ -9,6 +9,14 @@ import System.Directory
 import System.FilePath ((</>))
 import System.Process (readProcess, callProcess)
 import System.Exit
+
+-- delete every \n and the character following it from a string
+dropNewlines :: String -> String
+dropNewlines txt =
+      case break (== '\n') txt of
+          (all, "") -> all
+          (some, "\n") -> some
+          (some, '\n' : _ : rest) -> some ++ dropNewlines rest
 
 main = defaultMainWithHooks myHooks
   where myHooks = simpleUserHooks { buildHook = myBuild }
@@ -43,8 +51,12 @@ myBuild pd lbi uh flags = do
         return $ case output of
             Nothing -> Nothing
             Just txt ->
-                -- remove the trailing newline and leading "* "
-                Just $ drop 2 $ init txt
+                -- Remove the trailing newline and leading "* ".
+                -- Also, if we're at the tip of multiple branches
+                -- we'll get multiple lines, each indented with
+                -- "  " or "* ", so drop all newlines and the
+                -- first character after each.
+                Just $ dropNewlines $ drop 2 $ init txt
 
   let gitlog args =
         runGit ("log" : args)
