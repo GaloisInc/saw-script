@@ -343,12 +343,25 @@ in GitHub's Markdown viewer.
 Note that when reviewing a pull request you can open a file in that
 viewer via the "..." menu in the top right corner of each file's
 diffs; choose "View File" there.
+The [GitHub Flavored Markdown spec](https://github.github.com/gfm/)
+as well as the
+[Writing on GitHub](https://docs.github.com/en/get-started/writing-on-github)
+page can be useful references.
 
 The larger documents are currently written either in Markdown or
 ReStructured Text and built with Sphinx.
 Updates should render correctly in the built version.
+The Sphinx build uses
+[MyST](https://myst-parser.readthedocs.io/en/latest/intro.html),
+which also supports roles, directives, and other concepts from
+ReStructured Text.
 Ideally updates should also render correctly in GitHub's viewer, but
 this may not always be feasible.
+
+The [CommonMark specification](https://commonmark.org/) is an attempt
+at standardizing a 'core' Markdown that is "strongly defined" and
+"highly compatible".
+
 The various documentation builds are orchestrated with (GNU) make.
 
 All of these source formats are themselves plain text.
@@ -364,7 +377,15 @@ makes changes easier to review (and easier to merge) and considerably
 reduces development friction.
 
 1. Don't generate long lines.
-   Have your text editor word-wrap at somewhere between 60 and 70 columns.
+   The edit width (that is, the window size) for documentation is 80
+   columns.
+   Have your text editor word-wrap at somewhere between 60 and 70
+   columns so there's a right margin, like in this file.
+   (Emacs defaults to 70 and that's fine.)
+   Also, don't insert extra spaces to make paragraphs align flush
+   right.
+   With a fixed-width font this is significantly harder to read, and
+   it's also a headache to edit.
 
 2. New sentence, new line.
    When starting a new sentence, begin it on a new line.
@@ -385,17 +406,21 @@ reduces development friction.
 
 5. Embedded links can be long and not play nicely with word-wrap; if
    one gets ugly, put it on its own line.
+   If it nonetheless falls off the right edge of the screen, we need
+   to just live with that.
 
 If you find that your editor is violating these principles for you
 (e.g. refusing to let you have reasonable-length lines, or reflowing
 text without being asked) and you can't figure out how to stop it, ask
 for help.
 
-A couple tips for writing effective Markdown:
+A couple additional tips for writing effective Markdown:
 
-- You need a blank line before the first entry of a list, and between
-  entries.
+- You need a blank line before the first entry of a list.
   If you leave the initial blank line off, strange things happen.
+
+- Blank lines between list entries affect the resultant formatting;
+  give each list blank lines or not consistently.
 
 - The whole of each list item should be indented past the bullet point.
   This normally doesn't matter if you have a single paragraph, but if
@@ -651,9 +676,25 @@ Most of the code in SAW is Haskell and most of it uses 2-space or
 4-space indent because properties of Haskell's semantic whitespace
 make that more or less inevitable.
 
-The recommended edit width for source files is 80 characters.
+The recommended edit width (that is, window size) for source files is
+80 characters.
 This is currently somewhat aspirational (many are wider, some much
 wider) but the situation will hopefully improve over time.
+
+Block comments should be formatted to a right margin of 60-70
+characters (like documentation text), and not extend to the edge of
+the window, to improve legibility.
+
+To be precise: large blocks of text should not be more than 60-70
+columns wide, because more than this interferes with the eyeball's
+ability to do carriage-returns.
+A large comment that's substantially indented can reasonably extend
+further to the right, as long as it isn't off the edge of the window.
+But it's rarely worth arguing with your editor to make this happen.
+
+Conversely, code doesn't normally have the same horizontal density as
+text so there's generally no need to cut it off before the edge of the
+window.
 
 When editing, please maintain the existing style of files.
 Don't gratuitously reformat files.
