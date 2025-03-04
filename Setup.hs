@@ -19,7 +19,8 @@ myBuild pd lbi uh flags = do
 
   hasGit <- findExecutable "git"
 
-  let runGit args = case hasGit of
+  let runGit :: [String] -> IO (Maybe String)
+      runGit args = case hasGit of
         Nothing ->
             return Nothing
         Just exe -> do
@@ -30,14 +31,16 @@ myBuild pd lbi uh flags = do
               `catch` gitfailure
             return output
 
-  let gitdescribe = do
+  let gitdescribe :: IO (Maybe String)
+      gitdescribe = do
         output <- runGit ["describe", "--always", "--dirty"]
         return $ do -- in Maybe
             txt <- output
             -- remove the trailing newline
             return $ init txt
 
-  let gitbranch = do
+  let gitbranch :: IO (Maybe String)
+      gitbranch = do
         output <- runGit ["branch", "--points-at", "HEAD"]
         return $ do -- in Maybe
             txt <- output
@@ -46,7 +49,8 @@ myBuild pd lbi uh flags = do
             -- with a space to separate.
             return $ intercalate " " $ map (drop 2) $ lines txt
 
-  let gitlog args =
+  let gitlog :: [String] -> IO (Maybe String)
+      gitlog args =
         -- This apparently doesn't produce a newline if the
         -- output isn't a tty.
         runGit ("log" : args)
