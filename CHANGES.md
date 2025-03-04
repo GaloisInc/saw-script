@@ -40,6 +40,10 @@ This release supports [version
 
 ## Bug fixes
 
+* git submodule update --init --recursive no longer causes an infinite
+  checkout loop. (However, using --recursive clones a considerable
+  number of unnecessary trees and is still not recommended.)
+
 * The saw executable's usage message now fits into a terminal. (#405)
 
 * Invalid verbosity level specifications passed to the saw
