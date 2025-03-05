@@ -46,10 +46,7 @@ library
     what4,
 
     -- internal subpackages in the saw tree
-    saw-core,
-    saw-core-aig,
-    saw-core-sbv,
-    saw-core-what4
+    saw-core
 
   hs-source-dirs: src
   exposed-modules:
