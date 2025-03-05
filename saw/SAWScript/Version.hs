@@ -9,20 +9,27 @@
 {-# LANGUAGE Safe #-}
 
 module SAWScript.Version (
-    hashText
-  , versionText
+    versionText
   , shortVersionText
   ) where
 
 import Paths_saw_script (version)
-import GitRev (hash)
+import GitRev (foundGit, hash, branch)
 import Data.Version (showVersion)
 
-hashText :: String
-hashText = " (" ++ hash ++ ")"
+gitText :: String
+gitText =
+    if foundGit then
+        case (hash, branch) of
+            (Nothing, Nothing) -> "<non-dev build>"
+            (Just h, Nothing) -> h ++ " <unknown-branch>"
+            (Nothing, Just b) -> "<unknown-hash> " ++ b
+            (Just h, Just b) -> h ++ " " ++ b
+    else
+        "<VCS-less build>"
+
+shortVersionText :: String
+shortVersionText = showVersion version ++ " (" ++ gitText ++ ")"
 
 versionText :: String
 versionText = "version " ++ shortVersionText
-
-shortVersionText :: String
-shortVersionText = showVersion version ++ hashText
