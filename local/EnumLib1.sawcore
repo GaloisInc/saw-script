@@ -11,6 +11,43 @@ Eithers' = ListSort__rec
             (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
                (Either tp rec));
 
+
+-- A ListSort with the first n (or all, if n > length) entries removed
+listSortDrop' : ListSort -> Nat -> ListSort;
+listSortDrop' = ListSort__rec
+  (\ (_:ListSort) -> Nat -> ListSort)
+  (\ (_:Nat) -> LS_Nil)
+     -- Nil to Nil, what every the _:Nat is.
+  (\ (_:sort 0) (Ds:ListSort) (rec : Nat -> ListSort) ->
+     Nat_cases ListSort
+        Ds
+        (\ (n:Nat) (_ : ListSort) -> rec n));
+
+{-
+listSortDrop3 : ListSort -> Nat -> ListSort;
+listSortDrop3 l n =
+  Nat_cases (ListSort -> ListSort)
+    (\
+-}
+
+listSortDrop2 : ListSort -> Nat -> ListSort;
+listSortDrop2 ss n =
+  Nat__rec
+    (\(_:Nat) -> ListSort -> ListSort)
+    (\(l : ListSort) -> l)
+    (\(n' : Nat) (rec_n' : ListSort -> ListSort) ->
+       -- result here must be P(Succ n) == ListSort -> ListSort:
+       (\(l : ListSort)-> LS_Cons UnitType (rec_n' l))
+       {- \(l : ListSort)->
+         ListSort__rec -- P=?
+           (?) (?)
+       -}
+    )
+    n
+    ss;
+
+test_a1 : ListSort = listSortDrop2 LS_Nil 5;
+
 myTypes3 : ListSort;
 myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
 
