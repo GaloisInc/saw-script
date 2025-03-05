@@ -144,6 +144,7 @@ eithers_EnumType : (as : sort 0)
 - Cryptol
 enum EnumType as = C1 CT1
                  | C2 CT2
+                 | C3 CT3a CT3b
                  -- 'as' can be free in CT1, CT2 types
 -}
 
@@ -155,6 +156,9 @@ enum EnumType as = C1 CT1
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
 EnumType__ArgType_C1 (as : sort 0) : sort 0 = as;
 EnumType__ArgType_C2 (as : sort 0) : sort 0 = Bool;
+EnumType__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as
+
+-- TODO: or Right Nest onto the UnitType??
 
 --
 EnumType__TypeList : sort 0 -> ListSort;
