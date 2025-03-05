@@ -441,7 +441,7 @@ interpretStmt printBinds stmt = do
   let ?fileReader = BS.readFile
 
   ctx <- getMonadContext
-  rw <- liftTopLevel $ getTopLevelRW
+  rw <- liftTopLevel getMergedEnv
   stmt' <- processTypeCheck $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
 
   case stmt' of
