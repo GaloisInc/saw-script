@@ -26,41 +26,38 @@ listSortDrop' = ListSort__rec
         Ds
         (\ (n:Nat) (_ : ListSort) -> rec n));
 
-{-
-listSortDrop3 : ListSort -> Nat -> ListSort;
-listSortDrop3 ss n =
-  Nat__rec
-    (\(_:Nat) -> ListSort -> ListSort)
-    (\(l : ListSort) -> l)
-    (\(n' : Nat) (rec_n' : ListSort -> ListSort) ->
-       -- result here must be P(Succ n) == ListSort -> ListSort:
-       (\(l : ListSort)-> rec_n' (
-                            case_ListSort .. LS_Nil (
-       )
-       {- \(l : ListSort)->
-         ListSort__rec -- P=?
-           (?) (?)
-       -}
-    )
-    n
-    ss;
--}
-
 fold_ListSort : (a: sort 1) ->
                 a ->
                 (sort 0 -> (l:ListSort) -> a -> a) ->
                 ListSort -> a;
 fold_ListSort a base f ls =
   ListSort__rec (\(_:ListSort)-> a) base f ls;
+  -- FIXME: need 1st argument of f?
 
 length_ListSort : ListSort -> Nat;
 length_ListSort = fold_ListSort Nat
                     0
                     (\(_:sort 0) (l:ListSort) (n:Nat)-> Succ n);
 
+listSortDrop3 : ListSort -> Nat -> ListSort;
+listSortDrop3 ss n =
+  Nat__rec
+    (\(_:Nat) -> ListSort -> ListSort)
+    (\(l : ListSort) -> l)
+    (\(n' : Nat) (rec_n' : ListSort -> ListSort) ->
+      (\(l : ListSort)->
+          rec_n' (fold_ListSort ListSort
+                    LS_Nil
+                    (\(_:sort 0) (l:ListSort) (tail:ListSort) -> tail)
+                    l
+                 )
+      ))
+    n
+    ss;
+
 -- Exploring/learning here
-listSortDrop2 : ListSort -> Nat -> ListSort;
-listSortDrop2 ss n =
+listSortSilly : ListSort -> Nat -> ListSort;
+listSortSilly ss n =
   Nat__rec
     (\(_:Nat) -> ListSort -> ListSort)
     (\(l : ListSort) -> l)
@@ -75,7 +72,8 @@ listSortDrop2 ss n =
     n
     ss;
 
-test_a1 : ListSort = listSortDrop2 LS_Nil 5;
+test_s1 : ListSort = listSortSilly LS_Nil 5;
+
 
 myTypes3 : ListSort;
 myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
@@ -84,7 +82,12 @@ myTypes2 : ListSort;
 myTypes2 = listSortDrop myTypes3 (0 : Nat);
   -- TODO: error in `listSortDrop` or its documentation.
 
-test1 : ListSort = myTypes2;
+test1  : ListSort = myTypes2;
+test1a : ListSort = listSortDrop3 myTypes3 0;
+test1b : ListSort = listSortDrop3 myTypes3 1;
+test1c : ListSort = listSortDrop3 myTypes3 3;
+test1d : ListSort = listSortDrop3 myTypes3 5;
+test1e : ListSort = listSortDrop3 LS_Nil 5;
 
 testA : sort 0;
 testA = listSortGet myTypes3 (1 : Nat); -- works as expected.
