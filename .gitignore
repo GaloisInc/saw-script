@@ -1,4 +1,4 @@
-src/SAWScript/GitRev.hs
+saw-version/src/SAWVersion/GitRev.hs
 /bin
 cabal.sandbox.config
 cabal.project.local

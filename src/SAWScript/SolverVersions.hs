@@ -21,7 +21,7 @@ import qualified Data.Map as Map
 import qualified Data.SBV.Dynamic as SBV
 
 import SAWScript.SolverCache
-import SAWScript.GitRev
+import SAWVersion.GitRev
 
 -- | Given an 'SBV.Solver' from @SBV@, attempt to query the solver for its
 -- version and return the result as a string.

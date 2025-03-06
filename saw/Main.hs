@@ -31,10 +31,10 @@ import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
 import qualified SAWScript.REPL.Haskeline as REPL
 import qualified SAWScript.REPL.Monad as REPL
-import SAWScript.Version (shortVersionText)
 import SAWScript.Value (AIGProxy(..))
 import SAWScript.SolverCache
 import SAWScript.SolverVersions
+import SAWVersion.Version (shortVersionText)
 import qualified Data.AIG.CompactGraph as AIG
 
 

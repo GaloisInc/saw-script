@@ -15,7 +15,7 @@ set -e
 
 tgt_gitrev() {
     # fetch/update the compiled-in git version info
-    src/SAWScript/savegitinfo.sh
+    saw-version/src/SAWVersion/savegitinfo.sh
 }
 
 ##############################
