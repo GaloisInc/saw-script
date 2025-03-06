@@ -1,5 +1,5 @@
 -- |
--- Module      :  SAWScript.Version
+-- Module      :  SAWVersion.Version
 -- Copyright   :  (c) 2013-2016 Galois, Inc.
 -- License     :  BSD3
 -- Maintainer  :  saw@galois.com
@@ -8,13 +8,13 @@
 
 {-# LANGUAGE Safe #-}
 
-module SAWScript.Version (
+module SAWVersion.Version (
     versionText
   , shortVersionText
   ) where
 
 import Paths_saw_script (version)
-import SAWScript.GitRev (foundGit, hash, branch)
+import SAWVersion.GitRev (foundGit, hash, branch)
 import Data.Version (showVersion)
 
 gitText :: String
