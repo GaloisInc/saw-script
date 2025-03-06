@@ -78,6 +78,7 @@ haddock() {
   # interface) is to serve as an internals reference.
   local PACKAGES='
     rme
+    saw-script:saw-version
     saw-core
     cryptol-saw-core
     saw-core-what4

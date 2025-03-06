@@ -1,6 +1,6 @@
 #!/bin/sh
 # savegitinfo.sh - extract git information and generate GitRev.hs
-# usage: saw/SAWScript/savegitinfo.sh
+# usage: saw-version/src/SAWVersion/savegitinfo.sh
 
 set -e
 unset CDPATH   # `./` ensure no echoing of current directory in output
@@ -57,7 +57,7 @@ generate() {
     local rmehash=$6
 
     cat > "$WHERE"/GitRev.hs.new <<- EOF
-	module SAWScript.GitRev where
+	module SAWVersion.GitRev where
 	-- | Whether git was found at compile time, which affects how we
 	--   interpret Nothing in the data below
 	foundGit :: Bool

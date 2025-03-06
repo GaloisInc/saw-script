@@ -8,7 +8,7 @@ Stability   : provisional
 module SAWScript.REPL.Logo where
 
 import SAWScript.Panic (panic)
-import SAWScript.Version (versionText)
+import SAWVersion.Version (versionText)
 import System.Console.ANSI
 
 type Version = String
