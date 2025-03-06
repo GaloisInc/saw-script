@@ -13,23 +13,52 @@ Eithers' = ListSort__rec
 
 
 -- A ListSort with the first n (or all, if n > length) entries removed
+--  - This is the original (buggy), reformatted:
 listSortDrop' : ListSort -> Nat -> ListSort;
 listSortDrop' = ListSort__rec
   (\ (_:ListSort) -> Nat -> ListSort)
   (\ (_:Nat) -> LS_Nil)
      -- Nil to Nil, what every the _:Nat is.
-  (\ (_:sort 0) (Ds:ListSort) (rec : Nat -> ListSort) ->
+  (\ (_:sort 0) (Ds:ListSort)
+                (rec : Nat -> ListSort) -- result on l, the smaller list
+    ->
      Nat_cases ListSort
         Ds
         (\ (n:Nat) (_ : ListSort) -> rec n));
 
 {-
 listSortDrop3 : ListSort -> Nat -> ListSort;
-listSortDrop3 l n =
-  Nat_cases (ListSort -> ListSort)
-    (\
+listSortDrop3 ss n =
+  Nat__rec
+    (\(_:Nat) -> ListSort -> ListSort)
+    (\(l : ListSort) -> l)
+    (\(n' : Nat) (rec_n' : ListSort -> ListSort) ->
+       -- result here must be P(Succ n) == ListSort -> ListSort:
+       (\(l : ListSort)-> rec_n' (
+                            case_ListSort .. LS_Nil (
+       )
+       {- \(l : ListSort)->
+         ListSort__rec -- P=?
+           (?) (?)
+       -}
+    )
+    n
+    ss;
 -}
 
+fold_ListSort : (a: sort 1) ->
+                a ->
+                (sort 0 -> (l:ListSort) -> a -> a) ->
+                ListSort -> a;
+fold_ListSort a base f ls =
+  ListSort__rec (\(_:ListSort)-> a) base f ls;
+
+length_ListSort : ListSort -> Nat;
+length_ListSort = fold_ListSort Nat
+                    0
+                    (\(_:sort 0) (l:ListSort) (n:Nat)-> Succ n);
+
+-- Exploring/learning here
 listSortDrop2 : ListSort -> Nat -> ListSort;
 listSortDrop2 ss n =
   Nat__rec
@@ -54,6 +83,8 @@ myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
 myTypes2 : ListSort;
 myTypes2 = listSortDrop myTypes3 (0 : Nat);
   -- TODO: error in `listSortDrop` or its documentation.
+
+test1 : ListSort = myTypes2;
 
 testA : sort 0;
 testA = listSortGet myTypes3 (1 : Nat); -- works as expected.
