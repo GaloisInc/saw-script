@@ -3,21 +3,13 @@ Name:          saw-script
 Version:       1.3.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
-Build-type:    Custom
+Build-type:    Simple
 License:       BSD-3-Clause
 License-file:  LICENSE
 
 extra-source-files:
     src/SAWScript/Parser.y
     src/SAWScript/Lexer.x
-
-custom-setup
-  setup-depends:
-      Cabal >= 1.24
-    , base
-    , directory
-    , filepath
-    , process
 
 library
   default-language: Haskell2010
