@@ -16,7 +16,7 @@ Prelude.bvMul 32 (Prelude.bvNat 32 2) fresh:x#801
 
  SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = 389}
  ----------Counterexample----------
-   x: 512
+   x: NNN
  ----------------------------------
  Stack trace:
 "llvm_verify" (err001.saw:13:1-13:12)
