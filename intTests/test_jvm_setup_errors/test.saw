@@ -537,6 +537,7 @@ check_fails test "set"
     jvm_field_is this "val" (jvm_term x);
   };
 
+// (this is issue #946)
 print "multiple use of jvm_execute_func";
 KNOWN_FALSE_POSITIVE test "get"
   do {
