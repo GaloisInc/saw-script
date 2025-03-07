@@ -136,13 +136,21 @@ run-tests() {
         # use default Show instances and the saw-core positions carry
         # the directory and filename separately. This becomes
         # "interesting" from a quoting perspective...
-        sed < $TEST.rawlog > $TEST.log '
+        sed < $TEST.rawlog '
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }
             s,'"$CURDIR"'/,,g
             s,"'"$CURDIR"'",".",g
-        '
+        ' | (
+            # If there's a custom postprocess script for this test,
+            # chain it in.
+            if [ -f $TEST.postprocess.sh ]; then
+                ${TEST_SHELL:-bash} $TEST.postprocess.sh
+            else
+                cat
+            fi
+        ) > $TEST.log 
 
         # Check the output against the expected version.
         # Note: because we (intentionally) aren't using set -e, we

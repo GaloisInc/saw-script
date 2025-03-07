@@ -421,8 +421,17 @@ importPolyType sc env (tp : tps) props ty =
 importSchema :: SharedContext -> Env -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
 
+-- entry point
 proveProp :: HasCallStack => SharedContext -> Env -> C.Prop -> IO Term
-proveProp sc env prop =
+proveProp sc env prop = provePropRec sc env prop prop
+
+-- internal recursive version
+--
+-- (we carry around the original prop when recursing as "prop0", in
+-- case we get stuck and need to bail out, at which point we want to
+-- be able to print it)
+provePropRec :: HasCallStack => SharedContext -> Env -> C.Prop -> C.Prop -> IO Term
+provePropRec sc env prop0 prop =
   case Map.lookup (normalizeProp prop) (envP env) of
 
     -- Class dictionary was provided as an argument
@@ -462,21 +471,21 @@ proveProp sc env prop =
         (C.pIsZero -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pZero a)
+                pa <- provePropRec sc env prop0 (C.pZero a)
                 scGlobalApply sc "Cryptol.PZeroSeq" [n', a', pa]
         -- instance (Zero b) => Zero (a -> b)
         (C.pIsZero -> Just (C.tIsFun -> Just (a, b)))
           -> do a' <- importType sc env a
                 b' <- importType sc env b
-                pb <- proveProp sc env (C.pZero b)
+                pb <- provePropRec sc env prop0 (C.pZero b)
                 scGlobalApply sc "Cryptol.PZeroFun" [a', b', pb]
         -- instance (Zero a, Zero b, ...) => Zero (a, b, ...)
         (C.pIsZero -> Just (C.tIsTuple -> Just ts))
-          -> do ps <- traverse (proveProp sc env . C.pZero) ts
+          -> do ps <- traverse (provePropRec sc env prop0 . C.pZero) ts
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
         (C.pIsZero -> Just (C.tIsRec -> Just fm))
-          -> do proveProp sc env (C.pZero (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do provePropRec sc env prop0 (C.pZero (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -489,29 +498,29 @@ proveProp sc env prop =
         (C.pIsLogic -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pLogic a)
+                pa <- provePropRec sc env prop0 (C.pLogic a)
                 scGlobalApply sc "Cryptol.PLogicSeq" [n', a', pa]
         -- instance (Logic b) => Logic (a -> b)
         (C.pIsLogic -> Just (C.tIsFun -> Just (a, b)))
           -> do a' <- importType sc env a
                 b' <- importType sc env b
-                pb <- proveProp sc env (C.pLogic b)
+                pb <- provePropRec sc env prop0 (C.pLogic b)
                 scGlobalApply sc "Cryptol.PLogicFun" [a', b', pb]
         -- instance Logic ()
         (C.pIsLogic -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PLogicUnit" []
         -- instance (Logic a, Logic b) => Logic (a, b)
         (C.pIsLogic -> Just (C.tIsTuple -> Just [t]))
-          -> do proveProp sc env (C.pLogic t)
+          -> do provePropRec sc env prop0 (C.pLogic t)
         (C.pIsLogic -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pLogic t)
-                pb <- proveProp sc env (C.pLogic (C.tTuple ts))
+                pa <- provePropRec sc env prop0 (C.pLogic t)
+                pb <- provePropRec sc env prop0 (C.pLogic (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance (Logic a, Logic b, ...) => instance Logic { x : a, y : b, ... }
         (C.pIsLogic -> Just (C.tIsRec -> Just fm))
-          -> do proveProp sc env (C.pLogic (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do provePropRec sc env prop0 (C.pLogic (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Ring Integer
         (C.pIsRing -> Just (C.tIsInteger -> True))
@@ -536,29 +545,29 @@ proveProp sc env prop =
         (C.pIsRing -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pRing a)
+                pa <- provePropRec sc env prop0 (C.pRing a)
                 scGlobalApply sc "Cryptol.PRingSeq" [n', a', pa]
         -- instance (Ring b) => Ring (a -> b)
         (C.pIsRing -> Just (C.tIsFun -> Just (a, b)))
           -> do a' <- importType sc env a
                 b' <- importType sc env b
-                pb <- proveProp sc env (C.pRing b)
+                pb <- provePropRec sc env prop0 (C.pRing b)
                 scGlobalApply sc "Cryptol.PRingFun" [a', b', pb]
         -- instance Ring ()
         (C.pIsRing -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PRingUnit" []
         -- instance (Ring a, Ring b) => Ring (a, b)
         (C.pIsRing -> Just (C.tIsTuple -> Just [t]))
-          -> do proveProp sc env (C.pRing t)
+          -> do provePropRec sc env prop0 (C.pRing t)
         (C.pIsRing -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pRing t)
-                pb <- proveProp sc env (C.pRing (C.tTuple ts))
+                pa <- provePropRec sc env prop0 (C.pRing t)
+                pb <- provePropRec sc env prop0 (C.pRing (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
         -- instance (Ring a, Ring b, ...) => instance Ring { x : a, y : b, ... }
         (C.pIsRing -> Just (C.tIsRec -> Just fm))
-          -> do proveProp sc env (C.pRing (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do provePropRec sc env prop0 (C.pRing (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Integral Integer
         (C.pIsIntegral -> Just (C.tIsInteger -> True))
@@ -616,23 +625,23 @@ proveProp sc env prop =
         (C.pIsEq -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pEq a)
+                pa <- provePropRec sc env prop0 (C.pEq a)
                 scGlobalApply sc "Cryptol.PEqSeq" [n', a', pa]
         -- instance Eq ()
         (C.pIsEq -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PEqUnit" []
         -- instance (Eq a, Eq b) => Eq (a, b)
         (C.pIsEq -> Just (C.tIsTuple -> Just [t]))
-          -> do proveProp sc env (C.pEq t)
+          -> do provePropRec sc env prop0 (C.pEq t)
         (C.pIsEq -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pEq t)
-                pb <- proveProp sc env (C.pEq (C.tTuple ts))
+                pa <- provePropRec sc env prop0 (C.pEq t)
+                pb <- provePropRec sc env prop0 (C.pEq (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
         -- instance (Eq a, Eq b, ...) => instance Eq { x : a, y : b, ... }
         (C.pIsEq -> Just (C.tIsRec -> Just fm))
-          -> do proveProp sc env (C.pEq (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do provePropRec sc env prop0 (C.pEq (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -656,23 +665,23 @@ proveProp sc env prop =
         (C.pIsCmp -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pCmp a)
+                pa <- provePropRec sc env prop0 (C.pCmp a)
                 scGlobalApply sc "Cryptol.PCmpSeq" [n', a', pa]
         -- instance Cmp ()
         (C.pIsCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PCmpUnit" []
         -- instance (Cmp a, Cmp b) => Cmp (a, b)
         (C.pIsCmp -> Just (C.tIsTuple -> Just [t]))
-          -> do proveProp sc env (C.pCmp t)
+          -> do provePropRec sc env prop0 (C.pCmp t)
         (C.pIsCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pCmp t)
-                pb <- proveProp sc env (C.pCmp (C.tTuple ts))
+                pa <- provePropRec sc env prop0 (C.pCmp t)
+                pb <- provePropRec sc env prop0 (C.pCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance (Cmp a, Cmp b, ...) => instance Cmp { x : a, y : b, ... }
         (C.pIsCmp -> Just (C.tIsRec -> Just fm))
-          -> do proveProp sc env (C.pCmp (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do provePropRec sc env prop0 (C.pCmp (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
@@ -682,23 +691,23 @@ proveProp sc env prop =
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pSignedCmp a)
+                pa <- provePropRec sc env prop0 (C.pSignedCmp a)
                 scGlobalApply sc "Cryptol.PSignedCmpSeq" [n', a', pa]
         -- instance SignedCmp ()
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
         -- instance (SignedCmp a, SignedCmp b) => SignedCmp (a, b)
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just [t]))
-          -> do proveProp sc env (C.pSignedCmp t)
+          -> do provePropRec sc env prop0 (C.pSignedCmp t)
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pSignedCmp t)
-                pb <- proveProp sc env (C.pSignedCmp (C.tTuple ts))
+                pa <- provePropRec sc env prop0 (C.pSignedCmp t)
+                pb <- provePropRec sc env prop0 (C.pSignedCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance (SignedCmp a, SignedCmp b, ...) => instance SignedCmp { x : a, y : b, ... }
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
-          -> do proveProp sc env (C.pSignedCmp (C.tTuple (map snd (C.canonicalFields fm))))
+          -> do provePropRec sc env prop0 (C.pSignedCmp (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Literal val Bit
         (C.pIsLiteral -> Just (_, C.tIsBit -> True))
@@ -746,7 +755,19 @@ proveProp sc env prop =
                 p' <- importType sc env p
                 scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
 
-        _ -> do panic "proveProp" [pretty prop]
+        _ -> do
+            let prop0' = "   " ++ pretty prop0
+                prop' = "   " ++ pretty prop
+                env' = map (\p -> "   " ++ pretty p) $ Map.keys $ envP env
+                message = [
+                    "Cannot find or infer typeclass instance",
+                    "Property needed:",
+                    prop',
+                    "Original property:",
+                    prop0',
+                    "Available propositions in the environment:"
+                 ] ++ env'
+            panic "proveProp" message
 
 importPrimitive :: SharedContext -> ImportPrimitiveOptions -> Env -> C.Name -> C.Schema -> IO Term
 importPrimitive sc primOpts env n sch

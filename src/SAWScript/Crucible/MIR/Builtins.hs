@@ -654,7 +654,7 @@ mir_unsafe_assume_spec ::
 mir_unsafe_assume_spec rm nm setup =
   do cc <- setupCrucibleContext rm
      pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_assume_spec" pos
+     let loc = SS.toW4Loc "_SAW_mir_unsafe_assume_spec" pos
      fn <- findFn rm nm
      let st0 = initialCrucibleSetupState cc fn loc
      ms <- (view Setup.csMethodSpec) <$>
@@ -686,7 +686,7 @@ mir_verify rm nm lemmas checkSat setup tactic =
      let ?singleOverrideSpecialCase = sosp
 
      pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_verify_prestate" pos
+     let loc = SS.toW4Loc "_SAW_mir_verify" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "mir_verify" profFile
@@ -1081,7 +1081,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
   mccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
-     poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
+     poststateLoc <- SS.toW4Loc "_SAW_MIR_verifyPoststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      -- This discards all the obligations generated during
@@ -1179,7 +1179,7 @@ verifyPrestate cc mspec globals0 =
      let tyenv = MS.csAllocations mspec
      let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-     let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
+     let prestateLoc = W4.mkProgramLoc "_SAW_MIR_verifyPrestate" W4.InternalPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      (env, globals1) <- runStateT

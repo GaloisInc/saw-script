@@ -226,7 +226,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      let jc = cc^.jccJVMContext
 
      pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_verify_prestate" pos
+     let loc = SS.toW4Loc "_SAW_jvm_verify" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
@@ -284,7 +284,7 @@ jvm_unsafe_assume_spec cls nm setup =
      pos <- getPosition
      -- cls' is either cls or a (transitive) superclass of cls
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
-     let loc = SS.toW4Loc "_SAW_assume_spec" pos
+     let loc = SS.toW4Loc "_SAW_JVM_unsafe_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$>
              execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
@@ -382,7 +382,7 @@ verifyPrestate cc mspec globals0 =
      let tyenv = MS.csAllocations mspec
      let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-     let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
+     let prestateLoc = W4.mkProgramLoc "_SAW_JVM_verifyPrestate" W4.InternalPos
      W4.setCurrentProgramLoc sym prestateLoc
 
      --let cvar = CJ.dynamicClassTable (cc^.jccJVMContext)
@@ -766,7 +766,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
   jccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
-     poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
+     poststateLoc <- SS.toW4Loc "_SAW_JVM_verifyPoststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      -- This discards all the obligations generated during
