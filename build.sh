@@ -15,7 +15,12 @@ set -e
 
 tgt_gitrev() {
     # fetch/update the compiled-in git version info
-    src/SAWScript/savegitinfo.sh
+    # but only if .git exists
+    if [ -d .git ]; then
+        src/SAWScript/savegitinfo.sh
+    else
+        echo "(skipping GitRev update; no .git directory)"
+    fi
 }
 
 ##############################
