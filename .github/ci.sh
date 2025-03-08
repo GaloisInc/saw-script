@@ -54,6 +54,34 @@ build() {
   cabal v2-build "$@" "${pkgs[@]}"
 }
 
+haddock() {
+  # It seems that the secret sauce for getting cabal to _not_ go
+  # through building docs for every single sublibrary is to pass
+  # --disable-documentation, counterintuitive though that is.
+  #
+  # Note: there's a v2-haddock-project that runs haddock on all
+  # packages in the project, which would avoid needing to list them
+  # out. However, it doesn't support the --disable-documentation
+  # option, so it won't currently serve. (Also for some reason it
+  # currently demands --internal in place of --haddock-internal.)
+  local PACKAGES='
+    rme
+    saw-core
+    cryptol-saw-core
+    saw-core-what4
+    saw-core-sbv
+    saw-core-aig
+    saw-core-coq
+    heapster-saw
+    saw-script
+    saw-remote-api
+    crucible-mir-comp
+    crux-mir-comp
+    verif-viewer
+  '
+  cabal v2-haddock --haddock-internal --disable-documentation $PACKAGES
+}
+
 # Gather and tar up all HPC coverage files and binaries
 collect_hpc_files() {
   local MIX_FILES=$(find dist-newstyle -name "*.mix")
