@@ -182,7 +182,6 @@ library
     SAWScript.Crucible.MIR.Setup.Value
     SAWScript.Crucible.MIR.TypeShape
 
-    SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
     SAWScript.Prover.SolverStats
     SAWScript.Prover.Util
