@@ -77,7 +77,7 @@ generate() {
 	rmeHash :: Maybe String
 	rmeHash = $rmehash
 EOF
-    if diff -q "$WHERE"/GitRev.hs "$WHERE/"GitRev.hs.new; then
+    if diff -q "$WHERE"/GitRev.hs "$WHERE/"GitRev.hs.new >/dev/null 2>&1; then
         echo 'GitRev unchanged'
         rm -f "$WHERE"/GitRev.hs.new
     else
