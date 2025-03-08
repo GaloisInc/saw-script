@@ -86,6 +86,13 @@ EOF
     fi
 }
 
+# If .git is not here and we already have a GitRev.hs, assume it
+# contains useful info and don't clobber it with a new one that won't.
+if ! [ -d .git ] && [ -f "$WHERE"/GitRev.hs ]; then
+    echo 'Keeping existing GitRev; no .git directory'
+    exit 0
+fi
+
 # Check for git being here
 GITVER=$(git --version 2>/dev/null || echo MISSING)
 case "$GITVER" in
