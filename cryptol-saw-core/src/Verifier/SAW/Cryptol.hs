@@ -2021,7 +2021,7 @@ genNominalConstructors sc nominal env0 =
           where
           tFn tp body =
             if elem (C.tpKind tp) [C.KType, C.KNum]
-              then C.ETAbs tp body;i
+              then C.ETAbs tp body;
               else panic "genNominalConstructors"
                    ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
