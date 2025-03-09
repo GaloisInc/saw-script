@@ -323,7 +323,7 @@ jobs:
 
       - name: Gather HPC coverage files and copy to HTML docs
         run: |
-          ./github/ci.sh collect_all_html
+          .github/ci.sh collect_all_html
           mkdir -p doc/_build/html/coverage
           cp -r all-html/. doc/_build/html/coverage
         env:
