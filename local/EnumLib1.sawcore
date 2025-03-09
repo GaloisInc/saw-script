@@ -44,17 +44,42 @@ listSortDrop3 ss n =
   Nat__rec
     (\(_:Nat) -> ListSort -> ListSort)
     (\(l : ListSort) -> l)
-    (\(n' : Nat) (rec_n' : ListSort -> ListSort) ->
+    (\(_ : Nat) (rec_n' : ListSort -> ListSort) ->
       (\(l : ListSort)->
           rec_n' (fold_ListSort ListSort
                     LS_Nil
-                    (\(_:sort 0) (l:ListSort) (tail:ListSort) -> tail)
+                    (\(_:sort 0) (tail:ListSort) (_:ListSort) -> tail)
                     l
                  )
       ))
     n
     ss;
 
+myTypes3 : ListSort;
+myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+
+myTypes4 : ListSort;
+myTypes4 = LS_Cons UnitType (LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil)));
+
+myTypes2 : ListSort;
+myTypes2 = listSortDrop myTypes3 (0 : Nat);
+  -- TODO: error in `listSortDrop` or its documentation.
+
+test1  : ListSort = myTypes2;
+test1a : ListSort = listSortDrop3 myTypes4 0;
+test1b : ListSort = listSortDrop3 myTypes4 1;
+test1c : ListSort = listSortDrop3 myTypes4 2;
+test1d : ListSort = listSortDrop3 myTypes4 3;
+test1e : ListSort = listSortDrop3 myTypes4 5;
+test1f : ListSort = listSortDrop3 LS_Nil 5;
+
+testA : sort 0;
+testA = listSortGet myTypes3 (1 : Nat); -- works as expected.
+
+y3 : Eithers myTypes3;
+y3 = Left UnitType (Eithers myTypes2) Unit;
+
+--------------------------------------------------------------------
 -- Exploring/learning here
 listSortSilly : ListSort -> Nat -> ListSort;
 listSortSilly ss n =
@@ -74,26 +99,7 @@ listSortSilly ss n =
 
 test_s1 : ListSort = listSortSilly LS_Nil 5;
 
-
-myTypes3 : ListSort;
-myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
-
-myTypes2 : ListSort;
-myTypes2 = listSortDrop myTypes3 (0 : Nat);
-  -- TODO: error in `listSortDrop` or its documentation.
-
-test1  : ListSort = myTypes2;
-test1a : ListSort = listSortDrop3 myTypes3 0;
-test1b : ListSort = listSortDrop3 myTypes3 1;
-test1c : ListSort = listSortDrop3 myTypes3 3;
-test1d : ListSort = listSortDrop3 myTypes3 5;
-test1e : ListSort = listSortDrop3 LS_Nil 5;
-
-testA : sort 0;
-testA = listSortGet myTypes3 (1 : Nat); -- works as expected.
-
-y3 : Eithers myTypes3;
-y3 = Left UnitType (Eithers myTypes2) Unit;
+------------------------------------------------------------
 
 {-
 - alternatives
