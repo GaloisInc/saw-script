@@ -329,6 +329,37 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: |
+          python3 -c "
+          import os, re
+          github_ref = os.environ.get('GITHUB_REF')
+          if github_ref == 'refs/heads/master':
+            target = 'master'
+          elif github_ref.startswith('refs/tags/'):
+            # Matches vx.y or vx.y.z
+            m = re.match(r'^refs/tags/v([0-9]+\.[0-9]+(?:\.[0-9]+)?)$', github_ref)
+            target = m.group(1)
+          else:
+            target = ''
+          print(f'::set-output name=target::{target}')"
+
+      # Using peaceiris/actions-gh-pages, as it provides more control over the
+      # deployment.
+      - name: Publish docs to GitHub pages
+        if: steps.docs-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.docs-publish-dir.outputs.target }}
+          keep_files: false
+
   mr-solver-tests:
     needs: [build]
     strategy:
