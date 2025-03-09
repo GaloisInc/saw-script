@@ -1988,6 +1988,15 @@ genNominalConstructors sc nominal env0 =
                      }
       return env'
 
+      -- NOTE: in the above, C.nominalTypeConTypes gets Cryptol
+      -- schemas for Struct & ENum constructors.
+
+      -- MT:
+      -- - Q. Is the (name of) the nominal type in some environment?
+      --    - think so, note 'importType' goes from TVar to var in Term
+      --    - [ ] test this
+      -- - for Enums, we are adding
+
     -- | Create functions/constructors for Nominal Types.
     newDefsForNominal :: Env -> NominalType -> IO [(C.Name,Term)]
     newDefsForNominal env nt =
@@ -2019,38 +2028,56 @@ genNominalConstructors sc nominal env0 =
         -- TODO: hmm: these need to be ordered in dependency order?
         newDefsForEnum cs =
           do
-          (nmConstrs,argTypes,constrs) <- unzip <$>
-                                mapM mkArgTypeAndConstructor cs
+          cons <- mapM mkConstructor cs
+            -- starting simple.
+
+          -- (nmConstrs,argTypes,constrs) <- unzip <$>
+          --                       mapM mkArgTypeAndConstructor cs
 
           -- Create TypeList for the Enum
-          tlist <- stub argTypes -- TODO
+          -- tlist <- stub argTypes -- TODO
 
           -- TODO: create type definition (synonym)
-          tsyn  <- mkTypeSynonym
+          --  - is this *IN* the type?
+          -- tsyn  <- mkTypeSynonym
             -- TODO: use this to do the importType. ?
 
           -- TODO: add deconstructor (case/either):
-          case' <- mkCase stub
-          return $ zip stub
+          -- case' <- mkCase stub
+
+          return cons
 
           where
 
-          mkCase :: _
-          mkEnumNames :: C.Name -> (C.Name, C.Name, ?)
-            -- NOT LIKELY!
+          -- mkCase :: _ ->
+          -- mkEnumNames :: C.Name -> (C.Name, C.Name, ?)
+              -- NOT LIKELY TYPE!!
 
-          (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
-            -- define our naming conventions
+          -- (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
+          --  -- define our naming conventions
 
           -- FIXME[F]: support 2+ args and curried constructors!
           -- | generate ArgType and Constructor definitions:
-          mkArgTypeAndConstructor :: C.EnumCon -> IO (Term, Term)
-          mkArgTypeAndConstructor c =
+          mkConstructor :: C.EnumCon -> IO Term
+          mkConstructor c =
+            {- design:
+              1. just create from scratch, mimic C.nominalTypeConTypes
+                 - but you'd like to use the types from ^ because you
+                   need it in the terms!
+                 - 
+            -}
+             
             do
             let
               n         = length (C.ecFields c)
-              ty        = C.TCon (C.TC (C.TCTuple n))
-                                 (C.ecFields c)
+               
+              ty        = case C.ecFields c of
+                           [t] -> 
+
+               -- won't work, curried type is already in envT:
+               -- C.TCon (C.TC (C.TCTuple n))
+               --              (C.ecFields c)
+
               conName   = C.ecName c
               paramName = C.asLocal C.NSValue conName
 
