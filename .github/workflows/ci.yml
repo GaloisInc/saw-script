@@ -301,6 +301,34 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
+  build-docs:
+    name: "Build and deploy documentation to GitHub pages"
+    needs: [coverage]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Cache Python environment
+        uses: actions/cache@v4
+        with:
+          path: doc/.venv
+          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+
+      - name: Gather HPC coverage files and copy to HTML docs
+        run: |
+          ./github/ci.sh collect_all_html
+          mkdir -p doc/_build/html/coverage
+          cp -r all-html/. doc/_build/html/coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   mr-solver-tests:
     needs: [build]
     strategy:
