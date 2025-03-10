@@ -370,10 +370,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
     steps:
-      - name: Check out gh-pages
+      - name: Check out repo (no submodules)
         uses: actions/checkout@v4
-        with:
-          ref: gh-pages
 
       - name: Write versions to JSON file
         run: |
@@ -385,7 +383,7 @@ jobs:
           versions = sorted((item.name for item in cwd.iterdir()
                              if item.is_dir() and not item.name.startswith('.')),
                              reverse=True)
-          target_dir = Path('gh-pages')
+          target_dir = Path('saw-script')
           target_dir.mkdir(parents=True)
           target_file = target_dir / 'versions.json'
           with target_file.open('w') as f:
