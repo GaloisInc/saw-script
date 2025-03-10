@@ -36,7 +36,13 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
-  cabal v2-configure -j --enable-tests
+  # Configure with --disable-documentation and --haddock-internal so
+  # that the haddock run later, if enabled, doesn't recompile the
+  # world by using those flags. (See haddock() below for discussion of
+  # why those flags are used.) We could do this only for builds where
+  # we're intending to do the haddock run, but it should have no
+  # effect otherwise and unconditional is simpler.
+  cabal v2-configure -j --enable-tests --disable-documentation --haddock-internal
   git status --porcelain
   if $IS_WIN; then
     pkgs=(saw crux-mir-comp)
@@ -64,6 +70,10 @@ haddock() {
   # out. However, it doesn't support the --disable-documentation
   # option, so it won't currently serve. (Also for some reason it
   # currently demands --internal in place of --haddock-internal.)
+  #
+  # We use --haddock-internal because the point of generating the
+  # haddocks for SAW (which doesn't have an external-facing library
+  # interface) is to serve as an internals reference.
   local PACKAGES='
     rme
     saw-core
