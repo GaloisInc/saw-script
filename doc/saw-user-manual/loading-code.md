@@ -154,15 +154,7 @@ following steps:
    instructions](https://github.com/GaloisInc/mir-json#installation-instructions)
    in order to install `mir-json`.
 
-4. Navigate to the
-   [`crux-mir`](https://github.com/GaloisInc/crucible/tree/master/crux-mir)
-   subdirectory of the `crucible` submodule:
-
-   :::{code-block} console
-   $ cd ../crucible/crux-mir/
-   :::
-
-5. Run the `translate_libs.sh` script:
+4. Run the `translate_libs.sh` script in the `mir-json` submodule:
 
    :::{code-block} console
    $ ./translate_libs.sh
@@ -171,11 +163,11 @@ following steps:
    This will compile the custom versions of the Rust standard libraries using
    `mir-json`, placing the results under the `rlibs` subdirectory.
 
-6. Finally, define a `SAW_RUST_LIBRARY_PATH` environment variable that points
+5. Finally, define a `SAW_RUST_LIBRARY_PATH` environment variable that points
    to the newly created `rlibs` subdirectory:
 
    :::{code-block} console
-   $ export SAW_RUST_LIBRARY_PATH=<...>/crucible/crux-mir/rlibs
+   $ export SAW_RUST_LIBRARY_PATH=<...>/mir-json/rlibs
    :::
 
 For `cargo`-based projects, `mir-json` provides a `cargo` subcommand called
