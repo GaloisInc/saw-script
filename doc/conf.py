@@ -1,3 +1,5 @@
+from subprocess import check_output, CalledProcessError, DEVNULL
+
 # -- Project information -----------------------------------------------------
 
 project = "SAW Documentation"
@@ -45,9 +47,28 @@ exclude_patterns = [
     "README.md",
 ]
 
+# -- Options for templating --------------------------------------------------
+
+templates_path = ["_templates"]
+
 # -- Options for HTML output -------------------------------------------------
 
 html_theme = "sphinx_rtd_theme"
+
+git_describe = ["git", "describe", "--tags", "--exact-match"]
+git_symref = ["git", "symbolic-ref", "--short", "HEAD"]
+
+try:
+    git_version = check_output(git_describe, stderr=DEVNULL, encoding="utf-8")
+except CalledProcessError:
+    git_version = check_output(git_symref, stderr=DEVNULL, encoding="utf-8")
+
+html_context = {
+    "VERSIONS": True,
+    "current_version": git_version.strip(),
+}
+html_js_files = ["versions.js"]
+html_static_path = ["_static"]
 
 # -- Options for LaTeX output ------------------------------------------------
 

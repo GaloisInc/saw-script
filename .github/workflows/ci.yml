@@ -292,6 +292,103 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
+  build-docs:
+    name: "Build and deploy documentation to GitHub pages"
+    needs: [coverage]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Cache Python environment
+        uses: actions/cache@v4
+        with:
+          path: doc/.venv
+          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+
+      - name: Gather HPC coverage files and copy to HTML docs
+        run: |
+          .github/ci.sh collect_all_html
+          mkdir -p doc/_build/html/coverage
+          cp -r all-html/. doc/_build/html/coverage
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: |
+          python3 -c "
+          import os, re
+          github_ref = os.environ.get('GITHUB_REF')
+          if github_ref == 'refs/heads/master':
+            target = 'master'
+          elif github_ref.startswith('refs/tags/'):
+            # Matches vx.y or vx.y.z
+            m = re.match(r'^refs/tags/v([0-9]+\.[0-9]+(?:\.[0-9]+)?)$', github_ref)
+            target = m.group(1)
+          else:
+            target = 'test-version'
+          print(f'echo \"target={target}\" >> $GITHUB_OUTPUT')"
+
+      # Using peaceiris/actions-gh-pages, as it provides more control over the
+      # deployment.
+      - name: Publish docs to GitHub pages
+        if: steps.docs-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.docs-publish-dir.outputs.target }}
+          keep_files: false
+
+  # Adapted from:
+  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
+  update-docs-versions:
+    name: "Update documentation versions JSON"
+    needs: [build-docs]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Write versions to JSON file
+        run: |
+          python3 -C "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted((item.name for item in cwd.iterdir()
+                             if item.is_dir() and not item.name.startswith('.')),
+                             reverse=True)
+          target_dir = Path('gh-pages')
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
+              json.dump(versions, f)"
+
+      - name: Publish versions JSON to GitHub pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true
+
   mr-solver-tests:
     needs: [build]
     strategy:
@@ -542,13 +639,6 @@ jobs:
     name: "Run integration tests with coverage reporting"
     needs: build
     runs-on: ${{ matrix.os }}
-    # Do not run this job in forks, as the deploy-pages step will fail unless it
-    # has GITHUB_TOKEN permissions from a user within the GaloisInc organization
-    # (see #2216).
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
-    permissions:
-      pages: write
-      id-token: write
     strategy:
       matrix:
         suite: ['integration_tests']
@@ -630,21 +720,6 @@ jobs:
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
-
-      - name: Gather HPC coverage files
-        shell: bash
-        run: .github/ci.sh collect_all_html
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: all-html
-
-      - name: Deploy to github pages
-        id: deployment
-        uses: actions/deploy-pages@v4
 
   build-push-image:
     runs-on: ubuntu-22.04
