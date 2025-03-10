@@ -347,7 +347,7 @@ jobs:
             target = m.group(1)
           else:
             target = 'test-version'
-          print(f'echo \"target={target}\" >> $GITHUB_OUTPUT')
+          print(f'echo \"target={target}\" >> $GITHUB_OUTPUT')"
 
       # Using peaceiris/actions-gh-pages, as it provides more control over the
       # deployment.
