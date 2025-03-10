@@ -92,19 +92,16 @@ it is worthwhile to teach SAW the location of the custom libraries now.
 At present, the best way to obtain the custom version of the Rust standard
 libraries is to perform the following steps:
 
-1. Clone the [`crucible`](https://github.com/GaloisInc/crucible) repo like so:
+1. Clone the [`mir-json`](https://github.com/GaloisInc/mir-json) repo like so:
 
    :::{code-block} console
-   $ git clone https://github.com/GaloisInc/crucible
+   $ git clone https://github.com/GaloisInc/mir-json
+   $ cd mir-json
    :::
 
-2. Navigate to the
-   [`crux-mir`](https://github.com/GaloisInc/crucible/tree/master/crux-mir)
-   subdirectory of the `crucible` checkout:
-
-   :::{code-block} console
-   $ cd crucible/crux-mir/
-   :::
+2. Follow the instructions laid out in the [`mir-json` installation
+   instructions](https://github.com/GaloisInc/mir-json#installation-instructions)
+   in order to install `mir-json`.
 
 3. Run the `translate_libs.sh` script:
 
@@ -119,7 +116,7 @@ libraries is to perform the following steps:
    to the newly created `rlibs` subdirectory:
 
    :::{code-block} console
-   $ export SAW_RUST_LIBRARY_PATH=<...>/crucible/crux-mir/rlibs
+   $ export SAW_RUST_LIBRARY_PATH=<...>/mir-json/rlibs
    :::
 
 An upcoming release of SAW will include these custom libraries pre-built, which
