@@ -371,4 +371,7 @@ toPattern expr =
     Var x              -> return (PVar (getPos x) x Nothing)
     _              -> Left (InvalidPattern expr)
 
+toLName :: Token Pos -> LName
+toLName p = Located (tokStr p) (tokStr p) (tokPos p)
+
 }
