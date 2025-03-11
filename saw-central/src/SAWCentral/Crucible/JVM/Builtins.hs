@@ -121,7 +121,7 @@ import SAWCentral.Panic
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.TopLevel
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.Utils as SS
 import qualified SAWCentral.Position as SS
 import SAWCentral.Options

@@ -100,7 +100,7 @@ import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Prover.Util
 import SAWCentral.Prover.What4
-import SAWScript.Value
+import SAWCentral.Value
 
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4

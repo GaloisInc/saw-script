@@ -11,7 +11,7 @@ import Control.Lens (view, set)
 import Data.Aeson (FromJSON(..), Object, withObject, (.:))
 import Data.Aeson.Types (Parser)
 
-import SAWScript.Value
+import SAWCentral.Value
 
 import qualified Argo
 import qualified Argo.Doc as Doc

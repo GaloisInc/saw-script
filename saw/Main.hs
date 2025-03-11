@@ -31,7 +31,7 @@ import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
 import qualified SAWScript.REPL.Haskeline as REPL
 import qualified SAWScript.REPL.Monad as REPL
-import SAWScript.Value (AIGProxy(..))
+import SAWCentral.Value (AIGProxy(..))
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWVersion.Version (shortVersionText)

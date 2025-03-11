@@ -61,7 +61,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Proof (Sequent, SolveResult)
-import SAWScript.Value (TopLevel)
+import SAWCentral.Value (TopLevel)
 
 import SAWCentral.MRSolver.Term
 import SAWCentral.MRSolver.Evidence

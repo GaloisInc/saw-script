@@ -213,6 +213,8 @@ library saw-central
     SAWCentral.TopLevel
     SAWCentral.VerificationSummary
 
+    SAWCentral.Value
+
   other-modules:
     SAWCentral.Panic
 
@@ -333,7 +335,6 @@ library
     SAWScript.Search
     SAWScript.Token
     SAWScript.MGU
-    SAWScript.Value
 
     SAWScript.HeapsterBuiltins
 

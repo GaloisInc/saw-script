@@ -143,7 +143,7 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Utils (neGroupOn)
-import SAWScript.Value
+import SAWCentral.Value
 
 type AssumptionReason = (MS.ConditionMetadata, String)
 type SetupValue = MS.SetupValue MIR

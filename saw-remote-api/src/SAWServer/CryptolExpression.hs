@@ -30,7 +30,7 @@ import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP ( defaultPPOpts, pp )
-import SAWScript.Value (biSharedContext, TopLevelRW(..))
+import SAWCentral.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
     ( getAllIfaceDecls,
       getNamingEnv,

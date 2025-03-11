@@ -27,7 +27,7 @@ import qualified What4.ProgramLoc as W4
 
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
-import           SAWScript.Value
+import           SAWCentral.Value
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import           SAWCentral.Crucible.Common.Setup.Type

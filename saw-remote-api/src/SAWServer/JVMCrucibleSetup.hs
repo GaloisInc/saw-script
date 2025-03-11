@@ -42,7 +42,7 @@ import SAWCentral.Crucible.JVM.Builtins
       jvm_return )
 import SAWCentral.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
 import SAWCentral.JavaExpr (JavaType(..))
-import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
+import SAWCentral.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)

@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Value
+Module      : SAWCentral.Value
 Description : Value datatype for SAW-Script interpreter.
 License     : BSD3
 Maintainer  : huffman
@@ -28,7 +28,7 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module SAWScript.Value where
+module SAWCentral.Value where
 
 import Prelude hiding (fail)
 

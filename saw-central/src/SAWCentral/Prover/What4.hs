@@ -21,7 +21,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.SATQuery (SATQuery(..))
 
 import           SAWCentral.Proof(Sequent, sequentToSATQuery, CEX)
-import           SAWScript.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
+import           SAWCentral.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
 
 import           Data.Parameterized.Nonce
 

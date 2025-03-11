@@ -100,7 +100,7 @@ import SAWCentral.Options (Options)
 import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
 import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
                             makeCheckpoint, restoreCheckpoint)
-import SAWScript.Value
+import SAWCentral.Value
   ( AIGProxy(..), mergeLocalEnv, IsValue, Value
   , ProofScript(..), showsProofResult, toValue
   )

@@ -45,7 +45,7 @@ import SAWCentral.Crucible.MIR.Builtins
       mir_str_slice_value,
       mir_str_slice_range_value )
 import SAWCentral.Crucible.MIR.ResolveSetupValue (typeOfSetupValue)
-import SAWScript.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
+import SAWCentral.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)

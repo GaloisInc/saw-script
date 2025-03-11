@@ -43,7 +43,7 @@ import qualified Cryptol.Utils.PP        as Cryptol
 import SAWCentral.Position
 import SAWCentral.Utils
 import SAWCentral.TopLevel
-import SAWScript.Value
+import SAWCentral.Value
 --import Verifier.SAW.SharedTerm
 
 import SAWScript.AutoMatch.ArgMapping
