@@ -63,7 +63,7 @@ import qualified Data.AIG as AIG
 
 import qualified SAWCentral.AST as SS
 import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
-import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
+import SAWCentral.BisimulationTheorem (BisimTheorem)
 import qualified SAWCentral.Exceptions as SS
 import qualified SAWCentral.Position as SS
 import qualified SAWCentral.Crucible.Common as Common
