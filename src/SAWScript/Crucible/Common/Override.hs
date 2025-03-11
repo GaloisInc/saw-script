@@ -122,7 +122,7 @@ import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
-import           SAWScript.Exceptions
+import           SAWCentral.Exceptions
 import           SAWScript.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.Setup.Value as MS

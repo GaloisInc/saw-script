@@ -60,10 +60,10 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.AST (Located(..),Import(..))
 import SAWScript.Bisimulation
 import SAWScript.Builtins
-import SAWScript.Exceptions (failTypecheck)
+import SAWCentral.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.HeapsterBuiltins
-import SAWScript.JavaExpr
+import SAWCentral.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Lexer (lexSAW)

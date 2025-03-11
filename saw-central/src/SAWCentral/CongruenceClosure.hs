@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.CongruenceClosure
+Module      : SAWCentral.CongruenceClosure
 Description : Congruence closure library.
 License     : BSD3
 Maintainer  : atomb
@@ -8,7 +8,7 @@ Stability   : provisional
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 
-module SAWScript.CongruenceClosure
+module SAWCentral.CongruenceClosure
   ( -- * Functor type classes
     EqFoldable(..)
   , OrdFoldable(..)

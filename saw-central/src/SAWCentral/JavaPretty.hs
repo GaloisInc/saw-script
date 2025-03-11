@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.JavaPretty
+Module      : SAWCentral.JavaPretty
 Description : Pretty printer for Java Class datatype.
 License     : BSD3
 Maintainer  : atomb
@@ -8,7 +8,7 @@ Stability   : provisional
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWScript.JavaPretty where
+module SAWCentral.JavaPretty where
 
 import Prettyprinter
 

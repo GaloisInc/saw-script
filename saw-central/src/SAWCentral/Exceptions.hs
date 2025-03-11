@@ -1,7 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module SAWScript.Exceptions
+module SAWCentral.Exceptions
   ( TypeErrors(..), failTypecheck
   , TopLevelException(..)
   , TraceException(..)

@@ -136,7 +136,7 @@ import SAWScript.Crucible.MIR.MethodSpecIR
 import SAWScript.Crucible.MIR.Override
 import SAWScript.Crucible.MIR.ResolveSetupValue
 import SAWScript.Crucible.MIR.TypeShape
-import SAWScript.Exceptions
+import SAWCentral.Exceptions
 import SAWCentral.Options
 import SAWScript.Panic
 import qualified SAWCentral.Position as SS

@@ -116,7 +116,7 @@ import Verifier.SAW.TypedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Builtins (ghost_value)
-import SAWScript.Exceptions
+import SAWCentral.Exceptions
 import SAWScript.Panic
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -127,7 +127,7 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.Options
 import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
-import SAWScript.JavaExpr (JavaType(..))
+import SAWCentral.JavaExpr (JavaType(..))
 
 import qualified SAWScript.Crucible.Common as Common
 import           SAWScript.Crucible.Common

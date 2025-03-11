@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.SBVParser
+Module      : SAWCentral.SBVParser
 Description : Parser for .sbv file format.
 License     : BSD3
 Maintainer  : huffman
@@ -10,7 +10,7 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module SAWScript.SBVParser
+module SAWCentral.SBVParser
   ( loadSBV
   , parseSBVPgm
   , UnintMap
@@ -32,7 +32,7 @@ import Numeric.Natural (Natural)
 
 import Verifier.SAW.TypedAST
 import Verifier.SAW.SharedTerm
-import qualified SAWScript.SBVModel as SBV
+import qualified SAWCentral.SBVModel as SBV
 import SAWCentral.Options
 
 type NodeCache = Map SBV.NodeId Term

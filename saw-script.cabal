@@ -131,6 +131,13 @@ library saw-central
     SAWCentral.Utils
     SAWCentral.AST
     SAWCentral.ASTUtil
+    SAWCentral.Exceptions
+    SAWCentral.CongruenceClosure
+    SAWCentral.JavaExpr
+    SAWCentral.JavaPretty
+    SAWCentral.ImportAIG
+    SAWCentral.SBVParser
+    SAWCentral.SBVModel
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
@@ -244,20 +251,13 @@ library
     SAWScript.Bisimulation
     SAWScript.Bisimulation.BisimTheorem
     SAWScript.Builtins
-    SAWScript.CongruenceClosure
-    SAWScript.Exceptions
     SAWScript.Import
-    SAWScript.ImportAIG
     SAWScript.Interpreter
-    SAWScript.JavaExpr
-    SAWScript.JavaPretty
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
     SAWScript.Panic
     SAWScript.Parser
     SAWScript.Proof
-    SAWScript.SBVParser
-    SAWScript.SBVModel
     SAWScript.Search
     SAWScript.SolverCache
     SAWScript.SolverVersions
