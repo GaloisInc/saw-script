@@ -20,7 +20,6 @@ module SAWScript.MGU
        ( checkDecl
        , checkStmt
        , checkSchemaPattern
-       , substituteTyVars
        ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -41,7 +40,7 @@ import qualified Data.Set as S
 import qualified Prettyprinter as PP
 
 import SAWScript.AST
-import SAWScript.ASTUtil (namedTyVars)
+import SAWScript.ASTUtil (namedTyVars, SubstituteTyVars(..))
 import SAWScript.Panic (panic)
 import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -245,43 +244,6 @@ instance AppSubst NamedType where
   appSubst s nt = case nt of
     ConcreteType ty -> ConcreteType $ appSubst s ty
     AbstractType -> AbstractType
-
--- }}}
-
-
-------------------------------------------------------------
--- SubstituteTyVars {{{
-
---
--- substituteTyVars is a typeclass-polymorphic function for
--- substituting named type variables (such as those declared with
--- typedef) in a Type.
---
--- Note: substituteTyVars is exposed from this module and reused by
--- the interpreter as part of its handling of typedefs during
--- execution.
---
-
-class SubstituteTyVars t where
-  -- | @substituteTyVars m x@ applies the map @m@ to type variables in @x@.
-  substituteTyVars :: TyEnv -> t -> t
-
-instance (SubstituteTyVars a) => SubstituteTyVars (Maybe a) where
-  substituteTyVars tyenv = fmap (substituteTyVars tyenv)
-
-instance (SubstituteTyVars a) => SubstituteTyVars [a] where
-  substituteTyVars tyenv = map (substituteTyVars tyenv)
-
-instance SubstituteTyVars Type where
-  substituteTyVars tyenv ty = case ty of
-    TyCon pos tc ts     -> TyCon pos tc (substituteTyVars tyenv ts)
-    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars tyenv) fs)
-    TyUnifyVar _ _      -> ty
-    TyVar _ n           ->
-        case M.lookup n tyenv of
-            Nothing -> ty
-            Just AbstractType -> ty
-            Just (ConcreteType ty') -> ty'
 
 -- }}}
 

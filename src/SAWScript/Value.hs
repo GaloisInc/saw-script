@@ -62,6 +62,7 @@ import qualified Prettyprinter as PP
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.ASTUtil as SS (substituteTyVars)
 import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
@@ -76,7 +77,6 @@ import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
-import SAWScript.MGU (substituteTyVars)
 import SAWScript.Options (Options, printOutLn, Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -510,7 +510,7 @@ extendLocal x mt md v env = LocalLet x mt md v : env
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw =
   rw { rwNamedTypes = M.insert name (SS.ConcreteType ty') (rwNamedTypes rw) }
-  where ty' = substituteTyVars (rwNamedTypes rw) ty
+  where ty' = SS.substituteTyVars (rwNamedTypes rw) ty
 
 mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
 mergeLocalEnv sc env rw = foldrM addBinding rw env
