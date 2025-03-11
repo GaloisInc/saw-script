@@ -30,7 +30,6 @@ module SAWScript.AST
        , Schema(..)
        , SchemaPattern(..)
        , NamedType(..)
-       , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
        , tJVMSpec, tLLVMSpec, tMIRSpec
@@ -40,7 +39,6 @@ module SAWScript.AST
        , PrettyPrint(..), pShow, pShowText, commaSepAll, prettyWholeModule
        ) where
 
-import SAWScript.Token
 import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
 import Data.Text (Text)
@@ -92,9 +90,6 @@ instance Ord a => Ord (Located a) where
   compare a b = compare (getVal a) (getVal b)
 
 type LName = Located Name
-
-toLName :: Token Pos -> LName
-toLName p = Located (tokStr p) (tokStr p) (tokPos p)
 
 -- }}}
 
