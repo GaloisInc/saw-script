@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.SBVModel
+Module      : SAWCentral.SBVModel
 Description : Abstract representation for .sbv file format.
 Maintainer  : jhendrix
 Stability   : provisional
@@ -8,7 +8,7 @@ Stability   : provisional
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module SAWScript.SBVModel where
+module SAWCentral.SBVModel where
 
 import Data.Binary
 import Data.List(sortBy)

@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.ImportAIG
+Module      : SAWCentral.ImportAIG
 Description : And-Inverter Graphs.
 License     : BSD3
 Maintainer  : huffman
@@ -12,7 +12,7 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWScript.ImportAIG
+module SAWCentral.ImportAIG
   ( readAIG
   , loadAIG
   , verifyAIGCompatible
