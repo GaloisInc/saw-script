@@ -29,6 +29,111 @@ library saw-version
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 
+library saw-central
+  default-language: Haskell2010
+  visibility: public
+  build-depends:
+
+      -- upstream packages from hackage
+      base >= 4.9
+    , aeson >= 2.0 && < 2.3
+    , array
+    , binary
+    , bimap
+    , bytestring
+    , cborg-json
+    , containers
+    , constraints >= 0.6
+    , cryptohash-sha256 >= 0.11.102.1
+    , deepseq
+    , directory >= 1.2.4.0
+    , either
+    , exceptions
+    , executable-path
+    , extra
+    , fgl
+    , filepath
+    , free
+    , haskeline
+    , indexed-traversable
+    , IfElse
+    , lens
+    , modern-uri >= 0.3.2 && < 0.4
+    , mtl >= 2.1
+    , old-locale
+    , old-time
+    , panic
+    , parsec
+    , pretty
+    , prettyprinter
+    , pretty-show
+    , process
+    , reflection
+    , sbv >= 9.1 && < 10.11
+    , serialise
+    , split
+    , temporary
+    , template-haskell
+    , terminal-size
+    , text
+    , time
+    , transformers
+    , transformers-compat
+    , unordered-containers
+    , utf8-string
+    , vector
+    , zenc
+
+      -- galois packages from hackage
+    , bv-sized >= 1.0 && < 1.1
+
+      -- packages in git submodules
+      -- (hobbits is for now actually a source-repository-package)
+    , aig
+    , crucible >= 0.4
+    , crucible-jvm
+    , crucible-llvm >= 0.2
+    , crucible-mir
+    , cryptol
+    , elf-edit
+    , flexdis86
+    , galois-dwarf >= 0.2.2
+    , hobbits >= 1.3.1
+    , jvm-parser
+    , language-sally
+    , llvm-pretty >= 0.8
+    , llvm-pretty-bc-parser >= 0.1.3.1
+    , lmdb-simple
+    , macaw-base
+    , macaw-x86
+    , macaw-symbolic
+    , macaw-x86-symbolic
+    , parameterized-utils
+    , what4 >= 0.4
+    , what4-transition-system
+
+      -- internal subpackages/sublibraries in the saw tree
+    , cryptol-saw-core
+    , heapster-saw
+    , rme
+    , saw-core
+    , saw-core-aig
+    , saw-core-coq
+    , saw-core-sbv
+    , saw-core-what4
+    , saw-script:saw-version
+
+  hs-source-dirs: saw-central/src
+
+  exposed-modules:
+    SAWCentral.Options
+    SAWCentral.Position
+    SAWCentral.Utils
+
+  GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
+  if impl(ghc == 8.0.1)
+    ghc-options: -Wno-redundant-constraints
+
 library
   default-language: Haskell2010
   build-depends:
@@ -121,6 +226,7 @@ library
     , saw-core-sbv
     , saw-core-what4
     , saw-script:saw-version
+    , saw-script:saw-central
 
   hs-source-dirs: src
 
@@ -147,11 +253,9 @@ library
     SAWScript.JavaPretty
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
-    SAWScript.Options
     SAWScript.Panic
     SAWScript.Parser
     SAWScript.Proof
-    SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.Search
@@ -160,7 +264,6 @@ library
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
-    SAWScript.Utils
     SAWScript.Value
 
     SAWScript.HeapsterBuiltins
@@ -280,6 +383,7 @@ executable saw
     , heapster-saw
     , saw-core
     , saw-script:saw-version
+    , saw-script:saw-central
     , saw-script
 
   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts

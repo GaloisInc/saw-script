@@ -13,11 +13,11 @@ module SAWScript.Lexer
   , lexSAW
   ) where
 
-import SAWScript.Options (Verbosity(..))
+import SAWCentral.Options (Verbosity(..))
 import SAWScript.Token
 import SAWScript.Panic (panic)
-import SAWScript.Position
-import SAWScript.Utils
+import SAWCentral.Position
+import SAWCentral.Utils
 
 import Numeric (readInt)
 import Data.Char (ord)

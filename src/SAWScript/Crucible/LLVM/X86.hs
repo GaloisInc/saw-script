@@ -85,7 +85,7 @@ import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
 import SAWScript.Crucible.Common

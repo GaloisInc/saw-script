@@ -6,7 +6,7 @@ module SAWScript.ASTUtil (
 import Data.Map (Map)
 import qualified Data.Map as M
 
-import SAWScript.Position
+import SAWCentral.Position
 import SAWScript.AST
 
 ------------------------------------------------------------

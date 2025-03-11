@@ -83,9 +83,9 @@ import SAWScript.Crucible.Common.Override hiding (getSymInterface)
 import SAWScript.Crucible.MIR.MethodSpecIR
 import SAWScript.Crucible.MIR.ResolveSetupValue
 import SAWScript.Crucible.MIR.TypeShape
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.Panic (panic)
-import SAWScript.Utils (bullets, handleException)
+import SAWCentral.Utils (bullets, handleException)
 
 -- A few convenient synonyms
 type SetupValue = MS.SetupValue MIR
