@@ -1,4 +1,4 @@
-module SAWScript.ASTUtil (
+module SAWCentral.ASTUtil (
     namedTyVars,
     SubstituteTyVars(..)
  ) where
@@ -7,7 +7,7 @@ import Data.Map (Map)
 import qualified Data.Map as M
 
 import SAWCentral.Position
-import SAWScript.AST
+import SAWCentral.AST
 
 ------------------------------------------------------------
 -- NamedTyVars {{{

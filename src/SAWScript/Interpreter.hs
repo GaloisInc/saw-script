@@ -55,9 +55,9 @@ import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
-import qualified SAWScript.AST as SS
+import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
-import SAWScript.AST (Located(..),Import(..))
+import SAWCentral.AST (Located(..),Import(..))
 import SAWScript.Bisimulation
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
