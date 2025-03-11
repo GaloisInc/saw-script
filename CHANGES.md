@@ -38,6 +38,12 @@ This release supports [version
   occurred, so this change makes SAW more permissive with respect to
   unsupported LLVM versions.)
 
+* The modified copies of the Rust standard libraries that `mir-json` depends on
+  (and SAW therefore ingests when performing MIR verification) now live in the
+  `mir-json` repo rather than in the `crucible` repo. See the [`mir-json`
+  README](https://github.com/GaloisInc/mir-json/blob/master/README.md) for
+  details.
+
 ## Bug fixes
 
 * git submodule update --init --recursive no longer causes an infinite
