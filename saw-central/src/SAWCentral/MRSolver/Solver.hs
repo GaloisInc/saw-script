@@ -139,7 +139,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Proof (Sequent, SolveResult)
-import SAWScript.Value (TopLevel)
+import SAWCentral.Value (TopLevel)
 
 import SAWCentral.MRSolver.Term
 import SAWCentral.MRSolver.Evidence

@@ -43,7 +43,7 @@ import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.Crucible.Common.MethodSpec
 import SAWCentral.Crucible.LLVM.Builtins
 import SAWCentral.Crucible.LLVM.MethodSpecIR

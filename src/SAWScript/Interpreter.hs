@@ -72,7 +72,7 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 import SAWCentral.Proof (emptyTheoremDB)
@@ -575,7 +575,7 @@ buildTopLevelEnv proxy opts =
                    , rwMonadify   = Monadify.defaultMonEnv
                    , rwMRSolverEnv = emptyMREnv
                    , rwProofs     = []
-                   , rwPPOpts     = SAWScript.Value.defaultPPOpts
+                   , rwPPOpts     = SAWCentral.Value.defaultPPOpts
                    , rwSharedContext = sc
                    , rwSolverCache = mb_cache
                    , rwTheoremDB = emptyTheoremDB

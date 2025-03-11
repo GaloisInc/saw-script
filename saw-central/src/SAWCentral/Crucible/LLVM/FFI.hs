@@ -70,7 +70,7 @@ import           SAWCentral.Crucible.LLVM.Builtins
 import           SAWCentral.Crucible.LLVM.MethodSpecIR
 import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
-import           SAWScript.Value
+import           SAWCentral.Value
 import           Verifier.SAW.CryptolEnv
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Prelude

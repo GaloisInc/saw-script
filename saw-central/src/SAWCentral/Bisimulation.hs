@@ -93,7 +93,7 @@ import SAWCentral.Options (Verbosity(..))
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Prover.Util (checkBooleanSchema)
-import SAWScript.Value
+import SAWCentral.Value
 
 import qualified Verifier.SAW.Cryptol as C
 import Verifier.SAW.SharedTerm

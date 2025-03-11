@@ -54,7 +54,7 @@ import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
 
-import SAWScript.Value
+import SAWCentral.Value
 import qualified SAWCentral.Builtins as Builtins
 import qualified SAWCentral.Crucible.Common as Common
 

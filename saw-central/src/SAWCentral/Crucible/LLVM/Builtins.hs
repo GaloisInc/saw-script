@@ -198,7 +198,7 @@ import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Prover.Versions
 import SAWCentral.TopLevel
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.Position
 import SAWCentral.Exceptions
 import SAWCentral.Options

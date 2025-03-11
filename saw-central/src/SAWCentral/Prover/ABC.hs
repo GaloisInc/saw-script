@@ -37,7 +37,7 @@ import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWCentral.Prover.Exporter as Exporter
 import SAWCentral.Prover.Util (liftCexBB, liftLECexBB)
-import SAWScript.Value
+import SAWCentral.Value
 
 -- crucible-jvm
 -- TODO, very weird import

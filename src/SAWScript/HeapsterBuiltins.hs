@@ -112,7 +112,7 @@ import qualified Text.LLVM.Parser as L
 import qualified Text.PrettyPrint.HughesPJ as L (render)
 
 import SAWCentral.TopLevel
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.Options
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Builtins

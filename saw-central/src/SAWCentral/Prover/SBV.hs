@@ -19,7 +19,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.SATQuery (SATQuery(..))
 
 import SAWCentral.Proof (CEX)
-import SAWScript.Value
+import SAWCentral.Value
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- Constants with names in @unints@ are kept as uninterpreted

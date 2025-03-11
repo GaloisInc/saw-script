@@ -51,7 +51,7 @@ import SAWCentral.Crucible.LLVM.Builtins
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS (GhostGlobal)
-import SAWScript.Value
+import SAWCentral.Value
     ( BuiltinContext, LLVMCrucibleSetupM(..), TopLevelRW(..), biSharedContext )
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
