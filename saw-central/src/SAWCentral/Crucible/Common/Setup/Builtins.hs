@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.Common.Builtins
+Module      : SAWCentral.Crucible.Common.Builtins
 Description : User-facing operations in the CrucibleSetup monad
 License     : BSD3
 Maintainer  : langston
@@ -9,7 +9,7 @@ Stability   : provisional
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE ParallelListComp #-}
 
-module SAWScript.Crucible.Common.Setup.Builtins
+module SAWCentral.Crucible.Common.Setup.Builtins
   ( crucible_precond
   , crucible_postcond
   , crucible_return
@@ -29,8 +29,8 @@ import           Verifier.SAW.TypedTerm (TypedTerm)
 
 import           SAWScript.Value
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import           SAWScript.Crucible.Common.Setup.Type
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import           SAWCentral.Crucible.Common.Setup.Type
 
 --------------------------------------------------------------------------------
 -- ** Builtins

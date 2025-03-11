@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.Skeleton
+Module      : SAWCentral.Crucible.LLVM.Skeleton
 Description : Inferring and using "skeletons" of LLVM specifications
 Maintainer  : sbreese
 Stability   : provisional
@@ -9,7 +9,7 @@ Stability   : provisional
 {-# Language RecordWildCards #-}
 {-# Language ImplicitParams #-}
 
-module SAWScript.Crucible.LLVM.Skeleton.Builtins
+module SAWCentral.Crucible.LLVM.Skeleton.Builtins
   ( module_skeleton
   , function_skeleton
   , skeleton_resize_arg_index
@@ -44,11 +44,11 @@ import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 import Verifier.SAW.TypedTerm
 
 import SAWScript.Value
-import SAWScript.Crucible.Common.MethodSpec
-import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWCentral.Crucible.Common.MethodSpec
+import SAWCentral.Crucible.LLVM.Builtins
+import SAWCentral.Crucible.LLVM.MethodSpecIR
 
-import SAWScript.Crucible.LLVM.Skeleton
+import SAWCentral.Crucible.LLVM.Skeleton
 
 --------------------------------------------------------------------------------
 -- ** Manipulating skeletons

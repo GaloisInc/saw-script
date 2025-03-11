@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.Common.Setup.Value
+Module      : SAWCentral.Crucible.Common.Setup.Value
 Description : Language-neutral method specifications
 License     : BSD3
 Maintainer  : langston
@@ -9,9 +9,9 @@ This module uses GADTs & type families to distinguish syntax-extension- (source
 language-) specific code. This technique is described in the paper \"Trees That
 Grow\", and is prevalent across the Crucible codebase.
 
-The module exists separately from "SAWScript.Crucible.Common.MethodSpecIR"
+The module exists separately from "SAWCentral.Crucible.Common.MethodSpecIR"
 primarily to avoid import cycles. You probably want to import
-"SAWScript.Crucible.Common.MethodSpecIR" (which re-exports everything from this
+"SAWCentral.Crucible.Common.MethodSpecIR" (which re-exports everything from this
 module, plus additional functionality) instead.
 -}
 
@@ -24,7 +24,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module SAWScript.Crucible.Common.Setup.Value
+module SAWCentral.Crucible.Common.Setup.Value
   ( AllocIndex(..)
   , nextAllocIndex
 

@@ -1,13 +1,13 @@
 {- |
-Module      : SAWScript.Crucible.JVM.Setup.Value
+Module      : SAWCentral.Crucible.JVM.Setup.Value
 Description : Data types and type family instances for JVM-specific code
 License     : BSD3
 Maintainer  : Ryan Scott <rscott@galois.com>
 Stability   : provisional
 
-The module exists separately from "SAWScript.Crucible.JVM.MethodSpecIR"
+The module exists separately from "SAWCentral.Crucible.JVM.MethodSpecIR"
 primarily to avoid import cycles. You probably want to import
-"SAWScript.Crucible.JVM.MethodSpecIR" (which re-exports everything from this
+"SAWCentral.Crucible.JVM.MethodSpecIR" (which re-exports everything from this
 module, plus additional functionality) instead.
 -}
 
@@ -32,7 +32,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SAWScript.Crucible.JVM.Setup.Value
+module SAWCentral.Crucible.JVM.Setup.Value
   ( JIdent
 
   , JVMMethodId(..)
@@ -70,8 +70,8 @@ import qualified Language.JVM.Parser as J
 -- cryptol-saw-core
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
-import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.Setup.Value as MS
+import           SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.Setup.Value as MS
 
 --------------------------------------------------------------------------------
 -- ** Language features

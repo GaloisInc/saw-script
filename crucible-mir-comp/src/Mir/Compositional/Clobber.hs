@@ -25,7 +25,7 @@ import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
-import SAWScript.Crucible.MIR.TypeShape
+import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Generator (CollectionState, collection, staticMap, StaticVar(..))
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)

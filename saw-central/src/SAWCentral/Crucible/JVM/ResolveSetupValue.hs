@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.JVM.ResolveSetupValue
+Module      : SAWCentral.Crucible.JVM.ResolveSetupValue
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
@@ -12,7 +12,7 @@ Stability   : provisional
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module SAWScript.Crucible.JVM.ResolveSetupValue
+module SAWCentral.Crucible.JVM.ResolveSetupValue
   ( JVMVal(..)
   , JVMRefVal
   , resolveSetupVal
@@ -63,14 +63,14 @@ import qualified Lang.Crucible.JVM as CJ
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import SAWScript.Crucible.Common
-import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
+import SAWCentral.Crucible.Common
+import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
 
-import SAWScript.Panic
-import SAWScript.Crucible.JVM.MethodSpecIR
-import SAWScript.Crucible.JVM.Setup.Value (JVMRefVal)
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
+import SAWCentral.Panic
+import SAWCentral.Crucible.JVM.MethodSpecIR
+import SAWCentral.Crucible.JVM.Setup.Value (JVMRefVal)
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
 
 
 data JVMVal

@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.ResolveSetupValue
+Module      : SAWCentral.Crucible.LLVM.ResolveSetupValue
 Description : Turn SetupValues back into LLVMVals
 License     : BSD3
 Maintainer  : atomb
@@ -15,7 +15,7 @@ Stability   : provisional
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module SAWScript.Crucible.LLVM.ResolveSetupValue
+module SAWCentral.Crucible.LLVM.ResolveSetupValue
   ( LLVMVal, LLVMPtr
   , resolveSetupVal
   , resolveSetupValBitfield
@@ -67,7 +67,7 @@ import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.MemType     as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -81,11 +81,11 @@ import Verifier.SAW.Simulator.What4
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
 
-import           SAWScript.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
+import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), ppTypedTermType)
 
-import SAWScript.Crucible.LLVM.MethodSpecIR
-import SAWScript.Crucible.LLVM.Setup.Value (LLVMPtr)
+import SAWCentral.Crucible.LLVM.MethodSpecIR
+import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
 import qualified SAWScript.Proof as SP
 
 

@@ -11,7 +11,7 @@ import Prelude hiding (mod)
 import Control.Lens
 import qualified Data.Map as Map
 
-import SAWScript.Crucible.MIR.Builtins
+import SAWCentral.Crucible.MIR.Builtins
     ( mir_unsafe_assume_spec, mir_verify )
 import SAWScript.Value (rwCryptol)
 

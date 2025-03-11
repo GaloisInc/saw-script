@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 -- | The 'TypeShape' data type and related utilities.
-module SAWScript.Crucible.MIR.TypeShape
+module SAWCentral.Crucible.MIR.TypeShape
   ( TypeShape(..)
   , FieldShape(..)
   , VariantShape(..)

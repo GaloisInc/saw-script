@@ -165,6 +165,40 @@ library saw-central
     SAWCentral.Prover.Exporter
     SAWCentral.Prover.Versions
 
+    SAWCentral.Crucible.Common
+    SAWCentral.Crucible.Common.MethodSpec
+    SAWCentral.Crucible.Common.Override
+    SAWCentral.Crucible.Common.ResolveSetupValue
+    SAWCentral.Crucible.Common.Setup.Builtins
+    SAWCentral.Crucible.Common.Setup.Type
+    SAWCentral.Crucible.Common.Setup.Value
+
+    SAWCentral.Crucible.LLVM.Builtins
+    SAWCentral.Crucible.LLVM.Boilerplate
+    SAWCentral.Crucible.LLVM.CrucibleLLVM
+    SAWCentral.Crucible.LLVM.FFI
+    SAWCentral.Crucible.LLVM.Override
+    SAWCentral.Crucible.LLVM.MethodSpecIR
+    SAWCentral.Crucible.LLVM.ResolveSetupValue
+    SAWCentral.Crucible.LLVM.Setup.Value
+    SAWCentral.Crucible.LLVM.Skeleton
+    SAWCentral.Crucible.LLVM.Skeleton.Builtins
+    SAWCentral.Crucible.LLVM.X86
+
+    SAWCentral.Crucible.JVM.Builtins
+    SAWCentral.Crucible.JVM.BuiltinsJVM
+    SAWCentral.Crucible.JVM.MethodSpecIR
+    SAWCentral.Crucible.JVM.Override
+    SAWCentral.Crucible.JVM.ResolveSetupValue
+    SAWCentral.Crucible.JVM.Setup.Value
+
+    SAWCentral.Crucible.MIR.Builtins
+    SAWCentral.Crucible.MIR.MethodSpecIR
+    SAWCentral.Crucible.MIR.Override
+    SAWCentral.Crucible.MIR.ResolveSetupValue
+    SAWCentral.Crucible.MIR.Setup.Value
+    SAWCentral.Crucible.MIR.TypeShape
+
   other-modules:
     SAWCentral.Panic
 
@@ -296,40 +330,6 @@ library
     SAWScript.Value
 
     SAWScript.HeapsterBuiltins
-
-    SAWScript.Crucible.Common
-    SAWScript.Crucible.Common.MethodSpec
-    SAWScript.Crucible.Common.Override
-    SAWScript.Crucible.Common.ResolveSetupValue
-    SAWScript.Crucible.Common.Setup.Builtins
-    SAWScript.Crucible.Common.Setup.Type
-    SAWScript.Crucible.Common.Setup.Value
-
-    SAWScript.Crucible.LLVM.Builtins
-    SAWScript.Crucible.LLVM.Boilerplate
-    SAWScript.Crucible.LLVM.CrucibleLLVM
-    SAWScript.Crucible.LLVM.FFI
-    SAWScript.Crucible.LLVM.Override
-    SAWScript.Crucible.LLVM.MethodSpecIR
-    SAWScript.Crucible.LLVM.ResolveSetupValue
-    SAWScript.Crucible.LLVM.Setup.Value
-    SAWScript.Crucible.LLVM.Skeleton
-    SAWScript.Crucible.LLVM.Skeleton.Builtins
-    SAWScript.Crucible.LLVM.X86
-
-    SAWScript.Crucible.JVM.Builtins
-    SAWScript.Crucible.JVM.BuiltinsJVM
-    SAWScript.Crucible.JVM.MethodSpecIR
-    SAWScript.Crucible.JVM.Override
-    SAWScript.Crucible.JVM.ResolveSetupValue
-    SAWScript.Crucible.JVM.Setup.Value
-
-    SAWScript.Crucible.MIR.Builtins
-    SAWScript.Crucible.MIR.MethodSpecIR
-    SAWScript.Crucible.MIR.Override
-    SAWScript.Crucible.MIR.ResolveSetupValue
-    SAWScript.Crucible.MIR.Setup.Value
-    SAWScript.Crucible.MIR.TypeShape
 
     SAWScript.VerificationSummary
 
