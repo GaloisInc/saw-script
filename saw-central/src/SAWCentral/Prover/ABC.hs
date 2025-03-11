@@ -1,4 +1,4 @@
-module SAWScript.Prover.ABC
+module SAWCentral.Prover.ABC
   ( proveABC
   , w4AbcAIGER
   , w4AbcVerilog
@@ -28,15 +28,15 @@ import           Verifier.SAW.SATQuery
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 import SAWScript.Proof
   ( sequentToSATQuery, goalSequent, ProofGoal
   , goalType, goalNum, CEX
   , sequentSharedSize
   )
-import SAWScript.Prover.SolverStats (SolverStats, solverStats)
-import qualified SAWScript.Prover.Exporter as Exporter
-import SAWScript.Prover.Util (liftCexBB, liftLECexBB)
+import SAWCentral.Prover.SolverStats (SolverStats, solverStats)
+import qualified SAWCentral.Prover.Exporter as Exporter
+import SAWCentral.Prover.Util (liftCexBB, liftLECexBB)
 import SAWScript.Value
 
 -- crucible-jvm

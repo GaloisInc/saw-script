@@ -169,8 +169,8 @@ import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..
 import What4.ProgramLoc (ProgramLoc)
 
 import SAWCentral.Position
-import SAWScript.Prover.SolverStats
-import qualified SAWScript.Prover.MRSolver.Evidence as MRSolver
+import SAWCentral.Prover.SolverStats
+import qualified SAWCentral.MRSolver.Evidence as MRSolver
 import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.TermModel as TM
 import qualified Verifier.SAW.Simulator.What4 as W4Sim

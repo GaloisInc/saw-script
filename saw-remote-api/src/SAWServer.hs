@@ -57,7 +57,7 @@ import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWCentral.Options (Options(..), processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
-import SAWScript.Prover.Rewrite (basic_ss)
+import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import SAWCentral.Yosys.State (YosysSequential)
@@ -66,7 +66,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
 import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
-import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWCentral.Prover.MRSolver (emptyMREnv)
 import SAWScript.SolverCache (lazyOpenSolverCache)
 
 import qualified Argo

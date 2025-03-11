@@ -82,7 +82,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Panic (panic)
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWCentral.Options

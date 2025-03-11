@@ -31,7 +31,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
 import Verifier.SAW.Name (SAWNamingEnv)
 import What4.ProgramLoc (ProgramLoc(..))

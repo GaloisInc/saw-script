@@ -141,7 +141,7 @@ import SAWCentral.Options
 import SAWScript.Panic
 import qualified SAWCentral.Position as SS
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 import SAWCentral.Utils (neGroupOn)
 import SAWScript.Value
 

@@ -92,7 +92,7 @@ import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType, ppTypedTerm)
 import SAWCentral.Options (Verbosity(..))
 import SAWScript.Panic (panic)
 import SAWScript.Proof
-import SAWScript.Prover.Util (checkBooleanSchema)
+import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWScript.Value
 
 import qualified Verifier.SAW.Cryptol as C

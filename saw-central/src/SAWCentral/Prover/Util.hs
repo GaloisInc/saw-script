@@ -1,4 +1,4 @@
-module SAWScript.Prover.Util where
+module SAWCentral.Prover.Util where
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
