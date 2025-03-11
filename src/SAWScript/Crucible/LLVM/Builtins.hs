@@ -192,7 +192,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 import Verifier.SAW.TypedTerm
 
 -- saw-script
-import SAWScript.AST (Located(..))
+import SAWCentral.AST (Located(..))
 import SAWScript.Builtins (ghost_value)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats

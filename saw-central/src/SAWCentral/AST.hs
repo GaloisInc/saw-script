@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.AST
+Module      : SAWCentral.AST
 Description : Datatypes representing SAWScript statements, expressions, and types.
 License     : BSD3
 Maintainer  : huffman
@@ -14,7 +14,7 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module SAWScript.AST
+module SAWCentral.AST
        ( Name
        , LName
        , Located(..)

@@ -94,7 +94,7 @@ import qualified Data.AIG.CompactGraph as AIG
 
 --------------------
 
-import SAWScript.AST (Located(getVal))
+import SAWCentral.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWCentral.Options (Options)
 import SAWScript.Proof (ProofState, ProofResult(..), psGoals)

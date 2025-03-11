@@ -21,8 +21,8 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import SAWScript.AST
-import SAWScript.ASTUtil (namedTyVars)
+import SAWCentral.AST
+import SAWCentral.ASTUtil (namedTyVars)
 import SAWScript.Panic (panic)
 
 --
