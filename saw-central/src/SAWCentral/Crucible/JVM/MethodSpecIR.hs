@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.JVM.MethodSpecIR
+Module      : SAWCentral.Crucible.JVM.MethodSpecIR
 Description : Provides type-checked representation for Crucible/JVM function
               specifications and functions for creating it from a SAWscript AST.
 Maintainer  : atomb
@@ -25,7 +25,7 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.Crucible.JVM.MethodSpecIR
+module SAWCentral.Crucible.JVM.MethodSpecIR
   ( JIdent
 
   , JVMMethodId(..)
@@ -74,10 +74,10 @@ import qualified Lang.JVM.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-import           SAWScript.Crucible.JVM.Setup.Value
+import           SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import           SAWCentral.Crucible.JVM.Setup.Value
 
 --------------------------------------------------------------------------------
 -- *** JVMMethodId

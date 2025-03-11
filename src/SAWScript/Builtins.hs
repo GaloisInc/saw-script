@@ -131,16 +131,16 @@ import SAWCentral.ImportAIG
 import SAWCentral.AST (getVal, pShow, Located(..))
 import SAWCentral.Options as Opts
 import SAWScript.Proof
-import SAWScript.Crucible.Common (PathSatSolver(..))
-import qualified SAWScript.Crucible.Common as Common
+import SAWCentral.Crucible.Common (PathSatSolver(..))
+import qualified SAWCentral.Crucible.Common as Common
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWScript.SolverCache
 import SAWScript.SolverVersions
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import SAWScript.Crucible.Common.Setup.Type (addCondition, croTags)
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import SAWCentral.Crucible.Common.Setup.Type (addCondition, croTags)
 import SAWCentral.Prover.Util(checkBooleanSchema)
 import SAWCentral.Prover.SolverStats
 import qualified SAWCentral.Prover.SBV as Prover

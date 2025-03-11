@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.Builtins
+Module      : SAWCentral.Crucible.LLVM.Builtins
 Description : Implementations of Crucible-related SAW-Script primitives.
 License     : BSD3
 Maintainer  : atomb
@@ -25,7 +25,7 @@ Stability   : provisional
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SAWScript.Crucible.LLVM.Builtins
+module SAWCentral.Crucible.LLVM.Builtins
     ( show_cfg
     , llvm_execute_func
     , llvm_return
@@ -175,7 +175,7 @@ import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible
 import           Lang.Crucible.LLVM.QQ( llvmOvr )
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
 -- parameterized-utils
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -204,19 +204,19 @@ import SAWCentral.Exceptions
 import SAWCentral.Options
 import SAWCentral.Utils (neGroupOn, neNubOrd)
 
-import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common (Sym, SAWCruciblePersonality)
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
-import           SAWScript.Crucible.Common.Override
-import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
+import qualified SAWCentral.Crucible.Common as Common
+import           SAWCentral.Crucible.Common (Sym, SAWCruciblePersonality)
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..))
+import           SAWCentral.Crucible.Common.Override
+import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 
-import SAWScript.Crucible.LLVM.Override
-import SAWScript.Crucible.LLVM.ResolveSetupValue
-import SAWScript.Crucible.LLVM.MethodSpecIR
-import SAWScript.Panic (panic)
+import SAWCentral.Crucible.LLVM.Override
+import SAWCentral.Crucible.LLVM.ResolveSetupValue
+import SAWCentral.Crucible.LLVM.MethodSpecIR
+import SAWCentral.Panic (panic)
 
 type AssumptionReason = (MS.ConditionMetadata, String)
 
@@ -1266,7 +1266,7 @@ doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz md fresh initialization)
 lookupMemGlobal :: Crucible.GlobalVar tp -> Crucible.SymGlobalState sym -> Crucible.RegValue sym tp
 lookupMemGlobal mvar globals =
   fromMaybe
-    (panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["LLVM Memory global not found"])
+    (panic "SAWCentral.Crucible.LLVM.X86.pushFreshReturnAddress" ["LLVM Memory global not found"])
     (Crucible.lookupGlobal mvar globals)
 
 ppAbortedResult :: LLVMCrucibleContext arch
@@ -2282,7 +2282,7 @@ constructExpandedSetupValue cc sc loc t =
     -- See https://github.com/GaloisInc/saw-script/issues/1879 for why it is
     -- tricky to support opaque pointers here.
     Crucible.PtrOpaqueType  ->
-      panic "SAWScript.Crucible.LLVM.Builtins.constructExpandedSetupValue"
+      panic "SAWCentral.Crucible.LLVM.Builtins.constructExpandedSetupValue"
             [ "llvm_fresh_expanded_val does not support opaque pointers"
             , "Please report this at: https://github.com/GaloisInc/saw-script/issues/1879"
             ]

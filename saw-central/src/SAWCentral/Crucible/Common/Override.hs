@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.Common.Override
+Module      : SAWCentral.Crucible.Common.Override
 Description : Language-neutral overrides
 License     : BSD3
 Maintainer  : langston
@@ -19,7 +19,7 @@ Stability   : provisional
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module SAWScript.Crucible.Common.Override
+module SAWCentral.Crucible.Common.Override
   ( Pointer
   , MS.Pointer'
   , OverrideState
@@ -123,9 +123,9 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
 import           SAWCentral.Exceptions
-import           SAWScript.Crucible.Common (Backend, OnlineSolver, Sym)
-import           SAWScript.Crucible.Common.MethodSpec as MS
-import           SAWScript.Crucible.Common.Setup.Value as MS
+import           SAWCentral.Crucible.Common (Backend, OnlineSolver, Sym)
+import           SAWCentral.Crucible.Common.MethodSpec as MS
+import           SAWCentral.Crucible.Common.Setup.Value as MS
 import           SAWCentral.Utils (bullets)
 
 -- TODO, not sure this is the best place for this definition

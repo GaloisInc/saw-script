@@ -26,10 +26,10 @@ import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Parameterized.Nonce
 
 import qualified Lang.Crucible.JVM as CJ
-import SAWScript.Crucible.Common.MethodSpec
-import qualified SAWScript.Crucible.Common.MethodSpec as CMS
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
-import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
+import SAWCentral.Crucible.Common.MethodSpec
+import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
+import qualified SAWCentral.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWCentral.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP

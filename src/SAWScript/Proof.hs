@@ -171,7 +171,7 @@ import What4.ProgramLoc (ProgramLoc)
 import SAWCentral.Position
 import SAWCentral.Prover.SolverStats
 import qualified SAWCentral.MRSolver.Evidence as MRSolver
-import SAWScript.Crucible.Common as Common
+import SAWCentral.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.TermModel as TM
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim

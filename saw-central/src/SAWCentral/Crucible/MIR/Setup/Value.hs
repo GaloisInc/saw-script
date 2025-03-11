@@ -1,13 +1,13 @@
 {- |
-Module      : SAWScript.Crucible.MIR.Setup.Value
+Module      : SAWCentral.Crucible.MIR.Setup.Value
 Description : Data types and type family instances for MIR-specific code
 License     : BSD3
 Maintainer  : Ryan Scott <rscott@galois.com>
 Stability   : provisional
 
-The module exists separately from "SAWScript.Crucible.MIR.MethodSpecIR"
+The module exists separately from "SAWCentral.Crucible.MIR.MethodSpecIR"
 primarily to avoid import cycles. You probably want to import
-"SAWScript.Crucible.MIR.MethodSpecIR" (which re-exports everything from this
+"SAWCentral.Crucible.MIR.MethodSpecIR" (which re-exports everything from this
 module, plus additional functionality) instead.
 -}
 
@@ -21,7 +21,7 @@ module, plus additional functionality) instead.
 {-# Language TypeOperators #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SAWScript.Crucible.MIR.Setup.Value
+module SAWCentral.Crucible.MIR.Setup.Value
   ( -- * @MIRCrucibleContext@
     MIRCrucibleContext(..)
   , mccRustModule
@@ -73,8 +73,8 @@ import Mir.Generator
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 
-import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.Setup.Value as MS
+import           SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.Setup.Value as MS
 
 type instance MS.XSetupNull MIR = Void
 type instance MS.XSetupGlobal MIR = ()
@@ -117,7 +117,7 @@ type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 -- | A 'MirStaticInitializerMap' maps the 'GlobalVar's of each top-level static
 -- value in a 'Mir.RustModule' to its initializer value (post-Crucible
 -- translation). See @Note [Translating MIR statics in SAW]@ in
--- "SAWScript.Crucible.MIR.Builtins" for more details on how this map is
+-- "SAWCentral.Crucible.MIR.Builtins" for more details on how this map is
 -- created.
 type MirStaticInitializerMap = MapF GlobalVar (RegValue' Sym)
 
@@ -126,7 +126,7 @@ type MirStaticInitializerMap = MapF GlobalVar (RegValue' Sym)
 -- represented in @crucible-mir-comp@, which stores the list of values
 -- referenced by the slice. The @mir_points_to@ command, on the other hand,
 -- always creates 'MirPointsTo' values with exactly one value in the list (see
--- the @firstPointsToReferent@ function in "SAWScript.Crucible.MIR.Override").
+-- the @firstPointsToReferent@ function in "SAWCentral.Crucible.MIR.Override").
 data MirPointsTo = MirPointsTo MS.ConditionMetadata (MS.SetupValue MIR) [MS.SetupValue MIR]
     deriving (Show)
 
@@ -338,7 +338,7 @@ assume assume the following:
 
 This way, symbolic execution will never reach `fallthrough_block`. This
 Crucible assumption is created in
-SAWScript.Crucible.MIR.Builtins.constructExpandedSetupValue.goEnum`.
+SAWCentral.Crucible.MIR.Builtins.constructExpandedSetupValue.goEnum`.
 
 Similarly, we cannot make the VariantBranch predicates completely symbolic, as
 whether a predicate holds or not depends on the value of the discriminant. For
@@ -347,13 +347,13 @@ make each predicate the result of checking the discriminant against particular
 values. For instance, the predicate for the `E1` VariantBranch is defined to be
 `discr == 0`, and the predicate for the `E2` VariantBranch is defined to be
 `discr == 1`. These predicates are defined in
-`SAWScript.Crucible.MIR.ResolveSetupValue.resolveSetupValue`, along with the
+`SAWCentral.Crucible.MIR.ResolveSetupValue.resolveSetupValue`, along with the
 fields in the associated payloads.
 
 Lastly, there are the payloads (i.e., the fields of each variant) in each
 VariantBranch. These are created as completely symbolic values—the trick is to
 only access the fields when the corresponding predicate holds. For example,
-`SAWScript.Crucible.MIR.Override.matchArg` (in the `MirSetupEnumSymbolic` case)
+`SAWCentral.Crucible.MIR.Override.matchArg` (in the `MirSetupEnumSymbolic` case)
 must be able to match two possibly symbolic enum values together, but it must
 be careful to only match the fields in a variant if that VariantBranch's
 predicate holds.

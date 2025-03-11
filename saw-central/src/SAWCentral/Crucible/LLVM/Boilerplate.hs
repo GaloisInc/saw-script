@@ -10,7 +10,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 
-module SAWScript.Crucible.LLVM.Boilerplate
+module SAWCentral.Crucible.LLVM.Boilerplate
   ( llvm_boilerplate
   ) where
 
@@ -30,7 +30,7 @@ import qualified Text.LLVM as LLVM
 
 import SAWScript.Value
 
-import SAWScript.Crucible.LLVM.Skeleton
+import SAWCentral.Crucible.LLVM.Skeleton
 
 sortByDeps :: [FunctionSkeleton] -> [FunctionSkeleton]
 sortByDeps skels = reverse $ (\(f, _, _) -> f) . fromVertex <$> Graph.topSort g

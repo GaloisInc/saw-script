@@ -88,7 +88,7 @@ import qualified Cryptol.Utils.PP as C
 
 import SAWScript.Bisimulation.BisimTheorem
 import SAWScript.Builtins (unfold_term)
-import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType, ppTypedTerm)
+import SAWCentral.Crucible.Common.MethodSpec (ppTypedTermType, ppTypedTerm)
 import SAWCentral.Options (Verbosity(..))
 import SAWScript.Panic (panic)
 import SAWScript.Proof

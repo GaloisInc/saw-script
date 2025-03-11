@@ -13,9 +13,9 @@ import Prelude hiding (mod)
 import Control.Lens ( view )
 import qualified Data.Map as Map
 
-import SAWScript.Crucible.LLVM.Builtins
+import SAWCentral.Crucible.LLVM.Builtins
     ( llvm_unsafe_assume_spec, llvm_verify )
-import SAWScript.Crucible.LLVM.X86 ( llvm_verify_x86 )
+import SAWCentral.Crucible.LLVM.X86 ( llvm_verify_x86 )
 import SAWScript.Value (rwCryptol)
 
 import qualified Argo
