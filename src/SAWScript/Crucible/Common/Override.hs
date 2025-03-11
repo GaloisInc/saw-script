@@ -126,7 +126,7 @@ import           SAWScript.Exceptions
 import           SAWScript.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.Setup.Value as MS
-import           SAWScript.Utils (bullets)
+import           SAWCentral.Utils (bullets)
 
 -- TODO, not sure this is the best place for this definition
 type MetadataMap =

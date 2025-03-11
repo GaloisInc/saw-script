@@ -81,8 +81,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (toShortName)
 
 import qualified SAWScript.CongruenceClosure as CC
-import SAWScript.Position
-import SAWScript.Utils
+import SAWCentral.Position
+import SAWCentral.Utils
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
 

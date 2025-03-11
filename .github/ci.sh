@@ -73,10 +73,13 @@ haddock() {
   # option, so it won't currently serve. (Also for some reason it
   # currently demands --internal in place of --haddock-internal.)
   #
+  # (Every component you want docs for needs to be listed explicitly,
+  # not just every package.)  
+  #
   # We use --haddock-internal because the point of generating the
   # haddocks for SAW (which doesn't have an external-facing library
   # interface) is to serve as an internals reference.
-  local PACKAGES='
+  local COMPONENTS='
     rme
     saw-script:saw-version
     saw-core
@@ -86,13 +89,14 @@ haddock() {
     saw-core-aig
     saw-core-coq
     heapster-saw
+    saw-script:saw-central
     saw-script
     saw-remote-api
     crucible-mir-comp
     crux-mir-comp
     verif-viewer
   '
-  cabal v2-haddock --haddock-internal --disable-documentation $PACKAGES
+  cabal v2-haddock --haddock-internal --disable-documentation $COMPONENTS
 }
 
 # Gather and tar up all HPC coverage files and binaries

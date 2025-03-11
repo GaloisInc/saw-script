@@ -199,10 +199,10 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Versions
 import SAWScript.TopLevel
 import SAWScript.Value
-import SAWScript.Position
+import SAWCentral.Position
 import SAWScript.Exceptions
-import SAWScript.Options
-import SAWScript.Utils (neGroupOn, neNubOrd)
+import SAWCentral.Options
+import SAWCentral.Utils (neGroupOn, neNubOrd)
 
 import qualified SAWScript.Crucible.Common as Common
 import           SAWScript.Crucible.Common (Sym, SAWCruciblePersonality)

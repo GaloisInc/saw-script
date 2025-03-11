@@ -40,8 +40,8 @@ import qualified SAWScript.AST as SAWScript
 import qualified Cryptol.Parser.AST      as Cryptol
 import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
-import SAWScript.Position
-import SAWScript.Utils
+import SAWCentral.Position
+import SAWCentral.Utils
 import SAWScript.TopLevel
 import SAWScript.Value
 --import Verifier.SAW.SharedTerm

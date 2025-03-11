@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Position
+Module      : SAWCentral.Position
 Description : Positions in source code
 Maintainer  : jhendrix, atomb
 Stability   : provisional
@@ -13,7 +13,7 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module SAWScript.Position where
+module SAWCentral.Position where
 
 import Control.Lens
 import Data.Data (Data)
@@ -84,7 +84,7 @@ data Inference
 -- in comparePosQuality, which is a different kind of comparison.
 --
 -- XXX we should rearrange this so that either the usage is
--- "import qualified SAWScript.Position as Pos" and this type is T
+-- "import qualified SAWCentral.Position as Pos" and this type is T
 -- (so the normal name of the type is Pos.T and the constructors
 -- are Pos.Range, Pos.Unknown, etc.) or insert Pos in the names of
 -- all the constructors instead of just some.
