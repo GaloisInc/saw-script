@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Bisimulation
+Module      : SAWCentral.Bisimulation
 Description : Implementations of SAW-Script bisimulation prover
 License     : BSD3
 Maintainer  : bboston7
@@ -70,7 +70,7 @@ may handle more complex proofs.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module SAWScript.Bisimulation
+module SAWCentral.Bisimulation
   ( BisimTheorem, proveBisimulation )
   where
 
@@ -86,11 +86,11 @@ import qualified Data.Text as Text
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.PP as C
 
-import SAWScript.Bisimulation.BisimTheorem
+import SAWCentral.BisimulationTheorem
 import SAWCentral.Builtins (unfold_term)
 import SAWCentral.Crucible.Common.MethodSpec (ppTypedTermType, ppTypedTerm)
 import SAWCentral.Options (Verbosity(..))
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWScript.Value

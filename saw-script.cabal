@@ -202,6 +202,9 @@ library saw-central
     SAWCentral.X86
     SAWCentral.X86Spec
 
+    SAWCentral.Bisimulation
+    SAWCentral.BisimulationTheorem
+
     SAWCentral.Builtins
     SAWCentral.LLVMBuiltins
     SAWCentral.Proof
@@ -322,8 +325,6 @@ library
     SAWScript.AutoMatch.LLVM
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
-    SAWScript.Bisimulation
-    SAWScript.Bisimulation.BisimTheorem
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
