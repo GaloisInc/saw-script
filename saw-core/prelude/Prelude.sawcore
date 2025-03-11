@@ -1785,12 +1785,35 @@ listSortGet = ListSort__rec (\ (_:ListSort) -> Nat -> sort 0)
   (\ (A:sort 0) (_:ListSort) (rec : Nat -> sort 0) ->
      Nat_cases (sort 0) A (\ (n:Nat) (_:sort 0) -> rec n));
 
+listSort_cases : (a: sort 1) ->
+                 a ->
+                 (sort 0 -> (l:ListSort) -> a -> a) ->
+                 ListSort -> a;
+listSort_cases a base f ls =
+  ListSort__rec (\(_:ListSort)-> a) base f ls;
+
 -- A ListSort with the first n (or all, if n > length) entries removed
 listSortDrop : ListSort -> Nat -> ListSort;
-listSortDrop = ListSort__rec (\ (_:ListSort) -> Nat -> ListSort)
-  (\ (_:Nat) -> LS_Nil)
-  (\ (_:sort 0) (Ds:ListSort) (rec : Nat -> ListSort) ->
-     Nat_cases ListSort Ds (\ (n:Nat) (_ : ListSort) -> rec n));
+listSortDrop ss n =
+  Nat__rec
+    (\(_:Nat) -> ListSort -> ListSort)
+    (\(l : ListSort) -> l)
+    (\(_ : Nat) (rec_n' : ListSort -> ListSort) ->
+       (\(l : ListSort)->
+          rec_n' (listSort_cases ListSort
+                    LS_Nil
+                    (\(_:sort 0) (tail:ListSort) (_:ListSort) -> tail)
+                    l
+                 )
+      ))
+    n
+    ss;
+
+-- The length of ListSort
+listSort_length : ListSort -> Nat;
+listSort_length = listSort_cases Nat
+                    0
+                    (\(_:sort 0) (l:ListSort) (n:Nat)-> Succ n);
 
 
 --------------------------------------------------------------------------------
