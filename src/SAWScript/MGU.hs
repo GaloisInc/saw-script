@@ -39,8 +39,8 @@ import qualified Data.Set as S
 
 import qualified Prettyprinter as PP
 
-import SAWScript.AST
-import SAWScript.ASTUtil (namedTyVars, SubstituteTyVars(..))
+import SAWCentral.AST
+import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..))
 import SAWScript.Panic (panic)
 import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 

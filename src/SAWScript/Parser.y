@@ -23,7 +23,7 @@ import qualified Data.Text as Text
 import Data.Text (Text, pack, unpack)
 import SAWScript.Token
 import SAWScript.Lexer
-import SAWScript.AST
+import SAWCentral.AST
 import SAWCentral.Position
 import SAWCentral.Utils
 

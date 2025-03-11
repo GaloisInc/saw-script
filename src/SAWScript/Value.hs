@@ -61,8 +61,8 @@ import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
 
-import qualified SAWScript.AST as SS
-import qualified SAWScript.ASTUtil as SS (substituteTyVars)
+import qualified SAWCentral.AST as SS
+import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
 import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWScript.Exceptions as SS
 import qualified SAWCentral.Position as SS

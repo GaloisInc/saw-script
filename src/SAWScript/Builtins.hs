@@ -128,7 +128,7 @@ import Lang.Crucible.CFG.Common (freshGlobalVar)
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
-import SAWScript.AST (getVal, pShow, Located(..))
+import SAWCentral.AST (getVal, pShow, Located(..))
 import SAWCentral.Options as Opts
 import SAWScript.Proof
 import SAWScript.Crucible.Common (PathSatSolver(..))

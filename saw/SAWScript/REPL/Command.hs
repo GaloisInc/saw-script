@@ -52,7 +52,7 @@ import qualified Data.Map as Map
 
 -- SAWScript imports
 import qualified SAWCentral.Options (Verbosity(..))
-import qualified SAWScript.AST as SS
+import qualified SAWCentral.AST as SS
     (pShow,
      Located(..),
      Decl(..),

@@ -129,6 +129,8 @@ library saw-central
     SAWCentral.Options
     SAWCentral.Position
     SAWCentral.Utils
+    SAWCentral.AST
+    SAWCentral.ASTUtil
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
@@ -231,8 +233,6 @@ library
   hs-source-dirs: src
 
   exposed-modules:
-    SAWScript.AST
-    SAWScript.ASTUtil
     SAWScript.AutoMatch
     SAWScript.AutoMatch.Interaction
     SAWScript.AutoMatch.ArgMapping

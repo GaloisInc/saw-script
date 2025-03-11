@@ -18,7 +18,7 @@ import Control.Exception
 import System.Directory
 
 import SAWCentral.Position (Pos)
-import SAWScript.AST
+import SAWCentral.AST
 import SAWScript.Lexer (lexSAW)
 import SAWCentral.Options
 import SAWScript.Parser

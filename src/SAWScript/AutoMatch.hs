@@ -36,7 +36,7 @@ import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Nonce as Nonce
 import           Data.Parameterized.Nonce (NonceGenerator, withSTNonceGenerator)
 
-import qualified SAWScript.AST as SAWScript
+import qualified SAWCentral.AST as SAWScript
 import qualified Cryptol.Parser.AST      as Cryptol
 import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
