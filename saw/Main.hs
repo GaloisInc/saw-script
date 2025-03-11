@@ -32,8 +32,8 @@ import qualified SAWScript.REPL as REPL
 import qualified SAWScript.REPL.Haskeline as REPL
 import qualified SAWScript.REPL.Monad as REPL
 import SAWScript.Value (AIGProxy(..))
-import SAWScript.SolverCache
-import SAWScript.SolverVersions
+import SAWCentral.SolverCache
+import SAWCentral.SolverVersions
 import SAWVersion.Version (shortVersionText)
 import qualified Data.AIG.CompactGraph as AIG
 

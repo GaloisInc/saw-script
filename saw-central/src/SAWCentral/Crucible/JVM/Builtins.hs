@@ -115,12 +115,12 @@ import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
-import SAWScript.Builtins (ghost_value)
+import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Exceptions
 import SAWCentral.Panic
-import SAWScript.Proof
+import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import SAWScript.Value
 import SAWCentral.Utils as SS
 import qualified SAWCentral.Position as SS

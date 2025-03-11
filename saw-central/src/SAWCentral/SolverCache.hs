@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.SolverCache
+Module      : SAWCentral.SolverCache
 Description : Caching SMT solver results for SAWScript
 License     : BSD3
 Maintainer  : m-yac
@@ -10,7 +10,7 @@ database. The interface, as used in 'applyProverToGoal', works as follows:
 
 1. An 'SMTQuery' is converted into a string using 'scWriteExternal', and
    along with any relevant 'SolverBackendVersion's (obtained using
-   'getSolverBackendVersions' from @SAWScript.SolverVersions@), is then hashed
+   'getSolverBackendVersions' from @SAWCentral.SolverVersions@), is then hashed
    using SHA256 ('mkSolverCacheKey').
 2. The core of the 'SolverCache' is an LMDB database mapping these hashes to
    previously obtained results ('solverCacheEnv', 'solverCacheDB'). If this is
@@ -47,7 +47,7 @@ were obtained by the backends in the first place).
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWScript.SolverCache
+module SAWCentral.SolverCache
   ( SolverBackend(..)
   , allBackends
   , sbvBackends
@@ -117,7 +117,7 @@ import Verifier.SAW.ExternalFormat
 import Verifier.SAW.SharedTerm
 
 import SAWCentral.Options
-import SAWScript.Proof
+import SAWCentral.Proof
 
 
 -- Helper Functions ------------------------------------------------------------

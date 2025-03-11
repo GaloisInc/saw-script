@@ -30,7 +30,7 @@ import qualified Control.Monad.Trans.Class as MTL
 import qualified Control.Exception as X
 
 import SAWCentral.Options (Options)
-import SAWScript.TopLevel( TopLevelRO(..) )
+import SAWCentral.TopLevel( TopLevelRO(..) )
 
 
 -- | Haskeline-specific repl implementation.

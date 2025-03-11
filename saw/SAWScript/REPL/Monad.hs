@@ -97,8 +97,8 @@ import qualified Data.AIG.CompactGraph as AIG
 import SAWCentral.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWCentral.Options (Options)
-import SAWScript.Proof (ProofState, ProofResult(..), psGoals)
-import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
+import SAWCentral.Proof (ProofState, ProofResult(..), psGoals)
+import SAWCentral.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
                             makeCheckpoint, restoreCheckpoint)
 import SAWScript.Value
   ( AIGProxy(..), mergeLocalEnv, IsValue, Value

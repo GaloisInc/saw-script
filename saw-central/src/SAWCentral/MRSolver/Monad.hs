@@ -60,7 +60,7 @@ import Verifier.SAW.Module (Def(..))
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
 import SAWCentral.Prover.SolverStats
-import SAWScript.Proof (Sequent, SolveResult)
+import SAWCentral.Proof (Sequent, SolveResult)
 import SAWScript.Value (TopLevel)
 
 import SAWCentral.MRSolver.Term

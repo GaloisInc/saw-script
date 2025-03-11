@@ -3,7 +3,7 @@
 {-# Language PatternSynonyms #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE GADTs #-}
-module SAWScript.X86
+module SAWCentral.X86
   ( Options(..)
   , proof
   , proofWithOptions
@@ -135,9 +135,9 @@ import Verifier.SAW.Simulator.What4.ReturnTrip (sawRegisterSymFunInterp, toSC, s
 import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
--- SAWScript
-import SAWScript.X86Spec hiding (Prop)
-import SAWScript.Proof(boolToProp, Prop)
+-- SAWCentral
+import SAWCentral.X86Spec hiding (Prop)
+import SAWCentral.Proof(boolToProp, Prop)
 import SAWCentral.Crucible.Common.MethodSpec (ConditionMetadata(..))
 import SAWCentral.Crucible.Common.Override (MetadataMap)
 import SAWCentral.Crucible.Common

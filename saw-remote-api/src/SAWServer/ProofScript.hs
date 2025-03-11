@@ -31,9 +31,9 @@ import Numeric (showHex)
 import qualified Argo
 import qualified Argo.Doc as Doc
 import CryptolServer.Data.Expression ( Expression(..), Encoding(..), getCryptolExpr )
-import qualified SAWScript.Builtins as SB
+import qualified SAWCentral.Builtins as SB
 import qualified SAWScript.Value as SV
-import qualified SAWScript.Proof as PF
+import qualified SAWCentral.Proof as PF
 import SAWServer
     ( ServerVal(VSimpset),
       ServerName,

@@ -126,7 +126,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Builtins (ghost_value)
+import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.Override
@@ -140,7 +140,7 @@ import SAWCentral.Exceptions
 import SAWCentral.Options
 import SAWCentral.Panic
 import qualified SAWCentral.Position as SS
-import SAWScript.Proof
+import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Utils (neGroupOn)
 import SAWScript.Value

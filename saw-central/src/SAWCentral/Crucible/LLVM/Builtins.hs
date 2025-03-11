@@ -193,11 +193,11 @@ import Verifier.SAW.TypedTerm
 
 -- saw-script
 import SAWCentral.AST (Located(..))
-import SAWScript.Builtins (ghost_value)
-import SAWScript.Proof
+import SAWCentral.Builtins (ghost_value)
+import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Prover.Versions
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import SAWScript.Value
 import SAWCentral.Position
 import SAWCentral.Exceptions

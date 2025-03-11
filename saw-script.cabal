@@ -199,6 +199,17 @@ library saw-central
     SAWCentral.Crucible.MIR.Setup.Value
     SAWCentral.Crucible.MIR.TypeShape
 
+    SAWCentral.X86
+    SAWCentral.X86Spec
+
+    SAWCentral.Builtins
+    SAWCentral.LLVMBuiltins
+    SAWCentral.Proof
+    SAWCentral.SolverCache
+    SAWCentral.SolverVersions
+    SAWCentral.TopLevel
+    SAWCentral.VerificationSummary
+
   other-modules:
     SAWCentral.Panic
 
@@ -313,28 +324,17 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Bisimulation
     SAWScript.Bisimulation.BisimTheorem
-    SAWScript.Builtins
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
-    SAWScript.LLVMBuiltins
     SAWScript.Panic
     SAWScript.Parser
-    SAWScript.Proof
     SAWScript.Search
-    SAWScript.SolverCache
-    SAWScript.SolverVersions
     SAWScript.Token
-    SAWScript.TopLevel
     SAWScript.MGU
     SAWScript.Value
 
     SAWScript.HeapsterBuiltins
-
-    SAWScript.VerificationSummary
-
-    SAWScript.X86
-    SAWScript.X86Spec
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

@@ -109,7 +109,7 @@ import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 
-import           SAWScript.Proof (TheoremNonce)
+import           SAWCentral.Proof (TheoremNonce)
 
 import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm

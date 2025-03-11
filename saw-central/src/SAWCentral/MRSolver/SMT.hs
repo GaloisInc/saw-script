@@ -61,7 +61,7 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Simulator.TermModel
 import Verifier.SAW.Simulator.Prims
 import Verifier.SAW.FiniteValue
-import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
+import SAWCentral.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
 
 import SAWCentral.MRSolver.Term
 import SAWCentral.MRSolver.Monad

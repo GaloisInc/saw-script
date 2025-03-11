@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Proof
+Module      : SAWCentral.Proof
 Description : Representations of SAW-Script proof states.
 License     : BSD3
 Maintainer  : huffman
@@ -13,7 +13,7 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWScript.Proof
+module SAWCentral.Proof
   ( Prop
   , splitConj
   , splitDisj
@@ -175,7 +175,7 @@ import SAWCentral.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.TermModel as TM
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
-import SAWScript.Panic(panic)
+import SAWCentral.Panic(panic)
 
 -- | A proposition is a saw-core type of type `Prop`.
 -- In particular, this includes any pi type whose result

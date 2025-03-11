@@ -86,7 +86,7 @@ import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupVal
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 import SAWCentral.Crucible.LLVM.Setup.Value (LLVMPtr)
-import qualified SAWScript.Proof as SP
+import qualified SAWCentral.Proof as SP
 
 
 type LLVMVal = Crucible.LLVMVal Sym

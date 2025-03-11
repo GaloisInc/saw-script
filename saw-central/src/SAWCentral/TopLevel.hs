@@ -1,11 +1,11 @@
 {- |
-Module      : SAWScript.TopLevel
+Module      : SAWCentral.TopLevel
 Description : TopLevel monad for SAW-Script interpreter.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
-module SAWScript.TopLevel
+module SAWCentral.TopLevel
   ( TopLevel(..)
   , TopLevelRO(..)
   , TopLevelRW(..)
@@ -23,4 +23,4 @@ module SAWScript.TopLevel
   , restoreCheckpoint
   ) where
 
-import SAWScript.Value
+import SAWCentral.Value

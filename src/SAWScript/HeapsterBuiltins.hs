@@ -111,11 +111,11 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.Parser as L
 import qualified Text.PrettyPrint.HughesPJ as L (render)
 
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import SAWScript.Value
 import SAWCentral.Options
-import SAWScript.LLVMBuiltins
-import SAWScript.Builtins
+import SAWCentral.LLVMBuiltins
+import SAWCentral.Builtins
 import SAWCentral.Crucible.LLVM.Builtins
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 

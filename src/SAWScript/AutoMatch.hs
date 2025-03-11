@@ -42,7 +42,7 @@ import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
 import SAWCentral.Position
 import SAWCentral.Utils
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import SAWScript.Value
 --import Verifier.SAW.SharedTerm
 
@@ -55,7 +55,7 @@ import SAWScript.AutoMatch.JVM
 import SAWScript.AutoMatch.LLVM
 import SAWScript.AutoMatch.Cryptol
 
-import SAWScript.LLVMBuiltins
+import SAWCentral.LLVMBuiltins
 import Language.JVM.Common (dotsToSlashes, mkClassName)
 
 import Prettyprinter.Render.Text (putDoc, hPutDoc)

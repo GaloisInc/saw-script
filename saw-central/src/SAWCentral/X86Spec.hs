@@ -13,7 +13,7 @@
 #if __GLASGOW_HASKELL__ >= 806
 {-# Language NoStarIsType #-}
 #endif
-module SAWScript.X86Spec
+module SAWCentral.X86Spec
   ( Specification(..)
   , SpecType, Pre, Post
   , FunSpec(..)

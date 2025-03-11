@@ -68,7 +68,7 @@ import           Cryptol.Utils.RecordMap
 import           SAWCentral.Crucible.Common.MethodSpec
 import           SAWCentral.Crucible.LLVM.Builtins
 import           SAWCentral.Crucible.LLVM.MethodSpecIR
-import           SAWScript.LLVMBuiltins
+import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWScript.Value
 import           Verifier.SAW.CryptolEnv
