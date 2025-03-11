@@ -95,7 +95,7 @@ import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.Common.MethodSpec (ppTypedTermType)
-import SAWScript.Proof
+import SAWCentral.Proof
   (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Prover.Util

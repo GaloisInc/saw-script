@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Builtins
+Module      : SAWCentral.Builtins
 Description : Implementations of SAW-Script primitives.
 License     : BSD3
 Maintainer  : atomb
@@ -20,7 +20,7 @@ Stability   : provisional
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module SAWScript.Builtins where
+module SAWCentral.Builtins where
 
 #if !MIN_VERSION_base(4,8,0)
 import Data.Functor
@@ -130,14 +130,14 @@ import SAWCentral.ImportAIG
 
 import SAWCentral.AST (getVal, pShow, Located(..))
 import SAWCentral.Options as Opts
-import SAWScript.Proof
+import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import qualified SAWCentral.Crucible.Common as Common
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
-import SAWScript.SolverCache
-import SAWScript.SolverVersions
+import SAWCentral.SolverCache
+import SAWCentral.SolverVersions
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import SAWCentral.Crucible.Common.Setup.Type (addCondition, croTags)
@@ -149,7 +149,7 @@ import qualified SAWCentral.Prover.ABC as Prover
 import qualified SAWCentral.Prover.What4 as Prover
 import qualified SAWCentral.Prover.Exporter as Prover
 import qualified SAWCentral.Prover.MRSolver as Prover
-import SAWScript.VerificationSummary
+import SAWCentral.VerificationSummary
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do

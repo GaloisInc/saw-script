@@ -18,7 +18,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SATQuery (SATQuery(..))
 
-import SAWScript.Proof (CEX)
+import SAWCentral.Proof (CEX)
 import SAWScript.Value
 
 -- | Bit-blast a proposition and check its validity using SBV.

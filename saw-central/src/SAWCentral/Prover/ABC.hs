@@ -29,7 +29,7 @@ import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 import SAWCentral.Panic (panic)
-import SAWScript.Proof
+import SAWCentral.Proof
   ( sequentToSATQuery, goalSequent, ProofGoal
   , goalType, goalNum, CEX
   , sequentSharedSize

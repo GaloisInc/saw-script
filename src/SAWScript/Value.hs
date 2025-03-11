@@ -78,13 +78,13 @@ import qualified Text.LLVM.AST as LLVM (Type)
 import SAWCentral.JavaExpr (JavaType(..))
 import SAWCentral.JavaPretty (prettyClass)
 import SAWCentral.Options (Options, printOutLn, Verbosity(..))
-import SAWScript.Proof
+import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
 import SAWCentral.MRSolver.Evidence as MRSolver
-import SAWScript.SolverCache
+import SAWCentral.SolverCache
 import SAWCentral.Crucible.LLVM.Skeleton
-import SAWScript.X86 (X86Unsupported(..), X86Error(..))
+import SAWCentral.X86 (X86Unsupported(..), X86Error(..))
 import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
@@ -955,7 +955,7 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
      case r of
-       Left (stats,cex) -> return (SAWScript.Proof.InvalidProof stats cex pstate)
+       Left (stats,cex) -> return (SAWCentral.Proof.InvalidProof stats cex pstate)
        Right _ ->
          do sc <- getSharedContext
             db <- getTheoremDB

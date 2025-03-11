@@ -5,7 +5,7 @@ module SAWScript.AutoMatch.JVM where
 
 import qualified Language.JVM.Parser as JVM
 
---import SAWScript.Builtins
+--import SAWCentral.Builtins
 --import SAWCentral.Options
 import SAWScript.AutoMatch.Declaration
 import SAWScript.AutoMatch.Interaction

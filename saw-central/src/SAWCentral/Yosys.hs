@@ -55,7 +55,7 @@ import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
 
 import SAWScript.Value
-import qualified SAWScript.Builtins as Builtins
+import qualified SAWCentral.Builtins as Builtins
 import qualified SAWCentral.Crucible.Common as Common
 
 import SAWCentral.Yosys.Utils

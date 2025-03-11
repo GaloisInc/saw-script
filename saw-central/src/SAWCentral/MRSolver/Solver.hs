@@ -138,7 +138,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import SAWCentral.Prover.SolverStats
-import SAWScript.Proof (Sequent, SolveResult)
+import SAWCentral.Proof (Sequent, SolveResult)
 import SAWScript.Value (TopLevel)
 
 import SAWCentral.MRSolver.Term
