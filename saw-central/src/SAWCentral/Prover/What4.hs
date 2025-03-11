@@ -5,7 +5,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
 
-module SAWScript.Prover.What4 where
+module SAWCentral.Prover.What4 where
 
 
 import           Control.Lens ((^.))

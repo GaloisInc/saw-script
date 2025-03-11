@@ -1,4 +1,4 @@
-module SAWScript.Prover.SBV
+module SAWCentral.Prover.SBV
   ( proveUnintSBV
   , proveUnintSBVIO
   , SBV.SMTConfig

@@ -119,7 +119,7 @@ import SAWScript.Builtins (ghost_value)
 import SAWCentral.Exceptions
 import SAWScript.Panic
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWCentral.Utils as SS

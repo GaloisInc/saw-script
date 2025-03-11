@@ -153,7 +153,7 @@ import           SAWScript.Crucible.JVM.Setup.Value ()
 import           SAWScript.Crucible.MIR.Setup.Value
   (MirSetupEnum(..), MirSetupSlice(..))
 import           SAWCentral.Options
-import           SAWScript.Prover.SolverStats
+import           SAWCentral.Prover.SolverStats
 import           SAWCentral.Utils (bullets)
 import           SAWScript.Proof (TheoremNonce, TheoremSummary)
 

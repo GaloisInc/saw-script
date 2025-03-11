@@ -148,6 +148,23 @@ library saw-central
     SAWCentral.Yosys.TransitionSystem
     SAWCentral.Yosys
 
+    SAWCentral.MRSolver.Monad
+    SAWCentral.MRSolver.SMT
+    SAWCentral.MRSolver.Solver
+    SAWCentral.MRSolver.Evidence
+    SAWCentral.MRSolver.Term
+
+    SAWCentral.Prover.Rewrite
+    SAWCentral.Prover.SolverStats
+    SAWCentral.Prover.Util
+    SAWCentral.Prover.SBV
+    SAWCentral.Prover.MRSolver
+    SAWCentral.Prover.RME
+    SAWCentral.Prover.ABC
+    SAWCentral.Prover.What4
+    SAWCentral.Prover.Exporter
+    SAWCentral.Prover.Versions
+
   other-modules:
     SAWCentral.Panic
 
@@ -313,22 +330,6 @@ library
     SAWScript.Crucible.MIR.ResolveSetupValue
     SAWScript.Crucible.MIR.Setup.Value
     SAWScript.Crucible.MIR.TypeShape
-
-    SAWScript.Prover.Rewrite
-    SAWScript.Prover.SolverStats
-    SAWScript.Prover.Util
-    SAWScript.Prover.SBV
-    SAWScript.Prover.MRSolver
-    SAWScript.Prover.MRSolver.Monad
-    SAWScript.Prover.MRSolver.SMT
-    SAWScript.Prover.MRSolver.Solver
-    SAWScript.Prover.MRSolver.Evidence
-    SAWScript.Prover.MRSolver.Term
-    SAWScript.Prover.RME
-    SAWScript.Prover.ABC
-    SAWScript.Prover.What4
-    SAWScript.Prover.Exporter
-    SAWScript.Prover.Versions
 
     SAWScript.VerificationSummary
 

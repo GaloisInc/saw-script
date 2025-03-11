@@ -76,9 +76,9 @@ import SAWScript.Value
 import SAWScript.SolverCache
 import SAWScript.SolverVersions
 import SAWScript.Proof (emptyTheoremDB)
-import SAWScript.Prover.Rewrite(basic_ss)
-import SAWScript.Prover.Exporter
-import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
+import SAWCentral.Prover.Rewrite(basic_ss)
+import SAWCentral.Prover.Exporter
+import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWCentral.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp

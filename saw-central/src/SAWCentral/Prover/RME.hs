@@ -1,4 +1,4 @@
-module SAWScript.Prover.RME where
+module SAWCentral.Prover.RME where
 
 import Control.Monad.IO.Class
 import qualified Data.Map as Map
@@ -11,7 +11,7 @@ import qualified Verifier.SAW.Simulator.RME as RME
 import Verifier.SAW.SATQuery (SATQuery(..))
 
 import SAWScript.Proof (CEX)
-import SAWScript.Prover.Util
+import SAWCentral.Prover.Util
 import SAWScript.Value
 
 -- | Bit-blast a proposition and check its validity using RME.

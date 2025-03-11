@@ -141,14 +141,14 @@ import SAWScript.SolverVersions
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.Common.Setup.Type (addCondition, croTags)
-import SAWScript.Prover.Util(checkBooleanSchema)
-import SAWScript.Prover.SolverStats
-import qualified SAWScript.Prover.SBV as Prover
-import qualified SAWScript.Prover.RME as Prover
-import qualified SAWScript.Prover.ABC as Prover
-import qualified SAWScript.Prover.What4 as Prover
-import qualified SAWScript.Prover.Exporter as Prover
-import qualified SAWScript.Prover.MRSolver as Prover
+import SAWCentral.Prover.Util(checkBooleanSchema)
+import SAWCentral.Prover.SolverStats
+import qualified SAWCentral.Prover.SBV as Prover
+import qualified SAWCentral.Prover.RME as Prover
+import qualified SAWCentral.Prover.ABC as Prover
+import qualified SAWCentral.Prover.What4 as Prover
+import qualified SAWCentral.Prover.Exporter as Prover
+import qualified SAWCentral.Prover.MRSolver as Prover
 import SAWScript.VerificationSummary
 
 showPrim :: SV.Value -> TopLevel String

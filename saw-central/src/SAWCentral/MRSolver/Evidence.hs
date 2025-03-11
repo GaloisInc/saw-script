@@ -2,7 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module      : SAWScript.Prover.MRSolver.Evidence
+Module      : SAWCentral.MRSolver.Evidence
 Copyright   : Galois, Inc. 2023
 License     : BSD3
 Maintainer  : westbrook@galois.com
@@ -22,7 +22,7 @@ The reason we cannot just import @Value.hs@ here directly is because the
 constructor of the 'Value' datatype.
 -}
 
-module SAWScript.Prover.MRSolver.Evidence where
+module SAWCentral.MRSolver.Evidence where
 
 import Data.Foldable (foldMap')
 
@@ -39,9 +39,9 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 
-import SAWScript.Prover.MRSolver.Term
+import SAWCentral.MRSolver.Term
 
 
 ----------------------------------------------------------------------

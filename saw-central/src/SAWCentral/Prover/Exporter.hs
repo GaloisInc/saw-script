@@ -8,7 +8,7 @@
 {-# Language FlexibleContexts #-}
 {-# Language TypeApplications #-}
 {-# Language TupleSections #-}
-module SAWScript.Prover.Exporter
+module SAWCentral.Prover.Exporter
   ( proveWithSATExporter
   , proveWithPropExporter
 
@@ -97,9 +97,9 @@ import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
 import SAWScript.Proof
   (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
-import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Util
-import SAWScript.Prover.What4
+import SAWCentral.Prover.SolverStats
+import SAWCentral.Prover.Util
+import SAWCentral.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Interface as W4

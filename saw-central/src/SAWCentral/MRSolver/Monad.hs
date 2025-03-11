@@ -11,7 +11,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 
 {- |
-Module      : SAWScript.Prover.MRSolver.Monad
+Module      : SAWCentral.MRSolver.Monad
 Copyright   : Galois, Inc. 2022
 License     : BSD3
 Maintainer  : westbrook@galois.com
@@ -22,7 +22,7 @@ This module defines the monad used by Mr. Solver ('MRM') as well as the core
 monadic combinators for operating on terms.
 -}
 
-module SAWScript.Prover.MRSolver.Monad where
+module SAWCentral.MRSolver.Monad where
 
 import Data.Maybe
 import Data.List (find, findIndex, foldl')
@@ -59,12 +59,12 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Module (Def(..))
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Cryptol.Monadify
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 import SAWScript.Proof (Sequent, SolveResult)
 import SAWScript.Value (TopLevel)
 
-import SAWScript.Prover.MRSolver.Term
-import SAWScript.Prover.MRSolver.Evidence
+import SAWCentral.MRSolver.Term
+import SAWCentral.MRSolver.Evidence
 
 
 ----------------------------------------------------------------------

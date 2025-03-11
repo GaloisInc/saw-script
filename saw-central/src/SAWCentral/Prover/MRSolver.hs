@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Prover.MRSolver
+Module      : SAWCentral.Prover.MRSolver
 Description : The SAW monadic-recursive solver (Mr. Solver)
 Copyright   : Galois, Inc. 2022
 License     : BSD3
@@ -8,7 +8,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module SAWScript.Prover.MRSolver
+module SAWCentral.Prover.MRSolver
   (askMRSolver, refinementTerm, 
    MRFailure(..), showMRFailure, showMRFailureNoCtx,
    RefinesS(..), asRefinesS,
@@ -17,7 +17,7 @@ module SAWScript.Prover.MRSolver
    MREnv(..), emptyMREnv, mrEnvSetDebugLevel,
    asProjAll, isSpecFunType) where
 
-import SAWScript.Prover.MRSolver.Term
-import SAWScript.Prover.MRSolver.Evidence
-import SAWScript.Prover.MRSolver.Monad
-import SAWScript.Prover.MRSolver.Solver
+import SAWCentral.MRSolver.Term
+import SAWCentral.MRSolver.Evidence
+import SAWCentral.MRSolver.Monad
+import SAWCentral.MRSolver.Solver

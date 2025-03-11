@@ -1,11 +1,11 @@
 {- |
-Module      : SAWScript.Prover.SolverStats
+Module      : SAWCentral.Prover.SolverStats
 Description : Represents information about solved goals.
 Maintainer  : atomb
 Stability   : provisional
 -}
 
-module SAWScript.Prover.SolverStats where
+module SAWCentral.Prover.SolverStats where
 
 import Data.Semigroup
 import Data.Set (Set)

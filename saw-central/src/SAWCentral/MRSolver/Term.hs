@@ -17,7 +17,7 @@
 {-# OPTIONS_GHC -fno-warn-partial-type-signatures #-}
 
 {- |
-Module      : SAWScript.Prover.MRSolver.Term
+Module      : SAWCentral.MRSolver.Term
 Copyright   : Galois, Inc. 2022
 License     : BSD3
 Maintainer  : westbrook@galois.com
@@ -30,7 +30,7 @@ datatype is 'NormComp', which represents the result of one step of monadic
 normalization - see @Solver.hs@ for the description of this normalization.
 -}
 
-module SAWScript.Prover.MRSolver.Term where
+module SAWCentral.MRSolver.Term where
 
 import Data.String
 import Data.IORef

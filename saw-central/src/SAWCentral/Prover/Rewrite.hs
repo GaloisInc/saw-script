@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Provers.Rewrite
+Module      : SAWCentral.Provers.Rewrite
 Description : Useful rewrites.
 Maintainer  : GaloisInc
 Stability   : provisional
@@ -7,7 +7,7 @@ Stability   : provisional
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWScript.Prover.Rewrite where
+module SAWCentral.Prover.Rewrite where
 
 import Verifier.SAW.Rewriter
          ( Simpset, emptySimpset, addRules, RewriteRule
