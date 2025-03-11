@@ -20,7 +20,7 @@ module SAWScript.MGU
        ( checkDecl
        , checkStmt
        , checkSchemaPattern
-       , instantiate
+       , substituteTyVars
        ) where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -250,33 +250,32 @@ instance AppSubst NamedType where
 
 
 ------------------------------------------------------------
--- Instantiate {{{
+-- SubstituteTyVars {{{
 
 --
--- instantiate is a typeclass-polymorphic function for substituting
--- named type variables (such as those declared with typedef) in a
--- Type.
+-- substituteTyVars is a typeclass-polymorphic function for
+-- substituting named type variables (such as those declared with
+-- typedef) in a Type.
 --
--- Note: instantiate is exposed from this module and reused by the
--- interpreter as part of its handling of typedefs during execution.
--- XXX: Should probably come up with a clearer name. "instantiate"
--- could mean just about anything...
+-- Note: substituteTyVars is exposed from this module and reused by
+-- the interpreter as part of its handling of typedefs during
+-- execution.
 --
 
-class Instantiate t where
-  -- | @instantiate m x@ applies the map @m@ to type variables in @x@.
-  instantiate :: TyEnv -> t -> t
+class SubstituteTyVars t where
+  -- | @substituteTyVars m x@ applies the map @m@ to type variables in @x@.
+  substituteTyVars :: TyEnv -> t -> t
 
-instance (Instantiate a) => Instantiate (Maybe a) where
-  instantiate tyenv = fmap (instantiate tyenv)
+instance (SubstituteTyVars a) => SubstituteTyVars (Maybe a) where
+  substituteTyVars tyenv = fmap (substituteTyVars tyenv)
 
-instance (Instantiate a) => Instantiate [a] where
-  instantiate tyenv = map (instantiate tyenv)
+instance (SubstituteTyVars a) => SubstituteTyVars [a] where
+  substituteTyVars tyenv = map (substituteTyVars tyenv)
 
-instance Instantiate Type where
-  instantiate tyenv ty = case ty of
-    TyCon pos tc ts     -> TyCon pos tc (instantiate tyenv ts)
-    TyRecord pos fs     -> TyRecord pos (fmap (instantiate tyenv) fs)
+instance SubstituteTyVars Type where
+  substituteTyVars tyenv ty = case ty of
+    TyCon pos tc ts     -> TyCon pos tc (substituteTyVars tyenv ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars tyenv) fs)
     TyUnifyVar _ _      -> ty
     TyVar _ n           ->
         case M.lookup n tyenv of
@@ -421,11 +420,11 @@ applyCurrentSubst t = do
   s <- TI $ gets subst
   return $ appSubst s t
 
--- Apply the current typedef collection with instantiate.
-resolveCurrentTypedefs :: Instantiate t => t -> TI t
+-- Apply the current typedef collection with substituteTyVars.
+resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
 resolveCurrentTypedefs t = do
   s <- TI $ asks tyEnv
-  return $ instantiate s t
+  return $ substituteTyVars s t
 
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
@@ -1074,12 +1073,12 @@ inferExpr (ln, expr) = case expr of
            return (Var x, t)
          Just (Forall as t) -> do
            -- get a fresh tyvar for each quantifier binding, convert
-           -- to a name -> ty map, and instantiate with the fresh tyvars
+           -- to a name -> ty map, and substitute the fresh tyvars
            let once (apos, a) = do
                  at <- getFreshTyVar apos
                  return (a, ConcreteType at)
            substs <- mapM once as
-           let t' = instantiate (M.fromList substs) t
+           let t' = substituteTyVars (M.fromList substs) t
            return (Var x, t')
 
   Function pos pat body ->
@@ -1168,7 +1167,7 @@ withTypedef n t m =
   TI $
   local
     (\ro ->
-      let t' = instantiate (tyEnv ro) t
+      let t' = substituteTyVars (tyEnv ro) t
       in  ro { tyEnv = M.insert (getVal n) (ConcreteType t') $ tyEnv ro })
     $ unTI m
 
