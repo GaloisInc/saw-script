@@ -85,9 +85,9 @@ import SAWScript.Prover.MRSolver.Evidence as MRSolver
 import SAWScript.SolverCache
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
-import SAWScript.Yosys.IR
-import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
-import SAWScript.Yosys.State (YosysSequential)
+import SAWCentral.Yosys.IR
+import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
+import SAWCentral.Yosys.State (YosysSequential)
 
 import Verifier.SAW.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
 import Verifier.SAW.CryptolEnv as CEnv

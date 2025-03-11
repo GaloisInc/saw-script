@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.Cell
+Module      : SAWCentral.Yosys.Cell
 Description : Translating Yosys cells into SAWCore
 License     : BSD3
 Maintainer  : sbreese
@@ -10,7 +10,7 @@ Stability   : experimental
 {-# Language MultiWayIf #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWScript.Yosys.Cell where
+module SAWCentral.Yosys.Cell where
 
 import Control.Lens ((^.))
 import Control.Monad.IO.Class (MonadIO(..))
@@ -26,10 +26,10 @@ import Numeric.Natural (Natural)
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.Name as SC
 
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 
-import SAWScript.Yosys.Utils
-import SAWScript.Yosys.IR
+import SAWCentral.Yosys.Utils
+import SAWCentral.Yosys.IR
 
 -- | A SAWCore bitvector term along with its width and whether it should be interpreted as signed.
 data CellTerm = CellTerm

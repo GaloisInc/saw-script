@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.IR
+Module      : SAWCentral.Yosys.IR
 Description : Representation for Yosys JSON output
 License     : BSD3
 Maintainer  : sbreese
@@ -14,7 +14,7 @@ Stability   : experimental
 {-# Language FlexibleInstances #-}
 {-# Language DeriveFunctor #-}
 
-module SAWScript.Yosys.IR where
+module SAWCentral.Yosys.IR where
 
 import Control.Lens.TH (makeLenses)
 
@@ -30,8 +30,8 @@ import qualified Data.Text as Text
 
 import qualified Data.Aeson as Aeson
 
-import SAWScript.Panic (panic)
-import SAWScript.Yosys.Utils
+import SAWCentral.Panic (panic)
+import SAWCentral.Yosys.Utils
 
 --------------------------------------------------------------------------------
 -- ** Representing and loading the Yosys JSON IR

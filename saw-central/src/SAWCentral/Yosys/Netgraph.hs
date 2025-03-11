@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.Netgraph
+Module      : SAWCentral.Yosys.Netgraph
 Description : Translating graphs of Yosys cells into SAWCore
 License     : BSD3
 Maintainer  : sbreese
@@ -15,7 +15,7 @@ Stability   : experimental
 {-# Language TupleSections #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWScript.Yosys.Netgraph where
+module SAWCentral.Yosys.Netgraph where
 
 import Control.Lens.TH (makeLenses)
 
@@ -39,9 +39,9 @@ import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
 
-import SAWScript.Yosys.Utils
-import SAWScript.Yosys.IR
-import SAWScript.Yosys.Cell
+import SAWCentral.Yosys.Utils
+import SAWCentral.Yosys.IR
+import SAWCentral.Yosys.Cell
 
 cellToEdges :: (Ord b, Eq b) => Cell [b] -> [(b, [b])]
 cellToEdges c = (, inputBits) <$> outputBits
