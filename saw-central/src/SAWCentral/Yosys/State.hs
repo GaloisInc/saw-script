@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.State
+Module      : SAWCentral.Yosys.State
 Description : Representing and manipulating stateful HDL circuits
 License     : BSD3
 Maintainer  : sbreese
@@ -14,7 +14,7 @@ Stability   : experimental
 {-# Language TupleSections #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWScript.Yosys.State where
+module SAWCentral.Yosys.State where
 
 import Control.Lens.TH (makeLenses)
 
@@ -36,11 +36,11 @@ import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 
-import SAWScript.Yosys.Utils
-import SAWScript.Yosys.IR
-import SAWScript.Yosys.Netgraph
+import SAWCentral.Yosys.Utils
+import SAWCentral.Yosys.IR
+import SAWCentral.Yosys.Netgraph
 
 -- | Find all of the flip-flop cells in a network graph.
 findDffs ::

@@ -31,8 +31,8 @@ import SAWServer.ProofScript (ProofScript, interpretProofScript)
 import SAWServer.TopLevel (tl)
 
 import SAWScript.Value (getSharedContext, getTopLevelRW, rwCryptol)
-import SAWScript.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify, yosys_import_sequential, yosys_extract_sequential)
-import SAWScript.Yosys.Theorem (YosysImport(..))
+import SAWCentral.Yosys (loadYosysIR, yosysIRToTypedTerms, yosys_verify, yosys_import_sequential, yosys_extract_sequential)
+import SAWCentral.Yosys.Theorem (YosysImport(..))
 
 data YosysImportParams = YosysImportParams
   { yosysImportPath :: FilePath

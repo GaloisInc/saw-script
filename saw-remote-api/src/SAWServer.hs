@@ -60,8 +60,8 @@ import SAWCentral.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
-import SAWScript.Yosys.State (YosysSequential)
-import SAWScript.Yosys.Theorem (YosysImport, YosysTheorem)
+import SAWCentral.Yosys.State (YosysSequential)
+import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
