@@ -139,6 +139,9 @@ library saw-central
     SAWCentral.SBVParser
     SAWCentral.SBVModel
 
+  other-modules:
+    SAWCentral.Panic
+
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
