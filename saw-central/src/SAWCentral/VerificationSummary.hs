@@ -3,13 +3,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 {- |
-Module      : SAWScript.VerificationSummary
+Module      : SAWCentral.VerificationSummary
 Description : Summaries of verification for human consumption.
 License     : BSD3
 Maintainer  : atomb
 -}
 
-module SAWScript.VerificationSummary
+module SAWCentral.VerificationSummary
   ( computeVerificationSummary
   , jsonVerificationSummary
   , prettyVerificationSummary
@@ -30,7 +30,7 @@ import SAWCentral.Crucible.Common.MethodSpec
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWCentral.Crucible.JVM.MethodSpecIR as CMSJVM
-import SAWScript.Proof
+import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
 import Verifier.SAW.Name (SAWNamingEnv)

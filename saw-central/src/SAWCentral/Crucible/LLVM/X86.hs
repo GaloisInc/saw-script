@@ -81,13 +81,13 @@ import Verifier.SAW.SCTypeCheck (scTypeCheck)
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWCentral.Panic (panic)
-import SAWScript.Proof
+import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import SAWScript.Value
 import SAWCentral.Options
-import SAWScript.X86 hiding (Options)
-import SAWScript.X86Spec
+import SAWCentral.X86 hiding (Options)
+import SAWCentral.X86Spec
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.Common.Override (MetadataMap)
 

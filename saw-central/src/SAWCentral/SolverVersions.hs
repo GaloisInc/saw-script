@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.SolverVersions
+Module      : SAWCentral.SolverVersions
 Description : Determining SMT solver backend versions
 License     : BSD3
 Maintainer  : m-yac
@@ -10,7 +10,7 @@ Stability   : provisional
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
-module SAWScript.SolverVersions where
+module SAWCentral.SolverVersions where
 
 import Control.Exception (SomeException, try)
 import System.Process (readProcessWithExitCode)
@@ -20,7 +20,7 @@ import qualified Data.Map as Map
 
 import qualified Data.SBV.Dynamic as SBV
 
-import SAWScript.SolverCache
+import SAWCentral.SolverCache
 import SAWVersion.GitRev
 
 -- | Given an 'SBV.Solver' from @SBV@, attempt to query the solver for its

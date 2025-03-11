@@ -10,7 +10,7 @@ import Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.RME as RME
 import Verifier.SAW.SATQuery (SATQuery(..))
 
-import SAWScript.Proof (CEX)
+import SAWCentral.Proof (CEX)
 import SAWCentral.Prover.Util
 import SAWScript.Value
 

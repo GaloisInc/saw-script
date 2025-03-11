@@ -155,7 +155,7 @@ import           SAWCentral.Crucible.MIR.Setup.Value
 import           SAWCentral.Options
 import           SAWCentral.Prover.SolverStats
 import           SAWCentral.Utils (bullets)
-import           SAWScript.Proof (TheoremNonce, TheoremSummary)
+import           SAWCentral.Proof (TheoremNonce, TheoremSummary)
 
 -- | Are we writing preconditions or postconditions?
 data PrePost

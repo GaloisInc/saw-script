@@ -59,23 +59,23 @@ import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
 import SAWCentral.AST (Located(..),Import(..))
 import SAWScript.Bisimulation
-import SAWScript.Builtins
+import SAWCentral.Builtins
 import SAWCentral.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.HeapsterBuiltins
 import SAWCentral.JavaExpr
-import SAWScript.LLVMBuiltins
+import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkStmt)
 import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
-import SAWScript.TopLevel
+import SAWCentral.TopLevel
 import SAWCentral.Utils
 import SAWScript.Value
-import SAWScript.SolverCache
-import SAWScript.SolverVersions
-import SAWScript.Proof (emptyTheoremDB)
+import SAWCentral.SolverCache
+import SAWCentral.SolverVersions
+import SAWCentral.Proof (emptyTheoremDB)
 import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
 import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)

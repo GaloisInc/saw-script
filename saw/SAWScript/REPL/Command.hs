@@ -63,7 +63,7 @@ import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
-import SAWScript.TopLevel (TopLevelRW(..))
+import SAWCentral.TopLevel (TopLevelRW(..))
 
 
 -- Commands --------------------------------------------------------------------

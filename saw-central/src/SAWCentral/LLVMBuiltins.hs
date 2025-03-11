@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.LLVMBuiltins
+Module      : SAWCentral.LLVMBuiltins
 Description : Implementations of LLVM-related SAW-Script primitives.
 License     : BSD3
 Maintainer  : atomb
@@ -17,7 +17,7 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-module SAWScript.LLVMBuiltins where
+module SAWCentral.LLVMBuiltins where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative hiding (many)
