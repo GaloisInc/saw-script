@@ -57,7 +57,7 @@ import qualified SAWCentral.AST as SS
      Located(..),
      Decl(..),
      Pattern(..))
-import SAWScript.Exceptions
+import SAWCentral.Exceptions
 import SAWScript.MGU (checkDecl, checkSchemaPattern)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretStmt)

@@ -13,7 +13,7 @@ import qualified Data.Map as Map
 
 import SAWScript.Crucible.JVM.Builtins
     ( jvm_unsafe_assume_spec, jvm_verify )
-import SAWScript.JavaExpr (JavaType(..))
+import SAWCentral.JavaExpr (JavaType(..))
 import SAWScript.Value (rwCryptol)
 
 import qualified Argo

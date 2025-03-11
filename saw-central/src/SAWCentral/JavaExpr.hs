@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.JavaExpr
+Module      : SAWCentral.JavaExpr
 Description : Data structures for Java expressions and types.
 License     : BSD3
 Maintainer  : atomb
@@ -16,7 +16,7 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module SAWScript.JavaExpr
+module SAWCentral.JavaExpr
   (-- * Java Expressions
     JavaExprF(..)
   , JavaExpr
@@ -80,7 +80,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (toShortName)
 
-import qualified SAWScript.CongruenceClosure as CC
+import qualified SAWCentral.CongruenceClosure as CC
 import SAWCentral.Position
 import SAWCentral.Utils
 

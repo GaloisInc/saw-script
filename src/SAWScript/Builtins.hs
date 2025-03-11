@@ -125,8 +125,8 @@ import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 -- crucible
 import Lang.Crucible.CFG.Common (freshGlobalVar)
 
-import qualified SAWScript.SBVParser as SBV
-import SAWScript.ImportAIG
+import qualified SAWCentral.SBVParser as SBV
+import SAWCentral.ImportAIG
 
 import SAWCentral.AST (getVal, pShow, Located(..))
 import SAWCentral.Options as Opts

@@ -200,7 +200,7 @@ import SAWScript.Prover.Versions
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWCentral.Position
-import SAWScript.Exceptions
+import SAWCentral.Exceptions
 import SAWCentral.Options
 import SAWCentral.Utils (neGroupOn, neNubOrd)
 

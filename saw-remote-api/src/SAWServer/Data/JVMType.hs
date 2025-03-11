@@ -7,7 +7,7 @@ import Control.Applicative
 import qualified Data.Aeson as JSON
 import Data.Aeson (withObject, withText, (.:))
 
-import SAWScript.JavaExpr
+import SAWCentral.JavaExpr
 
 data JVMTypeTag
   = TagPrimType
