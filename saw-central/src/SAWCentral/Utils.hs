@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Utils
+Module      : SAWCentral.Utils
 Description : Miscellaneous utilities.
 Maintainer  : jhendrix, atomb
 Stability   : provisional
@@ -12,7 +12,7 @@ Stability   : provisional
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE LambdaCase #-}
 
-module SAWScript.Utils where
+module SAWCentral.Utils where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -44,8 +44,8 @@ import Numeric(showFFloat)
 
 import qualified Lang.JVM.Codebase as JSS
 
-import SAWScript.Options
-import SAWScript.Position
+import SAWCentral.Options
+import SAWCentral.Position
 
 bullets :: Char -> [PP.Doc ann] -> PP.Doc ann
 bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.<+>))

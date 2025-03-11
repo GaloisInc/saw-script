@@ -129,7 +129,7 @@ import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
 
 import SAWScript.AST (getVal, pShow, Located(..))
-import SAWScript.Options as Opts
+import SAWCentral.Options as Opts
 import SAWScript.Proof
 import SAWScript.Crucible.Common (PathSatSolver(..))
 import qualified SAWScript.Crucible.Common as Common

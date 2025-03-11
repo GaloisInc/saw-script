@@ -17,10 +17,10 @@ import qualified Data.Text as Text
 import Control.Exception
 import System.Directory
 
-import SAWScript.Position (Pos)
+import SAWCentral.Position (Pos)
 import SAWScript.AST
 import SAWScript.Lexer (lexSAW)
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.Parser
 import SAWScript.Token (Token)
 

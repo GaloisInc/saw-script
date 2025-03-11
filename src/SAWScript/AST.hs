@@ -39,7 +39,7 @@ module SAWScript.AST
        , PrettyPrint(..), pShow, pShowText, commaSepAll, prettyWholeModule
        ) where
 
-import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
+import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
 import Data.Text (Text)
 import Data.Map (Map)

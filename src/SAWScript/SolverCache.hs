@@ -116,7 +116,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.Proof
 
 

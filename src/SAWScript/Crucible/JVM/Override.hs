@@ -110,9 +110,9 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue
 import           SAWScript.Crucible.JVM.Setup.Value ()
-import           SAWScript.Options
+import           SAWCentral.Options
 import           SAWScript.Panic
-import           SAWScript.Utils (handleException)
+import           SAWCentral.Utils (handleException)
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J

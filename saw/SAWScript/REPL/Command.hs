@@ -35,7 +35,7 @@ module SAWScript.REPL.Command (
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
-import SAWScript.Position (getPos)
+import SAWCentral.Position (getPos)
 
 import Cryptol.Parser (ParseError())
 
@@ -51,7 +51,7 @@ import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory
 import qualified Data.Map as Map
 
 -- SAWScript imports
-import qualified SAWScript.Options (Verbosity(..))
+import qualified SAWCentral.Options (Verbosity(..))
 import qualified SAWScript.AST as SS
     (pShow,
      Located(..),
@@ -205,7 +205,7 @@ searchCmd str
          let msg' = show pos ++ ": " ++ Text.unpack msg
          io $ putStrLn msg'
          -- XXX this prints twice, fix it up when we do the message-printing cleanup
-         when (vrb == SAWScript.Options.Error) $
+         when (vrb == SAWCentral.Options.Error) $
              io $ throwIO $ userError msg'
      pat <- case SAWScript.Parser.parseSchemaPattern tokens of
        Left err -> fail (show err)

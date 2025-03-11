@@ -42,7 +42,7 @@ import qualified Prettyprinter as PP
 import SAWScript.AST
 import SAWScript.ASTUtil (namedTyVars, SubstituteTyVars(..))
 import SAWScript.Panic (panic)
-import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
+import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
 -- should probably move this to AST
 tUnit :: Pos -> Type

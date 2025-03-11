@@ -74,7 +74,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 
 -- saw-script
 import SAWScript.Value
-import SAWScript.Options(Options,simVerbose)
+import SAWCentral.Options(Options,simVerbose)
 import SAWScript.Crucible.Common
 import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)
 
@@ -82,7 +82,7 @@ import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, run
 import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
 
-import qualified SAWScript.Utils as J
+import qualified SAWCentral.Utils as J
 import qualified Lang.JVM.Codebase as JCB
 
 -- crucible-jvm

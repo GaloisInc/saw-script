@@ -33,7 +33,7 @@ import Numeric.Natural (Natural)
 import Verifier.SAW.TypedAST
 import Verifier.SAW.SharedTerm
 import qualified SAWScript.SBVModel as SBV
-import SAWScript.Options
+import SAWCentral.Options
 
 type NodeCache = Map SBV.NodeId Term
 

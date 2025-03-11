@@ -24,8 +24,8 @@ import Data.Text (Text, pack, unpack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
-import SAWScript.Position
-import SAWScript.Utils
+import SAWCentral.Position
+import SAWCentral.Utils
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)

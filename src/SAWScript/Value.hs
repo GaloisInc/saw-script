@@ -65,7 +65,7 @@ import qualified SAWScript.AST as SS
 import qualified SAWScript.ASTUtil as SS (substituteTyVars)
 import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWScript.Exceptions as SS
-import qualified SAWScript.Position as SS
+import qualified SAWCentral.Position as SS
 import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
@@ -77,7 +77,7 @@ import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JavaPretty (prettyClass)
-import SAWScript.Options (Options, printOutLn, Verbosity(..))
+import SAWCentral.Options (Options, printOutLn, Verbosity(..))
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)

@@ -122,9 +122,9 @@ import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
-import SAWScript.Utils as SS
-import qualified SAWScript.Position as SS
-import SAWScript.Options
+import SAWCentral.Utils as SS
+import qualified SAWCentral.Position as SS
+import SAWCentral.Options
 import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
 import SAWScript.JavaExpr (JavaType(..))

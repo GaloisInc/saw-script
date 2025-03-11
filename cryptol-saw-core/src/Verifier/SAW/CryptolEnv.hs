@@ -104,7 +104,6 @@ import Cryptol.Utils.Logger (quietLogger)
 --import SAWScript.REPL.Monad (REPLException(..))
 import Verifier.SAW.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
--- import SAWScript.Utils (Pos(..))
 -- import SAWScript.AST (Located(getVal, locatedPos), Import(..))
 
 

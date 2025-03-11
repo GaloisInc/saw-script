@@ -33,7 +33,7 @@ import qualified Text.LLVM.Parser as LLVM (parseType)
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.Value as SV
 
 llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)

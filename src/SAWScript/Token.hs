@@ -10,7 +10,7 @@ module SAWScript.Token where
 
 import Data.Text (Text)
 
-import SAWScript.Position (Positioned(..))
+import SAWCentral.Position (Positioned(..))
 
 -- | Lexer tokens for saw-script.
 --

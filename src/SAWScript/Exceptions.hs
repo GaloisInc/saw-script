@@ -14,7 +14,7 @@ import Data.Typeable (cast)
 
 import What4.ProgramLoc (ProgramLoc)
 
-import SAWScript.Position (Pos(..))
+import SAWCentral.Position (Pos(..))
 
 newtype TypeErrors = TypeErrors [(Pos, String)]
 

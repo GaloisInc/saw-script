@@ -25,8 +25,8 @@ import System.IO
 
 import GHC.IO.Encoding (setLocaleEncoding)
 
-import SAWScript.Options
-import SAWScript.Utils
+import SAWCentral.Options
+import SAWCentral.Utils
 import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
 import qualified SAWScript.REPL.Haskeline as REPL

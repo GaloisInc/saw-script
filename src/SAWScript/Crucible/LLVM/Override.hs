@@ -133,9 +133,9 @@ import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.Crucible.LLVM.ResolveSetupValue
 import           SAWScript.Crucible.LLVM.Setup.Value ()
-import           SAWScript.Options
+import           SAWCentral.Options
 import           SAWScript.Panic
-import           SAWScript.Utils (bullets, handleException)
+import           SAWCentral.Utils (bullets, handleException)
 
 type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 

@@ -56,7 +56,7 @@ import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
-import qualified SAWScript.Position as SS
+import qualified SAWCentral.Position as SS
 import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Bisimulation
 import SAWScript.Builtins
@@ -65,13 +65,13 @@ import qualified SAWScript.Import
 import SAWScript.HeapsterBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.Lexer (lexSAW)
 import SAWScript.MGU (checkStmt)
 import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWScript.TopLevel
-import SAWScript.Utils
+import SAWCentral.Utils
 import SAWScript.Value
 import SAWScript.SolverCache
 import SAWScript.SolverVersions

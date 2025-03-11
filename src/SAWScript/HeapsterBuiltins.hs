@@ -113,7 +113,7 @@ import qualified Text.PrettyPrint.HughesPJ as L (render)
 
 import SAWScript.TopLevel
 import SAWScript.Value
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.LLVMBuiltins
 import SAWScript.Builtins
 import SAWScript.Crucible.LLVM.Builtins

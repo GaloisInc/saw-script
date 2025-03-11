@@ -1,13 +1,13 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {- |
-Module      : SAWScript.Options
+Module      : SAWCentral.Options
 Description : Datatype for saw command-line options.
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
 -}
 
-module SAWScript.Options where
+module SAWCentral.Options where
 
 import Data.List (partition)
 import Data.Time

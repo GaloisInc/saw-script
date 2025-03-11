@@ -137,12 +137,12 @@ import SAWScript.Crucible.MIR.Override
 import SAWScript.Crucible.MIR.ResolveSetupValue
 import SAWScript.Crucible.MIR.TypeShape
 import SAWScript.Exceptions
-import SAWScript.Options
+import SAWCentral.Options
 import SAWScript.Panic
-import qualified SAWScript.Position as SS
+import qualified SAWCentral.Position as SS
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.Utils (neGroupOn)
+import SAWCentral.Utils (neGroupOn)
 import SAWScript.Value
 
 type AssumptionReason = (MS.ConditionMetadata, String)

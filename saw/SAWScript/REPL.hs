@@ -7,7 +7,7 @@ Stability   : provisional
 -}
 module SAWScript.REPL (run, runFromFile) where
 
-import SAWScript.Options (Options(..))
+import SAWCentral.Options (Options(..))
 import SAWScript.REPL.Logo (displayLogo)
 import SAWScript.REPL.Haskeline (repl)
 

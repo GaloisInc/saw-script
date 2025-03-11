@@ -29,7 +29,7 @@ import qualified Control.Monad.IO.Class as MTL
 import qualified Control.Monad.Trans.Class as MTL
 import qualified Control.Exception as X
 
-import SAWScript.Options (Options)
+import SAWCentral.Options (Options)
 import SAWScript.TopLevel( TopLevelRO(..) )
 
 
