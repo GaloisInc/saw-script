@@ -55,29 +55,38 @@ listSortDrop3 ss n =
     n
     ss;
 
-myTypes3 : ListSort;
-myTypes3 = LS_Cons UnitType (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+my3Types : ListSort;
+my3Types = LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil));
 
-myTypes4 : ListSort;
-myTypes4 = LS_Cons UnitType (LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil)));
+my4Types : ListSort;
+my4Types = LS_Cons UnitType my3Types;
 
-myTypes2 : ListSort;
-myTypes2 = listSortDrop myTypes3 (0 : Nat);
-  -- TODO: error in `listSortDrop` or its documentation.
+my3TypesB : ListSort;
+my3TypesB = listSortDrop my3Types (0 : Nat);
 
-test1  : ListSort = myTypes2;
-test1a : ListSort = listSortDrop3 myTypes4 0;
-test1b : ListSort = listSortDrop3 myTypes4 1;
-test1c : ListSort = listSortDrop3 myTypes4 2;
-test1d : ListSort = listSortDrop3 myTypes4 3;
-test1e : ListSort = listSortDrop3 myTypes4 5;
-test1f : ListSort = listSortDrop3 LS_Nil 5;
+test1a : ListSort = listSortDrop3 my4Types 0;
+test1b : ListSort = listSortDrop3 my4Types 1;
+test1c : ListSort = listSortDrop3 my4Types 2;
+test1d : ListSort = listSortDrop3 my4Types 5;
+test1e : ListSort = listSortDrop3 LS_Nil 5;
+
+check1a : Bool = equalNat (length_ListSort test1a) 4;
+check1b : Bool = equalNat (length_ListSort test1b) 3;
+check1c : Bool = equalNat (length_ListSort test1c) 2;
+check1d : Bool = equalNat (length_ListSort test1d) 0;
+check1e : Bool = equalNat (length_ListSort test1e) 0;
+
+check1afail : Bool = equalNat (length_ListSort test1a) 5;
+
+-- TODO: write property for length_ListSort and listSortDrop
+
+  -- testResult1a : Bit = listSort_length test1a == 4;
 
 testA : sort 0;
-testA = listSortGet myTypes3 (1 : Nat); -- works as expected.
+testA = listSortGet my3Types (1 : Nat); -- works as expected.
 
-y3 : Eithers myTypes3;
-y3 = Left UnitType (Eithers myTypes2) Unit;
+y3 : Eithers my4Types;
+y3 = Left UnitType (Eithers my3Types) Unit;
 
 --------------------------------------------------------------------
 -- Exploring/learning here
