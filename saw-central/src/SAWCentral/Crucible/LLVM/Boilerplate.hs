@@ -28,7 +28,7 @@ import qualified Data.Graph as Graph
 
 import qualified Text.LLVM as LLVM
 
-import SAWScript.Value
+import SAWCentral.Value
 
 import SAWCentral.Crucible.LLVM.Skeleton
 

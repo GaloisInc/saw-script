@@ -12,7 +12,7 @@ import Verifier.SAW.SATQuery (SATQuery(..))
 
 import SAWCentral.Proof (CEX)
 import SAWCentral.Prover.Util
-import SAWScript.Value
+import SAWCentral.Value
 
 -- | Bit-blast a proposition and check its validity using RME.
 proveRME ::

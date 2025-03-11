@@ -129,8 +129,8 @@ import SAWCentral.Options as Opts
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import SAWCentral.TopLevel
-import qualified SAWScript.Value as SV
-import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
+import qualified SAWCentral.Value as SV
+import SAWCentral.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
 

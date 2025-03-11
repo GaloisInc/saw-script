@@ -84,7 +84,7 @@ import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
 import SAWCentral.TopLevel
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.Options
 import SAWCentral.X86 hiding (Options)
 import SAWCentral.X86Spec

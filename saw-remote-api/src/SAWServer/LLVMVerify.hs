@@ -16,7 +16,7 @@ import qualified Data.Map as Map
 import SAWCentral.Crucible.LLVM.Builtins
     ( llvm_unsafe_assume_spec, llvm_verify )
 import SAWCentral.Crucible.LLVM.X86 ( llvm_verify_x86 )
-import SAWScript.Value (rwCryptol)
+import SAWCentral.Value (rwCryptol)
 
 import qualified Argo
 import qualified Argo.Doc as Doc

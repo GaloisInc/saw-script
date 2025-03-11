@@ -73,7 +73,7 @@ import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(.
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 -- saw-script
-import SAWScript.Value
+import SAWCentral.Value
 import SAWCentral.Options(Options,simVerbose)
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)

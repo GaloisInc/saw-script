@@ -32,7 +32,7 @@ import qualified Argo
 import qualified Argo.Doc as Doc
 import CryptolServer.Data.Expression ( Expression(..), Encoding(..), getCryptolExpr )
 import qualified SAWCentral.Builtins as SB
-import qualified SAWScript.Value as SV
+import qualified SAWCentral.Value as SV
 import qualified SAWCentral.Proof as PF
 import SAWServer
     ( ServerVal(VSimpset),
