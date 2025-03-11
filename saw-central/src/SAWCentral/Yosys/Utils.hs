@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.Utils
+Module      : SAWCentral.Yosys.Utils
 Description : Miscellaneous utilities used when working with HDL
 License     : BSD3
 Maintainer  : sbreese
@@ -13,7 +13,7 @@ Stability   : experimental
 {-# Language ViewPatterns #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWScript.Yosys.Utils where
+module SAWCentral.Yosys.Utils where
 
 import Control.Monad (forM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))

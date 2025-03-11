@@ -139,6 +139,15 @@ library saw-central
     SAWCentral.SBVParser
     SAWCentral.SBVModel
 
+    SAWCentral.Yosys.Utils
+    SAWCentral.Yosys.Theorem
+    SAWCentral.Yosys.IR
+    SAWCentral.Yosys.Cell
+    SAWCentral.Yosys.Netgraph
+    SAWCentral.Yosys.State
+    SAWCentral.Yosys.TransitionSystem
+    SAWCentral.Yosys
+
   other-modules:
     SAWCentral.Panic
 
@@ -325,15 +334,6 @@ library
 
     SAWScript.X86
     SAWScript.X86Spec
-
-    SAWScript.Yosys
-    SAWScript.Yosys.Cell
-    SAWScript.Yosys.IR
-    SAWScript.Yosys.Netgraph
-    SAWScript.Yosys.State
-    SAWScript.Yosys.Theorem
-    SAWScript.Yosys.TransitionSystem
-    SAWScript.Yosys.Utils
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

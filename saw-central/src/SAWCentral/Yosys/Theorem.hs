@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.Theorem
+Module      : SAWCentral.Yosys.Theorem
 Description : Utilities for rewriting/compositional verification of HDL modules
 License     : BSD3
 Maintainer  : sbreese
@@ -13,7 +13,7 @@ Stability   : experimental
 {-# Language ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
-module SAWScript.Yosys.Theorem where
+module SAWCentral.Yosys.Theorem where
  
 import Control.Lens.TH (makeLenses)
 
@@ -37,7 +37,7 @@ import qualified Verifier.SAW.Cryptol as CSC
 
 import qualified Cryptol.TypeCheck.Type as C
 
-import SAWScript.Yosys.Utils
+import SAWCentral.Yosys.Utils
 
 newtype YosysImport = YosysImport { yosysImport :: Map Text SC.TypedTerm }
 

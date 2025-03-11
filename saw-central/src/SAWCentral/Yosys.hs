@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys
+Module      : SAWCentral.Yosys
 Description : Loading and manipulating HDL programs
 License     : BSD3
 Maintainer  : sbreese
@@ -15,7 +15,7 @@ Stability   : experimental
 {-# Language TupleSections #-}
 {-# Language ScopedTypeVariables #-}
 
-module SAWScript.Yosys
+module SAWCentral.Yosys
   ( YosysIR
   , yosys_import
   , yosys_verify
@@ -58,12 +58,12 @@ import SAWScript.Value
 import qualified SAWScript.Builtins as Builtins
 import qualified SAWScript.Crucible.Common as Common
 
-import SAWScript.Yosys.Utils
-import SAWScript.Yosys.IR
-import SAWScript.Yosys.State
-import SAWScript.Yosys.Theorem
-import SAWScript.Yosys.TransitionSystem
-import SAWScript.Yosys.Netgraph
+import SAWCentral.Yosys.Utils
+import SAWCentral.Yosys.IR
+import SAWCentral.Yosys.State
+import SAWCentral.Yosys.Theorem
+import SAWCentral.Yosys.TransitionSystem
+import SAWCentral.Yosys.Netgraph
 
 --------------------------------------------------------------------------------
 -- ** Building the module graph from Yosys IR

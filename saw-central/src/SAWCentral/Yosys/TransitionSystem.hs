@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Yosys.TransitionSystem
+Module      : SAWCentral.Yosys.TransitionSystem
 Description : Exporting stateful HDL circuits to model checkers
 License     : BSD3
 Maintainer  : sbreese
@@ -16,7 +16,7 @@ Stability   : experimental
 {-# Language KindSignatures #-}
 {-# Language GADTs #-}
 
-module SAWScript.Yosys.TransitionSystem where
+module SAWCentral.Yosys.TransitionSystem where
 
 import Control.Lens.TH (makeLenses)
 
@@ -58,8 +58,8 @@ import qualified What4.TransitionSystem as W4
 import qualified Language.Sally as Sally
 import qualified Language.Sally.TransitionSystem as Sally
 
-import SAWScript.Yosys.Utils
-import SAWScript.Yosys.State
+import SAWCentral.Yosys.Utils
+import SAWCentral.Yosys.State
 
 -- | A named field with the given What4 base type.
 data SequentialField tp = SequentialField
