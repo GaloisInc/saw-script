@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.Skeleton
+Module      : SAWCentral.Crucible.LLVM.Skeleton
 Description : Inferring and using "skeletons" of LLVM specifications
 Maintainer  : sbreese
 Stability   : provisional
@@ -9,7 +9,7 @@ Stability   : provisional
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
 
-module SAWScript.Crucible.LLVM.Skeleton
+module SAWCentral.Crucible.LLVM.Skeleton
   ( Location(..), locationLine, locationColumn
   , SizeGuess(..), sizeGuessElems, sizeGuessInitialized, sizeGuessSource
   , TypeSkeleton(..), typeSkelLLVMType, typeSkelIsPointer, typeSkelSizeGuesses
@@ -39,7 +39,7 @@ import qualified Data.Set as Set
 import qualified Text.LLVM as LLVM
 import qualified Text.LLVM.DebugUtils as LLVM
 
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 
 --------------------------------------------------------------------------------
 -- ** Skeletons
@@ -104,7 +104,7 @@ parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 True "default
 -- lack of a pointee type. For now, we simply fail if we encounter one
 -- (see #1877).
 parseType LLVM.PtrOpaque =
-  panic "SAWScript.Crucible.LLVM.Skeleton.parseType"
+  panic "SAWCentral.Crucible.LLVM.Skeleton.parseType"
         [ "Skeleton generation does not support opaque pointers"
         , "Please report this at: https://github.com/GaloisInc/saw-script/issues/1877"
         ]

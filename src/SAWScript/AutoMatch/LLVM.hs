@@ -13,7 +13,7 @@ import qualified Data.AIG as AIG
 import Text.LLVM
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule, modAST, modFilePath)
+import SAWCentral.Crucible.LLVM.MethodSpecIR (LLVMModule, modAST, modFilePath)
 
 --import Data.Maybe
 import Data.Either

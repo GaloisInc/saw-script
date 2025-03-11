@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.Common
+Module      : SAWCentral.Crucible.Common
 Description : Crucible-related material that is not specific to a given language
 License     : BSD3
 Maintainer  : langston
@@ -9,7 +9,7 @@ Stability   : provisional
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
 
-module SAWScript.Crucible.Common
+module SAWCentral.Crucible.Common
   ( ppAbortedResult
   , Sym
   , Backend

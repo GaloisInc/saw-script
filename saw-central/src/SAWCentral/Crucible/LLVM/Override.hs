@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.Override
+Module      : SAWCentral.Crucible.LLVM.Override
 Description : Override matching and application for LLVM
 License     : BSD3
 Maintainer  : atomb
@@ -28,7 +28,7 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SAWScript.Crucible.LLVM.Override
+module SAWCentral.Crucible.LLVM.Override
   ( OverrideMatcher
   , OverrideMatcher'(..)
   , runOverrideMatcher
@@ -111,7 +111,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Symbol as W4
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr
@@ -124,17 +124,17 @@ import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.Simulator.TermModel
 import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
-import           SAWScript.Crucible.Common
-import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
-import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
-import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
-import           SAWScript.Crucible.LLVM.MethodSpecIR
-import           SAWScript.Crucible.LLVM.ResolveSetupValue
-import           SAWScript.Crucible.LLVM.Setup.Value ()
+import           SAWCentral.Crucible.Common
+import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
+import           SAWCentral.Crucible.Common.Override hiding (getSymInterface)
+import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
+import           SAWCentral.Crucible.LLVM.MethodSpecIR
+import           SAWCentral.Crucible.LLVM.ResolveSetupValue
+import           SAWCentral.Crucible.LLVM.Setup.Value ()
 import           SAWCentral.Options
-import           SAWScript.Panic
+import           SAWCentral.Panic
 import           SAWCentral.Utils (bullets, handleException)
 
 type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
@@ -1451,7 +1451,7 @@ matchPointsToValue opts sc cc spec prepost md maybe_cond ptr val =
                 -- the right-hand side value in the points_to statement. Make
                 -- sure to execute this match with an extended path condition
                 -- that takes the condition above into account. See also
-                -- Note [oeConditionalPred] in SAWScript.Crucible.Common.Override.
+                -- Note [oeConditionalPred] in SAWCentral.Crucible.Common.Override.
                 withConditionalPred cond' $
                   pure Nothing <* matchArg opts sc cc spec prepost md res_val memTy val'
               _ -> do

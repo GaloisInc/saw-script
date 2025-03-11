@@ -31,8 +31,8 @@ import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
 import qualified Text.LLVM.Parser as LLVM (parseType)
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
 import SAWCentral.Options
 import SAWScript.Value as SV
 

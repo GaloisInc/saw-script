@@ -66,13 +66,13 @@ import qualified SAWCentral.ASTUtil as SS (substituteTyVars)
 import SAWScript.Bisimulation.BisimTheorem (BisimTheorem)
 import qualified SAWCentral.Exceptions as SS
 import qualified SAWCentral.Position as SS
-import qualified SAWScript.Crucible.Common as Common
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-import qualified SAWScript.Crucible.Common.MethodSpec as CMS
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
-import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
-import qualified SAWScript.Crucible.MIR.MethodSpecIR ()
+import qualified SAWCentral.Crucible.Common as Common
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
+import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
+import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
 import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import SAWCentral.JavaExpr (JavaType(..))
@@ -83,7 +83,7 @@ import SAWCentral.Prover.SolverStats
 import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
 import SAWCentral.MRSolver.Evidence as MRSolver
 import SAWScript.SolverCache
-import SAWScript.Crucible.LLVM.Skeleton
+import SAWCentral.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))
 import SAWCentral.Yosys.IR
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)

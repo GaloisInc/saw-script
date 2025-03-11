@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.JVM.Override
+Module      : SAWCentral.Crucible.JVM.Override
 Description : Override matching and application for JVM
 License     : BSD3
 Maintainer  : atomb
@@ -26,7 +26,7 @@ Stability   : provisional
 
 {-# OPTIONS_GHC -Wno-orphans #-} -- Pretty JVMVal
 
-module SAWScript.Crucible.JVM.Override
+module SAWCentral.Crucible.JVM.Override
   ( OverrideMatcher
   , OverrideMatcher'(..)
   , runOverrideMatcher
@@ -101,17 +101,17 @@ import           Verifier.SAW.Simulator.What4.ReturnTrip (toSC)
 -- cryptol-saw-core
 import qualified Verifier.SAW.Cryptol as Cryptol
 
-import           SAWScript.Crucible.Common
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
-import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
-import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
+import           SAWCentral.Crucible.Common
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
+import           SAWCentral.Crucible.Common.Override hiding (getSymInterface)
+import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import           SAWScript.Crucible.JVM.MethodSpecIR
-import           SAWScript.Crucible.JVM.ResolveSetupValue
-import           SAWScript.Crucible.JVM.Setup.Value ()
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import           SAWCentral.Crucible.JVM.MethodSpecIR
+import           SAWCentral.Crucible.JVM.ResolveSetupValue
+import           SAWCentral.Crucible.JVM.Setup.Value ()
 import           SAWCentral.Options
-import           SAWScript.Panic
+import           SAWCentral.Panic
 import           SAWCentral.Utils (handleException)
 
 -- jvm-parser

@@ -14,7 +14,7 @@ import Control.Monad.State
 import Data.Parameterized.Classes (knownRepr)
 
 import Lang.Crucible.CFG.Common (freshGlobalVar)
-import SAWScript.Crucible.Common.MethodSpec (GhostGlobal)
+import SAWCentral.Crucible.Common.MethodSpec (GhostGlobal)
 
 import SAWServer
 import SAWServer.OK

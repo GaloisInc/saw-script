@@ -8,7 +8,7 @@
 
 -- | Provides type-checked representations for Rust/MIR function specifications
 -- and functions for creating them from ASTs.
-module SAWScript.Crucible.MIR.MethodSpecIR
+module SAWCentral.Crucible.MIR.MethodSpecIR
   ( -- * @MIRCrucibleContext@
     MIRCrucibleContext(..)
   , mccRustModule
@@ -77,10 +77,10 @@ import Mir.Intrinsics
 import qualified Mir.Mir as M
 import What4.ProgramLoc (ProgramLoc)
 
-import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-import           SAWScript.Crucible.MIR.Setup.Value
+import           SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import           SAWCentral.Crucible.MIR.Setup.Value
 
 mccHandleAllocator :: Getter MIRCrucibleContext HandleAllocator
 mccHandleAllocator = mccSimContext . to simHandleAllocator

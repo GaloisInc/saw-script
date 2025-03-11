@@ -116,8 +116,8 @@ import SAWScript.Value
 import SAWCentral.Options
 import SAWScript.LLVMBuiltins
 import SAWScript.Builtins
-import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWCentral.Crucible.LLVM.Builtins
+import SAWCentral.Crucible.LLVM.MethodSpecIR
 
 import Verifier.SAW.Utils (panic)
 import qualified Verifier.SAW.Term.Pretty as Pretty

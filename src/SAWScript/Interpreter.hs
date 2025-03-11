@@ -99,17 +99,17 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Lang.Crucible.JVM as CJ
 import           Mir.Intrinsics (MIR)
 import qualified Mir.Mir as Mir
-import qualified SAWScript.Crucible.Common as CC
-import qualified SAWScript.Crucible.Common.MethodSpec as CMS
-import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
-import           SAWScript.Crucible.LLVM.Builtins
-import           SAWScript.Crucible.JVM.Builtins
-import           SAWScript.Crucible.MIR.Builtins
-import           SAWScript.Crucible.LLVM.X86
-import           SAWScript.Crucible.LLVM.Boilerplate
-import           SAWScript.Crucible.LLVM.Skeleton.Builtins
-import           SAWScript.Crucible.LLVM.FFI
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
+import qualified SAWCentral.Crucible.Common as CC
+import qualified SAWCentral.Crucible.Common.MethodSpec as CMS
+import qualified SAWCentral.Crucible.JVM.BuiltinsJVM as CJ
+import           SAWCentral.Crucible.LLVM.Builtins
+import           SAWCentral.Crucible.JVM.Builtins
+import           SAWCentral.Crucible.MIR.Builtins
+import           SAWCentral.Crucible.LLVM.X86
+import           SAWCentral.Crucible.LLVM.Boilerplate
+import           SAWCentral.Crucible.LLVM.Skeleton.Builtins
+import           SAWCentral.Crucible.LLVM.FFI
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
 import qualified Cryptol.Eval as V (PPOpts(..))

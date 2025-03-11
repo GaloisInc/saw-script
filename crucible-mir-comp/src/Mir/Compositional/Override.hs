@@ -51,10 +51,10 @@ import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Term.Functor as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Override as MS
-import SAWScript.Crucible.MIR.MethodSpecIR
-import SAWScript.Crucible.MIR.TypeShape
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Override as MS
+import SAWCentral.Crucible.MIR.MethodSpecIR
+import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)

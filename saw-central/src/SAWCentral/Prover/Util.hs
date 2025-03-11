@@ -7,7 +7,7 @@ import Verifier.SAW.TypedTerm
 import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)
 
-import SAWScript.Crucible.Common.MethodSpec (ppTypedTermType)
+import SAWCentral.Crucible.Common.MethodSpec (ppTypedTermType)
 
 -- | Is this a bool, or something that returns bool.
 checkBooleanType :: C.Type -> IO ()

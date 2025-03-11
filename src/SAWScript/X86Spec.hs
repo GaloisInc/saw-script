@@ -87,7 +87,7 @@ import What4.Interface
 import What4.ProgramLoc
 
 import Lang.Crucible.FunctionHandle
-import SAWScript.Crucible.LLVM.CrucibleLLVM
+import SAWCentral.Crucible.LLVM.CrucibleLLVM
   ( EndianForm(LittleEndian)
   , MemImpl, doLoad, doPtrAddOffset, emptyMem
   , AllocType(HeapAlloc, GlobalAlloc), Mutability(..), Mem
@@ -145,7 +145,7 @@ import Cryptol.TypeCheck.TypePat(aNat)
 import Cryptol.Utils.PP(pp)
 import Cryptol.Utils.Patterns(matchMaybe)
 
-import SAWScript.Crucible.Common (Sym, sawCoreState)
+import SAWCentral.Crucible.Common (Sym, sawCoreState)
 
 
 data Specification = Specification

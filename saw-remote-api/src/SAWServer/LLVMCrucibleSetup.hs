@@ -32,8 +32,8 @@ import qualified Data.Text as Text
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Data.LLVM.BitCode as LLVM
-import qualified SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
-import SAWScript.Crucible.LLVM.Builtins
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import SAWCentral.Crucible.LLVM.Builtins
     ( llvm_alloc
     , llvm_alloc_aligned
     , llvm_alloc_global
@@ -48,9 +48,9 @@ import SAWScript.Crucible.LLVM.Builtins
     , llvm_return
     , llvm_precond
     , llvm_postcond )
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
-import qualified SAWScript.Crucible.Common.MethodSpec as CMS (GhostGlobal)
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS
+import qualified SAWCentral.Crucible.Common.MethodSpec as CMS (GhostGlobal)
 import SAWScript.Value
     ( BuiltinContext, LLVMCrucibleSetupM(..), TopLevelRW(..), biSharedContext )
 import qualified Verifier.SAW.CryptolEnv as CEnv

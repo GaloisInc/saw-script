@@ -18,7 +18,7 @@ import Control.Applicative
 import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?), (.!=))
 import Data.Text (Text)
 
-import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
+import SAWCentral.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
 
 import SAWServer
 import SAWServer.Data.SetupValue ()

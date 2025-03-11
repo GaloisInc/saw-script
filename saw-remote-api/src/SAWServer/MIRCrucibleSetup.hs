@@ -24,10 +24,10 @@ import qualified Mir.Mir as Mir
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Setup.Type as MS
-import SAWScript.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
-import SAWScript.Crucible.MIR.Builtins
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Setup.Type as MS
+import SAWCentral.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
+import SAWCentral.Crucible.MIR.Builtins
     ( mir_alloc,
       mir_alloc_mut,
       mir_fresh_expanded_value,
@@ -44,7 +44,7 @@ import SAWScript.Crucible.MIR.Builtins
       mir_slice_range_value,
       mir_str_slice_value,
       mir_str_slice_range_value )
-import SAWScript.Crucible.MIR.ResolveSetupValue (typeOfSetupValue)
+import SAWCentral.Crucible.MIR.ResolveSetupValue (typeOfSetupValue)
 import SAWScript.Value (BuiltinContext, MIRSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)

@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 -- | Turns 'SetupValue's back into 'MIRVal's.
-module SAWScript.Crucible.MIR.ResolveSetupValue
+module SAWCentral.Crucible.MIR.ResolveSetupValue
   ( MIRVal(..)
   , ppMIRVal
   , resolveSetupVal
@@ -101,13 +101,13 @@ import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
-import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
-import SAWScript.Crucible.MIR.MethodSpecIR
-import SAWScript.Crucible.MIR.TypeShape
-import SAWScript.Panic
+import SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+import SAWCentral.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
+import SAWCentral.Crucible.MIR.MethodSpecIR
+import SAWCentral.Crucible.MIR.TypeShape
+import SAWCentral.Panic
 
 -- | A pair of a simulation-time MIR value ('RegValue') and its corresponding
 -- type ('TypeShape'), where the @tp@ type parameter is closed over
@@ -526,7 +526,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                     [ "Expected enum type, received union:"
                     , show nm
                     ]
-        -- See Note [Symbolic enums] in SAWScript.Crucible.MIR.Setup.Value for
+        -- See Note [Symbolic enums] in SAWCentral.Crucible.MIR.Setup.Value for
         -- more information on the approach used to resolve symbolic enum
         -- values.
         MirSetupEnumSymbolic adt discr variantFlds ->
@@ -1272,8 +1272,8 @@ sliceRefTyToSliceInfo ty =
 --    iff @ty_1_a@ is compatible with @ty_1_b@, ..., and @ty_n_a@ is compatible
 --    with @ty_n_b@.
 --
--- See also @checkRegisterCompatibility@ in "SAWScript.Crucible.LLVM.Builtins"
--- and @registerCompatible@ in "SAWScript.Crucible.JVM.Builtins", which fill a
+-- See also @checkRegisterCompatibility@ in "SAWCentral.Crucible.LLVM.Builtins"
+-- and @registerCompatible@ in "SAWCentral.Crucible.JVM.Builtins", which fill a
 -- similar niche in the LLVM and JVM backends, respectively.
 checkCompatibleTys :: Mir.Ty -> Mir.Ty -> Bool
 checkCompatibleTys ty1 ty2 = tyView ty1 == tyView ty2

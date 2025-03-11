@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.Common.MethodSpec
+Module      : SAWCentral.Crucible.Common.MethodSpec
 Description : Language-neutral method specifications
 License     : BSD3
 Maintainer  : langston
@@ -26,7 +26,7 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SAWScript.Crucible.Common.MethodSpec
+module SAWCentral.Crucible.Common.MethodSpec
   ( AllocIndex(..)
   , nextAllocIndex
 
@@ -146,11 +146,11 @@ import           Verifier.SAW.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.Simulator.What4.ReturnTrip as SAWVerifier
 
-import           SAWScript.Crucible.Common (Sym, sawCoreState)
-import           SAWScript.Crucible.Common.Setup.Value
-import           SAWScript.Crucible.LLVM.Setup.Value (LLVM)
-import           SAWScript.Crucible.JVM.Setup.Value ()
-import           SAWScript.Crucible.MIR.Setup.Value
+import           SAWCentral.Crucible.Common (Sym, sawCoreState)
+import           SAWCentral.Crucible.Common.Setup.Value
+import           SAWCentral.Crucible.LLVM.Setup.Value (LLVM)
+import           SAWCentral.Crucible.JVM.Setup.Value ()
+import           SAWCentral.Crucible.MIR.Setup.Value
   (MirSetupEnum(..), MirSetupSlice(..))
 import           SAWCentral.Options
 import           SAWCentral.Prover.SolverStats

@@ -27,8 +27,8 @@ import qualified Data.Map as Map
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Lang.Crucible.JVM as CJ
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import SAWScript.Crucible.JVM.Builtins
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import SAWCentral.Crucible.JVM.Builtins
     ( jvm_alloc_array,
       jvm_alloc_object,
       jvm_elem_is,
@@ -40,7 +40,7 @@ import SAWScript.Crucible.JVM.Builtins
       jvm_postcond,
       jvm_precond,
       jvm_return )
-import SAWScript.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
+import SAWCentral.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
 import SAWCentral.JavaExpr (JavaType(..))
 import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv

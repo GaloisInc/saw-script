@@ -46,7 +46,7 @@ import Verifier.SAW.Simulator.What4 (SValue)
 import qualified Verifier.SAW.Simulator.What4 as SAW
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW (baseSCType)
 
-import SAWScript.Crucible.MIR.TypeShape
+import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Intrinsics
 import qualified Mir.Mir as M

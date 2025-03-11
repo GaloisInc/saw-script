@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 -- | Override matching and application for MIR.
-module SAWScript.Crucible.MIR.Override
+module SAWCentral.Crucible.MIR.Override
   ( OverrideMatcher
   , OverrideMatcher'(..)
   , runOverrideMatcher
@@ -75,16 +75,16 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip (saw_ctx, toSC)
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
-import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
-import SAWScript.Crucible.Common.Override hiding (getSymInterface)
-import SAWScript.Crucible.MIR.MethodSpecIR
-import SAWScript.Crucible.MIR.ResolveSetupValue
-import SAWScript.Crucible.MIR.TypeShape
+import SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..))
+import qualified SAWCentral.Crucible.Common.Override as Ov (getSymInterface)
+import SAWCentral.Crucible.Common.Override hiding (getSymInterface)
+import SAWCentral.Crucible.MIR.MethodSpecIR
+import SAWCentral.Crucible.MIR.ResolveSetupValue
+import SAWCentral.Crucible.MIR.TypeShape
 import SAWCentral.Options
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 import SAWCentral.Utils (bullets, handleException)
 
 -- A few convenient synonyms
@@ -424,7 +424,7 @@ differs from how it accomplishes this in a number of key ways.
 
 The main entrypoint to this check is the `checkMutableAllocPostconds` function,
 which is roughly the MIR counterpart to the LLVM backend's
-`SAWScript.Crucible.LLVM.Override.invalidateMutableAllocs` function. The LLVM
+`SAWCentral.Crucible.LLVM.Override.invalidateMutableAllocs` function. The LLVM
 function takes the approach of invalidating the underlying memory of
 underspecified mutable allocations or global variables such that if they are
 read from later, then a simulation-time error is thrown. The MIR memory model,
@@ -1159,7 +1159,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
                 fail_
 
           -- ...if the expected value is a symbolic enum (see
-          -- Note [Symbolic enums] in SAWScript.Crucible.MIR.Setup.Value), then
+          -- Note [Symbolic enums] in SAWCentral.Crucible.MIR.Setup.Value), then
           -- we employ a more general version of the `MirSetupEnumVariant` case
           -- above:
           --

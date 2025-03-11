@@ -80,7 +80,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHan
 
 
 -- Crucible LLVM
-import SAWScript.Crucible.LLVM.CrucibleLLVM
+import SAWCentral.Crucible.LLVM.CrucibleLLVM
   (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
@@ -138,9 +138,9 @@ import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 -- SAWScript
 import SAWScript.X86Spec hiding (Prop)
 import SAWScript.Proof(boolToProp, Prop)
-import SAWScript.Crucible.Common.MethodSpec (ConditionMetadata(..))
-import SAWScript.Crucible.Common.Override (MetadataMap)
-import SAWScript.Crucible.Common
+import SAWCentral.Crucible.Common.MethodSpec (ConditionMetadata(..))
+import SAWCentral.Crucible.Common.Override (MetadataMap)
+import SAWCentral.Crucible.Common
   ( newSAWCoreBackend, newSAWCoreExprBuilder
   , sawCoreState, SomeOnlineBackend(..)
   , PathSatSolver

@@ -1,13 +1,13 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.Setup.Value
+Module      : SAWCentral.Crucible.LLVM.Setup.Value
 Description : Data types and type family instances for LLVM-specific code
 License     : BSD3
 Maintainer  : Ryan Scott <rscott@galois.com>
 Stability   : provisional
 
-The module exists separately from "SAWScript.Crucible.LLVM.MethodSpecIR"
+The module exists separately from "SAWCentral.Crucible.LLVM.MethodSpecIR"
 primarily to avoid import cycles. You probably want to import
-"SAWScript.Crucible.LLVM.MethodSpecIR" (which re-exports everything from this
+"SAWCentral.Crucible.LLVM.MethodSpecIR" (which re-exports everything from this
 module, plus additional functionality) instead.
 -}
 
@@ -33,7 +33,7 @@ module, plus additional functionality) instead.
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWScript.Crucible.LLVM.Setup.Value
+module SAWCentral.Crucible.LLVM.Setup.Value
   ( LLVM
     -- * LLVMMethodId
   , LLVMMethodId(..)
@@ -104,10 +104,10 @@ import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
-import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.Setup.Value as Setup
+import           SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 
 import           SAWScript.Proof (TheoremNonce)
 

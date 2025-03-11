@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | Implementations of Crucible-related SAWScript primitives for MIR.
-module SAWScript.Crucible.MIR.Builtins
+module SAWCentral.Crucible.MIR.Builtins
   ( -- * Commands
     -- ** Setup
     mir_alloc
@@ -127,18 +127,18 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 import Verifier.SAW.TypedTerm
 
 import SAWScript.Builtins (ghost_value)
-import SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import SAWScript.Crucible.Common.Override
-import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-import SAWScript.Crucible.MIR.MethodSpecIR
-import SAWScript.Crucible.MIR.Override
-import SAWScript.Crucible.MIR.ResolveSetupValue
-import SAWScript.Crucible.MIR.TypeShape
+import SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import SAWCentral.Crucible.Common.Override
+import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import SAWCentral.Crucible.MIR.MethodSpecIR
+import SAWCentral.Crucible.MIR.Override
+import SAWCentral.Crucible.MIR.ResolveSetupValue
+import SAWCentral.Crucible.MIR.TypeShape
 import SAWCentral.Exceptions
 import SAWCentral.Options
-import SAWScript.Panic
+import SAWCentral.Panic
 import qualified SAWCentral.Position as SS
 import SAWScript.Proof
 import SAWCentral.Prover.SolverStats
@@ -418,7 +418,7 @@ constructExpandedSetupValue cc sc = go
           X.throwM $ MIRFreshExpandedValueUnsupportedType ty
 
     -- Create a fresh symbolic enum value, as described in
-    -- Note [Symbolic enums] in SAWScript.Crucible.MIR.Setup.Value.
+    -- Note [Symbolic enums] in SAWCentral.Crucible.MIR.Setup.Value.
     goEnum ::
       forall discrShp variantCtx.
       Text ->
@@ -1448,7 +1448,7 @@ setupCrucibleContext rm =
              return ()
 
      -- TODO! there's a lot of options setup we need to replicate
-     --  from SAWScript.Crucible.LLVM.Builtins
+     --  from SAWCentral.Crucible.LLVM.Builtins
 
      -- There is quite a bit of faff below, all for the sake of translating
      -- top-level static values. See Note [Translating MIR statics in SAW] for

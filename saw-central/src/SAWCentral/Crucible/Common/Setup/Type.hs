@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.Common.Setup.Type
+Module      : SAWCentral.Crucible.Common.Setup.Type
 Description : The CrucibleSetup monad
 License     : BSD3
 Maintainer  : langston
@@ -14,7 +14,7 @@ Stability   : provisional
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module SAWScript.Crucible.Common.Setup.Type
+module SAWCentral.Crucible.Common.Setup.Type
   ( CrucibleSetupState(..)
   , csVarCounter
   , csPrePost
@@ -49,7 +49,7 @@ import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
 import           Verifier.SAW.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
 import           Verifier.SAW.SharedTerm (SharedContext, scFreshEC)
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 
 --------------------------------------------------------------------------------
 -- * CrucibleSetupT

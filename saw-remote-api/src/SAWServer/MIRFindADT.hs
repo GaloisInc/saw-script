@@ -11,7 +11,7 @@ import Data.Aeson (FromJSON(..), withObject, (.:))
 import qualified Data.Text as T
 import Data.Text (Text)
 
-import SAWScript.Crucible.MIR.Builtins (mir_find_adt)
+import SAWCentral.Crucible.MIR.Builtins (mir_find_adt)
 
 import qualified Argo
 import qualified Argo.Doc as Doc

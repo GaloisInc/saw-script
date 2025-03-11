@@ -36,7 +36,7 @@
 -- converted to LLVM representation. Instead, we must create a fresh symbolic
 -- variable representing the LLVM output, then convert that to Cryptol
 -- representation and compare it with the Cryptol result.
-module SAWScript.Crucible.LLVM.FFI
+module SAWCentral.Crucible.LLVM.FFI
   ( llvm_ffi_setup
   ) where
 
@@ -65,11 +65,11 @@ import           Cryptol.Utils.Ident                  as Cry
 import           Cryptol.Utils.PP                     (pretty)
 import           Cryptol.Utils.RecordMap
 
-import           SAWScript.Crucible.Common.MethodSpec
-import           SAWScript.Crucible.LLVM.Builtins
-import           SAWScript.Crucible.LLVM.MethodSpecIR
+import           SAWCentral.Crucible.Common.MethodSpec
+import           SAWCentral.Crucible.LLVM.Builtins
+import           SAWCentral.Crucible.LLVM.MethodSpecIR
 import           SAWScript.LLVMBuiltins
-import           SAWScript.Panic
+import           SAWCentral.Panic
 import           SAWScript.Value
 import           Verifier.SAW.CryptolEnv
 import           Verifier.SAW.OpenTerm

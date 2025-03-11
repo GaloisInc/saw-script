@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.MethodSpecIR
+Module      : SAWCentral.Crucible.LLVM.MethodSpecIR
 Description : Provides type-checked representation for Crucible/LLVM function
               specifications and function for creating it from AST
               representation.
@@ -27,7 +27,7 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.Crucible.LLVM.MethodSpecIR
+module SAWCentral.Crucible.LLVM.MethodSpecIR
   ( LLVM
     -- * LLVMMethodId
   , LLVMMethodId(..)
@@ -133,12 +133,12 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
 
-import           SAWScript.Crucible.Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
+import           SAWCentral.Crucible.Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
-import           SAWScript.Crucible.LLVM.Setup.Value
+import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
+import           SAWCentral.Crucible.LLVM.Setup.Value
 
 import           Verifier.SAW.TypedTerm
 

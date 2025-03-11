@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.JVM.Builtins
+Module      : SAWCentral.Crucible.JVM.Builtins
 Description : Implementations of crucible-jvm-related SAW-Script primitives.
 License     : BSD3
 Maintainer  : atomb
@@ -24,7 +24,7 @@ Stability   : provisional
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SAWScript.Crucible.JVM.Builtins
+module SAWCentral.Crucible.JVM.Builtins
     ( jvm_verify
     , jvm_unsafe_assume_spec
     , jvm_return
@@ -117,7 +117,7 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Builtins (ghost_value)
 import SAWCentral.Exceptions
-import SAWScript.Panic
+import SAWCentral.Panic
 import SAWScript.Proof
 import SAWCentral.Prover.SolverStats
 import SAWScript.TopLevel
@@ -125,22 +125,22 @@ import SAWScript.Value
 import SAWCentral.Utils as SS
 import qualified SAWCentral.Position as SS
 import SAWCentral.Options
-import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
+import SAWCentral.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
 import SAWCentral.JavaExpr (JavaType(..))
 
-import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common
-import           SAWScript.Crucible.Common.Override (MetadataMap)
-import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
+import qualified SAWCentral.Crucible.Common as Common
+import           SAWCentral.Crucible.Common
+import           SAWCentral.Crucible.Common.Override (MetadataMap)
+import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
-import SAWScript.Crucible.JVM.MethodSpecIR
-import SAWScript.Crucible.JVM.Override
-import SAWScript.Crucible.JVM.ResolveSetupValue
-import SAWScript.Crucible.JVM.BuiltinsJVM ()
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import qualified SAWCentral.Crucible.Common.Setup.Builtins as Setup
+import SAWCentral.Crucible.JVM.MethodSpecIR
+import SAWCentral.Crucible.JVM.Override
+import SAWCentral.Crucible.JVM.ResolveSetupValue
+import SAWCentral.Crucible.JVM.BuiltinsJVM ()
 
 type AssumptionReason = (MS.ConditionMetadata, String)
 type SetupValue = MS.SetupValue CJ.JVM
@@ -850,7 +850,7 @@ setupCrucibleContext jclass =
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 
      -- TODO! there's a lot of options setup we need to replicate
-     --  from SAWScript.Crucible.LLVM.Builtins
+     --  from SAWCentral.Crucible.LLVM.Builtins
 
      return JVMCrucibleContext { _jccJVMClass = jclass
                                , _jccCodebase = cb

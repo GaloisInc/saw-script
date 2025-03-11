@@ -1,6 +1,6 @@
 -- | Utilities for resolving 'SetupValue's that are used across language
 -- backends.
-module SAWScript.Crucible.Common.ResolveSetupValue
+module SAWCentral.Crucible.Common.ResolveSetupValue
   ( resolveBoolTerm
   ) where
 
@@ -13,7 +13,7 @@ import qualified Verifier.SAW.Simulator.Concrete as Concrete
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
-import SAWScript.Crucible.Common
+import SAWCentral.Crucible.Common
 
 -- | Resolve a SAWCore 'Term' into a What4 'W4.Pred'.
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)

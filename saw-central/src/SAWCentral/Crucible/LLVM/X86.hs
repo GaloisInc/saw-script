@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.Crucible.LLVM.X86
+Module      : SAWCentral.Crucible.LLVM.X86
 Description : Implements a SAWScript primitive for verifying x86_64 functions
               against LLVM specifications.
 Maintainer  : sbreese
@@ -24,7 +24,7 @@ Stability   : provisional
 {-# Language TemplateHaskell #-}
 {-# Language ViewPatterns #-}
 
-module SAWScript.Crucible.LLVM.X86
+module SAWCentral.Crucible.LLVM.X86
   ( llvm_verify_x86
   , llvm_verify_fixpoint_x86
   , llvm_verify_fixpoint_chc_x86
@@ -80,7 +80,7 @@ import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
-import SAWScript.Panic (panic)
+import SAWCentral.Panic (panic)
 import SAWScript.Proof
 import SAWCentral.Prover.SolverStats
 import SAWScript.TopLevel
@@ -88,18 +88,18 @@ import SAWScript.Value
 import SAWCentral.Options
 import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
-import SAWScript.Crucible.Common
-import SAWScript.Crucible.Common.Override (MetadataMap)
+import SAWCentral.Crucible.Common
+import SAWCentral.Crucible.Common.Override (MetadataMap)
 
-import qualified SAWScript.Crucible.Common as Common
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Override as O
-import qualified SAWScript.Crucible.Common.Setup.Type as Setup
-import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR hiding (LLVM)
-import SAWScript.Crucible.LLVM.ResolveSetupValue
-import qualified SAWScript.Crucible.LLVM.Override as LO
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
+import qualified SAWCentral.Crucible.Common as Common
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Override as O
+import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
+import SAWCentral.Crucible.LLVM.Builtins
+import SAWCentral.Crucible.LLVM.MethodSpecIR hiding (LLVM)
+import SAWCentral.Crucible.LLVM.ResolveSetupValue
+import qualified SAWCentral.Crucible.LLVM.Override as LO
+import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as LMS (LLVM)
 
 import qualified What4.Concrete as W4
 import qualified What4.Config as W4
@@ -1216,7 +1216,7 @@ pushFreshReturnAddress path func = do
   stackAlign <- integerToAlignment path func defaultStackBaseAlign
   is_aligned <- liftIO $ C.LLVM.isAligned sym (knownNat @64) rsp stackAlign
   when (W4.asConstantPred is_aligned /= Just True) $
-    panic "SAWScript.Crucible.LLVM.X86.pushFreshReturnAddress" ["%rsp is not 16 byte aligned before the call instruction is executed."]
+    panic "SAWCentral.Crucible.LLVM.X86.pushFreshReturnAddress" ["%rsp is not 16 byte aligned before the call instruction is executed."]
 
   ptr <- liftIO $ C.LLVM.doPtrAddOffset bak mem rsp =<< W4.bvLit sym knownNat (BV.mkBV knownNat (-8))
   let writeAlign = C.LLVM.noAlignment
