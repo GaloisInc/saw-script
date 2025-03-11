@@ -1,4 +1,4 @@
-module SAWScript.Prover.Versions where
+module SAWCentral.Prover.Versions where
 
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)

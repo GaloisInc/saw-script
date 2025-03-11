@@ -12,7 +12,7 @@
 #endif
 
 {- |
-Module      : SAWScript.Prover.MRSolver.Solver
+Module      : SAWCentral.MRSolver.Solver
 Copyright   : Galois, Inc. 2022
 License     : BSD3
 Maintainer  : westbrook@galois.com
@@ -120,7 +120,7 @@ we are trying to prove @m1@ refines @m2@ in context @C@. This proceeds by cases:
 >   components relate to the two components on the other side, so just fail
 -}
 
-module SAWScript.Prover.MRSolver.Solver where
+module SAWCentral.MRSolver.Solver where
 
 import Data.Maybe
 import qualified Data.Text as T
@@ -137,14 +137,14 @@ import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
-import SAWScript.Prover.SolverStats
+import SAWCentral.Prover.SolverStats
 import SAWScript.Proof (Sequent, SolveResult)
 import SAWScript.Value (TopLevel)
 
-import SAWScript.Prover.MRSolver.Term
-import SAWScript.Prover.MRSolver.Evidence
-import SAWScript.Prover.MRSolver.Monad
-import SAWScript.Prover.MRSolver.SMT
+import SAWCentral.MRSolver.Term
+import SAWCentral.MRSolver.Evidence
+import SAWCentral.MRSolver.Monad
+import SAWCentral.MRSolver.SMT
 
 
 ----------------------------------------------------------------------

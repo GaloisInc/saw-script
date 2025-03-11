@@ -131,7 +131,7 @@ import Verifier.SAW.Heapster.ParsedCtx
 import qualified Verifier.SAW.Heapster.IDESupport as HIDE
 import Verifier.SAW.Heapster.LLVMGlobalConst
 
-import SAWScript.Prover.Exporter
+import SAWCentral.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
 

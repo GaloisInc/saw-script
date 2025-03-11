@@ -195,8 +195,8 @@ import Verifier.SAW.TypedTerm
 import SAWCentral.AST (Located(..))
 import SAWScript.Builtins (ghost_value)
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Versions
+import SAWCentral.Prover.SolverStats
+import SAWCentral.Prover.Versions
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWCentral.Position

@@ -79,9 +79,9 @@ import SAWCentral.JavaExpr (JavaType(..))
 import SAWCentral.JavaPretty (prettyClass)
 import SAWCentral.Options (Options, printOutLn, Verbosity(..))
 import SAWScript.Proof
-import SAWScript.Prover.SolverStats
-import SAWScript.Prover.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
-import SAWScript.Prover.MRSolver.Evidence as MRSolver
+import SAWCentral.Prover.SolverStats
+import SAWCentral.MRSolver.Term (funNameTerm, mrVarCtxInnerToOuter, ppTermAppInCtx)
+import SAWCentral.MRSolver.Evidence as MRSolver
 import SAWScript.SolverCache
 import SAWScript.Crucible.LLVM.Skeleton
 import SAWScript.X86 (X86Unsupported(..), X86Error(..))

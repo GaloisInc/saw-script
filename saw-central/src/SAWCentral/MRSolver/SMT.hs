@@ -16,7 +16,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 {- |
-Module      : SAWScript.Prover.MRSolver.SMT
+Module      : SAWCentral.MRSolver.SMT
 Copyright   : Galois, Inc. 2022
 License     : BSD3
 Maintainer  : westbrook@galois.com
@@ -27,7 +27,7 @@ This module implements the interface between Mr. Solver and an SMT solver,
 namely 'mrProvable' and 'mrProveEq'.
 -}
 
-module SAWScript.Prover.MRSolver.SMT where
+module SAWCentral.MRSolver.SMT where
 
 import Data.Maybe
 import qualified Data.Vector as V
@@ -63,8 +63,8 @@ import Verifier.SAW.Simulator.Prims
 import Verifier.SAW.FiniteValue
 import SAWScript.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
 
-import SAWScript.Prover.MRSolver.Term
-import SAWScript.Prover.MRSolver.Monad
+import SAWCentral.MRSolver.Term
+import SAWCentral.MRSolver.Monad
 
 
 ----------------------------------------------------------------------
