@@ -341,7 +341,7 @@ jobs:
       # target directories to publish to, where the built-in actions are
       # "one and done": Package and upload a single artifact, and deploy that.
       - name: Publish docs to GitHub pages
-        if: steps.docs-publish-dir.outputs.target != ''
+        if: steps.doc-publish-dir.outputs.target != ''
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
