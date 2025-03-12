@@ -61,7 +61,11 @@ git_symref = ["git", "symbolic-ref", "--short", "HEAD"]
 try:
     git_version = check_output(git_describe, stderr=DEVNULL, encoding="utf-8")
 except CalledProcessError:
+    pass
+try:
     git_version = check_output(git_symref, stderr=DEVNULL, encoding="utf-8")
+except CalledProcessError:
+    git_version = "test-version"
 
 # These context variables are used when instantiating
 # doc/_templates/versions.html
