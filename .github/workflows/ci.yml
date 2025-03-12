@@ -375,14 +375,14 @@ jobs:
               (
                   item.name
                   for item in cwd.iterdir()
-                  if item.is_dir() and not item.name.startswith(".")
+                  if item.is_dir() and not item.name.startswith('.')
               ),
               reverse=True,
           )
-          target_dir = Path("gh-pages")
+          target_dir = Path('gh-pages')
           target_dir.mkdir(parents=True)
-          target_file = target_dir / "versions.json"
-          with target_file.open("w") as f:
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
               json.dump(versions, f)"
 
       - name: Publish versions JSON to GitHub pages
