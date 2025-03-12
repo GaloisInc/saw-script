@@ -365,7 +365,25 @@ jobs:
           ref: gh-pages
 
       - name: Write versions to JSON file
-        run: python3 .github/dump_doc_versions.py
+        run: |
+          python3 -C "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted(
+              (
+                  item.name
+                  for item in cwd.iterdir()
+                  if item.is_dir() and not item.name.startswith(".")
+              ),
+              reverse=True,
+          )
+          target_dir = Path("gh-pages")
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / "versions.json"
+          with target_file.open("w") as f:
+              json.dump(versions, f)"
 
       - name: Publish versions JSON to GitHub pages
         uses: peaceiris/actions-gh-pages@v4
