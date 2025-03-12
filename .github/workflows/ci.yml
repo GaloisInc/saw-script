@@ -346,7 +346,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: doc/_build/html
-          destination_dir: ${{ steps.docs-publish-dir.outputs.target }}
+          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
           keep_files: false
 
   # Adapted from:
