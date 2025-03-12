@@ -63,10 +63,15 @@ try:
 except CalledProcessError:
     git_version = check_output(git_symref, stderr=DEVNULL, encoding="utf-8")
 
+# These context variables are used when instantiating
+# doc/_templates/versions.html
 html_context = {
     "VERSIONS": True,
     "current_version": git_version.strip(),
 }
+
+# Modifies the DOM corresponding to the versions pane to include everything in
+# the JSON file written by CI when new versions are published.
 html_js_files = ["versions.js"]
 html_static_path = ["_static"]
 
