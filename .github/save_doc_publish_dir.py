@@ -13,13 +13,15 @@ import re
 # is the case in GitHub actions.
 
 github_ref = os.environ.get("GITHUB_REF")
-if github_ref == "refs/heads/master":
-    target = "master"
-elif github_ref.startswith("refs/tags/"):
-    # Matches vx.y or vx.y.z
-    m = re.match(r"^refs/tags/v([0-9]+\.[0-9]+(?:\.[0-9]+)?)$", github_ref)
+
+# Matches vx.y or vx.y.z
+m = re.match(r"^refs/tags/v([0-9]+\.[0-9]+(?:\.[0-9]+)?)$", github_ref)
+if m:
     target = m.group(1)
+elif github_ref == "refs/heads/master":
+    target = "master"
 else:
     # TODO: This should be the empty string, after testing.
     target = "test-version"
-print(f'echo "target={target}" >> $GITHUB_OUTPUT')
+
+print(f"::set-output name=target::{target}")
