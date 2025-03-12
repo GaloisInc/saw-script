@@ -365,7 +365,7 @@ jobs:
           ref: gh-pages
 
       - name: Write versions to JSON file
-        run: python3 ./github/dump_doc_versions.py
+        run: python3 .github/dump_doc_versions.py
 
       - name: Publish versions JSON to GitHub pages
         uses: peaceiris/actions-gh-pages@v4
