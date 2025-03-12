@@ -366,7 +366,7 @@ jobs:
 
       - name: Write versions to JSON file
         run: |
-          python3 -C "
+          python3 -c "
           import json
           from pathlib import Path
 
