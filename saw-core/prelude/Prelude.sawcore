@@ -1813,7 +1813,7 @@ listSortDrop ss n =
 listSort_length : ListSort -> Nat;
 listSort_length = listSort_cases Nat
                     0
-                    (\(_:sort 0) (l:ListSort) (n:Nat)-> Succ n);
+                    (\(_:sort 0) (_:ListSort) (n:Nat)-> Succ n);
 
 
 --------------------------------------------------------------------------------
