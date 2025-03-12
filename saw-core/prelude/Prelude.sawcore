@@ -836,8 +836,11 @@ data Nat : sort 0 where {
     Succ : Nat -> Nat;
   }
 
-Nat__rec : (p : Nat -> sort 1) -> p Zero -> ((n:Nat) -> p n -> p (Succ n)) ->
-            (n:Nat) -> p n;
+Nat__rec : (p : Nat -> sort 1) ->
+           p Zero ->
+           ((n:Nat) -> p n -> p (Succ n)) ->
+           (n:Nat) ->
+           p n;
 Nat__rec p f1 f2 n = Nat#rec p f1 f2 n;
 
 Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
@@ -1767,9 +1770,11 @@ data ListSort : sort 1
     LS_Cons : sort 0 -> ListSort -> ListSort;
   }
 
-ListSort__rec : (P : ListSort -> sort 1) -> P LS_Nil ->
+ListSort__rec : (P : ListSort -> sort 1) ->
+                P LS_Nil ->
                 ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l)) ->
-                (l:ListSort) -> P l;
+                (l:ListSort) ->
+                P l;
 ListSort__rec P f1 f2 l = ListSort#rec P f1 f2 l;
 
 -- The sort at the given index in a ListSort or `Eq Bool True False` if
@@ -1780,12 +1785,35 @@ listSortGet = ListSort__rec (\ (_:ListSort) -> Nat -> sort 0)
   (\ (A:sort 0) (_:ListSort) (rec : Nat -> sort 0) ->
      Nat_cases (sort 0) A (\ (n:Nat) (_:sort 0) -> rec n));
 
+listSort_cases : (a: sort 1) ->
+                 a ->
+                 (sort 0 -> (l:ListSort) -> a -> a) ->
+                 ListSort -> a;
+listSort_cases a base f ls =
+  ListSort__rec (\(_:ListSort)-> a) base f ls;
+
 -- A ListSort with the first n (or all, if n > length) entries removed
 listSortDrop : ListSort -> Nat -> ListSort;
-listSortDrop = ListSort__rec (\ (_:ListSort) -> Nat -> ListSort)
-  (\ (_:Nat) -> LS_Nil)
-  (\ (_:sort 0) (Ds:ListSort) (rec : Nat -> ListSort) ->
-     Nat_cases ListSort Ds (\ (n:Nat) (_ : ListSort) -> rec n));
+listSortDrop ss n =
+  Nat__rec
+    (\(_:Nat) -> ListSort -> ListSort)
+    (\(l : ListSort) -> l)
+    (\(_ : Nat) (rec_n' : ListSort -> ListSort) ->
+       (\(l : ListSort)->
+          rec_n' (listSort_cases ListSort
+                    LS_Nil
+                    (\(_:sort 0) (tail:ListSort) (_:ListSort) -> tail)
+                    l
+                 )
+      ))
+    n
+    ss;
+
+-- The length of ListSort
+listSort_length : ListSort -> Nat;
+listSort_length = listSort_cases Nat
+                    0
+                    (\(_:sort 0) (_:ListSort) (n:Nat)-> Succ n);
 
 
 --------------------------------------------------------------------------------

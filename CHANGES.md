@@ -40,6 +40,9 @@ This release supports [version
 
 ## Bug fixes
 
+* An off-by-one error in `listSortDrop` in the SAWCore prelude has
+  been fixed (#2241).
+
 * git submodule update --init --recursive no longer causes an infinite
   checkout loop. (However, using --recursive clones a considerable
   number of unnecessary trees and is still not recommended.)
