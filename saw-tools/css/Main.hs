@@ -8,7 +8,6 @@ import           System.Console.GetOpt
 import           System.IO
 import qualified Data.ByteString as BS
 import           Data.Text ( pack )
-import           Data.Version
 
 import GHC.IO.Encoding (setLocaleEncoding)
 
@@ -25,6 +24,8 @@ import qualified Data.AIG.CompactGraph as AIG
 import qualified Data.AIG.Interface as AIG
 import qualified Data.AIG.Operations as AIG
 
+import qualified SAWVersion.Version as Version
+
 import qualified Verifier.SAW.Cryptol as C
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Cryptol.Prelude as C
@@ -33,7 +34,12 @@ import           Verifier.SAW.CryptolEnv (schemaNoUser, meSolverConfig)
 
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import qualified Paths_cryptol_saw_core as Paths
+-- CSS has its own version, because it used to be part of the
+-- cryptol-saw-core package, which for its entire existence was always
+-- at version 0.1. Keep that for now. We'll print the SAW version as
+-- well.
+css_version :: String
+css_version = "0.1"
 
 data CSS = CSS
   { output :: FilePath
@@ -68,7 +74,8 @@ options =
 
 version_string :: String
 version_string = unlines
-  [ "Cryptol Symbolic Simulator (css) version "++showVersion Paths.version
+  [ "Cryptol Symbolic Simulator (css) version " ++ css_version
+  , "SAW " ++ Version.versionText
   , "Copyright 2014 Galois, Inc.  All rights reserved."
   ]
 
