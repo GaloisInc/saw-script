@@ -19,7 +19,7 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.ParserUtils
 
 $(defineModuleFromFileWithFns
-  "specMModule" "scLoadSpecMModule" "saw/SpecM.sawcore")
+  "specMModule" "scLoadSpecMModule" "cryptol-saw-core/saw/SpecM.sawcore")
 
 $(defineModuleFromFileWithFns
-  "cryptolMModule" "scLoadCryptolMModule" "saw/CryptolM.sawcore")
+  "cryptolMModule" "scLoadCryptolMModule" "cryptol-saw-core/saw/CryptolM.sawcore")

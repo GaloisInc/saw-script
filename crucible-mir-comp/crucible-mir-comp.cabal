@@ -40,9 +40,9 @@ library
                  what4,
 
                  -- internal subpackages in the saw tree
-                 cryptol-saw-core,
                  saw-core,
                  saw-core-what4,
+                 saw-script:cryptol-saw-core,
                  saw-script:saw-central
 
   hs-source-dirs: src

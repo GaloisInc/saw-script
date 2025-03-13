@@ -1,12 +1,25 @@
 Cabal-version: 3.0
 Name:          saw-script
 Version:       1.3.0.99
-Author:        Galois Inc.
-Maintainer:    atomb@galois.com
+Author:        Galois, Inc.
+Maintainer:    saw@galois.com
 Build-type:    Simple
 License:       BSD-3-Clause
 License-file:  LICENSE
+Copyright:     Copyright 2012-2025 Galois, Inc.
+Category:      Formal Methods
+Synopsis:      The Software Analysis Workbench
+Description:
+  SAW is a tool supporting a broad range of formal verification
+  scenarios.
 
+-- extra files for cryptol-saw-core
+extra-source-files:
+    cryptol-saw-core/saw/Cryptol.sawcore
+    cryptol-saw-core/saw/SpecM.sawcore
+    cryptol-saw-core/saw/CryptolM.sawcore
+
+-- extra files for saw-script
 extra-source-files:
     saw-script/src/SAWScript/Parser.y
     saw-script/src/SAWScript/Lexer.x
@@ -31,6 +44,56 @@ library saw-version
     Paths_saw_script
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
+
+-- The cryptol-saw-core library interfaces Cryptol to saw-core.
+--
+-- It translates Cryptol syntax into SAWCore terms, which can then be
+-- analysed by various backend proof systems.
+
+library cryptol-saw-core
+  default-language: Haskell2010
+  visibility: public
+
+  build-depends:
+    -- upstream packages from hackage
+    base,
+    base-compat,
+    array,
+    bytestring,
+    containers,
+    data-inttrie >= 0.1.4,
+    executable-path,
+    filepath,
+    integer-gmp,
+    modern-uri,
+    mtl,
+    panic,
+    sbv,
+    template-haskell,
+    text,
+    unordered-containers,
+    vector,
+
+    -- packages in git submodules
+    aig,
+    cryptol >= 2.3.0,
+    what4,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
+  hs-source-dirs: cryptol-saw-core/src
+  exposed-modules:
+     Verifier.SAW.Cryptol
+     Verifier.SAW.Cryptol.Panic
+     Verifier.SAW.Cryptol.Prelude
+     Verifier.SAW.Cryptol.PreludeM
+     Verifier.SAW.Cryptol.Simpset
+     Verifier.SAW.Cryptol.Monadify
+     Verifier.SAW.CryptolEnv
+     Verifier.SAW.TypedTerm
+  -- GHC-options: -Wall -Werror
+  GHC-options: -Wall
 
 -- The saw-core-coq library implements a backend for translating terms
 -- in the SAWCore intermediate language into the syntax of Coq/Rocq.
@@ -58,8 +121,8 @@ library saw-core-coq
     parameterized-utils,
 
     -- internal subpackages/sublibraries in the saw tree
-    cryptol-saw-core,
-    saw-core
+    saw-core,
+    saw-script:cryptol-saw-core
 
   hs-source-dirs: saw-core-coq/src
   exposed-modules:
@@ -157,7 +220,6 @@ library saw-central
        --   flexdis86
 
       -- internal subpackages/sublibraries in the saw tree
-    , cryptol-saw-core
     , heapster-saw
     , rme
     , saw-core
@@ -165,6 +227,7 @@ library saw-central
     , saw-core-sbv
     , saw-core-what4
     , saw-script:saw-core-coq
+    , saw-script:cryptol-saw-core
     , saw-script:saw-version
 
   hs-source-dirs: saw-central/src
@@ -316,10 +379,10 @@ library
     , parameterized-utils
 
       -- internal subpackages/sublibraries in the saw tree
-    , cryptol-saw-core
     , heapster-saw
     , saw-core
     , saw-script:saw-version
+    , saw-script:cryptol-saw-core
     , saw-script:saw-core-coq
     , saw-script:saw-central
 
@@ -411,7 +474,7 @@ executable css
     saw-version,
     saw-core,
     saw-core-aig,
-    cryptol-saw-core
+    saw-script:cryptol-saw-core
 
   hs-source-dirs : saw-tools/css
   main-is : Main.hs
@@ -461,9 +524,9 @@ test-suite cryptol-saw-core-tc-test
     -- packages in git submodules
     cryptol,
 
-    -- internal subpackages in the saw tree
-    cryptol-saw-core,
-    saw-core
+    -- internal subpackages/sublibraries in the saw tree
+    saw-core,
+    saw-script:cryptol-saw-core
 
   GHC-options: -threaded
 

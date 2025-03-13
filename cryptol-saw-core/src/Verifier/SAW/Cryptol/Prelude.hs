@@ -19,4 +19,4 @@ import Verifier.SAW.Prelude
 import Verifier.SAW.ParserUtils
 
 $(defineModuleFromFileWithFns
-  "cryptolModule" "scLoadCryptolModule" "saw/Cryptol.sawcore")
+  "cryptolModule" "scLoadCryptolModule" "cryptol-saw-core/saw/Cryptol.sawcore")
