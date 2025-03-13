@@ -2,10 +2,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module      : Verifier.SAW.Translation.Coq.Test
+Module      : Test
 Copyright   : Galois, Inc. 2019
 License     : BSD3
 Maintainer  : val@galois.com
@@ -13,11 +14,12 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.Test where
+module Test where
 
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 -- import qualified Language.Coq.Pretty as Coq
@@ -72,7 +74,7 @@ preludeName :: Un.ModuleName
 preludeName = Un.moduleName preludeModule
 
 checkTermVar :: Un.TermVar -> Ident
-checkTermVar tv = mkIdent preludeName (Un.termVarString tv) -- FIXME
+checkTermVar tv = mkIdent preludeName (Text.pack $ Un.termVarString tv) -- FIXME
 
 checkTermCtx :: SCIOMonad m => Un.TermCtx -> m [(Ident, Term)]
 checkTermCtx ctx = mapM checkUntypedBinder ctx
@@ -97,11 +99,11 @@ getPreludeModule = do
   sc <- ask
   liftIO $ scFindModule sc preludeName
 
-getPreludeDataType :: SCIOMonad m => String -> m DataType
+getPreludeDataType :: SCIOMonad m => Text.Text -> m DataType
 getPreludeDataType name = do
   prelude <- getPreludeModule
   case findDataType prelude name of
-    Nothing -> error $ name ++ " not found"
+    Nothing -> error $ Text.unpack name ++ " not found"
     Just dt -> return dt
 
 translateSAWCorePrelude :: IO ()
@@ -118,7 +120,7 @@ translateSAWCorePrelude = do
       putStrLn "From CryptolToCoq Require Import SAWCoreScaffolding."
       putStrLn ""
 
-    doc <- translateModule configuration prelude
+    let doc = translateSAWModule configuration prelude
 
     liftIO $ putStrLn $ show doc
 
