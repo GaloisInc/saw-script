@@ -13,6 +13,7 @@ import re
 # is the case in GitHub actions.
 
 github_ref = os.environ.get("GITHUB_REF")
+branch_name = os.environ.get("BRANCH_NAME")
 
 # Matches vx.y or vx.y.z
 m = re.match(r"^refs/tags/v([0-9]+\.[0-9]+(?:\.[0-9]+)?)$", github_ref)
@@ -20,7 +21,9 @@ if m:
     target = m.group(1)
 elif github_ref == "refs/heads/master":
     target = "master"
+elif branch_name is not None:
+    target = branch_name
 else:
-    target = "yet-another-test-version"
+    target = ""
 
 print(f"::set-output name=target::{target}")

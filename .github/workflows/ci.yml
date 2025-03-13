@@ -357,6 +357,8 @@ jobs:
       - name: Determine documentation publishing directory
         id: doc-publish-dir
         run: python3 .github/save_doc_publish_dir.py
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
       # Using peaceiris/actions-gh-pages, as it allows us to specify specific
       # target directories to publish to, where the built-in actions are
