@@ -82,7 +82,7 @@ import Verifier.SAW.Prelude (preludeModule)
 import Verifier.SAW.Recognizer (asPi)
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.Translation.Coq as Coq
+import qualified SAWCoreCoq.Coq as Coq
 import Verifier.SAW.TypedAST (mkModuleName, toShortName)
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim

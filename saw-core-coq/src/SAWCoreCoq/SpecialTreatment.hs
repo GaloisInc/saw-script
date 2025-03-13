@@ -14,7 +14,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module      : Verifier.SAW.Translation.Coq
+Module      : SAWCoreCoq.SpecialTreatment
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -22,7 +22,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.SpecialTreatment where
+module SAWCoreCoq.SpecialTreatment where
 
 import           Control.Lens                       (_1, _2, over)
 import           Control.Monad.Reader               (asks)
@@ -35,7 +35,7 @@ import           Text.Encoding.Z                    (zEncodeString)
 
 import qualified Language.Coq.AST                   as Coq
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Translation.Coq.Monad
+import           SAWCoreCoq.Monad
 import           Verifier.SAW.Term.Functor
 
 data SpecialTreatment = SpecialTreatment

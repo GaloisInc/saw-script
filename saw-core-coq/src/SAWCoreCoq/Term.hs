@@ -19,7 +19,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module      : Verifier.SAW.Translation.Coq
+Module      : SAWCoreCoq.Term
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -27,7 +27,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.Term where
+module SAWCoreCoq.Term where
 
 import           Control.Lens                                  (makeLenses, over, set, to, view)
 import           Control.Monad                                 (forM)
@@ -56,8 +56,8 @@ import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Term.Pretty
 import           Verifier.SAW.Term.Functor
-import           Verifier.SAW.Translation.Coq.Monad
-import           Verifier.SAW.Translation.Coq.SpecialTreatment
+import           SAWCoreCoq.Monad
+import           SAWCoreCoq.SpecialTreatment
 
 {-
 import Debug.Trace

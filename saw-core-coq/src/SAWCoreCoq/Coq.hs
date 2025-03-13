@@ -3,7 +3,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 {- |
-Module      : Verifier.SAW.Translation.Coq
+Module      : SAWCoreCoq.Coq
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -11,7 +11,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq (
+module SAWCoreCoq.Coq (
   TranslationConfiguration(..),
   moduleDeclName,
   preamble,
@@ -31,11 +31,11 @@ import           Verifier.SAW.Module
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Term.Functor
 -- import Verifier.SAW.Term.CtxTerm
-import qualified Verifier.SAW.Translation.Coq.CryptolModule    as CMT
-import qualified Verifier.SAW.Translation.Coq.SAWModule        as SAWModuleTranslation
-import           Verifier.SAW.Translation.Coq.Monad
-import           Verifier.SAW.Translation.Coq.SpecialTreatment
-import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
+import qualified SAWCoreCoq.CryptolModule    as CMT
+import qualified SAWCoreCoq.SAWModule        as SAWModuleTranslation
+import           SAWCoreCoq.Monad
+import           SAWCoreCoq.SpecialTreatment
+import qualified SAWCoreCoq.Term             as TermTranslation
 import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.Cryptol (Env)
 

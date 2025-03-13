@@ -14,7 +14,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module      : Verifier.SAW.Translation.Coq
+Module      : SAWCoreCoq.SAWModule
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -22,7 +22,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.SAWModule where
+module SAWCoreCoq.SAWModule where
 
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          (asks)
@@ -34,10 +34,10 @@ import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Module
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Term.Functor
-import qualified Verifier.SAW.Translation.Coq.Monad            as M
-import           Verifier.SAW.Translation.Coq.SpecialTreatment
-import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
-import Verifier.SAW.Translation.Coq.Monad
+import qualified SAWCoreCoq.Monad            as M
+import           SAWCoreCoq.SpecialTreatment
+import qualified SAWCoreCoq.Term             as TermTranslation
+import SAWCoreCoq.Monad
 
 -- import Debug.Trace
 
