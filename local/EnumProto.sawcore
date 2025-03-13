@@ -1,4 +1,4 @@
-module EnumLib3 where
+module EnumProto where
 import Prelude;
 
 -- A right-nested sequence of Either types, defined as
@@ -156,9 +156,9 @@ enum EnumType as = C1 CT1
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
 EnumType__ArgType_C1 (as : sort 0) : sort 0 = as;
 EnumType__ArgType_C2 (as : sort 0) : sort 0 = Bool;
-EnumType__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as
+EnumType__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
 
--- TODO: or Right Nest onto the UnitType??
+  -- TODO: or Right Nest onto the UnitType??
 
 --
 EnumType__TypeList : sort 0 -> ListSort;
