@@ -372,3 +372,22 @@ test-suite integration_tests
                , tasty-expected-failure
 
   build-tool-depends: saw-script:saw
+
+-- saw-core-coq has its own small test suite.
+test-suite saw-core-coq-tests
+  type: exitcode-stdio-1.0
+  default-language: Haskell2010
+
+  hs-source-dirs: otherTests/saw-core-coq
+  main-is: Test.hs
+
+  build-depends:
+    base,
+    ansi-wl-pprint,
+    containers,
+    mtl,
+    saw-core,
+    saw-core-coq,
+    text
+
+  ghc-options: -Wall -threaded
