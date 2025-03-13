@@ -346,6 +346,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: html_docs
+          path: doc/_build/html
 
       # Adapted from:
       # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
