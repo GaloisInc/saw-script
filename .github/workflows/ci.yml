@@ -302,7 +302,7 @@ jobs:
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
   build-docs:
-    name: "Build and deploy documentation to GitHub pages"
+    name: "Build SAW documentation"
     needs: [config]
     runs-on: ${{ matrix.os }}
     strategy:
@@ -320,6 +320,32 @@ jobs:
 
       - name: Build HTML documentation
         run: make -C doc html
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html
+
+  deploy-docs:
+    name: "Deploy SAW documentation to GitHub Pages"
+    needs: [build-docs]
+    runs-on: ${{ matrix.os }}
+    # Do not run this job in forks, as the deployment to GitHub pages will fail
+    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
+    # organization (see #2216).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html_docs
 
       # Adapted from:
       # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
@@ -634,6 +660,10 @@ jobs:
     name: "Run integration tests with coverage reporting"
     needs: build
     runs-on: ${{ matrix.os }}
+    # Do not run this job in forks, as the deployment to GitHub pages will fail
+    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
+    # organization (see #2216).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
     strategy:
       matrix:
         suite: ['integration_tests']
