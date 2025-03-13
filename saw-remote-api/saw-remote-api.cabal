@@ -65,8 +65,8 @@ common deps
                  parameterized-utils,
 
                  -- internal subpackages in the saw tree
-                 cryptol-saw-core,
                  saw-core,
+                 saw-script:cryptol-saw-core,
                  saw-script:saw-central
 
   default-language: Haskell2010

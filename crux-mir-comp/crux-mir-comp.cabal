@@ -37,11 +37,11 @@ library
                  parameterized-utils >= 1.0.8,
                  what4,
 
-                 -- internal subpackages in the saw tree
-                 cryptol-saw-core,
+                 -- internal subpackages/sublibraries in the saw tree
                  crucible-mir-comp,
                  saw-core,
                  saw-core-what4,
+                 saw-script:cryptol-saw-core,
                  saw-script:saw-central
 
   hs-source-dirs: src

@@ -83,7 +83,7 @@ haddock() {
     rme
     saw-script:saw-version
     saw-core
-    cryptol-saw-core
+    saw-script:cryptol-saw-core
     saw-core-what4
     saw-core-sbv
     saw-core-aig
