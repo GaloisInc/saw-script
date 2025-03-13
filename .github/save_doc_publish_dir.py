@@ -21,7 +21,6 @@ if m:
 elif github_ref == "refs/heads/master":
     target = "master"
 else:
-    # TODO: This should be the empty string, after testing.
-    target = "another-test-version"
+    target = ""
 
 print(f"::set-output name=target::{target}")
