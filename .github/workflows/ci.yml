@@ -320,6 +320,8 @@ jobs:
 
       - name: Build HTML documentation
         run: make -C doc html
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
       - name: Upload HTML artifact
         uses: actions/upload-artifact@v4
