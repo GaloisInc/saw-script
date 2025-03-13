@@ -380,7 +380,7 @@ jobs:
               (
                   item.name
                   for item in cwd.iterdir()
-                  if item.is_dir() and not item.name.startswith('.')
+                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
               ),
               reverse=True,
           )
