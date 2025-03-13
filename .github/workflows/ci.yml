@@ -322,12 +322,17 @@ jobs:
         run: make -C doc html
 
       - name: Gather HPC coverage files and copy to HTML docs
-        run: |
-          .github/ci.sh collect_all_html
-          mkdir -p doc/_build/html/coverage
-          cp -r all-html/. doc/_build/html/coverage
+        run: .github/ci.sh collect_all_html
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Deploy coverage reports
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
 
       # Adapted from:
       # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
