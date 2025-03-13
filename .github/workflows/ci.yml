@@ -321,7 +321,7 @@ jobs:
       - name: Build HTML documentation
         run: make -C doc html
 
-      - name: Gather HPC coverage files and copy to HTML docs
+      - name: Gather HPC coverage files
         run: .github/ci.sh collect_all_html
         env:
           GH_TOKEN: ${{ github.token }}
