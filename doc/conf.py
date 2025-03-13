@@ -56,16 +56,12 @@ templates_path = ["_templates"]
 html_theme = "sphinx_rtd_theme"
 
 git_describe = ["git", "describe", "--tags", "--exact-match"]
-git_symref = ["git", "symbolic-ref", "--short", "HEAD"]
+git_revparse = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
 
 try:
     git_version = check_output(git_describe, stderr=DEVNULL, encoding="utf-8")
 except CalledProcessError:
-    pass
-try:
-    git_version = check_output(git_symref, stderr=DEVNULL, encoding="utf-8")
-except CalledProcessError:
-    git_version = "test-version"
+    git_version = check_output(git_revparse, stderr=DEVNULL, encoding="utf-8")
 
 # These context variables are used when instantiating
 # doc/_templates/versions.html
