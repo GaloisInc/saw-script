@@ -347,6 +347,9 @@ jobs:
         with:
           name: html_docs
 
+      - name: Show downloaded file structure
+        run: ls -R
+
       # Adapted from:
       # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
       # Based on the Stack Overflow thread:
