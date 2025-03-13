@@ -321,19 +321,6 @@ jobs:
       - name: Build HTML documentation
         run: make -C doc html
 
-      - name: Gather HPC coverage files
-        run: .github/ci.sh collect_all_html
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Deploy coverage reports
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: all-html
-          destination_dir: coverage
-          keep_files: false
-
       # Adapted from:
       # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
       # Based on the Stack Overflow thread:
@@ -728,6 +715,19 @@ jobs:
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
+
+      - name: Gather HPC coverage files
+        run: .github/ci.sh collect_all_html
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Deploy coverage reports
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
 
   build-push-image:
     runs-on: ubuntu-22.04
