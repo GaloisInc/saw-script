@@ -11,6 +11,9 @@ extra-source-files:
     saw-script/src/SAWScript/Parser.y
     saw-script/src/SAWScript/Lexer.x
 
+-- The saw-version library contains the SAW package's version
+-- information. It's a separate library in the hopes of reducing the
+-- rebuild impact when the git revision changes.
 library saw-version
   default-language: Haskell2010
   visibility: public
@@ -29,6 +32,9 @@ library saw-version
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 
+-- The saw-central library contains the upper-level guts of SAW,
+-- meaning the verification primitives and logic shared between
+-- the saw-script interpreter and the remote API interface.
 library saw-central
   default-language: Haskell2010
   visibility: public
@@ -219,6 +225,14 @@ library saw-central
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
 
+-- The saw-script library.
+--
+-- This can't be a sublibrary because you can't have a sublibrary with
+-- the same name as the package (why?) but it should not be construed as
+-- bigger or more important than the others.
+--
+-- The saw-script library contains the interpreter for the SAWScript
+-- language.
 library
   default-language: Haskell2010
   build-depends:
@@ -294,6 +308,7 @@ library
     alex:alex >= 3.1.3,
     happy:happy >= 1.9.4
 
+-- The saw executable is where you run the saw-script interpreter.
 executable saw
   default-language: Haskell2010
   hs-source-dirs: saw
@@ -340,6 +355,8 @@ executable saw
 
   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
+-- The integration_tests/intTests test suite is the main SAW test
+-- suite.
 test-suite integration_tests
   type: exitcode-stdio-1.0
   hs-source-dirs: intTests
