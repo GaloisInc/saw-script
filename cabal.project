@@ -3,7 +3,6 @@ packages:
     saw-remote-api
     crucible-mir-comp
     crux-mir-comp
-    cryptol-saw-core
     rme
     verif-viewer
     saw-core
