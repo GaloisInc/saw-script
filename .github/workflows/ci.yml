@@ -23,7 +23,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 4
+  CABAL_CACHE_VERSION: 5
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -301,6 +301,120 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
+  build-docs:
+    name: "Build SAW documentation"
+    needs: [config]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Cache Python environment
+        uses: actions/cache@v4
+        with:
+          path: doc/.venv
+          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html/
+
+  deploy-docs:
+    name: "Deploy SAW documentation to GitHub Pages"
+    needs: [build-docs]
+    runs-on: ${{ matrix.os }}
+    # Do not run this job in forks, as the deployment to GitHub pages will fail
+    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
+    # organization (see #2216).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html
+
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: python3 .github/save_doc_publish_dir.py
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
+      # target directories to publish to, where the built-in actions are
+      # "one and done": Package and upload a single artifact, and deploy that.
+      - name: Publish docs to GitHub pages
+        if: steps.doc-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
+          keep_files: false
+
+  # Adapted from:
+  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
+  update-docs-versions:
+    name: "Update documentation versions JSON"
+    needs: [deploy-docs]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Write versions to JSON file
+        run: |
+          python3 -c "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted(
+              (
+                  item.name
+                  for item in cwd.iterdir()
+                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
+              ),
+              reverse=True,
+          )
+          target_dir = Path('gh-pages')
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
+              json.dump(versions, f)"
+
+      - name: Publish versions JSON to GitHub pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true
+
   mr-solver-tests:
     needs: [build]
     strategy:
@@ -551,13 +665,10 @@ jobs:
     name: "Run integration tests with coverage reporting"
     needs: build
     runs-on: ${{ matrix.os }}
-    # Do not run this job in forks, as the deploy-pages step will fail unless it
-    # has GITHUB_TOKEN permissions from a user within the GaloisInc organization
-    # (see #2216).
+    # Do not run this job in forks, as the deployment to GitHub pages will fail
+    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
+    # organization (see #2216).
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
-    permissions:
-      pages: write
-      id-token: write
     strategy:
       matrix:
         suite: ['integration_tests']
@@ -641,19 +752,17 @@ jobs:
           name: coverage-html-${{ github.event.number }}
 
       - name: Gather HPC coverage files
-        shell: bash
         run: .github/ci.sh collect_all_html
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy coverage reports
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: all-html
-
-      - name: Deploy to github pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
 
   build-push-image:
     runs-on: ubuntu-22.04

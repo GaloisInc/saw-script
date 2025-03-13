@@ -6,6 +6,10 @@ This release supports [version
 
 ## New Features
 
+* SAW documentation is now built and deployed as part of CI.
+  In the future, this will only happen for the `master` branch and version tags,
+  but for the time being also occurs for PR source branches.
+
 * SAW documentation is now under a single Sphinx umbrella, resulting in a
   complete overhaul of the `doc/` directory (#1723). Generally speaking, all
   _content_ has stayed the same, and only organization has changed. Most

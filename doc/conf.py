@@ -1,3 +1,6 @@
+import os
+from subprocess import check_output, CalledProcessError, DEVNULL
+
 # -- Project information -----------------------------------------------------
 
 project = "SAW Documentation"
@@ -45,9 +48,39 @@ exclude_patterns = [
     "README.md",
 ]
 
+# -- Options for templating --------------------------------------------------
+
+templates_path = ["_templates"]
+
 # -- Options for HTML output -------------------------------------------------
 
 html_theme = "sphinx_rtd_theme"
+
+# To correctly set the current_version, we first look for a BRANCH_NAME in the
+# environment.
+# This allows us to set the value correctly in CI, where the build is run in a
+# detached HEAD state, and the best we can get from git rev-parse is the name
+# "HEAD".
+git_version = os.environ.get("BRANCH_NAME")
+if git_version is None:
+    git_describe = ["git", "describe", "--tags", "--exact-match"]
+    git_revparse = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+    try:
+        git_version = check_output(git_describe, stderr=DEVNULL, encoding="utf-8")
+    except CalledProcessError:
+        git_version = check_output(git_revparse, stderr=DEVNULL, encoding="utf-8")
+
+# These context variables are used when instantiating
+# doc/_templates/versions.html
+html_context = {
+    "VERSIONS": True,
+    "current_version": git_version.strip(),
+}
+
+# Modifies the DOM corresponding to the versions pane to include everything in
+# the JSON file written by CI when new versions are published.
+html_js_files = ["versions.js"]
+html_static_path = ["_static"]
 
 # -- Options for LaTeX output ------------------------------------------------
 
