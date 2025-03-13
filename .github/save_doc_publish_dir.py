@@ -21,6 +21,6 @@ if m:
 elif github_ref == "refs/heads/master":
     target = "master"
 else:
-    target = ""
+    target = "yet-another-test-version"
 
 print(f"::set-output name=target::{target}")
