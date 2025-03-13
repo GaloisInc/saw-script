@@ -57,7 +57,7 @@ checkTranslation sc (name, term) =
             fail "internal type error"
 
 superclassContents :: Text
-superclassContents = [there|test/superclass.cry|]
+superclassContents = [there|otherTests/cryptol-saw-core/superclass.cry|]
 
 instanceContents :: Text
-instanceContents = [there|test/instance.cry|]
+instanceContents = [there|otherTests/cryptol-saw-core/instance.cry|]
