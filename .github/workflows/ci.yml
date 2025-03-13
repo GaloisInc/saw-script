@@ -372,7 +372,7 @@ jobs:
   # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
   update-docs-versions:
     name: "Update documentation versions JSON"
-    needs: [build-docs]
+    needs: [deploy-docs]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
