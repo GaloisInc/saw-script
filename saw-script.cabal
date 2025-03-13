@@ -35,6 +35,8 @@ library saw-version
 -- The saw-core-coq library implements a backend for translating terms
 -- in the SAWCore intermediate language into the syntax of Coq/Rocq.
 library saw-core-coq
+  default-language: Haskell2010
+  visibility: private
   build-depends:
 
     -- upstream packages from hackage
@@ -63,12 +65,12 @@ library saw-core-coq
   exposed-modules:
      Language.Coq.AST
      Language.Coq.Pretty
-     Verifier.SAW.Translation.Coq
-     Verifier.SAW.Translation.Coq.CryptolModule
-     Verifier.SAW.Translation.Coq.SAWModule
-     Verifier.SAW.Translation.Coq.Monad
-     Verifier.SAW.Translation.Coq.Term
-     Verifier.SAW.Translation.Coq.SpecialTreatment
+     SAWCoreCoq.Coq
+     SAWCoreCoq.CryptolModule
+     SAWCoreCoq.SAWModule
+     SAWCoreCoq.Monad
+     SAWCoreCoq.Term
+     SAWCoreCoq.SpecialTreatment
   ghc-options: -Wall -Werror
 
 -- The saw-central library contains the upper-level guts of SAW,

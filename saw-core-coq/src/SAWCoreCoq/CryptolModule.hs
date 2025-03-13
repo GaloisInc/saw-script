@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 -- |
 
-module Verifier.SAW.Translation.Coq.CryptolModule where
+module SAWCoreCoq.CryptolModule where
 
 import           Control.Lens                       (over, view)
 import           Control.Monad                      (forM)
@@ -13,8 +13,8 @@ import           Cryptol.Utils.Ident                (unpackIdent)
 import qualified Language.Coq.AST                   as Coq
 import           Verifier.SAW.Term.Functor          (Term)
 import           Verifier.SAW.SharedTerm            (SharedContext)
-import           Verifier.SAW.Translation.Coq.Monad
-import qualified Verifier.SAW.Translation.Coq.Term  as TermTranslation
+import           SAWCoreCoq.Monad
+import qualified SAWCoreCoq.Term  as TermTranslation
 import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.Cryptol (Env)
 

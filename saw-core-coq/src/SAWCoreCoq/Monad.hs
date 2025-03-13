@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 {- |
-Module      : Verifier.SAW.Translation.Coq
+Module      : SAWCoreCoq.Monad
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : atomb@galois.com
@@ -12,7 +12,7 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.Monad
+module SAWCoreCoq.Monad
   ( TranslationConfiguration(..)
   , TranslationConfigurationMonad
   , TranslationMonad
