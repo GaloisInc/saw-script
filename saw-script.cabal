@@ -239,13 +239,16 @@ library
 
       -- upstream packages from hackage
       base >= 4.9
+    , ansi-terminal
     , array
     , bytestring
     , containers
     , directory >= 1.2.4.0
+    , exceptions
     , extra
     , filepath
     , free
+    , haskeline
     , IfElse
     , lens
     , mtl >= 2.1
@@ -276,6 +279,7 @@ library
     , heapster-saw
     , saw-core
     , saw-core-coq
+    , saw-script:saw-version
     , saw-script:saw-central
 
   hs-source-dirs: saw-script/src
@@ -300,6 +304,13 @@ library
 
     SAWScript.HeapsterBuiltins
 
+    SAWScript.REPL
+    SAWScript.REPL.Command
+    SAWScript.REPL.Haskeline
+    SAWScript.REPL.Logo
+    SAWScript.REPL.Monad
+    SAWScript.REPL.Trie
+
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
@@ -317,12 +328,6 @@ executable saw
 
   other-modules:
     Paths_saw_script
-    SAWScript.REPL
-    SAWScript.REPL.Command
-    SAWScript.REPL.Haskeline
-    SAWScript.REPL.Logo
-    SAWScript.REPL.Monad
-    SAWScript.REPL.Trie
 
   autogen-modules:
     Paths_saw_script
@@ -331,24 +336,13 @@ executable saw
 
       -- upstream packages from hackage
       base >= 4.5
-    , ansi-terminal
-    , containers >= 0.5.8
     , directory
-    , exceptions
     , filepath
-    , haskeline
-    , mtl
-    , text
-    , transformers
 
       -- packages in git submodules
     , aig
-    , cryptol
 
-      -- internal subpackages/sublibraries in the saw tree
-    , cryptol-saw-core
-    , heapster-saw
-    , saw-core
+      -- internal sublibraries in the saw tree
     , saw-script:saw-version
     , saw-script:saw-central
     , saw-script
