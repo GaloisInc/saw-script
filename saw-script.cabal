@@ -390,6 +390,34 @@ executable saw
 
   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
+-- The Cryptol Symbolic Simulator (css) is a standalone program that
+-- translates a single Cryptol function to an AIG.
+executable css
+
+  build-depends:
+
+    -- upstream packages from hackage
+    base >= 4.5,
+    array,
+    bytestring,
+    containers,
+    text,
+
+    -- packages in git submodules
+    aig,
+    cryptol,
+
+    -- internal subpackages/sublibraries in the saw tree
+    saw-version,
+    saw-core,
+    saw-core-aig,
+    cryptol-saw-core
+
+  hs-source-dirs : saw-tools/css
+  main-is : Main.hs
+  GHC-options: -Wall -O2 -threaded -rtsopts -pgmlc++
+  extra-libraries:      stdc++
+
 -- The integration_tests/intTests test suite is the main SAW test
 -- suite.
 test-suite integration_tests
