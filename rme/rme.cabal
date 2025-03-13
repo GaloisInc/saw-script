@@ -28,4 +28,4 @@ library
     Data.RME.Base
     Data.RME.Vector
 
-  GHC-options: -Wall -Werror -Wcompat
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count

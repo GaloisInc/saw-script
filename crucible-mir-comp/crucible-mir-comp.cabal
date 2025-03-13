@@ -54,4 +54,4 @@ library
     Mir.Compositional.Convert
     Mir.Compositional.Override
 
-  ghc-options: -Wall
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count

@@ -54,7 +54,7 @@ library
   other-modules:
     Mir.Compositional.DefId
 
-  ghc-options: -Wall
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
 
 
 executable crux-mir-comp
@@ -88,7 +88,8 @@ executable crux-mir-comp
   hs-source-dirs: exe
   main-is: Main.hs
 
-  ghc-options: -Wall -threaded
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  ghc-options: -threaded -rtsopts
   ghc-prof-options: -O2 -fprof-auto-top
 
 
@@ -131,5 +132,6 @@ test-suite crux-mir-comp-test
   hs-source-dirs: test
   main-is: Test.hs
 
-  ghc-options: -Wall -threaded
+  ghc-options: -O2 -Wall -Werror -Wcompat -fno-ignore-asserts -fno-spec-constr-count
+  ghc-options: -threaded -rtsopts
   ghc-prof-options: -fprof-auto -O2
