@@ -32,6 +32,45 @@ library saw-version
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
 
+-- The saw-core-coq library implements a backend for translating terms
+-- in the SAWCore intermediate language into the syntax of Coq/Rocq.
+library saw-core-coq
+  build-depends:
+
+    -- upstream packages from hackage
+    base == 4.*,
+    containers,
+    interpolate,
+    lens,
+    mtl,
+    prettyprinter,
+    text,
+    vector,
+    zenc,
+
+    -- galois packages from hackage
+    bv-sized,
+
+    -- packages in git submodules
+    cryptol,
+    parameterized-utils,
+
+    -- internal subpackages/sublibraries in the saw tree
+    cryptol-saw-core,
+    saw-core
+
+  hs-source-dirs: saw-core-coq/src
+  exposed-modules:
+     Language.Coq.AST
+     Language.Coq.Pretty
+     Verifier.SAW.Translation.Coq
+     Verifier.SAW.Translation.Coq.CryptolModule
+     Verifier.SAW.Translation.Coq.SAWModule
+     Verifier.SAW.Translation.Coq.Monad
+     Verifier.SAW.Translation.Coq.Term
+     Verifier.SAW.Translation.Coq.SpecialTreatment
+  ghc-options: -Wall -Werror
+
 -- The saw-central library contains the upper-level guts of SAW,
 -- meaning the verification primitives and logic shared between
 -- the saw-script interpreter and the remote API interface.
@@ -121,9 +160,9 @@ library saw-central
     , rme
     , saw-core
     , saw-core-aig
-    , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
+    , saw-script:saw-core-coq
     , saw-script:saw-version
 
   hs-source-dirs: saw-central/src
@@ -278,8 +317,8 @@ library
     , cryptol-saw-core
     , heapster-saw
     , saw-core
-    , saw-core-coq
     , saw-script:saw-version
+    , saw-script:saw-core-coq
     , saw-script:saw-central
 
   hs-source-dirs: saw-script/src
@@ -382,12 +421,15 @@ test-suite saw-core-coq-tests
   main-is: Test.hs
 
   build-depends:
+    -- upstream packages from hackage
     base,
     containers,
     mtl,
     prettyprinter,
+    text,
+
+    -- internal subpackages/sublibraries in the saw tree
     saw-core,
-    saw-core-coq,
-    text
+    saw-script:saw-core-coq
 
   ghc-options: -Wall -threaded
