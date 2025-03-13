@@ -132,7 +132,7 @@ import qualified Verifier.SAW.Heapster.IDESupport as HIDE
 import Verifier.SAW.Heapster.LLVMGlobalConst
 
 import SAWCentral.Prover.Exporter
-import Verifier.SAW.Translation.Coq
+import SAWCoreCoq.Coq
 import Prettyprinter
 
 -- | Build the SAW core term for the type @TpDesc@

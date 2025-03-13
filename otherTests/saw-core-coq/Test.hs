@@ -29,7 +29,7 @@ import Verifier.SAW.Prelude (preludeModule)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Typechecker
 import qualified Verifier.SAW.UntypedAST as Un
-import Verifier.SAW.Translation.Coq
+import SAWCoreCoq.Coq
 
 configuration :: TranslationConfiguration
 configuration = TranslationConfiguration {
