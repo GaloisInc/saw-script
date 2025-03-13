@@ -336,7 +336,7 @@ jobs:
     # Do not run this job in forks, as the deployment to GitHub pages will fail
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
     # organization (see #2216).
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc')
     strategy:
       matrix:
         os: [ubuntu-22.04]
@@ -357,8 +357,6 @@ jobs:
       - name: Determine documentation publishing directory
         id: doc-publish-dir
         run: python3 .github/save_doc_publish_dir.py
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
       # Using peaceiris/actions-gh-pages, as it allows us to specify specific
       # target directories to publish to, where the built-in actions are
