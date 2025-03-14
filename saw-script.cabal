@@ -300,7 +300,7 @@ library
     SAWScript.Parser
     SAWScript.Search
     SAWScript.Token
-    SAWScript.MGU
+    SAWScript.Typechecker
 
     SAWScript.HeapsterBuiltins
 

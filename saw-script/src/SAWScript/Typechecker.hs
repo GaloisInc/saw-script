@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.MGU
+Module      : SAWScript.Typechecker
 Description : SAW-Script type checking.
 License     : BSD3
 Maintainer  : diatchki
@@ -16,7 +16,7 @@ Stability   : provisional
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns]
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
-module SAWScript.MGU
+module SAWScript.Typechecker
        ( checkDecl
        , checkStmt
        , checkSchemaPattern

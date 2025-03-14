@@ -58,7 +58,7 @@ import qualified SAWCentral.AST as SS
      Decl(..),
      Pattern(..))
 import SAWCentral.Exceptions
-import SAWScript.MGU (checkDecl, checkSchemaPattern)
+import SAWScript.Typechecker (checkDecl, checkSchemaPattern)
 import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
