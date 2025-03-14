@@ -21,7 +21,7 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
--- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.MGU
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
@@ -67,7 +67,7 @@ import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkStmt)
+import SAWScript.Typechecker (checkStmt)
 import SAWScript.Parser (parseSchema)
 import SAWScript.Panic (panic)
 import SAWCentral.TopLevel
