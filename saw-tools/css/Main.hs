@@ -134,7 +134,7 @@ processModule menv fout funcName = do
 writeAIG :: SharedContext -> FilePath -> Term -> IO ()
 writeAIG sc f t = do
   BBSim.withBitBlastedTerm AIG.compactProxy sc mempty t $ \be ls -> do
-  AIG.writeAiger f (AIG.Network be (AIG.bvToList ls))
+    AIG.writeAiger f (AIG.Network be (AIG.bvToList ls))
 
 extractCryptol :: SharedContext -> CM.ModuleEnv -> String -> IO Term
 extractCryptol sc modEnv input = do
