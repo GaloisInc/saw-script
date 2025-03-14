@@ -333,7 +333,7 @@ jobs:
     name: "Deploy SAW documentation to GitHub Pages"
     needs: [build-docs]
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' && ${{ ! startsWith(github.ref, 'refs/heads/release-') }}
+    if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/release-') }}
     strategy:
       matrix:
         os: [ubuntu-22.04]
