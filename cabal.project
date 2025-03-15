@@ -5,7 +5,6 @@ packages:
     crux-mir-comp
     rme
     saw-core
-    saw-core-what4
     heapster-saw
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
