@@ -65,7 +65,7 @@ common deps
                  parameterized-utils,
 
                  -- internal subpackages in the saw tree
-                 saw-core,
+                 saw-script:saw-core,
                  saw-script:cryptol-saw-core,
                  saw-script:saw-central
 

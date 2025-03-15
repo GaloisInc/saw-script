@@ -13,6 +13,12 @@ Description:
   SAW is a tool supporting a broad range of formal verification
   scenarios.
 
+-- extra files for saw-core
+extra-source-files:
+    saw-core/prelude/Prelude.sawcore
+    saw-core/src/Verifier/SAW/Grammar.y
+    saw-core/src/Verifier/SAW/Lexer.x
+
 -- extra files for cryptol-saw-core
 extra-source-files:
     cryptol-saw-core/saw/Cryptol.sawcore
@@ -56,6 +62,112 @@ library saw-version
 
 
 ------------------------------------------------------------
+-- saw-core
+
+-- The SAWCore intermediate language
+library saw-core
+  default-language: Haskell2010
+  visibility: public
+
+  build-depends:
+    -- upstream packages from hackage
+    base >= 4.8,
+    aeson >= 2.0 && < 2.3,
+    array,
+    bytestring,
+    containers,
+    data-inttrie,
+    data-ref,
+    directory,
+    extra,
+    filepath,
+    hashable >= 1.3.4,
+    indexed-traversable,
+    lens >= 3.8,
+    modern-uri >= 0.3.2 && < 0.4,
+    MonadRandom,
+    mtl,
+    panic,
+    pretty,
+    prettyprinter >= 1.7.0,
+    prettyprinter-ansi-terminal >= 1.1.2,
+    random,
+    template-haskell,
+    text,
+    th-lift-instances,
+    tf-random,
+    transformers,
+    transformers-compat,
+    unordered-containers,
+    utf8-string,
+    vector,
+
+    -- packages in git submodules
+    parameterized-utils,
+
+    -- internal subpackages in the saw tree
+    rme
+
+  hs-source-dirs: saw-core/src
+  exposed-modules:
+     Verifier.SAW
+     Verifier.SAW.Constant
+     Verifier.SAW.ExternalFormat
+     Verifier.SAW.Conversion
+     Verifier.SAW.Cache
+     Verifier.SAW.FiniteValue
+     Verifier.SAW.Grammar
+     Verifier.SAW.Lexer
+     Verifier.SAW.Module
+     Verifier.SAW.Name
+     Verifier.SAW.ParserUtils
+     Verifier.SAW.Position
+     Verifier.SAW.Prelude
+     Verifier.SAW.Prelude.Constants
+     Verifier.SAW.Prim
+     Verifier.SAW.Recognizer
+     Verifier.SAW.Rewriter
+     Verifier.SAW.SATQuery
+     Verifier.SAW.SCTypeCheck
+     Verifier.SAW.Simulator
+     Verifier.SAW.Simulator.Concrete
+     Verifier.SAW.Simulator.TermModel
+     Verifier.SAW.Simulator.MonadLazy
+     Verifier.SAW.Simulator.Prims
+     Verifier.SAW.Simulator.RME
+     Verifier.SAW.Simulator.Value
+     Verifier.SAW.SharedTerm
+     Verifier.SAW.Term.Functor
+     Verifier.SAW.Term.CtxTerm
+     Verifier.SAW.OpenTerm
+     Verifier.SAW.Term.Pretty
+     Verifier.SAW.TermNet
+     Verifier.SAW.Testing.Random
+     Verifier.SAW.Typechecker
+     Verifier.SAW.TypedAST
+     Verifier.SAW.Unique
+     Verifier.SAW.UntypedAST
+     Verifier.SAW.Change
+     Verifier.SAW.Utils
+  other-modules:
+     Verifier.SAW.UnionFind
+
+  GHC-options: -Wall -Werror -Wcompat
+  if impl(ghc == 8.0.1)
+    ghc-options: -Wno-redundant-constraints
+  GHC-prof-options: -fprof-auto -fprof-cafs
+  default-extensions:
+    DeriveFunctor
+    GeneralizedNewtypeDeriving
+    ImplicitParams
+    ViewPatterns
+
+  build-tool-depends:
+    alex:alex >= 3.1.3,
+    happy:happy >= 1.9.6
+
+
+------------------------------------------------------------
 -- cryptol-saw-core
 
 -- The cryptol-saw-core library interfaces Cryptol to saw-core.
@@ -92,8 +204,8 @@ library cryptol-saw-core
     cryptol >= 2.3.0,
     what4,
 
-    -- internal subpackages in the saw tree
-    saw-core
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core
 
   hs-source-dirs: cryptol-saw-core/src
   exposed-modules:
@@ -137,8 +249,8 @@ library saw-core-coq
     cryptol,
     parameterized-utils,
 
-    -- internal subpackages/sublibraries in the saw tree
-    saw-core,
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core,
     saw-script:cryptol-saw-core
 
   hs-source-dirs: saw-core-coq/src
@@ -176,8 +288,8 @@ library saw-core-aig
     -- packages in git submodules
     aig,
 
-    -- internal subpackages in the saw tree
-    saw-core
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core
 
   hs-source-dirs: saw-core-aig/src
   exposed-modules:
@@ -208,8 +320,8 @@ library saw-core-sbv
     transformers,
     vector,
 
-    -- internal subpackages in the saw tree
-    saw-core
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core
 
   hs-source-dirs: saw-core-sbv/src
   exposed-modules:
@@ -247,8 +359,8 @@ library saw-core-what4
     parameterized-utils >= 1.0.8 && < 2.2,
     what4,
 
-    -- internal subpackages in the saw tree
-    saw-core
+    -- internal sublibaries in the saw tree
+    saw-script:saw-core
 
   hs-source-dirs: saw-core-what4/src
   exposed-modules:
@@ -306,8 +418,8 @@ library heapster
     parameterized-utils,
     what4,
 
-    -- internal subpackages in the saw tree
-    saw-core
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core
 
   hs-source-dirs: heapster-saw/src
   exposed-modules:
@@ -429,7 +541,7 @@ library saw-central
 
       -- internal subpackages/sublibraries in the saw tree
     , rme
-    , saw-core
+    , saw-script:saw-core
     , saw-script:saw-core-aig
     , saw-script:saw-core-coq
     , saw-script:saw-core-sbv
@@ -590,9 +702,9 @@ library
     , llvm-pretty >= 0.8
     , parameterized-utils
 
-      -- internal subpackages/sublibraries in the saw tree
-    , saw-core
+      -- internal sublibraries in the saw tree
     , saw-script:saw-version
+    , saw-script:saw-core
     , saw-script:cryptol-saw-core
     , saw-script:saw-core-coq
     , saw-script:heapster
@@ -691,10 +803,10 @@ executable css
     aig,
     cryptol,
 
-    -- internal subpackages/sublibraries in the saw tree
-    saw-version,
-    saw-core,
-    saw-core-aig,
+    -- internal sublibraries in the saw tree
+    saw-script:saw-version,
+    saw-script:saw-core,
+    saw-script:saw-core-aig,
     saw-script:cryptol-saw-core
 
   hs-source-dirs : saw-tools/css
@@ -738,7 +850,7 @@ executable extcore-info
       base >= 4
 
       -- the saw-core library in the saw tree
-    , saw-core
+    , saw-script:saw-core
 
   hs-source-dirs: saw-tools/extcore-info
   main-is: Main.hs
@@ -797,7 +909,7 @@ test-suite test-sawcore
     , vector
 
       -- the saw-core library in the saw tree
-    , saw-core
+    , saw-script:saw-core
 
   main-is: Tests.hs
   hs-source-dirs: otherTests/saw-core
@@ -830,8 +942,8 @@ test-suite cryptol-saw-core-tc-test
     -- packages in git submodules
     cryptol,
 
-    -- internal subpackages/sublibraries in the saw tree
-    saw-core,
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core,
     saw-script:cryptol-saw-core
 
   GHC-options: -threaded
@@ -852,9 +964,9 @@ test-suite saw-core-coq-tests
     prettyprinter,
     text,
 
-    -- internal subpackages/sublibraries in the saw tree
-    saw-core,
-    saw-script:saw-core-coq
+    -- internal sublibraries in the saw tree
+    saw-script:saw-core,
+    saw-script:saw-core-coq,
 
   ghc-options: -Wall -threaded
 

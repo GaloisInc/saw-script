@@ -29,7 +29,7 @@ import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
 
 
 $(defineModuleFromFileWithFns
-  "preludeModule" "scLoadPreludeModule" "prelude/Prelude.sawcore")
+  "preludeModule" "scLoadPreludeModule" "saw-core/prelude/Prelude.sawcore")
 
 -- | Given two terms, compute a term representing a decidable
 --   equality test between them.  The terms are assumed to

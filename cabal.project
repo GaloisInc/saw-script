@@ -4,7 +4,6 @@ packages:
     crucible-mir-comp
     crux-mir-comp
     rme
-    saw-core
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
