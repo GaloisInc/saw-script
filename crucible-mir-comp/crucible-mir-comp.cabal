@@ -40,7 +40,7 @@ library
                  what4,
 
                  -- internal subpackages in the saw tree
-                 saw-core,
+                 saw-script:saw-core,
                  saw-script:cryptol-saw-core,
                  saw-script:saw-core-what4,
                  saw-script:saw-central
