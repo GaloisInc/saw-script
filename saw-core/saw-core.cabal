@@ -117,13 +117,3 @@ library
     ImplicitParams
     ViewPatterns
 
-executable extcore-info
-  main-is: extcore-info.hs
-  hs-source-dirs: tools
-  build-depends:
-
-      -- upstream packages from hackage
-      base >= 4
-
-      -- this package's own library
-    , saw-core
