@@ -85,7 +85,7 @@ import Verifier.SAW.SharedTerm as SC
 import qualified SAWCoreCoq.Coq as Coq
 import Verifier.SAW.TypedAST (mkModuleName, toShortName)
 import CryptolSAWCore.TypedTerm
-import qualified Verifier.SAW.Simulator.BitBlast as BBSim
+import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.SBV as SBV

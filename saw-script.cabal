@@ -175,7 +175,7 @@ library saw-core-aig
 
   hs-source-dirs: saw-core-aig/src
   exposed-modules:
-     Verifier.SAW.Simulator.BitBlast
+     SAWCoreAIG.BitBlast
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
