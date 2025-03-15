@@ -70,13 +70,13 @@ import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
 import CryptolSAWCore.CryptolEnv
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.Name (toShortName)
-import Verifier.SAW.Prelude
-import Verifier.SAW.Recognizer
-import Verifier.SAW.SharedTerm
+import SAWCore.FiniteValue
+import SAWCore.Name (toShortName)
+import SAWCore.Prelude
+import SAWCore.Recognizer
+import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
-import Verifier.SAW.SCTypeCheck (scTypeCheck)
+import SAWCore.SCTypeCheck (scTypeCheck)
 
 import SAWCoreWhat4.ReturnTrip
 
@@ -880,9 +880,9 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
        when (phase == SimpleInvariant.InitialInvariant) $
          do printFn "Loop invariant implicit parameters!"
             forM_ implicit_params' $ \x ->
-                do printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts x))
+                do printFn (show (ppTerm SAWCore.SharedTerm.defaultPPOpts x))
                    tp <- scTypeOf sc x
-                   printFn (show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp))
+                   printFn (show (ppTerm SAWCore.SharedTerm.defaultPPOpts tp))
 
        -- actually apply the arguments to the given term
        inv <- scApplyAll sc (ttTerm func) (implicit_params' ++ [initial_tuple, current_tuple])
@@ -893,13 +893,13 @@ setupSimpleLoopInvariantFeature sym printFn loopNum sc sawst mdMap cfg mvar func
          Left _tcErr ->
            do tpType <- scTypeOf sc initial_tuple
               fail $ unlines [ "Loop invariant has incorrect type! State tuple has type:"
-                             , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tpType)
+                             , show (ppTerm SAWCore.SharedTerm.defaultPPOpts tpType)
                              ]
          Right tp ->
            do ok <- scConvertible sc True tp =<< scBoolType sc
               unless ok $
                 fail $ unlines [ "Loop invariant must return a boolean value, but got:"
-                               , show (ppTerm Verifier.SAW.SharedTerm.defaultPPOpts tp)
+                               , show (ppTerm SAWCore.SharedTerm.defaultPPOpts tp)
                                   -- TODO, get ppOpts from the right place
                                ]
        b <- bindSAWTerm sym sawst W4.BaseBoolRepr inv

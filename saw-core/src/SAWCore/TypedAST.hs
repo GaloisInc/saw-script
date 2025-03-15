@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
-Module      : Verifier.SAW.TypedAST
+Module      : SAWCore.TypedAST
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -11,7 +11,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.TypedAST
+module SAWCore.TypedAST
  ( -- * Module operations.
    Module
  , emptyModule
@@ -90,9 +90,9 @@ import Control.Exception (assert)
 
 import Prelude hiding (all, foldr)
 
-import Verifier.SAW.Module
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty
+import SAWCore.Module
+import SAWCore.Term.Functor
+import SAWCore.Term.Pretty
 
 -- | Returns the number of nested pi expressions.
 piArgCount :: Term -> Int

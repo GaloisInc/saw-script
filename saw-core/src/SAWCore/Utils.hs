@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Utils
+Module      : SAWCore.Utils
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -13,7 +13,7 @@ SAW-specific declarations should be stored in separate modules.
 
 {-# LANGUAGE Trustworthy, TemplateHaskell #-}
 
-module Verifier.SAW.Utils
+module SAWCore.Utils
   ( internalError
   , panic
   , sumBy

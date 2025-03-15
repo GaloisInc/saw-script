@@ -34,9 +34,9 @@ import           Prelude                            hiding (fail)
 import           Text.Encoding.Z                    (zEncodeString)
 
 import qualified Language.Coq.AST                   as Coq
-import           Verifier.SAW.SharedTerm
+import           SAWCore.SharedTerm
 import           SAWCoreCoq.Monad
-import           Verifier.SAW.Term.Functor
+import           SAWCore.Term.Functor
 
 data SpecialTreatment = SpecialTreatment
   { moduleRenaming        :: Map.Map ModuleName String

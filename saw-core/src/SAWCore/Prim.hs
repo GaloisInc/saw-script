@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 {- |
-Module      : Verifier.SAW.Prim
+Module      : SAWCore.Prim
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -11,7 +11,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Prim where
+module SAWCore.Prim where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative

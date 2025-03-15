@@ -47,10 +47,10 @@ import SAWServer.CryptolExpression ( CryptolModuleException(..), getTypedTermOfC
 import SAWServer.Exceptions ( notASimpset )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
-import Verifier.SAW.FiniteValue (FirstOrderValue(..))
-import Verifier.SAW.Name (ecName, toShortName)
-import Verifier.SAW.Rewriter (emptySimpset)
-import Verifier.SAW.TermNet (merge)
+import SAWCore.FiniteValue (FirstOrderValue(..))
+import SAWCore.Name (ecName, toShortName)
+import SAWCore.Rewriter (emptySimpset)
+import SAWCore.TermNet (merge)
 
 data Prover
   = RME

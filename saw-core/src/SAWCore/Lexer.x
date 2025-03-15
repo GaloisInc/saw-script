@@ -14,7 +14,7 @@
 {-# OPTIONS_GHC -fno-warn-tabs #-}
 
 {- |
-Module      : Verifier.SAW.Lexer
+Module      : SAWCore.Lexer
 Copyright   : Galois, Inc. 2012-2014
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -22,7 +22,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Lexer
+module SAWCore.Lexer
   ( Token(..)
   , LexerMessage(..)
   , LexerState
@@ -39,7 +39,7 @@ import Data.Bits
 import qualified Data.Char as Char
 import Numeric.Natural
 
-import Verifier.SAW.Position
+import SAWCore.Position
 
 }
 

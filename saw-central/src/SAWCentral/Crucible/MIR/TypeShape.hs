@@ -47,7 +47,7 @@ import qualified Mir.Mir as M
 import Mir.TransTy ( tyListToCtx, tyToRepr, tyToReprCont, canInitialize
                    , isUnsized, reprTransparentFieldTy )
 
-import qualified Verifier.SAW.SharedTerm as SAW
+import qualified SAWCore.SharedTerm as SAW
 
 -- | TypeShape is used to classify MIR `Ty`s and their corresponding
 -- CrucibleTypes into a few common cases.  We don't use `Ty` directly because

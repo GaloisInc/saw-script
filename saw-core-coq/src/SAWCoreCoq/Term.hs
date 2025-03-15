@@ -52,10 +52,10 @@ import qualified Data.BitVector.Sized                          as BV
 import qualified Data.Vector                                   as Vector (toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
-import           Verifier.SAW.Recognizer
-import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Term.Pretty
-import           Verifier.SAW.Term.Functor
+import           SAWCore.Recognizer
+import           SAWCore.SharedTerm
+import           SAWCore.Term.Pretty
+import           SAWCore.Term.Functor
 import           SAWCoreCoq.Monad
 import           SAWCoreCoq.SpecialTreatment
 

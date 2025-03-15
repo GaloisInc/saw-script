@@ -39,9 +39,9 @@ import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 import qualified What4.SWord as W4 (SWord(..))
 
-import qualified Verifier.SAW.SharedTerm as SAW
-import qualified Verifier.SAW.Simulator.MonadLazy as SAW
-import qualified Verifier.SAW.Simulator.Value as SAW
+import qualified SAWCore.SharedTerm as SAW
+import qualified SAWCore.Simulator.MonadLazy as SAW
+import qualified SAWCore.Simulator.Value as SAW
 import SAWCoreWhat4.What4 (SValue)
 import qualified SAWCoreWhat4.What4 as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW (baseSCType)

@@ -86,14 +86,14 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Numeric.Natural (Natural)
 
 -- saw-core
-import qualified Verifier.SAW.Recognizer as R
-import qualified Verifier.SAW.Simulator as Sim
-import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.SATQuery
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Simulator.Value
-import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, identBaseName)
+import qualified SAWCore.Recognizer as R
+import qualified SAWCore.Simulator as Sim
+import qualified SAWCore.Simulator.Prims as Prims
+import SAWCore.SATQuery
+import SAWCore.SharedTerm
+import SAWCore.Simulator.Value
+import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
+import SAWCore.TypedAST (FieldName, ModuleMap, toShortName, ctorPrimName, identBaseName)
 
 -- what4
 import qualified What4.Expr.Builder as B

@@ -121,7 +121,7 @@ import Lang.Crucible.Simulator.RegMap
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType)
 
-import Verifier.SAW.SharedTerm
+import SAWCore.SharedTerm
   (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
 import Data.Macaw.Memory(RegionIndex)
 import Data.Macaw.Symbolic

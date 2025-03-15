@@ -7,9 +7,9 @@ module SAWCentral.Crucible.Common.ResolveSetupValue
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 
-import Verifier.SAW.SharedTerm
+import SAWCore.SharedTerm
 
-import qualified Verifier.SAW.Simulator.Concrete as Concrete
+import qualified SAWCore.Simulator.Concrete as Concrete
 
 import SAWCoreWhat4.ReturnTrip
 

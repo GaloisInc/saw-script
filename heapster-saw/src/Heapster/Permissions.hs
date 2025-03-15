@@ -79,15 +79,15 @@ import Data.Parameterized.Pair
 import Prettyprinter as PP
 import Prettyprinter.Render.String (renderString)
 
-import Verifier.SAW.Utils (panic)
+import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
-import Verifier.SAW.SharedTerm hiding (Constant)
-import Verifier.SAW.OpenTerm
+import SAWCore.SharedTerm hiding (Constant)
+import SAWCore.OpenTerm
 import Heapster.NamedMb
 
 import Heapster.CruUtil

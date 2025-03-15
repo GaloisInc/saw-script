@@ -5,7 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module      : Verifier.SAW.UntypedAST
+Module      : SAWCore.UntypedAST
 Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -13,7 +13,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.UntypedAST
+module SAWCore.UntypedAST
   ( Module(..)
   , ModuleName, mkModuleName
   , Decl(..)
@@ -35,7 +35,7 @@ module Verifier.SAW.UntypedAST
   , Sort, mkSort, propSort, sortOf
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
   , badTerm
-  , module Verifier.SAW.Position
+  , module SAWCore.Position
   , moduleName
   , moduleTypedDecls
   , moduleDataDecls
@@ -53,8 +53,8 @@ import qualified Data.Text as Text
 import qualified Language.Haskell.TH.Syntax as TH
 import Numeric.Natural
 
-import Verifier.SAW.Position
-import Verifier.SAW.TypedAST
+import SAWCore.Position
+import SAWCore.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, propSort, sortOf
   , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList

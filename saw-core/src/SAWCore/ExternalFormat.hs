@@ -6,14 +6,14 @@
 {-# LANGUAGE RankNTypes #-}
 
 {- |
-Module      : Verifier.SAW.ExternalFormat
+Module      : SAWCore.ExternalFormat
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-module Verifier.SAW.ExternalFormat (
+module SAWCore.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
@@ -32,9 +32,9 @@ import qualified Data.Vector as V
 import Text.Read (readMaybe)
 import Text.URI
 
-import Verifier.SAW.Name
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
+import SAWCore.Name
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
 
 --------------------------------------------------------------------------------
 -- External text format

@@ -118,15 +118,15 @@ import qualified Data.Text as T
 import qualified Text.URI as URI
 import Data.Type.Equality
 
-import Verifier.SAW.Utils
-import Verifier.SAW.Name
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.OpenTerm
+import SAWCore.Utils
+import SAWCore.Name
+import SAWCore.Term.Functor
+import SAWCore.SharedTerm
+import SAWCore.OpenTerm
 import CryptolSAWCore.TypedTerm
 import CryptolSAWCore.Cryptol (Env)
-import Verifier.SAW.Recognizer
--- import Verifier.SAW.Position
+import SAWCore.Recognizer
+-- import SAWCore.Position
 import CryptolSAWCore.PreludeM
 
 import GHC.Stack

@@ -72,10 +72,10 @@ import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWCentral.Value
 import           CryptolSAWCore.CryptolEnv
-import           Verifier.SAW.OpenTerm
-import           Verifier.SAW.Prelude
-import           Verifier.SAW.Recognizer
-import           Verifier.SAW.SharedTerm as Term
+import           SAWCore.OpenTerm
+import           SAWCore.Prelude
+import           SAWCore.Recognizer
+import           SAWCore.SharedTerm as Term
 import           CryptolSAWCore.TypedTerm
 
 -- | Commonly used things that need to be passed around.

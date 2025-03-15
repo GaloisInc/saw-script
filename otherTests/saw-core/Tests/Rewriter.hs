@@ -13,10 +13,10 @@ module Tests.Rewriter
   ) where
 
 
-import Verifier.SAW.Conversion
-import Verifier.SAW.Prelude
-import Verifier.SAW.Rewriter
-import Verifier.SAW.SharedTerm
+import SAWCore.Conversion
+import SAWCore.Prelude
+import SAWCore.Rewriter
+import SAWCore.SharedTerm
 
 import Test.Tasty
 import Test.Tasty.HUnit

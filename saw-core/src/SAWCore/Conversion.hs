@@ -12,7 +12,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 {- |
-Module      : Verifier.SAW.Conversion
+Module      : SAWCore.Conversion
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -20,7 +20,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Conversion
+module SAWCore.Conversion
   ( (:*:)(..)
   , Net.toPat
   , termToPat
@@ -117,13 +117,13 @@ import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import qualified Verifier.SAW.Prim as Prim
-import Verifier.SAW.Recognizer ((:*:)(..))
-import Verifier.SAW.Prim
-import qualified Verifier.SAW.Recognizer as R
-import qualified Verifier.SAW.TermNet as Net
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Term.Functor
+import qualified SAWCore.Prim as Prim
+import SAWCore.Recognizer ((:*:)(..))
+import SAWCore.Prim
+import qualified SAWCore.Recognizer as R
+import qualified SAWCore.TermNet as Net
+import SAWCore.Utils (panic)
+import SAWCore.Term.Functor
 
 -- | A hack to allow storage of conversions in a term net.
 instance Eq Conversion where
@@ -398,7 +398,7 @@ mkTupleSelector :: Int -> Term -> TermBuilder Term
 mkTupleSelector i t
   | i == 1 = mkTermF (FTermF (PairLeft t))
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
-  | otherwise = panic "Verifier.SAW.Conversion.mkTupleSelector" ["non-positive index:", show i]
+  | otherwise = panic "SAWCore.Conversion.mkTupleSelector" ["non-positive index:", show i]
 
 mkCtor :: PrimName Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
@@ -527,7 +527,7 @@ tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) act
   where
     action (ts, i)
       | i > length ts =
-          panic "Verifier.SAW.Conversion.tupleConversion"
+          panic "SAWCore.Conversion.tupleConversion"
           ["index out of bounds:", show (i, length ts)]
       | otherwise =
           Just (return (ts !! (i - 1)))

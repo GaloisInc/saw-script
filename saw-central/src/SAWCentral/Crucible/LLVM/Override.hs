@@ -118,10 +118,10 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.BitVector.Sized as BV
 
-import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Recognizer
+import           SAWCore.SharedTerm
+import           SAWCore.Recognizer
 import           CryptolSAWCore.TypedTerm
-import           Verifier.SAW.Simulator.TermModel
+import           SAWCore.Simulator.TermModel
 import           SAWCoreWhat4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
 import           SAWCentral.Crucible.Common

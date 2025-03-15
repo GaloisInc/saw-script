@@ -17,9 +17,9 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import GHC.Natural
 
-import Verifier.SAW.Prelude
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Simulator.TermModel
+import SAWCore.Prelude
+import SAWCore.SharedTerm
+import SAWCore.Simulator.TermModel
 
 import Test.Tasty
 import Test.Tasty.HUnit

@@ -75,23 +75,23 @@ import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptol
 import CryptolSAWCore.PreludeM (cryptolMModule, specMModule,
                                       scLoadSpecMModule, scLoadCryptolMModule)
 import CryptolSAWCore.Monadify (defaultMonEnv, monadifyCryptolModule)
-import Verifier.SAW.ExternalFormat(scWriteExternal)
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.Module (emptyModule, moduleDecls)
-import Verifier.SAW.Prelude (preludeModule)
-import Verifier.SAW.Recognizer (asPi)
-import Verifier.SAW.SATQuery
-import Verifier.SAW.SharedTerm as SC
+import SAWCore.ExternalFormat(scWriteExternal)
+import SAWCore.FiniteValue
+import SAWCore.Module (emptyModule, moduleDecls)
+import SAWCore.Prelude (preludeModule)
+import SAWCore.Recognizer (asPi)
+import SAWCore.SATQuery
+import SAWCore.SharedTerm as SC
 import qualified SAWCoreCoq.Coq as Coq
-import Verifier.SAW.TypedAST (mkModuleName, toShortName)
+import SAWCore.TypedAST (mkModuleName, toShortName)
 import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
-import qualified Verifier.SAW.Simulator.Value as Sim
+import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
 import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
 
-import qualified Verifier.SAW.UntypedAST as Un
+import qualified SAWCore.UntypedAST as Un
 
 import SAWCentral.Crucible.Common
 import SAWCentral.Crucible.Common.MethodSpec (ppTypedTermType)

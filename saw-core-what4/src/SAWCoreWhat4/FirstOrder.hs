@@ -37,7 +37,7 @@ import Data.Parameterized.Context hiding (replicate)
 
 import SAWCoreWhat4.PosNat
 
-import Verifier.SAW.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
+import SAWCore.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
 
 import What4.BaseTypes
 import What4.IndexLit
@@ -135,7 +135,7 @@ groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayMapping _) = do
     -- it should be implemented in What4 so What4 never returns
     -- ArrayMapping.
     --
-    -- (See Note [FOVArray] in in saw-core:Verifier.SAW.FiniteValue
+    -- (See Note [FOVArray] in SAWCore.FiniteValue
     -- where FirstOrderValue is defined.)
     ty_idx' <- typeReprToFOT ty_idx
     ty_val' <- typeReprToFOT ty_val

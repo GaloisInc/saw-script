@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Unique
+Module      : SAWCore.Unique
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -7,7 +7,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Unique (getUniqueInt) where
+module SAWCore.Unique (getUniqueInt) where
 
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
