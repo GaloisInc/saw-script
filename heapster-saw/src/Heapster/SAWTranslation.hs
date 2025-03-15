@@ -29,7 +29,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Move brackets to avoid $" #-}
 
-module Verifier.SAW.Heapster.SAWTranslation where
+module Heapster.SAWTranslation where
 
 import Prelude hiding (pi)
 
@@ -79,12 +79,12 @@ import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor hiding (Constant)
 import Verifier.SAW.SharedTerm hiding (Constant)
 
--- import Verifier.SAW.Heapster.GenMonad
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.Implication
-import Verifier.SAW.Heapster.TypedCrucible
-import Verifier.SAW.Heapster.NamedMb
+-- import Heapster.GenMonad
+import Heapster.CruUtil
+import Heapster.Permissions
+import Heapster.Implication
+import Heapster.TypedCrucible
+import Heapster.NamedMb
 
 import GHC.Stack
 

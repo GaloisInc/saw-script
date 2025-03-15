@@ -5,7 +5,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeOperators #-}
-module Verifier.SAW.Heapster.NamedMb where
+module Heapster.NamedMb where
 
 import Data.Binding.Hobbits
 import Data.Binding.Hobbits.MonadBind

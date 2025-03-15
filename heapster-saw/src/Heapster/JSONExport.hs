@@ -8,7 +8,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-orphans #-} -- hobbits instances for Value
-module Verifier.SAW.Heapster.JSONExport
+module Heapster.JSONExport
   (JsonExport, JsonExport1, ppToJson)
   where
 
@@ -30,9 +30,9 @@ import Lang.Crucible.LLVM.DataLayout (EndianForm)
 import Lang.Crucible.Types
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Datatype as TH
-import Verifier.SAW.Heapster.CruUtil ( CruCtx )
-import Verifier.SAW.Heapster.Implication
-import Verifier.SAW.Heapster.Permissions
+import Heapster.CruUtil ( CruCtx )
+import Heapster.Implication
+import Heapster.Permissions
 import Verifier.SAW.Name ( Ident )
 import What4.FunctionName ( FunctionName )
 

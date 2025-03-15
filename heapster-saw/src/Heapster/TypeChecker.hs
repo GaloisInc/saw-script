@@ -12,7 +12,7 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language KindSignatures #-}
 {-# Options_GHC -Wno-unused-foralls #-}
-module Verifier.SAW.Heapster.TypeChecker (
+module Heapster.TypeChecker (
   -- * Checker type
   Tc, startTc,
 
@@ -53,11 +53,11 @@ import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Bytes
 
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Located
-import Verifier.SAW.Heapster.UntypedAST
-import Verifier.SAW.Heapster.ParsedCtx
+import Heapster.Permissions
+import Heapster.CruUtil
+import Heapster.Located
+import Heapster.UntypedAST
+import Heapster.ParsedCtx
 
 ----------------------------------------------------------------------
 -- * Type-checking environment

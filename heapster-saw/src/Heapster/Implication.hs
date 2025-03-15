@@ -26,7 +26,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE BangPatterns #-}
 
-module Verifier.SAW.Heapster.Implication where
+module Heapster.Implication where
 
 import Data.Maybe
 import Data.List
@@ -63,10 +63,10 @@ import Lang.Crucible.LLVM.Bytes
 
 import Data.Binding.Hobbits
 import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.PatternMatchUtil
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.GenMonad
+import Heapster.CruUtil
+import Heapster.PatternMatchUtil
+import Heapster.Permissions
+import Heapster.GenMonad
 
 import GHC.Stack
 import Unsafe.Coerce

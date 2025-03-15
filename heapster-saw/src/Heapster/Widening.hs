@@ -26,7 +26,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE BangPatterns #-}
 
-module Verifier.SAW.Heapster.Widening where
+module Heapster.Widening where
 
 import Data.Maybe
 import Data.List
@@ -46,8 +46,8 @@ import Data.Parameterized.BoolRepr
 import Prettyprinter
 
 import Lang.Crucible.LLVM.MemModel
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Permissions
+import Heapster.CruUtil
+import Heapster.Permissions
 
 import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits

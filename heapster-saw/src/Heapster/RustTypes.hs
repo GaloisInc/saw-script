@@ -26,7 +26,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -- {-# OPTIONS_GHC -freduction-depth=0 #-}
 
-module Verifier.SAW.Heapster.RustTypes where
+module Heapster.RustTypes where
 
 import Prelude hiding (span)
 
@@ -68,8 +68,8 @@ import Lang.Crucible.Types
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.MemModel hiding (Mutability(..))
 
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Permissions
+import Heapster.CruUtil
+import Heapster.Permissions
 
 
 ----------------------------------------------------------------------

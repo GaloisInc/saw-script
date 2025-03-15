@@ -27,7 +27,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-module Verifier.SAW.Heapster.TypedCrucible where
+module Heapster.TypedCrucible where
 
 import Data.Maybe
 import qualified Data.Text as Text
@@ -78,13 +78,13 @@ import Lang.Crucible.Analysis.Fixpoint.Components
 import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.Errors.UndefinedBehavior as UB
 
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.GenMonad
-import Verifier.SAW.Heapster.Implication
-import Verifier.SAW.Heapster.NamePropagation
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.Widening
-import Verifier.SAW.Heapster.NamedMb
+import Heapster.CruUtil
+import Heapster.GenMonad
+import Heapster.Implication
+import Heapster.NamePropagation
+import Heapster.Permissions
+import Heapster.Widening
+import Heapster.NamedMb
 
 import GHC.Stack (HasCallStack)
 
@@ -100,7 +100,7 @@ type NuMatchingExtC ext exprExt =
     NuMatchingAny1 (ExprExtension ext RegWithVal)
 #else
     -- See Note [QuantifiedConstraints + TypeFamilies trick] in
-    -- Verifier.SAW.Heapster.CruUtil
+    -- Heapster.CruUtil
     exprExt ~ ExprExtension ext RegWithVal
   , NuMatchingAny1 exprExt
 #endif

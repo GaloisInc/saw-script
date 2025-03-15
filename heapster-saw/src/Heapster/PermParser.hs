@@ -3,7 +3,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 
-module Verifier.SAW.Heapster.PermParser (
+module Heapster.PermParser (
   parseFunPermString,
   parseParsedCtxString,
   parseCtxString,
@@ -27,23 +27,23 @@ import Data.Parameterized.TraversableF
 
 import Lang.Crucible.Types
 
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.RustTypes
+import Heapster.CruUtil
+import Heapster.Permissions
+import Heapster.RustTypes
 
-import Verifier.SAW.Heapster.Lexer (lexer)
-import Verifier.SAW.Heapster.Located (Pos(..), Located(..))
-import Verifier.SAW.Heapster.Token (Token, describeToken)
-import Verifier.SAW.Heapster.Parser (ParseError(..), parseFunPerm, parseCtx, parseType, parseExpr, parseValuePerms)
-import Verifier.SAW.Heapster.TypeChecker (Tc, TypeError(..), startTc, tcFunPerm, tcCtx, tcType, tcExpr, inParsedCtxM, tcAtomicPerms, tcSortedMbValuePerms, tcValPerm)
-import Verifier.SAW.Heapster.ParsedCtx (ParsedCtx, parsedCtxCtx)
+import Heapster.Lexer (lexer)
+import Heapster.Located (Pos(..), Located(..))
+import Heapster.Token (Token, describeToken)
+import Heapster.Parser (ParseError(..), parseFunPerm, parseCtx, parseType, parseExpr, parseValuePerms)
+import Heapster.TypeChecker (Tc, TypeError(..), startTc, tcFunPerm, tcCtx, tcType, tcExpr, inParsedCtxM, tcAtomicPerms, tcSortedMbValuePerms, tcValPerm)
+import Heapster.ParsedCtx (ParsedCtx, parsedCtxCtx)
 
 ----------------------------------------------------------------------
 -- * Top-level Entrypoints for Parsing Things
 ----------------------------------------------------------------------
 
--- | One of the generated parsers from "Verifier.SAW.Heapster.Parser"
--- which is intended to be used with 'Verifier.SAW.Heapster.Lexer.lexer'
+-- | One of the generated parsers from "Heapster.Parser"
+-- which is intended to be used with 'Heapster.Lexer.lexer'
 type Parser p = [Located Token] -> Either ParseError p
 
 -- | Harness for running the lexer, parser, and type-checker.
