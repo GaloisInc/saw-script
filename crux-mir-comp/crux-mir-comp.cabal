@@ -40,7 +40,7 @@ library
                  -- internal subpackages/sublibraries in the saw tree
                  crucible-mir-comp,
                  saw-core,
-                 saw-core-what4,
+                 saw-script:saw-core-what4,
                  saw-script:cryptol-saw-core,
                  saw-script:saw-central
 
