@@ -3,12 +3,10 @@
 
 module Main where
 
-import Control.Monad
 import Data.Aeson
 import qualified Data.Aeson.Parser as AP
 import Data.Aeson.Types (Parser)
 import qualified Data.Aeson.Types as AE
-import Data.Maybe (isJust)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Foldable (toList)
@@ -22,12 +20,11 @@ import System.Exit (exitFailure)
 import System.Environment (getArgs)
 import Data.Time.Clock
 
-import GHC.IO.Encoding (setLocaleEncoding, utf8)
+import GHC.IO.Encoding (setLocaleEncoding)
 
 import qualified Data.Attoparsec.ByteString as AT
 import qualified Data.ByteString as BS
 import qualified Data.GraphViz as GV
-import qualified Data.GraphViz.Attributes as GV
 import qualified Data.GraphViz.Attributes.Complete as GV
 import qualified Data.GraphViz.Printing as GV
 import qualified Data.GraphViz.Attributes.HTML as HTML
@@ -90,15 +87,15 @@ fmtThm thm = [ GV.shape GV.Trapezium
 
 
 fmtMethod :: Map Integer SummaryNode -> MethodNode -> GV.Attributes
-fmtMethod nodeMap mn = [ GV.Label (GV.HtmlLabel top), GV.Shape GV.PlainText ]
+fmtMethod _nodeMap mn = [ GV.Label (GV.HtmlLabel top), GV.Shape GV.PlainText ]
   where
    top =
      if null subs then
-       HTML.Table (HTML.HTable Nothing [HTML.CellBorder 0] [ HTML.Cells [main] ])
+       HTML.Table (HTML.HTable Nothing [HTML.CellBorder 0] [ HTML.Cells [maincell] ])
      else
-       HTML.Table (HTML.HTable Nothing [HTML.CellBorder 0] [ HTML.Cells [main], HTML.Cells [subsTab]])
+       HTML.Table (HTML.HTable Nothing [HTML.CellBorder 0] [ HTML.Cells [maincell], HTML.Cells [subsTab]])
 
-   main = HTML.LabelCell
+   maincell = HTML.LabelCell
            [ HTML.Title (TL.fromStrict maintt)
            , HTML.HRef "#"
            , HTML.BGColor fillcol
