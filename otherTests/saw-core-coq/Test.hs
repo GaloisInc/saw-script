@@ -6,7 +6,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module      : Test
+Module      : Main
 Copyright   : Galois, Inc. 2019
 License     : BSD3
 Maintainer  : val@galois.com
@@ -14,13 +14,13 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Test where
+module Main where
 
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.Map as Map
 import qualified Data.Text as Text
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 
 -- import qualified Language.Coq.Pretty as Coq
 -- import Verifier.SAW.CryptolEnv
@@ -32,9 +32,13 @@ import qualified Verifier.SAW.UntypedAST as Un
 import Verifier.SAW.Translation.Coq
 
 configuration :: TranslationConfiguration
-configuration = TranslationConfiguration
-  { vectorModule   = "SAWCoreVectorsAsCoqVectors"
-  }
+configuration = TranslationConfiguration {
+    constantRenaming = [],
+    constantSkips = [],
+    monadicTranslation = False,
+    postPreamble = "",
+    vectorModule   = "SAWCoreVectorsAsCoqVectors"
+ }
 
 -- Creating a bunch of terms with no sharing, for testing purposes
 
@@ -64,9 +68,10 @@ aRecordType = do
   unitType <- scUnitType sc
   scRecordType sc [("natField", natType), ("unitField", unitType)]
 
-translate :: Monad m => m Term -> m Doc
-translate term = do
-  translateDeclImports configuration "MyDefinition" <$> term >>= \case
+translate :: Monad m => Term -> Term -> m (Doc ann)
+translate term ty = do
+  let result = translateTermAsDeclImports configuration "MyDefinition" term ty
+  case result of
     Left  e -> error $ show e
     Right r -> return r
 
