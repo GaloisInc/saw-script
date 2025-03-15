@@ -15,10 +15,10 @@ module Main where
 import Data.Binding.Hobbits
 import Data.Binding.Hobbits.NameMap(singleton)
 import Test.Tasty
-import Verifier.SAW.Heapster.Permissions
+import Heapster.Permissions
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.MemModel (LLVMPointerType)
-import Verifier.SAW.Heapster.Implication (proveVarImpl, checkVarImpl)
+import Heapster.Implication (proveVarImpl, checkVarImpl)
 import Test.Tasty.HUnit
 import Lang.Crucible.Types (BVType)
 import GHC.TypeLits

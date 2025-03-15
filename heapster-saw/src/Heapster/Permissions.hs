@@ -25,7 +25,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-module Verifier.SAW.Heapster.Permissions where
+module Heapster.Permissions where
 
 import Prelude hiding (pred)
 
@@ -88,9 +88,9 @@ import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.CFG.Core
 import Verifier.SAW.SharedTerm hiding (Constant)
 import Verifier.SAW.OpenTerm
-import Verifier.SAW.Heapster.NamedMb
+import Heapster.NamedMb
 
-import Verifier.SAW.Heapster.CruUtil
+import Heapster.CruUtil
 
 import GHC.Stack
 import Debug.Trace

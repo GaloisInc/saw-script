@@ -7,7 +7,7 @@
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Verifier.SAW.Heapster.HintExtract ( heapsterRequireName, extractHints ) where
+module Heapster.HintExtract ( heapsterRequireName, extractHints ) where
 
 import Data.String (fromString)
 import Data.Functor.Constant (Constant(..))
@@ -34,11 +34,11 @@ import Lang.Crucible.CFG.Core ( Some(Some)
                               , StmtSeq(..)
                               , Stmt (..), BlockID )
 
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.ParsedCtx
-import Verifier.SAW.Heapster.PatternMatchUtil
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.PermParser
+import Heapster.CruUtil
+import Heapster.ParsedCtx
+import Heapster.PatternMatchUtil
+import Heapster.Permissions
+import Heapster.PermParser
 
 heapsterRequireName :: String
 heapsterRequireName = "heapster.require"

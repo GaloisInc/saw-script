@@ -12,7 +12,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PolyKinds #-}
-module Verifier.SAW.Heapster.IDESupport where
+module Heapster.IDESupport where
 
 import Control.Monad.Reader
   ( MonadReader (ask, local),
@@ -44,18 +44,18 @@ import What4.ProgramLoc
     ProgramLoc (..),
   )
 
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.Implication
-import Verifier.SAW.Heapster.TypedCrucible
-import Verifier.SAW.Heapster.SAWTranslation (SomeTypedCFG (..))
-import Verifier.SAW.Heapster.JSONExport(ppToJson)
+import Heapster.CruUtil
+import Heapster.Permissions
+import Heapster.Implication
+import Heapster.TypedCrucible
+import Heapster.SAWTranslation (SomeTypedCFG (..))
+import Heapster.JSONExport(ppToJson)
 import Data.Type.RList (mapRAssign)
 import Data.Functor.Constant
 import Control.Monad.Writer
 import Data.Binding.Hobbits.NameMap (NameMap)
 import qualified Data.Binding.Hobbits.NameMap as NameMap
-import Verifier.SAW.Heapster.NamedMb
+import Heapster.NamedMb
 
 -- | The entry point for dumping a Heapster environment to a file for IDE
 -- consumption.

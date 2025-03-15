@@ -1,6 +1,6 @@
 {
 {-# Language ViewPatterns #-}
-module Verifier.SAW.Heapster.Parser (
+module Heapster.Parser (
 
   -- * Parser entry points
   parseCtx,
@@ -16,9 +16,9 @@ module Verifier.SAW.Heapster.Parser (
 
 import GHC.Natural
 
-import Verifier.SAW.Heapster.Located
-import Verifier.SAW.Heapster.Token
-import Verifier.SAW.Heapster.UntypedAST
+import Heapster.Located
+import Heapster.Token
+import Heapster.UntypedAST
 
 }
 

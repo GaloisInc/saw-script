@@ -1,6 +1,6 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language GADTs #-}
-module Verifier.SAW.Heapster.NamePropagation where
+module Heapster.NamePropagation where
 
 import Data.Functor.Constant
 import Data.Parameterized.TraversableFC ( FoldableFC(toListFC), FunctorFC(fmapFC) )

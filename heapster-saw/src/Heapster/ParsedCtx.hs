@@ -1,7 +1,7 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language GADTs #-}
 {-# Language TypeOperators #-}
-module Verifier.SAW.Heapster.ParsedCtx where
+module Heapster.ParsedCtx where
 
 import Data.Functor.Constant
 
@@ -13,7 +13,7 @@ import Data.Parameterized.Some (Some(Some))
 
 import Lang.Crucible.Types
 
-import Verifier.SAW.Heapster.CruUtil
+import Heapster.CruUtil
 
 -- | A sequence of variable names and their types
 data ParsedCtx ctx = ParsedCtx {
