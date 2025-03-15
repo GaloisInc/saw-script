@@ -41,8 +41,8 @@ library
 
                  -- internal subpackages in the saw tree
                  saw-core,
-                 saw-core-what4,
                  saw-script:cryptol-saw-core,
+                 saw-script:saw-core-what4,
                  saw-script:saw-central
 
   hs-source-dirs: src

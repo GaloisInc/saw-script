@@ -214,6 +214,49 @@ library saw-core-sbv
 
 
 ------------------------------------------------------------
+-- saw-core-what4
+
+-- SAWCore backend for What4
+--
+-- A backend for symbolically evaluating terms in the SAWCore
+-- intermediate language using the What4 library to generate SMT-Lib.
+library saw-core-what4
+  default-language: Haskell2010
+  visibility: public
+  build-depends:
+
+    -- upstream packages from hackage
+    base >= 4.9,
+    bv-sized >= 1.0.0,
+    containers,
+    indexed-traversable,
+    lens,
+    mtl,
+    panic,
+    reflection,
+    text,
+    transformers,
+    vector,
+
+    -- packages in git submodules
+    parameterized-utils >= 1.0.8 && < 2.2,
+    what4,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
+  hs-source-dirs: saw-core-what4/src
+  exposed-modules:
+     Verifier.SAW.Simulator.What4
+     Verifier.SAW.Simulator.What4.FirstOrder
+     Verifier.SAW.Simulator.What4.PosNat
+     Verifier.SAW.Simulator.What4.Panic
+     Verifier.SAW.Simulator.What4.ReturnTrip
+
+  GHC-options: -Wall -Werror
+
+
+------------------------------------------------------------
 -- saw-central
 
 -- The saw-central library contains the upper-level guts of SAW,
@@ -303,10 +346,10 @@ library saw-central
     , heapster-saw
     , rme
     , saw-core
-    , saw-core-what4
     , saw-script:saw-core-aig
     , saw-script:saw-core-coq
     , saw-script:saw-core-sbv
+    , saw-script:saw-core-what4
     , saw-script:cryptol-saw-core
     , saw-script:saw-version
 
