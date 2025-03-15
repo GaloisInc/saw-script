@@ -729,6 +729,22 @@ executable verif-viewer
     ghc-options: -Wno-redundant-constraints
   GHC-prof-options: -fprof-auto -fprof-cafs
 
+-- extcore-info is a tool for examining the saw-core external dump format.
+executable extcore-info
+  default-language: Haskell2010
+
+  build-depends:
+      -- upstream packages from hackage
+      base >= 4
+
+      -- the saw-core library in the saw tree
+    , saw-core
+
+  hs-source-dirs: saw-tools/extcore-info
+  main-is: Main.hs
+
+  GHC-options: -Wall -Werror -Wcompat
+
 
 ------------------------------------------------------------
 -- test suites

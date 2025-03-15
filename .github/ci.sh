@@ -92,6 +92,7 @@ haddock() {
     saw-script:saw-central
     saw-script
     saw-remote-api
+    saw-script:extcore-info
     saw-script:verif-viewer
     crucible-mir-comp
     crux-mir-comp
