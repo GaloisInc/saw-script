@@ -5,7 +5,7 @@
 {-# Language TypeFamilies #-} -- Equality constraints
 {-# Language TypeOperators #-} -- Equality constraints
 {-# Language RankNTypes #-}
-module Verifier.SAW.Heapster.GenMonad (
+module Heapster.GenMonad (
   -- * Core definitions
   GenStateContT(..), (>>>=), (>>>),
   -- * Continuation operations
@@ -23,7 +23,7 @@ import Control.Monad.State ( MonadState(get, put) )
 import Control.Monad.Trans.Class ( MonadTrans(lift) )
 import Control.Monad.Trans.Reader
 import Data.Proxy
-import Verifier.SAW.Heapster.NamedMb
+import Heapster.NamedMb
 
 -- | The generalized state-continuation monad
 newtype GenStateContT s1 r1 s2 r2 m a = GenStateContT {

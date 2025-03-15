@@ -125,8 +125,8 @@ import qualified Mir.Mir as MIR
 
 import           What4.ProgramLoc (ProgramLoc(..))
 
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.SAWTranslation (ChecksFlag,SomeTypedCFG(..))
+import Heapster.Permissions
+import Heapster.SAWTranslation (ChecksFlag,SomeTypedCFG(..))
 
 -- Values ----------------------------------------------------------------------
 

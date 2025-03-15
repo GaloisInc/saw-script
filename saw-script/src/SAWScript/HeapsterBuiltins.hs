@@ -121,15 +121,15 @@ import SAWCentral.Crucible.LLVM.MethodSpecIR
 
 import Verifier.SAW.Utils (panic)
 import qualified Verifier.SAW.Term.Pretty as Pretty
-import Verifier.SAW.Heapster.CruUtil
-import Verifier.SAW.Heapster.HintExtract
-import Verifier.SAW.Heapster.Permissions
-import Verifier.SAW.Heapster.SAWTranslation
-import Verifier.SAW.Heapster.PermParser
-import Verifier.SAW.Heapster.RustTypes (parseSome3FunPermFromRust, Some3FunPerm(..))
-import Verifier.SAW.Heapster.ParsedCtx
-import qualified Verifier.SAW.Heapster.IDESupport as HIDE
-import Verifier.SAW.Heapster.LLVMGlobalConst
+import Heapster.CruUtil
+import Heapster.HintExtract
+import Heapster.Permissions
+import Heapster.SAWTranslation
+import Heapster.PermParser
+import Heapster.RustTypes (parseSome3FunPermFromRust, Some3FunPerm(..))
+import Heapster.ParsedCtx
+import qualified Heapster.IDESupport as HIDE
+import Heapster.LLVMGlobalConst
 
 import SAWCentral.Prover.Exporter
 import SAWCoreCoq.Coq

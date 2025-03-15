@@ -20,7 +20,7 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Verifier.SAW.Heapster.CruUtil where
+module Heapster.CruUtil where
 
 import Data.Text (Text)
 import qualified Data.Text as Text

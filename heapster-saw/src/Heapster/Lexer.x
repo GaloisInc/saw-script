@@ -1,8 +1,8 @@
 {
-module Verifier.SAW.Heapster.Lexer (lexer) where
+module Heapster.Lexer (lexer) where
 
-import Verifier.SAW.Heapster.Located (Located(..), Pos(..))
-import Verifier.SAW.Heapster.Token (Token(..))
+import Heapster.Located (Located(..), Pos(..))
+import Heapster.Token (Token(..))
 
 }
 

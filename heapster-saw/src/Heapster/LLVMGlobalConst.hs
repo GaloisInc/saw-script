@@ -6,7 +6,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Verifier.SAW.Heapster.LLVMGlobalConst (
+module Heapster.LLVMGlobalConst (
   permEnvAddGlobalConst
   ) where
 
@@ -36,7 +36,7 @@ import Verifier.SAW.Name (mkSafeIdent)
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Heapster.Permissions
+import Heapster.Permissions
 
 
 -- FIXME: move these utilities to OpenTerm.hs

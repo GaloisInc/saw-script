@@ -1,7 +1,7 @@
 {-# Language DeriveTraversable #-}
 {-# Language TemplateHaskell #-}
 {-# Options_GHC -Wno-unused-foralls #-}
-module Verifier.SAW.Heapster.Located
+module Heapster.Located
   ( Located(..),
     Pos(..),
     HasPos(..),

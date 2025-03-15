@@ -306,30 +306,30 @@ library heapster
 
   hs-source-dirs: heapster-saw/src
   exposed-modules:
-    Verifier.SAW.Heapster.CruUtil
-    Verifier.SAW.Heapster.GenMonad
-    Verifier.SAW.Heapster.IDESupport
-    Verifier.SAW.Heapster.HintExtract
-    Verifier.SAW.Heapster.Implication
-    Verifier.SAW.Heapster.Lexer
-    Verifier.SAW.Heapster.LLVMGlobalConst
-    Verifier.SAW.Heapster.Located
-    Verifier.SAW.Heapster.NamedMb
-    Verifier.SAW.Heapster.JSONExport
-    Verifier.SAW.Heapster.ParsedCtx
-    Verifier.SAW.Heapster.Parser
-    Verifier.SAW.Heapster.Permissions
-    Verifier.SAW.Heapster.PermParser
-    Verifier.SAW.Heapster.NamePropagation
-    Verifier.SAW.Heapster.RustTypes
-    Verifier.SAW.Heapster.SAWTranslation
-    Verifier.SAW.Heapster.Token
-    Verifier.SAW.Heapster.TypeChecker
-    Verifier.SAW.Heapster.TypedCrucible
-    Verifier.SAW.Heapster.UntypedAST
-    Verifier.SAW.Heapster.Widening
+    Heapster.CruUtil
+    Heapster.GenMonad
+    Heapster.IDESupport
+    Heapster.HintExtract
+    Heapster.Implication
+    Heapster.Lexer
+    Heapster.LLVMGlobalConst
+    Heapster.Located
+    Heapster.NamedMb
+    Heapster.JSONExport
+    Heapster.ParsedCtx
+    Heapster.Parser
+    Heapster.Permissions
+    Heapster.PermParser
+    Heapster.NamePropagation
+    Heapster.RustTypes
+    Heapster.SAWTranslation
+    Heapster.Token
+    Heapster.TypeChecker
+    Heapster.TypedCrucible
+    Heapster.UntypedAST
+    Heapster.Widening
   other-modules:
-    Verifier.SAW.Heapster.PatternMatchUtil
+    Heapster.PatternMatchUtil
   GHC-options: -Wall
   build-tool-depends:
     alex:alex,

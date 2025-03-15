@@ -1,8 +1,8 @@
-module Verifier.SAW.Heapster.UntypedAST where
+module Heapster.UntypedAST where
 
 import GHC.Natural
 
-import Verifier.SAW.Heapster.Located
+import Heapster.Located
 
 -- | Unchecked function permission
 -- @(context). inputs -o outputs@

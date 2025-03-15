@@ -1,5 +1,5 @@
 -- | Pattern-matching utilities used within @heapster-saw@.
-module Verifier.SAW.Heapster.PatternMatchUtil
+module Heapster.PatternMatchUtil
   ( expectLengthAtLeastOne
   , expectLengthAtLeastTwo
   ) where
