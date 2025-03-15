@@ -510,6 +510,33 @@ executable css
   GHC-options: -Wall -O2 -threaded -rtsopts -pgmlc++
   extra-libraries:      stdc++
 
+-- Verification Summary Viewer
+--
+-- Translate JSON verification summaries into GraphViz format to
+-- produce a graph-based view of a verification effort.
+executable verif-viewer
+  default-language: Haskell2010
+
+  build-depends:
+    -- upstream packages from hackage
+    base >= 4.5,
+    aeson,
+    attoparsec,
+    attoparsec-aeson,
+    bytestring,
+    containers,
+    graphviz,
+    text,
+    time
+
+  hs-source-dirs: saw-tools/verif-viewer
+  main-is: Main.hs
+
+  --GHC-options: -Wall -Werror -Wcompat
+  if impl(ghc == 8.0.1)
+    ghc-options: -Wno-redundant-constraints
+  GHC-prof-options: -fprof-auto -fprof-cafs
+
 
 ------------------------------------------------------------
 -- test suites
