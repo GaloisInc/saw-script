@@ -22,13 +22,16 @@ ListSort__rec : (P : ListSort -> sort 1)  --
              -> (l:ListSort)
              -> P l;
 
+-- Term level lists:
 data List (a : sort 0) : sort 0
   where {
     Nil : List a;
     Cons : a -> List a -> List a;
   }
 
--- The type List1 itself
+-- The type List1 itself [!?]
+-- Type level lists, a 'kind' ... HELP!
+
 data List1 (a:sort 1) : sort 1 where {
   Nil1 : List1 a;
   Cons1 : a -> List1 a -> List1 a;
@@ -41,7 +44,9 @@ data ListSort : sort 1
     LS_Cons : sort 0 -> ListSort -> ListSort;
 }
 
--- The type of a list of functions to a particular output type a
+-- "The type of a list of functions to a particular output type a" [ugh]
+--  - contains types AND contains the functions.
+
 data FunsTo (a:sort 0) : sort 1 where {
   FunsTo_Nil : FunsTo a;
   FunsTo_Cons : (tp:sort 0) -> (tp -> a) -> FunsTo a -> FunsTo a;
@@ -54,6 +59,12 @@ data NTuple : sort 1 where {
 }
 
 -}
+
+-- TODO: understand List1.
+
+test1  : List1 (Nat->Nat) = Nil1 (Nat->Nat);
+test1b : List1 (ListSort) = Nil1 (ListSort);  -- !
+-- test1c : List1 (a : sort 0) = Nil1 a;  -- !
 
 ---- NTuples: useful?? ---------------------------------------------
 
@@ -102,7 +113,7 @@ test = MapRightArrow Bool ls1;
 
 ---- Misc ----------------------------------------------------------
 
-test1 : ListSort = test;
+test2 : ListSort = test;
 
 ---- thinking about eithers ----------------------------------------
 
@@ -141,11 +152,38 @@ eithers_EnumType : (as : sort 0)
 --   - nice to do spacing according to precedence, so don't do THIS
 --       nm:b -> c
 
--- TODO: Bite the bullet, follow Prelude.sawcore and use FunsToIns. Here:
+{-
+ TODO: Bite the bullet, follow Prelude.sawcore and use FunsToIns. Here:
+   - Just feels like poor staging!
+      - FunsTo has both types and functions!
+      - In the definition, FunsTo always used with FunsToIns [dropping functions]
+   - Because you cannot do this:
+      enumTypeA_LS = ...
+      enumTypeA    = Eithers' enumTypeA_LS
+      caseTypeA =
+         eithers' enumTypeA_LS
+          :: (a:sort 0) -> (MapRightArrow a enumTypeA_LS) -> Eithers' enumTypeA_LS -> a;
+-}
 
 -- An eliminator for the Eithers' type
 eithers' : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
 eithers' a =
+  FunsTo__rec
+    a
+    (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
+    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
+    (\ (tp : sort 0)                                     -- type arg
+       (f  : tp -> a)                                     --
+       (es : FunsTo a)                                    --
+       (rec: Eithers' (FunsToIns a es) -> a)              -- P es
+    ->
+       -- P (FunsTo_Cons a tp f es):
+       either tp (Eithers' (FunsToIns a es)) a f rec
+    );
+
+
+eithersLS : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
+eithersLS a =
   FunsTo__rec
     a
     (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
@@ -189,3 +227,22 @@ eithers a =
        ->
        eithers1 tp (FunsToIns a es) a eiths f rec);
 -}
+
+{-
+myFunsTo (a: sort 0) -> FunsTo a;
+myFunsTo = FunsTo_Cons  Bool ?
+            (FunsTo_Cons  UnitType   (\(_:Bool)     -> (0x02 : MyResTy))
+              (FunsTo_Nil a)
+            );
+-}
+
+-- my3Types = LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+
+my3Types : ListSort;
+my3Types = LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+
+
+MySum : sort 0 = Eithers' my3Types;
+
+-- TODO
+-- test2 = eithers' Bool
