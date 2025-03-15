@@ -181,10 +181,10 @@ import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified Data.Parameterized.TraversableFC as Ctx
 
 -- saw-core
-import Verifier.SAW.FiniteValue (ppFirstOrderValue)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Recognizer
+import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.Recognizer
 
 import SAWCoreWhat4.ReturnTrip
 

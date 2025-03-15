@@ -27,10 +27,10 @@ import           Prettyprinter
 
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
-import           Verifier.SAW.Module
-import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Term.Functor
--- import Verifier.SAW.Term.CtxTerm
+import           SAWCore.Module
+import           SAWCore.SharedTerm
+import           SAWCore.Term.Functor
+-- import SAWCore.Term.CtxTerm
 import qualified SAWCoreCoq.CryptolModule    as CMT
 import qualified SAWCoreCoq.SAWModule        as SAWModuleTranslation
 import           SAWCoreCoq.Monad

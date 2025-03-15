@@ -58,11 +58,11 @@ import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.FunctionHandle
-import Verifier.SAW.Term.Functor (Ident)
+import SAWCore.Term.Functor (Ident)
 import Lang.Crucible.LLVM.Bytes
 
 import Data.Binding.Hobbits
-import Verifier.SAW.Utils (panic)
+import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
 import Heapster.CruUtil
 import Heapster.PatternMatchUtil
 import Heapster.Permissions

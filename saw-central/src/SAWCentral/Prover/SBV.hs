@@ -15,8 +15,8 @@ import qualified Data.SBV.Internals as SBV
 
 import qualified SAWCoreSBV.SBV as SBVSim
 
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.SATQuery (SATQuery(..))
+import SAWCore.SharedTerm
+import SAWCore.SATQuery (SATQuery(..))
 
 import SAWCentral.Proof (CEX)
 import SAWCentral.Value

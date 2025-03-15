@@ -44,11 +44,10 @@ import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
 --import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
-import Verifier.SAW.Module (emptyModule)
-import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
-import Verifier.SAW.Term.Functor (mkModuleName)
+import SAWCore.Module (emptyModule)
+import SAWCore.SharedTerm (mkSharedContext, scLoadModule)
+import SAWCore.Term.Functor (mkModuleName)
 import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
-
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWCentral.Crucible.Common as CC (defaultSAWCoreBackendTimeout, PathSatSolver(..))

@@ -120,9 +120,9 @@ import qualified What4.Config as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
-import Verifier.SAW.FiniteValue (ppFirstOrderValue)
-import Verifier.SAW.Name (toShortName)
-import Verifier.SAW.SharedTerm
+import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.Name (toShortName)
+import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 

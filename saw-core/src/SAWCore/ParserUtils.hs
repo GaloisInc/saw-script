@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
-Module      : Verifier.SAW.ParserUtils
+Module      : SAWCore.ParserUtils
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -11,8 +11,8 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.ParserUtils
- ( module Verifier.SAW.TypedAST
+module SAWCore.ParserUtils
+ ( module SAWCore.TypedAST
    -- * Parser utilities.
  , readModuleFromFile
    -- * Template haskell utilities.
@@ -41,11 +41,11 @@ import Language.Haskell.TH.Syntax (qAddDependentFile)
 import System.Directory
 import qualified Language.Haskell.TH.Syntax as TH (lift)
 
-import qualified Verifier.SAW.UntypedAST as Un
-import qualified Verifier.SAW.Grammar as Un
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Typechecker (tcInsertModule)
+import qualified SAWCore.UntypedAST as Un
+import qualified SAWCore.Grammar as Un
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.Typechecker (tcInsertModule)
 
 -- | Parse an untyped module declaration from a (lazy) Text
 readModule :: FilePath -> FilePath -> TL.Text -> Un.Module

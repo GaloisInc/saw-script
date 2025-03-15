@@ -42,11 +42,11 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 
-import Verifier.SAW.SharedTerm
+import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
 
-import qualified Verifier.SAW.Prim as Prim
-import qualified Verifier.SAW.Simulator.Concrete as Concrete
+import qualified SAWCore.Prim as Prim
+import qualified SAWCore.Simulator.Concrete as Concrete
 
 import SAWCoreWhat4.ReturnTrip
 

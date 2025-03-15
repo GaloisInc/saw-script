@@ -44,11 +44,11 @@ import GHC.Generics
 import Prettyprinter
 import Data.Text (Text, unpack)
 
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
-import Verifier.SAW.Term.Pretty
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer hiding ((:*:))
+import SAWCore.Term.Functor
+import SAWCore.Term.CtxTerm (MonadTerm(..))
+import SAWCore.Term.Pretty
+import SAWCore.SharedTerm
+import SAWCore.Recognizer hiding ((:*:))
 import CryptolSAWCore.Monadify
 
 
@@ -442,8 +442,8 @@ deriving instance TermLike Comp
 -- have the prefix @pretty@ (e.g. 'prettyInCtx', 'prettyTermApp') and
 -- functions which return something of type 'SawDoc' have the prefix @pp@
 -- (e.g. 'ppInCtx', 'ppTermAppInCtx'). This latter convention is consistent with
--- the rest of saw-script (e.g. 'ppTerm' defined in @Verifier.SAW.Term.Pretty@,
--- 'ppFirstOrderValue' defined in @Verifier.SAW.FiniteValue@).
+-- the rest of saw-script (e.g. 'ppTerm' defined in @SAWCore.Term.Pretty@,
+-- 'ppFirstOrderValue' defined in @SAWCore.FiniteValue@).
 newtype PPInCtxM a = PPInCtxM (Reader (PPOpts, [LocalName]) a)
                    deriving newtype (Functor, Applicative, Monad,
                                      MonadReader (PPOpts, [LocalName]))

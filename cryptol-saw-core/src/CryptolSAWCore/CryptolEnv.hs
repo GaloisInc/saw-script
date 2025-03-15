@@ -61,9 +61,9 @@ import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
 import CryptolSAWCore.Panic
-import Verifier.SAW.Name (ecName)
-import Verifier.SAW.Recognizer (asConstant)
-import Verifier.SAW.SharedTerm (NameInfo, SharedContext, Term, incVars)
+import SAWCore.Name (ecName)
+import SAWCore.Recognizer (asConstant)
+import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars)
 
 import qualified CryptolSAWCore.Cryptol as C
 

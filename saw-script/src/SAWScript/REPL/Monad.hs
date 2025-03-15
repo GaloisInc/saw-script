@@ -87,7 +87,7 @@ import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
-import Verifier.SAW.SharedTerm (Term)
+import SAWCore.SharedTerm (Term)
 import CryptolSAWCore.CryptolEnv
 import qualified Data.AIG as AIG
 import qualified Data.AIG.CompactGraph as AIG
@@ -104,7 +104,7 @@ import SAWCentral.Value
   ( AIGProxy(..), mergeLocalEnv, IsValue, Value
   , ProofScript(..), showsProofResult, toValue
   )
-import Verifier.SAW (SharedContext)
+import SAWCore.SAWCore (SharedContext)
 
 deriving instance Typeable AIG.Proxy
 

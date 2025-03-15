@@ -20,7 +20,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.Ref ( C )
 import Test.Tasty
 import Test.Tasty.HUnit
-import Verifier.SAW.Cache
+import SAWCore.Cache
 
 
 cacheTests :: [TestTree]

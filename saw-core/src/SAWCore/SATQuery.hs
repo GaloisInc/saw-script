@@ -1,4 +1,4 @@
-module Verifier.SAW.SATQuery
+module SAWCore.SATQuery
 ( SATQuery(..)
 , SATResult(..)
 , SATAssert(..)
@@ -10,9 +10,9 @@ import Data.Map (Map)
 import Data.Set (Set)
 import Data.Foldable (foldrM)
 
-import Verifier.SAW.Name
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.SharedTerm
+import SAWCore.Name
+import SAWCore.FiniteValue
+import SAWCore.SharedTerm
 
 -- | This datatype represents a satisfiability query that might
 --   be dispatched to a solver.  It carries a series of assertions

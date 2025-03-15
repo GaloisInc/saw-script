@@ -32,10 +32,10 @@ import Lang.Crucible.LLVM.DataLayout
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.PrettyPrint
 
-import Verifier.SAW.Name (mkSafeIdent)
-import Verifier.SAW.OpenTerm
-import Verifier.SAW.Term.Functor (ModuleName)
-import Verifier.SAW.SharedTerm
+import SAWCore.Name (mkSafeIdent)
+import SAWCore.OpenTerm
+import SAWCore.Term.Functor (ModuleName)
+import SAWCore.SharedTerm
 import Heapster.Permissions
 
 

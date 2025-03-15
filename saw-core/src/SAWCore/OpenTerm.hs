@@ -8,7 +8,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 {- |
-Module      : Verifier.SAW.OpenTerm
+Module      : SAWCore.OpenTerm
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Stability   : experimental
@@ -50,7 +50,7 @@ by running its underlying 'IO' computation to build and type-check the resulting
 SAW core 'Term'.
 -}
 
-module Verifier.SAW.OpenTerm (
+module SAWCore.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeNormOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
@@ -115,13 +115,13 @@ import Numeric.Natural
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.SCTypeCheck
-import Verifier.SAW.Module
-import Verifier.SAW.Recognizer
-import Verifier.SAW.Utils
+import SAWCore.Term.Functor
+import SAWCore.Term.Pretty
+import SAWCore.SharedTerm
+import SAWCore.SCTypeCheck
+import SAWCore.Module
+import SAWCore.Recognizer
+import SAWCore.Utils
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type

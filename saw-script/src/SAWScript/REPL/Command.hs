@@ -30,7 +30,7 @@ module SAWScript.REPL.Command (
   --, moduleCmdResult
   ) where
 
---import Verifier.SAW.SharedTerm (SharedContext)
+--import SAWCore.SharedTerm (SharedContext)
 
 
 import SAWScript.REPL.Monad

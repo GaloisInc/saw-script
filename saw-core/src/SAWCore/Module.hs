@@ -11,7 +11,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 {- |
-Module      : Verifier.SAW.Module
+Module      : SAWCore.Module
 Copyright   : Galois, Inc. 2012-2017
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -19,7 +19,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Module
+module SAWCore.Module
   ( -- * Data types and definitions.
     DefQualifier(..)
   , Def(..)
@@ -90,10 +90,10 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 import Prelude hiding (all, foldr, sum)
 
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty
-import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Utils (internalError)
+import SAWCore.Term.Functor
+import SAWCore.Term.Pretty
+import SAWCore.Term.CtxTerm
+import SAWCore.Utils (internalError)
 
 -- Definitions -----------------------------------------------------------------
 

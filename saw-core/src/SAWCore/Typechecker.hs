@@ -17,7 +17,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
-Module      : Verifier.SAW.Typechecker
+Module      : SAWCore.Typechecker
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -25,7 +25,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Typechecker
+module SAWCore.Typechecker
   ( inferCompleteTerm
   , tcInsertModule
   ) where
@@ -41,17 +41,17 @@ import qualified Data.Vector as V
 
 import Prettyprinter hiding (Doc)
 
-import Verifier.SAW.Utils (internalError)
+import SAWCore.Utils (internalError)
 
-import Verifier.SAW.Module
-import Verifier.SAW.Position
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Term.Pretty (SawDoc)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
-import Verifier.SAW.SCTypeCheck
-import qualified Verifier.SAW.UntypedAST as Un
+import SAWCore.Module
+import SAWCore.Position
+import SAWCore.Term.Functor
+import SAWCore.Term.CtxTerm
+import SAWCore.Term.Pretty (SawDoc)
+import SAWCore.SharedTerm
+import SAWCore.Recognizer
+import SAWCore.SCTypeCheck
+import qualified SAWCore.UntypedAST as Un
 
 import Debug.Trace
 

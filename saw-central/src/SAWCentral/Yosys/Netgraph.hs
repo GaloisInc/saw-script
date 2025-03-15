@@ -32,8 +32,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Graph as Graph
 
-import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.Name as SC
+import qualified SAWCore.SharedTerm as SC
+import qualified SAWCore.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C

@@ -37,7 +37,7 @@ import CryptolSAWCore.CryptolEnv
       meSolverConfig,
       translateExpr,
       CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
-import Verifier.SAW.SharedTerm (SharedContext)
+import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 
 import qualified Argo

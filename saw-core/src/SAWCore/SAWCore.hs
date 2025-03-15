@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW
+Module      : SAWCore.SAWCore
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -9,14 +9,14 @@ Portability : non-portable (language extensions)
 
 {-# LANGUAGE TemplateHaskell #-}
 
-module Verifier.SAW
-  ( module Verifier.SAW.SharedTerm
-  , module Verifier.SAW.ExternalFormat
+module SAWCore.SAWCore
+  ( module SAWCore.SharedTerm
+  , module SAWCore.ExternalFormat
   , Module
   , preludeModule
   , scLoadPreludeModule
   ) where
 
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Prelude
-import Verifier.SAW.ExternalFormat
+import SAWCore.SharedTerm
+import SAWCore.Prelude
+import SAWCore.ExternalFormat

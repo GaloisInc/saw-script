@@ -30,8 +30,8 @@ import qualified Data.Text as Text
 import Data.Traversable (mapM)
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.TypedAST
-import Verifier.SAW.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.SharedTerm
 import qualified SAWCentral.SBVModel as SBV
 import SAWCentral.Options
 

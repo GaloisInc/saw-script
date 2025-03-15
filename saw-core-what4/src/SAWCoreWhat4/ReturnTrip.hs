@@ -61,9 +61,9 @@ import qualified What4.Expr.WeightedSum as WSum
 import qualified What4.SemiRing as B
 import           What4.Symbol
 
-import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.TypedAST as SC
-import           Verifier.SAW.Utils (panic)
+import qualified SAWCore.SharedTerm as SC
+import qualified SAWCore.TypedAST as SC
+import           SAWCore.Utils (panic) -- XXX why is this using another library's panic?
 
 data SAWCoreState n
   = SAWCoreState

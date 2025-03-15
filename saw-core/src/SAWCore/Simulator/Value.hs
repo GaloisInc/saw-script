@@ -8,7 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.Value
+Module      : SAWCore.Simulator.Value
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -16,9 +16,9 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.Value
-       ( module Verifier.SAW.Simulator.Value
-       , module Verifier.SAW.Simulator.MonadLazy
+module SAWCore.Simulator.Value
+       ( module SAWCore.Simulator.Value
+       , module SAWCore.Simulator.MonadLazy
        ) where
 
 import Prelude hiding (mapM)
@@ -34,13 +34,13 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
-import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType(..))
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Term.Pretty
+import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.Utils (panic)
+import SAWCore.Term.Pretty
 
-import Verifier.SAW.Simulator.MonadLazy
+import SAWCore.Simulator.MonadLazy
 
 ------------------------------------------------------------
 -- Values and Thunks
@@ -243,11 +243,11 @@ vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
-valPairLeft v = panic "Verifier.SAW.Simulator.Value.valPairLeft" ["Not a pair value:", show v]
+valPairLeft v = panic "SAWCore.Simulator.Value.valPairLeft" ["Not a pair value:", show v]
 
 valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairRight (VPair _ t2) = force t2
-valPairRight v = panic "Verifier.SAW.Simulator.Value.valPairRight" ["Not a pair value:", show v]
+valPairRight v = panic "SAWCore.Simulator.Value.valPairRight" ["Not a pair value:", show v]
 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
@@ -256,17 +256,17 @@ valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldNam
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
 valRecordProj v@(VRecordValue _) fld =
-  panic "Verifier.SAW.Simulator.Value.valRecordProj"
+  panic "SAWCore.Simulator.Value.valRecordProj"
   ["Record field not found:", show fld, "in value:", show v]
 valRecordProj v _ =
-  panic "Verifier.SAW.Simulator.Value.valRecordProj"
+  panic "SAWCore.Simulator.Value.valRecordProj"
   ["Not a record value:", show v]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun _ f) x = f x
 apply (TValue (VPiType _ _ body)) x = TValue <$> applyPiBody body x
 
-apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
+apply v _x = panic "SAWCore.Simulator.Value.apply" ["Not a function value:", show v]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
 applyAll = foldM apply
