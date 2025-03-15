@@ -182,6 +182,7 @@ jobs:
             integration_tests
             test-sawcore
             cryptol-saw-core-tc-test
+            saw-core-coq-tests
             prover_tests
           dest: dist-tests
 
