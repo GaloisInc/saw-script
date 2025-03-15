@@ -47,7 +47,7 @@ import qualified Verifier.SAW.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Verifier.SAW.Simulator.Value as Sim
-import qualified Verifier.SAW.Simulator.What4 as SimW4
+import qualified SAWCoreWhat4.What4 as SimW4
 
 import qualified What4.Interface as W4
 import qualified What4.Symbol as W4

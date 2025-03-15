@@ -42,9 +42,9 @@ import qualified What4.SWord as W4 (SWord(..))
 import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Simulator.MonadLazy as SAW
 import qualified Verifier.SAW.Simulator.Value as SAW
-import Verifier.SAW.Simulator.What4 (SValue)
-import qualified Verifier.SAW.Simulator.What4 as SAW
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW (baseSCType)
+import SAWCoreWhat4.What4 (SValue)
+import qualified SAWCoreWhat4.What4 as SAW
+import qualified SAWCoreWhat4.ReturnTrip as SAW (baseSCType)
 
 import SAWCentral.Crucible.MIR.TypeShape
 

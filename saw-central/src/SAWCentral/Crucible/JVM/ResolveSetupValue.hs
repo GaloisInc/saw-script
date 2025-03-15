@@ -48,7 +48,7 @@ import CryptolSAWCore.TypedTerm
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 -- crucible
 

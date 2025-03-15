@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------
 -- |
--- Module           : Verifier.SAW.Simulator.What4.ReturnTrip
+-- Module           : SAWCoreWhat4.ReturnTrip
 -- Description      : Translation from What4 back to SawCore
 -- Copyright        : (c) Galois, Inc 2014-2021
 -- License          : BSD3
@@ -19,7 +19,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Verifier.SAW.Simulator.What4.ReturnTrip
+module SAWCoreWhat4.ReturnTrip
   ( newSAWCoreState
   , SAWCoreState(..)
   , SAWExpr(..)

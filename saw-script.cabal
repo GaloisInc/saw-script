@@ -247,11 +247,11 @@ library saw-core-what4
 
   hs-source-dirs: saw-core-what4/src
   exposed-modules:
-     Verifier.SAW.Simulator.What4
-     Verifier.SAW.Simulator.What4.FirstOrder
-     Verifier.SAW.Simulator.What4.PosNat
-     Verifier.SAW.Simulator.What4.Panic
-     Verifier.SAW.Simulator.What4.ReturnTrip
+     SAWCoreWhat4.What4
+     SAWCoreWhat4.FirstOrder
+     SAWCoreWhat4.PosNat
+     SAWCoreWhat4.Panic
+     SAWCoreWhat4.ReturnTrip
 
   GHC-options: -Wall -Werror
 

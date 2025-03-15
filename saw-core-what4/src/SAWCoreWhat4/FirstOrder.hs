@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------
 -- |
--- Module      : Verifier.SAW.Simulator.What4.FirstOrder
+-- Module      : SAWCoreWhat4.FirstOrder
 -- Copyright   : Galois, Inc. 2012-2015
 -- License     : BSD3
 -- Maintainer  : sweirich@galois.com
@@ -10,7 +10,7 @@
 -- Connect What4's 'BaseType' with saw-core's 'FirstOrderType'
 -- (both types and values of Base/FirstOrder type)
 -- TODO NOTE: support for tuples, arrays and records is not complete
--- but is also unused in Verifier.SAW.Simulator.What4
+-- but is also unused in SAWCoreWhat4.What4
 ------------------------------------------------------------------------
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
@@ -21,7 +21,7 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Verifier.SAW.Simulator.What4.FirstOrder
+module SAWCoreWhat4.FirstOrder
   (
     fotToBaseType,
     typeReprToFOT,
@@ -35,7 +35,7 @@ import Data.Parameterized.TraversableFC (FoldableFC(..))
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context hiding (replicate)
 
-import Verifier.SAW.Simulator.What4.PosNat
+import SAWCoreWhat4.PosNat
 
 import Verifier.SAW.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
 

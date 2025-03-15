@@ -87,9 +87,9 @@ import Verifier.SAW.TypedAST (mkModuleName, toShortName)
 import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
-import qualified Verifier.SAW.Simulator.What4 as W4Sim
+import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
-import qualified Verifier.SAW.Simulator.What4 as W
+import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
 
 import qualified Verifier.SAW.UntypedAST as Un
 

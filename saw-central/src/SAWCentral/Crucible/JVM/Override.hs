@@ -96,7 +96,7 @@ import           Data.Parameterized.Some (Some(Some))
 import           Verifier.SAW.SharedTerm
 import           CryptolSAWCore.TypedTerm
 
-import           Verifier.SAW.Simulator.What4.ReturnTrip (toSC)
+import           SAWCoreWhat4.ReturnTrip (toSC)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.Cryptol as Cryptol

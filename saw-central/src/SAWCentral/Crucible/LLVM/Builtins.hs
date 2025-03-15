@@ -186,7 +186,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 -- cryptol-saw-core
 import CryptolSAWCore.TypedTerm

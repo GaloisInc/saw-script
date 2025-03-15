@@ -98,7 +98,7 @@ import qualified CryptolSAWCore.CryptolEnv as CEnv
 import qualified SAWCoreSBV.SBV as SBVSim
 
 -- saw-core-what4
-import qualified Verifier.SAW.Simulator.What4 as W4Sim
+import qualified SAWCoreWhat4.What4 as W4Sim
 
 -- sbv
 import qualified Data.SBV.Dynamic as SBV

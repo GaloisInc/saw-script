@@ -48,7 +48,7 @@ import Lang.Crucible.Types
 import qualified Verifier.SAW.Prelude as SAW
 import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
 import qualified Verifier.SAW.SharedTerm as SAW
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
+import qualified SAWCoreWhat4.ReturnTrip as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS

@@ -173,8 +173,8 @@ import SAWCentral.Prover.SolverStats
 import qualified SAWCentral.MRSolver.Evidence as MRSolver
 import SAWCentral.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.TermModel as TM
-import qualified Verifier.SAW.Simulator.What4 as W4Sim
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
+import qualified SAWCoreWhat4.What4 as W4Sim
+import qualified SAWCoreWhat4.ReturnTrip as W4Sim
 import SAWCentral.Panic(panic)
 
 -- | A proposition is a saw-core type of type `Prop`.

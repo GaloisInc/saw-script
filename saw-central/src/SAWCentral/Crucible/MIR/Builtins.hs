@@ -123,7 +123,7 @@ import qualified What4.ProgramLoc as W4
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Builtins (ghost_value)

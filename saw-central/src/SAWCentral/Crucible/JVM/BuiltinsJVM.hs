@@ -70,7 +70,7 @@ import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
 import CryptolSAWCore.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(..))
 
 -- saw-core-what4
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 -- saw-script
 import SAWCentral.Value

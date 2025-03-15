@@ -11,7 +11,7 @@ import Verifier.SAW.SharedTerm
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 import SAWCentral.Crucible.Common
 
