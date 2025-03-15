@@ -159,6 +159,7 @@ library saw-core-coq
 -- And-Inverter Graphs (AIGs).
 
 library saw-core-aig
+  default-language: Haskell2010
   build-depends:
 
     -- upstream packages from hackage
@@ -179,6 +180,37 @@ library saw-core-aig
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
+
+
+------------------------------------------------------------
+-- saw-core-sbv
+
+-- SAWCore backend for SBV
+--
+-- A backend for symbolically evaluating terms in the SAWCore
+-- intermediate language using the SBV library to generate SMT-Lib.
+library saw-core-sbv
+  default-language: Haskell2010
+  build-depends:
+
+    -- upstream packages from hackage
+    base == 4.*,
+    containers,
+    lens,
+    mtl,
+    sbv >= 9.1 && < 10.11,
+    text,
+    transformers,
+    vector,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
+  hs-source-dirs: saw-core-sbv/src
+  exposed-modules:
+     Verifier.SAW.Simulator.SBV
+     Verifier.SAW.Simulator.SBV.SWord
+  GHC-options: -Wall -Werror -Wcompat
 
 
 ------------------------------------------------------------
@@ -271,10 +303,10 @@ library saw-central
     , heapster-saw
     , rme
     , saw-core
-    , saw-core-sbv
     , saw-core-what4
     , saw-script:saw-core-aig
     , saw-script:saw-core-coq
+    , saw-script:saw-core-sbv
     , saw-script:cryptol-saw-core
     , saw-script:saw-version
 
