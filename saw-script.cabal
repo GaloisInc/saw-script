@@ -205,10 +205,10 @@ library saw-core-sbv
     -- internal subpackages in the saw tree
     saw-core
 
-  hs-source-dirs: saw-core-sbv/src
+  hs-source-dirs: saw-core-sbv
   exposed-modules:
-     Verifier.SAW.Simulator.SBV
-     Verifier.SAW.Simulator.SBV.SWord
+     SAWCoreSBV.SBV
+     SAWCoreSBV.SWord
   GHC-options: -Wall -Werror -Wcompat
 
 
