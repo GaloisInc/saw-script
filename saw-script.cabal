@@ -383,9 +383,9 @@ test-suite saw-core-coq-tests
 
   build-depends:
     base,
-    ansi-wl-pprint,
     containers,
     mtl,
+    prettyprinter,
     saw-core,
     saw-core-coq,
     text
