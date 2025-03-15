@@ -77,8 +77,8 @@ import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import CryptolSAWCore.Cryptol (importType, emptyEnv)
 import Verifier.SAW.Name
 import CryptolSAWCore.TypedTerm
-import Verifier.SAW.Simulator.What4
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.What4
+import SAWCoreWhat4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState, HasSymInterface(..))

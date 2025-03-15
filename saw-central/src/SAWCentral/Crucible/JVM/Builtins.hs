@@ -113,7 +113,7 @@ import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
 import CryptolSAWCore.TypedTerm
 
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Exceptions

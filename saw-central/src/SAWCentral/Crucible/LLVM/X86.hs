@@ -78,7 +78,7 @@ import Verifier.SAW.SharedTerm
 import CryptolSAWCore.TypedTerm
 import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof

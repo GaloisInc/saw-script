@@ -31,8 +31,8 @@ import           What4.Interface
 import           What4.Expr.GroundEval
 import           What4.Expr.VarIdentification
 import           What4.ProblemFeatures
-import qualified Verifier.SAW.Simulator.What4 as W
-import           Verifier.SAW.Simulator.What4.FirstOrder
+import qualified SAWCoreWhat4.What4 as W
+import           SAWCoreWhat4.FirstOrder
 import qualified What4.Expr.Builder as B
 
 

@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------
 -- |
--- Module      : Verifier.SAW.Simulator.What4.PosNat
+-- Module      : SAWCoreWhat4.PosNat
 -- Copyright   : Galois, Inc. 2018
 -- License     : BSD3
 -- Maintainer  : sweirich@galois.com
@@ -39,7 +39,7 @@
 -- to allow 'WithKnownNat'
 {-# OPTIONS_GHC -Wno-warnings-deprecations #-}
 
-module Verifier.SAW.Simulator.What4.PosNat where
+module SAWCoreWhat4.PosNat where
 -- TODO: find the right place for this code
 
 import GHC.TypeNats (KnownNat, Nat)

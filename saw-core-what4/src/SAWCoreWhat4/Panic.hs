@@ -1,7 +1,7 @@
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Verifier.SAW.Simulator.What4.Panic
+module SAWCoreWhat4.Panic
   ( panic
   ) where
 
