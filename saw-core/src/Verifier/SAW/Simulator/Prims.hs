@@ -950,7 +950,7 @@ splitOp bp =
     VWord xw ->
       let f i = (ready . VWord) <$> bpBvSlice bp (i*n) n xw
       in lift (VVector <$> V.generateM m f)
-    _ -> throwE "Verifier.SAW.Simulator.SBV.splitOp"
+    _ -> throwE "Verifier.SAW.Simulator.Prims.splitOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: (VMonadLazy l, Show (Extra l)) => Unpack l -> Prim l

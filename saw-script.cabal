@@ -208,8 +208,8 @@ library saw-core-sbv
 
   hs-source-dirs: saw-core-sbv/src
   exposed-modules:
-     Verifier.SAW.Simulator.SBV
-     Verifier.SAW.Simulator.SBV.SWord
+     SAWCoreSBV.SBV
+     SAWCoreSBV.SWord
   GHC-options: -Wall -Werror -Wcompat
 
 

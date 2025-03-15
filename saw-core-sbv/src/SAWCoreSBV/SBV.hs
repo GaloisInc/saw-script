@@ -17,14 +17,14 @@
 {-# LANGUAGE EmptyDataDecls #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.SBV
+Module      : SAWCoreSBV.SBV
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-module Verifier.SAW.Simulator.SBV
+module SAWCoreSBV.SBV
   ( sbvSATQuery
   , SValue
   , Labeler(..)
@@ -33,7 +33,7 @@ module Verifier.SAW.Simulator.SBV
   , toWord
   , toBool
   , getLabels
-  , module Verifier.SAW.Simulator.SBV.SWord
+  , module SAWCoreSBV.SWord
   ) where
 
 import Data.SBV.Dynamic
@@ -41,7 +41,7 @@ import Data.SBV.Dynamic
 import Data.SBV.Internals (UICodeKind(..))
 #endif
 
-import Verifier.SAW.Simulator.SBV.SWord
+import SAWCoreSBV.SWord
 
 import Control.Lens ((<&>))
 
@@ -248,7 +248,7 @@ toBool sv = error $ unwords ["toBool failed:", show sv]
 toWord :: SValue -> IO SWord
 toWord (VWord w) = return w
 toWord (VVector vv) = symFromBits <$> traverse (fmap toBool . force) vv
-toWord x = fail $ unwords ["Verifier.SAW.Simulator.SBV.toWord", show x]
+toWord x = fail $ unwords ["SAWCoreSBV.SBV.toWord", show x]
 
 toMaybeWord :: SValue -> IO (Maybe SWord)
 toMaybeWord (VWord w) = return (Just w)
@@ -372,7 +372,7 @@ bvShiftOp bvOp natOp =
       VNat i | j < toInteger (maxBound :: Int) -> return (vWord (natOp x (fromInteger j)))
         where j = toInteger i `min` toInteger (intSizeOf x)
       VBVToNat _ v -> fmap (vWord . bvOp x) (toWord v)
-      _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
+      _        -> error $ unwords ["SAWCoreSBV.SBV.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShLOp :: SPrim

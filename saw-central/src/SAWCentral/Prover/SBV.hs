@@ -13,7 +13,7 @@ import           Control.Monad
 import qualified Data.SBV.Dynamic as SBV
 import qualified Data.SBV.Internals as SBV
 
-import qualified Verifier.SAW.Simulator.SBV as SBVSim
+import qualified SAWCoreSBV.SBV as SBVSim
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SATQuery (SATQuery(..))

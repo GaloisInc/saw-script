@@ -8,7 +8,7 @@
 -- Portability : non-portable (language extensions)
 --
 -- A symbolic simulator for saw-core terms using What4.
--- (This module is derived from Verifier.SAW.Simulator.SBV)
+-- (This module is derived from SAWCoreSBV.SBV)
 ------------------------------------------------------------------------
 
 {-# LANGUAGE CPP #-}
