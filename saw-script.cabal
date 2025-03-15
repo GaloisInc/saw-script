@@ -757,6 +757,44 @@ test-suite integration_tests
 
   build-tool-depends: saw-script:saw
 
+-- There's a saw-core test suite.
+test-suite test-sawcore
+  type: exitcode-stdio-1.0
+  default-language: Haskell2010
+
+  build-depends:
+      -- upstream packages from hackage
+      base >= 4
+    , containers
+    , data-ref
+    , hashable
+    , lens
+    , mtl
+    , QuickCheck >= 2.7
+    , tagged
+    , tasty
+    , tasty-ant-xml >= 1.1.0
+    , tasty-hunit
+    , tasty-quickcheck
+    , time
+    , unordered-containers
+    , vector
+
+      -- the saw-core library in the saw tree
+    , saw-core
+
+  main-is: Tests.hs
+  hs-source-dirs: otherTests/saw-core
+  other-modules:
+    Tests.CacheTests
+    Tests.Functor
+    Tests.Parser
+    Tests.Rewriter
+    Tests.SharedTerm
+    Tests.Simulator
+
+  GHC-options: -Wall -Werror -Wcompat
+
 -- The cryptol-saw-core library has its own small test suite.
 test-suite cryptol-saw-core-tc-test
   type: exitcode-stdio-1.0

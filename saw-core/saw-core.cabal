@@ -117,41 +117,6 @@ library
     ImplicitParams
     ViewPatterns
 
-test-suite test-sawcore
-  type: exitcode-stdio-1.0
-  GHC-options: -Wall -Werror -Wcompat
-  main-is: Tests.hs
-  hs-source-dirs: tests/src
-  build-depends:
-
-      -- upstream packages from hackage
-      base >= 4
-    , containers
-    , data-ref
-    , hashable
-    , lens
-    , mtl
-    , QuickCheck >= 2.7
-    , tagged
-    , tasty
-    , tasty-ant-xml >= 1.1.0
-    , tasty-hunit
-    , tasty-quickcheck
-    , time
-    , unordered-containers
-    , vector
-
-      -- this package's own library
-    , saw-core
-
-  other-modules:
-    Tests.CacheTests
-    Tests.Functor
-    Tests.Parser
-    Tests.Rewriter
-    Tests.SharedTerm
-    Tests.Simulator
-
 executable extcore-info
   main-is: extcore-info.hs
   hs-source-dirs: tools
