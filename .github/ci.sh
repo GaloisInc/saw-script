@@ -86,7 +86,7 @@ haddock() {
     saw-script:cryptol-saw-core
     saw-core-what4
     saw-core-sbv
-    saw-core-aig
+    saw-script:saw-core-aig
     saw-script:saw-core-coq
     heapster-saw
     saw-script:saw-central

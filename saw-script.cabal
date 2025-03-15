@@ -150,6 +150,38 @@ library saw-core-coq
 
 
 ------------------------------------------------------------
+-- saw-core-aig
+
+-- SAWCore backend for AIGs
+--
+-- A backend for symbolically evaluating terms in the SAWCore
+-- intermediate language using the aig library to generate
+-- And-Inverter Graphs (AIGs).
+
+library saw-core-aig
+  build-depends:
+
+    -- upstream packages from hackage
+    base == 4.*,
+    containers,
+    text,
+    vector,
+
+    -- packages in git submodules
+    aig,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
+  hs-source-dirs: saw-core-aig/src
+  exposed-modules:
+     Verifier.SAW.Simulator.BitBlast
+  GHC-options: -Wall -Werror
+  if impl(ghc == 8.0.1)
+    ghc-options: -Wno-redundant-constraints
+
+
+------------------------------------------------------------
 -- saw-central
 
 -- The saw-central library contains the upper-level guts of SAW,
@@ -239,9 +271,9 @@ library saw-central
     , heapster-saw
     , rme
     , saw-core
-    , saw-core-aig
     , saw-core-sbv
     , saw-core-what4
+    , saw-script:saw-core-aig
     , saw-script:saw-core-coq
     , saw-script:cryptol-saw-core
     , saw-script:saw-version
