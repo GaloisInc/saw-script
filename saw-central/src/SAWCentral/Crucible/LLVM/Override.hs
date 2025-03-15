@@ -122,7 +122,7 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Recognizer
 import           CryptolSAWCore.TypedTerm
 import           Verifier.SAW.Simulator.TermModel
-import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
+import           SAWCoreWhat4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)

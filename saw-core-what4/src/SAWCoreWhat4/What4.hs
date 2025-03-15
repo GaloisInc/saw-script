@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------
 -- |
--- Module      : Verifier.SAW.Simulator.What4
+-- Module      : SAWCoreWhat4.What4
 -- Copyright   : Galois, Inc. 2012-2015
 -- License     : BSD3
 -- Maintainer  : sweirich@galois.com
@@ -38,7 +38,7 @@
 {-# OPTIONS_GHC -Wno-warnings-deprecations #-}
 
 
-module Verifier.SAW.Simulator.What4
+module SAWCoreWhat4.What4
   ( w4Solve
   , w4SolveBasic
   , SymFnCache
@@ -113,10 +113,10 @@ import Data.Parameterized.Context (Assignment)
 import Data.Parameterized.Some
 
 -- saw-core-what4
-import Verifier.SAW.Simulator.What4.PosNat
-import Verifier.SAW.Simulator.What4.FirstOrder
-import Verifier.SAW.Simulator.What4.Panic
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.PosNat
+import SAWCoreWhat4.FirstOrder
+import SAWCoreWhat4.Panic
+import SAWCoreWhat4.ReturnTrip
 
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
@@ -288,12 +288,12 @@ constMap sym =
 swBvWidth :: SWord sym -> Int
 swBvWidth x
   | w <= toInteger (maxBound :: Int) = fromInteger w
-  | otherwise = panic "swBvWidth" ["bitvector too long", show w]
+  | otherwise = panic "SAWCoreWhat4.What4.swBvWidth" ["bitvector too long", show w]
  where w = SW.bvWidth x
 
 toBool :: SValue sym -> IO (SBool sym)
 toBool (VBool b) = return b
-toBool x         = fail $ unwords ["Verifier.SAW.Simulator.What4.toBool", show x]
+toBool x         = fail $ unwords ["SAWCoreWhat4.What4.toBool", show x]
 
 toWord :: forall sym.
   Sym sym => sym -> SValue sym -> IO (SWord sym)
@@ -303,7 +303,7 @@ toWord sym (VVector vv) = do
   vec1 <- T.traverse force vv
   vec2 <- T.traverse toBool vec1
   SW.bvPackBE sym vec2
-toWord _ x            = fail $ unwords ["Verifier.SAW.Simulator.What4.toWord", show x]
+toWord _ x            = fail $ unwords ["SAWCoreWhat4.What4.toWord", show x]
 
 wordFun ::
  Sym sym => sym -> (SWord sym -> SPrim sym) -> SPrim sym
@@ -427,7 +427,7 @@ bvShiftOp sym bvOp natOp =
       VNat i   -> VWord <$> natOp x j
         where j = toInteger i `min` SW.bvWidth x
       VBVToNat _ v -> VWord <$> (bvOp x =<< toWord sym v)
-      _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
+      _        -> error $ unwords ["SAWCoreWhat4.What4.bvShiftOp", show y]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShLOp :: forall sym. Sym sym => sym -> SPrim sym
@@ -553,7 +553,7 @@ lookupSStream (VExtra (SStream f r)) n = do
      Nothing -> do v <- f n
                    writeIORef r (Map.insert n v m)
                    return v
-lookupSStream _ _ = fail "expected Stream"
+lookupSStream _ _ = fail "SAWCoreWhat4.What4.lookupSStream: expected Stream"
 
 
 muxBVal :: forall sym. Sym sym =>
@@ -623,7 +623,7 @@ arrayConstant sym ity _elTy elm
   , Just (Some elm_expr) <- valueToSymExpr elm =
     SArray <$> W.constantArray sym (Ctx.Empty Ctx.:> idx_repr) elm_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayConstant" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayConstant" ["argument type mismatch"]
 
 arrayLookup ::
   W.IsSymExprBuilder sym =>
@@ -638,11 +638,11 @@ arrayLookup sym arr idx
   , Just Refl <- testEquality idx_repr (W.exprType idx_expr) = do
     elm_expr <- W.arrayLookup sym arr_expr (Ctx.Empty Ctx.:> idx_expr)
     maybe
-      (panic "Verifier.SAW.Simulator.What4.Panic.arrayLookup" ["argument type mismatch"])
+      (panic "SAWCoreWhat4.What4.Panic.arrayLookup" ["argument type mismatch"])
       return
       (symExprToValue elm_repr elm_expr)
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayLookup" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayLookup" ["argument type mismatch"]
 
 arrayUpdate ::
   W.IsSymExprBuilder sym =>
@@ -660,7 +660,7 @@ arrayUpdate sym arr idx elm
   , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
     SArray <$> W.arrayUpdate sym arr_expr (Ctx.Empty Ctx.:> idx_expr) elm_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayUpdate" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayUpdate" ["argument type mismatch"]
 
 arrayCopy ::
   W.IsSymExprBuilder sym =>
@@ -684,7 +684,7 @@ arrayCopy sym dest_arr dest_idx src_arr src_idx len
   , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
     SArray <$> W.arrayCopy sym dest_arr_expr dest_idx_expr src_arr_expr src_idx_expr len_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayCopy" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayCopy" ["argument type mismatch"]
 
 arraySet ::
   W.IsSymExprBuilder sym =>
@@ -705,7 +705,7 @@ arraySet sym arr idx elm len
   , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
     SArray <$> W.arraySet sym arr_expr idx_expr elm_expr len_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arraySet" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arraySet" ["argument type mismatch"]
 
 arrayRangeEq ::
   W.IsSymExprBuilder sym =>
@@ -729,7 +729,7 @@ arrayRangeEq sym x_arr x_idx y_arr y_idx len
   , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
     W.arrayRangeEq sym x_arr_expr x_idx_expr y_arr_expr y_idx_expr len_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayRangeEq" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayRangeEq" ["argument type mismatch"]
 
 arrayEq ::
   W.IsSymExprBuilder sym =>
@@ -746,7 +746,7 @@ arrayEq sym lhs_arr rhs_arr
   , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
     W.arrayEq sym lhs_arr_expr rhs_arr_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayEq" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayEq" ["argument type mismatch"]
 
 arrayIte ::
   W.IsSymExprBuilder sym =>
@@ -764,7 +764,7 @@ arrayIte sym cond lhs_arr rhs_arr
   , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
     SArray <$> W.arrayIte sym cond lhs_arr_expr rhs_arr_expr
   | otherwise =
-    panic "Verifier.SAW.Simulator.What4.Panic.arrayIte" ["argument type mismatch"]
+    panic "SAWCoreWhat4.What4.Panic.arrayIte" ["argument type mismatch"]
 
 ----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as

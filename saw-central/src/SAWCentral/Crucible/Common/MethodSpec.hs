@@ -144,7 +144,7 @@ import qualified Cryptol.Utils.PP as Cryptol
 
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
-import           Verifier.SAW.Simulator.What4.ReturnTrip as SAWVerifier
+import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)
 import           SAWCentral.Crucible.Common.Setup.Value

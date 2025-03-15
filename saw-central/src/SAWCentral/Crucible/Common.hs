@@ -56,7 +56,7 @@ import qualified Prettyprinter as PP
 
 
 import Verifier.SAW.SharedTerm as SC
-import Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState, newSAWCoreState)
+import SAWCoreWhat4.ReturnTrip (SAWCoreState, newSAWCoreState)
 
 data PathSatSolver
   = PathSat_Z3

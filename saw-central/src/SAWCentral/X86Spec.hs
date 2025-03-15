@@ -136,7 +136,7 @@ import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
 
 import CryptolSAWCore.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
-import Verifier.SAW.Simulator.What4.ReturnTrip
+import SAWCoreWhat4.ReturnTrip
 
 import Cryptol.ModuleSystem.Name(Name)
 import Cryptol.ModuleSystem.Interface(ifTySyns)
