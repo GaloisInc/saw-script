@@ -532,7 +532,7 @@ executable verif-viewer
   hs-source-dirs: saw-tools/verif-viewer
   main-is: Main.hs
 
-  --GHC-options: -Wall -Werror -Wcompat
+  GHC-options: -Wall -Werror -Wcompat
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
   GHC-prof-options: -fprof-auto -fprof-cafs
