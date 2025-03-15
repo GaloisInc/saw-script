@@ -82,7 +82,7 @@ haddock() {
   local COMPONENTS='
     rme
     saw-script:saw-version
-    saw-core
+    saw-script:saw-core
     saw-script:cryptol-saw-core
     saw-script:saw-core-what4
     saw-script:saw-core-sbv
