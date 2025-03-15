@@ -181,51 +181,25 @@ eithers' a =
        either tp (Eithers' (FunsToIns a es)) a f rec
     );
 
-
-eithersLS : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
-eithersLS a =
-  FunsTo__rec
-    a
-    (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
-    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
-    (\ (tp : sort 0)                                     -- type arg
-       (f  : tp -> a)                                     --
-       (es : FunsTo a)                                    --
-       (rec: Eithers' (FunsToIns a es) -> a)              -- P es
-    ->
-       -- P (FunsTo_Cons a tp f es):
-       either tp (Eithers' (FunsToIns a es)) a f rec
-    );
-
-
 {-
+ TODO: the following is wrong, it should actually be
 
-FunsTo__rec :
-     (a:sort 0)
-  -> (P : FunsTo a -> sort 1)
-  -> P (FunsTo_Nil a)
-  -> ((tp:sort 0)
-      -> (f:tp -> a)
-      -> (es:FunsTo a)
-      -> P es
-      -> P (FunsTo_Cons a tp f es))
-  -> (es:FunsTo a)
-  -> P es;
+  eithersLS : (a:sort 0) -> (ts:ListSort)
+             -> Pairs (MapRightArrow a ts)
+             ->  Eithers' ts -> a;
 
-
-eithers : (a:sort 0) -> (es:FunsTo a) -> Eithers (FunsToIns a es) -> a;
-eithers a =
-  FunsTo__rec
-    a
-    (\ (es:FunsTo a) -> Eithers (FunsToIns a es) -> a)
-    (\ (contra:FalseProp) -> efq a contra)
-    (\ (tp:sort 0)
-       (f:tp -> a)
-       (es:   FunsTo a)
-       (rec:  Eithers (FunsToIns a es) -> a)
-       (eiths: Eithers (LS_Cons tp (FunsToIns a es)))
-       ->
-       eithers1 tp (FunsToIns a es) a eiths f rec);
+eithersLS : (a:sort 0) -> (ts:ListSort) -> Eithers' (MapRightArrow a ts) -> a;
+eithersLS a =
+  ListSort__rec
+    (\ (ts: ListSort) -> Eithers' (MapRightArrow a ts) -> a) -- P
+    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
+    (\ (tp  : sort 0)                                    -- type arg
+       (ts : ListSort)                                   -- base/inductive 'ts'
+       (rec: Eithers' (MapRightArrow a ts) -> a)         -- P ts
+    ->
+       -- P (LS_Cons tp ts):
+       either tp (Eithers' (MapRightArrow a ts)) a f rec
+    );
 -}
 
 {-
