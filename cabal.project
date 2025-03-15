@@ -4,7 +4,6 @@ packages:
     crucible-mir-comp
     crux-mir-comp
     rme
-    verif-viewer
     saw-core
     saw-core-aig
     saw-core-sbv

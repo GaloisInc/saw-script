@@ -92,9 +92,9 @@ haddock() {
     saw-script:saw-central
     saw-script
     saw-remote-api
+    saw-script:verif-viewer
     crucible-mir-comp
     crux-mir-comp
-    verif-viewer
   '
   cabal v2-haddock --haddock-internal --disable-documentation $COMPONENTS
 }
