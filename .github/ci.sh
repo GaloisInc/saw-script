@@ -88,7 +88,7 @@ haddock() {
     saw-script:saw-core-sbv
     saw-script:saw-core-aig
     saw-script:saw-core-coq
-    heapster-saw
+    saw-script:heapster
     saw-script:saw-central
     saw-script
     saw-remote-api
