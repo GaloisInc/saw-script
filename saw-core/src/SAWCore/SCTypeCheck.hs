@@ -7,7 +7,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 {- |
-Module      : Verifier.SAW.SCTypeCheck
+Module      : SAWCore.SCTypeCheck
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -15,7 +15,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.SCTypeCheck
+module SAWCore.SCTypeCheck
   ( scTypeCheck
   , scTypeCheckError
   , scTypeCheckComplete
@@ -62,13 +62,13 @@ import Data.Traversable (Traversable(..))
 import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
-import Verifier.SAW.Conversion (natConversions)
-import Verifier.SAW.Recognizer
-import Verifier.SAW.Rewriter
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Module
-import Verifier.SAW.Position
+import SAWCore.Conversion (natConversions)
+import SAWCore.Recognizer
+import SAWCore.Rewriter
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.Module
+import SAWCore.Position
 
 -- | The state for a type-checking computation = a memoization table
 type TCState = Map TermIndex Term

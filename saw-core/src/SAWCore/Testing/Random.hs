@@ -3,7 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- |
--- Module      :  Verifier.SAW.Testing.Random
+-- Module      :  SAWCore.Testing.Random
 -- Copyright   :  (c) 2013-2015 Galois, Inc.
 -- License     :  BSD3
 -- Maintainer  :  jhendrix@galois.com, conathan@galois.com
@@ -14,19 +14,19 @@
 --
 -- Based on 'Cryptol.Testing.Random'.
 
-module Verifier.SAW.Testing.Random where
+module SAWCore.Testing.Random where
 
-import Verifier.SAW.FiniteValue
+import SAWCore.FiniteValue
   ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
 
-import Verifier.SAW.Module (ModuleMap)
-import Verifier.SAW.SATQuery
-import Verifier.SAW.SharedTerm
+import SAWCore.Module (ModuleMap)
+import SAWCore.SATQuery
+import SAWCore.SharedTerm
   ( scGetModuleMap, SharedContext, Term
   , ExtCns(..), scInstantiateExt
   )
-import Verifier.SAW.Simulator.Concrete (evalSharedTerm) -- , CValue)
-import Verifier.SAW.Simulator.Value (Value(..)) -- , TValue(..))
+import SAWCore.Simulator.Concrete (evalSharedTerm) -- , CValue)
+import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
 
 
 #if !MIN_VERSION_base(4,8,0)

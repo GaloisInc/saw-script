@@ -15,8 +15,8 @@ import qualified Cryptol.ModuleSystem.Name as N
 import qualified Cryptol.Utils.Ident as N
 
 import qualified CryptolSAWCore.Cryptol as C
-import           Verifier.SAW.SharedTerm
-import qualified Verifier.SAW.SCTypeCheck as TC
+import           SAWCore.SharedTerm
+import qualified SAWCore.SCTypeCheck as TC
 import qualified CryptolSAWCore.Prelude as C
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 

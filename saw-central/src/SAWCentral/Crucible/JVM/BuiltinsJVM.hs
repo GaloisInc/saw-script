@@ -64,7 +64,7 @@ import qualified What4.Interface as W4
 import qualified What4.Solver.Yices as Yices
 
 -- saw-core
-import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
+import SAWCore.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
 
 -- cryptol-saw-core
 import CryptolSAWCore.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(..))

@@ -69,13 +69,13 @@ import qualified Lang.Crucible.LLVM.MemType     as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
 
-import Verifier.SAW.Rewriter
-import Verifier.SAW.SharedTerm
-import qualified Verifier.SAW.Prim as Prim
-import qualified Verifier.SAW.Simulator.Concrete as Concrete
+import SAWCore.Rewriter
+import SAWCore.SharedTerm
+import qualified SAWCore.Prim as Prim
+import qualified SAWCore.Simulator.Concrete as Concrete
 
 import CryptolSAWCore.Cryptol (importType, emptyEnv)
-import Verifier.SAW.Name
+import SAWCore.Name
 import CryptolSAWCore.TypedTerm
 import SAWCoreWhat4.What4
 import SAWCoreWhat4.ReturnTrip

@@ -11,7 +11,7 @@ import qualified Data.Text as Text
 
 import qualified Data.AIG as AIG
 import Text.LLVM
-import Verifier.SAW.SharedTerm
+import SAWCore.SharedTerm
 
 import SAWCentral.Crucible.LLVM.MethodSpecIR (LLVMModule, modAST, modFilePath)
 

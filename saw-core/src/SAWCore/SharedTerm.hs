@@ -14,7 +14,7 @@
 {-# LANGUAGE ImplicitParams #-}
 
 {- |
-Module      : Verifier.SAW.SharedTerm
+Module      : SAWCore.SharedTerm
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -22,7 +22,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.SharedTerm
+module SAWCore.SharedTerm
   ( TermF(..)
   , Uninterp(..)
   , Ident, mkIdent
@@ -315,17 +315,17 @@ import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
 
-import Verifier.SAW.Cache
-import Verifier.SAW.Change
-import Verifier.SAW.Name
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Prelude.Constants
-import Verifier.SAW.Recognizer
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Term.Pretty
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Unique
+import SAWCore.Cache
+import SAWCore.Change
+import SAWCore.Name
+import SAWCore.Utils (panic)
+import SAWCore.Prelude.Constants
+import SAWCore.Recognizer
+import SAWCore.Term.Functor
+import SAWCore.Term.CtxTerm
+import SAWCore.Term.Pretty
+import SAWCore.TypedAST
+import SAWCore.Unique
 
 
 #if !MIN_VERSION_base(4,8,0)

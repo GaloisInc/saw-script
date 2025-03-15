@@ -35,17 +35,17 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
-import qualified Verifier.SAW.Simulator as Sim
-import Verifier.SAW.Simulator.Value
-import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.SATQuery
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import qualified Verifier.SAW.Simulator.Concrete as Concrete
-import qualified Verifier.SAW.Prim as Prim
-import qualified Verifier.SAW.Recognizer as R
-import Verifier.SAW.Utils (panic)
+import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
+import qualified SAWCore.Simulator as Sim
+import SAWCore.Simulator.Value
+import qualified SAWCore.Simulator.Prims as Prims
+import SAWCore.SATQuery
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import qualified SAWCore.Simulator.Concrete as Concrete
+import qualified SAWCore.Prim as Prim
+import qualified SAWCore.Recognizer as R
+import SAWCore.Utils (panic)
 
 import qualified Data.AIG as AIG
 

@@ -11,8 +11,8 @@ import qualified Data.Map                           as Map
 import           Cryptol.ModuleSystem.Name          (Name, nameIdent)
 import           Cryptol.Utils.Ident                (unpackIdent)
 import qualified Language.Coq.AST                   as Coq
-import           Verifier.SAW.Term.Functor          (Term)
-import           Verifier.SAW.SharedTerm            (SharedContext)
+import           SAWCore.Term.Functor          (Term)
+import           SAWCore.SharedTerm            (SharedContext)
 import           SAWCoreCoq.Monad
 import qualified SAWCoreCoq.Term  as TermTranslation
 import           CryptolSAWCore.TypedTerm

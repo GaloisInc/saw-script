@@ -108,9 +108,9 @@ import qualified Lang.Crucible.JVM as CJ
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 
-import Verifier.SAW.FiniteValue (ppFirstOrderValue)
-import Verifier.SAW.Name (toShortName)
-import Verifier.SAW.SharedTerm
+import SAWCore.FiniteValue (ppFirstOrderValue)
+import SAWCore.Name (toShortName)
+import SAWCore.SharedTerm
 import CryptolSAWCore.TypedTerm
 
 import SAWCoreWhat4.ReturnTrip

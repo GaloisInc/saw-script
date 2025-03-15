@@ -50,14 +50,14 @@ import qualified Data.Set as Set
 
 import Prettyprinter
 
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
-import Verifier.SAW.Term.Pretty
-import Verifier.SAW.SCTypeCheck
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Module (Def(..))
-import Verifier.SAW.Recognizer
+import SAWCore.Utils (panic) -- XXX why is this using a different library's panic hook?
+import SAWCore.Term.Functor
+import SAWCore.Term.CtxTerm (MonadTerm(..))
+import SAWCore.Term.Pretty
+import SAWCore.SCTypeCheck
+import SAWCore.SharedTerm
+import SAWCore.Module (Def(..))
+import SAWCore.Recognizer
 import CryptolSAWCore.Monadify
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Proof (Sequent, SolveResult)

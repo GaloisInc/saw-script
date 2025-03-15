@@ -26,10 +26,10 @@ import Control.Monad.Reader (MonadReader, ReaderT(..))
 import Control.Monad.State (MonadState, StateT(..))
 import Prelude hiding (fail)
 
-import Verifier.SAW.SharedTerm
--- import Verifier.SAW.Term.CtxTerm
---import Verifier.SAW.Term.Pretty
--- import qualified Verifier.SAW.UntypedAST as Un
+import SAWCore.SharedTerm
+-- import SAWCore.Term.CtxTerm
+--import SAWCore.Term.Pretty
+-- import qualified SAWCore.UntypedAST as Un
 
 data TranslationError a
   = NotSupported a

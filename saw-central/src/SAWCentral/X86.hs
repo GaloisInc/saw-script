@@ -125,9 +125,9 @@ import Data.Macaw.X86.Crucible(SymFuns(..))
 
 
 -- Saw Core
-import Verifier.SAW.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
-import Verifier.SAW.Term.Pretty(showTerm)
-import Verifier.SAW.Recognizer(asBool)
+import SAWCore.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
+import SAWCore.Term.Pretty(showTerm)
+import SAWCore.Recognizer(asBool)
 
 import SAWCoreWhat4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
 

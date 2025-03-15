@@ -22,10 +22,10 @@ import System.Process (readProcessWithExitCode)
 
 import qualified Data.AIG as AIG
 
-import           Verifier.SAW.FiniteValue
-import           Verifier.SAW.Name
-import           Verifier.SAW.SATQuery
-import           Verifier.SAW.SharedTerm
+import           SAWCore.FiniteValue
+import           SAWCore.Name
+import           SAWCore.SATQuery
+import           SAWCore.SharedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 
 import SAWCentral.Panic (panic)

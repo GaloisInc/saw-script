@@ -111,10 +111,10 @@ import qualified Database.LMDB.Simple.Extra as LMDB
 
 import qualified Data.SBV.Dynamic as SBV
 
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.SATQuery
-import Verifier.SAW.ExternalFormat
-import Verifier.SAW.SharedTerm
+import SAWCore.FiniteValue
+import SAWCore.SATQuery
+import SAWCore.ExternalFormat
+import SAWCore.SharedTerm
 
 import SAWCentral.Options
 import SAWCentral.Proof

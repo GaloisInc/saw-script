@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Prelude.Constants
+Module      : SAWCore.Prelude.Constants
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -9,9 +9,9 @@ Portability : non-portable (language extensions)
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Verifier.SAW.Prelude.Constants where
+module SAWCore.Prelude.Constants where
 
-import Verifier.SAW.Term.Functor
+import SAWCore.Term.Functor
 
 preludeModuleName :: ModuleName
 preludeModuleName = mkModuleName ["Prelude"]

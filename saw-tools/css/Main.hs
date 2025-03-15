@@ -27,7 +27,7 @@ import qualified Data.AIG.Operations as AIG
 import qualified SAWVersion.Version as Version
 
 import qualified CryptolSAWCore.Cryptol as C
-import           Verifier.SAW.SharedTerm
+import           SAWCore.SharedTerm
 import qualified CryptolSAWCore.Prelude as C
 import           CryptolSAWCore.CryptolEnv (schemaNoUser, meSolverConfig)
 

@@ -93,7 +93,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
-import           Verifier.SAW.SharedTerm
+import           SAWCore.SharedTerm
 import           CryptolSAWCore.TypedTerm
 
 import           SAWCoreWhat4.ReturnTrip (toSC)

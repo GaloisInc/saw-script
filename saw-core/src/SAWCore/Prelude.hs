@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
-Module      : Verifier.SAW.Prelude
+Module      : SAWCore.Prelude
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -11,21 +11,21 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Prelude
+module SAWCore.Prelude
   ( Module
-  , module Verifier.SAW.Prelude
-  , module Verifier.SAW.Prelude.Constants
+  , module SAWCore.Prelude
+  , module SAWCore.Prelude.Constants
   ) where
 
 import qualified Data.Map as Map
 
-import Verifier.SAW.ParserUtils
-import Verifier.SAW.Prelude.Constants
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.FiniteValue
+import SAWCore.ParserUtils
+import SAWCore.Prelude.Constants
+import SAWCore.SharedTerm
+import SAWCore.FiniteValue
 
-import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
-import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
+import SAWCore.Simulator.Concrete (evalSharedTerm)
+import SAWCore.Simulator.Value (asFirstOrderTypeValue)
 
 
 $(defineModuleFromFileWithFns

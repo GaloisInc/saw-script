@@ -67,29 +67,29 @@ import qualified CryptolSAWCore.Simpset as Cryptol
 import qualified CryptolSAWCore.Monadify as Monadify
 
 -- saw-core
-import Verifier.SAW.Grammar (parseSAWTerm)
-import Verifier.SAW.ExternalFormat
-import Verifier.SAW.FiniteValue
+import SAWCore.Grammar (parseSAWTerm)
+import SAWCore.ExternalFormat
+import SAWCore.FiniteValue
   ( FiniteType(..), readFiniteValue
   , FirstOrderValue(..)
   , scFirstOrderValue
   )
-import Verifier.SAW.SATQuery
-import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
-import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
-import Verifier.SAW.Recognizer
-import Verifier.SAW.Prelude (scEq)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Pretty (MemoStyle(..))
+import SAWCore.SATQuery
+import SAWCore.SCTypeCheck hiding (TypedTerm)
+import qualified SAWCore.SCTypeCheck as TC (TypedTerm(..))
+import SAWCore.Recognizer
+import SAWCore.Prelude (scEq)
+import SAWCore.SharedTerm
+import SAWCore.Term.Pretty (MemoStyle(..))
 import CryptolSAWCore.TypedTerm
 
-import qualified Verifier.SAW.Simulator.Concrete as Concrete
-import Verifier.SAW.Prim (rethrowEvalError)
-import Verifier.SAW.Rewriter
-import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
-import Verifier.SAW.TypedAST
-import qualified Verifier.SAW.Simulator.TermModel as TM
-import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
+import qualified SAWCore.Simulator.Concrete as Concrete
+import SAWCore.Prim (rethrowEvalError)
+import SAWCore.Rewriter
+import SAWCore.Testing.Random (prepareSATQuery, runManyTests)
+import SAWCore.TypedAST
+import qualified SAWCore.Simulator.TermModel as TM
+import SAWCore.Term.Pretty (SawDoc, renderSawDoc)
 
 -- cryptol-saw-core
 import qualified CryptolSAWCore.CryptolEnv as CEnv

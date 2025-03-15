@@ -20,10 +20,10 @@ import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer (asExtCns)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.SCTypeCheck (scTypeCheckError)
+import SAWCore.FiniteValue
+import SAWCore.Recognizer (asExtCns)
+import SAWCore.SharedTerm
+import SAWCore.SCTypeCheck (scTypeCheckError)
 
 -- Typed terms -----------------------------------------------------------------
 

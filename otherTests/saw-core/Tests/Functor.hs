@@ -16,7 +16,7 @@ import Data.Hashable
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Verifier.SAW.Term.Functor
+import SAWCore.Term.Functor
 
 
 -- There are three properties of Term/TermF/FlatTermF that the

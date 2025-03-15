@@ -104,9 +104,9 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
-import           Verifier.SAW.Prelude as SAWVerifier (scEq)
-import           Verifier.SAW.SharedTerm as SAWVerifier
-import           Verifier.SAW.TypedAST as SAWVerifier
+import           SAWCore.Prelude as SAWVerifier (scEq)
+import           SAWCore.SharedTerm as SAWVerifier
+import           SAWCore.TypedAST as SAWVerifier
 import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)

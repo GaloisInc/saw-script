@@ -16,9 +16,9 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           System.IO
 
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.SATQuery (SATQuery(..))
+import SAWCore.SharedTerm
+import SAWCore.FiniteValue
+import SAWCore.SATQuery (SATQuery(..))
 
 import           SAWCentral.Proof(Sequent, sequentToSATQuery, CEX)
 import           SAWCentral.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)

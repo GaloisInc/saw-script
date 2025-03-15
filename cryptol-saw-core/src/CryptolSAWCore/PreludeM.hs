@@ -15,8 +15,8 @@ module CryptolSAWCore.PreludeM
   , scLoadPreludeModule
   ) where
 
-import Verifier.SAW.Prelude
-import Verifier.SAW.ParserUtils
+import SAWCore.Prelude
+import SAWCore.ParserUtils
 
 $(defineModuleFromFileWithFns
   "specMModule" "scLoadSpecMModule" "cryptol-saw-core/saw/SpecM.sawcore")

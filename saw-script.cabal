@@ -16,8 +16,8 @@ Description:
 -- extra files for saw-core
 extra-source-files:
     saw-core/prelude/Prelude.sawcore
-    saw-core/src/Verifier/SAW/Grammar.y
-    saw-core/src/Verifier/SAW/Lexer.x
+    saw-core/src/SAWCore/Grammar.y
+    saw-core/src/SAWCore/Lexer.x
 
 -- extra files for cryptol-saw-core
 extra-source-files:
@@ -110,47 +110,47 @@ library saw-core
 
   hs-source-dirs: saw-core/src
   exposed-modules:
-     Verifier.SAW
-     Verifier.SAW.Constant
-     Verifier.SAW.ExternalFormat
-     Verifier.SAW.Conversion
-     Verifier.SAW.Cache
-     Verifier.SAW.FiniteValue
-     Verifier.SAW.Grammar
-     Verifier.SAW.Lexer
-     Verifier.SAW.Module
-     Verifier.SAW.Name
-     Verifier.SAW.ParserUtils
-     Verifier.SAW.Position
-     Verifier.SAW.Prelude
-     Verifier.SAW.Prelude.Constants
-     Verifier.SAW.Prim
-     Verifier.SAW.Recognizer
-     Verifier.SAW.Rewriter
-     Verifier.SAW.SATQuery
-     Verifier.SAW.SCTypeCheck
-     Verifier.SAW.Simulator
-     Verifier.SAW.Simulator.Concrete
-     Verifier.SAW.Simulator.TermModel
-     Verifier.SAW.Simulator.MonadLazy
-     Verifier.SAW.Simulator.Prims
-     Verifier.SAW.Simulator.RME
-     Verifier.SAW.Simulator.Value
-     Verifier.SAW.SharedTerm
-     Verifier.SAW.Term.Functor
-     Verifier.SAW.Term.CtxTerm
-     Verifier.SAW.OpenTerm
-     Verifier.SAW.Term.Pretty
-     Verifier.SAW.TermNet
-     Verifier.SAW.Testing.Random
-     Verifier.SAW.Typechecker
-     Verifier.SAW.TypedAST
-     Verifier.SAW.Unique
-     Verifier.SAW.UntypedAST
-     Verifier.SAW.Change
-     Verifier.SAW.Utils
+     SAWCore.SAWCore
+     SAWCore.Constant
+     SAWCore.ExternalFormat
+     SAWCore.Conversion
+     SAWCore.Cache
+     SAWCore.FiniteValue
+     SAWCore.Grammar
+     SAWCore.Lexer
+     SAWCore.Module
+     SAWCore.Name
+     SAWCore.ParserUtils
+     SAWCore.Position
+     SAWCore.Prelude
+     SAWCore.Prelude.Constants
+     SAWCore.Prim
+     SAWCore.Recognizer
+     SAWCore.Rewriter
+     SAWCore.SATQuery
+     SAWCore.SCTypeCheck
+     SAWCore.Simulator
+     SAWCore.Simulator.Concrete
+     SAWCore.Simulator.TermModel
+     SAWCore.Simulator.MonadLazy
+     SAWCore.Simulator.Prims
+     SAWCore.Simulator.RME
+     SAWCore.Simulator.Value
+     SAWCore.SharedTerm
+     SAWCore.Term.Functor
+     SAWCore.Term.CtxTerm
+     SAWCore.OpenTerm
+     SAWCore.Term.Pretty
+     SAWCore.TermNet
+     SAWCore.Testing.Random
+     SAWCore.Typechecker
+     SAWCore.TypedAST
+     SAWCore.Unique
+     SAWCore.UntypedAST
+     SAWCore.Change
+     SAWCore.Utils
   other-modules:
-     Verifier.SAW.UnionFind
+     SAWCore.UnionFind
 
   GHC-options: -Wall -Werror -Wcompat
   if impl(ghc == 8.0.1)

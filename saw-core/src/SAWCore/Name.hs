@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Name
+Module      : SAWCore.Name
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -17,7 +17,7 @@ Various kinds of names.
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Verifier.SAW.Name
+module SAWCore.Name
   ( -- * Module names
     ModuleName, mkModuleName
   , preludeName
@@ -70,7 +70,7 @@ import           Text.URI
 import qualified Language.Haskell.TH.Syntax as TH
 import           Instances.TH.Lift () -- for instance TH.Lift Text
 
-import Verifier.SAW.Utils (panic, internalError)
+import SAWCore.Utils (panic, internalError)
 
 
 -- Module Names ----------------------------------------------------------------

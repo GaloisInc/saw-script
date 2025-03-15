@@ -43,10 +43,10 @@ import Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as TraversableFC
 
-import qualified Verifier.SAW.SharedTerm as SC
+import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
 
-import qualified Verifier.SAW.Simulator.Value as Sim
+import qualified SAWCore.Simulator.Value as Sim
 import qualified SAWCoreWhat4.What4 as SimW4
 
 import qualified What4.Interface as W4

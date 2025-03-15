@@ -56,9 +56,9 @@ import Mir.Overrides (getString)
 
 import qualified CryptolSAWCore.Prelude as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
-import qualified Verifier.SAW.SharedTerm as SAW
+import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCoreWhat4.ReturnTrip as SAW
-import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
+import qualified SAWCore.Recognizer as SAW (asExtCns)
 import qualified CryptolSAWCore.TypedTerm as SAW
 
 import SAWCentral.Crucible.MIR.TypeShape

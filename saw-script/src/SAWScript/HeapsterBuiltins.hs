@@ -84,17 +84,17 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableF
 import Data.Parameterized.TraversableFC
 
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Name
-import Verifier.SAW.Module as Mod
+import SAWCore.Term.Functor
+import SAWCore.Name
+import SAWCore.Module as Mod
 import CryptolSAWCore.Monadify
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
-import Verifier.SAW.OpenTerm
-import Verifier.SAW.Typechecker
-import Verifier.SAW.SCTypeCheck
-import qualified Verifier.SAW.UntypedAST as Un
-import qualified Verifier.SAW.Grammar as Un
+import SAWCore.SharedTerm
+import SAWCore.Recognizer
+import SAWCore.OpenTerm
+import SAWCore.Typechecker
+import SAWCore.SCTypeCheck
+import qualified SAWCore.UntypedAST as Un
+import qualified SAWCore.Grammar as Un
 
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
@@ -119,8 +119,8 @@ import SAWCentral.Builtins
 import SAWCentral.Crucible.LLVM.Builtins
 import SAWCentral.Crucible.LLVM.MethodSpecIR
 
-import Verifier.SAW.Utils (panic)
-import qualified Verifier.SAW.Term.Pretty as Pretty
+import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
+import qualified SAWCore.Term.Pretty as Pretty
 import Heapster.CruUtil
 import Heapster.HintExtract
 import Heapster.Permissions
@@ -269,7 +269,7 @@ lookupLLVMSymbolModAndCFG henv nm =
 heapster_default_env :: PermEnv
 heapster_default_env = emptyPermEnv
 
--- | Based on the function of the same name in Verifier.SAW.ParserUtils.
+-- | Based on the function of the same name in SAWCore.ParserUtils.
 -- Unlike that function, this calls 'fail' instead of 'error'.
 readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
 readModuleFromFile path = do

@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.RME
+Module      : SAWCore.Simulator.RME
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -16,7 +16,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.RME
+module SAWCore.Simulator.RME
   ( evalSharedTerm
   , RValue, Value(..)
   , RExtra(..)
@@ -41,15 +41,15 @@ import Data.RME (RME)
 import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
-import qualified Verifier.SAW.Prim as Prim
-import qualified Verifier.SAW.Simulator as Sim
-import Verifier.SAW.Simulator.Value
-import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType, toFiniteType)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST (ModuleMap)
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.SATQuery
+import qualified SAWCore.Prim as Prim
+import qualified SAWCore.Simulator as Sim
+import SAWCore.Simulator.Value
+import qualified SAWCore.Simulator.Prims as Prims
+import SAWCore.FiniteValue (FiniteType(..), FirstOrderType, toFiniteType)
+import SAWCore.SharedTerm
+import SAWCore.TypedAST (ModuleMap)
+import SAWCore.Utils (panic)
+import SAWCore.SATQuery
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -101,7 +101,7 @@ vBool b = VBool b
 
 toBool :: RValue -> RME
 toBool (VBool b) = b
-toBool x = error $ unwords ["Verifier.SAW.Simulator.RME.toBool", show x]
+toBool x = error $ unwords ["SAWCore.Simulator.RME.toBool", show x]
 
 vWord :: Vector RME -> RValue
 vWord x = VWord x
@@ -109,14 +109,14 @@ vWord x = VWord x
 toWord :: RValue -> Vector RME
 toWord (VWord x) = x
 toWord (VVector vv) = fmap (toBool . runIdentity . force) vv
-toWord x = error $ unwords ["Verifier.SAW.Simulator.RME.toWord", show x]
+toWord x = error $ unwords ["SAWCore.Simulator.RME.toWord", show x]
 
 vStream :: IntTrie RValue -> RValue
 vStream x = VExtra (AStream x)
 
 toStream :: RValue -> IntTrie RValue
 toStream (VExtra (AStream x)) = x
-toStream x = error $ unwords ["Verifier.SAW.Simulator.RME.toStream", show x]
+toStream x = error $ unwords ["SAWCore.Simulator.RME.toStream", show x]
 
 wordFun :: (Vector RME -> RPrim) -> RPrim
 wordFun f = Prims.strictFun (\x -> f (toWord x))
@@ -138,7 +138,7 @@ bvShiftOp op =
       VNat n   -> vWord (op x (toInteger n))
       VBVToNat _sz v -> vWord (genShift muxRMEV op x (toWord v))
       VIntToNat _i   -> error "RME.shiftOp: intToNat TODO"
-      _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
+      _        -> error $ unwords ["SAWCore.Simulator.RME.shiftOp", show y]
 
 ------------------------------------------------------------
 
@@ -449,4 +449,4 @@ withBitBlastedSATQuery sc addlPrims satq cont =
      let bval = bitBlastBasic modmap addlPrims varMap t
      case bval of
        VBool anf -> cont anf varShapes
-       _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]
+       _ -> panic "SAWCore.Simulator.RME.bitBlast" ["non-boolean result type."]

@@ -10,10 +10,10 @@ module Tests.Parser where
 
 import Test.Tasty
 import Test.Tasty.HUnit
-import Verifier.SAW.Module
-import Verifier.SAW.Prelude
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Functor
+import SAWCore.Module
+import SAWCore.Prelude
+import SAWCore.SharedTerm
+import SAWCore.Term.Functor
 
 
 namedMsg :: Ident -> String -> String

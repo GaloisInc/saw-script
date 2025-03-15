@@ -13,8 +13,8 @@ module Tests.SharedTerm
 import Control.Monad
 import Test.Tasty
 import Test.Tasty.HUnit
-import Verifier.SAW.Prelude
-import Verifier.SAW.SharedTerm
+import SAWCore.Prelude
+import SAWCore.SharedTerm
 
 
 sharedTermTests :: [TestTree]

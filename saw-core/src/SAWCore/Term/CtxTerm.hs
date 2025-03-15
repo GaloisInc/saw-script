@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Term.CtxTerm
+Module      : SAWCore.Term.CtxTerm
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Stability   : experimental
@@ -36,7 +36,7 @@ right when you finally get GHC to accept your code. :)
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Verifier.SAW.Term.CtxTerm
+module SAWCore.Term.CtxTerm
   (
     -- * Re-exports from "Data.Parameterized.Context"
     -- | We use DataKinds to represent contexts of free variables at the type level.
@@ -79,7 +79,7 @@ import Control.Monad.Trans
 
 import Data.Parameterized.Context
 
-import Verifier.SAW.Term.Functor
+import SAWCore.Term.Functor
 
 
 --

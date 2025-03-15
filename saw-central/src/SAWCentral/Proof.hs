@@ -150,21 +150,21 @@ import Prettyprinter
 
 import Data.Parameterized.Nonce
 
-import Verifier.SAW.Prelude (scApplyPrelude_False)
-import Verifier.SAW.Recognizer
-import Verifier.SAW.Rewriter
-import Verifier.SAW.SATQuery
-import Verifier.SAW.Name (SAWNamingEnv)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
+import SAWCore.Prelude (scApplyPrelude_False)
+import SAWCore.Recognizer
+import SAWCore.Rewriter
+import SAWCore.SATQuery
+import SAWCore.Name (SAWNamingEnv)
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
 import CryptolSAWCore.TypedTerm
-import Verifier.SAW.FiniteValue (FirstOrderValue)
-import Verifier.SAW.Term.Pretty
+import SAWCore.FiniteValue (FirstOrderValue)
+import SAWCore.Term.Pretty
   (SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames)
-import qualified Verifier.SAW.SCTypeCheck as TC
+import qualified SAWCore.SCTypeCheck as TC
 
-import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
-import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
+import SAWCore.Simulator.Concrete (evalSharedTerm)
+import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
 
 import What4.ProgramLoc (ProgramLoc)
 
@@ -172,7 +172,7 @@ import SAWCentral.Position
 import SAWCentral.Prover.SolverStats
 import qualified SAWCentral.MRSolver.Evidence as MRSolver
 import SAWCentral.Crucible.Common as Common
-import qualified Verifier.SAW.Simulator.TermModel as TM
+import qualified SAWCore.Simulator.TermModel as TM
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreWhat4.ReturnTrip as W4Sim
 import SAWCentral.Panic(panic)

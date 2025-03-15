@@ -11,7 +11,7 @@ module Main where
 import System.Environment (getArgs)
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
-import Verifier.SAW
+import SAWCore.SAWCore
 
 processFile :: FilePath -> IO ()
 processFile file = do

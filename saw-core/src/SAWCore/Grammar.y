@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -fno-warn-tabs #-}
 
 {- |
-Module      : Verifier.SAW.Grammar
+Module      : SAWCore.Grammar
 Copyright   : Galois, Inc. 2012-2014
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -12,7 +12,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Grammar
+module SAWCore.Grammar
   ( parseSAW
   , parseSAWTerm
   ) where
@@ -33,9 +33,9 @@ import System.Directory (getCurrentDirectory)
 
 import Prelude hiding (mapM, sequence)
 
-import Verifier.SAW.UntypedAST
-import Verifier.SAW.Module (DefQualifier(..))
-import Verifier.SAW.Lexer
+import SAWCore.UntypedAST
+import SAWCore.Module (DefQualifier(..))
+import SAWCore.Lexer
 
 }
 

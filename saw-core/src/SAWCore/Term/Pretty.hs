@@ -9,7 +9,7 @@
 {-# LANGUAGE PatternGuards #-}
 
 {- |
-Module      : Verifier.SAW.Term.Pretty
+Module      : SAWCore.Term.Pretty
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -17,7 +17,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Term.Pretty
+module SAWCore.Term.Pretty
   ( SawDoc
   , renderSawDoc
   , SawStyle(..)
@@ -69,10 +69,10 @@ import Text.URI
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
-import Verifier.SAW.Name
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Recognizer
+import SAWCore.Name
+import SAWCore.Term.Functor
+import SAWCore.Utils (panic)
+import SAWCore.Recognizer
 
 --------------------------------------------------------------------------------
 -- * Doc annotations
@@ -865,7 +865,7 @@ ppTermContainerWithNames ppContainer opts ne trms =
 --------------------------------------------------------------------------------
 
 -- | Datatype for representing modules in pretty-printer land. We do not want to
--- make the pretty-printer dependent on @Verifier.SAW.Module@, so we instead
+-- make the pretty-printer dependent on @SAWCore.Module@, so we instead
 -- have that module translate to this representation.
 data PPModule = PPModule [ModuleName] [PPDecl]
 

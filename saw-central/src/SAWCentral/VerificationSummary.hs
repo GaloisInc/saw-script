@@ -32,8 +32,8 @@ import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWCentral.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
-import qualified Verifier.SAW.Term.Pretty as PP
-import Verifier.SAW.Name (SAWNamingEnv)
+import qualified SAWCore.Term.Pretty as PP
+import SAWCore.Name (SAWNamingEnv)
 import What4.ProgramLoc (ProgramLoc(..))
 import What4.FunctionName
 

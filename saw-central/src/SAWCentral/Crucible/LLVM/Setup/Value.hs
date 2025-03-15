@@ -111,8 +111,8 @@ import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 
 import           SAWCentral.Proof (TheoremNonce)
 
-import           Verifier.SAW.Rewriter (Simpset)
-import           Verifier.SAW.SharedTerm
+import           SAWCore.Rewriter (Simpset)
+import           SAWCore.SharedTerm
 import           CryptolSAWCore.TypedTerm
 
 --------------------------------------------------------------------------------

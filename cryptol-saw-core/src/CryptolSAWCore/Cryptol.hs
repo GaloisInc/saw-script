@@ -87,15 +87,15 @@ import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import qualified Cryptol.Utils.PP as PP
 import Cryptol.Utils.PP (pretty,pp,(<+>))
 
--- saw-core (pkg, AKA 'SAWCore'):
-import qualified Verifier.SAW.Simulator.Concrete as SC
-import qualified Verifier.SAW.Simulator.Value as SC
-import Verifier.SAW.Prim (BitVector(..))
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.SCTypeCheck               as SC
-import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
-import Verifier.SAW.Name (preludeName)
+-- saw-core
+import qualified SAWCore.Simulator.Concrete as SC
+import qualified SAWCore.Simulator.Value as SC
+import SAWCore.Prim (BitVector(..))
+import SAWCore.SharedTerm
+import SAWCore.SCTypeCheck               as SC
+import SAWCore.Simulator.MonadLazy (force)
+import SAWCore.TypedAST (mkSort, FieldName, LocalName)
+import SAWCore.Name (preludeName)
 
 -- local modules:
 import CryptolSAWCore.Panic

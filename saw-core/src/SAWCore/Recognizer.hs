@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Recognizer
+Module      : SAWCore.Recognizer
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -16,7 +16,7 @@ Lightweight calculus for composing patterns as functions.
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Verifier.SAW.Recognizer
+module SAWCore.Recognizer
   ( Recognizer
   , (<:>), (<:), emptyl, endl
   , (:*:)(..)
@@ -84,8 +84,8 @@ import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Prelude.Constants
+import SAWCore.Term.Functor
+import SAWCore.Prelude.Constants
 
 data a :*: b = (:*:) a b
   deriving (Eq,Ord,Show)

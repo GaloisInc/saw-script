@@ -31,9 +31,9 @@ import           Prettyprinter                                 (Doc, pretty)
 
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
-import           Verifier.SAW.Module
-import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Term.Functor
+import           SAWCore.Module
+import           SAWCore.SharedTerm
+import           SAWCore.Term.Functor
 import qualified SAWCoreCoq.Monad            as M
 import           SAWCoreCoq.SpecialTreatment
 import qualified SAWCoreCoq.Term             as TermTranslation

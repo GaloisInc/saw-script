@@ -9,14 +9,14 @@ Stability   : provisional
 
 module SAWCentral.Prover.Rewrite where
 
-import Verifier.SAW.Rewriter
+import SAWCore.Rewriter
          ( Simpset, emptySimpset, addRules, RewriteRule
          , scEqsRewriteRules, scDefRewriteRules
          , addConvs
          )
-import Verifier.SAW.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
-import Verifier.SAW.Conversion
-import Verifier.SAW.SharedTerm(SharedContext,scFindDef)
+import SAWCore.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
+import SAWCore.Conversion
+import SAWCore.SharedTerm(SharedContext,scFindDef)
 
 basic_ss :: SharedContext -> IO (Simpset a)
 basic_ss sc =

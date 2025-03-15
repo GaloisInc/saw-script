@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.Concrete
+Module      : SAWCore.Simulator.Concrete
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -14,7 +14,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.Concrete
+module SAWCore.Simulator.Concrete
        ( evalSharedTerm
        , CValue, Concrete, Value(..), TValue(..)
        , CExtra(..)
@@ -30,14 +30,14 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
-import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
-import qualified Verifier.SAW.Prim as Prim
-import qualified Verifier.SAW.Simulator as Sim
-import Verifier.SAW.Simulator.Value
-import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.TypedAST (ModuleMap)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Utils (panic)
+import SAWCore.Prim (BitVector(..), signed, bv, bvNeg)
+import qualified SAWCore.Prim as Prim
+import qualified SAWCore.Simulator as Sim
+import SAWCore.Simulator.Value
+import qualified SAWCore.Simulator.Prims as Prims
+import SAWCore.TypedAST (ModuleMap)
+import SAWCore.SharedTerm
+import SAWCore.Utils (panic)
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
@@ -82,7 +82,7 @@ instance Show CExtra where
 
 toBool :: CValue -> Bool
 toBool (VBool b) = b
-toBool x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toBool", show x]
+toBool x = error $ unwords ["SAWCore.Simulator.Concrete.toBool", show x]
 
 vWord :: BitVector -> CValue
 vWord x = VWord x
@@ -90,14 +90,14 @@ vWord x = VWord x
 toWord :: CValue -> BitVector
 toWord (VWord x) = x
 toWord (VVector vv) = Prim.packBitVector (fmap (toBool . runIdentity . force) vv)
-toWord x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toWord", show x]
+toWord x = error $ unwords ["SAWCore.Simulator.Concrete.toWord", show x]
 
 vStream :: IntTrie CValue -> CValue
 vStream x = VExtra (CStream x)
 
 toStream :: CValue -> IntTrie CValue
 toStream (VExtra (CStream x)) = x
-toStream x = error $ unwords ["Verifier.SAW.Simulator.Concrete.toStream", show x]
+toStream x = error $ unwords ["SAWCore.Simulator.Concrete.toStream", show x]
 
 wordFun :: (BitVector -> CPrim) -> CPrim
 wordFun f = Prims.strictFun (\x -> f (toWord x))
@@ -110,7 +110,7 @@ bvShiftOp natOp =
   Prims.strictFun $ \y -> Prims.PrimValue $
     case y of
       VNat n | toInteger n < toInteger (maxBound :: Int) -> vWord (natOp x (fromIntegral n))
-      _      -> error $ unwords ["Verifier.SAW.Simulator.Concrete.shiftOp", show y]
+      _      -> error $ unwords ["SAWCore.Simulator.Concrete.shiftOp", show y]
 
 ------------------------------------------------------------
 
@@ -327,5 +327,5 @@ streamGetOp =
     VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
     VIntToNat (VInt i) -> return $ IntTrie.apply (toStream xs) i
     VBVToNat _ w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
-    n -> panic "Verifier.SAW.Simulator.Concrete.streamGetOp"
+    n -> panic "SAWCore.Simulator.Concrete.streamGetOp"
                ["Expected Nat value", show n]

@@ -55,7 +55,7 @@ import System.FilePath ((</>))
 import qualified Prettyprinter as PP
 
 
-import Verifier.SAW.SharedTerm as SC
+import SAWCore.SharedTerm as SC
 import SAWCoreWhat4.ReturnTrip (SAWCoreState, newSAWCoreState)
 
 data PathSatSolver

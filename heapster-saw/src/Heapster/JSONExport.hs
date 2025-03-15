@@ -33,7 +33,7 @@ import qualified Language.Haskell.TH.Datatype as TH
 import Heapster.CruUtil ( CruCtx )
 import Heapster.Implication
 import Heapster.Permissions
-import Verifier.SAW.Name ( Ident )
+import SAWCore.Name ( Ident )
 import What4.FunctionName ( FunctionName )
 
 instance NuMatching Value where

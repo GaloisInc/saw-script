@@ -11,7 +11,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 {- |
-Module      : Verifier.SAW.Term.Functor
+Module      : SAWCore.Term.Functor
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -19,7 +19,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Term.Functor
+module SAWCore.Term.Functor
   ( -- * Module Names
     ModuleName, mkModuleName
   , preludeName
@@ -83,8 +83,8 @@ import Numeric.Natural
 import qualified Language.Haskell.TH.Syntax as TH
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
-import Verifier.SAW.Name
-import qualified Verifier.SAW.TermNet as Net
+import SAWCore.Name
+import qualified SAWCore.TermNet as Net
 
 type DeBruijnIndex = Int
 type FieldName = Text
@@ -403,7 +403,7 @@ instance Hashable e => Hashable (TermF e) where
 -- 1. Hash 'Constant's based on their definition, if it exists, rather than
 -- always using their type. Represented as an 'ExtCns', it contains unavoidable
 -- freshness derived from a global counter (via 'scFreshGlobalVar' as
--- initialized in 'Verifier.SAW.SharedTerm.mkSharedContext'), but their
+-- initialized in 'SAWCore.SharedTerm.mkSharedContext'), but their
 -- definition does not necessarily contain the same freshness.
 -- (Q: If we did this, would we also have to update 'alphaEquiv'?)
 --
@@ -435,9 +435,9 @@ data Term
     -- in the course of a SAW invocation and needs to be lifted into a 'Term',
     -- we can see if we've already created a 'Term' wrapper for an identical
     -- 'TermF', and reuse it if so. The implementation of hash-consed 'Term'
-    -- construction exists in 'Verifier.SAW.SharedTerm', in particular in the
-    -- 'Verifier.SAW.SharedTerm.scTermF' field of the
-    -- t'Verifier.SAW.SharedTerm.SharedContext' object.
+    -- construction exists in 'SAWCore.SharedTerm', in particular in the
+    -- 'SAWCore.SharedTerm.scTermF' field of the
+    -- t'SAWCore.SharedTerm.SharedContext' object.
      { stAppIndex    :: {-# UNPACK #-} !TermIndex
        -- ^ The UID associated with a 'Term'. It is guaranteed unique across a
        -- universe of properly-constructed 'Term's within a single SAW
@@ -485,7 +485,7 @@ instance Hashable Term where
   -- to '(==)' (i.e. 'alphaEquiv'), then they must have the same hash. For terms
   -- constructed by/within SAW, this will hold, because SAW's handling of index
   -- generation and assignment ensures that equality of indices implies equality
-  -- of terms and term hashes (see 'Verifier.SAW.SharedTerm.getTerm'). However,
+  -- of terms and term hashes (see 'SAWCore.SharedTerm.getTerm'). However,
   -- if terms are constructed outside this standard procedure or in a way that
   -- does not respect index uniqueness rules, 'hashWithSalt''s contract could be
   -- violated.

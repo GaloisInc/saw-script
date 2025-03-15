@@ -23,8 +23,8 @@ import qualified Data.Text as Text
 
 import Numeric.Natural (Natural)
 
-import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.Name as SC
+import qualified SAWCore.SharedTerm as SC
+import qualified SAWCore.Name as SC
 
 import SAWCentral.Panic (panic)
 

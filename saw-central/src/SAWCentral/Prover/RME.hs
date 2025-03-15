@@ -5,10 +5,10 @@ import qualified Data.Map as Map
 
 import qualified Data.RME as RME
 
-import Verifier.SAW.FiniteValue
+import SAWCore.FiniteValue
 
-import qualified Verifier.SAW.Simulator.RME as RME
-import Verifier.SAW.SATQuery (SATQuery(..))
+import qualified SAWCore.Simulator.RME as RME
+import SAWCore.SATQuery (SATQuery(..))
 
 import SAWCentral.Proof (CEX)
 import SAWCentral.Prover.Util

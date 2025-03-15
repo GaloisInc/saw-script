@@ -47,20 +47,20 @@ import Prettyprinter
 import Data.Reflection
 import Data.Parameterized.BoolRepr
 
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
+import SAWCore.Utils (panic) -- XXX why is this using a different library's panic hook?
+import SAWCore.Term.Functor
+import SAWCore.Term.Pretty
+import SAWCore.SharedTerm
+import SAWCore.Recognizer
 
-import Verifier.SAW.Module
-import Verifier.SAW.Prim (widthNat, EvalError(..))
-import qualified Verifier.SAW.Prim as Prim
-import Verifier.SAW.Simulator (SimulatorConfig, evalSharedTerm)
-import Verifier.SAW.Simulator.Value
-import Verifier.SAW.Simulator.TermModel
-import Verifier.SAW.Simulator.Prims
-import Verifier.SAW.FiniteValue
+import SAWCore.Module
+import SAWCore.Prim (widthNat, EvalError(..))
+import qualified SAWCore.Prim as Prim
+import SAWCore.Simulator (SimulatorConfig, evalSharedTerm)
+import SAWCore.Simulator.Value
+import SAWCore.Simulator.TermModel
+import SAWCore.Simulator.Prims
+import SAWCore.FiniteValue
 import SAWCentral.Proof (termToProp, propToTerm, prettyProp, propToSequent, SolveResult(..))
 
 import SAWCentral.MRSolver.Term

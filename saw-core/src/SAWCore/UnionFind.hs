@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {- |
-Module      : Verifier.SAW.UnionFind
+Module      : SAWCore.UnionFind
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -9,7 +9,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.UnionFind (
+module SAWCore.UnionFind (
     AssertResult(..)
   , assertSucceeded
   -- * Class operations

@@ -7,7 +7,7 @@
 {-# LANGUAGE ImplicitParams #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.TermModel
+Module      : SAWCore.Simulator.TermModel
 Copyright   : Galois, Inc. 2012-2021
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -15,7 +15,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.TermModel
+module SAWCore.Simulator.TermModel
        ( TmValue, TermModel, Value(..), TValue(..)
        , VExtra(..)
        , readBackValue, readBackTValue
@@ -39,16 +39,16 @@ import qualified Data.Set as Set
 import Numeric.Natural
 
 
-import Verifier.SAW.Prim (BitVector(..))
-import qualified Verifier.SAW.Prim as Prim
-import Verifier.SAW.Prelude.Constants
-import qualified Verifier.SAW.Simulator as Sim
-import Verifier.SAW.Simulator.Value
-import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.TypedAST
+import SAWCore.Prim (BitVector(..))
+import qualified SAWCore.Prim as Prim
+import SAWCore.Prelude.Constants
+import qualified SAWCore.Simulator as Sim
+import SAWCore.Simulator.Value
+import qualified SAWCore.Simulator.Prims as Prims
+import SAWCore.TypedAST
        ( ModuleMap, FlatTermF(..), toShortName, dtPrimName )
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Utils (panic)
+import SAWCore.SharedTerm
+import SAWCore.Utils (panic)
 
 ------------------------------------------------------------
 

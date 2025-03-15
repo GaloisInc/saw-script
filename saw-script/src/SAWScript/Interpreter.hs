@@ -80,13 +80,13 @@ import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
 import SAWCentral.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWCentral.Yosys
-import Verifier.SAW.Conversion
---import Verifier.SAW.PrettySExp
-import Verifier.SAW.Prim (rethrowEvalError)
-import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Pretty (MemoStyle(..))
-import Verifier.SAW.TypedAST hiding (FlatTermF(..))
+import SAWCore.Conversion
+--import SAWCore.PrettySExp
+import SAWCore.Prim (rethrowEvalError)
+import SAWCore.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
+import SAWCore.SharedTerm
+import SAWCore.Term.Pretty (MemoStyle(..))
+import SAWCore.TypedAST hiding (FlatTermF(..))
 import CryptolSAWCore.TypedTerm
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import qualified CryptolSAWCore.Monadify as Monadify

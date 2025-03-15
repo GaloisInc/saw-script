@@ -13,10 +13,10 @@ module CryptolSAWCore.Simpset
   ( mkCryptolSimpset
   ) where
 
-import Verifier.SAW.Module
-import Verifier.SAW.Rewriter
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Functor
+import SAWCore.Module
+import SAWCore.Rewriter
+import SAWCore.SharedTerm
+import SAWCore.Term.Functor
 
 mkCryptolSimpset :: SharedContext -> IO (Simpset a)
 mkCryptolSimpset sc =

@@ -68,8 +68,8 @@ import Lang.Crucible.LLVM.Arch.X86
 import Lang.Crucible.LLVM.DataLayout
 import qualified Lang.Crucible.LLVM.Errors.Poison as Poison
 import qualified Lang.Crucible.LLVM.Errors.UndefinedBehavior as UB
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.OpenTerm
+import SAWCore.Term.Functor
+import SAWCore.OpenTerm
 
 
 -- | The lens into an 'RAssign' associated with a 'Member' proof

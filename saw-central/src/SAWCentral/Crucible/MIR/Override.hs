@@ -71,7 +71,7 @@ import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
-import Verifier.SAW.SharedTerm
+import SAWCore.SharedTerm
 import SAWCoreWhat4.ReturnTrip (saw_ctx, toSC)
 import CryptolSAWCore.TypedTerm
 

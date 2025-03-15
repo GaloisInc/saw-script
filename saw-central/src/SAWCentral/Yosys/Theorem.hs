@@ -28,10 +28,10 @@ import Data.Map (Map)
 
 import qualified Text.URI as URI
 
-import qualified Verifier.SAW.Cache as SC
-import qualified Verifier.SAW.SharedTerm as SC
+import qualified SAWCore.Cache as SC
+import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
-import qualified Verifier.SAW.Recognizer as R
+import qualified SAWCore.Recognizer as R
 
 import qualified CryptolSAWCore.Cryptol as CSC
 

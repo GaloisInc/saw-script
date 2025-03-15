@@ -44,7 +44,7 @@ import SAWCentral.Position
 import SAWCentral.Utils
 import SAWCentral.TopLevel
 import SAWCentral.Value
---import Verifier.SAW.SharedTerm
+--import SAWCore.SharedTerm
 
 import SAWScript.AutoMatch.ArgMapping
 import SAWScript.AutoMatch.Declaration

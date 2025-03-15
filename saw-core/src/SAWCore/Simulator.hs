@@ -11,7 +11,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module      : Verifier.SAW.Simulator
+Module      : SAWCore.Simulator
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -21,7 +21,7 @@ Portability : non-portable (language extensions)
 Evaluator for SAWCore terms, with lazy evaluation order.
 -}
 
-module Verifier.SAW.Simulator
+module SAWCore.Simulator
   ( SimulatorConfig(..)
   , evalSharedTerm
   , evalGlobal
@@ -50,16 +50,16 @@ import qualified Data.Text as Text
 import Data.Traversable
 import GHC.Stack
 
-import Verifier.SAW.Utils (panic)
+import SAWCore.Utils (panic)
 
-import Verifier.SAW.Module
-import Verifier.SAW.Name
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Prelude.Constants
+import SAWCore.Module
+import SAWCore.Name
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.Prelude.Constants
 
-import Verifier.SAW.Simulator.Value
-import qualified Verifier.SAW.Simulator.Prims as Prims
+import SAWCore.Simulator.Value
+import qualified SAWCore.Simulator.Prims as Prims
 
 type Id = Identity
 

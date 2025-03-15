@@ -1,12 +1,12 @@
 {- |
-Module      : Verifier.SAW.Simulator.MonadLazy
+Module      : SAWCore.Simulator.MonadLazy
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-module Verifier.SAW.Simulator.MonadLazy where
+module SAWCore.Simulator.MonadLazy where
 
 import Control.Monad (liftM)
 import Control.Monad.Identity (Identity)

@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.Prims
+Module      : SAWCore.Simulator.Prims
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -20,7 +20,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.Prims
+module SAWCore.Simulator.Prims
 ( Prim(..)
 , BasePrims(..)
 , constMap
@@ -77,12 +77,12 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.Term.Functor (Ident, primType, primName)
-import Verifier.SAW.Simulator.Value
-import Verifier.SAW.Prim
-import qualified Verifier.SAW.Prim as Prim
+import SAWCore.Term.Functor (Ident, primType, primName)
+import SAWCore.Simulator.Value
+import SAWCore.Prim
+import qualified SAWCore.Prim as Prim
 
-import qualified Verifier.SAW.Utils as Panic (panic)
+import qualified SAWCore.Utils as Panic (panic)
 
 
 -- | A utility type for implementing primitive functions.
@@ -395,7 +395,7 @@ constMap bp = Map.fromList
 -- | Call this function to indicate that a programming error has
 -- occurred, e.g. a datatype invariant has been violated.
 panic :: HasCallStack => String -> a
-panic msg = Panic.panic "Verifier.SAW.Simulator.Prims" [msg]
+panic msg = Panic.panic "SAWCore.Simulator.Prims" [msg]
 
 ------------------------------------------------------------
 -- Value accessors and constructors
@@ -405,7 +405,7 @@ vNat n = VNat n
 
 toBool :: Show (Extra l) => Value l -> VBool l
 toBool (VBool b) = b
-toBool x = panic $ unwords ["Verifier.SAW.Simulator.toBool", show x]
+toBool x = panic $ unwords ["SAWCore.Simulator.toBool", show x]
 
 
 type Pack l   = Vector (VBool l) -> MWord l
@@ -415,24 +415,24 @@ toWord :: (HasCallStack, VMonad l, Show (Extra l))
        => Pack l -> Value l -> MWord l
 toWord _ (VWord w) = return w
 toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
-toWord _ x = panic $ unwords ["Verifier.SAW.Simulator.toWord", show x]
+toWord _ x = panic $ unwords ["SAWCore.Simulator.toWord", show x]
 
 toWordPred :: (HasCallStack, VMonad l, Show (Extra l))
            => Value l -> VWord l -> MBool l
 toWordPred (VFun _ f) = fmap toBool . f . ready . VWord
-toWordPred x = panic $ unwords ["Verifier.SAW.Simulator.toWordPred", show x]
+toWordPred x = panic $ unwords ["SAWCore.Simulator.toWordPred", show x]
 
 toBits :: (HasCallStack, VMonad l, Show (Extra l))
        => Unpack l -> Value l -> EvalM l (Vector (VBool l))
 toBits unpack (VWord w) = unpack w
 toBits _ (VVector v) = V.mapM (liftM toBool . force) v
-toBits _ x = panic $ unwords ["Verifier.SAW.Simulator.toBits", show x]
+toBits _ x = panic $ unwords ["SAWCore.Simulator.toBits", show x]
 
 toVector :: (HasCallStack, VMonad l, Show (Extra l))
          => Unpack l -> Value l -> ExceptT Text (EvalM l) (Vector (Thunk l))
 toVector _ (VVector v) = return v
 toVector unpack (VWord w) = lift (liftM (fmap (ready . VBool)) (unpack w))
-toVector _ x = throwE $ "Verifier.SAW.Simulator.toVector " <> Text.pack (show x)
+toVector _ x = throwE $ "SAWCore.Simulator.toVector " <> Text.pack (show x)
 
 vecIdx :: a -> Vector a -> Int -> a
 vecIdx err v n =
@@ -442,7 +442,7 @@ vecIdx err v n =
 
 toArray :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MArray l
 toArray (VArray f) = return f
-toArray x = panic $ unwords ["Verifier.SAW.Simulator.toArray", show x]
+toArray x = panic $ unwords ["SAWCore.Simulator.toArray", show x]
 
 ------------------------------------------------------------
 -- Standard operator types
@@ -791,7 +791,7 @@ genOp =
   strictFun $ \f -> Prim $
     do let g i = delay $ apply f (ready (VNat (fromIntegral i)))
        if toInteger n > toInteger (maxBound :: Int) then
-         panic ("Verifier.SAW.Simulator.gen: vector size too large: " ++ show n)
+         panic ("SAWCore.Simulator.gen: vector size too large: " ++ show n)
          else liftM VVector $ V.generateM (fromIntegral n) g
 
 
@@ -919,7 +919,7 @@ appV bp xs ys =
     (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
     (VVector xv, VWord yw) -> lift (liftM (\yv -> VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw))
     (VWord xw, VVector yv) -> lift (liftM (\xv -> VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw))
-    _ -> throwE $ "Verifier.SAW.Simulator.Prims.appendOp: " <> Text.pack (show xs) <> ", " <> Text.pack (show ys)
+    _ -> throwE $ "SAWCore.Simulator.Prims.appendOp: " <> Text.pack (show xs) <> ", " <> Text.pack (show ys)
 
 -- join  :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
 joinOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
@@ -933,7 +933,7 @@ joinOp bp =
     VVector xv -> do
       vv <- lift (V.mapM force xv)
       V.foldM (appV bp) (VVector V.empty) vv
-    _ -> throwE "Verifier.SAW.Simulator.Prims.joinOp"
+    _ -> throwE "SAWCore.Simulator.Prims.joinOp"
 
 -- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 splitOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Prim l
@@ -950,7 +950,7 @@ splitOp bp =
     VWord xw ->
       let f i = (ready . VWord) <$> bpBvSlice bp (i*n) n xw
       in lift (VVector <$> V.generateM m f)
-    _ -> throwE "Verifier.SAW.Simulator.Prims.splitOp"
+    _ -> throwE "SAWCore.Simulator.Prims.splitOp"
 
 -- vZip :: (a b :: sort 0) -> (m n :: Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
 vZipOp :: (VMonadLazy l, Show (Extra l)) => Unpack l -> Prim l
@@ -1357,7 +1357,7 @@ muxValue bp tp0 b = value tp0
     value _ (TValue x)        (TValue y)        = TValue <$> tvalue x y
 
     value tp x                y                 =
-      panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: " <>
+      panic $ "SAWCore.Simulator.Prims.iteOp: malformed arguments: " <>
          show x <> " " <> show y <> " " <> show tp
 
     ctorArgs :: TValue l -> [Thunk l] -> [Thunk l] -> [Thunk l] -> EvalM l [Thunk l]
@@ -1379,12 +1379,12 @@ muxValue bp tp0 b = value tp0
       unsupportedPrimitive "muxValue" "cannot mux constructors with dependent types"
 
     ctorArgs _ _ _ _ =
-      panic $ "Verifier.SAW.Simulator.Prims.iteOp: constructor arguments mismtch"
+      panic $ "SAWCore.Simulator.Prims.iteOp: constructor arguments mismtch"
 
     tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
     tvalue (VSort x)         (VSort y)         | x == y = return $ VSort y
     tvalue x                 y                 =
-      panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
+      panic $ "SAWCore.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
     toVector' :: Value l -> EvalM l (Vector (Thunk l))
@@ -1395,7 +1395,7 @@ muxValue bp tp0 b = value tp0
     thunks :: TValue l -> Vector (Thunk l) -> Vector (Thunk l) -> EvalM l (Vector (Thunk l))
     thunks tp xv yv
       | V.length xv == V.length yv = V.zipWithM (thunk tp) xv yv
-      | otherwise                  = panic "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments"
+      | otherwise                  = panic "SAWCore.Simulator.Prims.iteOp: malformed arguments"
 
     thunk :: TValue l -> Thunk l -> Thunk l -> EvalM l (Thunk l)
     thunk tp x y = delay $

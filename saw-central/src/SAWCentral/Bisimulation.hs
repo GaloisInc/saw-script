@@ -96,10 +96,10 @@ import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
 
 import qualified CryptolSAWCore.Cryptol as C
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Functor
+import SAWCore.SharedTerm
+import SAWCore.Term.Functor
 import CryptolSAWCore.TypedTerm
-import Verifier.SAW.Recognizer
+import SAWCore.Recognizer
 
 -- State used to facilitate the replacement of a 'Constant' application in a
 -- 'Term' with an 'ExtCns'.  Used in 'replaceConstantTerm' and

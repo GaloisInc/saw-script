@@ -133,10 +133,10 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Set (Set)
 
-import Verifier.SAW.Utils (panic)
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Recognizer
+import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
+import SAWCore.Term.Functor
+import SAWCore.SharedTerm
+import SAWCore.Recognizer
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Proof (Sequent, SolveResult)
 import SAWCentral.Value (TopLevel)

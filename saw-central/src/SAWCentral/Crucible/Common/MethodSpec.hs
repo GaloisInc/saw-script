@@ -143,7 +143,7 @@ import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
 import           CryptolSAWCore.TypedTerm as SAWVerifier
-import           Verifier.SAW.SharedTerm as SAWVerifier
+import           SAWCore.SharedTerm as SAWVerifier
 import           SAWCoreWhat4.ReturnTrip as SAWVerifier
 
 import           SAWCentral.Crucible.Common (Sym, sawCoreState)

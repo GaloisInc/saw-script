@@ -2,14 +2,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 {- |
-Module      : Verifier.SAW.FiniteValue
+Module      : SAWCore.FiniteValue
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
 Portability : non-portable (language extensions)
 -}
-module Verifier.SAW.FiniteValue where
+module SAWCore.FiniteValue where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -34,10 +34,10 @@ import Prettyprinter hiding (Doc)
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..) )
 import qualified Data.Aeson as JSON
 
-import qualified Verifier.SAW.Recognizer as R
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Term.Pretty
+import qualified SAWCore.Recognizer as R
+import SAWCore.SharedTerm
+import SAWCore.TypedAST
+import SAWCore.Term.Pretty
 
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.
 data FiniteType

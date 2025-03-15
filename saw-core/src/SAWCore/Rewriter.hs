@@ -12,7 +12,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
-Module      : Verifier.SAW.Rewriter
+Module      : SAWCore.Rewriter
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -20,7 +20,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Rewriter
+module SAWCore.Rewriter
   ( -- * Rewrite rules
     RewriteRule
   , ctxtRewriteRule
@@ -77,14 +77,14 @@ import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
 
-import Verifier.SAW.Cache
-import Verifier.SAW.Conversion
-import qualified Verifier.SAW.Recognizer as R
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Functor
-import Verifier.SAW.TypedAST
-import qualified Verifier.SAW.TermNet as Net
-import Verifier.SAW.Prelude.Constants
+import SAWCore.Cache
+import SAWCore.Conversion
+import qualified SAWCore.Recognizer as R
+import SAWCore.SharedTerm
+import SAWCore.Term.Functor
+import SAWCore.TypedAST
+import qualified SAWCore.TermNet as Net
+import SAWCore.Prelude.Constants
 
 data RewriteRule a
   = RewriteRule

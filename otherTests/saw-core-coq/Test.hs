@@ -24,11 +24,11 @@ import Prettyprinter
 
 -- import qualified Language.Coq.Pretty as Coq
 -- import CryptolSAWCore.CryptolEnv
-import Verifier.SAW.Module
-import Verifier.SAW.Prelude (preludeModule)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.Typechecker
-import qualified Verifier.SAW.UntypedAST as Un
+import SAWCore.Module
+import SAWCore.Prelude (preludeModule)
+import SAWCore.SharedTerm
+import SAWCore.Typechecker
+import qualified SAWCore.UntypedAST as Un
 import SAWCoreCoq.Coq
 
 configuration :: TranslationConfiguration
