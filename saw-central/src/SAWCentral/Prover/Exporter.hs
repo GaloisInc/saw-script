@@ -88,7 +88,7 @@ import CryptolSAWCore.TypedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
-import qualified Verifier.SAW.Simulator.SBV as SBV
+import qualified SAWCoreSBV.SBV as SBV
 import qualified Verifier.SAW.Simulator.What4 as W
 
 import qualified Verifier.SAW.UntypedAST as Un

@@ -95,7 +95,7 @@ import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 -- saw-core-sbv
-import qualified Verifier.SAW.Simulator.SBV as SBVSim
+import qualified SAWCoreSBV.SBV as SBVSim
 
 -- saw-core-what4
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
