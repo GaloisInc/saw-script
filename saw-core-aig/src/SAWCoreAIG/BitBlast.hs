@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
-Module      : Verifier.SAW.Simulator.BitBlast
+Module      : SAWCoreAIG.BitBlast
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : jhendrix@galois.com
@@ -16,7 +16,7 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Simulator.BitBlast
+module SAWCoreAIG.BitBlast
   ( BValue
   , withBitBlastedTerm
   , withBitBlastedSATQuery
@@ -113,7 +113,7 @@ vBool l = VBool l
 
 toBool :: BValue l -> l
 toBool (VBool l) = l
-toBool x = error $ unwords ["Verifier.SAW.Simulator.BitBlast.toBool", show x]
+toBool x = error $ unwords ["SAWCoreAIG.BitBlast.toBool", show x]
 
 vWord :: LitVector l -> BValue l
 vWord lv = VWord lv
@@ -121,12 +121,12 @@ vWord lv = VWord lv
 toWord :: BValue l -> IO (LitVector l)
 toWord (VWord lv) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
-toWord x = fail $ unwords ["Verifier.SAW.Simulator.BitBlast.toWord", show x]
+toWord x = fail $ unwords ["SAWCoreAIG.BitBlast.toWord", show x]
 
 flattenBValue :: BValue l -> IO (LitVector l)
 flattenBValue (VBool l) = return (AIG.replicate 1 l)
 flattenBValue (VWord lv) = return lv
-flattenBValue (VExtra (BStream _ _)) = error "Verifier.SAW.Simulator.BitBlast.flattenBValue: BStream"
+flattenBValue (VExtra (BStream _ _)) = error "SAWCoreAIG.BitBlast.flattenBValue: BStream"
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
 flattenBValue VUnit = return $ AIG.concat []
@@ -136,7 +136,7 @@ flattenBValue (VPair x y) = do
   return $ AIG.concat [vx, vy]
 flattenBValue (VRecordValue elems) = do
   AIG.concat <$> mapM (flattenBValue <=< force . snd) elems
-flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
+flattenBValue _ = error $ unwords ["SAWCoreAIG.BitBlast.flattenBValue: unsupported value"]
 
 ------------------------------------------------------------
 
@@ -151,7 +151,7 @@ bvShiftOp bvOp natOp =
     case y of
       VNat n   -> return (vWord (natOp x n))
       VBVToNat _ v -> fmap vWord (bvOp x =<< toWord v)
-      _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
+      _        -> error $ unwords ["SAWCoreAIG.BitBlast.shiftOp", show y]
 
 lvSShr :: LitVector l -> Natural -> LitVector l
 lvSShr v i = lvShr (AIG.msb v) v i
@@ -417,7 +417,7 @@ streamGetOp be =
     VBVToNat _ w ->
        do bs <- toWord w
           AIG.muxInteger (lazyMux be (muxBVal be tp)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
-    v -> fail (unlines ["Verifier.SAW.Simulator.BitBlast.streamGetOp", "Expected Nat value", show v])
+    v -> fail (unlines ["SAWCoreAIG.BitBlast.streamGetOp", "Expected Nat value", show v])
 
 
 lookupBStream :: BValue l -> Natural -> IO (BValue l)
@@ -428,7 +428,7 @@ lookupBStream (VExtra (BStream f r)) n = do
      Nothing -> do v <- f n
                    writeIORef r (Map.insert n v m)
                    return v
-lookupBStream _ _ = fail "Verifier.SAW.Simulator.BitBlast.lookupBStream: expected Stream"
+lookupBStream _ _ = fail "SAWCoreAIG.BitBlast.lookupBStream: expected Stream"
 
 ------------------------------------------------------------
 -- Generating variables for arguments
@@ -481,7 +481,7 @@ bitBlastExtCns ecMap (EC idx name _v) =
   case Map.lookup idx ecMap of
     Just var -> return var
     Nothing -> fail $
-      "Verifier.SAW.Simulator.BitBlast: can't translate variable " ++
+      "SAWCoreAIG.BitBlast: can't translate variable " ++
       show name ++ "(index: " ++ show idx ++ ")"
 
 asAIGType :: SharedContext -> Term -> IO [(String, Term)]
@@ -493,7 +493,7 @@ asAIGType sc t = do
     (R.asVecType -> Just _)      -> return []
     (R.asTupleType -> Just _)    -> return []
     (R.asRecordType -> Just _)   -> return []
-    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: "
+    _                            -> fail $ "SAWCoreAIG.BitBlast.adAIGType: invalid AIG type: "
                                     ++ scPrettyTerm defaultPPOpts t'
 
 bitBlastTerm ::
@@ -567,4 +567,4 @@ withBitBlastedSATQuery proxy sc addlPrims satq cont =
           x <- bitBlastBasic be modmap addlPrims varMap t
           case x of
             VBool l -> cont be l varShapes
-            _ -> fail "Verifier.SAW.Simulator.BitBlast.withBitBlastedSATQuery: non-boolean result type."
+            _ -> fail "SAWCoreAIG.BitBlast.withBitBlastedSATQuery: non-boolean result type."

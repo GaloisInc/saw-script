@@ -26,7 +26,7 @@ import           Verifier.SAW.FiniteValue
 import           Verifier.SAW.Name
 import           Verifier.SAW.SATQuery
 import           Verifier.SAW.SharedTerm
-import qualified Verifier.SAW.Simulator.BitBlast as BBSim
+import qualified SAWCoreAIG.BitBlast as BBSim
 
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof

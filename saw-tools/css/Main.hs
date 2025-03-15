@@ -32,7 +32,7 @@ import qualified CryptolSAWCore.Prelude as C
 import           CryptolSAWCore.CryptolEnv (schemaNoUser, meSolverConfig)
 
 
-import qualified Verifier.SAW.Simulator.BitBlast as BBSim
+import qualified SAWCoreAIG.BitBlast as BBSim
 
 -- CSS has its own version, because it used to be part of the
 -- cryptol-saw-core package, which for its entire existence was always

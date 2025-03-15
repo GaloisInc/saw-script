@@ -172,9 +172,9 @@ library saw-core-aig
     -- internal subpackages in the saw tree
     saw-core
 
-  hs-source-dirs: saw-core-aig/src
+  hs-source-dirs: saw-core-aig
   exposed-modules:
-     Verifier.SAW.Simulator.BitBlast
+     SAWCoreAIG.BitBlast
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
