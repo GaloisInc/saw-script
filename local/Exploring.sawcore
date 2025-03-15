@@ -9,11 +9,26 @@ data Either2 (s t : sort 0) : sort 0 where {
 -- x : Bool
 -- x = ?
 
+{-
+Testing:
+
+data ListSortX : sort 0
+  where {
+    LSX_Nil  : ListSortX;
+    LSX_Cons : sort 0 -> ListSortX -> ListSortX;
+  }
+
+Result:
+Malformed declaration for "ListSortX"
+Universe level of constructors should be strictly contained in that of the datatype
+-}
+
 xx : Nat = 1;
 
 test1 : List1 Nat;
 test1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
 
+test2 : Void -> Nat -> Bool = elimVoid (Nat -> Bool);
 
 -- eta-expanded version of the Left constructor
 left2 : (a b : sort 0) -> a -> Either2 a b;
