@@ -1,18 +1,52 @@
 module EnumProto where
 
--- import Eithers;
+import Prelude;
+-- import Eithers;  -- DOES NOT WORK!!
 
 -------------------------------------------------------------------
--- Translation
+---- Import Eithers by Hand ----------------------------------------
+
+
+
+-- A right-nested sequence of Either types, defined as
+--   Eithers' [] = Void
+--   Eithers' (tp:tps) = Either tp (Eithers' tps)
+Eithers' : ListSort -> sort 0;
+Eithers' = ListSort__rec
+            (\ (_:ListSort) -> sort 0)
+            Void
+            (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (Either tp rec));
+
+
+-- An eliminator for the Eithers' type
+eithers' : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
+eithers' a =
+  FunsTo__rec
+    a
+    (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
+    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
+    (\ (tp : sort 0)                                     -- type arg
+       (f  : tp -> a)                                     --
+       (es : FunsTo a)                                    --
+       (rec: Eithers' (FunsToIns a es) -> a)              -- P es
+    ->
+       -- P (FunsTo_Cons a tp f es):
+       either tp (Eithers' (FunsToIns a es)) a f rec
+    );
+
+
+-------------------------------------------------------------------
+-- Prototyping the Translation
 -------------------------------------------------------------------
 
 ---- Cryptol: ------------------------------------------------------
 {-
 - Cryptol
-enum EnumType as = C1 CT1
-                 | C2 CT2
-                 | C3 CT3a CT3b
-                 -- 'as' can be free in CT1, CT2 types
+enum ETT as = C1 CT1
+            | C2 CT2
+            | C3 CT3a CT3b
+             -- 'as' can be free in CT1, CT2, ... types
 -}
 
 ---- SawCore: ------------------------------------------------------
@@ -21,56 +55,77 @@ enum EnumType as = C1 CT1
 -- Just Like EnumLib3, but let's inline things:
 
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
-EnumType__ArgType_C1 (as : sort 0) : sort 0 = as;
-EnumType__ArgType_C2 (as : sort 0) : sort 0 = Bool;
-EnumType__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
+ETT__ArgType_C1 (as : sort 0) : sort 0 = as;
+ETT__ArgType_C2 (as : sort 0) : sort 0 = Bool;
+ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
 
-  -- TODO: or Right Nest onto the UnitType??
+  -- TODO[B]: better: Right Nest onto the UnitType.
 
 --
-EnumType__TypeList : sort 0 -> ListSort;
-EnumType__TypeList as = LS_Cons (EnumType__ArgType_C1 as) (LS_Cons (EnumType__ArgType_C2 as) LS_Nil);
+ETT__TypeList : sort 0 -> ListSort;
+ETT__TypeList as = LS_Cons (ETT__ArgType_C1 as) (LS_Cons (ETT__ArgType_C2 as) LS_Nil);
 
 -- Define the type:
-EnumType : (as : sort 0) -> sort 0;
-EnumType as = Eithers' (
-   LS_Cons (EnumType__ArgType_C1 as) (LS_Cons (EnumType__ArgType_C2 as) LS_Nil)
-                       );
+ETT : (as : sort 0) -> sort 0;
+ETT as = Eithers' (
+   LS_Cons (ETT__ArgType_C1 as) (LS_Cons (ETT__ArgType_C2 as) LS_Nil));
 
 -- constructors (these aren't new, already in Cryptol, and AFAIK mapped into SawCore),
 -- thus straightforward names.
-C1 : (as : sort 0) -> EnumType__ArgType_C1 as -> EnumType as;
-C1 as x = Left (EnumType__ArgType_C1 as) (Eithers' (LS_Cons (EnumType__ArgType_C2 as) LS_Nil)) x;
+C1 : (as : sort 0) -> ETT__ArgType_C1 as -> ETT as;
+C1 as x = Left (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_Nil)) x;
 
-C2 : (as : sort 0) -> EnumType__ArgType_C2 as -> EnumType as;
-C2 as x = Right (EnumType__ArgType_C1 as) (Eithers' (LS_Cons (EnumType__ArgType_C2 as) LS_Nil))
-                    (Left (EnumType__ArgType_C2 as) (Eithers' LS_Nil)
+C2 : (as : sort 0) -> ETT__ArgType_C2 as -> ETT as;
+C2 as x = Right (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_Nil))
+                    (Left (ETT__ArgType_C2 as) (Eithers' LS_Nil)
                       x);
 
-EnumType_eithers : (as : sort 0)
-                -> (b: sort 0)
-                -> (EnumType__ArgType_C1 as -> b) -> (EnumType__ArgType_C2 as -> b)
-                -> EnumType as
-                -> b;
-EnumType_eithers as b f1 f2 =
-  either (EnumType__ArgType_C1 as) (Eithers' (LS_Cons (EnumType__ArgType_C2 as) LS_Nil)) b f1
-    (either (EnumType__ArgType_C2 as) Void b f2
+ETT_eithers : (as : sort 0)
+           -> (b: sort 0)
+           -> (ETT__ArgType_C1 as -> b)
+           -> (ETT__ArgType_C2 as -> b)
+           -> ETT as
+           -> b;
+ETT_eithers as b f1 f2 =
+  either (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_Nil)) b f1
+    (either (ETT__ArgType_C2 as) Void b f2
        (elimVoid b));
 
--- case for EnumType:
-{-
-EnumType_eithers  :  (b: sort 0)
-               -> MapRightArrow b EnumType__TypeList
-               -> Eithers EnumType__TypeList  -- AKA EnumType
-               -> b;
 
-EnumType_eithers = eithers' EnumType__TypeList
--}
+ETT_eithers2 : (as : sort 0)
+           -> (b: sort 0)
+           -> (ETT__ArgType_C1 as -> b)
+           -> (ETT__ArgType_C2 as -> b)
+           -> ETT as
+           -> b;
+ETT_eithers2 as b f1 f2 =
+  eithers' b (FunsTo_Cons b (ETT__ArgType_C1 as) f1
+             (FunsTo_Cons b (ETT__ArgType_C2 as) f2
+             (FunsTo_Nil b)));
 
----- examples of EnumType -----------------------------------------------------
 
-val1 : EnumType  Nat;
+-- NOTE: See Eithers.sawcore for a discussion of other alternatives.
+
+
+---- examples of ETT ------------------------------------------
+
+val1 : ETT  Nat;
 val1 = C1 Nat 5;
 
-val2 : (as : sort 0) -> EnumType  as;
+val2 : (as : sort 0) -> ETT  as;
 val2 as = C2 as True;
+
+fun : ETT Nat -> Bool;
+fun = ETT_eithers2 Nat Bool
+        (\(n : ETT__ArgType_C1 Nat) -> equal0Nat n)
+        (\(b : ETT__ArgType_C2 Nat) -> b          );
+
+---- tests ---------------------------------------------------------
+
+test10 : ETT Nat = val1;
+test11 : Bool    = fun val1;
+test12 : Bool    = fun (C1 Nat      0);
+test13 : Bool    = fun (C2 Nat  False);
+test14 : Bool    = fun (C2 Nat  True);
+
+test1  : Bool    = test14;
