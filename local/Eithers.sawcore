@@ -12,6 +12,22 @@ Eithers' = ListSort__rec
             (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
                (Either tp rec));
 
+-- An eliminator for the Eithers' type
+eithers' : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
+eithers' a =
+  FunsTo__rec
+    a
+    (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
+    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
+    (\ (tp : sort 0)                                     -- type arg
+       (f  : tp -> a)                                     --
+       (es : FunsTo a)                                    --
+       (rec: Eithers' (FunsToIns a es) -> a)              -- P es
+    ->
+       -- P (FunsTo_Cons a tp f es):
+       either tp (Eithers' (FunsToIns a es)) a f rec
+    );
+
 ---- The various Sawcore Lists -------------------------------------
 {-
 REFERENCE:
@@ -164,22 +180,6 @@ eithers_EnumType : (as : sort 0)
          eithers' enumTypeA_LS
           :: (a:sort 0) -> (MapRightArrow a enumTypeA_LS) -> Eithers' enumTypeA_LS -> a;
 -}
-
--- An eliminator for the Eithers' type
-eithers' : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
-eithers' a =
-  FunsTo__rec
-    a
-    (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
-    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
-    (\ (tp : sort 0)                                     -- type arg
-       (f  : tp -> a)                                     --
-       (es : FunsTo a)                                    --
-       (rec: Eithers' (FunsToIns a es) -> a)              -- P es
-    ->
-       -- P (FunsTo_Cons a tp f es):
-       either tp (Eithers' (FunsToIns a es)) a f rec
-    );
 
 {-
  TODO: the following is wrong, it should actually be
