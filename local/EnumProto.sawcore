@@ -1,11 +1,9 @@
 module EnumProto where
 
 import Prelude;
--- import Eithers;  -- DOES NOT WORK!!
 
--------------------------------------------------------------------
 ---- Import Eithers by Hand ----------------------------------------
-
+-- import Eithers;  -- DOES NOT WORK!!, Thus
 
 
 -- A right-nested sequence of Either types, defined as
@@ -43,9 +41,10 @@ eithers' a =
 ---- Cryptol: ------------------------------------------------------
 {-
 - Cryptol
+-- ETT = Enum Test Type
 enum ETT as = C1 CT1
             | C2 CT2
-            | C3 CT3a CT3b
+            | C3 CT3a CT3b  -- not done yet!
              -- 'as' can be free in CT1, CT2, ... types
 -}
 
@@ -80,6 +79,13 @@ C2 as x = Right (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_
                     (Left (ETT__ArgType_C2 as) (Eithers' LS_Nil)
                       x);
 
+{-
+C1' : (as : sort 0) -> ETT__ArgType_C1 as -> ETT as;
+C1' =
+  where
+  r, ls, split (n-1) ...
+-}
+
 ETT_eithers : (as : sort 0)
            -> (b: sort 0)
            -> (ETT__ArgType_C1 as -> b)
@@ -93,11 +99,11 @@ ETT_eithers as b f1 f2 =
 
 
 ETT_eithers2 : (as : sort 0)
-           -> (b: sort 0)
-           -> (ETT__ArgType_C1 as -> b)
-           -> (ETT__ArgType_C2 as -> b)
-           -> ETT as
-           -> b;
+            -> (b: sort 0)
+            -> (ETT__ArgType_C1 as -> b)
+            -> (ETT__ArgType_C2 as -> b)
+            -> ETT as
+            -> b;
 ETT_eithers2 as b f1 f2 =
   eithers' b (FunsTo_Cons b (ETT__ArgType_C1 as) f1
              (FunsTo_Cons b (ETT__ArgType_C2 as) f2
