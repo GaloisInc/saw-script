@@ -192,12 +192,8 @@ equivalence between Cryptol and non-Cryptol code. Leaving these
 abstractions in place is appropriate when comparing only Cryptol code,
 however, so <code class="docutils literal notranslate"><span class="pre">cryptol_ss</span></code> is not included in <code class="docutils literal notranslate"><span class="pre">basic_ss</span></code>.</p></li>
 </ul>
-<p>The next set of functions can extend or apply a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>:</p>
+<p>The following function can apply a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">addsimp'</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds a single <code class="docutils literal notranslate"><span class="pre">Term</span></code> to an
-existing `Simpset.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">addsimps'</span> <span class="pre">:</span> <span class="pre">[Term]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code> adds a list of <code class="docutils literal notranslate"><span class="pre">Term</span></code>s to
-an existing <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rewrite</span> <span class="pre">:</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Term</span></code> applies a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code> to an existing
 <code class="docutils literal notranslate"><span class="pre">Term</span></code> to produce a new <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p></li>
 </ul>
@@ -225,22 +221,6 @@ to be transformed:</p>
 <span class="go">           (Prelude.bvNat 1 1))</span>
 </pre></div>
 </div>
-<p>Finally, we apply the rule to the target term:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let result = rewrite (addsimp&#39; rule empty_ss) term</span>
-<span class="go">sawscript&gt; print_term result</span>
-<span class="go">\(x : Prelude.Vec 8 Prelude.Bool) -&gt;</span>
-<span class="go">  Prelude.bvAdd 8</span>
-<span class="go">    (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False x</span>
-<span class="go">       (Prelude.bvNat 1 1))</span>
-<span class="go">    (Prelude.bvNat 8 1)</span>
-</pre></div>
-</div>
-<p>Note that <code class="docutils literal notranslate"><span class="pre">addsimp'</span></code> and <code class="docutils literal notranslate"><span class="pre">addsimps'</span></code> take a <code class="docutils literal notranslate"><span class="pre">Term</span></code> or list of <code class="docutils literal notranslate"><span class="pre">Term</span></code>s;
-these could in principle be anything, and are not necessarily terms
-representing logically valid equalities. They have <code class="docutils literal notranslate"><span class="pre">'</span></code> suffixes because
-they are not intended to be the primary interface to rewriting. When using
-these functions, the soundness of the proof process depends on the
-correctness of these rules as a side condition.</p>
 <p>The primary interface to rewriting uses the <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> type instead of
 the <code class="docutils literal notranslate"><span class="pre">Term</span></code> type, as shown in the signatures for <code class="docutils literal notranslate"><span class="pre">addsimp</span></code> and
 <code class="docutils literal notranslate"><span class="pre">addsimps</span></code>.</p>
@@ -255,6 +235,18 @@ In general, a <code class="docutils literal notranslate"><span class="pre">Theor
 rewrite rule. However, if it has an appropriate shape it can be used for
 rewriting. In the <a class="reference internal" href="proofs-about-terms.html"><span class="std std-doc">“Proofs about Terms”</span></a> section,
 we’ll describe how to construct <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> values from <code class="docutils literal notranslate"><span class="pre">Term</span></code> values.</p>
+<p>For the time being, we’ll assume we’ve proved our <code class="docutils literal notranslate"><span class="pre">rule</span></code> term correct in
+some way, and have a <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> named <code class="docutils literal notranslate"><span class="pre">rule_thm</span></code>.</p>
+<p>Finally, we apply the rule to the target term:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sawscript&gt; let result = rewrite (addsimp rule_thm empty_ss) term</span>
+<span class="go">sawscript&gt; print_term result</span>
+<span class="go">\(x : Prelude.Vec 8 Prelude.Bool) -&gt;</span>
+<span class="go">  Prelude.bvAdd 8</span>
+<span class="go">    (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False x</span>
+<span class="go">       (Prelude.bvNat 1 1))</span>
+<span class="go">    (Prelude.bvNat 8 1)</span>
+</pre></div>
+</div>
 <p>In the absence of user-constructed <code class="docutils literal notranslate"><span class="pre">Theorem</span></code> values, there are some
 additional built-in rules that are not included in either <code class="docutils literal notranslate"><span class="pre">basic_ss</span></code> and
 <code class="docutils literal notranslate"><span class="pre">cryptol_ss</span></code> because they are not always beneficial, but that can

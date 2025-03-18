@@ -124,6 +124,15 @@
 <p class="admonition-title">Warning</p>
 <p>This section is under construction!</p>
 </div>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">addsimp'</span> <span class="pre">:</span> <span class="pre">Term</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">addsimps'</span> <span class="pre">:</span> <span class="pre">[Term]</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span> <span class="pre">-&gt;</span> <span class="pre">Simpset</span></code></p>
+<p>These functions unconditionally added rules represented as <code class="docutils literal notranslate"><span class="pre">Term</span></code> values to a
+<code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.
+When used in a proof, these functions make the correctness of the added rules
+a side condition of the proof process’s soundness.</p>
+</li>
+</ul>
 </section>
 
 
