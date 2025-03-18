@@ -140,7 +140,7 @@ some way, and have a `Theorem` named `rule_thm`.
 Finally, we apply the rule to the target term:
 
 :::{code-block} console
-sawscript> let result = rewrite (addsimp rule empty_ss) term
+sawscript> let result = rewrite (addsimp rule_thm empty_ss) term
 sawscript> print_term result
 \(x : Prelude.Vec 8 Prelude.Bool) ->
   Prelude.bvAdd 8
