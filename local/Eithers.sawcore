@@ -36,18 +36,22 @@ inj =
     (\ (ts:ListSort) -> (n: Nat) -> listSortGet ts n -> Eithers' ts)
     (\ (_: Nat) (_: sort 0) -> FalseProp)            -- LS_Nil: fails
     (\ (A:sort 0) (ts:ListSort) (rec : (n: Nat) -> listSortGet ts n -> Eithers' ts) ->
+      -- A is not input type, it's just the new HEAD of 'ts'
       -- expect type:
       --   P (LS_Cons A ts) ==
       --     (n:Nat) -> ListSortGet (LS_Cons A ts) -> Eithers' (LS_Cons A ts)
-      Nat_cases (A -> Eithers' (LS_Cons A ts))
-        (\ (a: A)-> Left A (Eithers' ts) a)
+      Nat_cases (listSortGet ts n -> Eithers' (LS_Cons A ts))
+        (\ (a: A)-> Left A (Eithers' ts) a) -- in this case A == codomain.
 
         -- expect type:
         --  Nat -> (sort 0 -> Eithers' (LS_Cons A ts))
         --      -> (sort 0 -> Eithers' (LS_Cons A ts))
         -- (\ (n: Nat) (_: A -> Eithers' (LS_Cons A ts))->
+
+        -- HMMM: have two 'n's in scope now.
+
         (\ (n: Nat) (_: sort 0)->
-         \ (a':A)-> Right A (Eithers' ts) (rec n a'))
+         \ (a': listSortGet ts n)-> Right A (Eithers' ts) (rec n a'))
     );
 
 {-
