@@ -32,14 +32,26 @@ inj : (ts: ListSort) -> (n: Nat) -> listSortGet ts n -> Eithers' ts;
 inj =
   ListSort__rec
     (\ (ts:ListSort) -> Nat -> sort 0 -> Eithers' ts)
-    (\ (_: Nat) (_:sort 0) -> Eq Bool True False)                -- LS_Nil: fails
-    (\ (A:sort 0) (ts:ListSort) (rec : Nat -> sort 0 -> Eithers' ts) ->
-      Nat_cases (A -> Eithers' ts)
+    (\ (_: Nat) (_: sort 0) -> Eq Bool True False)                -- LS_Nil: fails
+    (\ (A:sort 0) (ts:ListSort) (rec : Nat -> A -> Eithers' ts) ->
+      -- expect type:
+      --   P (LS_Cons A ts) == Nat -> sort 0 -> Eithers' (LS_Cons A ts)
+      Nat_cases (A -> Eithers' (LS_Cons A ts))
         (\ (a: A)-> Left A (Eithers' ts) a)
-        (\ (n:Nat)-> (a:A) -> Right A (Eithers' ts) (rec n a))
+        -- expect type:
+        --  Nat -> (sort 0 -> Eithers' (LS_Cons A ts))
+        --      -> (sort 0 -> Eithers' (LS_Cons A ts))
+        (\ (n: Nat) (_: A -> Eithers' (LS_Cons A ts)) ->
+           \(a: A) ->
+           Right A (Eithers' ts) (rec n a))
     );
 
 {-
+inferred type  (Nat -> A -> Either ...)
+expected type:
+  Nat -> (A -> Either) -> A -> Either ...
+
+---
 Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
 
 
