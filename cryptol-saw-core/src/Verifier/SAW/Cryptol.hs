@@ -1983,9 +1983,26 @@ genNominalConstructors sc nominal env0 =
       ns <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
           constrs = map (\(x,e) -> (x,(e,0))) ns
+            -- FIXME:MT: above 'magic' code, where's the abstraction?
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
+      unless (null conTs) $
+        do
+        putStrLn $ "conTs:"
+        mapM_ (\t -> putStrLn $ "  " ++ show t) conTs
+        putStrLn "\n\n"
+      putStrLn "\nenvironment extended with nominal defns:"
+      flip mapM_ ns $
+        (\(n,e)->
+           do
+           putStrLn $ " NAME: " ++ show (C.nameIdent n)
+           putStrLn $ " EXPR: " ++ showTerm e
+            -- showTerm t = scPrettyTerm defaultPPOpts t
+            --  ... in ../SAW/Term/PRetty.hs
+            -- also means to show with 'env/named-things'
+        )
+
       return env'
 
       -- NOTE: in the above, C.nominalTypeConTypes gets Cryptol
@@ -2021,11 +2038,11 @@ genNominalConstructors sc nominal env0 =
           where
           tFn tp body =
             if elem (C.tpKind tp) [C.KType, C.KNum]
-              then C.ETAbs tp body;
+              then C.ETAbs tp body
               else panic "genNominalConstructors"
                    ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
-        -- TODO: hmm: these need to be ordered in dependency order?
+        -- TODO: hmmm: do these need to be ordered in dependency order?
         newDefsForEnum cs =
           do
           cons <- mapM mkConstructor cs
@@ -2057,23 +2074,26 @@ genNominalConstructors sc nominal env0 =
           --  -- define our naming conventions
 
           -- FIXME[F]: support 2+ args and curried constructors!
+
           -- | generate ArgType and Constructor definitions:
-          mkConstructor :: C.EnumCon -> IO Term
+          mkConstructor :: C.EnumCon -> IO (C.Name,Term)
           mkConstructor c =
             {- design:
               1. just create from scratch, mimic C.nominalTypeConTypes
                  - but you'd like to use the types from ^ because you
                    need it in the terms!
-                 - 
+                 -
             -}
-             
+
             do
             let
               n         = length (C.ecFields c)
-               
+              ty        = C.TCon (C.TC (C.TCTuple n))
+                                 (C.ecFields c)
+              {- FIXME:TODO:  HIA
               ty        = case C.ecFields c of
-                           [t] -> 
-
+                           [t] ->
+              -}
                -- won't work, curried type is already in envT:
                -- C.TCon (C.TC (C.TCTuple n))
                --              (C.ecFields c)
@@ -2088,8 +2108,8 @@ genNominalConstructors sc nominal env0 =
                   -- where
                   --  let x = paramName
                   --  ts <- instantiations for the N-Sums for this branch.
-            constructor <- scTuple sc []
-            return (argType,constructor)
+            -- constructor <- scTuple sc []  [MT: OOPSIE!!]
+            return (conName, argType)
 
             -- ty' <- importType sc env ty
             --   -- this causes
