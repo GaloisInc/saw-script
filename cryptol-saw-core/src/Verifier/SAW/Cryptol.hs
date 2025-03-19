@@ -2108,7 +2108,6 @@ genNominalConstructors sc nominal env0 =
                   -- where
                   --  let x = paramName
                   --  ts <- instantiations for the N-Sums for this branch.
-            -- constructor <- scTuple sc []  [MT: OOPSIE!!]
             return (conName, argType)
 
             -- ty' <- importType sc env ty

@@ -62,12 +62,13 @@ ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
 
 --
 ETT__TypeList : sort 0 -> ListSort;
-ETT__TypeList as = LS_Cons (ETT__ArgType_C1 as) (LS_Cons (ETT__ArgType_C2 as) LS_Nil);
+ETT__TypeList as = LS_Cons (ETT__ArgType_C1 as)
+                  (LS_Cons (ETT__ArgType_C2 as)
+                   LS_Nil);
 
 -- Define the type:
 ETT : (as : sort 0) -> sort 0;
-ETT as = Eithers' (
-   LS_Cons (ETT__ArgType_C1 as) (LS_Cons (ETT__ArgType_C2 as) LS_Nil));
+ETT as = Eithers' ETT_TypeList
 
 -- constructors (these aren't new, already in Cryptol, and AFAIK mapped into SawCore),
 -- thus straightforward names.
@@ -80,6 +81,20 @@ C2 as x = Right (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_
                       x);
 
 {-
+C1..C3:
+C1 = L T1 (Eithers (drop 1 TL))
+C2 = R T1 (Eithers (drop 1 TL))
+   $ L T2 (Eithers (drop 2 TL))
+C3 = R T1 (Eithers (drop 1 TL))
+   $ R T2 (Eithers (drop 2 TL))
+   $ L T3 (Eithers (drop 3 TL))
+
+better, generic n-sum
+
+In1 :: ListSort -> a ->
+
+-----
+
 C1' : (as : sort 0) -> ETT__ArgType_C1 as -> ETT as;
 C1' =
   where
