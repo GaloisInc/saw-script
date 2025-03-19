@@ -28,6 +28,33 @@ eithers' a =
        either tp (Eithers' (FunsToIns a es)) a f rec
     );
 
+inj : (ts: ListSort) -> (n: Nat) -> listSortGet ts n -> Eithers' ts;
+inj =
+  ListSort__rec
+    (\ (ts:ListSort) -> Nat -> sort 0 -> Eithers' ts)
+    (\ (_: Nat) (_:sort 0) -> Eq Bool True False)                -- LS_Nil: fails
+    (\ (A:sort 0) (ts:ListSort) (rec : Nat -> sort 0 -> Eithers' ts) ->
+      Nat_cases (A -> Eithers' ts)
+        (\ (a: A)-> Left A (Eithers' ts) a)
+        (\ (n:Nat)-> (a:A) -> Right A (Eithers' ts) (rec n a))
+    );
+
+{-
+Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
+
+
+-- The sort at the given index in a ListSort or `Eq Bool True False` if
+--  the index is out of bounds
+listSortGet : ListSort -> Nat -> sort 0;
+listSortGet = ListSort__rec (\ (_:ListSort) -> Nat -> sort 0)
+  (\ (_:Nat) -> Eq Bool True False)
+  (\ (A:sort 0) (_:ListSort) (rec : Nat -> sort 0) ->
+     Nat_cases (sort 0) A (\ (n:Nat) (_:sort 0) -> rec n));
+
+
+-- inj2 : (ts:ListSort) -> a -> Eithers' (LSCons a ts)
+-}
+
 ---- The various Sawcore Lists -------------------------------------
 {-
 REFERENCE:
