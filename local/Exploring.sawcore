@@ -23,18 +23,39 @@ Malformed declaration for "ListSortX"
 Universe level of constructors should be strictly contained in that of the datatype
 -}
 
-xx : Nat = 1;
+---- List1 : -------------------------------------------------------
 
--- List1 :
+testLS_1 : ListSort = LS_Cons (Nat->Nat) LS_Nil;
+
+
+xx : Nat = 1;
 
 testL1_1 : List1 Nat;
 testL1_1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
 
 testL1_2 : List1 (Nat->Nat) = Nil1 (Nat->Nat);
-testL1_3 : List1 (ListSort) = Nil1 (ListSort);  -- !
--- testL1_4 : List1 (a : sort 0) = Nil1 a;  -- !
+testL1_3 : List1 (ListSort) = Nil1 (ListSort);
+testL1_4 : List1 (ListSort) = Cons1 ListSort testLS_1 (Nil1 ListSort);
 
--- Void:
+testL1_5 : (a : sort 0) -> List1 a;
+testL1_5 a = Nil1 a;  -- !
+
+testL1_6 : (a : sort 1) -> List1 a;
+testL1_6 a = Nil1 a;  -- !
+
+-- testL1_7 : List1 (sort 1);
+-- testL1_7 = Cons (sort 1) Nat (Cons (sort 1) Bool (Nil1 (sort 1)));
+
+
+{-
+fails (learning):
+
+testL1_7 : List1 (sort 1);
+testL1_7 = Nil1 Nat;  -- !
+-}
+
+
+---- Void: ---------------------------------------------------------
 test2 : Void -> Nat -> Bool = elimVoid (Nat -> Bool);
 
 -- eta-expanded version of the Left constructor
