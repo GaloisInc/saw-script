@@ -28,8 +28,12 @@ eithers' a =
        either tp (Eithers' (FunsToIns a es)) a f rec
     );
 
--- TODO: must reflect that
+---- a generic injection -------------------------------------------
+-- TODO: is this the right design?
+--   - listSortGet must reflect that __
+--   - refer to EnumProto.sawcore
 
+{-
 inj : (ts: ListSort) -> (n: Nat) -> listSortGet ts n -> Eithers' ts;
 inj =
   ListSort__rec
@@ -40,8 +44,22 @@ inj =
       -- expect type:
       --   P (LS_Cons A ts) ==
       --     (n:Nat) -> ListSortGet (LS_Cons A ts) -> Eithers' (LS_Cons A ts)
-      Nat_cases (listSortGet ts n -> Eithers' (LS_Cons A ts))
-        (\ (a: A)-> Left A (Eithers' ts) a) -- in this case A == codomain.
+      Nat__rec
+        -- P:
+        (\(n:Nat)-> listSortGet ts n -> Eithers' (LS_Cons A ts))
+
+        -- P Zero ==
+        --    listSortGet ts Zero -> Eithers (LS_Cons A ts)
+        (\(a: A)-> Left A (Eithers' ts) a) -- in this case A == codomain.
+
+        -- ((n:Nat) -> P n -> P (Succ n)) =
+        --    (n:Nat) ->
+        --    (listSortGet ts n -> Eithers' (LS_Cons A ts)) ->
+        --    (listSortGet ts (Succ n) -> Eithers' (LS_Cons A ts)))
+
+        (\(n : Nat) ->
+           -- P n ==
+           --   listSortGet ts n -> Eithers' (LS_Cons A ts))
 
         -- expect type:
         --  Nat -> (sort 0 -> Eithers' (LS_Cons A ts))
@@ -54,37 +72,49 @@ inj =
          \ (a': listSortGet ts n)-> Right A (Eithers' ts) (rec n a'))
     );
 
+------------------------------------------
+
+- if you split the injection into two??
+  - comparably: splitting TL into two parts
+
+  Part 1: create the 'i : 0..' nested rights
+   i=2
+    injRs :: (ts: SortList) -> (a: sort 0) -> a -> Eithers' (ts ++ [a])
+    injRs x = R T1 (Eithers(drop 1 TL))
+            $ R T2 (Eithers(drop 2 TL))
+              x
+
+      -- the above is wrong
+        -- using ListSort__rec you can create a base case, i.e., write SNOC!
+        -- or ...
+
+    injRs [t1,t2] a :: a -> t1+(t2+a)
+
+  Part 2: inject at top, this just Left
+    injL : a -> b -> Either a b
+    injL A B = L
+
+inj' : (ts: SortList) -> (A : sort 0) -> (r: sort 0)
+     -> A -> Eithers (ts ++ [A `Either` r])
+inj' ts A r a = injRs ts (injL A r a)
+
+-----------
+
+Have you gained much by using inj' ?
+  - do we have erasure and thus no duplication of code?
+
+C0 :: TL.0 -> Eithers TL
+C1 :: TL.1 -> Eithers TL
+C2 :: TL.2 -> Eithers TL
+C0 = inj' (take 0 TS) TL.0 (Eithers (drop 1 TS))
+C1 = inj' (take 1 TS) TL.1 (Eithers (drop 2 TS))
+C2 = inj' (take 2 TS) TL.2 (Eithers (drop 3 TS))
+-}
+
+
+---- REFERENCE: CODE/TYPES ------------------------------------------
 {-
-While typechecking term:
-  rec n a'
-Eithers.sawcore:49:43:
-
-Inferred type
-  A
-
-Not a subtype of expected type
-  Prelude.ListSort#rec
-  (\(_ : Prelude.ListSort) -> Prelude.Nat -> sort 0)
-  ( Prelude.LS_Nil
-    =>
-    \(_ : Prelude.Nat) ->
-      Prelude.Eq Prelude.Bool Prelude.True Prelude.False
-    ,
-    Prelude.LS_Cons
-    =>
-    \(A1 : sort 0) ->
-      \(_ : Prelude.ListSort) ->
-        \(rec1 : (Prelude.Nat -> sort 0)) ->
-          Prelude.Nat_cases sort 0 A1
-            (\(n1 : Prelude.Nat) -> \(_ : sort 0) -> rec1 n1) )
-  ts
-  n
-For term
-  a
-
----
 Nat_cases : (a:sort 1) -> a -> (Nat -> a -> a) -> Nat -> a;
-
 
 -- The sort at the given index in a ListSort or `Eq Bool True False` if
 --  the index is out of bounds
@@ -95,13 +125,10 @@ listSortGet = ListSort__rec (\ (_:ListSort) -> Nat -> sort 0)
      Nat_cases (sort 0) A (\ (n:Nat) (_:sort 0) -> rec n));
 
 
--- inj2 : (ts:ListSort) -> a -> Eithers' (LSCons a ts)
 -}
 
----- The various Sawcore Lists -------------------------------------
+---- REFERENCE: Various Sawcore Lists -------------------------------------
 {-
-REFERENCE:
-
 ListSort__rec : (P : ListSort -> sort 1)  --
              -> P LS_Nil
              -> ((A:sort 0) -> (l:ListSort) -> P l -> P (LS_Cons A l))
@@ -146,11 +173,8 @@ data NTuple : sort 1 where {
 
 -}
 
--- TODO: understand List1.
+-- see Exploring.sawcore for understanding List1
 
-test1  : List1 (Nat->Nat) = Nil1 (Nat->Nat);
-test1b : List1 (ListSort) = Nil1 (ListSort);  -- !
--- test1c : List1 (a : sort 0) = Nil1 a;  -- !
 
 ---- NTuples: useful?? ---------------------------------------------
 
@@ -197,11 +221,7 @@ ls1 = LS_Cons Bool (LS_Cons UnitType LS_Nil);
 test : ListSort;
 test = MapRightArrow Bool ls1;
 
----- Misc ----------------------------------------------------------
-
-test2 : ListSort = test;
-
----- thinking about eithers ----------------------------------------
+---- thinking about eithers (n-ary case) ---------------------------
 
 {-
 eithers2' : (ts: ListSort)  -- the 'as' are in the 'ts'
@@ -287,6 +307,8 @@ my3Types = LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil));
 
 
 MySum : sort 0 = Eithers' my3Types;
+
+test1 : sort 0 = MySum;
 
 -- TODO
 -- test2 = eithers' Bool
