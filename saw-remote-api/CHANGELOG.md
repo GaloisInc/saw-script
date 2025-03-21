@@ -1,6 +1,6 @@
 # Revision history for saw-remote-api
 
-## next
+## 1.3 -- 2025-03-21
 
 * No changes specifically to the remote API.
 
