@@ -25,9 +25,16 @@ Universe level of constructors should be strictly contained in that of the datat
 
 xx : Nat = 1;
 
-test1 : List1 Nat;
-test1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
+-- List1 :
 
+testL1_1 : List1 Nat;
+testL1_1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
+
+testL1_2 : List1 (Nat->Nat) = Nil1 (Nat->Nat);
+testL1_3 : List1 (ListSort) = Nil1 (ListSort);  -- !
+-- testL1_4 : List1 (a : sort 0) = Nil1 a;  -- !
+
+-- Void:
 test2 : Void -> Nat -> Bool = elimVoid (Nat -> Bool);
 
 -- eta-expanded version of the Left constructor
@@ -103,3 +110,8 @@ y3'' a1 = Left UnitType a1 Unit;
 -- y3 : SumOf3 UnitType UnitType Bool;
 -- and each constructor [per cryptol AND SawCore] is going have 'all'
 -- "top level" type parameters [follows from last]
+
+
+---- final tests ---------------------------------------------------
+
+test1 : List1 Nat = testL1_1;
