@@ -81,24 +81,21 @@ C2 as x = Right (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_
                       x);
 
 {-
-C1..C3:
-C1 = L T1 (Eithers (drop 1 TL))
-C2 = R T1 (Eithers (drop 1 TL))
+C0..C3:
+C0 :: TL.0 -> Eithers TL
+C1 :: TL.1 -> Eithers TL
+C2 :: TL.2 -> Eithers TL
+
+C0 = L T1 (Eithers (drop 1 TL))
+C1 = R T1 (Eithers (drop 1 TL))
    $ L T2 (Eithers (drop 2 TL))
-C3 = R T1 (Eithers (drop 1 TL))
+C2 = R T1 (Eithers (drop 1 TL))
    $ R T2 (Eithers (drop 2 TL))
    $ L T3 (Eithers (drop 3 TL))
 
-better, generic n-sum
+-- See Eithers.sawcore for explorations re 'generic' injection.
+-- But for now (after all these TEMPESTS) just do the above ^.
 
-In1 :: ListSort -> a ->
-
------
-
-C1' : (as : sort 0) -> ETT__ArgType_C1 as -> ETT as;
-C1' =
-  where
-  r, ls, split (n-1) ...
 -}
 
 ETT_eithers : (as : sort 0)
