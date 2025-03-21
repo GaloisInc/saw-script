@@ -16,6 +16,8 @@ This release supports [version
   importantly for users, the PDF artifacts included in CI-generated releases
   have different names and render with Sphinx styling.
 
+* The contributor docs have been improved and modernized.
+
 * The saw executable now accepts a -B or --batch option to run a file of
   REPL commands, similar to the -b option in Cryptol.
 
@@ -125,6 +127,9 @@ This release supports [version
 
 * Fix a bug in which an LLVM override would fail to apply when matching an
   argument against a string constant.
+
+* Assorted other minor bugs and annoyances have been fixed, and a
+  number of error messages have been improved, particularly type errors.
 
 # Version 1.2 -- 2024-08-30
 

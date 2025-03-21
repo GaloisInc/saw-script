@@ -1,5 +1,9 @@
 # Revision history for saw-client
 
+## next
+
+* Bump the lmdb Python bindings to 1.6.2 to gain support for Python 3.13.
+
 ## 1.2.1 -- 2024-09-18
 
 * Require building with `argo-client-0.0.13` or later. `argo-client-0.0.13` uses
