@@ -1,5 +1,9 @@
 # Revision history for saw-client
 
+## next
+
+Nothing yet.
+
 ## 1.3 - 2025-03-21
 
 * Bump the lmdb Python bindings to 1.6.2 to gain support for Python 3.13.
