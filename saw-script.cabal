@@ -1,6 +1,6 @@
 Cabal-version: 2.4
 Name:          saw-script
-Version:       1.2.0.99
+Version:       1.3
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
 Build-type:    Custom
