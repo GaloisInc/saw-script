@@ -1,5 +1,9 @@
 # next -- TBA
 
+Nothing yet.
+
+# Version 1.3 -- 2025-03-21
+
 This release supports [version
 1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
 `mir-json`'s schema.
@@ -15,6 +19,8 @@ This release supports [version
   _content_ has stayed the same, and only organization has changed. Most
   importantly for users, the PDF artifacts included in CI-generated releases
   have different names and render with Sphinx styling.
+
+* The contributor docs have been improved and modernized.
 
 * The saw executable now accepts a -B or --batch option to run a file of
   REPL commands, similar to the -b option in Cryptol.
@@ -125,6 +131,9 @@ This release supports [version
 
 * Fix a bug in which an LLVM override would fail to apply when matching an
   argument against a string constant.
+
+* Assorted other minor bugs and annoyances have been fixed, and a
+  number of error messages have been improved, particularly type errors.
 
 # Version 1.2 -- 2024-08-30
 

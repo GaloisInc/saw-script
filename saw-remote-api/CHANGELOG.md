@@ -1,5 +1,13 @@
 # Revision history for saw-remote-api
 
+## next
+
+Nothing yet.
+
+## 1.3 -- 2025-03-21
+
+* No changes specifically to the remote API.
+
 ## 1.2.0 -- 2024-08-30
 
 * Add `"str slice"` and `"str slice range"` `setup value`s, which are used to
