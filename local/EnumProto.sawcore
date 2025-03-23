@@ -139,6 +139,7 @@ fun = ETT_eithers2 Nat Bool
         (\(n : ETT__ArgType_C1 Nat) -> equal0Nat n)
         (\(b : ETT__ArgType_C2 Nat) -> b          );
 
+
 ---- test misc -----------------------------------------------------
 
 test20 : sort 0 = listSortGet (ETT__TypeList Nat) 0;

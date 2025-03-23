@@ -1987,21 +1987,25 @@ genNominalConstructors sc nominal env0 =
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
+      -- MT: DEBUGGING:
       unless (null conTs) $
         do
         putStrLn $ "conTs:"
         mapM_ (\t -> putStrLn $ "  " ++ show t) conTs
         putStrLn "\n\n"
-      putStrLn "\nenvironment extended with nominal defns:"
-      flip mapM_ ns $
-        (\(n,e)->
-           do
-           putStrLn $ " NAME: " ++ show (C.nameIdent n)
-           putStrLn $ " EXPR: " ++ showTerm e
-            -- showTerm t = scPrettyTerm defaultPPOpts t
-            --  ... in ../SAW/Term/PRetty.hs
-            -- also means to show with 'env/named-things'
-        )
+      unless (null ns) $
+        do
+        putStrLn "\nenvironment extended with nominal defns:"
+        flip mapM_ ns $
+          (\(n,e)->
+             do
+             putStrLn $ " NAME: " ++ show (C.nameIdent n)
+             putStrLn $ " EXPR: " ++ showTerm e
+             putStrLn $ " AST : " ++ show e
+              -- showTerm t = scPrettyTerm defaultPPOpts t
+              --  ... in ../SAW/Term/PRetty.hs
+              -- also means to show with 'env/named-things'
+          )
 
       return env'
 
@@ -2051,13 +2055,16 @@ genNominalConstructors sc nominal env0 =
           -- (nmConstrs,argTypes,constrs) <- unzip <$>
           --                       mapM mkArgTypeAndConstructor cs
 
-          -- Create TypeList for the Enum
+          -- Create TypeList for the Enum, add to environment:
           -- tlist <- stub argTypes -- TODO
 
-          -- TODO: create type definition (synonym)
-          --  - is this *IN* the type?
+          -- TODO: create type definition
+          --  - is this *IN* the type?  [HUH?]
+          --  : TNAME as = Eithers TLISTNAME
+
           -- tsyn  <- mkTypeSynonym
             -- TODO: use this to do the importType. ?
+            -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
 
           -- TODO: add deconstructor (case/either):
           -- case' <- mkCase stub
@@ -2075,46 +2082,42 @@ genNominalConstructors sc nominal env0 =
 
           -- FIXME[F]: support 2+ args and curried constructors!
 
+
+          -- FIXME: implem. ArgType below.
           -- | generate ArgType and Constructor definitions:
           mkConstructor :: C.EnumCon -> IO (C.Name,Term)
           mkConstructor c =
-            {- design:
-              1. just create from scratch, mimic C.nominalTypeConTypes
-                 - but you'd like to use the types from ^ because you
-                   need it in the terms!
-                 -
-            -}
-
             do
             let
-              n         = length (C.ecFields c)
-              ty        = C.TCon (C.TC (C.TCTuple n))
-                                 (C.ecFields c)
-              {- FIXME:TODO:  HIA
-              ty        = case C.ecFields c of
-                           [t] ->
-              -}
-               -- won't work, curried type is already in envT:
-               -- C.TCon (C.TC (C.TCTuple n))
-               --              (C.ecFields c)
+              conArgTypes = C.ecFields c
+              numArgs     = length conArgTypes
+              conName     = C.ecName c
+              paramName   = C.asLocal C.NSValue conName -- ???
 
-              conName   = C.ecName c
-              paramName = C.asLocal C.NSValue conName
+            -- to SAWCore types:
+            conArgTypes' <- mapM (importType sc env) conArgTypes
 
-            argType <- scTuple sc []
-                  -- MT:FIXME: implement with real thing, e.g., this sawcore
-                  --   name <typeParams> x = inj_<n> ts x
-                  --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
-                  -- where
-                  --  let x = paramName
-                  --  ts <- instantiations for the N-Sums for this branch.
-            return (conName, argType)
+            -- the product type that we map to (in SawCore)
+            storageType <- scTupleType sc conArgTypes'
 
-            -- ty' <- importType sc env ty
-            --   -- this causes
-            --        panic, called at src/Verifier/SAW/Cryptol.hs:297:37
-            -- TODO: Alternatives:
-            --  A. bring the EnumLib.sawcore in as cryptol names, call addTypeParams
-            --     like C.Struct does
-            --  B. (better) directly reference EnumLib.sawcore
-            --  C. (future) dynamically update, as needed the code there
+            -- create the constructor arguments:
+            vars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+
+            -- create the constructor:
+            conBody <- scTuple sc vars
+            conDefn <- scLambdaList sc
+                         (zip vars conArgTypes')
+                         conBody
+
+            -- FIXME: conDefn/conBody are Bogus! add:
+               -- injection!
+               --  - and type params for
+               -- type params for defn
+                 --   name <typeParams> x = inj_<n> ts x
+                 --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
+                 -- where
+                 --  let x = paramName
+                 --  ts <- instantiations for the N-Sums for this branch.
+            -- Very OLD:
+            -- conDefn <- scNat sc (fromIntegral (C.ecNumber c))
+            return (conName, conDefn)
