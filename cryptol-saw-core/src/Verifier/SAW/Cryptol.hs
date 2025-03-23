@@ -283,7 +283,8 @@ importType sc env ty =
         C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
                          Just (t, j) -> incVars sc 0 j t
-                         Nothing -> panic "importType TVBound" []
+                         Nothing -> panic "importType TVBound: TV is not in type environment"
+                                      [show v]
     C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
@@ -2049,8 +2050,12 @@ genNominalConstructors sc nominal env0 =
         -- TODO: hmmm: do these need to be ordered in dependency order?
         newDefsForEnum cs =
           do
-          cons <- mapM mkConstructor cs
-            -- starting simple.
+
+          cons <- -- ADHOC: FIXME[MT]: remove 1st branch!
+                  if not (null (C.ntParams nt))
+                  then return []
+                  else mapM mkConstructor cs
+          -- (starting simple)
 
           -- (nmConstrs,argTypes,constrs) <- unzip <$>
           --                       mapM mkArgTypeAndConstructor cs
@@ -2092,7 +2097,7 @@ genNominalConstructors sc nominal env0 =
               conArgTypes = C.ecFields c
               numArgs     = length conArgTypes
               conName     = C.ecName c
-              paramName   = C.asLocal C.NSValue conName -- ???
+              -- paramName   = C.asLocal C.NSValue conName -- ???
 
             -- to SAWCore types:
             conArgTypes' <- mapM (importType sc env) conArgTypes
@@ -2100,14 +2105,23 @@ genNominalConstructors sc nominal env0 =
             -- the product type that we map to (in SawCore)
             storageType <- scTupleType sc conArgTypes'
 
-            -- create the constructor arguments:
-            vars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+            -- create names for constructor arguments
+            -- vars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+            let vars = map (\x-> Text.pack ("arg" ++ show x))
+                           (take numArgs [(0 ::Int)..])
 
             -- create the constructor:
-            conBody <- scTuple sc vars
+            -- conBody <- scNat sc (fromIntegral (C.ecNumber c))
+
+
+            conBody <- scTuple sc []  -- FIXME: implement!
+            -- conBody <- scTuple sc (map stub vars)
             conDefn <- scLambdaList sc
                          (zip vars conArgTypes')
                          conBody
+
+            -- Can you create the body without somehow adding vars to env?
+            --   (you had example of this)
 
             -- FIXME: conDefn/conBody are Bogus! add:
                -- injection!
