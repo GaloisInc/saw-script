@@ -1920,6 +1920,32 @@ eithers a =
        (eiths:Eithers (LS_Cons tp (FunsToIns a elims))) ->
        eithers1 tp (FunsToIns a elims) a eiths f rec);
 
+-- EithersV (a simpler version of Eithers): A right-nested sequence of
+-- Either types, defined as
+--   EithersV [] = Void
+--   EithersV (tp:tps) = Either tp (EithersV tps)
+EithersV : ListSort -> sort 0;
+EithersV = ListSort__rec
+            (\ (_:ListSort) -> sort 0)
+            Void
+            (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (Either tp rec));
+
+-- An eliminator for the EithersV type
+eithersV : (a:sort 0) -> (es:FunsTo a) -> EithersV (FunsToIns a es) -> a;
+eithersV a =
+  FunsTo__rec
+    a
+    (\ (es: FunsTo a) -> EithersV (FunsToIns a es) -> a) -- P
+    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
+    (\ (tp : sort 0)                                     -- type arg
+       (f  : tp -> a)                                     --
+       (es : FunsTo a)                                    --
+       (rec: EithersV (FunsToIns a es) -> a)              -- P es
+    ->
+       -- P (FunsTo_Cons a tp f es):
+       either tp (EithersV (FunsToIns a es)) a f rec
+    );
 
 --------------------------------------------------------------------------------
 -- Nested Sigma types
