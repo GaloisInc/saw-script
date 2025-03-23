@@ -1821,8 +1821,14 @@ listSort_length = listSort_cases Nat
                     (\(_:sort 0) (_:ListSort) (n:Nat)-> Succ n);
 
 
+-- An if-then-else that tests if a ListSort is nil
+ifLSNil : (a : sort 1) -> ListSort -> a -> a -> a;
+ifLSNil a l x y =
+  ListSort__rec (\ (_:ListSort) -> a) x (\ (_:sort 0) (_:ListSort) (_:a) -> y) l;
+
+
 --------------------------------------------------------------------------------
--- Nested Either types
+-- FalseProp and Related
 
 -- The false proposition
 FalseProp : Prop;
@@ -1852,10 +1858,9 @@ efq1 a contra =
           (\ (b:Bit) (_:Eq Bit Bit1 b) -> Bit#rec (\ (_:Bit) -> sort 1) #() a b)
           () Bit0 (efq (Eq Bit Bit1 Bit0) contra);
 
--- An if-then-else that tests if a ListSort is nil
-ifLSNil : (a : sort 1) -> ListSort -> a -> a -> a;
-ifLSNil a l x y =
-  ListSort__rec (\ (_:ListSort) -> a) x (\ (_:sort 0) (_:ListSort) (_:a) -> y) l;
+
+--------------------------------------------------------------------------------
+-- Nested Either types
 
 -- A right-nested sequence of Eithers, defined as
 --   Eithers [] = FalseProp
