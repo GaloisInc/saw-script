@@ -50,5 +50,4 @@ excludedNames =
   , "PEq"
   , "PCmp"
   , "PSignedCmp"
-  , "ecEq"
   ]
