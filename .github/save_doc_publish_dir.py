@@ -14,12 +14,20 @@ import re
 
 github_ref = os.environ.get("GITHUB_REF")
 
-# Matches vx.y or vx.y.z
-m = re.match(r"^refs/tags/v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)$", github_ref)
-if m:
-    target = m.group(1)
+# Matches release tags: vx.y or vx.y.z or x.y or x.y.z
+mtag = re.match(r"^refs/tags/v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)$", github_ref)
+
+# Matches release branches: release-x.y or release-x.y.z
+mrel = re.match(r"^refs/heads/release-([0-9]+\.[0-9]+(?:\.[0-9]+)?)$", github_ref)
+
+if mtag:
+    target = mtag.group(1)
 elif github_ref == "refs/heads/master":
     target = "master"
+elif mrel:
+    # Currently because we are having trouble with tag events, match release
+    # branches too. See ci.yml.
+    target = mrel.group(1)
 else:
     target = ""
 

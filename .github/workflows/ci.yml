@@ -348,7 +348,21 @@ jobs:
     # will trigger a branch run, and then tagging it will trigger a
     # separate tag run.
     #
-    if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
+    # However, as of 20250324 we aren't getting runs at all for tag
+    # pushes, and it's not obvious why; they just aren't happening.
+    # For expediency, since this is holding up the release, disable
+    # the check for a release branch. This will get us docs for the
+    # tip of the release branch, which isn't exactly what we want but
+    # is good enough for the time being. If we start maintaining the
+    # release branch as a stable branch we'll probably want to figure
+    # out something else.
+    #
+    # Also note: make sure that for every event and GITHUB_REF pattern
+    # that we accept, the save_doc_publish_dir.py script produces a
+    # nonempty target name. Otherwise the publish step won't run.
+    #
+    #if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
+    if: github.event_name == 'push' && github.repository_owner == 'GaloisInc'
     strategy:
       matrix:
         os: [ubuntu-22.04]
