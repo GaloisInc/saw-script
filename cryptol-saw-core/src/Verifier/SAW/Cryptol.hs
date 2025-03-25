@@ -2027,6 +2027,8 @@ genNominalConstructors sc nominal env0 =
             let recTy     = C.TRec (C.ntFields fs)
                 con       = C.ntConName fs
                 paramName = C.asLocal C.NSValue con
+                            -- feels odd: using name of constructor as the
+                            -- name of the constructor argument.
                 fn        = C.EAbs paramName recTy (C.EVar paramName)
             e <- importExpr sc env (addTypeParams fn)
             return [(con, e)]
@@ -2034,8 +2036,6 @@ genNominalConstructors sc nominal env0 =
         C.Enum cs  -> newDefsForEnum cs
 
       where
-
-        stub = error "stub" -- FIXME
 
         addTypeParams :: C.Expr -> C.Expr
         addTypeParams fn = foldr tFn fn (C.ntParams nt)
@@ -2055,8 +2055,8 @@ genNominalConstructors sc nominal env0 =
                   if not (null (C.ntParams nt))
                   then return []
                   else mapM mkConstructor cs
-          -- (starting simple)
 
+          -- (starting simple)
           -- (nmConstrs,argTypes,constrs) <- unzip <$>
           --                       mapM mkArgTypeAndConstructor cs
 
@@ -2105,23 +2105,19 @@ genNominalConstructors sc nominal env0 =
             -- the product type that we map to (in SawCore)
             storageType <- scTupleType sc conArgTypes'
 
-            -- create names for constructor arguments
-            -- vars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
-            let vars = map (\x-> Text.pack ("arg" ++ show x))
-                           (take numArgs [(0 ::Int)..])
+            -- create vars (& names) for constructor arguments
+            paramVars <-
+              reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+            let paramNames = map (\x-> Text.pack ("a" ++ show x))
+                                 (take numArgs [(0 ::Int)..])
 
             -- create the constructor:
-            -- conBody <- scNat sc (fromIntegral (C.ecNumber c))
+            conBody <- scTuple sc paramVars
 
-
-            conBody <- scTuple sc []  -- FIXME: implement!
-            -- conBody <- scTuple sc (map stub vars)
+            -- conBody <- scTuple sc (map stub paramVars)
             conDefn <- scLambdaList sc
-                         (zip vars conArgTypes')
+                         (zip paramNames conArgTypes')
                          conBody
-
-            -- Can you create the body without somehow adding vars to env?
-            --   (you had example of this)
 
             -- FIXME: conDefn/conBody are Bogus! add:
                -- injection!
