@@ -322,13 +322,30 @@ jobs:
     name: "Deploy SAW documentation to GitHub Pages"
     needs: [config, build-docs]
     runs-on: ${{ matrix.os }}
-    # Only run for pushes to `master` and version tags, but not in forks.
-    # This is to avoid issues with missing permissions on GITHUB_TOKEN, needed
-    # when actually deploying the documentation to the `gh-pages` branch.
     #
-    # Note that pushing a tag results in a github.ref of the form
-    # `refs/tags/...`: Even if the tag refers to `HEAD` of a `release-*` branch,
-    # only a workflow for the `refs/tags/...` ref will be started.
+    # The whole workflow is only run at all on branches matching
+    # `master`, branches matching `release-**`, and release tags, per
+    # the `on:` stanza at the top of the file.
+    #
+    # We want to upload docs for `master` and for releases, and not
+    # otherwise, so filter this further:
+    #    - restricting to `push` actions eliminates pull requests
+    #    - requiring needs.config.outputs.release be false skips `release-**` branches
+    # so what's left is `master` and release tags.
+    #
+    # Then also check the repository owner to avoid running in forks.
+    # This is to avoid issues with missing permissions on
+    # GITHUB_TOKEN, needed when actually deploying the documentation
+    # to the `gh-pages` branch.
+    #
+    # Note that even though tags will normally be _on_ release
+    # branches, tag events generate a github.ref of the form
+    # `refs/tags/...` which won't set needs.config.outputs.release, so
+    # we aren't accidentally skipping release tags. We think,
+    # according to the docs, that if you push to a release branch that
+    # will trigger a branch run, and then tagging it will trigger a
+    # separate tag run.
+    #
     if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
     strategy:
       matrix:
