@@ -161,15 +161,6 @@ jobs:
           restore-keys: |
             ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
-      - if: needs.config.outputs.release == 'true'
-        shell: bash
-        run: |
-          sed -i.bak \
-            -e 's/^hashText = .*$/hashText = ""/' \
-            -e '/import GitRev.*$/d' \
-            saw/SAWScript/Version.hs
-          rm -f saw/SAWScript/Version.hs.bak
-
       - shell: bash
         run: .github/ci.sh build
         env:
