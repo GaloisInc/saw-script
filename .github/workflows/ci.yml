@@ -31,9 +31,7 @@ env:
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  # ./s2nTests/scripts/blst-entrypoint.sh
-  # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20241119"
+  SOLVER_PKG_VERSION: "snapshot-20250227"
 
 jobs:
   config:
