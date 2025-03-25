@@ -320,7 +320,7 @@ jobs:
 
   deploy-docs:
     name: "Deploy SAW documentation to GitHub Pages"
-    needs: [build-docs]
+    needs: [config, build-docs]
     runs-on: ${{ matrix.os }}
     # Only run for pushes to `master` and version tags, but not in forks.
     # This is to avoid issues with missing permissions on GITHUB_TOKEN, needed
