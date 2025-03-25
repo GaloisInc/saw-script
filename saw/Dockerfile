@@ -32,7 +32,8 @@ WORKDIR /home/saw//rootfs/usr/local/bin
 # The URL here is based on the same logic used to specify BUILD_TARGET_OS and
 # BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to x86-64
 # Ubuntu.
-RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20241119/ubuntu-22.04-X64-bin.zip"
+# If updating the snapshot version, update ci.yml and saw-remote-api/Dockerfile too.
+RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250227/ubuntu-22.04-X64-bin.zip"
 RUN unzip solvers.zip && rm solvers.zip && chmod +x *
 USER root
 RUN chown -R root:root /home/saw/rootfs
