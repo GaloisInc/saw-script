@@ -275,7 +275,7 @@ importPC sc pc =
     C.PValidFloat      -> panic "importPC PValidFloat" []
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
-importType :: SharedContext -> Env -> C.Type -> IO Term
+importType :: (HasCallStack) => SharedContext -> Env -> C.Type -> IO Term
 importType sc env ty =
   case ty of
     C.TVar tvar ->
@@ -294,8 +294,13 @@ importType sc env ty =
          let n = C.ntName nt
          case ntDef nt of
            C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
-           C.Enum {} -> error "importType: `enum` is not yet supported"
-             -- MT:FIXME: implement
+           C.Enum {} ->
+             do
+             enumType <- scTupleType sc []
+               -- FIXME:MT: implement
+               -- - what CAN you do at Cryptol level?
+             -- go (plainSubst s enumType)
+             return enumType
            C.Abstract
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' (envPrimTypes env) ->
@@ -1472,7 +1477,7 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       -- build the environment for the declaration bodies
       let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
-      -- grab a reference to the outermost variable; this will be the record in the body
+      -- grab a reference to the outermost variable; this will be the record ifn the body
       -- of the lambda we build later
       v0 <- scLocalVar sc 0
 
@@ -1974,7 +1979,7 @@ exportRecordValue fields v =
 --   - Abstract types do not produce any functions.
 
 -- FIXME: names no longer accurate; extendEnvWithNominalTypes, and ...
-genNominalConstructors :: SharedContext -> Map C.Name NominalType -> Env -> IO Env
+genNominalConstructors :: (HasCallStack) =>SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genNominalConstructors sc nominal env0 =
   foldM updateEnvForNominal env0 nominal
 
@@ -2017,7 +2022,6 @@ genNominalConstructors sc nominal env0 =
       -- - Q. Is the (name of) the nominal type in some environment?
       --    - think so, note 'importType' goes from TVar to var in Term
       --    - [ ] test this
-      -- - for Enums, we are adding
 
     -- | Create functions/constructors for Nominal Types.
     newDefsForNominal :: Env -> NominalType -> IO [(C.Name,Term)]
@@ -2037,9 +2041,28 @@ genNominalConstructors sc nominal env0 =
 
       where
 
+        addTypeParamsSC :: Env -> Term -> IO Term
+        addTypeParamsSC env x =
+          fst <$> Fold.foldlM tFn (x,env) (reverse $ C.ntParams nt)
+          where
+          tFn :: (Term,Env) -> C.TParam -> IO (Term,Env)
+          tFn (body,env') tp =
+            if elem (C.tpKind tp) [C.KType, C.KNum] then
+              do
+              env'' <- bindTParam sc tp env'
+              k <- importKind sc (C.tpKind tp)
+              t <- scLambda sc (tparamToLocalName tp) k body
+              return (t, env'')
+
+            else
+              panic "genNominalConstructors"
+                    ["illegal nominal type parameter kind"
+                    , show (C.tpKind tp)
+                    ]
+
+        -- FIXME[C2]: remove this in favor of above [via refactor].
         addTypeParams :: C.Expr -> C.Expr
         addTypeParams fn = foldr tFn fn (C.ntParams nt)
-
           where
           tFn tp body =
             if elem (C.tpKind tp) [C.KType, C.KNum]
@@ -2048,13 +2071,11 @@ genNominalConstructors sc nominal env0 =
                    ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
         -- TODO: hmmm: do these need to be ordered in dependency order?
+        newDefsForEnum :: [C.EnumCon] -> IO [(C.Name,Term)]
         newDefsForEnum cs =
           do
-
-          cons <- -- ADHOC: FIXME[MT]: remove 1st branch!
-                  if not (null (C.ntParams nt))
-                  then return []
-                  else mapM mkConstructor cs
+          cons <- mapM (mkConstructor env) cs
+          return cons
 
           -- (starting simple)
           -- (nmConstrs,argTypes,constrs) <- unzip <$>
@@ -2074,7 +2095,6 @@ genNominalConstructors sc nominal env0 =
           -- TODO: add deconstructor (case/either):
           -- case' <- mkCase stub
 
-          return cons
 
           where
 
@@ -2085,13 +2105,10 @@ genNominalConstructors sc nominal env0 =
           -- (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
           --  -- define our naming conventions
 
-          -- FIXME[F]: support 2+ args and curried constructors!
-
-
           -- FIXME: implem. ArgType below.
           -- | generate ArgType and Constructor definitions:
-          mkConstructor :: C.EnumCon -> IO (C.Name,Term)
-          mkConstructor c =
+          mkConstructor :: (HasCallStack) => Env -> C.EnumCon -> IO (C.Name,Term)
+          mkConstructor env' c =
             do
             let
               conArgTypes = C.ecFields c
@@ -2100,7 +2117,7 @@ genNominalConstructors sc nominal env0 =
               -- paramName   = C.asLocal C.NSValue conName -- ???
 
             -- to SAWCore types:
-            conArgTypes' <- mapM (importType sc env) conArgTypes
+            conArgTypes' <- mapM (importType sc env') conArgTypes
 
             -- the product type that we map to (in SawCore)
             storageType <- scTupleType sc conArgTypes'
@@ -2112,22 +2129,11 @@ genNominalConstructors sc nominal env0 =
                                  (take numArgs [(0 ::Int)..])
 
             -- create the constructor:
-            conBody <- scTuple sc paramVars
+            conBody0 <- scTuple sc paramVars
+              -- TODO: add injection!
+            conBody1 <- scLambdaList sc
+                          (zip paramNames conArgTypes')
+                          conBody0
+            conBody2 <- addTypeParamsSC env' conBody1
 
-            -- conBody <- scTuple sc (map stub paramVars)
-            conDefn <- scLambdaList sc
-                         (zip paramNames conArgTypes')
-                         conBody
-
-            -- FIXME: conDefn/conBody are Bogus! add:
-               -- injection!
-               --  - and type params for
-               -- type params for defn
-                 --   name <typeParams> x = inj_<n> ts x
-                 --   name = addTypeParams (\(x:ty) = inj_<n> ts x)
-                 -- where
-                 --  let x = paramName
-                 --  ts <- instantiations for the N-Sums for this branch.
-            -- Very OLD:
-            -- conDefn <- scNat sc (fromIntegral (C.ecNumber c))
-            return (conName, conDefn)
+            return (conName, conBody2)
