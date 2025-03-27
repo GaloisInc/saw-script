@@ -24,7 +24,7 @@ RUN apt-get update -y -q && \
     zlib1g-dev \
     python3-pip \
     tox \
-    libncurses5 \
+    libncurses6 \
     libtinfo-dev \
     && \
     rm -rf /var/lib/apt/lists/*
