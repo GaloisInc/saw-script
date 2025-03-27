@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 AS build
+FROM ubuntu:24.04 AS build
 USER root
 RUN apt-get update && \
     apt-get install -y \
@@ -32,12 +32,12 @@ WORKDIR /home/saw//rootfs/usr/local/bin
 # BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to x86-64
 # Ubuntu.
 # If updating the snapshot version, update ci.yml and saw/Dockerfile too.
-RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250227/ubuntu-22.04-X64-bin.zip"
+RUN curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250326/ubuntu-24.04-X64-bin.zip"
 RUN unzip solvers.zip && rm solvers.zip && chmod +x *
 USER root
 RUN chown -R root:root /home/saw/rootfs
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 RUN apt-get update && \
     apt-get install -y libgmp10 libgomp1 libffi8 wget libncurses6 unzip libreadline-dev openjdk-11-jdk-headless zlib1g
 COPY --from=build /home/saw/rootfs /
