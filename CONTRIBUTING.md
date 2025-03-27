@@ -304,7 +304,12 @@ obsolete;
 - updates to the remote API interface docs;
 
 - updates to doc strings/Haddocks/etc. for code objects in source
-files, including such documentation for new code objects.
+files, including such documentation for new code objects;
+
+- bumping the documentation datestamp in
+  [doc/scripts/epoch.mk](doc/scripts/epoch.mk)
+  for any nontrivial updates to the manual or tutorial
+  (see below).
 
 In general changes will not be merged without their corresponding
 documentation changes.
@@ -408,6 +413,13 @@ reduces development friction.
    one gets ugly, put it on its own line.
    If it nonetheless falls off the right edge of the screen, we need
    to just live with that.
+
+6. Bump the documentation date, if there is one, when you make
+   anything more than trivial content changes.
+   The date for the manual and tutorials lives in
+   [doc/scripts/epoch.mk](doc/scripts/epoch.mk).
+   This is the date that appears, for example, on the front page of
+   the manual, so it should reflect the date of last revision.
 
 If you find that your editor is violating these principles for you
 (e.g. refusing to let you have reasonable-length lines, or reflowing
