@@ -260,14 +260,7 @@ submodules like so:</p>
 <li><p>Follow the instructions laid out in the <a class="reference external" href="https://github.com/GaloisInc/mir-json#installation-instructions"><code class="docutils literal notranslate"><span class="pre">mir-json</span></code> installation
 instructions</a>
 in order to install <code class="docutils literal notranslate"><span class="pre">mir-json</span></code>.</p></li>
-<li><p>Navigate to the
-<a class="reference external" href="https://github.com/GaloisInc/crucible/tree/master/crux-mir"><code class="docutils literal notranslate"><span class="pre">crux-mir</span></code></a>
-subdirectory of the <code class="docutils literal notranslate"><span class="pre">crucible</span></code> submodule:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>../crucible/crux-mir/
-</pre></div>
-</div>
-</li>
-<li><p>Run the <code class="docutils literal notranslate"><span class="pre">translate_libs.sh</span></code> script:</p>
+<li><p>Run the <code class="docutils literal notranslate"><span class="pre">translate_libs.sh</span></code> script in the <code class="docutils literal notranslate"><span class="pre">mir-json</span></code> submodule:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>./translate_libs.sh
 </pre></div>
 </div>
@@ -276,7 +269,7 @@ subdirectory of the <code class="docutils literal notranslate"><span class="pre"
 </li>
 <li><p>Finally, define a <code class="docutils literal notranslate"><span class="pre">SAW_RUST_LIBRARY_PATH</span></code> environment variable that points
 to the newly created <code class="docutils literal notranslate"><span class="pre">rlibs</span></code> subdirectory:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">SAW_RUST_LIBRARY_PATH</span><span class="o">=</span>&lt;...&gt;/crucible/crux-mir/rlibs
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">export</span><span class="w"> </span><span class="nv">SAW_RUST_LIBRARY_PATH</span><span class="o">=</span>&lt;...&gt;/mir-json/rlibs
 </pre></div>
 </div>
 </li>
