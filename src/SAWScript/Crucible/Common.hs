@@ -130,7 +130,7 @@ ppAbortedResult ppGP (AbortedBranch loc _predicate trueBranch falseBranch) =
     , PP.pretty "Message from the false branch:"
     , PP.indent 2 (ppAbortedResult ppGP falseBranch)
     ]
-ppAbortedResult _ (AbortedExit ec) =
+ppAbortedResult _ (AbortedExit ec _gp) =
   PP.pretty "Branch exited:" PP.<+> PP.viaShow ec
 
 setupProfiling ::
