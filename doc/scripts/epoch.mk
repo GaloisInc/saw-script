@@ -1,3 +1,11 @@
+# This is the date used for the documentation build.
+# (It does not, and should not, leak out into the rest of SAW.)
+# Among other things it appears on the cover page of the manual.
+#
+# Bump this date to the current date if you make anything more than
+# completely trivial changes to the manual and tutorial content.
+# (But don't let it move backwards.)
+#
 # Update procedure here is:
 #    - pick a date/time
 #    - update the human-readable date in the comments
