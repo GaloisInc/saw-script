@@ -23,6 +23,14 @@
 #    - produce T.log with timestamps stripped out
 #    - diff T.log against T.log.good to produce T.diff
 #
+# It will also test all SAW repl scripts (*.isaw) it finds:
+#    - run "saw -B T.isaw"
+#    - produce T.rawlog
+#    - produce T.log with timestamps stripped out
+#    - diff T.log against T.log.good to produce T.diff
+#
+# Don't use the same names for *.saw and *.isaw files.
+#
 # These steps are "run-tests". It will always run all tests before
 # checking any of the outputs. If SAW itself fails (exits non-zero)
 # that fact is logged, and if unexpected will cause a diff, but will
@@ -61,13 +69,23 @@
 #
 # Note that in some shells (and depending on settings) asking for
 # *.saw when there aren't any will yield "*.saw" rather than
-# generating an error.
+# generating an error or an empty list.
 TESTS=
 for SCRIPT in *.saw; do
+    if [ "$SCRIPT" = "*.saw" ]; then
+        break
+    fi
     BASE=${SCRIPT%.saw}
     TESTS="$TESTS $BASE"
 done
-if [ "$TESTS" = " *.saw" ] || [ "$TESTS" = " " ]; then
+for SCRIPT in *.isaw; do
+    if [ "$SCRIPT" = "*.isaw" ]; then
+        break
+    fi
+    BASE=${SCRIPT%.isaw}
+    TESTS="$TESTS $BASE"
+done
+if [ "$TESTS" = "" ]; then
     echo "$0: Found no files matching *.saw" 1>&2
     exit 1
 fi
@@ -99,8 +117,13 @@ run-tests() {
 
         # run the test
         # (do not fail if saw does, instead log it)
-        echo "$SAW $TEST.saw"
-        $SAW $TEST.saw > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
+        if [ -f "$TEST.saw" ]; then
+            echo "$SAW $TEST.saw"
+            $SAW $TEST.saw > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
+        else
+            echo "$SAW -B $TEST.isaw"
+            $SAW -B $TEST.isaw > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
+        fi
 
         # Prune the timestamps from the log since they'll never match.
         # We also need to shorten pathnames that contain the current
@@ -113,13 +136,21 @@ run-tests() {
         # use default Show instances and the saw-core positions carry
         # the directory and filename separately. This becomes
         # "interesting" from a quoting perspective...
-        sed < $TEST.rawlog > $TEST.log '
+        sed < $TEST.rawlog '
             /^\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\] /{
                 s/^..............//
             }
             s,'"$CURDIR"'/,,g
             s,"'"$CURDIR"'",".",g
-        '
+        ' | (
+            # If there's a custom postprocess script for this test,
+            # chain it in.
+            if [ -f $TEST.postprocess.sh ]; then
+                ${TEST_SHELL:-bash} $TEST.postprocess.sh
+            else
+                cat
+            fi
+        ) > $TEST.log 
 
         # Check the output against the expected version.
         # Note: because we (intentionally) aren't using set -e, we

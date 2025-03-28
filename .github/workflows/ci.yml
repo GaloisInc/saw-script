@@ -8,7 +8,9 @@
 name: SAWScript
 on:
   push:
-    tags: ["v?[0-9]+.[0-9]+(.[0-9]+)?"]
+    tags:
+      - "v?[0-9]+.[0-9]+"
+      - "v?[0-9]+.[0-9]+.[0-9]+"
     branches: [master, "release-**"]
   pull_request:
   schedule:
@@ -23,7 +25,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 3
+  CABAL_CACHE_VERSION: 5
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -31,9 +33,7 @@ env:
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  # ./s2nTests/scripts/blst-entrypoint.sh
-  # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20241119"
+  SOLVER_PKG_VERSION: "snapshot-20250227"
 
 jobs:
   config:
@@ -77,6 +77,7 @@ jobs:
         os: [ubuntu-22.04]
         cabal: ["3.10.3.0"]
         ghc: ["9.4.8", "9.6.6", "9.8.2"]
+        haddock: [true]
         run-tests: [true]
         hpc: [false]
         include:
@@ -86,12 +87,14 @@ jobs:
           - os: ubuntu-20.04
             ghc: "9.4.8"
             cabal: "3.10.3.0"
+            haddock: false
             run-tests: false
             hpc: false
           # Include one job with HPC enabled
           - os: ubuntu-22.04
             ghc: "9.4.8"
             cabal: "3.10.3.0"
+            haddock: false
             run-tests: true
             hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
@@ -100,14 +103,17 @@ jobs:
           # macOS runner (macos-14).
           - os: windows-2019
             ghc: 9.4.8
+            haddock: false
             run-tests: true
             hpc: false
           - os: macos-13
             ghc: 9.4.8
+            haddock: false
             run-tests: true
             hpc: false
           - os: macos-14
             ghc: 9.4.8
+            haddock: false
             run-tests: true
             hpc: false
     outputs:
@@ -155,25 +161,19 @@ jobs:
           restore-keys: |
             ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
-      - if: needs.config.outputs.release == 'true'
-        shell: bash
-        run: |
-          sed -i.bak \
-            -e 's/^hashText = .*$/hashText = ""/' \
-            -e '/import GitRev.*$/d' \
-            saw/SAWScript/Version.hs
-          rm -f saw/SAWScript/Version.hs.bak
-
       - shell: bash
         run: .github/ci.sh build
         env:
           ENABLE_HPC: ${{ matrix.hpc }}
 
-
       - shell: bash
         env:
           RELEASE: ${{ needs.config.outputs.release }}
         run: .github/ci.sh build_cryptol
+
+      - if: matrix.haddock == true
+        shell: bash
+        run: .github/ci.sh haddock
 
       - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         id: cabal-test-suites
@@ -291,6 +291,139 @@ jobs:
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+
+  build-docs:
+    name: "Build SAW documentation"
+    needs: [config]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Cache Python environment
+        uses: actions/cache@v4
+        with:
+          path: doc/.venv
+          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html/
+
+  deploy-docs:
+    name: "Deploy SAW documentation to GitHub Pages"
+    needs: [config, build-docs]
+    runs-on: ${{ matrix.os }}
+    #
+    # The whole workflow is only run at all on branches matching
+    # `master`, branches matching `release-**`, and release tags, per
+    # the `on:` stanza at the top of the file.
+    #
+    # We want to upload docs for `master` and for releases, and not
+    # otherwise, so filter this further:
+    #    - restricting to `push` actions eliminates pull requests
+    #    - requiring needs.config.outputs.release be false skips `release-**` branches
+    # so what's left is `master` and release tags.
+    #
+    # Then also check the repository owner to avoid running in forks.
+    # This is to avoid issues with missing permissions on
+    # GITHUB_TOKEN, needed when actually deploying the documentation
+    # to the `gh-pages` branch.
+    #
+    # Note that even though tags will normally be _on_ release
+    # branches, tag events generate a github.ref of the form
+    # `refs/tags/...` which won't set needs.config.outputs.release, so
+    # we aren't accidentally skipping release tags. We think,
+    # according to the docs, that if you push to a release branch that
+    # will trigger a branch run, and then tagging it will trigger a
+    # separate tag run.
+    #
+    if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html
+
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: python3 .github/save_doc_publish_dir.py
+
+      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
+      # target directories to publish to, where the built-in actions are
+      # "one and done": Package and upload a single artifact, and deploy that.
+      - name: Publish docs to GitHub pages
+        if: steps.doc-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
+          keep_files: false
+
+  # Adapted from:
+  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
+  update-docs-versions:
+    name: "Update documentation versions JSON"
+    needs: [deploy-docs]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Write versions to JSON file
+        run: |
+          python3 -c "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted(
+              (
+                  item.name
+                  for item in cwd.iterdir()
+                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
+              ),
+              reverse=True,
+          )
+          target_dir = Path('gh-pages')
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
+              json.dump(versions, f)"
+
+      - name: Publish versions JSON to GitHub pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true
 
   mr-solver-tests:
     needs: [build]
@@ -542,13 +675,10 @@ jobs:
     name: "Run integration tests with coverage reporting"
     needs: build
     runs-on: ${{ matrix.os }}
-    # Do not run this job in forks, as the deploy-pages step will fail unless it
-    # has GITHUB_TOKEN permissions from a user within the GaloisInc organization
-    # (see #2216).
+    # Do not run this job in forks, as the deployment to GitHub pages will fail
+    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
+    # organization (see #2216).
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
-    permissions:
-      pages: write
-      id-token: write
     strategy:
       matrix:
         suite: ['integration_tests']
@@ -632,19 +762,17 @@ jobs:
           name: coverage-html-${{ github.event.number }}
 
       - name: Gather HPC coverage files
-        shell: bash
         run: .github/ci.sh collect_all_html
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy coverage reports
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: all-html
-
-      - name: Deploy to github pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
 
   build-push-image:
     runs-on: ubuntu-22.04
@@ -689,15 +817,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - if: needs.config.outputs.release == 'true'
-        shell: bash
-        run: |
-          sed -i.bak \
-            -e 's/^hashText = .*$/hashText = ""/' \
-            -e '/import GitRev.*$/d' \
-            saw/SAWScript/Version.hs
-          rm -f saw/SAWScript/Version.hs.bak
 
       - uses: docker/build-push-action@v2
         with:

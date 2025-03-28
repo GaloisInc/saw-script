@@ -1,11 +1,14 @@
  Loading file "unify009.saw"
- unify009.saw:21:6-21:12: Type mismatch.
+ unify009.saw:21:6-21:19: Type mismatch.
     Mismatch of type constructors. Expected: String but got Int
-    unify009.saw:21:16-21:21: The type String arises from the type of this term
-    unify009.saw:21:9-21:12: The type Int arises from this type annotation
+    unify009.saw:21:33-21:38: The type String arises from the type of this term
+    unify009.saw:21:16-21:19: The type Int arises from this type annotation
     
     Expected: String
     Found:    Int
+    
+    Expected: Int -> String
+    Found:    Int -> Int
     
     within "x" (unify009.saw:20:6-20:7)
 

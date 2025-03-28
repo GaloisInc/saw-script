@@ -85,13 +85,7 @@ equivalence between Cryptol and non-Cryptol code. Leaving these
 abstractions in place is appropriate when comparing only Cryptol code,
 however, so `cryptol_ss` is not included in `basic_ss`.
 
-The next set of functions can extend or apply a `Simpset`:
-
-- `addsimp' : Term -> Simpset -> Simpset` adds a single `Term` to an
-existing `Simpset.
-
-- `addsimps' : [Term] -> Simpset -> Simpset` adds a list of `Term`s to
-an existing `Simpset`.
+The following function can apply a `Simpset`:
 
 - `rewrite : Simpset -> Term -> Term` applies a `Simpset` to an existing
 `Term` to produce a new `Term`.
@@ -124,25 +118,6 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
            (Prelude.bvNat 1 1))
 :::
 
-Finally, we apply the rule to the target term:
-
-:::{code-block} console
-sawscript> let result = rewrite (addsimp' rule empty_ss) term
-sawscript> print_term result
-\(x : Prelude.Vec 8 Prelude.Bool) ->
-  Prelude.bvAdd 8
-    (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False x
-       (Prelude.bvNat 1 1))
-    (Prelude.bvNat 8 1)
-:::
-
-Note that `addsimp'` and `addsimps'` take a `Term` or list of `Term`s;
-these could in principle be anything, and are not necessarily terms
-representing logically valid equalities. They have `'` suffixes because
-they are not intended to be the primary interface to rewriting. When using
-these functions, the soundness of the proof process depends on the
-correctness of these rules as a side condition.
-
 The primary interface to rewriting uses the `Theorem` type instead of
 the `Term` type, as shown in the signatures for `addsimp` and
 `addsimps`.
@@ -158,6 +133,21 @@ In general, a `Theorem` can be any statement, and may not be useful as a
 rewrite rule. However, if it has an appropriate shape it can be used for
 rewriting. In the ["Proofs about Terms"](proofs-about-terms.md) section,
 we'll describe how to construct `Theorem` values from `Term` values.
+
+For the time being, we'll assume we've proved our `rule` term correct in
+some way, and have a `Theorem` named `rule_thm`.
+
+Finally, we apply the rule to the target term:
+
+:::{code-block} console
+sawscript> let result = rewrite (addsimp rule_thm empty_ss) term
+sawscript> print_term result
+\(x : Prelude.Vec 8 Prelude.Bool) ->
+  Prelude.bvAdd 8
+    (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False x
+       (Prelude.bvNat 1 1))
+    (Prelude.bvNat 8 1)
+:::
 
 In the absence of user-constructed `Theorem` values, there are some
 additional built-in rules that are not included in either `basic_ss` and

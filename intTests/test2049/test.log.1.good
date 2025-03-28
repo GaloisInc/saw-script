@@ -10,6 +10,16 @@
  Checking proof obligations zero ...
  Subgoal failed: zero test.saw:60:1: error: in ghost_value
 Literal equality postcondition
+Expected term: 
+let { x@1 = Prelude.Vec 8 Prelude.Bool
+    }
+ in fresh:zero::table#806
+Actual term:
+let { x@1 = Prelude.Vec 8 Prelude.Bool
+    }
+ in Cryptol.ecArrayUpdate x@1 x@1 fresh:zero::table#806
+      fresh:zero::k#807
+      (Prelude.bvNat 8 0)
 
  SolverStats {solverStatsSolvers = fromList ["W4 ->z3"], solverStatsGoalSize = 334}
  ----------Counterexample----------

@@ -223,7 +223,6 @@ module Verifier.SAW.SharedTerm
   , scBvAt
   , scBvConst
   , scBvLit
-  , scFinVal
   , scBvForall
   , scUpdBvFun
   , scBvNonzero, scBvBool
@@ -2125,12 +2124,6 @@ scBvLit sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
      bits <- mapM (scBool sc . testBit v)
                   [(fromIntegral w - 1), (fromIntegral w - 2) .. 0]
      scVector sc bool_tp bits
-
--- TODO: This doesn't appear to be used anywhere, and "FinVal" doesn't appear
--- in Prelude.sawcore... can this be deleted?
--- | FinVal :: (x r :: Nat) -> Fin (Succ (addNat r x));
-scFinVal :: SharedContext -> Term -> Term -> IO Term
-scFinVal sc a b = scCtorApp sc "Prelude.FinVal" [a, b]
 
 -- | Create a term computing the bitvector of given length representing 0 if
 -- the other given term evaluates to @False@ and representing 1 if the other

@@ -578,7 +578,7 @@ withMethodSpec pathSat lm nm setup action =
            do let sym = cc^.ccSym
 
               pos <- getPosition
-              let setupLoc = toW4Loc "_SAW_verify_prestate" pos
+              let setupLoc = toW4Loc "_SAW_LLVM_withMethodSpec" pos
 
               let est0 =
                     case defOrDecl of
@@ -956,7 +956,7 @@ verifyPrestate ::
 verifyPrestate opts cc mspec globals =
   do let ?lc = ccTypeCtx cc
      let sym = cc^.ccSym
-     let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
+     let prestateLoc = W4.mkProgramLoc "_SAW_LLVM_verifyPrestate" W4.InternalPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)
@@ -1648,7 +1648,7 @@ verifyPoststate ::
     {- ^ generated labels and verification conditions -}
 verifyPoststate cc mspec env0 globals ret mdMap invSubst =
   ccWithBackend cc $ \bak ->
-  do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
+  do poststateLoc <- toW4Loc "_SAW_LLVM_verifyPoststate" <$> getPosition
      sc <- getSharedContext
      opts <- getOptions
      io $ W4.setCurrentProgramLoc sym poststateLoc

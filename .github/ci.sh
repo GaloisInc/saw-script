@@ -36,7 +36,13 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
-  cabal v2-configure -j --enable-tests
+  # Configure with --disable-documentation and --haddock-internal so
+  # that the haddock run later, if enabled, doesn't recompile the
+  # world by using those flags. (See haddock() below for discussion of
+  # why those flags are used.) We could do this only for builds where
+  # we're intending to do the haddock run, but it should have no
+  # effect otherwise and unconditional is simpler.
+  cabal v2-configure -j --enable-tests --disable-documentation --haddock-internal
   git status --porcelain
   if $IS_WIN; then
     pkgs=(saw crux-mir-comp)
@@ -52,6 +58,38 @@ build() {
   # be less likely with modern GitHub Actions caching, so we have removed the
   # retry logic.
   cabal v2-build "$@" "${pkgs[@]}"
+}
+
+haddock() {
+  # It seems that the secret sauce for getting cabal to _not_ go
+  # through building docs for every single sublibrary is to pass
+  # --disable-documentation, counterintuitive though that is.
+  #
+  # Note: there's a v2-haddock-project that runs haddock on all
+  # packages in the project, which would avoid needing to list them
+  # out. However, it doesn't support the --disable-documentation
+  # option, so it won't currently serve. (Also for some reason it
+  # currently demands --internal in place of --haddock-internal.)
+  #
+  # We use --haddock-internal because the point of generating the
+  # haddocks for SAW (which doesn't have an external-facing library
+  # interface) is to serve as an internals reference.
+  local PACKAGES='
+    rme
+    saw-core
+    cryptol-saw-core
+    saw-core-what4
+    saw-core-sbv
+    saw-core-aig
+    saw-core-coq
+    heapster-saw
+    saw-script
+    saw-remote-api
+    crucible-mir-comp
+    crux-mir-comp
+    verif-viewer
+  '
+  cabal v2-haddock --haddock-internal --disable-documentation $PACKAGES
 }
 
 # Gather and tar up all HPC coverage files and binaries

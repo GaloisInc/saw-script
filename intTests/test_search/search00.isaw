@@ -1,0 +1,26 @@
+return ()    // the return works around a parsing bug with comment lines
+return ()    // various basic searches
+
+print "--------------------------------"
+print "-- LLVMSpec"
+:search LLVMSpec
+
+print "--------------------------------"
+print "-- (LLVMSpec -> [String])"
+:search (LLVMSpec -> [String])
+
+print "--------------------------------"
+print "-- (LLVMSetup ())"
+:search (LLVMSetup ())
+
+print "--------------------------------"
+print "-- Int String"
+:search Int String
+
+print "--------------------------------"
+print "-- String Int"
+:search String Int
+
+print "--------------------------------"
+print "-- (TopLevel Int)"
+:search (TopLevel Int)

@@ -1,0 +1,18 @@
+// "Only functions can be recursive"
+//
+// Note: we'll only get the error from the first one for now (as of
+// 20250228) but expected cleanup soon should get us all four. If
+// someone finds this in more than a few months and that hasn't
+// happened, split it into four cases. (I'm not doing that right now
+// because each separate case we have in here requires its own saw
+// execution and that isn't free.)
+
+rec x = 3;
+
+rec y = y;
+
+rec f a = a
+and f' = 3;
+
+rec g a = a
+and g' = g 3;

@@ -13,7 +13,7 @@ import Control.Exception
 import Control.Monad
 
 import Data.Char (toLower)
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe)
 import Text.Read (readMaybe)
 
 import System.Console.GetOpt
@@ -106,6 +106,7 @@ options =
               return opts { simVerbose = verb }
       setDetectVacuity opts = return opts { detectVacuity = True }
       setExtraChecks opts = return opts { extraChecks = True }
+      setBatchFile f opts = return opts { batchFile = Just f }
       setRunInteractively opts = return opts { runInteractively = True }
       setShowHelp opts = return opts { showHelp = True }
       setShowVersion opts = return opts { showVersion = True }
@@ -135,6 +136,9 @@ options =
   [
     noArg setShowHelp "h?" "help"
             "Print this help message",
+
+    reqArg setBatchFile "B" "batch" "<filename>"
+            "Run <filename> as if it were typed into the REPL",
 
     reqArg addJavaBinDirs "b" "java-bin-dirs" "<path>"
             "Add <path> to the Java binary directory path",
@@ -319,43 +323,105 @@ usageText =
     -- verbosity descriptions in the footer above.
     usageInfo' header 28 options footer
 
+-- Issue a top-level error and exit.
+err :: Options -> String -> IO ()
+err opts msg = do
+  when (verbLevel opts >= Error) $
+      hPutStrLn stderr msg
+  exitProofUnknown
+
+-- Issue a top-level warning.
+warn :: Options -> String -> IO ()
+warn opts msg = do
+  when (verbLevel opts >= Warn) $
+      hPutStrLn stderr msg
+
+-- Load (and run) a saw-script file.
+loadFile :: Options -> FilePath -> IO ()
+loadFile opts file = do
+  let aigProxy = AIGProxy AIG.compactProxy
+      subsh = REPL.subshell (REPL.replBody Nothing (return ()))
+      proofSubsh = REPL.proof_subshell (REPL.replBody Nothing (return ()))
+  processFile aigProxy opts file (Just subsh) (Just proofSubsh)
+    `catch`
+    (\(ErrorCall msg) -> err opts msg)
+
 main :: IO ()
 main = do
   setLocaleEncoding utf8
   hSetBuffering stdout LineBuffering
   argv <- getArgs
-  case getOpt Permute options argv of
-    (opts, files, []) -> do
-      opts' <- foldl (>>=) (return defaultOptions) opts
-      opts'' <- processEnv opts'
-      {- We have two modes of operation: batch processing, handled in
-      'SAWScript.ProcessFile', and a REPL, defined in 'SAWScript.REPL'. -}
-      case files of
-        _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
-        _ | showHelp opts'' -> err opts'' usageText
-        _ | Just path <- cleanMisVsCache opts'' -> doCleanMisVsCache opts'' path
-        [] -> checkZ3 opts'' *> REPL.run opts''
-        _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
-        [file] -> checkZ3 opts'' *>
-          processFile (AIGProxy AIG.compactProxy) opts'' file subsh proofSubsh`catch`
-          (\(ErrorCall msg) -> err opts'' msg)
-        (_:_) -> err opts'' "Multiple files not yet supported."
-    (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageText)
-                       exitProofUnknown
-  where subsh = Just (REPL.subshell (REPL.replBody Nothing (return ())))
-        proofSubsh = Just (REPL.proof_subshell (REPL.replBody Nothing (return ())))
-        checkZ3 opts = do
-          p <- findExecutable "z3"
-          unless (isJust p)
-            $ err opts "Error: z3 is required to run SAW, but it was not found on the system path."
-        err opts msg = do
-          when (verbLevel opts >= Error)
-            (hPutStrLn stderr msg)
-          exitProofUnknown
-        doCleanMisVsCache opts path | not (null path) = do
-          cache <- lazyOpenSolverCache path
-          vs <- getSolverBackendVersions allBackends
-          fst <$> solverCacheOp (cleanMismatchedVersionsSolverCache vs) opts cache
-        doCleanMisVsCache opts _ =
-          err opts "Error: either --clean-mismatched-versions-solver-cache must be given an argument or SAW_SOLVER_CACHE_PATH must be set"
+  let (rawOpts, files, errs) = getOpt Permute options argv
+  when (errs /= []) $ do
+      hPutStrLn stderr (concat errs ++ usageText)
+      exitProofUnknown
 
+  opts <- do
+      -- Eval the options, which are in IO and might fail/exit
+      evaledOpts <- foldl (>>=) (return defaultOptions) rawOpts
+      -- Add stuff from the environment
+      processEnv evaledOpts
+
+  --
+  -- Check for the options that don't actually run.
+  --
+
+  when (showVersion opts) $ do
+      hPutStrLn stderr shortVersionText
+      exitSuccess
+
+  when (showHelp opts) $
+      err opts usageText
+
+  -- blah, there should be a tidier way to write this (without
+  -- incurring an incomplete match warning or indenting the whole rest
+  -- of the function)
+  let (doClean, cleanPath) = case cleanMisVsCache opts of
+          Nothing -> (False, "")
+          Just path -> (True, path)
+  when doClean $ do
+      when (null cleanPath) $ do
+          err opts $ "Error: no path to clean.\n" ++
+                     "Either give --clean-mismatched-versions-solver-cache" ++
+                     " an argument or set SAW_SOLVER_CACHE_PATH"
+      cache <- lazyOpenSolverCache cleanPath
+      vs <- getSolverBackendVersions allBackends
+      fst <$> solverCacheOp (cleanMismatchedVersionsSolverCache vs) opts cache
+      exitSuccess
+
+  -- Now we can check for z3.
+  z3 <- findExecutable "z3"
+  when (z3 == Nothing) $
+      err opts $ "Error: z3 is required to run SAW, but it was not found" ++
+                 " on the system path."
+
+  --
+  -- There are three ways we can run:
+  --    interactively in the REPL;
+  --    by loading a file through the REPL's command processor ("batch mode");
+  --    by loading a saw-script file directly.
+  --
+
+  case batchFile opts of
+      Nothing
+       | runInteractively opts -> do
+            when (files /= []) $
+                -- XXX: would be nicer to load and then drop into the
+                -- repl. That won't (usefully) work at the moment
+                -- because there's no way to retrieve the context from
+                -- loading a file and then feed it to the repl.
+                warn opts "Warning: files loaded along with -I are ignored"
+            REPL.run opts
+       | [] <- files ->
+            REPL.run opts
+       | [file] <- files ->
+            loadFile opts file
+       | otherwise ->
+            err opts "Multiple files not yet supported."
+      Just f -> do
+            when (runInteractively opts) $
+                err opts "Error: -B and -I cannot be used together"
+            when (files /= []) $
+                err opts $ "Error: cannot load ordinary saw-script files" ++
+                           " along with -B"
+            REPL.runFromFile f opts

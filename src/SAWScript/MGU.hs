@@ -19,6 +19,7 @@ Stability   : provisional
 module SAWScript.MGU
        ( checkDecl
        , checkStmt
+       , checkSchemaPattern
        , instantiate
        ) where
 
@@ -26,7 +27,7 @@ module SAWScript.MGU
 import Control.Applicative
 #endif
 
-import Control.Monad (zipWithM)
+import Control.Monad (zipWithM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
@@ -40,6 +41,7 @@ import qualified Data.Set as S
 import qualified Prettyprinter as PP
 
 import SAWScript.AST
+import SAWScript.ASTUtil (namedTyVars)
 import SAWScript.Panic (panic)
 import SAWScript.Position (Inference(..), Pos(..), Positioned(..), choosePos)
 
@@ -54,7 +56,7 @@ type TyEnv = Map Name NamedType
 
 
 ------------------------------------------------------------
--- UnifyVars, NamedVars {{{
+-- UnifyVars {{{
 
 --
 -- unifyVars is a type-class-polymorphic function for extracting
@@ -86,33 +88,6 @@ instance UnifyVars NamedType where
   unifyVars nt = case nt of
     ConcreteType ty -> unifyVars ty
     AbstractType -> M.empty
-
---
--- namedVars is a type-class-polymorphic function for extracting named
--- type variables from a type or type schema. It returns a set of Name
--- (Name is just String) manifested as a map from those Names to their
--- positions/provenance.
---
-
-class NamedVars t where
-  namedVars :: t -> M.Map Name Pos
-
-instance (Ord k, NamedVars a) => NamedVars (M.Map k a) where
-  namedVars = namedVars . M.elems
-
-instance (NamedVars a) => NamedVars [a] where
-  namedVars = M.unionsWith choosePos . map namedVars
-
-instance NamedVars Type where
-  namedVars t = case t of
-    TyCon _ _ ts      -> namedVars ts
-    TyRecord _ tm     -> namedVars tm
-    TyVar pos n       -> M.singleton n pos
-    TyUnifyVar _ _    -> M.empty
-
-instance NamedVars Schema where
-  namedVars (Forall ns t) = namedVars t M.\\ M.fromList ns'
-    where ns' = map (\(pos, n) -> (n, pos)) ns
 
 -- }}}
 
@@ -1451,7 +1426,7 @@ generalize foralls es0 ts0 = do
      -- Extract lists of any unification vars and named type vars that
      -- still appear.
      let is0 = unifyVars ts
-     let bs0 = namedVars ts
+     let bs0 = namedTyVars ts
 
      -- Drop any unification vars and named type vars that we
      -- shouldn't forall-bind.
@@ -1521,6 +1496,44 @@ generalize foralls es0 ts0 = do
 
      return $ zipWith mk es ts
 
+
+-- Check that a type is a function and isn't a plain value, in order
+-- to reject recursive values in "rec" definitions. Otherwise they
+-- crash the interpreter downstream. See issue #2203.
+--
+-- There are cases where it might be convenient to include a plain
+-- value within a system of recursive declarations. For example, if
+-- you have something like
+--    rec foo x = ...
+--    and foo0 = foo 0
+--    and foo1 = foo 1
+--    and bar x = ...
+--    and bar0 = bar 0
+--    and bar1 = bar 1
+--    and baz x = ...
+--    and baz0 = baz 0
+--    and baz1 = baz 1
+-- then depending on what the code is, it might be logically
+-- reasonable to place the values like this and ugly to need to move
+-- them out of the flow. If this ever comes up it might make sense to
+-- loosen this check (e.g. to check whether the value is actually
+-- recursive) and also fix the interpreter to not choke. However,
+-- provided the values actually aren't recursive it is _possible_ to
+-- move them out, so this is only worth chasing after given a fairly
+-- compelling use case.
+--
+-- Note that actual recursively defined values are always bottom (in
+-- the absence of mutable variables) and are best not allowed.
+--
+requireFunction :: Pos -> Type -> TI ()
+requireFunction pos ty = do
+    ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
+    case ty' of
+        TyCon _pos FunCon _args ->
+            return ()
+        _ ->
+            recordError pos $ "Only functions may be recursive."
+
 -- Type inference for a declaration.
 --
 -- Note that the type schema slot in Decl is always Nothing as we get
@@ -1559,6 +1572,9 @@ inferRecDecls ds =
                    $ sequence [ inferExpr (patternLName p, e)
                               | Decl _pos p _ e <- ds
                               ]
+
+       -- Only functions can be recursive.
+       zipWithM_ (\d t -> requireFunction (getPos d) t) ds ts
 
        -- pats' has already been checked once, which will have inserted
        -- unification vars for any missing types. Running it through
@@ -1695,12 +1711,11 @@ checkType kind ty = case ty of
 
   TyUnifyVar _pos _ix ->
       -- for now at least we don't track the kinds of unification vars
-      -- (types of mismatch kinds can't be the same types, so they
+      -- (types of mismatched kinds can't be the same types, so they
       -- won't ever unify, so the possible mischief is limited) and all
       -- possible unification var numbers are well formed, so we don't
       -- need to do anything.
       return ty
-
 
 -- }}}
 
@@ -1787,6 +1802,29 @@ checkStmt env tenv ctx stmt =
 checkDecl :: VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl env tenv decl =
   evalTIWithEnv env tenv (inferDecl decl)
+
+-- | Check a schema (type) pattern as used by :search. (This is an
+-- external interface.)
+--
+-- The first two arguments are the starting variable and typedef
+-- environments to use. The third argument is the pattern.
+--
+-- Returns a possibly updated pattern.
+--
+checkSchemaPattern :: VarEnv -> TyEnv -> SchemaPattern -> Result SchemaPattern
+checkSchemaPattern _env _tenv pat =
+    -- For the time being, do nothing -- we specifically don't want it
+    -- to reject unbound/free type variables (see Search.hs for a
+    -- discussion of why) or underapplied type constructors, so the
+    -- only check in checkType that makes sense to apply is the one
+    -- for _overapplied_ type constructors, and that is (a) not
+    -- critical (an overapplied type constructor will never match
+    -- anything valid) and (b) as noted in checkType not currently
+    -- actually reasonable because of limitations in the concrete
+    -- syntax. Point (b) will probably change eventually, so we want
+    -- to keep this hook and keep knowledge of its internals private
+    -- here even though for now it's a nop.
+    (Right pat, [])
 
 -- }}}
 

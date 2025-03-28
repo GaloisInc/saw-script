@@ -424,6 +424,14 @@ for interactive use:
 - `:env` displays the values and types of all currently bound
 variables, including built-in functions and commands.
 
+- `:search` with one or more types (complex types go in parentheses)
+searches the currently bound variables, including built-in functions
+and commands, and prints those that mention all the types cited.
+You can use `_` as a wildcard.
+Free type variables are treated as pattern constraints; use
+forall-bound type variables using the `{a}` syntax to search
+specifically for forall-bound types.
+
 - `:tenv` displays the expansions of all currently defined type
 aliases, including those that are built in.
 

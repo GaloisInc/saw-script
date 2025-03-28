@@ -274,14 +274,24 @@ getElf :: FilePath -> IO (Elf.ElfHeaderInfo 64)
 getElf path =
   do bs <- BS.readFile path
      case Elf.decodeElfHeaderInfo bs of
-       Right (Elf.SomeElf hdr)
-         | Elf.ELFCLASS64 <- Elf.headerClass (Elf.header hdr) -> pure hdr
-         | otherwise -> unsupported path "32-bit ELF format"
-       Left (off, msg) -> malformed path $ mconcat [ "Invalid ELF header at offset "
-                                              , show off
-                                              , ": "
-                                              , msg
-                                              ]
+       Left (off, msg) ->
+           malformed path $ "Invalid ELF header at offset " ++ show off ++
+                            ": " ++ msg
+       Right (Elf.SomeElf hdr) ->
+           let elfmachine = Elf.headerMachine (Elf.header hdr)
+               elfclass = Elf.headerClass (Elf.header hdr)
+           in case (elfmachine, elfclass) of
+               (Elf.EM_X86_64, Elf.ELFCLASS64) ->
+                   pure hdr
+               (Elf.EM_X86_64, _) ->
+                   -- Note that 32-bit x86 is a different machine; if
+                   -- we do see a 32-bit x86_64 bin though it might be
+                   -- one of the several 32-on-64 ABIs (akin to mips
+                   -- N32) that haven't caught on, so call it
+                   -- unsupported rather than malformed.
+                   unsupported path $ "Unexpected ELF class " ++ show elfclass
+               (_, _) ->
+                   unsupported path $ "Unexpected ELF machine " ++ show elfmachine
 
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.

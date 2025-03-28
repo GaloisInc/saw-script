@@ -1,10 +1,18 @@
 # next -- TBA
 
+Nothing yet.
+
+# Version 1.3 -- 2025-03-21
+
 This release supports [version
 1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
 `mir-json`'s schema.
 
 ## New Features
+
+* SAW documentation is now built and deployed as part of CI.
+  In the future, this will only happen for the `master` branch and version tags,
+  but for the time being also occurs for PR source branches.
 
 * SAW documentation is now under a single Sphinx umbrella, resulting in a
   complete overhaul of the `doc/` directory (#1723). Generally speaking, all
@@ -12,7 +20,16 @@ This release supports [version
   importantly for users, the PDF artifacts included in CI-generated releases
   have different names and render with Sphinx styling.
 
+* The contributor docs have been improved and modernized.
+
+* The saw executable now accepts a -B or --batch option to run a file of
+  REPL commands, similar to the -b option in Cryptol.
+
 * Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
+
+* Add a `:search` REPL command, which searches the value environment by type.
+  For example, to find everything involving the LLVMSetup monad you can do
+  `:search (LLVMSetup _)`.
 
 * Add a `:tenv` REPL command, which is like `:env` but prints the type
   environment instead of the variable environment. `:t` is still short
@@ -31,7 +48,20 @@ This release supports [version
   occurred, so this change makes SAW more permissive with respect to
   unsupported LLVM versions.)
 
+* The modified copies of the Rust standard libraries that `mir-json` depends on
+  (and SAW therefore ingests when performing MIR verification) now live in the
+  `mir-json` repo rather than in the `crucible` repo. See the [`mir-json`
+  README](https://github.com/GaloisInc/mir-json/blob/master/README.md) for
+  details.
+
 ## Bug fixes
+
+* An off-by-one error in `listSortDrop` in the SAWCore prelude has
+  been fixed (#2241).
+
+* git submodule update --init --recursive no longer causes an infinite
+  checkout loop. (However, using --recursive clones a considerable
+  number of unnecessary trees and is still not recommended.)
 
 * The saw executable's usage message now fits into a terminal. (#405)
 
@@ -107,6 +137,9 @@ This release supports [version
 
 * Fix a bug in which an LLVM override would fail to apply when matching an
   argument against a string constant.
+
+* Assorted other minor bugs and annoyances have been fixed, and a
+  number of error messages have been improved, particularly type errors.
 
 # Version 1.2 -- 2024-08-30
 

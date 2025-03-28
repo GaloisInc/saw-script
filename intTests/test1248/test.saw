@@ -1,0 +1,3 @@
+// these used to crash
+let bv32 = parse_core "Vec 32 Bool";
+let four = parse_core "4";
