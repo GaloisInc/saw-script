@@ -673,7 +673,7 @@ span.spaces    { background: white }
 <span class="lineno">  654 </span><span class="decl"><span class="istickedoff">mir_unsafe_assume_spec rm nm setup =</span>
 <span class="lineno">  655 </span><span class="spaces">  </span><span class="istickedoff">do cc &lt;- setupCrucibleContext rm</span>
 <span class="lineno">  656 </span><span class="spaces">     </span><span class="istickedoff">pos &lt;- getPosition</span>
-<span class="lineno">  657 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_assume_spec&quot; pos</span>
+<span class="lineno">  657 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_mir_unsafe_assume_spec&quot; pos</span>
 <span class="lineno">  658 </span><span class="spaces">     </span><span class="istickedoff">fn &lt;- findFn rm nm</span>
 <span class="lineno">  659 </span><span class="spaces">     </span><span class="istickedoff">let st0 = initialCrucibleSetupState <span class="nottickedoff">cc</span> fn loc</span>
 <span class="lineno">  660 </span><span class="spaces">     </span><span class="istickedoff">ms &lt;- (view Setup.csMethodSpec) &lt;$&gt;</span>
@@ -705,7 +705,7 @@ span.spaces    { background: white }
 <span class="lineno">  686 </span><span class="spaces">     </span><span class="istickedoff">let ?singleOverrideSpecialCase = sosp</span>
 <span class="lineno">  687 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  688 </span><span class="spaces">     </span><span class="istickedoff">pos &lt;- getPosition</span>
-<span class="lineno">  689 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_verify_prestate&quot; pos</span>
+<span class="lineno">  689 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_mir_verify&quot; pos</span>
 <span class="lineno">  690 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  691 </span><span class="spaces">     </span><span class="istickedoff">profFile &lt;- rwProfilingFile &lt;$&gt; getTopLevelRW</span>
 <span class="lineno">  692 </span><span class="spaces">     </span><span class="istickedoff">(writeFinalProfile, pfs) &lt;- io $ setupProfiling <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;mir_verify&quot;</span> profFile</span>
@@ -1100,7 +1100,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1081 </span><span class="spaces">  </span><span class="istickedoff">mccWithBackend cc $ \bak -&gt;</span>
 <span class="lineno"> 1082 </span><span class="spaces">  </span><span class="istickedoff">do opts &lt;- getOptions</span>
 <span class="lineno"> 1083 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno"> 1084 </span><span class="spaces">     </span><span class="istickedoff">poststateLoc &lt;- SS.toW4Loc &quot;_SAW_verify_poststate&quot; &lt;$&gt; getPosition</span>
+<span class="lineno"> 1084 </span><span class="spaces">     </span><span class="istickedoff">poststateLoc &lt;- SS.toW4Loc &quot;_SAW_MIR_verifyPoststate&quot; &lt;$&gt; getPosition</span>
 <span class="lineno"> 1085 </span><span class="spaces">     </span><span class="istickedoff">io $ W4.setCurrentProgramLoc sym poststateLoc</span>
 <span class="lineno"> 1086 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1087 </span><span class="spaces">     </span><span class="istickedoff">-- This discards all the obligations generated during</span>
@@ -1198,7 +1198,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1179 </span><span class="spaces">     </span><span class="istickedoff">let tyenv = MS.csAllocations mspec</span>
 <span class="lineno"> 1180 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames</span></span>
 <span class="lineno"> 1181 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1182 </span><span class="spaces">     </span><span class="istickedoff">let prestateLoc = W4.mkProgramLoc &quot;_SAW_verify_prestate&quot; W4.InternalPos</span>
+<span class="lineno"> 1182 </span><span class="spaces">     </span><span class="istickedoff">let prestateLoc = W4.mkProgramLoc &quot;_SAW_MIR_verifyPrestate&quot; W4.InternalPos</span>
 <span class="lineno"> 1183 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ W4.setCurrentProgramLoc sym prestateLoc</span>
 <span class="lineno"> 1184 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1185 </span><span class="spaces">     </span><span class="istickedoff">(env, globals1) &lt;- runStateT</span>

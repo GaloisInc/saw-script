@@ -245,7 +245,7 @@ span.spaces    { background: white }
 <span class="lineno">  226 </span><span class="spaces">     </span><span class="istickedoff">let jc = cc^.jccJVMContext</span>
 <span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  228 </span><span class="spaces">     </span><span class="istickedoff">pos &lt;- getPosition</span>
-<span class="lineno">  229 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_verify_prestate&quot; pos</span>
+<span class="lineno">  229 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_jvm_verify&quot; pos</span>
 <span class="lineno">  230 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  231 </span><span class="spaces">     </span><span class="istickedoff">profFile &lt;- rwProfilingFile &lt;$&gt; getTopLevelRW</span>
 <span class="lineno">  232 </span><span class="spaces">     </span><span class="istickedoff">(writeFinalProfile, pfs) &lt;- io $ setupProfiling <span class="nottickedoff">sym</span> <span class="nottickedoff">&quot;jvm_verify&quot;</span> profFile</span>
@@ -303,7 +303,7 @@ span.spaces    { background: white }
 <span class="lineno">  284 </span><span class="spaces">     </span><span class="istickedoff">pos &lt;- getPosition</span>
 <span class="lineno">  285 </span><span class="spaces">     </span><span class="istickedoff">-- cls' is either cls or a (transitive) superclass of cls</span>
 <span class="lineno">  286 </span><span class="spaces">     </span><span class="istickedoff">(cls', method) &lt;- io $ findMethod <span class="nottickedoff">cb</span> <span class="nottickedoff">pos</span> nm cls -- TODO: switch to crucible-jvm version</span>
-<span class="lineno">  287 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_assume_spec&quot; pos</span>
+<span class="lineno">  287 </span><span class="spaces">     </span><span class="istickedoff">let loc = SS.toW4Loc &quot;_SAW_JVM_unsafe_assume_spec&quot; pos</span>
 <span class="lineno">  288 </span><span class="spaces">     </span><span class="istickedoff">let st0 = initialCrucibleSetupState cc (cls', method) loc</span>
 <span class="lineno">  289 </span><span class="spaces">     </span><span class="istickedoff">ms &lt;- (view Setup.csMethodSpec) &lt;$&gt;</span>
 <span class="lineno">  290 </span><span class="spaces">             </span><span class="istickedoff">execStateT (runReaderT (runJVMSetupM setup) <span class="nottickedoff">Setup.makeCrucibleSetupRO</span>) st0</span>
@@ -401,7 +401,7 @@ span.spaces    { background: white }
 <span class="lineno">  382 </span><span class="spaces">     </span><span class="istickedoff">let tyenv = MS.csAllocations mspec</span>
 <span class="lineno">  383 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames</span></span>
 <span class="lineno">  384 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  385 </span><span class="spaces">     </span><span class="istickedoff">let prestateLoc = W4.mkProgramLoc &quot;_SAW_verify_prestate&quot; W4.InternalPos</span>
+<span class="lineno">  385 </span><span class="spaces">     </span><span class="istickedoff">let prestateLoc = W4.mkProgramLoc &quot;_SAW_JVM_verifyPrestate&quot; W4.InternalPos</span>
 <span class="lineno">  386 </span><span class="spaces">     </span><span class="istickedoff">W4.setCurrentProgramLoc sym prestateLoc</span>
 <span class="lineno">  387 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  388 </span><span class="spaces">     </span><span class="istickedoff">--let cvar = CJ.dynamicClassTable (cc^.jccJVMContext)</span>
@@ -785,7 +785,7 @@ span.spaces    { background: white }
 <span class="lineno">  766 </span><span class="spaces">  </span><span class="istickedoff">jccWithBackend cc $ \bak -&gt;</span>
 <span class="lineno">  767 </span><span class="spaces">  </span><span class="istickedoff">do opts &lt;- getOptions</span>
 <span class="lineno">  768 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  769 </span><span class="spaces">     </span><span class="istickedoff">poststateLoc &lt;- SS.toW4Loc &quot;_SAW_verify_poststate&quot; &lt;$&gt; getPosition</span>
+<span class="lineno">  769 </span><span class="spaces">     </span><span class="istickedoff">poststateLoc &lt;- SS.toW4Loc &quot;_SAW_JVM_verifyPoststate&quot; &lt;$&gt; getPosition</span>
 <span class="lineno">  770 </span><span class="spaces">     </span><span class="istickedoff">io $ W4.setCurrentProgramLoc sym poststateLoc</span>
 <span class="lineno">  771 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  772 </span><span class="spaces">     </span><span class="istickedoff">-- This discards all the obligations generated during</span>

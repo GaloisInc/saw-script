@@ -96,7 +96,7 @@ span.spaces    { background: white }
 <span class="lineno">   77 </span><span class="decl"><span class="istickedoff">crucible_return retval = do</span>
 <span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">ret &lt;- use (csMethodSpec . MS.csRetValue)</span>
 <span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">case ret of</span>
-<span class="lineno">   80 </span><span class="spaces">    </span><span class="istickedoff">Just _ -&gt; <span class="nottickedoff">fail &quot;crucible_return: duplicate return value specification&quot;</span></span>
+<span class="lineno">   80 </span><span class="spaces">    </span><span class="istickedoff">Just _ -&gt; fail &quot;crucible_return: duplicate return value specification&quot;</span>
 <span class="lineno">   81 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; csMethodSpec . MS.csRetValue .= Just retval</span></span>
 <span class="lineno">   82 </span>
 <span class="lineno">   83 </span>crucible_execute_func ::

@@ -73,7 +73,7 @@ span.spaces    { background: white }
 <span class="lineno">   54 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">style = case mbBatch of</span>
 <span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">Nothing   -&gt; defaultBehavior</span>
-<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">Just path -&gt; <span class="nottickedoff">useFile path</span></span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">Just path -&gt; useFile path</span>
 <span class="lineno">   58 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   59 </span><span class="spaces">  </span><span class="istickedoff">enableSubshell m =</span>
 <span class="lineno">   60 </span><span class="spaces">    </span><span class="istickedoff">REPL $ \refs -&gt;</span>
@@ -91,7 +91,7 @@ span.spaces    { background: white }
 <span class="lineno">   72 </span><span class="spaces">            </span><span class="istickedoff">shouldContinue</span>
 <span class="lineno">   73 </span><span class="spaces">          </span><span class="istickedoff">when continue loop</span>
 <span class="lineno">   74 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">   75 </span><span class="spaces">        </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt; <span class="nottickedoff">loop</span></span>
+<span class="lineno">   75 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; loop</span>
 <span class="lineno">   76 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   77 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
 <span class="lineno">   78 </span><span class="spaces"></span><span class="istickedoff"></span>

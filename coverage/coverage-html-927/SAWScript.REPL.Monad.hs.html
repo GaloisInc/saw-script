@@ -226,7 +226,7 @@ span.spaces    { background: white }
 <span class="lineno">  207 </span>
 <span class="lineno">  208 </span>instance Fail.MonadFail REPL where
 <span class="lineno">  209 </span>  {-# INLINE fail #-}
-<span class="lineno">  210 </span>  <span class="decl"><span class="nottickedoff">fail msg = REPL (\_ -&gt; fail msg)</span></span>
+<span class="lineno">  210 </span>  <span class="decl"><span class="istickedoff">fail msg = REPL (\_ -&gt; fail msg)</span></span>
 <span class="lineno">  211 </span>
 <span class="lineno">  212 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Applicative REPL</span></span></span></span></span></span> where
 <span class="lineno">  213 </span>  {-# INLINE pure #-}
@@ -285,11 +285,11 @@ span.spaces    { background: white }
 <span class="lineno">  266 </span>
 <span class="lineno">  267 </span>-- | Similar to 'catch' above, but catches generic IO exceptions from 'fail'.
 <span class="lineno">  268 </span>catchFail :: REPL a -&gt; (String -&gt; REPL a) -&gt; REPL a
-<span class="lineno">  269 </span><span class="decl"><span class="istickedoff">catchFail m k = REPL (\ ref -&gt; X.catchJust <span class="nottickedoff">sel</span> (unREPL m ref) <span class="nottickedoff">(\s -&gt; unREPL (k s) ref)</span>)</span>
+<span class="lineno">  269 </span><span class="decl"><span class="istickedoff">catchFail m k = REPL (\ ref -&gt; X.catchJust sel (unREPL m ref) (\s -&gt; unREPL (k s) ref))</span>
 <span class="lineno">  270 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  271 </span><span class="spaces">    </span><span class="istickedoff">sel :: X.IOException -&gt; Maybe String</span>
-<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">sel e | isUserError e = Just (ioeGetErrorString e)</span></span>
-<span class="lineno">  273 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">| otherwise     = Nothing</span></span></span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">sel e | <span class="tickonlytrue">isUserError e</span> = Just (ioeGetErrorString e)</span>
+<span class="lineno">  273 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>     = <span class="nottickedoff">Nothing</span></span></span>
 <span class="lineno">  274 </span>
 <span class="lineno">  275 </span>-- | Handle any other exception (except that we ignore async exceptions and exitWith)
 <span class="lineno">  276 </span>catchOther :: REPL a -&gt; (X.SomeException -&gt; REPL a) -&gt; REPL a
@@ -315,7 +315,7 @@ span.spaces    { background: white }
 <span class="lineno">  296 </span><span class="decl"><span class="istickedoff">exceptionProtect cmd =</span>
 <span class="lineno">  297 </span><span class="spaces">      </span><span class="istickedoff">do chk &lt;- io . makeCheckpoint =&lt;&lt; getEnvironment</span>
 <span class="lineno">  298 </span><span class="spaces">         </span><span class="istickedoff">cmd `catch`      <span class="nottickedoff">(handlerPP chk)</span></span>
-<span class="lineno">  299 </span><span class="spaces">             </span><span class="istickedoff">`catchFail`  <span class="nottickedoff">(handlerFail chk)</span></span>
+<span class="lineno">  299 </span><span class="spaces">             </span><span class="istickedoff">`catchFail`  (handlerFail chk)</span>
 <span class="lineno">  300 </span><span class="spaces">             </span><span class="istickedoff">`catchOther` (handlerPrint chk)</span>
 <span class="lineno">  301 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  302 </span><span class="spaces">    </span><span class="istickedoff">where</span>
@@ -327,9 +327,9 @@ span.spaces    { background: white }
 <span class="lineno">  308 </span><span class="spaces">      </span><span class="istickedoff">do io (putStrLn &quot;&quot; &gt;&gt; putStrLn (X.displayException e))</span>
 <span class="lineno">  309 </span><span class="spaces">         </span><span class="istickedoff">void $ liftTopLevel (restoreCheckpoint chk)</span>
 <span class="lineno">  310 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">handlerFail chk s =</span></span>
-<span class="lineno">  312 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do io (putStrLn &quot;&quot; &gt;&gt; putStrLn s)</span></span>
-<span class="lineno">  313 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">void $ liftTopLevel (restoreCheckpoint chk)</span></span></span>
+<span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">handlerFail chk s =</span>
+<span class="lineno">  312 </span><span class="spaces">      </span><span class="istickedoff">do io (putStrLn &quot;&quot; &gt;&gt; putStrLn s)</span>
+<span class="lineno">  313 </span><span class="spaces">         </span><span class="istickedoff">void $ liftTopLevel (restoreCheckpoint chk)</span></span>
 <span class="lineno">  314 </span>
 <span class="lineno">  315 </span>liftTopLevel :: IsValue a =&gt; TopLevel a -&gt; REPL Value
 <span class="lineno">  316 </span><span class="decl"><span class="istickedoff">liftTopLevel m =</span>
@@ -370,7 +370,7 @@ span.spaces    { background: white }
 <span class="lineno">  351 </span>getPrompt :: REPL String
 <span class="lineno">  352 </span><span class="decl"><span class="istickedoff">getPrompt =</span>
 <span class="lineno">  353 </span><span class="spaces">  </span><span class="istickedoff">do batch &lt;- REPL (return . eIsBatch)</span>
-<span class="lineno">  354 </span><span class="spaces">     </span><span class="istickedoff">if <span class="tickonlyfalse">batch</span> then <span class="nottickedoff">return &quot;&quot;</span></span>
+<span class="lineno">  354 </span><span class="spaces">     </span><span class="istickedoff">if batch then return &quot;&quot;</span>
 <span class="lineno">  355 </span><span class="spaces">     </span><span class="istickedoff">else</span>
 <span class="lineno">  356 </span><span class="spaces">       </span><span class="istickedoff">getProofStateRef &gt;&gt;= \case</span>
 <span class="lineno">  357 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; return &quot;sawscript&gt; &quot;</span>
@@ -502,10 +502,10 @@ span.spaces    { background: white }
 <span class="lineno">  483 </span><span class="decl"><span class="istickedoff">getEnvironment = readRef environment</span></span>
 <span class="lineno">  484 </span>
 <span class="lineno">  485 </span>getValueEnvironment :: REPL TopLevelRW
-<span class="lineno">  486 </span><span class="decl"><span class="nottickedoff">getValueEnvironment =</span>
-<span class="lineno">  487 </span><span class="spaces">  </span><span class="nottickedoff">do ro &lt;- getTopLevelRO</span>
-<span class="lineno">  488 </span><span class="spaces">     </span><span class="nottickedoff">rw &lt;- getEnvironment</span>
-<span class="lineno">  489 </span><span class="spaces">     </span><span class="nottickedoff">io (mergeLocalEnv (rwSharedContext rw) (roLocalEnv ro) rw)</span></span>
+<span class="lineno">  486 </span><span class="decl"><span class="istickedoff">getValueEnvironment =</span>
+<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">do ro &lt;- getTopLevelRO</span>
+<span class="lineno">  488 </span><span class="spaces">     </span><span class="istickedoff">rw &lt;- getEnvironment</span>
+<span class="lineno">  489 </span><span class="spaces">     </span><span class="istickedoff">io (mergeLocalEnv <span class="nottickedoff">(rwSharedContext rw)</span> (roLocalEnv ro) rw)</span></span>
 <span class="lineno">  490 </span>
 <span class="lineno">  491 </span>putEnvironment :: TopLevelRW -&gt; REPL ()
 <span class="lineno">  492 </span><span class="decl"><span class="nottickedoff">putEnvironment = modifyEnvironment . const</span></span>

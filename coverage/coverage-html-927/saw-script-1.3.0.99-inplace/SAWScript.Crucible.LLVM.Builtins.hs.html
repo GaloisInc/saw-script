@@ -597,7 +597,7 @@ span.spaces    { background: white }
 <span class="lineno">  578 </span><span class="spaces">           </span><span class="istickedoff">do let sym = cc^.ccSym</span>
 <span class="lineno">  579 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  580 </span><span class="spaces">              </span><span class="istickedoff">pos &lt;- getPosition</span>
-<span class="lineno">  581 </span><span class="spaces">              </span><span class="istickedoff">let setupLoc = toW4Loc &quot;_SAW_verify_prestate&quot; pos</span>
+<span class="lineno">  581 </span><span class="spaces">              </span><span class="istickedoff">let setupLoc = toW4Loc &quot;_SAW_LLVM_withMethodSpec&quot; pos</span>
 <span class="lineno">  582 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  583 </span><span class="spaces">              </span><span class="istickedoff">let est0 =</span>
 <span class="lineno">  584 </span><span class="spaces">                    </span><span class="istickedoff">case defOrDecl of</span>
@@ -975,7 +975,7 @@ span.spaces    { background: white }
 <span class="lineno">  956 </span><span class="decl"><span class="istickedoff">verifyPrestate opts cc mspec globals =</span>
 <span class="lineno">  957 </span><span class="spaces">  </span><span class="istickedoff">do let ?lc = <span class="nottickedoff">ccTypeCtx cc</span></span>
 <span class="lineno">  958 </span><span class="spaces">     </span><span class="istickedoff">let sym = cc^.ccSym</span>
-<span class="lineno">  959 </span><span class="spaces">     </span><span class="istickedoff">let prestateLoc = W4.mkProgramLoc &quot;_SAW_verify_prestate&quot; W4.InternalPos</span>
+<span class="lineno">  959 </span><span class="spaces">     </span><span class="istickedoff">let prestateLoc = W4.mkProgramLoc &quot;_SAW_LLVM_verifyPrestate&quot; W4.InternalPos</span>
 <span class="lineno">  960 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ W4.setCurrentProgramLoc sym prestateLoc</span>
 <span class="lineno">  961 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  962 </span><span class="spaces">     </span><span class="istickedoff">let lvar = Crucible.llvmMemVar (ccLLVMContext cc)</span>
@@ -1667,7 +1667,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1648 </span>    {- ^ generated labels and verification conditions -}
 <span class="lineno"> 1649 </span><span class="decl"><span class="istickedoff">verifyPoststate cc mspec env0 globals ret mdMap invSubst =</span>
 <span class="lineno"> 1650 </span><span class="spaces">  </span><span class="istickedoff">ccWithBackend cc $ \bak -&gt;</span>
-<span class="lineno"> 1651 </span><span class="spaces">  </span><span class="istickedoff">do poststateLoc &lt;- toW4Loc &quot;_SAW_verify_poststate&quot; &lt;$&gt; getPosition</span>
+<span class="lineno"> 1651 </span><span class="spaces">  </span><span class="istickedoff">do poststateLoc &lt;- toW4Loc &quot;_SAW_LLVM_verifyPoststate&quot; &lt;$&gt; getPosition</span>
 <span class="lineno"> 1652 </span><span class="spaces">     </span><span class="istickedoff">sc &lt;- getSharedContext</span>
 <span class="lineno"> 1653 </span><span class="spaces">     </span><span class="istickedoff">opts &lt;- getOptions</span>
 <span class="lineno"> 1654 </span><span class="spaces">     </span><span class="istickedoff">io $ W4.setCurrentProgramLoc sym poststateLoc</span>

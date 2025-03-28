@@ -256,8 +256,8 @@ span.spaces    { background: white }
 <span class="lineno">  237 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">  238 </span>
 <span class="lineno">  239 </span>isVUnit :: Value -&gt; Bool
-<span class="lineno">  240 </span><span class="decl"><span class="nottickedoff">isVUnit (VTuple []) = True</span>
-<span class="lineno">  241 </span><span class="spaces"></span><span class="nottickedoff">isVUnit _ = False</span></span>
+<span class="lineno">  240 </span><span class="decl"><span class="istickedoff">isVUnit (VTuple []) = True</span>
+<span class="lineno">  241 </span><span class="spaces"></span><span class="istickedoff">isVUnit _ = <span class="nottickedoff">False</span></span></span>
 <span class="lineno">  242 </span>
 <span class="lineno">  243 </span>data PPOpts = PPOpts
 <span class="lineno">  244 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">ppOptsAnnotate</span></span></span> :: Bool
@@ -1022,7 +1022,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1003 </span>    <span class="decl"><span class="istickedoff">toValue x = x</span></span>
 <span class="lineno"> 1004 </span>
 <span class="lineno"> 1005 </span>instance IsValue () where
-<span class="lineno"> 1006 </span>    <span class="decl"><span class="istickedoff">toValue _ = VTuple <span class="nottickedoff">[]</span></span></span>
+<span class="lineno"> 1006 </span>    <span class="decl"><span class="istickedoff">toValue _ = VTuple []</span></span>
 <span class="lineno"> 1007 </span>
 <span class="lineno"> 1008 </span>instance FromValue () where
 <span class="lineno"> 1009 </span>    <span class="decl"><span class="istickedoff">fromValue _ = ()</span></span>
