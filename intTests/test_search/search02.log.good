@@ -18,6 +18,8 @@ llvm_pointer : LLVMType -> LLVMType
 rewrite : Simpset -> Term -> Term
 str_concat : String -> String -> String
 tail : {a} [a] -> [a]
+term_eval : Term -> Term
+term_eval_unint : [String] -> Term -> Term
 time : {a} TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
  --------------------------------
