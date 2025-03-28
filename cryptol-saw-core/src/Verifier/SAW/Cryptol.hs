@@ -2052,34 +2052,42 @@ genNominalConstructors sc nominal env0 =
         C.Enum cs  -> newDefsForEnum cs
 
       where
-
-        addTypeParamsSC :: Env -> Term -> IO Term
-        addTypeParamsSC env x =
-          fst <$> Fold.foldlM tFn (x,env) (reverse $ C.ntParams nt)
-          where
-          tFn :: (Term,Env) -> C.TParam -> IO (Term,Env)
-          tFn (body,env') tp =
-            if elem (C.tpKind tp) [C.KType, C.KNum] then
-              do
-              env'' <- bindTParam sc tp env'
-              k <- importKind sc (C.tpKind tp)
-              t <- scLambda sc (tparamToLocalName tp) k body
-              return (t, env'')
-
-            else
-              panic "genNominalConstructors"
-                    ["illegal nominal type parameter kind"
-                    , show (C.tpKind tp)
-                    ]
-
-        -- FIXME[C2]: remove this in favor of above [via refactor].
+        -- addTypeParam - extend environment and create 'context' that adds the
+        -- type abstractions; all at the Term (SAWCore) level.
+        addTypeParam :: C.TParam -> (Env, Term -> IO Term) -> IO (Env, Term -> IO Term)
+        addTypeParam tp (env', addAbstractions) =
+          if elem (C.tpKind tp) [C.KType, C.KNum] then
+            do
+            env'' <- bindTParam sc tp env'
+            return (env'', \e -> do
+                                 e' <- addAbstractions e
+                                 k <- importKind sc (C.tpKind tp)
+                                 scLambda sc (tparamToLocalName tp) k e'
+                   )
+          else
+            panic "newDefsForNominal: addTypeParam"
+                  ["illegal nominal type parameter kind"
+                  , show (C.tpKind tp)
+                  ]
 
         -- TODO: hmmm: do these need to be ordered in dependency order?
 
         newDefsForEnum :: [C.EnumCon] -> IO [(C.Name,Term)]
         newDefsForEnum cs =
           do
-          cons <- mapM (mkConstructor env) cs
+          -- common code to process type paramers:
+          (env',addTypeAbstractions) <- Fold.foldrM addTypeParam
+                                                    (env, return)
+                                                    (C.ntParams nt)
+
+            -- FIXME[C]: any probs with sharing?
+
+          -- apply the above to each constructor:
+          cons <- flip mapM cs $ \con->
+                    do
+                    (nm,rhs) <- mkConstructor env' con
+                    rhs' <- addTypeAbstractions rhs
+                    return (nm, rhs')
           return cons
 
           -- (starting simple)
@@ -2103,42 +2111,41 @@ genNominalConstructors sc nominal env0 =
 
           where
 
-          -- mkCase :: _ ->
-          -- mkEnumNames :: C.Name -> (C.Name, C.Name, ?)
-              -- NOT LIKELY TYPE!!
+            -- mkCase :: _ ->
+            -- mkEnumNames :: C.Name -> (C.Name, C.Name, ?)
+                -- NOT LIKELY TYPE!!
 
-          -- (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
-          --  -- define our naming conventions
+            -- (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
+            --  -- define our naming conventions
 
-          -- FIXME: implem. ArgType below.
-          -- | generate ArgType and Constructor definitions:
-          mkConstructor :: (HasCallStack) => Env -> C.EnumCon -> IO (C.Name,Term)
-          mkConstructor env' c =
-            do
-            let
-              conArgTypes = C.ecFields c
-              numArgs     = length conArgTypes
-              conName     = C.ecName c
-              -- paramName   = C.asLocal C.NSValue conName -- ???
+            -- FIXME: implem. ArgType below.
 
-            -- to SAWCore types:
-            conArgTypes' <- mapM (importType sc env') conArgTypes
+            -- | generate ArgType and Constructor definitions:
+            mkConstructor :: (HasCallStack) => Env -> C.EnumCon -> IO (C.Name,Term)
+            mkConstructor env' c =
+              do
+              let
+                conArgTypes = C.ecFields c
+                numArgs     = length conArgTypes
+                conName     = C.ecName c
 
-            -- the product type that we map to (in SawCore)
-            storageType <- scTupleType sc conArgTypes'
+              -- to SAWCore types:
+              conArgTypes' <- mapM (importType sc env') conArgTypes
 
-            -- create vars (& names) for constructor arguments
-            paramVars <-
-              reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
-            let paramNames = map (\x-> Text.pack ("a" ++ show x))
-                                 (take numArgs [(0 ::Int)..])
+              -- the product type that we map to (in SawCore)
+              storageType <- scTupleType sc conArgTypes'
+                -- FIXME: this is dead code.
 
-            -- create the constructor:
-            conBody0 <- scTuple sc paramVars
-              -- TODO: add injection!
-            conBody1 <- scLambdaList sc
-                          (zip paramNames conArgTypes')
-                          conBody0
-            conBody2 <- addTypeParamsSC env' conBody1
+              -- create vars (& names) for constructor arguments
+              paramVars <-
+                reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+              let paramNames = map (\x-> Text.pack ("a" ++ show x))
+                                   (take numArgs [(0 ::Int)..])
 
-            return (conName, conBody2)
+              -- create the constructor:
+              conBody0 <- scTuple sc paramVars
+              conBody1 <- return conBody0 -- TODO: add injection!
+              conBody2 <- scLambdaList sc
+                            (zip paramNames conArgTypes')
+                            conBody1
+              return (conName, conBody2)
