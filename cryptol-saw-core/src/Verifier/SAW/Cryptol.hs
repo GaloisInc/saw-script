@@ -2036,7 +2036,19 @@ genNominalConstructors sc nominal env0 =
                 fn        = C.EAbs paramName recTy (C.EVar paramName)
             e <- importExpr sc env (addTypeParams fn)
             return [(con, e)]
+
+          where
+          addTypeParams :: C.Expr -> C.Expr
+          addTypeParams fn = foldr tFn fn (C.ntParams nt)
+            where
+            tFn tp body =
+              if elem (C.tpKind tp) [C.KType, C.KNum]
+                then C.ETAbs tp body
+                else panic "genNominalConstructors"
+                     ["illegal nominal type parameter kind", show (C.tpKind tp)]
+
         C.Abstract -> return []
+
         C.Enum cs  -> newDefsForEnum cs
 
       where
@@ -2061,16 +2073,9 @@ genNominalConstructors sc nominal env0 =
                     ]
 
         -- FIXME[C2]: remove this in favor of above [via refactor].
-        addTypeParams :: C.Expr -> C.Expr
-        addTypeParams fn = foldr tFn fn (C.ntParams nt)
-          where
-          tFn tp body =
-            if elem (C.tpKind tp) [C.KType, C.KNum]
-              then C.ETAbs tp body
-              else panic "genNominalConstructors"
-                   ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
         -- TODO: hmmm: do these need to be ordered in dependency order?
+
         newDefsForEnum :: [C.EnumCon] -> IO [(C.Name,Term)]
         newDefsForEnum cs =
           do
