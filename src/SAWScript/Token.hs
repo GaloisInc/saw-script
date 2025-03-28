@@ -50,10 +50,6 @@ data Token p = TVar      { tokPos :: p, tokStr :: Text                          
              | TReserved { tokPos :: p, tokStr :: Text                               }
              | TOp       { tokPos :: p, tokStr :: Text                               }
              | TNum      { tokPos :: p, tokStr :: Text, tokNum :: Integer            }
-             | TCommentS { tokPos :: p, tokStr :: Text                               }
-             | TCommentE { tokPos :: p, tokStr :: Text                               }
-             | TCommentL { tokPos :: p, tokStr :: Text                               }
-             | TEOL      { tokPos :: p, tokStr :: Text                               }
              | TEOF      { tokPos :: p, tokStr :: Text                               }
              deriving (Show, Functor)
 

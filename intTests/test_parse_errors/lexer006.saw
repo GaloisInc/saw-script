@@ -1,12 +1,4 @@
-// Currently comment delimiters in Cryptol blocks are not recognized
-// by the saw-script lexer; they're treated as part of the block and
-// handled by the Cryptol lexer downstream. This has some odd
-// consequences. See issue #2189.
-//
-// This currently fails with "unexpected +" because the whole {{ }}
-// is commented out and the comment only ends after _then_ seeing a
-// newline.
-
+// This fails with an unexpected } after the comment is processed.
 let x = 3 // {{
 }} *
 + 5;

@@ -1,0 +1,3 @@
+let {{ x : Bit -> Bit /*
+*/     x y = y
+}};

@@ -1,3 +1,5 @@
  Loading file "lexer004.saw"
- Parse error at lexer004.saw:9:20-9:21: Unexpected `+'
+ Stack trace:
+lexer004.saw:2:9-2:11: Unclosed cryptol block
+
 FAILED
