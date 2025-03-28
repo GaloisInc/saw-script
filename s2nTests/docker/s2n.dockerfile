@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 RUN apt-get update -y -q && \
     apt-get install -y software-properties-common && \
@@ -24,7 +24,7 @@ RUN apt-get update -y -q && \
     zlib1g-dev \
     python3-pip \
     tox \
-    libncurses5 \
+    libncurses6 \
     libtinfo-dev \
     && \
     rm -rf /var/lib/apt/lists/*

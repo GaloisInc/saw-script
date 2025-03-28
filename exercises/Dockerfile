@@ -1,9 +1,10 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-RUN apt-get update && apt-get install -y clang-12 make
+RUN apt-get update && apt-get install -y clang-14 make
 
-RUN find /usr/bin/ -name "*-12" -exec basename {} \; | sed "s/\-12//" | xargs -I{} ln -s /usr/bin/'{}'-12 /usr/bin/'{}'
+# symlink clang -> clang-14 for all the clang bins
+RUN (cd /usr/bin && ls *-14 | sed 's/-14$//' | awk '{ printf "ln -s %s-14 %s\n", $1, $1 }' | sh)
 
 COPY . /workdir
 
