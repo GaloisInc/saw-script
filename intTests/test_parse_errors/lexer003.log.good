@@ -1,3 +1,5 @@
  Loading file "lexer003.saw"
- Parse error at lexer003.saw:9:20-9:22: Unexpected `*/'
+ Stack trace:
+lexer003.saw:3:9-3:11: Unclosed cryptol block
+
 FAILED
