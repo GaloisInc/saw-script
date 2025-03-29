@@ -1574,16 +1574,17 @@ scConstant sc name rhs ty =
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
+-- FIXME:MT:doc: prev & next have same doc, but slightly diff type & implem.
 
 -- | Create an abstract constant with the specified name, body, and
 -- type. The term for the body must not have any loose de Bruijn
 -- indices. If the body contains any ExtCns variables, they will be
 -- abstracted over and reapplied to the resulting constant.
 scConstant' :: SharedContext
-           -> NameInfo -- ^ The name
-           -> Term   -- ^ The body
-           -> Term   -- ^ The type
-           -> IO Term
+            -> NameInfo -- ^ The name
+            -> Term   -- ^ The body
+            -> Term   -- ^ The type
+            -> IO Term
 scConstant' sc nmi rhs ty =
   do unless (termIsClosed rhs) $
        fail "scConstant: term contains loose variables"
