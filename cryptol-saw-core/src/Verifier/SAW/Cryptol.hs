@@ -112,9 +112,12 @@ $(runIO (mkSharedContext >>= \sc ->
 
 
 --------------------------------------------------------------------------------
--- Type Environments
+-- FIXME:MT:doc:
+-- Type (?!) Environments
 
 -- | SharedTerms are paired with a deferred shift amount for loose variables
+--
+--   FIXME:MT:doc: loose==free?  'deferred shift amount' = ??
 data Env = Env
   { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
   , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
@@ -124,6 +127,7 @@ data Env = Env
               --   given field selectors (in reverse order!) to the term.
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
+              -- FIXME:MT:doc: assuming the De Bruijn indexes index this list?
   , envRefPrims :: Map C.PrimIdent C.Expr
   , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
   , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
@@ -133,13 +137,20 @@ emptyEnv :: Env
 emptyEnv =
   Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
 
+-- FIXME:MT:doc : possible to create a [documented] abstraction here for
+--  - "loose vars", lift*,
+
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
 
 liftProp :: (Term, [FieldName], Int) -> (Term, [FieldName], Int)
 liftProp (t, fns, j) = (t, fns, j + 1)
 
--- | Increment dangling bound variables of all types in environment.
+-- | Increment dangling bound variables of all types [MT: 'types', really?]
+--   in environment.
+--
+--   FIXME:MT:doc: What does the above mean?!  dangling==loose,
+
 liftEnv :: Env -> Env
 liftEnv env =
   Env { envT = fmap liftTerm (envT env)
@@ -158,8 +169,10 @@ bindTParam sc tp env = do
   v <- scLocalVar sc 0
   k <- importKind sc (C.tpKind tp)
   return $ env' { envT = Map.insert (C.tpUnique tp) (v, 0) (envT env')
-                , envS = k : envS env }
+                , envS = k : envS env
+                }
 
+-- | bindName - bind name in appropriate environments to De Bruijn index 0. [MT: true?]
 bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO Env
 bindName sc name schema env = do
   let env' = liftEnv env
@@ -1477,7 +1490,7 @@ importDeclGroup declOpts sc env (C.Recursive decls) =
       -- build the environment for the declaration bodies
       let dm = Map.fromList [ (C.dName d, d) | d <- decls ]
 
-      -- grab a reference to the outermost variable; this will be the record ifn the body
+      -- grab a reference to the outermost variable; this will be the record in the body
       -- of the lambda we build later
       v0 <- scLocalVar sc 0
 
@@ -1979,9 +1992,10 @@ exportRecordValue fields v =
 --   - Abstract types do not produce any functions.
 
 -- FIXME: names no longer accurate; extendEnvWithNominalTypes, and ...
-genNominalConstructors :: (HasCallStack) =>SharedContext -> Map C.Name NominalType -> Env -> IO Env
-genNominalConstructors sc nominal env0 =
-  foldM updateEnvForNominal env0 nominal
+
+genNominalConstructors :: (HasCallStack) => SharedContext -> Map C.Name NominalType -> Env -> IO Env
+genNominalConstructors sc nominalMap env0 =
+  foldM updateEnvForNominal env0 nominalMap
 
   where
     updateEnvForNominal :: Env -> NominalType -> IO Env
