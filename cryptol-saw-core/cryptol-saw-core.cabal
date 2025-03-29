@@ -41,6 +41,7 @@ library
     vector,
     text,
     template-haskell,
+    unordered-containers,
     executable-path,
     filepath
   hs-source-dirs: src

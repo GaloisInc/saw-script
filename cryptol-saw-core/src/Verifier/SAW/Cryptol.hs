@@ -92,7 +92,7 @@ import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
+import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName, ModuleName)
 
 -- local modules:
 import Verifier.SAW.Cryptol.Panic
@@ -100,6 +100,10 @@ import Verifier.SAW.Cryptol.Panic
 
 -- MT: Debugging:
 -- import Text.Show.Pretty
+import qualified Data.HashMap.Strict as HMap
+
+-- MT: maybe temporary:
+import Verifier.SAW.Name (preludeName,identName)
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
@@ -1991,6 +1995,18 @@ exportRecordValue fields v =
 --     - a case function for the type
 --   - Abstract types do not produce any functions.
 
+-- | add definition to sawcore environment (e.g., for derived code, like from enum decl)
+--
+insertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
+insertDef sc mnm ident def_tp def_rhs =
+  do
+  scInsertDef sc mnm ident def_tp def_rhs
+
+  -- TODO: add to Env?
+  --   - no need because only references will be from newly generated code?
+
+  --  scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
+
 -- FIXME: names no longer accurate; extendEnvWithNominalTypes, and ...
 
 genNominalConstructors :: (HasCallStack) => SharedContext -> Map C.Name NominalType -> Env -> IO Env
@@ -2004,24 +2020,32 @@ genNominalConstructors sc nominalMap env0 =
       let conTs = C.nominalTypeConTypes nt
           constrs = map (\(x,e) -> (x,(e,0))) ns
             -- FIXME:MT: above 'magic' code, where's the abstraction?
+            --  - it's the De
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
       -- MT: DEBUGGING:
+      putStrLn $ "\nMYLOG: scGetModuleMap:"
+      hm <- scGetModuleMap sc
+      mapM_ print (HMap.keys hm)
+
+      putStrLn "\nMYLOG: genNominalCon.. FOR NOMINAL TYPE :\n"
+      putStrLn $ "  " ++ show (ntName nt)
+        -- NOTE: the name
       unless (null conTs) $
         do
-        putStrLn $ "conTs:"
+        putStrLn $ "\nMYLOG: conTs:"
         mapM_ (\t -> putStrLn $ "  " ++ show t) conTs
         putStrLn "\n\n"
       unless (null ns) $
         do
-        putStrLn "\nenvironment extended with nominal defns:"
+        putStrLn "\nMYLOG: environment extended with nominal defns:"
         flip mapM_ ns $
           (\(n,e)->
              do
-             putStrLn $ " NAME: " ++ show (C.nameIdent n)
-             putStrLn $ " EXPR: " ++ showTerm e
-             putStrLn $ " AST : " ++ show e
+             putStrLn $ "  MYLOG: NAME: " ++ show (C.nameIdent n)
+             putStrLn $ "  MYLOG: EXPR: " ++ showTerm e
+             putStrLn $ "  MYLOG: AST : " ++ show e
               -- showTerm t = scPrettyTerm defaultPPOpts t
               --  ... in ../SAW/Term/PRetty.hs
               -- also means to show with 'env/named-things'
@@ -2041,6 +2065,10 @@ genNominalConstructors sc nominalMap env0 =
     newDefsForNominal :: Env -> NominalType -> IO [(C.Name,Term)]
     newDefsForNominal env nt =
       case C.ntDef nt of
+        C.Abstract -> return []
+
+        C.Enum cs  -> newDefsForEnum cs
+
         C.Struct fs -> do
             let recTy     = C.TRec (C.ntFields fs)
                 con       = C.ntConName fs
@@ -2060,10 +2088,6 @@ genNominalConstructors sc nominalMap env0 =
                 then C.ETAbs tp body
                 else panic "genNominalConstructors"
                      ["illegal nominal type parameter kind", show (C.tpKind tp)]
-
-        C.Abstract -> return []
-
-        C.Enum cs  -> newDefsForEnum cs
 
       where
         -- addTypeParam - extend environment and create 'context' that adds the
@@ -2095,6 +2119,17 @@ genNominalConstructors sc nominalMap env0 =
                                                     (C.ntParams nt)
 
             -- FIXME[C]: any probs with sharing?
+
+          -- test to do `insertDef`:
+          testType <- scTupleType sc []
+          testRhs  <- scTuple sc []
+          let newIdent =
+                mkIdent
+                  preludeName
+                  (Text.append "TESTDEF_"
+                           (C.identText (C.nameIdent (ntName nt))))
+          insertDef sc preludeName newIdent testType testRhs
+          putStrLn $ "MYLOG: newIdent: " ++ identName newIdent
 
           -- apply the above to each constructor:
           cons <- flip mapM cs $ \con->
@@ -2149,6 +2184,10 @@ genNominalConstructors sc nominalMap env0 =
               -- the product type that we map to (in SawCore)
               storageType <- scTupleType sc conArgTypes'
                 -- FIXME: this is dead code.
+
+              -- FIXME: Q.
+              --  - In other places one needs to 'bindName', do we need to do that here?
+              --    - no, because all references to new args are created by us here. ?
 
               -- create vars (& names) for constructor arguments
               paramVars <-
