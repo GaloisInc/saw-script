@@ -99,8 +99,8 @@ C2 a b.. = R (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
          $ L (listSortGet (ETT_TL a b..) 2) (EithersV (drop (ETT_TL a b..) 3))
 -}
 
--- But for now (after all these TEMPESTS) just do the above ^.
--- See Eithers.sawcore for explorations re 'generic' injection.
+-- For now (after all these TEMPESTS) just do the above ^.
+--  later, see Eithers.sawcore for explorations re 'generic' injection.
 
 ETT_eithers : (as : sort 0)
            -> (b: sort 0)
