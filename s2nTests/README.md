@@ -17,3 +17,16 @@ Running `make <target>` on one of the following targets will use the `saw` binar
 - `blst`
 
 `make` alone with no targets will run all of the proofs.
+
+## Ongoing maintenance concerns
+
+- Currently the awslc proof fails because it tickles #1094.
+  It's consequently disabled in the CI run until that gets fixed; see #2273.
+
+- Currently the tls proof contains invalid SAWScript that is accepted with a
+  warning in SAW 1.3 but will be rejected eventually.
+  This will need to be fixed.
+  See #2169.
+
+- The pending deprecation of llvm_struct per #2159 will eventually require
+  upstream updates to a number of the proofs.
