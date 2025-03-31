@@ -19,7 +19,6 @@ import SAWScript.Panic (panic)
 import SAWScript.Position
 import SAWScript.Utils
 
-import Control.Arrow (first)
 import Numeric (readInt)
 import Data.Char (ord)
 import qualified Data.Char as Char
@@ -185,6 +184,9 @@ endLineComment p txt s =
     InLineComment f cs done -> ([], addWhitespace p (cs <> txt) done)
     _                    -> panic "[Lexer] endLineComment" ["outside line comment"]
 
+-- Cryptol is indentation-sensitive. Just deleting the comments could produce
+-- unparsable Cryptol , so we replace the removed comments with matching
+-- whitespace
 addWhitespace p txt s@(InCode q x) = snd $ addToCode p (whiteout txt) s
 addWhitespace p txt s@(InCType q x) = snd $ addToCType p (whiteout txt) s
 addWhitespace _ _ s = s
@@ -388,8 +390,9 @@ scanTokens filename str = go (startPos, str) Normal
                     last : lines -> (length lines, Text.length last)
                 pos' = fillPos pos height width
             in
-            let (t, s') = act pos' text s in
-              first (t ++) $ go inp' s'
+            let (t, s') = act pos' text s
+                (ts, mmsg) = go inp' s'
+            in (t ++ ts, mmsg)
 
 -- | Type to hold a diagnostic message (error or warning).
 --
