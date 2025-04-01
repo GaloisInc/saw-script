@@ -60,14 +60,14 @@ ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
 
   -- NOTE: don't need to name these, just use the below.
 
-ETT__TypeList : sort 0 -> ListSort;
-ETT__TypeList as = LS_Cons (ETT__ArgType_C1 as)
-                  (LS_Cons (ETT__ArgType_C2 as)
-                   LS_Nil);
+ETT__LS : sort 0 -> ListSort;
+ETT__LS as = LS_Cons (ETT__ArgType_C1 as)
+             (LS_Cons (ETT__ArgType_C2 as)
+               LS_Nil);
 
 -- Define the type:
 ETT : (as : sort 0) -> sort 0;
-ETT as = Eithers' (ETT__TypeList as);
+ETT as = Eithers' (ETT__LS as);
 
 -- constructors (these aren't new, already in Cryptol, and AFAIK mapped into SawCore),
 -- thus straightforward names.
@@ -80,9 +80,9 @@ C2 as x = Right (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_
                       x);
 
 -- implement per the below framework:
-C1' : (as : sort 0) -> listSortGet (ETT__TypeList as) 0 -> ETT as;
-C1' as x = Left (listSortGet (ETT__TypeList as) 0)
-                (Eithers' (listSortDrop (ETT__TypeList as) 1))
+C1' : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
+C1' as x = Left (listSortGet (ETT__LS as) 0)
+                (Eithers' (listSortDrop (ETT__LS as) 1))
                 x;
 
 {-
@@ -146,9 +146,9 @@ fun = ETT_eithers2 Nat Bool
 
 ---- test misc -----------------------------------------------------
 
-test20 : sort 0 = listSortGet (ETT__TypeList Nat) 0;
-test21 : sort 0 = listSortGet (ETT__TypeList Nat) 1;
-test22 : sort 0 = listSortGet (ETT__TypeList Nat) 2;
+test20 : sort 0 = listSortGet (ETT__LS Nat) 0;
+test21 : sort 0 = listSortGet (ETT__LS Nat) 1;
+test22 : sort 0 = listSortGet (ETT__LS Nat) 2;
 
 test1 : sort 0 = test20;
 
