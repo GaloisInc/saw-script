@@ -130,6 +130,7 @@ textToPrimitiveCellType = Map.fromList
   , ("$mux"         , CellTypeMux)
   , ("$pmux"        , CellTypePmux)
   , ("$dff"         , CellTypeDff)
+  , ("$ff"          , CellTypeFf)
   ]
 
 -- | Mapping from primitive cell types to textual representation
@@ -176,6 +177,7 @@ data CellType
   | CellTypeMux
   | CellTypePmux
   | CellTypeDff
+  | CellTypeFf
   | CellTypeUnsupportedPrimitive Text
   | CellTypeUserType Text
   deriving (Eq, Ord)

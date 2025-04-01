@@ -78,6 +78,7 @@ moduleNetgraph m =
     cellToNodes :: (Text, Cell [Bitrep]) -> [((Text, Cell [Bitrep]), Bitrep, [Bitrep])]
     cellToNodes (nm, c)
       | c ^. cellType == CellTypeDff = ((nm, c), , []) <$> outputBits
+      | c ^. cellType == CellTypeFf = ((nm, c), , []) <$> outputBits
       | otherwise = ((nm, c), , inputBits) <$> outputBits
       where
         inputBits :: [Bitrep]
@@ -163,11 +164,16 @@ netgraphToTerms sc env ng inputs
             let ((cnm, c), _output, _deps) = ng ^. netgraphNodeFromVertex $ v
             let outputFields = Map.filter (\d -> d == DirectionOutput || d == DirectionInout) $ c ^. cellPortDirections
             if
-              -- special handling for $dff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
+              -- special handling for $dff/$ff nodes - we read their /output/ from the inputs map, and later detect and write their /input/ to the state
               | c ^. cellType == CellTypeDff
               , Just dffout <- Map.lookup "Q" $ c ^. cellConnections -> do
                   r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") dffout acc
                   ts <- deriveTermsByIndices sc dffout r
+                  pure $ Map.union ts acc
+              | c ^. cellType == CellTypeFf
+              , Just ffout <- Map.lookup "Q" $ c ^. cellConnections -> do
+                  r <- lookupPatternTerm sc (YosysBitvecConsumerCell cnm "Q") ffout acc
+                  ts <- deriveTermsByIndices sc ffout r
                   pure $ Map.union ts acc
               | otherwise -> do
                   args <- fmap Map.fromList . forM (Map.assocs $ cellInputConnections c) $ \(inm, i) -> do -- for each input bit pattern
