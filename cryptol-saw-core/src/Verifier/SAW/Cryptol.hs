@@ -2156,13 +2156,13 @@ genNominalConstructors sc nominalMap env0 =
           --  : TNAME as = EithersV (TL_ ...)
 
           -- create all the constructors:
-          cons <- flip mapM cs $ \con->
+          ctors <- flip mapM cs $ \ctor->
                     do
-                    scTypes <- getConstructorTypes env' con
-                    (nm,rhs) <- mkConstructor env' scTypes con
+                    scTypes <- getConstructorTypes env' ctor -- FIXME (code dup!)
+                    (nm,rhs) <- mkConstructor env' scTypes ctor
                     rhs' <- addTypeAbstractions rhs
                     return (nm, rhs')
-          return cons
+          return ctors
 
           -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
 
@@ -2180,7 +2180,7 @@ genNominalConstructors sc nominalMap env0 =
 
               -- the product type that we map to (in SawCore)
               storageType <- scTupleType sc scConArgTypes
-                -- FIXME: this is dead code for now.
+                -- FIXME: this is dead code for now, MOVE.
 
               return scConArgTypes
 
