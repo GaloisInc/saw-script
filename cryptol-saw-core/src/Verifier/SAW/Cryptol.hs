@@ -2032,6 +2032,7 @@ genNominalConstructors sc nominalMap env0 =
       putStrLn "\nMYLOG: genNominalCon.. FOR NOMINAL TYPE :\n"
       putStrLn $ "  " ++ show (ntName nt)
         -- NOTE: the name
+
       unless (null conTs) $
         do
         putStrLn $ "\nMYLOG: conTs:"
@@ -2120,70 +2121,76 @@ genNominalConstructors sc nominalMap env0 =
 
             -- FIXME[C]: any probs with sharing?
 
-          -- test to do `insertDef`:
-          testType <- scTupleType sc []
-          testRhs  <- scTuple sc []
-          let newIdent =
-                mkIdent
-                  preludeName
-                  (Text.append "TESTDEF_"
-                           (C.identText (C.nameIdent (ntName nt))))
-          insertDef sc preludeName newIdent testType testRhs
-          putStrLn $ "MYLOG: newIdent: " ++ identName newIdent
+          let newIdent nt suffix = mkIdent
+                                     preludeName
+                                     (Text.append
+                                        (C.identText (C.nameIdent (ntName nt)))
+                                       suffix)
+              tl_ident    = newIdent nt "__TL"
+              ident_sumty = newIdent nt ""
 
-          -- apply the above to each constructor:
+
+          -- access needed SAWCore Prelude types & definitions:
+
+          sort0          <- scSort sc (mkSort 0)
+          scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
+          scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
+          let scLS_Cons a = scCtorApp sc "Prelude.LS_Cons" [a]
+          let scLS_Nil    = scCtorApp sc "Prelude.LS_Nil"  []
+          let scEithersV ls = scDataTypeApp sc "Prelude.EithersV" ls
+
+          -- Create TypeList for the Enum, add to environment:
+
+          putStrLn "checkpoint-1"
+
+          -- OLD: useful?
+          -- scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
+
+          tl_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) scListSort
+          tl_rhs   <- scLS_Nil  -- TODO!
+          tl_rhs'  <- addTypeAbstractions tl_rhs
+
+          insertDef sc preludeName tl_ident tl_type tl_rhs'
+
+          -- TODO: create enum type definition,
+          --  : TNAME as = EithersV (TL_ ...)
+
+          -- create all the constructors:
           cons <- flip mapM cs $ \con->
                     do
-                    (nm,rhs) <- mkConstructor env' con
+                    scTypes <- getConstructorTypes env' con
+                    (nm,rhs) <- mkConstructor env' scTypes con
                     rhs' <- addTypeAbstractions rhs
                     return (nm, rhs')
           return cons
 
-          -- (starting simple)
-          -- (nmConstrs,argTypes,constrs) <- unzip <$>
-          --                       mapM mkArgTypeAndConstructor cs
-
-          -- Create TypeList for the Enum, add to environment:
-          -- tlist <- stub argTypes -- TODO
-
-          -- TODO: create type definition
-          --  - is this *IN* the type?  [HUH?]
-          --  : TNAME as = Eithers TLISTNAME
-
-          -- tsyn  <- mkTypeSynonym
-            -- TODO: use this to do the importType. ?
-            -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
+          -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
 
           -- TODO: add deconstructor (case/either):
-          -- case' <- mkCase stub
-
 
           where
 
-            -- mkCase :: _ ->
-            -- mkEnumNames :: C.Name -> (C.Name, C.Name, ?)
-                -- NOT LIKELY TYPE!!
-
-            -- (nmArgType,nmTypeList,nmCase) = mkEnumNames (ntName nt)
-            --  -- define our naming conventions
-
-            -- FIXME: implem. ArgType below.
-
-            -- | generate ArgType and Constructor definitions:
-            mkConstructor :: (HasCallStack) => Env -> C.EnumCon -> IO (C.Name,Term)
-            mkConstructor env' c =
+            getConstructorTypes :: Env -> C.EnumCon -> IO [Term]
+            getConstructorTypes env' c =
               do
-              let
-                conArgTypes = C.ecFields c
-                numArgs     = length conArgTypes
-                conName     = C.ecName c
+              let conArgTypes = C.ecFields c
 
               -- to SAWCore types:
-              conArgTypes' <- mapM (importType sc env') conArgTypes
+              scConArgTypes <- mapM (importType sc env') conArgTypes
 
               -- the product type that we map to (in SawCore)
-              storageType <- scTupleType sc conArgTypes'
-                -- FIXME: this is dead code.
+              storageType <- scTupleType sc scConArgTypes
+                -- FIXME: this is dead code for now.
+
+              return scConArgTypes
+
+            -- | generate Constructor definitions:
+            mkConstructor :: (HasCallStack) => Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
+            mkConstructor _env' scConArgTypes c =
+              do
+              let
+                conName     = C.ecName c
+                numArgs     = length scConArgTypes
 
               -- FIXME: Q.
               --  - In other places one needs to 'bindName', do we need to do that here?
@@ -2197,8 +2204,8 @@ genNominalConstructors sc nominalMap env0 =
 
               -- create the constructor:
               conBody0 <- scTuple sc paramVars
-              conBody1 <- return conBody0 -- TODO: add injection!
+              conBody1 <- return conBody0 -- TODO: add call to injection_n!
               conBody2 <- scLambdaList sc
-                            (zip paramNames conArgTypes')
+                            (zip paramNames scConArgTypes)
                             conBody1
               return (conName, conBody2)
