@@ -290,6 +290,7 @@ primCellToMap sc c args = case c ^. cellType of
   -- "$slice" -> _
   -- "$concat" -> _
   CellTypeDff -> pure Nothing
+  CellTypeFf -> pure Nothing
   CellTypeUnsupportedPrimitive _ -> pure Nothing
   CellTypeUserType _ -> pure Nothing
   where
