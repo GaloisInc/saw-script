@@ -15,9 +15,12 @@ Description:
 
 library
   build-depends:
+
+    -- upstream packages from hackage
     base == 4.*,
     containers,
     vector
+
   hs-source-dirs: src
   exposed-modules:
     Data.RME

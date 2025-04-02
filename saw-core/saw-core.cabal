@@ -24,6 +24,8 @@ library
     happy >= 1.9.6
 
   build-depends:
+
+    -- upstream packages from hackage
     base >= 4.8,
     aeson >= 2.0 && < 2.3,
     array,
@@ -41,12 +43,10 @@ library
     MonadRandom,
     mtl,
     panic,
-    parameterized-utils,
     pretty,
     prettyprinter >= 1.7.0,
     prettyprinter-ansi-terminal >= 1.1.2,
     random,
-    rme,
     template-haskell,
     text,
     th-lift-instances,
@@ -55,7 +55,14 @@ library
     transformers-compat,
     unordered-containers,
     utf8-string,
-    vector
+    vector,
+
+    -- packages in git submodules
+    parameterized-utils,
+
+    -- internal subpackages in the saw tree
+    rme
+
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW
@@ -116,22 +123,26 @@ test-suite test-sawcore
   main-is: Tests.hs
   hs-source-dirs: tests/src
   build-depends:
+
+      -- upstream packages from hackage
       base >= 4
     , containers
     , data-ref
     , hashable
     , lens
     , mtl
-    , saw-core
-    , time
-    , unordered-containers
-    , vector
     , QuickCheck >= 2.7
+    , tagged
     , tasty
     , tasty-ant-xml >= 1.1.0
     , tasty-hunit
     , tasty-quickcheck
-    , tagged
+    , time
+    , unordered-containers
+    , vector
+
+      -- this package's own library
+    , saw-core
 
   other-modules:
     Tests.CacheTests
@@ -144,5 +155,9 @@ executable extcore-info
   main-is: extcore-info.hs
   hs-source-dirs: tools
   build-depends:
+
+      -- upstream packages from hackage
       base >= 4
+
+      -- this package's own library
     , saw-core

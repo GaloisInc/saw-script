@@ -19,12 +19,15 @@ library
     happy >= 1.9.6
 
   build-depends:
+
+    -- upstream packages from hackage
     base == 4.*,
     aeson,
     attoparsec,
     fgl,
     graphviz,
     text
+
   hs-source-dirs: src
   exposed-modules:
 
@@ -43,13 +46,17 @@ executable verif-viewer
   main-is: VerifViewer.hs
   hs-source-dirs: tools
   build-depends:
+
+      -- upstream packages from hackage
       base >= 4.5
     , aeson
     , attoparsec
     , attoparsec-aeson
-    , containers
-    , text
-    , verif-viewer
     , bytestring
-    , time
+    , containers
     , graphviz
+    , text
+    , time
+
+      -- this package's own library
+    , verif-viewer
