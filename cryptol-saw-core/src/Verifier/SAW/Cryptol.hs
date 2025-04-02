@@ -1985,16 +1985,6 @@ exportRecordValue fields v =
   where
     run = SC.runIdentity . force
 
--- | Generate functions, required by nominal types, to insert into the
---   term environment.
---
---   - For structs, make identity functions that take the record the newtype
---     wraps.
---   - Enum types create
---     - multiple constructor functions
---     - a case function for the type
---   - Abstract types do not produce any functions.
-
 -- | add definition to sawcore environment (e.g., for derived code, like from enum decl)
 --
 insertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
@@ -2007,7 +1997,18 @@ insertDef sc mnm ident def_tp def_rhs =
 
   --  scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
 
--- FIXME: names no longer accurate; extendEnvWithNominalTypes, and ...
+-- FIXME[C1]: in what follows, names no longer accurate;
+-- extendEnvWithNominalTypes, and ...
+
+-- | Generate functions, required by nominal types, to insert into the
+--   term environment.
+--
+--   - For structs, make identity functions that take the record the newtype
+--     wraps.
+--   - Enum types create
+--     - multiple constructor functions
+--     - a case function for the type
+--   - Abstract types do not produce any functions.
 
 genNominalConstructors :: (HasCallStack) => SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genNominalConstructors sc nominalMap env0 =
@@ -2091,8 +2092,8 @@ genNominalConstructors sc nominalMap env0 =
                      ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
       where
-        -- addTypeParam - extend environment and create 'context' that adds the
-        -- type abstractions; all at the Term (SAWCore) level.
+        -- addTypeParam - extend environment and create 'context' that adds one
+        -- type abstraction (this all at the Term (SAWCore) level).
         addTypeParam :: C.TParam -> (Env, Term -> IO Term) -> IO (Env, Term -> IO Term)
         addTypeParam tp (env', addAbstractions) =
           if elem (C.tpKind tp) [C.KType, C.KNum] then
@@ -2185,7 +2186,8 @@ genNominalConstructors sc nominalMap env0 =
               return scConArgTypes
 
             -- | generate Constructor definitions:
-            mkConstructor :: (HasCallStack) => Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
+            mkConstructor :: (HasCallStack) =>
+                             Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
             mkConstructor _env' scConArgTypes c =
               do
               let
@@ -2194,7 +2196,7 @@ genNominalConstructors sc nominalMap env0 =
 
               -- FIXME: Q.
               --  - In other places one needs to 'bindName', do we need to do that here?
-              --    - no, because all references to new args are created by us here. ?
+              --    - no, because all references to new args are created by us here.
 
               -- create vars (& names) for constructor arguments
               paramVars <-
