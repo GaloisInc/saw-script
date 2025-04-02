@@ -2125,9 +2125,10 @@ genCodeForEnum sc env nt cs =
   --  - the types maintain the same exact type vars (see typeParametersr)
   tl_type  <- scFunAll sc (map (\_-> sort0) typeParameters) scListSort
 
-  (typeListEachCtor :: [[Term]]) <- mapM (getConstructorTypes env') cs
+  (typeListEachCtor :: [[Term]]) <- mapM (importConstructorTypes env') cs
 
   tl_rhs   <- do
+              -- storageType <- scTupleType sc scConArgTypes
               tl <- scLS_Nil  -- FIXME: implement
               addTypeAbstractions tl
   insertDef sc preludeName tl_ident tl_type tl_rhs
@@ -2148,9 +2149,8 @@ genCodeForEnum sc env nt cs =
   insertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
   -- create all the constructors:
-  ctors <- flip mapM cs $ \ctor->
+  ctors <- flip mapM (zip typeListEachCtor cs) $ \(scTypes,ctor)->
             do
-            scTypes <- getConstructorTypes env' ctor -- FIXME (code dup!)
             (nm,rhs) <- mkConstructor env' scTypes ctor
             rhs' <- addTypeAbstractions rhs
             return (nm, rhs')
@@ -2186,19 +2186,9 @@ genCodeForEnum sc env nt cs =
       -- scApplyAll term ps
       return (error "TODO")
 
-    getConstructorTypes :: Env -> C.EnumCon -> IO [Term]
-    getConstructorTypes env' c =
-      do
-      let conArgTypes = C.ecFields c
-
-      -- convert to SAWCore types:
-      scConArgTypes <- mapM (importType sc env') conArgTypes
-
-      -- the product type that we map to (in SawCore)
-      storageType <- scTupleType sc scConArgTypes
-        -- FIXME: this is dead code for now, MOVE.
-
-      return scConArgTypes
+    importConstructorTypes :: Env -> C.EnumCon -> IO [Term]
+    importConstructorTypes env' c =
+      mapM (importType sc env') (C.ecFields c)
 
     -- | generate Constructor definitions:
     mkConstructor :: (HasCallStack) =>
@@ -2210,8 +2200,8 @@ genCodeForEnum sc env nt cs =
         numArgs     = length scConArgTypes
 
       -- NOTE: we don't add the constructor arguments to the Env, as
-      -- the only references to these new definitions are in the code
-      -- we generate.
+      -- the only references to these new definitions are in the generated
+      -- SAWCore code.
 
       -- create vars (& names) for constructor arguments
       paramVars <-
