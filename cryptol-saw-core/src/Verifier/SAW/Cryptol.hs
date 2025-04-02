@@ -38,7 +38,7 @@ module Verifier.SAW.Cryptol
   , importSchema
 
   , defaultPrimitiveOptions
-  , genNominalConstructors
+  , genCodeForNominalTypes
   , exportValueWithSchema
 
   ) where
@@ -2010,8 +2010,8 @@ insertDef sc mnm ident def_tp def_rhs =
 --     - a case function for the type
 --   - Abstract types do not produce any functions.
 
-genNominalConstructors :: (HasCallStack) => SharedContext -> Map C.Name NominalType -> Env -> IO Env
-genNominalConstructors sc nominalMap env0 =
+genCodeForNominalTypes :: (HasCallStack) => SharedContext -> Map C.Name NominalType -> Env -> IO Env
+genCodeForNominalTypes sc nominalMap env0 =
   foldM updateEnvForNominal env0 nominalMap
 
   where
@@ -2088,7 +2088,7 @@ genNominalConstructors sc nominalMap env0 =
             tFn tp body =
               if elem (C.tpKind tp) [C.KType, C.KNum]
                 then C.ETAbs tp body
-                else panic "genNominalConstructors"
+                else panic "genCodeForNominalTypes"
                      ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
       where

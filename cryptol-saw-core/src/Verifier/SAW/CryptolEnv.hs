@@ -373,7 +373,7 @@ genTermEnv sc modEnv cryEnv0 = do
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
       nominals   = ME.loadedNominalTypes modEnv
-  cryEnv1 <- C.genNominalConstructors sc nominals cryEnv0
+  cryEnv1 <- C.genCodeForNominalTypes sc nominals cryEnv0
   cryEnv2 <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions cryEnv1 declGroups
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv2)
 
@@ -435,7 +435,7 @@ loadCryptolModule sc primOpts env path = do
                                      (ME.loadedNominalTypes modEnv)
 
   newTermEnv <-
-    do cEnv <- C.genNominalConstructors sc newNominal oldCryEnv
+    do cEnv <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc primOpts cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
@@ -537,7 +537,7 @@ importModule sc env src as vis imps = do
                                      (ME.loadedNominalTypes modEnv)
 
   newTermEnv <-
-    do cEnv      <- C.genNominalConstructors sc newNominal oldCryEnv
+    do cEnv      <- C.genCodeForNominalTypes sc newNominal oldCryEnv
        newCryEnv <- C.importTopLevelDeclGroups sc C.defaultPrimitiveOptions
                                                             cEnv newDeclGroups
        traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
