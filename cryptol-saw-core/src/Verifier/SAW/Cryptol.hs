@@ -2097,11 +2097,21 @@ genCodeForEnum sc env nt cs =
   do
   -- common code to handle type paramers:
   let typeParameters = C.ntParams nt -- of the nominal type
+  -- de Bruijn var references to the above:
+  typeArgs <- reverse <$> mapM (scLocalVar sc)
+                               (take (length typeParameters) [0..])
+
   (env',addTypeAbstractions) <- Fold.foldrM addTypeAbstraction
                                             (env, return)
                                             typeParameters
 
     -- FIXME[F]: any probs with sharing 'addTypeAbstractions'?
+
+
+  let -- | the elimination of `addTypeAbstractions`, assumes no
+      --   intervening lambdas.
+      applyTypeArgs :: Term -> IO Term
+      applyTypeArgs term = scApplyAll sc term typeArgs
 
   -- common naming conventions:
   let newIdent suffix = mkIdent
@@ -2141,7 +2151,7 @@ genCodeForEnum sc env nt cs =
   sumTy_type  <- scFunAll sc (map (\_-> sort0) typeParameters) sort0
   sumTy_rhs  <- do
                 putStrLn "checkpoint-2a"
-                x1 <- scGlobalApply sc tl_ident [] -- TODO typeVars
+                x1 <- scGlobalApply sc tl_ident typeArgs
                 x2 <- scEithersV x1
                 putStrLn "checkpoint-2b"
                 addTypeAbstractions x2
@@ -2179,12 +2189,6 @@ genCodeForEnum sc env nt cs =
               ["illegal nominal type parameter kind"
               , show (C.tpKind tp)
               ]
-
-    applyTypeParams :: Env -> Term -> IO Term
-    applyTypeParams env' term =
-      do
-      -- scApplyAll term ps
-      return (error "TODO")
 
     importConstructorTypes :: Env -> C.EnumCon -> IO [Term]
     importConstructorTypes env' c =
