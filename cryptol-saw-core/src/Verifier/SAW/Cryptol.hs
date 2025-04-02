@@ -2110,6 +2110,12 @@ genNominalConstructors sc nominalMap env0 =
                   , show (C.tpKind tp)
                   ]
 
+        applyTypeParams :: Env -> Term -> IO Term
+        applyTypeParams env' term =
+          do
+          -- scApplyAll term ps
+          return (error "TODO")
+
         -- TODO: hmmm: do these need to be ordered in dependency order?
 
         newDefsForEnum :: [C.EnumCon] -> IO [(C.Name,Term)]
@@ -2128,8 +2134,7 @@ genNominalConstructors sc nominalMap env0 =
                                         (C.identText (C.nameIdent (ntName nt)))
                                        suffix)
               tl_ident    = newIdent nt "__TL"
-              ident_sumty = newIdent nt ""
-
+              sumTy_ident = newIdent nt "__TY"
 
           -- access needed SAWCore Prelude types & definitions:
 
@@ -2138,23 +2143,33 @@ genNominalConstructors sc nominalMap env0 =
           scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
           let scLS_Cons a = scCtorApp sc "Prelude.LS_Cons" [a]
           let scLS_Nil    = scCtorApp sc "Prelude.LS_Nil"  []
-          let scEithersV ls = scDataTypeApp sc "Prelude.EithersV" ls
+          let scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
 
-          -- Create TypeList for the Enum, add to environment:
-
-          putStrLn "checkpoint-1"
-
-          -- OLD: useful?
-          -- scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
+          -- Create TypeList(tl) for the Enum, add to environment:
 
           tl_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) scListSort
-          tl_rhs   <- scLS_Nil  -- TODO!
-          tl_rhs'  <- addTypeAbstractions tl_rhs
 
-          insertDef sc preludeName tl_ident tl_type tl_rhs'
+          typeListEachCtor <- mapM (getConstructorTypes env') cs
 
-          -- TODO: create enum type definition,
+          tl_rhs   <- do
+                      tl <- scLS_Nil  -- FIXME: implement
+                      addTypeAbstractions tl
+          insertDef sc preludeName tl_ident tl_type tl_rhs
+          putStrLn "checkpoint-1a"
+          tl_ref   <- scGlobalDef sc tl_ident
+          putStrLn "checkpoint-1b"
+
+          -- Create the definition for the Sawcore Sum (which we map the enum type to);
           --  : TNAME as = EithersV (TL_ ...)
+          sumTy_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) sort0
+          sumTy_rhs  <- do
+                        putStrLn "checkpoint-2a"
+                        x1 <- scGlobalApply sc tl_ident [] -- TODO typeVars
+                        x2 <- scEithersV x1
+                        putStrLn "checkpoint-2b"
+                        addTypeAbstractions x2
+
+          insertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
           -- create all the constructors:
           ctors <- flip mapM cs $ \ctor->
