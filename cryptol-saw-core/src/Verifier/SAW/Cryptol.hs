@@ -1989,11 +1989,12 @@ exportRecordValue fields v =
 -- | Generate functions, required by nominal types, to insert into the
 --   term environment.
 --
---   - For structs, make identity functions that take the record the newtype
---     wraps.
+--   - For structs, make identity functions that take the record which
+--     the newtype  wraps.
 --   - Enum types create
 --     - multiple constructor functions
 --     - a case function for the type
+--     - a number of 'internal' only sawcore
 --   - Abstract types do not produce any functions.
 
 genCodeForNominalTypes ::
@@ -2020,7 +2021,6 @@ genCodeForNominalTypes sc nominalMap env0 =
 
       putStrLn "\nMYLOG: genNominalCon.. FOR NOMINAL TYPE :\n"
       putStrLn $ "  " ++ show (ntName nt)
-        -- NOTE: the name
 
       unless (null conTs) $
         do
@@ -2070,14 +2070,18 @@ genCodeForNominalTypes sc nominalMap env0 =
             return [(con, e)]
 
           where
+
           addTypeAbstractions :: C.Expr -> C.Expr
           addTypeAbstractions fn = foldr tFn fn (C.ntParams nt)
             where
             tFn tp body =
-              if elem (C.tpKind tp) [C.KType, C.KNum]
-                then C.ETAbs tp body
-                else panic "genCodeForNominalTypes"
-                     ["illegal nominal type parameter kind", show (C.tpKind tp)]
+              if elem (C.tpKind tp) [C.KType, C.KNum] then
+                C.ETAbs tp body
+              else
+                panic "genCodeForNominalTypes"
+                  [ "illegal nominal type parameter kind"
+                  , show (C.tpKind tp)
+                  ]
 
 genCodeForEnum ::
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
@@ -2088,7 +2092,6 @@ genCodeForEnum sc env nt cs =
   -- de Bruijn var references to the above:
   typeArgs <- reverse <$> mapM (scLocalVar sc)
                                (take (length typeParameters) [0..])
-
   (env',addTypeAbstractions) <- Fold.foldrM addTypeAbstraction
                                             (env, return)
                                             typeParameters
@@ -2100,6 +2103,12 @@ genCodeForEnum sc env nt cs =
       --   intervening lambdas.
       applyTypeArgs :: Term -> IO Term
       applyTypeArgs term = scApplyAll sc term typeArgs
+      -- FIXME: dead code
+
+  -- FIXME: ordering of typeargs reversed SOMETIMES:
+  -- - __TL - types reversed
+  -- - __TY - correct
+  -- - constructors - reversed!
 
   -- common naming conventions:
   let newIdent suffix = mkIdent
@@ -2183,7 +2192,7 @@ genCodeForEnum sc env nt cs =
     importConstructorTypes env' c =
       mapM (importType sc env') (C.ecFields c)
 
-    -- | generate Constructor definitions:
+    -- | generate constructor definitions:
     mkConstructor :: (HasCallStack) =>
                      Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
     mkConstructor _env' scConArgTypes c =
@@ -2197,9 +2206,8 @@ genCodeForEnum sc env nt cs =
       -- SAWCore code.
 
       -- create vars (& names) for constructor arguments
-      paramVars <-
-        reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
-      let paramNames = map (\x-> Text.pack ("a" ++ show x))
+      paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+      let paramNames = map (\x-> Text.pack ("x" ++ show x))
                            (take numArgs [(0 ::Int)..])
 
       -- create the constructor:
