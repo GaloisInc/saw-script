@@ -1997,8 +1997,6 @@ insertDef sc mnm ident def_tp def_rhs =
 
   --  scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
 
--- FIXME[C1]: in what follows, names no longer accurate;
--- extendEnvWithNominalTypes, and ...
 
 -- | Generate functions, required by nominal types, to insert into the
 --   term environment.
@@ -2010,7 +2008,9 @@ insertDef sc mnm ident def_tp def_rhs =
 --     - a case function for the type
 --   - Abstract types do not produce any functions.
 
-genCodeForNominalTypes :: (HasCallStack) => SharedContext -> Map C.Name NominalType -> Env -> IO Env
+genCodeForNominalTypes ::
+  (HasCallStack) =>
+  SharedContext -> Map C.Name NominalType -> Env -> IO Env
 genCodeForNominalTypes sc nominalMap env0 =
   foldM updateEnvForNominal env0 nominalMap
 
@@ -2021,7 +2021,7 @@ genCodeForNominalTypes sc nominalMap env0 =
       let conTs = C.nominalTypeConTypes nt
           constrs = map (\(x,e) -> (x,(e,0))) ns
             -- FIXME:MT: above 'magic' code, where's the abstraction?
-            --  - it's the De
+            --  - it's the De Bruijn indexing!
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
@@ -2069,7 +2069,7 @@ genCodeForNominalTypes sc nominalMap env0 =
       case C.ntDef nt of
         C.Abstract -> return []
 
-        C.Enum cs  -> newDefsForEnum cs
+        C.Enum x   -> genCodeForEnum sc env nt x
 
         C.Struct fs -> do
             let recTy     = C.TRec (C.ntFields fs)
@@ -2078,12 +2078,12 @@ genCodeForNominalTypes sc nominalMap env0 =
                             -- feels odd: using name of constructor as the
                             -- name of the constructor argument.
                 fn        = C.EAbs paramName recTy (C.EVar paramName)
-            e <- importExpr sc env (addTypeParams fn)
+            e <- importExpr sc env (addTypeAbstractions fn)
             return [(con, e)]
 
           where
-          addTypeParams :: C.Expr -> C.Expr
-          addTypeParams fn = foldr tFn fn (C.ntParams nt)
+          addTypeAbstractions :: C.Expr -> C.Expr
+          addTypeAbstractions fn = foldr tFn fn (C.ntParams nt)
             where
             tFn tp body =
               if elem (C.tpKind tp) [C.KType, C.KNum]
@@ -2091,138 +2091,135 @@ genCodeForNominalTypes sc nominalMap env0 =
                 else panic "genCodeForNominalTypes"
                      ["illegal nominal type parameter kind", show (C.tpKind tp)]
 
-      where
-        -- addTypeParam - extend environment and create 'context' that adds one
-        -- type abstraction (this all at the Term (SAWCore) level).
-        addTypeParam :: C.TParam -> (Env, Term -> IO Term) -> IO (Env, Term -> IO Term)
-        addTypeParam tp (env', addAbstractions) =
-          if elem (C.tpKind tp) [C.KType, C.KNum] then
+genCodeForEnum ::
+  SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
+genCodeForEnum sc env nt cs =
+  do
+  -- common code to handle type paramers:
+  (env',addTypeAbstractions) <- Fold.foldrM addTypeAbstraction
+                                            (env, return)
+                                            (C.ntParams nt)
+
+  -- FIXME[C]: any probs with sharing 'addTypeAbstractions'?
+
+  -- common naming conventions:
+  let newIdent suffix = mkIdent
+                          preludeName
+                          (Text.append
+                             (C.identText (C.nameIdent (ntName nt)))
+                            suffix)
+      tl_ident    = newIdent "__TL"
+      sumTy_ident = newIdent "__TY"
+
+  -- create access to needed SAWCore Prelude types & definitions:
+  sort0          <- scSort sc (mkSort 0)
+  scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
+  scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
+  let scLS_Cons a   = scCtorApp sc "Prelude.LS_Cons" [a]
+      scLS_Nil      = scCtorApp sc "Prelude.LS_Nil"  []
+      scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
+
+  -- Create TypeList(tl) for the Enum, add to environment:
+  tl_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) scListSort
+
+  typeListEachCtor <- mapM (getConstructorTypes env') cs
+
+  tl_rhs   <- do
+              tl <- scLS_Nil  -- FIXME: implement
+              addTypeAbstractions tl
+  insertDef sc preludeName tl_ident tl_type tl_rhs
+  putStrLn "checkpoint-1a"
+  tl_ref   <- scGlobalDef sc tl_ident
+  putStrLn "checkpoint-1b"
+
+  -- Create the definition for the Sawcore Sum (which we map the enum type to);
+  --  : TNAME as = EithersV (TL_ ...)
+  sumTy_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) sort0
+  sumTy_rhs  <- do
+                putStrLn "checkpoint-2a"
+                x1 <- scGlobalApply sc tl_ident [] -- TODO typeVars
+                x2 <- scEithersV x1
+                putStrLn "checkpoint-2b"
+                addTypeAbstractions x2
+
+  insertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
+
+  -- create all the constructors:
+  ctors <- flip mapM cs $ \ctor->
             do
-            env'' <- bindTParam sc tp env'
-            return (env'', \e -> do
-                                 e' <- addAbstractions e
-                                 k <- importKind sc (C.tpKind tp)
-                                 scLambda sc (tparamToLocalName tp) k e'
-                   )
-          else
-            panic "newDefsForNominal: addTypeParam"
-                  ["illegal nominal type parameter kind"
-                  , show (C.tpKind tp)
-                  ]
+            scTypes <- getConstructorTypes env' ctor -- FIXME (code dup!)
+            (nm,rhs) <- mkConstructor env' scTypes ctor
+            rhs' <- addTypeAbstractions rhs
+            return (nm, rhs')
+  return ctors
 
-        applyTypeParams :: Env -> Term -> IO Term
-        applyTypeParams env' term =
-          do
-          -- scApplyAll term ps
-          return (error "TODO")
+    -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
+    --   - TODO: will this be an issue?
 
-        -- TODO: hmmm: do these need to be ordered in dependency order?
+    where
 
-        newDefsForEnum :: [C.EnumCon] -> IO [(C.Name,Term)]
-        newDefsForEnum cs =
-          do
-          -- common code to process type paramers:
-          (env',addTypeAbstractions) <- Fold.foldrM addTypeParam
-                                                    (env, return)
-                                                    (C.ntParams nt)
+    -- | addTypeAbstraction - extend environment and create 'context'
+    --   that adds one type abstraction (this all at the Term level).
+    addTypeAbstraction ::
+       C.TParam -> (Env, Term -> IO Term) -> IO (Env, Term -> IO Term)
+    addTypeAbstraction tp (env', addAbstractions) =
+      if elem (C.tpKind tp) [C.KType, C.KNum] then
+        do
+        env'' <- bindTParam sc tp env'
+        return (env'', \e -> do
+                             e' <- addAbstractions e
+                             k <- importKind sc (C.tpKind tp)
+                             scLambda sc (tparamToLocalName tp) k e'
+               )
+      else
+        panic "genCodeForEnum: addTypeAbstraction"
+              ["illegal nominal type parameter kind"
+              , show (C.tpKind tp)
+              ]
 
-            -- FIXME[C]: any probs with sharing?
+    applyTypeParams :: Env -> Term -> IO Term
+    applyTypeParams env' term =
+      do
+      -- scApplyAll term ps
+      return (error "TODO")
 
-          let newIdent nt suffix = mkIdent
-                                     preludeName
-                                     (Text.append
-                                        (C.identText (C.nameIdent (ntName nt)))
-                                       suffix)
-              tl_ident    = newIdent nt "__TL"
-              sumTy_ident = newIdent nt "__TY"
+    getConstructorTypes :: Env -> C.EnumCon -> IO [Term]
+    getConstructorTypes env' c =
+      do
+      let conArgTypes = C.ecFields c
 
-          -- access needed SAWCore Prelude types & definitions:
+      -- convert to SAWCore types:
+      scConArgTypes <- mapM (importType sc env') conArgTypes
 
-          sort0          <- scSort sc (mkSort 0)
-          scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
-          scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
-          let scLS_Cons a = scCtorApp sc "Prelude.LS_Cons" [a]
-          let scLS_Nil    = scCtorApp sc "Prelude.LS_Nil"  []
-          let scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
+      -- the product type that we map to (in SawCore)
+      storageType <- scTupleType sc scConArgTypes
+        -- FIXME: this is dead code for now, MOVE.
 
-          -- Create TypeList(tl) for the Enum, add to environment:
+      return scConArgTypes
 
-          tl_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) scListSort
+    -- | generate Constructor definitions:
+    mkConstructor :: (HasCallStack) =>
+                     Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
+    mkConstructor _env' scConArgTypes c =
+      do
+      let
+        conName     = C.ecName c
+        numArgs     = length scConArgTypes
 
-          typeListEachCtor <- mapM (getConstructorTypes env') cs
+      -- NOTE: we don't add the constructor arguments to the Env, as
+      -- the only references to these new definitions are in the code
+      -- we generate.
 
-          tl_rhs   <- do
-                      tl <- scLS_Nil  -- FIXME: implement
-                      addTypeAbstractions tl
-          insertDef sc preludeName tl_ident tl_type tl_rhs
-          putStrLn "checkpoint-1a"
-          tl_ref   <- scGlobalDef sc tl_ident
-          putStrLn "checkpoint-1b"
+      -- create vars (& names) for constructor arguments
+      paramVars <-
+        reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+      let paramNames = map (\x-> Text.pack ("a" ++ show x))
+                           (take numArgs [(0 ::Int)..])
 
-          -- Create the definition for the Sawcore Sum (which we map the enum type to);
-          --  : TNAME as = EithersV (TL_ ...)
-          sumTy_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) sort0
-          sumTy_rhs  <- do
-                        putStrLn "checkpoint-2a"
-                        x1 <- scGlobalApply sc tl_ident [] -- TODO typeVars
-                        x2 <- scEithersV x1
-                        putStrLn "checkpoint-2b"
-                        addTypeAbstractions x2
-
-          insertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
-
-          -- create all the constructors:
-          ctors <- flip mapM cs $ \ctor->
-                    do
-                    scTypes <- getConstructorTypes env' ctor -- FIXME (code dup!)
-                    (nm,rhs) <- mkConstructor env' scTypes ctor
-                    rhs' <- addTypeAbstractions rhs
-                    return (nm, rhs')
-          return ctors
-
-          -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
-
-          -- TODO: add deconstructor (case/either):
-
-          where
-
-            getConstructorTypes :: Env -> C.EnumCon -> IO [Term]
-            getConstructorTypes env' c =
-              do
-              let conArgTypes = C.ecFields c
-
-              -- to SAWCore types:
-              scConArgTypes <- mapM (importType sc env') conArgTypes
-
-              -- the product type that we map to (in SawCore)
-              storageType <- scTupleType sc scConArgTypes
-                -- FIXME: this is dead code for now, MOVE.
-
-              return scConArgTypes
-
-            -- | generate Constructor definitions:
-            mkConstructor :: (HasCallStack) =>
-                             Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
-            mkConstructor _env' scConArgTypes c =
-              do
-              let
-                conName     = C.ecName c
-                numArgs     = length scConArgTypes
-
-              -- FIXME: Q.
-              --  - In other places one needs to 'bindName', do we need to do that here?
-              --    - no, because all references to new args are created by us here.
-
-              -- create vars (& names) for constructor arguments
-              paramVars <-
-                reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
-              let paramNames = map (\x-> Text.pack ("a" ++ show x))
-                                   (take numArgs [(0 ::Int)..])
-
-              -- create the constructor:
-              conBody0 <- scTuple sc paramVars
-              conBody1 <- return conBody0 -- TODO: add call to injection_n!
-              conBody2 <- scLambdaList sc
-                            (zip paramNames scConArgTypes)
-                            conBody1
-              return (conName, conBody2)
+      -- create the constructor:
+      conBody0 <- scTuple sc paramVars
+      conBody1 <- return conBody0 -- FIXME: TODO: add call to injection_n!
+      conBody2 <- scLambdaList sc
+                    (zip paramNames scConArgTypes)
+                    conBody1
+      return (conName, conBody2)
