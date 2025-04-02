@@ -2096,11 +2096,12 @@ genCodeForEnum ::
 genCodeForEnum sc env nt cs =
   do
   -- common code to handle type paramers:
+  let typeParameters = C.ntParams nt -- of the nominal type
   (env',addTypeAbstractions) <- Fold.foldrM addTypeAbstraction
                                             (env, return)
-                                            (C.ntParams nt)
+                                            typeParameters
 
-  -- FIXME[C]: any probs with sharing 'addTypeAbstractions'?
+    -- FIXME[F]: any probs with sharing 'addTypeAbstractions'?
 
   -- common naming conventions:
   let newIdent suffix = mkIdent
@@ -2119,10 +2120,12 @@ genCodeForEnum sc env nt cs =
       scLS_Nil      = scCtorApp sc "Prelude.LS_Nil"  []
       scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
 
-  -- Create TypeList(tl) for the Enum, add to environment:
-  tl_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) scListSort
+  -- Create TypeList(tl) for the Enum, add to SAWCore environment:
+  --  - elements of list are the elements of the Sum.
+  --  - the types maintain the same exact type vars (see typeParametersr)
+  tl_type  <- scFunAll sc (map (\_-> sort0) typeParameters) scListSort
 
-  typeListEachCtor <- mapM (getConstructorTypes env') cs
+  (typeListEachCtor :: [[Term]]) <- mapM (getConstructorTypes env') cs
 
   tl_rhs   <- do
               tl <- scLS_Nil  -- FIXME: implement
@@ -2134,7 +2137,7 @@ genCodeForEnum sc env nt cs =
 
   -- Create the definition for the Sawcore Sum (which we map the enum type to);
   --  : TNAME as = EithersV (TL_ ...)
-  sumTy_type  <- scFunAll sc (map (\_-> sort0) (C.ntParams nt)) sort0
+  sumTy_type  <- scFunAll sc (map (\_-> sort0) typeParameters) sort0
   sumTy_rhs  <- do
                 putStrLn "checkpoint-2a"
                 x1 <- scGlobalApply sc tl_ident [] -- TODO typeVars
