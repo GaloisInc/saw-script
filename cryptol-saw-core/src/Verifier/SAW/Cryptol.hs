@@ -1985,18 +1985,6 @@ exportRecordValue fields v =
   where
     run = SC.runIdentity . force
 
--- | add definition to sawcore environment (e.g., for derived code, like from enum decl)
---
-insertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
-insertDef sc mnm ident def_tp def_rhs =
-  do
-  scInsertDef sc mnm ident def_tp def_rhs
-
-  -- TODO: add to Env?
-  --   - no need because only references will be from newly generated code?
-
-  --  scInsertDef :: SharedContext -> ModuleName -> Ident -> Term -> Term -> IO ()
-
 
 -- | Generate functions, required by nominal types, to insert into the
 --   term environment.
@@ -2126,9 +2114,12 @@ genCodeForEnum sc env nt cs =
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
   scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
-  let scLS_Cons a   = scCtorApp sc "Prelude.LS_Cons" [a]
-      scLS_Nil      = scCtorApp sc "Prelude.LS_Nil"  []
+  scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
+  let scLS_Cons s ls = scCtorApp sc "Prelude.LS_Cons" [s,ls]
       scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
+
+      scMakeListSort :: [Term] -> IO Term
+      scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
 
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
@@ -2136,15 +2127,13 @@ genCodeForEnum sc env nt cs =
   tl_type  <- scFunAll sc (map (\_-> sort0) typeParameters) scListSort
 
   (typeListEachCtor :: [[Term]]) <- mapM (importConstructorTypes env') cs
+  sawcoreTypeEachCtor <- flip mapM typeListEachCtor $ \ts ->
+                           scTupleType sc ts
 
   tl_rhs   <- do
-              -- storageType <- scTupleType sc scConArgTypes
-              tl <- scLS_Nil  -- FIXME: implement
-              addTypeAbstractions tl
-  insertDef sc preludeName tl_ident tl_type tl_rhs
-  putStrLn "checkpoint-1a"
-  tl_ref   <- scGlobalDef sc tl_ident
-  putStrLn "checkpoint-1b"
+              ls <- scMakeListSort sawcoreTypeEachCtor
+              addTypeAbstractions ls
+  scInsertDef sc preludeName tl_ident tl_type tl_rhs
 
   -- Create the definition for the Sawcore Sum (which we map the enum type to);
   --  : TNAME as = EithersV (TL_ ...)
@@ -2156,7 +2145,7 @@ genCodeForEnum sc env nt cs =
                 putStrLn "checkpoint-2b"
                 addTypeAbstractions x2
 
-  insertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
+  scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
   -- create all the constructors:
   ctors <- flip mapM (zip typeListEachCtor cs) $ \(scTypes,ctor)->
