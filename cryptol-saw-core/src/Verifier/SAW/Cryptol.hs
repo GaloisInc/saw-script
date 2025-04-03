@@ -2141,13 +2141,15 @@ genCodeForEnum sc env nt cs =
   -- Create access to needed SAWCore Prelude types & definitions:
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
-  scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
-  scListSortGet  <- scGlobalDef sc ("Prelude.listSortGet")
+  -- scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
+  -- scListSortGet  <- scGlobalDef sc ("Prelude.listSortGet")
   scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
 
   let scLS_Cons s ls = scCtorApp sc "Prelude.LS_Cons" [s,ls]
 
       scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
+      scLeft  a b x = scCtorApp sc "Prelude.Left"  [a,b,x]
+      scRight a b x = scCtorApp sc "Prelude.Right" [a,b,x]
 
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
@@ -2174,33 +2176,76 @@ genCodeForEnum sc env nt cs =
   -- Create the definition for the Sawcore Sum (to which we map the
   -- enum type).
 
-  sumTy_type  <- scFunAll sc (map (\_-> sort0) typeParameters) sort0
-  sumTy_rhs  <- do
-                x1 <- scGlobalApply sc tl_ident typeArgs
-                x2 <- scEithersV x1
-                addTypeAbstractions x2
+  -- the Typelist(tl) applied to the [free] type arguments.
+  tl_applied <- scGlobalApply sc tl_ident typeArgs
+
+  sumTy_type <- scFunAll sc (map (\_-> sort0) typeParameters) sort0
+  sumTy_rhs  <- scEithersV tl_applied >>= addTypeAbstractions
 
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
   -------------------------------------------------------------
+  -- Create needed SawCore types for the constructors:
+  --  - Each Either in the nested Either's needs a pair of types
+
+  tps <- flip mapM [0..length cs - 1] $ \i->
+           do
+           typeLeft  <- do
+                        n <- scNat sc (fromIntegral i)
+                        scGlobalApply sc "Prelude.listSortGet"
+                          [tl_applied, n]
+
+           typeRight <- do
+                        n <- scNat sc (fromIntegral i + 1)
+                        tl_remainder <-
+                          scGlobalApply sc "Prelude.listSortDrop"
+                            [tl_applied, n]
+                        scEithersV tl_remainder
+
+           return (typeLeft, typeRight)
+
+  -------------------------------------------------------------
+  -- Code to do *just* the injection into the Sum type:
+
+{-
+  f 0 x = Left (tps!0) x
+  f 1 x = Right (tps!0) (Left (tps!1))
+  f n x = Right (tps!0) $ Right (tps!1) $ Left (tps!n)
+
+  inj n x = injRight (n-1) (Left (tps!n))
+
+  injRight 0 x = x
+  injRight n x = injRight (n-1) (Right tps!n x)
+-}
+  let
+      scInjectRight :: Int -> Term -> IO Term
+      scInjectRight n x | n <= 0    = return x
+                        | otherwise = do
+                            y <- scRight (fst (tps!!n)) (snd (tps!!n)) x
+                            scInjectRight (n-1) y
+
+      scNthInjection :: Int -> Term -> IO Term
+      scNthInjection n x = do
+                           y <- scLeft (fst (tps!!n)) (snd (tps!!n)) x
+                           scInjectRight (n-1) y
+
+  -------------------------------------------------------------
   -- Create all the constructors:
-
-  let scInjectionN :: Int -> Term -> IO Term
-      scInjectionN n x = do
-        scN <- scNat sc (fromIntegral n)
-        scTuple sc [scN,x]  -- FIXME: turn from fake to real.
-
+  let
       -- | generate constructor definitions:
-      mkConstructor :: [Term] -> C.EnumCon -> IO (C.Name,Term)
+      mkConstructor :: HasCallStack => [Term] -> C.EnumCon -> IO (C.Name,Term)
       mkConstructor scConArgTypes c =
         do
         let
           conName     = C.ecName c
+          conNumber   = C.ecNumber c
           numArgs     = length scConArgTypes
 
         -- NOTE: we don't add the constructor arguments to the Env, as
         -- the only references to these new definitions are in the generated
         -- SAWCore code.
+
+        -- create the vars (& names) for constructor arguments
 
         -- create vars (& names) for constructor arguments
         paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
@@ -2209,7 +2254,7 @@ genCodeForEnum sc env nt cs =
 
         -- create the constructor:
         conBody0 <- scTuple sc paramVars
-        conBody1 <- scInjectionN (C.ecNumber c) conBody0
+        conBody1 <- scNthInjection conNumber conBody0
         conBody2 <- scLambdaList sc
                       (zip paramNames scConArgTypes)
                       conBody1
