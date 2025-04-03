@@ -2010,9 +2010,9 @@ genCodeForNominalTypes sc nominalMap env0 =
       let kinds = map C.tpKind (C.ntParams nt)
       unless (all (`elem` [C.KType, C.KNum]) kinds) $
         panic "genCodeForNominalTypes"
-              [ "type parameters for nominal types must have kind * or #:"
-              , show kinds
-              ]
+          [ "type parameters for nominal types must each have kind * or #:"
+          , show kinds
+          ]
 
       ns <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
@@ -2052,7 +2052,7 @@ genCodeForNominalTypes sc nominalMap env0 =
       return env'
 
       -- NOTE: in the above, C.nominalTypeConTypes gets Cryptol
-      -- schemas for Struct & ENum constructors.
+      -- schemas for Struct & Enum constructors.
 
       -- MT:
       -- - Q. Is the (name of) the nominal type in some environment?
@@ -2079,6 +2079,7 @@ genCodeForNominalTypes sc nominalMap env0 =
             e <- importExpr sc env fnWithTAbs
             return [(con, e)]
 
+
 genCodeForEnum ::
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt cs =
@@ -2090,7 +2091,7 @@ genCodeForEnum sc env nt cs =
 
   typeArgs <- reverse <$> mapM (scLocalVar sc)
                                (take (length typeParameters) [0..])
-    -- de Bruijn var references to the above.
+    -- de Bruijn var references to the type parameters.
 
   -- add typeParameters to env:
   env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env typeParameters
@@ -2143,7 +2144,9 @@ genCodeForEnum sc env nt cs =
 
   tl_type  <- scFunAll sc (map (\_-> sort0) typeParameters) scListSort
 
-  (typeListEachCtor :: [[Term]]) <- mapM (importConstructorTypes env') cs
+  (typeListEachCtor :: [[Term]]) <-
+    mapM (\c-> mapM (importType sc env') (C.ecFields c)) cs
+
   sawcoreTypeEachCtor <- flip mapM typeListEachCtor $ \ts ->
                            scTupleType sc ts
 
@@ -2158,10 +2161,8 @@ genCodeForEnum sc env nt cs =
 
   sumTy_type  <- scFunAll sc (map (\_-> sort0) typeParameters) sort0
   sumTy_rhs  <- do
-                putStrLn "checkpoint-2a"
                 x1 <- scGlobalApply sc tl_ident typeArgs
                 x2 <- scEithersV x1
-                putStrLn "checkpoint-2b"
                 addTypeAbstractions x2
 
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
@@ -2175,14 +2176,7 @@ genCodeForEnum sc env nt cs =
             return (nm, rhs')
   return ctors
 
-    -- NOTE: Cryptol allows non-sequential defs, SAWCore: doesn't.
-    --   - TODO: will this be an issue?
-
-    where
-
-    importConstructorTypes :: Env -> C.EnumCon -> IO [Term]
-    importConstructorTypes env' c =
-      mapM (importType sc env') (C.ecFields c)
+  where
 
     -- | generate constructor definitions:
     mkConstructor :: (HasCallStack) =>
