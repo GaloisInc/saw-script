@@ -2128,6 +2128,7 @@ genCodeForEnum sc env nt cs =
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
   scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
+  scListSortGet  <- scGlobalDef sc ("Prelude.listSortGet")
   scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
 
   let scLS_Cons s ls = scCtorApp sc "Prelude.LS_Cons" [s,ls]
@@ -2136,6 +2137,11 @@ genCodeForEnum sc env nt cs =
 
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
+
+      scInjectionN :: Int -> Term -> IO Term
+      scInjectionN n x = do
+        scN <- scNat sc (fromIntegral n)
+        scTuple sc [scN,x]
 
   -------------------------------------------------------------
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
@@ -2171,7 +2177,7 @@ genCodeForEnum sc env nt cs =
   -- Create all the constructors:
   ctors <- flip mapM (zip typeListEachCtor cs) $ \(scTypes,ctor)->
             do
-            (nm,rhs) <- mkConstructor env' scTypes ctor
+            (nm,rhs) <- mkConstructor scTypes scInjectionN ctor
             rhs' <- addTypeAbstractions rhs
             return (nm, rhs')
   return ctors
@@ -2179,9 +2185,10 @@ genCodeForEnum sc env nt cs =
   where
 
     -- | generate constructor definitions:
-    mkConstructor :: (HasCallStack) =>
-                     Env -> [Term] -> C.EnumCon -> IO (C.Name,Term)
-    mkConstructor _env' scConArgTypes c =
+    mkConstructor :: [Term]
+                  -> (Int -> Term -> IO Term)
+                  -> C.EnumCon -> IO (C.Name,Term)
+    mkConstructor scConArgTypes scInjection c =
       do
       let
         conName     = C.ecName c
@@ -2198,7 +2205,7 @@ genCodeForEnum sc env nt cs =
 
       -- create the constructor:
       conBody0 <- scTuple sc paramVars
-      conBody1 <- return conBody0 -- FIXME: TODO: add call to injection_n!
+      conBody1 <- scInjection (C.ecNumber c) conBody0
       conBody2 <- scLambdaList sc
                     (zip paramNames scConArgTypes)
                     conBody1
