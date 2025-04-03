@@ -2091,23 +2091,25 @@ genCodeForEnum sc env nt cs =
   typeArgs <- reverse <$> mapM (scLocalVar sc)
                                (take (length typeParameters) [0..])
 
-  (env',addTypeAbstractions) <- Fold.foldrM addTypeAbstraction
-                                            (env, return)
-                                            typeParameters
+  -- add typeParameters to env:
+  env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env typeParameters
 
-    -- FIXME[F]: any probs with sharing 'addTypeAbstractions'?
+  let
+     -- | add a type Abstraction for each tp in typeParameters
+     addTypeAbstractions :: Term -> IO Term
+     addTypeAbstractions t =
+        Fold.foldrM
+          (\tp t'-> do
+                    k <- importKind sc (C.tpKind tp)
+                    scLambda sc (tparamToLocalName tp) k t')
+          t
+          typeParameters
 
-
-  let -- | the elimination of `addTypeAbstractions`, assumes no
-      --   intervening lambdas.
-      applyTypeArgs :: Term -> IO Term
-      applyTypeArgs term = scApplyAll sc term typeArgs
-      -- FIXME: dead code
-
-  -- FIXME: ordering of typeargs reversed SOMETIMES:
-  -- - __TL - types reversed
-  -- - __TY - correct
-  -- - constructors - reversed!
+     -- | the elimination of `addTypeAbstractions`, assumes no
+     --   intervening lambdas.
+     applyTypeArgs :: Term -> IO Term
+     applyTypeArgs term = scApplyAll sc term typeArgs
+     -- FIXME: dead code
 
   -- Common naming conventions:
   let newIdent suffix = mkIdent
@@ -2168,20 +2170,6 @@ genCodeForEnum sc env nt cs =
     --   - TODO: will this be an issue?
 
     where
-
-    -- | addTypeAbstraction - extend environment and create 'context'
-    --   that adds one type abstraction (this all at the Term level).
-    addTypeAbstraction ::
-       C.TParam -> (Env, Term -> IO Term) -> IO (Env, Term -> IO Term)
-    addTypeAbstraction tp (env', addAbstractions) =
-      if elem (C.tpKind tp) [C.KType, C.KNum] then
-        do
-        env'' <- bindTParam sc tp env'
-        return (env'', \e -> do
-                             e' <- addAbstractions e
-                             k <- importKind sc (C.tpKind tp)
-                             scLambda sc (tparamToLocalName tp) k e'
-               )
 
     importConstructorTypes :: Env -> C.EnumCon -> IO [Term]
     importConstructorTypes env' c =
