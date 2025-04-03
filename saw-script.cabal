@@ -205,7 +205,7 @@ library saw-core-sbv
     -- internal subpackages in the saw tree
     saw-core
 
-  hs-source-dirs: saw-core-sbv
+  hs-source-dirs: saw-core-sbv/src
   exposed-modules:
      SAWCoreSBV.SBV
      SAWCoreSBV.SWord
