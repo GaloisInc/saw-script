@@ -1,6 +1,9 @@
 # next -- TBA
 
-Nothing yet.
+## Bug fixes
+
+* Invoking the Cryptol `error` function in SAW now preserves the error message
+  instead of throwing it away.
 
 # Version 1.3 -- 2025-03-21
 

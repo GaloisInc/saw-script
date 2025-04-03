@@ -68,6 +68,7 @@ import Data.Functor
 import Data.Maybe (fromMaybe)
 import Data.Bitraversable
 import Data.Bits
+import Data.Char (chr)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -373,6 +374,8 @@ constMap bp = Map.fromList
 
   -- Strings
   , ("Prelude.String", PrimValue (TValue VStringType))
+  , ("Prelude.appendString", appendStringOp)
+  , ("Prelude.bytesToString", bytesToStringOp bp)
   , ("Prelude.equalString", equalStringOp bp)
 
   -- Overloaded
@@ -729,6 +732,41 @@ natCaseOp =
 
 --------------------------------------------------------------------------------
 -- Strings
+
+-- appendString : String -> String -> String;
+appendStringOp :: VMonad l => Prim l
+appendStringOp =
+  stringFun $ \x ->
+  stringFun $ \y ->
+    Prim $ pure $ VString $ x <> y
+
+-- bytesToString : (n : Nat) -> Vec n (Vec 8 Bool) -> String;
+bytesToStringOp :: forall l. (VMonad l, Show (Extra l))
+                => BasePrims l -> Prim l
+bytesToStringOp bp =
+  constFun $
+  vectorFun (bpUnpack bp) $ \v -> Prim $ do
+    v' <- V.mapM byteToChar v
+    pure $ VString $ Text.pack $ V.toList v'
+  where
+    byteToChar :: Lazy (EvalM l) (Value l) -> EvalM l Char
+    byteToChar lv = do
+      v <- force lv
+      bits <- toBits (bpUnpack bp) v
+      pure $ chr $ bitsToInt $ V.map asBool bits
+
+    bitsToInt :: Vector Bool -> Int
+    bitsToInt = V.ifoldl' (\bits idx b ->
+                            -- Each character's bits are stored in big-endian
+                            -- order in the vector, so we must subtract the
+                            -- index of a bit from 7 (8 - 1) in order to set
+                            -- the bit at that index.
+                            if b then setBit bits (7 - idx) else bits)
+                          zeroBits
+
+    asBool :: VBool l -> Bool
+    asBool vb = fromMaybe (panic "bytesToStringOp: Nothing VBool")
+                          (bpAsBool bp vb)
 
 equalStringOp :: VMonad l => BasePrims l -> Prim l
 equalStringOp bp =
