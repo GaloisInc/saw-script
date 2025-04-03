@@ -1,6 +1,6 @@
 #!/bin/sh
 # savegitinfo.sh - extract git information and generate GitRev.hs
-# usage: saw-version/SAWVersion/savegitinfo.sh
+# usage: saw-version/src/SAWVersion/savegitinfo.sh
 
 set -e
 

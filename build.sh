@@ -17,7 +17,7 @@ tgt_gitrev() {
     # fetch/update the compiled-in git version info
     # but only if .git exists
     if [ -d .git ]; then
-        saw-version/SAWVersion/savegitinfo.sh
+        saw-version/src/SAWVersion/savegitinfo.sh
     else
         echo "(skipping GitRev update; no .git directory)"
     fi

@@ -17,7 +17,7 @@ library saw-version
   build-depends:
       base >= 4.9
 
-  hs-source-dirs: saw-version
+  hs-source-dirs: saw-version/src
   exposed-modules:
       SAWVersion.GitRev
       SAWVersion.Version
