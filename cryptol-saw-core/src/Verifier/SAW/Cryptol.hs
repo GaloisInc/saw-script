@@ -2004,8 +2004,16 @@ genCodeForNominalTypes sc nominalMap env0 =
   foldM updateEnvForNominal env0 nominalMap
 
   where
+
     updateEnvForNominal :: Env -> NominalType -> IO Env
     updateEnvForNominal env nt = do
+      let kinds = map C.tpKind (C.ntParams nt)
+      unless (all (`elem` [C.KType, C.KNum]) kinds) $
+        panic "genCodeForNominalTypes"
+              [ "type parameters for nominal types must have kind * or #:"
+              , show kinds
+              ]
+
       ns <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
           constrs = map (\(x,e) -> (x,(e,0))) ns
@@ -2051,47 +2059,38 @@ genCodeForNominalTypes sc nominalMap env0 =
       --    - think so, note 'importType' goes from TVar to var in Term
       --    - [ ] test this
 
+
     -- | Create functions/constructors for Nominal Types.
     newDefsForNominal :: Env -> NominalType -> IO [(C.Name,Term)]
     newDefsForNominal env nt =
       case C.ntDef nt of
-        C.Abstract -> return []
+        C.Abstract  -> return []
 
-        C.Enum x   -> genCodeForEnum sc env nt x
+        C.Enum x    -> genCodeForEnum sc env nt x
 
         C.Struct fs -> do
-            let recTy     = C.TRec (C.ntFields fs)
-                con       = C.ntConName fs
-                paramName = C.asLocal C.NSValue con
-                            -- feels odd: using name of constructor as the
-                            -- name of the constructor argument.
-                fn        = C.EAbs paramName recTy (C.EVar paramName)
-            e <- importExpr sc env (addTypeAbstractions fn)
+            let recTy      = C.TRec (C.ntFields fs)
+                con        = C.ntConName fs
+                paramName  = C.asLocal C.NSValue con
+                             -- feels odd: using name of constructor as the
+                             -- name of the constructor argument.
+                fn         = C.EAbs paramName recTy (C.EVar paramName)
+                fnWithTAbs = foldr C.ETAbs fn (C.ntParams nt)
+            e <- importExpr sc env fnWithTAbs
             return [(con, e)]
-
-          where
-
-          addTypeAbstractions :: C.Expr -> C.Expr
-          addTypeAbstractions fn = foldr tFn fn (C.ntParams nt)
-            where
-            tFn tp body =
-              if elem (C.tpKind tp) [C.KType, C.KNum] then
-                C.ETAbs tp body
-              else
-                panic "genCodeForNominalTypes"
-                  [ "illegal nominal type parameter kind"
-                  , show (C.tpKind tp)
-                  ]
 
 genCodeForEnum ::
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt cs =
   do
-  -- common code to handle type paramers:
+
+  -- common code to handle type parameters of the nominal type:
+
   let typeParameters = C.ntParams nt -- of the nominal type
   -- de Bruijn var references to the above:
   typeArgs <- reverse <$> mapM (scLocalVar sc)
                                (take (length typeParameters) [0..])
+
   (env',addTypeAbstractions) <- Fold.foldrM addTypeAbstraction
                                             (env, return)
                                             typeParameters
@@ -2110,7 +2109,7 @@ genCodeForEnum sc env nt cs =
   -- - __TY - correct
   -- - constructors - reversed!
 
-  -- common naming conventions:
+  -- Common naming conventions:
   let newIdent suffix = mkIdent
                           preludeName
                           (Text.append
@@ -2119,7 +2118,7 @@ genCodeForEnum sc env nt cs =
       tl_ident    = newIdent "__TL"
       sumTy_ident = newIdent "__TY"
 
-  -- create access to needed SAWCore Prelude types & definitions:
+  -- Create access to needed SAWCore Prelude types & definitions:
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
   scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
@@ -2132,7 +2131,8 @@ genCodeForEnum sc env nt cs =
 
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
-  --  - the types maintain the same exact type vars (see typeParametersr)
+  --  - the types maintain the same exact type vars (see typeParameters)
+
   tl_type  <- scFunAll sc (map (\_-> sort0) typeParameters) scListSort
 
   (typeListEachCtor :: [[Term]]) <- mapM (importConstructorTypes env') cs
@@ -2182,11 +2182,6 @@ genCodeForEnum sc env nt cs =
                              k <- importKind sc (C.tpKind tp)
                              scLambda sc (tparamToLocalName tp) k e'
                )
-      else
-        panic "genCodeForEnum: addTypeAbstraction"
-              ["illegal nominal type parameter kind"
-              , show (C.tpKind tp)
-              ]
 
     importConstructorTypes :: Env -> C.EnumCon -> IO [Term]
     importConstructorTypes env' c =
