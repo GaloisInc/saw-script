@@ -2023,12 +2023,18 @@ genCodeForNominalTypes sc nominalMap env0 =
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
       -- MT: DEBUGGING:
-      putStrLn $ "\nMYLOG: scGetModuleMap:"
-      hm <- scGetModuleMap sc
-      mapM_ print (HMap.keys hm)
+      -- putStrLn $ "\nMYLOG: scGetModuleMap:"
+      -- hm <- scGetModuleMap sc
+      -- mapM_ print (HMap.keys hm)
 
-      putStrLn "\nMYLOG: genNominalCon.. FOR NOMINAL TYPE :\n"
-      putStrLn $ "  " ++ show (ntName nt)
+      case ntDef nt of
+        C.Abstract ->
+            return ()
+        _          ->
+            do
+            putStrLn "\nMYLOG: updateEnvForNominal.. FOR NOMINAL TYPE :\n"
+            putStrLn $ "  " ++ show (C.identText $ C.nameIdent (ntName nt))
+            putStrLn $ "  " ++ show (ntName nt)
 
       unless (null conTs) $
         do
@@ -2041,9 +2047,10 @@ genCodeForNominalTypes sc nominalMap env0 =
         flip mapM_ ns $
           (\(n,e)->
              do
-             putStrLn $ "  MYLOG: NAME: " ++ show (C.nameIdent n)
+             putStrLn $ "  MYLOG: NAME: "
+                        ++ show (C.identText $ C.nameIdent n)
              putStrLn $ "  MYLOG: EXPR: " ++ showTerm e
-             putStrLn $ "  MYLOG: AST : " ++ show e
+             putStrLn $ "  MYLOG: AST : " ++ take 240 (show e)
               -- showTerm t = scPrettyTerm defaultPPOpts t
               --  ... in ../SAW/Term/PRetty.hs
               -- also means to show with 'env/named-things'
@@ -2061,7 +2068,8 @@ genCodeForNominalTypes sc nominalMap env0 =
 
 
     -- | Create functions/constructors for Nominal Types.
-    newDefsForNominal :: Env -> NominalType -> IO [(C.Name,Term)]
+    newDefsForNominal ::
+      HasCallStack => Env -> NominalType -> IO [(C.Name,Term)]
     newDefsForNominal env nt =
       case C.ntDef nt of
         C.Abstract  -> return []
@@ -2081,9 +2089,15 @@ genCodeForNominalTypes sc nominalMap env0 =
 
 
 genCodeForEnum ::
+  (HasCallStack) =>
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt cs =
   do
+
+  -- MT: Debugging
+  putStrLn "\nMYLOG: genCodeForEnum :\n"
+  putStrLn $ "  " ++ show (C.identText $ C.nameIdent (ntName nt))
+
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
 
@@ -2206,6 +2220,5 @@ genCodeForEnum sc env nt cs =
             (nm,rhs) <- mkConstructor scConArgTypes ctor
             rhs' <- addTypeAbstractions rhs
             return (nm, rhs')
-  return ctors
 
-  where
+  return ctors
