@@ -172,7 +172,7 @@ library saw-core-aig
     -- internal subpackages in the saw tree
     saw-core
 
-  hs-source-dirs: saw-core-aig
+  hs-source-dirs: saw-core-aig/src
   exposed-modules:
      SAWCoreAIG.BitBlast
   GHC-options: -Wall -Werror
