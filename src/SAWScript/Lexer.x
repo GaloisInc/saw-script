@@ -86,35 +86,144 @@ $charesc     = [abfnrtv\\\"\'\&]
 
 sawTokens :-
 
-\n                               { plain          TEOL      }
-"//"                             { plain          TCommentL }
-"/*"                             { plain          TCommentS }
-"*/"                             { plain          TCommentE }
+<0,comment,code,ctype> {
+\/\*                             { startComment }
+}
+
+<comment> {
+\*+\/                            { endComment   }
+[^\*\/]+                         { addToComment }
+\*                               { addToComment }
+\/                               { addToComment }
+\n                               { addToComment }
+}
+
+<0,code,ctype> "//".*            { startLineComment }
+<0,code,ctype> \"                { startString }
+
+<linecomment> \n                 { endLineComment }
+
+<string> {
+@string                          { addToString }
+\"                               { endString   }
+\\.                              { addToString }
+}
+
+<0> {
 $whitechar+                      ;
+\n                               ;
 @reservedid                      { plain          TReserved }
 @punct                           { plain          TPunct    }
 @reservedop                      { plain          TOp       }
 @varid                           { plain          TVar      }
-\" @string* \"                   { xform read'    TLit      }
-\{\{ @code* \}\}                 { xform readCode TCode     }
-\{\| @ctype* \|\}                { xform readCode TCType    }
+\{\{                             { startCode                }
+\{\|                             { startCType               }
 @decimal                         { addon read'    TNum      }
 0[bB] @binary                    { addon readBin  TNum      }
 0[oO] @octal                     { addon read'    TNum      }
 0[xX] @hexadecimal               { addon read'    TNum      }
 .                                { plain          TUnknown  }
+}
 
+<code> {
+[^\}\/\*]+                       { addToCode }
+\n                               { addToCode }
+.                                { addToCode }
+\}\}                             { endCode   }
+}
+
+<ctype> {
+[^\|\}\/\*]+                     { addToCType }
+\n                               { addToCType }
+.                                { addToCType }
+\|\}                             { endCType   }
+}
 {
 
 -- token helpers
 
-plain ::                   (Pos -> Text -> Token Pos)   -> Pos -> Text -> Token Pos
-xform :: (Text -> Text) -> (Pos -> Text -> Token Pos)   -> Pos -> Text -> Token Pos
-addon :: (Text -> a) -> (Pos -> Text -> a -> Token Pos) -> Pos -> Text -> Token Pos
+type Action = Pos -> Text -> LexS -> ([Token Pos], LexS)
+plain ::                   (Pos -> Text -> Token Pos)   -> Action
+xform :: (Text -> Text) -> (Pos -> Text -> Token Pos)   -> Action
+addon :: (Text -> a) -> (Pos -> Text -> a -> Token Pos) -> Action
 
-plain   tok pos txt = tok pos txt         -- ^ just the contents
-xform f tok pos txt = tok pos (f txt)     -- ^ transform contents
-addon f tok pos txt = tok pos txt (f txt) -- ^ also variant contents
+addToComment, startComment, endComment :: Action
+addToCode, startCode, endCode :: Action
+addToString, startString, endString :: Action
+addToCType, startCType, endCType :: Action
+
+plain   tok pos txt = \s -> ([tok pos txt], s)         -- ^ just the contents
+xform f tok pos txt = \s -> ([tok pos (f txt)], s)     -- ^ transform contents
+addon f tok pos txt = \s -> ([tok pos txt (f txt)], s) -- ^ also variant contents
+
+startComment p txt s = ([], InComment p stack chunks done)
+  where (stack,chunks, done) = case s of
+          Normal                 -> ([], [txt], Normal)
+          InComment q qs cs done -> (q : qs, txt : cs, done)
+          InCode q ctxt          -> ([], [txt], InCode q ctxt)
+          InCType q ctxt         -> ([], [txt], InCType q ctxt)
+          _                      -> panic "[Lexer] startComment" ["not in normal or cryptol block or comment"]
+
+endComment p txt s =
+  case s of
+    InComment f [] cs done     -> ([], addWhitespace f (Text.concat (reverse cs) <> txt) done)
+    InComment _ (q:qs) cs done -> ([], InComment q qs (txt : cs) done)
+    _                          -> panic "[Lexer] endComment" ["outside comment"]
+
+addToComment _ txt s = ([], InComment p stack (txt : chunks) done)
+  where
+  (p, stack, chunks, done) =
+     case s of
+       InComment q qs cs done -> (q,qs,cs,done)
+       _                   -> panic "[Lexer] addToComment" ["outside comment"]
+
+startLineComment p txt s = ([], InLineComment p txt s)
+
+endLineComment p txt s =
+  case s of
+    InLineComment f cs done -> ([], addWhitespace p (cs <> txt) done)
+    _                    -> panic "[Lexer] endLineComment" ["outside line comment"]
+
+-- Cryptol is indentation-sensitive. Just deleting the comments could produce
+-- unparsable Cryptol , so we replace the removed comments with matching
+-- whitespace
+addWhitespace p txt s@(InCode q x) = snd $ addToCode p (whiteout txt) s
+addWhitespace p txt s@(InCType q x) = snd $ addToCType p (whiteout txt) s
+addWhitespace _ _ s = s
+
+whiteout = Text.map (\c -> if c == '\n' then '\n' else ' ')
+
+startString p txt s = ([],InString p txt s)
+
+endString pe txt s = case s of
+  InString ps str done -> ([mkToken ps str], done)
+  _               -> panic "[Lexer] endString" ["outside string"]
+  where
+  mkToken ps str = TLit (spanPos ps pe) (read' $ str `Text.append` txt)
+
+addToString _ txt s = case s of
+  InString p str done -> ([],InString p (str `Text.append` txt) done)
+  _              -> panic "[Lexer] addToString" ["outside string"]
+
+startCode p _ _ = ([],InCode p Text.empty)
+
+endCode pe _ s = case s of
+  InCode ps str -> ([TCode (spanPos ps pe) str], Normal)
+  _               -> panic "[Lexer] endCode" ["outside code"]
+
+addToCode _ txt s = case s of
+  InCode p str -> ([],InCode p (str `Text.append` txt))
+  _              -> panic "[Lexer] addToCode" ["outside code"]
+
+startCType p _ _ = ([],InCType p Text.empty)
+
+endCType pe _ s = case s of
+  InCType ps str -> ([TCType (spanPos ps pe) str], Normal)
+  _               -> panic "[Lexer] endCType" ["outside ctype"]
+
+addToCType _ txt s = case s of
+  InCType p str -> ([],InCType p (str `Text.append` txt))
+  _              -> panic "[Lexer] addToCType" ["outside ctype"]
 
 -- fetch a value via Read
 --
@@ -133,15 +242,11 @@ read' txt = case readMaybe txt' of
     Nothing -> panic "Lexer" ["Failed to decode string or number literal", txt']
   where txt' = Text.unpack txt
 
--- drop the {{ }} or {| |} from Cryptol blocks
-readCode :: Text -> Text
-readCode txt = Text.drop 2 $ Text.dropEnd 2 txt
-
 -- read a binary integer
 readBin :: Text -> Integer
 readBin s = case readInt 2 isDigit cvt (Text.unpack s') of
               [(a, "")] -> a
-              _         -> error $ "Cannot read a binary number from: " ++ show s
+              _         -> panic "Lexer" ["Cannot read a binary number from: ", show s]
   where cvt c = ord c - ord '0'
         isDigit c = c == '0' || c == '1'
         s' | "0b" `Text.isPrefixOf` s = Text.drop 2 s
@@ -162,6 +267,22 @@ type AlexInput = (
     AlexPos,    -- ^ Current position
     Text        -- ^ Remaining input
   )
+
+data LexS
+  = Normal
+  | InComment !Pos ![Pos] [Text] LexS
+  | InLineComment !Pos Text LexS
+  | InString !Pos Text LexS
+  | InCode   !Pos Text
+  | InCType  !Pos Text
+  deriving (Show)
+
+stateToInt Normal = 0
+stateToInt (InComment {}) = comment
+stateToInt (InLineComment {}) = linecomment
+stateToInt (InString {}) = string
+stateToInt (InCode {}) = code
+stateToInt (InCType {}) = ctype
 
 -- initial position
 startPos :: AlexPos
@@ -227,8 +348,8 @@ alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 
 -- read the text of a file, passing in the filename for use in positions
-scanTokens :: FilePath -> Text -> [Token Pos]
-scanTokens filename str = go (startPos, str)
+scanTokens :: FilePath -> Text -> ([Token Pos], OptMsg)
+scanTokens filename str = go (startPos, str) Normal
   where
     fillPos pos height width =
         let startLine = apLine pos
@@ -238,17 +359,29 @@ scanTokens filename str = go (startPos, str)
         in
         Range filename startLine startCol endLine endCol
 
-    go inp@(pos, str) = case alexScan inp 0 of
-        AlexEOF ->
-            let pos' = fillPos pos 0 0 in
-            [TEOF pos' "EOF"]
+    go inp@(pos, str) s = case alexScan inp (stateToInt s) of
+        AlexEOF -> let pos' = fillPos pos 0 0
+                       tok = [TEOF pos' "EOF"]
+                   in case s of
+            Normal ->
+                (tok, Nothing)
+            InLineComment pos _ _ ->
+                (tok, Just (Warn, pos', "Missing newline at end of file"))
+            InComment pos _ _ _ ->
+                (tok, Just (Error, pos, "Unclosed block comment"))
+            InString pos _ _ ->
+                (tok, Just (Error, pos, "Unterminated string"))
+            InCode pos _ ->
+                (tok, Just (Error, pos, "Unclosed cryptol block"))
+            InCType pos _ ->
+                (tok, Just (Error, pos, "Unclosed ctype block"))
         AlexError (pos, _) ->
             let line' = show $ apLine pos
                 col' = show $ apCol pos
             in
-            error $ line' ++ ":" ++ col' ++ ": unspecified lexical error"
+            panic "Lexer" [line' ++ ":" ++ col' ++ ": unspecified lexical error"]
         AlexSkip inp' len ->
-            go inp'
+            go inp' s
         AlexToken inp' len act ->
             let text = Text.take len str
                 (height, width) = case reverse $ Text.lines text of
@@ -257,18 +390,9 @@ scanTokens filename str = go (startPos, str)
                     last : lines -> (length lines, Text.length last)
                 pos' = fillPos pos height width
             in
-            act pos' text : go inp'
-
--- | State for processing comments.
---
--- CNone is the ground state (not in a comment)
---
--- CBlock startpos n is when we're within a block comment starting at
--- startpos, and n is the number of additional nested block comments
--- that have been opened.
---
--- CLine is when we're in a line (//-type) comment.
-data CommentState = CNone | CBlock Pos !Int | CLine
+            let (t, s') = act pos' text s
+                (ts, mmsg) = go inp' s'
+            in (t ++ ts, mmsg)
 
 -- | Type to hold a diagnostic message (error or warning).
 --
@@ -278,84 +402,9 @@ data CommentState = CNone | CBlock Pos !Int | CLine
 -- generated a message.
 type OptMsg = Maybe (Verbosity, Pos, Text)
 
--- | Postprocess to drop comments; this allows block comments to nest.
---
--- Also returns a message (error or warning) along with the updated
--- token list if there's an unclosed comment when we reach EOF. Since
--- we aren't in a monad here and can't print, dispatching the message
--- is the caller's responsibility.
-dropComments :: [Token Pos] -> ([Token Pos], OptMsg)
-dropComments = go CNone
-  where go :: CommentState -> [Token Pos] -> ([Token Pos], OptMsg)
-        go state ts = case ts of
-          [] ->
-            -- should always see TEOF before we hit the end
-            panic "Lexer" ["dropComments: tokens ran out"]
-          TEOF _ _ : _ : _ ->
-            -- should only see TEOF at the end of the list
-            panic "Lexer" ["dropComments: misplaced EOF in tokens"]
-
-          t : ts' ->
-            let take state' =
-                    let (results, optmsg) = go state' ts' in
-                    (t : results, optmsg)
-                drop state' = go state' ts'
-                finish = ([t], Nothing)
-                finishWith msg = ([t], Just msg)
-            in
-            case state of
-              CNone -> case t of
-                TEOF _ _ ->
-                    -- plain EOF
-                    finish
-                TCommentS pos _ ->
-                    -- open block-comment
-                    drop (CBlock pos 0)
-                TCommentL _ _  ->
-                    -- begin line-comment
-                    drop CLine
-                TEOL _ _ ->
-                    -- ordinary EOL, doesn't need to be seen downstream; drop it
-                    drop CNone
-                _ ->
-                    -- uncommented token, keep it
-                    take CNone
-
-              CBlock startpos depth -> case t of
-                TEOF pos _ ->
-                    -- EOF in /**/-comment; unclosed, which is an error
-                    finishWith (Error, startpos, "Unclosed block comment")
-                TCommentS _ _ ->
-                    -- open nested comment, keep original start position
-                    drop (CBlock startpos (depth + 1))
-                TCommentE _ _
-                 | depth == 0 ->
-                     -- end outer block comment
-                     drop CNone
-                 | otherwise ->
-                     -- end nested block comment
-                     drop (CBlock startpos (depth - 1))
-                _ ->
-                     -- anything else in a block comment, drop it
-                     -- (this includes any TCommentLs that come through)
-                     drop state
-
-              CLine -> case t of
-                TEOF pos _ ->
-                    -- EOF in //-comment; missing a newline
-                    finishWith (Warn, pos, "Missing newline at end of file")
-                TEOL _ _ ->
-                    -- EOL ending a line comment, drop it
-                    -- (EOLs aren't sent downstream)
-                    drop CNone
-                _ ->
-                    -- anything else in a line comment, drop it
-                    -- (this includes any TCommentS/TCommentE that appear)
-                    drop CLine
-
 -- entry point
 lexSAW :: FilePath -> Text -> ([Token Pos], OptMsg)
-lexSAW f text = dropComments $ scanTokens f text
+lexSAW f text = scanTokens f text
 
 -- alternate monadic entry point (XXX: does this have any value?)
 scan :: Monad m => FilePath -> Text -> m ([Token Pos], OptMsg)
