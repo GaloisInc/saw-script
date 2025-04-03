@@ -2138,11 +2138,6 @@ genCodeForEnum sc env nt cs =
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
 
-      scInjectionN :: Int -> Term -> IO Term
-      scInjectionN n x = do
-        scN <- scNat sc (fromIntegral n)
-        scTuple sc [scN,x]
-
   -------------------------------------------------------------
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
@@ -2175,38 +2170,42 @@ genCodeForEnum sc env nt cs =
 
   -------------------------------------------------------------
   -- Create all the constructors:
-  ctors <- flip mapM (zip typeListEachCtor cs) $ \(scTypes,ctor)->
+
+  let scInjectionN :: Int -> Term -> IO Term
+      scInjectionN n x = do
+        scN <- scNat sc (fromIntegral n)
+        scTuple sc [scN,x]  -- FIXME: turn from fake to real.
+
+      -- | generate constructor definitions:
+      mkConstructor :: [Term] -> C.EnumCon -> IO (C.Name,Term)
+      mkConstructor scConArgTypes c =
+        do
+        let
+          conName     = C.ecName c
+          numArgs     = length scConArgTypes
+
+        -- NOTE: we don't add the constructor arguments to the Env, as
+        -- the only references to these new definitions are in the generated
+        -- SAWCore code.
+
+        -- create vars (& names) for constructor arguments
+        paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
+        let paramNames = map (\x-> Text.pack ("x" ++ show x))
+                             (take numArgs [(0 ::Int)..])
+
+        -- create the constructor:
+        conBody0 <- scTuple sc paramVars
+        conBody1 <- scInjectionN (C.ecNumber c) conBody0
+        conBody2 <- scLambdaList sc
+                      (zip paramNames scConArgTypes)
+                      conBody1
+        return (conName, conBody2)
+
+  ctors <- flip mapM (zip typeListEachCtor cs) $ \(scConArgTypes,ctor)->
             do
-            (nm,rhs) <- mkConstructor scTypes scInjectionN ctor
+            (nm,rhs) <- mkConstructor scConArgTypes ctor
             rhs' <- addTypeAbstractions rhs
             return (nm, rhs')
   return ctors
 
   where
-
-    -- | generate constructor definitions:
-    mkConstructor :: [Term]
-                  -> (Int -> Term -> IO Term)
-                  -> C.EnumCon -> IO (C.Name,Term)
-    mkConstructor scConArgTypes scInjection c =
-      do
-      let
-        conName     = C.ecName c
-        numArgs     = length scConArgTypes
-
-      -- NOTE: we don't add the constructor arguments to the Env, as
-      -- the only references to these new definitions are in the generated
-      -- SAWCore code.
-
-      -- create vars (& names) for constructor arguments
-      paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
-      let paramNames = map (\x-> Text.pack ("x" ++ show x))
-                           (take numArgs [(0 ::Int)..])
-
-      -- create the constructor:
-      conBody0 <- scTuple sc paramVars
-      conBody1 <- scInjection (C.ecNumber c) conBody0
-      conBody2 <- scLambdaList sc
-                    (zip paramNames scConArgTypes)
-                    conBody1
-      return (conName, conBody2)
