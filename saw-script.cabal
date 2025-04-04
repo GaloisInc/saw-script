@@ -866,6 +866,62 @@ executable saw
 ------------------------------------------------------------
 -- saw-tools
 
+-- The saw-remote-api executable is the server program for the remote
+-- API interface.
+executable saw-remote-api
+  default-language: Haskell2010
+  build-depends:
+                 -- upstream packages from hackage
+                 base >=4.11.1.0 && <4.20,
+                 aeson >= 1.4.2 && < 2.3,
+                 base64-bytestring,
+                 bytestring,
+                 containers >= 0.6 && < 0.7,
+                 cryptonite,
+                 cryptonite-conduit,
+                 directory,
+                 lens,
+                 mtl,
+                 silently,
+                 text,
+                 unordered-containers,
+                 vector >= 0.12 && < 0.14,
+
+                 -- packages in git submodules
+                 aig,
+                 argo,
+                 cryptol >= 2.8.1,
+                 cryptol-remote-api,
+                 crucible,
+                 crucible-jvm,
+                 crucible-mir,
+                 jvm-parser,
+                 llvm-pretty,
+                 llvm-pretty-bc-parser,
+                 parameterized-utils,
+
+                 -- internal subpackages in the saw tree
+                 saw-script:saw-core,
+                 saw-script:cryptol-saw-core,
+                 saw-script:saw-central,
+                 saw-script:saw-server
+
+  main-is:             Main.hs
+  hs-source-dirs: saw-remote-api/saw-remote-api
+  ghc-options:
+    -O2
+    -threaded
+    -Wall
+    -Wno-orphans
+    -Werror=missing-fields
+    -Werror=incomplete-patterns
+    -Werror=missing-methods
+    -Werror=overlapping-patterns
+
+
+------------------------------------------------------------
+-- saw-tools
+
 -- The Cryptol Symbolic Simulator (css) is a standalone program that
 -- translates a single Cryptol function to an AIG.
 executable css
