@@ -40,10 +40,10 @@ library
                  what4,
 
                  -- internal subpackages in the saw tree
-                 saw-script:saw-core,
-                 saw-script:cryptol-saw-core,
-                 saw-script:saw-core-what4,
-                 saw-script:saw-central
+                 saw:saw-core,
+                 saw:cryptol-saw-core,
+                 saw:saw-core-what4,
+                 saw:saw-central
 
   hs-source-dirs: src
   exposed-modules: Mir.Compositional.Builder

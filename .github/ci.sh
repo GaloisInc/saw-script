@@ -81,20 +81,21 @@ haddock() {
   # interface) is to serve as an internals reference.
   local COMPONENTS='
     rme
-    saw-script:saw-version
-    saw-script:saw-core
-    saw-script:cryptol-saw-core
-    saw-script:saw-core-what4
-    saw-script:saw-core-sbv
-    saw-script:saw-core-aig
-    saw-script:saw-core-coq
-    saw-script:heapster
-    saw-script:saw-central
-    saw-script
-    saw-script:saw-server
-    saw-script:saw-remote-api
-    saw-script:extcore-info
-    saw-script:verif-viewer
+    saw:saw-version
+    saw:saw-core
+    saw:cryptol-saw-core
+    saw:saw-core-what4
+    saw:saw-core-sbv
+    saw:saw-core-aig
+    saw:saw-core-coq
+    saw:heapster
+    saw:saw-central
+    saw:saw-script
+    saw:saw-server
+    saw:saw
+    saw:saw-remote-api
+    saw:extcore-info
+    saw:verif-viewer
     crucible-mir-comp
     crux-mir-comp
   '
@@ -188,7 +189,7 @@ zip_dist_with_solvers() {
 }
 
 output() { echo "::set-output name=$1::$2"; }
-ver() { grep Version saw-script.cabal | awk '{print $2}'; }
+ver() { grep Version saw.cabal | awk '{print $2}'; }
 set_version() { output saw-version "$(ver)"; }
 set_files() { output changed-files "$(files_since "$1" "$2")"; }
 files_since() {
