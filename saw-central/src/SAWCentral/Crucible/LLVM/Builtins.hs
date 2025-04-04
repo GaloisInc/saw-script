@@ -140,7 +140,7 @@ import qualified Data.Parameterized.Context as Ctx
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
 import qualified Cryptol.TypeCheck.PP as Cryptol
-import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified CryptolSAWCore.Cryptol as Cryptol
 
 -- what4
 import qualified What4.Concrete as W4
@@ -189,7 +189,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 -- cryptol-saw-core
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 -- saw-script
 import SAWCentral.AST (Located(..))

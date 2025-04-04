@@ -87,7 +87,7 @@ import Data.Parameterized.TraversableFC
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Name
 import Verifier.SAW.Module as Mod
-import Verifier.SAW.Cryptol.Monadify
+import CryptolSAWCore.Monadify
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.OpenTerm

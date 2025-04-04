@@ -68,7 +68,7 @@ import qualified Lang.JVM.Codebase as CB
 import qualified Language.JVM.Parser as J
 
 -- cryptol-saw-core
-import           Verifier.SAW.TypedTerm (TypedTerm)
+import           CryptolSAWCore.TypedTerm (TypedTerm)
 
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.Setup.Value as MS

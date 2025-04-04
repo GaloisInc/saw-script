@@ -44,7 +44,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as TraversableFC
 
 import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.TypedTerm as SC
+import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as SimW4

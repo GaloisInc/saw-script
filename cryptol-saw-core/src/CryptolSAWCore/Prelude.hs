@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
-Module      : Verifier.SAW.Cryptol.Prelude
+Module      : CryptolSAWCore.Prelude
 Copyright   : Galois, Inc. 2012-2015
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -9,9 +9,9 @@ Stability   : experimental
 Portability : non-portable (language extensions)
 -}
 
-module Verifier.SAW.Cryptol.Prelude
+module CryptolSAWCore.Prelude
   ( Module
-  , module Verifier.SAW.Cryptol.Prelude
+  , module CryptolSAWCore.Prelude
   , scLoadPreludeModule
   ) where
 

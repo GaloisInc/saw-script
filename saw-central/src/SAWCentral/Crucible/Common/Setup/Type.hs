@@ -45,8 +45,8 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
-import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
-import           Verifier.SAW.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
+import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyEnv)
+import           CryptolSAWCore.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
 import           Verifier.SAW.SharedTerm (SharedContext, scFreshEC)
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS

@@ -124,7 +124,7 @@ import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Crucible.Common

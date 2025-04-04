@@ -90,20 +90,20 @@ import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
 import Verifier.SAW.Name (toShortName, SAWNamingEnv, emptySAWNamingEnv)
-import Verifier.SAW.CryptolEnv as CEnv
-import Verifier.SAW.Cryptol.Monadify as Monadify
+import CryptolSAWCore.CryptolEnv as CEnv
+import CryptolSAWCore.Monadify as Monadify
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
 import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
 import qualified Verifier.SAW.Term.Pretty as SAWCorePP
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Concrete as C
-import Verifier.SAW.Cryptol (exportValueWithSchema)
+import CryptolSAWCore.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import qualified Cryptol.Utils.Ident as T (mkIdent, packModName)

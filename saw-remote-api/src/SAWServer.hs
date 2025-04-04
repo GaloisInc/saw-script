@@ -43,11 +43,11 @@ import qualified Lang.JVM.Codebase as JSS
 import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
 import Mir.Mir (Adt)
---import qualified Verifier.SAW.CryptolEnv as CryptolEnv
+--import qualified CryptolSAWCore.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
 import Verifier.SAW.Term.Functor (mkModuleName)
-import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
+import CryptolSAWCore.TypedTerm (TypedTerm, CryptolModule)
 
 
 import SAWCentral.Crucible.LLVM.X86 (defaultStackBaseAlign)
@@ -62,10 +62,10 @@ import SAWCentral.Proof (emptyTheoremDB)
 import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts, SAWSimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysImport, YosysTheorem)
-import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
-import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
+import qualified CryptolSAWCore.Prelude as CryptolSAW
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Cryptol.Utils.Ident as Cryptol
-import Verifier.SAW.Cryptol.Monadify (defaultMonEnv)
+import CryptolSAWCore.Monadify (defaultMonEnv)
 import SAWCentral.Prover.MRSolver (emptyMREnv)
 import SAWCentral.SolverCache (lazyOpenSolverCache)
 

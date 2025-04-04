@@ -31,14 +31,14 @@ import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP ( defaultPPOpts, pp )
 import SAWCentral.Value (biSharedContext, TopLevelRW(..))
-import Verifier.SAW.CryptolEnv
+import CryptolSAWCore.CryptolEnv
     ( getAllIfaceDecls,
       getNamingEnv,
       meSolverConfig,
       translateExpr,
       CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
 import Verifier.SAW.SharedTerm (SharedContext)
-import Verifier.SAW.TypedTerm(TypedTerm(..),TypedTermType(..))
+import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 
 import qualified Argo
 import CryptolServer.Data.Expression (Expression, getCryptolExpr)

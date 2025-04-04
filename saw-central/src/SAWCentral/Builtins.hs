@@ -62,9 +62,9 @@ import Text.Printf (printf)
 import Text.Read (readMaybe)
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
-import qualified Verifier.SAW.Cryptol as Cryptol
-import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
-import qualified Verifier.SAW.Cryptol.Monadify as Monadify
+import qualified CryptolSAWCore.Cryptol as Cryptol
+import qualified CryptolSAWCore.Simpset as Cryptol
+import qualified CryptolSAWCore.Monadify as Monadify
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -81,7 +81,8 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Pretty (MemoStyle(..))
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
+
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter
@@ -91,7 +92,7 @@ import qualified Verifier.SAW.Simulator.TermModel as TM
 import Verifier.SAW.Term.Pretty (SawDoc, renderSawDoc)
 
 -- cryptol-saw-core
-import qualified Verifier.SAW.CryptolEnv as CEnv
+import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 -- saw-core-sbv
 import qualified Verifier.SAW.Simulator.SBV as SBVSim

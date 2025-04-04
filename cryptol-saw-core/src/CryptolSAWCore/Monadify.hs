@@ -16,7 +16,7 @@
 {-# LANGUAGE KindSignatures #-}
 
 {- |
-Module      : Verifier.SAW.Cryptol.Monadify
+Module      : CryptolSAWCore.Monadify
 Copyright   : Galois, Inc. 2021
 License     : BSD3
 Maintainer  : westbrook@galois.com
@@ -99,7 +99,7 @@ Mon(cnst) = cnstM  if cnst is impure and monadifies to constM
 Mon(cnst) = cnst   otherwise
 -}
 
-module Verifier.SAW.Cryptol.Monadify where
+module CryptolSAWCore.Monadify where
 
 import Numeric.Natural
 import Data.Map.Strict (Map)
@@ -123,11 +123,11 @@ import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
-import Verifier.SAW.TypedTerm
-import Verifier.SAW.Cryptol (Env)
+import CryptolSAWCore.TypedTerm
+import CryptolSAWCore.Cryptol (Env)
 import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
-import Verifier.SAW.Cryptol.PreludeM
+import CryptolSAWCore.PreludeM
 
 import GHC.Stack
 -- import Debug.Trace

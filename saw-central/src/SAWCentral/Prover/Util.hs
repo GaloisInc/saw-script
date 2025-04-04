@@ -2,7 +2,7 @@ module SAWCentral.Prover.Util where
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)

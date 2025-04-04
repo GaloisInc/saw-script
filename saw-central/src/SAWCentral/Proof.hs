@@ -157,7 +157,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.Name (SAWNamingEnv)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Term.Pretty
   (SawDoc, renderSawDoc, ppTermWithNames, ppTermContainerWithNames)

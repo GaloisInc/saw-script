@@ -38,7 +38,7 @@ import qualified Data.Set as Set
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Cryptol.Monadify
+import CryptolSAWCore.Monadify
 import SAWCentral.Prover.SolverStats
 
 import SAWCentral.MRSolver.Term

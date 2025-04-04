@@ -94,12 +94,12 @@ import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.TypedTerm
+import           CryptolSAWCore.TypedTerm
 
 import           Verifier.SAW.Simulator.What4.ReturnTrip (toSC)
 
 -- cryptol-saw-core
-import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified CryptolSAWCore.Cryptol as Cryptol
 
 import           SAWCentral.Crucible.Common
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
