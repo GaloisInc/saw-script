@@ -123,7 +123,7 @@ library saw-central
     , saw-core-what4
     , saw-script:saw-version
 
-  hs-source-dirs: saw-central
+  hs-source-dirs: saw-central/src
 
   exposed-modules:
     SAWCentral.Options
