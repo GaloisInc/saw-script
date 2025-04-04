@@ -13,7 +13,7 @@ module SAWVersion.Version (
   , shortVersionText
   ) where
 
-import Paths_saw_script (version)
+import Paths_saw (version)
 import SAWVersion.GitRev (foundGit, hash, branch)
 import Data.Version (showVersion)
 
