@@ -2735,7 +2735,7 @@ scOpenTerm sc nm tp idx body = do
     body' <- instantiateVar sc idx ec_term body
     return (ec, body')
 
--- | `closeTerm closer sc ec body` replaces the external constant `ec` in `body` by
+-- | `closeTerm close sc ec body` replaces the external constant `ec` in `body` by
 --   a new deBruijn variable and binds it using the binding form given by 'close'.
 --   The name and type of the new bound variable are given by the name and type of `ec`.
 scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
