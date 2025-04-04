@@ -14,7 +14,7 @@ include = [
 python = "^3.8"
 requests = "^2.25.1"
 BitVector = "^3.4.9"
-cryptol = "3.3" # { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
+cryptol = "3.3" # { path = "../deps/cryptol/cryptol-remote-api/python/", develop = true }
 argo-client = ">=0.0.13"
 lmdb = "^1.6.2"
 cbor2 = "^5.4.6"
