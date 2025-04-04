@@ -304,7 +304,7 @@ Systematizing these so that the intended user-facing documents are
 easily found is on the near-term agenda.
 
 Other developer-facing documentation includes assorted other READMEs and
-change logs, the [saw-remote-api/docs](remote API documentation),
+change logs, the [saw-server/docs](remote API documentation),
 this file, its supplements [doc/developer/developer.md](developer.md)
 and assorted other notes found in [doc/internal](doc/internal).
 The eventual goal is also to be able to generate an internals manual
