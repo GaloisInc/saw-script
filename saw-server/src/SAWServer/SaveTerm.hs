@@ -11,7 +11,7 @@ import qualified Argo
 import qualified Argo.Doc as Doc
 
 import CryptolServer.Data.Expression ( Expression )
-import SAWServer ( ServerName, SAWState, setServerVal )
+import SAWServer.SAWServer ( ServerName, SAWState, setServerVal )
 import SAWServer.CryptolExpression ( getTypedTerm )
 import SAWServer.OK ( OK, ok )
 

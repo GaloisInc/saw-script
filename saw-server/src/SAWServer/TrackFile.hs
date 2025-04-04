@@ -5,7 +5,9 @@ import qualified Data.Map as M
 import qualified Crypto.Hash.Conduit as Hash
 
 import qualified Argo
-import SAWServer ( SAWState, trackedFiles )
+
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer ( SAWState, trackedFiles )
 
 -- | Add a filepath to the list of filepaths tracked by the server. Any change
 -- to the SHA256 hash of this file will invalidate any cached state which is

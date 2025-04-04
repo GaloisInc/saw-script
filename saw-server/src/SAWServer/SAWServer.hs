@@ -9,8 +9,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
-module SAWServer
-  ( module SAWServer
+module SAWServer.SAWServer
+  ( module SAWServer.SAWServer
   ) where
 
 import Prelude hiding (mod)

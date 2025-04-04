@@ -27,7 +27,7 @@ import CryptolServer.Data.Expression ( Expression(..), getCryptolExpr )
 import CryptolSAWCore.TypedTerm (TypedTerm)
 import qualified SAWCentral.Builtins as SB
 import qualified SAWCentral.Value as SV
-import SAWServer
+import SAWServer.SAWServer
     ( SAWState,
       sawBIC,
       sawTopLevelRW)

@@ -91,6 +91,7 @@ haddock() {
     saw-script:heapster
     saw-script:saw-central
     saw-script
+    saw-script:saw-server
     saw-remote-api
     saw-script:extcore-info
     saw-script:verif-viewer

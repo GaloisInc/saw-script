@@ -23,7 +23,9 @@ import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer ( SAWState, sawBIC, sawTopLevelRW )
+
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer ( SAWState, sawBIC, sawTopLevelRW )
 import SAWServer.Exceptions ( cryptolError )
 import SAWServer.OK ( OK, ok )
 

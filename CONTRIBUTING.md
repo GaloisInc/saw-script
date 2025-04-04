@@ -236,8 +236,10 @@ The top-level repository directories are:
 
 * `saw` - Source for the `saw` executable.
 
-* `saw-remote-api` - Source for a server that provides a remote API to
+* `saw-server` - Library source for a server that provides a remote API to
   SAW based on JSON-RPC.
+
+* `saw-remote-api` - Executable entry point to serve the remote API.
 
 * `saw-python` - a Python client for the remote API.
 

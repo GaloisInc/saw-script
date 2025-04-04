@@ -16,7 +16,8 @@ import Data.Parameterized.Classes (knownRepr)
 import Lang.Crucible.CFG.Common (freshGlobalVar)
 import SAWCentral.Crucible.Common.MethodSpec (GhostGlobal)
 
-import SAWServer
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer
 import SAWServer.OK
 
 createGhostVariableDescr :: Doc.Block

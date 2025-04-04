@@ -15,7 +15,7 @@ import SAWCentral.Crucible.MIR.Builtins (mir_find_adt)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer
+import SAWServer.SAWServer
     ( SAWState,
       ServerName,
       sawEnv,

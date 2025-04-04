@@ -10,7 +10,8 @@ import Data.Aeson (withObject, withText, (.:))
 
 import qualified Mir.Mir as Mir
 
-import SAWServer (SAWEnv, ServerName, getMIRAdtEither)
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer (SAWEnv, ServerName, getMIRAdtEither)
 
 data MIRTypeTag
   = TagAdt

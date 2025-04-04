@@ -16,7 +16,8 @@ import SAWCentral.Value
 import qualified Argo
 import qualified Argo.Doc as Doc
 
-import SAWServer ( SAWState, sawTopLevelRW )
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer ( SAWState, sawTopLevelRW )
 import SAWServer.OK ( OK, ok )
 
 

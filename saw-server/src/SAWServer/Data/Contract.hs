@@ -20,7 +20,8 @@ import Data.Text (Text)
 
 import SAWCentral.Crucible.Common.Setup.Builtins (CheckPointsToType(..))
 
-import SAWServer
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer
 import SAWServer.Data.SetupValue ()
 
 -- | How to use a contract: as a verification goal or an assumption.
