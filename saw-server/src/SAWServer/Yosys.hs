@@ -23,7 +23,7 @@ import qualified Argo.Doc as Doc
 
 import CryptolServer.Data.Expression (Expression(..), getCryptolExpr)
 
-import SAWServer (SAWState, ServerName (ServerName), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential, sawTopLevelRW)
+import SAWServer.SAWServer (SAWState, ServerName (ServerName), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential, sawTopLevelRW)
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions (notAtTopLevel)
 import SAWServer.OK (OK, ok)

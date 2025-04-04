@@ -59,7 +59,9 @@ import CryptolSAWCore.TypedTerm (TypedTerm)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer as Server
+
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer as Server
     ( ServerName(..),
       SAWState,
       CrucibleSetupVal(..),

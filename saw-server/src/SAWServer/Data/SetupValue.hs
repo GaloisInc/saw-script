@@ -6,7 +6,8 @@ module SAWServer.Data.SetupValue (CrucibleSetupVal) where
 import Control.Applicative
 import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?))
 
-import SAWServer
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer
 
 data SetupValTag
   = TagNamedValue

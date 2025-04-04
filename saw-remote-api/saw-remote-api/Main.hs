@@ -7,7 +7,7 @@ import qualified Argo
 import qualified Argo.DefaultMain as Argo (defaultMain)
 import qualified Argo.Doc as Doc
 
-import SAWServer ( SAWState, initialState )
+import SAWServer.SAWServer ( SAWState, initialState )
 import SAWServer.ClearState
     ( clearStateDescr,
       clearState,
