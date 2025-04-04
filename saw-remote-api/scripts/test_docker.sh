@@ -16,7 +16,7 @@ TAG=${1:-saw-remote-api}
 ( cd "$DIR";
   docker run --name=saw-remote-api -d \
     --env CLASSPATH=/home/saw/tests/saw/test-files \
-    -v $PWD/python/tests/saw/test-files:/home/saw/tests/saw/test-files \
+    -v $PWD/../saw-python/tests/saw/test-files:/home/saw/tests/saw/test-files \
     -p 8080:8080 \
     "$TAG";
 
@@ -28,7 +28,7 @@ TAG=${1:-saw-remote-api}
 
 sleep 5 # let the server catch its breath and be ready for requests
 
-( cd "$DIR/python";
+( cd "$DIR/../saw-python";
 
   NUM_FAILS=0;
   function run_test {

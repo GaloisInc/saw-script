@@ -237,7 +237,9 @@ The top-level repository directories are:
 * `saw` - Source for the `saw` executable.
 
 * `saw-remote-api` - Source for a server that provides a remote API to
-  SAW based on JSON-RPC, and a Python client for that API.
+  SAW based on JSON-RPC.
+
+* `saw-python` - a Python client for the remote API.
 
 * `crucible-mir-comp` - Support library for crux-mir-comp.
 
@@ -293,8 +295,8 @@ Other user-facing documentation includes the top-level
 not all) of the assorted other READMEs and change logs scattered about
 the saw-script tree.
 The most notable of these are the
-[saw-remote-api/python/README.md](README) and
-[saw-remote-api/python/CHANGES.md](change log)
+[saw-python/README.md](README) and
+[saw-python/CHANGES.md](change log)
 for the Python bindings.
 Systematizing these so that the intended user-facing documents are
 easily found is on the near-term agenda.

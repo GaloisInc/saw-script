@@ -20,7 +20,7 @@ git submodule update --init
 ```
 4. Navigate to the python client
 ```
-cd saw-remote-api/python
+cd saw-python
 ```
 5. Install and setup some version of the `saw-remote-api` server and update any
    relevant environment variables as needed (see `saw_client.connect()` documentation
@@ -58,10 +58,10 @@ $ git submodule update --init
 ```
 
 Then, use [`poetry`](https://python-poetry.org/docs/#installation) to install
-the python client from the `saw-remote-api/python` directory:
+the python client from the `saw-python` directory:
 
 ```
-$ cd saw-remote-api/python
+$ cd saw-python
 $ poetry install
 ```
 
@@ -160,7 +160,7 @@ Python (>= v3.8) client can be installed using
 [`poetry`](https://python-poetry.org/docs/#installation) as follows:
 
 ```
-$ cd saw-remote-api/python
+$ cd saw-python
 $ poetry install
 ```
 
@@ -203,4 +203,4 @@ guarantee any previous state on the server is cleared.
 
 ## Python Version Support
 
-Currently, `saw-remote-api` officially supports python `3.12`.
+Currently, `saw-python` officially supports python `3.12`.
