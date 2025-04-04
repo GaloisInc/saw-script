@@ -27,7 +27,7 @@ RUN mkdir -p /home/saw/.ghcup && \
 RUN cabal v2-update
 RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
-RUN cp $(cabal v2-exec which saw) /home/saw/rootfs/usr/local/bin/saw
+RUN cp $(cabal -v0 list-bin exe:saw) /home/saw/rootfs/usr/local/bin/saw
 WORKDIR /home/saw//rootfs/usr/local/bin
 # The URL here is based on the same logic used to specify BUILD_TARGET_OS and
 # BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to x86-64

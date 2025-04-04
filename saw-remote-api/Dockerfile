@@ -26,7 +26,7 @@ RUN mkdir -p /home/saw/.ghcup && \
     ghcup set ghc 9.4.8
 RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
-RUN cp $(cabal v2-exec which saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
+RUN cp $(cabal -v0 list-bin exe:saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
 WORKDIR /home/saw//rootfs/usr/local/bin
 # The URL here is based on the same logic used to specify BUILD_TARGET_OS and
 # BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to x86-64
