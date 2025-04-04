@@ -11,7 +11,7 @@ import SAWCentral.Value ( TopLevel, runTopLevel, IsValue(..), FromValue(..) )
 
 import qualified Argo
 import CryptolServer.Exceptions (cryptolError)
-import SAWServer ( SAWState, sawTopLevelRO, sawTopLevelRW )
+import SAWServer.SAWServer ( SAWState, sawTopLevelRO, sawTopLevelRW )
 import SAWServer.CryptolExpression (CryptolModuleException(..))
 import SAWServer.Exceptions ( verificationException )
 

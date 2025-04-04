@@ -43,7 +43,9 @@ import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
 import qualified Argo
 import CryptolServer.Data.Expression (Expression, getCryptolExpr)
 import CryptolServer.Exceptions (cryptolError)
-import SAWServer
+
+-- XXX why are we importing what's theoretically the top-level interface from inside?
+import SAWServer.SAWServer
 
 getTypedTerm :: Expression -> Argo.Command SAWState TypedTerm
 getTypedTerm inputExpr =

@@ -34,7 +34,7 @@ import CryptolServer.Data.Expression ( Expression(..), Encoding(..), getCryptolE
 import qualified SAWCentral.Builtins as SB
 import qualified SAWCentral.Value as SV
 import qualified SAWCentral.Proof as PF
-import SAWServer
+import SAWServer.SAWServer
     ( ServerVal(VSimpset),
       ServerName,
       SAWState,

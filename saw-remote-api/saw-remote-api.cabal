@@ -71,42 +71,10 @@ common deps
 
   default-language: Haskell2010
 
-library
-  import: deps, warnings, errors
-  hs-source-dirs: src
-  exposed-modules: SAWServer,
-                   SAWServer.ClearState,
-                   SAWServer.CryptolExpression,
-                   SAWServer.CryptolSetup,
-                   SAWServer.Data.Contract,
-                   SAWServer.Data.JVMType,
-                   SAWServer.Data.LLVMType,
-                   SAWServer.Data.MIRType,
-                   SAWServer.Data.SetupValue,
-                   SAWServer.Eval,
-                   SAWServer.Exceptions,
-                   SAWServer.Ghost,
-                   SAWServer.JVMCrucibleSetup,
-                   SAWServer.JVMVerify,
-                   SAWServer.LLVMCrucibleSetup,
-                   SAWServer.LLVMVerify,
-                   SAWServer.MIRCrucibleSetup,
-                   SAWServer.MIRFindADT,
-                   SAWServer.MIRVerify,
-                   SAWServer.NoParams,
-                   SAWServer.OK,
-                   SAWServer.ProofScript,
-                   SAWServer.SaveTerm,
-                   SAWServer.SetOption,
-                   SAWServer.TopLevel,
-                   SAWServer.TrackFile,
-                   SAWServer.VerifyCommon,
-                   SAWServer.Yosys
-
 executable saw-remote-api
   import: general, deps, warnings, errors
   main-is:             Main.hs
-  build-depends:       saw-remote-api
+  build-depends:       saw-script:saw-server
   -- other-modules:
   -- other-extensions:
   hs-source-dirs: saw-remote-api

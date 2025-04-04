@@ -20,7 +20,7 @@ import SAWCentral.Value (rwCryptol)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer
+import SAWServer.SAWServer
     ( SAWState,
       SAWTask(LLVMCrucibleSetup),
       sawBIC,

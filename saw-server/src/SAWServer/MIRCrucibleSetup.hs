@@ -51,7 +51,7 @@ import CryptolSAWCore.TypedTerm (TypedTerm)
 
 import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer
+import SAWServer.SAWServer
     ( ServerName(..),
       SAWEnv,
       SAWState,

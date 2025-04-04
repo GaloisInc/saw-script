@@ -13,7 +13,7 @@ import Prelude hiding (mod)
 import Data.Aeson (FromJSON(..), withObject, (.:))
 
 import CryptolServer.Data.Expression ( Expression )
-import SAWServer ( ServerName )
+import SAWServer.SAWServer ( ServerName )
 import SAWServer.Data.Contract ( Contract )
 import SAWServer.OK ( OK )
 import SAWServer.ProofScript ( ProofScript )
