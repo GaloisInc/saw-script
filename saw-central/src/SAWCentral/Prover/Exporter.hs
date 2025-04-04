@@ -69,12 +69,12 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule,
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule,
                                 ImportPrimitiveOptions(..), mkCryEnv)
-import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
-import Verifier.SAW.Cryptol.PreludeM (cryptolMModule, specMModule,
+import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import CryptolSAWCore.PreludeM (cryptolMModule, specMModule,
                                       scLoadSpecMModule, scLoadCryptolMModule)
-import Verifier.SAW.Cryptol.Monadify (defaultMonEnv, monadifyCryptolModule)
+import CryptolSAWCore.Monadify (defaultMonEnv, monadifyCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Module (emptyModule, moduleDecls)
@@ -84,7 +84,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm as SC
 import qualified SAWCoreCoq.Coq as Coq
 import Verifier.SAW.TypedAST (mkModuleName, toShortName)
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim

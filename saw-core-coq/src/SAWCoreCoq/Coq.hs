@@ -36,8 +36,8 @@ import qualified SAWCoreCoq.SAWModule        as SAWModuleTranslation
 import           SAWCoreCoq.Monad
 import           SAWCoreCoq.SpecialTreatment
 import qualified SAWCoreCoq.Term             as TermTranslation
-import           Verifier.SAW.TypedTerm
-import           Verifier.SAW.Cryptol (Env)
+import           CryptolSAWCore.TypedTerm
+import           CryptolSAWCore.Cryptol (Env)
 
 text :: String -> Doc ann
 text = pretty

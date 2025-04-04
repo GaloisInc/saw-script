@@ -41,7 +41,7 @@ import Lang.Crucible.LLVM.ArraySizeProfile
 import qualified Lang.Crucible.LLVM.MemType as C.LLVM
 import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Value
 import SAWCentral.Crucible.Common.MethodSpec

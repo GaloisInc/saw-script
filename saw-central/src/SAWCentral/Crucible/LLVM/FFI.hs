@@ -71,12 +71,12 @@ import           SAWCentral.Crucible.LLVM.MethodSpecIR
 import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWCentral.Value
-import           Verifier.SAW.CryptolEnv
+import           CryptolSAWCore.CryptolEnv
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Prelude
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm as Term
-import           Verifier.SAW.TypedTerm
+import           CryptolSAWCore.TypedTerm
 
 -- | Commonly used things that need to be passed around.
 data FFISetupCtx = FFISetupCtx

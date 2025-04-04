@@ -25,7 +25,7 @@ import qualified Data.Map as Map
 
 import qualified What4.ProgramLoc as W4
 
-import           Verifier.SAW.TypedTerm (TypedTerm)
+import           CryptolSAWCore.TypedTerm (TypedTerm)
 
 import           SAWCentral.Value
 

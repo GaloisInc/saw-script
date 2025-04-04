@@ -120,7 +120,7 @@ import qualified Data.BitVector.Sized as BV
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Recognizer
-import           Verifier.SAW.TypedTerm
+import           CryptolSAWCore.TypedTerm
 import           Verifier.SAW.Simulator.TermModel
 import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 

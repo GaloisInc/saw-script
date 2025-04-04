@@ -26,10 +26,10 @@ import qualified Data.AIG.Operations as AIG
 
 import qualified SAWVersion.Version as Version
 
-import qualified Verifier.SAW.Cryptol as C
+import qualified CryptolSAWCore.Cryptol as C
 import           Verifier.SAW.SharedTerm
-import qualified Verifier.SAW.Cryptol.Prelude as C
-import           Verifier.SAW.CryptolEnv (schemaNoUser, meSolverConfig)
+import qualified CryptolSAWCore.Prelude as C
+import           CryptolSAWCore.CryptolEnv (schemaNoUser, meSolverConfig)
 
 
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim

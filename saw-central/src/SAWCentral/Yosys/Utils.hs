@@ -31,7 +31,7 @@ import qualified Data.Graph as Graph
 import Text.Encoding.Z (zEncodeString)
 
 import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.TypedTerm as SC
+import qualified CryptolSAWCore.TypedTerm as SC
 import qualified Verifier.SAW.SCTypeCheck as SC.TC
 
 import qualified Cryptol.TypeCheck.Type as C

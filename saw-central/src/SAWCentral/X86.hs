@@ -132,8 +132,8 @@ import Verifier.SAW.Recognizer(asBool)
 import Verifier.SAW.Simulator.What4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
 
 -- Cryptol Verifier
-import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
-import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
+import CryptolSAWCore.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
+import CryptolSAWCore.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWCentral
 import SAWCentral.X86Spec hiding (Prop)

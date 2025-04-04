@@ -142,7 +142,7 @@ import           Mir.Intrinsics (MIR)
 import qualified Cryptol.TypeCheck.Type as Cryptol (Schema)
 import qualified Cryptol.Utils.PP as Cryptol
 
-import           Verifier.SAW.TypedTerm as SAWVerifier
+import           CryptolSAWCore.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.Simulator.What4.ReturnTrip as SAWVerifier
 

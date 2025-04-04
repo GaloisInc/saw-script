@@ -31,7 +31,7 @@ import qualified Data.Graph as Graph
 import Numeric.Natural (Natural)
 
 import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.TypedTerm as SC
+import qualified CryptolSAWCore.TypedTerm as SC
 import qualified Verifier.SAW.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C

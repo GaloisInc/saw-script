@@ -30,10 +30,10 @@ import qualified Text.URI as URI
 
 import qualified Verifier.SAW.Cache as SC
 import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.TypedTerm as SC
+import qualified CryptolSAWCore.TypedTerm as SC
 import qualified Verifier.SAW.Recognizer as R
 
-import qualified Verifier.SAW.Cryptol as CSC
+import qualified CryptolSAWCore.Cryptol as CSC
 
 import qualified Cryptol.TypeCheck.Type as C
 

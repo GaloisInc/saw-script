@@ -67,7 +67,7 @@ import qualified What4.Solver.Yices as Yices
 import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
 
 -- cryptol-saw-core
-import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(..))
+import CryptolSAWCore.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(..))
 
 -- saw-core-what4
 import Verifier.SAW.Simulator.What4.ReturnTrip

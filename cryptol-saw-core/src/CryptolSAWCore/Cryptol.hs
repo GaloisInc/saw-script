@@ -9,7 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
-Module      : Verifier.SAW.Cryptol
+Module      : CryptolSAWCore.Cryptol
 Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -20,7 +20,7 @@ This module \'imports\' various Cryptol elements (Name,Expr,...),
 translating each to the comparable element of SAWCore.
 -}
 
-module Verifier.SAW.Cryptol
+module CryptolSAWCore.Cryptol
   ( scCryptolType
   , Env(..)
   , emptyEnv
@@ -95,15 +95,15 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck               as SC
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
+import Verifier.SAW.Name (preludeName)
 
 -- local modules:
-import Verifier.SAW.Cryptol.Panic
-import Verifier.SAW.Name (preludeName)
+import CryptolSAWCore.Panic
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
-import Verifier.SAW.Cryptol.Prelude
-import Verifier.SAW.Cryptol.PreludeM
+import CryptolSAWCore.Prelude
+import CryptolSAWCore.PreludeM
 
 $(runIO (mkSharedContext >>= \sc ->
           scLoadPreludeModule sc >> scLoadCryptolModule sc >>

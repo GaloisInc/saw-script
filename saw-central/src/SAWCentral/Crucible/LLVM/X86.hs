@@ -69,13 +69,13 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
-import Verifier.SAW.CryptolEnv
+import CryptolSAWCore.CryptolEnv
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import Verifier.SAW.SCTypeCheck (scTypeCheck)
 
 import Verifier.SAW.Simulator.What4.ReturnTrip

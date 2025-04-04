@@ -87,13 +87,13 @@ import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Pretty (MemoStyle(..))
 import Verifier.SAW.TypedAST hiding (FlatTermF(..))
-import Verifier.SAW.TypedTerm
-import qualified Verifier.SAW.CryptolEnv as CEnv
-import qualified Verifier.SAW.Cryptol.Monadify as Monadify
+import CryptolSAWCore.TypedTerm
+import qualified CryptolSAWCore.CryptolEnv as CEnv
+import qualified CryptolSAWCore.Monadify as Monadify
 
 import qualified Lang.JVM.Codebase as JCB
 
-import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
+import qualified CryptolSAWCore.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ

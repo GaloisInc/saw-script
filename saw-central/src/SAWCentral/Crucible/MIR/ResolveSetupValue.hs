@@ -94,12 +94,12 @@ import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
-import Verifier.SAW.Cryptol (importType, emptyEnv)
+import CryptolSAWCore.Cryptol (importType, emptyEnv)
 import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Simulator.What4.ReturnTrip
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS

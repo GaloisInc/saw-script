@@ -49,7 +49,7 @@ import Verifier.SAW.Term.CtxTerm (MonadTerm(..))
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer hiding ((:*:))
-import Verifier.SAW.Cryptol.Monadify
+import CryptolSAWCore.Monadify
 
 
 ----------------------------------------------------------------------

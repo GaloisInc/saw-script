@@ -10,7 +10,7 @@ module SAWCentral.BisimulationTheorem
   where
 
 import qualified Cryptol.TypeCheck.Type as C
-import Verifier.SAW.TypedTerm ( TypedTerm )
+import CryptolSAWCore.TypedTerm ( TypedTerm )
 
 -- | A proved bisimulation theorem.  See the comment at the top of
 -- "SAWCentral.Bisimulation" for an explanation of some of the terms used here.

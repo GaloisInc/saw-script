@@ -43,9 +43,9 @@ import SAWCentral.Crucible.JVM.Builtins
 import SAWCentral.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
 import SAWCentral.JavaExpr (JavaType(..))
 import SAWCentral.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
-import qualified Verifier.SAW.CryptolEnv as CEnv
-import Verifier.SAW.CryptolEnv (CryptolEnv)
-import Verifier.SAW.TypedTerm (TypedTerm)
+import qualified CryptolSAWCore.CryptolEnv as CEnv
+import CryptolSAWCore.CryptolEnv (CryptolEnv)
+import CryptolSAWCore.TypedTerm (TypedTerm)
 
 import qualified Argo
 import qualified Argo.Doc as Doc

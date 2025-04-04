@@ -16,7 +16,7 @@ import qualified Data.Map as Map
 
 import Cryptol.Utils.Ident (mkIdent)
 
-import qualified Verifier.SAW.CryptolEnv as CEnv
+import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified Argo
 import qualified Argo.Doc as Doc

@@ -58,7 +58,7 @@ import Verifier.SAW.SCTypeCheck
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Module (Def(..))
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Cryptol.Monadify
+import CryptolSAWCore.Monadify
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Proof (Sequent, SolveResult)
 import SAWCentral.Value (TopLevel)

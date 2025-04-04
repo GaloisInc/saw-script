@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.CryptolEnv
+Module      : CryptolSAWCore.CryptolEnv
 Description : Context for interpreting Cryptol within SAW-Script.
 License     : BSD3
 Maintainer  : huffman
@@ -10,7 +10,7 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Verifier.SAW.CryptolEnv
+module CryptolSAWCore.CryptolEnv
   ( ImportVisibility(..)
   , CryptolEnv(..)
   , initCryptolEnv
@@ -60,12 +60,12 @@ import System.Environment (lookupEnv)
 import System.Environment.Executable (splitExecutablePath)
 import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
-import Verifier.SAW.Cryptol.Panic
+import CryptolSAWCore.Panic
 import Verifier.SAW.Name (ecName)
 import Verifier.SAW.Recognizer (asConstant)
 import Verifier.SAW.SharedTerm (NameInfo, SharedContext, Term, incVars)
 
-import qualified Verifier.SAW.Cryptol as C
+import qualified CryptolSAWCore.Cryptol as C
 
 import qualified Cryptol.Eval as E
 import qualified Cryptol.Parser as P
@@ -102,7 +102,7 @@ import Cryptol.Utils.Ident (Ident, preludeName, arrayName, preludeReferenceName
 import Cryptol.Utils.Logger (quietLogger)
 
 --import SAWScript.REPL.Monad (REPLException(..))
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import Cryptol.ModuleSystem.Env (ModContextParams(NoParams))
 -- import SAWCentral.AST (Located(getVal, locatedPos), Import(..))
 

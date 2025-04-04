@@ -113,7 +113,7 @@ import           SAWCentral.Proof (TheoremNonce)
 
 import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.TypedTerm
+import           CryptolSAWCore.TypedTerm
 
 --------------------------------------------------------------------------------
 -- ** Language features

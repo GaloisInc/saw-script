@@ -26,7 +26,7 @@ import qualified Cryptol.TypeCheck.AST as AST
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP
 
-import Verifier.SAW.CryptolEnv( meSolverConfig )
+import CryptolSAWCore.CryptolEnv( meSolverConfig )
 
 
 -- | Parse a Cryptol module into a list of declarations

@@ -88,7 +88,7 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 import System.Exit (ExitCode)
 
 import Verifier.SAW.SharedTerm (Term)
-import Verifier.SAW.CryptolEnv
+import CryptolSAWCore.CryptolEnv
 import qualified Data.AIG as AIG
 import qualified Data.AIG.CompactGraph as AIG
 

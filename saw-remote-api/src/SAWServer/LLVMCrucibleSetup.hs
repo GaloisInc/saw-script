@@ -53,9 +53,9 @@ import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS (GhostGlobal)
 import SAWCentral.Value
     ( BuiltinContext, LLVMCrucibleSetupM(..), TopLevelRW(..), biSharedContext )
-import qualified Verifier.SAW.CryptolEnv as CEnv
-import Verifier.SAW.CryptolEnv (CryptolEnv)
-import Verifier.SAW.TypedTerm (TypedTerm)
+import qualified CryptolSAWCore.CryptolEnv as CEnv
+import CryptolSAWCore.CryptolEnv (CryptolEnv)
+import CryptolSAWCore.TypedTerm (TypedTerm)
 
 import qualified Argo
 import qualified Argo.Doc as Doc

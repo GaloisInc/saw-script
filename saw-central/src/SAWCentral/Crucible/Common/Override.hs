@@ -107,7 +107,7 @@ import           Data.Parameterized.TraversableFC (toListFC)
 import           Verifier.SAW.Prelude as SAWVerifier (scEq)
 import           Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.TypedAST as SAWVerifier
-import           Verifier.SAW.TypedTerm as SAWVerifier
+import           CryptolSAWCore.TypedTerm as SAWVerifier
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 

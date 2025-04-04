@@ -92,14 +92,14 @@ library cryptol-saw-core
 
   hs-source-dirs: cryptol-saw-core/src
   exposed-modules:
-     Verifier.SAW.Cryptol
-     Verifier.SAW.Cryptol.Panic
-     Verifier.SAW.Cryptol.Prelude
-     Verifier.SAW.Cryptol.PreludeM
-     Verifier.SAW.Cryptol.Simpset
-     Verifier.SAW.Cryptol.Monadify
-     Verifier.SAW.CryptolEnv
-     Verifier.SAW.TypedTerm
+     CryptolSAWCore.Cryptol
+     CryptolSAWCore.CryptolEnv
+     CryptolSAWCore.Monadify
+     CryptolSAWCore.Panic
+     CryptolSAWCore.Prelude
+     CryptolSAWCore.PreludeM
+     CryptolSAWCore.Simpset
+     CryptolSAWCore.TypedTerm
   -- GHC-options: -Wall -Werror
   GHC-options: -Wall
 

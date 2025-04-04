@@ -14,11 +14,11 @@ import Text.Heredoc (there)
 import qualified Cryptol.ModuleSystem.Name as N
 import qualified Cryptol.Utils.Ident as N
 
-import qualified Verifier.SAW.Cryptol as C
+import qualified CryptolSAWCore.Cryptol as C
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.SCTypeCheck as TC
-import qualified Verifier.SAW.Cryptol.Prelude as C
-import qualified Verifier.SAW.CryptolEnv as CEnv
+import qualified CryptolSAWCore.Prelude as C
+import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 main :: IO ()
 main =

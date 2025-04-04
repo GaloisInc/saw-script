@@ -67,7 +67,7 @@ import           Data.Set (Set)
 
 import           What4.ProgramLoc (ProgramLoc)
 
-import           Verifier.SAW.TypedTerm
+import           CryptolSAWCore.TypedTerm
 
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
