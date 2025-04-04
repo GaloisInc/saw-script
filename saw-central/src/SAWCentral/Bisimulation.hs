@@ -95,10 +95,10 @@ import SAWCentral.Proof
 import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
 
-import qualified Verifier.SAW.Cryptol as C
+import qualified CryptolSAWCore.Cryptol as C
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import Verifier.SAW.Recognizer
 
 -- State used to facilitate the replacement of a 'Constant' application in a

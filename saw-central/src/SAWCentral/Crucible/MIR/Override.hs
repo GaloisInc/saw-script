@@ -73,7 +73,7 @@ import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip (saw_ctx, toSC)
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 import SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS

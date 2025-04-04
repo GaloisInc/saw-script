@@ -23,7 +23,7 @@ import qualified Data.Text as Text
 import Prettyprinter
 
 -- import qualified Language.Coq.Pretty as Coq
--- import Verifier.SAW.CryptolEnv
+-- import CryptolSAWCore.CryptolEnv
 import Verifier.SAW.Module
 import Verifier.SAW.Prelude (preludeModule)
 import Verifier.SAW.SharedTerm

@@ -55,7 +55,7 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
+import qualified CryptolSAWCore.Simpset as Cryptol
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
@@ -74,9 +74,9 @@ import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 
-import Verifier.SAW.Cryptol (importType, emptyEnv)
+import CryptolSAWCore.Cryptol (importType, emptyEnv)
 import Verifier.SAW.Name
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 import Verifier.SAW.Simulator.What4
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import qualified Text.LLVM.DebugUtils as L

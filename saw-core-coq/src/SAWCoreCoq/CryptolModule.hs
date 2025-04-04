@@ -15,8 +15,8 @@ import           Verifier.SAW.Term.Functor          (Term)
 import           Verifier.SAW.SharedTerm            (SharedContext)
 import           SAWCoreCoq.Monad
 import qualified SAWCoreCoq.Term  as TermTranslation
-import           Verifier.SAW.TypedTerm
-import           Verifier.SAW.Cryptol (Env)
+import           CryptolSAWCore.TypedTerm
+import           CryptolSAWCore.Cryptol (Env)
 
 
 -- | Translate a list of named terms with their types to a Coq definitions

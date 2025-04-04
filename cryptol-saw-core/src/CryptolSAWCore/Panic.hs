@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Verifier.SAW.Cryptol.Panic
+module CryptolSAWCore.Panic
  ( panic, unimplemented )
  where
 

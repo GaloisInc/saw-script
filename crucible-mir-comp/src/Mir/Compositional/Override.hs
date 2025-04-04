@@ -49,7 +49,7 @@ import qualified Verifier.SAW.Prelude as SAW
 import qualified Verifier.SAW.Recognizer as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Term.Functor as SAW
-import qualified Verifier.SAW.TypedTerm as SAW
+import qualified CryptolSAWCore.TypedTerm as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Override as MS

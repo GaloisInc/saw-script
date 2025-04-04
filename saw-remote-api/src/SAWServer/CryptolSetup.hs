@@ -19,7 +19,7 @@ import qualified Data.Text as T
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName)
 import SAWCentral.Value (biSharedContext, rwCryptol)
-import qualified Verifier.SAW.CryptolEnv as CEnv
+import qualified CryptolSAWCore.CryptolEnv as CEnv
 
 import qualified Argo
 import qualified Argo.Doc as Doc

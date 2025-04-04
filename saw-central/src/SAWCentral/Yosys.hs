@@ -48,7 +48,7 @@ import qualified Text.URI as URI
 import qualified Data.Parameterized.Nonce as Nonce
 
 import qualified Verifier.SAW.SharedTerm as SC
-import qualified Verifier.SAW.TypedTerm as SC
+import qualified CryptolSAWCore.TypedTerm as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 import qualified Cryptol.Utils.Ident as C

@@ -1,12 +1,12 @@
 {- |
-Module      : SAWScript.TypedTerm
+Module      : CryptolSAWCore.TypedTerm
 Description : SAW-Core terms paired with Cryptol types.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE PatternGuards #-}
-module Verifier.SAW.TypedTerm where
+module CryptolSAWCore.TypedTerm where
 
 import Control.Monad (foldM)
 import Data.Map (Map)
@@ -19,7 +19,7 @@ import Cryptol.Utils.PP (pretty)
 import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
-import Verifier.SAW.Cryptol (scCryptolType, Env, importKind, importSchema)
+import CryptolSAWCore.Cryptol (scCryptolType, Env, importKind, importSchema)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm

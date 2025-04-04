@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Cryptol.Simpset
+Module      : CryptolSAWCore.Simpset
 Copyright   : Galois, Inc. 2018
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -9,7 +9,7 @@ Portability : non-portable (language extensions)
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Verifier.SAW.Cryptol.Simpset
+module CryptolSAWCore.Simpset
   ( mkCryptolSimpset
   ) where
 

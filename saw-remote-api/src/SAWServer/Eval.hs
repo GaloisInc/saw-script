@@ -24,7 +24,7 @@ import Data.Aeson
 import qualified Argo
 import qualified Argo.Doc as Doc
 import CryptolServer.Data.Expression ( Expression(..), getCryptolExpr )
-import Verifier.SAW.TypedTerm (TypedTerm)
+import CryptolSAWCore.TypedTerm (TypedTerm)
 import qualified SAWCentral.Builtins as SB
 import qualified SAWCentral.Value as SV
 import SAWServer

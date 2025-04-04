@@ -75,7 +75,7 @@ import Text.Read hiding (lift)
 
 import Lang.JVM.Codebase as JSS
 
-import Verifier.SAW.Cryptol
+import CryptolSAWCore.Cryptol
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (toShortName)

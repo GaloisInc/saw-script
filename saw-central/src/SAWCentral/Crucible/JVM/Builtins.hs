@@ -111,7 +111,7 @@ import qualified Data.Parameterized.Context as Ctx
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
+import CryptolSAWCore.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 

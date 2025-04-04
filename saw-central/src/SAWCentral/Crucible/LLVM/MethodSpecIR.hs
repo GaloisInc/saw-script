@@ -140,7 +140,7 @@ import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 import           SAWCentral.Crucible.LLVM.Setup.Value
 
-import           Verifier.SAW.TypedTerm
+import           CryptolSAWCore.TypedTerm
 
 
 --------------------------------------------------------------------------------
