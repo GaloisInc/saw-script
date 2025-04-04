@@ -208,6 +208,10 @@ The top-level repository directories are:
 
 * `cve-reports` - Infrastructure for security audits of dependencies.
 
+* `vim-saw` - Support bits for using vim.
+
+* `saw-version` - A library encapsulating the build version data.
+
 * `rme` - A library implementing a Reed-Muller Expansion datatype for
   representing Boolean formulas.
 
@@ -232,14 +236,18 @@ The top-level repository directories are:
 
 * `heapster` - The Heapster tool.
 
-* `src` - A library containing the bulk of SAW, including the SAWScript interpreter.
+* `saw-central` - A library containing the bulk of SAW.
 
-* `saw` - Source for the `saw` executable.
+* `saw-script` - A library containing the SAWScript interpreter.
 
 * `saw-server` - Library source for a server that provides a remote API to
   SAW based on JSON-RPC.
 
+* `saw` - Source for the `saw` executable.
+
 * `saw-remote-api` - Executable entry point to serve the remote API.
+
+* `saw-tools` - Additional executables.
 
 * `saw-python` - a Python client for the remote API.
 
@@ -254,6 +262,8 @@ The top-level repository directories are:
 
 * `s2nTests` - Additional tests for SAWScript, confirming that
   verifications involving the s2n library continue to work.
+
+* `otherTests` - Some further tests for individual components.
 
 * `dist-newstyle` - Transient build directory used by `cabal`.
 
