@@ -154,7 +154,7 @@ These are pieces of documentation in `saw-script` that are _not_ part of the
 
 - `saw-core/doc/`: A lone TeX file, presumably describing formalism related to
   the SAWCore intermediate representation
-- `saw-remote-api/docs/`: An old Sphinx setup for SAW's Python remote API
+- `saw-server/docs/`: An old Sphinx setup for SAW's Python remote API
 
 ### Adding new materials
 

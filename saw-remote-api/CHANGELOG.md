@@ -26,7 +26,7 @@ Nothing yet.
     without performing any verification.
 
   See the [remote API
-  documentation](https://github.com/GaloisInc/saw-script/blob/master/saw-remote-api/docs/SAW.rst#sawmirload-module-command)
+  documentation](https://github.com/GaloisInc/saw-script/blob/master/saw-server/docs/SAW.rst#sawmirload-module-command)
   for more detailed APIs for each of these commands. For more information about
   how SAW's MIR verification support works in general, see the `mir_*` commands
   documented in the [SAW
