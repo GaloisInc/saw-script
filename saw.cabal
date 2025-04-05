@@ -27,8 +27,8 @@ extra-source-files:
 
 -- extra files for heapster
 extra-source-files:
-    heapster-saw/src/Heapster/Lexer.x
-    heapster-saw/src/Heapster/Parser.y
+    heapster/src/Heapster/Lexer.x
+    heapster/src/Heapster/Parser.y
 
 -- extra files for saw-script
 extra-source-files:
@@ -421,7 +421,7 @@ library heapster
     -- internal sublibraries in the saw tree
     saw:saw-core
 
-  hs-source-dirs: heapster-saw/src
+  hs-source-dirs: heapster/src
   exposed-modules:
     Heapster.CruUtil
     Heapster.GenMonad
@@ -1112,7 +1112,7 @@ test-suite prover_tests
   type: exitcode-stdio-1.0
   default-language: Haskell2010
 
-  hs-source-dirs: heapster-saw/proverTests
+  hs-source-dirs: heapster/proverTests
   main-is: Main.hs
 
   build-depends:
