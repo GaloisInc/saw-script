@@ -152,8 +152,10 @@ liftProp (t, fns, j) = (t, fns, j + 1)
 
 -- | Increment dangling bound variables of all types [MT: 'types', really?]
 --   in environment.
+
 --
 --   FIXME:MT:doc: What does the above mean?!  dangling==loose,
+--   FIXME[C]: 'lift' is overloaded/overused.  Is this De Bruijn terminology??
 
 liftEnv :: Env -> Env
 liftEnv env =
@@ -2109,9 +2111,10 @@ genCodeForEnum sc env nt cs =
 
   -- add typeParameters to env:
   env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env typeParameters
+    -- FIXME: bindTParam and scLocalVar both create new vars.
 
   let
-     -- | add a type Abstraction for each tp in typeParameters
+     -- | add a type Abstraction for each type in typeParameters.
      addTypeAbstractions :: Term -> IO Term
      addTypeAbstractions t =
         Fold.foldrM
@@ -2120,6 +2123,7 @@ genCodeForEnum sc env nt cs =
                     scLambda sc (tparamToLocalName tp) k t')
           t
           typeParameters
+        -- FIXME[F]: broken: doesn't work when these occur under lambdas!
 
      -- | the elimination of `addTypeAbstractions`, assumes no
      --   intervening lambdas.
@@ -2185,8 +2189,8 @@ genCodeForEnum sc env nt cs =
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
   -------------------------------------------------------------
-  -- Create needed SawCore types for the constructors:
-  --  - Each Either in the nested Either's needs a pair of types
+  -- Create needed SawCore types for the Left/Right constructors;
+  -- each Either in the nested Either's needs a pair of types:
 
   tps <- flip mapM [0..length cs - 1] $ \i->
            do
@@ -2207,16 +2211,6 @@ genCodeForEnum sc env nt cs =
   -------------------------------------------------------------
   -- Code to do *just* the injection into the Sum type:
 
-{-
-  f 0 x = Left (tps!0) x
-  f 1 x = Right (tps!0) (Left (tps!1))
-  f n x = Right (tps!0) $ Right (tps!1) $ Left (tps!n)
-
-  inj n x = injRight (n-1) (Left (tps!n))
-
-  injRight 0 x = x
-  injRight n x = injRight (n-1) (Right tps!n x)
--}
   let
       scInjectRight :: Int -> Term -> IO Term
       scInjectRight n x | n <= 0    = return x
@@ -2246,8 +2240,6 @@ genCodeForEnum sc env nt cs =
         -- SAWCore code.
 
         -- create the vars (& names) for constructor arguments
-
-        -- create vars (& names) for constructor arguments
         paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
         let paramNames = map (\x-> Text.pack ("x" ++ show x))
                              (take numArgs [(0 ::Int)..])
@@ -2258,12 +2250,10 @@ genCodeForEnum sc env nt cs =
         conBody2 <- scLambdaList sc
                       (zip paramNames scConArgTypes)
                       conBody1
-        return (conName, conBody2)
+        conBody3 <- addTypeAbstractions conBody2
+        return (conName, conBody3)
 
   ctors <- flip mapM (zip typeListEachCtor cs) $ \(scConArgTypes,ctor)->
-            do
-            (nm,rhs) <- mkConstructor scConArgTypes ctor
-            rhs' <- addTypeAbstractions rhs
-            return (nm, rhs')
+             mkConstructor scConArgTypes ctor
 
   return ctors
