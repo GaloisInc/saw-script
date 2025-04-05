@@ -19,6 +19,11 @@ extra-source-files:
     cryptol-saw-core/saw/SpecM.sawcore
     cryptol-saw-core/saw/CryptolM.sawcore
 
+-- extra files for heapster
+extra-source-files:
+    heapster-saw/src/Heapster/Lexer.x
+    heapster-saw/src/Heapster/Parser.y
+
 -- extra files for saw-script
 extra-source-files:
     saw-script/src/SAWScript/Parser.y
