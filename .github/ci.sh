@@ -36,6 +36,8 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
+  # Run build.sh to capture the git info so we can do plain cabal builds
+  ./build.sh gitrev
   # Configure with --disable-documentation and --haddock-internal so
   # that the haddock run later, if enabled, doesn't recompile the
   # world by using those flags. (See haddock() below for discussion of
