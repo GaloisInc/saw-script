@@ -2103,18 +2103,18 @@ genCodeForEnum sc env nt cs =
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
 
-  let typeParameters = C.ntParams nt
+  let tyParamsInfo = C.ntParams nt
 
   typeArgs <- reverse <$> mapM (scLocalVar sc)
-                               (take (length typeParameters) [0..])
+                               (take (length tyParamsInfo) [0..])
     -- de Bruijn var references to the type parameters.
 
-  -- add typeParameters to env:
-  env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env typeParameters
-    -- FIXME: bindTParam and scLocalVar both create new vars.
+  -- add tyParamsInfo to env:
+  env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env tyParamsInfo
+    -- FIXME: bindTParam and scLocalVar both create new vars. A prob?
 
   let
-     -- | add a type Abstraction for each type in typeParameters.
+     -- | add a type Abstraction for each element of tyParamsInfo.
      addTypeAbstractions :: Term -> IO Term
      addTypeAbstractions t =
         Fold.foldrM
@@ -2122,14 +2122,11 @@ genCodeForEnum sc env nt cs =
                     k <- importKind sc (C.tpKind tp)
                     scLambda sc (tparamToLocalName tp) k t')
           t
-          typeParameters
+          tyParamsInfo
         -- FIXME[F]: broken: doesn't work when these occur under lambdas!
-
-     -- | the elimination of `addTypeAbstractions`, assumes no
-     --   intervening lambdas.
-     applyTypeArgs :: Term -> IO Term
-     applyTypeArgs term = scApplyAll sc term typeArgs
-     -- FIXME: dead code
+  {-
+        conBody3 <- scAbstractExts sc [t1_ec] conBody2
+  -}
 
   -------------------------------------------------------------
    -- Common naming conventions:
@@ -2161,9 +2158,9 @@ genCodeForEnum sc env nt cs =
   -------------------------------------------------------------
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
-  --  - the types maintain the same exact type vars (see typeParameters)
+  --  - the types maintain the same exact type vars (see tyParamsInfo)
 
-  tl_type  <- scFunAll sc (map (\_-> sort0) typeParameters) scListSort
+  tl_type  <- scFunAll sc (map (\_-> sort0) tyParamsInfo) scListSort
 
   (typeListEachCtor :: [[Term]]) <-
     mapM (\c-> mapM (importType sc env') (C.ecFields c)) cs
@@ -2183,7 +2180,7 @@ genCodeForEnum sc env nt cs =
   -- the Typelist(tl) applied to the [free] type arguments.
   tl_applied <- scGlobalApply sc tl_ident typeArgs
 
-  sumTy_type <- scFunAll sc (map (\_-> sort0) typeParameters) sort0
+  sumTy_type <- scFunAll sc (map (\_-> sort0) tyParamsInfo) sort0
   sumTy_rhs  <- scEithersV tl_applied >>= addTypeAbstractions
 
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
