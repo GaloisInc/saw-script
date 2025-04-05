@@ -7,13 +7,13 @@ import "Dilithium2.cry";
 //    implementation (https://github.com/pq-crystals/dilithium) - specifially,
 //    the commit `918af1a6eaedcedf9fdd8aaaca6c1fccd5a7a51f` is the latest that
 //    has been confirmed to work (NB: if you update this commit hash be sure to
-//    also update the commit hash in the `heapster-saw/examples/Makefile`)
+//    also update the commit hash in the `heapster/examples/Makefile`)
 // 2. Applying the `dilithium.patch` file provided in this directory
 // 3. Running `LLVM_COMPILER=clang make bitcode` in the `ref` directory of the
 //    patched `dilithium` repo
 // 4. Copying the `libpqcrystals_dilithium2_ref.so.bc` file generated in the
 //    `ref` directory of the patched `dilithium` repo into
-//    `heapster-saw/examples` as `dilithium2.bc`
+//    `heapster/examples` as `dilithium2.bc`
 // Run `make Dilithium2.bc` to perform these steps automatically, or see the
 // `Makefile` in this directory for more detail.
 env <- heapster_init_env "Dilithium2" "dilithium2.bc";
