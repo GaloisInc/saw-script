@@ -132,6 +132,7 @@ data Env = Env
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
               -- FIXME:MT:doc: assuming the De Bruijn indexes index this list?
+              -- FIXME:MT: this appears to be write-only!
   , envRefPrims :: Map C.PrimIdent C.Expr
   , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
   , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
@@ -2105,28 +2106,23 @@ genCodeForEnum sc env nt cs =
 
   let tyParamsInfo = C.ntParams nt
 
-  typeArgs <- reverse <$> mapM (scLocalVar sc)
-                               (take (length tyParamsInfo) [0..])
-    -- de Bruijn var references to the type parameters.
+  tyParamsECs <- flip mapM tyParamsInfo $ \tpi -> do
+                   k <- importKind sc (C.tpKind tpi)
+                   scFreshEC sc (tparamToLocalName tpi) k
+  putStrLn "MYLOG: pt1"
+  tyParamsVars <- mapM (scExtCns sc) tyParamsECs
+
+  putStrLn "MYLOG: pt2"
 
   -- add tyParamsInfo to env:
   env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env tyParamsInfo
     -- FIXME: bindTParam and scLocalVar both create new vars. A prob?
 
+  putStrLn "MYLOG: pt3"
   let
-     -- | add a type Abstraction for each element of tyParamsInfo.
-     addTypeAbstractions :: Term -> IO Term
-     addTypeAbstractions t =
-        Fold.foldrM
-          (\tp t'-> do
-                    k <- importKind sc (C.tpKind tp)
-                    scLambda sc (tparamToLocalName tp) k t')
-          t
-          tyParamsInfo
-        -- FIXME[F]: broken: doesn't work when these occur under lambdas!
-  {-
-        conBody3 <- scAbstractExts sc [t1_ec] conBody2
-  -}
+      -- | add a type abstractions for the type parameters
+      addTypeAbstractions :: Term -> IO Term
+      addTypeAbstractions t = scAbstractExts sc tyParamsECs t
 
   -------------------------------------------------------------
    -- Common naming conventions:
@@ -2155,36 +2151,46 @@ genCodeForEnum sc env nt cs =
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
 
+  putStrLn "MYLOG: pt4"
+
   -------------------------------------------------------------
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
   --  - the types maintain the same exact type vars (see tyParamsInfo)
 
   tl_type  <- scFunAll sc (map (\_-> sort0) tyParamsInfo) scListSort
+    -- FIXME: nab kinds from above
+  putStrLn "MYLOG: pt5a"
 
   (typeListEachCtor :: [[Term]]) <-
     mapM (\c-> mapM (importType sc env') (C.ecFields c)) cs
+  putStrLn "MYLOG: pt5b"
 
   sawcoreTypeEachCtor <- flip mapM typeListEachCtor $ \ts ->
                            scTupleType sc ts
 
+  putStrLn "MYLOG: pt5c"
   tl_rhs   <- do
               ls <- scMakeListSort sawcoreTypeEachCtor
               addTypeAbstractions ls
+  putStrLn "MYLOG: pt5d"
   scInsertDef sc preludeName tl_ident tl_type tl_rhs
+
+  putStrLn "MYLOG: pt5"
 
   -------------------------------------------------------------
   -- Create the definition for the Sawcore Sum (to which we map the
   -- enum type).
 
   -- the Typelist(tl) applied to the [free] type arguments.
-  tl_applied <- scGlobalApply sc tl_ident typeArgs
+  tl_applied <- scGlobalApply sc tl_ident tyParamsVars
 
   sumTy_type <- scFunAll sc (map (\_-> sort0) tyParamsInfo) sort0
   sumTy_rhs  <- scEithersV tl_applied >>= addTypeAbstractions
 
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
+  putStrLn "MYLOG: pt6"
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
   -- each Either in the nested Either's needs a pair of types:
@@ -2205,6 +2211,7 @@ genCodeForEnum sc env nt cs =
 
            return (typeLeft, typeRight)
 
+  putStrLn "MYLOG: pt7"
   -------------------------------------------------------------
   -- Code to do *just* the injection into the Sum type:
 
@@ -2250,6 +2257,7 @@ genCodeForEnum sc env nt cs =
         conBody3 <- addTypeAbstractions conBody2
         return (conName, conBody3)
 
+  putStrLn "MYLOG: pt8"
   ctors <- flip mapM (zip typeListEachCtor cs) $ \(scConArgTypes,ctor)->
              mkConstructor scConArgTypes ctor
 
