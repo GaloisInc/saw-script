@@ -835,7 +835,7 @@ Note [QuantifiedConstraints + TypeFamilies trick]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 GHC 9.2 and later are reasonably adept and combining TypeFamilies with type
 classes that have quantified superclasses. This is important, as there are
-several places in heapster-saw that require constraints of the form
+several places in heapster that require constraints of the form
 `NuMatchingAny1 (ExprExtension ext f)`, where NuMatchingAny1 has a quantified
 superclass and ExprExtension is a type family.
 
