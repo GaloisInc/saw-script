@@ -87,16 +87,23 @@ C1' as x = Left (listSortGet (ETT__LS as) 0)
 
 {-
 C0..C3:
-C0 : (a b.. : sort0)->listSortGet (ETT_TL a b..) 0 -> EithersV (ETT_TL a b..)
-C1 : (a b.. : sort0)->listSortGet (ETT_TL a b..) 1 -> EithersV (ETT_TL a b..)
-C2 : (a b.. : sort0)->listSortGet (ETT_TL a b..) 2 -> EithersV (ETT_TL a b..)
+C0 : (a b.. : sort0)->(CURRIED[listSortGet (ETT_TL a b..) 0]) -> EithersV (ETT_TL a b..)
+C1 : (a b.. : sort0)->(CURRIED[listSortGet (ETT_TL a b..) 1]) -> EithersV (ETT_TL a b..)
+C2 : (a b.. : sort0)->(CURRIED[listSortGet (ETT_TL a b..) 2]) -> EithersV (ETT_TL a b..)
 
-C0 a b.. = L (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
-C1 a b.. = R (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
+C0 a b.. = \x1 x2..->
+           L (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
+         $ C[x1,x2,...]
+C1 a b.. = \y1 y2..->
+           R (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
          $ L (listSortGet (ETT_TL a b..) 1) (EithersV (drop (ETT_TL a b..) 2))
-C2 a b.. = R (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
+         $ C[y1,y2,...]
+
+C2 a b.. = \z1 z2..->
+           R (listSortGet (ETT_TL a b..) 0) (EithersV (drop (ETT_TL a b..) 1))
          $ R (listSortGet (ETT_TL a b..) 1) (EithersV (drop (ETT_TL a b..) 2))
          $ L (listSortGet (ETT_TL a b..) 2) (EithersV (drop (ETT_TL a b..) 3))
+         $ C[z1,z2,...]
 -}
 
 -- For now (after all these TEMPESTS) just do the above ^.
