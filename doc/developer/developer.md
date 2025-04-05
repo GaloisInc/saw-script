@@ -141,6 +141,7 @@ The following can be run with `cabal test`:
 
 - `integration_tests` (this is the main test suite)
 - `cryptol-saw-core-tc-tests`
+- `saw-core-coq-tests`
 - `test-sawcore`
 - `test` (this belongs to crux-mir-comp, needs to be run specifically
   as `crux-mir-comp:test` because its name is ambiguous, and should be

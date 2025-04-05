@@ -54,14 +54,14 @@ import qualified Mir.Mir as M
 import qualified Mir.PP as M
 import Mir.Overrides (getString)
 
-import qualified Verifier.SAW.Cryptol.Prelude as SAW
-import qualified Verifier.SAW.CryptolEnv as SAW
-import qualified Verifier.SAW.SharedTerm as SAW
-import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
-import qualified Verifier.SAW.Recognizer as SAW (asExtCns)
-import qualified Verifier.SAW.TypedTerm as SAW
+import qualified CryptolSAWCore.Prelude as SAW
+import qualified CryptolSAWCore.CryptolEnv as SAW
+import qualified SAWCore.SharedTerm as SAW
+import qualified SAWCoreWhat4.ReturnTrip as SAW
+import qualified SAWCore.Recognizer as SAW (asExtCns)
+import qualified CryptolSAWCore.TypedTerm as SAW
 
-import SAWScript.Crucible.MIR.TypeShape
+import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Compositional.Convert
 import Mir.Compositional.DefId (hasInstPrefix)

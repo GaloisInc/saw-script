@@ -25,6 +25,7 @@ RUN mkdir -p /home/saw/.ghcup && \
     ghcup install ghc 9.4.8 && \
     ghcup set ghc 9.4.8
 RUN cabal v2-update
+RUN ./build.sh gitrev
 RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal v2-exec which saw) /home/saw/rootfs/usr/local/bin/saw
