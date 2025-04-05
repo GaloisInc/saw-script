@@ -1,4 +1,4 @@
-# Tutorial to learn the basics of heapster-saw
+# Tutorial to learn the basics of Heapster
 
 This tutorial extends the current README with enough details and
 examples to get anyone up to speed with using and hacking on Heapster.
@@ -6,7 +6,7 @@ examples to get anyone up to speed with using and hacking on Heapster.
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
-- [Tutorial to learn the basics of heapster-saw](#tutorial-to-learn-the-basics-of-heapster-saw)
+- [Tutorial to learn the basics of Heapster](#tutorial-to-learn-the-basics-of-heapster)
     - [Building](#building)
         - [Build Saw](#build-saw)
         - [Build the Coq backend for Saw](#build-the-coq-backend-for-saw)
@@ -101,7 +101,7 @@ to build all the heapser examples. Simply go to the examples folder
 and build, like so
 
 ```bash
-cd /heapster-saw/examples
+cd /heapster/examples
 make
 ```
 
@@ -109,13 +109,13 @@ If this is the first time you run make in this folder, you will see `cabal run s
 
 ```
 /Path/To/Saw/
-[16:59:41.084] Loading file "/Path/To/Saw/saw-script/heapster-saw/examples/linked_list.saw"
+[16:59:41.084] Loading file "/Path/To/Saw/saw-script/heapster/examples/linked_list.saw"
 cabal run saw xor_swap.saw
 Up to date
 
 
 
-[16:59:42.974] Loading file "/Path/To/Saw/saw-script/heapster-saw/examples/xor_swap.saw"
+[16:59:42.974] Loading file "/Path/To/Saw/saw-script/heapster/examples/xor_swap.saw"
 cabal run saw xor_swap_rust.saw
 Up to date
 ```
@@ -349,11 +349,11 @@ extracted as a functional program to be verified in Coq.
 
 **TODO: Double check this description of Heapster**
 
-This section assumes you are in the `/heapster-saw/examples`
+This section assumes you are in the `/heapster/examples`
 directory. If you are not, make sure to go there
 
 ```bash
-cd /heapster-saw/examples
+cd /heapster/examples
 make
 ```
 
@@ -400,7 +400,7 @@ Just like with SAW, we want to work with the LLVM bitcode
 clang -g -c -emit-llvm -o tutorial_c.bc tutorial_c.c
 ```
 
-Alternatively, as long as you are in the `heapster-saw/examples` directory, you can also run 
+Alternatively, as long as you are in the `heapster/examples` directory, you can also run
 
 ```bash
 make tutorial_c.bc
@@ -681,7 +681,7 @@ This should produce a new file `tutorial_c_gen.vo`.
 ##### Writting your own proofs
 
 Open a new coq file `tutorial_c_proofs.v` in the same folder
-(i.e. `heapster-saw/examples/`) and the following preamble
+(i.e. `heapster/examples/`) and the following preamble
 
 ```
 From CryptolToCoq Require Import SAWCoreScaffolding.
@@ -906,7 +906,7 @@ Up to date
 
 
 
-[16:41:49.222] Loading file "/Users/Santiago/Projects/saw-script/heapster-saw/examples/tutorial_c.saw"
+[16:41:49.222] Loading file "/Users/Santiago/Projects/saw-script/heapster/examples/tutorial_c.saw"
 [16:41:49.230] File loaded
 [16:41:49.245] Type checked add.
 [16:41:49.249] Type checked add_mistyped. This will produce an error in the output.
@@ -1061,7 +1061,7 @@ important steps are handled by custom automation.
 We will now typecheck a function over lists, a recursive data
 structure. You can start a fresh SAW session with `cabal run saw`
 (quit any current session with `:q` if you are in one), but make sure
-you do so from the `heapster-saw/examples` directory.
+you do so from the `heapster/examples` directory.
 
 Specifically, we want to verify the function `is_elem`,
 which tests if a specific value is in a list. The function, together

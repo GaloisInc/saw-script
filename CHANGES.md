@@ -266,7 +266,7 @@ This release supports [version
 * SAW now implements Heapster, which allows extracting functional specifications
   of memory-safe C programs to Coq. There is now a family of experimental
   `heapster_*` commands that support this. For more information, refer to the
-  [Heapster README](heapster-saw/README.md).
+  [Heapster README](heapster/README.md).
 
 * New commands `enable_what4_eval` and `disable_what4_eval` to enable or
   disable What4 translation for SAWCore expressions during Crucible symbolic

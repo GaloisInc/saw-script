@@ -1,4 +1,4 @@
--- | Pattern-matching utilities used within @heapster-saw@.
+-- | Pattern-matching utilities used within @heapster@.
 module Heapster.PatternMatchUtil
   ( expectLengthAtLeastOne
   , expectLengthAtLeastTwo

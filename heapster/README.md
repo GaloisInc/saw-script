@@ -1,7 +1,7 @@
-# heapster-saw
+# Heapster
 
 Implementation of the Heapster type system of separation types inside SAW,
-including a translation to SAW core.
+including a translation to SAWCore.
 
 The remainder of this README contains general information about using
 Heapster about the `examples` directory contained here.
