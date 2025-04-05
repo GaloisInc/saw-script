@@ -510,7 +510,7 @@ jobs:
         shell: bash
         run: opam exec -- make -j
 
-      - working-directory: heapster-saw/examples
+      - working-directory: heapster/examples
         shell: bash
         run: opam exec -- make -j
 
