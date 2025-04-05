@@ -40,6 +40,7 @@ RUN mkdir -p /home/saw/.ghcup && \
     ghcup install cabal 3.10.3.0 && \
     ghcup install ghc 9.4.8 && \
     ghcup set ghc 9.4.8
+RUN ./build.sh gitrev
 RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal -v0 list-bin exe:saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
