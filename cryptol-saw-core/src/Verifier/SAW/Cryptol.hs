@@ -2105,18 +2105,17 @@ genCodeForEnum sc env nt cs =
   -- Common code to handle type parameters of the nominal type:
 
   let tyParamsInfo = C.ntParams nt
+      tyParamsNames = map tparamToLocalName tyParamsInfo
 
   tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
                    importKind sc (C.tpKind tpi)
-  tyParamsECs <- flip mapM (zip tyParamsKinds tyParamsInfo) $ \(k,tpi) ->
-                   scFreshEC sc (tparamToLocalName tpi) k
+  tyParamsECs <- flip mapM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
+                   scFreshEC sc nm k
   tyParamsVars <- mapM (scExtCns sc) tyParamsECs
-
-  putStrLn "MYLOG: pt2"
 
   putStrLn "MYLOG: pt3"
   let
-      -- | add a type abstractions for the type parameters
+      -- | add a type abstraction for each type parameter
       addTypeAbstractions :: Term -> IO Term
       addTypeAbstractions t = scAbstractExts sc tyParamsECs t
 
@@ -2127,8 +2126,9 @@ genCodeForEnum sc env nt cs =
                           (Text.append
                              (C.identText (C.nameIdent (ntName nt)))
                             suffix)
-      tl_ident    = newIdent "__TL"
-      sumTy_ident = newIdent "__TY"
+      tl_ident      = newIdent "__TL"
+      sumTy_ident   = newIdent "__TY"
+      eithers_ident = newIdent "__eithers"
 
   -------------------------------------------------------------
   -- Create access to needed SAWCore Prelude types & definitions:
@@ -2158,17 +2158,18 @@ genCodeForEnum sc env nt cs =
   putStrLn "MYLOG: pt5a"
 
   (typeListEachCtor :: [[Term]]) <- do
-     -- add tyParamsInfo to env, need to allow `importType` to work.
+     -- add tyParamsInfo to env as it is needed to allow `importType` to work:
     env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
-    mapM (\c-> mapM
-                (\t-> do
-                   -- type params are de bruijn's:
-                   t' <- importType sc env' t
-                   -- type params are ExtCns:
-                   instantiateVarList sc 0 tyParamsVars t'
-                )
-                (C.ecFields c))
-         cs
+
+    flip mapM cs $ \c->
+      mapM (\t-> do
+              t' <- importType sc env' t
+                -- here, type params are de bruijn's ^
+              instantiateVarList sc 0 tyParamsVars t'
+                -- here, type params are ExtCns ^
+           )
+           (C.ecFields c)
+
   putStrLn "MYLOG: pt5b"
 
   sawcoreTypeEachCtor <- flip mapM typeListEachCtor $ \ts ->
@@ -2196,6 +2197,36 @@ genCodeForEnum sc env nt cs =
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
   putStrLn "MYLOG: pt6"
+
+  -------------------------------------------------------------
+  -- Create an `eithers` specialized to the enum.
+
+  sumTy_applied <- scGlobalApply sc sumTy_ident tyParamsVars
+    -- <- Nope!
+    -- but if you could do scAbstractExts with a 'Pi' (vs Lambda)
+    -- would this all work?
+
+  -- FIXME: TODO:
+  eithers_type <-
+    do
+    unitType <- scTupleType sc []
+    decons <- return [unitType,unitType]
+              -- FIXME: todo!
+              -- will be referencing tyParams
+    scPiList sc (zip tyParamsNames tyParamsKinds)
+      =<< scPi sc "result" sort0
+      =<< scFunAll sc decons
+      =<< scFun sc sumTy_applied  -- FIXME: wrong.
+      =<< scLocalVar sc 0 -- refers to "result"
+
+          -- huh?  scFun's aren't included in deBruijn's?
+
+  eithers_rhs  <- addTypeAbstractions =<< scTuple sc []
+
+  putStrLn $ "MYLOG: eithers_type: " ++ showTerm eithers_type
+  putStrLn $ "MYLOG: eithers_rhs:  " ++ showTerm eithers_rhs
+  scInsertDef sc preludeName eithers_ident eithers_type eithers_rhs
+
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
   -- each Either in the nested Either's needs a pair of types:
