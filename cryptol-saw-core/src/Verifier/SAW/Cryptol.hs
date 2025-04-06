@@ -2106,10 +2106,10 @@ genCodeForEnum sc env nt cs =
 
   let tyParamsInfo = C.ntParams nt
 
-  tyParamsECs <- flip mapM tyParamsInfo $ \tpi -> do
-                   k <- importKind sc (C.tpKind tpi)
+  tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
+                   importKind sc (C.tpKind tpi)
+  tyParamsECs <- flip mapM (zip tyParamsKinds tyParamsInfo) $ \(k,tpi) ->
                    scFreshEC sc (tparamToLocalName tpi) k
-  putStrLn "MYLOG: pt1"
   tyParamsVars <- mapM (scExtCns sc) tyParamsECs
 
   putStrLn "MYLOG: pt2"
@@ -2154,8 +2154,7 @@ genCodeForEnum sc env nt cs =
   --  - elements of list are the elements of the Sum.
   --  - the types maintain the same exact type vars (see tyParamsInfo)
 
-  tl_type  <- scFunAll sc (map (\_-> sort0) tyParamsInfo) scListSort
-    -- FIXME: nab kinds from above
+  tl_type  <- scFunAll sc tyParamsKinds scListSort
   putStrLn "MYLOG: pt5a"
 
   (typeListEachCtor :: [[Term]]) <- do
