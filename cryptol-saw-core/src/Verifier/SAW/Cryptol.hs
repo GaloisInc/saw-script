@@ -2190,7 +2190,7 @@ genCodeForEnum sc env nt cs =
   -- the Typelist(tl) applied to the [free] type arguments.
   tl_applied <- scGlobalApply sc tl_ident tyParamsVars
 
-  sumTy_type <- scFunAll sc (map (\_-> sort0) tyParamsInfo) sort0
+  sumTy_type <- scFunAll sc tyParamsKinds sort0
   sumTy_rhs  <- scEithersV tl_applied >>= addTypeAbstractions
 
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
