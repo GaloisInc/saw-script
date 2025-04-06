@@ -2114,10 +2114,6 @@ genCodeForEnum sc env nt cs =
 
   putStrLn "MYLOG: pt2"
 
-  -- add tyParamsInfo to env:
-  env' <- Fold.foldlM (\env' tp-> bindTParam sc tp env') env tyParamsInfo
-    -- FIXME: bindTParam and scLocalVar both create new vars. A prob?
-
   putStrLn "MYLOG: pt3"
   let
       -- | add a type abstractions for the type parameters
@@ -2162,8 +2158,18 @@ genCodeForEnum sc env nt cs =
     -- FIXME: nab kinds from above
   putStrLn "MYLOG: pt5a"
 
-  (typeListEachCtor :: [[Term]]) <-
-    mapM (\c-> mapM (importType sc env') (C.ecFields c)) cs
+  (typeListEachCtor :: [[Term]]) <- do
+     -- add tyParamsInfo to env, need to allow `importType` to work.
+    env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
+    mapM (\c-> mapM
+                (\t-> do
+                   -- type params are de bruijn's:
+                   t' <- importType sc env' t
+                   -- type params are ExtCns:
+                   instantiateVarList sc 0 tyParamsVars t'
+                )
+                (C.ecFields c))
+         cs
   putStrLn "MYLOG: pt5b"
 
   sawcoreTypeEachCtor <- flip mapM typeListEachCtor $ \ts ->
