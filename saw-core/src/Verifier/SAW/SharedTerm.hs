@@ -2533,14 +2533,14 @@ scAbstractExts sc exts x = loop (zip (inits exts) exts)
     -- the ExtCns values that appear before it in the original list.
     loop :: [([ExtCns Term], ExtCns Term)] -> IO Term
 
-    -- specical case: outermost variable, no need to abstract
+    -- special case: outermost variable, no need to abstract
     -- inside the type of ec
     loop (([],ec):ecs) =
       do tm' <- loop ecs
          scLambda sc (toShortName (ecName ec)) (ecType ec) tm'
 
     -- ordinary case. We need to abstract over all the ExtCns in @begin@
-    -- before apply scLambda.  This ensures any dependenices between the
+    -- before apply scLambda.  This ensures any dependencies between the
     -- types are handled correctly.
     loop ((begin,ec):ecs) =
       do tm' <- loop ecs
