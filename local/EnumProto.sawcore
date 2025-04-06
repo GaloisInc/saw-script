@@ -48,8 +48,7 @@ enum ETT as = C1 CT1
              -- 'as' can be free in CT1, CT2, ... types
 -}
 
----- SawCore: ------------------------------------------------------
--- types:
+---- SawCore: Type Definitions -------------------------------------
 
 -- Just Like EnumLib3, but let's inline things:
 
@@ -68,6 +67,8 @@ ETT__LS as = LS_Cons (ETT__ArgType_C1 as)
 -- Define the type:
 ETT : (as : sort 0) -> sort 0;
 ETT as = Eithers' (ETT__LS as);
+
+---- SawCore: Constructors -----------------------------------------
 
 -- constructors (these aren't new, already in Cryptol, and AFAIK mapped into SawCore),
 -- thus straightforward names.
@@ -108,6 +109,23 @@ C2 a b.. = \z1 z2..->
 
 -- For now (after all these TEMPESTS) just do the above ^.
 --  later, see Eithers.sawcore for explorations re 'generic' injection.
+
+---- SawCore: case/eithers function --------------------------------
+
+{- Design Alts:
+
+Note
+ 1. eithers'/eithersV
+
+  - requires generating a `es:FunsTo` for every instantiation to which we want    a case;
+  - thus, adding code on every case in code.
+
+ 2. ETT_eithers2
+  - nice: you can use eithers'/eithersV but you write just one time.
+  - TODO: you need to make the alt-functions curried.
+
+-}
+
 
 ETT_eithers : (as : sort 0)
            -> (b: sort 0)
