@@ -2206,26 +2206,27 @@ genCodeForEnum sc env nt cs =
     -- but if you could do scAbstractExts with a 'Pi' (vs Lambda)
     -- would this all work?
 
-  -- FIXME: TODO:
   eithers_type <-
     do
-    unitType <- scTupleType sc []
-    decons <- return [unitType,unitType]
-              -- FIXME: todo!
-              -- will be referencing tyParams
-    scPiList sc (zip tyParamsNames tyParamsKinds)
+    result <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
+          -- N.B.: scFun's aren't included in deBruijn's!
+    decons <- flip mapM sawcoreTypeEachCtor $ \ty ->
+                scFun sc ty result
+    scPiAbstractExts sc tyParamsECs
+        -- BTW, rather generalize **.SharedTerm.scAbstractExts?
       =<< scPi sc "result" sort0
       =<< scFunAll sc decons
-      =<< scFun sc sumTy_applied  -- FIXME: wrong.
-      =<< scLocalVar sc 0 -- refers to "result"
+      =<< scFun sc sumTy_applied
+                   result
 
-          -- huh?  scFun's aren't included in deBruijn's?
 
   eithers_rhs  <- addTypeAbstractions =<< scTuple sc []
+    -- FIXME: TODO!
 
   putStrLn $ "MYLOG: eithers_type: " ++ showTerm eithers_type
   putStrLn $ "MYLOG: eithers_rhs:  " ++ showTerm eithers_rhs
   scInsertDef sc preludeName eithers_ident eithers_type eithers_rhs
+    -- NOTE: these are not type-checked!  TODO?
 
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
