@@ -38,13 +38,6 @@ build() {
   cabal v2-update
   # Run build.sh to capture the git info so we can do plain cabal builds
   ./build.sh gitrev
-  # Configure with --disable-documentation and --haddock-internal so
-  # that the haddock run later, if enabled, doesn't recompile the
-  # world by using those flags. (See haddock() below for discussion of
-  # why those flags are used.) We could do this only for builds where
-  # we're intending to do the haddock run, but it should have no
-  # effect otherwise and unconditional is simpler.
-  cabal v2-configure -j --enable-tests --disable-documentation --haddock-internal
   git status --porcelain
   if $IS_WIN; then
     pkgs=(saw crux-mir-comp)
@@ -55,6 +48,13 @@ build() {
   if [[ "$ENABLE_HPC" == "true" ]]; then
     cat cabal.project.ci-hpc >> cabal.project.local
   fi
+  # Configure with --disable-documentation and --haddock-internal so
+  # that the haddock run later, if enabled, doesn't recompile the
+  # world by using those flags. (See haddock() below for discussion of
+  # why those flags are used.) We could do this only for builds where
+  # we're intending to do the haddock run, but it should have no
+  # effect otherwise and unconditional is simpler.
+  cabal v2-configure -j --enable-tests --disable-documentation --haddock-internal
   # In the distant past, we had to retry the `cabal build` command to work
   # around issues with caching dylib files on macOS. These issues appear to
   # be less likely with modern GitHub Actions caching, so we have removed the
