@@ -1,5 +1,3 @@
  Loading file "lexer005.saw"
- Stack trace:
-lexer005.saw:9:9-9:11: Unclosed block comment
-
+ Parse error at lexer005.saw:3:20-3:21: Unexpected `}'
 FAILED
