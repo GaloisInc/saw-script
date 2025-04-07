@@ -59,7 +59,7 @@ span.spaces    { background: white }
 <span class="lineno">   40 </span>--
 <span class="lineno">   41 </span>-- FUTURE: many of these could stand to be renamed
 <span class="lineno">   42 </span>--
-<span class="lineno">   43 </span>data Token p = TVar      { <span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">tokPos</span></span></span></span></span></span></span></span></span> :: p, <span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">tokStr</span></span></span></span></span></span></span></span></span> :: Text                               }
+<span class="lineno">   43 </span>data Token p = TVar      { <span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">tokPos</span></span></span></span></span></span></span> :: p, <span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">tokStr</span></span></span></span></span></span></span> :: Text                               }
 <span class="lineno">   44 </span>             | TQVar     { tokPos :: p, tokStr :: Text, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">tokVars</span></span></span> :: ([Text], Text)    }
 <span class="lineno">   45 </span>             | TLit      { tokPos :: p, tokStr :: Text                               }
 <span class="lineno">   46 </span>             | TCode     { tokPos :: p, tokStr :: Text                               }
@@ -69,15 +69,11 @@ span.spaces    { background: white }
 <span class="lineno">   50 </span>             | TReserved { tokPos :: p, tokStr :: Text                               }
 <span class="lineno">   51 </span>             | TOp       { tokPos :: p, tokStr :: Text                               }
 <span class="lineno">   52 </span>             | TNum      { tokPos :: p, tokStr :: Text, <span class="istickedoff"><span class="decl"><span class="istickedoff">tokNum</span></span></span> :: Integer            }
-<span class="lineno">   53 </span>             | TCommentS { tokPos :: p, tokStr :: Text                               }
-<span class="lineno">   54 </span>             | TCommentE { tokPos :: p, tokStr :: Text                               }
-<span class="lineno">   55 </span>             | TCommentL { tokPos :: p, tokStr :: Text                               }
-<span class="lineno">   56 </span>             | TEOL      { tokPos :: p, tokStr :: Text                               }
-<span class="lineno">   57 </span>             | TEOF      { tokPos :: p, tokStr :: Text                               }
-<span class="lineno">   58 </span>             deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
-<span class="lineno">   59 </span>
-<span class="lineno">   60 </span>instance Positioned p =&gt; Positioned (Token p) where
-<span class="lineno">   61 </span>  <span class="decl"><span class="istickedoff">getPos = getPos . tokPos</span></span>
+<span class="lineno">   53 </span>             | TEOF      { tokPos :: p, tokStr :: Text                               }
+<span class="lineno">   54 </span>             deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Functor</span></span></span></span>)
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>instance Positioned p =&gt; Positioned (Token p) where
+<span class="lineno">   57 </span>  <span class="decl"><span class="istickedoff">getPos = getPos . tokPos</span></span>
 
 </pre>
 </body>
