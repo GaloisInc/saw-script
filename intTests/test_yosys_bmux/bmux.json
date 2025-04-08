@@ -1,0 +1,180 @@
+{
+  "creator": "Yosys 0.48 (git sha1 aaa534749, aarch64-linux-gnu-g++ 11.4.0-1ubuntu1~22.04 -fPIC -O3)",
+  "modules": {
+    "PrimeSelector": {
+      "attributes": {
+        "top": "00000000000000000000000000000001",
+        "architecture": "Behavioral",
+        "library": "work",
+        "hdlname": "PrimeSelector",
+        "src": "demo.vhd:5.8-5.21"
+      },
+      "ports": {
+        "clk": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "prime_out": {
+          "direction": "output",
+          "bits": [ 3, 4, 5, 6, 7, 8, 9, 10 ]
+        },
+        "index_in": {
+          "direction": "input",
+          "bits": [ 11, 12, 13, 14 ]
+        }
+      },
+      "cells": {
+        "$verific$buf_4$demo.vhd:28$10": {
+          "hide_name": 1,
+          "type": "$pos",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000000100",
+            "Y_WIDTH": "00000000000000000000000000000100"
+          },
+          "attributes": {
+            "src": "demo.vhd:28.13-28.16"
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 11, 12, 13, 14 ],
+            "Y": [ 15, 16, 17, 18 ]
+          }
+        },
+        "$verific$buf_6$demo.vhd:30$12": {
+          "hide_name": 1,
+          "type": "$pos",
+          "parameters": {
+            "A_SIGNED": "00000000000000000000000000000000",
+            "A_WIDTH": "00000000000000000000000000001000",
+            "Y_WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "demo.vhd:30.17-30.26"
+          },
+          "port_directions": {
+            "A": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ 19, 20, 21, 22, 23, 24, "0", "0" ],
+            "Y": [ 25, 26, 27, 28, 29, 30, 31, 32 ]
+          }
+        },
+        "$verific$mux_5$demo.vhd:30$11": {
+          "hide_name": 1,
+          "type": "$bmux",
+          "parameters": {
+            "S_WIDTH": "00000000000000000000000000000100",
+            "WIDTH": "00000000000000000000000000000110"
+          },
+          "attributes": {
+            "src": "demo.vhd:30.66-30.69"
+          },
+          "port_directions": {
+            "A": "input",
+            "S": "input",
+            "Y": "output"
+          },
+          "connections": {
+            "A": [ "0", "1", "0", "0", "0", "0", "1", "1", "0", "0", "0", "0", "1", "0", "1", "0", "0", "0", "1", "1", "1", "0", "0", "0", "1", "1", "0", "1", "0", "0", "1", "0", "1", "1", "0", "0", "1", "0", "0", "0", "1", "0", "1", "1", "0", "0", "1", "0", "1", "1", "1", "0", "1", "0", "1", "0", "1", "1", "1", "0", "1", "1", "1", "1", "1", "0", "1", "0", "1", "0", "0", "1", "1", "0", "0", "1", "0", "1", "1", "1", "0", "1", "0", "1", "1", "1", "1", "1", "0", "1", "1", "0", "1", "0", "1", "1" ],
+            "S": [ 15, 16, 17, 18 ],
+            "Y": [ 19, 20, 21, 22, 23, 24 ]
+          }
+        },
+        "$verific$prime_out_reg$demo.vhd:34$13": {
+          "hide_name": 1,
+          "type": "$dff",
+          "parameters": {
+            "CLK_POLARITY": "00000000000000000000000000000001",
+            "WIDTH": "00000000000000000000000000001000"
+          },
+          "attributes": {
+            "src": "demo.vhd:27.9-34.16"
+          },
+          "port_directions": {
+            "CLK": "input",
+            "D": "input",
+            "Q": "output"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 25, 26, 27, 28, 29, 30, 31, 32 ],
+            "Q": [ 3, 4, 5, 6, 7, 8, 9, 10 ]
+          }
+        }
+      },
+      "netnames": {
+        "$verific$n1$1": {
+          "hide_name": 1,
+          "bits": [ "0" ],
+          "attributes": {
+          }
+        },
+        "$verific$n10$5": {
+          "hide_name": 1,
+          "bits": [ 19, 20, 21, 22, 23, 24 ],
+          "attributes": {
+          }
+        },
+        "$verific$n17$6": {
+          "hide_name": 1,
+          "bits": [ 25, 26, 27, 28, 29, 30, 31, 32 ],
+          "attributes": {
+          }
+        },
+        "$verific$n2$2": {
+          "hide_name": 1,
+          "bits": [ "1" ],
+          "attributes": {
+          }
+        },
+        "$verific$n3$3": {
+          "hide_name": 1,
+          "bits": [ "x" ],
+          "attributes": {
+          }
+        },
+        "$verific$n5$4": {
+          "hide_name": 1,
+          "bits": [ 15, 16, 17, 18 ],
+          "attributes": {
+          }
+        },
+        "clk": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "demo.vhd:7.9-7.12"
+          }
+        },
+        "idx": {
+          "hide_name": 0,
+          "bits": [ 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64 ],
+          "attributes": {
+            "bottom_bound": "10000000000000000000000000000000",
+            "src": "demo.vhd:25.18-25.21",
+            "top_bound": "01111111111111111111111111111111"
+          }
+        },
+        "index_in": {
+          "hide_name": 0,
+          "bits": [ 11, 12, 13, 14 ],
+          "attributes": {
+            "src": "demo.vhd:8.9-8.17"
+          }
+        },
+        "prime_out": {
+          "hide_name": 0,
+          "bits": [ 3, 4, 5, 6, 7, 8, 9, 10 ],
+          "attributes": {
+            "src": "demo.vhd:9.9-9.18"
+          }
+        }
+      }
+    }
+  }
+}

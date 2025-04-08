@@ -1,5 +1,9 @@
 # next -- TBA
 
+## New Features
+
+* Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
+
 ## Bug fixes
 
 * Invoking the Cryptol `error` function in SAW now preserves the error message

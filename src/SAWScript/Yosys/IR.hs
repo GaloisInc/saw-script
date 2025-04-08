@@ -129,6 +129,7 @@ textToPrimitiveCellType = Map.fromList
   , ("$logic_or"    , CellTypeLogicOr)
   , ("$mux"         , CellTypeMux)
   , ("$pmux"        , CellTypePmux)
+  , ("$bmux"        , CellTypeBmux)
   , ("$dff"         , CellTypeDff)
   , ("$ff"          , CellTypeFf)
   ]
@@ -176,6 +177,7 @@ data CellType
   | CellTypeLogicOr
   | CellTypeMux
   | CellTypePmux
+  | CellTypeBmux
   | CellTypeDff
   | CellTypeFf
   | CellTypeUnsupportedPrimitive Text
