@@ -1,0 +1,66 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCore.Simulator.MonadLazy
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : huffman@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>-}
+<span class="lineno">    9 </span>module SAWCore.Simulator.MonadLazy where
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>import Control.Monad (liftM)
+<span class="lineno">   12 </span>import Control.Monad.Identity (Identity)
+<span class="lineno">   13 </span>import Control.Monad.IO.Class
+<span class="lineno">   14 </span>import Data.IORef
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>newtype Lazy m a = Lazy (m a)
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>class Monad m =&gt; MonadLazy m where
+<span class="lineno">   19 </span>  delay :: m a -&gt; m (Lazy m a)
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>force :: Lazy m a -&gt; m a
+<span class="lineno">   22 </span><span class="decl"><span class="istickedoff">force (Lazy m) = m</span></span>
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>ready :: Monad m =&gt; a -&gt; Lazy m a
+<span class="lineno">   25 </span><span class="decl"><span class="istickedoff">ready x = Lazy (return x)</span></span>
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>instance MonadLazy Identity where
+<span class="lineno">   28 </span>  <span class="decl"><span class="istickedoff">delay m = return (Lazy m)</span></span>
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>instance MonadLazy IO where
+<span class="lineno">   31 </span>  <span class="decl"><span class="istickedoff">delay = delayIO</span></span>
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>delayIO :: MonadIO m =&gt; m a -&gt; m (Lazy m a)
+<span class="lineno">   34 </span><span class="decl"><span class="istickedoff">delayIO m = liftM pull (liftIO (newIORef Nothing))</span>
+<span class="lineno">   35 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   36 </span><span class="spaces">    </span><span class="istickedoff">pull ref = Lazy $ do</span>
+<span class="lineno">   37 </span><span class="spaces">      </span><span class="istickedoff">r &lt;- liftIO (readIORef ref)</span>
+<span class="lineno">   38 </span><span class="spaces">      </span><span class="istickedoff">case r of</span>
+<span class="lineno">   39 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno">   40 </span><span class="spaces">          </span><span class="istickedoff">x &lt;- m</span>
+<span class="lineno">   41 </span><span class="spaces">          </span><span class="istickedoff">liftIO (writeIORef ref (Just x))</span>
+<span class="lineno">   42 </span><span class="spaces">          </span><span class="istickedoff">return x</span>
+<span class="lineno">   43 </span><span class="spaces">        </span><span class="istickedoff">Just x -&gt; return x</span></span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,355 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    2 </span>{-# LANGUAGE DeriveGeneric #-}
+<span class="lineno">    3 </span>{-# LANGUAGE FlexibleContexts #-}
+<span class="lineno">    4 </span>{-# LANGUAGE FlexibleInstances #-}
+<span class="lineno">    5 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    6 </span>{-# LANGUAGE KindSignatures #-}
+<span class="lineno">    7 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    8 </span>{-# LANGUAGE QuasiQuotes #-}
+<span class="lineno">    9 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">   10 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">   11 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">   12 </span>{-# LANGUAGE UndecidableInstances #-}
+<span class="lineno">   13 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   14 </span>{-# LANGUAGE PolyKinds #-}
+<span class="lineno">   15 </span>module Heapster.IDESupport where
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>import Control.Monad.Reader
+<span class="lineno">   18 </span>  ( MonadReader (ask, local),
+<span class="lineno">   19 </span>    ReaderT (..),
+<span class="lineno">   20 </span>  )
+<span class="lineno">   21 </span>import Data.Aeson (ToJSON, Value, encodeFile)
+<span class="lineno">   22 </span>import Data.Binding.Hobbits
+<span class="lineno">   23 </span>  ( Liftable (..),
+<span class="lineno">   24 </span>    Mb,
+<span class="lineno">   25 </span>    NuMatching (..),
+<span class="lineno">   26 </span>    RList,
+<span class="lineno">   27 </span>    mbMatch,
+<span class="lineno">   28 </span>    nuMP,
+<span class="lineno">   29 </span>    nuMultiWithElim1,
+<span class="lineno">   30 </span>    unsafeMbTypeRepr,
+<span class="lineno">   31 </span>    Name,
+<span class="lineno">   32 </span>  )
+<span class="lineno">   33 </span>import Data.Kind (Type)
+<span class="lineno">   34 </span>import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
+<span class="lineno">   35 </span>import Data.Parameterized.Some (Some (..))
+<span class="lineno">   36 </span>import qualified Data.Text as T
+<span class="lineno">   37 </span>import qualified Data.Type.RList as RL
+<span class="lineno">   38 </span>import GHC.Generics (Generic)
+<span class="lineno">   39 </span>import Lang.Crucible.FunctionHandle
+<span class="lineno">   40 </span>import Lang.Crucible.Types (CrucibleType)
+<span class="lineno">   41 </span>import What4.FunctionName (FunctionName (functionName))
+<span class="lineno">   42 </span>import What4.ProgramLoc
+<span class="lineno">   43 </span>  ( Position (BinaryPos, InternalPos, OtherPos, SourcePos),
+<span class="lineno">   44 </span>    ProgramLoc (..),
+<span class="lineno">   45 </span>  )
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>import Heapster.CruUtil
+<span class="lineno">   48 </span>import Heapster.Permissions
+<span class="lineno">   49 </span>import Heapster.Implication
+<span class="lineno">   50 </span>import Heapster.TypedCrucible
+<span class="lineno">   51 </span>import Heapster.SAWTranslation (SomeTypedCFG (..))
+<span class="lineno">   52 </span>import Heapster.JSONExport(ppToJson)
+<span class="lineno">   53 </span>import Data.Type.RList (mapRAssign)
+<span class="lineno">   54 </span>import Data.Functor.Constant
+<span class="lineno">   55 </span>import Control.Monad.Writer
+<span class="lineno">   56 </span>import Data.Binding.Hobbits.NameMap (NameMap)
+<span class="lineno">   57 </span>import qualified Data.Binding.Hobbits.NameMap as NameMap
+<span class="lineno">   58 </span>import Heapster.NamedMb
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>-- | The entry point for dumping a Heapster environment to a file for IDE
+<span class="lineno">   61 </span>-- consumption.
+<span class="lineno">   62 </span>printIDEInfo :: PermEnv -&gt; [Some SomeTypedCFG] -&gt; FilePath -&gt; PPInfo -&gt; IO ()
+<span class="lineno">   63 </span><span class="decl"><span class="nottickedoff">printIDEInfo _penv tcfgs file ppinfo =</span>
+<span class="lineno">   64 </span><span class="spaces">  </span><span class="nottickedoff">encodeFile file $ IDELog (runWithLoc ppinfo tcfgs)</span></span>
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>type ExtractionM = ReaderT (PPInfo, ProgramLoc, String) (Writer [LogEntry])
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>emit :: LogEntry -&gt; ExtractionM ()
+<span class="lineno">   70 </span><span class="decl"><span class="nottickedoff">emit entry = tell [entry]</span></span>
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>gather :: ExtractionM () -&gt; ExtractionM [LogEntry]
+<span class="lineno">   73 </span><span class="decl"><span class="nottickedoff">gather m = snd &lt;$&gt; listen m</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- | A single entry in the IDE info dump log.  At a bare minimum, this must
+<span class="lineno">   76 </span>-- include a location and corresponding permission.  Once the basics are
+<span class="lineno">   77 </span>-- working, we can enrich the information we log.
+<span class="lineno">   78 </span>data LogEntry
+<span class="lineno">   79 </span>  = LogEntry
+<span class="lineno">   80 </span>      { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leLocation</span></span></span> :: String
+<span class="lineno">   81 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leEntryId</span></span></span> :: LogEntryID
+<span class="lineno">   82 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leCallers</span></span></span> :: [LogEntryID]
+<span class="lineno">   83 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leFunctionName</span></span></span> :: String
+<span class="lineno">   84 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">lePermissions</span></span></span> :: [(String, String, Value)]
+<span class="lineno">   85 </span>      }
+<span class="lineno">   86 </span>  | LogError
+<span class="lineno">   87 </span>      { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">lerrLocation</span></span></span> :: String
+<span class="lineno">   88 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">lerrError</span></span></span> :: String
+<span class="lineno">   89 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">lerrFunctionName</span></span></span> :: String
+<span class="lineno">   90 </span>      }
+<span class="lineno">   91 </span>  | LogImpl
+<span class="lineno">   92 </span>      { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">limplLocation</span></span></span> :: String
+<span class="lineno">   93 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">limplExport</span></span></span> :: Value
+<span class="lineno">   94 </span>      , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">limplFunctionName</span></span></span> :: String
+<span class="lineno">   95 </span>      }
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   98 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON LogEntry</span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   99 </span>instance NuMatching LogEntry where
+<span class="lineno">  100 </span>  <span class="decl"><span class="nottickedoff">nuMatchingProof = unsafeMbTypeRepr</span></span>
+<span class="lineno">  101 </span>instance Liftable LogEntry where
+<span class="lineno">  102 </span>  <span class="decl"><span class="nottickedoff">mbLift mb = case mbMatch mb of</span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="nottickedoff">[nuMP| LogEntry v w x y z |] -&gt; </span>
+<span class="lineno">  104 </span><span class="spaces">      </span><span class="nottickedoff">LogEntry (mbLift v) (mbLift w) (mbLift x) (mbLift y) (mbLift z)</span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="nottickedoff">[nuMP| LogError x y z |] -&gt; </span>
+<span class="lineno">  106 </span><span class="spaces">      </span><span class="nottickedoff">LogError (mbLift x) (mbLift y) (mbLift z)</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="nottickedoff">[nuMP| LogImpl x y z |] -&gt; </span>
+<span class="lineno">  108 </span><span class="spaces">      </span><span class="nottickedoff">LogImpl (mbLift x) (mbLift y) (mbLift z)</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>data LogEntryID = LogEntryID
+<span class="lineno">  111 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leIdBlock</span></span></span> :: Int
+<span class="lineno">  112 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">leIdHeapster</span></span></span> :: Int
+<span class="lineno">  113 </span>  }
+<span class="lineno">  114 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  115 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON LogEntryID</span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  116 </span>instance NuMatching LogEntryID where
+<span class="lineno">  117 </span>  <span class="decl"><span class="nottickedoff">nuMatchingProof = unsafeMbTypeRepr</span></span> 
+<span class="lineno">  118 </span>instance Liftable LogEntryID where
+<span class="lineno">  119 </span>  <span class="decl"><span class="nottickedoff">mbLift mb = case mbMatch mb of</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="nottickedoff">[nuMP| LogEntryID x y |] -&gt; LogEntryID (mbLift x) (mbLift y)</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>-- | A complete IDE info dump log, which is just a sequence of entries.  Once
+<span class="lineno">  123 </span>-- the basics are working, we can enrich the information we log.
+<span class="lineno">  124 </span>newtype IDELog = IDELog {
+<span class="lineno">  125 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">lmfEntries</span></span></span> :: [LogEntry]
+<span class="lineno">  126 </span>} deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Generic</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  127 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">ToJSON IDELog</span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">  128 </span>
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>class ExtractLogEntries a where
+<span class="lineno">  131 </span>  extractLogEntries :: a -&gt; ExtractionM ()
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>instance (PermCheckExtC ext extExpr)
+<span class="lineno">  134 </span>    =&gt; ExtractLogEntries
+<span class="lineno">  135 </span>         (TypedEntry TransPhase ext blocks tops ret args ghosts) where
+<span class="lineno">  136 </span>  <span class="decl"><span class="nottickedoff">extractLogEntries te = do</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="nottickedoff">let loc = mbLiftNamed $ fmap getFirstProgramLocTS (typedEntryBody te)</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="nottickedoff">withLoc loc (mb'ExtractLogEntries (typedEntryBody te))</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="nottickedoff">let entryId = mkLogEntryID $ typedEntryID te</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="nottickedoff">let callers = callerIDs $ typedEntryCallers te</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="nottickedoff">(ppi, _, fname) &lt;- ask</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="nottickedoff">let loc' = snd (ppLoc loc)</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="nottickedoff">let debugNames = _mbNames (typedEntryBody te)</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="nottickedoff">let insertNames ::</span>
+<span class="lineno">  145 </span><span class="spaces">          </span><span class="nottickedoff">RL.RAssign Name (x :: RList CrucibleType) -&gt;</span>
+<span class="lineno">  146 </span><span class="spaces">          </span><span class="nottickedoff">RL.RAssign StringF x -&gt;</span>
+<span class="lineno">  147 </span><span class="spaces">          </span><span class="nottickedoff">NameMap (StringF :: CrucibleType -&gt; Type)-&gt;</span>
+<span class="lineno">  148 </span><span class="spaces">          </span><span class="nottickedoff">NameMap (StringF :: CrucibleType -&gt; Type)</span>
+<span class="lineno">  149 </span><span class="spaces">        </span><span class="nottickedoff">insertNames RL.MNil RL.MNil m = m</span>
+<span class="lineno">  150 </span><span class="spaces">        </span><span class="nottickedoff">insertNames (ns RL.:&gt;: n) (xs RL.:&gt;: StringF name) m =</span>
+<span class="lineno">  151 </span><span class="spaces">          </span><span class="nottickedoff">insertNames ns xs (NameMap.insert n (StringF name) m)</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="nottickedoff">inputs = mbLift</span>
+<span class="lineno">  153 </span><span class="spaces">               </span><span class="nottickedoff">$ flip nuMultiWithElim1 (typedEntryPermsIn te)</span>
+<span class="lineno">  154 </span><span class="spaces">               </span><span class="nottickedoff">$ \ns body -&gt;</span>
+<span class="lineno">  155 </span><span class="spaces">                 </span><span class="nottickedoff">let ppi' = ppi { ppExprNames = insertNames ns debugNames (ppExprNames ppi) }</span>
+<span class="lineno">  156 </span><span class="spaces">                     </span><span class="nottickedoff">f :: </span>
+<span class="lineno">  157 </span><span class="spaces">                      </span><span class="nottickedoff">(Pair StringF ValuePerm) x -&gt;</span>
+<span class="lineno">  158 </span><span class="spaces">                      </span><span class="nottickedoff">Constant (String, String, Value) x</span>
+<span class="lineno">  159 </span><span class="spaces">                     </span><span class="nottickedoff">f (Pair (StringF name) vp) = Constant (name, permPrettyString ppi' vp, ppToJson ppi' vp)</span>
+<span class="lineno">  160 </span><span class="spaces">                 </span><span class="nottickedoff">in RL.toList (mapRAssign f (zipRAssign debugNames body))</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="nottickedoff">tell [LogEntry loc' entryId callers fname inputs]</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>mkLogEntryID :: TypedEntryID blocks args -&gt; LogEntryID
+<span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">mkLogEntryID = uncurry LogEntryID . entryIDIndices</span></span>
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>callerIDs :: [Some (TypedCallSite phase blocks tops args ghosts)] -&gt; [LogEntryID]
+<span class="lineno">  167 </span><span class="decl"><span class="nottickedoff">callerIDs = map $ \(Some tcs) -&gt; case typedCallSiteID tcs of </span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="nottickedoff">TypedCallSiteID tei _ _ _ -&gt; mkLogEntryID tei</span></span>
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>data Pair f g x = Pair (f x) (g x)
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>zipRAssign :: RL.RAssign f x -&gt; RL.RAssign g x -&gt; RL.RAssign (Pair f g) x
+<span class="lineno">  173 </span><span class="decl"><span class="nottickedoff">zipRAssign RL.MNil RL.MNil = RL.MNil</span>
+<span class="lineno">  174 </span><span class="spaces"></span><span class="nottickedoff">zipRAssign (xs RL.:&gt;: x) (ys RL.:&gt;: y) = zipRAssign xs ys RL.:&gt;: Pair x y</span></span>
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>instance ExtractLogEntries (TypedStmtSeq ext blocks tops ret ps_in) where
+<span class="lineno">  177 </span>  <span class="decl"><span class="nottickedoff">extractLogEntries (TypedImplStmt (AnnotPermImpl _str pimpl)) =</span>
+<span class="lineno">  178 </span><span class="spaces">    </span><span class="nottickedoff">-- fmap (setErrorMsg str) &lt;$&gt; extractLogEntries pimpl</span>
+<span class="lineno">  179 </span><span class="spaces">    </span><span class="nottickedoff">extractLogEntries pimpl</span>
+<span class="lineno">  180 </span><span class="spaces">  </span><span class="nottickedoff">extractLogEntries (TypedConsStmt loc _ _ rest) = do</span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="nottickedoff">withLoc loc $ mb'ExtractLogEntries rest</span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="nottickedoff">extractLogEntries (TypedTermStmt _ _) = pure ()</span></span>
+<span class="lineno">  183 </span>
+<span class="lineno">  184 </span>instance ExtractLogEntries
+<span class="lineno">  185 </span>    (PermImpl (TypedStmtSeq ext blocks tops ret) ps_in) where
+<span class="lineno">  186 </span>  <span class="decl"><span class="nottickedoff">extractLogEntries (PermImpl_Step pi1 mbpis) = do</span>
+<span class="lineno">  187 </span><span class="spaces">    </span><span class="nottickedoff">pi1Entries &lt;- extractLogEntries pi1</span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="nottickedoff">pisEntries &lt;- extractLogEntries mbpis</span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="nottickedoff">return $ pi1Entries &lt;&gt; pisEntries</span>
+<span class="lineno">  190 </span><span class="spaces">  </span><span class="nottickedoff">extractLogEntries (PermImpl_Done stmts) = extractLogEntries stmts</span></span>
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>instance ExtractLogEntries (PermImpl1 ps_in ps_outs) where
+<span class="lineno">  193 </span>  <span class="decl"><span class="nottickedoff">extractLogEntries (Impl1_Fail err) =</span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="nottickedoff">do (_, loc, fname) &lt;- ask</span>
+<span class="lineno">  195 </span><span class="spaces">       </span><span class="nottickedoff">emit (LogError (snd (ppLoc loc)) (ppError err) fname)</span>
+<span class="lineno">  196 </span><span class="spaces">    </span><span class="nottickedoff">-- The error message is available further up the stack, so we just leave it</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="nottickedoff">extractLogEntries impl =</span>
+<span class="lineno">  198 </span><span class="spaces">    </span><span class="nottickedoff">do (ppi, loc, fname) &lt;- ask</span>
+<span class="lineno">  199 </span><span class="spaces">       </span><span class="nottickedoff">emit (LogImpl (snd (ppLoc loc)) (ppToJson ppi impl) fname)</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>instance ExtractLogEntries
+<span class="lineno">  202 </span>    (MbPermImpls (TypedStmtSeq ext blocks tops ret) ps_outs) where
+<span class="lineno">  203 </span>  <span class="decl"><span class="nottickedoff">extractLogEntries (MbPermImpls_Cons ctx mbpis pis) = do</span>
+<span class="lineno">  204 </span><span class="spaces">    </span><span class="nottickedoff">mbExtractLogEntries ctx pis</span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">extractLogEntries mbpis</span>
+<span class="lineno">  206 </span><span class="spaces">  </span><span class="nottickedoff">extractLogEntries MbPermImpls_Nil = pure ()</span></span>
+<span class="lineno">  207 </span>
+<span class="lineno">  208 </span>instance (PermCheckExtC ext extExpr)
+<span class="lineno">  209 </span>  =&gt; ExtractLogEntries (TypedCFG ext blocks ghosts inits gouts ret) where
+<span class="lineno">  210 </span>    <span class="decl"><span class="nottickedoff">extractLogEntries tcfg = extractLogEntries $ tpcfgBlockMap tcfg</span></span>
+<span class="lineno">  211 </span>
+<span class="lineno">  212 </span>instance (PermCheckExtC ext extExpr)
+<span class="lineno">  213 </span>  =&gt; ExtractLogEntries (TypedBlockMap TransPhase ext blocks tops ret) where
+<span class="lineno">  214 </span>  <span class="decl"><span class="nottickedoff">extractLogEntries tbm =</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="nottickedoff">sequence_ $ RL.mapToList extractLogEntries tbm</span></span>
+<span class="lineno">  216 </span>
+<span class="lineno">  217 </span>instance (PermCheckExtC ext extExpr)
+<span class="lineno">  218 </span>  =&gt; ExtractLogEntries (TypedBlock TransPhase ext blocks tops ret args) where
+<span class="lineno">  219 </span>    <span class="decl"><span class="nottickedoff">extractLogEntries tb =</span>
+<span class="lineno">  220 </span><span class="spaces">      </span><span class="nottickedoff">mapM_ (\(Some te) -&gt; extractLogEntries te) $ _typedBlockEntries tb</span></span>
+<span class="lineno">  221 </span>
+<span class="lineno">  222 </span>mbExtractLogEntries
+<span class="lineno">  223 </span>  :: ExtractLogEntries a =&gt; CruCtx ctx -&gt; Mb (ctx :: RList CrucibleType) a -&gt; ExtractionM ()
+<span class="lineno">  224 </span><span class="decl"><span class="nottickedoff">mbExtractLogEntries ctx mb_a =</span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="nottickedoff">ReaderT $ \(ppi, loc, fname) -&gt;</span>
+<span class="lineno">  226 </span><span class="spaces">  </span><span class="nottickedoff">tell $ mbLift $ flip nuMultiWithElim1 mb_a $ \ns x -&gt;</span>
+<span class="lineno">  227 </span><span class="spaces">  </span><span class="nottickedoff">let ppi' = ppInfoAddTypedExprNames ctx ns ppi in</span>
+<span class="lineno">  228 </span><span class="spaces">  </span><span class="nottickedoff">execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)</span></span>
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>mb'ExtractLogEntries
+<span class="lineno">  231 </span>  :: ExtractLogEntries a =&gt; NamedMb (ctx :: RList CrucibleType) a -&gt; ExtractionM ()
+<span class="lineno">  232 </span><span class="decl"><span class="nottickedoff">mb'ExtractLogEntries mb_a =</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="nottickedoff">ReaderT $ \(ppi, loc, fname) -&gt;</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">tell $ mbLift $ flip nuMultiWithElim1 (_mbBinding mb_a) $ \ns x -&gt;</span>
+<span class="lineno">  235 </span><span class="spaces">  </span><span class="nottickedoff">let ppi' = ppInfoApplyAllocation ns (_mbNames mb_a) ppi in</span>
+<span class="lineno">  236 </span><span class="spaces">  </span><span class="nottickedoff">execWriter $ runReaderT (extractLogEntries x) (ppi', loc, fname)</span></span>
+<span class="lineno">  237 </span>
+<span class="lineno">  238 </span>typedStmtOutCtx :: TypedStmt ext rets ps_in ps_next -&gt; CruCtx rets
+<span class="lineno">  239 </span><span class="decl"><span class="nottickedoff">typedStmtOutCtx = error &quot;FIXME: write typedStmtOutCtx&quot;</span></span>
+<span class="lineno">  240 </span>
+<span class="lineno">  241 </span>withLoc :: ProgramLoc -&gt; ExtractionM a -&gt; ExtractionM a
+<span class="lineno">  242 </span><span class="decl"><span class="nottickedoff">withLoc loc = local (\(ppinfo, _, fname) -&gt; (ppinfo, loc, fname))</span></span>
+<span class="lineno">  243 </span>
+<span class="lineno">  244 </span>setErrorMsg :: String -&gt; LogEntry -&gt; LogEntry
+<span class="lineno">  245 </span><span class="decl"><span class="nottickedoff">setErrorMsg msg le@LogError {} = le { lerrError = msg }</span>
+<span class="lineno">  246 </span><span class="spaces"></span><span class="nottickedoff">setErrorMsg msg le@LogImpl {} =</span>
+<span class="lineno">  247 </span><span class="spaces">  </span><span class="nottickedoff">LogError { lerrError = msg</span>
+<span class="lineno">  248 </span><span class="spaces">           </span><span class="nottickedoff">, lerrLocation = limplLocation le</span>
+<span class="lineno">  249 </span><span class="spaces">           </span><span class="nottickedoff">, lerrFunctionName = limplFunctionName le}</span>
+<span class="lineno">  250 </span><span class="spaces"></span><span class="nottickedoff">setErrorMsg msg le@LogEntry {} =</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">LogError { lerrError = msg</span>
+<span class="lineno">  252 </span><span class="spaces">           </span><span class="nottickedoff">, lerrLocation = leLocation le</span>
+<span class="lineno">  253 </span><span class="spaces">           </span><span class="nottickedoff">, lerrFunctionName = leFunctionName le</span>
+<span class="lineno">  254 </span><span class="spaces">           </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  255 </span>
+<span class="lineno">  256 </span>runWithLoc :: PPInfo -&gt; [Some SomeTypedCFG] -&gt; [LogEntry]
+<span class="lineno">  257 </span><span class="decl"><span class="nottickedoff">runWithLoc ppi =</span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="nottickedoff">concatMap (runWithLocHelper ppi)</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  260 </span><span class="spaces">    </span><span class="nottickedoff">runWithLocHelper :: PPInfo -&gt; Some SomeTypedCFG -&gt; [LogEntry]</span>
+<span class="lineno">  261 </span><span class="spaces">    </span><span class="nottickedoff">runWithLocHelper ppi' sstcfg = case sstcfg of</span>
+<span class="lineno">  262 </span><span class="spaces">      </span><span class="nottickedoff">Some (SomeTypedCFG _ _ tcfg) -&gt; do</span>
+<span class="lineno">  263 </span><span class="spaces">        </span><span class="nottickedoff">let env = (ppi', getFirstProgramLoc tcfg, getFunctionName tcfg)</span>
+<span class="lineno">  264 </span><span class="spaces">        </span><span class="nottickedoff">execWriter (runReaderT (extractLogEntries tcfg) env)</span></span>
+<span class="lineno">  265 </span>
+<span class="lineno">  266 </span>getFunctionName :: TypedCFG ext blocks ghosts inits gouts ret -&gt; String
+<span class="lineno">  267 </span><span class="decl"><span class="nottickedoff">getFunctionName tcfg = case tpcfgHandle tcfg of</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="nottickedoff">TypedFnHandle _ _ handle -&gt; show $ handleName handle</span></span>
+<span class="lineno">  269 </span>
+<span class="lineno">  270 </span>getFirstProgramLoc
+<span class="lineno">  271 </span>  :: PermCheckExtC ext extExpr
+<span class="lineno">  272 </span>  =&gt; TypedCFG ext blocks ghosts inits gouts ret -&gt; ProgramLoc
+<span class="lineno">  273 </span><span class="decl"><span class="nottickedoff">getFirstProgramLoc tcfg =</span>
+<span class="lineno">  274 </span><span class="spaces">  </span><span class="nottickedoff">case listToMaybe $ catMaybes $</span>
+<span class="lineno">  275 </span><span class="spaces">         </span><span class="nottickedoff">RL.mapToList getFirstProgramLocBM $ tpcfgBlockMap tcfg of</span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="nottickedoff">Just pl -&gt; pl</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; error &quot;Unable to get initial program location&quot;</span></span>
+<span class="lineno">  278 </span>
+<span class="lineno">  279 </span>getFirstProgramLocBM
+<span class="lineno">  280 </span>  :: PermCheckExtC ext extExpr
+<span class="lineno">  281 </span>  =&gt; TypedBlock TransPhase ext blocks tops ret ctx
+<span class="lineno">  282 </span>  -&gt; Maybe ProgramLoc
+<span class="lineno">  283 </span><span class="decl"><span class="nottickedoff">getFirstProgramLocBM block =</span>
+<span class="lineno">  284 </span><span class="spaces">  </span><span class="nottickedoff">listToMaybe $ mapMaybe helper (_typedBlockEntries block)</span>
+<span class="lineno">  285 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="nottickedoff">helper</span>
+<span class="lineno">  287 </span><span class="spaces">      </span><span class="nottickedoff">:: PermCheckExtC ext extExpr</span>
+<span class="lineno">  288 </span><span class="spaces">      </span><span class="nottickedoff">=&gt; Some (TypedEntry TransPhase ext blocks tops ret ctx)</span>
+<span class="lineno">  289 </span><span class="spaces">      </span><span class="nottickedoff">-&gt; Maybe ProgramLoc</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="nottickedoff">helper ste = case ste of</span>
+<span class="lineno">  291 </span><span class="spaces">      </span><span class="nottickedoff">Some TypedEntry { typedEntryBody = stmts } -&gt;</span>
+<span class="lineno">  292 </span><span class="spaces">        </span><span class="nottickedoff">Just $ mbLiftNamed $ fmap getFirstProgramLocTS stmts</span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>-- | From the sequence, get the first program location we encounter, which
+<span class="lineno">  295 </span>-- should correspond to the permissions for the entry point we want to log
+<span class="lineno">  296 </span>getFirstProgramLocTS :: PermCheckExtC ext extExpr
+<span class="lineno">  297 </span>  =&gt; TypedStmtSeq ext blocks tops ret ctx
+<span class="lineno">  298 </span>  -&gt; ProgramLoc
+<span class="lineno">  299 </span><span class="decl"><span class="nottickedoff">getFirstProgramLocTS (TypedImplStmt (AnnotPermImpl _ pis)) =</span>
+<span class="lineno">  300 </span><span class="spaces">  </span><span class="nottickedoff">getFirstProgramLocPI pis</span>
+<span class="lineno">  301 </span><span class="spaces"></span><span class="nottickedoff">getFirstProgramLocTS (TypedConsStmt loc _ _ _) = loc</span>
+<span class="lineno">  302 </span><span class="spaces"></span><span class="nottickedoff">getFirstProgramLocTS (TypedTermStmt loc _) = loc</span></span>
+<span class="lineno">  303 </span>
+<span class="lineno">  304 </span>getFirstProgramLocPI
+<span class="lineno">  305 </span>  :: PermCheckExtC ext extExpr
+<span class="lineno">  306 </span>  =&gt; PermImpl (TypedStmtSeq ext blocks tops ret) ctx
+<span class="lineno">  307 </span>  -&gt; ProgramLoc
+<span class="lineno">  308 </span><span class="decl"><span class="nottickedoff">getFirstProgramLocPI (PermImpl_Done stmts) = getFirstProgramLocTS stmts</span>
+<span class="lineno">  309 </span><span class="spaces"></span><span class="nottickedoff">getFirstProgramLocPI (PermImpl_Step _ mbps) = getFirstProgramLocMBPI mbps</span></span>
+<span class="lineno">  310 </span>
+<span class="lineno">  311 </span>getFirstProgramLocMBPI
+<span class="lineno">  312 </span>  :: PermCheckExtC ext extExpr
+<span class="lineno">  313 </span>  =&gt; MbPermImpls (TypedStmtSeq ext blocks tops ret) ctx
+<span class="lineno">  314 </span>  -&gt; ProgramLoc
+<span class="lineno">  315 </span><span class="decl"><span class="nottickedoff">getFirstProgramLocMBPI MbPermImpls_Nil =</span>
+<span class="lineno">  316 </span><span class="spaces">  </span><span class="nottickedoff">error &quot;Error finding program location for IDE log&quot;</span>
+<span class="lineno">  317 </span><span class="spaces"></span><span class="nottickedoff">getFirstProgramLocMBPI (MbPermImpls_Cons _ _ pis) =</span>
+<span class="lineno">  318 </span><span class="spaces">  </span><span class="nottickedoff">mbLift $ fmap getFirstProgramLocPI pis</span></span>
+<span class="lineno">  319 </span>
+<span class="lineno">  320 </span>-- | Print a `ProgramLoc` in a way that is useful for an IDE, i.e., machine
+<span class="lineno">  321 </span>-- readable
+<span class="lineno">  322 </span>ppLoc :: ProgramLoc -&gt; (String, String)
+<span class="lineno">  323 </span><span class="decl"><span class="nottickedoff">ppLoc pl =</span>
+<span class="lineno">  324 </span><span class="spaces">  </span><span class="nottickedoff">let fnName = T.unpack $ functionName $ plFunction pl</span>
+<span class="lineno">  325 </span><span class="spaces">      </span><span class="nottickedoff">locStr = ppPos $ plSourceLoc pl</span>
+<span class="lineno">  326 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  327 </span><span class="spaces">      </span><span class="nottickedoff">ppPos (SourcePos file line column) =</span>
+<span class="lineno">  328 </span><span class="spaces">        </span><span class="nottickedoff">T.unpack file &lt;&gt; &quot;:&quot; &lt;&gt; show line &lt;&gt; &quot;:&quot; &lt;&gt; show column</span>
+<span class="lineno">  329 </span><span class="spaces">      </span><span class="nottickedoff">ppPos (BinaryPos _ _) = &quot;&lt;unknown binary pos&gt;&quot;</span>
+<span class="lineno">  330 </span><span class="spaces">      </span><span class="nottickedoff">ppPos (OtherPos _) = &quot;&lt;unknown other pos&gt;&quot;</span>
+<span class="lineno">  331 </span><span class="spaces">      </span><span class="nottickedoff">ppPos InternalPos = &quot;&lt;unknown internal pos&gt;&quot;</span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="nottickedoff">in (fnName, locStr)</span></span>
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Crucible.Common.Setup.Type
+<span class="lineno">    3 </span>Description : The CrucibleSetup monad
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : langston
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# LANGUAGE DeriveDataTypeable #-}
+<span class="lineno">   10 </span>{-# LANGUAGE DeriveFunctor #-}
+<span class="lineno">   11 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">   12 </span>{-# LANGUAGE MultiParamTypeClasses #-}
+<span class="lineno">   13 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">   14 </span>{-# LANGUAGE StandaloneDeriving #-}
+<span class="lineno">   15 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>module SAWCentral.Crucible.Common.Setup.Type
+<span class="lineno">   18 </span>  ( CrucibleSetupState(..)
+<span class="lineno">   19 </span>  , csVarCounter
+<span class="lineno">   20 </span>  , csPrePost
+<span class="lineno">   21 </span>  , csResolvedState
+<span class="lineno">   22 </span>  , csMethodSpec
+<span class="lineno">   23 </span>  , csCrucibleContext
+<span class="lineno">   24 </span>  , makeCrucibleSetupState
+<span class="lineno">   25 </span>  , CrucibleSetupRO(..)
+<span class="lineno">   26 </span>  , croTags
+<span class="lineno">   27 </span>  , makeCrucibleSetupRO
+<span class="lineno">   28 </span>  --
+<span class="lineno">   29 </span>  , CrucibleSetupT
+<span class="lineno">   30 </span>  , currentState
+<span class="lineno">   31 </span>  , addPointsTo
+<span class="lineno">   32 </span>  , addAllocGlobal
+<span class="lineno">   33 </span>  , addCondition
+<span class="lineno">   34 </span>  , freshTypedExtCns
+<span class="lineno">   35 </span>  , freshVariable
+<span class="lineno">   36 </span>  , setupWithTag
+<span class="lineno">   37 </span>  ) where
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import           Control.Lens
+<span class="lineno">   40 </span>import           Control.Monad.State (StateT)
+<span class="lineno">   41 </span>import           Control.Monad.Reader (ReaderT, withReaderT)
+<span class="lineno">   42 </span>import           Control.Monad.IO.Class (MonadIO(liftIO))
+<span class="lineno">   43 </span>import           Data.Text (Text)
+<span class="lineno">   44 </span>import           Data.Set (Set)
+<span class="lineno">   45 </span>import qualified Data.Set as Set
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
+<span class="lineno">   48 </span>import qualified CryptolSAWCore.Cryptol as Cryptol (importType, emptyEnv)
+<span class="lineno">   49 </span>import           CryptolSAWCore.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
+<span class="lineno">   50 </span>import           SAWCore.SharedTerm (SharedContext, scFreshEC)
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>--------------------------------------------------------------------------------
+<span class="lineno">   55 </span>-- * CrucibleSetupT
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>--------------------------------------------------------------------------------
+<span class="lineno">   58 </span>-- ** CrucibleSetupState
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>-- | Type of &quot;read only&quot; data maintained in a lexicograpic
+<span class="lineno">   61 </span>--   manner.
+<span class="lineno">   62 </span>data CrucibleSetupRO =
+<span class="lineno">   63 </span>  CrucibleSetupRO
+<span class="lineno">   64 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_croTags</span></span></span> :: Set String
+<span class="lineno">   65 </span>  }
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''CrucibleSetupRO</span></span></span>
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>-- | The type of state kept in the 'CrucibleSetup' monad
+<span class="lineno">   70 </span>data CrucibleSetupState ext =
+<span class="lineno">   71 </span>  CrucibleSetupState
+<span class="lineno">   72 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csVarCounter</span></span></span>      :: !MS.AllocIndex
+<span class="lineno">   73 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csPrePost</span></span></span>         :: !MS.PrePost
+<span class="lineno">   74 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csResolvedState</span></span></span>   :: MS.ResolvedState ext
+<span class="lineno">   75 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csMethodSpec</span></span></span>      :: MS.CrucibleMethodSpecIR ext
+<span class="lineno">   76 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_csCrucibleContext</span></span></span> :: MS.CrucibleContext ext
+<span class="lineno">   77 </span>  }
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="istickedoff"><span class="nottickedoff"><span class="istickedoff"><span class="decl"><span class="istickedoff">makeLenses ''CrucibleSetupState</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>makeCrucibleSetupRO :: CrucibleSetupRO
+<span class="lineno">   82 </span><span class="decl"><span class="istickedoff">makeCrucibleSetupRO =</span>
+<span class="lineno">   83 </span><span class="spaces">  </span><span class="istickedoff">CrucibleSetupRO</span>
+<span class="lineno">   84 </span><span class="spaces">  </span><span class="istickedoff">{ _croTags = mempty }</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>makeCrucibleSetupState ::
+<span class="lineno">   87 </span>  MS.ResolvedState ext -&gt;
+<span class="lineno">   88 </span>  MS.CrucibleContext ext -&gt;
+<span class="lineno">   89 </span>  MS.CrucibleMethodSpecIR ext -&gt;
+<span class="lineno">   90 </span>  CrucibleSetupState ext
+<span class="lineno">   91 </span><span class="decl"><span class="istickedoff">makeCrucibleSetupState rs cc mspec =</span>
+<span class="lineno">   92 </span><span class="spaces">  </span><span class="istickedoff">CrucibleSetupState</span>
+<span class="lineno">   93 </span><span class="spaces">    </span><span class="istickedoff">{ _csVarCounter      = MS.AllocIndex 0</span>
+<span class="lineno">   94 </span><span class="spaces">    </span><span class="istickedoff">, _csPrePost         = MS.PreState</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff">, _csResolvedState   = rs</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">, _csMethodSpec      = mspec</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="istickedoff">, _csCrucibleContext = cc</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="istickedoff">}</span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>--------------------------------------------------------------------------------
+<span class="lineno">  101 </span>-- ** CrucibleSetupT
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>type CrucibleSetupT ext m =
+<span class="lineno">  104 </span>  ReaderT CrucibleSetupRO (StateT (CrucibleSetupState ext) m)
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>--------------------------------------------------------------------------------
+<span class="lineno">  107 </span>-- ** State operations
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>currentState :: Lens' (CrucibleSetupState ext) (MS.StateSpec ext)
+<span class="lineno">  110 </span><span class="decl"><span class="istickedoff">currentState f x = case x^. csPrePost of</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">MS.PreState  -&gt; csMethodSpec (MS.csPreState f) x</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">MS.PostState -&gt; csMethodSpec (MS.csPostState f) x</span></span>
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>addPointsTo :: Monad m =&gt; MS.PointsTo ext -&gt; CrucibleSetupT ext m ()
+<span class="lineno">  115 </span><span class="decl"><span class="istickedoff">addPointsTo pt = currentState . MS.csPointsTos %= (pt : )</span></span>
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>addAllocGlobal :: Monad m =&gt; MS.AllocGlobal ext -&gt; CrucibleSetupT ext m ()
+<span class="lineno">  118 </span><span class="decl"><span class="istickedoff">addAllocGlobal ag = csMethodSpec . MS.csGlobalAllocs %= (ag : )</span></span>
+<span class="lineno">  119 </span>
+<span class="lineno">  120 </span>addCondition :: Monad m =&gt; MS.SetupCondition ext -&gt; CrucibleSetupT ext m ()
+<span class="lineno">  121 </span><span class="decl"><span class="istickedoff">addCondition cond = currentState . MS.csConditions %= (cond : )</span></span>
+<span class="lineno">  122 </span>
+<span class="lineno">  123 </span>-- | Allocate a fresh variable in the form of a 'TypedExtCns' and
+<span class="lineno">  124 </span>-- record this allocation in the setup state.
+<span class="lineno">  125 </span>freshTypedExtCns ::
+<span class="lineno">  126 </span>  MonadIO m =&gt;
+<span class="lineno">  127 </span>  SharedContext {- ^ shared context -} -&gt;
+<span class="lineno">  128 </span>  Text          {- ^ variable name  -} -&gt;
+<span class="lineno">  129 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
+<span class="lineno">  130 </span>  CrucibleSetupT arch m TypedExtCns
+<span class="lineno">  131 </span><span class="decl"><span class="istickedoff">freshTypedExtCns sc name cty =</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.importType sc <span class="nottickedoff">Cryptol.emptyEnv</span> cty</span>
+<span class="lineno">  133 </span><span class="spaces">     </span><span class="istickedoff">ec &lt;- liftIO $ scFreshEC sc name ty</span>
+<span class="lineno">  134 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedExtCns cty ec</span>
+<span class="lineno">  135 </span><span class="spaces">     </span><span class="istickedoff">currentState . MS.csFreshVars %= cons tt</span>
+<span class="lineno">  136 </span><span class="spaces">     </span><span class="istickedoff">return tt</span></span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>-- | Allocate a fresh variable in the form of a 'TypedTerm' and record
+<span class="lineno">  139 </span>-- this allocation in the setup state.
+<span class="lineno">  140 </span>freshVariable ::
+<span class="lineno">  141 </span>  MonadIO m =&gt;
+<span class="lineno">  142 </span>  SharedContext {- ^ shared context -} -&gt;
+<span class="lineno">  143 </span>  Text          {- ^ variable name  -} -&gt;
+<span class="lineno">  144 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
+<span class="lineno">  145 </span>  CrucibleSetupT arch m TypedTerm
+<span class="lineno">  146 </span><span class="decl"><span class="istickedoff">freshVariable sc name cty =</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedExtCns sc name cty</span>
+<span class="lineno">  148 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typedTermOfExtCns sc tec</span></span>
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>setupWithTag :: String -&gt; CrucibleSetupT arch m a -&gt; CrucibleSetupT arch m a
+<span class="lineno">  151 </span><span class="decl"><span class="istickedoff">setupWithTag tag m =</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">withReaderT (croTags %~ Set.insert tag) m</span></span>
+
+</pre>
+</body>
+</html>
