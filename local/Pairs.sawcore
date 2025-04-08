@@ -1,0 +1,64 @@
+module Pairs where
+
+import Prelude;
+
+PairsR : ListSort -> sort 0;
+PairsR = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType tp rec));
+
+PairsL : ListSort -> sort 0;
+PairsL = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType rec tp));
+
+
+ls1 : ListSort;
+ls1 = LS_Cons UnitType (LS_Cons Bool (LS_Cons Nat LS_Nil));
+
+{-
+i.e., arrowsType:
+  MyCurry : ListSort -> sort 0 -> sort 0
+  MyCurry []     a = a
+  MyCurry (t:ts) b = t -> MyCurry ts b)
+-}
+
+{-
+UnCurryN1 : (ls: ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b;
+UnCurryN1 ls b f =
+  ListSort__rec
+       (\(ls:ListSort) -> PairsL ls -> b)          -- P
+       (\(_:UnitType)-> f)                         -- P(LS_Nil)
+       (\ (tp:sort 0) (ls:ListSort) (rec: arrowsType ls b) ->
+            uncurry tp (PairsL ls) b rec
+       )
+  f;
+-}
+
+UnCurryN : (b: sort 0) -> (ls: ListSort) -> arrowsType ls b -> PairsL ls -> b;
+UnCurryN b =
+  ListSort__rec
+       (\(ls:ListSort) -> arrowsType ls b -> PairsL ls -> b)          -- P
+       (\(x:b) (_:UnitType)-> x)                                      -- P(LS_Nil)
+       (\ (A:sort 0)
+          (ls:ListSort)
+          (rec : arrowsType ls b -> PairsL ls -> b)
+          -- P(LS_Cons A ls) ==
+          --    arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
+         -- -> \(f: arrowsType (LS_Cons A ls) b) -> uncurry (PairsL ls) A b (rec f)
+         -> \(f: arrowsType ls b) -> uncurry (PairsL ls) A b (rec f)
+       );
+
+testa : arrowsType ls1 Bool -> PairsL ls1 -> Bool;
+testa = UnCurryN ls1 Bool;
+
+testbR : sort 0 = PairsR ls1;
+testbL : sort 0 = PairsL ls1;
+testbA : sort 0 = arrowsType ls1 Bool;
+
+
+test1 : sort 0 = testbA;
