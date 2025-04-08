@@ -189,7 +189,7 @@ zip_dist_with_solvers() {
 }
 
 output() { echo "::set-output name=$1::$2"; }
-ver() { grep Version saw.cabal | awk '{print $2}'; }
+ver() { grep '^Version' saw.cabal | awk '{print $2}'; }
 set_version() { output saw-version "$(ver)"; }
 set_files() { output changed-files "$(files_since "$1" "$2")"; }
 files_since() {
