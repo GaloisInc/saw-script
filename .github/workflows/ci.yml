@@ -797,6 +797,9 @@ jobs:
         with:
           submodules: true
 
+      - name: capture git state in GitRev.hs
+        run: ./build.sh gitrev
+
       - uses: rlespinasse/github-slug-action@v3.x
 
       - id: common-tag
