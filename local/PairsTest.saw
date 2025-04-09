@@ -5,10 +5,16 @@ enable_experimental;
 load_sawcore_from_file "Pairs.sawcore";
 
 let printNorm m e =
-  print (show_term (normalize_term (parse_core_mod m e)));
+  do {
+   print e;
+   print (show_term (normalize_term (parse_core_mod m e)));
+   print "";
+  };
 
 let printNorm_e2 = printNorm "Pairs";   // Module name!
 
 printNorm_e2 "test1";
+printNorm_e2 "test2";
+printNorm_e2 "test3";
 
 print "done";
