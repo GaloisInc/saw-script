@@ -17,6 +17,11 @@ import SAWServer.CryptolSetup
       cryptolLoadFileDescr,
       cryptolLoadFile )
 import SAWServer.Data.JVMType()
+import SAWServer.Eval
+    ( evalIntDescr,
+      evalInt,
+      evalBoolDescr,
+      evalBool )
 import SAWServer.Ghost
     ( createGhostVariableDescr,
       createGhostVariable )
@@ -117,6 +122,14 @@ sawMethods =
      "SAW/prove"
      proveDescr
      prove
+  , Argo.command
+     "SAW/eval int"
+     evalIntDescr
+     evalInt
+  , Argo.command
+     "SAW/eval bool"
+     evalBoolDescr
+     evalBool
   , Argo.command
      "SAW/set option"
      setOptionDescr

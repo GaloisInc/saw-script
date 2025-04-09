@@ -648,6 +648,26 @@ def prove(goal: cryptoltypes.CryptolJSON,
         pr.counterexample = None
     return pr
 
+def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
+    """Atempts to evaluate the given expression as a concrete integer.
+    """
+    conn = __get_designated_connection()
+    res = conn.eval_int(expr).result()
+    v = res['value']
+    if not isinstance(v, int):
+        raise ValueError(str(v) + " is not an integer")
+    return v
+
+def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
+    """Atempts to evaluate the given expression as a concrete boolean.
+    """
+    conn = __get_designated_connection()
+    res = conn.eval_bool(expr).result()
+    v = res['value']
+    if not isinstance(v, bool):
+        raise ValueError(str(v) + " is not a boolean")
+    return v
+
 def set_option(option : option.SAWOption, value : bool) -> None:
     """Set a boolean-valued SAW option."""
     global __designated_connection

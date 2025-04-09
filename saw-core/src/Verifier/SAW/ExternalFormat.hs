@@ -268,13 +268,15 @@ scReadExternal sc input =
              lift (scResolveNameByURI sc (moduleIdentToURI ident)) >>= \case
                Just vi' -> pure (EC vi' nmi t')
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
-           _ ->
-             case Map.lookup vi vs of
-               Just vi' -> pure $ EC vi' nmi t'
-               Nothing ->
-                 do vi' <- lift $ scFreshGlobalVar sc
-                    State.put (ts, nms, Map.insert vi vi' vs)
-                    pure $ EC vi' nmi t'
+           ImportedName uri _aliases ->
+             lift (scResolveNameByURI sc uri) >>= \case
+               Just vi' -> pure (EC vi' nmi t')
+               Nothing -> case Map.lookup vi vs of
+                 Just vi' -> pure $ EC vi' nmi t'
+                 Nothing ->
+                   do vi' <- lift $ scFreshGlobalVar sc
+                      State.put (ts, nms, Map.insert vi vi' vs)
+                      pure $ EC vi' nmi t'
 
     readEC :: String -> String -> ReadM (ExtCns Term)
     readEC i t =

@@ -464,22 +464,18 @@ printGoalSize =
 resolveNames :: [String] -> TopLevel (Set VarIndex)
 resolveNames nms =
   do sc <- getSharedContext
-     Set.fromList <$> mapM (resolveName sc) nms
+     Set.fromList . mconcat <$> mapM (resolveName sc) nms
 
--- | Given a user-provided name, resolve it to some
---   'ExtCns' that represents an unfoldable 'Constant'
---   value or a fresh uninterpreted constant.
---
---   We first attempt to find the name in the local Cryptol
---   environment; if the name is found, attempt to resolve it to
---   an 'ExtCns' in the SAWCore environment.  If the given name
---   does not resolve to a cryptol value in the current environment that
---  maps to an 'ExtCns', then instead directly look it up
---  in the SAWCore naming environment.  If both stages
---  fail, then throw an exception.
-resolveName :: SharedContext -> String -> TopLevel VarIndex
+-- | Given a user-provided name, resolve it to (potentially several)
+-- 'ExtCns' that each represent an unfoldable 'Constant' value or a
+-- fresh uninterpreted constant.
+-- The given name is searched for in both the local Cryptol environment
+-- and the SAWCore naming environment. If it is found in neither, an
+-- exception is thrown.
+resolveName :: SharedContext -> String -> TopLevel [VarIndex]
 resolveName sc nm =
   do cenv <- rwCryptol <$> getTopLevelRW
+     scnms <- fmap fst <$> io (scResolveName sc tnm)
      let ?fileReader = StrictBS.readFile
      res <- io $ CEnv.resolveIdentifier cenv tnm
      case res of
@@ -489,14 +485,13 @@ resolveName sc nm =
               ImportedName uri _ ->
                 do resolvedName <- io $ scResolveNameByURI sc uri
                    case resolvedName of
-                     Just vi -> pure vi
-                     Nothing -> fallback
-              _ -> fallback
-       Nothing -> fallback
+                     Just vi -> pure $ vi:scnms
+                     Nothing -> pure scnms
+              _ -> pure scnms
+       Nothing -> pure scnms
 
  where
  tnm = Text.pack nm
- fallback = fst <$> io (scResolveUnambiguous sc tnm)
 
 
 normalize_term :: TypedTerm -> TopLevel TypedTerm
@@ -506,7 +501,7 @@ normalize_term_opaque :: [String] -> TypedTerm -> TopLevel TypedTerm
 normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      modmap <- io (scGetModuleMap sc)
-     idxs <- mapM (resolveName sc) opaque
+     idxs <- mconcat <$> mapM (resolveName sc) opaque
      let opaqueSet = Set.fromList idxs
      tm' <- io (TM.normalizeSharedTerm sc modmap mempty mempty opaqueSet (ttTerm tt))
      pure tt{ ttTerm = tm' }
@@ -557,11 +552,11 @@ extract_uninterp ::
   TopLevel (TypedTerm, [(String,[(TypedTerm,TypedTerm)])])
 extract_uninterp unints opaques tt =
   do sc <- getSharedContext
-     idxs <- mapM (resolveName sc) unints
+     idxs <- mconcat <$> mapM (resolveName sc) unints
      let unintSet = Set.fromList idxs
      mmap <- io (scGetModuleMap sc)
 
-     opaqueSet <- Set.fromList <$> mapM (resolveName sc) opaques
+     opaqueSet <- Set.fromList . mconcat <$> mapM (resolveName sc) opaques
 
      boundECRef <- io (newIORef Set.empty)
      let ?recordEC = \ec -> modifyIORef boundECRef (Set.insert ec)
@@ -929,13 +924,13 @@ provePrim script t = do
     _ -> return ()
   return res
 
-provePrintPrim ::
+proveHelper ::
   ProofScript () ->
   TypedTerm ->
+  (Term -> TopLevel Prop) ->
   TopLevel Theorem
-provePrintPrim script t = do
-  sc <- getSharedContext
-  prop <- io $ predicateToProp sc Universal (ttTerm t)
+proveHelper script t f = do
+  prop <- f $ ttTerm t
   let goal = ProofGoal 0 "prove" "prove" prop
   opts <- rwPPOpts <$> getTopLevelRW
   res <- SV.runProofScript script goal Nothing "prove_print_prim"
@@ -948,6 +943,22 @@ provePrintPrim script t = do
          SV.returnProof thm
     InvalidProof _stats _cex pst -> failProof pst
     UnfinishedProof pst -> failProof pst
+
+provePrintPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+provePrintPrim script t = do
+  sc <- getSharedContext
+  proveHelper script t $ io . predicateToProp sc Universal
+
+provePropPrim ::
+  ProofScript () ->
+  TypedTerm ->
+  TopLevel Theorem
+provePropPrim script t = do
+  sc <- getSharedContext
+  proveHelper script t $ io . termToProp sc
 
 satPrim ::
   ProofScript () ->
@@ -1036,7 +1047,7 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
 unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  unints' <- mapM (resolveName sc) unints
+  unints' <- mconcat <$> mapM (resolveName sc) unints
   t' <- io $ scUnfoldConstants sc unints' t
   return (TypedTerm schema t')
 

@@ -33,6 +33,7 @@ data Token
   | TOr                 -- ^ keyword @or@
   | TTrue               -- ^ keyword @true@
   | TFalse              -- ^ keyword @false@
+  | TAny                -- ^ keyword @any@
   | TEmpty              -- ^ keyword @empty@
   | TExists             -- ^ keyword @exists@
   | TEq                 -- ^ keyword @eq@
@@ -115,6 +116,7 @@ describeToken t =
     TOr                 -> "keyword 'or'"
     TTrue               -> "keyword 'true'"
     TFalse              -> "keyword 'false'"
+    TAny                -> "keyword 'any'"
     TEmpty              -> "keyword 'empty'"
     TExists             -> "keyword 'exists'"
     TEq                 -> "keyword 'eq'"

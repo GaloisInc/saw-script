@@ -216,6 +216,9 @@ data ExprTrans (a :: CrucibleType) where
   -- | The unit type has no computational content
   ETrans_Unit :: ExprTrans UnitType
 
+  -- | The translation of Vectors of the Crucible any type have no content
+  ETrans_AnyVector :: ExprTrans (VectorType AnyType)
+
   -- | The translation for every other expression type is just a SAW term. Note
   -- that this construct should not be used for the types handled above.
   ETrans_Term :: OpenTerm -> ExprTrans a
@@ -269,6 +272,7 @@ instance IsTermTrans (ExprTrans tp) where
     concat $ RL.mapToList transTerms etranss
   transTerms ETrans_Fun = []
   transTerms ETrans_Unit = []
+  transTerms ETrans_AnyVector = []
   transTerms (ETrans_Term t) = [t]
 
 instance IsTermTrans (ExprTransCtx ctx) where
@@ -698,6 +702,8 @@ instance TransInfo info =>
       return $ error "translate: SequenceRepr"
     [nuMP| BVRepr w |] ->
       returnType1 =<< bitvectorTransM (translate w)
+    [nuMP| VectorRepr AnyRepr |] ->
+      return $ mkTypeTrans0 ETrans_AnyVector
 
     -- Our special-purpose intrinsic types, whose translations do not have
     -- computational content
@@ -1059,13 +1065,14 @@ data AtomicPermTrans ctx a where
   -- | @lowned@ permissions translate to a monadic function from (the
   -- translation of) the input permissions to the output permissions
   APTrans_LOwned :: Mb ctx [PermExpr LifetimeType] ->
-                    Mb ctx (LOwnedPerms ps_in) ->
-                    Mb ctx (LOwnedPerms ps_out) ->
+                    CruCtx ps_in -> CruCtx ps_out ->
+                    Mb ctx (ExprPerms ps_in) ->
+                    Mb ctx (ExprPerms ps_out) ->
                     OpenTerm -> AtomicPermTrans ctx LifetimeType
 
   -- | Simple @lowned@ permissions have no translation, because they represent
   -- @lowned@ permissions whose translations are just the identity function
-  APTrans_LOwnedSimple :: Mb ctx (LOwnedPerms ps) ->
+  APTrans_LOwnedSimple :: CruCtx ps -> Mb ctx (ExprPerms ps) ->
                           AtomicPermTrans ctx LifetimeType
 
   -- | LCurrent permissions have no computational content
@@ -1088,6 +1095,9 @@ data AtomicPermTrans ctx a where
   -- | Propositional permissions are represented by a SAW term
   APTrans_BVProp :: (1 <= w, KnownNat w) => BVPropTrans ctx w ->
                     AtomicPermTrans ctx (LLVMPointerType w)
+
+  -- | Any permissions have no SAW terms
+  APTrans_Any :: AtomicPermTrans ctx a
 
 
 -- | The translation of a proof of a 'BVProp'
@@ -1227,13 +1237,14 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_NamedConj _ _ _ t) = [t]
   transTerms (APTrans_DefinedNamedConj _ _ _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMFrame _) = []
-  transTerms (APTrans_LOwned _ _ _ t) = [t]
-  transTerms (APTrans_LOwnedSimple _) = []
+  transTerms (APTrans_LOwned _ _ _ _ _ t) = [t]
+  transTerms (APTrans_LOwnedSimple _ _) = []
   transTerms (APTrans_LCurrent _) = []
   transTerms APTrans_LFinished = []
   transTerms (APTrans_Struct pctx) = transTerms pctx
   transTerms (APTrans_Fun _ t) = [t]
   transTerms (APTrans_BVProp prop) = transTerms prop
+  transTerms APTrans_Any = []
 
 instance IsTermTrans (BVPropTrans ctx w) where
   transTerms (BVPropTrans _ t) = [t]
@@ -1284,9 +1295,10 @@ atomicPermTransPerm _ (APTrans_NamedConj npn args off _) =
 atomicPermTransPerm _ (APTrans_DefinedNamedConj npn args off _) =
   mbMap2 (Perm_NamedConj npn) args off
 atomicPermTransPerm _ (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
-atomicPermTransPerm _ (APTrans_LOwned ls ps_in ps_out _) =
-  mbMap3 Perm_LOwned ls ps_in ps_out
-atomicPermTransPerm _ (APTrans_LOwnedSimple lops) = fmap Perm_LOwnedSimple lops
+atomicPermTransPerm _ (APTrans_LOwned mb_ls tps_in tps_out mb_ps_in mb_ps_out _) =
+  mbMap3 (\ls -> Perm_LOwned ls tps_in tps_out) mb_ls mb_ps_in mb_ps_out
+atomicPermTransPerm _ (APTrans_LOwnedSimple tps mb_lops) =
+  fmap (Perm_LOwnedSimple tps) mb_lops
 atomicPermTransPerm _ (APTrans_LCurrent l) = fmap Perm_LCurrent l
 atomicPermTransPerm prxs APTrans_LFinished = nus prxs $ const Perm_LFinished
 atomicPermTransPerm prxs (APTrans_Struct ps) =
@@ -1294,6 +1306,7 @@ atomicPermTransPerm prxs (APTrans_Struct ps) =
 atomicPermTransPerm _ (APTrans_Fun fp _) = fmap Perm_Fun fp
 atomicPermTransPerm _ (APTrans_BVProp (BVPropTrans prop _)) =
   fmap Perm_BVProp prop
+atomicPermTransPerm prxs APTrans_Any = nuMulti prxs $ const $ Perm_Any
 
 -- | Extract out the permissions from a context of permission translations
 permTransCtxPerms :: RAssign Proxy ctx -> PermTransCtx ctx ps ->
@@ -1348,15 +1361,17 @@ instance ExtPermTrans AtomicPermTrans where
   extPermTrans (APTrans_DefinedNamedConj npn args off ptrans) =
     APTrans_DefinedNamedConj npn (extMb args) (extMb off) (extPermTrans ptrans)
   extPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
-  extPermTrans (APTrans_LOwned ls ps_in ps_out t) =
-    APTrans_LOwned (extMb ls) (extMb ps_in) (extMb ps_out) t
-  extPermTrans (APTrans_LOwnedSimple lops) = APTrans_LOwnedSimple (extMb lops)
+  extPermTrans (APTrans_LOwned ls tps_in tps_out ps_in ps_out t) =
+    APTrans_LOwned (extMb ls) tps_in tps_out (extMb ps_in) (extMb ps_out) t
+  extPermTrans (APTrans_LOwnedSimple tps lops) =
+    APTrans_LOwnedSimple tps (extMb lops)
   extPermTrans (APTrans_LCurrent p) = APTrans_LCurrent $ extMb p
   extPermTrans APTrans_LFinished = APTrans_LFinished
   extPermTrans (APTrans_Struct ps) = APTrans_Struct $ RL.map extPermTrans ps
   extPermTrans (APTrans_Fun fp t) = APTrans_Fun (extMb fp) t
   extPermTrans (APTrans_BVProp prop_trans) =
     APTrans_BVProp $ extPermTrans prop_trans
+  extPermTrans APTrans_Any = APTrans_Any
 
 instance ExtPermTrans LLVMArrayPermTrans where
   extPermTrans (LLVMArrayPermTrans ap len sh {- bs -} t) =
@@ -1758,15 +1773,16 @@ instance TransInfo info =>
                          APTrans_NamedConj (mbLift npn) args off t) ptrans
     [nuMP| Perm_LLVMFrame fp |] ->
       return $ mkTypeTrans0 $ APTrans_LLVMFrame fp
-    [nuMP| Perm_LOwned ls ps_in ps_out |] ->
+    [nuMP| Perm_LOwned ls tps_in tps_out ps_in ps_out |] ->
       do tp_in <- typeTransTupleType <$> translate ps_in
          tp_out <- typeTransTupleType <$> translate ps_out
          let tp = arrowOpenTerm "ps" tp_in (applyOpenTerm
                                             (globalOpenTerm "Prelude.CompM")
                                             tp_out)
-         return $ mkTypeTrans1 tp (APTrans_LOwned ls ps_in ps_out)
-    [nuMP| Perm_LOwnedSimple lops |] ->
-      return $ mkTypeTrans0 $ APTrans_LOwnedSimple lops
+         return $ mkTypeTrans1 tp (APTrans_LOwned ls
+                                   (mbLift tps_in) (mbLift tps_out) ps_in ps_out)
+    [nuMP| Perm_LOwnedSimple tps lops |] ->
+      return $ mkTypeTrans0 $ APTrans_LOwnedSimple (mbLift tps) lops
     [nuMP| Perm_LCurrent l |] ->
       return $ mkTypeTrans0 $ APTrans_LCurrent l
     [nuMP| Perm_LFinished |] ->
@@ -1778,6 +1794,7 @@ instance TransInfo info =>
       return $ mkTypeTrans1 tp_term (APTrans_Fun fun_perm)
     [nuMP| Perm_BVProp prop |] ->
       fmap APTrans_BVProp <$> translate prop
+    [nuMP| Perm_Any |] -> return $ mkTypeTrans0 APTrans_Any
 
 -- | Translate an array permission to a 'TypeTrans' for an array permission
 -- translation, also returning the translations of the bitvector width as a
@@ -1845,19 +1862,14 @@ instance TransInfo info =>
                                                  (PermTransCtx ctx ps)) where
   translate = translate . mbDistPermsToValuePerms . fmap unTypeDistPerms
 
--- LOwnedPerms translate to a single tuple type, because lowned permissions
--- translate to functions with one argument and one return value
 instance TransInfo info =>
-         Translate info ctx (LOwnedPerms ps) (TypeTrans
-                                              (PermTransCtx ctx ps)) where
-  translate mb_lops =
-    translate $ flip fmap mb_lops $ \lops ->
-    -- NOTE: if we can't translate lops to a DistPerms, we just translate the
-    -- "raw" / un-offset permissions returned by lownedPermPerm, so that we at
-    -- least have something to return, and it doesn't really matter what because
-    -- in this case lops can't really be instantiated anyway
-    maybe (RL.map lownedPermPerm lops) distPermsToValuePerms $
-    lownedPermsToDistPerms lops
+         Translate info ctx (ExprPerms ps) (TypeTrans
+                                            (PermTransCtx ctx ps)) where
+  translate mb_eps
+    | Just mb_ps <- mbExprPermsToValuePerms mb_eps = translate mb_ps
+  translate mb_ps =
+    error ("Translating expression permissions that could not be converted " ++
+           "to variable permissions:" ++ permPrettyString emptyPPInfo mb_ps)
 
 -- Translate a FunPerm to a pi-abstraction (FIXME: more documentation!)
 instance TransInfo info =>
@@ -2481,6 +2493,8 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          m
 
   [nuMP| SImpl_CastLLVMPtr _ _ _ _ |] ->
+    -- FIXME: offsetLLVMPerm can throw away conjuncts, like free and llvmfunptr
+    -- permissions, that change the type of the translation
     do tptrans <- translateSimplImplOutHead mb_simpl
        withPermStackM RL.tail
          (\(pctx :>: _ :>: ptrans) ->
@@ -2824,7 +2838,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
       pctx :>: PTrans_Conj [APTrans_IsLLVMPtr] :>: ptrans)
     m
 
-  [nuMP| SImpl_SplitLifetime _ f args l _ _ ps_in ps_out |] ->
+  [nuMP| SImpl_SplitLifetime _ f args l _ _ _ _ ps_in ps_out |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        ps_in_trans <- translate ps_in
        ps_out_trans <- translate ps_out
@@ -2843,14 +2857,14 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            typeTransF pctx_out_trans (transTerms ptrans_x ++ [f_tm]))
          m
 
-  [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ |] ->
+  [nuMP| SImpl_SubsumeLifetime _ _ _ _ _ _ _ |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM id
          (\(pctx :>: ptrans_l) ->
            RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
          m
 
-  [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ |] ->
+  [nuMP| SImpl_ContainedLifetimeCurrent _ _ _ _ _ _ _ |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM
          (\(ns :>: l1) -> ns :>: l1 :>: l1)
@@ -2861,7 +2875,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            RL.append pctx $ typeTransF pctx_out_trans (transTerms ptrans_l))
          m
 
-  [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ |] ->
+  [nuMP| SImpl_RemoveContainedLifetime _ _ _ _ _ _ _ |] ->
     do pctx_out_trans <- translateSimplImplOut mb_simpl
        withPermStackM
          (\(ns :>: l1 :>: _) -> ns :>: l1)
@@ -2882,7 +2896,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            RL.append pctx (typeTransF pctx_out_trans $ transTerms ptrans_x))
          m
 
-  [nuMP| SImpl_MapLifetime l _ ps_in ps_out
+  [nuMP| SImpl_MapLifetime l _ _ _ ps_in ps_out _ _
                            ps_in' ps_out' ps1 ps2 impl_in impl_out |] ->
     -- First, translate the output permissions and all of the perm lists
     do pctx_out_trans <- translateSimplImplOut mb_simpl
@@ -2913,10 +2927,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            fromJustOrError Nothing = error "translateSimplImpl: SImpl_MapLifetime"
            ps_in'_vars =
              RL.map (translateVar . getCompose) $ mbRAssign $ 
-             fmap (fromJustOrError . lownedPermsVars) ps_in'
+             fmap (fromJustOrError . exprPermsVars) ps_in'
            ps_out_vars =
              RL.map (translateVar . getCompose) $ mbRAssign $ 
-             fmap (fromJustOrError . lownedPermsVars) ps_out
+             fmap (fromJustOrError . exprPermsVars) ps_out
        impl_in_tm <-
          translateCurryLocalPermImpl "Error mapping lifetime input perms:" impl_in
          pctx1 vars1 ps_in'_trans ps_in'_vars ps_in_trans
@@ -2939,7 +2953,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
          (\_ -> RL.append pctx_ps $ typeTransF pctx_out_trans [l_res_tm])
          m
 
-  [nuMP| SImpl_EndLifetime _ ps_in ps_out |] ->
+  [nuMP| SImpl_EndLifetime _ _ _ ps_in ps_out |] ->
     -- First, translate the output permissions and the input and output types of
     -- the monadic function for the lifeime ownership permission
     do ps_out_trans <- tupleTypeTrans <$> translate ps_out
@@ -2956,7 +2970,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            fromJustHelper _ = error "translateSimplImpl: SImpl_EndLifetime"
        let vars_out =
              RL.append ps_vars $ RL.map (translateVar . getCompose) $
-             mbRAssign $ fmap (fromJustHelper . lownedPermsVars) ps_out
+             mbRAssign $ fmap (fromJustHelper . exprPermsVars) ps_out
 
        -- Now we apply the lifetime ownerhip function to ps_in and bind its output
        -- in the rest of the computation
@@ -2971,7 +2985,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                   PTrans_Conj [APTrans_LFinished])
            m]
 
-  [nuMP| SImpl_IntroLOwnedSimple _ _ |] ->
+  [nuMP| SImpl_IntroLOwnedSimple _ _ _ |] ->
     do let prx_ps_l = mbRAssignProxies $ mbSimplImplIn mb_simpl
        ttrans <- translateSimplImplOut mb_simpl
        withPermStackM id
@@ -2980,7 +2994,7 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
            RL.append pctx0 $ typeTransF ttrans (transTerms pctx_ps))
          m
 
-  [nuMP| SImpl_ElimLOwnedSimple _ mb_lops |] ->
+  [nuMP| SImpl_ElimLOwnedSimple _ _ mb_lops |] ->
     do ttrans <- translateSimplImplOutHead mb_simpl
        lops_tp <- typeTransTupleType <$> translate mb_lops
        let f_tm =
@@ -3321,6 +3335,30 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
                                                 ++ [transTerm1 ptrans_x,
                                                     transTerm1 ptrans_y])])
          m
+
+  [nuMP| SImpl_IntroAnyEqEq _ _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_IntroAnyWordPtr _ _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM RL.tail
+         (\(pctx :>: _ :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_ElimAnyToEq _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
+
+  [nuMP| SImpl_ElimAnyToPtr _ _ |] ->
+    do tp_trans <- translateSimplImplOutHead mb_simpl
+       withPermStackM id
+         (\(pctx :>: _) ->
+           pctx :>: typeTransF tp_trans []) m
 
 
 -- | A flag to indicate whether the translation of a permission implication
@@ -3688,7 +3726,8 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
   ([nuMP| Impl1_BeginLifetime |], _) ->
     translatePermImplUnary mb_impls $ \m ->
     inExtTransM ETrans_Lifetime $
-    do tp_trans <- translateClosed $ ValPerm_LOwned [] MNil MNil
+    do tp_trans <- translateClosed (ValPerm_LOwned
+                                    [] CruCtxNil CruCtxNil MNil MNil)
        let id_fun =
              lambdaOpenTerm "ps_empty" unitTypeOpenTerm $ \x ->
              applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
@@ -4853,6 +4892,8 @@ tcTranslateCFGTupleFun env checks endianness dlevel cfgs_and_perms =
   case cfg_and_perm of
     SomeCFGAndPerm sym _ cfg fun_perm ->
       debugTraceTraceLvl dlevel ("Type-checking " ++ show sym) $
+      debugTrace verboseDebugLevel dlevel
+      ("With type:\n" ++ permPrettyString emptyPPInfo fun_perm) $
       translateCFG env' checks $
       tcCFG ?ptrWidth env' endianness dlevel fun_perm cfg
 

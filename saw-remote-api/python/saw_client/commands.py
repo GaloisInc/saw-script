@@ -184,6 +184,30 @@ class Prove(SAWCommand):
     def process_result(self, res : Any) -> Any:
         return res
 
+class EvalInt(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            expr : cryptoltypes.CryptolJSON,
+            timeout : Optional[float]) -> None:
+        params = {'expr': cryptoltypes.to_cryptol(expr)}
+        super(EvalInt, self).__init__('SAW/eval int', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
+class EvalBool(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            expr : cryptoltypes.CryptolJSON,
+            timeout : Optional[float]) -> None:
+        params = {'expr': cryptoltypes.to_cryptol(expr)}
+        super(EvalBool, self).__init__('SAW/eval bool', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class SAWReset(argo.Notification):
     def __init__(self, connection : argo.HasProtocolState) -> None:
         super(SAWReset, self).__init__(

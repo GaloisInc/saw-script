@@ -67,3 +67,13 @@ run_test "is_elem |= noErrorsSpec" (mr_solver is_elem is_elem_noErrorsSpec) true
 */
 
 run_test "is_elem |= is_elem_spec" (mr_solver is_elem {{ is_elem_spec }}) true;
+
+
+monadify_term {{ Right }};
+monadify_term {{ Left }};
+monadify_term {{ nil }};
+monadify_term {{ cons }};
+
+sorted_insert_no_malloc <- parse_core_mod "linked_list" "sorted_insert_no_malloc";
+run_test "sorted_insert_no_malloc |= sorted_insert_spec"
+  (mr_solver sorted_insert_no_malloc {{ sorted_insert_spec }}) true;

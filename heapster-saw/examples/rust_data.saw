@@ -596,6 +596,17 @@ list64_tail_sym <- heapster_find_symbol env "11list64_tail";
 heapster_typecheck_fun_rename env list64_tail_sym "list64_tail"
   "<> fn (l:List64) -> Option<List64>";
 
+// list64_head_mut
+list64_head_mut_sym <- heapster_find_symbol env "15list64_head_mut";
+heapster_typecheck_fun_rename env list64_head_mut_sym "list64_head_mut"
+  "<'a> fn (l:&'a mut List64) -> Option<&'a mut u64>";
+
+// list64_find_mut
+list64_find_mut_sym <- heapster_find_symbol env "15list64_find_mut";
+heapster_typecheck_fun_rename env list64_find_mut_sym "list64_find_mut"
+  "<'a> fn (x:u64, l:&'a mut List64) -> Option<&'a mut u64>";
+
+/*
 hash_map_insert_gt_to_le_sym <- heapster_find_symbol env "hash_map_insert_gt_to_le";
 heapster_typecheck_fun_rename
   env hash_map_insert_gt_to_le_sym
@@ -628,6 +639,7 @@ heapster_set_translation_checks env false;
 list20_head_sym <- heapster_find_symbol env "11list20_head";
 heapster_typecheck_fun_rename env list20_head_sym "list20_head"
   "<'a> fn (x:&'a List20<List<u64>>) -> &'a List<u64>";
+*/
 
 
 /***

@@ -179,7 +179,7 @@ pub fn extract_from_result_infallible <'a> (r:&'a Result<Infallible,u64>) -> u64
 /* Sum of two types; yes, this is like Result, but defined locally so we can
  * make an impl block on it */
 #[derive(Clone, Debug, PartialEq)]
-#[repr(C)]
+#[repr(C,u64)]
 pub enum Sum<X,Y> {
     Left (X),
     Right (Y)
@@ -418,6 +418,14 @@ pub fn list64_sum(l:&List64) -> u64 {
     match l {
         List64::Nil64 => 0,
         List64::Cons64 (x,rest) => x + list64_sum (rest),
+    }
+}
+
+/* Return a mutable reference to the head of a list, or None if it is empty */
+pub fn list64_head_mut <'a> (l:&'a mut List64) -> Option<&'a mut u64> {
+    match l {
+        List64::Nil64 => None,
+        List64::Cons64 (h,_) => Some (h),
     }
 }
 
