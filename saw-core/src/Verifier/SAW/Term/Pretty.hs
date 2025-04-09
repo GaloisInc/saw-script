@@ -115,9 +115,15 @@ data PPOpts = PPOpts { ppBase :: Int
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
-                         ppNoInlineMemo = mempty, ppNoInlineIdx = mempty,
-                         ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
+defaultPPOpts =
+  PPOpts
+    { ppBase = 10
+    , ppColor = False
+    , ppNoInlineMemo = mempty
+    , ppNoInlineIdx = mempty
+    , ppShowLocalNames = True
+    , ppMaxDepth = Nothing
+    , ppMinSharing = 2 }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -239,9 +245,12 @@ data PPState =
 
 emptyPPState :: PPOpts -> SAWNamingEnv -> PPState
 emptyPPState opts ne =
-  PPState { ppOpts = opts, ppDepth = 0, ppNaming = emptyVarNaming,
+  PPState { ppOpts = opts,
+            ppDepth = 0,
+            ppNaming = emptyVarNaming,
             ppNamingEnv = ne,
-            ppNextMemoVar = 1, ppGlobalMemoTable = IntMap.empty,
+            ppNextMemoVar = 1,
+            ppGlobalMemoTable = IntMap.empty,
             ppLocalMemoTable = IntMap.empty }
 
 -- | The pretty-printing monad
@@ -295,18 +304,18 @@ withBoundVarM basename m =
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
 
--- | Attempt to memoize the given term (index) 'idx' and run a computation in
--- the context that the attempt produces. If memoization succeeds, the context
--- will contain a binding (global in scope if 'global_p' is set, local if not)
--- of a fresh memoization variable to the term, and the fresh variable will be
--- supplied to the computation. If memoization fails, the context will not
--- contain such a binding, and no fresh variable will be supplied.
+-- | Attempt to memoize the given term (index) 'termIdx' and run a computation
+-- in the context that the attempt produces. If memoization succeeds, the
+-- context will contain a binding (global in scope if 'global_p' is set, local
+-- if not) of a fresh memoization variable to the term, and the fresh variable
+-- will be supplied to the computation. If memoization fails, the context will
+-- not contain such a binding, and no fresh variable will be supplied.
 withMemoVar :: Bool -> TermIndex -> (Maybe MemoVar -> PPM a) -> PPM a
-withMemoVar global_p idx f =
+withMemoVar global_p termIdx f =
   do
     memoVar <- asks ppNextMemoVar
     memoSkips <- asks (ppNoInlineMemo . ppOpts)
-    idxSkips <- asks (ppNoInlineIdx . ppOpts)
+    termIdxSkips <- asks (ppNoInlineIdx . ppOpts)
     case memoSkips of
       -- Even if we must skip this memoization variable, we still want to
       -- "pretend" we memoized by calling `updateMemoVar`, so that non-inlined
@@ -315,22 +324,22 @@ withMemoVar global_p idx f =
       (skip:skips)
         | skip == memoVar -> local (updateMemoVar . addIdxSkip . setMemoSkips skips) (f Nothing)
       _
-        | idx `Set.member` idxSkips -> f Nothing
+        | termIdx `Set.member` termIdxSkips -> f Nothing
         | otherwise -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
   where
     bind = if global_p then bindGlobal else bindLocal
 
     bindGlobal memoVar PPState{ .. } =
-      PPState { ppGlobalMemoTable = IntMap.insert idx memoVar ppGlobalMemoTable, .. }
+      PPState { ppGlobalMemoTable = IntMap.insert termIdx memoVar ppGlobalMemoTable, .. }
 
     bindLocal memoVar PPState{ .. } =
-      PPState { ppLocalMemoTable = IntMap.insert idx memoVar ppLocalMemoTable, .. }
+      PPState { ppLocalMemoTable = IntMap.insert termIdx memoVar ppLocalMemoTable, .. }
 
     setMemoSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
       PPState { ppOpts = PPOpts { ppNoInlineMemo = memoSkips, ..}, ..}
 
     addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
-      PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert idx ppNoInlineIdx, .. }, .. }
+      PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert termIdx ppNoInlineIdx, .. }, .. }
 
     updateMemoVar PPState{ .. } =
       PPState { ppNextMemoVar = ppNextMemoVar + 1, .. }
@@ -689,13 +698,13 @@ ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
-ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
-  do isBound <- isJust <$> memoLookupM idx
+ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
+  do isBound <- isJust <$> memoLookupM termIdx
      if isBound then ppLets global_p idxs bindings baseDoc else
-       do doc_rhs <- ppTerm' PrecTerm t_rhs
-          withMemoVar global_p idx $ \memoVarM ->
+       do termDoc <- ppTerm' PrecTerm term
+          withMemoVar global_p termIdx $ \memoVarM ->
             let bindings' = case memoVarM of
-                  Just memoVar -> (memoVar, doc_rhs):bindings
+                  Just memoVar -> (memoVar, termDoc):bindings
                   Nothing -> bindings
             in  ppLets global_p idxs bindings' baseDoc
 
