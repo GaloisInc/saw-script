@@ -18,7 +18,7 @@ PairsL = ListSort__rec
 
 
 ls1 : ListSort;
-ls1 = LS_Cons UnitType (LS_Cons Bool (LS_Cons Nat LS_Nil));
+ls1 = LS_Cons (Vec 1 Bool) (LS_Cons (Vec 2 Bool) LS_Nil);
 
 {-
 i.e., arrowsType:
@@ -39,26 +39,67 @@ UnCurryN1 ls b f =
   f;
 -}
 
+{-
 UnCurryN : (b: sort 0) -> (ls: ListSort) -> arrowsType ls b -> PairsL ls -> b;
 UnCurryN b =
   ListSort__rec
        (\(ls:ListSort) -> arrowsType ls b -> PairsL ls -> b)          -- P
        (\(x:b) (_:UnitType)-> x)                                      -- P(LS_Nil)
-       (\ (A:sort 0)
-          (ls:ListSort)
-          (rec : arrowsType ls b -> PairsL ls -> b)
+       (\ (A:   sort 0)
+          (ls:  ListSort)
+          (rec: arrowsType ls b -> PairsL ls -> b)
           -- P(LS_Cons A ls) ==
           --    arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
-         -- -> \(f: arrowsType (LS_Cons A ls) b) -> uncurry (PairsL ls) A b (rec f)
-         -> \(f: arrowsType ls b) -> uncurry (PairsL ls) A b (rec f)
+         -> \(f: arrowsType (LS_Cons A ls) b) -> uncurry (PairsL ls) A b (rec f)
        );
 
 testa : arrowsType ls1 Bool -> PairsL ls1 -> Bool;
 testa = UnCurryN ls1 Bool;
+-}
+
+{-
+
+uncurry b []         :: b               -> U -> b
+uncurry b [a1]       :: (a1 -> b)       -> (U,a1) -> b
+
+uncurry b [a1,a2]    :: (a1->a2->b)     -> ((U,a1),a2)->b
+
+uncurry b [a1,a2,a3] :: (a1->a2->a3->b) -> (((U,a1),a2),a3)->b
+
+                         s/b/a3->b/
+
+b^a1      ===  b^(1*a1)
+(b^a2)^a1 ===  b^(1*a1*a2)
+
+transforming:
+  (b^a2)^a1 ===  b^(1*a1*a2)
+
+  ((b'^a3)^a2)^a1  === (b'^a3)^(1*a1*a2)
+                   ==  b'^(1*a1*a2*a3)
+
+create rather
+  uncurryN (n:Nat) (a1 ... an : sort 0) = ...
+
+uncurry b [] = ?
+
+:t uc . uc . uc . uc . (\x () -> x)
+  :: (a1 -> a3 -> a4 -> a5 -> b) -> (a5, (a4, (a3, (a1, ())))) -> b
+
+
+
+unc0 b = \(U)-> b
+unc1 f = \((U,a1)-> f a1
+unc2 f = \((U,a1),a2)-> f a1 a2
+
+----------
+?
+-}
+
 
 testbR : sort 0 = PairsR ls1;
 testbL : sort 0 = PairsL ls1;
 testbA : sort 0 = arrowsType ls1 Bool;
 
-
-test1 : sort 0 = testbA;
+test1 : sort 0 = testbR;
+test2 : sort 0 = testbL;
+test3 : sort 0 = testbA;
