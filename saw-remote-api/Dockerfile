@@ -1,4 +1,6 @@
-FROM ubuntu:24.04 AS build
+# Note that we intentionally do not use ubuntu:24.04 or later pending a
+# resolution to https://github.com/coder/coder/issues/17316.
+FROM ubuntu:22.04 AS build
 USER root
 RUN apt-get update && \
     apt-get install -y \
@@ -54,12 +56,12 @@ RUN case ${TARGETPLATFORM} in \
         printf "Unsupported architecture: %s\n" "${TARGETPLATFORM}" >&2 \
         exit 1 ;; \
     esac && \
-    curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250326/ubuntu-24.04-${WHAT4_SOLVERS_ARCH}-bin.zip"
+    curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20250326/ubuntu-22.04-${WHAT4_SOLVERS_ARCH}-bin.zip"
 RUN unzip solvers.zip && rm solvers.zip && chmod +x *
 USER root
 RUN chown -R root:root /home/saw/rootfs
 
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get install -y libgmp10 libgomp1 libffi8 wget libncurses6 unzip libreadline-dev openjdk-11-jdk-headless zlib1g
 COPY --from=build /home/saw/rootfs /
