@@ -24,6 +24,18 @@ class SetContract(Contract):
         self.points_to(global_var("g"), x)
         self.returns(void)
 
+class GetContract(Contract):
+    def specification(self):
+        self.alloc_global("g")
+        g = global_var("g")
+        x = self.fresh_var(i32, "x")
+        self.points_to(g, x)
+
+        self.execute_func(x)
+
+        self.points_to(g, x)
+        self.returns(x)
+
 class LLVMGlobalTest(unittest.TestCase):
     def test_llvm_global(self):
         connect(reset_server=True)
@@ -34,6 +46,8 @@ class LLVMGlobalTest(unittest.TestCase):
         result = llvm_verify(mod, 'set', SetContract())
         self.assertIs(result.is_success(), True)
         result = llvm_verify(mod, 'clear', ClearContract())
+        self.assertIs(result.is_success(), True)
+        result = llvm_verify(mod, 'get', GetContract())
         self.assertIs(result.is_success(), True)
 
 
