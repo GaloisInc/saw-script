@@ -60,7 +60,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Numeric (showIntAtBase)
+import Numeric (showIntAtBase, showHex)
 import Prettyprinter
 import Prettyprinter.Render.Terminal
 import Text.URI
@@ -115,7 +115,25 @@ data PPOpts = PPOpts { ppBase :: Int
                         -- field of 'MemoVar', of variables that shouldn't be
                         -- inlined
                      , ppNoInlineIdx :: Set TermIndex -- move to PPState?
+                     , ppMemoStyle :: MemoStyle
                      , ppMinSharing :: Int }
+
+-- | How should memoization variables be displayed?
+--
+-- Note: actual text stylization is the province of 'ppMemoVar', this just
+-- describes the semantic information 'ppMemoVar' should be prepared to display.
+data MemoStyle
+  = Incremental
+  -- ^ 'Incremental' says to display a term's memoization variable with the
+  -- value of a counter that increments after a term is memoized. The first
+  -- term to be memoized will be displayed with '1', the second with '2', etc.
+  | Hash Int
+  -- ^ 'Hash i' says to display a term's memoization variable with the first 'i'
+  -- digits of the term's hash.
+  | HashIncremental Int
+  -- ^ 'HashIncremental i' says to display a term's memoization variable with
+  -- _both_ the first 'i' digits of the term's hash _and_ the value of the
+  -- counter described in 'Incremental'.
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
@@ -127,7 +145,8 @@ defaultPPOpts =
     , ppNoInlineIdx = mempty
     , ppShowLocalNames = True
     , ppMaxDepth = Nothing
-    , ppMinSharing = 2 }
+    , ppMinSharing = 2
+    , ppMemoStyle = Incremental }
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -383,9 +402,17 @@ ppNat (PPOpts{..}) i
     value  = showIntAtBase (toInteger ppBase) (digits !!) i ""
     digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
--- | Pretty-print a memoization variable
-ppMemoVar :: MemoVar -> SawDoc
-ppMemoVar MemoVar{..} = "x@" <> pretty memoFresh
+-- | Pretty-print a memoization variable, according to 'ppMemoStyle'
+ppMemoVar :: MemoVar -> PPM SawDoc
+ppMemoVar MemoVar{..} = asks (ppMemoStyle . ppOpts) >>= \case
+  Incremental ->
+    pure ("x@" <> pretty memoFresh)
+  Hash prefixLen ->
+    pure ("x@" <> pretty (take prefixLen hashStr))
+  HashIncremental prefixLen ->
+    pure ("x" <> pretty memoFresh <> "@" <> pretty (take prefixLen hashStr))
+  where
+    hashStr = showHex (abs memoHash) ""
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
@@ -397,16 +424,22 @@ ppAppList :: Prec -> SawDoc -> [SawDoc] -> SawDoc
 ppAppList _ f [] = f
 ppAppList p f args = ppParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 
--- | Pretty-print "let x1 = t1 ... xn = tn in body"
-ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> SawDoc
+-- | Pretty-print "let x = t ... x' = t' in body"
+ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> PPM SawDoc
 ppLetBlock defs body =
-  vcat
-  [ "let" <+> lbrace <+> align (vcat (map ppEqn defs))
-  , indent 4 rbrace
-  , " in" <+> body
-  ]
+  do
+    lets <- align . vcat <$> mapM ppEqn defs
+    pure $
+      vcat
+        [ "let" <+> lbrace <+> lets
+        , indent 4 rbrace
+        , " in" <+> body
+        ]
   where
-    ppEqn (var,d) = ppMemoVar var <+> pretty '=' <+> d
+    ppEqn (var,d) =
+      do
+        mv <- ppMemoVar var
+        pure $ mv <+> pretty '=' <+> d
 
 
 -- | Pretty-print pairs as "(x, y)"
@@ -597,7 +630,7 @@ ppTerm' prec = atNextDepthM "..." . ppTerm'' where
   ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
        case maybe_memo_var of
-         Just memo_var -> return $ ppMemoVar memo_var
+         Just memo_var -> ppMemoVar memo_var
          Nothing -> ppTermF prec tf
 
 
@@ -709,7 +742,7 @@ ppLets _ [] [] baseDoc = baseDoc
 
 -- When we have run out of (idx,term) pairs, pretty-print a let binding for
 -- all the accumulated bindings around the term
-ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
+ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) =<< baseDoc
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
