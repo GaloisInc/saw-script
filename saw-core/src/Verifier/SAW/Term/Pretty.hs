@@ -22,6 +22,7 @@ module Verifier.SAW.Term.Pretty
   , renderSawDoc
   , SawStyle(..)
   , PPOpts(..)
+  , MemoStyle(..)
   , defaultPPOpts
   , depthPPOpts
   , ppNat
@@ -147,6 +148,9 @@ defaultPPOpts =
     , ppMaxDepth = Nothing
     , ppMinSharing = 2
     , ppMemoStyle = Incremental }
+    -- If 'ppMemoStyle' changes its default, be sure to update the help text in
+    -- the interpreter functions that control the memoization style to reflect
+    -- this change to users.
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
