@@ -2230,6 +2230,9 @@ primitives = Map.fromList
     , " `x@9`, and `x@3`. These indices are assigned deterministically with"
     , "regard to a particular goal, but are not persistent across goals. As"
     , "such, this should be used primarily when debugging a proof."
+    , ""
+    , "Note: incompatible with non-incremental memoization strategies - see"
+    , "`set_memoization_incremental` and `set_memoization_hash_incremental`."
     ]
   , prim "write_goal" "String -> ProofScript ()"
     (pureVal write_goal)
