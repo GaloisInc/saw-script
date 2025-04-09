@@ -2099,7 +2099,7 @@ getTopPermM :: ImpTransM ext blocks tops rets (ps :> tp) ctx (PermTrans ctx tp)
 getTopPermM = (\(_ :>: p) -> p) <$> itiPermStack <$> ask
 
 -- | Helper to disambiguate the @ext@ type variable
-getExtReprM :: PermCheckExtC ext =>
+getExtReprM :: PermCheckExtC ext exprExt =>
                ImpTransM ext blocks tops rets ps ctx (ExtRepr ext)
 getExtReprM = return knownRepr
 
@@ -2952,10 +2952,10 @@ translateSimplImpl (ps0 :: Proxy ps0) mb_simpl m = case mbMatch mb_simpl of
        let fromJustOrError (Just x) = x
            fromJustOrError Nothing = error "translateSimplImpl: SImpl_MapLifetime"
            ps_in'_vars =
-             RL.map (translateVar . getCompose) $ mbRAssign $ 
+             RL.map (translateVar . getCompose) $ mbRAssign $
              fmap (fromJustOrError . exprPermsVars) ps_in'
            ps_out_vars =
-             RL.map (translateVar . getCompose) $ mbRAssign $ 
+             RL.map (translateVar . getCompose) $ mbRAssign $
              fmap (fromJustOrError . exprPermsVars) ps_out
        impl_in_tm <-
          translateCurryLocalPermImpl "Error mapping lifetime input perms:" impl_in
@@ -4009,7 +4009,7 @@ translateRWV :: TransInfo info => Mb ctx (RegWithVal a) ->
 translateRWV mb_rwv = transTerm1 <$> translate mb_rwv
 
 -- translate for a TypedExpr yields an ExprTrans
-instance (PermCheckExtC ext, TransInfo info) =>
+instance (PermCheckExtC ext exprExt, TransInfo info) =>
          Translate info ctx (App ext RegWithVal tp) (ExprTrans tp) where
   translate mb_e = case mbMatch mb_e of
     [nuMP| BaseIsEq BaseBoolRepr e1 e2 |] ->
@@ -4240,14 +4240,14 @@ instance (PermCheckExtC ext, TransInfo info) =>
 
 
 -- translate for a TypedExpr yields an ExprTrans
-instance (PermCheckExtC ext, TransInfo info) =>
+instance (PermCheckExtC ext exprExt, TransInfo info) =>
          Translate info ctx (TypedExpr ext tp) (ExprTrans tp) where
   translate mb_x = case mbMatch mb_x of
     [nuMP| TypedExpr _ (Just e) |] -> translate e
     [nuMP| TypedExpr app Nothing |] -> translate app
 
 -- | Get the output permission on the return value of a 'TypedExpr'
-exprOutPerm :: PermCheckExtC ext => Mb ctx (TypedExpr ext tp) ->
+exprOutPerm :: PermCheckExtC ext exprExt => Mb ctx (TypedExpr ext tp) ->
                PermTrans ctx tp
 exprOutPerm mb_x = case mbMatch mb_x of
   [nuMP| TypedExpr _ (Just e) |] -> PTrans_Eq e
@@ -4292,8 +4292,8 @@ translateApply nm f perms =
 -- | Translate a call to (the translation of) an entrypoint, by either calling
 -- the letrec-bound variable for the entrypoint, if it has one, or by just
 -- translating the body of the entrypoint if it does not.
-translateCallEntry :: forall ext tops args ghosts blocks ctx rets.
-                      PermCheckExtC ext => String ->
+translateCallEntry :: forall ext tops args ghosts blocks ctx rets exprExt.
+                      PermCheckExtC ext exprExt => String ->
                       TypedEntryTrans ext blocks tops rets args ghosts ->
                       Mb ctx (RAssign ExprVar (tops :++: args)) ->
                       Mb ctx (RAssign ExprVar ghosts) ->
@@ -4326,7 +4326,7 @@ translateCallEntry nm entry_trans mb_tops_args mb_ghosts =
               (translate $ typedEntryBody entry)
 
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (CallSiteImplRet blocks tops args ghosts ps) OpenTerm where
   translate (mbMatch ->
@@ -4336,13 +4336,13 @@ instance PermCheckExtC ext =>
          itiBlockMapTrans <$> ask
        translateCallEntry "CallSiteImplRet" entry_trans mb_tavars mb_gvars
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          ImplTranslateF (CallSiteImplRet blocks tops args ghosts)
          ext blocks tops rets where
   translateF mb_tgt = translate mb_tgt
 
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (TypedJumpTarget blocks tops ps) OpenTerm where
   translate (mbMatch -> [nuMP| TypedJumpTarget siteID _ _ mb_perms_in |]) =
@@ -4352,7 +4352,7 @@ instance PermCheckExtC ext =>
        translate $ flip fmap mb_perms_in $ \perms_in ->
          varSubst (permVarSubstOfNames $ distPermsVars perms_in) mb_impl
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          ImplTranslateF (TypedJumpTarget blocks tops) ext blocks tops rets where
   translateF mb_tgt = translate mb_tgt
 
@@ -4363,7 +4363,7 @@ instance PermCheckExtC ext =>
 
 -- | Translate a 'TypedStmt' to a function on translation computations
 translateStmt ::
-  PermCheckExtC ext => ProgramLoc ->
+  PermCheckExtC ext exprExt => ProgramLoc ->
   Mb ctx (TypedStmt ext stmt_rets ps_in ps_out) ->
   ImpTransM ext blocks tops rets ps_out (ctx :++: stmt_rets) OpenTerm ->
   ImpTransM ext blocks tops rets ps_in ctx OpenTerm
@@ -4579,7 +4579,7 @@ translateLLVMStmt mb_stmt m = case mbMatch mb_stmt of
 -- * Translating Sequences of Typed Crucible Statements
 ----------------------------------------------------------------------
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (TypedRet tops rets ps) OpenTerm where
   translate (mbMatch -> [nuMP| TypedRet Refl mb_rets mb_rets_ns mb_perms |]) =
@@ -4601,11 +4601,11 @@ instance PermCheckExtC ext =>
          applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
          [ret_tp, sigma_trm]
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          ImplTranslateF (TypedRet tops rets) ext blocks tops rets where
   translateF mb_ret = translate mb_ret
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (TypedTermStmt blocks tops rets ps) OpenTerm where
   translate mb_x = case mbMatch mb_x of
@@ -4621,7 +4621,7 @@ instance PermCheckExtC ext =>
       mkErrorCompM "Error (unknown message)"
 
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          Translate (ImpTransInfo ext blocks tops rets ps) ctx
          (TypedStmtSeq ext blocks tops rets ps) OpenTerm where
   translate mb_x = case mbMatch mb_x of
@@ -4630,7 +4630,7 @@ instance PermCheckExtC ext =>
       translateStmt (mbLift loc) stmt (translate $ mbCombine (mbLift pxys) mb_seq)
     [nuMP| TypedTermStmt _ term_stmt |] -> translate term_stmt
 
-instance PermCheckExtC ext =>
+instance PermCheckExtC ext exprExt =>
          ImplTranslateF (TypedStmtSeq
                          ext blocks tops rets) ext blocks tops rets where
   translateF mb_seq = translate mb_seq
@@ -4742,7 +4742,7 @@ lambdaBlockMap = helper where
 --
 -- over the top-level, local, and ghost arguments and (the translations of) the
 -- input permissions of the entrypoint
-translateEntryBody :: PermCheckExtC ext =>
+translateEntryBody :: PermCheckExtC ext exprExt =>
                       TypedBlockMapTrans ext blocks tops rets ->
                       TypedEntry TransPhase ext blocks tops rets args ghosts ->
                       TypeTransM ctx OpenTerm
@@ -4756,7 +4756,7 @@ translateEntryBody mapTrans entry =
 
 -- | Translate all the entrypoints in a 'TypedBlockMap' that correspond to
 -- letrec-bound functions to SAW core functions as in 'translateEntryBody'
-translateBlockMapBodies :: PermCheckExtC ext =>
+translateBlockMapBodies :: PermCheckExtC ext exprExt =>
                            TypedBlockMapTrans ext blocks tops rets ->
                            TypedBlockMap TransPhase ext blocks tops rets ->
                            TypeTransM ctx OpenTerm
@@ -4766,7 +4766,7 @@ translateBlockMapBodies mapTrans blk_map =
 
 -- | Translate a typed CFG to a SAW term
 translateCFG ::
-  PermCheckExtC ext =>
+  PermCheckExtC ext exprExt =>
   PermEnv -> ChecksFlag ->
   TypedCFG ext blocks ghosts inits gouts ret ->
   OpenTerm
@@ -4938,7 +4938,7 @@ tcTranslateAddCFGs sc mod_name env checks endianness dlevel cfgs_and_perms =
        applyOpenTerm (globalOpenTerm "Prelude.lrtTupleType") lrts
      tup_fun_tm <- completeNormOpenTerm sc $
        applyOpenTermMulti (globalOpenTerm "Prelude.multiFixM") [lrts, tup_fun]
-     scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm 
+     scInsertDef sc mod_name tup_fun_ident tup_fun_tp tup_fun_tm
      new_entries <-
        zipWithM
        (\cfg_and_perm i ->

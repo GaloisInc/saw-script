@@ -230,7 +230,7 @@ Definition sbvToInt (n : Nat) (b : bitvector n) : Z
 
 (* Useful notation for bools *)
 Definition boolToInt (b : bool) : Z := if b then 1%Z else 0%Z.
-Numeral Notation bool Z.odd boolToInt : bool_scope.
+Number Notation bool Z.odd boolToInt : bool_scope.
 Close Scope bool_scope. (* no, don't interpret all numbers as booleans... *)
 
 (* This is annoying to implement, so using BITS conversion *)

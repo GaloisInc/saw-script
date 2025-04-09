@@ -33,10 +33,14 @@ opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-bits
 ```
 
-If you run into any issue that is probably due to the version mismatch between the `ocamlc` 
-and the `ocaml` base system installed on your machine and it can be fixed as explained 
+If you run into any issue that is probably due to the version mismatch between the `ocamlc`
+and the `ocaml` base system installed on your machine and it can be fixed as explained
 [here](https://github.com/ocaml/opam/issues/3708).
 
+Currently, the Coq support libraries for `saw-core-coq` requires Coq 8.13 or
+later.  In particular, they are known to build with Coq 8.13, 8.15, and 8.16,
+but *not* 8.14 (see [this
+issue](https://coq.zulipchat.com/#narrow/stream/237977-Coq-users/topic/Code.20typechecks.20in.20Coq.208.2E13.2C.20but.20not.20in.208.2E14)).
 
 ## Building the and Using the Coq Support Libraries
 

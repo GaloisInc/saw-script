@@ -359,34 +359,33 @@ ruleOfTerms l r = mkRewriteRule [] l r False Nothing
 
 -- | Converts a parameterized equality predicate to a RewriteRule,
 -- returning 'Nothing' if the predicate is not an equation.
-ruleOfProp :: Term -> Maybe a -> Maybe (RewriteRule a)
-ruleOfProp (R.asPi -> Just (_, ty, body)) ann =
-  do rule <- ruleOfProp body ann
-     Just rule { ctxt = ty : ctxt rule }
-ruleOfProp (R.asLambda -> Just (_, ty, body)) ann =
-  do rule <- ruleOfProp body ann
-     Just rule { ctxt = ty : ctxt rule }
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (unwrapTermF -> Constant _ (Just body)) ann = ruleOfProp body ann
-ruleOfProp (R.asEq -> Just (_, x, y)) ann =
-  Just $ mkRewriteRule [] x y False ann
-ruleOfProp (R.asEqTrue -> Just body) ann = ruleOfProp body ann
-ruleOfProp _ _ = Nothing
+ruleOfProp :: SharedContext -> Term -> Maybe a -> IO (Maybe (RewriteRule a))
+ruleOfProp sc term ann =
+  case term of
+    (R.asPi -> Just (_, ty, body)) ->
+      do  rule <- ruleOfProp sc body ann
+          pure $ (\r -> r { ctxt = ty : ctxt r }) <$> rule
+    (R.asLambda -> Just (_, ty, body)) ->
+      do  rule <- ruleOfProp sc body ann
+          pure $ (\r -> r { ctxt = ty : ctxt r }) <$> rule
+    (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
+    (unwrapTermF -> Constant _ (Just body)) -> ruleOfProp sc body ann
+    (R.asEq -> Just (_, x, y)) -> eqRule x y
+    (R.asEqTrue -> Just body) -> ruleOfProp sc body ann
+    (R.asApplyAll -> (R.asConstant -> Just (_, Just body), args)) ->
+      do  app <- scApplyAllBeta sc body args
+          ruleOfProp sc app ann
+    _ -> pure Nothing
+
+  where
+    eqRule x y = pure $ Just $ mkRewriteRule [] x y False ann
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
 scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule a)

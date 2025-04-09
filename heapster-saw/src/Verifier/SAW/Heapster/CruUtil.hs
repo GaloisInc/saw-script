@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -14,6 +15,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -315,13 +317,6 @@ instance Liftable EndianForm where
   mbLift = unClosed . mbLift . fmap toClosed
 
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => Some f |])
-
-instance NuMatchingAny1 BaseTypeRepr where
-  nuMatchingAny1Proof = nuMatchingProof
-
-instance NuMatchingAny1 TypeRepr where
-  nuMatchingAny1Proof = nuMatchingProof
-
 $(mkNuMatching [t| forall f ctx . NuMatchingAny1 f => AssignView f ctx |])
 
 viewToAssign :: AssignView f ctx -> Assignment f ctx
@@ -336,9 +331,6 @@ instance NuMatchingAny1 f => NuMatching (Assignment f ctx) where
     -- here?
     isoMbTypeRepr viewAssign viewToAssign
 
-instance NuMatchingAny1 f => NuMatchingAny1 (Assignment f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 instance Closable (Assignment TypeRepr ctx) where
   toClosed = unsafeClose
 
@@ -347,10 +339,6 @@ instance Liftable (Assignment TypeRepr ctx) where
 
 
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => BaseTerm f tp |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (BaseTerm f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 $(mkNuMatching [t| forall a. NuMatching a => NonEmpty a |])
 $(mkNuMatching [t| forall p v. (NuMatching p, NuMatching v) => Partial p v |])
 $(mkNuMatching [t| X86_80Val |])
@@ -359,10 +347,18 @@ $(mkNuMatching [t| forall w. BV.BV w |])
 $(mkNuMatching [t| Word16String |])
 $(mkNuMatching [t| forall s. StringLiteral s |])
 $(mkNuMatching [t| forall s. StringInfoRepr s |])
+
+#if __GLASGOW_HASKELL__ >= 902
 $(mkNuMatching [t| forall ext f tp.
                 (NuMatchingAny1 f, NuMatchingAny1 (ExprExtension ext f)) =>
                 App ext f tp |])
-
+#else
+-- See Note [QuantifiedConstraints + TypeFamilies trick]
+$(mkNuMatching [t| forall ext f tp exprExt.
+                ( NuMatchingAny1 f
+                , exprExt ~ ExprExtension ext f, NuMatchingAny1 exprExt
+                ) => App ext f tp |])
+#endif
 
 $(mkNuMatching [t| Bytes |])
 $(mkNuMatching [t| forall v. NuMatching v => Field v |])
@@ -385,9 +381,6 @@ $(mkNuMatching [t| forall blocks tp. BlockID blocks tp |])
 instance NuMatching (EmptyExprExtension f tp) where
   nuMatchingProof = unsafeMbTypeRepr
 
-instance NuMatchingAny1 (EmptyExprExtension f) where
-  nuMatchingAny1Proof = nuMatchingProof
-
 $(mkNuMatching [t| AVXOp1 |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => ExtX86 f tp |])
 
@@ -403,9 +396,6 @@ instance Liftable (Nonce s tp) where
 $(mkNuMatching [t| forall tp. GlobalVar tp |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f =>
                 LLVMExtensionExpr f tp |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (LLVMExtensionExpr f) where
-  nuMatchingAny1Proof = nuMatchingProof
 
 {-
 $(mkNuMatching [t| forall w f tp. NuMatchingAny1 f => LLVMStmt w f tp |])
@@ -475,9 +465,6 @@ closeAssign f (viewAssign -> AssignExtend asgn fa) =
 data Typed f a = Typed { typedType :: TypeRepr a, typedObj :: f a }
 
 $(mkNuMatching [t| forall f a. NuMatching (f a) => Typed f a |])
-
-instance NuMatchingAny1 f => NuMatchingAny1 (Typed f) where
-  nuMatchingAny1Proof = nuMatchingProof
 
 -- | Cast an existential 'Typed' to a particular type or raise an error
 castTypedM :: Fail.MonadFail m => String -> TypeRepr a -> Some (Typed f) -> m (f a)
@@ -576,9 +563,6 @@ unKnownReprObj :: KnownReprObj f a -> f a
 unKnownReprObj (KnownReprObj :: KnownReprObj f a) = knownRepr :: f a
 
 $(mkNuMatching [t| forall f a. KnownReprObj f a |])
-
-instance NuMatchingAny1 (KnownReprObj f) where
-  nuMatchingAny1Proof = nuMatchingProof
 
 instance Liftable (KnownReprObj f a) where
   mbLift (mbMatch -> [nuMP| KnownReprObj |]) = KnownReprObj
@@ -834,3 +818,35 @@ termStmtRegs (Return reg) = [Some reg]
 termStmtRegs (TailCall reg _ regs) =
   Some reg : foldMapFC (\r -> [Some r]) regs
 termStmtRegs (ErrorStmt reg) = [Some reg]
+
+{-
+Note [QuantifiedConstraints + TypeFamilies trick]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+GHC 9.2 and later are reasonably adept and combining TypeFamilies with type
+classes that have quantified superclasses. This is important, as there are
+several places in heapster-saw that require constraints of the form
+`NuMatchingAny1 (ExprExtension ext f)`, where NuMatchingAny1 has a quantified
+superclass and ExprExtension is a type family.
+
+Unfortunately, GHC 9.0 and earlier suffer from a bug where constraints of the
+form `NuMatchingAny1 (ExprExtension ext f)`. See
+https://gitlab.haskell.org/ghc/ghc/-/issues/14860. Thankfully, it is relatively
+straightforward to work around the bug. Instead of writing instances like
+these:
+
+  instance forall ext f.
+           NuMatchingAny1 (ExprExtension ext f) =>
+           NuMatchingAny (Foo ext f tp)
+
+We instead write instances like these, introducing an intermediate `exprExt`
+type variable that is used in conjunction with an equality constraint:
+
+  instance forall ext f exprExt.
+           (exprExt ~ ExprExtension ext f, NuMatchingAny1 exprExt) =>
+           NuMatchingAny (Foo ext f tp)
+
+A bit tedious, but this version actually works on pre-9.2 GHCs, which is nice.
+
+I have guarded each use of this trick with CPP so that we remember to remove
+this workaround when we drop support for pre-9.2 GHCs.
+-}

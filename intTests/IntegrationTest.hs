@@ -167,7 +167,7 @@ genTests envvars disabled = map mkTest
       if r == ExitSuccess
         then return ()
         else putStrLn o >> hPutStrLn stderr e
-      r @=? ExitSuccess
+      ExitSuccess @=? r
 
 
 -- | Several of the tests use definitions from the cryptol-specs
