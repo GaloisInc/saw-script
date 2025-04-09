@@ -312,8 +312,10 @@ lazyMux muxFn c tm fm =
       f <- fm
       muxFn c t f
 
--- selectV merger maxValue valueFn index returns valueFn v when index has value v
--- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
+-- @selectV merger maxValue valueFn vx@ treats @vx@ as an index, represented
+-- as a big-endian list of bits. It does a binary lookup, using @merger@ as an
+-- if-then-else operator. If the index is greater than @maxValue@, then it
+-- returns @valueFn maxValue@.
 selectV :: (SBool -> b -> b -> b) -> Natural -> (Natural -> b) -> SWord -> b
 selectV merger maxValue valueFn vx =
   case svAsInteger vx of
@@ -324,7 +326,13 @@ selectV merger maxValue valueFn vx =
   where
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
-    impl i y = merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
+    impl i y =
+      -- NB: `i` counts down in each iteration, so we use svTestBit (a
+      -- little-endian indexing function) to ensure that the bits are processed
+      -- in big-endian order. Alternatively, we could have `i` count up and use
+      -- svAt (a big-endian indexing function), but we use svTestBit as it is
+      -- slightly cheaper to compute.
+      merger (svTestBit vx j) (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 -- Big-endian version of svTestBit
 svAt :: SWord -> Int -> SBool

@@ -275,8 +275,8 @@ translateTupleType (x : xs) = Coq.App (Coq.Var "prod") [x, translateTupleType xs
 
 translateTupleSelector :: Int -> Coq.Term -> Coq.Term
 translateTupleSelector i x
-  | i == 0 = Coq.App (Coq.Var "SAWCoreScaffolding.fst") [x]
-  | otherwise = translateTupleSelector (i - 1) (Coq.App (Coq.Var "SAWCoreScaffolding.snd") [x])
+  | i == 0 = Coq.App (Coq.Var "fst") [x]
+  | otherwise = translateTupleSelector (i - 1) (Coq.App (Coq.Var "snd") [x])
 
 flatTermFToExpr ::
   TermTranslationMonad m =>

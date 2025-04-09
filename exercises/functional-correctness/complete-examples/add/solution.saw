@@ -1,0 +1,21 @@
+let add_spec = do {
+     // Create fresh variables for `x` and `y`
+     x <- llvm_fresh_var "x" (llvm_int 32);
+     y <- llvm_fresh_var "y" (llvm_int 32);
+
+     // Invoke the function with the fresh variables
+     llvm_execute_func [llvm_term x, llvm_term y];
+
+     // The function returns a value containing the sum of x and y
+     llvm_return (llvm_term {{ x + y }});
+};
+
+// Load LLVM bitcode to verify
+m <- llvm_load_module "add.bc";
+
+// Verify the `add` function satisfies its specification
+llvm_verify m "add" [] true add_spec (do {
+     //simplify (cryptol_ss());
+     //print_goal;
+     z3;
+});

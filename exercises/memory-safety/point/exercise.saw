@@ -1,0 +1,28 @@
+////////////////////////////////////////////////////////////////////////////////
+// Exercise: Points
+////////////////////////////////////////////////////////////////////////////////
+
+include "../../common/helpers.saw";
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 1: Structs
+////////////////////////////////////////////////////////////////////////////////
+
+// Write memory safety specs and proofs for point_eq, point_new, and point_copy.
+// Use the override your point_new proof returns in your point_copy proof.
+
+// Remember: You can declare struct types with:
+//    llvm_struct "struct.<name>"
+
+////////////////////////////////////////////////////////////////////////////////
+// Part 2: Global Variables
+////////////////////////////////////////////////////////////////////////////////
+
+// Write the memory safety spec and proof for point_add.  Use overrides from
+// all of the proofs from part 1 here.  Initially write the spec without
+// initializing the global variable `ZERO`.  Familiarize yourself with the
+// error message.  Then, fix your spec and re-run the proof.
+
+// Useful commands:
+//   Declare a global: llvm_alloc_global "<global name>"
+//   Get a pointer to a global: llvm_global "<global name>"
