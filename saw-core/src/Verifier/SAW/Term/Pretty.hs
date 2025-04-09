@@ -53,6 +53,7 @@ import Control.Monad.State.Strict (MonadState(..), State, execState)
 import Data.Foldable (Foldable)
 #endif
 import qualified Data.Foldable as Fold
+import Data.Hashable (hash)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Map as Map
@@ -109,7 +110,10 @@ data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
                      , ppMaxDepth :: Maybe Int
-                     , ppNoInlineMemo :: [MemoVar]
+                     , ppNoInlineMemoFresh :: [Int]
+                        -- ^ The numeric identifiers, as seen in the 'memoFresh'
+                        -- field of 'MemoVar', of variables that shouldn't be
+                        -- inlined
                      , ppNoInlineIdx :: Set TermIndex -- move to PPState?
                      , ppMinSharing :: Int }
 
@@ -119,7 +123,7 @@ defaultPPOpts =
   PPOpts
     { ppBase = 10
     , ppColor = False
-    , ppNoInlineMemo = mempty
+    , ppNoInlineMemoFresh = mempty
     , ppNoInlineIdx = mempty
     , ppShowLocalNames = True
     , ppMaxDepth = Nothing
@@ -217,9 +221,18 @@ consVarNaming (VarNaming names) name =
 -- * Pretty-printing monad
 --------------------------------------------------------------------------------
 
--- | Memoization variables, which are like deBruijn index variables but for
--- terms that we are memoizing during printing
-type MemoVar = Int
+-- | Memoization variables contain several pieces of information about the term
+-- they bind. What subset is displayed when they're printed is governed by the
+-- 'ppMemoStyle' field of 'PPOpts', in tandem with 'ppMemoVar'.
+data MemoVar =
+  MemoVar
+    {
+      -- | A unique value - like a deBruijn index, but evinced only during
+      -- printing when a term is to be memoized.
+      memoFresh :: Int,
+      -- | A likely-unique value - the hash of the term this 'MemoVar'
+      -- represents.
+      memoHash :: Int }
 
 -- | The local state used by pretty-printing computations
 data PPState =
@@ -233,8 +246,8 @@ data PPState =
     ppNaming :: VarNaming,
     -- | The top-level naming environment
     ppNamingEnv :: SAWNamingEnv,
-    -- | The next "memoization variable" to generate
-    ppNextMemoVar :: MemoVar,
+    -- | A source of freshness for memoization variables
+    ppMemoFresh :: Int,
     -- | Memoization table for the global, closed terms, mapping term indices to
     -- "memoization variables" that are in scope
     ppGlobalMemoTable :: IntMap MemoVar,
@@ -249,7 +262,7 @@ emptyPPState opts ne =
             ppDepth = 0,
             ppNaming = emptyVarNaming,
             ppNamingEnv = ne,
-            ppNextMemoVar = 1,
+            ppMemoFresh = 1,
             ppGlobalMemoTable = IntMap.empty,
             ppLocalMemoTable = IntMap.empty }
 
@@ -310,22 +323,24 @@ withBoundVarM basename m =
 -- if not) of a fresh memoization variable to the term, and the fresh variable
 -- will be supplied to the computation. If memoization fails, the context will
 -- not contain such a binding, and no fresh variable will be supplied.
-withMemoVar :: Bool -> TermIndex -> (Maybe MemoVar -> PPM a) -> PPM a
-withMemoVar global_p termIdx f =
+withMemoVar :: Bool -> TermIndex -> Int -> (Maybe MemoVar -> PPM a) -> PPM a
+withMemoVar global_p termIdx termHash f =
   do
-    memoVar <- asks ppNextMemoVar
-    memoSkips <- asks (ppNoInlineMemo . ppOpts)
+    memoFresh <- asks ppMemoFresh
+    let memoVar = MemoVar { memoFresh = memoFresh, memoHash = termHash }
+    memoFreshSkips <- asks (ppNoInlineMemoFresh . ppOpts)
     termIdxSkips <- asks (ppNoInlineIdx . ppOpts)
-    case memoSkips of
+    case memoFreshSkips of
       -- Even if we must skip this memoization variable, we still want to
-      -- "pretend" we memoized by calling `updateMemoVar`, so that non-inlined
+      -- "pretend" we memoized by calling `freshen`, so that non-inlined
       -- memoization identifiers are kept constant between two
       -- otherwise-identical terms with differing inline strategies.
       (skip:skips)
-        | skip == memoVar -> local (updateMemoVar . addIdxSkip . setMemoSkips skips) (f Nothing)
+        | skip == memoFresh ->
+          local (freshen . addIdxSkip . setMemoFreshSkips skips) (f Nothing)
       _
         | termIdx `Set.member` termIdxSkips -> f Nothing
-        | otherwise -> local (updateMemoVar . bind memoVar) (f (Just memoVar))
+        | otherwise -> local (freshen . bind memoVar) (f (Just memoVar))
   where
     bind = if global_p then bindGlobal else bindLocal
 
@@ -335,14 +350,14 @@ withMemoVar global_p termIdx f =
     bindLocal memoVar PPState{ .. } =
       PPState { ppLocalMemoTable = IntMap.insert termIdx memoVar ppLocalMemoTable, .. }
 
-    setMemoSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
-      PPState { ppOpts = PPOpts { ppNoInlineMemo = memoSkips, ..}, ..}
+    setMemoFreshSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineMemoFresh = memoSkips, ..}, ..}
 
     addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
       PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert termIdx ppNoInlineIdx, .. }, .. }
 
-    updateMemoVar PPState{ .. } =
-      PPState { ppNextMemoVar = ppNextMemoVar + 1, .. }
+    freshen PPState{ .. } =
+      PPState { ppMemoFresh = ppMemoFresh + 1, .. }
 
 --------------------------------------------------------------------------------
 -- * The Pretty-Printing of Specific Constructs
@@ -370,7 +385,7 @@ ppNat (PPOpts{..}) i
 
 -- | Pretty-print a memoization variable
 ppMemoVar :: MemoVar -> SawDoc
-ppMemoVar mv = "x@" <> pretty mv
+ppMemoVar MemoVar{..} = "x@" <> pretty memoFresh
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
@@ -702,7 +717,7 @@ ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
   do isBound <- isJust <$> memoLookupM termIdx
      if isBound then ppLets global_p idxs bindings baseDoc else
        do termDoc <- ppTerm' PrecTerm term
-          withMemoVar global_p termIdx $ \memoVarM ->
+          withMemoVar global_p termIdx (hash term) $ \memoVarM ->
             let bindings' = case memoVarM of
                   Just memoVar -> (memoVar, termDoc):bindings
                   Nothing -> bindings
