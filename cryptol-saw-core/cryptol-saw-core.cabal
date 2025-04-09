@@ -15,6 +15,7 @@ Description:
 
 extra-source-files:
     saw/Cryptol.sawcore
+    saw/CryptolM.sawcore
 
 library
   build-depends:

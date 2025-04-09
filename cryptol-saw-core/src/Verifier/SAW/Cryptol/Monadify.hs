@@ -1007,6 +1007,41 @@ eitherMacro = MonMacro 3 $ \_ args ->
                             (MTyArrow (MTyArrow mtp_b mtp_c)
                              (MTyArrow (mkMonType0 tp_eith) mtp_c))) eith_app
 
+-- | The macro for invariantHint, which converts @invariantHint a cond m@
+-- to @invariantHint (CompM a) cond m@ and which contains any binds in the body
+-- to the body
+invariantHintMacro :: MonMacro
+invariantHintMacro = MonMacro 3 $ \_ args ->
+  do let (tp, cond, m) =
+           case args of
+             [t1, t2, t3] -> (t1, t2, t3)
+             _ -> error "invariantHintMacro: wrong number of arguments!"
+     atrm_cond <- monadifyArg (Just boolMonType) cond
+     mtp <- monadifyTypeM tp
+     mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
+     return $ fromCompTerm mtp $
+       applyOpenTermMulti (globalOpenTerm "Prelude.invariantHint")
+       [toCompType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
+
+-- | The macro for @asserting@ or @assuming@, which converts @asserting@ to
+-- @assertingM@ or @assuming@ to @assumingM@ (depending on whether the given
+-- 'Bool' is true or false, respectively) and which contains any binds in the
+-- body to the body
+assertingOrAssumingMacro :: Bool -> MonMacro
+assertingOrAssumingMacro doAsserting = MonMacro 3 $ \_ args ->
+  do let (tp, cond, m) =
+           case args of
+             [t1, t2, t3] -> (t1, t2, t3)
+             _ -> error "assertingOrAssumingMacro: wrong number of arguments!"
+     atrm_cond <- monadifyArg (Just boolMonType) cond
+     mtp <- monadifyTypeM tp
+     mtrm <- resetMonadifyM (toArgType mtp) $ monadifyTerm (Just mtp) m
+     let ident = if doAsserting then "Prelude.assertingM"
+                                else "Prelude.assumingM"
+     return $ fromCompTerm mtp $
+       applyOpenTermMulti (globalOpenTerm ident)
+       [toArgType mtp, toArgTerm atrm_cond, toCompTerm mtrm]
+
 -- | Make a 'MonMacro' that maps a named global whose first argument is @n:Num@
 -- to a global of semi-pure type that takes an additional argument of type
 -- @isFinite n@
@@ -1041,7 +1076,6 @@ lrtFromMonType (MTyArrow mtp1 mtp2) =
    lambdaOpenTerm "_" (toArgType mtp1) (\_ -> lrtFromMonType mtp2)]
 lrtFromMonType mtp =
   ctorOpenTerm "Prelude.LRT_Ret" [toArgType mtp]
-
 
 -- | The macro for fix
 --
@@ -1096,6 +1130,9 @@ defaultMonEnv =
   , mmCustom "Prelude.ite" iteMacro
   , mmCustom "Prelude.fix" fixMacro
   , mmCustom "Prelude.either" eitherMacro
+  , mmCustom "Prelude.invariantHint" invariantHintMacro
+  , mmCustom "Prelude.asserting" (assertingOrAssumingMacro True)
+  , mmCustom "Prelude.assuming" (assertingOrAssumingMacro False)
 
     -- Top-level sequence functions
   , mmArg "Cryptol.seqMap" "CryptolM.seqMapM"
@@ -1168,6 +1205,7 @@ defaultMonEnv =
   , mmSemiPureFin1 "Cryptol.ecReverse" "CryptolM.ecReverseM"
   , mmSemiPure "Cryptol.ecTranspose" "CryptolM.ecTransposeM"
   , mmArg "Cryptol.ecAt" "CryptolM.ecAtM"
+  , mmArg "Cryptol.ecUpdate" "CryptolM.ecUpdateM"
   -- , mmArgFin1 "Cryptol.ecAtBack" "CryptolM.ecAtBackM"
   -- , mmSemiPureFin2 "Cryptol.ecFromTo" "CryptolM.ecFromToM"
   , mmSemiPureFin1 "Cryptol.ecFromToLessThan" "CryptolM.ecFromToLessThanM"

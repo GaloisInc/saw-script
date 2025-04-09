@@ -2153,15 +2153,39 @@ primitive existsM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 orM : (a : sort 0) -> CompM a -> CompM a -> CompM a;
 orM a m1 m2 = existsM Bool a (\ (b:Bool) -> ite (CompM a) b m1 m2);
 
+-- The specification that matches any computation
+anySpec : (a : sort 0) -> CompM a;
+anySpec a = existsM (CompM a) a (\ (m:CompM a) -> m);
+
 -- The specification formed from the intersection of all computations f x for
 -- all possible inputs x. Computationally, this is sort of like running f for
 -- all possible inputs x at the same time and then raising an error if any of
 -- those computations diverge from each other.
 primitive forallM : (a b:sort 0) -> (a -> CompM b) -> CompM b;
 
--- A hint to Mr Solver that a recursive function has the given precondition
-precondHint : (a : sort 0) -> Bool -> a -> a;
-precondHint _ _ a = a;
+-- The specification which asserts that the first argument is True and then
+-- runs the second argument
+assertingM : (a : sort 0) -> Bool -> CompM a -> CompM a;
+assertingM a b m = ite (CompM a) b m (errorM a "Assertion failed");
+
+-- The specification which assumes that the first argument is True and then
+-- runs the second argument
+assumingM : (a : sort 0) -> Bool -> CompM a -> CompM a;
+assumingM a b m = ite (CompM a) b m (anySpec a);
+
+-- A hint to Mr Solver that a recursive function has the given loop invariant
+invariantHint : (a : sort 0) -> Bool -> a -> a;
+invariantHint _ _ a = a;
+
+-- The version of assertingM which appears in un-monadified Cryptol (this gets
+-- converted to assertingM during monadification, see assertingOrAssumingMacro)
+asserting : (a : isort 0) -> Bool -> a -> a;
+asserting a b x = ite a b x (error a "Assertion failed");
+
+-- The version of assumingM which appears in un-monadified Cryptol (this gets
+-- converted to assumingM during monadification, see assertingOrAssumingMacro)
+assuming : (a : isort 0) -> Bool -> a -> a;
+assuming a b x = ite a b x (error a "Assuming failed");
 
 -- NOTE: for the simplicity and efficiency of MR solver, we define all
 -- fixed-point computations in CompM via a primitive multiFixM, defined below.

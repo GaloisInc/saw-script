@@ -1627,17 +1627,22 @@ setMonadification sc cry_str saw_str =
          _ -> fail ("Could not find type for Cryptol name: " ++ cry_str)
      cry_mon_tp <- liftIO $ Monadify.monadifyCompleteArgType sc cry_saw_tp
 
-     -- Step 3: convert the second string to a typed SAW core term, and check
-     -- that it has the same type as the monadified type for the Cryptol name
+     -- Step 3: convert the second string to a typed SAW core term, and if it
+     -- has an existing macro, check that it has the same type as the type for
+     -- the cryptol name, or if no macro exists, check that it has the same
+     -- type as the monadified type for the Cryptol name and generate a macro
+     -- which maps the Cryptol name to the SAW core term
      let saw_ident = parseIdent saw_str
      saw_trm <- liftIO $ scGlobalDef sc saw_ident
      saw_tp <- liftIO $ scTypeOf sc saw_trm
-     liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) cry_mon_tp
+     let (tp_to_check, macro) =
+           case Map.lookup (ModuleIdentifier saw_ident) (rwMonadify rw) of
+             Just existing_macro -> (cry_saw_tp, existing_macro)
+             Nothing -> (cry_mon_tp, Monadify.argGlobalMacro cry_nmi saw_ident)
+     liftIO $ scCheckSubtype sc Nothing (TC.TypedTerm saw_trm saw_tp) tp_to_check
 
-     -- Step 4: Add a mapping from the Cryptol name to the SAW core term
-     put (rw { rwMonadify =
-                 Map.insert cry_nmi (Monadify.argGlobalMacro
-                                     cry_nmi saw_ident) (rwMonadify rw) })
+     -- Step 4: Add the generated macro
+     put (rw { rwMonadify = Map.insert cry_nmi macro (rwMonadify rw) })
 
 parseSharpSATResult :: String -> Maybe Integer
 parseSharpSATResult s = parse (lines s)
