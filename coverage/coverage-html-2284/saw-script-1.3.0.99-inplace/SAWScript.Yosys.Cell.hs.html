@@ -161,9 +161,9 @@ span.spaces    { background: white }
 <span class="lineno">  142 </span>  m (Maybe (Map Text SC.Term))
 <span class="lineno">  143 </span><span class="decl"><span class="istickedoff">primCellToMap sc c args = case c ^. cellType of</span>
 <span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">CellTypeNot -&gt; bvUnaryOp . liftUnary sc $ SC.scBvNot sc</span>
-<span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">CellTypePos -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- input &quot;A&quot;</span></span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output res</span></span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">CellTypePos -&gt; do</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="istickedoff">res &lt;- input &quot;A&quot;</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">output res</span>
 <span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">CellTypeNeg -&gt; <span class="nottickedoff">bvUnaryOp . liftUnary sc $ SC.scBvNeg sc</span></span>
 <span class="lineno">  149 </span><span class="spaces">  </span><span class="istickedoff">CellTypeAnd -&gt; bvBinaryOp . liftBinary sc $ SC.scBvAnd sc</span>
 <span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">CellTypeOr -&gt; bvBinaryOp . liftBinary sc $ SC.scBvOr sc</span>
@@ -303,21 +303,21 @@ span.spaces    { background: white }
 <span class="lineno">  284 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">resPair &lt;- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]</span></span>
 <span class="lineno">  285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">res &lt;- liftIO $ SC.scPairRight sc resPair</span></span>
 <span class="lineno">  286 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output $ CellTerm res (connWidthNat &quot;A&quot;) (connSigned &quot;Y&quot;)</span></span>
-<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">CellTypeBmux -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ia &lt;- input &quot;A&quot;</span></span>
-<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">is &lt;- flipEndianness sc =&lt;&lt; input &quot;S&quot;</span></span>
-<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let swidth = cellTermWidth is</span></span>
-<span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">let ywidth = connWidthNat &quot;Y&quot;</span></span>
-<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- Split input A into chunks</span></span>
-<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">chunks &lt;- liftIO (SC.scNat sc (2 ^ swidth))</span></span>
-<span class="lineno">  294 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ywidth' &lt;- liftIO (SC.scNat sc ywidth)</span></span>
-<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">bool &lt;- liftIO (SC.scBoolType sc)</span></span>
-<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">splitA &lt;- liftIO (SC.scSplit sc chunks ywidth' bool (cellTermTerm ia))</span></span>
-<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">-- Select chunk from output</span></span>
-<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">outputType &lt;- liftIO (SC.scBitvector sc ywidth)</span></span>
-<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">ixWidth &lt;- liftIO (SC.scNat sc swidth)</span></span>
-<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">elt &lt;- liftIO (SC.scBvAt sc chunks outputType ixWidth splitA (cellTermTerm is))</span></span>
-<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">output (CellTerm elt ywidth (connSigned &quot;Y&quot;))</span></span>
+<span class="lineno">  287 </span><span class="spaces">  </span><span class="istickedoff">CellTypeBmux -&gt; do</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="istickedoff">ia &lt;- input &quot;A&quot;</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="istickedoff">is &lt;- flipEndianness sc =&lt;&lt; input &quot;S&quot;</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">let swidth = cellTermWidth is</span>
+<span class="lineno">  291 </span><span class="spaces">    </span><span class="istickedoff">let ywidth = connWidthNat &quot;Y&quot;</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="istickedoff">-- Split input A into chunks</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">chunks &lt;- liftIO (SC.scNat sc (2 ^ swidth))</span>
+<span class="lineno">  294 </span><span class="spaces">    </span><span class="istickedoff">ywidth' &lt;- liftIO (SC.scNat sc ywidth)</span>
+<span class="lineno">  295 </span><span class="spaces">    </span><span class="istickedoff">bool &lt;- liftIO (SC.scBoolType sc)</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">splitA &lt;- liftIO (SC.scSplit sc chunks ywidth' bool (cellTermTerm ia))</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">-- Select chunk from output</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">outputType &lt;- liftIO (SC.scBitvector sc ywidth)</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">ixWidth &lt;- liftIO (SC.scNat sc swidth)</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">elt &lt;- liftIO (SC.scBvAt sc chunks outputType ixWidth splitA (cellTermTerm is))</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="istickedoff">output (CellTerm elt ywidth <span class="nottickedoff">(connSigned &quot;Y&quot;)</span>)</span>
 <span class="lineno">  302 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$demux&quot; -&gt; _</span>
 <span class="lineno">  303 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$lut&quot; -&gt; _</span>
 <span class="lineno">  304 </span><span class="spaces">  </span><span class="istickedoff">-- &quot;$slice&quot; -&gt; _</span>
