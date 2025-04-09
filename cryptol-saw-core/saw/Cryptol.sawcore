@@ -1867,6 +1867,9 @@ ecArrayUpdate = arrayUpdate;
 ecArrayCopy : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a;
 ecArrayCopy = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a) arrayCopy;
 
+ecArrayEq : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
+ecArrayEq = finNumRec (\ (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool) (\ (n:Nat) -> arrayEq (Vec n Bool));
+
 ecArraySet : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
 ecArraySet = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a) arraySet;
 

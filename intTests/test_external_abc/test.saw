@@ -44,8 +44,8 @@ let order_res = {{ ([[0x02,0x03],[0x04,0x05]], 0x81050fff) }};
 
 // Check that Verilog counterexamples are in the right order
 sr1 <- sat w4_abc_verilog order_term;
-caseSatResult sr1 undefined (\t -> prove_print yices {{ t == order_res }});
+caseSatResult sr1 (fail "ABC verilog sat fail") (\t -> prove_print yices {{ t == order_res }});
 
 // Check that AIGER counterexamples are in the right order
 sr2 <- sat w4_abc_aiger order_term;
-caseSatResult sr2 undefined (\t -> prove_print yices {{ t == order_res }});
+caseSatResult sr2 (fail "ABC aiger sat fail") (\t -> prove_print yices {{ t == order_res }});

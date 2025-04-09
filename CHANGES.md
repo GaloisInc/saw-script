@@ -47,6 +47,49 @@
   required to provide a term that describes how the live variables in
   the loop evolve over an iteration.
 
+* A new experimental facility for "tagging" proof obligations in
+  specifications and later using those tags to make decisions
+  in proof tactics. See the new `llvm_setup_with_tag`,
+  `goal_has_tags`, and `goal_has_some_tag` commands.
+
+* A new experimental option (toggled via
+  `enable_single_override_special_case` and
+  `disable_single_override_special_case`) which changes the handling
+  for cases where an overriden function has only one override that
+  could possibly apply. When the special case handling is enabled,
+  preconditions for the override are asserted separately, maintaining
+  their individual metadata instead of being combined into a single
+  precondition for the entire override. This may be advantageous if
+  proving the individual goals is easier than the conjunction of all
+  of them, or if different tactics are needed for different subgoals.
+  Currently, this option only applies to LLVM verifications.
+
+* Experimental interactive features. Using the new `subshell`
+  and `proof_subshell` commands, a user can regain a command-line
+  interface in the middle of a running script for experimentation
+  and exploration purposes. In addition `callcc` and `checkpoint`
+  allow the user to have more flexibility with restoring prior states
+  and executing the remaining context of a proof in such an
+  interactive session.
+
+* A significant overhaul of the SAW proof and tactics system.  Under
+  the hood, tactics now manipulate _sequents_ instead of just
+  propositions. This allows more the user to specify more precise goal
+  rearrangements, and provides a much nicer interface for proof
+  exploration (especially with the new `proof_subshell`). There are a
+  variety of new tactics that provide the user with control over proof
+  steps that is similar to that found in an interactive theorem prover.
+  Proofs that do not make use of the new experimental tactics should
+  see no substantive changes, so this is expected to be a highly
+  backward-compatible change.
+
+* The experimental and rarely-used `goal_assume` tactic has been
+  removed. The use case it was targeting is better solved via sequents.
+
+* A new experimental `llvm_verify_x86_with_invariant` command that
+  allows verification certain kinds of simple loops by using a
+  user-provided loop invariant.
+
 # Version 0.9
 
 ## New Features

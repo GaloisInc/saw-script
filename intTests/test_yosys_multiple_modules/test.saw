@@ -1,0 +1,2 @@
+enable_experimental;
+yosys_import "test.json";

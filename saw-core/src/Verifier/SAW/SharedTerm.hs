@@ -41,6 +41,7 @@ module Verifier.SAW.SharedTerm
   , alphaEquiv
   , alistAllFields
   , scRegisterName
+  , scLookupNameInfo
   , scResolveName
   , scResolveNameByURI
   , scResolveUnambiguous
@@ -59,6 +60,10 @@ module Verifier.SAW.SharedTerm
   , SharedContext
   , mkSharedContext
   , scGetModuleMap
+  , SharedContextCheckpoint
+  , checkpointSharedContext
+  , restoreSharedContext
+  , scGetNamingEnv
     -- ** Low-level generic term constructors
   , scTermF
   , scFlatTermF
@@ -160,6 +165,8 @@ module Verifier.SAW.SharedTerm
   , scXor
   , scBoolEq
   , scIte
+  , scAndList
+  , scOrList
   -- *** Natural numbers
   , scNat
   , scNatType
@@ -207,6 +214,7 @@ module Verifier.SAW.SharedTerm
   , scBvToNat
   , scBvAt
   , scBvConst
+  , scBvLit
   , scFinVal
   , scBvForall
   , scUpdBvFun
@@ -256,7 +264,11 @@ module Verifier.SAW.SharedTerm
   , scUnfoldConstantSet
   , scUnfoldConstantSet'
   , scSharedSize
+  , scSharedSizeAux
+  , scSharedSizeMany
   , scTreeSize
+  , scTreeSizeAux
+  , scTreeSizeMany
   ) where
 
 import Control.Applicative
@@ -276,7 +288,7 @@ import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef')
+import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
@@ -354,6 +366,31 @@ data SharedContext = SharedContext
   , scFreshGlobalVar :: IO VarIndex
   }
 
+data SharedContextCheckpoint =
+  SCC
+  { sccModuleMap :: ModuleMap
+  , sccNamingEnv :: SAWNamingEnv
+  , sccGlobalEnv :: HashMap Ident Term
+  }
+
+checkpointSharedContext :: SharedContext -> IO SharedContextCheckpoint
+checkpointSharedContext sc =
+  do mmap <- readIORef (scModuleMap sc)
+     nenv <- readIORef (scNamingEnv sc)
+     genv <- readIORef (scGlobalEnv sc)
+     return SCC
+            { sccModuleMap = mmap
+            , sccNamingEnv = nenv
+            , sccGlobalEnv = genv
+            }
+
+restoreSharedContext :: SharedContextCheckpoint -> SharedContext -> IO SharedContext
+restoreSharedContext scc sc =
+  do writeIORef (scModuleMap sc) (sccModuleMap scc)
+     writeIORef (scNamingEnv sc) (sccNamingEnv scc)
+     writeIORef (scGlobalEnv sc) (sccGlobalEnv scc)
+     return sc
+
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
@@ -375,6 +412,11 @@ scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, (
       case registerName i nmi env of
         Left uri -> throw (DuplicateNameException uri)
         Right env' -> env'
+
+scLookupNameInfo :: SharedContext -> VarIndex -> IO (Maybe NameInfo)
+scLookupNameInfo sc i = do
+  env <- readIORef $ scNamingEnv sc
+  pure . Map.lookup i $ resolvedNames env
 
 scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
 scResolveUnambiguous sc nm =
@@ -491,6 +533,10 @@ scCtorApp sc c_id args =
   do ctor <- scRequireCtor sc c_id
      let (params,args') = splitAt (ctorNumParams ctor) args
      scCtorAppParams sc (ctorPrimName ctor) params args'
+
+-- | Get the current naming environment
+scGetNamingEnv :: SharedContext -> IO SAWNamingEnv
+scGetNamingEnv sc = readIORef (scNamingEnv sc)
 
 -- | Get the current 'ModuleMap'
 scGetModuleMap :: SharedContext -> IO ModuleMap
@@ -1631,6 +1677,25 @@ scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 
+-- | Build a conjunction from a list of boolean terms.
+scAndList :: SharedContext -> [Term] -> IO Term
+scAndList sc = conj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just True
+    conj [] = scBool sc True
+    conj [x] = return x
+    conj (x : xs) = foldM (scAnd sc) x xs
+
+-- | Build a conjunction from a list of boolean terms.
+scOrList :: SharedContext -> [Term] -> IO Term
+scOrList sc = disj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just False
+    disj [] = scBool sc False
+    disj [x] = return x
+    disj (x : xs) = foldM (scOr sc) x xs
+
+
 -- | Create a term applying @Prelude.append@ to two vectors.
 --
 -- > append : (m n : Nat) -> (e : sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
@@ -1977,13 +2042,22 @@ scBvToNat sc n x = do
     n' <- scNat sc n
     scGlobalApply sc "Prelude.bvToNat" [n',x]
 
--- | Create a term computing a bitvector of the given length representing the
--- given 'Integer' value (if possible).
+-- | Create a @bvNat@ term computing a bitvector of the given length
+-- representing the given 'Integer' value (if possible).
 scBvConst :: SharedContext -> Natural -> Integer -> IO Term
 scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
   x <- scNat sc w
   y <- scNat sc $ fromInteger $ v .&. (1 `shiftL` fromIntegral w - 1)
   scGlobalApply sc "Prelude.bvNat" [x, y]
+
+-- | Create a vector literal term computing a bitvector of the given length
+-- representing the given 'Integer' value (if possible).
+scBvLit :: SharedContext -> Natural -> Integer -> IO Term
+scBvLit sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
+  do bool_tp <- scBoolType sc
+     bits <- mapM (scBool sc . testBit v)
+                  [(fromIntegral w - 1), (fromIntegral w - 2) .. 0]
+     scVector sc bool_tp bits
 
 -- TODO: This doesn't appear to be used anywhere, and "FinVal" doesn't appear
 -- in Prelude.sawcore... can this be deleted?
@@ -2524,7 +2598,13 @@ scUnfoldConstantSet' sc b names t0 = do
 
 -- | Return the number of DAG nodes used by the given @Term@.
 scSharedSize :: Term -> Integer
-scSharedSize = fst . go (0, Set.empty)
+scSharedSize = fst . scSharedSizeAux (0, Set.empty)
+
+scSharedSizeMany :: [Term] -> Integer
+scSharedSizeMany = fst . foldl scSharedSizeAux (0, Set.empty)
+
+scSharedSizeAux :: (Integer, Set TermIndex) -> Term -> (Integer, Set TermIndex)
+scSharedSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (strictPair (sz + 1) seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf })
@@ -2537,7 +2617,13 @@ strictPair x y = x `seq` y `seq` (x, y)
 -- | Return the number of nodes that would be used by the given
 -- @Term@ if it were represented as a tree instead of a DAG.
 scTreeSize :: Term -> Integer
-scTreeSize = fst . go (0, Map.empty)
+scTreeSize = fst . scTreeSizeAux (0, Map.empty)
+
+scTreeSizeMany :: [Term] -> Integer
+scTreeSizeMany = fst . foldl scTreeSizeAux (0, Map.empty)
+
+scTreeSizeAux :: (Integer, Map TermIndex Integer) -> Term -> (Integer, Map TermIndex Integer)
+scTreeSizeAux = go
   where
     go (sz, seen) (Unshared tf) = foldl' go (sz + 1, seen) tf
     go (sz, seen) (STApp{ stAppIndex = idx, stAppTermF = tf }) =

@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -33,9 +35,11 @@ import Data.String
 import Data.IORef
 import Control.Monad.Reader
 import qualified Data.IntMap as IntMap
+import Numeric.Natural (Natural)
 import GHC.Generics
 
 import Prettyprinter
+import Data.Text (Text, unpack)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -107,12 +111,68 @@ funNameTerm (GlobalName gdef (TermProjRecord fname:projs)) =
 -- | A term specifically known to be of type @sort i@ for some @i@
 newtype Type = Type Term deriving (Generic, Show)
 
+-- | A context of variables, with names and types. To avoid confusion as to
+-- how variables are ordered, do not use this type's constructor directly.
+-- Instead, use the combinators defined below.
+newtype MRVarCtx = MRVarCtx [(LocalName,Type)]
+                   -- ^ Internally, we store these names and types in order
+                   -- from innermost to outermost variable, see
+                   -- 'mrVarCtxInnerToOuter'
+                   deriving (Generic, Show)
+
+-- | Build an empty context of variables
+emptyMRVarCtx :: MRVarCtx
+emptyMRVarCtx = MRVarCtx []
+
+-- | Build a context with a single variable of the given name and type
+singletonMRVarCtx :: LocalName -> Type -> MRVarCtx
+singletonMRVarCtx nm tp = MRVarCtx [(nm,tp)]
+
+-- | Add a context of new variables (the first argument) to an existing context
+-- (the second argument). The new variables to add must be in the existing
+-- context, i.e. all the types in the first argument must be in the context of
+-- the second argument.
+mrVarCtxAppend :: MRVarCtx -> MRVarCtx -> MRVarCtx
+mrVarCtxAppend (MRVarCtx ctx1) (MRVarCtx ctx2) = MRVarCtx (ctx1 ++ ctx2)
+
+-- | Return the number of variables in the given context
+mrVarCtxLength :: MRVarCtx -> Int
+mrVarCtxLength (MRVarCtx ctx) = length ctx
+
+-- | Return a list of the names and types of the variables in the given
+-- context in order from innermost to outermost, i.e., where element @i@
+-- corresponds to deBruijn index @i@, and each type is in the context of
+-- all the variables which come after it in the list (i.e. all the variables
+-- which come after a type in the list are free in that type). In other words,
+-- the list is ordered from newest to oldest variable.
+mrVarCtxInnerToOuter :: MRVarCtx -> [(LocalName,Term)]
+mrVarCtxInnerToOuter (MRVarCtx ctx) = map (\(nm, Type tp) -> (nm, tp)) ctx
+
+-- | Build a context of variables from a list of names and types in innermost
+-- to outermost order - see 'mrVarCtxInnerToOuter'.
+mrVarCtxFromInnerToOuter :: [(LocalName,Term)] -> MRVarCtx
+mrVarCtxFromInnerToOuter = MRVarCtx . map (\(nm,tp) -> (nm, Type tp))
+
+-- | Return a list of the names and types of the variables in the given
+-- context in order from outermost to innermost, i.e., where element @i@
+-- corresponds to deBruijn index @len - i@, and each type is in the context of
+-- all the variables which come before it in the list (i.e. all the variables
+-- which come before a type in the list are free in that type). In other words,
+-- the list is ordered from oldest to newest variable.
+mrVarCtxOuterToInner :: MRVarCtx -> [(LocalName,Term)]
+mrVarCtxOuterToInner = reverse . mrVarCtxInnerToOuter
+
+-- | Build a context of variables from a list of names and types in outermost
+-- to innermost order - see 'mrVarCtxOuterToInner'.
+mrVarCtxFromOuterToInner :: [(LocalName,Term)] -> MRVarCtx
+mrVarCtxFromOuterToInner = mrVarCtxFromInnerToOuter . reverse
+
 -- | A Haskell representation of a @CompM@ in "monadic normal form"
 data NormComp
   = ReturnM Term -- ^ A term @returnM a x@
   | ErrorM Term -- ^ A term @errorM a str@
   | Ite Term Comp Comp -- ^ If-then-else computation
-  | Either Type Type CompFun CompFun Term -- ^ A sum elimination
+  | Eithers [EitherElim] Term -- ^ A multi-way sum elimination
   | MaybeElim Type Comp CompFun Term -- ^ A maybe elimination
   | OrM Comp Comp -- ^ an @orM@ computation
   | AssertingM Term Comp -- ^ an @assertingM@ computation
@@ -123,26 +183,30 @@ data NormComp
     -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
   deriving (Generic, Show)
 
+-- | An eliminator for an @Eithers@ type is a pair of the type of the disjunct
+-- and a function from that type to the output type
+type EitherElim = (Type,CompFun)
+
 -- | A computation function of type @a -> CompM b@ for some @a@ and @b@
 data CompFun
      -- | An arbitrary term
   = CompFunTerm Term
     -- | A special case for the term @\ (x:a) -> returnM a x@
-  | CompFunReturn
+  | CompFunReturn Type
     -- | The monadic composition @f >=> g@
   | CompFunComp CompFun CompFun
   deriving (Generic, Show)
 
 -- | Compose two 'CompFun's, simplifying if one is a 'CompFunReturn'
 compFunComp :: CompFun -> CompFun -> CompFun
-compFunComp CompFunReturn f = f
-compFunComp f CompFunReturn = f
+compFunComp (CompFunReturn _) f = f
+compFunComp f (CompFunReturn _) = f
 compFunComp f g = CompFunComp f g
 
 -- | If a 'CompFun' contains an explicit lambda-abstraction, then return the
 -- textual name bound by that lambda
 compFunVarName :: CompFun -> Maybe LocalName
-compFunVarName (CompFunTerm (asLambda -> Just (nm, _, _))) = Just nm
+compFunVarName (CompFunTerm t) = asLambdaName t
 compFunVarName (CompFunComp f _) = compFunVarName f
 compFunVarName _ = Nothing
 
@@ -151,12 +215,8 @@ compFunVarName _ = Nothing
 compFunInputType :: CompFun -> Maybe Type
 compFunInputType (CompFunTerm (asLambda -> Just (_, tp, _))) = Just $ Type tp
 compFunInputType (CompFunComp f _) = compFunInputType f
+compFunInputType (CompFunReturn t) = Just t
 compFunInputType _ = Nothing
-
--- | Returns true iff the given 'CompFun' is 'CompFunReturn'
-isCompFunReturn :: CompFun -> Bool
-isCompFunReturn CompFunReturn = True
-isCompFunReturn _ = False
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompReturn Term
@@ -174,16 +234,71 @@ isCompFunType sc t = scWhnf sc t >>= \case
   (asPiList -> (_, asCompM -> Just _)) -> return True
   _ -> return False
 
+
+----------------------------------------------------------------------
+-- * Useful 'Recognizer's for 'Term's
+----------------------------------------------------------------------
+
 -- | Recognize a 'Term' as an application of `bvToNat`
 asBvToNat :: Recognizer Term (Term, Term)
 asBvToNat (asApplyAll -> ((isGlobalDef "Prelude.bvToNat" -> Just ()),
                           [n, x])) = Just (n, x)
 asBvToNat _ = Nothing
 
+-- | Recognize a term as a @Left@ or @Right@
+asEither :: Recognizer Term (Either Term Term)
+asEither (asCtor -> Just (c, [_, _, x]))
+  | primName c == "Prelude.Left"  = return $ Left x
+  | primName c == "Prelude.Right" = return $ Right x
+asEither _ = Nothing
+
+-- | Recognize a term as a @TCNum n@ or @TCInf@
+asNum :: Recognizer Term (Either Term ())
+asNum (asCtor -> Just (c, [n]))
+  | primName c == "Cryptol.TCNum"  = return $ Left n
+asNum (asCtor -> Just (c, []))
+  | primName c == "Cryptol.TCInf"  = return $ Right ()
+asNum _ = Nothing
+
+-- | Recognize a term as being of the form @isFinite n@
+asIsFinite :: Recognizer Term Term
+asIsFinite (asApp -> Just (isGlobalDef "CryptolM.isFinite" -> Just (), n)) =
+  Just n
+asIsFinite _ = Nothing
+
+-- | Test if a 'Term' is a 'BVVec' type, excluding bitvectors
+asBVVecType :: Recognizer Term (Term, Term, Term)
+asBVVecType (asApplyAll ->
+             (isGlobalDef "Prelude.Vec" -> Just _,
+              [(asApplyAll ->
+                (isGlobalDef "Prelude.bvToNat" -> Just _, [n, len])), a]))
+  | Just _ <- asBoolType a = Nothing
+  | otherwise = Just (n, len, a)
+asBVVecType _ = Nothing
+
+-- | Like 'asVectorType', but returns 'Nothing' if 'asBVVecType' returns
+-- 'Just' or if the given 'Term' is a bitvector type
+asNonBVVecVectorType :: Recognizer Term (Term, Term)
+asNonBVVecVectorType (asBVVecType -> Just _) = Nothing
+asNonBVVecVectorType (asVectorType -> Just (n, a))
+  | Just _ <- asBoolType a = Nothing
+  | otherwise = Just (n, a)
+asNonBVVecVectorType _ = Nothing
+
+-- | Like 'asLambda', but only return's the lambda-bound variable's 'LocalName'
+asLambdaName :: Recognizer Term LocalName
+asLambdaName (asLambda -> Just (nm, _, _)) = Just nm
+asLambdaName _ = Nothing
+
 
 ----------------------------------------------------------------------
 -- * Mr Solver Environments
 ----------------------------------------------------------------------
+
+-- | The right-hand-side of a 'FunAssump': either a 'FunName' and arguments, if
+-- it is an opaque 'FunAsump', or a 'NormComp', if it is a rewrite 'FunAssump'
+data FunAssumpRHS = OpaqueFunAssump FunName [Term]
+                  | RewriteFunAssump NormComp
 
 -- | An assumption that a named function refines some specification. This has
 -- the form
@@ -194,14 +309,12 @@ asBvToNat _ = Nothing
 -- expressions @ei@ over the universal @xj@ variables, and some right-hand side
 -- computation expression @m@.
 data FunAssump = FunAssump {
-  -- | The uvars that were in scope when this assmption was created, in order
-  -- from outermost to innermost; that is, the uvars as "seen from outside their
-  -- scope", which is the reverse of the order of 'mrUVars', below
-  fassumpCtx :: [(LocalName,Term)],
+  -- | The uvars that were in scope when this assumption was created
+  fassumpCtx :: MRVarCtx,
   -- | The argument expressions @e1, ..., en@ over the 'fassumpCtx' uvars
   fassumpArgs :: [Term],
   -- | The right-hand side upper bound @m@ over the 'fassumpCtx' uvars
-  fassumpRHS :: NormComp
+  fassumpRHS :: FunAssumpRHS
 }
 
 -- | A map from function names to function refinement assumptions over that
@@ -214,17 +327,23 @@ type FunAssumps = Map FunName FunAssump
 data MREnv = MREnv {
   -- | The set of function refinements to be assumed by to Mr. Solver (which
   -- have hopefully been proved previously...)
-  mreFunAssumps :: FunAssumps
-  }
+  mreFunAssumps :: FunAssumps,
+  -- | The debug level, which controls debug printing
+  mreDebugLevel :: Int
+}
 
 -- | The empty 'MREnv'
 emptyMREnv :: MREnv
-emptyMREnv = MREnv { mreFunAssumps = Map.empty }
+emptyMREnv = MREnv { mreFunAssumps = Map.empty, mreDebugLevel = 0 }
 
 -- | Add a 'FunAssump' to a Mr Solver environment
 mrEnvAddFunAssump :: FunName -> FunAssump -> MREnv -> MREnv
 mrEnvAddFunAssump f fassump env =
   env { mreFunAssumps = Map.insert f fassump (mreFunAssumps env) }
+
+-- | Set the debug level of a Mr Solver environment
+mrEnvSetDebugLevel :: Int -> MREnv -> MREnv
+mrEnvSetDebugLevel dlvl env = env { mreDebugLevel = dlvl }
 
 
 ----------------------------------------------------------------------
@@ -325,8 +444,14 @@ instance TermLike Term where
 instance TermLike FunName where
   liftTermLike _ _ = return
   substTermLike _ _ = return
+instance TermLike LocalName where
+  liftTermLike _ _ = return
+  substTermLike _ _ = return
+instance TermLike Natural where
+  liftTermLike _ _ = return
+  substTermLike _ _ = return
 
-deriving instance TermLike Type
+deriving anyclass instance TermLike Type
 deriving instance TermLike NormComp
 deriving instance TermLike CompFun
 deriving instance TermLike Comp
@@ -336,17 +461,24 @@ deriving instance TermLike Comp
 -- * Pretty-Printing MR Solver Terms
 ----------------------------------------------------------------------
 
--- | The monad for pretty-printing in a context of SAW core variables
-type PPInCtxM = Reader [LocalName]
+-- | The monad for pretty-printing in a context of SAW core variables. The
+-- context is in innermost-to-outermost order, i.e. from newest to oldest
+-- variable (see 'mrVarCtxInnerToOuter' for more detail on this ordering).
+newtype PPInCtxM a = PPInCtxM (Reader [LocalName] a)
+                   deriving newtype (Functor, Applicative, Monad,
+                                     MonadReader [LocalName])
+
+-- | Run a 'PPInCtxM' computation in the given 'MRVarCtx' context
+runPPInCtxM :: PPInCtxM a -> MRVarCtx -> a
+runPPInCtxM (PPInCtxM m) = runReader m . map fst . mrVarCtxInnerToOuter
 
 -- | Pretty-print an object in a SAW core context and render to a 'String'
-showInCtx :: PrettyInCtx a => [LocalName] -> a -> String
-showInCtx ctx a =
-  renderSawDoc defaultPPOpts $ runReader (prettyInCtx a) ctx
+showInCtx :: PrettyInCtx a => MRVarCtx -> a -> String
+showInCtx ctx a = renderSawDoc defaultPPOpts $ runPPInCtxM (prettyInCtx a) ctx
 
 -- | Pretty-print an object in the empty SAW core context
 ppInEmptyCtx :: PrettyInCtx a => a -> SawDoc
-ppInEmptyCtx a = runReader (prettyInCtx a) []
+ppInEmptyCtx a = runPPInCtxM (prettyInCtx a) emptyMRVarCtx
 
 -- | A generic function for pretty-printing an object in a SAW core context of
 -- locally-bound names
@@ -365,18 +497,16 @@ prettyTermApp :: Term -> [Term] -> PPInCtxM SawDoc
 prettyTermApp f_top args =
   prettyInCtx $ foldl (\f arg -> Unshared $ App f arg) f_top args
 
--- | FIXME: move this helper function somewhere better...
-ppCtx :: [(LocalName,Term)] -> SawDoc
-ppCtx = helper [] where
-  helper :: [LocalName] -> [(LocalName,Term)] -> SawDoc
-  helper _ [] = ""
-  helper ns ((n,tp):ctx) =
-    let ns' = n:ns in
-    ppTermInCtx defaultPPOpts ns' (Unshared $ LocalVar 0) <> ":" <>
-    ppTermInCtx defaultPPOpts ns tp <> ", " <> helper ns' ctx
-
-instance PrettyInCtx String where
-  prettyInCtx str = return $ fromString str
+instance PrettyInCtx MRVarCtx where
+  prettyInCtx = return . align . sep . helper [] . mrVarCtxOuterToInner where
+    helper :: [LocalName] -> [(LocalName,Term)] -> [SawDoc]
+    helper _ [] = []
+    helper ns [(n, tp)] =
+      [ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+       ppTermInCtx defaultPPOpts ns tp]
+    helper ns ((n, tp):ctx) =
+      (ppTermInCtx defaultPPOpts (n:ns) (Unshared $ LocalVar 0) <> ":" <>
+       ppTermInCtx defaultPPOpts ns tp <> ",") : (helper (n:ns) ctx)
 
 instance PrettyInCtx SawDoc where
   prettyInCtx pp = return pp
@@ -387,8 +517,29 @@ instance PrettyInCtx Type where
 instance PrettyInCtx MRVar where
   prettyInCtx (MRVar ec) = return $ ppName $ ecName ec
 
-instance PrettyInCtx [Term] where
+instance PrettyInCtx a => PrettyInCtx [a] where
   prettyInCtx xs = list <$> mapM prettyInCtx xs
+
+instance {-# OVERLAPPING #-} PrettyInCtx String where
+  prettyInCtx str = return $ fromString str
+
+instance PrettyInCtx Text where
+  prettyInCtx str = return $ fromString $ unpack str
+
+instance PrettyInCtx Int where
+  prettyInCtx i = return $ viaShow i
+
+instance PrettyInCtx a => PrettyInCtx (Maybe a) where
+  prettyInCtx (Just x) = (<+>) "Just" <$> prettyInCtx x
+  prettyInCtx Nothing = return "Nothing"
+
+instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (Either a b) where
+  prettyInCtx (Left  a) = (<+>) "Left"  <$> prettyInCtx a
+  prettyInCtx (Right b) = (<+>) "Right" <$> prettyInCtx b
+
+instance (PrettyInCtx a, PrettyInCtx b) => PrettyInCtx (a,b) where
+  prettyInCtx (x, y) = (\x' y' -> parens (x' <> "," <> y')) <$> prettyInCtx x
+                                                            <*> prettyInCtx y
 
 instance PrettyInCtx TermProj where
   prettyInCtx (TermProjTuple i) = return (pretty '.' <> pretty i)
@@ -410,7 +561,8 @@ instance PrettyInCtx Comp where
 
 instance PrettyInCtx CompFun where
   prettyInCtx (CompFunTerm t) = prettyInCtx t
-  prettyInCtx CompFunReturn = return "returnM"
+  prettyInCtx (CompFunReturn t) =
+    prettyAppList [return "returnM", parens <$> prettyInCtx t]
   prettyInCtx (CompFunComp f g) =
     prettyAppList [prettyInCtx f, return ">=>", prettyInCtx g]
 
@@ -422,12 +574,9 @@ instance PrettyInCtx NormComp where
   prettyInCtx (Ite cond t1 t2) =
     prettyAppList [return "ite", return "_", parens <$> prettyInCtx cond,
                    parens <$> prettyInCtx t1, parens <$> prettyInCtx t2]
-  prettyInCtx (Either ltp rtp f g eith) =
-    prettyAppList [return "either",
-                   parens <$> prettyInCtx ltp, parens <$> prettyInCtx rtp,
-                   return (parens "CompM _"),
-                   parens <$> prettyInCtx f, parens <$> prettyInCtx g,
-                   parens <$> prettyInCtx eith]
+  prettyInCtx (Eithers elims eith) =
+    prettyAppList [return "eithers", return (parens "CompM _"),
+                   prettyInCtx (map snd elims), parens <$> prettyInCtx eith]
   prettyInCtx (MaybeElim tp m f mayb) =
     prettyAppList [return "maybe", parens <$> prettyInCtx tp,
                    return (parens "CompM _"), parens <$> prettyInCtx m,
@@ -447,7 +596,7 @@ instance PrettyInCtx NormComp where
   prettyInCtx (ForallM tp f) =
     prettyAppList [return "forallM", prettyInCtx tp, return "_",
                    parens <$> prettyInCtx f]
-  prettyInCtx (FunBind f args CompFunReturn) =
+  prettyInCtx (FunBind f args (CompFunReturn _)) =
     prettyTermApp (funNameTerm f) args
   prettyInCtx (FunBind f [] k) =
     prettyAppList [prettyInCtx f, return ">>=", prettyInCtx k]

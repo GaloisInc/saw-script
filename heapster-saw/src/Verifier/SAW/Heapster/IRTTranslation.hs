@@ -61,13 +61,6 @@ completeOpenTermTyped sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM termM sc Nothing []
 
--- | Build an element of type ListSort from a list of types
--- TODO Move this to OpenTerm.hs?
-listSortOpenTerm :: [OpenTerm] -> OpenTerm
-listSortOpenTerm [] = ctorOpenTerm "Prelude.LS_Nil" []
-listSortOpenTerm (tp:tps) =
-  ctorOpenTerm "Prelude.LS_Cons" [tp, listSortOpenTerm tps]
-
 -- | Get the result of applying 'exprCtxToTerms' to the current expression
 -- translation context
 -- TODO Move this to SAWTranslation.hs?

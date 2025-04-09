@@ -19,6 +19,8 @@ module SAWScript.TopLevel
   , getTopLevelRW
   , localOptions
   , putTopLevelRW
+  , makeCheckpoint
+  , restoreCheckpoint
   ) where
 
 import SAWScript.Value

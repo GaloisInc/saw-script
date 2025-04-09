@@ -43,7 +43,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , allocSpecType
   , allocSpecAlign
   , allocSpecMut
-  , allocSpecLoc
+  , allocSpecMd
   , allocSpecBytes
   , allocSpecFresh
   , allocSpecInit
@@ -223,7 +223,7 @@ data LLVMAllocSpec =
     , _allocSpecType  :: CL.MemType
     , _allocSpecAlign :: CL.Alignment
     , _allocSpecBytes :: Term
-    , _allocSpecLoc   :: ProgramLoc
+    , _allocSpecMd    :: MS.ConditionMetadata
     , _allocSpecFresh :: Bool -- ^ Whether declared with @crucible_fresh_pointer@
     , _allocSpecInit :: LLVMAllocSpecInit
     }
@@ -288,8 +288,7 @@ loadLLVMModule file halloc =
        Left err -> return (Left err)
        Right llvm_mod ->
          do memVar <- CL.mkMemVar (Text.pack "saw:llvm_memory") halloc
-            -- FIXME: do something with the translation warnings
-            (Some mtrans, _warnings) <- CL.translateModule halloc memVar llvm_mod
+            Some mtrans <- CL.translateModule halloc memVar llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans)))
 
 instance TestEquality LLVMModule where
@@ -389,11 +388,11 @@ ccSym = to (\cc -> ccWithBackend cc backendGetSym)
 type instance MS.PointsTo (LLVM arch) = LLVMPointsTo arch
 
 data LLVMPointsTo arch
-  = LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (LLVM arch)) (LLVMPointsToValue arch)
+  = LLVMPointsTo MS.ConditionMetadata (Maybe TypedTerm) (MS.SetupValue (LLVM arch)) (LLVMPointsToValue arch)
     -- | A variant of 'LLVMPointsTo' tailored to the @llvm_points_to_bitfield@
     -- command, which doesn't quite fit into the 'LLVMPointsToValue' paradigm.
     -- The 'String' represents the name of the field within the bitfield.
-  | LLVMPointsToBitfield ProgramLoc (MS.SetupValue (LLVM arch)) String (MS.SetupValue (LLVM arch))
+  | LLVMPointsToBitfield MS.ConditionMetadata (MS.SetupValue (LLVM arch)) String (MS.SetupValue (LLVM arch))
 
 data LLVMPointsToValue arch
   = ConcreteSizeValue (MS.SetupValue (LLVM arch))
@@ -401,16 +400,16 @@ data LLVMPointsToValue arch
 
 -- | Return the 'ProgramLoc' corresponding to an 'LLVMPointsTo' statement.
 llvmPointsToProgramLoc :: LLVMPointsTo arch -> ProgramLoc
-llvmPointsToProgramLoc (LLVMPointsTo pl _ _ _) = pl
-llvmPointsToProgramLoc (LLVMPointsToBitfield pl _ _ _) = pl
+llvmPointsToProgramLoc (LLVMPointsTo md _ _ _) = MS.conditionLoc md
+llvmPointsToProgramLoc (LLVMPointsToBitfield md _ _ _) = MS.conditionLoc md
 
 ppPointsTo :: LLVMPointsTo arch -> PPL.Doc ann
-ppPointsTo (LLVMPointsTo _loc cond ptr val) =
+ppPointsTo (LLVMPointsTo _md cond ptr val) =
   MS.ppSetupValue ptr
   PPL.<+> PPL.pretty "points to"
   PPL.<+> PPL.pretty val
   PPL.<+> maybe PPL.emptyDoc (\tt -> PPL.pretty "if" PPL.<+> MS.ppTypedTerm tt) cond
-ppPointsTo (LLVMPointsToBitfield _loc ptr fieldName val) =
+ppPointsTo (LLVMPointsToBitfield _md ptr fieldName val) =
   MS.ppSetupValue ptr <> PPL.pretty ("." ++ fieldName)
   PPL.<+> PPL.pretty "points to (bitfield)"
   PPL.<+> MS.ppSetupValue val

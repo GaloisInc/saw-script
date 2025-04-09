@@ -35,7 +35,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , W4EvalTactic(..)
   ) where
 
-import Control.Lens ((^.))
+import Control.Lens ( (^.), view )
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
@@ -536,7 +536,7 @@ typeOfSetupValue cc env nameEnv val =
             Right symTy -> return (Crucible.PtrType symTy)
 
     SetupGlobalInitializer () name -> do
-      case Map.lookup (L.Symbol name) (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
+      case Map.lookup (L.Symbol name) (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
             Left err -> throwError $ unlines
@@ -657,7 +657,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal bak mem (L.Symbol name)
     SetupGlobalInitializer () name ->
       case Map.lookup (L.Symbol name)
-                      (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
+                      (view Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         -- There was an error in global -> constant translation
         Just (_, Left e) -> fail e
         Just (_, Right (_, Just v)) ->

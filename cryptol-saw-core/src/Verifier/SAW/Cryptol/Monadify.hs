@@ -90,6 +90,7 @@ import Verifier.SAW.Recognizer
 -- import Verifier.SAW.Position
 import Verifier.SAW.Cryptol.PreludeM
 
+import GHC.Stack
 import Debug.Trace
 
 
@@ -345,6 +346,12 @@ typeclassMonMap =
    ("Cryptol.PIntegral", "Cryptol.PIntegral"),
    ("Cryptol.PLiteral", "Cryptol.PLiteral")]
 
+-- | The list of functions that are monadified as themselves in types
+typeLevelOpMonList :: [Ident]
+typeLevelOpMonList = ["Cryptol.tcAdd", "Cryptol.tcSub", "Cryptol.tcMul",
+                      "Cryptol.tcDiv", "Cryptol.tcMod", "Cryptol.tcExp",
+                      "Cryptol.tcMin", "Cryptol.tcMax"]
+
 -- | A context of local variables used for monadifying types, which includes the
 -- variable names, their original types (before monadification), and, if their
 -- types corespond to 'MonKind's, a local 'MonType' that quantifies over them.
@@ -364,25 +371,20 @@ ppTermInTypeCtx ctx t =
 typeCtxPureCtx :: MonadifyTypeCtx -> [(LocalName,Term)]
 typeCtxPureCtx = map (\(x,tp,_) -> (x,tp))
 
--- | Make a monadification type that is to be considered a base type
-mkTermBaseType :: MonadifyTypeCtx -> MonKind -> Term -> MonType
-mkTermBaseType ctx k t =
-  MTyBase k $ openOpenTerm (typeCtxPureCtx ctx) t
-
 -- | Monadify a type and convert it to its corresponding argument type
-monadifyTypeArgType :: MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeArgType :: HasCallStack => MonadifyTypeCtx -> Term -> OpenTerm
 monadifyTypeArgType ctx t = toArgType $ monadifyType ctx t
 
 -- | Apply a monadified type to a type or term argument in the sense of
 -- 'applyPiOpenTerm', meaning give the type of applying @f@ of a type to a
 -- particular argument @arg@
-applyMonType :: MonType -> Either MonType ArgMonTerm -> MonType
+applyMonType :: HasCallStack => MonType -> Either MonType ArgMonTerm -> MonType
 applyMonType (MTyArrow _ tp_ret) (Right _) = tp_ret
 applyMonType (MTyForall _ _ f) (Left mtp) = f mtp
 applyMonType _ _ = error "applyMonType: application at incorrect type"
 
 -- | Convert a SAW core 'Term' to a monadification type
-monadifyType :: MonadifyTypeCtx -> Term -> MonType
+monadifyType :: HasCallStack => MonadifyTypeCtx -> Term -> MonType
 {-
 monadifyType ctx t
   | trace ("\nmonadifyType:\n" ++ ppTermInTypeCtx ctx t) False = undefined
@@ -417,15 +419,12 @@ monadifyType ctx (asDataType -> Just (pn, args))
     -- and/or Nums
     MTyBase k_out $ dataTypeOpenTerm (primName pn) (map toArgType margs)
 monadifyType ctx (asVectorType -> Just (len, tp)) =
-  let lenOT = openOpenTerm (typeCtxPureCtx ctx) len in
+  let lenOT = monadifyTypeNat ctx len in
   MTySeq (ctorOpenTerm "Cryptol.TCNum" [lenOT]) $ monadifyType ctx tp
-monadifyType ctx tp@(asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
+monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just seq_id), [n, a]))
   | seq_id == "Cryptol.seq" =
-    case monTypeNum (monadifyType ctx n) of
-      Just n_trm -> MTySeq n_trm (monadifyType ctx a)
-      Nothing ->
-        error ("Monadify type: not a number: " ++ ppTermInTypeCtx ctx n
-               ++ " in type: " ++ ppTermInTypeCtx ctx tp)
+    let nOT = monadifyTypeArgType ctx n in
+    MTySeq nOT $ monadifyType ctx a
 monadifyType ctx (asApp -> Just ((asGlobalDef -> Just f), arg))
   | Just f_trans <- lookup f typeclassMonMap =
     MTyBase (MKType $ mkSort 1) $
@@ -442,14 +441,31 @@ monadifyType ctx (asApplyAll -> (f, args))
     MTyBase k_out (applyOpenTermMulti (globalDefOpenTerm glob) $
                    map toArgType margs)
 -}
-monadifyType ctx tp@(asCtor -> Just (pn, _))
-  | primName pn == "Cryptol.TCNum" || primName pn == "Cryptol.TCInf" =
-    MTyNum $ openOpenTerm (typeCtxPureCtx ctx) tp
+monadifyType _ (asCtor -> Just (pn, []))
+  | primName pn == "Cryptol.TCInf"
+  = MTyNum $ ctorOpenTerm "Cryptol.TCInf" []
+monadifyType ctx (asCtor -> Just (pn, [n]))
+  | primName pn == "Cryptol.TCNum"
+  = MTyNum $ ctorOpenTerm "Cryptol.TCNum" [monadifyTypeNat ctx n]
+monadifyType ctx (asApplyAll -> ((asGlobalDef -> Just f), args))
+  | f `elem` typeLevelOpMonList =
+    MTyNum $
+    applyOpenTermMulti (globalOpenTerm f) $ map (monadifyTypeArgType ctx) args
 monadifyType ctx (asLocalVar -> Just i)
   | i < length ctx
   , (_,_,Just tp) <- ctx!!i = tp
 monadifyType ctx tp =
   error ("monadifyType: not a valid type for monadification: "
+         ++ ppTermInTypeCtx ctx tp)
+
+-- | Monadify a type-level natural number
+monadifyTypeNat :: HasCallStack => MonadifyTypeCtx -> Term -> OpenTerm
+monadifyTypeNat _ (asNat -> Just n) = natOpenTerm n
+monadifyTypeNat ctx (asLocalVar -> Just i)
+  | i < length ctx
+  , (_,_,Just tp) <- ctx!!i = toArgType tp
+monadifyTypeNat ctx tp =
+  error ("monadifyTypeNat: not a valid natural number for monadification: "
          ++ ppTermInTypeCtx ctx tp)
 
 
@@ -590,13 +606,21 @@ failArgMonTerm :: MonType -> String -> ArgMonTerm
 failArgMonTerm tp str = fromArgTerm tp (failOpenTerm str)
 
 -- | Apply a monadified term to a type or term argument
-applyMonTerm :: MonTerm -> Either MonType ArgMonTerm -> MonTerm
+applyMonTerm :: HasCallStack => MonTerm -> Either MonType ArgMonTerm -> MonTerm
 applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ f)) (Right arg) = f arg
 applyMonTerm (ArgMonTerm (ForallMonTerm _ _ f)) (Left mtp) = f mtp
-applyMonTerm _ _ = error "applyMonTerm: application at incorrect type"
+applyMonTerm (ArgMonTerm (FunMonTerm _ _ _ _)) (Left _) =
+  error "applyMonTerm: application of term-level function to type-level argument"
+applyMonTerm (ArgMonTerm (ForallMonTerm _ _ _)) (Right _) =
+  error "applyMonTerm: application of type-level function to term-level argument"
+applyMonTerm (ArgMonTerm (BaseMonTerm _ _)) _ =
+  error "applyMonTerm: application of non-function base term"
+applyMonTerm (CompMonTerm _ _) _ =
+  error "applyMonTerm: application of computational term"
 
 -- | Apply a monadified term to 0 or more arguments
-applyMonTermMulti :: MonTerm -> [Either MonType ArgMonTerm] -> MonTerm
+applyMonTermMulti :: HasCallStack => MonTerm -> [Either MonType ArgMonTerm] ->
+                     MonTerm
 applyMonTermMulti = foldl applyMonTerm
 
 -- | Build a 'MonTerm' from a global of a given argument type
@@ -680,8 +704,11 @@ ppTermInMonCtx :: MonadifyCtx -> Term -> String
 ppTermInMonCtx ctx t =
   scPrettyTermInCtx defaultPPOpts (map (\(x,_,_) -> x) ctx) t
 
--- | A memoization table for monadifying terms
-type MonadifyMemoTable = IntMap MonTerm
+-- | A memoization table for monadifying terms: a map from 'TermIndex'es to
+-- 'MonTerm's and, possibly, corresponding 'ArgMonTerm's. The latter are simply
+-- the result of calling 'argifyMonTerm' on the former, but are only added when
+-- needed (i.e. when 'memoArgMonTerm' is called, e.g. in 'monadifyArg').
+type MonadifyMemoTable = IntMap (MonTerm, Maybe ArgMonTerm)
 
 -- | The empty memoization table
 emptyMemoTable :: MonadifyMemoTable
@@ -751,15 +778,34 @@ runCompleteMonadifyM sc env top_ret_tp m =
   runMonadifyM env [] (toArgType $ monadifyType [] top_ret_tp) m
 
 -- | Memoize a computation of the monadified term associated with a 'TermIndex'
-memoizingM :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
-memoizingM i m =
+memoMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM MonTerm
+memoMonTerm i m =
   (IntMap.lookup i <$> get) >>= \case
-  Just ret ->
-    return ret
+  Just (mtm, _) ->
+    return mtm
   Nothing ->
-    do ret <- m
-       modify (IntMap.insert i ret)
-       return ret
+    do mtm <- m
+       modify (IntMap.insert i (mtm, Nothing))
+       return mtm
+
+-- | Memoize a computation of the monadified term of argument type associated
+-- with a 'TermIndex', using a memoized 'ArgTerm' directly if it exists or
+-- applying 'argifyMonTerm' to a memoized 'MonTerm' (and memoizing the result)
+-- if it exists
+memoArgMonTerm :: TermIndex -> MonadifyM MonTerm -> MonadifyM ArgMonTerm
+memoArgMonTerm i m =
+  (IntMap.lookup i <$> get) >>= \case
+  Just (_, Just argmtm) ->
+    return argmtm
+  Just (mtm, Nothing) ->
+    do argmtm <- argifyMonTerm mtm
+       modify (IntMap.insert i (mtm, Just argmtm))
+       return argmtm
+  Nothing ->
+    do mtm <- m
+       argmtm <- argifyMonTerm mtm
+       modify (IntMap.insert i (mtm, Just argmtm))
+       return argmtm
 
 -- | Turn a 'MonTerm' of type @CompMT(tp)@ to a term of argument type @MT(tp)@
 -- by inserting a monadic bind if the 'MonTerm' is computational
@@ -791,17 +837,25 @@ assertIsFinite _ =
 ----------------------------------------------------------------------
 
 -- | Monadify a type in the context of the 'MonadifyM' monad
-monadifyTypeM :: Term -> MonadifyM MonType
+monadifyTypeM :: HasCallStack => Term -> MonadifyM MonType
 monadifyTypeM tp =
   do ctx <- monStCtx <$> ask
      return $ monadifyType (ctxToTypeCtx ctx) tp
 
 -- | Monadify a term to a monadified term of argument type
-monadifyArg :: Maybe MonType -> Term -> MonadifyM ArgMonTerm
-monadifyArg mtp t = monadifyTerm mtp t >>= argifyMonTerm
+monadifyArg :: HasCallStack => Maybe MonType -> Term -> MonadifyM ArgMonTerm
+{-
+monadifyArg _ t
+  | trace ("Monadifying term of argument type: " ++ showTerm t) False
+  = undefined
+-}
+monadifyArg mtp t@(STApp { stAppIndex = ix }) =
+  memoArgMonTerm ix $ monadifyTerm' mtp t
+monadifyArg mtp t =
+  monadifyTerm' mtp t >>= argifyMonTerm
 
 -- | Monadify a term to argument type and convert back to a term
-monadifyArgTerm :: Maybe MonType -> Term -> MonadifyM OpenTerm
+monadifyArgTerm :: HasCallStack => Maybe MonType -> Term -> MonadifyM OpenTerm
 monadifyArgTerm mtp t = toArgTerm <$> monadifyArg mtp t
 
 -- | Monadify a term
@@ -812,7 +866,7 @@ monadifyTerm _ t
   = undefined
 -}
 monadifyTerm mtp t@(STApp { stAppIndex = ix }) =
-  memoizingM ix $ monadifyTerm' mtp t
+  memoMonTerm ix $ monadifyTerm' mtp t
 monadifyTerm mtp t =
   monadifyTerm' mtp t
 
@@ -821,7 +875,7 @@ monadifyTerm mtp t =
 -- (i.e.,, lambdas, pairs, and records), but is optional for elimination forms
 -- (i.e., applications, projections, and also in this case variables). Note that
 -- this means monadification will fail on terms with beta or tuple redexes.
-monadifyTerm' :: Maybe MonType -> Term -> MonadifyM MonTerm
+monadifyTerm' :: HasCallStack => Maybe MonType -> Term -> MonadifyM MonTerm
 monadifyTerm' (Just mtp) t@(asLambda -> Just _) =
   ask >>= \(MonadifyROState { monStEnv = env, monStCtx = ctx }) ->
   return $ monadifyLambdas env ctx mtp t
@@ -900,7 +954,7 @@ monadifyTerm' _ t =
 
 -- | Monadify the application of a monadified term to a list of terms, using the
 -- type of the already monadified to monadify the arguments
-monadifyApply :: MonTerm -> [Term] -> MonadifyM MonTerm
+monadifyApply :: HasCallStack => MonTerm -> [Term] -> MonadifyM MonTerm
 monadifyApply f (t : ts)
   | MTyArrow tp_in _ <- getMonType f =
     do mtrm <- monadifyArg (Just tp_in) t
@@ -915,7 +969,8 @@ monadifyApply f [] = return f
 
 -- | FIXME: documentation; get our type down to a base type before going into
 -- the MonadifyM monad
-monadifyLambdas :: MonadifyEnv -> MonadifyCtx -> MonType -> Term -> MonTerm
+monadifyLambdas :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
+                   MonType -> Term -> MonTerm
 monadifyLambdas env ctx (MTyForall _ k tp_f) (asLambda ->
                                               Just (x, x_tp, body)) =
   -- FIXME: check that monadifyKind x_tp == k
@@ -930,7 +985,8 @@ monadifyLambdas env ctx tp t =
   monadifyEtaExpand env ctx tp tp t []
 
 -- | FIXME: documentation
-monadifyEtaExpand :: MonadifyEnv -> MonadifyCtx -> MonType -> MonType -> Term ->
+monadifyEtaExpand :: HasCallStack => MonadifyEnv -> MonadifyCtx ->
+                     MonType -> MonType -> Term ->
                      [Either MonType ArgMonTerm] -> MonTerm
 monadifyEtaExpand env ctx top_mtp (MTyForall x k tp_f) t args =
   ArgMonTerm $ ForallMonTerm x k $ \mtp ->

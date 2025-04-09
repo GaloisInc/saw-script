@@ -24,8 +24,12 @@ import Control.Monad.Trans.Except
 import Control.DeepSeq(rnf, NFData(..))
 import Data.Char(isSpace)
 import Data.Data
+import Data.Function (on)
+import Data.List
+import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Maybe
 import Data.Ratio
 import Data.Time.Clock
@@ -243,3 +247,21 @@ unparseMethodDescriptor :: ([JSS.Type], Maybe JSS.Type) -> String
 unparseMethodDescriptor (args, ret) =
   "(" ++ concatMap unparseTypeDescriptor args ++ ")" ++
   maybe "V" unparseTypeDescriptor ret
+
+
+neGroupOn ::
+  Ord b =>
+  (a -> b) {- ^ equivalence class projection -} ->
+  [a] -> [NE.NonEmpty a]
+neGroupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)
+
+neNubOrd ::
+  Ord a =>
+  NE.NonEmpty a ->
+  NE.NonEmpty a
+neNubOrd (hd NE.:| tl) = hd NE.:| loop (Set.singleton hd) tl
+  where
+    loop _prev [] = []
+    loop prev (x:xs)
+      | Set.member x prev = loop prev xs
+      | otherwise         = x : loop (Set.insert x prev) xs

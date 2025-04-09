@@ -21,6 +21,7 @@ import qualified Control.Monad.Catch as E
 import Data.Char (isAlphaNum, isSpace)
 import Data.Function (on)
 import Data.List (isPrefixOf,sortBy)
+import Data.Maybe (isJust)
 import System.Console.Haskeline
 import System.Directory(getAppUserDataDirectory,createDirectoryIfMissing)
 import System.FilePath((</>))
@@ -29,6 +30,7 @@ import qualified Control.Monad.Trans.Class as MTL
 import qualified Control.Exception as X
 
 import SAWScript.Options (Options)
+import SAWScript.TopLevel( TopLevelRO(..) )
 
 
 -- | Haskeline-specific repl implementation.
@@ -38,22 +40,31 @@ import SAWScript.Options (Options)
 -- handle this.
 repl :: Maybe FilePath -> Options -> REPL () -> IO ()
 repl mbBatch opts begin =
-  do settings <- setHistoryFile replSettings
-     runREPL isBatch opts (runInputTBehavior style settings body)
+  runREPL (isJust mbBatch) opts (replBody mbBatch begin)
+
+
+replBody :: Maybe FilePath -> REPL () -> REPL ()
+replBody mbBatch begin =
+  do settings <- MTL.liftIO (setHistoryFile replSettings)
+     enableSubshell (runInputTBehavior style settings body)
   where
   body = withInterrupt $ do
     MTL.lift begin
     loop
 
-  (isBatch,style) = case mbBatch of
-    Nothing   -> (False,defaultBehavior)
-    Just path -> (True,useFile path)
+  style = case mbBatch of
+    Nothing   -> defaultBehavior
+    Just path -> useFile path
+
+  enableSubshell m =
+    REPL $ \refs ->
+      do let ro' = (eTopLevelRO refs){ roSubshell = subshell (runInputT replSettings (withInterrupt loop)) }
+         unREPL m refs{ eTopLevelRO = ro' }
 
   loop = do
     prompt <- MTL.lift getPrompt
     mb     <- handleInterrupt (return (Just "")) (getInputLines prompt [])
     case mb of
-
       Just line
         | Just cmd <- parseCommand findCommand line -> do
           continue <- MTL.lift $ do

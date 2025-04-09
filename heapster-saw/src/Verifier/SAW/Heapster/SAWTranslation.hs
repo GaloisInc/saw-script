@@ -84,6 +84,12 @@ suffixMembers _ MNil = MNil
 suffixMembers ctx1 (ctx2 :>: _) =
   RL.map Member_Step (suffixMembers ctx1 ctx2) :>: Member_Base
 
+-- | Build a SAW core term of type @ListSort@ from a list of types
+listSortOpenTerm :: [OpenTerm] -> OpenTerm
+listSortOpenTerm =
+  foldr (\x y -> ctorOpenTerm "Prelude.LS_Cons" [x,y])
+  (ctorOpenTerm "Prelude.LS_Nil" [])
+
 
 ----------------------------------------------------------------------
 -- * Translation Monads
@@ -495,6 +501,26 @@ eitherElimTransM tp_l tp_r tp_ret fl fr eith =
      return $ applyOpenTermMulti (globalOpenTerm "Prelude.either")
        [ typeTransTupleType tp_l, typeTransTupleType tp_r,
          typeTransTupleType tp_ret, fl_trans, fr_trans, eith ]
+
+-- | Eliminate a multi-way SAW @Eithers@ type, taking in: a list of the
+-- translations of the types in the @Eithers@ type; the translation of the
+-- output type; a list of functions for the branches of the @Eithers@
+-- elimination; and the term of @Eithers@ type being eliminated
+eithersElimTransM :: [TypeTrans tr_in] -> TypeTrans tr_out ->
+                     [tr_in -> TransM info ctx OpenTerm] -> OpenTerm ->
+                     TransM info ctx OpenTerm
+eithersElimTransM tps tp_ret fs eith =
+  foldr (\(tp,f) restM ->
+          do f_trans <- lambdaTupleTransM "x_eith_elim" tp f
+             rest <- restM
+             return (ctorOpenTerm "Prelude.FunsTo_Cons"
+                     [typeTransTupleType tp_ret,
+                      typeTransTupleType tp, f_trans, rest]))
+  (return $ ctorOpenTerm "Prelude.FunsTo_Nil" [typeTransTupleType tp_ret])
+  (zip tps fs)
+  >>= \elims_trans ->
+  return (applyOpenTermMulti (globalOpenTerm "Prelude.eithers")
+          [typeTransTupleType tp_ret, elims_trans, eith])
 
 -- | Build the dependent pair type whose first projection type is the
 -- 'typeTransTupleType' of the supplied 'TypeTrans' and whose second projection
@@ -3511,36 +3537,30 @@ translatePermImpl1 prx mb_impl mb_impls = case (mbMatch mb_impl, mbMatch mb_impl
        ptrans <- getTopPermM
        setVarPermM x ptrans (withPermStackM RL.tail RL.tail m)
 
-  -- If both branches of an or elimination fail, the whole thing fails; otherwise,
-  -- an or elimination performs a pattern-match on an Either
-  ([nuMP| Impl1_ElimOr x mb_p1 mb_p2 |],
-   [nuMP| (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2) |]) ->
-    pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl1) >>= \(mtrans1,hasf1) ->
-    pitmCatching (translatePermImpl prx $
-                  mbCombine RL.typeCtxProxies mb_impl2) >>= \(mtrans2,hasf2) ->
-    tell ([],hasf1 <> hasf2) >>
-    case (mtrans1, mtrans2) of
-      (Nothing, Nothing) -> mzero
-      _ ->
-        return $ \k ->
-        do let mb_p1_or_p2 =
-                 mbMapCl $(mkClosed
-                           [| \(Impl1_ElimOr _ p1 p2) -> ValPerm_Or p1 p2 |])
-                 mb_impl
-           () <- assertTopPermM "Impl1_ElimOr" x mb_p1_or_p2
-           tp1 <- translate mb_p1
-           tp2 <- translate mb_p2
-           tp_ret <- compReturnTypeTransM
-           top_ptrans <- getTopPermM
-           eitherElimTransM tp1 tp2 tp_ret
-             (\ptrans ->
-               withPermStackM id ((:>: ptrans) . RL.tail) $
-               forceImplTrans mtrans1 k)
-             (\ptrans ->
-               withPermStackM id ((:>: ptrans) . RL.tail) $
-               forceImplTrans mtrans2 k)
-             (transTupleTerm top_ptrans)
+  -- If all branches of an or elimination fail, the whole thing fails; otherwise,
+  -- an or elimination performs a multi way Eithers elimination
+  ([nuMP| Impl1_ElimOrs x mb_or_list |], _) ->
+    -- First, translate all the PermImpls in mb_impls, using pitmCatching to
+    -- isolate failures to each particular branch, but still reporting failures
+    -- in any branch
+    mapM (pitmCatching . translatePermImpl prx)
+         (mbOrListPermImpls mb_or_list mb_impls) >>= \transs ->
+    let (mtranss, hasfs) = unzip transs in
+    tell ([], mconcat hasfs) >>
+    -- As a special case, if all branches fail (representing as translating to
+    -- Nothing), then the entire or elimination fails
+    if all isNothing mtranss then mzero else
+      return $ \k ->
+      do let mb_or_p = mbOrListPerm mb_or_list
+         () <- assertTopPermM "Impl1_ElimOrs" x mb_or_p
+         tps <- mapM translate $ mbOrListDisjs mb_or_list
+         tp_ret <- compReturnTypeTransM
+         top_ptrans <- getTopPermM
+         eithersElimTransM tps tp_ret
+           (flip map mtranss $ \mtrans ptrans ->
+             withPermStackM id ((:>: ptrans) . RL.tail) $
+             forceImplTrans mtrans k)
+           (transTupleTerm top_ptrans)
 
   -- An existential elimination performs a pattern-match on a Sigma
   ([nuMP| Impl1_ElimExists x p |], _) ->

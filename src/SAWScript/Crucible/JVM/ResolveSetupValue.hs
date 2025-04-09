@@ -41,7 +41,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -114,7 +113,7 @@ instance X.Exception JVMTypeOfError
 typeOfSetupValue ::
   X.MonadThrow m =>
   JVMCrucibleContext ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   m J.Type
@@ -159,7 +158,7 @@ lookupAllocIndex env i =
 resolveSetupVal ::
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   IO JVMVal
