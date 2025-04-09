@@ -85,6 +85,7 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Term.Pretty (MemoStyle(..))
 import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -871,6 +872,37 @@ set_min_sharing b = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsMinSharing = b } }
 
+-- | 'set_memoization_hash i' changes the memoization strategy for terms:
+-- memoization identifiers will include the first 'i' digits of the hash of the
+-- term they memoize. This is useful to help keep memoization identifiers of the
+-- same term as constant as possible across different executions of a proof
+-- script over the course of its development.
+set_memoization_hash :: Int -> TopLevel ()
+set_memoization_hash i = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = Hash i } }
+
+-- | 'set_memoization_hash_incremental i' changes the memoization strategy for
+-- terms: memoization identifiers will include the first 'i' digits of the hash
+-- of the term they memoize, as well as the value of a global counter that
+-- increments each time a term is memoized. This is useful to help keep
+-- memoization identifiers of the same term as constant as possible across
+-- different executions of a proof script over the course of its development, as
+-- well as to freshen memoization identifiers in the unlikely case of term hash
+-- collisions.
+set_memoization_hash_incremental :: Int -> TopLevel ()
+set_memoization_hash_incremental i = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = HashIncremental i } }
+
+-- | `set_memoization_incremental` changes the memoization strategy for terms:
+-- memoization identifiers will only include the value of a global counter that
+-- increments each time a term is memoized.
+set_memoization_incremental :: TopLevel ()
+set_memoization_incremental = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = Incremental } }
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
@@ -1377,6 +1409,40 @@ primitives = Map.fromList
     Current
     [ "Set the number times a subterm must be shared for it to be"
     ,  "let-bound in printer output." ]
+
+  , prim "set_memoization_hash" "Int -> TopLevel ()"
+    (pureVal set_memoization_hash)
+    Current
+    [ "`set_memoization_hash i` changes the memoization strategy "
+    , "for terms: memoization identifiers will include the first `i` "
+    , "digits of the hash of the term they memoize. This is useful "
+    , "to help keep memoization identifiers of the same term as "
+    , "constant as possible across different executions of a proof "
+    , "script over the course of its development."
+    ]
+
+  , prim "set_memoization_hash_incremental" "Int -> TopLevel ()"
+    (pureVal set_memoization_hash_incremental)
+    Current
+    [ "`set_memoization_hash_incremental i` changes the memoization "
+    , "strategy for terms: memoization identifiers will include the "
+    , "first `i` digits of the hash of the term they memoize, as well "
+    , "as the value of a global counter that increments each time a "
+    , "term is memoized. This is useful to help keep memoization "
+    , "identifiers of the same term as constant as possible across "
+    , "different executions of a proof script over the course of its "
+    , "development, as well as to freshen memoization identifiers in "
+    , "the unlikely case of term hash collisions."
+    ]
+
+  , prim "set_memoization_incremental" "TopLevel ()"
+    (pureVal set_memoization_incremental)
+    Current
+    [ "`set_memoization_incremental` changes the memoization strategy "
+    , "for terms: memoization identifiers will only include the value "
+    , "of a global counter that increments each time a term is memoized. "
+    , "This is the default."
+    ]
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
@@ -2164,6 +2230,9 @@ primitives = Map.fromList
     , " `x@9`, and `x@3`. These indices are assigned deterministically with"
     , "regard to a particular goal, but are not persistent across goals. As"
     , "such, this should be used primarily when debugging a proof."
+    , ""
+    , "Note: incompatible with non-incremental memoization strategies - see"
+    , "`set_memoization_incremental` and `set_memoization_hash_incremental`."
     ]
   , prim "write_goal" "String -> ProofScript ()"
     (pureVal write_goal)
