@@ -41,7 +41,7 @@ module Verifier.SAW.Term.Pretty
   , ppName
   ) where
 
-import Data.Char (intToDigit)
+import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
 import Control.Monad.Reader
 import Control.Monad.State.Strict as State
@@ -176,8 +176,19 @@ lookupVarName False _ i = Text.pack ('!' : show i)
 freshName :: [LocalName] -> LocalName -> LocalName
 freshName used name
   | name == "_" = name
-  | elem name used = freshName used (name <> "'")
+  | elem name used = freshName used (nextName name)
   | otherwise = name
+
+-- | Generate a variant of a name by incrementing the number at the
+-- end, or appending the number 1 if there is none.
+nextName :: LocalName -> LocalName
+nextName = Text.pack . reverse . go . reverse . Text.unpack
+  where
+    go :: String -> String
+    go (c : cs)
+      | c == '9'  = '0' : go cs
+      | isDigit c = succ c : cs
+    go cs = '1' : cs
 
 -- | Add a new variable with the given base name to the local variable list,
 -- returning both the fresh name actually used and the new variable list. As a
@@ -688,7 +699,8 @@ renderSawDoc :: PPOpts -> SawDoc -> String
 renderSawDoc ppOpts doc =
   Text.Lazy.unpack (renderLazy (style (layoutPretty layoutOpts doc)))
   where
-    layoutOpts = LayoutOptions (AvailablePerLine 80 0.8)
+    -- ribbon width 64, with effectively unlimited right margin
+    layoutOpts = LayoutOptions (AvailablePerLine 8000 0.008)
     style = if ppColor ppOpts then reAnnotateS colorStyle else unAnnotateS
 
 -- | Pretty-print a term and render it to a string, using the given options

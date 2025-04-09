@@ -4795,7 +4795,25 @@ llvmArrayBorrowRangeDelete borrow rng =
       | otherwise =
         error "llvmArrayBorrowRangeDelete: found non unit new_range for FieldBorrow"
 
+-- | Return whether or not the borrows in @ap@ cover the range of cells [0, len). Specifically,
+-- if the borrowed cells (as ranges) can be arranged in as a sequence of non-overlapping but contiguous
+-- ranges (in the sense of @bvCouldEqual@) that extends at least as far as @len@ (in the sense of @bvLeq@)
+llvmArrayIsBorrowed ::
+  (HasCallStack, 1 <= w, KnownNat w) =>
+  LLVMArrayPerm w ->
+  Bool
+llvmArrayIsBorrowed ap =
+  go (bvInt 0) (llvmArrayBorrowCells <$> llvmArrayBorrows ap)
+  where
+    end = bvRangeEnd (llvmArrayCells ap)
 
+    go off borrows
+      | bvLeq end off
+      = True
+      | Just i <- findIndex (permForOff off) borrows
+      = go (bvAdd off (bvRangeLength (borrows!!i))) (deleteNth i borrows)
+
+    permForOff o b = bvCouldEqual o (bvRangeOffset b)
 
 -- | Test if a byte offset @o@ statically aligns with a statically-known offset
 -- into some array cell, i.e., whether
