@@ -692,7 +692,7 @@ From CryptolToCoq Require Import SAWCorePrelude.
 
 (* The following 2 lines allows better automation *)
 Require Import Examples.common.
-Require Import Coq.Program.Tactics. (* Great tacticals, move to automation. Perhaps `Require Export`? *)
+Require Import Coq.Program.Tactics.
 
 (* Import our function definitions*)
 Require Import Examples.tutorial_c_gen.
@@ -1054,8 +1054,6 @@ Definition zero_array_precond x
 
 We will not go into detail about the proof, but notice that the
 important steps are handled by custom automation. 
-
-TODO: This proof is involved. Perhaps add some more details?
 
 
 ### Recursive data structures
