@@ -119,16 +119,16 @@ type SAWCoreBackend n solver fs = B.ExprBuilder n (SAWCoreState solver fs) fs
 --   state of these fields is restored.
 inFreshNamingContext :: SAWCoreBackend n solver fs -> IO a -> IO a
 inFreshNamingContext sym f =
-  do old <- readIORef (B.sbStateManager sym)
+  do old <- readIORef (B.userState sym)
      bracket (mkNew (B.exprCounter sym) old) (restore old) action
 
  where
  action new =
-   do writeIORef (B.sbStateManager sym) new
+   do writeIORef (B.userState sym) new
       f
 
  restore old _new =
-   do writeIORef (B.sbStateManager sym) old
+   do writeIORef (B.userState sym) old
 
  mkNew _gen old =
    do ch <- B.newIdxCache
@@ -146,7 +146,7 @@ inFreshNamingContext sym f =
 
 getInputs :: SAWCoreBackend n solver fs -> IO (Seq (SC.ExtCns SC.Term))
 getInputs sym =
-  do st <- readIORef (B.sbStateManager sym)
+  do st <- readIORef (B.userState sym)
      readIORef (saw_inputs st)
 
 baseSCType ::
@@ -191,7 +191,7 @@ sawCreateVar :: SAWCoreBackend n solver fs
              -> SC.Term
              -> IO SC.Term
 sawCreateVar sym nm tp = do
-  st <- readIORef (B.sbStateManager sym)
+  st <- readIORef (B.userState sym)
   let sc = saw_ctx st
   ec <- SC.scFreshEC sc nm tp
   t <- SC.scFlatTermF sc (SC.ExtCns ec)
@@ -203,7 +203,7 @@ bindSAWTerm :: SAWCoreBackend n solver fs
             -> SC.Term
             -> IO (B.Expr n bt)
 bindSAWTerm sym bt t = do
-  st <- readIORef $ B.sbStateManager sym
+  st <- readIORef $ B.userState sym
   ch_r <- readIORef $ saw_elt_cache_r st
   let midx =
         case t of
@@ -247,7 +247,7 @@ newSAWCoreBackend fm sc gen = do
   enableOpt <- getOptionSetting enableOnlineBackend (getConfiguration sym)
   let st = st0{ saw_online_state = ob_st0{ onlineEnabled = getOpt enableOpt } }
 
-  writeIORef (B.sbStateManager sym) st
+  writeIORef (B.userState sym) st
   return sym
 
 -- | Register an interpretation for a symbolic function. This is not
@@ -260,19 +260,19 @@ sawRegisterSymFunInterp ::
   (SC.SharedContext -> [SC.Term] -> IO SC.Term) ->
   IO ()
 sawRegisterSymFunInterp sym f i =
-  modifyIORef (B.sbStateManager sym) $ \s ->
+  modifyIORef (B.userState sym) $ \s ->
       s { saw_symMap = Map.insert (indexValue (B.symFnId f)) i (saw_symMap s) }
 
 
 sawBackendSharedContext :: SAWCoreBackend n solver fs -> IO SC.SharedContext
 sawBackendSharedContext sym =
-  saw_ctx <$> readIORef (B.sbStateManager sym)
+  saw_ctx <$> readIORef (B.userState sym)
 
 
 toSC :: OnlineSolver solver =>
   SAWCoreBackend n solver fs -> B.Expr n tp -> IO SC.Term
 toSC sym elt =
-  do st <- readIORef $ B.sbStateManager sym
+  do st <- readIORef $ B.userState sym
      evaluateExpr sym (saw_ctx st) (saw_elt_cache st) elt
 
 
@@ -652,7 +652,7 @@ applyExprSymFn ::
   Ctx.Assignment SAWExpr args ->
   IO (SAWExpr ret)
 applyExprSymFn sym sc fn args =
-  do st <- readIORef (B.sbStateManager sym)
+  do st <- readIORef (B.userState sym)
      mk <-
        case Map.lookup (indexValue (B.symFnId fn)) (saw_symMap st) of
          Nothing -> panic "SAWCore.applyExprSymFn"
@@ -679,7 +679,7 @@ considerSatisfiability ::
   IO BranchResult
 considerSatisfiability sym mbPloc p =
   withSolverProcess'
-    (\sym' -> saw_online_state <$> readIORef (B.sbStateManager sym')) sym
+    (\sym' -> saw_online_state <$> readIORef (B.userState sym')) sym
     (pure IndeterminateBranchResult)
     $ \proc ->
     do pnot <- notPred sym p
@@ -1214,7 +1214,7 @@ withSolverProcess ::
   IO a ->
   (SolverProcess scope solver -> IO a) ->
   IO a
-withSolverProcess = withSolverProcess' (\sym' -> saw_online_state <$> readIORef (B.sbStateManager sym'))
+withSolverProcess = withSolverProcess' (\sym' -> saw_online_state <$> readIORef (B.userState sym'))
 
 withSolverConn ::
   OnlineSolver solver =>
@@ -1228,7 +1228,7 @@ getAssumptionStack ::
   SAWCoreBackend s solver fs ->
   IO (AssumptionStack (B.BoolExpr s) AssumptionReason SimError)
 getAssumptionStack sym =
-  (assumptionStack . saw_online_state) <$> readIORef (B.sbStateManager sym)
+  (assumptionStack . saw_online_state) <$> readIORef (B.userState sym)
 
 
 -- TODO! we should find a better way to share implementations with `OnlineBackend`
@@ -1308,7 +1308,7 @@ instance OnlineSolver solver => IsBoolSolver (SAWCoreBackend n solver fs) where
        AS.saveAssumptionStack stk
 
   restoreAssumptionState sym gc =
-    do st <- saw_online_state <$> readIORef (B.sbStateManager sym)
+    do st <- saw_online_state <$> readIORef (B.userState sym)
        restoreSolverState gc st
 
        -- restore the previous assumption stack
