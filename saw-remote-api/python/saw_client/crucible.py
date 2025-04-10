@@ -454,6 +454,7 @@ class Contract:
 
     __state : ContractState = 'pre'
 
+    __mutable_globals : List[str]
     __pre_state : State
     __post_state : State
 
@@ -467,6 +468,7 @@ class Contract:
     __cached_json : JSON
 
     def __init__(self) -> None:
+        self.__mutable_globals = []
         self.__pre_state = State(self)
         self.__post_state = State(self)
         self.__used_names = set()
@@ -542,6 +544,16 @@ class Contract:
             self.points_to(a, points_to)
 
         return a
+
+    def alloc_global(self, name: str) -> None:
+        """Declare that memory for the named mutable global should be allocated.
+        This is done implicitly for immutable globals. A pointer to the
+        allocated memory may be obtained using `global_var`.
+
+        At present, this is only supported with LLVM verification. Using this
+        function with JVM or MIR verification will raise an error.
+        """
+        self.__mutable_globals.append(name)
 
     def points_to(self, pointer : SetupVal, target : SetupVal, *,
                   check_target_type : Union[PointerType, 'LLVMType', 'JVMType', 'MIRType', None] = PointerType(),
@@ -714,7 +726,8 @@ class Contract:
                 raise Exception("forgot return")
 
             self.__cached_json = \
-                {'pre vars': [v.to_init_json() for v in self.__pre_state.fresh],
+                {'mutable globals': self.__mutable_globals,
+                 'pre vars': [v.to_init_json() for v in self.__pre_state.fresh],
                  'pre conds': [c.to_json() for c in self.__pre_state.conditions],
                  'pre allocated': [a.to_init_json() for a in self.__pre_state.allocated],
                  'pre ghost values': [g.to_json() for g in self.__pre_state.ghost_values],

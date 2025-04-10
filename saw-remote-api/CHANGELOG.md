@@ -1,8 +1,11 @@
 # Revision history for saw-remote-api
 
-## next
+## next -- TBA
 
-Nothing yet.
+* Add a `"mutable globals"` field to specification objects, which contains a
+  list of strings representing the names of mutable global variables that
+  should be allocated. This field can only be used with LLVM, and attempting to
+  use this field with JVM or MIR verification will raise an error.
 
 ## 1.3 -- 2025-03-21
 

@@ -1,8 +1,11 @@
 # Revision history for saw-client
 
-## next
+## next -- TBA
 
-Nothing yet.
+* Add a `alloc_global(name)` method to `Contract`, which declares that the
+  memory for the mutable global with the name `name` should be allocated. This
+  function can only be used with LLVM verification, and attempting to use this
+  function with JVM or MIR verification will raise an error.
 
 ## 1.3 - 2025-03-21
 
