@@ -1,0 +1,11 @@
+enable_experimental;
+
+let id_u8_spec = do {
+  x <- mir_fresh_var "x" mir_u8;
+  mir_execute_func [mir_term x];
+  mir_return (mir_term x);
+};
+
+m <- mir_load_module "saw-basics.linked-mir.json";
+
+mir_verify m "saw_basics::id_u8" [] false id_u8_spec z3;

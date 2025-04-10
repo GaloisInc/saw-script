@@ -51,14 +51,6 @@ import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.Skeleton
 
 --------------------------------------------------------------------------------
--- ** Helper functions
-
-throwSkeletonLLVM :: Text -> String -> LLVMCrucibleSetupM a
-throwSkeletonLLVM nm msg = do
-  loc <- LLVMCrucibleSetupM $ getW4Position nm
-  throwLLVM loc msg
-
---------------------------------------------------------------------------------
 -- ** Manipulating skeletons
 
 module_skeleton ::
@@ -219,7 +211,7 @@ skeleton_exec prestate = do
     case (mval, mptr) of
       (_, Just ptr) -> pure ptr
       (Just val, Nothing) -> pure $ anySetupTerm val
-      (Nothing, Nothing) -> throwSkeletonLLVM "skeleton_exec" "Invalid pointer-pointee combination on skeleton argument"
+      (Nothing, Nothing) -> throwLLVMFun "skeleton_exec" "Invalid pointer-pointee combination on skeleton argument"
   llvm_execute_func args
 
 rebuildArg ::
@@ -267,7 +259,7 @@ skeleton_arg_index state idx
   | idx < length (state ^. skelArgs)
   , (Just t, _, _) <- (state ^. skelArgs) !! idx
   = pure t
-  | otherwise = throwSkeletonLLVM "skeleton_arg_index" $ mconcat
+  | otherwise = throwLLVMFun "skeleton_arg_index" $ mconcat
     [ "No initialized argument at index "
     , show idx
     ]
@@ -286,7 +278,7 @@ skeleton_arg ::
 skeleton_arg state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index state idx
-  | otherwise = throwSkeletonLLVM "skeleton_arg" $ mconcat
+  | otherwise = throwLLVMFun "skeleton_arg" $ mconcat
     [ "No initialized argument named \""
     , nm
     , "\" (enabling debug symbols when compiling might help)"
@@ -301,12 +293,12 @@ skeleton_arg_index_pointer state idx
   , (_, mp, _) <- (state ^. skelArgs) !! idx
   = case mp of
       Just p -> pure p
-      Nothing -> throwSkeletonLLVM "skeleton_arg_index_pointer" $ mconcat
+      Nothing -> throwLLVMFun "skeleton_arg_index_pointer" $ mconcat
         [ "Argument at index "
         , show idx
         , " is not a pointer or array"
         ]
-  | otherwise = throwSkeletonLLVM "skeleton_arg_index_pointer" $ mconcat
+  | otherwise = throwLLVMFun "skeleton_arg_index_pointer" $ mconcat
     [ "No argument at index "
     , show idx
     ]
@@ -319,7 +311,7 @@ skeleton_arg_pointer state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index_pointer state idx
   | otherwise = do
-      throwSkeletonLLVM "skeleton_arg_pointer" $ mconcat
+      throwLLVMFun "skeleton_arg_pointer" $ mconcat
         [ "No argument named \""
         , nm
         , "\" (enabling debug symbols when compiling might help)"

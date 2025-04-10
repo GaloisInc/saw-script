@@ -1,0 +1,52 @@
+enable_experimental;
+
+let times_two_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_execute_func [mir_term x];
+  mir_return (mir_term {{ 2 * x }});
+};
+
+m <- mir_load_module "times-two.linked-mir.json";
+
+mir_verify m "times_two::times_two" [] false times_two_spec z3;
+
+let times_two_ref_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x < 2^^31 }};
+  mir_execute_func [mir_term x];
+  mir_return (mir_term {{ 2 * x }});
+};
+
+mir_verify m "times_two::times_two_ref" [] false times_two_ref_spec z3;
+
+let times_two_ref_positive_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ 0 < x }}; // The input must be positive
+  mir_precond {{ x < 2^^31 }};
+  mir_execute_func [mir_term x];
+  mir_return (mir_term {{ 2 * x }});
+};
+
+mir_verify m "times_two::times_two_ref" [] false times_two_ref_positive_spec z3;
+
+let times_two_ref_positive_postcond_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ 0 < x }}; // The input must be positive
+  mir_precond {{ x < 2^^31 }};
+  mir_execute_func [mir_term x];
+  mir_postcond {{ x < (2 * x) }}; // Argument value < return value
+  mir_return (mir_term {{ 2 * x }});
+};
+
+mir_verify m "times_two::times_two_ref" [] false times_two_ref_positive_postcond_spec z3;
+
+let times_two_ref_positive_postcond_assert_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_assert {{ 0 < x }}; // The input must be positive
+  mir_assert {{ x < 2^^31 }};
+  mir_execute_func [mir_term x];
+  mir_assert {{ x < (2 * x) }}; // Argument value < return value
+  mir_return (mir_term {{ 2 * x }});
+};
+
+mir_verify m "times_two::times_two_ref" [] false times_two_ref_positive_postcond_assert_spec z3;

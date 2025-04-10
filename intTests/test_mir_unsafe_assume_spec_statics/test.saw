@@ -1,0 +1,55 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let side_spec_1 = do {
+  let a_static = mir_static "test::A";
+  a_init <- mir_fresh_var "A" mir_u32;
+  mir_points_to a_static (mir_term a_init);
+
+  mir_execute_func [];
+
+  mir_points_to a_static (mir_term {{ 0 : [32] }});
+  mir_return (mir_term a_init);
+};
+
+let side_spec_2 = do {
+  let a_static = mir_static "test::A";
+  a_init <- mir_fresh_var "A" mir_u32;
+  mir_points_to a_static (mir_term a_init);
+
+  mir_execute_func [];
+
+  mir_return (mir_term a_init);
+};
+
+// This spec is erroneous. See the comments below in the "Avoid unsoundness"
+// part of the test.
+let foo_spec = do {
+  let a_static = mir_static "test::A";
+  a_init <- mir_fresh_var "A" mir_u32;
+  mir_points_to a_static (mir_term a_init);
+
+  mir_execute_func [];
+
+  mir_return (mir_term a_init);
+};
+
+///////////////////////
+// Avoid unsoundness //
+///////////////////////
+
+side_ov_1 <- mir_verify m "test::side_effect" [] false side_spec_1 z3;
+side_ov_2 <- mir_verify m "test::side_effect" [] false side_spec_2 z3;
+
+// This should not verify, as invoking `side_effect` should cause `foo` to
+// always return `0` rather than the original value of A.
+fails (
+  mir_verify m "test::foo" [side_ov_1] false foo_spec z3
+);
+// This should not verify, as side_spec_2 underspecifies the mutable
+// static `a_ptr` in its postconditions. SAW will catch this when attempting
+// to use side_ov_2 as an override.
+fails (
+  mir_verify m "test::foo" [side_ov_2] false foo_spec z3
+);

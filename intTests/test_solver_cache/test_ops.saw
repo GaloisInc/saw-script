@@ -1,0 +1,8 @@
+prove_print z3 {{ \(x:[64]) -> x == x }};
+prove_print z3 {{ \(new_name:[64]) -> new_name == new_name }};
+prove_print (w4_unint_z3 []) {{ \(x:[64]) -> x == x }};
+prove_print (w4_unint_z3_using "qfnia" []) {{ \(x:[64]) -> x == x }};
+fails (prove_print z3 {{ \(x:[64])(y:[64]) -> x == y }});
+fails (prove_print z3 {{ \(new_name_1:[64])(new_name_2:[64]) -> new_name_1 == new_name_2 }});
+fails (prove_print w4 {{ \(x:[64])(y:[64]) -> x == y }});
+fails (prove_print (w4_unint_z3_using "qfnia" []) {{ \(x:[64])(y:[64]) -> x == y }});

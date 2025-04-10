@@ -1,14 +1,16 @@
 # Overall configuration notes:
-# - Artifact uploads for binaries are from GHC 8.10.7
-# - Builds for Ubuntu happen on 22.04. We also include a single configuration
-#   for 20.04 to increase our Linux coverage.
+# - Artifact uploads for binaries are from GHC 9.4.8
+# - Builds for Ubuntu happen on 24.04. We also include a single configuration
+#   for 22.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
 # Please update this comment as those details change.
 
 name: SAWScript
 on:
   push:
-    tags: ["v?[0-9]+.[0-9]+(.[0-9]+)?"]
+    tags:
+      - "v?[0-9]+.[0-9]+"
+      - "v?[0-9]+.[0-9]+.[0-9]+"
     branches: [master, "release-**"]
   pull_request:
   schedule:
@@ -16,21 +18,26 @@ on:
   workflow_dispatch:
 
 env:
-  CACHE_VERSION: 1
+  # The CABAL_CACHE_VERSION and SOLVER_CACHE_VERSION environment variables
+  # can be updated to force the use of a new cabal or solver cache if the
+  # respective current cache contents become corrupted/invalid.  This can
+  # sometimes happen when (for example) the OS version is changed but
+  # older .so files are cached, which can have various effects
+  # (e.g. cabal complains it can't find a valid version of the "happy"
+  # tool).
+  CABAL_CACHE_VERSION: 7
+  SOLVER_CACHE_VERSION: 1
+
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
 
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  # ./s2nTests/scripts/blst-entrypoint.sh
-  # ./s2nTests/docker/saw.dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20221212"
-
-  OCAML_VERSION: 4.09.x
+  SOLVER_PKG_VERSION: "snapshot-20250326"
 
 jobs:
   config:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -40,7 +47,7 @@ jobs:
       release: ${{ steps.config.outputs.release }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -67,47 +74,68 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12, windows-latest]
-        ghc: ["8.8.4", "8.10.7", "9.0.2"]
+        os: [ubuntu-24.04]
+        cabal: ["3.10.3.0"]
+        ghc: ["9.4.8", "9.6.6", "9.8.2"]
+        haddock: [true]
         run-tests: [true]
+        hpc: [false]
         include:
-          - os: ubuntu-20.04
-            ghc: "8.10.7"
+          # We include one job from an older Ubuntu LTS release to increase our
+          # coverage of possible Linux configurations. Since we already run the
+          # tests with the newest LTS release, we won't bother testing this one.
+          - os: ubuntu-22.04
+            ghc: "9.4.8"
+            cabal: "3.10.3.0"
+            haddock: false
             run-tests: false
-        exclude:
-          # Exclude 8.8 on macOS 12 due to
-          # https://gitlab.haskell.org/ghc/ghc/-/issues/18446
-          - os: macos-12
-            ghc: "8.8.4"
+            hpc: false
+          # Include one job with HPC enabled
+          - os: ubuntu-24.04
+            ghc: "9.4.8"
+            cabal: "3.10.3.0"
+            haddock: false
             run-tests: true
-          - os: windows-latest
-            ghc: "8.8.4"
+            hpc: true
+          # Windows and macOS CI runners are more expensive than Linux runners,
+          # so we only build one particular GHC version to test them on. We
+          # include both an x86-64 macOS runner (macos-13) as well as an AArch64
+          # macOS runner (macos-14).
+          - os: windows-2019
+            ghc: 9.4.8
+            haddock: false
             run-tests: true
-          # Exclude 9.0 on Windows for now until
-          # https://github.com/commercialhaskell/stackage/issues/6400
-          # is resolved
-          - os: windows-latest
-            ghc: "9.0.2"
-            run-tests: false
+            hpc: false
+          - os: macos-13
+            ghc: 9.4.8
+            haddock: false
+            run-tests: true
+            hpc: false
+          - os: macos-14
+            ghc: 9.4.8
+            haddock: false
+            run-tests: true
+            hpc: false
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
            git submodule update --init
 
       - id: config
         shell: bash
         run: |
-          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64"
+          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
           .github/ci.sh output name $NAME
-          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-x86_64" >> $GITHUB_ENV
+          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
 
-      - uses: haskell/actions/setup@v1
+      - uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
 
       - name: Post-GHC installation fixups on Windows
         shell: bash
@@ -121,35 +149,33 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/cache@v2
-        name: Cache cabal store
+      - uses: actions/cache/restore@v4
+        name: Restore cabal store cache
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
           restore-keys: |
-            ${{ env.CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
-
-      - if: needs.config.outputs.release == 'true'
-        shell: bash
-        run: |
-          sed -i.bak \
-            -e 's/^hashText = .*$/hashText = ""/' \
-            -e '/import GitRev.*$/d' \
-            saw/SAWScript/Version.hs
-          rm -f saw/SAWScript/Version.hs.bak
+            ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - shell: bash
         run: .github/ci.sh build
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
 
       - shell: bash
         env:
           RELEASE: ${{ needs.config.outputs.release }}
         run: .github/ci.sh build_cryptol
 
-      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1
+      - if: matrix.haddock == true
+        shell: bash
+        run: .github/ci.sh haddock
+
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         id: cabal-test-suites
         with:
           targets: |
@@ -159,11 +185,20 @@ jobs:
             prover_tests
           dest: dist-tests
 
-      - uses: actions/upload-artifact@v2
-        if: "matrix.ghc == '8.10.7'"
+      # In the next 2 steps, we upload to different names depending on whether
+      # the binaries were compiled using HPC or not. This is done to ensure that
+      # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
+      - uses: actions/upload-artifact@v4
+        if: matrix.ghc == '9.4.8' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.ghc == '9.4.8' && matrix.hpc == true
+        with:
+          path: dist-tests
+          name: dist-tests-${{ matrix.os }}-hpc
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -177,51 +212,228 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+      # Restrict these steps so they're only run when the secrets
+      # needed are available. It's insufficient to just check whether
+      # we're working on a pull request in a fork because we might be
+      # working on master in a fork. We have scheduled runs, and it's
+      # apparently impossible to restrict scheduled runs to the
+      # original repository; they will also always run in forks.
+      # See https://github.com/orgs/community/discussions/16109.
+      - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME.tar.gz
 
-      - if: matrix.ghc == '8.10.7' && github.event.pull_request.head.repo.fork == false
+      - if: matrix.ghc == '9.4.8' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: .github/ci.sh sign $NAME-with-solvers.tar.gz
 
-      - if: matrix.ghc == '8.10.7'
-        uses: actions/upload-artifact@v2
+      ##########################################################################
+      # We upload an archive containing SAW, and also and archive containing SAW
+      # and the set of possible SMT solvers, but only for our "primary"
+      # distribution (currently: GHC 9.4.8).  These archives are utilized in
+      # subsequent CI jobs, but are also published for external users, and are
+      # therefore signed.
+      #
+      # In addition, if we built with HPC, we upload a tarball containing the
+      # HPC-enabled binaries and HPC-specific files generated during the build
+      # process.  These are mostly used for subsequent CI jobs that will
+      # generate a coverage report, and the binaries are essentially the same as
+      # those collected for the previous operation, but they are captured in
+      # their original cabal-generated locations where they are expected to live
+      # for subsequent coverage collection.
+
+      # In the next 3 steps we check that `matrix.hpc == false` so that if the
+      # distribution version matches the HPC version, the HPC build artifacts do
+      # not clobber the non-HPC distribution artifacts.
+      - if: matrix.ghc == '9.4.8' && matrix.hpc == false
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7'
-        uses: actions/upload-artifact@v2
+      - if: matrix.ghc == '9.4.8' && matrix.hpc == false
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          name: ${{ steps.config.outputs.name }}-with-solvers (GHC ${{ matrix.ghc }})
           path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '8.10.7' && matrix.run-tests
-        uses: actions/upload-artifact@v2
+      - if: matrix.ghc == '9.4.8' && matrix.run-tests && matrix.hpc == false
+        uses: actions/upload-artifact@v4
         with:
           path: dist/bin
-          name: ${{ runner.os }}-bins
+          name: ${{ matrix.os }}-bins
+
+      - if: matrix.hpc == true
+        shell: bash
+        run: .github/ci.sh collect_hpc_files
+
+      - if: matrix.hpc == true
+        uses: actions/upload-artifact@v4
+        with:
+          path: hpc.tar.gz
+          name: ${{ matrix.os }}-hpc.tar.gz
+
+      - uses: actions/cache/save@v4
+        name: Save cabal store cache
+        if: always()
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+
+  build-docs:
+    name: "Build SAW documentation"
+    needs: [config]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Cache Python environment
+        uses: actions/cache@v4
+        with:
+          path: doc/.venv
+          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html/
+
+  deploy-docs:
+    name: "Deploy SAW documentation to GitHub Pages"
+    needs: [config, build-docs]
+    runs-on: ${{ matrix.os }}
+    #
+    # The whole workflow is only run at all on branches matching
+    # `master`, branches matching `release-**`, and release tags, per
+    # the `on:` stanza at the top of the file.
+    #
+    # We want to upload docs for `master` and for releases, and not
+    # otherwise, so filter this further:
+    #    - restricting to `push` actions eliminates pull requests
+    #    - requiring needs.config.outputs.release be false skips `release-**` branches
+    # so what's left is `master` and release tags.
+    #
+    # Then also check the repository owner to avoid running in forks.
+    # This is to avoid issues with missing permissions on
+    # GITHUB_TOKEN, needed when actually deploying the documentation
+    # to the `gh-pages` branch.
+    #
+    # Note that even though tags will normally be _on_ release
+    # branches, tag events generate a github.ref of the form
+    # `refs/tags/...` which won't set needs.config.outputs.release, so
+    # we aren't accidentally skipping release tags. We think,
+    # according to the docs, that if you push to a release branch that
+    # will trigger a branch run, and then tagging it will trigger a
+    # separate tag run.
+    #
+    if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html
+
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: python3 .github/save_doc_publish_dir.py
+
+      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
+      # target directories to publish to, where the built-in actions are
+      # "one and done": Package and upload a single artifact, and deploy that.
+      - name: Publish docs to GitHub pages
+        if: steps.doc-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
+          keep_files: false
+
+  # Adapted from:
+  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
+  update-docs-versions:
+    name: "Update documentation versions JSON"
+    needs: [deploy-docs]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Write versions to JSON file
+        run: |
+          python3 -c "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted(
+              (
+                  item.name
+                  for item in cwd.iterdir()
+                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
+              ),
+              reverse=True,
+          )
+          target_dir = Path('gh-pages')
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
+              json.dump(versions, f)"
+
+      - name: Publish versions JSON to GitHub pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true
 
   mr-solver-tests:
     needs: [build]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12]
+        os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -229,10 +441,11 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - name: Update PATH to include SAW
@@ -252,10 +465,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-12]
+        os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -263,10 +476,11 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - name: Update PATH to include SAW
@@ -275,9 +489,9 @@ jobs:
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
 
-      - uses: ocaml/setup-ocaml@v2
+      - uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: 4.14.x
+          ocaml-compiler: "4.14"
 
       - run: opam repo add coq-released https://coq.inria.fr/opam/released
 
@@ -285,7 +499,7 @@ jobs:
 
         # If you change the entree-specs commit below, make sure you update the
         # documentation in saw-core-coq/README.md accordingly.
-      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#52c4868f1f65c7ce74e90000214de27e23ba98fb
+      - run: opam pin -y entree-specs https://github.com/GaloisInc/entree-specs.git#f104f6b3e6fe5987d543d90265cdc52f532de5fe
 
       # FIXME: the following steps generate Coq libraries for the SAW core to
       # Coq translator and builds them; if we do other Coq tests, these steps
@@ -308,21 +522,20 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: ubuntu-22.04
+            os: ubuntu-24.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
               cd saw-remote-api/python/
-              poetry update
               poetry install
               poetry run mypy --install-types --non-interactive saw_client/ || true
               poetry run mypy --install-types --non-interactive saw_client/
-            os: macos-12
+            os: macos-14
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
-            os: ubuntu-22.04
+            os: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -330,19 +543,22 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - uses: actions/setup-python@v2
         with:
-          python-version: '3.11'
+          # Ensure that this matches saw-remote-api/python/mypy.ini file
+          # and that saw-remote-api/python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
 
       - uses: abatilo/actions-poetry@v2.0.0
         with:
-          poetry-version: 1.1.5
+          poetry-version: 1.4.2
 
       - name: ${{ matrix.name }}
         shell: bash
@@ -364,25 +580,25 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
         continue-on-error: [false]
         include:
           - suite: integration_tests
-            os: macos-12
+            os: macos-14
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
           - suite: integration_tests
-            os: windows-latest
+            os: windows-2019
             timeout-minutes: 60
             continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/1135
         exclude:
           - suite: integration_tests
-            os: macos-12
+            os: macos-14
             continue-on-error: false
           - suite: integration_tests
-            os: windows-latest
+            os: windows-2019
             continue-on-error: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -390,10 +606,11 @@ jobs:
         run: .github/ci.sh install_system_deps
         env:
           BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: dist/bin
 
       - shell: bash
@@ -404,7 +621,7 @@ jobs:
         if: runner.os != 'Windows'
         run: chmod +x bin/*
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
@@ -420,6 +637,22 @@ jobs:
           java-package: jdk
           architecture: x64
 
+      - uses: actions/cache/restore@v4
+        name: Restore SMT solver result cache
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - shell: bash
+        name: Enable solver caching
+        if: "matrix.suite == 'integration_tests'"
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
       - name: ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
@@ -427,10 +660,128 @@ jobs:
           export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
+      - uses: actions/cache/save@v4
+        name: Save SMT solver result cache
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+
+  # The coverage job is similar to the cabal-test job, but it only runs the HPC
+  # enabled SAW build against the integration test suite. It then collects the
+  # test coverage results, generates an HTML summary, and publishes the results
+  # to github pages.
+  coverage:
+    name: "Run integration tests with coverage reporting"
+    needs: build
+    runs-on: ${{ matrix.os }}
+    # Do not run this job in forks, as the deployment to GitHub pages will fail
+    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
+    # organization (see #2216).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc'
+    strategy:
+      matrix:
+        suite: ['integration_tests']
+        os: [ubuntu-24.04]
+    steps:
+      # Need a copy of the source to generate coverage HTML
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: haskell-actions/setup@v2
+        id: setup-haskell
+        with:
+          ghc-version: "9.4.8"
+
+      - name: Install system dependencies
+        shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-tests-${{ matrix.os }}-hpc
+          path: dist-tests
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: "${{ matrix.os }}-hpc.tar.gz"
+
+      - name: Setup test environment
+        shell: bash
+        run: |
+          tar xvf hpc.tar.gz
+          chmod +x dist/bin/*
+          chmod +x bin/*
+          chmod +x dist-tests/*
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      # NOTE: This job uses the SMT solver cache to improve performance but it
+      # does not save the updated SMT solver cache. This is because the
+      # `cabal-test` also runs the integration tests and uploads an updated
+      # cache. Because the test suite is the same, the resulting cache files
+      # would also be identical.
+      - uses: actions/cache/restore@v4
+        name: Restore SMT solver result cache
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - shell: bash
+        name: Enable solver caching
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
+      - name: Run integration tests
+        shell: bash
+        run: |
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          dist-tests/integration_tests
+        env:
+          ENABLE_HPC: true
+
+      - name: Compute coverage
+        shell: bash
+        run: |
+          ./compute-coverage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: hpc-html
+          name: coverage-html-${{ github.event.number }}
+
+      - name: Gather HPC coverage files
+        run: .github/ci.sh collect_all_html
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Deploy coverage reports
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
+
   build-push-image:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [config]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true'
+    # Restrict this to the main repository where the needed secrets
+    # will be available. As noted above, scheduled runs also happen in
+    # forks. It would be nice to run all of it but the final push step,
+    # but we appear to need docker login to build.
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.release == 'true') && github.repository_owner == 'GaloisInc'
     strategy:
       fail-fast: false
       matrix:
@@ -442,9 +793,12 @@ jobs:
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: capture git state in GitRev.hs
+        run: ./build.sh gitrev
 
       - uses: rlespinasse/github-slug-action@v3.x
 
@@ -466,15 +820,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - if: needs.config.outputs.release == 'true'
-        shell: bash
-        run: |
-          sed -i.bak \
-            -e 's/^hashText = .*$/hashText = ""/' \
-            -e '/import GitRev.*$/d' \
-            saw/SAWScript/Version.hs
-          rm -f saw/SAWScript/Version.hs.bak
 
       - uses: docker/build-push-action@v2
         with:
@@ -501,12 +846,14 @@ jobs:
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9'
+          # Ensure that this matches saw-remote-api/python/mypy.ini file
+          # and that saw-remote-api/python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: abatilo/actions-poetry@v2.0.0
         with:
-          poetry-version: 1.1.5
+          poetry-version: 1.4.2
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         name: Test saw-remote-api
@@ -528,9 +875,9 @@ jobs:
 
   s2n-tests:
     name: "Test s2n proofs"
-    timeout-minutes: 120
+    timeout-minutes: 150
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -541,61 +888,75 @@ jobs:
           - bike
           - tls
           - hmac-failure
-          - awslc
+          # 20250328: disabled temporarily because it now tickles #1094 (see #2273)
+          # - awslc
           - blst
-        ghc: ["8.10.7"]
+        os: [ubuntu-24.04]
+        ghc: ["9.4.8"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p s2nTests/bin
 
       - name: Download previously-built SAW
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: ./s2nTests/bin
 
       - shell: bash
         working-directory: s2nTests
         run: |
-          docker-compose pull
+          docker compose pull --ignore-buildable
           grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
-
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
 
       - shell: bash
         name: "make s2n"
         working-directory: s2nTests
-        run: docker-compose build s2n
+        run: docker compose build s2n
+
+      - uses: actions/cache/restore@v4
+        name: Restore SMT solver result cache
+        with:
+          path: s2nTests/cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
+          restore-keys:
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-
 
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
           chmod +x bin/*
+          mkdir -p cache && touch cache/data.mdb cache/lock.mdb
+          chmod -R +rw cache
           make ${{ matrix.s2n-target }}
+
+      - uses: actions/cache/save@v4
+        name: Save SMT solver result cache
+        if: always()
+        with:
+          path: s2nTests/cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
 
   exercises:
     name: "Test SAW exercises"
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        ghc: ["8.10.7"]
+        os: [ubuntu-24.04]
+        ghc: ["9.4.8"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - run: |
           mkdir -p exercises/bin
 
       - name: Download previously-built SAW
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
-          name: "${{ runner.os }}-bins"
+          name: "${{ matrix.os }}-bins"
           path: ./exercises/bin
-
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
 
       - shell: bash
         name: "make exercises container"
@@ -616,12 +977,13 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs:
       - build
       - heapster-tests
       - saw-remote-api-tests
       - cabal-test
+      - coverage
       - s2n-tests
       - exercises
     steps:

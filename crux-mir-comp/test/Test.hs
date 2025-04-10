@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# Language OverloadedStrings #-}
+{-# Language ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-top-binds #-}
 
 import qualified Data.ByteString as BS
@@ -24,6 +25,8 @@ import           Test.Tasty.HUnit (Assertion, testCaseSteps, assertBool, assertF
 import           Test.Tasty.Golden (findByExtension)
 import           Test.Tasty.Golden.Advanced (goldenTest)
 import           Test.Tasty.ExpectedFailure (expectFailBecause)
+import           Text.Regex.Base ( makeRegex, matchM )
+import           Text.Regex.Posix.ByteString.Lazy ( Regex )
 
 import qualified Mir.Language as Mir
 
@@ -92,7 +95,7 @@ runCrux rustFile outHandle mode = Mir.withMirLogging $ do
                                             _ -> "",
                                         Crux.branchCoverage = (mode == RcmCoverage) } ,
                    Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
-                                           Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
+                                           Mir.defaultRlibsDir = "../deps/mir-json/rlibs" })
     let ?outputConfig = Crux.mkOutputConfig (outHandle, False) (outHandle, False)
             Mir.mirLoggingToSayWhat (Just $ Crux.outputOptions $ fst options)
     setEnv "CRYPTOLPATH" "."
@@ -117,7 +120,7 @@ cruxOracleTest dir name step = do
   step ("Oracle output: " ++ orOut)
 
   let rustFile = dir </> name <.> "rs"
-  
+
   cruxOut <- withSystemTempFile name $ \tempName h -> do
     runCrux rustFile h RcmConcrete
     hClose h
@@ -137,8 +140,9 @@ symbTest dir =
      return $
        testGroup "Output testing"
          [ doGoldenTest (takeBaseName rustFile) goodFile outFile $
-           withFile outFile WriteMode $ \h ->
-           runCrux rustFile h RcmSymbolic
+           do withFile outFile WriteMode $ \h ->
+                runCrux rustFile h RcmSymbolic
+              sanitizeGoldenOutputFile outFile
          | rustFile <- rustFiles
          -- Skip hidden files, such as editor swap files
          , not $ "." `isPrefixOf` takeFileName rustFile
@@ -181,6 +185,40 @@ doGoldenTest rustFile goodFile outFile act = goldenTest (takeBaseName rustFile)
         goodFile ++ " contains:\n" ++ BS8.toString out)
     (\out -> BS.writeFile goodFile out)
 
+-- | Sanitize the golden output in a file.
+sanitizeGoldenOutputFile :: FilePath -> IO ()
+sanitizeGoldenOutputFile file = do
+  out <- BS.readFile file
+  BS.writeFile file $ sanitizeGoldenTestOutput out
+
+-- | Replace occurrences of crate disambiguators (which are highly sensitive to
+-- the contents of crates' source code) with more stable output to reduce churn
+-- in the golden tests.
+sanitizeGoldenTestOutput :: BS.ByteString -> BS.ByteString
+sanitizeGoldenTestOutput = go
+  where
+    go :: BS.ByteString -> BS.ByteString
+    go out
+      | Just (before, _matched :: BS.ByteString, after, [preDisamb])
+          <- matchM disambRE out
+      = before <> preDisamb <> "<DISAMB>::" <> go after
+      | otherwise
+      = out
+
+    disambRE :: Regex
+    disambRE = makeRegex disambBS
+
+    -- A disambiguator looks something like foo/a1b4j89a, i.e., an alphanumeric
+    -- string that starts with an alphabetic character, followed by a forward
+    -- slash, followed by eight alphanumeric characters. To reduce the rate of
+    -- false positives, we also match two trailing colons, which would be
+    -- present when printing out a full DefId (e.g., foo/a1b4j89a::Bar::Baz).
+    disambBS :: BS.ByteString
+    disambBS = "([A-Za-z_]" <> alphaNum <> "*/)" <> mconcat (replicate 8 alphaNum) <> "::"
+
+    alphaNum :: BS.ByteString
+    alphaNum = "[A-Za-z0-9_]"
+
 main :: IO ()
 main = defaultMain =<< suite
 
@@ -189,7 +227,7 @@ suite = do
   let ?debug = 0 :: Int
   let ?assertFalseOnError = True
   let ?printCrucible = False
-  trees <- sequence 
+  trees <- sequence
            [ testGroup "crux concrete" <$> sequence [ testDir cruxOracleTest "test/conc_eval/" ]
            , testGroup "crux symbolic" <$> sequence [ symbTest "test/symb_eval" ]
            , testGroup "crux coverage" <$> sequence [ coverageTests "test/coverage" ]

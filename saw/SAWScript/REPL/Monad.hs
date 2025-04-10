@@ -35,7 +35,7 @@ module SAWScript.REPL.Monad (
     -- ** Environment
   , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
   , getModuleEnv, setModuleEnv
-  , getTSyns, getNewtypes, getVars
+  , getTSyns, getNominalTypes, getVars
   , getExprNames
   , getTypeNames
   , getPropertyNames
@@ -80,6 +80,7 @@ import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Typeable (Typeable)
 import System.Console.ANSI (setTitle)
 import qualified Control.Exception as X
@@ -193,7 +194,7 @@ instance Functor REPL where
 
 instance Monad REPL where
   {-# INLINE return #-}
-  return x = REPL (\_ -> return x)
+  return = pure
 
   {-# INLINE (>>=) #-}
   m >>= f = REPL $ \ref -> do
@@ -210,7 +211,7 @@ instance Fail.MonadFail REPL where
 
 instance Applicative REPL where
   {-# INLINE pure #-}
-  pure = return
+  pure x = REPL (\_ -> pure x)
   {-# INLINE (<*>) #-}
   (<*>) = ap
 
@@ -381,7 +382,14 @@ getVars  = do
   let decls = getAllIfaceDecls me
   let vars1 = M.ifDecls decls
   extras <- getExtraTypes
-  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl q s [] False Nothing Nothing) extras
+  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl { M.ifDeclName = q
+                                                  , M.ifDeclSig = s
+                                                  , M.ifDeclIsPrim = False
+                                                  , M.ifDeclPragmas = []
+                                                  , M.ifDeclInfix = False
+                                                  , M.ifDeclFixity = Nothing
+                                                  , M.ifDeclDoc = Nothing
+                                                  }) extras
   return (Map.union vars1 vars2)
 
 getTSyns :: REPL (Map.Map T.Name T.TySyn)
@@ -390,11 +398,11 @@ getTSyns  = do
   let decls = getAllIfaceDecls me
   return (M.ifTySyns decls)
 
-getNewtypes :: REPL (Map.Map T.Name T.Newtype)
-getNewtypes = do
+getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
+getNominalTypes = do
   me <- getModuleEnv
   let decls = getAllIfaceDecls me
-  return (M.ifNewtypes decls)
+  return (M.ifNominalTypes decls)
 
 -- | Get visible variable names.
 getExprNames :: REPL [String]
@@ -491,7 +499,7 @@ getSAWScriptNames :: REPL [String]
 getSAWScriptNames = do
   env <- getEnvironment
   let rnames = Map.keys (rwValues env)
-  return (map getVal rnames)
+  return (map (Text.unpack . getVal) rnames)
 
 -- User Environment Interaction ------------------------------------------------
 

@@ -6,18 +6,21 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fno-warn-tabs                #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SAWScript.Parser
   ( parseModule
   , parseStmt
   , parseStmtSemi
   , parseExpression
   , parseSchema
+  , parseSchemaPattern
   , ParseError(..)
   ) where
 
 import Data.List
 import qualified Data.Map as Map (fromList)
-import Data.Text (pack)
+import qualified Data.Text as Text
+import Data.Text (Text, pack, unpack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
@@ -25,7 +28,7 @@ import SAWScript.Position
 import SAWScript.Utils
 
 import qualified Cryptol.Parser.AST as P
-import qualified Cryptol.Utils.Ident as P (packIdent, packModName)
+import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
 
 import qualified Text.Show.Pretty as PP
 
@@ -39,9 +42,11 @@ import Control.Exception
 %name parseStmtSemi StmtSemiEOF
 %name parseExpression ExpressionEOF
 %name parseSchema PolyTypeEOF
+%name parseSchemaPattern SchemaPatternEOF
 %error { parseError }
 %tokentype { Token Pos }
 %monad { Either ParseError }
+%expect 0
 
 %token
   'import'       { TReserved _ "import"         }
@@ -59,6 +64,7 @@ import Control.Exception
   'CryptolSetup' { TReserved _ "CryptolSetup"   }
   'JavaSetup'    { TReserved _ "JavaSetup"      }
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
+  'MIRSetup'     { TReserved _ "MIRSetup"       }
   'ProofScript'  { TReserved _ "ProofScript"    }
   'TopLevel'     { TReserved _ "TopLevel"       }
   'CrucibleSetup'{ TReserved _ "CrucibleSetup"  }
@@ -66,6 +72,7 @@ import Control.Exception
   'LLVMSpec'     { TReserved _ "LLVMSpec"       }
   'JVMMethodSpec'{ TReserved _ "JVMMethodSpec"  }
   'JVMSpec'      { TReserved _ "JVMSpec"        }
+  'MIRSpec'      { TReserved _ "MIRSpec"        }
   'Bool'         { TReserved _ "Bool"           }
   'Int'          { TReserved _ "Int"            }
   'String'       { TReserved _ "String"         }
@@ -116,6 +123,9 @@ ExpressionEOF :: { Expr }
 PolyTypeEOF :: { Schema }
  : PolyType EOF                         { $1 }
 
+SchemaPatternEOF :: { SchemaPattern }
+ : SchemaPattern EOF                    { $1 }
+
 Stmts :: { [Stmt] }
  : termBy(Stmt, ';')                    { $1 }
 
@@ -123,21 +133,21 @@ StmtSemi :: { Stmt }
  : fst(Stmt, opt(';'))                  { $1 }
 
 Import :: { Import }
- : string mbAs mbImportSpec             { Import (Left (tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
+ : string mbAs mbImportSpec             { Import (Left (unpack $ tokStr $1)) (fst $2) (fst $3) (maxSpan [tokPos $1, snd $2, snd $3])}
  -- TODO: allow imports by module name instead of path
 
 mbAs :: { (Maybe P.ModName, Pos) }
- : 'as' name                            { (Just (P.packModName [pack (tokStr $2)]), maxSpan [$1, $2]) }
+ : 'as' name                            { (Just (P.packModName [tokStr $2]), maxSpan [$1, $2]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
- : '(' list(name) ')'                   { (Just $ P.Only   [ P.packIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
- | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.packIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
+ : '(' list(name) ')'                   { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
+ | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
- : Expression                           { StmtBind (getPos $1) (PWild Nothing) Nothing $1 }
- | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan [getPos x, getPos $3]) x Nothing $3) (toPattern $1) }
+ : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) $1 }
+ | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { StmtLet (maxSpan [tokPos $1, maxSpan $2]) (Recursive $2) }
  | 'let' Declaration                    { StmtLet (maxSpan [tokPos $1, getPos $2]) (NonRecursive $2) }
  | 'let' Code                           { StmtCode (maxSpan [tokPos $1, getPos $2]) $2 }
@@ -145,103 +155,121 @@ Stmt :: { Stmt }
  | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (toLName $2) $4 }
 
 Declaration :: { Decl }
- : Arg list(Arg) '=' Expression         { Decl (maxSpan [getPos $1, getPos $4]) $1 Nothing (buildFunction $2 $4) }
+ : Arg list(Arg) '=' Expression         { Decl (maxSpan' $1 $4) $1 Nothing (buildFunction $2 $4) }
  | Arg list(Arg) ':' Type '=' Expression
-                                        { Decl (maxSpan [getPos $1, getPos $6]) $1 Nothing (buildFunction $2 (TSig $6 $4)) }
+                                        { Decl (maxSpan' $1 $6) $1 Nothing (buildFunction $2 (TSig (maxSpan' $4 $6) $6 $4)) }
 
 Pattern :: { Pattern }
  : Arg                                  { $1 }
- | name ':' Type                        { PVar (toLName $1) (Just $3) }
+ | name ':' Type                        { PVar (maxSpan [tokPos $1, getPos $3]) (toLName $1) (Just $3) }
 
 Arg :: { Pattern }
- : name                                 { LPattern (tokPos $1) (PVar (toLName $1) Nothing) }
- | '(' ')'                              { LPattern (maxSpan [tokPos $1, tokPos $2]) (PTuple []) }
- | '(' commas(Pattern) ')'              { LPattern (maxSpan [tokPos $1, tokPos $3]) (case $2 of [p] -> p; _ -> PTuple $2) }
+ : name                                 { PVar (tokPos $1) (toLName $1) Nothing }
+ | '(' ')'                              { PTuple (maxSpan [tokPos $1, tokPos $2]) [] }
+ | '(' commas(Pattern) ')'              { case $2 of [p] -> p; _ -> PTuple (maxSpan [tokPos $1, tokPos $3]) $2 }
 
 Expression :: { Expr }
  : IExpr                                { $1 }
- | IExpr ':' Type                       { TSig $1 $3          }
+ | IExpr ':' Type                       { TSig (maxSpan' $1 $3) $1 $3 }
  | '\\' list1(Arg) '->' Expression      { buildFunction $2 $4 }
- | 'let' Declaration 'in' Expression    { Let (NonRecursive $2) $4 }
+ | 'let' Declaration 'in' Expression    { Let (maxSpan [tokPos $1, getPos $4]) (NonRecursive $2) $4 }
  | 'rec' sepBy1(Declaration, 'and')
-   'in' Expression                      { Let (Recursive $2) $4 }
+   'in' Expression                      { Let (maxSpan [tokPos $1, getPos $4]) (Recursive $2) $4 }
  | 'if' Expression 'then' Expression
-                   'else' Expression    { IfThenElse $2 $4 $6 }
+                   'else' Expression    { IfThenElse (maxSpan [tokPos $1, getPos $6]) $2 $4 $6 }
 
 IExpr :: { Expr }
  : AExprs                               { $1 }
 
 AExprs :: { Expr }
- : list1(AExpr)                         { LExpr (maxSpan $1) (buildApplication $1) }
+ : list1(AExpr)                         { buildApplication $1 }
 
 AExpr :: { Expr }
-: '(' ')'                               { LExpr (maxSpan [tokPos $1, tokPos $2]) (Tuple []) }
- | '[' ']'                              { LExpr (maxSpan [tokPos $1, tokPos $2]) (Array []) }
- | string                               { LExpr (tokPos $1) (String (tokStr $1)) }
- | Code                                 { Code $1                 }
- | CType                                { CType $1                }
- | num                                  { LExpr (tokPos $1) (Int (tokNum $1)) }
+: '(' ')'                               { Tuple (maxSpan [tokPos $1, tokPos $2]) [] }
+ | '[' ']'                              { Array (maxSpan [tokPos $1, tokPos $2]) [] }
+ | string                               { String (tokPos $1) (tokStr $1) }
+ | Code                                 { Code $1 }
+ | CType                                { CType $1 }
+ | num                                  { Int (tokPos $1) (tokNum $1) }
  | name                                 { Var (Located (tokStr $1) (tokStr $1) (tokPos $1)) }
- | '(' Expression ')'                   { LExpr (maxSpan [tokPos $1, tokPos $3]) $2 }
- | '(' commas2(Expression) ')'          { LExpr (maxSpan [tokPos $1, tokPos $3]) (Tuple $2) }
- | '[' commas(Expression) ']'           { LExpr (maxSpan [tokPos $1, tokPos $3]) (Array $2) }
- | '{' commas(Field) '}'                { LExpr (maxSpan [tokPos $1, tokPos $3]) (Record (Map.fromList $2)) }
- | 'do' '{' termBy(Stmt, ';') '}'       { LExpr (maxSpan [tokPos $1, tokPos $4]) (Block $3) }
- | AExpr '.' name                       { LExpr (maxSpan [getPos $1, tokPos $3]) (Lookup $1 (tokStr $3)) }
- | AExpr '.' num                        { LExpr (maxSpan [getPos $1, tokPos $3]) (TLookup $1 (tokNum $3))           }
+ | '(' Expression ')'                   { $2 } -- { Parens (maxSpan [tokPos $1, tokPos $3]) $2 }
+ | '(' commas2(Expression) ')'          { Tuple (maxSpan [tokPos $1, tokPos $3]) $2 }
+ | '[' commas(Expression) ']'           { Array (maxSpan [tokPos $1, tokPos $3]) $2 }
+ | '{' commas(Field) '}'                { Record (maxSpan [tokPos $1, tokPos $3]) (Map.fromList $2) }
+ | 'do' '{' termBy(Stmt, ';') '}'       { Block (maxSpan [tokPos $1, tokPos $4]) $3 }
+ | AExpr '.' name                       { Lookup (maxSpan [getPos $1, tokPos $3]) $1 (tokStr $3) }
+ | AExpr '.' num                        { TLookup (maxSpan [getPos $1, tokPos $3]) $1 (tokNum $3) }
 
-Code :: { Located String }
+Code :: { Located Text }
  : code                                 { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
-CType :: { Located String }
+CType :: { Located Text }
  : ctype                                { Located (tokStr $1) (tokStr $1) (tokPos $1) }
 
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }
 
-Names :: { [Name] }
- : name                                 { [tokStr $1] }
- | name ',' Names                       { tokStr $1:$3 }
+Names :: { [(Pos, Name)] }
+ : name                                 { [(getPos $1, tokStr $1)] }
+ | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
 
 PolyType :: { Schema }
- : Type                                 { tMono $1                }
- | '{' Names '}' Type                   { Forall $2 $4            }
+ : Type                                 { tMono $1     }
+ | '{' Names '}' Type                   { Forall $2 $4 }
+
+-- this is used by :search so you can write multiple match criteria:
+-- it allows either t1 -> t2 -> ... or t1 t2 t3, including (t1 -> t1') t2 t3
+SchemaPattern :: { SchemaPattern }
+ : BaseFunType                          { SchemaPattern [] [$1]       }
+ | BaseType list(BaseType)              { SchemaPattern [] ($1 : $2)  }
+ | '{' Names '}' BaseFunType            { SchemaPattern $2 [$4]       }
+ | '{' Names '}' BaseType list(BaseType) { SchemaPattern $2 ($4 : $5) }
 
 Type :: { Type }
- : BaseType                             { $1                      }
- | BaseType '->' Type                   { LType (maxSpan [$1, $3]) (tFun $1 $3) }
+ : AppliedType                          { $1                      }
+ | AppliedType '->' Type                { tFun (maxSpan [$1, $3]) $1 $3 }
 
-FieldType :: { Bind Type }
-  : name ':' BaseType                   { (tokStr $1, $3)         }
+AppliedType :: { Type }
+ : BaseType                             { $1                      }
+ | Context AppliedType                  { tBlock (maxSpan' $1 $2) $1 $2 }
+
+-- special case of function type that can be followed by more base types
+-- without requiring parens
+BaseFunType :: { Type }
+ : BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
 
 BaseType :: { Type }
- : name                                 { LType (getPos $1) (tVar (tokStr $1))  }
- | Context BaseType                     { tBlock $1 $2                          }
- | '(' ')'                              { LType (maxSpan [$1, $2]) (tTuple [])  }
- | 'Bool'                               { LType (getPos $1) tBool               }
- | 'Int'                                { LType (getPos $1) tInt                }
- | 'String'                             { LType (getPos $1) tString             }
- | 'Term'                               { LType (getPos $1) tTerm               }
- | 'Type'                               { LType (getPos $1) tType               }
- | 'AIG'                                { LType (getPos $1) tAIG                }
- | 'CFG' 				{ LType (getPos $1) tCFG                }
- | 'CrucibleMethodSpec'			{ LType (getPos $1) tLLVMSpec           }
- | 'LLVMSpec' 				{ LType (getPos $1) tLLVMSpec           }
- | 'JVMMethodSpec'			{ LType (getPos $1) tJVMSpec            }
- | 'JVMSpec' 				{ LType (getPos $1) tJVMSpec            }
- | '(' Type ')'                         { LType (maxSpan [$1, $3]) $2           }
- | '(' commas2(Type) ')'                { LType (maxSpan [$1, $3]) (tTuple $2)  }
- | '[' Type ']'                         { LType (maxSpan [$1, $3]) (tArray $2)  }
- | '{' commas(FieldType) '}'            { LType (maxSpan [$1, $3]) (tRecord $2) }
+ : name                                 { tVar (getPos $1) (tokStr $1)  }
+ | '(' ')'                              { tTuple (maxSpan [$1, $2]) []  }
+ | 'Bool'                               { tBool (getPos $1)             }
+ | 'Int'                                { tInt (getPos $1)              }
+ | 'String'                             { tString (getPos $1)           }
+ | 'Term'                               { tTerm (getPos $1)             }
+ | 'Type'                               { tType (getPos $1)             }
+ | 'AIG'                                { tAIG (getPos $1)              }
+ | 'CFG'                                { tCFG (getPos $1)              }
+ | 'CrucibleMethodSpec'                 { tLLVMSpec (getPos $1)         }
+ | 'LLVMSpec'                           { tLLVMSpec (getPos $1)         }
+ | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)          }
+ | 'JVMSpec'                            { tJVMSpec (getPos $1)          }
+ | 'MIRSpec'                            { tMIRSpec (getPos $1)          }
+ | '(' Type ')'                         { $2                            }
+ | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2  }
+ | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2  }
+ | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2 }
 
 Context :: { Type }
- : 'CryptolSetup'                       { tContext CryptolSetup   }
- | 'JavaSetup'                          { tContext JavaSetup      }
- | 'LLVMSetup'                          { tContext LLVMSetup      }
- | 'ProofScript'                        { tContext ProofScript    }
- | 'TopLevel'                           { tContext TopLevel       }
- | 'CrucibleSetup'                      { tContext LLVMSetup      }
- | name                                 { tVar (tokStr $1)        }
+ : 'CryptolSetup'                       { tContext (getPos $1) CryptolSetup   }
+ | 'JavaSetup'                          { tContext (getPos $1) JavaSetup      }
+ | 'LLVMSetup'                          { tContext (getPos $1) LLVMSetup      }
+ | 'MIRSetup'                           { tContext (getPos $1) MIRSetup       }
+ | 'ProofScript'                        { tContext (getPos $1) ProofScript    }
+ | 'TopLevel'                           { tContext (getPos $1) TopLevel       }
+ | 'CrucibleSetup'                      { tContext (getPos $1) LLVMSetup      }
+ | name                                 { tVar (getPos $1) (tokStr $1)        }
+
+FieldType :: { (Name, Type) }
+  : name ':' Type                       { (tokStr $1, $3)         }
 
 -- Parameterized productions, most come directly from the Happy manual.
 fst(p, q)  : p q   { $1 }
@@ -315,7 +343,7 @@ instance Show ParseError where
   show e =
     case e of
       UnexpectedEOF     -> "Parse error: unexpected end of file"
-      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ tokStr t ++ "'"
+      UnexpectedToken t -> "Parse error at " ++ show (tokPos t) ++ ": Unexpected `" ++ unpack (tokStr t) ++ "'"
         where Range _ sl sc el ec = tokPos t -- TODO show token span consistently
       InvalidPattern x  -> "Parse error: invalid pattern " ++ pShow x
 
@@ -325,18 +353,22 @@ parseError toks = case toks of
   t : _ -> Left (UnexpectedToken t)
 
 buildFunction :: [Pattern] -> Expr -> Expr
-buildFunction args e = foldr Function e args
+buildFunction args e =
+  let once :: Pattern -> Expr -> Expr
+      once pat e = Function (maxSpan' pat e) pat e
+  in
+  foldr once e args
 
 buildApplication :: [Expr] -> Expr
-buildApplication = foldl1 (\e body -> Application e body)
+buildApplication es =
+  foldl1 (\e body -> Application (maxSpan' e body) e body) es
 
 toPattern :: Expr -> Either ParseError Pattern
 toPattern expr =
   case expr of
-    Tuple es       -> PTuple `fmap` mapM toPattern es
-    TSig (Var x) t -> return (PVar x (Just t))
-    Var x          -> return (PVar x Nothing)
-    LExpr pos e    -> LPattern pos `fmap` toPattern e
+    Tuple pos es       -> PTuple pos `fmap` mapM toPattern es
+    TSig pos (Var x) t -> return (PVar pos x (Just t))
+    Var x              -> return (PVar (getPos x) x Nothing)
     _              -> Left (InvalidPattern expr)
 
 }

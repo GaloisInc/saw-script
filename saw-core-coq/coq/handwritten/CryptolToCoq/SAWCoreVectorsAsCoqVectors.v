@@ -23,6 +23,8 @@ From mathcomp Require Import tuple.
 From Coq Require Export ZArith.BinIntDef.
 From Coq Require Export PArith.BinPos.
 
+From EnTree Require Import EnTreeSpecs.
+
 Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
@@ -68,8 +70,8 @@ Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
     ).
 Defined.
 
-Definition head (n : nat) (a : Type) (v : Vec (S n) a) : a := hd v.
-Definition tail (n : nat) (a : Type) (v : Vec (S n) a) : Vec n a := tl v.
+Definition head (n : nat) (a : Type) (v : Vec (S n) a) : a := VectorDef.hd v.
+Definition tail (n : nat) (a : Type) (v : Vec (S n) a) : Vec n a := VectorDef.tl v.
 
 Lemma head_gen (n : nat) (a : Type) (f : nat -> a) :
   head n a (gen (Succ n) a f) = f 0.
@@ -86,6 +88,41 @@ Qed.
 Instance Inhabited_Vec (n:nat) (a:Type) {Ha:Inhabited a} : Inhabited (Vec n a) :=
   MkInhabited (Vec n a) (gen n a (fun _ => inhabitant)).
 
+(* Build the encoding of the N-tuple of a given encoding *)
+Fixpoint QEnc_NTuple n (qenc : QuantEnc) : QuantEnc :=
+ match n with
+ | 0 => QEnc_prop True
+ | S n' => QEnc_pair qenc (QEnc_NTuple n' qenc)
+ end.
+
+(* The quantEnum function for Vec n a *)
+Definition quantEnum_Vec n A `{QuantType A} :
+ encodes (QEnc_NTuple n (quantEnc (A:=A))) -> Vec n A :=
+ nat_rect
+   (fun n => encodes (QEnc_NTuple n (quantEnc (A:=A))) -> Vec n A)
+   (fun _ => VectorDef.nil _)
+   (fun n enumF x => VectorDef.cons _ (quantEnum (fst x)) _ (enumF (snd x)))
+   n.
+
+(* The quantEnumInv function for Vec n a *)
+Definition quantEnumInv_Vec n A `{QuantType A} :
+ Vec n A -> encodes (QEnc_NTuple n (quantEnc (A:=A))) :=
+ nat_rect
+   (fun n => Vec n A -> encodes (QEnc_NTuple n (quantEnc (A:=A))))
+   (fun _ => I)
+   (fun n enumInvF x => (quantEnumInv (VectorDef.hd x), enumInvF (VectorDef.tl x)))
+   n.
+
+Program Instance QuantType_Vec n A `{QuantType A} : QuantType (Vec n A) :=
+ { quantEnc := QEnc_NTuple n (quantEnc (A:=A));
+   quantEnum := quantEnum_Vec n A;
+   quantEnumInv := quantEnumInv_Vec n A }.
+Next Obligation.
+ induction a.
+ - reflexivity.
+ - simpl. rewrite quantEnumSurjective. rewrite IHa. reflexivity.
+Defined.
+  
 Theorem gen_domain_eq n T : forall f g (domain_eq : forall i, f i = g i),
     gen n T f = gen n T g.
 Proof.
@@ -178,7 +215,8 @@ Proof.
 Qed.
 
 Lemma foldr_cons (a b : Type) (n : nat) (f : a -> b -> b) (base : b)
-  (v : Vec (S n) a) : foldr a b (S n) f base v = f (hd v) (foldr a b n f base (tl v)).
+  (v : Vec (S n) a) : foldr a b (S n) f base v
+  = f (VectorDef.hd v) (foldr a b n f base (VectorDef.tl v)).
 Proof.
   destruct (Vec_S_cons _ _ v) as [ x [ xs pf ]].
   rewrite pf. reflexivity.
@@ -199,7 +237,7 @@ Qed.
 
 Lemma foldl_cons (a b : Type) (n : nat) (f : b -> a -> b) (base : b)
   (v : Vec (S n) a) :
-  foldl a b (S n) f base v = foldl a b n f (f base (hd v)) (tl v).
+  foldl a b (S n) f base v = foldl a b n f (f base (VectorDef.hd v)) (VectorDef.tl v).
 Proof.
   destruct (Vec_S_cons _ _ v) as [ x [ xs pf ]].
   rewrite pf. reflexivity.
@@ -444,7 +482,7 @@ Definition shiftL1 (n:nat) (A:Type) (x:A) (v : Vector.t A n) :=
 
 (* right shift by one element, shifting in the value of x on the left *)
 Definition shiftR1 (n:nat) (A:Type) (x:A) (v : Vector.t A n) :=
-  Vector.shiftout (cons _ x _ v).
+  Vector.shiftout (VectorDef.cons _ x _ v).
 
 Definition rotateL (n : nat) : forall (A : Type) (v : Vector.t A n) (i : nat), Vector.t A n :=
   match n with

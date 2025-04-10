@@ -1,0 +1,8 @@
+let {{
+    f : {m, n, a}
+        (Ring ([m + n]a), Zero a, fin n) =>
+        [n]a -> [m + n]a
+    f x = (x # zero) + (x # zero)
+
+    g x = f x + f x
+}};

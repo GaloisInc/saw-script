@@ -1,0 +1,20 @@
+enable_experimental;
+
+m <- mir_load_module "statics-compositional.linked-mir.json";
+
+let a = "statics_compositional::A";
+
+let side_effect_spec = do {
+  mir_points_to (mir_static a) (mir_static_initializer a);
+  mir_execute_func [];
+};
+
+let foo_spec = do {
+  let a_init = mir_static_initializer a;
+  mir_points_to (mir_static a) a_init;
+  mir_execute_func [];
+  mir_return a_init;
+};
+
+side_effect_ov <- mir_verify m "statics_compositional::side_effect" [] false side_effect_spec z3;
+mir_verify m "statics_compositional::foo" [side_effect_ov] false foo_spec z3;

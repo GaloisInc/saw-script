@@ -15,15 +15,20 @@ Description:
 
 library
   build-depends:
+
+    -- upstream packages from hackage
     base == 4.*,
     containers,
     lens,
     mtl,
-    saw-core,
-    sbv >= 8.10 && < 8.16,
+    sbv >= 9.1 && < 10.11,
     text,
     transformers,
-    vector
+    vector,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Simulator.SBV

@@ -1,0 +1,47 @@
+enable_experimental;
+
+import "test.cry";
+mod <- llvm_load_module "test.bc";
+
+llvm_verify mod "add8" [] true (llvm_ffi_setup {{ add8 }}) z3;
+llvm_verify mod "sub16" [] true (llvm_ffi_setup {{ sub16 }}) z3;
+llvm_verify mod "mul32" [] true (llvm_ffi_setup {{ mul32 }}) z3;
+llvm_verify mod "div64" [] true (llvm_ffi_setup {{ div64 }}) z3;
+
+llvm_verify mod "extendInput" [] true (llvm_ffi_setup {{ extendInput }}) z3;
+llvm_verify mod "maskOutput" [] true (llvm_ffi_setup {{ maskOutput }}) z3;
+llvm_verify mod "noBits" [] true (llvm_ffi_setup {{ noBits }}) z3;
+
+not_ov <- llvm_verify mod "not" [] true (llvm_ffi_setup {{ not }}) z3;
+
+llvm_verify mod "usesTypeSynonym" [] true (llvm_ffi_setup {{ usesTypeSynonym }}) z3;
+
+llvm_verify mod "sum10" [] true (llvm_ffi_setup {{ sum10 }}) z3;
+llvm_verify mod "reverse5" [] true (llvm_ffi_setup {{ reverse5 }}) z3;
+
+compoundTypes_ov <- llvm_verify mod "compoundTypes" [] true (llvm_ffi_setup {{ compoundTypes }}) z3;
+
+for [0, 12345, 4294967297] (\n ->
+  llvm_verify mod "typeToValue" [] true (llvm_ffi_setup {{ typeToValue`{n} }}) z3);
+for [0, 1, 5, 42, 100] (\n ->
+  llvm_verify mod "sumPoly" [] true (llvm_ffi_setup {{ sumPoly`{n} }}) z3);
+for [1, 3, 72] (\n ->
+  llvm_verify mod "inits" [] true (llvm_ffi_setup {{ inits`{n} }}) z3);
+let dims = [1, 2, 3];
+for dims (\n ->
+  for dims (\m ->
+    for dims (\p ->
+      llvm_verify mod "zipMul3" [] true (llvm_ffi_setup {{ zipMul3`{n, m, p} }}) z3)));
+
+for dims (\a ->
+  for dims (\b ->
+    for dims (\c ->
+      for dims (\d ->
+        llvm_verify mod "reshape" [] true (llvm_ffi_setup {{ reshape`{a, b, c, d} }}) z3))));
+
+let same_setup = llvm_ffi_setup {{ same }};
+llvm_verify mod "same" [] true same_setup z3;
+llvm_verify mod "same" [compoundTypes_ov] true same_setup z3;
+let notnot_setup = llvm_ffi_setup {{ notnot }};
+llvm_verify mod "notnot" [] true notnot_setup z3;
+llvm_verify mod "notnot" [not_ov] true notnot_setup z3;

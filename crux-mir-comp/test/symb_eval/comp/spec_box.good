@@ -1,11 +1,11 @@
-test spec_box/3a1fbbbh::f_test[0]: ok
-test spec_box/3a1fbbbh::use_f[0]: FAILED
+test spec_box/<DISAMB>::f_test[0]: ok
+test spec_box/<DISAMB>::use_f[0]: FAILED
 
 failures:
 
----- spec_box/3a1fbbbh::use_f[0] counterexamples ----
+---- spec_box/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./lib/crucible/lib.rs:37:41: 37:58 !test/symb_eval/comp/spec_box.rs:58:5: 58:30: error: in spec_box/3a1fbbbh::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/spec_box.rs:58:5: 58:29: error: in spec_box/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/spec_box.rs:58:5:
 [Crux]   	d < 10
 

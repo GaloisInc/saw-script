@@ -15,32 +15,41 @@ Description:
 
 extra-source-files:
     saw/Cryptol.sawcore
+    saw/SpecM.sawcore
     saw/CryptolM.sawcore
 
 library
   build-depends:
-    aig,
-    array,
+
+    -- upstream packages from hackage
     base,
     base-compat,
+    array,
     bytestring,
     containers,
-    cryptol >= 2.3.0,
     data-inttrie >= 0.1.4,
+    executable-path,
+    filepath,
     integer-gmp,
     modern-uri,
     mtl,
     panic,
+    sbv,
+    template-haskell,
+    text,
+    vector,
+
+    -- packages in git submodules
+    aig,
+    cryptol >= 2.3.0,
+    what4,
+
+    -- internal subpackages in the saw tree
     saw-core,
     saw-core-aig,
     saw-core-sbv,
-    saw-core-what4,
-    what4,
-    sbv,
-    vector,
-    text,
-    executable-path,
-    filepath
+    saw-core-what4
+
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Cryptol
@@ -51,23 +60,30 @@ library
      Verifier.SAW.Cryptol.Monadify
      Verifier.SAW.CryptolEnv
      Verifier.SAW.TypedTerm
-  GHC-options: -Wall -Werror
+  -- GHC-options: -Wall -Werror
+  GHC-options: -Wall
 
 executable css
   other-modules:
     Paths_cryptol_saw_core
 
   build-depends:
-    aig,
+
+    -- upstream packages from hackage
+    base >= 4.5,
     array,
-    base,
     bytestring,
     containers,
-    cryptol,
-    saw-core,
-    saw-core-aig,
     text,
-    cryptol-saw-core
+
+    -- packages in git submodules
+    aig,
+    cryptol,
+
+    -- internal subpackages in the saw tree
+    cryptol-saw-core,
+    saw-core,
+    saw-core-aig
 
   hs-source-dirs : css
   main-is : Main.hs
@@ -82,12 +98,19 @@ test-suite cryptol-saw-core-tc-test
   main-is: CryptolVerifierTC.hs
 
   build-depends:
+
+    -- upstream packages from hackage
     base,
     bytestring,
     containers,
-    cryptol,
-    cryptol-saw-core,
     heredoc >= 0.2,
+    text,
+
+    -- packages in git submodules
+    cryptol,
+
+    -- internal subpackages in the saw tree
+    cryptol-saw-core,
     saw-core
 
   GHC-options: -threaded

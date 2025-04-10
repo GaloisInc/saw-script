@@ -1,0 +1,10 @@
+//
+// Exercise failure of the unify call in the correctly-typed case of
+// StmtBind in inferStmt.
+//
+// This checks the pattern against the value being bound to it.
+//
+
+let _ = do {
+   (x : Int) <- return "abc";
+};

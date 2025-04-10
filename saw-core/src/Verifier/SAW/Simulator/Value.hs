@@ -45,8 +45,8 @@ import Verifier.SAW.Simulator.MonadLazy
 ------------------------------------------------------------
 -- Values and Thunks
 
-{- | The type of values.
-Values are parameterized by the /name/ of an instantiation.
+{- | SAWCore Values. Values are parameterized by the /name/ of an
+instantiation.
 The concrete parameters to use are computed from the name using
 a collection of type families (e.g., 'EvalM', 'VBool', etc.). -}
 data Value l

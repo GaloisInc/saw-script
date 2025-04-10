@@ -17,7 +17,9 @@ module Verifier.SAW.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
-import Control.Monad.State.Strict as State
+import Control.Monad (forM)
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class (MonadTrans(..))
 #if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
 #endif
@@ -184,8 +186,8 @@ scWriteExternal t0 =
             RecordValue elems   -> pure $ unwords ["Record", show elems]
             RecordProj e prj    -> pure $ unwords ["RecordProj", show e, Text.unpack prj]
             Sort s h
-              | s == propSort -> pure $ unwords ["Prop", show h]
-              | otherwise     -> pure $ unwords ["Sort", drop 5 (show s), show h]
+              | s == propSort -> pure $ unwords ("Prop" : map show (sortFlagsToList h))
+              | otherwise     -> pure $ unwords ("Sort" : drop 5 (show s) : map show (sortFlagsToList h))
                                                         -- /\ Ugly hack to drop "sort "
             NatLit n            -> pure $ unwords ["Nat", show n]
             ArrayValue e v      -> pure $ unwords ("Array" : show e :
@@ -221,7 +223,7 @@ scReadExternal sc input =
          tf <- parse tokens
          t <- lift $ scTermF sc tf
          (ts, nms, vs) <- State.get
-         put (Map.insert i t ts, nms, vs)
+         State.put (Map.insert i t ts, nms, vs)
     go [] = pure () -- empty lines are ignored
 
     readM :: forall a. Read a => String -> ReadM a
@@ -347,8 +349,8 @@ scReadExternal sc input =
         ["Record", elems] ->
           FTermF <$> (RecordValue <$> (traverse (traverse getTerm) =<< readM elems))
         ["RecordProj", e, prj] -> FTermF <$> (RecordProj <$> readIdx e <*> pure (Text.pack prj))
-        ["Prop", h]         -> FTermF <$> (Sort propSort <$> readM h)
-        ["Sort", s, h]      -> FTermF <$> (Sort <$> (mkSort <$> readM s) <*> readM h)
+        ("Prop" : h)        -> FTermF <$> (Sort propSort . sortFlagsFromList <$> (mapM readM h))
+        ("Sort" : s : h)    -> FTermF <$> (Sort <$> (mkSort <$> readM s) <*> (sortFlagsFromList <$> mapM readM h))
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
         ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
         ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))

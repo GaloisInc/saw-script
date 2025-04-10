@@ -2,9 +2,8 @@
 
 import "SpecPrims.cry";
 
-set_monadification "exists" "Prelude.existsM";
-set_monadification "forall" "Prelude.forallM";
-set_monadification "anySpec" "Prelude.anySpec";
-set_monadification "asserting" "Prelude.asserting";
-set_monadification "assuming" "Prelude.assuming";
-set_monadification "invariantHint" "Prelude.invariantHint";
+set_monadification "exists" "SpecM.existsS" true;
+set_monadification "forall" "SpecM.forallS" true;
+set_monadification "asserting" "SpecM.asserting" true;
+set_monadification "assuming" "SpecM.assuming" true;
+set_monadification "invariantHint" "SpecM.invariantHint" true;

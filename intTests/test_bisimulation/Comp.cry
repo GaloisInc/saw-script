@@ -1,0 +1,58 @@
+module Comp where
+
+// Specification for a functional AND gate. First output bit is the ready bit,
+// second bit is the result
+andSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+andSpec (_, (x, y)) = ((), (True, x && y))
+
+// Specification for a functional NAND gate. First output bit is the ready bit,
+// second bit is the result
+nandSpec : ((), (Bit, Bit)) -> ((), (Bit, Bit))
+nandSpec (_, (x, y)) = ((), (True, ~ (andSpec ((), (x, y))).1.1))
+
+// State for a stateful AND gate that first loads its inputs into memory, then
+// computes logical AND over them. `loaded` indicates whether the inputs have
+// been loaded into `origX` and `origY`.
+type andState = { loaded : Bit, origX : Bit, origY : Bit }
+
+// A stateful AND gate.  First output bit is the ready bit, second bit is the
+// result.  This gate takes 2 cycles to compute.  It restarts when the input
+// changes.
+andImp : (andState, (Bit, Bit)) -> (andState, (Bit, Bit))
+andImp (s, (x, y)) =
+  if s.loaded /\ x == s.origX /\ y == s.origY
+  then (s, (True, s.origX && s.origY))
+  else ({ loaded = True, origX = x, origY = y }, (False, 0))
+
+// Output relation between `andImp` and `andSpec`.  Checks that outputs are
+// equivalent, given that `andImp` is ready to be read.
+andOutputRel : (andState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+andOutputRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+
+// State relation between `andImp` and `andSpec`.  Trivial in this case because
+// `andSpec` is stateless.
+andStateRel : andState -> () -> Bit
+andStateRel _ () = True
+
+// Stateful NAND gate holds `andState` as well as an unused bit.
+type nandState = { as : andState, unused : Bit }
+
+// A stateful NAND gate.  First output bit is the ready bit, second bit is the
+// result.  This gate takes 2 cycles to compute.  It restarts when the input
+// changes.
+nandImp : (nandState, (Bit, Bit)) -> (nandState, (Bit, Bit))
+nandImp (s, in) = ({ as = as' , unused = False }, (andReady, ~andRes))
+  where
+    (as', (andReady, andRes)) = andImp (s.as, in)
+
+// Relation between `nandImp` and `nandSpec`.  Checks that outputs are
+// equivalent, given that `nandImp` is ready to be read.
+nandOutputRel : (nandState, (Bit, Bit)) -> ((), (Bit, Bit)) -> Bit
+nandOutputRel (s, (impReady, impO)) ((), (_, specO)) =
+  if impReady then impO == specO else True
+
+// State relation between `nandImp` and `nandSpec`.  Trivial in this case
+// because `nandSpec` is stateless.
+nandStateRel : nandState -> () -> Bit
+nandStateRel _ () = True

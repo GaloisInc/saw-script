@@ -41,9 +41,17 @@ class UnintProver(Prover):
   def to_json(self) -> Any:
     return { "name": self.name, "uninterpreted functions": self.unints }
 
+class Bitwuzla(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("w4-bitwuzla", unints)
+
 class CVC4(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-cvc4", unints)
+
+class CVC5(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("w4-cvc5", unints)
 
 class Yices(UnintProver):
   def __init__(self, unints : List[str]) -> None:
@@ -53,9 +61,17 @@ class Z3(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-z3", unints)
 
+class Bitwuzla_SBV(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("sbv-bitwuzla", unints)
+
 class CVC4_SBV(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("sbv-cvc4", unints)
+
+class CVC5_SBV(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("sbv-cvc5", unints)
 
 class Yices_SBV(UnintProver):
   def __init__(self, unints : List[str]) -> None:
@@ -118,8 +134,14 @@ abc_verilog = UseProver(ABC_Verilog())
 rme = UseProver(RME())
 boolector = UseProver(Boolector())
 
+def bitwuzla(unints : List[str]) -> ProofTactic:
+  return UseProver(Bitwuzla(unints))
+
 def cvc4(unints : List[str]) -> ProofTactic:
   return UseProver(CVC4(unints))
+
+def cvc5(unints : List[str]) -> ProofTactic:
+  return UseProver(CVC5(unints))
 
 def yices(unints : List[str]) -> ProofTactic:
   return UseProver(Yices(unints))

@@ -1,0 +1,5 @@
+// This fails with an unexpected } after the comment is processed.
+
+let x = /* {{ */ 2 }};
+
+

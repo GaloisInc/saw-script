@@ -1,0 +1,135 @@
+enable_experimental;
+
+import "ht_simplified.cry";
+
+let uint32_t = llvm_int 32;
+let uint64_t = llvm_int 64;
+
+let setup_tuple (type : LLVMType) (name : String) = do {
+  cfvTerm <- llvm_fresh_var name type;
+  let setupVal = llvm_term cfvTerm;
+  return (setupVal, cfvTerm);
+};
+
+let global_setup name = do {
+    llvm_alloc_global name;
+    let p = (llvm_global name);
+    return p;
+};
+
+let check_ptable ptable table = do {
+    llvm_points_to ptable (llvm_term {{pooledHashTableToTuple table}});
+};
+
+let check_entry_pool entry_pool_p ep = do
+{
+    llvm_points_to entry_pool_p (llvm_term {{map entryToTuple ep}});
+};
+
+let check_state ptable_p entry_pool_p state = do
+{
+    check_entry_pool entry_pool_p ({{state.ep}});
+    check_ptable ptable_p ({{state.pht}});
+};
+
+m  <- llvm_load_module "ht_simplified.bc";
+
+let hash_ok = do {
+    (ve,vc) <- (setup_tuple uint64_t "v");
+    llvm_execute_func[ve];
+    llvm_return (llvm_term {{ hash (vc) }});
+};
+
+let get_bucket_ok = do {   
+    (ke,kv) <- (setup_tuple uint64_t "key");
+    llvm_precond {{`NUMBUCKETS >= 1}};
+    llvm_execute_func[ke];
+    let return_spec = {{ getBucket (kv) }};
+    llvm_return (llvm_term return_spec);
+    llvm_postcond {{return_spec < `NUMBUCKETS }};
+};
+
+
+
+// Initialize function holds invariant.
+let init_table_spec = do {
+    llvm_alloc_global "entry_pool";
+    entry_pool <- llvm_fresh_var "entry_pool" (llvm_array (eval_size {| POOLSIZE |}) (llvm_alias "struct.Entry"));
+    llvm_points_to (llvm_global "entry_pool") (llvm_term entry_pool);
+    llvm_alloc_global "ptable";
+
+    llvm_execute_func [];
+
+    let res = {{ pooledHashTableToTuple initTable }};
+    llvm_points_to (llvm_global "ptable") (llvm_term res);
+    let initState = {{ {ep = (tupleToEntryPool entry_pool), pht = initTable} }};
+    llvm_postcond {{ is_valid_state initState }};
+};
+
+let increment_value_spec = do {
+    llvm_alloc_global "entry_pool";
+    entry_pool <- llvm_fresh_var "entry_pool" (llvm_array (eval_size {| POOLSIZE |}) (llvm_alias "struct.Entry"));
+    llvm_points_to (llvm_global "entry_pool") (llvm_term entry_pool);
+    llvm_alloc_global "ptable";
+    ptable <- llvm_fresh_var "ptable" (llvm_alias "struct.PooledHashTable");
+    llvm_points_to (llvm_global "ptable") (llvm_term ptable);
+
+    key <- llvm_fresh_var "key" uint64_t;
+
+    // Assume invariant holds on initial state.
+    let initialState = {{tupleToState (entry_pool, ptable)}};
+    llvm_precond (normalize_term {{ is_valid_state initialState }});
+
+    let initialCurrentEntry = {{initialState.pht.cur_entry}};
+
+    llvm_execute_func [llvm_term key];
+    let return_spec = {{ incrementValueFull key initialState}};
+
+    entry_pool' <- llvm_fresh_var "entry_pool'" (llvm_array (eval_size {| POOLSIZE |}) (llvm_alias "struct.Entry"));
+    llvm_points_to (llvm_global "entry_pool") (llvm_term entry_pool');
+    ptable' <- llvm_fresh_var "ptable" (llvm_alias "struct.PooledHashTable");
+    llvm_points_to (llvm_global "ptable") (llvm_term ptable');
+    let finalState = {{tupleToState (entry_pool', ptable')}};
+
+    // Invariant holds on end state
+    llvm_postcond {{ is_valid_state finalState }};
+
+    // Check if function is equivalent to cryptol spec
+    llvm_return (llvm_term {{ return_spec.value }});
+    check_state (llvm_global "ptable") (llvm_global "entry_pool") {{return_spec.state}};
+
+    //Check if cryptol spec holds post conditions.
+
+    //If modified slot is null then we weren't able to find a spot in entry pool value should be zero.
+    llvm_postcond {{(return_spec.slot == NULL) ==> return_spec.value == 0}};
+
+    //Entry that was modified
+    let modifiedEntry = {{return_spec.state.ep@(return_spec.slot)}};
+
+    //Otherwise key should be == key given
+    llvm_postcond {{(return_spec.slot != NULL) ==> modifiedEntry.key == key }};
+
+    //Value should be equivalent of what is was returned
+    llvm_postcond {{(return_spec.slot != NULL) ==> ((modifiedEntry.value == return_spec.value) /\ (modifiedEntry.value > 0) /\ (modifiedEntry.value <= CAP)) }};
+
+    //If we grabed from the entry pool.
+    llvm_postcond {{(return_spec.slot == initialCurrentEntry) ==> ((modifiedEntry.next == NULL) /\ (modifiedEntry.value == 1))}};
+    llvm_postcond {{(return_spec.slot == initialCurrentEntry) ==> return_spec.state.pht.cur_entry == initialCurrentEntry + 1}};
+
+    
+};
+
+
+let main : TopLevel () = do {
+    hash <- llvm_verify m "hash" [] true hash_ok (w4_unint_z3 []);
+    get_bucket <- llvm_verify m "get_bucket" [hash] true get_bucket_ok (w4_unint_z3 []);
+    init <- llvm_verify m "init_table" [] true init_table_spec (w4_unint_z3 []);
+
+    enable_what4_eval;
+    llvm_verify m "increment_value" [] true increment_value_spec (w4_unint_z3 []);
+    print "Done!";
+};
+
+
+
+

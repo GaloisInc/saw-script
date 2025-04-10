@@ -1,0 +1,17 @@
+module Salsa20Extras where
+
+import Salsa20
+
+type STATE_WORDS = 16
+type BLOCK_SIZE = 64
+
+counter_setup : [STATE_WORDS][32] -> [64] -> [STATE_WORDS][32]
+counter_setup state counter =
+  updates state [8, 9] [drop counter, drop (counter >> 32)]
+
+apply_keystream : [32] -> [STATE_WORDS][32] -> [64] -> [BLOCK_SIZE][8] -> [BLOCK_SIZE][8]
+apply_keystream count state0 counter output =
+    output ^ littleendian_state_inverse state2
+  where
+    state1 = counter_setup state0 counter
+    state2 = Salsa20_rounds count state1 state1

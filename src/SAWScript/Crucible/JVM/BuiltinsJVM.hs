@@ -7,7 +7,7 @@ Stability   : provisional
 
 
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NoMonoLocalBinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE PackageImports #-}
@@ -73,7 +73,6 @@ import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts, TypedTermType(.
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
 -- saw-script
-import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
 import SAWScript.Crucible.Common
@@ -159,7 +158,7 @@ jvm_extract c mname = do
   ctx <- getJVMTrans
 
   io $ do -- only the IO monad, nothing else
-          sym <- newSAWCoreExprBuilder sc
+          sym <- newSAWCoreExprBuilder sc False
           SomeOnlineBackend bak <- newSAWCoreBackend pathSatSolver sym
           st  <- sawCoreState sym
           CJ.setSimulatorVerbosity verbosity sym
@@ -176,7 +175,8 @@ jvm_extract c mname = do
               gp <- getGlobalPair opts pr
               let regval = gp^.Crucible.gpValue
               let regty = Crucible.regType regval
-              let failure = fail $ unwords ["Unexpected return type:", show regty]
+              let failure :: forall a. IO a
+                  failure = fail $ unwords ["Unexpected return type:", show regty]
               t <- Crucible.asSymExpr regval (toSC sym st) failure
               cty <-
                 case Crucible.asBaseType regty of

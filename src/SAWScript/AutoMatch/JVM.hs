@@ -14,6 +14,7 @@ import SAWScript.AutoMatch.Util
 import Control.Monad
 import Control.Monad.Free
 import Data.Either
+import qualified Data.Text as Text
 
 -- | Parse a Java class into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
@@ -27,8 +28,9 @@ getDeclsJVM cls = return $ do
                argTypes <- mapM jssTypeToStdType $ JVM.methodParameterTypes method
                let argIndices = map (JVM.localIndexOfParameter method) [0 .. length argTypes - 1]
                tableEntries <- forM argIndices $ JVM.lookupLocalVariableByIdx method 0
-               let args = zipWith Arg (map JVM.localName tableEntries) argTypes
-               return $ Decl (JVM.methodName method) returnType args
+               let getname name = Text.pack $ JVM.localName name
+                   args = zipWith Arg (map getname tableEntries) argTypes
+               return $ Decl (Text.pack $ JVM.methodName method) returnType args
 
    when (not . null $ untranslateable) $ do
       separator ThinSep

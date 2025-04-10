@@ -5,6 +5,7 @@ module Main where
 
 import Control.Monad
 import Data.Aeson
+import qualified Data.Aeson.Parser as AP
 import Data.Aeson.Types (Parser)
 import qualified Data.Aeson.Types as AE
 import Data.Maybe (isJust)
@@ -21,6 +22,8 @@ import System.Exit (exitFailure)
 import System.Environment (getArgs)
 import Data.Time.Clock
 
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
+
 import qualified Data.Attoparsec.ByteString as AT
 import qualified Data.ByteString as BS
 import qualified Data.GraphViz as GV
@@ -30,10 +33,11 @@ import qualified Data.GraphViz.Printing as GV
 import qualified Data.GraphViz.Attributes.HTML as HTML
 
 main :: IO ()
-main =
-  do [f,o] <- getArgs
+main = do
+     setLocaleEncoding utf8
+     [f,o] <- getArgs
      bs <- BS.readFile f
-     case AT.parseOnly json' bs of
+     case AT.parseOnly AP.json' bs of
        Left msg -> putStrLn msg >> exitFailure
        Right v ->
          case AE.parse parseNodes v of

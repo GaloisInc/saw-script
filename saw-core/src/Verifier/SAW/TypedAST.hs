@@ -70,6 +70,7 @@ module Verifier.SAW.TypedAST
  , scPrettyTermInCtx
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf, maxSort
+ , SortFlags(..), noFlags, sortFlagsLift2, sortFlagsToList, sortFlagsFromList
  , Ident(..), identName, mkIdent
  , NameInfo(..), toShortName, toAbsoluteName
  , parseIdent
@@ -82,7 +83,7 @@ module Verifier.SAW.TypedAST
  , VarIndex
    -- * Utility functions
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, completeBitSet
+  , decrBitSet, completeBitSet, termIsClosed
  ) where
 
 import Control.Exception (assert)

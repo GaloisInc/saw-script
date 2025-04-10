@@ -1,0 +1,5 @@
+// Trigger the "do block must end with expression" message
+
+let x = do {
+   y <- llvm_assert {{ True }};
+};

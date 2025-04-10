@@ -2,7 +2,7 @@
 set -e
 
 mkdir -p tmp
-cp ../../doc/tutorial/code/* tmp
+cp ../../doc/llvm-java-verification-with-saw/code/* tmp
 cd tmp
 sed -i.bak s/abc/w4/g ffs_java.saw
 sed -i.bak s/abc/w4/g ffs_llvm.saw

@@ -1,13 +1,9 @@
 module GlobalVar where
 
-import Prelude;
+import SpecM;
 
-acquireLockM : Vec 64 Bool ->
-               SpecM VoidEv emptyFunStack (Vec 64 Bool * Vec 64 Bool);
-acquireLockM u =
-  retS VoidEv emptyFunStack (Vec 64 Bool * Vec 64 Bool) (u,u);
+acquireLockM : Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool * Vec 64 Bool);
+acquireLockM u = retS VoidEv (Vec 64 Bool * Vec 64 Bool) (u,u);
 
-releaseLockM : Vec 64 Bool -> Vec 64 Bool ->
-               SpecM VoidEv emptyFunStack (Vec 64 Bool);
-releaseLockM u new_u =
-  retS VoidEv emptyFunStack (Vec 64 Bool) new_u;
+releaseLockM : Vec 64 Bool -> Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool);
+releaseLockM u new_u = retS VoidEv (Vec 64 Bool) new_u;

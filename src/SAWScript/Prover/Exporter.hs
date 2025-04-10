@@ -1,3 +1,4 @@
+{-# Language CPP #-}
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
 {-# Language NamedFieldPuns #-}
@@ -48,6 +49,7 @@ import Data.Foldable(toList)
 
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
+import Control.Monad.State (gets)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
@@ -70,6 +72,9 @@ import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule,
                                 ImportPrimitiveOptions(..), mkCryEnv)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import Verifier.SAW.Cryptol.PreludeM (cryptolMModule, specMModule,
+                                      scLoadSpecMModule, scLoadCryptolMModule)
+import Verifier.SAW.Cryptol.Monadify (defaultMonEnv, monadifyCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Module (emptyModule, moduleDecls)
@@ -99,7 +104,7 @@ import SAWScript.Value
 
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
-import What4.Config (extendConfig)
+import What4.Config (extendConfig, getOptionSetting, setOpt)
 import What4.Interface (getConfiguration, IsSymExprBuilder)
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.SMTLib2.Response (smtParseOptions)
@@ -297,18 +302,27 @@ write_smtlib2_w4 f (TypedTerm schema t) = do
 writeSMTLib2 :: FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2 f satq = getSharedContext >>= \sc -> io $
   do (_, _, l) <- SBV.sbvSATQuery sc mempty satq
+#if MIN_VERSION_sbv(10,0,0)
+     txt <- SBV.generateSMTBenchmarkSat l
+#else
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
+#endif
      writeFile f txt
 
 -- | Write a SAT query an SMT-Lib version 2 file.
 -- This version uses What4 instead of SBV.
 writeSMTLib2What4 :: FilePath -> SATQuery -> TopLevel ()
-writeSMTLib2What4 f satq = getSharedContext >>= \sc -> io $
-  do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
+writeSMTLib2What4 f satq = do
+  sc <- getSharedContext
+  what4PushMuxOps <- gets rwWhat4PushMuxOps
+  io $ do
+     sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
      (_varMap, lits) <- W.w4Solve sym sc satq
      let cfg = getConfiguration sym
      extendConfig smtParseOptions cfg
+     pushMuxOpsSetting <- getOptionSetting W4.pushMuxOpsOption cfg
+     _ <- setOpt pushMuxOpsSetting what4PushMuxOps
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features Nothing sym h lits
 
@@ -320,7 +334,7 @@ write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilogSAT :: FilePath -> SATQuery -> TopLevel [(ExtCns Term, FiniteType)]
 writeVerilogSAT path satq = getSharedContext >>= \sc -> io $
-  do sym <- newSAWCoreExprBuilder sc
+  do sym <- newSAWCoreExprBuilder sc False
      -- For SAT checking, we don't care what order the variables are in,
      -- but only that we can correctly keep track of the connection
      -- between inputs and assignments.
@@ -372,7 +386,7 @@ flattenSValue _ sval = fail $ "write_verilog: unsupported result type: " ++ show
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  sym <- newSAWCoreExprBuilder sc
+  sym <- newSAWCoreExprBuilder sc False
   st  <- sawCoreState sym
   -- For writing Verilog in the general case, it's convenient for any
   -- lambda-bound inputs to appear first in the module input list, in
@@ -434,6 +448,22 @@ withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq
    ]
   }
 
+withImportSpecM ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSpecM config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SpecM."
+   ]
+  }
+
+withImportSpecMPrimitivesForSAWCore ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSpecMPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SpecMPrimitivesForSAWCore."
+   ]
+  }
+
 
 withImportCryptolPrimitivesForSAWCoreExtra ::
   Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
@@ -476,13 +506,21 @@ writeCoqProp name notations skips path t =
      tm <- io (propToTerm sc t)
      writeCoqTerm name notations skips path tm
 
+-- | Write out a representation of a Cryptol module in Gallina syntax for Coq.
 writeCoqCryptolModule ::
+  -- | Translate the "monadified" version of the module when 'True'
+  Bool ->
+  -- | Path to module to export
   FilePath ->
+  -- | Path for output Coq file
   FilePath ->
+  -- | Pairs of notation substitutions: operator on the left will be replaced
+  -- with the identifier on the right
   [(String, String)] ->
+  -- | List of identifiers to skip during translation
   [String] ->
   TopLevel ()
-writeCoqCryptolModule inputFile outputFile notations skips = io $ do
+writeCoqCryptolModule mon inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -491,6 +529,8 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   let primOpts = ImportPrimitiveOptions{ allowUnknownPrimitives = True }
   (cm, _) <- loadCryptolModule sc primOpts env inputFile
+  cry_env <- mkCryEnv env
+  cm' <- if mon then fst <$> monadifyCryptolModule sc cry_env defaultMonEnv cm else return cm
   let cryptolPreludeDecls = mapMaybe Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration =
         withImportCryptolPrimitivesForSAWCoreExtra $
@@ -499,8 +539,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
   let nm = takeBaseName inputFile
-  cry_env <- mkCryEnv env
-  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm
+  res <- Coq.translateCryptolModule sc cry_env nm configuration cryptolPreludeDecls cm'
   case res of
     Left e -> putStrLn $ show e
     Right cmDoc ->
@@ -527,24 +566,41 @@ writeCoqSAWCorePrelude outputFile notations skips = do
   writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
 
 writeCoqCryptolPrimitivesForSAWCore ::
-  FilePath ->
+  FilePath -> FilePath -> FilePath ->
   [(String, String)] ->
   [String] ->
   IO ()
-writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
+writeCoqCryptolPrimitivesForSAWCore cryFile specMFile cryMFile notations skips = do
   sc <- mkSharedContext
   () <- scLoadPreludeModule sc
   () <- scLoadCryptolModule sc
+  () <- scLoadSpecMModule sc
+  () <- scLoadCryptolMModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  m_spec <- scFindModule sc (Un.moduleName specMModule)
+  m_mon <- scFindModule sc (Un.moduleName cryptolMModule)
   let configuration =
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         coqTranslationConfiguration notations skips
+  let configuration_spec =
+        withImportCryptolPrimitivesForSAWCore $
+        withImportSpecM configuration
+  let configuration_mon =
+        withImportSpecMPrimitivesForSAWCore configuration
   let doc = Coq.translateSAWModule configuration m
-  writeFile outputFile (show . vcat $ [ Coq.preamble configuration
-                                      , doc
-                                      ])
+  writeFile cryFile (show . vcat $ [ Coq.preamble configuration
+                                   , doc
+                                   ])
+  let doc_spec = Coq.translateSAWModule configuration_spec m_spec
+  writeFile specMFile (show . vcat $ [ Coq.preamble configuration_spec
+                                    , doc_spec
+                                    ])
+  let doc_mon = Coq.translateSAWModule configuration_mon m_mon
+  writeFile cryMFile (show . vcat $ [ Coq.preamble configuration_mon
+                                    , doc_mon
+                                    ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)

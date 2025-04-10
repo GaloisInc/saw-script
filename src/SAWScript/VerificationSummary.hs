@@ -18,10 +18,10 @@ module SAWScript.VerificationSummary
 import Control.Lens ((^.))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Text (Text)
 import Data.String
 import Prettyprinter
 import Data.Aeson (encode, (.=), Value(..), object, toJSON)
+import Data.Aeson.Key (Key)
 import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.Parameterized.Nonce
 
@@ -60,14 +60,14 @@ vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
 vsAllSolvers :: VerificationSummary -> Set.Set String
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
-computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> IO VerificationSummary
+computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
 computeVerificationSummary db js ls thms =
-  do let roots = mconcat (
+  let roots = mconcat (
                 [ vcDeps vc | j <- js, vc <- j^.psVCStats ] ++
                 [ vcDeps vc | CMSLLVM.SomeLLVM l <- ls, vc <- l^.psVCStats ] ++
                 [ Set.singleton (thmNonce t) | t <- thms ])
-     thms' <- Map.elems <$> reachableTheorems db roots
-     pure (VerificationSummary js ls thms')
+      thms' = Map.elems (reachableTheorems db roots)
+  in  VerificationSummary js ls thms'
 
 -- TODO: we could make things instances of a ToJSON typeclass instead of using the two methods below.
 msToJSON :: forall ext . Pretty (MethodId ext) => CMS.ProvedSpec ext -> Value
@@ -111,7 +111,7 @@ thmToJSON thm = object ([
          Just ploc -> [("ploc" .= plocToJSON ploc)]
   )
 
-theoremStatus :: TheoremSummary -> [(Text,Value)]
+theoremStatus :: TheoremSummary -> [(Key,Value)]
 theoremStatus summary = case summary of
       ProvedTheorem stats ->
         [ ("status"  .= ("verified" :: String))

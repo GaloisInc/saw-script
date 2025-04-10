@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
@@ -20,6 +21,8 @@ Stability   : provisional
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+-- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in SAWScript.MGU
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
   ( interpretStmt
@@ -40,18 +43,22 @@ import qualified Control.Exception as X
 import Control.Monad (unless, (>=>), when)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import qualified Data.Text as Text
+import Data.Text (Text)
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
+import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
+import SAWScript.Bisimulation
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
@@ -60,21 +67,25 @@ import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
 import SAWScript.Lexer (lexSAW)
-import SAWScript.MGU (checkDecl, checkDeclGroup)
+import SAWScript.MGU (checkStmt)
 import SAWScript.Parser (parseSchema)
+import SAWScript.Panic (panic)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
-import SAWScript.Proof (newTheoremDB)
+import SAWScript.SolverCache
+import SAWScript.SolverVersions
+import SAWScript.Proof (emptyTheoremDB)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
-import SAWScript.Prover.MRSolver (emptyMREnv)
+import SAWScript.Prover.MRSolver (emptyMREnv, emptyRefnset)
 import SAWScript.Yosys
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Term.Pretty (MemoStyle(..))
 import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -86,14 +97,18 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
+import           Mir.Intrinsics (MIR)
+import qualified Mir.Mir as Mir
 import qualified SAWScript.Crucible.Common as CC
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
+import           SAWScript.Crucible.LLVM.FFI
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -108,41 +123,92 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
+
+-- Support ---------------------------------------------------------------------
+
+-- This is used to reject top-level execution of polymorphic
+-- expressions. Assumes we aren't inside an uninstantiated forall
+-- quantifier. Also assumes the typechecker has already approved the
+-- type. This means we know it doesn't contain unbound named type
+-- variables. Fail if we encounter a unification var.
+--
+-- XXX: this serves little purpose. A polymorphic expression must
+-- either be a partially applied (or unapplied) polymorphic function,
+-- in which case we aren't going to actually execute anything anyway,
+-- or be fully applied but have a polymorphic return type, and the
+-- only such functions we can have are those that don't return (like
+-- "fail") so we don't actually care what they produce. So this code
+-- and the check that calls it should probably be removed.
+--
+-- XXX: also, this is here transiently so that the rejection continues
+-- to work while the interaction between the interpreter and the
+-- typechecker is rationalized. In the long run, the rejection should
+-- really belong only to the repl for repl purposes and the
+-- polymorphism check should be part of the currently nonexistent
+-- incremental interface to the typechecker. Alternatively, if there
+-- are cases that really require rejection of polymorphic expressions
+-- at the top level, they also require rejection of polymorphic
+-- expressions in nested do-blocks that aren't inside functions, and
+-- it can and should all happen inside the typechecker.
+isPolymorphic :: SS.Type -> Bool
+isPolymorphic ty0 = case ty0 of
+    SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyRecord _pos fields -> any isPolymorphic fields
+    SS.TyVar _pos _a -> False
+    SS.TyUnifyVar _pos _ix -> True
+
+
 -- Environment -----------------------------------------------------------------
 
 bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
 bindPatternLocal pat ms v env =
   case pat of
-    SS.PWild _   -> env
-    SS.PVar x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
-    SS.PTuple ps ->
+    SS.PWild _pos _   -> env
+    SS.PVar _pos x mt  -> extendLocal x (ms <|> (SS.tMono <$> mt)) Nothing v env
+    SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   Just t -> error ("bindPatternLocal: expected tuple type " ++ show t)
         _ -> error "bindPatternLocal: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternLocal pat' ms v env
 
 bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
 bindPatternEnv pat ms v env =
   case pat of
-    SS.PWild _   -> pure env
-    SS.PVar x mt ->
+    SS.PWild _pos _   -> pure env
+    SS.PVar _pos x mt ->
       do sc <- getSharedContext
          liftIO $ extendEnv sc x (ms <|> (SS.tMono <$> mt)) Nothing v env
-    SS.PTuple ps ->
+    SS.PTuple _pos ps ->
       case v of
         VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
-                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                  Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   Just t -> error ("bindPatternEnv: expected tuple type " ++ show t)
         _ -> error "bindPatternEnv: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternEnv pat' ms v env
+
+-- Typechecker ----------------------------------------------------------------
+
+-- Process a typechecker result.
+-- Wraps the typechecker in the stuff needed to print its warnings and errors.
+--
+-- XXX: this code should probably live inside the typechecker.
+--
+-- Usage is processTypeCheck $ checkStmt ...
+type MsgList = [(SS.Pos, String)]
+processTypeCheck :: InteractiveMonad m => (Either MsgList a, MsgList) -> m a
+processTypeCheck (errs_or_output, warns) =
+  liftTopLevel $ do
+    let issueWarning (pos, msg) =
+          -- XXX the print functions should be what knows how to show positions...
+          printOutLnTop Warn (show pos ++ ": Warning: " ++ msg)
+    mapM_ issueWarning warns
+    either failTypecheck return errs_or_output
 
 -- Interpretation of SAWScript -------------------------------------------------
 
@@ -150,62 +216,64 @@ interpret :: SS.Expr -> TopLevel Value
 interpret expr =
     let ?fileReader = BS.readFile in
     case expr of
-      SS.Bool b              -> return $ VBool b
-      SS.String s            -> return $ VString (Text.pack s)
-      SS.Int z               -> return $ VInteger z
-      SS.Code str            -> do sc <- getSharedContext
-                                   cenv <- fmap rwCryptol getMergedEnv
-                                   --io $ putStrLn $ "Parsing code: " ++ show str
-                                   --showCryptolEnv' cenv
-                                   t <- io $ CEnv.parseTypedTerm sc cenv
-                                           $ locToInput str
-                                   return (toValue t)
-      SS.CType str           -> do cenv <- fmap rwCryptol getMergedEnv
-                                   s <- io $ CEnv.parseSchema cenv
-                                           $ locToInput str
-                                   return (toValue s)
-      SS.Array es            -> VArray <$> traverse interpret es
-      SS.Block stmts         -> interpretStmts stmts
-      SS.Tuple es            -> VTuple <$> traverse interpret es
-      SS.Record bs           -> VRecord <$> traverse interpret bs
-      SS.Index e1 e2         -> do a <- interpret e1
-                                   i <- interpret e2
-                                   return (indexValue a i)
-      SS.Lookup e n          -> do a <- interpret e
-                                   return (lookupValue a n)
-      SS.TLookup e i         -> do a <- interpret e
-                                   return (tupleLookupValue a i)
-      SS.Var x               -> do rw <- getMergedEnv
-                                   case Map.lookup x (rwValues rw) of
-                                     Nothing -> fail $ "unknown variable: " ++ SS.getVal x
-                                     Just v -> return (addTrace (show x) v)
-      SS.Function pat e      -> do env <- getLocalEnv
-                                   let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
-                                   return $ VLambda f
-      SS.Application e1 e2   -> do v1 <- interpret e1
-                                   v2 <- interpret e2
-                                   case v1 of
-                                     VLambda f -> f v2
-                                     _ -> fail $ "interpret Application: " ++ show v1
-      SS.Let dg e            -> do env' <- interpretDeclGroup dg
-                                   withLocalEnv env' (interpret e)
-      SS.TSig e _            -> interpret e
-      SS.IfThenElse e1 e2 e3 -> do v1 <- interpret e1
-                                   case v1 of
-                                     VBool b -> interpret (if b then e2 else e3)
-                                     _ -> fail $ "interpret IfThenElse: " ++ show v1
-      SS.LExpr _ e           -> interpret e
+      SS.Bool _ b              -> return $ VBool b
+      SS.String _ s            -> return $ VString s
+      SS.Int _ z               -> return $ VInteger z
+      SS.Code str              -> do sc <- getSharedContext
+                                     cenv <- fmap rwCryptol getMergedEnv
+                                     --io $ putStrLn $ "Parsing code: " ++ show str
+                                     --showCryptolEnv' cenv
+                                     t <- io $ CEnv.parseTypedTerm sc cenv
+                                             $ locToInput str
+                                     return (toValue t)
+      SS.CType str             -> do cenv <- fmap rwCryptol getMergedEnv
+                                     s <- io $ CEnv.parseSchema cenv
+                                             $ locToInput str
+                                     return (toValue s)
+      SS.Array _ es            -> VArray <$> traverse interpret es
+      SS.Block _ stmts         -> interpretStmts stmts
+      SS.Tuple _ es            -> VTuple <$> traverse interpret es
+      SS.Record _ bs           -> VRecord <$> traverse interpret bs
+      SS.Index _ e1 e2         -> do a <- interpret e1
+                                     i <- interpret e2
+                                     return (indexValue a i)
+      SS.Lookup _ e n          -> do a <- interpret e
+                                     return (lookupValue a n)
+      SS.TLookup _ e i         -> do a <- interpret e
+                                     return (tupleLookupValue a i)
+      SS.Var x                 -> do rw <- getMergedEnv
+                                     case Map.lookup x (rwValues rw) of
+                                       Nothing -> fail $ Text.unpack $ "unknown variable: " <> SS.getVal x
+                                       Just v -> return (addTrace (show x) v)
+      SS.Function _ pat e      -> do env <- getLocalEnv
+                                     let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
+                                     return $ VLambda f
+      SS.Application _ e1 e2   -> do v1 <- interpret e1
+                                     v2 <- interpret e2
+                                     case v1 of
+                                       VLambda f -> f v2
+                                       _ -> fail $ "interpret Application: " ++ show v1
+      SS.Let _ dg e            -> do env' <- interpretDeclGroup dg
+                                     withLocalEnv env' (interpret e)
+      SS.TSig _ e _            -> interpret e
+      SS.IfThenElse _ e1 e2 e3 -> do v1 <- interpret e1
+                                     case v1 of
+                                       VBool b -> interpret (if b then e2 else e3)
+                                       _ -> fail $ "interpret IfThenElse: " ++ show v1
 
-locToInput :: Located String -> CEnv.InputText
+locToInput :: Located Text -> CEnv.InputText
 locToInput l = CEnv.InputText { CEnv.inpText = getVal l
                               , CEnv.inpFile = file
                               , CEnv.inpLine = ln
                               , CEnv.inpCol  = col + 2 -- for dropped }}
                               }
   where
-  (file,ln,col) =
-    case locatedPos l of
+  (file, ln, col) = extract $ locatedPos l
+  extract pos = case pos of
       SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.FileOnlyPos f -> (f, 1, 1)
+      SS.FileAndFunctionPos f _ -> (f, 1, 1)
+      SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
       SS.Unknown       -> ("Unknown", 1, 1)
@@ -218,9 +286,9 @@ interpretDecl env (SS.Decl _ pat mt expr) = do
 interpretFunction :: LocalEnv -> SS.Expr -> Value
 interpretFunction env expr =
     case expr of
-      SS.Function pat e -> VLambda f
+      SS.Function _ pat e -> VLambda f
         where f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpret e)
-      SS.TSig e _ -> interpretFunction env e
+      SS.TSig _ e _ -> interpretFunction env e
       _ -> error "interpretFunction: not a function"
 
 interpretDeclGroup :: SS.DeclGroup -> TopLevel LocalEnv
@@ -236,15 +304,22 @@ interpretDeclGroup (SS.Recursive ds) =
 interpretStmts :: [SS.Stmt] -> TopLevel Value
 interpretStmts stmts =
     let ?fileReader = BS.readFile in
+    -- XXX are the uses of withPosition here suitable? not super clear
     case stmts of
       [] -> fail "empty block"
-      [SS.StmtBind pos (SS.PWild _) _ e] -> withPosition pos (interpret e)
-      SS.StmtBind pos pat _mcxt e : ss ->
+      [SS.StmtBind pos (SS.PWild _patpos _) e] -> withPosition pos (interpret e)
+      SS.StmtBind pos pat e : ss ->
           do env <- getLocalEnv
              v1 <- withPosition pos (interpret e)
              let f v = withLocalEnv (bindPatternLocal pat Nothing v env) (interpretStmts ss)
              bindValue pos v1 (VLambda f)
-      SS.StmtLet _ bs : ss -> interpret (SS.Let bs (SS.Block ss))
+      SS.StmtLet pos bs : ss ->
+          -- Caution: the position pos is not the correct position for
+          -- the block ss. However, interpret on Block ignores the
+          -- position there, so all we need is a placeholder for it to
+          -- ignore. Therefore, don't take the trouble to compute the
+          -- correct position (the bounding box on the statements ss).
+          interpret (SS.Let pos bs (SS.Block pos ss))
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv
@@ -265,59 +340,75 @@ stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
   fst <$> runTopLevel (withLocalEnv emptyLocal (interpretStmts stmts)) ro rw
 
+-- Get the type of an AST element. For now, only patterns because that's
+-- what we're using.
+--
+-- Assumes we have been through the typechecker and the types are filled in.
+--
+-- XXX: this should be a typeclass function with instances for all the AST
+-- types.
+---
+-- XXX: also it should be moved to ASTUtil once we have such a place.
+getType :: SS.Pattern -> SS.Type
+getType pat = case pat of
+    SS.PWild _pos ~(Just t) -> t
+    SS.PVar _pos _x ~(Just t) -> t
+    SS.PTuple tuplepos pats ->
+        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+
 processStmtBind ::
   InteractiveMonad m =>
   Bool ->
   SS.Pattern ->
-  Maybe SS.Type ->
   SS.Expr ->
   m ()
-processStmtBind printBinds pat _mc expr = do -- mx mt
-  let (mx, mt) = case pat of
-        SS.PWild t -> (Nothing, t)
-        SS.PVar x t -> (Just x, t)
-        _ -> (Nothing, Nothing)
-  let it = SS.Located "it" "it" SS.PosREPL
-  let lname = maybe it id mx
-  ctx <- SS.tContext <$> getMonadContext
-  let expr' = case mt of
-                Nothing -> expr
-                Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl (SS.getPos expr) pat Nothing expr'
+processStmtBind printBinds pat expr = do -- mx mt
   rw <- liftTopLevel getMergedEnv
-  let opts = rwPPOpts rw
 
-  ~(SS.Decl _ _ (Just schema) expr'') <- liftTopLevel $
-    either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+  val <- liftTopLevel $ interpret expr
 
-  val <- liftTopLevel $ interpret expr''
+  -- Fetch the type from updated pattern, since the typechecker will
+  -- have filled it in there.
+  --
+  -- Note that this type won't include the current monad type, because
+  -- it's the type of the value that the pattern on the left of <- is
+  -- trying to bind.
+  let ty = getType pat
 
-  -- Run the resulting TopLevel action.
-  (result, ty) <-
-    case schema of
-      SS.Forall [] t ->
-        case t of
-          SS.TyCon SS.BlockCon [c, t'] | c == ctx -> do
-            result <- actionFromValue val
-            return (result, t')
-          _ -> return (val, t)
-      _ -> fail $ "Not a monomorphic type: " ++ SS.pShow schema
+  -- Reject polymorphic values. XXX: as noted above this should either
+  -- be inside the typechecker or restricted to the repl.
+  when (isPolymorphic ty) $ fail $ "Not a monomorphic type: " ++ SS.pShow ty
+
+  -- Run the resulting TopLevel (or ProofScript) action.
+  result <- actionFromValue val
+
   --io $ putStrLn $ "Top-level bind: " ++ show mx
   --showCryptolEnv
 
-  -- Print non-unit result if it was not bound to a variable
-  case pat of
-    SS.PWild _ | printBinds && not (isVUnit result) ->
-      liftTopLevel $
-      do nenv <- io . scGetNamingEnv =<< getSharedContext
-         printOutLnTop Info (showsPrecValue opts nenv 0 result "")
-    _ -> return ()
+  -- When in the repl, print the result.
+  when printBinds $ do
+    let opts = rwPPOpts rw
 
-  -- Print function type if result was a function
-  case ty of
-    SS.TyCon SS.FunCon _ ->
-      liftTopLevel $ printOutLnTop Info $ getVal lname ++ " : " ++ SS.pShow ty
-    _ -> return ()
+    -- Extract the variable, if any, from the pattern. If there isn't
+    -- any single variable use "it".
+    let name = case pat of
+          SS.PWild _patpos _t -> "it"
+          SS.PVar _patpos x _t -> getVal x
+          SS.PTuple _patpos _pats -> "it"
+
+    -- Print non-unit result if it was not bound to a variable
+    case pat of
+      SS.PWild _ _ | not (isVUnit result) ->
+        liftTopLevel $
+        do nenv <- io . scGetNamingEnv =<< getSharedContext
+           printOutLnTop Info (showsPrecValue opts nenv 0 result "")
+      _ -> return ()
+
+    -- Print function type if result was a function
+    case ty of
+      SS.TyCon _ SS.FunCon _ ->
+        liftTopLevel $ printOutLnTop Info $ Text.unpack $ name <> " : " <> SS.pShowText ty
+      _ -> return ()
 
   liftTopLevel $
    do rw' <- getTopLevelRW
@@ -342,29 +433,30 @@ instance InteractiveMonad ProofScript where
   actionFromValue = fromValue
   getMonadContext = return SS.ProofScript
 
--- | Interpret a block-level statement in the TopLevel monad.
+-- | Interpret a block-level statement in an interactive monad (TopLevel or ProofScript)
 interpretStmt :: InteractiveMonad m =>
   Bool {-^ whether to print non-unit result values -} ->
   SS.Stmt ->
   m ()
-interpretStmt printBinds stmt =
-  let ?fileReader = BS.readFile in
-  case stmt of
+interpretStmt printBinds stmt = do
+  let ?fileReader = BS.readFile
 
-    SS.StmtBind pos pat mc expr ->
-      withTopLevel (withPosition pos) (processStmtBind printBinds pat mc expr)
+  ctx <- getMonadContext
+  rw <- liftTopLevel getMergedEnv
+  stmt' <- processTypeCheck $ checkStmt (rwValueTypes rw) (rwNamedTypes rw) ctx stmt
 
-    SS.StmtLet _ dg           ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
-         dg' <- either failTypecheck return $
-                checkDeclGroup (rwTypes rw) (rwTypedef rw) dg
-         env <- interpretDeclGroup dg'
+  case stmt' of
+
+    SS.StmtBind pos pat expr ->
+      withTopLevel (withPosition pos) (processStmtBind printBinds pat expr)
+
+    SS.StmtLet _pos dg ->
+      liftTopLevel $ do
+         env <- interpretDeclGroup dg
          withLocalEnv env getMergedEnv >>= putTopLevelRW
 
     SS.StmtCode _ lstr ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          sc <- getSharedContext
          --io $ putStrLn $ "Processing toplevel code: " ++ show lstr
          --showCryptolEnv
@@ -373,8 +465,7 @@ interpretStmt printBinds stmt =
          --showCryptolEnv
 
     SS.StmtImport _ imp ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          sc <- getSharedContext
          --showCryptolEnv
          let mLoc = iModule imp
@@ -385,15 +476,14 @@ interpretStmt printBinds stmt =
          --showCryptolEnv
 
     SS.StmtTypedef _ name ty ->
-      liftTopLevel $
-      do rw <- getTopLevelRW
+      liftTopLevel $ do
          putTopLevelRW $ addTypedef (getVal name) ty rw
 
 interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain = 
+interpretFile file runMain =
   bracketTopLevel (io getCurrentDirectory) (io . setCurrentDirectory) (const interp)
   where
-    interp = 
+    interp =
       do  opts <- getOptions
           io $ setCurrentDirectory (takeDirectory file)
           stmts <- io $ SAWScript.Import.loadFile opts file
@@ -450,7 +540,9 @@ buildTopLevelEnv proxy opts =
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
-       thmDB <- newTheoremDB
+       mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
+         Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+         _ -> return Nothing
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roJavaCodebase = jcb
@@ -476,8 +568,8 @@ buildTopLevelEnv proxy opts =
 
        let rw0 = TopLevelRW
                    { rwValues     = valueEnv primsAvail opts bic
-                   , rwTypes      = primTypeEnv primsAvail
-                   , rwTypedef    = Map.empty
+                   , rwValueTypes = primValueTypeEnv primsAvail
+                   , rwNamedTypes = primNamedTypeEnv primsAvail
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwMonadify   = Monadify.defaultMonEnv
@@ -485,7 +577,8 @@ buildTopLevelEnv proxy opts =
                    , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwSharedContext = sc
-                   , rwTheoremDB = thmDB
+                   , rwSolverCache = mb_cache
+                   , rwTheoremDB = emptyTheoremDB
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
@@ -501,6 +594,8 @@ buildTopLevelEnv proxy opts =
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
                    , rwAllocSymInitCheck = True
+                   , rwWhat4PushMuxOps = False
+                   , rwNoSatisfyingWriteFreshConstant = True
                    , rwCrucibleTimeout = CC.defaultSAWCoreBackendTimeout
                    , rwPathSatSolver = CC.PathSat_Z3
                    , rwSkipSafetyProofs = False
@@ -537,7 +632,8 @@ add_primitives lc bic opts = do
   let lcs = Set.singleton lc
   putTopLevelRW rw {
     rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
-  , rwTypes      = rwTypes rw `Map.union` primTypeEnv lcs
+  , rwValueTypes = rwValueTypes rw `Map.union` primValueTypeEnv lcs
+  , rwNamedTypes = rwNamedTypes rw `Map.union` primNamedTypeEnv lcs
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
@@ -635,6 +731,24 @@ disable_lax_loads_and_stores = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxLoadsAndStores = False }
 
+set_solver_cache_path :: FilePath -> TopLevel ()
+set_solver_cache_path path = do
+  rw <- getTopLevelRW
+  case rwSolverCache rw of
+    Just _ -> onSolverCache (setSolverCachePath path)
+    Nothing -> do cache <- io $ openSolverCache path
+                  putTopLevelRW rw { rwSolverCache = Just cache }
+
+clean_mismatched_versions_solver_cache :: TopLevel ()
+clean_mismatched_versions_solver_cache = do
+  vs <- io $ getSolverBackendVersions allBackends
+  onSolverCache (cleanMismatchedVersionsSolverCache vs)
+
+test_solver_cache_stats :: Integer -> Integer -> Integer -> Integer ->
+                           Integer -> TopLevel ()
+test_solver_cache_stats sz ls ls_f is is_f =
+  onSolverCache (testSolverCacheStats sz ls ls_f is is_f)
+
 enable_debug_intrinsics :: TopLevel ()
 enable_debug_intrinsics = do
   rw <- getTopLevelRW
@@ -705,6 +819,26 @@ disable_alloc_sym_init_check = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwAllocSymInitCheck = False }
 
+enable_no_satisfying_write_fresh_constant :: TopLevel ()
+enable_no_satisfying_write_fresh_constant = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwNoSatisfyingWriteFreshConstant = True }
+
+disable_no_satisfying_write_fresh_constant :: TopLevel ()
+disable_no_satisfying_write_fresh_constant = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwNoSatisfyingWriteFreshConstant = False }
+
+enable_what4_push_mux_ops :: TopLevel ()
+enable_what4_push_mux_ops = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4PushMuxOps = True }
+
+disable_what4_push_mux_ops :: TopLevel ()
+disable_what4_push_mux_ops = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4PushMuxOps = False }
+
 set_crucible_timeout :: Integer -> TopLevel ()
 set_crucible_timeout t = do
   rw <- getTopLevelRW
@@ -738,6 +872,37 @@ set_min_sharing b = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsMinSharing = b } }
 
+-- | 'set_memoization_hash i' changes the memoization strategy for terms:
+-- memoization identifiers will include the first 'i' digits of the hash of the
+-- term they memoize. This is useful to help keep memoization identifiers of the
+-- same term as constant as possible across different executions of a proof
+-- script over the course of its development.
+set_memoization_hash :: Int -> TopLevel ()
+set_memoization_hash i = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = Hash i } }
+
+-- | 'set_memoization_hash_incremental i' changes the memoization strategy for
+-- terms: memoization identifiers will include the first 'i' digits of the hash
+-- of the term they memoize, as well as the value of a global counter that
+-- increments each time a term is memoized. This is useful to help keep
+-- memoization identifiers of the same term as constant as possible across
+-- different executions of a proof script over the course of its development, as
+-- well as to freshen memoization identifiers in the unlikely case of term hash
+-- collisions.
+set_memoization_hash_incremental :: Int -> TopLevel ()
+set_memoization_hash_incremental i = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = HashIncremental i } }
+
+-- | `set_memoization_incremental` changes the memoization strategy for terms:
+-- memoization identifiers will only include the value of a global counter that
+-- increments each time a term is memoized.
+set_memoization_incremental :: TopLevel ()
+set_memoization_incremental = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) {ppOptsMemoStyle = Incremental } }
+
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
@@ -762,11 +927,41 @@ print_value v = do
   nenv <- io . scGetNamingEnv =<< getSharedContext
   printOutLnTop Info (showsPrecValue opts nenv 0 v "")
 
-readSchema :: String -> SS.Schema
-readSchema str =
-  case parseSchema (lexSAW "internal" str) of
-    Left err -> error (show err)
+-- | Read a type schema. This is used to digest the type signatures
+-- for builtins, and the expansions for builtin typedefs.
+--
+-- The first argument (fakeFileName) is a string to pass as the
+-- filename for the lexer, which (complete with line and column
+-- numbering of dubious value) will go into the positions of the
+-- elements of the resulting type.
+--
+-- FUTURE: we should figure out how to generate more meaningful
+-- positions (like "third argument of concat") but this at least
+-- allows telling the user which builtin the type came from.
+--
+readSchema :: FilePath -> Text -> SS.Schema
+readSchema fakeFileName str =
+  let croak what msg =
+        error (what ++ " error in builtin " ++ Text.unpack str ++ ": " ++ msg)
+      tokens =
+        let (tokens', optmsg) = lexSAW fakeFileName str in
+        -- XXX clean this up when we clean out the message printing infrastructure
+        case optmsg of
+            Just (Error, _pos, msg) -> croak "Lexer" $ Text.unpack msg
+            Just (_, _pos, _msg) -> tokens'  -- ignore warnings for now
+            Nothing -> tokens'
+  in
+  case parseSchema tokens of
+    Left err -> croak "Parse" $ show err
     Right schema -> schema
+
+data PrimType
+  = PrimType
+    { primTypeName :: SS.Name
+    , primTypeType :: SS.NamedType
+    , primTypeLife :: PrimitiveLifecycle
+    -- FUTURE: add doc strings for these?
+    }
 
 data Primitive
   = Primitive
@@ -776,6 +971,70 @@ data Primitive
     , primitiveDoc  :: [String]
     , primitiveFn   :: Options -> BuiltinContext -> Value
     }
+
+-- | Primitive types, that is, builtin types used by the primitives.
+--
+-- This excludes certain types that are built in more deeply and
+-- appear as entries in @TyCon in AST.hs. Note that those are also
+-- handled as reserved words in the lexer and parser. XXX: and there's
+-- no particular system to which are there and which are here; some of
+-- the ones there have no special syntax or semantics and should
+-- probably be moved here at some point.
+primTypes :: Map SS.Name PrimType
+primTypes = Map.fromList
+  [ abstype "BisimTheorem" Experimental
+  , abstype "CryptolModule" Current
+  , abstype "FunctionProfile" Experimental
+  , abstype "FunctionSkeleton" Experimental
+  , abstype "Ghost" Current
+  , abstype "HeapsterEnv" Experimental
+  , abstype "JVMSetup" Current
+  , abstype "JVMValue" Current
+  , abstype "JavaClass" Current
+  , abstype "JavaType" Current
+  , abstype "LLVMModule" Current
+  , abstype "LLVMType" Current
+  , abstype "MIRAdt" Experimental
+  , abstype "MIRModule" Experimental
+  , abstype "MIRType" Experimental
+  , abstype "MIRValue" Experimental
+  , abstype "ModuleSkeleton" Experimental
+  , abstype "ProofResult" Current
+  , abstype "Refnset" Experimental
+  , abstype "SatResult" Current
+  , abstype "SetupValue" Current
+  , abstype "Simpset" Current
+  , abstype "SkeletonState" Experimental
+  , abstype "Theorem" Current
+  , abstype "Uninterp" Deprecated
+  , abstype "YosysSequential" Experimental
+  , abstype "YosysTheorem" Experimental
+  ]
+  where
+    -- abstract type
+    abstype :: Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    abstype name lc = (name, info)
+      where
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.AbstractType
+          , primTypeLife = lc
+          }
+
+    -- concrete type (not currently used)
+    _conctype :: Text -> Text -> PrimitiveLifecycle -> (SS.Name, PrimType)
+    _conctype name tystr lc = (name, info)
+      where
+        info = PrimType
+          { primTypeName = name
+          , primTypeType = SS.ConcreteType ty
+          , primTypeLife = lc
+          }
+        fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
+        ty = case readSchema fakeFileName tystr of
+            SS.Forall [] ty' -> ty'
+            _ -> panic "primTypes" ["Builtin typedef name not monomorphic"]
+
 
 primitives :: Map SS.LName Primitive
 primitives = Map.fromList
@@ -845,6 +1104,11 @@ primitives = Map.fromList
     (pureVal ((++) :: String -> String -> String))
     Current
     [ "Concatenate two strings to yield a third." ]
+
+  , prim "str_concats"          "[String] -> String"
+    (pureVal (concat :: [String] -> String))
+    Current
+    [ "Concatenate a list of strings together to yield a string." ]
 
   , prim "callcc" "{a} ((a -> TopLevel ()) -> TopLevel a) -> TopLevel a"
     (\_ _ -> toplevelCallCC)
@@ -1050,6 +1314,55 @@ primitives = Map.fromList
     , "currently are 'z3' and 'yices'."
     ]
 
+  , prim "set_solver_cache_path" "String -> TopLevel ()"
+    (pureVal set_solver_cache_path)
+    Current
+    [ "Create a solver result cache at the given path, add to that cache all results"
+    , "in the currently used solver result cache, if there is one, then use the newly"
+    , "created cache as the solver result cache going forward. Note that if the"
+    , "SAW_SOLVER_CACHE_PATH environment variable was set at startup but solver"
+    , "caching has yet to actually be used, then the value of the environment"
+    , "variable is ignored."
+    ]
+
+  , prim "clean_mismatched_versions_solver_cache" "TopLevel ()"
+    (pureVal clean_mismatched_versions_solver_cache)
+    Current
+    [ "Remove all entries in the solver result cache which were created"
+    , "using solver backend versions which do not match the versions"
+    , "in the current environment."
+    ]
+
+  , prim "print_solver_cache" "String -> TopLevel ()"
+    (pureVal (onSolverCache . printSolverCacheByHex))
+    Current
+    [ "Print all entries in the solver result cache whose SHA256 hash"
+    , "keys start with the given hex string. Providing an empty string"
+    , "results in all entries in the cache being printed."
+    ]
+
+  , prim "print_solver_cache_stats" "TopLevel ()"
+    (pureVal (onSolverCache printSolverCacheStats))
+    Current
+    [ "Print out statistics about how the solver cache has been used, namely:"
+    , "1. How many entries are in the cache (and where the cache is stored)"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session." ]
+
+  , prim "test_solver_cache_stats" "Int -> Int -> Int -> Int -> Int -> TopLevel ()"
+    (pureVal test_solver_cache_stats)
+    Current
+    [ "Test whether the values of the statistics printed out by"
+    , "print_solver_cache_stats are equal to those given, failing if this does not"
+    , "hold. Specifically, the arguments represent:"
+    , "1. How many entries are in the cache"
+    , "2. How many insertions into the cache have been made so far this session"
+    , "3. How many failed insertion attempts have been made so far this session"
+    , "4. How times cached results have been used so far this session"
+    , "5. How many failed attempted usages have occurred so far this session" ]
+
   , prim "enable_debug_intrinsics" "TopLevel ()"
     (pureVal enable_debug_intrinsics)
     Current
@@ -1096,6 +1409,40 @@ primitives = Map.fromList
     Current
     [ "Set the number times a subterm must be shared for it to be"
     ,  "let-bound in printer output." ]
+
+  , prim "set_memoization_hash" "Int -> TopLevel ()"
+    (pureVal set_memoization_hash)
+    Current
+    [ "`set_memoization_hash i` changes the memoization strategy "
+    , "for terms: memoization identifiers will include the first `i` "
+    , "digits of the hash of the term they memoize. This is useful "
+    , "to help keep memoization identifiers of the same term as "
+    , "constant as possible across different executions of a proof "
+    , "script over the course of its development."
+    ]
+
+  , prim "set_memoization_hash_incremental" "Int -> TopLevel ()"
+    (pureVal set_memoization_hash_incremental)
+    Current
+    [ "`set_memoization_hash_incremental i` changes the memoization "
+    , "strategy for terms: memoization identifiers will include the "
+    , "first `i` digits of the hash of the term they memoize, as well "
+    , "as the value of a global counter that increments each time a "
+    , "term is memoized. This is useful to help keep memoization "
+    , "identifiers of the same term as constant as possible across "
+    , "different executions of a proof script over the course of its "
+    , "development, as well as to freshen memoization identifiers in "
+    , "the unlikely case of term hash collisions."
+    ]
+
+  , prim "set_memoization_incremental" "TopLevel ()"
+    (pureVal set_memoization_incremental)
+    Current
+    [ "`set_memoization_incremental` changes the memoization strategy "
+    , "for terms: memoization identifiers will only include the value "
+    , "of a global counter that increments each time a term is memoized. "
+    , "This is the default."
+    ]
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
@@ -1468,10 +1815,24 @@ primitives = Map.fromList
     ]
 
   , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
-    (pureVal writeCoqCryptolModule)
+    (pureVal (writeCoqCryptolModule False))
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
     , "Coq."
+    , "The first argument is the file containing the module to export."
+    , "The second argument is the name of the file to output into,"
+    , "use an empty string to output to standard output."
+    , "The third argument is a list of pairs of notation substitutions:"
+    , "the operator on the left will be replaced with the identifier on"
+    , "the right, as we do not support notations on the Coq side."
+    , "The fourth argument is a list of identifiers to skip translating."
+    ]
+
+  , prim "write_coq_cryptol_module_monadic" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal (writeCoqCryptolModule True))
+    Experimental
+    [ "Write out a representation of a Cryptol module in Gallina syntax for"
+    , "Coq, using the monadified version of the given module."
     , "The first argument is the file containing the module to export."
     , "The second argument is the name of the file to output into,"
     , "use an empty string to output to standard output."
@@ -1494,17 +1855,19 @@ primitives = Map.fromList
     , "The third argument is a list of identifiers to skip translating."
     ]
 
-  , prim "write_coq_cryptol_primitives_for_sawcore" "String -> [(String, String)] -> [String] -> TopLevel ()"
+  , prim "write_coq_cryptol_primitives_for_sawcore"
+    "String -> String -> String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqCryptolPrimitivesForSAWCore)
     Experimental
-    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore in"
-    , "Gallina syntax for Coq."
-    , "The first argument is the name of the file to output into,"
-    , "use an empty string to output to standard output."
-    , "The second argument is a list of pairs of notation substitutions:"
+    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore and "
+    , "CryptolM.sawcore in Gallina syntax for Coq."
+    , "The first three arguments are the names of the output files for translating "
+    , "Cryptol.sawcore, SpecM.sawcore, and CryptolM.sawcore, respectively."
+    , "Use an empty string to output to standard output."
+    , "The fourth argument is a list of pairs of notation substitutions:"
     , "the operator on the left will be replaced with the identifier on"
     , "the right, as we do not support notations on the Coq side."
-    , "The third argument is a list of identifiers to skip translating."
+    , "The fifth argument is a list of identifiers to skip translating."
     ]
 
   , prim "offline_coq" "String -> ProofScript ()"
@@ -1563,6 +1926,31 @@ primitives = Map.fromList
     , "successful, and aborts if unsuccessful."
     ]
 
+  , prim "prove_bisim"         "ProofScript () -> [BisimTheorem] -> Term -> Term -> Term -> Term -> TopLevel BisimTheorem"
+    (pureVal proveBisimulation)
+    Experimental
+    [ "Use bisimulation to prove that two terms simulate each other.  The "
+    , "command takes the following arguments: "
+    , "1. The proof strategy to use"
+    , "2. A list of already proven bisimulation theorems"
+    , "3. A state relation `srel : lhsState -> rhsState -> Bit`"
+    , "4. An output relation `orel : (lhsState, output) -> (rhsState, output) -> Bit`"
+    , "5. A term `lhs : (lhsState, input) -> (lhsState, output)`"
+    , "6. A term `rhs : (rhsState, input) -> (rhsState, output)`"
+    , "and considers `lhs` and `rhs` bisimilar when the following two theorems hold:"
+    , "* OUTPUT RELATION THEOREM:"
+    , "   forall s1 s2 in."
+    , "     srel s1 s2 -> orel (lhs (s1, in)) (rhs (s2, in))"
+    , "* STATE RELATION THEOREM:"
+    , "   forall s1 s2 out1 out2."
+    , "     orel (s1, out1) (s2, out2) -> srel s1 s2"
+    , ""
+    , "LIMITATIONS: For now, the prove_bisim command has a couple limitations:"
+    , "* `lhs` and `rhs` (arguments 5 and 6) must be named functions."
+    , "* Each subterm present in the list of bisimulation theorems already"
+    , "  proven (argument 2) may be invoked at most once in `lhs` or `rhs`."
+    ]
+
   , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
@@ -1604,6 +1992,14 @@ primitives = Map.fromList
     (pureVal unfoldGoal)
     Current
     [ "Unfold the named subterm(s) within the current goal." ]
+
+  , prim "unfolding_fix_once" "[String] -> ProofScript ()"
+    (pureVal unfoldFixOnceGoal)
+    Current
+    [ "Unfold the named recursive constants once within the current goal."
+    , "Like `unfolding`, except that the recursive constants are unfolded"
+    , "only once, avoiding possible infinite evaluation."
+    ]
 
   , prim "simplify"            "Simpset -> ProofScript ()"
     (pureVal simplifyGoal)
@@ -1824,6 +2220,20 @@ primitives = Map.fromList
     (pureVal print_goal)
     Current
     [ "Print the current goal that a proof script is attempting to prove." ]
+  , prim "print_goal_inline"   "[Int] -> ProofScript ()"
+    (pureVal print_goal_inline)
+    Current
+    [ "Print the current goal that a proof script is attempting to prove,"
+    , "without generating `let` bindings for the provided indices. For"
+    , "example, `print_goal_inline [1,9,3]` will print the goal without"
+    , "inlining the variables that would otherwise be abstracted as `x@1`,"
+    , " `x@9`, and `x@3`. These indices are assigned deterministically with"
+    , "regard to a particular goal, but are not persistent across goals. As"
+    , "such, this should be used primarily when debugging a proof."
+    , ""
+    , "Note: incompatible with non-incremental memoization strategies - see"
+    , "`set_memoization_incremental` and `set_memoization_hash_incremental`."
+    ]
   , prim "write_goal" "String -> ProofScript ()"
     (pureVal write_goal)
     Current
@@ -1906,6 +2316,11 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+  , prim "bitwuzla"            "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
+
   , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
     Current
@@ -1915,6 +2330,11 @@ primitives = Map.fromList
     (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
+
+  , prim "cvc5"                "ProofScript ()"
+    (pureVal proveCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal." ]
 
   , prim "z3"                  "ProofScript ()"
     (pureVal proveZ3)
@@ -1931,6 +2351,13 @@ primitives = Map.fromList
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
+  , prim "unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal proveUnintBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "unint_z3"            "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
     Current
@@ -1945,12 +2372,24 @@ primitives = Map.fromList
     , "given list of names as uninterpreted."
     ]
 
+  , prim "unint_cvc5"            "[String] -> ProofScript ()"
+    (pureVal proveUnintCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "unint_yices"           "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
+
+  , prim "sbv_bitwuzla"        "ProofScript ()"
+    (pureVal proveBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal." ]
 
   , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)
@@ -1961,6 +2400,11 @@ primitives = Map.fromList
     (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
+
+  , prim "sbv_cvc5"            "ProofScript ()"
+    (pureVal proveCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal." ]
 
   , prim "sbv_z3"              "ProofScript ()"
     (pureVal proveZ3)
@@ -1977,6 +2421,13 @@ primitives = Map.fromList
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
+  , prim "sbv_unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal proveUnintBitwuzla)
+    Current
+    [ "Use the Bitwuzla theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "sbv_unint_z3"        "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
     Current
@@ -1988,6 +2439,13 @@ primitives = Map.fromList
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
+  , prim "sbv_unint_cvc5"        "[String] -> ProofScript ()"
+    (pureVal proveUnintCVC5)
+    Current
+    [ "Use the CVC5 theorem prover to prove the current goal. Leave the"
     , "given list of names as uninterpreted."
     ]
 
@@ -2086,6 +2544,13 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
+  , prim "w4_unint_bitwuzla" "[String] -> ProofScript ()"
+    (pureVal w4_unint_bitwuzla)
+    Current
+    [ "Prove the current goal using What4 (Bitwuzla backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "w4_unint_z3"         "[String] -> ProofScript ()"
     (pureVal w4_unint_z3)
     Current
@@ -2114,6 +2579,13 @@ primitives = Map.fromList
     , "given list of names as uninterpreted."
     ]
 
+  , prim "w4_unint_cvc5"         "[String] -> ProofScript ()"
+    (pureVal w4_unint_cvc5)
+    Current
+    [ "Prove the current goal using What4 (CVC5 backend). Leave the"
+    , "given list of names as uninterpreted."
+    ]
+
   , prim "w4_abc_aiger"        "ProofScript ()"
     (pureVal w4_abc_aiger)
     Current
@@ -2138,6 +2610,13 @@ primitives = Map.fromList
     , "using the What4 backend."
     ]
 
+  , prim "offline_w4_unint_bitwuzla" "[String] -> String -> ProofScript ()"
+    (pureVal offline_w4_unint_bitwuzla)
+    Current
+    [ "Write the current goal to the given file using What4 (Bitwuzla backend)"
+    , " in SMT-Lib2 format. Leave the given list of names as uninterpreted."
+    ]
+
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_z3)
     Current
@@ -2156,6 +2635,13 @@ primitives = Map.fromList
     (pureVal offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_cvc5"  "[String] -> String -> ProofScript ()"
+    (pureVal offline_w4_unint_cvc5)
+    Current
+    [ "Write the current goal to the given file using What4 (CVC5 backend) in"
     ," SMT-Lib2 format. Leave the given list of names as uninterpreted."
     ]
 
@@ -2744,7 +3230,21 @@ primitives = Map.fromList
     , "`llvm_points_to`). The Term is the tuple consisting of the"
     , "output parameters of the LLVM function: the return parameter, then"
     , "the parameters passed by reference (in the order given by"
-    , "`llvm_points_to`). For more flexibility, see `llvm_verify`."
+    , "`llvm_points_to`)."
+    , ""
+    , "When invoking `llvm_compositional_extract mod fn_name term_name ovs"
+    , "check_path_sat spec strat`, the arguments represent the following:"
+    , "  1. `mod`: The LLVM module containing the function to extract."
+    , "  2. `fn_name`: The name of the function to extract."
+    , "  3. `term_name`: The name of the `Term` to generate."
+    , "  4. `ovs`: A list of overrides to use in the proof that the extracted"
+    , "     function satisifies `spec`."
+    , "  5. `check_path_sat`: Whether to perform path satisfiability checks."
+    , "  6. `spec`: SAW specification for the extracted function."
+    , "  7. `strat`: Proof strategy to use when verifying that the extracted"
+    , "     function satisfies `spec`."
+    , ""
+    , "For more flexibility, see `llvm_verify`."
     ]
   , prim "crucible_llvm_compositional_extract"
     "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
@@ -3034,7 +3534,7 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate must hold.  Acts as `llvm_precond`"
     , "or `llvm_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `llvm_execute_func`."
+    , "it appears (i.e., before or after `llvm_execute_func`)."
     ]
 
   , prim "llvm_setup_with_tag" "String -> LLVMSetup () -> LLVMSetup ()"
@@ -3179,6 +3679,19 @@ primitives = Map.fromList
     , "the live variables in the loop evolve as the loop computes."
     ]
 
+  , prim "llvm_verify_fixpoint_chc_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> Term -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_fixpoint_chc_x86)
+    Experimental
+    [ "An experimental variant of 'llvm_verify_x86'. This variant can prove some properties"
+    , "involving simple loops with the help of a user-provided term that describes how"
+    , "the live variables in the loop evolve as the loop computes."
+    , ""
+    , "This differs from 'llvm_verify_fixpoint_x86' in that it leverages Z3's"
+    , "constrained horn-clause (CHC) functionality to synthesize some of the"
+    , "loop's properties."
+    ]
+
   , prim "llvm_verify_x86_with_invariant"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> (String, Int, Term) -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify_x86_with_invariant)
@@ -3266,6 +3779,37 @@ primitives = Map.fromList
     , "Disabling this check allows an override to apply when the memory region specified by the alloc_sym_init command"
     , "in the override specification is not written to in the calling context."
     , "This makes the implicit assumption that there is some unspecified byte at any valid memory address."
+    ]
+
+  , prim "enable_no_satisfying_write_fresh_constant" "TopLevel ()"
+    (pureVal enable_no_satisfying_write_fresh_constant)
+    Experimental
+    [ "When simulating LLVM code that performs an invalid write, make a fresh"
+    , "constant as a proof obligation. This constant will always fail, but it"
+    , "will also not be constant-folded away."
+    ]
+
+  , prim "disable_no_satisfying_write_fresh_constant" "TopLevel ()"
+    (pureVal disable_no_satisfying_write_fresh_constant)
+    Experimental
+    [ "When simulating LLVM code that performs an invalid write, return 'false'"
+    , "as a proof obligation."
+    ]
+
+  , prim "enable_what4_push_mux_ops" "TopLevel ()"
+    (pureVal enable_what4_push_mux_ops)
+    Experimental
+    [ "Push certain What4 operations (e.g., 'zext') down to the branches of"
+    , "'ite' expressions as much as possible. In some (but not all) circumstances,"
+    , "this can result in operations that are easier for SMT solvers to reason"
+    , "about."
+    ]
+
+  , prim "disable_what4_push_mux_ops" "TopLevel ()"
+    (pureVal disable_what4_push_mux_ops)
+    Experimental
+    [ "Do not push certain What4 operations (e.g., 'zext') down to the branches"
+    , "of 'ite' expressions as much as possible."
     ]
 
   , prim "set_crucible_timeout" "Int -> TopLevel ()"
@@ -3415,16 +3959,21 @@ primitives = Map.fromList
     ]
 
   -- Ghost state support
-  , prim "llvm_declare_ghost_state"
+  , prim "declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
+  , prim "llvm_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (pureVal declare_ghost_state)
+    Current
+    [ "Legacy alternative name for `declare_ghost_state`." ]
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal llvm_declare_ghost_state)
+    (pureVal declare_ghost_state)
     Current
-    [ "Legacy alternative name for `llvm_declare_ghost_state`." ]
+    [ "Legacy alternative name for `declare_ghost_state`." ]
 
   , prim "llvm_ghost_value"
     "Ghost -> Term -> LLVMSetup ()"
@@ -3437,6 +3986,20 @@ primitives = Map.fromList
     (pureVal llvm_ghost_value)
     Current
     [ "Legacy alternative name for `llvm_ghost_value`."]
+
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (pureVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
+
+  , prim "mir_ghost_value"
+    "Ghost -> Term -> MIRSetup ()"
+    (pureVal mir_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."]
 
   , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
@@ -3458,6 +4021,15 @@ primitives = Map.fromList
     (\_ _ -> toValue llvm_spec_size)
     Current
     [ "Legacy alternative name for `llvm_spec_size`." ]
+
+  , prim "llvm_ffi_setup"  "Term -> LLVMSetup ()"
+    (pureVal llvm_ffi_setup)
+    Experimental
+    [ "Generate a @LLVMSetup@ spec that can be used to verify that the given"
+    , "monomorphic Cryptol term, consisting of a Cryptol foreign function"
+    , "fully applied to any type arguments, has a correct foreign (LLVM)"
+    , "implementation with respect to its Cryptol implementation."
+    ]
 
     ---------------------------------------------------------------------
     -- Crucible/JVM commands
@@ -3602,7 +4174,7 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate must hold.  Acts as `jvm_precond`"
     , "or `jvm_postcond` depending on the phase of specification in which"
-    , "it appears (i.e., before or after `jvm_execute_func`."
+    , "it appears (i.e., before or after `jvm_execute_func`)."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
@@ -3610,6 +4182,15 @@ primitives = Map.fromList
     Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "method being verified."
+    ]
+
+  , prim "jvm_equal" "JVMValue -> JVMValue -> JVMSetup ()"
+    (pureVal jvm_equal)
+    Current
+    [ "State that two JVM values should be equal. Can be used as either a"
+    , "pre-condition or a post-condition. It is semantically equivalent to"
+    , "an `jvm_precond` or `jvm_postcond` statement which is an equality"
+    , "predicate, but potentially more efficient."
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
@@ -3671,6 +4252,385 @@ primitives = Map.fromList
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
     Current
     [ "Construct a `JVMValue` from a `Term`." ]
+
+    ---------------------------------------------------------------------
+    -- Crucible/MIR commands
+
+  , prim "mir_alloc" "MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc)
+    Experimental
+    [ "Declare that an immutable reference to the given type should be allocated"
+    , "in a MIR specification. Before `mir_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `mir_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
+    ]
+
+  , prim "mir_alloc_mut" "MIRType -> MIRSetup MIRValue"
+    (pureVal mir_alloc_mut)
+    Experimental
+    [ "Declare that a mutable reference to the given type should be allocated"
+    , "in a MIR specification. Before `mir_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `mir_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    , ""
+    , "This command will raise an error if a `mir_slice` or `mir_str` type is"
+    , "passed as an argument. To create slice reference, use the"
+    , "`mir_slice_value` or `mir_slice_range_value` functions instead."
+    ]
+
+  , prim "mir_array_value" "MIRType -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupArray :: Mir.Ty -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing an array of the given type, with the"
+    , "given list of values as elements."
+    ]
+
+  , prim "mir_assert" "Term -> MIRSetup ()"
+    (pureVal mir_assert)
+    Experimental
+    [ "State that the given predicate must hold.  Acts as `mir_precond`"
+    , "or `mir_postcond` depending on the phase of specification in which"
+    , "it appears (i.e., before or after `mir_execute_func`)."
+    ]
+
+  , prim "mir_enum_value" "MIRAdt -> String -> [MIRValue] -> MIRValue"
+    (funVal3 mir_enum_value)
+    Experimental
+    [ "Create a MIRValue representing a variant of a MIR enum with the given"
+    , "list of values as elements. The MIRAdt argument determines what enum"
+    , "type to create; use `mir_find_adt` to retrieve a MIRAdt value. The"
+    , "String argument represents the variant name."
+    ]
+
+  , prim "mir_equal" "MIRValue -> MIRValue -> MIRSetup ()"
+    (pureVal mir_equal)
+    Experimental
+    [ "State that two MIR values should be equal. Can be used as either a"
+    , "pre-condition or a post-condition. It is semantically equivalent to"
+    , "an `mir_precond` or `mir_postcond` statement which is an equality"
+    , "predicate, but potentially more efficient."
+    ]
+
+  , prim "mir_execute_func" "[MIRValue] -> MIRSetup ()"
+    (pureVal mir_execute_func)
+    Experimental
+    [ "Specify the given list of values as the arguments of the method."
+    ,  ""
+    , "The mir_execute_func statement also serves to separate the pre-state"
+    , "section of the spec (before mir_execute_func) from the post-state"
+    , "section (after mir_execute_func). The effects of some MIRSetup"
+    , "statements depend on whether they occur in the pre-state or post-state"
+    , "section."
+    ]
+
+  , prim "mir_find_adt" "MIRModule -> String -> [MIRType] -> MIRAdt"
+    (funVal3 mir_find_adt)
+    Experimental
+    [ "Consult the given MIRModule to find an algebraic data type (MIRAdt)"
+    , "with the given String as an identifier and the given MIRTypes as the"
+    , "types used to instantiate the type parameters. If such a MIRAdt cannot"
+    , "be found in the MIRModule, this will raise an error."
+    ]
+
+  , prim "mir_fresh_cryptol_var" "String -> Type -> MIRSetup Term"
+    (pureVal mir_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a MIR specification. The given name is used only for"
+    , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
+    , "there isn't an appropriate MIR type, such as the Cryptol Array type."
+    ]
+
+  , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
+    (pureVal mir_fresh_expanded_value)
+    Experimental
+    [ "Create a MIR value entirely populated with fresh symbolic variables."
+    , "For compound types such as structs and arrays, this will explicitly set"
+    , "each field or element to contain a fresh symbolic variable. The String"
+    , "argument is used as a prefix in each of the symbolic variables."
+    ]
+
+  , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
+    (pureVal mir_fresh_var)
+    Experimental
+    [ "Create a fresh symbolic variable for use within a MIR"
+    , "specification. The name is used only for pretty-printing."
+    ]
+
+  , prim "mir_load_module" "String -> TopLevel MIRModule"
+    (pureVal mir_load_module)
+    Experimental
+    [ "Load a MIR JSON file and return a handle to it." ]
+
+  , prim "mir_mux_values" "Term -> MIRValue -> MIRValue -> MIRValue"
+    (pureVal mir_mux_values)
+    Experimental
+    [ "Mux two MIRValues based on whether a (possibly symbolic) Term predicate"
+    , "holds or not. The Term argument must have the Cryptol type Bit, and the"
+    , "two MIRValue arguments must have the same type."
+    ]
+
+  , prim "mir_points_to" "MIRValue -> MIRValue -> MIRSetup ()"
+    (pureVal mir_points_to)
+    Experimental
+    [ "Declare that the memory location indicated by the given reference (first"
+    , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before `mir_execute_func`) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after `mir_execute_func`), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "mir_postcond" "Term -> MIRSetup ()"
+    (pureVal mir_postcond)
+    Experimental
+    [ "State that the given predicate is a post-condition of execution of the"
+    , "method being verified."
+    ]
+
+  , prim "mir_precond" "Term -> MIRSetup ()"
+    (pureVal mir_precond)
+    Experimental
+    [ "State that the given predicate is a pre-condition on execution of the"
+    , "method being verified."
+    ]
+
+  , prim "mir_return" "MIRValue -> MIRSetup ()"
+    (pureVal mir_return)
+    Experimental
+    [ "Specify the given value as the return value of the method. A"
+    , "mir_return statement is required if and only if the method"
+    , "has a non-() return type." ]
+
+  , prim "mir_slice_value" "MIRValue -> MIRValue"
+    (pureVal mir_slice_value)
+    Experimental
+    [ "Create a MIRValue representing a slice of type &[T]. The argument must"
+    , "be a reference to an array value, whose overall type must be &[T; N]"
+    , "for some length N."
+    ]
+
+  , prim "mir_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
+    (pureVal mir_slice_range_value)
+    Experimental
+    [ "Create a MIRValue representing a slice of type &[T] over a given range."
+    , "The first argument must be a reference to an array value, whose overall"
+    , "type must be &[T; N] for some length N. The second and third arguments"
+    , "represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed N."
+    ]
+
+  , prim "mir_str_slice_value" "MIRValue -> MIRValue"
+    (pureVal mir_str_slice_value)
+    Experimental
+    [ "Create a MIRValue representing a slice of type &str. The argument must"
+    , "be a reference to an array value, whose overall type must be &[u8; N]"
+    , "for some length N. This array is expected to be a UTF-8-encoded sequence"
+    , "of bytes."
+    ]
+
+  , prim "mir_str_slice_range_value" "MIRValue -> Int -> Int -> MIRValue"
+    (pureVal mir_str_slice_range_value)
+    Experimental
+    [ "Create a MIRValue representing a slice of type &str over a given range."
+    , "The first argument must be a reference to an array value, whose overall"
+    , "type must be &[u8; N] for some length N. This array is expected to be a"
+    , "UTF-8-encoded sequence of bytes. The second and third arguments"
+    , "represent the start and end of the range. The start must not"
+    , "exceed the end, and the end must not exceed N."
+    ]
+
+  , prim "mir_struct_value" "MIRAdt -> [MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupStruct :: Mir.Adt -> [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR struct with the given list of"
+    , "values as elements. The MIRAdt argument determines what struct type to"
+    , "create; use `mir_find_adt` to retrieve a MIRAdt value."
+    ]
+
+  , prim "mir_static"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing a reference to the named static."
+    , "The String should be the name of a static value."
+    ]
+
+  , prim "mir_static_initializer"
+    "String -> MIRValue"
+    (pureVal (CMS.SetupGlobalInitializer () :: String -> CMS.SetupValue MIR))
+    Experimental
+    [ "Return a MIRValue representing the value of the initializer of a named"
+    , "static. The String should be the name of a static value."
+    ]
+
+  , prim "mir_term"
+    "Term -> MIRValue"
+    (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue MIR))
+    Experimental
+    [ "Construct a `MIRValue` from a `Term`." ]
+
+  , prim "mir_tuple_value" "[MIRValue] -> MIRValue"
+    (pureVal (CMS.SetupTuple () :: [CMS.SetupValue MIR] -> CMS.SetupValue MIR))
+    Experimental
+    [ "Create a SetupValue representing a MIR tuple with the given list of"
+    , "values as elements."
+    ]
+
+  , prim "mir_unsafe_assume_spec"
+    "MIRModule -> String -> MIRSetup () -> TopLevel MIRSpec"
+    (pureVal mir_unsafe_assume_spec)
+    Experimental
+    [ "Return a MIRSpec corresponding to a MIRSetup block, as would be"
+    , "returned by mir_verify but without performing any verification."
+    ]
+
+  , prim "mir_verify"
+    "MIRModule -> String -> [MIRSpec] -> Bool -> MIRSetup () -> ProofScript () -> TopLevel MIRSpec"
+    (pureVal mir_verify)
+    Experimental
+    [ "Verify the MIR function named by the second parameter in the module"
+    , "specified by the first. The third parameter lists the MIRSpec"
+    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    , "parameter enables or disables path satisfiability checking. The fifth"
+    , "describes how to set up the symbolic execution engine before verification."
+    , "And the last gives the script to use to prove the validity of the resulting"
+    , "verification conditions."
+    ]
+
+  , prim "mir_adt" "MIRAdt -> MIRType"
+    (pureVal mir_adt)
+    Experimental
+    [ "The type of a MIR algebraic data type (ADT), i.e., a struct or enum,"
+    , "corresponding to the given MIRAdt. Use the `mir_find_adt` command to"
+    , "retrieve a MIRAdt value."
+    ]
+
+  , prim "mir_array" "Int -> MIRType -> MIRType"
+    (pureVal mir_array)
+    Experimental
+    [ "The type of MIR arrays with the given number of elements of the"
+    , "given type." ]
+
+  , prim "mir_bool" "MIRType"
+    (pureVal mir_bool)
+    Experimental
+    [ "The type of MIR booleans." ]
+
+  , prim "mir_char" "MIRType"
+    (pureVal mir_char)
+    Experimental
+    [ "The type of MIR characters." ]
+
+  , prim "mir_i8" "MIRType"
+    (pureVal mir_i8)
+    Experimental
+    [ "The type of MIR 8-bit signed integers." ]
+
+  , prim "mir_i16" "MIRType"
+    (pureVal mir_i16)
+    Experimental
+    [ "The type of MIR 16-bit signed integers." ]
+
+  , prim "mir_i32" "MIRType"
+    (pureVal mir_i32)
+    Experimental
+    [ "The type of MIR 32-bit signed integers." ]
+
+  , prim "mir_i64" "MIRType"
+    (pureVal mir_i64)
+    Experimental
+    [ "The type of MIR 64-bit signed integers." ]
+
+  , prim "mir_i128" "MIRType"
+    (pureVal mir_i128)
+    Experimental
+    [ "The type of MIR 128-bit signed integers." ]
+
+  , prim "mir_isize" "MIRType"
+    (pureVal mir_isize)
+    Experimental
+    [ "The type of MIR pointer-sized signed integers." ]
+
+  , prim "mir_f32" "MIRType"
+    (pureVal mir_f32)
+    Experimental
+    [ "The type of MIR single-precision floating-point values." ]
+
+  , prim "mir_f64" "MIRType"
+    (pureVal mir_f64)
+    Experimental
+    [ "The type of MIR double-precision floating-point values." ]
+
+  , prim "mir_lifetime" "MIRType"
+    (pureVal mir_lifetime)
+    Experimental
+    [ "The type of MIR lifetimes." ]
+
+  , prim "mir_ref" "MIRType -> MIRType"
+    (pureVal mir_ref)
+    Experimental
+    [ "The type of MIR immutable references." ]
+
+  , prim "mir_ref_mut" "MIRType -> MIRType"
+    (pureVal mir_ref_mut)
+    Experimental
+    [ "The type of MIR mutable references." ]
+
+  , prim "mir_slice" "MIRType -> MIRType"
+    (pureVal mir_slice)
+    Experimental
+    [ "The type of MIR slices, i.e., dynamically sized views into a"
+    , "contiguous sequence of the given type. Currently, SAW can only"
+    , "handle references to slices (&[T])." ]
+
+  , prim "mir_str" "MIRType"
+    (pureVal mir_str)
+    Experimental
+    [ "The type of MIR strings, which are a particular kind of slice."
+    , "Currently, SAW can only handle references to strings (&str)." ]
+
+  , prim "mir_tuple" "[MIRType] -> MIRType"
+    (pureVal mir_tuple)
+    Experimental
+    [ "The type of MIR tuples of the given types." ]
+
+  , prim "mir_u8" "MIRType"
+    (pureVal mir_u8)
+    Experimental
+    [ "The type of MIR 8-bit unsigned integers." ]
+
+  , prim "mir_u16" "MIRType"
+    (pureVal mir_u16)
+    Experimental
+    [ "The type of MIR 16-bit unsigned integers." ]
+
+  , prim "mir_u32" "MIRType"
+    (pureVal mir_u32)
+    Experimental
+    [ "The type of MIR 32-bit unsigned integers." ]
+
+  , prim "mir_u64" "MIRType"
+    (pureVal mir_u64)
+    Experimental
+    [ "The type of MIR 64-bit unsigned integers." ]
+
+  , prim "mir_u128" "MIRType"
+    (pureVal mir_u128)
+    Experimental
+    [ "The type of MIR 128-bit unsigned integers." ]
+
+  , prim "mir_usize" "MIRType"
+    (pureVal mir_usize)
+    Experimental
+    [ "The type of MIR pointer-sized unsigned integers." ]
 
     ---------------------------------------------------------------------
 
@@ -3739,46 +4699,55 @@ primitives = Map.fromList
 
     ---------------------------------------------------------------------
 
-  , prim "mr_solver_prove" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve True))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this can"
-    , " be done, this refinement will be used in future calls to"
-    , " Mr. Solver, and if it cannot, the script will exit. See also:"
-    , " mr_solver_test, mr_solver_query." ]
-
-  , prim "mr_solver_test" "Term -> Term -> TopLevel ()"
-    (scVal (mrSolverProve False))
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another. If this cannot"
-    , " be done, the script will exit. See also: mr_solver_prove,"
-    , " mr_solver_query - unlike the former, this refinement will not"
-    , " be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_query" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverQuery)
-    Experimental
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to prove that one monadic term refines another, returning"
-    , " true iff this can be done. See also: mr_solver_prove,"
-    , " mr_solver_test - unlike the former, this refinement will not"
-    , " be considered in future calls to Mr. Solver, and unlike both,"
-    , " this command will never fail." ]
-
-  , prim "mr_solver_assume" "Term -> Term -> TopLevel Bool"
-    (scVal mrSolverAssume)
-    Experimental
-    [ "Add the refinement of the two given expressions as an assumption"
-    , " which will be used in future calls to Mr. Solver." ]
-
-  , prim "mr_solver_set_debug_level" "Int -> TopLevel ()"
+  , prim "mrsolver_set_debug_level" "Int -> TopLevel ()"
     (pureVal mrSolverSetDebug)
     Experimental
     [ "Set the debug level for Mr. Solver; 0 = no debug output,"
     , " 1 = basic debug output, 2 = verbose debug output,"
     , " 3 = all debug output" ]
+
+  , prim "mrsolver_set_debug_printing_depth" "Int -> TopLevel ()"
+    (pureVal mrSolverSetDebugDepth)
+    Experimental
+    [ "Limit the printing of terms in all subsequent Mr. Solver error messages"
+    , "and debug output to a maximum depth" ]
+
+  , prim "mrsolver" "ProofScript ()"
+    (pureVal (mrSolver emptyRefnset))
+    Experimental
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`" ]
+
+  , prim "empty_rs"            "Refnset"
+    (pureVal (emptyRefnset :: SAWRefnset))
+    Experimental
+    [ "The empty refinement set, containing no refinements." ]
+
+  , prim "addrefn"             "Theorem -> Refnset -> Refnset"
+    (funVal2 addrefn)
+    Experimental
+    [ "Add a proved refinement theorem to a given refinement set." ]
+
+  , prim "addrefns"            "[Theorem] -> Refnset -> Refnset"
+    (funVal2 addrefns)
+    Experimental
+    [ "Add proved refinement theorems to a given refinement set." ]
+
+  , prim "mrsolver_with" "Refnset -> ProofScript ()"
+    (pureVal mrSolver)
+    Experimental
+    [ "Use MRSolver to prove a current refinement goal, i.e. a goal of"
+    , " the form `(a1:A1) -> ... -> (an:An) -> refinesS_eq ...`, with"
+    , " the given set of refinements taken as assumptions" ]
+
+  , prim "refines" "[Term] -> Term -> Term -> Term"
+    (funVal3 refinesTerm)
+    Experimental
+    [ "Given a list of 'fresh_symbolic' variables over which to quantify"
+    , " as as well as two terms containing those variables, which may be"
+    , " either terms or functions in the SpecM monad, construct the"
+    , " SAWCore term which is the refinement (`SpecM.refinesS`) of the"
+    , " given terms, with the given variables generalized with a Pi type." ]
 
     ---------------------------------------------------------------------
 
@@ -3862,59 +4831,45 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_perm)
     Experimental
-    [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
+    [ "heapster_define_opaque_perm nm args tp trans d defines an opaque named"
     , " Heapster permission named nm with arguments parsed from args and type"
-    , " parsed from tp that translates to the named type trans"
+    , " tp that translates to the SAW core type trans with type description d"
     ]
 
   , prim "heapster_define_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> [String] -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_recursive_perm)
     Experimental
-    [ "heapster_define_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
+    [ "heapster_define_recursive_perm env nm arg_ctx tp p defines a recursive"
     , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to the permission"
-    , " p1 \\/ ... \\/ pn, where the pi can contain name."
-    ]
-
-  , prim "heapster_define_irt_recursive_perm"
-    "HeapsterEnv -> String -> String -> String -> [String] -> TopLevel HeapsterEnv"
-    (bicVal heapster_define_irt_recursive_perm)
-    Experimental
-    [ "heapster_define_irt_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
-    , " nm with arguments parsed from args_ctx and type parsed from value_type"
-    , " that translates to the appropriate IRT type. The resulting permission"
-    , " is equivalent to the permission p1 \\/ ... \\/ pn, where the pi can"
-    , " contain name."
-    ]
-
-  , prim "heapster_define_irt_recursive_shape"
-    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
-    (bicVal heapster_define_irt_recursive_shape)
-    Experimental
-    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
-    , " defines a recursive named Heapser shape named nm with arguments"
-    , " parsed from args_ctx and width w that translates to the appropriate"
-    , " IRT type. The resulting shape is equivalent to the shape body_sh,"
-    , " where body_sh can contain name."
+    , " type parsed from tp that translates to permissions p, which can"
+    , " resurively use nm (with no arguments) in those permissions"
     ]
 
   , prim "heapster_define_reachability_perm"
-    "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_reachability_perm)
     Experimental
-    [ "heapster_define_recursive_perm env name arg_ctx value_type"
-    , " [ p1, ..., pn ] trans_tp fold_fun unfold_fun defines an recursive named"
-    , " Heapster permission named nm with arguments parsed from args_ctx and"
-    , " type parsed from value_type that translates to the named type"
-    , " trans_tp. The resulting permission is equivalent to he permission"
-    , " p1 \\/ ... \\/ pn, where the pi can contain name."
+    [ "heapster_define_recursive_perm env nm arg_ctx value_type p trans_fun"
+    , " defines a recursive named Heapster permission named nm with arguments"
+    , " parsed from args_ctx and type parsed from value_type that unfolds to p,"
+    , " which should form a reachability permission, meaning that it should"
+    , " have the form eq(x) or q for some permission q, where x is the last"
+    , " argument argument in arg_ctx and q can contain nm with no arguments to"
+    , " refer to the entire permission recursively."
+    ]
+
+  , prim "heapster_define_recursive_shape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_recursive_shape)
+    Experimental
+    [ "heapster_define_irt_recursive_shape env name w arg_ctx body_sh"
+    , " defines a recursive named Heapser shape named nm with arguments"
+    , " parsed from args_ctx and width w that unfolds to the shape body_sh,"
+    , " whichx can contain name for recursive occurrences of the shape"
     ]
 
   , prim "heapster_define_perm"
@@ -3936,10 +4891,10 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_llvmshape"
-    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_llvmshape)
     Experimental
-    [ "heapster_define_opaque_llvmshape henv nm w args len tp defines a Heapster"
+    [ "heapster_define_opaque_llvmshape henv nm w args len tp d defines a Heapster"
     , " LLVM shape that is opaque, meaning it acts as a sort of shape axiom, where"
     , " Heapster does not know or care about the contents of memory of this shape"
     , " but instead treats that memory as an opaque object, defined only by its"
@@ -3948,8 +4903,9 @@ primitives = Map.fromList
     , " The henv argument is the Heapster environment this new shape is added to,"
     , " nm is its name, args is a context of argument variables for this shape,"
     , " len is an expression for the length of the shape in terms of the arguments,"
-    , " and tp gives the translation of the shape as a SAW core type over the"
-    , " translation of the arguments to SAW core variables."
+    , " tp gives the translation of the shape as a SAW core type over the"
+    , " translation of the arguments to SAW core variables, and d is a SAW core"
+    , " term of type TpDesc that describes the SAW core type."
     ]
 
   , prim "heapster_define_rust_type"
@@ -4153,6 +5109,14 @@ primitives = Map.fromList
     [ "Tell Heapster whether to perform its translation-time checks of the "
     , "well-formedness of type-checking proofs" ]
 
+  , prim "heapster_trans_rust_type"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_translate_rust_type)
+    Experimental
+    [ "Parse a Rust function type and print the equivalent Heapser type. "
+    , "Ideal for learning how Rust types are translated into Heapster. "
+    ]
+
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)
@@ -4211,16 +5175,17 @@ primitives = Map.fromList
   ]
 
   where
-    prim :: String -> String -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
+    prim :: Text -> Text -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
     prim name ty fn lc doc = (qname, Primitive
                                      { primitiveName = qname
-                                     , primitiveType = readSchema ty
+                                     , primitiveType = readSchema fakeFileName ty
                                      , primitiveDoc  = doc
                                      , primitiveFn   = fn
                                      , primitiveLife = lc
                                      })
       where qname = qualify name
+            fakeFileName = Text.unpack $ "<type of " <> name <> ">"
 
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
     pureVal x _ _ = toValue x
@@ -4234,6 +5199,11 @@ primitives = Map.fromList
     funVal2 f _ _ = VLambda $ \a -> return $ VLambda $ \b ->
       fmap toValue (f (fromValue a) (fromValue b))
 
+    funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
+               -> Options -> BuiltinContext -> Value
+    funVal3 f _ _ = VLambda $ \a -> return $ VLambda $ \b -> return $ VLambda $ \c ->
+      fmap toValue (f (fromValue a) (fromValue b) (fromValue c))
+
     scVal :: forall t. IsValue t =>
              (SharedContext -> t) -> Options -> BuiltinContext -> Value
     scVal f _ bic = toValue (f (biSharedContext bic))
@@ -4243,18 +5213,28 @@ primitives = Map.fromList
     bicVal f opts bic = toValue (f bic opts)
 
 
-filterAvail ::
+filterAvailTypes ::
+  Set PrimitiveLifecycle ->
+  Map SS.Name PrimType ->
+  Map SS.Name PrimType
+filterAvailTypes primsAvail =
+  Map.filter (\p -> primTypeLife p `Set.member` primsAvail)
+
+filterAvailPrims ::
   Set PrimitiveLifecycle ->
   Map SS.LName Primitive ->
   Map SS.LName Primitive
-filterAvail primsAvail =
+filterAvailPrims primsAvail =
   Map.filter (\p -> primitiveLife p `Set.member` primsAvail)
 
-primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
-primTypeEnv primsAvail = fmap primitiveType (filterAvail primsAvail primitives)
+primValueTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
+primValueTypeEnv primsAvail = fmap primitiveType (filterAvailPrims primsAvail primitives)
+
+primNamedTypeEnv :: Set PrimitiveLifecycle -> Map SS.Name SS.NamedType
+primNamedTypeEnv primsAvail = fmap primTypeType (filterAvailTypes primsAvail primTypes)
 
 valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
-valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
+valueEnv primsAvail opts bic = fmap f (filterAvailPrims primsAvail primitives)
   where f p = (primitiveFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
@@ -4263,7 +5243,7 @@ primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
 primDocEnv primsAvail =
   Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
-      prims = filterAvail primsAvail primitives
+      prims = filterAvailPrims primsAvail primitives
       tag p = case primitiveLife p of
                 Current -> []
                 Deprecated -> ["DEPRECATED", ""]
@@ -4273,9 +5253,9 @@ primDocEnv primsAvail =
                 , "-----------"
                 , ""
                 ] ++ tag p ++
-                [ "    " ++ getVal n ++ " : " ++ SS.pShow (primitiveType p)
+                [ "    " ++ Text.unpack (getVal n) ++ " : " ++ SS.pShow (primitiveType p)
                 , ""
                 ] ++ primitiveDoc p
 
-qualify :: String -> Located SS.Name
+qualify :: Text -> Located SS.Name
 qualify s = Located s s (SS.PosInternal "coreEnv")

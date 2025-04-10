@@ -5,12 +5,9 @@ From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import Strings.String.
 From Coq Require Export Logic.Eqdep.
-From CryptolToCoq Require Export CompM.
 
-From EnTree Require Export
-     Basics.HeterogeneousRelations
-     Basics.QuantType
-     Ref.SpecM.
+From EnTree Require Import EnTreeSpecs.
+
 
 (***
  *** sawLet
@@ -118,6 +115,17 @@ Global Instance Inhabited_unit : Inhabited unit :=
 Global Instance Inhabited_bool : Inhabited bool :=
   MkInhabited bool false.
 
+Program Instance QuantType_Bool : QuantType Bool :=
+ { quantEnc := QEnc_nat;
+   quantEnum := fun n => match n with
+                         | 0 => false
+                         | S _ => true
+                         end;
+   quantEnumInv := fun b => if b then 1 else 0 }.
+Next Obligation.
+ destruct a; reflexivity.
+Defined.
+
 (* SAW uses an alternate form of eq_rect where the motive function P also
 depends on the equality proof itself *)
 Definition Eq__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl) y (e:x=y) :
@@ -132,7 +140,7 @@ Qed.
 
 Definition coerce (a b : sort 0) (p : @eq (sort 0) a b) (x : a) : b :=
   match p in eq _ a' return a' with
-  | eq_refl _ => x
+  | @eq_refl _ _ => x
   end
 .
 Check eq_sym.
@@ -226,8 +234,8 @@ Definition IsLeNat__rec
   : forall (m : nat) (Hm : IsLeNat n m), p m Hm :=
   fix rec (m:nat) (Hm : IsLeNat n m) {struct Hm} : p m Hm :=
             match Hm as Hm' in le _ m' return p m' Hm' with
-            | le_n _ => Hbase
-            | le_S _ m H => Hstep m H (rec m H)
+            | @le_n _ => Hbase
+            | @le_S _ m H => Hstep m H (rec m H)
             end.
 
 (* We could have SAW autogenerate this definition in SAWCorePrelude, but it is
@@ -261,6 +269,9 @@ Arguments Datatypes.snd {_ _}.
 
 Definition Zero := O.
 Definition Succ := S.
+
+Definition addNat := Nat.add.
+Definition mulNat := Nat.mul.
 
 Global Instance Inhabited_Pair (a b:Type) {Ha : Inhabited a} {Hb : Inhabited b} : Inhabited (PairType a b) :=
     MkInhabited (PairType a b) (PairValue a b inhabitant inhabitant).
@@ -347,15 +358,19 @@ Global Instance Inhabited_RecordCons (fnm:string) (tp rest_tp:Type)
   := MkInhabited (RecordTypeCons fnm tp rest_tp) (RecordCons fnm inhabitant inhabitant).
 
 (* Get the head element of a non-empty record type *)
+(* NOTE: more recent versions of Coq seem to have changed constructor patterns
+so that the parameters of an inductive type are not required, even when they are
+specified in the Arguments declaration, so we use the explicit arguments
+@RecordCons pattern, since that does not change between Coq versions *)
 Definition recordHead {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : tp :=
   match r with
-  | RecordCons _ x _ => x
+  | @RecordCons _ _ _ x _ => x
   end.
 
 (* Get the tail of a non-empty record type *)
 Definition recordTail {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : rest_tp :=
   match r with
-  | RecordCons _ _ rest => rest
+  | @RecordCons _ _ _ _ rest => rest
   end.
 
 (* An inductive description of a string being a field in a record type *)
@@ -371,8 +386,8 @@ Global Hint Constructors IsRecordField : typeclass_instances.
 (* If str is a field in record type rtp, get its associated type *)
 Fixpoint getRecordFieldType rtp str `{irf:IsRecordField str rtp} : Type :=
   match irf with
-  | IsRecordField_Base _ tp rtp => tp
-  | IsRecordField_Step _ _ _ _ irf' => @getRecordFieldType _ _ irf'
+  | @IsRecordField_Base _ tp rtp => tp
+  | @IsRecordField_Step _ _ _ _ irf' => @getRecordFieldType _ _ irf'
   end.
 
 (* If str is a field in record r of record type rtp, get its associated value *)
@@ -380,8 +395,8 @@ Fixpoint getRecordField {rtp} str `{irf:IsRecordField str rtp} :
   rtp -> getRecordFieldType rtp str :=
   match irf in IsRecordField _ rtp
         return rtp -> getRecordFieldType rtp str (irf:=irf) with
-  | IsRecordField_Base _ tp rtp' => fun r => recordHead r
-  | IsRecordField_Step _ _ _ _ irf' =>
+  | @IsRecordField_Base _ tp rtp' => fun r => recordHead r
+  | @IsRecordField_Step _ _ _ _ irf' =>
     fun r => @getRecordField _ _ irf' (recordTail r)
   end.
 

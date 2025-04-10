@@ -1,0 +1,11 @@
+//
+// Exercise failure of the unify call in the Index case of inferExpr.
+//
+// (XXX: we can't. There's no concrete syntax for it and no other
+// way to generate it. So this test will be a placeholder until
+// either we add a syntax or remove the construction.)
+//
+
+let x = [1,2,3];
+
+

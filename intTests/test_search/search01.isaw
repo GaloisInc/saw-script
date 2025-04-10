@@ -1,0 +1,14 @@
+return ()    // wildcard searches
+
+print "--------------------------------"
+print "-- (LLVMSpec -> _)"
+:search (LLVMSpec -> _)
+
+print "--------------------------------"
+print "-- (_ Int)"
+:search (_ Int)
+
+print "--------------------------------"
+print "-- (JVMSetup _)"
+:search (JVMSetup _)
+

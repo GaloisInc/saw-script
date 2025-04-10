@@ -54,7 +54,7 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None, *, re
 #     is_ready_for_input0 <- crucible_fresh_var "is_ready_for_input" (llvm_int 8);
 #     currently_in_hash0 <- crucible_fresh_var "currently_in_hash" (llvm_int 64);
 #     md_len0 <- crucible_fresh_var "md_len" (llvm_int 32);
-#     (_, pimpl) <- ptr_to_fresh_readonly "impl" (llvm_struct "struct.s2n_hash");
+#     (_, pimpl) <- ptr_to_fresh_readonly "impl" (llvm_alias "struct.s2n_hash");
 #     crucible_points_to pstate
 #       (crucible_struct
 #         [ pimpl
@@ -122,7 +122,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 #     alg <- crucible_fresh_var "alg" (llvm_int 32);
 #     is_ready_for_input <- crucible_fresh_var "is_ready_for_input" (llvm_int 8);
 #     currently_in_hash <- crucible_fresh_var "currently_in_hash" (llvm_int 64);
-#     (_, pimpl) <- ptr_to_fresh_readonly "impl" (llvm_struct "struct.s2n_hash");
+#     (_, pimpl) <- ptr_to_fresh_readonly "impl" (llvm_alias "struct.s2n_hash");
 
 #     crucible_points_to pstate
 #       (crucible_struct
@@ -146,7 +146,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_init_spec = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     (st0, _) <- setup_hash_state pstate;
 #     alg <- crucible_fresh_var "alg" (llvm_int 32);
 #     crucible_execute_func [pstate, crucible_term alg];
@@ -158,7 +158,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_reset_spec = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     (st0, _) <- setup_hash_state pstate;
 #     crucible_execute_func [pstate];
 #     let st1 = {{ hash_init_c_state st0 }};
@@ -167,8 +167,8 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_copy_spec = do {
-#     pstate1 <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
-#     pstate2 <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate1 <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
+#     pstate2 <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     (st1, _) <- setup_hash_state pstate1;
 #     (st2, _) <- setup_hash_state pstate2;
 #     crucible_execute_func [pstate1, pstate2];
@@ -178,7 +178,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_update_spec msg_size = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     (msg, pmsg) <- ptr_to_fresh_readonly "msg" (llvm_array msg_size (llvm_int 8));
 #     (st0, _) <- setup_hash_state pstate;
 #     let size = crucible_term {{ `msg_size : [32] }};
@@ -189,7 +189,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_update_unbounded_spec = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     (st0, _) <- setup_hash_state pstate;
 
 #     size <- crucible_fresh_var "size" (llvm_int 32);
@@ -206,7 +206,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_digest_spec digest_size = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     (dgst, pdgst) <- ptr_to_fresh "out" (llvm_array digest_size (llvm_int 8));
 #     (st0, _) <- setup_hash_state pstate;
 #     size <- crucible_fresh_var "size" (llvm_int 32);
@@ -218,7 +218,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # };
 
 # let hash_get_currently_in_hash_total_spec = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hash_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hash_state");
 #     pout <- crucible_alloc (llvm_int 64);
 #     (st0, currently_in_hash) <- setup_hash_state pstate;
 #     crucible_execute_func [pstate, pout];
@@ -231,7 +231,7 @@ def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
 # // HMAC.
 
 # let setup_hmac_state alg0 hash_block_size0 block_size0 digest_size0 = do {
-#     pstate <- crucible_alloc (llvm_struct "struct.s2n_hmac_state");
+#     pstate <- crucible_alloc (llvm_alias "struct.s2n_hmac_state");
 #     currently_in_hash_block0 <- crucible_fresh_var "currently_in_hash_block" (llvm_int 32);
 #     xor_pad0 <- crucible_fresh_var "xor_pad" (llvm_array 128 (llvm_int 8));
 #     let digest_size = eval_size {| SHA512_DIGEST_LENGTH |};

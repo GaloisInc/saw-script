@@ -1,0 +1,3 @@
+module Instantiated = Parameterized where
+
+type gamma =  3

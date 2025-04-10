@@ -1,33 +1,33 @@
 include "sha512.saw";
 
-round_00_15 <- parse_core_mod "SHA512" "round_00_15";
-round_16_80 <- parse_core_mod "SHA512" "round_16_80";
-processBlock <- parse_core_mod "SHA512" "processBlock";
-processBlocks <- parse_core_mod "SHA512" "processBlocks";
+let round_00_15= parse_core_mod "SHA512" "round_00_15";
+let round_16_80 = parse_core_mod "SHA512" "round_16_80";
+let processBlock = parse_core_mod "SHA512" "processBlock";
+let processBlocks = parse_core_mod "SHA512" "processBlocks";
 
 // Test that every function refines itself
-// mr_solver_test processBlocks processBlocks;
-// mr_solver_test processBlock processBlock;
-// mr_solver_test round_16_80 round_16_80;
-// mr_solver_test round_00_15 round_00_15;
+// prove_extcore mrsolver (refines [] processBlocks processBlocks);
+// prove_extcore mrsolver (refines [] processBlock processBlock);
+// prove_extcore mrsolver (refines [] round_16_80 round_16_80);
+// prove_extcore mrsolver (refines [] round_00_15 round_00_15);
 
 import "sha512.cry";
-// FIXME: Why aren't we monadifying these automatically when they're used?
-monadify_term {{ K }};
-monadify_term {{ SIGMA_0 }};
-monadify_term {{ SIGMA_1 }};
-monadify_term {{ sigma_0 }};
-monadify_term {{ sigma_1 }};
-monadify_term {{ Ch }};
-monadify_term {{ Maj }};
-monadify_term {{ round_00_15_spec }};
-monadify_term {{ round_16_80_spec }};
-monadify_term {{ processBlock_loop_spec }};
-monadify_term {{ processBlock_spec }};
-monadify_term {{ processBlocks_loop_spec }};
-monadify_term {{ processBlocks_spec }};
 
-mr_solver_prove round_00_15 {{ round_00_15_spec }};
-mr_solver_prove round_16_80 {{ round_16_80_spec }};
-mr_solver_prove processBlock {{ processBlock_spec }};
-// mr_solver_prove processBlocks {{ processBlocks_spec }};
+thm_round_00_15 <-
+  prove_extcore mrsolver (refines [] round_00_15 {{ round_00_15_spec }});
+
+thm_round_16_80 <-
+  prove_extcore
+    (mrsolver_with (addrefns [thm_round_00_15] empty_rs))
+    (refines [] round_16_80 {{ round_16_80_spec }});
+
+thm_processBlock <-
+  prove_extcore
+    (mrsolver_with (addrefns [thm_round_00_15, thm_round_16_80] empty_rs))
+    (refines [] processBlock {{ processBlock_spec }});
+
+// thm_processBlocks <-
+//   prove_extcore
+//     (mrsolver_with (addrefns [thm_processBlock] empty_rs))
+//     (refines [] processBlocks {{ processBlocks_spec }});
+

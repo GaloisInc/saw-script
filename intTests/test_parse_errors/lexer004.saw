@@ -1,0 +1,2 @@
+// This fails with an unclosed cryptol block.
+let x = {{ // 3 }} + 4;

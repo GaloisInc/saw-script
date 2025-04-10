@@ -7,7 +7,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -34,11 +33,13 @@ import Data.List
 import Data.Functor.Compose
 import Data.Reflection
 import qualified Data.BitVector.Sized as BV
-import GHC.TypeLits
+import GHC.TypeLits (KnownNat)
 import Control.Lens hiding ((:>), ix)
-import Control.Applicative
+import qualified Control.Applicative as App
+import Control.Monad (forM_)
 import Control.Monad.Extra (concatMapM)
-import Control.Monad.State.Strict hiding (ap)
+import Control.Monad.State.Strict (MonadState(..), State, StateT, evalState, execStateT)
+import Control.Monad.Trans.Class (MonadTrans(..))
 
 import qualified Data.Type.RList as RL
 import Data.Binding.Hobbits.MonadBind
@@ -61,7 +62,9 @@ import Verifier.SAW.Term.Functor (Ident)
 import Lang.Crucible.LLVM.Bytes
 
 import Data.Binding.Hobbits
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Heapster.CruUtil
+import Verifier.SAW.Heapster.PatternMatchUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.GenMonad
 
@@ -315,7 +318,7 @@ instance Applicative SomeEqProof where
   liftA2 f (SomeEqProofRefl a) some_eqp = fmap (f a) some_eqp
   liftA2 f some_eqp (SomeEqProofRefl b) = fmap (flip f b) some_eqp
   liftA2 f (SomeEqProofCons eqp1 step1) (SomeEqProofCons eqp2 step2) =
-    SomeEqProofCons (liftA2 f eqp1 eqp2) (eqProofStepLiftA2 f step1 step2)
+    SomeEqProofCons (App.liftA2 f eqp1 eqp2) (eqProofStepLiftA2 f step1 step2)
 
 -- | An 'EqProofStep' with an existentially quantified list of permissions
 data SomeEqProofStep a = forall ps. SomeEqProofStep (EqProofStep ps a)
@@ -371,9 +374,9 @@ data ImplError where
   EqualityProofError :: Doc ann -> Doc ann -> ImplError
   InsufficientVariablesError :: Doc ann -> ImplError
   ExistentialError :: Doc ann -> Doc ann -> ImplError
-  ImplVariableError 
-    :: Doc ann -> String 
-    -> (Doc ann, ExprVar tp) -> (Doc ann, ValuePerm tp) -> CruCtx vars 
+  ImplVariableError
+    :: Doc ann -> String
+    -> (Doc ann, ExprVar tp) -> (Doc ann, ValuePerm tp) -> CruCtx vars
     -> DistPerms ps
     -> ImplError
 
@@ -396,34 +399,34 @@ instance Liftable LifetimeErrorType where
 instance SubstVar PermVarSubst m =>
     Substable PermVarSubst ImplError m where
   genSubst s mb_impl = case mbMatch mb_impl of
-    [nuMP| GeneralError doc |] -> 
+    [nuMP| GeneralError doc |] ->
       return $ GeneralError $ mbLift doc
-    [nuMP| NoFrameInScopeError |] -> 
+    [nuMP| NoFrameInScopeError |] ->
       return NoFrameInScopeError
-    [nuMP| ArrayStepError |] -> 
+    [nuMP| ArrayStepError |] ->
       return ArrayStepError
-    [nuMP| MuUnfoldError |] -> 
+    [nuMP| MuUnfoldError |] ->
       return MuUnfoldError
-    [nuMP| FunctionPermissionError |] -> 
+    [nuMP| FunctionPermissionError |] ->
       return FunctionPermissionError
-    [nuMP| PartialSubstitutionError str doc |] -> 
+    [nuMP| PartialSubstitutionError str doc |] ->
       return $ PartialSubstitutionError (mbLift str) (mbLift doc)
-    [nuMP| LifetimeError le |] -> 
+    [nuMP| LifetimeError le |] ->
       return $ LifetimeError $ mbLift le
-    [nuMP| MemBlockError doc |] -> 
+    [nuMP| MemBlockError doc |] ->
       return $ MemBlockError (mbLift doc)
-    [nuMP| EqualityProofError docl docr |] -> 
+    [nuMP| EqualityProofError docl docr |] ->
       return $ EqualityProofError (mbLift docl) (mbLift docr)
-    [nuMP| InsufficientVariablesError doc |] -> 
+    [nuMP| InsufficientVariablesError doc |] ->
       return $ InsufficientVariablesError $ mbLift doc
-    [nuMP| ExistentialError doc1 doc2 |] -> 
+    [nuMP| ExistentialError doc1 doc2 |] ->
       return $ ExistentialError (mbLift doc1) (mbLift doc2)
     [nuMP| ImplVariableError doc f (xdoc, x) (pdoc, p) ctx mb_dp |] -> do
       x' <- genSubst s x
       p' <- genSubst s p
       dp <- genSubst s mb_dp
       return $ ImplVariableError (mbLift doc) (mbLift f) (mbLift xdoc, x') (mbLift pdoc, p') (mbLift ctx) dp
-   
+
 -- The reason this isn't just Show is to sort of future-proof things. For
 -- instance, we may want to dump a limited amount of information to stdout, but
 -- something more comprehensive to a log for an IDE.
@@ -970,7 +973,7 @@ data SimplImpl ps_in ps_out where
   -- current lifetime and part that is saved in the lifetime for later:
   --
   -- > x:F<l,rws> * l:[l2]lcurrent * l2:lowned[ls] (ps_in -o ps_out)
-  -- >   -o x:F<l2,rws> * l2:lowned[ls](x:F<l2,Rs>, ps_in -o x:F<l,rws>, ps_out)
+  -- >   -o x:F<l2,rws> * l2:lowned[ls](ps_in, x:F<l2,Rs> -o ps_out, x:F<l,rws>)
   --
   -- Note that this rule also supports @l=always@, in which case the
   -- @l:[l2]lcurrent@ permission is replaced by @l2:true@ (as a hack, because it
@@ -1113,6 +1116,20 @@ data SimplImpl ps_in ps_out where
   -- > x:memblock(rw,l,off,len,emptysh)
   -- >   -o x:[l]array(rw,off,<len,*1,fieldsh(true),[])
   SImpl_ElimLLVMBlockToBytes ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Add a tuple shape around the shape of a @memblock@ permission
+  --
+  -- > x:memblock(rw,l,off,len,sh) -o x:memblock(rw,l,off,len,tuplesh(sh))
+  SImpl_IntroLLVMBlockTuple ::
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+
+  -- | Eliminate a tuple shape in a @memblock@ permission
+  --
+  -- > x:memblock(rw,l,off,len,tuplesh(sh)) -o x:memblock(rw,l,off,len,sh)
+  SImpl_ElimLLVMBlockTuple ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMBlockPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
 
@@ -1463,7 +1480,9 @@ data PermImpl1 ps_in ps_outs where
   -- same input permissions to both branches:
   --
   -- > ps -o ps \/ ps
-  Impl1_Catch :: PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
+  --
+  -- The 'String' gives debug info about why the algorithm inserted the catch.
+  Impl1_Catch :: String -> PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
 
   -- | Push the primary permission for variable @x@ onto the stack:
   --
@@ -1482,7 +1501,11 @@ data PermImpl1 ps_in ps_outs where
   --
   -- > ps * x:(p1 \/ (p2 \/ (... \/ pn)))
   -- >   -o (ps * x:p1) \/ ... \/ (ps * x:pn)
-  Impl1_ElimOrs :: ExprVar a -> OrList ps a disjs -> PermImpl1 (ps :> a) disjs
+  --
+  -- The 'String' is contains the printed version of the @x:(p1 \/ ...)@
+  -- permission that is being eliminated, for debug info.
+  Impl1_ElimOrs :: String -> ExprVar a -> OrList ps a disjs ->
+                   PermImpl1 (ps :> a) disjs
 
   -- | Eliminate an existential on the top of the stack:
   --
@@ -1633,7 +1656,7 @@ type OrList ps a = RAssign (OrListDisj ps a)
 -- disjunct on the right of the judgment corresponds to a different leaf in the
 -- tree, while each @Gammai@ denotes the variables that are bound on the path
 -- from the root to that leaf. The @ps@ argument captures the form of the
--- "distinguished" left-hand side permissions @Pl@.
+-- \"distinguished\" left-hand side permissions @Pl@.
 --
 -- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
 -- top of the stack
@@ -1663,7 +1686,7 @@ data MbPermImpls r bs_pss where
 newtype LocalPermImpl ps_in ps_out =
   LocalPermImpl (PermImpl (LocalImplRet ps_out) ps_in)
 
--- | The "success" condition of a 'LocalPermImpl', which essentially is just a
+-- | The \"success\" condition of a 'LocalPermImpl', which essentially is just a
 -- type equality stating that the output permissions are as expected
 newtype LocalImplRet ps ps' = LocalImplRet (ps :~: ps')
 
@@ -1826,8 +1849,8 @@ permImplCatch pimpl (PermImpl_Step (Impl1_Fail _) _)
   | pruneFailingBranches = pimpl
 permImplCatch (PermImpl_Step (Impl1_Fail str1) _) (PermImpl_Step
                                                    (Impl1_Fail str2) mb_impls) =
-  PermImpl_Step (Impl1_Fail $ GeneralError $ 
-      pretty (ppError str1 ++ "\n\n--------------------\n\n" ++ ppError str2)) 
+  PermImpl_Step (Impl1_Fail $ GeneralError $
+      pretty (ppError str1 ++ "\n\n--------------------\n\n" ++ ppError str2))
     mb_impls
 permImplCatch pimpl1@(PermImpl_Step (Impl1_Fail _) _) pimpl2 =
   permImplCatch pimpl2 pimpl1
@@ -1843,15 +1866,15 @@ permImplCatch pimpl1 pimpl2 =
 -}
 
 
--- | Test if a 'PermImpl' "succeeds", meaning there is at least one non-failing
--- branch. If it does succeed, return a heuristic number for how "well" it
+-- | Test if a 'PermImpl' \"succeeds\", meaning there is at least one non-failing
+-- branch. If it does succeed, return a heuristic number for how \"well\" it
 -- succeeds; e.g., rate a 'PermImpl' higher if all disjunctive branches succeed,
 -- that is, if both children of every 'Impl1_ElimOr' succeed. Return 0 if the
 -- 'PermImpl' does not succeed at all.
 permImplSucceeds :: PermImpl r ps -> Int
 permImplSucceeds (PermImpl_Done _) = 2
 permImplSucceeds (PermImpl_Step (Impl1_Fail _) _) = 0
-permImplSucceeds (PermImpl_Step Impl1_Catch
+permImplSucceeds (PermImpl_Step (Impl1_Catch _)
                   (MbPermImpls_Cons _ (MbPermImpls_Cons _ _ mb_impl1) mb_impl2)) =
   max (mbLift $ fmap permImplSucceeds mb_impl1)
   (mbLift $ fmap permImplSucceeds mb_impl2)
@@ -1859,7 +1882,7 @@ permImplSucceeds (PermImpl_Step (Impl1_Push _ _) (MbPermImpls_Cons _ _ mb_impl))
   mbLift $ fmap permImplSucceeds mb_impl
 permImplSucceeds (PermImpl_Step (Impl1_Pop _ _) (MbPermImpls_Cons _ _ mb_impl)) =
   mbLift $ fmap permImplSucceeds mb_impl
-permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ ) mb_impls) =
+permImplSucceeds (PermImpl_Step (Impl1_ElimOrs _ _ _) mb_impls) =
   mbImplsSucc mb_impls where
   mbImplsSucc :: MbPermImpls r ps_outs -> Int
   mbImplsSucc MbPermImpls_Nil = 0
@@ -2154,6 +2177,11 @@ simplImplIn (SImpl_CoerceLLVMBlockEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_ElimLLVMBlockToBytes x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplIn (SImpl_IntroLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
+simplImplIn (SImpl_ElimLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
+                bp { llvmBlockShape = PExpr_TupShape (llvmBlockShape bp) })
 simplImplIn (SImpl_IntroLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplIn (SImpl_ElimLLVMBlockSeqEmpty x bp) =
@@ -2476,14 +2504,10 @@ simplImplOut (SImpl_LLVMBlockIsPtr x bp) =
 simplImplOut (SImpl_SplitLifetime x f args l l2 sub_ls tps_in tps_out ps_in ps_out) =
   distPerms2 x (ltFuncApply f args $ PExpr_Var l2)
   l2 (ValPerm_LOwned sub_ls
-      (appendCruCtx (singletonCruCtx $ exprType x) tps_in)
-      (appendCruCtx (singletonCruCtx $ exprType x) tps_out)
-      (RL.append (MNil :>:
-                  ExprAndPerm (PExpr_Var x)
-                  (ltFuncMinApply f (PExpr_Var l2))) ps_in)
-      (RL.append (MNil :>:
-                  ExprAndPerm (PExpr_Var x)
-                  (ltFuncApply f args l)) ps_out))
+      (CruCtxCons tps_in $ exprType x)
+      (CruCtxCons tps_out $ exprType x)
+      (ps_in :>: ExprAndPerm (PExpr_Var x) (ltFuncMinApply f (PExpr_Var l2)))
+      (ps_out :>: ExprAndPerm (PExpr_Var x) (ltFuncApply f args l)))
 simplImplOut (SImpl_SubsumeLifetime l ls tps_in tps_out ps_in ps_out l2) =
   distPerms1 l (ValPerm_LOwned (l2:ls) tps_in tps_out ps_in ps_out)
 simplImplOut (SImpl_ContainedLifetimeCurrent l ls tps_in tps_out ps_in ps_out l2) =
@@ -2535,6 +2559,11 @@ simplImplOut (SImpl_CoerceLLVMBlockEmpty x bp) =
 simplImplOut (SImpl_ElimLLVMBlockToBytes x (LLVMBlockPerm {..})) =
   distPerms1 x (llvmByteArrayPerm llvmBlockOffset llvmBlockLen
                 llvmBlockRW llvmBlockLifetime)
+simplImplOut (SImpl_IntroLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
+                bp { llvmBlockShape = PExpr_TupShape (llvmBlockShape bp) })
+simplImplOut (SImpl_ElimLLVMBlockTuple x bp) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock bp)
 simplImplOut (SImpl_IntroLLVMBlockSeqEmpty x bp) =
   distPerms1 x (ValPerm_Conj1 $ Perm_LLVMBlock $
                 bp { llvmBlockShape =
@@ -2764,7 +2793,7 @@ mbOrListPermImpls
 applyImpl1 :: HasCallStack => PPInfo -> PermImpl1 ps_in ps_outs ->
               PermSet ps_in -> MbPermSets ps_outs
 applyImpl1 _ (Impl1_Fail _) _ = MbPermSets_Nil
-applyImpl1 _ Impl1_Catch ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
+applyImpl1 _ (Impl1_Catch _) ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
 applyImpl1 pp_info (Impl1_Push x p) ps =
   if ps ^. varPerm x == p then
     mbPermSets1 $ emptyMb $ pushPerm x p $ set (varPerm x) ValPerm_True ps
@@ -2788,7 +2817,7 @@ applyImpl1 pp_info (Impl1_Pop x p) ps =
       vsep [pretty "applyImpl1: Impl1_Pop: non-empty permissions for variable"
             <+> permPretty pp_info x <> pretty ":",
             permPretty pp_info (ps ^. varPerm x)]
-applyImpl1 _ (Impl1_ElimOrs x or_list) ps =
+applyImpl1 _ (Impl1_ElimOrs _ x or_list) ps =
   if ps ^. topDistPerm x == orListPerm or_list then
     orListMbPermSets ps x or_list
   else
@@ -2971,7 +3000,7 @@ instance (NuMatching a, Substable PermVarSubst a Identity) =>
     [nuMP| EqProofCons eqp' eq_step |] ->
       EqProofCons <$> genSubst s eqp' <*> genSubst s eq_step
 
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (SimplImpl ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
     [nuMP| SImpl_Drop x p |] ->
@@ -3160,6 +3189,10 @@ instance SubstVar PermVarSubst m =>
       SImpl_CoerceLLVMBlockEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockToBytes x bp |] ->
       SImpl_ElimLLVMBlockToBytes <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_IntroLLVMBlockTuple x bp |] ->
+      SImpl_IntroLLVMBlockTuple <$> genSubst s x <*> genSubst s bp
+    [nuMP| SImpl_ElimLLVMBlockTuple x bp |] ->
+      SImpl_ElimLLVMBlockTuple <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_IntroLLVMBlockSeqEmpty x bp |] ->
       SImpl_IntroLLVMBlockSeqEmpty <$> genSubst s x <*> genSubst s bp
     [nuMP| SImpl_ElimLLVMBlockSeqEmpty x bp |] ->
@@ -3250,17 +3283,17 @@ instance SubstVar PermVarSubst m =>
     [nuMP| SImpl_ElimAnyToPtr x fp |] ->
       SImpl_ElimAnyToPtr <$> genSubst s x <*> genSubst s fp
 
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (PermImpl1 ps_in ps_out) m where
   genSubst s mb_impl = case mbMatch mb_impl of
     [nuMP| Impl1_Fail err |] -> Impl1_Fail <$> genSubst s err
-    [nuMP| Impl1_Catch |] -> return Impl1_Catch
+    [nuMP| Impl1_Catch str |] -> return $ Impl1_Catch $ mbLift str
     [nuMP| Impl1_Push x p |] ->
       Impl1_Push <$> genSubst s x <*> genSubst s p
     [nuMP| Impl1_Pop x p |] ->
       Impl1_Pop <$> genSubst s x <*> genSubst s p
-    [nuMP| Impl1_ElimOrs x or_list |] ->
-      Impl1_ElimOrs <$> genSubst s x <*> genSubst s or_list
+    [nuMP| Impl1_ElimOrs str x or_list |] ->
+      Impl1_ElimOrs (mbLift str) <$> genSubst s x <*> genSubst s or_list
     [nuMP| Impl1_ElimExists x p_body |] ->
       Impl1_ElimExists <$> genSubst s x <*> genSubst s p_body
     [nuMP| Impl1_ElimFalse x |] ->
@@ -3290,8 +3323,7 @@ instance SubstVar PermVarSubst m =>
       Impl1_TryProveBVProp <$> genSubst s x <*> genSubst s prop <*>
                                return (mbLift prop_str)
 
--- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
-instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
+instance (NuMatchingAny1 r, m ~ Identity,
           Substable1 PermVarSubst r m) =>
          Substable PermVarSubst (PermImpl r ps) m where
   genSubst s mb_impl = case mbMatch mb_impl of
@@ -3299,8 +3331,7 @@ instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
     [nuMP| PermImpl_Step impl1 mb_impls |] ->
       PermImpl_Step <$> genSubst s impl1 <*> genSubst s mb_impls
 
--- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
-instance (NuMatchingAny1 r, SubstVar PermVarSubst m,
+instance (NuMatchingAny1 r, m ~ Identity,
           Substable1 PermVarSubst r m) =>
          Substable PermVarSubst (MbPermImpls r bs_pss) m where
   genSubst s mb_impls = case mbMatch mb_impls of
@@ -3316,8 +3347,7 @@ instance SubstVar s m => Substable s (OrListDisj ps a disj) m where
 instance SubstVar s m => Substable1 s (OrListDisj ps a) m where
   genSubst1 = genSubst
 
--- FIXME: shouldn't need the SubstVar PermVarSubst m assumption...
-instance SubstVar PermVarSubst m =>
+instance m ~ Identity =>
          Substable PermVarSubst (LocalPermImpl ps_in ps_out) m where
   genSubst s (mbMatch -> [nuMP| LocalPermImpl impl |]) =
     LocalPermImpl <$> genSubst s impl
@@ -3700,6 +3730,17 @@ getDistPermsProxies = rlToProxies <$> getDistPerms
 getTopDistPerm :: ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 getTopDistPerm x = use (implStatePerms . topDistPerm x)
 
+-- | Get the top permission in the stack, which is expected to be a conjuction,
+-- and return its conjuncts. If it is not a conjunction, raise an 'error', using
+-- the supplied 'String' as the caller in the error message.
+getTopDistConj :: HasCallStack =>
+                  String -> ExprVar a ->
+                  ImplM vars s r (ps :> a) (ps :> a) [AtomicPerm a]
+getTopDistConj caller x =
+  use (implStatePerms . topDistPerm x) >>>= \case
+  ValPerm_Conj ps -> return ps
+  _ -> error (caller ++ ": unexpected non-conjunctive permission")
+
 -- | Get a sequence of the top @N@ permissions on the stack
 getTopDistPerms :: prx1 ps1 -> RAssign prx2 ps2 ->
                    ImplM vars s r (ps1 :++: ps2) (ps1 :++: ps2) (DistPerms ps2)
@@ -3794,11 +3835,11 @@ implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
      implSetNameTypes ns tps
 
 -- | TODO: Move this in to Hobbits
-nameMapFind 
-  :: (forall tp. f tp -> Bool) 
-  -> NameMap f 
+nameMapFind
+  :: (forall tp. f tp -> Bool)
+  -> NameMap f
   -> Maybe (Some (Product Name f))
-nameMapFind predicate nm = 
+nameMapFind predicate nm =
   case find (\(NameAndElem _ f) -> predicate f) $ NameMap.assocs nm of
     Just (NameAndElem name f) -> Just $ Some $ Pair name f
     Nothing -> Nothing
@@ -3814,13 +3855,13 @@ permContainsVar x p = NameSet.member x (freeVars p)
 -- FIXME: what is the purpose of this? Don't we want all permissions recursively
 -- containing @x@?
 findPermsContainingVar :: ExprVar tp -> ImplM vars s r ps ps (Some DistPerms)
-findPermsContainingVar x = 
+findPermsContainingVar x =
   getPerms >>>= \perms ->
     case nameMapFind (permContainsVar x) (view varPermMap perms) of
       Just (Some (Pair y p)) -> findPermsContainingVar y >>>= \(Some dps) ->
         return $ Some $ DistPermsCons dps y p
       Nothing -> return $ Some DistPermsNil
-      
+
 -- | When adding a new existential unit-typed variable, instantiate it with the
 -- underlying global unit if available; if not, update the global unit variable
 -- with a fresh variable
@@ -3954,6 +3995,11 @@ implDebugM reqlvl f =
      let str = renderDoc doc
      debugTrace reqlvl dlevel str (return str)
 
+-- | Pretty-print an object using the current pretty-printing info
+implPrettyM :: NuMatchingAny1 r => PermPretty p => p ->
+               ImplM vars s r ps ps (PP.Doc ann)
+implPrettyM p = uses implStatePPInfo $ \pp_info -> permPretty pp_info p
+
 -- | Emit debugging output using the current 'PPInfo' if the 'implStateDebugLevel'
 -- is at least 'traceDebugLevel'
 implTraceM :: (PPInfo -> PP.Doc ann) -> ImplM vars s r ps ps String
@@ -3991,10 +4037,10 @@ implCatchM :: NuMatchingAny1 r => PermPretty p => String -> p ->
               ImplM vars s r ps1 ps2 a -> ImplM vars s r ps1 ps2 a ->
               ImplM vars s r ps1 ps2 a
 implCatchM f p m1 m2 =
-  implTraceM (\i -> pretty ("Inserting catch in " ++ f ++ " for proving:")
-                    <> line <> permPretty i p) >>>
+  implTraceM (\i -> pretty ("Catch in " ++ f ++ " for proving:")
+                    <> line <> permPretty i p) >>>= \catch_str ->
   implApplyImpl1
-    Impl1_Catch
+    (Impl1_Catch catch_str)
     (MNil
      :>: Impl1Cont (const $
                     implTraceM (\i -> pretty ("Case 1 of catch in " ++ f
@@ -4007,9 +4053,9 @@ implCatchM f p m1 m2 =
                                       <> line <> permPretty i p) >>>
                     m2))
 
--- | "Push" all of the permissions in the permission set for a variable, which
+-- | \"Push\" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
--- from the input permission set. This is like a simple "proof" of @x:p@.
+-- from the input permission set. This is like a simple \"proof\" of @x:p@.
 implPushM :: HasCallStack => NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
              ImplM vars s r (ps :> a) ps ()
 implPushM x p =
@@ -4061,8 +4107,8 @@ implElimOrsM :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                 ImplM vars s r (ps :> a) (ps :> a) ()
 implElimOrsM x p@(matchOrList -> Just (Some or_list)) =
   implTraceM (\pp_info -> pretty "Eliminating or:" <+>
-                          permPretty pp_info p) >>>
-  implApplyImpl1 (Impl1_ElimOrs x or_list)
+                          permPretty pp_info (ColonPair x p)) >>>= \xp_pp ->
+  implApplyImpl1 (Impl1_ElimOrs xp_pp x or_list)
   (RL.map (\(OrListDisj _) -> Impl1Cont (const $ pure ())) or_list)
 implElimOrsM _ _ = error "implElimOrsM: malformed input permission"
 
@@ -4209,8 +4255,10 @@ implIntroStructAllFields ::
   ImplM vars s r (ps :> StructType ctx) (ps :++: CtxToRList ctx
                                          :> StructType ctx) ()
 implIntroStructAllFields x =
-  getTopDistPerm x >>>= \(ValPerm_Conj1 (Perm_Struct ps)) ->
-  implIntroStructFields x ps (RL.members ps)
+  getTopDistPerm x >>>= \case
+  (ValPerm_Conj1 (Perm_Struct ps)) ->
+    implIntroStructFields x ps (RL.members ps)
+  _ -> error "implIntroStructAllFields: malformed input permission"
 
 -- | Eliminate a permission @x:ptr((rw,off) |-> p)@ into permissions
 -- @x:ptr((rw,off) |-> eq(y))@ and @y:p@ for a fresh variable @y@, returning the
@@ -4443,7 +4491,7 @@ elimOrsExistsNamesM x =
     p -> pure p
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or defined
--- permissions for a variable and then return the resulting "simple" permission
+-- permissions for a variable and then return the resulting \"simple\" permission
 getSimpleVarPerm :: NuMatchingAny1 r => ExprVar a ->
                     ImplM vars s r ps ps (ValuePerm a)
 getSimpleVarPerm x =
@@ -4733,7 +4781,7 @@ introOrRM x p1 p2 = implSimplM Proxy (SImpl_IntroOrR x p1 p2)
 -- | Apply existential introduction to the top of the permission stack, changing
 -- it from @[e/x]p@ to @exists (x:tp).p@
 --
--- FIXME: is there some way we could "type-check" this, to ensure that the
+-- FIXME: is there some way we could \"type-check\" this, to ensure that the
 -- permission on the top of the stack really equals @[e/x]p@?
 introExistsM :: (KnownRepr TypeRepr tp, NuMatchingAny1 r) =>
                 ExprVar a -> PermExpr tp -> Binding tp (ValuePerm a) ->
@@ -5125,10 +5173,12 @@ implLLVMFieldSplit x fp sz_bytes
         (Impl1_SplitLLVMWordField x (llvmFieldSetEqWord fp e) sz endianness)
         (MNil :>: Impl1Cont (const $ return ())) >>>
         getDistPerms >>>=
-        \(_ :>: VarAndPerm _ (ValPerm_Conj1 p1) :>:
-          VarAndPerm _ (ValPerm_Conj1 p2) :>:
-          VarAndPerm y p_y :>: VarAndPerm z p_z) ->
-        recombinePerm z p_z >>> recombinePerm y p_y >>> return (p1,p2)
+        \case
+          (_ :>: VarAndPerm _ (ValPerm_Conj1 p1) :>:
+           VarAndPerm _ (ValPerm_Conj1 p2) :>:
+           VarAndPerm y p_y :>: VarAndPerm z p_z) ->
+            recombinePerm z p_z >>> recombinePerm y p_y >>> return (p1,p2)
+          _ -> error "implLLVMFieldSplit: unexpected permission stack"
       Nothing ->
         implSimplM Proxy (SImpl_SplitLLVMTrueField x
                           (llvmFieldSetTrue fp fp) sz fp_m_sz) >>>
@@ -5163,8 +5213,10 @@ implLLVMFieldTruncate x fp sz'
         (Impl1_TruncateLLVMWordField x (llvmFieldSetEqWord fp e) sz' endianness)
         (MNil :>: Impl1Cont (const $ return ())) >>>
         getDistPerms >>>=
-        \(_ :>: VarAndPerm _ (ValPerm_Conj1 p) :>: VarAndPerm y p_y) ->
-        recombinePerm y p_y >>> return p
+        \case
+          (_ :>: VarAndPerm _ (ValPerm_Conj1 p) :>: VarAndPerm y p_y) ->
+            recombinePerm y p_y >>> return p
+          _ -> error "implLLVMFieldTruncate: unexpected permission stack"
       Nothing ->
         implSimplM Proxy (SImpl_TruncateLLVMTrueField x
                           (llvmFieldSetTrue fp fp) sz') >>>
@@ -5353,10 +5405,11 @@ implLLVMArrayReturnBorrow ::
                                             :> LLVMPointerType w) ()
 implLLVMArrayReturnBorrow x ap (FieldBorrow cell) =
   implLLVMArrayCellReturn x ap cell
-implLLVMArrayReturnBorrow x ap b@(RangeBorrow _) =
-  let ValPerm_Conj1 (Perm_LLVMArray ap_ret) = permForLLVMArrayBorrow ap b in
-  implLLVMArrayReturn x ap ap_ret >>>
-  pure ()
+implLLVMArrayReturnBorrow x ap b@(RangeBorrow _)
+  | ValPerm_Conj1 (Perm_LLVMArray ap_ret) <- permForLLVMArrayBorrow ap b =
+    implLLVMArrayReturn x ap ap_ret >>>
+    pure ()
+implLLVMArrayReturnBorrow _ _ _ = error "implLLVMArrayReturnBorrow"
 
 
 -- | Append to array permissions, assuming one ends where the other begins and
@@ -5436,7 +5489,7 @@ implElimLLVMBlock :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
 implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_EmptyShape }) =
   implSimplM Proxy (SImpl_ElimLLVMBlockToBytes x bp)
 
--- If the "natural" length of the shape of a memblock permission is smaller than
+-- If the \"natural\" length of the shape of a memblock permission is smaller than
 -- its actual length, sequence with the empty shape and then eliminate
 implElimLLVMBlock x bp
   | Just sh_len <- llvmShapeLength $ llvmBlockShape bp
@@ -5496,6 +5549,10 @@ implElimLLVMBlock x bp
 --
 -- implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape =
 --                                           PExpr_ArrayShape _ _ _ }) =
+
+-- For a tuple shape, eliminate the tuple
+implElimLLVMBlock x bp@(LLVMBlockPerm { llvmBlockShape = PExpr_TupShape sh }) =
+  implSimplM Proxy (SImpl_ElimLLVMBlockTuple x (bp { llvmBlockShape = sh }))
 
 -- Special case: for shape sh1;emptysh where the natural length of sh1 is the
 -- same as the length of the block permission, eliminate the emptysh, converting
@@ -5615,9 +5672,9 @@ permIndicesForProvingOffset ps imprecise_p off =
 -- it as the return value, and recombine any other permissions that are yielded
 -- by this elimination.
 --
--- The notion of "contains" is determined by the supplied @imprecise_p@ flag: a
--- 'True' makes this mean "could contain" in the sense of 'bvPropCouldHold',
--- while 'False' makes this mean "definitely contains" in the sense of
+-- The notion of \"contains\" is determined by the supplied @imprecise_p@ flag: a
+-- 'True' makes this mean \"could contain\" in the sense of 'bvPropCouldHold',
+-- while 'False' makes this mean \"definitely contains\" in the sense of
 -- 'bvPropHolds'.
 --
 -- If there are multiple ways to eliminate @p@ to a @p'@ that contains @off@
@@ -5661,7 +5718,7 @@ implGetLLVMPermForOffset ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
   ExprVar (LLVMPointerType w) {- ^ the variable @x@ -} ->
   [AtomicPerm (LLVMPointerType w)]  {- ^ the permissions held for @x@ -} ->
-  Bool {- ^ whether imprecise matches are allowed -} -> 
+  Bool {- ^ whether imprecise matches are allowed -} ->
   Bool  {- ^ whether block permissions should be eliminated -} ->
   PermExpr (BVType w) {- ^ the offset we are looking for -} ->
   Mb vars (ValuePerm (LLVMPointerType w)) {- ^ the perm we want to prove -} ->
@@ -6069,11 +6126,11 @@ instance ProveEq (LLVMFramePerm w) where
     | mbLift mb_i == i =
       do eqp1 <- proveEq e mb_e
          eqp2 <- proveEq fperms mb_fperms
-         pure (liftA2 (\x y -> (x,i):y) eqp1 eqp2)
-  proveEq perms mb = 
+         pure (App.liftA2 (\x y -> (x,i):y) eqp1 eqp2)
+  proveEq perms mb =
     use implStatePPInfo >>>= \ppinfo ->
-      implFailM $ EqualityProofError 
-                    (permPretty ppinfo perms) 
+      implFailM $ EqualityProofError
+                    (permPretty ppinfo perms)
                     (permPretty ppinfo mb)
 
 instance ProveEq (LLVMBlockPerm w) where
@@ -6125,6 +6182,16 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
       substEqsWithProof e >>= \eqp ->
       setVarM memb (someEqProofRHS eqp) >>> pure eqp
 
+  -- If the RHS is an unset variable z plus an offset o, simplify e using any
+  -- available equality proofs to some e' and set z equal to e' minus o
+  (_, [nuMP| PExpr_LLVMOffset z mb_off |])
+    | Left memb <- mbNameBoundP z
+    , Nothing <- psubstLookup psubst memb
+    , Just off <- partialSubst psubst mb_off ->
+      -- implTraceM (\i -> pretty "proveEqH (unset var + offset):" <+> permPretty i e) >>>
+      substEqsWithProof e >>= \eqp ->
+      setVarM memb (someEqProofRHS eqp `addLLVMOffset` bvNegate off) >>> pure eqp
+
   -- If the RHS is a set variable, substitute for it and recurse
   (_, [nuMP| PExpr_Var z |])
     | Left memb <- mbNameBoundP z
@@ -6161,9 +6228,9 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
           Just _ -> proveEqH psubst e mb_e
           Nothing -> getVarEqPerm y >>= \case
             Just _ -> proveEqH psubst e mb_e
-            Nothing -> 
+            Nothing ->
               use implStatePPInfo >>>= \ppinfo ->
-                implFailM $ EqualityProofError 
+                implFailM $ EqualityProofError
                               (permPretty ppinfo e)
                               (permPretty ppinfo mb_e)
 
@@ -6193,7 +6260,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
       pure (someEqProofTrans (someEqProof1 x e' True) eqp2)
     Nothing ->
       use implStatePPInfo >>>= \ppinfo ->
-      implFailM $ EqualityProofError 
+      implFailM $ EqualityProofError
                     (permPretty ppinfo e)
                     (permPretty ppinfo mb_e)
 
@@ -6208,7 +6275,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
           pure (someEqProofTrans eqp (someEqProof1 x e' False))
         Nothing ->
           use implStatePPInfo >>>= \ppinfo ->
-          implFailM $ EqualityProofError 
+          implFailM $ EqualityProofError
                         (permPretty ppinfo e)
                         (permPretty ppinfo mb_e)
 
@@ -6235,7 +6302,7 @@ proveEqH psubst e mb_e = case (e, mbMatch mb_e) of
 
   -- Otherwise give up!
   _ -> use implStatePPInfo >>>= \ppinfo ->
-         implFailM $ EqualityProofError 
+         implFailM $ EqualityProofError
                        (permPretty ppinfo e)
                        (permPretty ppinfo mb_e)
 
@@ -6468,10 +6535,12 @@ proveNeededPerm _ (NeededEq eq_perm) =
   return (Some MNil)
 proveNeededPerm vars (NeededRange x rng@(MbRangeForLLVMType _ _ _ _)) =
   proveSomeMbPerm x (someMbPermForRange vars rng) >>>
-  getTopDistPerm x >>>= \(ValPerm_LLVMBlock bp) ->
-  case NameSet.toRAssign (findEqVarFieldsInShape (llvmBlockShape bp)) of
-    NameSet.SomeRAssign ns ->
-      Some <$> traverseRAssign (\n -> VarAndPerm n <$> getPerm n) ns
+  getTopDistPerm x >>>= \case
+  (ValPerm_LLVMBlock bp) ->
+    case NameSet.toRAssign (findEqVarFieldsInShape (llvmBlockShape bp)) of
+      NameSet.SomeRAssign ns ->
+        Some <$> traverseRAssign (\n -> VarAndPerm n <$> getPerm n) ns
+  _ -> error "proveNeededPerm: expected block permission"
 
 -- | Prove the permissions represented by a sequence of 'NeededPerms', returning
 -- zero or more auxiliary permissions that are also needed
@@ -6564,7 +6633,7 @@ solveForPermListImplH vars ps_l (CruCtxCons tps_r' _) (ps_r' :>: _) =
 
 -- | Determine what additional permissions from the current set of variable
 -- permissions, if any, would be needed to prove one list of permissions implies
--- another. This is just a "best guess", so just do nothing and return if
+-- another. This is just a \"best guess\", so just do nothing and return if
 -- nothing can be done.
 --
 -- At a high level, this algorithm currently works as follows. It starts by
@@ -6732,7 +6801,7 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
     let mb_fp1 = fmap (flip llvmFieldSetContents
                        (ValPerm_Eq (PExpr_Var y))) mb_fp in
     proveVarLLVMFieldH x (Perm_LLVMField fp') off mb_fp1 >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp1) ->
+    getTopDistPerm x >>>= \p_top1 ->
 
     -- Next, prove the rest of mb_fp, at offset off+sz_bytes and with contents
     -- equal to some variable z
@@ -6744,13 +6813,18 @@ proveVarLLVMFieldH2 x (Perm_LLVMField fp) off mb_fp
                           llvmFieldContents = ValPerm_Eq (PExpr_Var z) })
           mb_fp in
     withExtVarsM (proveVarImplInt x $ mbValPerm_LLVMField mb_fp2) >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp2) ->
+    getTopDistPerm x >>>= \p_top2 ->
 
     -- Finally, combine these two pieces of mb_fp into a single permission, and
     -- use this permission to prove the one we needed to begin with
-    implLLVMFieldConcat x fp1 fp2 >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp_concat) ->
-    proveVarLLVMFieldH x (Perm_LLVMField fp_concat) off mb_fp
+    case (p_top1, p_top2) of
+      (ValPerm_LLVMField fp1, ValPerm_LLVMField fp2) ->
+        implLLVMFieldConcat x fp1 fp2 >>>
+        getTopDistPerm x >>>= \case
+        (ValPerm_LLVMField fp_concat) ->
+          proveVarLLVMFieldH x (Perm_LLVMField fp_concat) off mb_fp
+        _ -> error "proveVarLLVMFieldH2: expected field permission"
+      _ -> error "proveVarLLVMFieldH2: expected field permissions"
 
 -- If we have a field permission that contains the correct offset but doesn't
 -- start at it, then split it and recurse
@@ -6910,10 +6984,12 @@ borrowedLLVMArrayForArray lhs rhs =
                               , llvmArrayOffset  = o'
                               })
       where
-        rs   = llvmArrayAbsBorrowRange rhs <$> bs
+        rs        = llvmArrayAbsBorrowRange rhs <$> bs
+        (r', rs') = expectLengthAtLeastOne rs
+
         bs'  = chopBorrows [] bs (llvmArrayBorrows rhs) ++ llvmArrayBorrows rhs
-        o'   = bvRangeOffset (head rs)
-        v    = bvRangeOffset (last rs) `bvAdd` bvRangeLength (last rs)
+        o'   = bvRangeOffset r'
+        v    = bvRangeOffset rs' `bvAdd` bvRangeLength rs'
         len' = matchLLVMArrayCell rhs v
     _ -> Nothing
 
@@ -6965,8 +7041,8 @@ proveVarLLVMArray x ps mb_ap =
 --
 -- 4. By eliminating a @memblock@ permission with array shape.
 --
--- NOTE: these "ways" do *not* line up with the cases of the function, labeled
--- as "case 1", "case 2", etc. outputs in the code below.
+-- NOTE: these \"ways\" do *not* line up with the cases of the function, labeled
+-- as \"case 1\", \"case 2\", etc. outputs in the code below.
 --
 -- To determine which way to use, the algorithm searches for a permission
 -- currently held on the left that is either an array permission with exactly
@@ -7504,7 +7580,7 @@ proveVarLLVMBlocks1 x ps psubst (mb_bp:mb_bps)
 
     -- Recursively prove the remaining perms
     proveVarLLVMBlocks x ps' psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks1" x >>>= \ps_out ->
 
     -- Finally, combine the one memblock perm we chose with the rest of them
     implInsertConjM x (Perm_LLVMBlock bp') ps_out 0
@@ -7579,7 +7655,7 @@ proveVarLLVMBlocks1 x ps psubst mb_bps_in@(mb_bp:_)
                else
                  bvSub off (llvmBlockOffset bp) in
     implSimplM Proxy (SImpl_SplitLLVMBlockEmpty x bp len1) >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks1" x >>>= \ps' ->
     implAppendConjsM x (deleteNth i ps) ps' >>>
     proveVarLLVMBlocks x (deleteNth i ps ++ ps') psubst mb_bps_in
 
@@ -7627,7 +7703,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp [nuMP| PExpr_EmptyShape |] mb_bps
     -- Do the recursive call without the empty shape and remember what
     -- permissions it proved
     proveVarLLVMBlocks x ps psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
 
     -- Substitute into the required block perm and prove it with
     -- SImpl_IntroLLVMBlockEmpty
@@ -7652,8 +7728,11 @@ proveVarLLVMBlocks2 x ps psubst mb_bp [nuMP| PExpr_EmptyShape |] mb_bps =
   proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>
 
   -- Extract out the block perm we proved and coerce it to the empty shape
-  getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
-  let (Perm_LLVMBlock bp : ps_out') = ps_out in
+  getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
+  let (ps_out_hd, ps_out') = expectLengthAtLeastOne ps_out
+      bp = case ps_out_hd of
+        Perm_LLVMBlock bp_ -> bp_
+        _ -> error "proveVarLLVMBlocks2: expected block permission" in
   implSplitSwapConjsM x ps_out 1 >>>
   implSimplM Proxy (SImpl_CoerceLLVMBlockEmpty x bp) >>>
 
@@ -7687,8 +7766,11 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
 
   -- Move the correctly-sized perm + the empty shape one to the top of the
   -- stack and sequence them, and then eliminate the empty shape at the end
-  getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
-  let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps'') = ps'
+  getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
+  let (bp1,bp2,ps'') = case ps' of
+        (Perm_LLVMBlock bp1_ : Perm_LLVMBlock bp2_ : ps''_) ->
+          (bp1_,bp2_,ps''_)
+        _ -> error "proveVarLLVMBlocks2: expected two block permissions"
       len2 = llvmBlockLen bp2
       bp_out = bp1 { llvmBlockLen = bvAdd (llvmBlockLen bp1) len2 } in
   implSplitSwapConjsM x ps' 2 >>>
@@ -7721,8 +7803,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Extract out the block perm we proved
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
-    let (_ : ps_out') = ps_out in
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
+    let (_, ps_out') = expectLengthAtLeastOne ps_out in
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Introduce the modalities
@@ -7766,8 +7848,11 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Extract out the block perm we proved
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
-    let (Perm_LLVMBlock bp : ps_out') = ps_out in
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
+    let (ps_out_hd, ps_out') = expectLengthAtLeastOne ps_out
+        bp = case ps_out_hd of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> error "proveVarLLVMBlocks2: expected block permission" in
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Fold the named shape
@@ -7802,9 +7887,12 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_EqShape _ (PExpr_Var mb_z) |] <- mb_sh
   , Left memb <- mbNameBoundP mb_z
   , Just blk <- psubstLookup psubst memb =
-    let mb_bp' = fmap (\bp ->
-                        let PExpr_EqShape len _ = llvmBlockShape bp in
-                        bp { llvmBlockShape = PExpr_EqShape len blk }) mb_bp in
+    let mb_bp' =
+          fmap (\bp ->
+                 case llvmBlockShape bp of
+                   PExpr_EqShape len _ ->
+                     bp { llvmBlockShape = PExpr_EqShape len blk }
+                   _ -> error "proveVarLLVMBlocks2: expected eq shape") mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps)
 
 
@@ -7825,8 +7913,11 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>
 
     -- Extract out the block perm we proved
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_out) ->
-    let (Perm_LLVMBlock bp : ps_out') = ps_out in
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps_out ->
+    let (ps_out_hd, ps_out') = expectLengthAtLeastOne ps_out
+        bp = case ps_out_hd of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> error "proveVarLLVMBlocks2: expected block perm" in
     implSplitSwapConjsM x ps_out 1 >>>
 
     -- Eliminate that block perm to have an equality shape, and set z to the
@@ -7868,7 +7959,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
 
     -- Move the pointer permission we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implExtractSwapConjM x ps' 0 >>>
 
     -- Use the SImpl_IntroLLVMBlockPtr rule to prove the required memblock perm
@@ -7876,7 +7967,8 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSimplM Proxy (SImpl_IntroLLVMBlockPtr x bp) >>>
 
     -- Finally, move the memblock perm we proved back into position
-    implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps') 0
+    let (_, ps'') = expectLengthAtLeastOne ps' in
+    implSwapInsertConjM x (Perm_LLVMBlock bp) ps'' 0
 
 
 -- If proving a field shape, prove the remaining blocks and then prove the
@@ -7897,15 +7989,16 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Recursively prove the remaining block permissions
     proveVarLLVMBlocks x ps psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
 
     -- Prove the corresponding field permission
     proveVarImplInt x (mbValPerm_LLVMField mb_fp) >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMField fp) ->
-
-    -- Finally, convert the field perm to a block and move it into position
-    implSimplM Proxy (SImpl_IntroLLVMBlockField x fp) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock $ llvmFieldPermToBlock fp) ps' 0
+    getTopDistPerm x >>>= \case
+      (ValPerm_LLVMField fp) ->
+        -- Finally, convert the field perm to a block and move it into position
+        implSimplM Proxy (SImpl_IntroLLVMBlockField x fp) >>>
+        implSwapInsertConjM x (Perm_LLVMBlock $ llvmFieldPermToBlock fp) ps' 0
+      _ -> error "proveVarLLVMBlocks2: expected field permission"
 
 
 -- If proving an array shape, prove the remaining blocks and then prove the
@@ -7916,18 +8009,47 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_ArrayShape _ _ _ |] <- mb_sh =
     -- Recursively prove the remaining block permissions
     proveVarLLVMBlocks x ps psubst mb_bps >>>
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
 
     -- Prove the corresponding array permission
     proveVarImplInt x (mbMapCl $(mkClosed [| ValPerm_LLVMArray . fromJust .
                                              llvmBlockPermToArray |]) mb_bp) >>>
-    getTopDistPerm x >>>= \(ValPerm_LLVMArray ap) ->
+    getTopDistPerm x >>>= \case
+      ValPerm_LLVMArray ap ->
+        -- Finally, convert the array perm to a block and move it into position
+        implSimplM Proxy (SImpl_IntroLLVMBlockArray x ap) >>>
+        implSwapInsertConjM x (Perm_LLVMBlock $ fromJust $
+                               llvmArrayPermToBlock ap) ps' 0
+      _ -> error "proveVarLLVMBlocks2: expected array permission"
 
-    -- Finally, convert the array perm to a block and move it into position
-    implSimplM Proxy (SImpl_IntroLLVMBlockArray x ap) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock $ fromJust $
-                           llvmArrayPermToBlock ap) ps' 0
+-- If proving a tuple shape, prove the contents of the tuple and add the tuple
+proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
+  | [nuMP| PExpr_TupShape _ |] <- mb_sh =
 
+    -- Recursively call proveVarLLVMBlocks with sh in place of tuplesh(sh)
+    let mb_bp' = mbMapCl $(mkClosed
+                           [| \bp ->
+                             case llvmBlockShape bp of
+                               PExpr_TupShape sh ->
+                                 bp { llvmBlockShape = sh }
+                               _ -> error "proveVarLLVMBlocks2: expected tuple shape"
+                            |]) mb_bp in
+    proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
+
+    -- Extract the sh permission from the top of the stack and tuple it
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
+    implExtractSwapConjM x ps' 0 >>>
+    let (ps_hd', ps'') = expectLengthAtLeastOne ps'
+        bp = case ps_hd' of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> panic "proveVarLLVMBlocks2" ["expected block permission"]
+        sh = llvmBlockShape bp in
+    implSimplM Proxy (SImpl_IntroLLVMBlockTuple x bp) >>>
+
+    -- Finally, put the new tuplesh(sh) permission back in place
+    implSwapInsertConjM x (Perm_LLVMBlock
+                           (bp { llvmBlockShape = PExpr_TupShape sh }))
+                        ps'' 0
 
 -- If proving a sequence shape with an unneeded empty shape, i.e., of the form
 -- sh1;emptysh where the length of sh1 equals the entire length of the required
@@ -7936,21 +8058,30 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
   | [nuMP| PExpr_SeqShape _ PExpr_EmptyShape |] <- mb_sh
   , mbLift $ mbMapCl $(mkClosed
                        [| \bp ->
-                         let PExpr_SeqShape sh1 _ = llvmBlockShape bp in
-                         bvEq (llvmBlockLen bp) (fromJust $
-                                                 llvmShapeLength sh1) |]) mb_bp =
+                         case llvmBlockShape bp of
+                           PExpr_SeqShape sh1 _ ->
+                             bvEq (llvmBlockLen bp) (fromJust $
+                                                     llvmShapeLength sh1)
+                           _ -> error "proveVarLLVMBlocks2: expected seq shape"
+                        |]) mb_bp =
     -- Recursively call proveVarLLVMBlocks with sh1 in place of sh1;emptysh
     let mb_bp' = mbMapCl $(mkClosed
                            [| \bp ->
-                             let PExpr_SeqShape sh1 _ = llvmBlockShape bp in
-                             bp { llvmBlockShape = sh1 } |]) mb_bp in
+                             case llvmBlockShape bp of
+                               PExpr_SeqShape sh1 _ ->
+                                 bp { llvmBlockShape = sh1 }
+                               _ -> error "proveVarLLVMBlocks2: expected seq shape"
+                            |]) mb_bp in
     proveVarLLVMBlocks x ps psubst (mb_bp':mb_bps) >>>
 
     -- Extract the sh1 permission from the top of the stack and sequence an
     -- empty shape onto the end of it
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implExtractSwapConjM x ps' 0 >>>
-    let Perm_LLVMBlock bp = head ps'
+    let (ps_hd', ps'') = expectLengthAtLeastOne ps'
+        bp = case ps_hd' of
+          Perm_LLVMBlock bp_ -> bp_
+          _ -> error "proveVarLLVMBlocks2: expected block permission"
         sh1 = llvmBlockShape bp in
     implSimplM Proxy (SImpl_IntroLLVMBlockSeqEmpty x bp) >>>
 
@@ -7958,7 +8089,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     implSwapInsertConjM x (Perm_LLVMBlock
                            (bp { llvmBlockShape =
                                    PExpr_SeqShape sh1 PExpr_EmptyShape }))
-                        (tail ps') 0
+                        ps'' 0
 
 
 -- If proving a sequence shape otherwise, prove the two shapes and combine them;
@@ -7971,8 +8102,10 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     let mb_bps12 =
           mbMapCl
           $(mkClosed [| \bp ->
-                       let PExpr_SeqShape sh1 sh2 = llvmBlockShape bp in
-                       let Just len1 = llvmShapeLength sh1 in
+                       let (sh1,sh2) = case llvmBlockShape bp of
+                             PExpr_SeqShape sh1_ sh2_ -> (sh1_,sh2_)
+                             _ -> error "proveVarLLVMBlocks2: expected seq shape" in
+                       let len1 = fromJust (llvmShapeLength sh1) in
                        [bp { llvmBlockLen = len1, llvmBlockShape = sh1 },
                         bp { llvmBlockOffset = bvAdd (llvmBlockOffset bp) len1,
                              llvmBlockLen = bvSub (llvmBlockLen bp) len1,
@@ -7981,8 +8114,12 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mbList mb_bps12 ++ mb_bps) >>>
 
     -- Move the block permissions we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
-    let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps'') = ps'
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
+    let (bp1,bp2,ps'') =
+          (case ps' of
+              (Perm_LLVMBlock bp1_ : Perm_LLVMBlock bp2_ : ps''_) ->
+                (bp1_,bp2_,ps''_)
+              _ -> error "proveVarLLVMBlocks2: expected 2 block permissions")
         len2 = llvmBlockLen bp2
         sh2 = llvmBlockShape bp2 in
     implSplitSwapConjsM x ps' 2 >>>
@@ -8039,15 +8176,16 @@ proveVarLLVMBlocks2 x ps psubst mb_bp _ mb_bps
                                      : mb_bps) >>>
 
     -- Move the block permission with shape mb_sh to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps'') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps'' ->
     implExtractSwapConjM x ps'' 0 >>>
 
     -- Finally, weaken the block permission to be the desired tagged union
     -- shape, and move it back into position
+    let (_, ps''') = expectLengthAtLeastOne ps'' in
     partialSubstForceM mb_shs "proveVarLLVMBlock" >>>= \shs ->
     partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp ->
     implIntroOrShapeMultiM x bp shs i >>>
-    implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps'') 0
+    implSwapInsertConjM x (Perm_LLVMBlock bp) ps''' 0
 
 
 -- If proving a disjunctive shape, try to prove one of the disjuncts
@@ -8064,21 +8202,24 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocks x ps psubst (mb_bp' : mb_bps) >>>
 
     -- Move the block permission we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implSplitSwapConjsM x ps' 1 >>>
 
     -- Prove the disjunction of the two memblock permissions
     partialSubstForceM mb_bp "proveVarLLVMBlock" >>>= \bp ->
-    let PExpr_OrShape sh1 sh2 = llvmBlockShape bp in
+    let (sh1, sh2) = case llvmBlockShape bp of
+          PExpr_OrShape sh1' sh2' -> (sh1',sh2')
+          _ -> error "proveVarLLVMBlocks2: expected or shape" in
     let introM = if is_case1 then introOrLM else introOrRM in
     introM x (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh1 })
     (ValPerm_LLVMBlock $ bp { llvmBlockShape = sh2 }) >>>
 
     -- Now coerce the disjunctive permission on top of the stack to an or shape,
     -- and move it back into position
+    let (_, ps'') = expectLengthAtLeastOne ps' in
     implSimplM Proxy (SImpl_IntroLLVMBlockOr
                       x (bp { llvmBlockShape = sh1 }) sh2) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock bp) (tail ps') 0
+    implSwapInsertConjM x (Perm_LLVMBlock bp) ps'' 0
 
 
 -- If proving an existential shape, introduce an evar and recurse
@@ -8092,7 +8233,7 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocksExt1 x ps psubst mb_bp' mb_bps >>>= \e ->
 
     -- Move the block permission we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps') ->
+    getTopDistConj "proveVarLLVMBlocks2" x >>>= \ps' ->
     implSplitSwapConjsM x ps' 1 >>>
 
     -- Prove an existential around the memblock permission we proved
@@ -8101,8 +8242,9 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
 
     -- Now coerce the existential permission on top of the stack to a memblock
     -- perm with existential shape, and move it back into position
+    let (_, ps'') = expectLengthAtLeastOne ps' in
     implSimplM Proxy (SImpl_IntroLLVMBlockEx x bp_out) >>>
-    implSwapInsertConjM x (Perm_LLVMBlock bp_out) (tail ps') 0
+    implSwapInsertConjM x (Perm_LLVMBlock bp_out) ps'' 0
 
 
 -- If proving an evar shape that has already been set, substitute and recurse
@@ -8250,9 +8392,14 @@ proveVarLLVMBlocks2 x ps psubst mb_bp mb_sh mb_bps
     proveVarLLVMBlocksExt2 x ps psubst mb_bps12 mb_bps >>>
 
     -- Move the two block permissions we proved to the top of the stack
-    getTopDistPerm x >>>= \(ValPerm_Conj ps_ret) ->
-    let (Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps_ret') = ps_ret
-        len2 = llvmBlockLen bp2
+    getTopDistPerm x >>>= \p_top ->
+    (case p_top of
+        ValPerm_Conj
+          ps_ret@(Perm_LLVMBlock bp1 : Perm_LLVMBlock bp2 : ps_ret') ->
+          return (ps_ret, bp1, bp2, ps_ret')
+        _ -> error "proveVarLLVMBlocks2: unexpected permission on top of the stack")
+    >>>= \(ps_ret, bp1, bp2, ps_ret') ->
+    let len2 = llvmBlockLen bp2
         sh2 = llvmBlockShape bp2 in
     implSplitSwapConjsM x ps_ret 2 >>>
     implSplitConjsM x (map Perm_LLVMBlock [bp1,bp2]) 1 >>>
@@ -8724,7 +8871,7 @@ proveVarConjImpl x ps_lhs mb_ps =
       implInsertConjM x p ps' i
     [nuMP| Nothing |] ->
       use implStatePPInfo >>>= \ppinfo ->
-      implFailM $ InsufficientVariablesError $ 
+      implFailM $ InsufficientVariablesError $
       permPretty ppinfo (fmap ValPerm_Conj mb_ps)
 
 
@@ -8734,7 +8881,7 @@ proveVarConjImpl x ps_lhs mb_ps =
 ----------------------------------------------------------------------
 
 -- | Prove @x:p'@, where @p@ may have existentially-quantified variables in
--- it. The "@Int@" suffix indicates that this call is internal to the
+-- it. The \"@Int@\" suffix indicates that this call is internal to the
 -- implication prover, similar to 'proveVarsImplAppendInt', meaning that this
 -- version will not end lifetimes, which must be done at the top level.
 proveVarImplInt :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
@@ -9053,7 +9200,7 @@ proveExVarImpl _ mb_x mb_p@(mbMatch -> [nuMP| ValPerm_Conj [Perm_LLVMFrame _] |]
 -- Otherwise we fail
 proveExVarImpl _ mb_x mb_p =
   use implStatePPInfo >>>= \ppinfo ->
-    implFailM $ ExistentialError 
+    implFailM $ ExistentialError
                   (permPretty ppinfo mb_x)
                   (permPretty ppinfo mb_p)
 
@@ -9078,7 +9225,7 @@ funPermExDistIns fun_perm args =
   fmap (varSubst (permVarSubstOfNames args)) $ mbSeparate args $
   mbValuePermsToDistPerms $ funPermIns fun_perm
 
--- | Make a "base case" 'DistPermsSplit' where the split is at the end
+-- | Make a \"base case\" 'DistPermsSplit' where the split is at the end
 baseDistPermsSplit :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                       DistPermsSplit (ps :> a)
 baseDistPermsSplit ps x p =
@@ -9203,7 +9350,7 @@ proveVarsImplAppendInt mb_ps =
         use implStatePPInfo >>>= \ppinfo ->
         implFailM $ InsufficientVariablesError $
         permPretty ppinfo mb_ps
-        
+
 -- | Like 'proveVarsImplAppendInt' but re-associate the appends
 proveVarsImplAppendIntAssoc ::
   NuMatchingAny1 r => prx ps_in -> prx1 ps1 -> ExDistPerms vars ps ->
@@ -9393,7 +9540,7 @@ proveVarImpl x mb_p = proveVarsImplAppend $ fmap (distPerms1 x) mb_p
 implFailM :: NuMatchingAny1 r => ImplError -> ImplM vars s r ps_any ps a
 implFailM err =
   use implStateFailPrefix >>>= \prefix ->
-    implTraceM (const $ pretty $ prefix <> ppError err) >>> 
+    implTraceM (const $ pretty $ prefix <> ppError err) >>>
     implApplyImpl1 (Impl1_Fail err) MNil
 
 -- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
@@ -9404,19 +9551,19 @@ implFailVarM f x p mb_p =
   use implStateVars >>>= \ctx ->
   findPermsContainingVar x >>>= \case
     (Some distperms) ->
-      implFailM $ ImplVariableError 
-                    (ppImpl ppinfo x p mb_p) 
-                    f 
-                    (permPretty ppinfo x, x) 
+      implFailM $ ImplVariableError
+                    (ppImpl ppinfo x p mb_p)
+                    f
+                    (permPretty ppinfo x, x)
                     (permPretty ppinfo p, p)
-                    ctx 
+                    ctx
                     distperms
 
 instance ErrorPretty ImplError where
   ppError (GeneralError doc) = renderDoc doc
-  ppError NoFrameInScopeError = 
+  ppError NoFrameInScopeError =
     "No LLVM frame in scope"
-  ppError ArrayStepError = 
+  ppError ArrayStepError =
     "Error proving array permissions"
   ppError MuUnfoldError =
     "Tried to unfold a mu on the left after unfolding on the right"

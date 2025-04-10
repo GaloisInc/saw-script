@@ -62,13 +62,14 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Monad.Identity
-import Control.Monad.State
+import Control.Monad (MonadPlus(..), (>=>), guard, join, unless)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import Data.IORef
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
+import Data.List.Extra (nubOrd)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -245,8 +246,8 @@ scMatch sc pat term =
     -- saves the names associated with those bound variables.
     match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
              MaybeT IO MatchState
-    match _ _ (STApp i fv _) (STApp j _ _) s
-      | fv == emptyBitSet && i == j = return s
+    match _ _ t@(STApp i _ _ _) (STApp j _ _ _) s
+      | termIsClosed t && i == j = return s
     match depth env x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y) >>
@@ -260,7 +261,11 @@ scMatch sc pat term =
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
                    do v <- scFreshGlobal sc nm ty
-                      let Just ec = R.asExtCns v
+                      -- asExtCns should always return Just here because
+                      -- scFreshGlobal always returns an ExtCns.
+                      ec <- case R.asExtCns v of
+                              Just ec -> pure ec
+                              Nothing -> error "scMatch.match: impossible"
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
              let fixVars t [] = return (t, [])
@@ -320,6 +325,9 @@ boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
 
 vecEqIdent :: Ident
 vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
+
+pairEqIdent :: Ident
+pairEqIdent = mkIdent (mkModuleName ["Prelude"]) "pairEq"
 
 arrayEqIdent :: Ident
 arrayEqIdent = mkIdent (mkModuleName ["Prelude"]) "arrayEq"
@@ -389,6 +397,7 @@ ruleOfProp sc term ann =
     (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef pairEqIdent -> Just (), [_, _, _, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
@@ -871,8 +880,7 @@ replaceTerm :: Ord a =>
   Term         {- ^ the term in which to perform the replacement -} ->
   IO (Set a, Term)
 replaceTerm sc ss (pat, repl) t = do
-    let fvs = looseVars pat
-    unless (fvs == emptyBitSet) $ fail $ unwords
+    unless (termIsClosed pat) $ fail $ unwords
        [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
@@ -933,7 +941,10 @@ hoistIfs sc t = do
    let ss :: Simpset () = addRules rules emptySimpset
 
    (t', conds) <- doHoistIfs sc ss cache itePat . snd =<< rewriteSharedTerm sc ss t
-   splitConds sc ss (map fst conds) t'
+
+   -- remove duplicate conditions from the list, as muxing in SAW can result in
+   -- many copies of the same condition, which cause a performance issue
+   splitConds sc ss (nubOrd $ map fst conds) t'
 
 
 splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
@@ -975,10 +986,13 @@ doHoistIfs sc ss hoistCache itePat = go
        top :: Term -> TermF Term -> IO (HoistIfs s)
        top t tf
           | Just inst <- first_order_match itePat t = do
-               let Just branch_tp   = Map.lookup 0 inst
-               let Just cond        = Map.lookup 1 inst
-               let Just then_branch = Map.lookup 2 inst
-               let Just else_branch = Map.lookup 3 inst
+               -- All of these Map lookups should be safe due to the term
+               -- structure of an if-then-else expression.
+               let err = error "doHoistIfs.top: impossible"
+               let branch_tp   = Map.findWithDefault err 0 inst
+               let cond        = Map.findWithDefault err 1 inst
+               let then_branch = Map.findWithDefault err 2 inst
+               let else_branch = Map.findWithDefault err 3 inst
 
                (then_branch',conds1) <- go then_branch
                (else_branch',conds2) <- go else_branch

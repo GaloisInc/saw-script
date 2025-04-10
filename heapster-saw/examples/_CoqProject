@@ -4,7 +4,7 @@
 
 # FIXME: Uncomment _proofs files when they're updated with the latest automation
 linked_list_gen.v
-linked_list_proofs.v
+#linked_list_proofs.v
 xor_swap_gen.v
 xor_swap_proofs.v
 xor_swap_rust_gen.v
@@ -17,8 +17,6 @@ loops_gen.v
 #loops_proofs.v
 iter_linked_list_gen.v
 #iter_linked_list_proofs.v
-iso_recursive_gen.v
-#iso_recursive_proofs.v
 memcpy_gen.v
 #memcpy_proofs.v
 rust_data_gen.v
@@ -32,7 +30,7 @@ clearbufs_gen.v
 exp_explosion_gen.v
 #exp_explosion_proofs.v
 mbox_gen.v
-mbox_proofs.v
+#mbox_proofs.v
 global_var_gen.v
 #global_var_proofs.v
 sha512_gen.v

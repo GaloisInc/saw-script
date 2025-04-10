@@ -1,0 +1,3 @@
+// Trigger the "do block must include at least one expression" message
+
+let x = do {};

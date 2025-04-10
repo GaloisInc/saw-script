@@ -1,0 +1,5 @@
+// This fails with an unexpected end of cryptol block.
+
+let x = {{ /* 3 }} */;
+
+
