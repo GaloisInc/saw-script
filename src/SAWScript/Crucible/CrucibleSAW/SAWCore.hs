@@ -105,7 +105,7 @@ data SAWExpr (bt :: BaseType) where
   IntToRealSAWExpr :: !(SAWExpr BaseIntegerType) -> SAWExpr BaseRealType
   -- This is a SAWCore term that represents a natural number, but has an
   -- implicit nat-to-integer conversion.
-  NatToIntSAWExpr :: !(SAWExpr BaseNatType) -> SAWExpr BaseIntegerType
+  --NatToIntSAWExpr :: !(SAWExpr BaseNatType) -> SAWExpr BaseIntegerType
 
 type SAWCoreBackend n solver fs = B.ExprBuilder n (SAWCoreState solver fs) fs
 
@@ -159,7 +159,6 @@ baseSCType sym sc bt =
   case bt of
     BaseBoolRepr -> SC.scBoolType sc
     BaseBVRepr w -> SC.scBitvector sc $ fromIntegral (natValue w)
-    BaseNatRepr  -> SC.scNatType sc
     BaseIntegerRepr -> SC.scIntegerType sc
     BaseArrayRepr indexTypes range
       | Ctx.Empty Ctx.:> idx_type <- indexTypes ->
@@ -278,6 +277,7 @@ toSC sym elt =
 
 
 -- | Return a shared term with type nat from a SAWExpr.
+{-
 scAsIntExpr ::
   OnlineSolver solver =>
   SAWCoreBackend n solver fs ->
@@ -288,6 +288,7 @@ scAsIntExpr _ sc (IntToRealSAWExpr (NatToIntSAWExpr (SAWExpr t))) = SC.scNatToIn
 scAsIntExpr _ _ (IntToRealSAWExpr (SAWExpr t)) = return t
 scAsIntExpr sym _ SAWExpr{} = unsupported sym
                                   "SAWbackend does not support real values."
+-}
 
 -- | Create a Real SAWELT value from a Rational.
 --
@@ -301,8 +302,6 @@ scRealLit ::
 scRealLit sym sc r
   | denominator r /= 1 =
     unsupported sym "SAW backend does not support real values"
-  | r >= 0 =
-    IntToRealSAWExpr . NatToIntSAWExpr . SAWExpr <$> SC.scNat sc (fromInteger (numerator r))
   | otherwise =
     IntToRealSAWExpr <$> scIntLit sc (numerator r)
 
@@ -315,8 +314,8 @@ scIntLit sc i
     SAWExpr <$> (SC.scIntNeg sc =<< SC.scNatToInt sc =<< SC.scNat sc (fromInteger (negate i)))
 
 -- | Create a SAWCore term with type 'Nat' from a Haskell Nat.
-scNatLit :: SC.SharedContext -> Natural -> IO (SAWExpr BaseNatType)
-scNatLit sc n = SAWExpr <$> SC.scNat sc n
+--scNatLit :: SC.SharedContext -> Natural -> IO (SAWExpr BaseNatType)
+--scNatLit sc n = SAWExpr <$> SC.scNat sc n
 
 scBvLit :: SC.SharedContext -> NatRepr w -> BV.BV w -> IO (SAWExpr (BaseBVType w))
 scBvLit sc w bv = SAWExpr <$> SC.scBvConst sc (natValue w) (BV.asUnsigned bv)
@@ -349,6 +348,7 @@ scRealBinop _ sym _ _ _ =
   unsupported sym "SAW backend does not support real values"
 
 
+{-
 scIntBinop ::
   (SC.SharedContext -> SAWExpr BaseNatType -> SAWExpr BaseNatType -> IO (SAWExpr BaseNatType))
     {- ^ operation on naturals -} ->
@@ -365,7 +365,9 @@ scIntBinop _natOp intOp sc (SAWExpr x) (NatToIntSAWExpr (SAWExpr y)) =
   SAWExpr <$> join (intOp sc <$> pure x <*> SC.scNatToInt sc y)
 scIntBinop _natOp intOp sc (SAWExpr x) (SAWExpr y) =
   SAWExpr <$> intOp sc x y
+-}
 
+{-
 scIntCmpop ::
   (SC.SharedContext -> SAWExpr BaseNatType -> SAWExpr BaseNatType -> IO (SAWExpr BaseBoolType))
     {- ^ operation on naturals -} ->
@@ -382,6 +384,7 @@ scIntCmpop _natOp intOp sc (SAWExpr x) (NatToIntSAWExpr (SAWExpr y)) =
   SAWExpr <$> join (intOp sc <$> pure x <*> SC.scNatToInt sc y)
 scIntCmpop _natOp intOp sc (SAWExpr x) (SAWExpr y) =
   SAWExpr <$> intOp sc x y
+-}
 
 scAddReal ::
   OnlineSolver solver =>
@@ -398,11 +401,13 @@ scAddInt :: SC.SharedContext
             -> IO (SAWExpr BaseIntegerType)
 scAddInt = scIntBinop scAddNat SC.scIntAdd
 
+{-
 scAddNat :: SC.SharedContext
             -> SAWExpr BaseNatType
             -> SAWExpr BaseNatType
             -> IO (SAWExpr BaseNatType)
 scAddNat sc (SAWExpr x) (SAWExpr y) = SAWExpr <$> SC.scAddNat sc x y
+-}
 
 
 scMulReal ::
@@ -420,11 +425,13 @@ scMulInt ::    SC.SharedContext
             -> IO (SAWExpr BaseIntegerType)
 scMulInt = scIntBinop scMulNat SC.scIntMul
 
+{-
 scMulNat :: SC.SharedContext
             -> SAWExpr BaseNatType
             -> SAWExpr BaseNatType
             -> IO (SAWExpr BaseNatType)
 scMulNat sc (SAWExpr x) (SAWExpr y) = SAWExpr <$> SC.scMulNat sc x y
+-}
 
 scIteReal ::
   OnlineSolver solver =>
@@ -446,6 +453,7 @@ scIteInt sc p = scIntBinop
     (\sc' x y -> SC.scIntegerType sc >>= \tp -> SC.scIte sc' tp p x y)
     sc
 
+{-
 scIteNat :: SC.SharedContext
             -> SC.Term
             -> SAWExpr BaseNatType
@@ -453,6 +461,7 @@ scIteNat :: SC.SharedContext
             -> IO (SAWExpr BaseNatType)
 scIteNat sc p (SAWExpr x) (SAWExpr y) =
   SAWExpr <$> (SC.scNatType sc >>= \tp -> SC.scIte sc tp p x y)
+-}
 
 scIte ::
   OnlineSolver solver =>
@@ -466,7 +475,6 @@ scIte ::
 scIte sym sc tp (SAWExpr p) x y =
   case tp of
     BaseRealRepr    -> scIteReal sym sc p x y
-    BaseNatRepr     -> scIteNat sc p x y
     BaseIntegerRepr -> scIteInt sc p x y
     _ ->
       do tp' <- baseSCType sym sc tp
@@ -490,11 +498,13 @@ scIntEq :: SC.SharedContext
         -> IO (SAWExpr BaseBoolType)
 scIntEq = scIntCmpop scNatEq SC.scIntEq
 
+{-
 scNatEq :: SC.SharedContext
         -> SAWExpr BaseNatType
         -> SAWExpr BaseNatType
         -> IO (SAWExpr BaseBoolType)
 scNatEq sc (SAWExpr x) (SAWExpr y) = SAWExpr <$> SC.scEqualNat sc x y
+-}
 
 scBoolEq ::
   SC.SharedContext ->
@@ -515,7 +525,6 @@ scEq sym sc tp x y =
   case tp of
     BaseBoolRepr    -> scBoolEq sc x y
     BaseRealRepr    -> scRealEq sym sc x y
-    BaseNatRepr     -> scNatEq sc x y
     BaseIntegerRepr -> scIntEq sc x y
     BaseBVRepr w    ->
       do let SAWExpr x' = x
@@ -559,6 +568,7 @@ scIntLe, scIntLt ::
 scIntLe = scIntCmpop scNatLe SC.scIntLe
 scIntLt = scIntCmpop scNatLt SC.scIntLt
 
+{-
 scNatLe, scNatLt ::
   SC.SharedContext ->
   SAWExpr BaseNatType ->
@@ -570,6 +580,7 @@ scNatLe sc (SAWExpr x) (SAWExpr y) =
      SAWExpr <$> SC.scOr sc lt eq
 scNatLt sc (SAWExpr x) (SAWExpr y) =
   SAWExpr <$> SC.scLtNat sc x y
+-}
 
 scBvAdd ::
   SC.SharedContext ->
@@ -628,7 +639,7 @@ termOfSAWExpr ::
 termOfSAWExpr sym sc expr =
   case expr of
     SAWExpr t -> return t
-    NatToIntSAWExpr (SAWExpr t) -> SC.scNatToInt sc t
+    --NatToIntSAWExpr (SAWExpr t) -> SC.scNatToInt sc t
     IntToRealSAWExpr _
       -> unsupported sym "SAW backend does not support real values"
 
@@ -730,7 +741,7 @@ evaluateExpr sym sc cache = f []
 
     go _ (B.SemiRingLiteral sr x _) =
       case sr of
-        B.SemiRingNatRepr     -> scNatLit sc x
+        --B.SemiRingNatRepr     -> scNatLit sc x
         B.SemiRingBVRepr _ w  -> scBvLit sc w x
         B.SemiRingIntegerRepr -> scIntLit sc x
         B.SemiRingRealRepr    -> scRealLit sym sc x
@@ -789,7 +800,7 @@ evaluateExpr sym sc cache = f []
           case sr of
             B.OrderedSemiRingRealRepr    -> join (scRealLe sym sc <$> eval env xe <*> eval env ye)
             B.OrderedSemiRingIntegerRepr -> join (scIntLe sc <$> eval env xe <*> eval env ye)
-            B.OrderedSemiRingNatRepr     -> join (scNatLe sc <$> eval env xe <*> eval env ye)
+            --B.OrderedSemiRingNatRepr     -> join (scNatLe sc <$> eval env xe <*> eval env ye)
 
         B.NotPred x ->
           goNeg env x
@@ -811,9 +822,11 @@ evaluateExpr sym sc cache = f []
              B.SemiRingIntegerRepr ->
                do pd' <- WSum.prodEvalM (scMulInt sc) (eval env) pd
                   maybe (scIntLit sc 1) return pd'
+{-
              B.SemiRingNatRepr ->
                do pd' <- WSum.prodEvalM (scMulNat sc) (eval env) pd
                   maybe (scNatLit sc 1) return pd'
+-}
              B.SemiRingBVRepr B.BVArithRepr w ->
                do n <- SC.scNat sc (natValue w)
                   pd' <- WSum.prodEvalM (SC.scBvMul sc n) (f env) pd
@@ -833,10 +846,12 @@ evaluateExpr sym sc cache = f []
                where add x y = scAddInt sc x y
                      smul 1  e = eval env e
                      smul sm e = join $ scMulInt sc <$> scIntLit sc sm <*> eval env e
+{-
             B.SemiRingNatRepr -> WSum.evalM add smul (scNatLit sc) ss
                where add x y = scAddNat sc x y
                      smul 1  e = eval env e
                      smul sm e = join $ scMulNat sc <$> scNatLit sc sm <*> eval env e
+-}
             B.SemiRingBVRepr B.BVArithRepr w -> WSum.evalM add smul (scBvLit sc w) ss
                where add x y          = scBvAdd sc w x y
                      smul (BV.BV 1) e = eval env e
@@ -1027,6 +1042,7 @@ evaluateExpr sym sc cache = f []
              sc_len <- f env len
              SAWExpr <$> SC.scArraySet sc sc_w sc_a sc_arr sc_idx sc_val sc_len
 
+{-
         B.NatToInteger x -> NatToIntSAWExpr <$> eval env x
         B.IntegerToNat x ->
            eval env x >>= \case
@@ -1042,6 +1058,7 @@ evaluateExpr sym sc cache = f []
           do x' <- f env x
              y' <- f env y
              SAWExpr <$> SC.scModNat sc x' y'
+-}
 
         B.IntDiv x y ->
           do x' <- f env x
@@ -1053,7 +1070,7 @@ evaluateExpr sym sc cache = f []
              SAWExpr <$> SC.scIntMod sc x' y'
         B.IntAbs x ->
           eval env x >>= \case
-            NatToIntSAWExpr z -> return (NatToIntSAWExpr z)
+            --NatToIntSAWExpr z -> return (NatToIntSAWExpr z)
             SAWExpr z -> SAWExpr <$> (SC.scIntAbs sc z)
 
         B.IntDivisible x 0 ->
@@ -1065,9 +1082,11 @@ evaluateExpr sym sc cache = f []
              z  <- SC.scIntMod sc x' k'
              SAWExpr <$> (SC.scIntEq sc z =<< SC.scIntegerConst sc 0)
 
+{-
         B.BVToNat x ->
           let n = natValue (bvWidth x) in
           SAWExpr <$> (SC.scBvToNat sc n =<< f env x)
+-}
 
         B.IntegerToBV x w ->
           do n <- SC.scNat sc (natValue w)
@@ -1186,7 +1205,7 @@ evaluateExpr sym sc cache = f []
           case sr of
             B.OrderedSemiRingRealRepr    -> join (scRealLt sym sc <$> eval env ye <*> eval env xe)
             B.OrderedSemiRingIntegerRepr -> join (scIntLt sc <$> eval env ye <*> eval env xe)
-            B.OrderedSemiRingNatRepr     -> join (scNatLt sc <$> eval env ye <*> eval env xe)
+            --B.OrderedSemiRingNatRepr     -> join (scNatLt sc <$> eval env ye <*> eval env xe)
         _ -> SAWExpr <$> (SC.scNot sc =<< f env expr)
 
 withSolverProcess ::
