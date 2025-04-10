@@ -95,7 +95,7 @@ data SAWCoreState solver fs n
       -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
       -- SAWCore terms and What4 variables.
 
-    , saw_online_state_maybe :: Maybe (OnlineBackend solver n (SAWCoreState solver fs) fs)
+    , saw_online_state_maybe :: Maybe (OnlineBackend solver n (SAWCoreState' solver fs) fs)
     }
 
 -- | Wrapper around SAWCoreState that accounts for how the IORef needs
@@ -264,7 +264,8 @@ newSAWCoreBackend fm sc gen = do
               , saw_elt_cache_r = ch_r
               , saw_online_state_maybe = Nothing
               }
-  sym <- B.newExprBuilder fm st0 gen
+  st0' <- SAWCoreState' <$> newIORef st0
+  sym <- B.newExprBuilder fm st0' gen
   ob_st0 <- newOnlineBackend sym feats
   let st = st0 { saw_online_state_maybe = Just ob_st0 }
 
