@@ -52,9 +52,6 @@
 [submodule "deps/mir-json"]
 	path = deps/mir-json
 	url = https://github.com/GaloisInc/mir-json.git
-[submodule "deps/what4-serialize"]
-	path = deps/what4-serialize
-	url = https://github.com/GaloisInc/what4-serialize
 [submodule "deps/asl-translator"]
 	path = deps/asl-translator
 	url = https://github.com/GaloisInc/asl-translator
