@@ -1151,11 +1151,11 @@ evaluateExpr sym sc cache = f []
         ------------------------------------------------------------------------
         -- Floating point operations
 
-        B.FloatPZero{} -> floatFail
-        B.FloatNZero{} -> floatFail
-        B.FloatNaN{}   -> floatFail
-        B.FloatPInf{}  -> floatFail
-        B.FloatNInf{}  -> floatFail
+        --B.FloatPZero{} -> floatFail
+        --B.FloatNZero{} -> floatFail
+        --B.FloatNaN{}   -> floatFail
+        --B.FloatPInf{}  -> floatFail
+        --B.FloatNInf{}  -> floatFail
         B.FloatNeg{}  -> floatFail
         B.FloatAbs{}  -> floatFail
         B.FloatSqrt{}  -> floatFail
@@ -1164,11 +1164,11 @@ evaluateExpr sym sc cache = f []
         B.FloatMul{}  -> floatFail
         B.FloatDiv{}  -> floatFail
         B.FloatRem{}  -> floatFail
-        B.FloatMin{}  -> floatFail
-        B.FloatMax{}  -> floatFail
+        --B.FloatMin{}  -> floatFail
+        --B.FloatMax{}  -> floatFail
         B.FloatFMA{}  -> floatFail
         B.FloatFpEq{}  -> floatFail
-        B.FloatFpNe{}  -> floatFail
+        --B.FloatFpNe{}  -> floatFail
         B.FloatLe{}  -> floatFail
         B.FloatLt{}  -> floatFail
         B.FloatIsNaN{}  -> floatFail
@@ -1195,14 +1195,15 @@ evaluateExpr sym sc cache = f []
         B.CeilReal{} -> realFail
         B.RealDiv{} -> realFail
         B.RealSqrt{} -> realFail
-        B.Pi{} -> realFail
-        B.RealSin{} -> realFail
-        B.RealCos{} -> realFail
-        B.RealSinh{} -> realFail
-        B.RealCosh{} -> realFail
-        B.RealExp{} -> realFail
-        B.RealLog{} -> realFail
-        B.RealATan2{} -> realFail
+        --B.Pi{} -> realFail
+        --B.RealSin{} -> realFail
+        --B.RealCos{} -> realFail
+        --B.RealSinh{} -> realFail
+        --B.RealCosh{} -> realFail
+        --B.RealExp{} -> realFail
+        --B.RealLog{} -> realFail
+        --B.RealATan2{} -> realFail
+        B.RealSpecialFunction{} -> realFail
 
         B.Cplx{}     -> cplxFail
         B.RealPart{} -> cplxFail
