@@ -49,6 +49,8 @@ import qualified Data.Text as Text
 
 import           Numeric.Natural
 
+import           GHC.Stack
+
 import           What4.BaseTypes
 import           What4.Config
 import           What4.Interface
@@ -743,7 +745,7 @@ These proof obligations are all tagged with "Unsupported", so that
 users of the library can choose if they will try to discharge them,
 fail in some other way, or just ignore them. -}
 unsupported :: OnlineSolver solver => SAWCoreBackend n solver fs -> Text.Text -> IO a
-unsupported sym x = addFailedAssertion sym (Unsupported Text.unpack x)
+unsupported sym x = addFailedAssertion sym (Unsupported callstack $ Text.unpack x)
 
 evaluateExpr :: forall n solver tp fs.
   OnlineSolver solver =>
