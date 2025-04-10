@@ -849,10 +849,10 @@ evaluateExpr sym sc cache = f []
           goNeg env x
 
         B.ConjPred xs ->
-          case BM.viewBoolMap xs of
-            BM.BoolMapUnit -> SAWExpr <$> SC.scBool sc True
-            BM.BoolMapDualUnit -> SAWExpr <$> SC.scBool sc False
-            BM.BoolMapTerms (t:|ts) ->
+          case BM.viewConjMap xs of
+            BM.ConjTrue -> SAWExpr <$> SC.scBool sc True
+            BM.ConjFalse -> SAWExpr <$> SC.scBool sc False
+            BM.Conjuncts (t:|ts) ->
               let pol (x,BM.Positive) = f env x
                   pol (x,BM.Negative) = termOfSAWExpr sym sc =<< goNeg env x
               in SAWExpr <$> join (foldM (SC.scAnd sc) <$> pol t <*> mapM pol ts)
@@ -1230,10 +1230,10 @@ evaluateExpr sym sc cache = f []
       case expr of
         -- negation of (x /\ y) becomes (~x \/ ~y)
         B.AppExpr (B.appExprApp -> B.ConjPred xs) ->
-          case BM.viewBoolMap xs of
-            BM.BoolMapUnit -> SAWExpr <$> SC.scBool sc False
-            BM.BoolMapDualUnit -> SAWExpr <$> SC.scBool sc True
-            BM.BoolMapTerms (t:|ts) ->
+          case BM.viewConjMap xs of
+            BM.ConjTrue -> SAWExpr <$> SC.scBool sc False
+            BM.ConjFalse -> SAWExpr <$> SC.scBool sc True
+            BM.Conjuncts (t:|ts) ->
               let pol (x, BM.Positive) = termOfSAWExpr sym sc =<< goNegAtom env x
                   pol (x, BM.Negative) = f env x
               in SAWExpr <$> join (foldM (SC.scOr sc) <$> pol t <*> mapM pol ts)
