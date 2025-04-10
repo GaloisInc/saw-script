@@ -312,7 +312,7 @@ span.spaces    { background: white }
 <span class="lineno">  293 </span>     we also hang onto the results and use them to seed the interpreter. -}
 <span class="lineno">  294 </span>sawScriptCmd :: String -&gt; REPL ()
 <span class="lineno">  295 </span><span class="decl"><span class="istickedoff">sawScriptCmd str = do</span>
-<span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">let (tokens, optmsg) = SAWScript.Lexer.lexSAW <span class="nottickedoff">replFileName</span> (Text.pack str)</span>
+<span class="lineno">  296 </span><span class="spaces">  </span><span class="istickedoff">let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)</span>
 <span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">case optmsg of</span>
 <span class="lineno">  298 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; return <span class="nottickedoff">()</span></span>
 <span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">Just (_vrb, pos, msg) -&gt; <span class="nottickedoff">do</span></span>
