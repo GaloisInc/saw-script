@@ -133,7 +133,7 @@ type SAWCoreBackend n solver fs = B.ExprBuilder n (SAWCoreState' solver fs) fs
 inFreshNamingContext :: SAWCoreBackend n solver fs -> IO a -> IO a
 inFreshNamingContext sym f =
   do old <- readIORef (userStateRef sym)
-     bracket (mkNew (B.exprCounter sym) old) (restore old) action
+     bracket (mkNew (sym ^. B.exprCounter) old) (restore old) action
 
  where
  action new =
