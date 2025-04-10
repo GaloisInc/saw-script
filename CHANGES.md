@@ -1,3 +1,14 @@
+# next next -- TBA
+
+The way git information gets compiled in (so it can be reported with
+e.g. saw --version) has been changed.
+You must build with build.sh after git changes for those changes to
+show through; builds done directly with cabal will not update the git
+info.
+(If you really want you can run the update script by hand instead, of
+course.)
+Note that build.sh is in any case the recommended way to build.
+
 # next -- TBA
 
 ## New Features

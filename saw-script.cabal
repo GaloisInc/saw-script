@@ -3,21 +3,13 @@ Name:          saw-script
 Version:       1.3.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
-Build-type:    Custom
+Build-type:    Simple
 License:       BSD-3-Clause
 License-file:  LICENSE
 
 extra-source-files:
     src/SAWScript/Parser.y
     src/SAWScript/Lexer.x
-
-custom-setup
-  setup-depends:
-      Cabal >= 1.24
-    , base
-    , directory
-    , filepath
-    , process
 
 library
   default-language: Haskell2010
@@ -114,6 +106,8 @@ library
   hs-source-dirs: src
 
   exposed-modules:
+    SAWScript.GitRev
+
     SAWScript.AST
     SAWScript.ASTUtil
     SAWScript.AutoMatch
@@ -219,11 +213,6 @@ library
     SAWScript.Yosys.TransitionSystem
     SAWScript.Yosys.Utils
 
-  other-modules:
-    GitRev
-  autogen-modules:
-    GitRev
-
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
@@ -240,7 +229,6 @@ executable saw
 
   other-modules:
     Paths_saw_script
-    GitRev
     SAWScript.REPL
     SAWScript.REPL.Command
     SAWScript.REPL.Haskeline
@@ -251,7 +239,6 @@ executable saw
 
   autogen-modules:
     Paths_saw_script
-    GitRev
 
   build-depends:
 

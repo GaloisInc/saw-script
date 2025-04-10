@@ -91,6 +91,8 @@ To build SAWScript and related utilities from source:
 
     The SAWScript executables will be available in the `bin` directory.
 
+    Note that running `cabal build` or `cabal install` directly will not work.
+
   * Optionally, run ./stage.sh to create a binary tarball.
 
 ## Notes on LLVM

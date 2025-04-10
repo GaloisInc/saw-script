@@ -4,10 +4,19 @@
 #
 # Valid targets are:
 #    build (the default)
+#    gitrev (included in build, needed before building)
 #    submodules (included in build, at least for now)
 #    clean
 
 set -e
+
+##############################
+# gitrev
+
+tgt_gitrev() {
+    # fetch/update the compiled-in git version info
+    src/SAWScript/savegitinfo.sh
+}
 
 ##############################
 # submodules
@@ -27,6 +36,7 @@ install() {
 }
 
 tgt_build() {
+    tgt_gitrev
     tgt_submodules
 
     echo "cabal build ..."
@@ -63,6 +73,7 @@ tgt_clean() {
 # top level
 
 case "X$1" in
+    Xgitrev) tgt_gitrev;;
     Xsubmodules) tgt_submodules;;
     X|Xbuild) tgt_build;;
     Xclean) tgt_clean;;

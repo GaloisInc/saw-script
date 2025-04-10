@@ -1,3 +1,7 @@
+# Note: before running "docker build", you should do "./build.sh
+# gitrev" so that the current git commit information propagates
+# into the container.
+
 # Note that we intentionally do not use ubuntu:24.04 or later pending a
 # resolution to https://github.com/coder/coder/issues/17316.
 FROM ubuntu:22.04 AS build
@@ -41,6 +45,14 @@ RUN mkdir -p /home/saw/.ghcup && \
     ghcup install ghc 9.4.8 && \
     ghcup set ghc 9.4.8
 RUN cabal v2-update
+
+# Make sure GitRev.hs exists in case it wasn't created outside the
+# container and copied in. Since we don't have .git in here, this will
+# not overwrite an existing GitRev.hs, but it will create a blank one
+# if it's missing entirely. That in turn will avoid an unnecessary
+# build failure.
+RUN ./build.sh gitrev
+
 RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal -v0 list-bin exe:saw) /home/saw/rootfs/usr/local/bin/saw
