@@ -35,7 +35,6 @@ packages:
     deps/flexdis86/binary-symbols
     deps/lmdb/lmdb
     deps/lmdb/lmdb-simple
-    deps/what4-serialize
     deps/asl-translator
     deps/arm-asl-parser
     deps/dismantle/dismantle-tablegen
@@ -46,6 +45,7 @@ packages:
     deps/macaw/base
     deps/macaw/macaw-dump
     deps/macaw/macaw-loader
+    deps/macaw/macaw-loader-aarch32
     deps/macaw/macaw-loader-x86
     deps/macaw/symbolic
     deps/macaw/x86
