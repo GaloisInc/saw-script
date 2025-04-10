@@ -95,7 +95,7 @@ data SAWCoreState solver fs n
       -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
       -- SAWCore terms and What4 variables.
 
-    , saw_online_state :: OnlineBackendState solver n
+    , saw_online_state_maybe :: Maybe (OnlineBackend solver n (SAWCoreState solver fs) fs)
     }
 
 -- | Wrapper around SAWCoreState that accounts for how the IORef needs
@@ -153,7 +153,7 @@ inFreshNamingContext sym f =
                 , saw_symMap = mempty
                 , saw_elt_cache = ch
                 , saw_elt_cache_r = ch_r
-                , saw_online_state = saw_online_state old
+                , saw_online_state_maybe = saw_online_state_maybe old
                 }
       return new
 
@@ -244,24 +244,50 @@ newSAWCoreBackend fm sc gen = do
   ch   <- B.newIdxCache
   ch_r <- newIORef IntMap.empty
   let feats = Yices.yicesDefaultFeatures
-  ob_st0  <- initialOnlineBackendState gen feats
+
+  -- dholland 20250409 this initialization is now circular:
+  --    the SAWCoreState requires an OnlineBackend
+  --    the OnlineBackend requires sym
+  --    sym (the ExprBuilder) requires a SAWCoreState
+  --
+  -- We can't fix this by mucking with the ExprBuilder or
+  -- OnlineBackend construction as those are controlled by Crucible
+  -- and What4 interfaces (resp.) so we have to create an initial
+  -- SAWCoreState with a dummy OnlineBackend.  Then we can update the
+  -- state. However, in order to do this we need to make the state
+  -- field Maybe, which will be a headache wherever it's used.
   let st0 = SAWCoreState
               { saw_ctx = sc
               , saw_inputs = inpr
               , saw_symMap = Map.empty
               , saw_elt_cache = ch
               , saw_elt_cache_r = ch_r
-              , saw_online_state = ob_st0
+              , saw_online_state_maybe = Nothing
               }
   sym <- B.newExprBuilder fm st0 gen
+  ob_st0 <- newOnlineBackend sym feats
+  let st = st0 { saw_online_state_maybe = Just ob_st0 }
+
+  -- though on the plus side this goop is now handled inside newOnlineBackend
+{-
   let options = backendOptions ++ onlineBackendOptions ob_st0 ++ Yices.yicesOptions
   extendConfig options (getConfiguration sym)
 
   enableOpt <- getOptionSetting enableOnlineBackend (getConfiguration sym)
   let st = st0{ saw_online_state = ob_st0{ onlineEnabled = getOpt enableOpt } }
+-}
 
   writeIORef (userStateRef sym) st
   return sym
+
+-- | Extract the saw_online_state from the SAWCoreState. This is a
+--   pretend field accessor created for compat with code from before
+--   the online state needed a Maybe in it. (The Nothing case of said
+--   Maybe only exists during initialization; see newSAWCoreBackend.
+saw_online_state :: SAWCoreState solver fs n -> OnlineBackend solver n (SAWCoreState' solver fs) fs
+saw_online_state st = case saw_online_state_maybe st of
+  Nothing -> panic "CrucibleSAW.SAWCore" ["saw_online_state: hit Nothing after initialization"]
+  Just ob_st -> ob_st
 
 -- | Register an interpretation for a symbolic function. This is not
 -- used during simulation, but rather, when we translate Crucible
