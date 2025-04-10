@@ -16,6 +16,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
@@ -200,7 +201,7 @@ baseSCType sym sc bt =
 
 -- | Create a new symbolic variable.
 sawCreateVar :: SAWCoreBackend n solver fs
-             -> String                                       -- ^ the name of the variable
+             -> Text.Text                       -- ^ the name of the variable
              -> SC.Term
              -> IO SC.Term
 sawCreateVar sym nm tp = do
@@ -571,7 +572,7 @@ scEq sym sc tp x y =
          let SAWExpr y' = y
          w' <- SC.scNat sc $ fromIntegral (natValue w)
          SAWExpr <$> SC.scBvEq sc w' x' y'
-    _ -> unsupported sym ("SAW backend: equality comparison on unsupported type:" ++ show tp)
+    _ -> unsupported sym ("SAW backend: equality comparison on unsupported type:" <> Text.pack (show tp))
 
 
 scAllEq ::
@@ -741,8 +742,8 @@ obligation to ensure that we won't get there.
 These proof obligations are all tagged with "Unsupported", so that
 users of the library can choose if they will try to discharge them,
 fail in some other way, or just ignore them. -}
-unsupported :: OnlineSolver solver => SAWCoreBackend n solver fs -> String -> IO a
-unsupported sym x = addFailedAssertion sym (Unsupported x)
+unsupported :: OnlineSolver solver => SAWCoreBackend n solver fs -> Text.Text -> IO a
+unsupported sym x = addFailedAssertion sym (Unsupported Text.unpack x)
 
 evaluateExpr :: forall n solver tp fs.
   OnlineSolver solver =>
@@ -772,8 +773,8 @@ evaluateExpr sym sc cache = f []
     stringFail :: IO a
     stringFail = unsupported sym "SAW backend does not support string values"
 
-    unimplemented :: String -> IO a
-    unimplemented x = unsupported sym $ "SAW backend: not implemented: " ++ x
+    unimplemented :: Text.Text -> IO a
+    unimplemented x = unsupported sym $ "SAW backend: not implemented: " <> x
 
     go :: [Maybe SolverSymbol] -> B.Expr n tp' -> IO (SAWExpr tp')
 
@@ -794,14 +795,14 @@ evaluateExpr sym sc cache = f []
         B.UninterpVarKind -> do
           tp <- baseSCType sym sc (B.bvarType bv)
           SAWExpr <$> sawCreateVar sym nm tp
-            where nm = Text.unpack $ solverSymbolAsText $ B.bvarName bv
+            where nm = solverSymbolAsText $ B.bvarName bv
         B.LatchVarKind ->
           unsupported sym "SAW backend does not support latch variables"
         B.QuantifierVarKind -> do
           case elemIndex (Just $ B.bvarName bv) env of
             Nothing -> unsupported sym $ "unbound quantifier variable " <> nm
             Just idx -> SAWExpr <$> SC.scLocalVar sc idx
-            where nm = Text.unpack $ solverSymbolAsText $ B.bvarName bv
+            where nm = solverSymbolAsText $ B.bvarName bv
 
     go env (B.NonceAppExpr p) =
       case B.nonceExprApp p of
@@ -830,7 +831,7 @@ evaluateExpr sym sc cache = f []
     go env a0@(B.AppExpr a) =
       let nyi = unsupported sym $
                   "Expression form not yet implemented in SAWCore backend:\n"
-                        ++ show a0
+                        <> Text.pack (show a0)
       in
       case B.appExprApp a of
         B.BaseIte bt _ c xe ye -> join (scIte sym sc bt <$> eval env c <*> eval env xe <*> eval env ye)
