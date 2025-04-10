@@ -75,7 +75,7 @@ import qualified SAWScript.Crucible.Common.Override as O
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR
+import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMCrucibleContext(..))
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
 
@@ -88,7 +88,7 @@ import qualified What4.Solver.Yices as Yices
 
 import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
-import qualified Lang.Crucible.Backend.SAWCore as C
+import qualified SAWScript.Crucible.CrucibleSAW.SAWCore as C
 import qualified Lang.Crucible.CFG.Core as C
 import qualified Lang.Crucible.FunctionHandle as C
 import qualified Lang.Crucible.Simulator.EvalStmt as C
@@ -130,8 +130,9 @@ import qualified Language.ASL.Globals as ASL
 
 type Sym = C.SAWCoreBackend GlobalNonceGenerator Yices.Connection (W4.Flags W4.FloatReal)
 type LLVMArch = C.LLVM.X86 32
-type LLVM = C.LLVM.LLVM LLVMArch
-type LLVMOverrideMatcher = O.OverrideMatcher LLVM
+--type LLVM = C.LLVM.LLVM LLVMArch
+type LLVM = C.LLVM.LLVM
+type LLVMOverrideMatcher rorw a = O.OverrideMatcher LLVM rorw a
 type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.ARM)
 type Register = Macaw.ARMReg (Macaw.BVType 32)
 type Mem = C.LLVM.MemImpl Sym
@@ -256,7 +257,7 @@ freshVal sym t ptrOk nm =
       | ptrOk, Just Refl <- testEquality w (knownNat @64) -> do
           sn_base <- symName (nm ++ "_base")
           sn_off <- symName (nm ++ "_off")
-          base <- W4.freshConstant sym sn_base C.BaseNatRepr
+          base <- W4.freshNat sym sn_base
           off <- W4.freshConstant sym sn_off (C.BaseBVRepr w)
           return (C.LLVM.LLVMPointer base off)
       | otherwise -> do
