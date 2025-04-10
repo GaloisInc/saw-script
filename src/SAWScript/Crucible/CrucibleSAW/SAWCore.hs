@@ -235,10 +235,10 @@ bindSAWTerm sym bt t = do
       return sbVar
 
 newSAWCoreBackend ::
-  FloatModeRepr fm ->
+  B.FloatModeRepr fm ->
   SC.SharedContext ->
   NonceGenerator IO s ->
-  IO (SAWCoreBackend s Yices.Connection (Flags fm))
+  IO (SAWCoreBackend s Yices.Connection (B.Flags fm))
 newSAWCoreBackend fm sc gen = do
   inpr <- newIORef Seq.empty
   ch   <- B.newIdxCache
