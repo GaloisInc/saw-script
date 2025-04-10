@@ -296,7 +296,7 @@ saw_online_state st = case saw_online_state_maybe st of
 -- arguments in regular (left-to-right) order.
 sawRegisterSymFunInterp ::
   SAWCoreBackend n solver fs ->
-  B.ExprSymFn n (B.Expr n) args ret ->
+  B.ExprSymFn n args ret ->
   (SC.SharedContext -> [SC.Term] -> IO SC.Term) ->
   IO ()
 sawRegisterSymFunInterp sym f i =
@@ -688,7 +688,7 @@ applyExprSymFn ::
   OnlineSolver solver =>
   SAWCoreBackend n solver fs ->
   SC.SharedContext ->
-  B.ExprSymFn n (B.Expr n) args ret ->
+  B.ExprSymFn n args ret ->
   Ctx.Assignment SAWExpr args ->
   IO (SAWExpr ret)
 applyExprSymFn sym sc fn args =
