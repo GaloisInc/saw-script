@@ -69,7 +69,7 @@ UnCurryN =
           --     P(LS_Cons A ls)
           --  == (b: sort 0) -> arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
          -> \(b: sort 0)->
-            \(f: arrowsType ls (A->b))->
+            \(f: arrowsType (LS_Cons A ls) b)->
             uncurry (PairsL ls) A b (rec (A->b) f)
        );
 
