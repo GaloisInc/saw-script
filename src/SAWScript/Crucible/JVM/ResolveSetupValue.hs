@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module SAWScript.Crucible.JVM.ResolveSetupValue
@@ -29,7 +30,6 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
 
 import           Control.Lens
 import qualified Control.Monad.Catch as X
-import           Data.IORef
 import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -41,16 +41,17 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
-import qualified What4.ProgramLoc as W4
 
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-
-import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
+import qualified Verifier.SAW.Prim as Prim
+import qualified Verifier.SAW.Simulator.Concrete as Concrete
+
+import Verifier.SAW.Simulator.What4.ReturnTrip
+
 -- crucible
+
 import qualified Lang.Crucible.Simulator as Crucible (RegValue)
 
 -- what4
@@ -59,23 +60,18 @@ import qualified What4.Partial as W4
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
 
--- sbv
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord, toBool)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger, svAsBool)
-
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import SAWScript.Crucible.Common (Sym)
+import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
---import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Panic
-import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
+import SAWScript.Crucible.JVM.Setup.Value (JVMRefVal)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import SAWScript.Crucible.Common.ResolveSetupValue (resolveBoolTerm)
 
---import qualified SAWScript.LLVMBuiltins as LB
 
 data JVMVal
   = RVal (Crucible.RegValue Sym CJ.JVMRefType)
@@ -87,13 +83,12 @@ instance Show JVMVal where
   show (IVal _) = "IVal"
   show (LVal _) = "LVal"
 
-type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
-
 type SetupValue = MS.SetupValue CJ.JVM
 
 data JVMTypeOfError
   = JVMPolymorphicType Cryptol.Schema
   | JVMNonRepresentableType Cryptol.Type
+  | JVMInvalidTypedTerm TypedTermType
 
 instance Show JVMTypeOfError where
   show (JVMPolymorphicType s) =
@@ -107,13 +102,18 @@ instance Show JVMTypeOfError where
     [ "Type not representable in JVM:"
     , show (Cryptol.pp ty)
     ]
+  show (JVMInvalidTypedTerm tp) =
+    unlines
+    [ "Expected typed term with Cryptol represnentable type, but got"
+    , show (MS.ppTypedTermType tp)
+    ]
 
 instance X.Exception JVMTypeOfError
 
 typeOfSetupValue ::
   X.MonadThrow m =>
   JVMCrucibleContext ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   m J.Type
@@ -124,12 +124,13 @@ typeOfSetupValue _cc env _nameEnv val =
         Nothing -> panic "JVMSetup" ["typeOfSetupValue", "Unresolved prestate variable:" ++ show i]
         Just (_, alloc) -> return (allocationType alloc)
     MS.SetupTerm tt ->
-      case ttSchema tt of
-        Cryptol.Forall [] [] ty ->
+      case ttType tt of
+        TypedTermSchema (Cryptol.Forall [] [] ty) ->
           case toJVMType (Cryptol.evalValType mempty ty) of
             Nothing -> X.throwM (JVMNonRepresentableType ty)
             Just jty -> return jty
-        s -> X.throwM (JVMPolymorphicType s)
+        TypedTermSchema s -> X.throwM (JVMPolymorphicType s)
+        tp -> X.throwM (JVMInvalidTypedTerm tp)
 
     MS.SetupNull () ->
       -- We arbitrarily set the type of NULL to java.lang.Object,
@@ -138,11 +139,17 @@ typeOfSetupValue _cc env _nameEnv val =
       -- type-safe field accesses.
       return (J.ClassType (J.mkClassName "java/lang/Object"))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
+    MS.SetupEnum empty                -> absurd empty
+    MS.SetupTuple empty _             -> absurd empty
+    MS.SetupSlice empty               -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
+    MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+    MS.SetupMux empty _ _ _           -> absurd empty
 
 lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
 lookupAllocIndex env i =
@@ -155,43 +162,54 @@ lookupAllocIndex env i =
 resolveSetupVal ::
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (MS.ConditionMetadata, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   IO JVMVal
 resolveSetupVal cc env _tyenv _nameEnv val =
   case val of
-    MS.SetupVar i
-      | Just v <- Map.lookup i env -> return (RVal v)
-      | otherwise -> panic "JVMSetup" ["resolveSetupVal", "Unresolved prestate variable:" ++ show i]
+    MS.SetupVar i ->
+      pure (RVal (lookupAllocIndex env i))
     MS.SetupTerm tm -> resolveTypedTerm cc tm
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
     MS.SetupGlobal empty _            -> absurd empty
-    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupStruct empty _            -> absurd empty
+    MS.SetupEnum empty                -> absurd empty
+    MS.SetupTuple empty _             -> absurd empty
+    MS.SetupSlice empty               -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
+    MS.SetupCast empty _              -> absurd empty
+    MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+    MS.SetupMux empty _ _ _           -> absurd empty
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
 resolveTypedTerm ::
   JVMCrucibleContext ->
   TypedTerm       ->
   IO JVMVal
 resolveTypedTerm cc tm =
-  case ttSchema tm of
-    Cryptol.Forall [] [] ty ->
+  case ttType tm of
+    TypedTermSchema (Cryptol.Forall [] [] ty) ->
       resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
-    _ -> fail "resolveSetupVal: expected monomorphic term"
+    tp -> fail $ unlines
+            [ "resolveSetupVal: expected monomorphic term"
+            , "but got a term of type"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 resolveSAWPred ::
   JVMCrucibleContext ->
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.jccBackend) W4.BaseBoolRepr tm
+  do let sym = cc^.jccSym
+     st <- sawCoreState sym
+     bindSAWTerm sym st W4.BaseBoolRepr tm
 
 resolveSAWTerm ::
   JVMCrucibleContext ->
@@ -218,8 +236,10 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
     Cryptol.TVSeq sz Cryptol.TVBit ->
       case sz of
-        8  -> fail "resolveSAWTerm: unimplemented type char (FIXME)"
-        16 -> fail "resolveSAWTerm: unimplemented type short (FIXME)"
+        8  -> do x <- resolveBitvectorTerm sym (W4.knownNat @8) tm
+                 IVal <$> W4.bvSext sym W4.knownNat x
+        16 -> do x <- resolveBitvectorTerm sym (W4.knownNat @16) tm
+                 IVal <$> W4.bvSext sym W4.knownNat x
         32 -> IVal <$> resolveBitvectorTerm sym W4.knownNat tm
         64 -> LVal <$> resolveBitvectorTerm sym W4.knownNat tm
         _  -> fail ("Invalid bitvector width: " ++ show sz)
@@ -233,12 +253,11 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
       fail "resolveSAWTerm: unsupported function type"
-    Cryptol.TVAbstract _ _ ->
-      fail "resolveSAWTerm: unsupported abstract type"
+    Cryptol.TVNominal {} ->
+      fail "resolveSAWTerm: unsupported nominal type"
   where
-    sym = cc^.jccBackend
+    sym = cc^.jccSym
 
--- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBitvectorTerm ::
   forall w.
   (1 W4.<= w) =>
@@ -247,35 +266,18 @@ resolveBitvectorTerm ::
   Term ->
   IO (W4.SymBV Sym w)
 resolveBitvectorTerm sym w tm =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-     --ss <- basic_ss sc
-     --tm' <- rewriteSharedTerm sc ss tm
-     let tm' = tm
-     mx <- case getAllExts tm' of
+  do st <- sawCoreState sym
+     let sc = saw_ctx st
+     mx <- case getAllExts tm of
+             -- concretely evaluate if it is a closed term
              [] ->
-               do -- Evaluate in SBV to test whether 'tm' is a concrete value
-                  sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
-                  return (SBV.svAsInteger sbv)
+               do modmap <- scGetModuleMap sc
+                  let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                  pure (Just (Prim.unsigned (Concrete.toWord v)))
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
-
--- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
-resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
-resolveBoolTerm sym tm =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-     ss <- basic_ss sc
-     tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
-             [] ->
-               do -- Evaluate in SBV to test whether 'tm' is a concrete value
-                  sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
-                  return (SBV.svAsBool sbv)
-             _ -> return Nothing
-     case mx of
-       Just x  -> return (W4.backendPred sym x)
-       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =
@@ -288,7 +290,7 @@ toJVMType tp =
     Cryptol.TVRational -> Nothing
     Cryptol.TVSeq n Cryptol.TVBit ->
       case n of
-        8  -> Just J.CharType
+        8  -> Just J.ByteType
         16 -> Just J.ShortType
         32 -> Just J.IntType
         64 -> Just J.LongType
@@ -300,7 +302,7 @@ toJVMType tp =
     Cryptol.TVTuple _tps -> Nothing
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
-    Cryptol.TVAbstract _ _ -> Nothing
+    Cryptol.TVNominal {} -> Nothing
 
 equalValsPred ::
   JVMCrucibleContext ->
@@ -315,4 +317,4 @@ equalValsPred cc v1 v2 = go (v1, v2)
   go (LVal l1, LVal l2) = W4.bvEq sym l1 l2
   go _ = return (W4.falsePred sym)
 
-  sym = cc^.jccBackend
+  sym = cc^.jccSym

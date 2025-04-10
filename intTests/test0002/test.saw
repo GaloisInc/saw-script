@@ -1,4 +1,4 @@
-import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
+import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.md";
 
 let main = do {
    java_md5 <- read_aig "../support/JavaMD5.aig";
@@ -19,5 +19,6 @@ let main = do {
    print "";
 
    let thm = {{ \x -> join (md5_ref x) == java_md5 (join x) }};
-   prove_print abc thm;
+   write_aig "md5_ref.aig" {{ \(x:[16][8]) -> join (md5_ref x) }};
+   write_aig "java_md5.aig" {{ \(x:[16][8]) -> java_md5 (join x) }};
 };

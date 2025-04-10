@@ -1,0 +1,39 @@
+enable_experimental;
+env <- heapster_init_env_from_file "linked_list.sawcore" "linked_list.bc";
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+
+heapster_define_recursive_perm env "LList"
+  "X:perm(llvmptr 64), l:lifetime, rw:rwmodality"
+  "llvmptr 64"
+  "eq(llvmword(0)) or [l]ptr((rw,0) |-> X) * [l]ptr((rw,8) |-> LList)";
+
+heapster_typecheck_fun env "is_elem"
+  "(). arg0:int64<>, arg1:LList<int64<>,always,R> -o \
+     \ arg0:true, arg1:true, ret:int64<>";
+
+heapster_assume_fun env "malloc"
+  "(sz:bv 64). arg0:eq(llvmword(8*sz)) -o \
+             \ arg0:true, ret:array(W,0,<sz,*8,fieldsh(true))"
+  "mallocSpec";
+
+heapster_typecheck_fun env "any"
+  "(). arg0:llvmfunptr{1,64}((). arg0:int64<> -o arg0:true, ret:int64<>), \
+     \ arg1:LList<int64<>,always,R> -o \
+     \ arg0:true, arg1:true, ret:int64<>";
+
+heapster_typecheck_fun env "find_elem"
+  "(). arg0:int64<>, arg1:LList<int64<>,always,W> -o \
+     \ arg0:true, arg1:true, ret:LList<int64<>,always,W>";
+
+heapster_typecheck_fun env "sorted_insert"
+  "(). arg0:int64<>, arg1:LList<int64<>,always,W> -o \
+     \ arg0:true, arg1:true, ret:LList<int64<>,always,W>";
+
+heapster_typecheck_fun env "sorted_insert_no_malloc"
+  "(). arg0:ptr((W,0) |-> int64<>) * ptr((W,8) |-> eq(llvmword(0))), \
+     \ arg1:LList<int64<>,always,W> -o \
+     \ arg0:true, arg1:true, ret:LList<int64<>,always,W>";
+
+heapster_export_coq env "linked_list_gen.v";

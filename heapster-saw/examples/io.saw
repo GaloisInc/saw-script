@@ -1,0 +1,30 @@
+enable_experimental;
+env <- heapster_init_env_from_file "io.sawcore" "io.bc";
+
+// Set the event type
+heapster_set_event_type env "ioEv";
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_define_perm env "int32" " " "llvmptr 32" "exists x:bv 32.eq(llvmword(x))";
+heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
+
+heapster_define_perm env "int8array" "rw:rwmodality,len:bv 64" "llvmptr 64"
+  "array(rw,0,<len,*1,fieldsh(8,int8<>))";
+
+// Assume the read and write functions call their corresponding events
+heapster_assume_fun env "\01_write"
+  "(len:bv 64). \
+   \ arg0:int32<>, arg1:int8array<R,len>, arg2:eq(llvmword(len)) -o ret:int64<>"
+  "\\ (len:Vec 64 Bool) (fd:Vec 32 Bool) (buf:buffer len) -> \
+    \ triggerS ioEv (writeEv fd len buf)";
+
+
+///
+/// And now to start type-checking!
+///
+
+heapster_typecheck_fun env "hello_world" "(). empty -o empty";
+
+// Finally, export everything to Coq
+heapster_export_coq env "io_gen.v";

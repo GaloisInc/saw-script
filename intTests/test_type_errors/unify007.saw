@@ -1,0 +1,7 @@
+//
+// Exercise failure of the second unify call (via checkExpr) in the
+// IfThenElse case of inferExpr. This is the consistency check for the
+// true and false branches.
+//
+
+let f (b : Bool) = if b then 1 else "hi";

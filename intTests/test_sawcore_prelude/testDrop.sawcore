@@ -1,0 +1,21 @@
+module testDrop where
+import Prelude;
+
+my3Types : ListSort;
+my3Types = LS_Cons Bool (LS_Cons UnitType (LS_Cons Bool LS_Nil));
+
+my4Types : ListSort;
+my4Types = LS_Cons UnitType my3Types;
+
+test1a : ListSort = listSortDrop my4Types 0;
+test1b : ListSort = listSortDrop my4Types 1;
+test1c : ListSort = listSortDrop my4Types 2;
+test1d : ListSort = listSortDrop my4Types 5;
+test1e : ListSort = listSortDrop LS_Nil 5;
+
+check1a : Bool = equalNat (listSort_length test1a) 4;
+check1b : Bool = equalNat (listSort_length test1b) 3;
+check1c : Bool = equalNat (listSort_length test1c) 2;
+check1d : Bool = equalNat (listSort_length test1d) 0;
+check1e : Bool = equalNat (listSort_length test1e) 0;
+

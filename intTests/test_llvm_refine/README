@@ -1,0 +1,13 @@
+This is a test of the `llvm_refine_spec` command.  We write separate
+specifications for a function at a specific range of concrete values,
+and then combine the spec into a single one using refinement.
+
+The tested function computes the base 2 logarithm for a small
+collection of values directly via "switch" statement. We prove
+the correctness of the algorithm individually for each of the
+handled values, then assemble them into a single spec that
+characterizes the allowed inputs via nontrivial preconditions.
+
+This test ensures both that the expected refinement proof succeeds,
+and that an over-general specification (which includes too many
+values) fails.

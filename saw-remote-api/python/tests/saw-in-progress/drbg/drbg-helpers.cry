@@ -1,0 +1,44 @@
+////////////////////////////////////////////////////////////////
+// Copyright 2019 Galois, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License").
+// You may not use this file except in compliance with the License.
+// A copy of the License is located at
+//
+//  http://aws.amazon.com/apache2.0
+//
+// or in the "license" file accompanying this file. This file is distributed
+// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+// express or implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+//import Primitive::Keyless::Generator::DRBG
+import DRBG
+import AES
+
+// TODO: the original version of this, keysize = 32 conflicted
+// in the definition of encrypt_128
+type keysize = 16 // keylen / 8
+
+max_seq_number : [blocksize*8]
+max_seq_number = ~zero
+
+drbg_generate_seedlen : s2n_drbg -> [seedlen] -> Bit -> ([seedlen], s2n_drbg)
+drbg_generate_seedlen = drbg_generate `{n=seedlen,blocks=2}
+
+encrypt_128 : [keysize][8] -> [blocksize][8] -> [blocksize][8]
+encrypt_128 key msg =
+  split (block_encrypt (join key) (join msg))
+
+mode_128 = 0
+mode_256 = 1
+
+// TODO: Tried to simulate the top-level symbolic variable from the
+// saw script version using undefined below, but in the end
+// this trick did not work.
+// Note: I changed this. Originally it was seedsize, but
+// that appears to be 48 here which prevents some proofs
+// from going through.
+//type entropy_len = 32
+//fake_entropy : [entropy_len*8]
+//fake_entropy = undefined

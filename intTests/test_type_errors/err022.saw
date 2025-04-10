@@ -1,0 +1,3 @@
+// Trigger the "Tuple lookup on non-tuple argument" message.
+
+let foo (x: Int) = x.3;

@@ -1,0 +1,38 @@
+import "DES.cry";
+
+print "proving dec_enc...";
+let prop1 = {{ \key msg -> decrypt key (encrypt key msg) == msg }};
+dec_enc <- prove_print w4_abc_verilog {{prop1}};
+
+print dec_enc;
+
+print "proving enc_dec...";
+let prop2 = {{ \key msg -> encrypt key (decrypt key msg) == msg }};
+enc_dec <- prove_print w4_abc_verilog {{prop2}};
+
+print enc_dec;
+
+let ss = addsimp dec_enc (addsimp enc_dec basic_ss);
+
+let {{ enc3 k1 k2 k3 msg = encrypt k3 (decrypt k2 (encrypt k1 msg)) }};
+let {{ dec3 k1 k2 k3 msg = decrypt k1 (encrypt k2 (decrypt k3 msg)) }};
+
+print "proving dec3_enc3...";
+let {{ prop3 k1 k2 k3 msg = dec3 k1 k2 k3 (enc3 k1 k2 k3 msg) == msg }};
+prove_print do {
+    unfolding ["prop3"];
+    unfolding ["dec3", "enc3"];
+    simplify ss;
+    print_goal;
+    w4_abc_verilog;
+} {{prop3}};
+
+print "proving enc3_dec3...";
+let {{ prop4 k1 k2 k3 msg = enc3 k1 k2 k3 (dec3 k1 k2 k3 msg) == msg }};
+prove_print do {
+    unfolding ["prop4"];
+    unfolding ["dec3", "enc3"];
+    simplify ss;
+    print_goal;
+    w4_abc_verilog;
+} {{prop4}};

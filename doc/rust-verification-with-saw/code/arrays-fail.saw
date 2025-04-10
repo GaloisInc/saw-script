@@ -1,0 +1,14 @@
+enable_experimental;
+
+let index_fail_spec = do {
+  arr <- mir_fresh_var "arr" (mir_array 3 mir_u32);
+  idx <- mir_fresh_var "idx" mir_usize;
+
+  mir_execute_func [mir_term arr, mir_term idx];
+
+  mir_return (mir_term {{ arr @ idx }});
+};
+
+m <- mir_load_module "arrays.linked-mir.json";
+
+mir_verify m "arrays::index" [] false index_fail_spec z3;

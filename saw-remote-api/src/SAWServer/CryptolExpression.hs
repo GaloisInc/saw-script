@@ -1,44 +1,57 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-module SAWServer.CryptolExpression (getTypedTerm, getTypedTermOfCExp) where
+{-# LANGUAGE TupleSections #-}
+module SAWServer.CryptolExpression
+ ( getCryptolExpr
+ , getTypedTerm
+ , getTypedTermOfCExp
+ , CryptolModuleException(..)
+ ) where
 
-import Control.Lens hiding (re)
-import Control.Monad.IO.Class
+import Control.Exception (Exception)
+import Control.Lens ( view )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import qualified Data.ByteString as B
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
-import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
-import Cryptol.ModuleSystem (ModuleRes)
+import Cryptol.Eval (EvalOpts(..))
+import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv)
-import Cryptol.ModuleSystem.Interface (noIfaceParams)
+import Cryptol.ModuleSystem.Env (ModuleEnv, ModContextParams(..))
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
-import Cryptol.Parser.AST
+import Cryptol.Parser.AST ( Expr, PName )
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
+import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
-import Cryptol.Utils.PP
+import Cryptol.Utils.PP ( defaultPPOpts, pp )
 import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
+    ( getAllIfaceDecls,
+      getNamingEnv,
+      meSolverConfig,
+      translateExpr,
+      CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
 import Verifier.SAW.SharedTerm (SharedContext)
-import Verifier.SAW.TypedTerm(TypedTerm(..))
+import Verifier.SAW.TypedTerm(TypedTerm(..),TypedTermType(..))
 
-import Argo
-import CryptolServer.Data.Expression
-import SAWServer
+import qualified Argo
+import CryptolServer.Data.Expression (Expression, getCryptolExpr)
 import CryptolServer.Exceptions (cryptolError)
+import SAWServer
 
-getTypedTerm :: Expression -> Method SAWState TypedTerm
+getTypedTerm :: Expression -> Argo.Command SAWState TypedTerm
 getTypedTerm inputExpr =
-  do cenv <- rwCryptol . view sawTopLevelRW <$> getState
-     fileReader <- getFileReader
-     expr <- getExpr inputExpr
-     sc <- biSharedContext . view sawBIC <$> getState
-     (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp fileReader sc cenv expr)
+  do cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+     fileReader <- Argo.getFileReader
+     expr <- getCryptolExpr inputExpr
+     sc <- biSharedContext . view sawBIC <$> Argo.getState
+     (t, _) <- moduleCmdResult =<< liftIO (getTypedTermOfCExp fileReader sc cenv expr)
      return t
 
 getTypedTermOfCExp ::
@@ -47,7 +60,10 @@ getTypedTermOfCExp ::
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
-     mres <- runModuleM (defaultEvalOpts, B.readFile, env) $
+     let minp = ModuleInput True (pure defaultEvalOpts) B.readFile env
+     mres <-
+       withSolver (return ()) (meSolverConfig env) $ \s ->
+       runModuleM (minp s) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
@@ -58,7 +74,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
           let ifDecls = getAllIfaceDecls env
           let range = fromMaybe emptyRange (getLoc re)
           prims <- getPrimMap
-          tcEnv <- genInferInput range prims noIfaceParams ifDecls
+          tcEnv <- genInferInput range prims NoParams ifDecls
           let tcEnv' = tcEnv { inpVars = Map.union (eExtraTypes cenv) (inpVars tcEnv)
                              , inpTSyns = Map.union (eExtraTSyns cenv) (inpTSyns tcEnv)
                              }
@@ -69,15 +85,16 @@ getTypedTermOfCExp fileReader sc cenv expr =
        (Right ((checkedExpr, schema), modEnv'), ws) ->
          do let env' = cenv { eModuleEnv = modEnv' }
             trm <- liftIO $ translateExpr sc env' checkedExpr
-            return (Right (TypedTerm schema trm, modEnv'), ws)
+            return (Right (TypedTerm (TypedTermSchema schema) trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)
 
-moduleCmdResult :: ModuleRes a -> Method SAWState (a, ModuleEnv)
+moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =
-  do mapM_ (liftIO . print . pp) warnings
+  do -- TODO: Printing warnings directly to stdout here is questionable (#2129)
+     mapM_ (liftIO . print . pp) warnings
      case result of
        Right (a, me) -> return (a, me)
-       Left err      -> raise $ cryptolError err warnings
+       Left err      -> Argo.raise $ cryptolError err warnings
 
 defaultEvalOpts :: EvalOpts
 defaultEvalOpts = EvalOpts quietLogger defaultPPOpts
@@ -94,3 +111,10 @@ runInferOutput out =
     InferFailed nm warns errs ->
       do typeCheckWarnings nm warns
          typeCheckingFailed nm errs
+
+data CryptolModuleException = CryptolModuleException
+  { cmeError    :: ModuleError
+  , cmeWarnings :: [ModuleWarning]
+  } deriving Show
+
+instance Exception CryptolModuleException

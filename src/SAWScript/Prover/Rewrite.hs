@@ -5,29 +5,20 @@ Maintainer  : GaloisInc
 Stability   : provisional
 -}
 
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.Prover.Rewrite where
 
 import Verifier.SAW.Rewriter
          ( Simpset, emptySimpset, addRules, RewriteRule
-         , rewriteSharedTerm
          , scEqsRewriteRules, scDefRewriteRules
          , addConvs
          )
 import Verifier.SAW.Term.Functor(preludeName, mkIdent, Ident, mkModuleName)
 import Verifier.SAW.Conversion
-import Verifier.SAW.SharedTerm(Term,SharedContext,scFindDef)
+import Verifier.SAW.SharedTerm(SharedContext,scFindDef)
 
-rewriteEqs :: SharedContext -> Term -> IO Term
-rewriteEqs sc t =
-  do let eqs = map (mkIdent preludeName)
-                [ "eq_Bool", "eq_Nat", "eq_bitvector", "eq_VecBool"
-                , "eq_VecVec" ]
-     rs <- scEqsRewriteRules sc eqs
-     ss <- addRules rs <$> basic_ss sc
-     t' <- rewriteSharedTerm sc ss t
-     return t'
-
-basic_ss :: SharedContext -> IO Simpset
+basic_ss :: SharedContext -> IO (Simpset a)
 basic_ss sc =
   do rs1 <- concat <$> traverse (defRewrites sc) defs
      rs2 <- scEqsRewriteRules sc eqs
@@ -65,7 +56,6 @@ basic_ss sc =
          , "and_triv1"
          , "or_triv2"
          , "and_triv2"
-         , "eq_refl"
          , "bvAddZeroL"
          , "bvAddZeroR"
          , "bveq_sameL"
@@ -79,7 +69,7 @@ basic_ss sc =
 
 
 
-defRewrites :: SharedContext -> Ident -> IO [RewriteRule]
+defRewrites :: SharedContext -> Ident -> IO [RewriteRule a]
 defRewrites sc ident =
   scFindDef sc ident >>= \maybe_def ->
   case maybe_def of

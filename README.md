@@ -1,5 +1,4 @@
-[![Build
-Status](https://travis-ci.org/GaloisInc/saw-script.svg?branch=master)](https://travis-ci.org/GaloisInc/saw-script)
+[![Build Status](https://github.com/GaloisInc/saw-script/workflows/SAWScript/badge.svg)](https://github.com/GaloisInc/saw-script/actions?query=event%3Aschedule)
 
 # SAWScript
 
@@ -7,18 +6,33 @@ This repository contains the code for SAWScript, the scripting
 language that forms the primary user interface to the Software
 Analysis Workbench (SAW). It provides the ability to reason about
 formal models describing the denotation of programs written in
-languages such as C, Java, and Cryptol.
+languages such as C, Java, and Cryptol. It also provides experimental,
+incomplete support for the Rust language.
 
 ## Documentation
 
-The [SAWScript tutorial](https://saw.galois.com/tutorial.html) gives an
-introduction to using the SAWScript interpreter. A longer
-[manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md)
-describes the breadth of SAWScript's features.
+There are two SAWScript tutorials that give an introduction to using the
+SAWScript interpreter:
+
+* [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/llvm-java-verification-with-saw.pdf) gives an
+  introduction to verifying C code (using LLVM) and Java code (using JVM).
+* [This tutorial](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/rust-verification-with-saw.pdf)
+  gives an introduction to verifying Rust code (using MIR).
+
+There is also a longer
+[manual](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/saw-user-manual.pdf)
+that describes the breadth of SAWScript's features.
 
 ## Precompiled Binaries
 
-Precompiled SAWScript binaries for a variety of platforms are available on the [releases page](https://github.com/GaloisInc/saw-script/releases).
+Precompiled SAWScript binaries for a variety of platforms are available
+on the [releases
+page](https://github.com/GaloisInc/saw-script/releases).
+
+## Docker Images
+
+Alternatively, there is a Docker image available from the [packages
+page](https://github.com/orgs/GaloisInc/packages/container/package/saw).
 
 ## Getting Z3
 
@@ -28,21 +42,29 @@ solver](https://github.com/Z3Prover/z3) installed.  You can download Z3
 binaries for a variety of platforms from their [releases
 page](https://github.com/Z3Prover/z3/releases).
 
-We currently recommend Z3 4.8.7. If you plan to use path satisfiability
+We currently recommend Z3 4.8.10. If you plan to use path satisfiability
 checking, you'll also need Yices version 2.6.1 or newer.
 
 After installation, make sure that `z3` (or `z3.exe` on Windows)
 is on your PATH.
 
+## Cloning the Repository
+
+After cloning the saw-script repository, you need to also clone
+submodules.
+Run `git submodule update --init`.
+The commonly used `--recursive` option is not required, and also not
+recommended as it results in cloning a considerable number of
+additional unused subtrees.
+
 ## Manual Installation
 
 To build SAWScript and related utilities from source:
 
-  * Ensure that you have the
-    [Stack](https://github.com/commercialhaskell/stack) program on your
-    `PATH`. If you don't already have Stack, then `cabal install stack`,
-    or download a precompiled binary from
-    https://github.com/commercialhaskell/stack/releases.
+  * Ensure that you have the `cabal` and `ghc` executables in your
+    `PATH`. If you don't already have them, we recommend using `ghcup`
+    to install them: <https://www.haskell.org/ghcup/>. We recommend
+    Cabal 3.10 or newer, and GHC 9.4, 9.6, or 9.8.
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
@@ -53,49 +75,21 @@ To build SAWScript and related utilities from source:
     `PATH`. Z3 binaries are available at
     https://github.com/Z3Prover/z3/releases
 
-  * Setup a `stack.yaml` for your OS and preferred GHC.
+    On MacOS you need an actual JDK; the placeholder `javac` that
+    comes with the system by default, unfortunately, breaks SAW.
+    See issue [#1709](https://github.com/GaloisInc/saw-script/issues/1709).
 
-    Choose one of the Stack YAML config files and link it to
-    `stack.yaml`:
+  * Optionally, put in place dependency version freeze files:
 
-        ln -s stack.<ghc version and os>.yaml stack.yaml
+        ln -s cabal.<ghc version>.config cabal.project.freeze
 
-    The `stack-<ghc version>-unix.yaml` files are for both Linux and
-    OS X.
-
-    (Alternatively, you can
-
-        export STACK_YAML=stack.<ghc version and os>.yaml
-
-    instead of creating a symlink.
-
-    **Developers**: defining a `STACK_YAML` env var also overrides the
-    `stack.yaml` file, if any, and so is useful for testing a
-    alternative build without permanently changing your default. You
-    can even define `STACK_YAML` only for the current command: e.g.
-
-        STACK_YAML=stack.<ghc version and os>.yaml stack build
-
-    will build SAWScript using the given Stack YAML.)
+  * Run `cabal update` if you had installed `cabal` prior to using this README.
 
   * Build SAWScript by running
 
         ./build.sh
 
-    The SAWScript executables will be created in
-
-        echo `stack path --local-install-root`/bin
-
-    a path under the SAWScript repo. You can install SAWScript into
-    a more predictable location by running
-
-        stack install
-
-    which installs into
-
-        stack path --local-bin-path
-
-    which is `$HOME/.local/bin` by default.
+    The SAWScript executables will be available in the `bin` directory.
 
   * Optionally, run ./stage.sh to create a binary tarball.
 
@@ -105,7 +99,7 @@ SAW can analyze LLVM programs (usually derived from C, but potentially
 for other languages). The only tool strictly required for this is a
 compiler that can generate LLVM bitcode, such as `clang`. However,
 having the full LLVM tool suite available can be useful. We have tested
-SAW with LLVM and `clang` versions from 3.5 to 9.0, as well as the
+SAW with LLVM and `clang` versions from 3.5 to 16.0, as well as the
 version of `clang` bundled with Apple Xcode. We welcome bug reports on
 any failure to parse bitcode from LLVM versions in that range.
 
@@ -114,6 +108,40 @@ will be possible for all language constructs. There are various
 instructions that are not supported during verification. However,
 any failure during `llvm_load_module` should be considered a bug.
 
+## Notes on Rust
+
+SAW has experimental support for analyzing Rust programs. To do so, one must
+compile Rust code using [`mir-json`](https://github.com/GaloisInc/mir-json), a
+tool which compiles Rust code to a machine-readable, JSON-based format.
+
+Currently, SAW supports [version
+1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
+`mir-json`'s schema. Note that the schema versions produced by `mir-json` can
+change over time as dictated by internal requirements and upstream changes. To
+help smooth this over:
+
+* We intend that once SAW introduces support for any given schema version, it
+  will retain that support across at least two releases.
+* An exception to this rule is when `mir-json` updates to support a new Rust
+  toolchain version. In general, we cannot promise backwards compatibility
+  across Rust toolchains, as the changes are often significant enough to
+  impeded any ability to reasonably provide backwards-compatibility guarantees.
+
+Moreover, SAW requires slightly modified versions of the Rust standard
+libraries that are suited to verification purposes. SAW consults the value of
+the `SAW_RUST_LIBRARY_PATH` environment variable to determine where to look for
+these modified standard libraries.
+
+For complete instructions on how to install `mir-json`, the modified Rust
+standard libraries, and how to defined the `SAW_RUST_LIBRARY_PATH` environment
+variable, follow the instructions
+[here](https://github.com/GaloisInc/mir-json#installation-instructions).
+
+## Notes on Windows
+
+If you have trouble loading the SAW REPL on Windows, try invoking it
+with the `--no-color` option.
+
 ## Related Packages
 
 Many dependencies are automatically downloaded into `deps/` when you
@@ -121,11 +149,8 @@ build using `build.sh`; see
 [Manual Installation](#manual-installation) above. Key automatically
 downloaded dependencies include:
 
-* `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 * `deps/crucible/`:         [Crucible symbolic execution engine](https://github.com/GaloisInc/crucible)
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
-* `deps/jvm-verifier/`:     [Java Symbolic Simulator (JSS)](https://github.com/GaloisInc/jvm-verifier)
-* `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, and SAWScript
 
 ## For SAW developers
 
@@ -139,12 +164,6 @@ If you are using `cabal` to build, select the `saw-script` target:
 $ cabal new-repl saw-script
 ```
 
-If you are using `stack` to build, select the `saw-script` *library* target:
-
-```
-$ stack repl saw-script:lib
-```
-
 In order to use interactive tools like `intero`, you need to configure them with
 this target. You can configure `intero-mode` in Emacs to use the `saw-script`
 library target by setting the variable `intero-targets` to the string
@@ -156,11 +175,37 @@ project, place the following snippet in the file `src/.dir-locals.el`:
   (intero-targets "saw-script:lib")))
 ```
 
+## Notes on Freeze Files
+
+We use the `cabal.GHC-*.config` files to constrain dependency versions
+in CI, and recommend using the following command for best results before
+building locally:
+
+```
+ln -s cabal.GHC-<VER>.config cabal.project.freeze
+```
+
+These configuration files were generated using `cabal freeze`, but with
+some manual changes to allow cross-platfom builds, since Unix-like
+systems and Windows systems end up with different package dependencies.
+Specifically, we remove lines for the following packages or flags:
+
+```
+cryptol-saw-core
+regex-posix
+saw-remote-api
+saw-script
+tasty +unix
+unix
+unix-compat
+unix-time
+```
+
 ## Acknowledgements
 
 Much of the work on SAW has been funded by, and lots of design input was
 provided by the team at the [NSA's Laboratory for Advanced Cybersecurity
-Research](https://www.nsa.gov/what-we-do/research/cybersecurity-research/),
+Research](https://www.nsa.gov/Research/NSA-Mission-Oriented-Research/LAC/),
 including Brad Martin, Frank Taylor, and Sean Weaver.
 
 Portions of SAW are also based upon work supported by the Office

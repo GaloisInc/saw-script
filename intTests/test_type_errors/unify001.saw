@@ -1,0 +1,8 @@
+//
+// Exercise failure of the unify call in the TSig (type signature)
+// case of inferExpr. This is the unification of the array value's
+// type with (Array t).
+//
+
+
+let x = (3 : String);

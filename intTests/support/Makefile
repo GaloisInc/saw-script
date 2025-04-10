@@ -1,4 +1,4 @@
-CP=.:../../deps/jvm-verifier/support/galois.jar
+CP=.:../jars/galois.jar
 
 %.ll: %.c
 	clang -S -emit-llvm $< -o $(shell basename $< .c).ll

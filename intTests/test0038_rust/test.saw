@@ -8,7 +8,7 @@ let f_spec : CrucibleSetup() = do {
     //     %BI = type { [0 x i32], [2 x [4 x i32]], [0 x i32] }
     //
     i <- llvm_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
-    pw <- llvm_alloc (llvm_struct "BI");
+    pw <- llvm_alloc (llvm_alias "BI");
     llvm_points_to pw
       (llvm_struct_value [ llvm_term {{ zero:[0][32] }}
                          , llvm_term i

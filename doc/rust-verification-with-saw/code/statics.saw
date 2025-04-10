@@ -1,0 +1,55 @@
+enable_experimental;
+
+m <- mir_load_module "statics.linked-mir.json";
+
+let answer_to_the_ultimate_question_spec1 = do {
+  mir_execute_func [];
+
+  mir_return (mir_term {{ 42 : [32] }});
+};
+
+mir_verify m "statics::answer_to_the_ultimate_question" [] false
+           answer_to_the_ultimate_question_spec1 z3;
+
+let answer_to_the_ultimate_question_spec2 = do {
+  mir_execute_func [];
+
+  mir_return (mir_static_initializer "statics::ANSWER");
+};
+
+mir_verify m "statics::answer_to_the_ultimate_question" [] false
+           answer_to_the_ultimate_question_spec2 z3;
+
+let answer_in_ref_form_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_static "statics::ANSWER");
+};
+
+mir_verify m "statics::answer_in_ref_form" [] false
+           answer_in_ref_form_spec z3;
+
+let mut_answer_to_the_ultimate_question_spec = do {
+  let mut_answer = "statics::MUT_ANSWER";
+  let mut_answer_init = mir_static_initializer mut_answer;
+  mir_points_to (mir_static mut_answer) mut_answer_init;
+
+  mir_execute_func [];
+
+  mir_return mut_answer_init;
+};
+
+mir_verify m "statics::mut_answer_to_the_ultimate_question" [] false
+           mut_answer_to_the_ultimate_question_spec z3;
+
+let mut_answer_to_the_ultimate_question_alt_spec = do {
+  let alt_answer = mir_term {{ 27 : [32] }};
+  mir_points_to (mir_static "statics::MUT_ANSWER") alt_answer;
+
+  mir_execute_func [];
+
+  mir_return alt_answer;
+};
+
+mir_verify m "statics::mut_answer_to_the_ultimate_question" [] false
+           mut_answer_to_the_ultimate_question_alt_spec z3;

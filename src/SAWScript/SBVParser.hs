@@ -20,10 +20,13 @@ module SAWScript.SBVParser
 
 import Prelude hiding (mapM)
 
-import Control.Monad.State hiding (mapM)
+import Control.Monad (foldM, liftM, replicateM, unless)
+import Control.Monad.State (MonadState(..), StateT(..))
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Traversable (mapM)
 import Numeric.Natural (Natural)
 
@@ -112,7 +115,7 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
                    b <- scBoolType sc
                    -- SBV append takes the most-significant argument
                    -- first, as SAWCore does.
-                   scAppend sc b s1 s2 arg1 arg2
+                   scAppend sc s1 s2 b arg1 arg2
             _ -> fail "parseSBVExpr: wrong number of arguments for append"
       SBV.BVLkUp indexSize resultSize ->
           do (size1 : inSizes, arg1 : args) <- liftM unzip $ mapM (parseSBV sc nodes) sbvs
@@ -127,14 +130,18 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
                Nothing ->
                    do printOutLn opts Warn ("WARNING: unknown uninterpreted function " ++ show (name, typ, size))
                       printOutLn opts Info ("Using Prelude." ++ name)
-                      scGlobalDef sc (mkIdent preludeName name)
+                      scGlobalDef sc (mkIdent preludeName (Text.pack name))
              args <- mapM (parseSBV sc nodes) sbvs
              let inSizes = map fst args
-                 (TFun inTyp outTyp) = typ
+             (inTyp, outTyp) <-
+               case typ of
+                 TFun inTyp outTyp -> pure (inTyp, outTyp)
+                 _ -> fail "parseSBVExpr: expected function type"
              unless (sum (typSizes inTyp) == sum (map fromIntegral inSizes)) $ do
                printOutLn opts Error ("ERROR parseSBVPgm: input size mismatch in " ++ name)
-               printOutFn opts Error (show inTyp)
-               printOutFn opts Error (show inSizes)
+               -- these used to print without newlines but that seems totally wrong
+               printOutLn opts Error (show inTyp)
+               printOutLn opts Error (show inSizes)
              argument <- combineOutputs sc inTyp args
              result <- scApply sc t argument
              results <- splitInputs sc outTyp result
@@ -210,7 +217,7 @@ data Typ
   | TFun Typ Typ
   | TVec SBV.Size Typ
   | TTuple [Typ]
-  | TRecord [(String, Typ)]
+  | TRecord [(FieldName, Typ)]
 
 instance Show Typ where
   show TBool = "."
@@ -218,7 +225,7 @@ instance Show Typ where
   show (TVec size t) = "[" ++ show size ++ "]" ++ show t
   show (TTuple ts) = "(" ++ intercalate "," (map show ts) ++ ")"
   show (TRecord fields) = "{" ++ intercalate "," (map showField fields) ++ "}"
-    where showField (s, t) = s ++ ":" ++ show t
+    where showField (s, t) = Text.unpack s ++ ":" ++ show t
 
 parseIRType :: SBV.IRType -> Typ
 parseIRType (SBV.TApp "." []) = TBool
@@ -227,7 +234,7 @@ parseIRType (SBV.TApp ":" [SBV.TInt n, a]) = TVec n (parseIRType a)
 parseIRType (SBV.TApp c ts)
   | c == "(" ++ replicate (length ts - 1) ',' ++ ")" = TTuple (map parseIRType ts)
 parseIRType (SBV.TRecord fields) =
-    TRecord [ (name, parseIRType t) | (name, SBV.Scheme [] [] [] t) <- fields ]
+    TRecord [ (Text.pack name, parseIRType t) | (name, SBV.Scheme [] [] [] t) <- fields ]
 parseIRType t = error ("parseIRType: " ++ show t)
 
 typSizes :: Typ -> [SBV.Size]
@@ -332,7 +339,10 @@ combineOutputs sc ty xs0 =
 
 parseSBVPgm :: Options -> SharedContext -> UnintMap -> SBV.SBVPgm -> IO Term
 parseSBVPgm opts sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warnings, _uninterps)) =
-    do let (TFun inTyp outTyp) = parseIRType irtype
+    do (inTyp, outTyp) <-
+         case parseIRType irtype of
+           TFun inTyp outTyp -> pure (inTyp, outTyp)
+           _ -> fail "parseSBVPgm: expected function type"
        let cmds = reverse revcmds
        let (assigns, inputs, outputs) = partitionSBVCommands cmds
        let inSizes = [ size | SBVInput size _ <- inputs ]
@@ -384,7 +394,7 @@ scAppendAll sc ((x, size1) : xs) =
        s1 <- scNat sc (fromInteger size1)
        s2 <- scNat sc (fromInteger size2)
        y <- scAppendAll sc xs
-       scAppend sc b s1 s2 x y
+       scAppend sc s1 s2 b x y
 
 typOf :: SBV.SBVPgm -> Typ
 typOf (SBV.SBVPgm (_, irtype, _, _, _, _)) = parseIRType irtype

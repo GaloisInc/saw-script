@@ -16,7 +16,7 @@ let ptr_to_fresh n ty = do {
 // Verify 'init'.
 
 let init_spec = do {
-  (s, sp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  (s, sp) <- ptr_to_fresh "st" (llvm_alias "struct.state");
 
   llvm_execute_func [sp];
 
@@ -32,7 +32,7 @@ print "";
 // Verify 'update'.
 
 let update_spec xs_len = do {
-  (st0, stp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  (st0, stp) <- ptr_to_fresh "st" (llvm_alias "struct.state");
   (xs0, xsp) <- ptr_to_fresh "xs" (llvm_array xs_len (llvm_int 32));
 
   llvm_execute_func [stp, xsp, llvm_term {{ `xs_len : [32] }}];
@@ -54,7 +54,7 @@ print "";
 // Verify 'digest'.
 
 let digest_spec = do {
-  (st0, stp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  (st0, stp) <- ptr_to_fresh "st" (llvm_alias "struct.state");
   avgp <- llvm_alloc (llvm_int 32);
 
   // Avoid division by zero

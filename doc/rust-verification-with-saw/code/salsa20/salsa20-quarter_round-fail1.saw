@@ -1,0 +1,21 @@
+enable_experimental;
+
+m <- mir_load_module "salsa20.linked-mir.json";
+import "Salsa20.cry";
+
+let quarter_round_spec = do {
+  a <- mir_fresh_var "a" mir_usize;
+  b <- mir_fresh_var "b" mir_usize;
+  c <- mir_fresh_var "c" mir_usize;
+  d <- mir_fresh_var "d" mir_usize;
+  state_ref <- mir_alloc_mut (mir_array STATE_WORDS mir_u32);
+  state_arr <- mir_fresh_var "state" (mir_array STATE_WORDS mir_u32);
+  mir_points_to state_ref (mir_term state_arr);
+
+  mir_execute_func [ mir_term a
+                   , mir_term b
+                   , mir_term c
+                   , mir_term d
+                   , state_ref
+                   ];
+};

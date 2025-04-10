@@ -8,19 +8,44 @@ prove_print w4_abc_smtlib2 t;
 prove_print w4_abc_verilog t;
 prove_print (offline_verilog "offline_verilog") t;
 prove_print (w4_offline_smtlib2 "w4_offline_smtlib2") t;
+prove_print (offline_aig_external "offline_aig") t;
+prove_print (offline_cnf_external "offline_cnf") t;
 
 // A formula that is unsatisfiable.
 let q_unsat = {{ \(x:[8]) -> x != 0 /\ x+x == x }};
 
 write_verilog "write_verilog_unsat.v" q_unsat;
 write_smtlib2_w4 "write_smtlib2_w4_unsat.smt2" q_unsat;
+write_aig_external "./write_aig_external_unsat.aig" q_unsat;
+write_cnf_external "./write_aig_external_unsat.cnf" q_unsat;
 
 // A formula that is satisfiable.
 let q_sat = {{ \(x:[8]) -> x+x == x }};
 
 write_verilog "write_verilog_sat.v" q_sat;
 write_smtlib2_w4 "write_smtlib2_w4_sat.smt2" q_sat;
+write_aig_external "./write_aig_external_sat.aig" q_sat;
+write_cnf_external "./write_aig_external_sat.cnf" q_sat;
 
 fails (prove_print sbv_abc q_sat);
 fails (prove_print w4_abc_smtlib2 q_sat);
 fails (prove_print w4_abc_verilog q_sat);
+
+// A function that returns a sequence
+let seqt = {{ \(x:[8]) (y:[8]) -> [x + y, x - y] }};
+write_verilog "write_verilog_seqt.v" seqt;
+
+// A function that returns a tuple
+let tupt = {{ \(x:[8]) (y:[8]) -> (x + y, x - y) }};
+write_verilog "write_verilog_tupt.v" tupt;
+
+let order_term = {{ \(x:[2][2][8]) -> \(y:[32]) -> y == 0x81050fff /\ x == [[2,3],[4,5]] }};
+let order_res = {{ ([[0x02,0x03],[0x04,0x05]], 0x81050fff) }};
+
+// Check that Verilog counterexamples are in the right order
+sr1 <- sat w4_abc_verilog order_term;
+caseSatResult sr1 (fail "ABC verilog sat fail") (\t -> prove_print yices {{ t == order_res }});
+
+// Check that AIGER counterexamples are in the right order
+sr2 <- sat w4_abc_aiger order_term;
+caseSatResult sr2 (fail "ABC aiger sat fail") (\t -> prove_print yices {{ t == order_res }});

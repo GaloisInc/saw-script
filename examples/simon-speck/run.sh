@@ -6,7 +6,7 @@ done
 if [ -z "$JAVA_HOME" ]; then
     echo "Need to set JAVA_HOME environment variable"
     exit 1
-fi  
+fi
 if [ ! -e simon.cry ]; then
   wget -q https://github.com/GaloisInc/cryptol/raw/master/examples/contrib/simon.cry
 fi
@@ -26,5 +26,5 @@ javac -g SimonEngine.java
 javac -g SpeckEngine.java
 saw simon.saw
 saw speck.saw
-saw -j $JAVA_HOME/jre/lib/rt.jar speck-java-bug-1.saw
-saw -j $JAVA_HOME/jre/lib/rt.jar speck-java-bug-2.saw
+saw -b $JAVA_HOME/bin speck-java-bug-1.saw
+saw -b $JAVA_HOME/bin speck-java-bug-2.saw

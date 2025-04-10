@@ -1,3 +1,0 @@
-import "DES.cry";
-let {{ thm key msg = decrypt key (encrypt key msg) == msg }};
-prove_print abc {{ thm }};

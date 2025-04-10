@@ -1,0 +1,3 @@
+// Nor should we be able to use just anything _in_ an identifier.
+let thingy_hook = true;
+let thingy_🪝 = false;

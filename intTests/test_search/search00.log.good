@@ -1,0 +1,55 @@
+ --------------------------------
+ -- LLVMSpec
+crucible_llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
+crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+crucible_spec_size : LLVMSpec -> Int
+crucible_spec_solvers : LLVMSpec -> [String]
+llvm_spec_size : LLVMSpec -> Int
+llvm_spec_solvers : LLVMSpec -> [String]
+llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
+llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+ --------------------------------
+ -- (LLVMSpec -> [String])
+crucible_spec_solvers : LLVMSpec -> [String]
+llvm_spec_solvers : LLVMSpec -> [String]
+ --------------------------------
+ -- (LLVMSetup ())
+crucible_alloc_global : String -> LLVMSetup ()
+crucible_conditional_points_to : Term -> SetupValue -> SetupValue -> LLVMSetup ()
+crucible_conditional_points_to_untyped : Term -> SetupValue -> SetupValue -> LLVMSetup ()
+crucible_equal : SetupValue -> SetupValue -> LLVMSetup ()
+crucible_execute_func : [SetupValue] -> LLVMSetup ()
+crucible_ghost_value : Ghost -> Term -> LLVMSetup ()
+crucible_llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
+crucible_llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+crucible_points_to : SetupValue -> SetupValue -> LLVMSetup ()
+crucible_points_to_untyped : SetupValue -> SetupValue -> LLVMSetup ()
+crucible_postcond : Term -> LLVMSetup ()
+crucible_precond : Term -> LLVMSetup ()
+crucible_return : SetupValue -> LLVMSetup ()
+llvm_alloc_global : String -> LLVMSetup ()
+llvm_assert : Term -> LLVMSetup ()
+llvm_conditional_points_to : Term -> SetupValue -> SetupValue -> LLVMSetup ()
+llvm_conditional_points_to_at_type : Term -> SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()
+llvm_conditional_points_to_untyped : Term -> SetupValue -> SetupValue -> LLVMSetup ()
+llvm_equal : SetupValue -> SetupValue -> LLVMSetup ()
+llvm_execute_func : [SetupValue] -> LLVMSetup ()
+llvm_ghost_value : Ghost -> Term -> LLVMSetup ()
+llvm_points_to : SetupValue -> SetupValue -> LLVMSetup ()
+llvm_points_to_at_type : SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()
+llvm_points_to_untyped : SetupValue -> SetupValue -> LLVMSetup ()
+llvm_postcond : Term -> LLVMSetup ()
+llvm_precond : Term -> LLVMSetup ()
+llvm_return : SetupValue -> LLVMSetup ()
+llvm_unsafe_assume_spec : LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
+llvm_verify : LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec
+ --------------------------------
+ -- Int String
+get_opt : Int -> String
+write_saig' : String -> Term -> Int -> TopLevel ()
+ --------------------------------
+ -- String Int
+get_opt : Int -> String
+write_saig' : String -> Term -> Int -> TopLevel ()
+ --------------------------------
+ -- (TopLevel Int)

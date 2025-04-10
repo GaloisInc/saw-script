@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 module SAWScript.REPL.Logo where
 
+import SAWScript.Panic (panic)
 import SAWScript.Version (versionText)
 import System.Console.ANSI
 
@@ -27,7 +28,10 @@ logo useColor =
         ++ replicate (lineLen - 20 - length versionText) ' '
         ++ versionText
   ls = (if useColor then logo2 else logo1) ver
-  lineLen   = length (head ls)
+  line      = case ls of
+                line':_ -> line'
+                [] -> panic "logo" ["empty lines"]
+  lineLen   = length line
   slen      = length ls `div` 3
   (ws,rest) = splitAt slen ls
   (vs,ds)   = splitAt slen rest

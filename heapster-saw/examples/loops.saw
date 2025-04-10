@@ -1,0 +1,24 @@
+enable_experimental;
+env <- heapster_init_env_from_file "loops.sawcore" "loops.bc";
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+
+heapster_block_entry_hint env "add_loop" 3
+  "top0:llvmptr 64, top1:llvmptr 64"
+  "frm:llvmframe 64, x0:llvmptr 64, x1:llvmptr 64"
+  "top0:int64<>, top1:int64<>, \
+  \ arg0:ptr((W,0) |-> int64<>), arg1:ptr((W,0) |-> int64<>), \
+  \ frm:llvmframe [arg1:8,arg0:8,x1:8,x0:8], \
+  \ x0:ptr((W,0) |-> true), x1:ptr((W,0) |-> true)";
+
+heapster_typecheck_fun env "add_loop"
+  "(). arg0:int64<>, arg1:int64<> -o ret:int64<>";
+
+heapster_typecheck_fun env "sign_of_sum"
+  "(). arg0:int64<>, arg1:int64<> -o ret:int64<>";
+
+heapster_typecheck_fun env "compare_sum"
+  "(). arg0:int64<>, arg1:int64<>, arg2:int64<> -o ret:int64<>";
+
+heapster_export_coq env "loops_gen.v";

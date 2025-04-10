@@ -1,102 +1,74 @@
-#!/bin/bash
-set -x
-set -v
+#!/bin/sh
+# build.sh: build SAW
+# usage: ./build.sh [target]
+#
+# Valid targets are:
+#    build (the default)
+#    submodules (included in build, at least for now)
+#    clean
+
 set -e
 
-TESTABLE="abcBridge jvm-verifier parameterized-utils saw-core"
+##############################
+# submodules
 
-dotests="false"
-jobs=""
-while getopts "tpfj:" opt; do
-    case $opt in
-        t)
-            dotests="true"
-            ;;
-        j)
-            jobs="-j$OPTARG"
-            ;;
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
-            exit 1
-            ;;
-    esac
-done
+tgt_submodules() {
+    echo "git submodule update --init"
+    git submodule update --init
+}
 
-git submodule init
-git submodule update
-(cd deps/abcBridge && git submodule init && git submodule update)
+##############################
+# build
 
-if [ ! -e stack.yaml -a -z "$STACK_YAML" ] ; then
-    set +x
+install() {
+  PROG=$(cabal list-bin -v0 exe:$1)
+  echo "cp $PROG bin/"
+  cp $PROG bin/
+}
+
+tgt_build() {
+    tgt_submodules
+
+    echo "cabal build ..."
+    cabal build exe:cryptol exe:saw exe:saw-remote-api \
+                exe:crux-mir-comp exe:extcore-info exe:verif-viewer
+
+    echo "rm -rf bin && mkdir bin"
+    rm -rf bin && mkdir bin
+
+    install cryptol
+    install saw
+    install saw-remote-api
+    install crux-mir-comp
+    install extcore-info
+    install verif-viewer
+
     echo
-    echo "ERROR: no stack.yaml file found."
-    echo
-    echo "Select one of the given stack configuration files using:"
-    echo
-    echo "    ln -s stack.<ghc version and os>.yaml stack.yaml"
-    exit 1
-fi
+    echo "COPIED EXECUTABLES TO `pwd`/bin."
+}
 
-stack setup
+##############################
+# clean
 
-LOCALBINPATH=$(stack path --local-bin-path | tr -d '\r\n')
-if [ "${OS}" == "Windows_NT" ] ; then
-    HERE=$(cygpath -w $(pwd))
-    PATH=$PATH:$(cygpath -u -a $LOCALBINPATH)
-else
-    HERE=$(pwd)
-    PATH=$PATH:$LOCALBINPATH
-fi
-
-stack="stack $jobs"
-
-${stack} install alex
-${stack} install happy
-${stack} install c2hs
-
-which alex
-which happy
-which c2hs
-
-if [ "${dotests}" == "true" ] ; then
-  if [ -z ${TEST_TIMEOUT} ]; then
-    TEST_TIMEOUT="120s"
-  fi
-
-  mkdir -p tmp
-  for pkg in ${TESTABLE}; do
-    test_arguments="--xml=${HERE}/tmp/${pkg}-test-results.xml --timeout=${TEST_TIMEOUT}"
-
-    if [ ! "${QC_TESTS}" == "" ]; then
-        test_arguments="${test_arguments} --quickcheck-tests=${QC_TESTS}"
+tgt_clean() {
+    echo "cabal clean"
+    cabal clean
+    if [ -d bin ]; then
+        echo "rm -rf bin"
+        rm -rf bin
     fi
+}
 
-    # Stack is returning 1 when a test fails, which kills the whole
-    # build. Presumably Cabal returned 0 in this case.
-    #
-    # If the build part of the test fails, there won't be any XML
-    # file, so we'll detect failure in that case when we check for the
-    # XML file below.
-    (
-      set +e
-      ${stack} build --test --test-arguments="${test_arguments}" ${pkg}
-      exit 0
-    )
+##############################
+# top level
 
-    if [ -e tmp/${pkg}-test-results.xml ]; then
-      xsltproc jenkins-junit-munge.xsl tmp/${pkg}-test-results.xml > tmp/jenkins-${pkg}-test-results.xml
-    else
-      echo "Missing test results: tmp/${pkg}-test-results.xml"
-      exit 1
-    fi
-  done
-else
-  ${stack} build
-fi
-
-# Link bin directory to a more convenient location
-rm -f bin
-ln -s `stack path --local-install-root`/bin
-set +x +v
-echo
-echo "COPIED EXECUTABLES TO `pwd`/bin."
+case "X$1" in
+    Xsubmodules) tgt_submodules;;
+    X|Xbuild) tgt_build;;
+    Xclean) tgt_clean;;
+    *)
+        echo "$0: Don't know how to build $1" 1>&2
+        exit 1
+        ;;
+esac
+exit 0

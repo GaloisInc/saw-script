@@ -1,5 +1,5 @@
 let inc_spec : CrucibleSetup () = do {
-  m <- llvm_alloc (llvm_struct "struct.my_struct");
+  m <- llvm_alloc (llvm_alias "struct.my_struct");
   counter <- llvm_fresh_var "counter" (llvm_int 32);
   llvm_points_to (llvm_field m "counter") (llvm_term counter);
   llvm_execute_func [m];

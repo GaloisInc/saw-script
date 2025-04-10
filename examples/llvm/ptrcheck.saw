@@ -13,7 +13,7 @@ let ptr_to_fresh n ty = do {
 };
 
 llvm_verify m "f" [] false do {
-    (s, sp) <- ptr_to_fresh "s" (llvm_struct "struct.s");
+    (s, sp) <- ptr_to_fresh "s" (llvm_alias "struct.s");
     llvm_execute_func [sp];
     llvm_return (llvm_term {{ 0 : [32] }});
 } abc;

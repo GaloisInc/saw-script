@@ -1,0 +1,12 @@
+//
+// Exercise failure of the unify call in the incorrectly non-monadic
+// case of StmtBind in inferStmt. (This case was accepted prior to
+// December 2024 and now has its own special-cased unify call.
+//
+// The special case applies only at the syntactic top leel.
+//
+// This checks the pattern against the value being bound to it,
+// but allows it to not be in a monad.
+//
+
+(x : Int) <- "abc";

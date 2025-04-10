@@ -1,0 +1,12 @@
+// this should not be accepted, but prior to fixing #2105 the call to
+// go caused an internal dynamic type error
+
+typedef Stuff = {
+   foo: Int,
+   bar: String
+};
+
+let make (a: Int) (b: String) = { foo = a, baz = b };
+let get (t: Stuff) = t.bar;
+let go (a: Int) (b: String) = get (make a b);
+let x = go 3 "abc";

@@ -1,0 +1,9 @@
+//
+// Trigger the "Not a monomorphic type" message associated with
+// polymorphic binds.
+//
+// In this test, trigger it in a top-level nested do-block.
+
+_ <- do {
+   return (\a -> a);
+};

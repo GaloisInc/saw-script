@@ -11,6 +11,12 @@ module SAWServer.Exceptions (
   , notASimpset
   , notATerm
   , notAJVMClass
+  , notAYosysTheorem
+  , notAYosysImport
+  , notAYosysSequential
+  , notAMIRModule
+  , notAMIRMethodSpecIR
+  , notAMIRAdt
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -23,11 +29,11 @@ module SAWServer.Exceptions (
   , verificationException
   ) where
 
-import Control.Exception
-import Data.Aeson as JSON
+import Control.Exception ( Exception(displayException) )
+import Data.Aeson as JSON ( object, KeyValue((.=)), ToJSON )
 import qualified Data.Text as T
 
-import Argo
+import Argo ( makeJSONRPCException, JSONRPCException )
 
 --------------------------------------------------------------------------------
 -- NOTE: IF YOU MODIFY EXCEPTION CODES OR ADD NEW ONES, THESE CHANGES MUST BE
@@ -155,6 +161,72 @@ notAtTopLevel tasks =
   makeJSONRPCException
     10120 "Not at top level"
     (Just (JSON.object ["tasks" .= tasks]))
+
+notAYosysTheorem ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a Yosys theorem -}->
+  JSONRPCException
+notAYosysTheorem name =
+  makeJSONRPCException 10130
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a Yosys theorem")
+    (Just $ object ["name" .= name])
+
+notAYosysImport ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a Yosys import -}->
+  JSONRPCException
+notAYosysImport name =
+  makeJSONRPCException 10131
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a Yosys import")
+    (Just $ object ["name" .= name])
+
+notAYosysSequential ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a Yosys sequential module -}->
+  JSONRPCException
+notAYosysSequential name =
+  makeJSONRPCException 10132
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a Yosys sequential module")
+    (Just $ object ["name" .= name])
+
+notAMIRModule ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a MIR module -}->
+  JSONRPCException
+notAMIRModule name =
+  makeJSONRPCException 10140
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a MIR module")
+    (Just $ object ["name" .= name])
+
+notAMIRMethodSpecIR ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a method specification IR -}->
+  JSONRPCException
+notAMIRMethodSpecIR name =
+  makeJSONRPCException 10150
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a MIR method specification")
+    (Just $ object ["name" .= name])
+
+notAMIRAdt ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a MIR ADT -}->
+  JSONRPCException
+notAMIRAdt name =
+  makeJSONRPCException 10150
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a MIR ADT")
+    (Just $ object ["name" .= name])
 
 cantLoadLLVMModule :: String -> JSONRPCException
 cantLoadLLVMModule err =

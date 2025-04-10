@@ -1,0 +1,58 @@
+
+enable_experimental;
+env <- heapster_init_env "c_data" "c_data.bc";
+
+/***
+ *** Type Definitions
+ ***/
+
+// Integer types
+heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+
+// padded_struct type
+heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
+
+heapster_define_llvmshape env "padded_struct" 64 ""
+  "fieldsh(int64<>);fieldsh(8,int8<>);fieldsh(56,true); \
+  \ fieldsh(int64<>);fieldsh(8,int8<>);fieldsh(56,true)";
+
+
+/***
+ *** Assumed Functions
+ ***/
+
+heapster_assume_fun env "malloc"
+  "(sz:bv 64). arg0:eq(llvmword(8*sz)) -o \
+             \ arg0:true, ret:array(W,0,<sz,*8,fieldsh(true))"
+  "\\ (sz:Vec 64 Bool) -> \
+    \ retS VoidEv \
+            \ (BVVec 64 sz #()) \
+            \ (genBVVec 64 sz #() (\\ (i:Vec 64 Bool) (_:is_bvult 64 i sz) -> ()))";
+
+
+/***
+ *** Type-Checked Functions
+ ***/
+
+// incr_u64_ptr_byte
+heapster_typecheck_fun env "incr_u64_ptr_byte"
+  "(). arg0:ptr((W,0) |-> int64<>) -o arg0:ptr((W,0) |-> int64<>)";
+
+// alloc_padded_struct
+heapster_typecheck_fun env "alloc_padded_struct"
+  "(). empty -o ret:memblock(W,0,32,padded_struct<>)";
+
+// padded_struct_incr_all
+heapster_typecheck_fun env "padded_struct_incr_all"
+  "(). arg0:memblock(W,0,32,padded_struct<>) -o arg0:memblock(W,0,32,padded_struct<>)";
+
+// is_little_endian
+heapster_typecheck_fun env "is_little_endian"
+  "(). empty -o ret:int64<>";
+
+/***
+ *** Export to Coq
+ ***/
+
+heapster_export_coq env "c_data_gen.v";

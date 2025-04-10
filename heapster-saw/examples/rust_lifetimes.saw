@@ -1,0 +1,98 @@
+enable_experimental;
+env <- heapster_init_env_from_file "rust_lifetimes.sawcore" "rust_lifetimes.bc";
+
+/***
+ *** Types
+ ***/
+
+// Integer perms
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_define_perm env "int8" " " "llvmptr 8" "exists x:bv 8.eq(llvmword(x))";
+heapster_define_perm env "int1" " " "llvmptr 1" "exists x:bv 1.eq(llvmword(x))";
+
+// Integer shapes
+heapster_define_llvmshape env "u64" 64 "" "fieldsh(int64<>)";
+
+// bool type
+heapster_define_llvmshape env "bool" 64 "" "fieldsh(1,int1<>)";
+
+
+/***
+ *** Assumed Functions
+ ***/
+
+// llvm.uadd.with.overflow.i64
+heapster_assume_fun env "llvm.uadd.with.overflow.i64"
+  "(). arg0:int64<>, arg1:int64<> -o \
+     \ ret:struct(int64<>,int1<>)"
+  "\\ (x y:Vec 64 Bool) -> \
+    \ retS VoidEv (Vec 64 Bool * Vec 1 Bool) \
+    \      (bvAdd 64 x y, gen 1 Bool (\\ (_:Nat) -> bvCarry 64 x y))";
+
+// llvm.expect.i1
+heapster_assume_fun env "llvm.expect.i1"
+  "().arg0:int1<>, arg1:int1<> -o ret:int1<>"
+  "\\ (x y:Vec 1 Bool) -> retS VoidEv (Vec 1 Bool) x";
+
+// core::panicking::panic
+//panic_sym <- heapster_find_symbol env "5panic";
+//heapster_assume_fun_rename env panic_sym "panic"
+//  "().empty -o empty" "returnM (Vec 1 Bool) x";
+
+
+/***
+ *** Type-Checked Functions
+ ***/
+
+// FIXME: Get this working again
+/*
+// mux_mut_refs_u64
+mux_mut_refs_u64_sym <- heapster_find_symbol env "16mux_mut_refs_u64";
+heapster_typecheck_fun_rename env mux_mut_refs_u64_sym "mux_mut_refs_u64"
+  "<'a> fn (x1: &'a mut u64, x2: &'a mut u64, b: bool) -> &'a mut u64";
+  // "(l:lifetime, l1:lifetime ,l2:lifetime). \
+  // \ l:lowned(arg0:[l]memblock(R,0,8,u64<>), arg1:[l]memblock(R,0,8,u64<>) -o \
+  // \          arg0:[l1]memblock(W,0,8,u64<>), arg1:[l2]memblock(W,0,8,u64<>)), \
+  // \ arg0:[l]memblock(W,0,8,u64<>), arg1:[l]memblock(W,0,8,u64<>), arg2:int1<> -o \
+  // \ l:lowned (ret:[l]memblock(R,0,8,u64<>) -o \
+  // \ arg0:[l1]memblock(W,0,8,u64<>), arg1:[l2]memblock(W,0,8,u64<>)), \
+  // \ ret:[l]memblock(W,0,8,u64<>)";
+
+// mux_mut_refs_poly
+mux_mut_refs_poly_u64_sym <- heapster_find_symbol env "17mux_mut_refs_poly";
+heapster_typecheck_fun_rename env mux_mut_refs_poly_u64_sym "mux_mut_refs_poly_u64"
+  "<'a> fn (x1: &'a mut u64, x2: &'a mut u64, b: bool) -> &'a mut u64";
+
+// use_mux_mut_refs
+use_mux_mut_refs_sym <- heapster_find_symbol env "16use_mux_mut_refs";
+heapster_typecheck_fun_rename env use_mux_mut_refs_sym "use_mux_mut_refs"
+  "(). empty -o ret:int64<>";
+
+// use_mux_mut_refs2
+use_mux_mut_refs2_sym <- heapster_find_symbol env "17use_mux_mut_refs2";
+heapster_typecheck_fun_rename env use_mux_mut_refs2_sym "use_mux_mut_refs2"
+  "<'a,'b> fn (x1: &'a mut u64, x2: &'b mut u64) -> u64";
+
+// mux3_mut_refs_u64
+mux3_mut_refs_u64_sym <- heapster_find_symbol env "17mux3_mut_refs_u64";
+heapster_typecheck_fun_rename env mux3_mut_refs_u64_sym "mux3_mut_refs_u64"
+  "<'a> fn (x1: &'a mut u64, x2: &'a mut u64, \
+          \ x3: &'a mut u64, i: u64) -> &'a mut u64";
+
+// use_mux3_mut_refs
+use_mux3_mut_refs_sym <- heapster_find_symbol env "17use_mux3_mut_refs";
+heapster_typecheck_fun_rename env use_mux3_mut_refs_sym "use_mux3_mut_refs"
+  "<'a,'b,'c> fn (x1: &'a mut u64, x2: &'b mut u64, x3: &'c mut u64) -> u64";
+
+// use_mux3_mut_refs_onel
+use_mux3_mut_refs_onel_sym <- heapster_find_symbol env "22use_mux3_mut_refs_onel";
+heapster_typecheck_fun_rename env use_mux3_mut_refs_onel_sym
+  "use_mux3_mut_refs_onel"
+  "<'a> fn (x1: &'a mut u64, x2: &'a mut u64, x3: &'a mut u64) -> u64";
+*/
+
+/***
+ *** Export to Coq
+ ***/
+
+heapster_export_coq env "rust_lifetimes_gen.v";

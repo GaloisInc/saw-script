@@ -1,0 +1,7 @@
+// This fails with an unexpected } after the comment is processed.
+let x = 3 // {{
+}} *
++ 5;
+
+
+

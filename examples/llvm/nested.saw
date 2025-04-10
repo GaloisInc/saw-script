@@ -1,5 +1,5 @@
 let f_spec = do {
-    tp <- llvm_alloc (llvm_struct "struct.t");
+    tp <- llvm_alloc (llvm_alias "struct.t");
     b <- llvm_fresh_var "b" (llvm_int 32);
 
     // The following will work if nested.bc is compiled with debug info

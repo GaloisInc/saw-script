@@ -1,0 +1,40 @@
+///////////////////////////////////////////////////////////////////////////////
+// Exercise: Popcount Functional Correctness
+///////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 1: Memory Safety to Functional Correctness
+///////////////////////////////////////////////////////////////////////////////
+
+// Convert the memory safety spec below to a function correctness spec.  It
+// should assert that the result of pop_count is equal to the result of popCount
+// defined in "Popcount.cry" when applied to the same arguments.  Ensure that
+// the two llvm_verify commands at the end of this Part successfully verify.
+
+// Remember:
+//   * Use `import "some_cryptol_file.cry"` to make Cryptol definitions
+//     available in SAW.
+//   * Place inline cryptol between "{{" and "}}".
+
+let popcount_spec = do {
+     x <- llvm_fresh_var "x" (llvm_int 32);
+     llvm_execute_func [llvm_term x];
+     ret <- llvm_fresh_var "ret" (llvm_int 32);
+     llvm_return ( llvm_term ret );
+};
+
+popmod <- llvm_load_module "popcount.bc";
+
+llvm_verify popmod "pop_count" [] true popcount_spec yices;
+llvm_verify popmod "pop_count_mul" [] true popcount_spec yices;
+
+///////////////////////////////////////////////////////////////////////////////
+// Part 2: Performance
+///////////////////////////////////////////////////////////////////////////////
+
+// Uncomment the llvm_verify command below and re-run SAW on this file.  You'll
+// notice it takes much longer to verify this case than the others.  Why do you
+// think that is?
+
+// verify the while loop version
+// llvm_verify popmod "pop_count_sparse" [] true popcount_spec yices;

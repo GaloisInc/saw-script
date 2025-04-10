@@ -24,24 +24,33 @@ import Control.Applicative hiding (many)
 #endif
 import Data.String
 import Data.Parameterized.Some
+import Control.Monad (unless)
 import Control.Monad.State (gets)
 
 import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
 import qualified Text.LLVM.Parser as LLVM (parseType)
 
-import SAWScript.Value as SV
-
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
+import SAWScript.Options
+import SAWScript.Value as SV
 
 llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)
 llvm_load_module file =
   do laxArith <- gets rwLaxArith
-     let ?laxArith = laxArith
+     debugIntrinsics <- gets rwDebugIntrinsics
+     let ?transOpts = CL.defaultTranslationOptions
+                        { CL.laxArith = laxArith
+                        , CL.debugIntrinsics = debugIntrinsics
+                        }
      halloc <- getHandleAlloc
      io (CMS.loadLLVMModule file halloc) >>= \case
        Left err -> fail (LLVM.formatError err)
-       Right llvm_mod -> return llvm_mod
+       Right (llvm_mod, warnings) -> do
+         unless (null warnings) $
+           printOutLnTop Warn $ show $ LLVM.ppParseWarnings warnings
+         return llvm_mod
 
 llvm_type :: String -> TopLevel LLVM.Type
 llvm_type str =
@@ -61,5 +70,14 @@ llvm_double = LLVM.PrimType (LLVM.FloatType LLVM.Double)
 llvm_array :: Int -> LLVM.Type -> LLVM.Type
 llvm_array n t = LLVM.Array (fromIntegral n) t
 
-llvm_struct :: String -> LLVM.Type
-llvm_struct n = LLVM.Alias (fromString n)
+llvm_alias :: String -> LLVM.Type
+llvm_alias n = LLVM.Alias (fromString n)
+
+llvm_packed_struct_type :: [LLVM.Type] -> LLVM.Type
+llvm_packed_struct_type = LLVM.PackedStruct
+
+llvm_pointer :: LLVM.Type -> LLVM.Type
+llvm_pointer = LLVM.PtrTo
+
+llvm_struct_type :: [LLVM.Type] -> LLVM.Type
+llvm_struct_type = LLVM.Struct

@@ -1,0 +1,18 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let s_adt = mir_find_adt m "test::S" [mir_lifetime];
+
+let f_spec = do {
+  y_ref <- mir_alloc mir_u32;
+  y_val <- mir_fresh_var "y" mir_u32;
+  mir_points_to y_ref (mir_term y_val);
+
+  mir_execute_func [y_ref];
+
+  let s = mir_struct_value s_adt [y_ref];
+  mir_return s;
+};
+
+mir_verify m "test::f" [] false f_spec z3;

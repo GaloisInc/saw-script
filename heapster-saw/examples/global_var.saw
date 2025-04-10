@@ -1,0 +1,77 @@
+enable_experimental;
+env <- heapster_init_env_from_file "global_var.sawcore" "global_var.bc";
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+
+
+// Demonstrates one technique for dealing with global variables and environment
+// permissions like locks
+
+
+
+// A heapster type for the lock global variable"
+//
+// The rwmodality makes the permission not copyable when provided the write
+// modality.
+//
+// When extracted to Coq, u:has_lock_perm<W> and u:can_lock_perm<W> are
+// bitvectors representing the value stored in the shared_data variable
+heapster_define_opaque_perm env "has_lock_perm"
+    "rw:rwmodality, dat:llvmptr 64"
+    "unit"
+    "Vec 64 Bool"
+    "Tp_bitvector 64";
+
+heapster_define_opaque_perm env "can_lock_perm"
+    "rw:rwmodality"
+    "unit"
+    "Vec 64 Bool"
+    "Tp_bitvector 64";
+
+// Need to axiomatize acquire_lock because it touches the global variables
+heapster_assume_fun env
+    "acquire_lock"
+
+    "(u:unit). \
+    \ arg0:ptr((W,0) |-> true), \
+    \ u:can_lock_perm<W> \
+    \ -o \
+    \ (dat:llvmptr 64). \
+    \ ret:eq(llvmword(1)), \
+    \ arg0:ptr((W,0) |-> eq(dat)), \
+    \ dat:ptr((W,0) |-> int64<>), \
+    \ u:has_lock_perm<W,dat>"
+
+    "acquireLockM";
+
+heapster_assume_fun env
+    "release_lock"
+
+    "(u:unit, dat:llvmptr 64). \
+    \ u:has_lock_perm<W,dat>, \
+    \ dat:ptr((W,0) |-> int64<>) \
+    \ -o \
+    \ ret:true, \
+    \ u:can_lock_perm<W>"
+
+    "releaseLockM";
+
+
+
+heapster_typecheck_fun env
+    "acquire_release_acquire_release"
+    "(u:unit). u:can_lock_perm<W> \
+    \ -o \
+    \ ret:int64<>, u:can_lock_perm<W>";
+
+// FIXME: this is meant to fail; figure out how to check that it does in CI...
+/*
+heapster_typecheck_fun env
+    "acquire_release_fail"
+    "(u:unit). u:can_lock_perm<W> \
+    \ -o \
+    \ ret:int64<>, u:can_lock_perm<W>";
+*/
+
+heapster_export_coq env "global_var_gen.v";

@@ -1,0 +1,43 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let option_u32_adt = mir_find_adt m "core::option::Option" [mir_u32];
+
+let f_none_spec = do {
+  let x = mir_enum_value option_u32_adt "None" [];
+
+  mir_execute_func [x];
+
+  mir_return (mir_term {{ 27 : [32] }});
+};
+
+let f_some_spec = do {
+  ret <- mir_fresh_var "ret" mir_u32;
+  let x = mir_enum_value option_u32_adt "Some" [mir_term ret];
+
+  mir_execute_func [x];
+
+  mir_return (mir_term ret);
+};
+
+let g_spec = do {
+  x <- mir_fresh_expanded_value "x" (mir_adt option_u32_adt);
+
+  mir_execute_func [x];
+};
+
+let gg_spec = do {
+  xx <- mir_fresh_expanded_value "xx" (mir_adt option_u32_adt);
+
+  mir_execute_func [xx];
+};
+
+f_none_ov <- mir_verify m "test::f" [] false f_none_spec z3;
+f_some_ov <- mir_verify m "test::f" [] false f_some_spec z3;
+
+mir_verify m "test::g" [] false g_spec z3;
+g_ov <- mir_verify m "test::g" [f_none_ov, f_some_ov] false g_spec z3;
+
+mir_verify m "test::gg" [] false gg_spec z3;
+mir_verify m "test::gg" [g_ov] false gg_spec z3;

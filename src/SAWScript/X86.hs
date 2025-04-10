@@ -12,6 +12,7 @@ module SAWScript.X86
   , Fun(..)
   , Goal(..)
   , gGoal
+  , gLoc
   , getGoals
   , X86Error(..)
   , X86Unsupported(..)
@@ -27,20 +28,20 @@ module SAWScript.X86
   ) where
 
 
-import Control.Lens (toListOf, folded, (^.))
+import Control.Lens ((^.))
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
 import qualified Data.BitVector.Sized as BV
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
+import           Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
 import           System.IO(hFlush,stdout)
-import           Data.Maybe(mapMaybe)
+import           Data.Maybe(mapMaybe, fromMaybe)
 
 -- import Text.PrettyPrint.ANSI.Leijen(pretty)
 
@@ -48,11 +49,9 @@ import qualified Data.ElfEdit as Elf
 
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
-import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
 import What4.Interface(asNat,asBV)
-import What4.Expr(FloatModeRepr(..))
 import qualified What4.Interface as W4
 import qualified What4.Config as W4
 import What4.FunctionName(functionNameFromText)
@@ -71,10 +70,12 @@ import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (ExecResult(..), SimContext(..), FnState(..)
           , ExecState(InitialState)
+          , FunctionBindings(..)
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
-          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList)
+          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,goalsToList
+          ,assumptionsPred,IsSymBackend(..),SomeBackend(..),HasSymInterface(..))
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
@@ -84,11 +85,6 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
-
--- Crucible SAW
-import Lang.Crucible.Backend.SAWCore
-  (newSAWCoreBackend, toSC, sawBackendSharedContext
-  , sawRegisterSymFunInterp)
 
 -- Macaw
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
@@ -110,6 +106,9 @@ import Data.Macaw.Symbolic( ArchRegStruct
                           , GlobalMap
                           , MacawSimulatorState(..)
                           , macawExtensions
+                          , MemModelConfig(..)
+                          , unsupportedSyscalls
+                          , defaultMacawArchStmtExtensionOverride
                           )
 import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
 import Data.Macaw.Symbolic( MacawExt
@@ -130,19 +129,26 @@ import Verifier.SAW.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
 import Verifier.SAW.Term.Pretty(showTerm)
 import Verifier.SAW.Recognizer(asBool)
 
+import Verifier.SAW.Simulator.What4.ReturnTrip (sawRegisterSymFunInterp, toSC, saw_ctx)
+
 -- Cryptol Verifier
-import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
+import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule,defaultPrimitiveOptions)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec hiding (Prop)
-import SAWScript.Proof(predicateToProp, Quantification(Universal), Prop)
-
+import SAWScript.Proof(boolToProp, Prop)
+import SAWScript.Crucible.Common.MethodSpec (ConditionMetadata(..))
+import SAWScript.Crucible.Common.Override (MetadataMap)
+import SAWScript.Crucible.Common
+  ( newSAWCoreBackend, newSAWCoreExprBuilder
+  , sawCoreState, SomeOnlineBackend(..)
+  , PathSatSolver
+  )
 
 
 --------------------------------------------------------------------------------
 -- Input Options
-
 
 -- | What we'd like done, plus additional information from the "outside world".
 data Options = Options
@@ -155,7 +161,7 @@ data Options = Options
   , archInfo :: ArchitectureInfo X86_64
     -- ^ Architectural flavor.  See "linuxInfo" and "bsdInfo".
 
-  , backend :: Sym
+  , backend :: SomeBackend Sym
     -- ^ The Crucible backend to use.
 
   , allocator :: HandleAllocator
@@ -185,32 +191,34 @@ data Fun = Fun { funName :: ByteString, funSpec :: FunSpec }
 
 --------------------------------------------------------------------------------
 
-type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
+type CallHandler = Sym -> Macaw.LookupFunctionHandle (MacawSimulatorState Sym) Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
 proof ::
   (FilePath -> IO ByteString) ->
+  PathSatSolver ->
   ArchitectureInfo X86_64 ->
   FilePath {- ^ ELF binary -} ->
   Maybe FilePath {- ^ Cryptol spec, if any -} ->
   [(ByteString,Integer,Unit)] ->
   Fun ->
   IO (SharedContext,Integer,[Goal])
-proof fileReader archi file mbCry globs fun =
+proof fileReader pss archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
-     sym <- newSAWCoreBackend FloatRealRepr sc globalNonceGenerator
+     sym <- newSAWCoreExprBuilder sc False
+     SomeOnlineBackend bak <- newSAWCoreBackend pss sym
      let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
-     mvar <- mkMemVar halloc
+     mvar <- mkMemVar "saw_x86:llvm_memory" halloc
      proofWithOptions Options
        { fileName = file
        , function = fun
        , archInfo = archi
-       , backend = sym
+       , backend = SomeBackend bak
        , allocator = halloc
        , memvar = mvar
        , cryEnv = cenv
@@ -221,7 +229,8 @@ proof fileReader archi file mbCry globs fun =
 -- Useful for integrating with other tool.
 proofWithOptions :: Options -> IO (SharedContext,Integer,[Goal])
 proofWithOptions opts =
-  do elf <- getRelevant =<< getElf (fileName opts)
+  do let path = fileName opts
+     elf <- getRelevant path =<< getElf path
      translate opts elf (function opts)
 
 -- | Add interpretations for the symbolic functions, by looking
@@ -230,11 +239,12 @@ proofWithOptions opts =
 registerSymFuns :: Opts -> IO (SymFuns Sym)
 registerSymFuns opts =
   do let sym = optsSym opts
+     st  <- sawCoreState sym
      sfs <- newSymFuns sym
 
-     sawRegisterSymFunInterp sym (fnAesEnc     sfs) (mk2 "aesenc")
-     sawRegisterSymFunInterp sym (fnAesEncLast sfs) (mk2 "aesenclast")
-     sawRegisterSymFunInterp sym (fnClMul      sfs) (mk2 "clmul")
+     sawRegisterSymFunInterp st (fnAesEnc     sfs) (mk2 "aesenc")
+     sawRegisterSymFunInterp st (fnAesEncLast sfs) (mk2 "aesenclast")
+     sawRegisterSymFunInterp st (fnClMul      sfs) (mk2 "clmul")
 
      return sfs
 
@@ -264,19 +274,32 @@ getElf :: FilePath -> IO (Elf.ElfHeaderInfo 64)
 getElf path =
   do bs <- BS.readFile path
      case Elf.decodeElfHeaderInfo bs of
-       Right (Elf.SomeElf hdr)
-         | Elf.ELFCLASS64 <- Elf.headerClass (Elf.header hdr) -> pure hdr
-         | otherwise -> unsupported "32-bit ELF format"
-       Left _ -> malformed "Invalid ELF header"
-
+       Left (off, msg) ->
+           malformed path $ "Invalid ELF header at offset " ++ show off ++
+                            ": " ++ msg
+       Right (Elf.SomeElf hdr) ->
+           let elfmachine = Elf.headerMachine (Elf.header hdr)
+               elfclass = Elf.headerClass (Elf.header hdr)
+           in case (elfmachine, elfclass) of
+               (Elf.EM_X86_64, Elf.ELFCLASS64) ->
+                   pure hdr
+               (Elf.EM_X86_64, _) ->
+                   -- Note that 32-bit x86 is a different machine; if
+                   -- we do see a 32-bit x86_64 bin though it might be
+                   -- one of the several 32-on-64 ABIs (akin to mips
+                   -- N32) that haven't caught on, so call it
+                   -- unsupported rather than malformed.
+                   unsupported path $ "Unexpected ELF class " ++ show elfclass
+               (_, _) ->
+                   unsupported path $ "Unexpected ELF machine " ++ show elfmachine
 
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.
-getRelevant :: Elf.ElfHeaderInfo 64 -> IO RelevantElf
-getRelevant elf =
+getRelevant :: FilePath -> Elf.ElfHeaderInfo 64 -> IO RelevantElf
+getRelevant path elf =
   case (memoryForElf opts elf, memoryForElfAllSymbols opts elf) of
-    (Left err, _) -> malformed err
-    (_, Left err) -> malformed err
+    (Left err, _) -> malformed path err
+    (_, Left err) -> malformed path err
     (Right (mem, faddrs, _warnings, _errs), Right (_, addrs, _, _)) ->
       do let toEntry msym = (memSymbolStart msym, memSymbolName msym)
          return RelevantElf { memory = mem
@@ -299,12 +322,12 @@ findSymbols addrs nm = Map.findWithDefault [] nm invertedMap
   invertedMap = Map.fromListWith (++) [ (y,[x]) | (x,y) <- Map.toList addrs ]
 
 -- | Find the single address of a symbol, or fail.
-findSymbol :: AddrSymMap 64 -> ByteString -> IO (MemSegmentOff 64)
-findSymbol addrs nm =
+findSymbol :: FilePath -> AddrSymMap 64 -> ByteString -> IO (MemSegmentOff 64)
+findSymbol path addrs nm =
   case findSymbols addrs nm of
     [addr] -> return $! addr
-    []     -> malformed ("Could not find function " ++ show nm)
-    _      -> malformed ("Multiple definitions for " ++ show nm)
+    []     -> malformed path ("Could not find function " ++ show nm)
+    _      -> malformed path ("Multiple definitions for " ++ show nm)
 
 
 loadGlobal ::
@@ -361,11 +384,11 @@ loadCry ::
   Sym -> Maybe FilePath ->
   IO CryptolEnv
 loadCry sym mb =
-  do ctx <- sawBackendSharedContext sym
-     env <- initCryptolEnv ctx
+  do sc <- saw_ctx <$> sawCoreState sym
+     env <- initCryptolEnv sc
      case mb of
        Nothing   -> return env
-       Just file -> snd <$> loadCryptolModule ctx env file
+       Just file -> snd <$> loadCryptolModule sc defaultPrimitiveOptions env file
 
 
 --------------------------------------------------------------------------------
@@ -398,10 +421,15 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
-     let ?recordLLVMAnnotation = \_ _ -> return ()
+     -- TODO? do we need to pass in the mdMap into more places in this mode?
+     mdMap <- newIORef mempty
 
-     let sym   = backend opts
-         sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
+     let ?memOpts = Crucible.defaultMemOptions
+     let ?recordLLVMAnnotation = \_ _ _ -> return ()
+
+     let bak   = backend opts
+         sym   = case bak of SomeBackend b -> backendGetSym b
+         sopts = Opts { optsBackend = bak, optsCry = cryEnv opts, optsMvar = memvar opts }
 
      sfs <- registerSymFuns sopts
 
@@ -417,9 +445,9 @@ translate opts elf fun =
 
      addr <- doSim opts elf sfs name globs st checkPost
 
-     gs <- getGoals sym
-     ctx <- sawBackendSharedContext sym
-     return (ctx, addr, gs)
+     gs <- getGoals bak mdMap
+     sc <- saw_ctx <$> sawCoreState sym
+     return (sc, addr, gs)
 
 
 setSimulatorVerbosity :: (W4.IsSymExprBuilder sym) => Int -> sym -> IO ()
@@ -431,7 +459,7 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
-  Crucible.HasLLVMAnn Sym =>
+  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->
@@ -442,7 +470,8 @@ doSim ::
   IO Integer
 doSim opts elf sfs name (globs,overs) st checkPost =
   do say "  Looking for address... "
-     addr <- findSymbol (symMap elf) name
+     let path = fileName opts
+     addr <- findSymbol path (symMap elf) name
      -- addr :: MemSegmentOff 64
      let addrInt =
            let seg :: MemSegment 64
@@ -458,8 +487,9 @@ doSim opts elf sfs name (globs,overs) st checkPost =
 
      -- writeFile "XXX.hs" (show cfg)
 
-     let sym = backend opts
+     let sym  = case backend opts of SomeBackend bak -> backendGetSym bak
          mvar = memvar opts
+
      setSimulatorVerbosity 0 sym
 
      execResult <- statusBlock "  Simulating... " $ do
@@ -472,16 +502,26 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        -- The memory setup for this verifier does not have that problem, and
        -- thus does not need any additional validity predicates.
        let noExtraValidityPred _ _ _ _ = return Nothing
+       let archEvalFns = x86_64MacawEvalFn sfs defaultMacawArchStmtExtensionOverride
+       let lookupSyscall = unsupportedSyscalls "saw-script"
+       let mmConf = MemModelConfig
+                      { globalMemMap = globs
+                      , lookupFunctionHandle = callHandler overs sym
+                      , lookupSyscallHandle = lookupSyscall
+                      , mkGlobalPointerValidityAssertion = noExtraValidityPred
+                      , resolvePointer = pure
+                      , concreteImmutableGlobalRead = \_ _ -> pure Nothing
+                      , lazilyPopulateGlobalMem = \_ _ -> pure
+                      }
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
-           ctx = SimContext { _ctxSymInterface = sym
+           ctx = SimContext { _ctxBackend = backend opts
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
-                              , _functionBindings =
-                                   insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
-                                   emptyHandleMap
+                              , extensionImpl = macawExtensions archEvalFns mvar mmConf
+                              , _functionBindings = FnBindings $
+                                insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
                               , _profilingMetrics = Map.empty
                               }
@@ -504,7 +544,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
      case execResult of
        FinishedResult {} -> pure ()
        AbortedResult {}  -> sayLn "[Warning] Function never returns"
-       TimeoutResult {}  -> malformed $ unlines [ "Execution timed out" ]
+       TimeoutResult {}  -> timeout path
 
      return addrInt
 
@@ -522,7 +562,7 @@ makeCFG ::
   MemSegmentOff 64 ->
   IO TheCFG
 makeCFG opts elf name addr =
-  do (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
+  do (_,Some funInfo) <- return $ analyzeFunction addr UserRequest empty
      -- writeFile "MACAW.cfg" (show (pretty funInfo))
      mkFunCFG x86 (allocator opts) cruxName posFn funInfo
   where
@@ -538,13 +578,16 @@ makeCFG opts elf name addr =
 data Goal = Goal
   { gAssumes :: [ Term ]              -- ^ Assuming these
   , gShows   :: Term                  -- ^ We need to show this
-  , gLoc     :: ProgramLoc            -- ^ The goal came from here
+  , gMd      :: ConditionMetadata     -- ^ Metadata about the goal
   , gMessage :: SimErrorReason        -- ^ We should say this if the proof fails
   }
 
+gLoc :: Goal -> ProgramLoc
+gLoc = conditionLoc . gMd
+
 -- | The proposition that needs proving (i.e., assumptions imply conclusion)
 gGoal :: SharedContext -> Goal -> IO Prop
-gGoal sc g0 = predicateToProp sc Universal [] =<< go (gAssumes g)
+gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
   where
   g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }
 
@@ -564,18 +607,31 @@ gGoal sc g0 = predicateToProp sc Universal [] =<< go (gAssumes g)
             []     -> return (gShows g)
             a : as -> scImplies sc a =<< go as
 
-getGoals :: Sym -> IO [Goal]
-getGoals sym =
-  do obls <- proofGoalsToList <$> getProofObligations sym
-     mapM toGoal obls
+getGoals :: SomeBackend Sym -> IORef MetadataMap -> IO [Goal]
+getGoals (SomeBackend bak) mdMap =
+  do finalMdMap <- readIORef mdMap
+     obls <- maybe [] goalsToList <$> getProofObligations bak
+     st <- sawCoreState sym
+     mapM (toGoal st finalMdMap) obls
   where
-  toGoal (ProofGoal asmps g) =
-    do as <- mapM (toSC sym) (toListOf (folded . labeledPred) asmps)
-       p  <- toSC sym (g ^. labeledPred)
+  sym = backendGetSym bak
+
+  toGoal st finalMdMap (ProofGoal asmps g) =
+    do a1 <- toSC sym st =<< assumptionsPred sym asmps
+       p  <- toSC sym st (g ^. labeledPred)
        let SimError loc msg = g^.labeledPredMsg
-       return Goal { gAssumes = as
+       let defaultMd = ConditionMetadata
+                       { conditionLoc = loc
+                       , conditionTags = mempty
+                       , conditionType = "safety assertion"
+                       , conditionContext = ""
+                       }
+       let md = fromMaybe defaultMd $
+                  do ann <- W4.getAnnotation sym (g^.labeledPred)
+                     Map.lookup ann finalMdMap
+       return Goal { gAssumes = [a1]
                    , gShows   = p
-                   , gLoc     = loc
+                   , gMd      = md
                    , gMessage = msg
                    }
 
@@ -611,26 +667,28 @@ x86 = x86_64MacawSymbolicFns
 
 
 --------------------------------------------------------------------------------
--- Logging
-quiet :: Applicative m => a -> m ()
-quiet _ = pure ()
-
-
-
---------------------------------------------------------------------------------
 -- Errors
 
-data X86Unsupported = X86Unsupported String deriving Show
-data X86Error       = X86Error String deriving Show
+-- | Exception for hitting an unsupported object or feature. The arguments
+--   are the filename we were looking at, and a message.
+data X86Unsupported = X86Unsupported FilePath String deriving Show
+
+-- | Exception for miscellaneous errors during verification. The arguments
+--   are the filename we were looking at, also optionally a function/symbol
+--   name, and a message.
+data X86Error       = X86Error FilePath (Maybe String) String deriving Show
 
 instance Exception X86Unsupported
 instance Exception X86Error
 
-unsupported :: String -> IO a
-unsupported x = throwIO (X86Unsupported x)
+unsupported :: FilePath -> String -> IO a
+unsupported path x = throwIO (X86Unsupported path x)
 
-malformed :: String -> IO a
-malformed x = throwIO (X86Error x)
+malformed :: FilePath -> String -> IO a
+malformed path x = throwIO (X86Error path Nothing x)
+
+timeout :: FilePath -> IO a
+timeout path = throwIO (X86Error path Nothing "Execution timed out")
 
 
 --------------------------------------------------------------------------------

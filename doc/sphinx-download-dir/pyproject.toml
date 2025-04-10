@@ -1,0 +1,10 @@
+[build-system]
+requires = [
+  "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sphinx-download-dir"
+version = "0.0.1"
+dependencies = ["sphinx"]

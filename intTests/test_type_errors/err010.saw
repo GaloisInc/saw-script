@@ -1,0 +1,12 @@
+// This was allowed prior to Dec 2024 and is currently a warning;
+// should eventually become an error.
+//
+// This case checks what happens if you take a tuple in the wrong
+// monad and bind it to a single value.
+
+let f x = do {
+   llvm_assert {{ True }};
+   return (x, x);
+};
+
+a <- f 0;

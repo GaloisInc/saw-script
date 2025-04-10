@@ -2,25 +2,31 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module SAWServer.TopLevel (tl) where
 
-import Control.Exception
-import Control.Lens
-import Control.Monad.State
+import Control.Exception ( try, SomeException(..) )
+import Control.Lens ( view, set )
+import Control.Monad.State ( MonadIO(liftIO) )
+import Data.Typeable (cast)
 
-import SAWScript.Value
+import SAWScript.Value ( TopLevel, runTopLevel, IsValue(..), FromValue(..) )
 
-import Argo
-import SAWServer
-import SAWServer.Exceptions
+import qualified Argo
+import CryptolServer.Exceptions (cryptolError)
+import SAWServer ( SAWState, sawTopLevelRO, sawTopLevelRW )
+import SAWServer.CryptolExpression (CryptolModuleException(..))
+import SAWServer.Exceptions ( verificationException )
 
-tl :: TopLevel a -> Method SAWState a
+tl :: (FromValue a, IsValue a) => TopLevel a -> Argo.Command SAWState a
 tl act =
-  do st <- getState
+  do st <- Argo.getState
      let ro = view sawTopLevelRO st
          rw = view sawTopLevelRW st
      liftIO (try (runTopLevel act ro rw)) >>=
        \case
-         Left (e :: SomeException) ->
-           raise (verificationException e)
+         Left e@(SomeException e')
+           |  Just (CryptolModuleException err warnings) <- cast e'
+           -> Argo.raise (cryptolError err warnings)
+           |  otherwise
+           -> Argo.raise (verificationException e)
          Right (res, rw') ->
-           do modifyState $ set sawTopLevelRW rw'
-              return res
+           do Argo.modifyState $ set sawTopLevelRW rw'
+              return (fromValue res)

@@ -1,0 +1,48 @@
+enable_experimental;
+env <- heapster_init_env_from_file "iter_linked_list.sawcore" "iter_linked_list.bc";
+
+// Integer types
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+
+heapster_define_reachability_perm env "ListF"
+  "X:perm(llvmptr 64), l:lifetime, rw:rwmodality, y:llvmptr 64"
+  "llvmptr 64"
+  "eq(y) or [l]ptr((rw,0) |-> X) * [l]ptr((rw,8) |-> ListF)"
+  "appendList";
+
+heapster_block_entry_hint env "is_elem" 3
+  "top_ptr:llvmptr 64, top_ptr1:llvmptr 64"
+  "ghost_frm:llvmframe 64, ghost_ptr:llvmptr 64"
+  "top_ptr:int64<>, top_ptr1:true, \
+  \ arg0:ptr((W,0) |-> true), arg1:ptr((W,0) |-> eq(top_ptr)), \
+  \ arg2:ptr((W,0) |-> eq(ghost_ptr)), \
+  \ ghost_ptr:ListF<int64<>,always,R,llvmword(0)>, \
+  \ ghost_frm:llvmframe [arg2:8, arg1:8, arg0:8]";
+
+heapster_typecheck_fun env "is_elem"
+  "(). arg0:int64<>, arg1:ListF<int64<>,always,R,llvmword(0)> -o \
+     \ arg0:true, arg1:true, ret:int64<>";
+
+heapster_block_entry_hint env "incr_list" 3
+  "top1:llvmptr 64"
+  "frm:llvmframe 64,ghost:llvmptr 64"
+  "top1:ListF<int64<>,always,W,ghost>, \
+  \ arg0:ptr((W,0) |-> eq(ghost)), \
+  \ ghost:ListF<int64<>,always,W,llvmword(0)>, frm:llvmframe [arg0:8]";
+
+heapster_typecheck_fun env "incr_list"
+  "(). arg0:ListF<int64<>,always,W,llvmword(0)> -o \
+     \ arg0:ListF<int64<>,always,W,llvmword(0)>, ret:true";
+
+heapster_block_entry_hint env "length" 3
+  "top1:llvmptr 64"
+  "frm:llvmframe 64, ghost:llvmptr 64"
+  "top1:ListF<int64<>,always,W,ghost>, \
+  \ arg0:ptr((W,0) |-> eq(ghost)), arg1:ptr((W,0) |-> int64<>), \
+  \ ghost:ListF<int64<>,always,W,llvmword(0)>, frm:llvmframe [arg1:8,arg0:8]";
+
+heapster_typecheck_fun env "length"
+  "(). arg0:ListF<int64<>,always,W,llvmword(0)> -o \
+     \ arg0:true, ret:int64<>";
+
+heapster_export_coq env "iter_linked_list_gen.v";

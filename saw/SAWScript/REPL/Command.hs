@@ -8,6 +8,8 @@ Stability   : provisional
 {-# LANGUAGE CPP, PatternGuards, FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+-- TODO RGS: Do better (or at least comment why we do this)
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 
 module SAWScript.REPL.Command (
     -- * Commands
@@ -30,33 +32,38 @@ module SAWScript.REPL.Command (
 
 --import Verifier.SAW.SharedTerm (SharedContext)
 
+
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
 import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
-import Cryptol.Utils.PP
 
-import Control.Monad (guard)
+import Control.Exception (throwIO)
+import Control.Monad (guard, void, when)
+
 import Data.Char (isSpace,isPunctuation,isSymbol)
 import Data.Function (on)
-import Data.List (intercalate)
+import Data.List (intercalate, nub)
+import qualified Data.Text as Text
 import System.FilePath((</>), isPathSeparator)
-import System.Directory(getHomeDirectory,setCurrentDirectory,doesDirectoryExist)
+import System.Directory(getHomeDirectory,getCurrentDirectory,setCurrentDirectory,doesDirectoryExist)
 import qualified Data.Map as Map
 
 -- SAWScript imports
+import qualified SAWScript.Options (Verbosity(..))
 import qualified SAWScript.AST as SS
     (pShow,
      Located(..),
      Decl(..),
      Pattern(..))
 import SAWScript.Exceptions
-import SAWScript.MGU (checkDecl)
+import SAWScript.MGU (checkDecl, checkSchemaPattern)
+import SAWScript.Search (compileSearchPattern, matchSearchPattern)
 import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
-import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
-import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
+import qualified SAWScript.Parser (parseStmtSemi, parseExpression, parseSchemaPattern)
+import SAWScript.TopLevel (TopLevelRW(..))
 
 
 -- Commands --------------------------------------------------------------------
@@ -71,6 +78,7 @@ data Command
 -- | Command builder.
 data CommandDescr = CommandDescr
   { cName :: String
+  , cAliases :: [String]
   , cBody :: CommandBody
   , cHelp :: String
   }
@@ -91,38 +99,48 @@ data CommandBody
   | NoArg       (REPL ())
 
 
+-- | Convert the command list to a Trie, expanding aliases.
+makeCommands :: [CommandDescr] -> CommandMap
+makeCommands list  = foldl insert emptyTrie (concatMap expandAliases list)
+  where
+  insert m (name, d) = insertTrie name d m
+  expandAliases :: CommandDescr -> [(String, CommandDescr)]
+  expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)
+
 -- | REPL command parsing.
 commands :: CommandMap
-commands  = foldl insert emptyTrie commandList
-  where
-  insert m d = insertTrie (cName d) d m
+commands = makeCommands commandList
 
 -- | Notebook command parsing.
 nbCommands :: CommandMap
-nbCommands  = foldl insert emptyTrie nbCommandList
-  where
-  insert m d = insertTrie (cName d) d m
+nbCommands = makeCommands nbCommandList
 
 -- | A subset of commands safe for Notebook execution
 nbCommandList :: [CommandDescr]
 nbCommandList  =
-  [ CommandDescr ":env"    (NoArg envCmd)
+  [ CommandDescr ":env"  []      (NoArg envCmd)
     "display the current sawscript environment"
-  , CommandDescr ":type"   (ExprArg typeOfCmd)
+  , CommandDescr ":search" []    (ExprArg searchCmd)
+    "search the environment by type"
+  , CommandDescr ":tenv" []      (NoArg tenvCmd)
+    "display the current sawscript type environment"
+  , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
-  , CommandDescr ":?"      (ExprArg helpCmd)
+  , CommandDescr ":?"    []      (ExprArg helpCmd)
     "display a brief description about a built-in operator"
-  , CommandDescr ":help"   (ExprArg helpCmd)
+  , CommandDescr ":help" []      (ExprArg helpCmd)
     "display a brief description about a built-in operator"
   ]
 
 commandList :: [CommandDescr]
 commandList  =
   nbCommandList ++
-  [ CommandDescr ":quit"   (NoArg quitCmd)
+  [ CommandDescr ":quit" []   (NoArg quitCmd)
     "exit the REPL"
-  , CommandDescr ":cd" (FilenameArg cdCmd)
+  , CommandDescr ":cd"   []   (FilenameArg cdCmd)
     "set the current working directory"
+  , CommandDescr ":pwd"  []   (NoArg pwdCmd)
+    "display the current working directory"
   ]
 
 genHelp :: [CommandDescr] -> [String]
@@ -139,13 +157,7 @@ genHelp cs = map cmdHelp cs
 runCommand :: Command -> REPL ()
 runCommand c = case c of
 
-  Command cmd -> cmd `SAWScript.REPL.Monad.catch` handlerPP
-                     `SAWScript.REPL.Monad.catchFail` handlerFail
-                     `SAWScript.REPL.Monad.catchOther` handlerPrint
-    where
-    handlerPP re = io (putStrLn "" >> print (pp re))
-    handlerPrint e = io (putStrLn "" >> print e)
-    handlerFail s = io (putStrLn "" >> putStrLn s)
+  Command cmd -> exceptionProtect cmd
 
   Unknown cmd -> io (putStrLn ("Unknown command: " ++ cmd))
 
@@ -155,16 +167,66 @@ runCommand c = case c of
 
 
 typeOfCmd :: String -> REPL ()
-typeOfCmd str =
-  do let tokens = SAWScript.Lexer.lexSAW replFileName str
+typeOfCmd str
+  | null str = do io $ putStrLn "[error] :type requires an argument"
+  | otherwise =
+  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+     case optmsg of
+       Nothing -> return ()
+       Just (_vrb, pos, msg) -> do
+         -- XXX wrap printing of positions in the message-printing infrastructure
+         let msg' = show pos ++ ": " ++ Text.unpack msg
+         io $ putStrLn msg'
      expr <- case SAWScript.Parser.parseExpression tokens of
        Left err -> fail (show err)
        Right expr -> return expr
-     let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
-     rw <- getEnvironment
-     ~(SS.Decl _pos _ (Just schema) _expr') <-
-       either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
+     let pos = getPos expr
+         decl = SS.Decl pos (SS.PWild pos Nothing) Nothing expr
+     rw <- getValueEnvironment
+     decl' <- do
+       let (errs_or_results, warns) = checkDecl (rwValueTypes rw) (rwNamedTypes rw) decl
+       let issueWarning (msgpos, msg) =
+             -- XXX the print functions should be what knows how to show positions...
+             putStrLn (show msgpos ++ ": Warning: " ++ msg)
+       io $ mapM_ issueWarning warns
+       either failTypecheck return errs_or_results
+     let ~(SS.Decl _pos _ (Just schema) _expr') = decl'
      io $ putStrLn $ SS.pShow schema
+
+searchCmd :: String -> REPL ()
+searchCmd str
+  | null str = do io $ putStrLn $ "[error] :search requires at least one argument"
+  | otherwise =
+  do let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+     case optmsg of
+       Nothing -> return ()
+       Just (vrb, pos, msg) -> do
+         -- XXX wrap printing of positions in the message-printing infrastructure
+         let msg' = show pos ++ ": " ++ Text.unpack msg
+         io $ putStrLn msg'
+         -- XXX this prints twice, fix it up when we do the message-printing cleanup
+         when (vrb == SAWScript.Options.Error) $
+             io $ throwIO $ userError msg'
+     pat <- case SAWScript.Parser.parseSchemaPattern tokens of
+       Left err -> fail (show err)
+       Right pat -> return pat
+     rw <- getValueEnvironment
+     let valueTypes = rwValueTypes rw
+         namedTypes = rwNamedTypes rw
+         (errs_or_results, warns) = checkSchemaPattern valueTypes namedTypes pat
+     let issueWarning (msgpos, msg) =
+           -- XXX the print functions should be what knows how to show positions...
+           putStrLn (show msgpos ++ ": Warning: " ++ msg)
+     io $ mapM_ issueWarning warns
+     pat' <- either failTypecheck return $ errs_or_results
+     let search = compileSearchPattern namedTypes pat'
+         matches = Map.assocs $ Map.filter (matchSearchPattern search) valueTypes
+         printMatch (lname, ty) = do
+           let name = Text.unpack $ SS.getVal lname
+               ty' = SS.pShow ty
+           putStrLn (name ++ " : " ++ ty')
+     io $ mapM_ printMatch matches
+
 
 quitCmd :: REPL ()
 quitCmd  = stop
@@ -172,16 +234,21 @@ quitCmd  = stop
 
 envCmd :: REPL ()
 envCmd = do
-  env <- getEnvironment
-  let showLName = SS.getVal
-  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwTypes env) ]
+  env <- getValueEnvironment
+  let showLName = Text.unpack . SS.getVal
+  io $ sequence_ [ putStrLn (showLName x ++ " : " ++ SS.pShow v) | (x, v) <- Map.assocs (rwValueTypes env) ]
+
+tenvCmd :: REPL ()
+tenvCmd = do
+  env <- getValueEnvironment
+  io $ sequence_ [ putStrLn (Text.unpack a ++ " : " ++ SS.pShow t) | (a, t) <- Map.assocs (rwNamedTypes env) ]
 
 helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
   | otherwise =
     do env <- getEnvironment
-       case Map.lookup cmd (rwDocs env) of
+       case Map.lookup (Text.pack cmd) (rwDocs env) of
          Just d -> io $ putStr d
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =
@@ -198,6 +265,9 @@ cdCmd f | null f = io $ putStrLn $ "[error] :cd requires a path argument"
   if exists
     then io $ setCurrentDirectory f
     else raise $ DirectoryNotFound f
+
+pwdCmd :: REPL ()
+pwdCmd = io $ getCurrentDirectory >>= putStrLn
 
 -- SAWScript commands ----------------------------------------------------------
 
@@ -223,14 +293,20 @@ caveats:
      we also hang onto the results and use them to seed the interpreter. -}
 sawScriptCmd :: String -> REPL ()
 sawScriptCmd str = do
-  let tokens = SAWScript.Lexer.lexSAW replFileName str
+  let (tokens, optmsg) = SAWScript.Lexer.lexSAW replFileName (Text.pack str)
+  case optmsg of
+    Nothing -> return ()
+    Just (_vrb, pos, msg) -> do
+      -- XXX wrap printing of positions in the message-printing infrastructure
+      let msg' = show pos ++ ": " ++ Text.unpack msg
+      io $ putStrLn msg'
   case SAWScript.Parser.parseStmtSemi tokens of
     Left err -> io $ print err
     Right stmt ->
-      do ro <- getTopLevelRO
-         ie <- getEnvironment
-         ((), ie') <- io $ runTopLevel (interpretStmt True stmt) ro ie
-         putEnvironment ie'
+      do mr <- getProofStateRef
+         case mr of
+           Nothing -> void $ liftTopLevel (interpretStmt True stmt)
+           Just r  -> void $ liftProofScript (interpretStmt True stmt) r
 
 replFileName :: String
 replFileName = "<stdin>"
@@ -278,19 +354,20 @@ splitCommand txt =
 
     expr -> guard (not (null expr)) >> return (expr,[])
 
--- | Uncons a list.
-uncons :: [a] -> Maybe (a,[a])
-uncons as = case as of
-  a:rest -> Just (a,rest)
-  _      -> Nothing
+-- | Look up a string in a command list. If given a string that's both
+-- itself a command and a prefix of something else, choose that
+-- command; otherwise such commands are inaccessible. Also, deduplicate
+-- the list of results to avoid silliness with command aliases.
+findSomeCommand :: String -> CommandMap -> [CommandDescr]
+findSomeCommand str commandTable = nub $ lookupTrieWithExact str commandTable
 
--- | Lookup a string in the command list.
+-- | Look up a string in the command list.
 findCommand :: String -> [CommandDescr]
-findCommand str = lookupTrie str commands
+findCommand str = findSomeCommand str commands
 
--- | Lookup a string in the notebook-safe command list.
+-- | Look up a string in the notebook-safe command list.
 findNbCommand :: String -> [CommandDescr]
-findNbCommand str = lookupTrie str nbCommands
+findNbCommand str = findSomeCommand str nbCommands
 
 -- | Parse a line as a command.
 parseCommand :: (String -> [CommandDescr]) -> String -> Maybe Command
@@ -298,17 +375,20 @@ parseCommand findCmd line = do
   (cmd,args) <- splitCommand line
   let args' = sanitizeEnd args
   case findCmd cmd of
+    -- nothing matched; if it doesn't begin with a colon, eval it
+    [] -> case cmd of
+      []      -> Nothing
+      ':' : _ -> Just (Unknown cmd)
+      _       -> Just (Command (sawScriptCmd line))
+
+    -- matched exactly one command; run it
     [c] -> case cBody c of
       ExprArg     body -> Just (Command (body args'))
       FilenameArg body -> Just (Command (body =<< expandHome args'))
       ShellArg    body -> Just (Command (body args'))
       NoArg       body -> Just (Command  body)
 
-    [] -> case uncons cmd of
-      Just (':',_) -> Just (Unknown cmd)
-      Just _       -> Just (Command (sawScriptCmd line))
-      _            -> Nothing
-
+    -- matched several things; complain
     cs -> Just (Ambiguous cmd (map cName cs))
 
   where

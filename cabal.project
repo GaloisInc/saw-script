@@ -1,29 +1,40 @@
 packages:
     saw-script.cabal
     saw-remote-api
+    crucible-mir-comp
+    crux-mir-comp
+    cryptol-saw-core
+    rme
+    verif-viewer
+    saw-core
+    saw-core-aig
+    saw-core-sbv
+    saw-core-what4
+    saw-core-coq
+    heapster-saw
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
     deps/aig
-    deps/abcBridge
     deps/cryptol
-    deps/saw-core/cryptol-saw-core
-    deps/saw-core/rme
-    deps/saw-core/saw-core
-    deps/saw-core/saw-core-aig
-    deps/saw-core/saw-core-sbv
-    deps/saw-core/saw-core-what4
-    deps/saw-core-coq
-    deps/jvm-verifier
     deps/what4/what4
+    deps/what4/what4-transition-system
+    deps/language-sally
     deps/crucible/crucible
+    deps/crucible/crucible-concurrency
+    deps/crucible/crucible-debug
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm
-    deps/crucible/crucible-saw
+    deps/crucible/crucible-mir
+    deps/crucible/crucible-symio
+    deps/crucible/crucible-syntax
     deps/crucible/crux
+    deps/crucible/crux-mir
     deps/parameterized-utils
     deps/flexdis86
     deps/flexdis86/binary-symbols
+    deps/lmdb/lmdb
+    deps/lmdb/lmdb-simple
     deps/what4-serialize
     deps/asl-translator
     deps/arm-asl-parser
@@ -33,6 +44,9 @@ packages:
     deps/semmc/semmc-synthesis
     deps/semmc/semmc-aarch32
     deps/macaw/base
+    deps/macaw/macaw-dump
+    deps/macaw/macaw-loader
+    deps/macaw/macaw-loader-x86
     deps/macaw/symbolic
     deps/macaw/x86
     deps/macaw/x86_symbolic
@@ -43,7 +57,10 @@ packages:
     deps/dwarf
     deps/argo/argo
     deps/argo/tasty-script-exitcode
-    deps/argo/python
     deps/cryptol/cryptol-remote-api
+    deps/language-rust
 
-allow-newer: uuid:random
+source-repository-package
+    type: git
+    location: https://github.com/eddywestbrook/hobbits.git
+    tag: 70963e0e3eba2b16f6fc030acb582e8100955e47

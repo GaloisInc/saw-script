@@ -1,0 +1,12 @@
+test alias_ok/<DISAMB>::f_test[0]: ok
+test alias_ok/<DISAMB>::use_f[0]: FAILED
+
+failures:
+
+---- alias_ok/<DISAMB>::use_f[0] counterexamples ----
+[Crux] Found counterexample for verification goal
+[Crux]   ./libs/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/alias_ok.rs:49:5: 49:35: error: in alias_ok/<DISAMB>::use_f[0]
+[Crux]   MIR assertion at test/symb_eval/comp/alias_ok.rs:49:5:
+[Crux]   	b.get() < 10
+
+[Crux] Overall status: Invalid.

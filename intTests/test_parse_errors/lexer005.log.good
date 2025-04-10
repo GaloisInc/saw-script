@@ -1,0 +1,3 @@
+ Loading file "lexer005.saw"
+ Parse error at lexer005.saw:3:20-3:21: Unexpected `}'
+FAILED

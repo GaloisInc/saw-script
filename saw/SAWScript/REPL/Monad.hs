@@ -6,8 +6,10 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 module SAWScript.REPL.Monad (
@@ -19,6 +21,12 @@ module SAWScript.REPL.Monad (
   , catch
   , catchFail
   , catchOther
+  , exceptionProtect
+  , liftTopLevel
+  , liftProofScript
+  , subshell
+  , proof_subshell
+  , Refs(..)
 
     -- ** Errors
   , REPLException(..)
@@ -27,7 +35,7 @@ module SAWScript.REPL.Monad (
     -- ** Environment
   , getCryptolEnv, modifyCryptolEnv, setCryptolEnv
   , getModuleEnv, setModuleEnv
-  , getTSyns, getNewtypes, getVars
+  , getTSyns, getNominalTypes, getVars
   , getExprNames
   , getTypeNames
   , getPropertyNames
@@ -38,16 +46,18 @@ module SAWScript.REPL.Monad (
   , getTermEnv, modifyTermEnv, setTermEnv
   , getExtraTypes, modifyExtraTypes, setExtraTypes
   , getExtraNames, modifyExtraNames, setExtraNames
-  , getRW
 
     -- ** SAWScript stuff
   , getSharedContext
   , getTopLevelRO
+  , getValueEnvironment
   , getEnvironment, modifyEnvironment, putEnvironment
+  , getEnvironmentRef
+  , getProofStateRef
   , getSAWScriptNames
   ) where
 
-import Cryptol.Eval (EvalError)
+import Cryptol.Eval (EvalError, EvalErrorEx(..))
 import qualified Cryptol.ModuleSystem as M
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import Cryptol.ModuleSystem.NamingEnv (NamingEnv)
@@ -55,90 +65,128 @@ import Cryptol.Parser (ParseError,ppError)
 import Cryptol.Parser.NoInclude (IncludeError,ppIncludeError)
 import Cryptol.Parser.NoPat (Error)
 import qualified Cryptol.TypeCheck.AST as T
+import Cryptol.Utils.Ident (Namespace(..))
 import Cryptol.Utils.PP
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative(..), pure, (<*>))
 #endif
-import Control.Monad (unless, ap)
+import Control.Monad (unless, ap, void)
+import Control.Monad.Reader (ask)
+import Control.Monad.State (put, get, StateT(..))
+import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
-import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
+import Data.IORef (IORef, newIORef, readIORef, modifyIORef, writeIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Typeable (Typeable)
 import System.Console.ANSI (setTitle)
 import qualified Control.Exception as X
 import System.IO.Error (isUserError, ioeGetErrorString)
+import System.Exit (ExitCode)
 
 import Verifier.SAW.SharedTerm (Term)
 import Verifier.SAW.CryptolEnv
-#ifdef USE_BUILTIN_ABC
-import qualified Data.ABC.GIA as GIA
-#else
 import qualified Data.AIG as AIG
-#endif
+import qualified Data.AIG.CompactGraph as AIG
 
 --------------------
 
 import SAWScript.AST (Located(getVal))
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
-import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
-import SAWScript.Value (AIGProxy(..))
+import SAWScript.Proof (ProofState, ProofResult(..), psGoals)
+import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..), TopLevel(..), runTopLevel,
+                            makeCheckpoint, restoreCheckpoint)
+import SAWScript.Value
+  ( AIGProxy(..), mergeLocalEnv, IsValue, Value
+  , ProofScript(..), showsProofResult, toValue
+  )
 import Verifier.SAW (SharedContext)
 
-#ifdef USE_BUILTIN_ABC
-deriving instance Typeable GIA.Proxy
-#else
 deriving instance Typeable AIG.Proxy
-#endif
 
 -- REPL Environment ------------------------------------------------------------
 
--- REPL RW Environment.
-data RW = RW
-  { eContinue   :: Bool
+-- REPL Environment.
+data Refs = Refs
+  { eContinue   :: IORef Bool
   , eIsBatch    :: Bool
   , eTopLevelRO :: TopLevelRO
-  , environment :: TopLevelRW
+  , environment :: IORef TopLevelRW
+  , proofState  :: Maybe (IORef ProofState)
   }
 
 -- | Initial, empty environment.
-defaultRW :: Bool -> Options -> IO RW
-defaultRW isBatch opts = do
-#ifdef USE_BUILTIN_ABC
-  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy GIA.proxy) opts
-#else
-  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.basicProxy) opts
-#endif
+defaultRefs :: Bool -> Options -> IO Refs
+defaultRefs isBatch opts =
+  do (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.compactProxy) opts
+     contRef <- newIORef True
+     rwRef <- newIORef rw
+     return Refs
+       { eContinue   = contRef
+       , eIsBatch    = isBatch
+       , eTopLevelRO = ro
+       , environment = rwRef
+       , proofState  = Nothing
+       }
 
-  return RW
-    { eContinue   = True
-    , eIsBatch    = isBatch
-    , eTopLevelRO = ro
-    , environment = rw
-    }
 
--- | Build up the prompt for the REPL.
-mkPrompt :: RW -> String
-mkPrompt rw
-  | eIsBatch rw = ""
-  | otherwise   = "sawscript> "
-
-mkTitle :: RW -> String
-mkTitle _rw = "sawscript"
+mkTitle :: Refs -> String
+mkTitle _refs = "sawscript"
 
 
 -- REPL Monad ------------------------------------------------------------------
 
 -- | REPL_ context with InputT handling.
-newtype REPL a = REPL { unREPL :: IORef RW -> IO a }
+newtype REPL a = REPL { unREPL :: Refs -> IO a }
 
 -- | Run a REPL action with a fresh environment.
 runREPL :: Bool -> Options -> REPL a -> IO a
-runREPL isBatch opts m = do
-  ref <- newIORef =<< defaultRW isBatch opts
-  unREPL m ref
+runREPL isBatch opts m =
+  do refs <- defaultRefs isBatch opts
+     unREPL m refs
+
+subshell :: REPL () -> TopLevel ()
+subshell (REPL m) = TopLevel_ $
+  do ro <- ask
+     rw <- get
+     rw' <- liftIO $
+       do contRef <- newIORef True
+          rwRef <- newIORef rw
+          let refs = Refs
+                     { eContinue = contRef
+                     , eIsBatch  = False
+                     , eTopLevelRO = ro
+                     , environment = rwRef
+                     , proofState  = Nothing
+                     }
+          m refs
+          readIORef rwRef
+     put rw'
+
+proof_subshell :: REPL () -> ProofScript ()
+proof_subshell (REPL m) =
+  ProofScript $ ExceptT $ StateT $ \proofSt ->
+  do ro <- ask
+     rw <- get
+     (rw', outProofSt) <- liftIO $
+       do contRef <- newIORef True
+          rwRef <- newIORef rw
+          proofRef <- newIORef proofSt
+          let refs = Refs
+                     { eContinue = contRef
+                     , eIsBatch  = False
+                     , eTopLevelRO = ro
+                     , environment = rwRef
+                     , proofState  = Just proofRef
+                     }
+          m refs
+          (,) <$> readIORef rwRef <*> readIORef proofRef
+     put rw'
+     return (Right (), outProofSt)
 
 instance Functor REPL where
   {-# INLINE fmap #-}
@@ -146,7 +194,7 @@ instance Functor REPL where
 
 instance Monad REPL where
   {-# INLINE return #-}
-  return x = REPL (\_ -> return x)
+  return = pure
 
   {-# INLINE (>>=) #-}
   m >>= f = REPL $ \ref -> do
@@ -163,7 +211,7 @@ instance Fail.MonadFail REPL where
 
 instance Applicative REPL where
   {-# INLINE pure #-}
-  pure = return
+  pure x = REPL (\_ -> pure x)
   {-# INLINE (<*>) #-}
   (<*>) = ap
 
@@ -224,9 +272,14 @@ catchFail m k = REPL (\ ref -> X.catchJust sel (unREPL m ref) (\s -> unREPL (k s
     sel e | isUserError e = Just (ioeGetErrorString e)
           | otherwise     = Nothing
 
--- | Handle any other exception
+-- | Handle any other exception (except that we ignore async exceptions and exitWith)
 catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
-catchOther = catchEx
+catchOther m k = REPL (\ref -> X.catchJust flt (unREPL m ref) (\s -> unREPL (k s) ref))
+ where
+  flt e
+    | Just (_ :: X.AsyncException) <- X.fromException e = Nothing
+    | Just (_ :: ExitCode)       <- X.fromException e = Nothing
+    | otherwise = Just e
 
 rethrowEvalError :: IO a -> IO a
 rethrowEvalError m = run `X.catch` rethrow
@@ -235,42 +288,93 @@ rethrowEvalError m = run `X.catch` rethrow
     a <- m
     return $! a
 
-  rethrow :: EvalError -> IO a
-  rethrow exn = X.throwIO (EvalError exn)
+  rethrow :: EvalErrorEx -> IO a
+  rethrow (EvalErrorEx _ exn) = X.throwIO (EvalError exn)
 
 
+exceptionProtect :: REPL () -> REPL ()
+exceptionProtect cmd =
+      do chk <- io . makeCheckpoint =<< getEnvironment
+         cmd `catch`      (handlerPP chk)
+             `catchFail`  (handlerFail chk)
+             `catchOther` (handlerPrint chk)
 
+    where
+    handlerPP chk re =
+      do io (putStrLn "" >> print (pp re))
+         void $ liftTopLevel (restoreCheckpoint chk)
+         return ()
+    handlerPrint chk e =
+      do io (putStrLn "" >> putStrLn (X.displayException e))
+         void $ liftTopLevel (restoreCheckpoint chk)
+
+    handlerFail chk s =
+      do io (putStrLn "" >> putStrLn s)
+         void $ liftTopLevel (restoreCheckpoint chk)
+
+liftTopLevel :: IsValue a => TopLevel a -> REPL Value
+liftTopLevel m =
+  do ro  <- getTopLevelRO
+     ref <- getEnvironmentRef
+     io $ do rw <- readIORef ref
+             (v,rw') <- runTopLevel m ro rw
+             writeIORef ref rw'
+             return v
+
+liftProofScript :: IsValue a => ProofScript a -> IORef ProofState -> REPL Value
+liftProofScript m ref =
+  liftTopLevel $
+  do st <- liftIO $ readIORef ref
+     (res, st') <- runStateT (runExceptT (unProofScript m)) st
+     liftIO $ writeIORef ref st'
+     case res of
+       Left (stats, cex) ->
+         do ppOpts <- rwPPOpts <$> get
+            fail (showsProofResult ppOpts (InvalidProof stats cex st') "")
+       Right x -> return (toValue x)
 
 -- Primitives ------------------------------------------------------------------
 
 io :: IO a -> REPL a
 io m = REPL (\ _ -> m)
 
-getRW :: REPL RW
-getRW  = REPL readIORef
+getRefs :: REPL Refs
+getRefs = REPL pure
 
-modifyRW_ :: (RW -> RW) -> REPL ()
-modifyRW_ f = REPL (\ ref -> modifyIORef ref f)
+readRef :: (Refs -> IORef a) -> REPL a
+readRef r = REPL (\refs -> readIORef (r refs))
+
+modifyRef :: (Refs -> IORef a) -> (a -> a) -> REPL ()
+modifyRef r f = REPL (\refs -> modifyIORef (r refs) f)
 
 -- | Construct the prompt for the current environment.
 getPrompt :: REPL String
-getPrompt  = mkPrompt `fmap` getRW
+getPrompt =
+  do batch <- REPL (return . eIsBatch)
+     if batch then return ""
+     else
+       getProofStateRef >>= \case
+         Nothing -> return "sawscript> "
+         Just psr ->
+           do ps <- io (readIORef psr)
+              return ("proof ("++show (length (psGoals ps))++")> ")
 
 shouldContinue :: REPL Bool
-shouldContinue  = eContinue `fmap` getRW
+shouldContinue = readRef eContinue
 
 stop :: REPL ()
-stop  = modifyRW_ (\ rw -> rw { eContinue = False })
+stop = modifyRef eContinue (const False)
 
 unlessBatch :: REPL () -> REPL ()
-unlessBatch body = do
-  rw <- getRW
-  unless (eIsBatch rw) body
+unlessBatch body =
+  do batch <- REPL (return . eIsBatch)
+     unless batch body
 
 setREPLTitle :: REPL ()
-setREPLTitle  = unlessBatch $ do
-  rw <- getRW
-  io (setTitle (mkTitle rw))
+setREPLTitle =
+  unlessBatch $
+  do refs <- getRefs
+     io (setTitle (mkTitle refs))
 
 getVars :: REPL (Map.Map T.Name M.IfaceDecl)
 getVars  = do
@@ -278,7 +382,14 @@ getVars  = do
   let decls = getAllIfaceDecls me
   let vars1 = M.ifDecls decls
   extras <- getExtraTypes
-  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl q s [] False Nothing Nothing) extras
+  let vars2 = Map.mapWithKey (\q s -> M.IfaceDecl { M.ifDeclName = q
+                                                  , M.ifDeclSig = s
+                                                  , M.ifDeclIsPrim = False
+                                                  , M.ifDeclPragmas = []
+                                                  , M.ifDeclInfix = False
+                                                  , M.ifDeclFixity = Nothing
+                                                  , M.ifDeclDoc = Nothing
+                                                  }) extras
   return (Map.union vars1 vars2)
 
 getTSyns :: REPL (Map.Map T.Name T.TySyn)
@@ -287,23 +398,23 @@ getTSyns  = do
   let decls = getAllIfaceDecls me
   return (M.ifTySyns decls)
 
-getNewtypes :: REPL (Map.Map T.Name T.Newtype)
-getNewtypes = do
+getNominalTypes :: REPL (Map.Map T.Name T.NominalType)
+getNominalTypes = do
   me <- getModuleEnv
   let decls = getAllIfaceDecls me
-  return (M.ifNewtypes decls)
+  return (M.ifNominalTypes decls)
 
 -- | Get visible variable names.
 getExprNames :: REPL [String]
 getExprNames =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.neExprs fNames)))
+     return (map (show . pp) (Map.keys (MN.namespaceMap NSValue fNames)))
 
 -- | Get visible type signature names.
 getTypeNames :: REPL [String]
 getTypeNames  =
   do fNames <- fmap getNamingEnv getCryptolEnv
-     return (map (show . pp) (Map.keys (MN.neTypes fNames)))
+     return (map (show . pp) (Map.keys (MN.namespaceMap NSType fNames)))
 
 getPropertyNames :: REPL [String]
 getPropertyNames =
@@ -357,27 +468,38 @@ setCryptolEnv :: CryptolEnv -> REPL ()
 setCryptolEnv x = modifyCryptolEnv (const x)
 
 getSharedContext :: REPL SharedContext
-getSharedContext = fmap roSharedContext getTopLevelRO
+getSharedContext = rwSharedContext <$> getEnvironment
 
 getTopLevelRO :: REPL TopLevelRO
-getTopLevelRO = fmap eTopLevelRO getRW
+getTopLevelRO = REPL (return . eTopLevelRO)
+
+getEnvironmentRef :: REPL (IORef TopLevelRW)
+getEnvironmentRef = environment <$> getRefs
+
+getProofStateRef :: REPL (Maybe (IORef ProofState))
+getProofStateRef = proofState <$> getRefs
 
 getEnvironment :: REPL TopLevelRW
-getEnvironment = fmap environment getRW
+getEnvironment = readRef environment
+
+getValueEnvironment :: REPL TopLevelRW
+getValueEnvironment =
+  do ro <- getTopLevelRO
+     rw <- getEnvironment
+     io (mergeLocalEnv (rwSharedContext rw) (roLocalEnv ro) rw)
 
 putEnvironment :: TopLevelRW -> REPL ()
 putEnvironment = modifyEnvironment . const
 
 modifyEnvironment :: (TopLevelRW -> TopLevelRW) -> REPL ()
-modifyEnvironment f = modifyRW_ $ \current ->
-  current { environment = f (environment current) }
+modifyEnvironment = modifyRef environment
 
 -- | Get visible variable names for Haskeline completion.
 getSAWScriptNames :: REPL [String]
 getSAWScriptNames = do
   env <- getEnvironment
   let rnames = Map.keys (rwValues env)
-  return (map getVal rnames)
+  return (map (Text.unpack . getVal) rnames)
 
 -- User Environment Interaction ------------------------------------------------
 
@@ -386,4 +508,3 @@ data EnvVal
   | EnvNum    !Int
   | EnvBool   Bool
     deriving (Show)
-

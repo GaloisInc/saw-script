@@ -1,0 +1,34 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+let error_adt = mir_find_adt m "test::Error" [];
+let result_adt = mir_find_adt m "core::result::Result" [mir_u32, mir_adt error_adt];
+
+let increment_spec = do {
+  count <- mir_fresh_var "count" mir_u32;
+
+  mir_execute_func [mir_term count];
+
+  let ok  = mir_enum_value result_adt "Ok" [mir_term {{ count + 1 }}];
+  let err = mir_enum_value result_adt "Err" [mir_enum_value error_adt "Overflow" []];
+  let res = mir_mux_values {{ count < (2^^32 - 1) }} ok err;
+  mir_return res;
+};
+
+increment_ov <- mir_verify m "test::increment" [] false increment_spec z3;
+
+let f_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value result_adt "Ok" [mir_term {{ 1 : [32] }}]);
+};
+
+let g_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_enum_value result_adt "Err" [mir_enum_value error_adt "Overflow" []]);
+};
+
+mir_verify m "test::f" [increment_ov] false f_spec z3;
+mir_verify m "test::g" [increment_ov] false g_spec z3;

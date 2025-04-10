@@ -1,0 +1,4 @@
+f : [2] -> [10]
+f x = take y
+  where
+    y = x # y

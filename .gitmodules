@@ -1,6 +1,3 @@
-[submodule "deps/abcBridge"]
-	path = deps/abcBridge
-	url = https://github.com/GaloisInc/abcBridge.git
 [submodule "deps/aig"]
 	path = deps/aig
 	url = https://github.com/GaloisInc/aig.git
@@ -13,21 +10,15 @@
 [submodule "deps/jvm-parser"]
 	path = deps/jvm-parser
 	url = https://github.com/GaloisInc/jvm-parser.git
-[submodule "deps/jvm-verifier"]
-	path = deps/jvm-verifier
-	url = https://github.com/GaloisInc/jvm-verifier.git
 [submodule "deps/llvm-pretty"]
 	path = deps/llvm-pretty
-	url = https://github.com/elliottt/llvm-pretty.git
+	url = https://github.com/GaloisInc/llvm-pretty.git
 [submodule "deps/llvm-pretty-bc-parser"]
 	path = deps/llvm-pretty-bc-parser
 	url = https://github.com/GaloisInc/llvm-pretty-bc-parser.git
 [submodule "deps/parameterized-utils"]
 	path = deps/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils.git
-[submodule "deps/saw-core"]
-	path = deps/saw-core
-	url = https://github.com/GaloisInc/saw-core.git
 [submodule "deps/flexdis86"]
 	path = deps/flexdis86
 	url = https://github.com/GaloisInc/flexdis86.git
@@ -46,12 +37,21 @@
 [submodule "deps/what4"]
 	path = deps/what4
 	url = https://github.com/GaloisInc/what4.git
-[submodule "deps/saw-core-coq"]
-	path = deps/saw-core-coq
-	url = https://github.com/GaloisInc/saw-core-coq.git
 [submodule "deps/argo"]
 	path = deps/argo
 	url = https://github.com/galoisinc/argo
+[submodule "deps/language-rust"]
+	path = deps/language-rust
+	url = https://github.com/GaloisInc/language-rust.git
+[submodule "deps/language-sally"]
+	path = deps/language-sally
+	url = https://github.com/GaloisInc/language-sally
+[submodule "deps/lmdb"]
+	path = deps/lmdb
+	url = https://github.com/GaloisInc/lmdb.git
+[submodule "deps/mir-json"]
+	path = deps/mir-json
+	url = https://github.com/GaloisInc/mir-json.git
 [submodule "deps/what4-serialize"]
 	path = deps/what4-serialize
 	url = https://github.com/GaloisInc/what4-serialize

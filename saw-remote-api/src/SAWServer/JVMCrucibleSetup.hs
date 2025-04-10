@@ -4,53 +4,72 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE TupleSections #-}
 module SAWServer.JVMCrucibleSetup
-  ( startJVMSetup
-  , jvmLoadClass
+  ( jvmLoadClass
+  , jvmLoadClassDescr
   , compileJVMContract
   ) where
 
-import Control.Lens
-import Control.Monad.IO.Class
-import Control.Monad.State
+import Control.Exception (throw)
+import Control.Lens ( view )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
-import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe
-import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Lang.Crucible.JVM as CJ
-import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Crucible.JVM.Builtins
-import SAWScript.Crucible.JVM.BuiltinsJVM
+    ( jvm_alloc_array,
+      jvm_alloc_object,
+      jvm_elem_is,
+      jvm_field_is,
+      jvm_static_field_is,
+      jvm_execute_func,
+      jvm_fresh_var,
+      jvm_ghost_value,
+      jvm_postcond,
+      jvm_precond,
+      jvm_return )
+import SAWScript.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
 
-import Argo
+import qualified Argo
+import qualified Argo.Doc as Doc
 import SAWServer
+    ( ServerName(..),
+      SAWState,
+      CrucibleSetupVal(..),
+      sawTask,
+      setServerVal )
 import SAWServer.Data.Contract
+    ( PointsTo(PointsTo),
+      PointsToBitfield,
+      GhostValue(GhostValue),
+      Allocated(Allocated),
+      ContractVar(ContractVar),
+      Contract(preVars, preConds, preAllocated, preGhostValues, prePointsTos, prePointsToBitfields,
+               argumentVals, postVars, postConds, postAllocated, postGhostValues, postPointsTos, postPointsToBitfields,
+               returnVal) )
 import SAWServer.Data.SetupValue ()
-import SAWServer.CryptolExpression (getTypedTermOfCExp)
-import SAWServer.Exceptions
-import SAWServer.OK
-import SAWServer.TopLevel
+import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
+import SAWServer.Exceptions ( notAtTopLevel )
+import SAWServer.OK ( OK, ok )
+import SAWServer.TopLevel ( tl )
 
-startJVMSetup :: StartJVMSetupParams -> Method SAWState OK
-startJVMSetup (StartJVMSetupParams n) =
-  do pushTask (JVMSetup n [])
-     ok
-
-data StartJVMSetupParams
+newtype StartJVMSetupParams
   = StartJVMSetupParams ServerName
 
 instance FromJSON StartJVMSetupParams where
@@ -58,117 +77,145 @@ instance FromJSON StartJVMSetupParams where
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartJVMSetupParams <$> o .: "name"
 
-data ServerSetupVal = Val (SetupValue CJ.JVM)
+instance Doc.DescribedMethod StartJVMSetupParams OK where
+  parameterFieldDescription =
+    [ ("name",
+       Doc.Paragraph [Doc.Text "The name of the item to setup on the server."])
+    ]
+  resultFieldDescription = []
 
--- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
+newtype ServerSetupVal = Val (MS.SetupValue CJ.JVM)
+
 compileJVMContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
+  Map ServerName MS.GhostGlobal ->
   CryptolEnv ->
   Contract JavaType (P.Expr P.PName) ->
   JVMSetupM ()
-compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv steps
+compileJVMContract fileReader bic ghostEnv cenv0 c =
+  do allocsPre <- mapM setupAlloc (preAllocated c)
+     (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
+     mapM_ (\p -> getTypedTerm cenvPre p >>= jvm_precond) (preConds c)
+     mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
+     mapM_ setupPointsToBitfields (prePointsToBitfields c)
+     mapM_ (setupGhostValue ghostEnv cenvPre) (preGhostValues c)
+     traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= jvm_execute_func
+     allocsPost <- mapM setupAlloc (postAllocated c)
+     (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
+     mapM_ (\p -> getTypedTerm cenvPost p >>= jvm_postcond) (postConds c)
+     mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
+     mapM_ setupPointsToBitfields (postPointsToBitfields c)
+     mapM_ (setupGhostValue ghostEnv cenvPost) (postGhostValues c)
+     case returnVal c of
+       Just v -> getSetupVal (envPost, cenvPost) v >>= jvm_return
+       Nothing -> return ()
   where
-    setupFresh (ContractVar n dn ty) = SetupFresh n dn ty
-    setupAlloc (Allocated n ty mut align) = SetupAlloc n ty mut align
-    steps =
-      map setupFresh (preVars c) ++
-      map SetupPrecond (preConds c) ++
-      map setupAlloc (preAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (prePointsTos c) ++
-      [ SetupExecuteFunction (argumentVals c) ] ++
-      map setupFresh (postVars c) ++
-      map SetupPostcond (postConds c) ++
-      map setupAlloc (postAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
-      [ SetupReturn v | v <- maybeToList (returnVal c) ]
+    setupFresh :: ContractVar JavaType -> JVMSetupM (ServerName, TypedTerm)
+    setupFresh (ContractVar n dn ty) =
+      do t <- jvm_fresh_var dn ty
+         return (n, t)
+    setupState allocs (env, cenv) vars =
+      do freshTerms <- mapM setupFresh vars
+         let cenv' = foldr (\(ServerName n, t) -> CEnv.bindTypedTerm (mkIdent n, t)) cenv freshTerms
+         let env' = Map.union env $ Map.fromList $
+                   [ (n, Val (MS.SetupTerm t)) | (n, t) <- freshTerms ] ++
+                   [ (n, Val v) | (n, v) <- allocs ]
+         return (env', cenv')
 
-interpretJVMSetup ::
-  (FilePath -> IO ByteString) ->
-  BuiltinContext ->
-  CryptolEnv ->
-  [SetupStep JavaType] ->
-  JVMSetupM ()
-interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
-  where
-    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return
-    -- TODO: do we really want two names here?
-    go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ jvm_fresh_var (T.unpack debugName) ty
-         (env, cenv) <- get
-         put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
-         save name (Val (MS.SetupTerm t))
-    go (SetupAlloc name _ _ (Just _)) =
-      error $ "attempted to allocate a Java object with alignment information: " ++ show name
-    go (SetupAlloc name (JavaArray n ty) True Nothing) =
-      lift (jvm_alloc_array n ty) >>= save name . Val
-    go (SetupAlloc name (JavaClass c) True Nothing) =
-      lift (jvm_alloc_object c) >>= save name . Val
-    go (SetupAlloc _ ty _ Nothing) =
-      error $ "cannot allocate type: " ++ show ty
-    go (SetupPointsTo src tgt) = get >>= \env -> lift $
-      do _ptr <- getSetupVal env src
-         _tgt' <- getSetupVal env tgt
-         error "nyi: points-to"
-    go (SetupExecuteFunction args) =
-      get >>= \env ->
-      lift $ traverse (getSetupVal env) args >>= jvm_execute_func
-    go (SetupPrecond p) = get >>= \env -> lift $
-      getTypedTerm env p >>= jvm_precond
-    go (SetupPostcond p) = get >>= \env -> lift $
-      getTypedTerm env p >>= jvm_postcond
+    setupAlloc :: Allocated JavaType -> JVMSetupM (ServerName, MS.SetupValue CJ.JVM)
+    setupAlloc (Allocated _ _ False _) =
+      JVMSetupM $ fail "Immutable allocations not supported in JVM API."
+    setupAlloc (Allocated _ _ _ (Just _)) =
+      JVMSetupM $ fail "Alignment not supported in JVM API."
+    setupAlloc (Allocated n ty True Nothing) =
+      case ty of
+        JavaArray sz ety -> (n,) <$> jvm_alloc_array sz ety
+        JavaClass cname -> (n,) <$> jvm_alloc_object cname
+        _ -> JVMSetupM $ fail $ "Cannot allocate Java object of type " ++ show ty
 
-    save name val = modify' (\(env, cenv) -> (Map.insert name val env, cenv))
+    setupPointsTo _ (PointsTo _ _ (Just _) _) =
+      JVMSetupM $ fail "Points-to without type checking not supported in JVM API."
+    setupPointsTo _ (PointsTo _ _ _ (Just _)) =
+      JVMSetupM $ fail "Conditional points-to not supported in JVM API."
+    setupPointsTo env (PointsTo p v Nothing Nothing) =
+      do sv <- getSetupVal env v
+         case p of
+           FieldLValue base fld ->
+             getSetupVal env base >>= \o -> jvm_field_is o fld sv
+           ElementLValue base eidx ->
+             getSetupVal env base >>= \o -> jvm_elem_is o eidx sv
+           GlobalLValue name -> jvm_static_field_is name sv
+           _ -> JVMSetupM $ fail "Invalid points-to statement."
+
+    setupPointsToBitfields :: PointsToBitfield JavaType (P.Expr P.PName) -> JVMSetupM ()
+    setupPointsToBitfields _ =
+      JVMSetupM $ fail "Points-to-bitfield not supported in JVM API."
+
+    setupGhostValue genv cenv (GhostValue serverName e) =
+      do g <- resolve genv serverName
+         t <- getTypedTerm cenv e
+         jvm_ghost_value g t
+
+    resolve :: Map ServerName a -> ServerName -> JVMSetupM a
+    resolve env name =
+      JVMSetupM $
+      case Map.lookup name env of
+        Just v -> return v
+        Nothing -> fail $ unlines
+                   [ "Server value " ++ show name ++ " not found - impossible!" -- rule out elsewhere
+                   , show (Map.keys env)
+                   ]
+
+    getTypedTerm ::
+      CryptolEnv ->
+      P.Expr P.PName ->
+      JVMSetupM TypedTerm
+    getTypedTerm cenv expr = JVMSetupM $
+      do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
+         case res of
+           Right (t, _) -> return t
+           Left err -> throw $ CryptolModuleException err warnings
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      CrucibleSetupVal (P.Expr P.PName) ->
+      CrucibleSetupVal JavaType (P.Expr P.PName) ->
       JVMSetupM (MS.SetupValue CJ.JVM)
-    getSetupVal _ NullValue = JVMSetupM $ return $ MS.SetupNull ()
-                              {-
-    getSetupVal env (ArrayValue elts) =
-      do elts' <- mapM (getSetupVal env) elts
-         JVMSetupM $ return $ MS.SetupArray () elts'
-    getSetupVal env (FieldLValue base fld) =
-      do base' <- getSetupVal env base
-         JVMSetupM $ return $ MS.SetupField () base' fld
-    getSetupVal env (ElementLValue base idx) =
-      do base' <- getSetupVal env base
-         JVMSetupM $ return $ MS.SetupElem () base' idx
-    getSetupVal _ (GlobalInitializer name) =
-      JVMSetupM $ return $ MS.SetupGlobalInitializer () name
-    getSetupVal _ (GlobalLValue name) =
-      JVMSetupM $ return $ MS.SetupGlobal () name
-         -}
-    getSetupVal (env, _) (ServerValue n) = JVMSetupM $
-      resolve env n >>=
-      \case
-        Val x -> return x -- TODO add cases for the server values that
-                          -- are not coming from the setup monad
-                          -- (e.g. surrounding context)
-    getSetupVal (_, cenv) (CryptolExpr expr) = JVMSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         -- TODO: add warnings (snd res)
-         case fst res of
-           Right (t, _) -> return (MS.SetupTerm t)
-           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
-    getSetupVal _ _sv = error $ "unrecognized setup value" -- ++ show sv
-
-    getTypedTerm ::
-      (Map ServerName ServerSetupVal, CryptolEnv) ->
-      P.Expr P.PName ->
-      JVMSetupM TypedTerm
-    getTypedTerm (_, cenv) expr = JVMSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         -- TODO: add warnings (snd res)
-         case fst res of
-           Right (t, _) -> return t
-           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
-
-    resolve env name =
-       case Map.lookup name env of
-         Just v -> return v
-         Nothing -> error "Server value not found - impossible!" -- rule out elsewhere
+    getSetupVal _ NullValue = JVMSetupM $ return (MS.SetupNull ())
+    getSetupVal (env, _) (NamedValue n) =
+      resolve env n >>= \case Val x -> return x
+    getSetupVal (_, cenv) (CryptolExpr expr) =
+      MS.SetupTerm <$> getTypedTerm cenv expr
+    getSetupVal _ (ArrayValue _ _) =
+      JVMSetupM $ fail "Array setup values unsupported in JVM API."
+    getSetupVal _ (StructValue _ _) =
+      JVMSetupM $ fail "Struct setup values unsupported in JVM API."
+    getSetupVal _ (EnumValue _ _ _) =
+      JVMSetupM $ fail "Enum setup values unsupported in JVM API."
+    getSetupVal _ (TupleValue _) =
+      JVMSetupM $ fail "Tuple setup values unsupported in JVM API."
+    getSetupVal _ (SliceValue _) =
+      JVMSetupM $ fail "Slice setup values unsupported in JVM API."
+    getSetupVal _ (SliceRangeValue _ _ _) =
+      JVMSetupM $ fail "Slice range setup values unsupported in JVM API."
+    getSetupVal _ (StrSliceValue _) =
+      JVMSetupM $ fail "String slice setup values unsupported in JVM API."
+    getSetupVal _ (StrSliceRangeValue _ _ _) =
+      JVMSetupM $ fail "String slice range setup values unsupported in JVM API."
+    getSetupVal _ (FieldLValue _ _) =
+      JVMSetupM $ fail "Field l-values unsupported in JVM API."
+    getSetupVal _ (CastLValue _ _) =
+      JVMSetupM $ fail "Cast l-values unsupported in JVM API."
+    getSetupVal _ (UnionLValue _ _) =
+      JVMSetupM $ fail "Union l-values unsupported in JVM API."
+    getSetupVal _ (ElementLValue _ _) =
+      JVMSetupM $ fail "Element l-values unsupported in JVM API."
+    getSetupVal _ (GlobalInitializer _) =
+      JVMSetupM $ fail "Global initializers unsupported in JVM API."
+    getSetupVal _ (GlobalLValue _) =
+      JVMSetupM $ fail "Global l-values unsupported in JVM API."
+    getSetupVal _ (FreshExpandedValue _ _) =
+      JVMSetupM $ fail "Fresh expanded values unsupported in JVM API."
 
 data JVMLoadClassParams
   = JVMLoadClassParams ServerName String
@@ -176,14 +223,27 @@ data JVMLoadClassParams
 instance FromJSON JVMLoadClassParams where
   parseJSON =
     withObject "params for \"SAW/JVM/load class\"" $ \o ->
-    JVMLoadClassParams <$> o .: "name" <*> o .: "class"
+    JVMLoadClassParams <$> o .: "name" <*> o .: "class name"
 
-jvmLoadClass :: JVMLoadClassParams -> Method SAWState OK
+jvmLoadClass :: JVMLoadClassParams -> Argo.Command SAWState OK
 jvmLoadClass (JVMLoadClassParams serverName cname) =
-  do tasks <- view sawTask <$> getState
+  do tasks <- view sawTask <$> Argo.getState
      case tasks of
-       (_:_) -> raise $ notAtTopLevel $ map fst tasks
+       (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
          do c <- tl $ loadJavaClass cname
             setServerVal serverName c
             ok
+
+jvmLoadClassDescr :: Doc.Block
+jvmLoadClassDescr =
+  Doc.Paragraph [Doc.Text "Load the JVM class with the given name for later verification."]
+
+instance Doc.DescribedMethod JVMLoadClassParams OK where
+  parameterFieldDescription =
+    [ ("name",
+        Doc.Paragraph [Doc.Text "The name of the class on the server."])
+    , ("class name",
+      Doc.Paragraph [Doc.Text "The java class to load."])
+    ]
+  resultFieldDescription = []

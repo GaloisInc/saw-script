@@ -1,51 +1,194 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import qualified Data.Aeson as JSON
-import Data.Text (Text)
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
-import Argo
-import Argo.DefaultMain
+import qualified Argo
+import qualified Argo.DefaultMain as Argo (defaultMain)
+import qualified Argo.Doc as Doc
 
-import SAWServer
+import SAWServer ( SAWState, initialState )
+import SAWServer.ClearState
+    ( clearStateDescr,
+      clearState,
+      clearAllStatesDescr,
+      clearAllStates )
 import SAWServer.CryptolSetup
---import SAWServer.JVMCrucibleSetup
---import SAWServer.JVMVerify
+    ( cryptolLoadModuleDescr,
+      cryptolLoadModule,
+      cryptolLoadFileDescr,
+      cryptolLoadFile )
+import SAWServer.Data.JVMType()
+import SAWServer.Eval
+    ( evalIntDescr,
+      evalInt,
+      evalBoolDescr,
+      evalBool )
+import SAWServer.Ghost
+    ( createGhostVariableDescr,
+      createGhostVariable )
+import SAWServer.JVMCrucibleSetup
+import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
+    ( llvmLoadModuleDescr, llvmLoadModule )
 import SAWServer.LLVMVerify
+    ( llvmVerifyDescr,
+      llvmVerify,
+      llvmAssumeDescr,
+      llvmAssume,
+      llvmVerifyX86Descr,
+      llvmVerifyX86 )
+import SAWServer.MIRCrucibleSetup
+    ( mirLoadModuleDescr, mirLoadModule )
+import SAWServer.MIRFindADT
+    ( mirFindADTDescr, mirFindADT )
+import SAWServer.MIRVerify
+    ( mirAssumeDescr, mirAssume,
+      mirVerifyDescr, mirVerify )
 import SAWServer.ProofScript
-import SAWServer.SaveTerm
-import SAWServer.SetOption
+    ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
+import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
+import SAWServer.SetOption ( setOptionDescr, setOption )
+import SAWServer.Yosys
+    ( yosysImportDescr, yosysImport,
+      yosysVerifyDescr, yosysVerify,
+      yosysImportSequentialDescr, yosysImportSequential,
+      yosysExtractSequentialDescr, yosysExtractSequential )
 
 
 main :: IO ()
-main =
-  do theApp <- mkApp initialState sawMethods
-     defaultMain description theApp
+main = do
+  setLocaleEncoding utf8
+  theApp <- Argo.mkApp
+               "SAW RPC Server"
+               serverDocs
+               (Argo.defaultAppOpts
+               Argo.MutableState)
+               initialState
+               sawMethods
+  Argo.defaultMain description theApp
+
+serverDocs :: [Doc.Block]
+serverDocs =
+  [ Doc.Section "Summary" $ [ Doc.Paragraph
+    [Doc.Text "A remote server for ",
+     Doc.Link (Doc.URL "https://saw.galois.com/") "SAW",
+     Doc.Text " for verifying programs with a featureset similar to SAWScript."]]]
 
 description :: String
 description =
   "An RPC server for SAW."
 
-sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
+sawMethods :: [Argo.AppMethod SAWState]
 sawMethods =
   -- Cryptol
-  [ ("SAW/Cryptol/load module",  Command, method cryptolLoadModule)
-  , ("SAW/Cryptol/load file",    Command, method cryptolLoadFile)
-  , ("SAW/Cryptol/save term",    Command, method saveTerm)
+  [ Argo.command
+     "SAW/Cryptol/load module"
+     cryptolLoadModuleDescr
+     cryptolLoadModule
+  , Argo.command
+     "SAW/Cryptol/load file"
+     cryptolLoadFileDescr
+     cryptolLoadFile
+  , Argo.command
+     "SAW/Cryptol/save term"
+     saveTermDescr
+     saveTerm
   -- JVM
-  {-
-  , ("SAW/JVM/load class",       Command, method jvmLoadClass)
-  , ("SAW/JVM/verify",           Command, method jvmVerify)
-  , ("SAW/JVM/assume",           Command, method jvmAssume)
-  -}
+  , Argo.command
+     "SAW/JVM/load class"
+     jvmLoadClassDescr
+     jvmLoadClass
+  , Argo.command
+     "SAW/JVM/verify"
+     jvmVerifyDescr
+     jvmVerify
+  , Argo.command
+     "SAW/JVM/assume"
+     jvmAssumeDescr
+     jvmAssume
   -- LLVM
-  , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
-  , ("SAW/LLVM/verify",          Command, method llvmVerify)
-  , ("SAW/LLVM/verify x86",      Command, method llvmVerifyX86)
-  , ("SAW/LLVM/assume",          Command, method llvmAssume)
+  , Argo.command
+     "SAW/LLVM/load module"
+     llvmLoadModuleDescr
+     llvmLoadModule
+  , Argo.command
+     "SAW/LLVM/verify"
+     llvmVerifyDescr
+     llvmVerify
+  , Argo.command
+     "SAW/LLVM/verify x86"
+     llvmVerifyX86Descr
+     llvmVerifyX86
+  , Argo.command
+     "SAW/LLVM/assume"
+     llvmAssumeDescr
+     llvmAssume
+  -- MIR
+  , Argo.command
+      "SAW/MIR/load module"
+      mirLoadModuleDescr
+      mirLoadModule
+  , Argo.command
+     "SAW/MIR/verify"
+     mirVerifyDescr
+     mirVerify
+  , Argo.command
+     "SAW/MIR/assume"
+     mirAssumeDescr
+     mirAssume
+  , Argo.command
+     "SAW/MIR/find ADT"
+     mirFindADTDescr
+     mirFindADT
+  -- Yosys
+  , Argo.command
+     "SAW/Yosys/import"
+     yosysImportDescr
+     yosysImport
+  , Argo.command
+     "SAW/Yosys/verify"
+     yosysVerifyDescr
+     yosysVerify
+  , Argo.command
+     "SAW/Yosys/import sequential"
+     yosysImportSequentialDescr
+     yosysImportSequential
+  , Argo.command
+     "SAW/Yosys/extract sequential"
+     yosysExtractSequentialDescr
+     yosysExtractSequential
   -- General
-  , ("SAW/make simpset",         Command, method makeSimpset)
-  , ("SAW/prove",                Command, method prove)
-  , ("SAW/set option",           Command, method setOption)
+  , Argo.command
+     "SAW/create ghost variable"
+     createGhostVariableDescr
+     createGhostVariable
+  , Argo.command
+     "SAW/make simpset"
+     makeSimpsetDescr
+     makeSimpset
+  , Argo.command
+     "SAW/prove"
+     proveDescr
+     prove
+  , Argo.command
+     "SAW/eval int"
+     evalIntDescr
+     evalInt
+  , Argo.command
+     "SAW/eval bool"
+     evalBoolDescr
+     evalBool
+  , Argo.command
+     "SAW/set option"
+     setOptionDescr
+     setOption
+  , Argo.notification
+     "SAW/clear state"
+     clearStateDescr
+     clearState
+  , Argo.notification
+     "SAW/clear all states"
+     clearAllStatesDescr
+     clearAllStates
   ]

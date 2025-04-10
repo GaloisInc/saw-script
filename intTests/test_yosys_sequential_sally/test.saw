@@ -1,0 +1,13 @@
+enable_experimental;
+m <- yosys_import_sequential "seqgen" "test.json";
+
+yosys_verify_sequential_offline_sally m "test.mcmt" {{
+  \(cycles : [8]) (i : {reset : [1], C : [1], G : [1], P : [1]}) (s : {S : [1]}) ->
+    ( (cycles > 1)
+    && (i.G == 0)
+    && (i.C == 1)
+    && (i.P == 1)
+    ) ==>
+      (s.S == 1)
+  }}
+  ["C", "G", "P", "reset"];

@@ -1,6 +1,6 @@
 src/SAWScript/Lexer.hs
 src/SAWScript/Parser.hs
-bin
+/bin
 cabal.sandbox.config
 cabal.project.local
 dist
@@ -20,3 +20,4 @@ cabal.project.freeze
 *~
 *#
 .#*
+saw-core-coq/coq/.Makefile.coq.d

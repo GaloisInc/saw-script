@@ -1,0 +1,9 @@
+//
+// Specifically trigger the selective refinement of the printed
+// mismatch of function types.
+
+let foo (a: Int) (b: Int) (c: String) : Int = a;
+
+let g (f: Int -> Int -> Int -> Int) (x: Int) = f x x x;
+
+let x = g foo 3;

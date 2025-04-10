@@ -1,0 +1,3 @@
+ Loading file "err032.saw"
+ Parse error at err032.saw:7:13-7:17: Unexpected `Bool'
+FAILED

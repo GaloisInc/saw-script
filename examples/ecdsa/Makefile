@@ -1,5 +1,4 @@
 SAW?=../../bin/saw
-JDK?=$(shell (java -verbose 2>&1) | grep Opened | head -1 | cut -d ' ' -f 2 | cut -d ']' -f 1)
 
 all : build
 
@@ -29,6 +28,6 @@ ecdsa.jar: build
 
 # Run the SAWScript verification
 verify : build
-	${SAW} -j "${JDK}" -c build ecdsa.saw
+	${SAW} -c build ecdsa.saw
 
 .PHONY : build clean doc run32 run64 verify

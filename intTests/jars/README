@@ -5,3 +5,11 @@ DIMACS format SAT solver from http://www.sat4j.org. Released under
 open source license LICENSE.sat4j, copied from
 http://www.eclipse.org/legal/epl-v10.html. See usage in ../sat.sh for
 usage info.
+
+
+bcprov-jdk16-145.jar
+--------------------
+
+Crypto library from https://www.bouncycastle.org. Released under open
+source license LICENSE.bcprov, copied from
+https://www.bouncycastle.org/licence.html.
