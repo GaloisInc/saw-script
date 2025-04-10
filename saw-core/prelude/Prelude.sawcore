@@ -1127,12 +1127,6 @@ Nat_complete_induction p f n0 =
 
 
 --------------------------------------------------------------------------------
--- Operations on string values
-
-primitive equalString : String -> String -> Bool;
-
-
---------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".
 primitive Vec : Nat -> sort 0 -> sort 0;
 
@@ -1327,6 +1321,17 @@ splitLittleEndian : (m n : Nat)
                   -> Vec (mulNat m n) a
                   -> Vec m (Vec n a);
 splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
+
+--------------------------------------------------------------------------------
+-- Operations on string values
+
+primitive appendString : String -> String -> String;
+
+-- Convert a Cryptol string (a sequence of 8-bit ASCII characters) to a SAWCore
+-- String.
+primitive bytesToString : (n : Nat) -> Vec n (Vec 8 Bool) -> String;
+
+primitive equalString : String -> String -> Bool;
 
 --------------------------------------------------------------------------------
 -- Bitvectors

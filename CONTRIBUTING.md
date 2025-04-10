@@ -79,6 +79,17 @@ Normally you should build with `build.sh`; however, under some
 circumstances it may sense to run `cabal build` by hand to recompile
 only part of the system.
 
+With a fresh tree, if you have never run `build.sh`, you must first
+run `build.sh gitrev` to capture the git checkout state.
+(And you should rerun this when you change your git checkout.)
+You should also do this before attempting to build the Docker
+containers.
+
+Once the git data has been updated you can run `cabal build` or other
+cabal commands as needed.
+However, running `cabal` by hand is not the recommended or supported
+build interface and additional manual steps may appear in the future.
+
 As a contributor there are a few additional quirks to be aware of.
 
 One is that test infrastructure is not compiled by default and will

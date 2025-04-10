@@ -246,10 +246,11 @@ data PPOpts = PPOpts
   , ppOptsBase :: Int
   , ppOptsColor :: Bool
   , ppOptsMinSharing :: Int
+  , ppOptsMemoStyle :: SAWCorePP.MemoStyle
   }
 
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts False False 10 False 2
+defaultPPOpts = PPOpts False False 10 False 2 SAWCorePP.Incremental
 
 cryptolPPOpts :: PPOpts -> C.PPOpts
 cryptolPPOpts opts =
@@ -264,6 +265,7 @@ sawPPOpts opts =
     { SAWCorePP.ppBase = ppOptsBase opts
     , SAWCorePP.ppColor = ppOptsColor opts
     , SAWCorePP.ppMinSharing = ppOptsMinSharing opts
+    , SAWCorePP.ppMemoStyle = ppOptsMemoStyle opts
     }
 
 quietEvalOpts :: C.EvalOpts

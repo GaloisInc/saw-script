@@ -80,6 +80,7 @@ import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Prelude (scEq)
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Term.Pretty (MemoStyle(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -482,11 +483,22 @@ print_goal_inline noInline =
   execTactic $ tacticId $ \goal ->
     do
       opts <- getTopLevelPPOpts
-      let opts' = opts { ppNoInlineMemo = sort noInline }
+      opts' <-
+        case ppMemoStyle opts of
+          Incremental -> pure opts { ppNoInlineMemoFresh = sort noInline }
+          HashIncremental _ -> pure opts { ppNoInlineMemoFresh = sort noInline }
+          Hash _ -> warnIncremental >> pure opts
       sc <- getSharedContext
       nenv <- io (scGetNamingEnv sc)
       let output = prettySequent opts' nenv (goalSequent goal)
       printOutLnTop Info (unlines [goalSummary goal, output])
+  where
+    warnIncremental =
+      printOutLnTop Warn $
+        unlines
+          [ "`print_goal_inline` is incompatible with non-incremental"
+          , "memoization strategies. Printing goal without inlining..."
+          ]
 
 print_goal_summary :: ProofScript ()
 print_goal_summary =

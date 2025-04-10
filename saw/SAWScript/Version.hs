@@ -14,7 +14,7 @@ module SAWScript.Version (
   ) where
 
 import Paths_saw_script (version)
-import GitRev (foundGit, hash, branch)
+import SAWScript.GitRev (foundGit, hash, branch)
 import Data.Version (showVersion)
 
 gitText :: String

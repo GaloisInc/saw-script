@@ -18,6 +18,7 @@ class TrivialTest(unittest.TestCase):
         c.llvm_load_module('m', null_bc).result()
 
         contract = {
+            "mutable globals": [],
             "pre vars": [],
             "pre conds": [],
             "pre allocated": [],

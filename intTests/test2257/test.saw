@@ -1,0 +1,13 @@
+enable_experimental;
+
+mod <- mir_load_module "test.linked-mir.json";
+
+let f_spec = do {
+  arg <- mir_fresh_var "arg" mir_u32;
+
+  mir_execute_func [mir_term arg];
+
+  mir_return (mir_term {{ reverse arg }});
+};
+
+mir_verify mod "test::f" [] true f_spec w4;

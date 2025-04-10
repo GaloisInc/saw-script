@@ -1,7 +1,7 @@
 # Overall configuration notes:
 # - Artifact uploads for binaries are from GHC 9.4.8
-# - Builds for Ubuntu happen on 22.04. We also include a single configuration
-#   for 20.04 to increase our Linux coverage.
+# - Builds for Ubuntu happen on 24.04. We also include a single configuration
+#   for 22.04 to increase our Linux coverage.
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
 # Please update this comment as those details change.
 
@@ -25,7 +25,7 @@ env:
   # older .so files are cached, which can have various effects
   # (e.g. cabal complains it can't find a valid version of the "happy"
   # tool).
-  CABAL_CACHE_VERSION: 5
+  CABAL_CACHE_VERSION: 7
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -33,11 +33,11 @@ env:
   # Solver package snapshot date - also update in the following locations:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20250227"
+  SOLVER_PKG_VERSION: "snapshot-20250326"
 
 jobs:
   config:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       name: ${{ steps.config.outputs.name }}
       version: ${{ steps.config.outputs.version }}
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
         cabal: ["3.10.3.0"]
         ghc: ["9.4.8", "9.6.6", "9.8.2"]
         haddock: [true]
@@ -84,14 +84,14 @@ jobs:
           # We include one job from an older Ubuntu LTS release to increase our
           # coverage of possible Linux configurations. Since we already run the
           # tests with the newest LTS release, we won't bother testing this one.
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             ghc: "9.4.8"
             cabal: "3.10.3.0"
             haddock: false
             run-tests: false
             hpc: false
           # Include one job with HPC enabled
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             ghc: "9.4.8"
             cabal: "3.10.3.0"
             haddock: false
@@ -298,7 +298,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
         uses: actions/checkout@v4
@@ -351,7 +351,7 @@ jobs:
     if: github.event_name == 'push' && needs.config.outputs.release == 'false' && github.repository_owner == 'GaloisInc'
     strategy:
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
         uses: actions/checkout@v4
@@ -390,7 +390,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
     steps:
       - name: Check out gh-pages
         uses: actions/checkout@v4
@@ -430,7 +430,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
+        os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -465,7 +465,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
+        os: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -489,9 +489,9 @@ jobs:
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
 
-      - uses: ocaml/setup-ocaml@v2
+      - uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: 4.14.x
+          ocaml-compiler: "4.14"
 
       - run: opam repo add coq-released https://coq.inria.fr/opam/released
 
@@ -522,7 +522,7 @@ jobs:
         include:
           - name: Install and test
             test: saw-remote-api/scripts/run_rpc_tests.sh
-            os: ubuntu-22.04
+            os: ubuntu-24.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
           - name: Install on MacOS
             test: |
@@ -533,7 +533,7 @@ jobs:
             os: macos-14
           - name: Check docs
             test: saw-remote-api/scripts/check_docs.sh
-            os: ubuntu-22.04
+            os: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -580,7 +580,7 @@ jobs:
       fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
         continue-on-error: [false]
         include:
           - suite: integration_tests
@@ -682,7 +682,7 @@ jobs:
     strategy:
       matrix:
         suite: ['integration_tests']
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
     steps:
       # Need a copy of the source to generate coverage HTML
       - uses: actions/checkout@v4
@@ -775,7 +775,7 @@ jobs:
           keep_files: false
 
   build-push-image:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [config]
     # Restrict this to the main repository where the needed secrets
     # will be available. As noted above, scheduled runs also happen in
@@ -796,6 +796,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: capture git state in GitRev.hs
+        run: ./build.sh gitrev
 
       - uses: rlespinasse/github-slug-action@v3.x
 
@@ -885,9 +888,10 @@ jobs:
           - bike
           - tls
           - hmac-failure
-          - awslc
+          # 20250328: disabled temporarily because it now tickles #1094 (see #2273)
+          # - awslc
           - blst
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
         ghc: ["9.4.8"]
     steps:
       - uses: actions/checkout@v4
@@ -941,7 +945,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
         ghc: ["9.4.8"]
     steps:
       - uses: actions/checkout@v4
@@ -973,7 +977,7 @@ jobs:
   # - changes to jobs or job instances don't require a mergify config update
   # - dependencies through `needs:` are validated, CI will fail if it's invalid
   mergify:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs:
       - build
       - heapster-tests

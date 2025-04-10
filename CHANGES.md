@@ -1,6 +1,24 @@
+# next next -- TBA
+
+The way git information gets compiled in (so it can be reported with
+e.g. saw --version) has been changed.
+You must build with build.sh after git changes for those changes to
+show through; builds done directly with cabal will not update the git
+info.
+(If you really want you can run the update script by hand instead, of
+course.)
+Note that build.sh is in any case the recommended way to build.
+
 # next -- TBA
 
-Nothing yet.
+## New Features
+
+* Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
+
+## Bug fixes
+
+* Invoking the Cryptol `error` function in SAW now preserves the error message
+  instead of throwing it away.
 
 # Version 1.3 -- 2025-03-21
 

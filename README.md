@@ -83,11 +83,15 @@ To build SAWScript and related utilities from source:
 
         ln -s cabal.<ghc version>.config cabal.project.freeze
 
+  * Run `cabal update` if you had installed `cabal` prior to using this README.
+
   * Build SAWScript by running
 
         ./build.sh
 
     The SAWScript executables will be available in the `bin` directory.
+
+    Note that running `cabal build` or `cabal install` directly will not work.
 
   * Optionally, run ./stage.sh to create a binary tarball.
 

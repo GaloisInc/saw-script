@@ -19,22 +19,30 @@ extra-source-files:  README.md
 
 library
   default-language: Haskell2010
-  build-depends: base >= 4.9 && < 5,
-                 text,
-                 prettyprinter >= 1.7.0,
-                 crucible,
-                 parameterized-utils >= 1.0.8,
+  build-depends:
+                 -- upstream packages from hackage
+                 base >= 4.9 && < 5,
+                 bytestring,
                  containers,
                  lens,
-                 vector,
                  mtl,
-                 what4,
+                 prettyprinter >= 1.7.0,
+                 text,
+                 vector,
+
+                 -- galois packages from hackage
                  bv-sized,
-                 bytestring,
+
+                 -- packages in git submodules
+                 crucible,
                  crucible-mir,
+                 parameterized-utils >= 1.0.8,
+                 what4,
+
+                 -- internal subpackages in the saw tree
+                 cryptol-saw-core,
                  saw-core,
                  saw-core-what4,
-                 cryptol-saw-core,
                  saw-script
 
   hs-source-dirs: src

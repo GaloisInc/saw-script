@@ -34,34 +34,41 @@ common errors
     -Werror=overlapping-patterns
 
 common deps
-  build-depends: base >=4.11.1.0 && <4.20,
+  build-depends:
+                 -- upstream packages from hackage
+                 base >=4.11.1.0 && <4.20,
                  aeson >= 1.4.2 && < 2.3,
-                 aig,
-                 argo,
                  base64-bytestring,
                  bytestring,
                  containers >= 0.6 && < 0.7,
-                 cryptol >= 2.8.1,
-                 cryptol-saw-core,
-                 crucible,
-                 crucible-jvm,
-                 crucible-mir,
                  cryptonite,
                  cryptonite-conduit,
                  directory,
-                 jvm-parser,
                  lens,
-                 llvm-pretty,
-                 llvm-pretty-bc-parser,
                  mtl,
-                 parameterized-utils,
-                 saw-core,
-                 saw-script,
                  silently,
                  text,
                  unordered-containers,
                  vector >= 0.12 && < 0.14,
-                 cryptol-remote-api
+
+                 -- packages in git submodules
+                 aig,
+                 argo,
+                 cryptol >= 2.8.1,
+                 cryptol-remote-api,
+                 crucible,
+                 crucible-jvm,
+                 crucible-mir,
+                 jvm-parser,
+                 llvm-pretty,
+                 llvm-pretty-bc-parser,
+                 parameterized-utils,
+
+                 -- internal subpackages in the saw tree
+                 cryptol-saw-core,
+                 saw-core,
+                 saw-script
+
   default-language: Haskell2010
 
 library

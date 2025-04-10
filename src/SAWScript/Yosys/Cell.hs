@@ -284,12 +284,27 @@ primCellToMap sc c args = case c ^. cellType of
     resPair <- liftIO $ SC.scApplyAll sc scFoldr [bool, accTy, swidth, fun, defaultAcc, ts]
     res <- liftIO $ SC.scPairRight sc resPair
     output $ CellTerm res (connWidthNat "A") (connSigned "Y")
-  -- "$bmux" -> _
+  CellTypeBmux -> do
+    ia <- input "A"
+    is <- flipEndianness sc =<< input "S"
+    let swidth = cellTermWidth is
+    let ywidth = connWidthNat "Y"
+    -- Split input A into chunks
+    chunks <- liftIO (SC.scNat sc (2 ^ swidth))
+    ywidth' <- liftIO (SC.scNat sc ywidth)
+    bool <- liftIO (SC.scBoolType sc)
+    splitA <- liftIO (SC.scSplit sc chunks ywidth' bool (cellTermTerm ia))
+    -- Select chunk from output
+    outputType <- liftIO (SC.scBitvector sc ywidth)
+    ixWidth <- liftIO (SC.scNat sc swidth)
+    elt <- liftIO (SC.scBvAt sc chunks outputType ixWidth splitA (cellTermTerm is))
+    output (CellTerm elt ywidth (connSigned "Y"))
   -- "$demux" -> _
   -- "$lut" -> _
   -- "$slice" -> _
   -- "$concat" -> _
   CellTypeDff -> pure Nothing
+  CellTypeFf -> pure Nothing
   CellTypeUnsupportedPrimitive _ -> pure Nothing
   CellTypeUserType _ -> pure Nothing
   where

@@ -1,5 +1,4 @@
-src/SAWScript/Lexer.hs
-src/SAWScript/Parser.hs
+src/SAWScript/GitRev.hs
 /bin
 cabal.sandbox.config
 cabal.project.local
