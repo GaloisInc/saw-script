@@ -1273,7 +1273,12 @@ getAssumptionStack sym =
 
 
 -- TODO! we should find a better way to share implementations with `OnlineBackend`
-instance OnlineSolver solver => IsBoolSolver (SAWCoreBackend n solver fs) where
+--
+-- XXX: while the first argument here needs to be the ExprBuilder, the second can
+-- be something else (AIUI) and if we peel some bits of the state out and put
+-- them in the second argument instead we can probably avoid the circular
+-- initialization in newSAWCoreBackend.
+instance OnlineSolver solver => IsSymBackend (SAWCoreBackend n solver fs) (SAWCoreBackend n solver fs) where
 
   addDurableProofObligation sym a =
      AS.addProofObligation a =<< getAssumptionStack sym
