@@ -20,7 +20,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Lang.Crucible.Backend.SAWCore where
+--module Lang.Crucible.Backend.SAWCore where
+module SAWScript.Crucible.CrucibleSAW.SAWCore where
 
 import           Control.Exception ( bracket )
 import           Control.Lens

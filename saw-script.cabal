@@ -157,6 +157,8 @@ library
 
     SAWScript.HeapsterBuiltins
 
+    SAWScript.Crucible.CrucibleSAW.SAWCore
+
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
