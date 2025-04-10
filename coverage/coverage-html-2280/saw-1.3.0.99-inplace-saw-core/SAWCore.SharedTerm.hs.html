@@ -1798,7 +1798,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1779 </span>--
 <span class="lineno"> 1780 </span>-- &gt; split : (m n : Nat) -&gt; (a : sort 0) -&gt; Vec (mulNat m n) a -&gt; Vec m (Vec n a);
 <span class="lineno"> 1781 </span>scSplit :: SharedContext -&gt; Term -&gt; Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1782 </span><span class="decl"><span class="nottickedoff">scSplit sc m n a v = scGlobalApply sc &quot;Prelude.split&quot; [m, n, a, v]</span></span>
+<span class="lineno"> 1782 </span><span class="decl"><span class="istickedoff">scSplit sc m n a v = scGlobalApply sc &quot;Prelude.split&quot; [m, n, a, v]</span></span>
 <span class="lineno"> 1783 </span>
 <span class="lineno"> 1784 </span>-- | Create a term selecting a range of values from a vector with @Prelude.slice@.
 <span class="lineno"> 1785 </span>--
@@ -1820,7 +1820,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1801 </span>-- &gt; bvAt : (n : Nat) -&gt; (a : sort 0) -&gt; (w : Nat) -&gt; Vec n a -&gt; Vec w Bool -&gt; a;
 <span class="lineno"> 1802 </span>scBvAt :: SharedContext -&gt; Term -&gt; Term -&gt;
 <span class="lineno"> 1803 </span>         Term -&gt; Term -&gt; Term -&gt; IO Term
-<span class="lineno"> 1804 </span><span class="decl"><span class="nottickedoff">scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName &quot;bvAt&quot;) [n, a, i, xs, idx]</span></span>
+<span class="lineno"> 1804 </span><span class="decl"><span class="istickedoff">scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName &quot;bvAt&quot;) [n, a, i, xs, idx]</span></span>
 <span class="lineno"> 1805 </span>
 <span class="lineno"> 1806 </span>-- | Create a term accessing a particular element of a vector, with a default
 <span class="lineno"> 1807 </span>-- to return if the index is out of bounds.

@@ -115,7 +115,7 @@ span.spaces    { background: white }
 <span class="lineno">   96 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   97 </span><span class="spaces">  </span><span class="istickedoff">stateFields &lt;- forM stateWidths $ \w -&gt; do</span>
 <span class="lineno">   98 </span><span class="spaces">    </span><span class="istickedoff">t &lt;- liftIO $ SC.scBitvector sc w</span>
-<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">let cty = C.tWord $ <span class="nottickedoff">C.tNum w</span></span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="istickedoff">let cty = C.tWord $ C.tNum w</span>
 <span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">pure (t, cty)</span>
 <span class="lineno">  101 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">let inputPorts = moduleInputPorts m</span>
@@ -189,9 +189,9 @@ span.spaces    { background: white }
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">t &lt;- liftIO $ SC.scAbstractExts sc [domainRecordEC] outputRecord</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">-- ty &lt;- liftIO $ SC.scFun sc domainRecordType codomainRecordType</span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">_ &lt;- validateTerm sc <span class="nottickedoff">&quot;translating a sequential circuit&quot;</span> t</span>
-<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">cty = C.tFun domainCryptolRecordType codomainCryptolRecordType</span></span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">let cty = C.tFun domainCryptolRecordType codomainCryptolRecordType</span>
 <span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">pure YosysSequential</span>
-<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">{ _yosysSequentialTerm = SC.TypedTerm <span class="nottickedoff">(SC.TypedTermSchema $ C.tMono cty)</span> t</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff">{ _yosysSequentialTerm = SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) t</span>
 <span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">, _yosysSequentialStateFields = stateFields</span>
 <span class="lineno">  177 </span><span class="spaces">    </span><span class="istickedoff">, _yosysSequentialInputFields = inputFields</span>
 <span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">, _yosysSequentialOutputFields = outputFields</span>
