@@ -1266,7 +1266,7 @@ withSolverConn sym k = withSolverProcess sym (pure ()) (k . solverConn)
 
 getAssumptionStack ::
   SAWCoreBackend s solver fs ->
-  IO (AssumptionStack (B.BoolExpr s) AssumptionReason SimError)
+  IO (AssumptionStack (Assumption (B.BoolExpr s)) SimError)
 getAssumptionStack sym =
   (assumptionStack . saw_online_state) <$> readIORef (userStateRef sym)
 
@@ -1291,7 +1291,8 @@ instance OnlineSolver solver => IsBoolSolver (SAWCoreBackend n solver fs) where
 
                  -- Record assumption, even if trivial.
                  -- This allows us to keep track of the full path we are on.
-                 AS.assume a =<< getAssumptionStack sym
+                 stk <- getAssumptionStack sym
+                 AS.appendAssumptions (Seq.singleton a) stk
 
   addAssumptions sym a =
     -- NB, don't add the assumption to the assumption stack unless
