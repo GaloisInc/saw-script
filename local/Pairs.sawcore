@@ -37,11 +37,11 @@ UnCurryN1 ls b f =
             uncurry tp (PairsL ls) b rec
        )
   f;
--}
 
-{-
-UnCurryN : (b: sort 0) -> (ls: ListSort) -> arrowsType ls b -> PairsL ls -> b;
-UnCurryN b =
+  -- ^ HIGHLY FLAWED.
+
+UnCurryN2 : (b: sort 0) -> (ls: ListSort) -> arrowsType ls b -> PairsL ls -> b;
+UnCurryN2 b =
   ListSort__rec
        (\(ls:ListSort) -> arrowsType ls b -> PairsL ls -> b)          -- P
        (\(x:b) (_:UnitType)-> x)                                      -- P(LS_Nil)
@@ -53,9 +53,35 @@ UnCurryN b =
          -> \(f: arrowsType (LS_Cons A ls) b) -> uncurry (PairsL ls) A b (rec f)
        );
 
+   -- ^ NO, each induction step must instantiate 'b' differently!
+
+-}
+
+UnCurryN : (ls: ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b;
+UnCurryN =
+  ListSort__rec
+       (\(ls:ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b) -- P
+       (\(b: sort 0) (x: b) (_y: UnitType) -> x)                          -- P(LS_Nil)
+       (\ (A:   sort 0)
+          (ls:  ListSort)
+          (rec: (b: sort 0) -> arrowsType ls b -> PairsL ls -> b)
+          -- the following must be of type
+          --     P(LS_Cons A ls)
+          --  == (b: sort 0) -> arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
+         -> \(b: sort 0)->
+            \(f: arrowsType ls (A->b))->
+            uncurry (PairsL ls) A b (rec (A->b) f)
+       );
+
+
+-- inferred for `f`
+--   A -> arrowsType ls b
+-- expected for `f`
+--   arrowsType ls (A -> B)
+
 testa : arrowsType ls1 Bool -> PairsL ls1 -> Bool;
 testa = UnCurryN ls1 Bool;
--}
+
 
 {-
 
@@ -98,7 +124,7 @@ unc2 f = \((U,a1),a2)-> f a1 a2
 
 testbR : sort 0 = PairsR ls1;
 testbL : sort 0 = PairsL ls1;
-testbA : sort 0 = arrowsType ls1 Bool;
+testbA : sort 0 = arrowsType ls1 Nat;
 
 test1 : sort 0 = testbR;
 test2 : sort 0 = testbL;
