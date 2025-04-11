@@ -150,6 +150,7 @@ test-suite test-sawcore
     Tests.Rewriter
     Tests.SharedTerm
     Tests.Simulator
+    Tests.Functor
 
 executable extcore-info
   main-is: extcore-info.hs
