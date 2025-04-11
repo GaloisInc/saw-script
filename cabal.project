@@ -1,6 +1,6 @@
 packages:
-    rme
     saw.cabal
+    rme
     crucible-mir-comp
     crux-mir-comp
 

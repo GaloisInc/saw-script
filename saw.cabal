@@ -655,10 +655,6 @@ library saw-central
 
 -- The saw-script library.
 --
--- This can't be a sublibrary because you can't have a sublibrary with
--- the same name as the package (why?) but it should not be construed as
--- bigger or more important than the others.
---
 -- The saw-script library contains the interpreter for the SAWScript
 -- language.
 library saw-script
