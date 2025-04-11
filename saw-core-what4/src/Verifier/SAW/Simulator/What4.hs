@@ -51,6 +51,7 @@ module Verifier.SAW.Simulator.What4
   , w4EvalBasic
   , getLabelValues
 
+  , w4EvalTerm
   , w4SimulatorEval
   , NeutralTermException(..)
 
@@ -1274,6 +1275,102 @@ getLabelValues f =
 
 ----------------------------------------------------------------------
 -- Evaluation through crucible-saw backend
+
+-- | Simplify a saw-core term by evaluating it through the saw backend
+-- of what4. The term may have any first-order monomorphic function
+-- type. Return a term with the same type.
+w4EvalTerm ::
+  forall n st fs.
+  B.ExprBuilder n st fs ->
+  SAWCoreState n ->
+  SharedContext ->
+  Map Ident (SPrim (B.ExprBuilder n st fs)) ->
+  Set VarIndex ->
+  Term ->
+  IO Term
+w4EvalTerm sym st sc ps unintSet t =
+  do modmap <- scGetModuleMap sc
+     ref <- newIORef Map.empty
+     let eval = w4EvalBasic sym st sc modmap ps ref unintSet
+     ty <- eval =<< scTypeOf sc t
+     -- evaluate term to an SValue
+     val <- eval t
+     tytval <- toTValue ty
+     -- convert SValue back into a Term
+     rebuildTerm sym st sc tytval val
+  where
+    toTValue :: Value l -> IO (TValue l)
+    toTValue (TValue x) = pure x
+    toTValue _ = fail "toTValue"
+
+rebuildTerm ::
+  B.ExprBuilder n st fs ->
+  SAWCoreState n ->
+  SharedContext ->
+  TValue (What4 (B.ExprBuilder n st fs)) ->
+  SValue (B.ExprBuilder n st fs) ->
+  IO Term
+rebuildTerm sym st sc tv sv =
+  let chokeOn what =
+        -- XXX: alas, for the time being it looks like all we have for
+        -- printing SValue/Value is a show instance
+        fail ("saw-core-what4: rebuildTerm: cannot handle " ++ what ++ ": " ++
+              show sv)
+  in
+  case sv of
+    VFun _ _ ->
+      chokeOn "lambdas (VFun)"
+    VUnit ->
+      scUnitValue sc
+    VPair x y ->
+      case tv of
+        VPairType tx ty ->
+          do vx <- force x
+             vy <- force y
+             x' <- rebuildTerm sym st sc tx vx
+             y' <- rebuildTerm sym st sc ty vy
+             scPairValue sc x' y'
+        _ -> fail "panic: rebuildTerm: internal error: pair wasn't a pair"
+    VCtorApp _ _ _ ->
+      chokeOn "constructors (VCtorApp)"
+    VVector xs ->
+      case tv of
+        VVecType _ tx ->
+          do vs <- traverse force (V.toList xs)
+             xs' <- traverse (rebuildTerm sym st sc tx) vs
+             tx' <- termOfTValue sc tx
+             scVectorReduced sc tx' xs'
+        _ -> fail "panic: rebuildTerm: internal error: vector wasn't a vector"
+    VBool x ->
+      toSC sym st x
+    VWord x ->
+      case x of
+        DBV w -> toSC sym st w
+        ZBV ->
+          do z <- scNat sc 0
+             scBvNat sc z z
+    VBVToNat _ _ ->
+      chokeOn "VBVToNat"
+    VIntToNat _ ->
+      chokeOn "VIntToNat"
+    VNat n ->
+      scNat sc n
+    VInt x ->
+      toSC sym st x
+    VIntMod _ _ ->
+      chokeOn "VIntMod"
+    VArray _ ->
+      chokeOn "arrays (VArray)"
+    VString s ->
+      scString sc s
+    VRecordValue _ ->
+      chokeOn "records (VRecordValue)"
+    VRecursor _ _ _ _ _ ->
+      chokeOn "recursors (VRecursor)"
+    VExtra _ ->
+      chokeOn "VExtra"
+    TValue _tval ->
+      chokeOn "types (TValue)"
 
 
 -- | Simplify a saw-core term by evaluating it through the saw backend
