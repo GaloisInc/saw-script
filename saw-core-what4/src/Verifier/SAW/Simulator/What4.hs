@@ -1310,10 +1310,16 @@ rebuildTerm ::
   TValue (What4 (B.ExprBuilder n st fs)) ->
   SValue (B.ExprBuilder n st fs) ->
   IO Term
-rebuildTerm sym st sc tv =
-  \case
+rebuildTerm sym st sc tv sv =
+  let chokeOn what =
+        -- XXX: alas, for the time being it looks like all we have for
+        -- printing SValue/Value is a show instance
+        fail ("saw-core-what4: rebuildTerm: cannot handle " ++ what ++ ": " ++
+              show sv)
+  in
+  case sv of
     VFun _ _ ->
-      fail "rebuildTerm VFun"
+      chokeOn "lambdas (VFun)"
     VUnit ->
       scUnitValue sc
     VPair x y ->
@@ -1324,9 +1330,9 @@ rebuildTerm sym st sc tv =
              x' <- rebuildTerm sym st sc tx vx
              y' <- rebuildTerm sym st sc ty vy
              scPairValue sc x' y'
-        _ -> fail "panic: rebuildTerm: internal error"
+        _ -> fail "panic: rebuildTerm: internal error: pair wasn't a pair"
     VCtorApp _ _ _ ->
-      fail "rebuildTerm VCtorApp"
+      chokeOn "constructors (VCtorApp)"
     VVector xs ->
       case tv of
         VVecType _ tx ->
@@ -1334,7 +1340,7 @@ rebuildTerm sym st sc tv =
              xs' <- traverse (rebuildTerm sym st sc tx) vs
              tx' <- termOfTValue sc tx
              scVectorReduced sc tx' xs'
-        _ -> fail "panic: rebuildTerm: internal error"
+        _ -> fail "panic: rebuildTerm: internal error: vector wasn't a vector"
     VBool x ->
       toSC sym st x
     VWord x ->
@@ -1344,27 +1350,27 @@ rebuildTerm sym st sc tv =
           do z <- scNat sc 0
              scBvNat sc z z
     VBVToNat _ _ ->
-      fail "rebuildTerm VBVToNat"
+      chokeOn "VBVToNat"
     VIntToNat _ ->
-      fail "rebuildTerm VIntToNat"
+      chokeOn "VIntToNat"
     VNat n ->
       scNat sc n
     VInt x ->
       toSC sym st x
     VIntMod _ _ ->
-      fail "rebuildTerm VIntMod"
+      chokeOn "VIntMod"
     VArray _ ->
-      fail "rebuildTerm VArray"
+      chokeOn "arrays (VArray)"
     VString s ->
       scString sc s
     VRecordValue _ ->
-      fail "rebuildTerm VRecordValue"
+      chokeOn "records (VRecordValue)"
     VRecursor _ _ _ _ _ ->
-      fail "rebuildTerm VRecursor"
+      chokeOn "recursors (VRecursor)"
     VExtra _ ->
-      fail "rebuildTerm VExtra"
+      chokeOn "VExtra"
     TValue _tval ->
-      fail "rebuildTerm TValue"
+      chokeOn "types (TValue)"
 
 
 -- | Simplify a saw-core term by evaluating it through the saw backend
