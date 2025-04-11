@@ -685,54 +685,60 @@ Open a new coq file `tutorial_c_proofs.v` in the same folder
 
 ```
 From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Import SAWCorePrelude.
-From CryptolToCoq Require Import CompMExtra.
 
-(* The following line enables pretty printing*)
-Import CompMExtraNotation. Open Scope fun_syntax.
+(* The following 2 lines allows better automation *)
+Require Import Examples.common.
+Require Import Coq.Program.Tactics.
 
+(* Import our function definitions*)
 Require Import Examples.tutorial_c_gen.
 Import tutorial_c.
 ```
 
-It first imports all the SAW functionality we need and enables pretty
-printing. Then it imports our new definitions (e.g. `add`).
+It first imports all the SAW functionality we need and some useful
+tactics. Then it imports our new definitions (e.g. `add`).
 
 Our first proof will claim that the function `add` produces no
 errors. More specifically, it says that for all inputs (that's what
-`refinesFun` quantifies) `add` always refines to `noErrorsSpec`. That
-is, it returns a pure value.
+`spec_refines_eq` quantifies) `add` always refines to `safety_spec`. That
+is, it returns a pure value without errors.
 
 ```
-Lemma no_errors_add
-  : refinesFun add (fun _ _ => noErrorsSpec).
+
+Lemma no_errors_add (x y: bitvector 64) :
+  spec_refines_eq (add x y) (safety_spec (x,y)).
 Proof.
 ```
 
-We will use our automation to quickly prove the lemma, but we must
-first unfold those definitions the the automation is unfamiliar with.
+We will use our automation to quickly prove the lemma,
 
 ```
-unfold add, add__tuple_fun, noErrorsSpec.
-```
-
-Then our function `prove_refinement` will deal with the proof.
-
-```
-  prove_refinement.
-Qed.
+solve_trivial_spec 0 0. Qed.
 ```
 
 You can also attempt the same proof with `add_mistyped`, which
-obviously will fail, since `add_mistyped` has an error.
+obviously will fail, since `add_mistyped` has an error. First, you
+will note that `add_mistyped` only takes one argument (since only one
+was defined in its signature)
 
 ```
-Lemma no_errors_add_mistyped
-  : refinesFun add_mistyped (fun _ => noErrorsSpec).
-Proof.
-  unfold add_mistyped, add_mistyped__tuple_fun, noErrorsSpec.
-  prove_refinement. 
-  (* Fails to solve the goal. *)
+Lemma no_errors_add_mistyped (x: bitvector 64) :
+  spec_refines_eq (add_mistyped x) (safety_spec (x)).
+Proof. solve_trivial_spec 0 0.
+
+	clarify_goal_tutorial.
+```
+
+After rewriting the terms for clarity, you can see the
+remaining goal says that an `ErrorS` is a refinement of
+`RetS`. In other words, it's trying to prove that a trivially
+pure function has an error. That's obviously false.
+
+```
 Abort.
 ```
 
@@ -793,12 +799,9 @@ You will have to generate the `.vo` again to write proofs about
 produces no errors.
 
 ```
-Lemma no_errors_incr_ptr
-  : refinesFun incr_ptr (fun _ => noErrorsSpec).
-Proof.
-  unfold incr_ptr, incr_ptr__tuple_fun.
-  prove_refinement.
-Qed.
+Lemma no_errors_incr_ptr (x: bitvector 64) :
+  spec_refines_eq (incr_ptr x) (safety_spec x).
+Proof.  solve_trivial_spec 0 0. Qed.
 ```
 
 ### Structs
@@ -963,48 +966,39 @@ adds dynamic checks on the extracted code which we will see in the Coq
 code. 
 
 Let's go to `arrays_gen.v` (which has already been generated for you)
-and look for the definition of `zero_array__tuple_fun`. You will
-notice that it calls `errorM` twice but, in this case that's not a
+and look for the definition of `zero_array__bodies`. You will
+notice that it calls `errorS` twice, but in this case, that's not a
 sign of a typing error! Heapster includes these errors to catch
 out-of-bounds array accesses and unrepresentable indices (i.e. index
 that can't be written as a machine integer). The code below is a
-simplification of the `zero_array__tuple_fun` with some notation for
+simplification of the `zero_array__bodies` with some notation for
 readability (see below for how to enable such pritty printing).
 
 ```
-zero_array__tuple_fun = 
-    (* ... Some ommited code ... *) 
-    LetRec f:=
-     (fun (e1 e2 : int64) (p1 : Vector int64 e1)
-        (_ _ _ : unit : Type) =>
-        (* ... Some ommited code ... *) 
-        let var__4 := (0)[1] in
-        let var__6 := e2 < e1 in
-		(*... Some ommited code ...*)
-	  if
-       not
-         ((if var__6 then 1 else var__4) ==
-          var__4)
-      then
-       if
-        ((17293822569102704640)[64] <= e2) &&
-        (e2 <= (1152921504606846975)[64])
-       then
-        If e2 <P e1
-        Then f e1 (e2 + (1)[64])
-               (p1 [e2 <- (0)[64]]) tt tt tt
-        Else errorM "ghost_bv <u top_bv"
-       else
-        errorM "Failed Assert at arrays.c:61:5"
-      else returnM p1, tt)
-      InBody (f e0 (0)[64] p0 tt tt tt), tt))
+(fun (e0 : int64) (p0 : Vector int64 e0) =>
+   CallS VoidEv emptyFunStack zero_array__frame
+     (mkFrameCall zero_array__frame 1 e0 (0)[64] p0 tt tt tt),
+  (fun (e0 e1 : int64) (p0 : Vector int64 e0) (_ _ _ : unit) =>
+   if negb ((if e1 < e0 then (-1)[1] else (0)[1]) == (0)[1])
+   then
+    if ((17293822569102704640)[64] <= e1) && (e1 <= (1152921504606846975)[64])
+    then
+     If e1 <P e0
+     Then CallS VoidEv emptyFunStack zero_array__frame
+            (mkFrameCall zero_array__frame 1 e0 (e1 + (1)[64]) 
+               (p0 [e1 <- (0)[64]]) tt tt tt)
+     Else ErrorS (Vector int64 e0) "ghost_bv <u top_bv"
+    else ErrorS (Vector int64 e0) "Failed Assert at arrays.c:61:5"
+   else RetS p0, tt))
 ```
  
-The arguments `e1`, `e2` and `p1` correspond to the length `len`, the
+Notice there are two functions, the outermost one represents
+`zero_array` and the one inside represents the loop. in the latter,
+the arguments `e0`, `e1` and `p1` correspond to the length `len`, the
 offset `i`, and the array `arr`. Notice most of that the function
 performs several tests before executing any computation. The first two
 tests, which are within `if then else` blocks, check that the offset
-is less than the array length `e2 < e1`, and that the index `i` is
+is less than the array length `e1 < e0`, and that the index `i` is
 within the bounds of machine integers. The former is part of the loop
 condition, the second is added by Heapster to ensure the ghost
 variable represents a machine integer.
@@ -1012,15 +1006,16 @@ variable represents a machine integer.
 The last check, which is within uppercase `If Then Else` (which
 handles option types) is not part of the original function but
 inserted by Heapster. It checks that the array access is within bounds
-`e2 <P e1`. The operator `<P` returns an optional proof of the array
+`e1 <P e0`. The operator `<P` returns an optional proof of the array
 access being safe. If the check fails, the function reports a runtime
-error `errorM "ghost_bv <u top_bv"`.
+error `ErrorS _ "ghost_bv <u top_bv"`.
 
 If all the checks pass, then the function simply calls
 itself recursively, with the next index and array with a new entry zeroed out.
 
 ```
-f e1 (e2 + (1)[64]) (p1 [e2 <- (0)[64]]) tt tt tt
+(mkFrameCall zero_array__frame 1 e0 (e1 + (1)[64]) 
+               (p0 [e1 <- (0)[64]]) tt tt tt)
 ```
 
 The extra `tt` are artifacts that get inserted by Heapster, but you
@@ -1040,9 +1035,10 @@ We shall now prove that this function in fact should never return an
 error if the inputs are correct. Go to `array_proofs.v` and look at the proof 
 
 ```
-Lemma no_errors_zero_array
-  : refinesFun zero_array (fun x _ => assumingM (zero_array_precond x) noErrorsSpec).
-Proof
+Lemma no_errors_zero_array x y:
+  spec_refines_eq (zero_array x y)
+    (total_spec (fun '(len, vec, dec) =>  zero_array_precond len) (fun _ _ => True) (x,y, bvAdd _ x (intToBv _ 1))).
+Proof.
 ```
 
 It claims that, assuming the precondition `zero_array_precond` is
@@ -1057,12 +1053,8 @@ Definition zero_array_precond x
 
 
 We will not go into detail about the proof, but notice that the
-important steps are handled by custom automation. Namely we use the
-commands `prove_refinement_match_letRecM_l` and `prove_refinement` to
-handle refinements with and without recursion (respectively). The rest
-of the proof, consists of discharging simple inequalities and a couple
-of trivial entailments, where the left hand side is an error (and thus
-entails anything).
+important steps are handled by custom automation. 
+
 
 ### Recursive data structures
 
