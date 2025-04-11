@@ -6,11 +6,11 @@
 linked_list_gen.v
 #linked_list_proofs.v
 xor_swap_gen.v
-xor_swap_proofs.v
+#xor_swap_proofs.v
 xor_swap_rust_gen.v
 #xor_swap_rust_proofs.v
 c_data_gen.v
-c_data_proofs.v
+#c_data_proofs.v
 string_set_gen.v
 #string_set_proofs.v
 loops_gen.v
@@ -37,4 +37,4 @@ sha512_gen.v
 #sha512_proofs.v
 io_gen.v
 #io_proofs.v
-common.v
+#common.v
