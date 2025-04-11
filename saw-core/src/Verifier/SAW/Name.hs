@@ -88,7 +88,7 @@ moduleNameText :: ModuleName -> Text
 moduleNameText (ModuleName x) = x
 
 moduleNamePieces :: ModuleName -> [Text]
-moduleNamePieces (ModuleName x) = Text.splitOn (Text.pack ".") x
+moduleNamePieces (ModuleName x) = Text.splitOn "." x
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.

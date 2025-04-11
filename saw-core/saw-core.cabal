@@ -146,6 +146,7 @@ test-suite test-sawcore
 
   other-modules:
     Tests.CacheTests
+    Tests.Functor
     Tests.Parser
     Tests.Rewriter
     Tests.SharedTerm
