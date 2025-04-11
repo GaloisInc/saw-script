@@ -20,6 +20,8 @@ PairsL = ListSort__rec
 ls1 : ListSort;
 ls1 = LS_Cons (Vec 1 Bool) (LS_Cons (Vec 2 Bool) LS_Nil);
 
+ListSort_foldl
+
 {-
 i.e., arrowsType:
   MyCurry : ListSort -> sort 0 -> sort 0
@@ -57,6 +59,16 @@ UnCurryN2 b =
 
 -}
 
+{-
+DEAD CODE:
+arrowsTypeL : ListSort -> sort 0 -> sort 0;
+arrowsTypeL as b =
+  ListSort__rec (\ (_:ListSort) -> sort 0)
+    b
+    (\ (a:sort 0) (_:ListSort) (rec:sort 0) -> rec -> a )
+    as;
+-}
+{-
 UnCurryN : (ls: ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b;
 UnCurryN =
   ListSort__rec
@@ -69,7 +81,7 @@ UnCurryN =
           --     P(LS_Cons A ls)
           --  == (b: sort 0) -> arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
          -> \(b: sort 0)->
-            \(f: arrowsType (LS_Cons A ls) b)->
+            \(f: arrowsType (LS_Cons A ls))->
             uncurry (PairsL ls) A b (rec (A->b) f)
        );
 
@@ -81,9 +93,13 @@ UnCurryN =
 
 testa : arrowsType ls1 Bool -> PairsL ls1 -> Bool;
 testa = UnCurryN ls1 Bool;
-
+-}
 
 {-
+
+REF:
+  arrowsTypeL [T1,T2] b  ==  (b->T1)->T2
+  arrowsTypeR [T1,T2] b  ==  T1->(T2->b)
 
 uncurry b []         :: b               -> U -> b
 uncurry b [a1]       :: (a1 -> b)       -> (U,a1) -> b
