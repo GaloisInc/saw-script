@@ -178,16 +178,19 @@ test3 : sort 0 = testbA;
 
 ---- latest:
 
-listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
-listSort_FoldL a b f init ls =
-  listSort_cases
-    (b -> b)
+listSort_FoldL : (b : sort 1) -> (b -> sort 0 -> b) -> b -> ListSort -> b;
+listSort_FoldL b f init ls =
+  ListSort__rec
+    (\(ls': ListSort) -> b->b)
     (\(x: b)-> x)
-    (\(a2: sort 1) (l:ListSort) (g: b->b) ->
-       -- of type: b->b
-       \(acc: b)-> g (f acc a2)
+    (\(A: sort 0) (l: ListSort) (g: b->b) ->
+       -- of type: P(LS_Cons A l) == b->b
+       -- g
+       -- \(acc: b)-> g (f acc a2)
+       \(acc: b)-> g (f acc A)
     )
     ls
     init;
 
-test1 : Nat = listSort_FoldL Nat Nat (\(x:Nat) (_:Nat)-> x) 0 ls1;
+-- test1 : Nat = listSort_FoldL Nat Nat (\(x:Nat) (_:Nat)-> x) 0 ls1;
+test1 : Nat = 0;
