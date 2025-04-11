@@ -146,11 +146,11 @@ test-suite test-sawcore
 
   other-modules:
     Tests.CacheTests
+    Tests.Functor
     Tests.Parser
     Tests.Rewriter
     Tests.SharedTerm
     Tests.Simulator
-    Tests.Functor
 
 executable extcore-info
   main-is: extcore-info.hs

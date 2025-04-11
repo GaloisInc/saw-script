@@ -18,7 +18,7 @@ import Test.Tasty.HUnit
 
 import Verifier.SAW.Term.Functor
 
---
+
 -- There are three properties of Term/TermF/FlatTermF that the
 -- Eq, Ord, and Hashable instances are supposed to respect:
 --    1. Comparison is up to alpha equivalence.
@@ -43,7 +43,7 @@ import Verifier.SAW.Term.Functor
 --    - stAppIndex should only be the same for equal terms
 --    - stAppHash t = hash (stAppTermF t)
 --    - and stAppFreeVars can always be empty.
---
+
 
 -- | Construct a shared Term according to expectations
 --   Note: I am playing fast and loose with the indexes
@@ -229,7 +229,6 @@ tests = do
       one = NatLit 1
   testOne 0 unit
   testOne 0 one
-  let _flop _x = seedTwo one one
   seedTwo zero one
   seedTwo one zero
   seedTwo one unit
