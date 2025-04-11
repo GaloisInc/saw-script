@@ -20,8 +20,6 @@ PairsL = ListSort__rec
 ls1 : ListSort;
 ls1 = LS_Cons (Vec 1 Bool) (LS_Cons (Vec 2 Bool) LS_Nil);
 
-ListSort_foldl
-
 {-
 i.e., arrowsType:
   MyCurry : ListSort -> sort 0 -> sort 0
@@ -57,6 +55,49 @@ UnCurryN2 b =
 
    -- ^ NO, each induction step must instantiate 'b' differently!
 
+-}
+
+listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
+listSort_FoldL a b f init ls =
+  listSort_cases
+    (b -> b)
+    (\(x :b)-> x)
+    (\(a: sort 0) (l:ListSort) (f: b->b) ->
+       -- of type: b->b
+       f
+    )
+    ls
+    init;
+
+{-
+listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
+listSort_FoldL a b f init ls =
+  listSort_cases
+    b
+    ls
+    (\(a: sort 0) (l:ListSort) a ->  )
+  (\(x : b)-> x)
+  ls
+  init
+-}
+
+{-
+-- A ListSort with the first n (or all, if n > length) entries removed
+listSortReverse : ListSort -> ListSort;
+listSortReverse ss =
+  Nat__rec
+    (\(_:Nat) -> ListSort -> ListSort)
+    (\(l : ListSort) -> l)
+    (\(_ : Nat) (rec_n' : ListSort -> ListSort) ->
+       (\(l : ListSort)->
+          rec_n' (listSort_cases ListSort
+                    LS_Nil
+                    (\(_:sort 0) (tail:ListSort) (_:ListSort) -> tail)
+                    l
+                 )
+      ))
+    n
+    ss;
 -}
 
 {-
