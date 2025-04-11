@@ -7,11 +7,12 @@ set -e
 WHERE=$(dirname "$0")
 
 # Run "git describe" in directory $1 and wrap the output in Maybe
-# (put the chdir inside so we get Nothing back if it fails)
+# (note: we get Nothing back if cd fails)
 gitdescribe() {
     local output
 
-    output=$(cd $1 && git describe --always --dirty)
+    cd ./$1 && output=$(git describe --always --dirty)
+      # `./` reduces echoing of current directory when CDPATH is set.
     if [ $? != 0 ]; then
         echo Nothing
     else
