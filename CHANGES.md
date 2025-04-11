@@ -1,4 +1,4 @@
-# next next -- TBA
+# next -- TBA
 
 The way git information gets compiled in (so it can be reported with
 e.g. saw --version) has been changed.
@@ -9,9 +9,11 @@ info.
 course.)
 Note that build.sh is in any case the recommended way to build.
 
-# next -- TBA
-
 ## New Features
+
+* Add new SAWScript commands `term_eval` and `term_eval_unint`.
+  These are like `goal_eval` and `goal_eval_unint` proof tactics
+  but work on arbitrary terms rather than proof goals.
 
 * Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
 
