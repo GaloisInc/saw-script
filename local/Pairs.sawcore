@@ -57,18 +57,6 @@ UnCurryN2 b =
 
 -}
 
-listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
-listSort_FoldL a b f init ls =
-  listSort_cases
-    (b -> b)
-    (\(x :b)-> x)
-    (\(a: sort 0) (l:ListSort) (f: b->b) ->
-       -- of type: b->b
-       f
-    )
-    ls
-    init;
-
 {-
 listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
 listSort_FoldL a b f init ls =
@@ -183,6 +171,23 @@ testbR : sort 0 = PairsR ls1;
 testbL : sort 0 = PairsL ls1;
 testbA : sort 0 = arrowsType ls1 Nat;
 
-test1 : sort 0 = testbR;
+-- test1 : sort 0 = testbR;
 test2 : sort 0 = testbL;
 test3 : sort 0 = testbA;
+
+
+---- latest:
+
+listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
+listSort_FoldL a b f init ls =
+  listSort_cases
+    (b -> b)
+    (\(x: b)-> x)
+    (\(a2: sort 1) (l:ListSort) (g: b->b) ->
+       -- of type: b->b
+       \(acc: b)-> g (f acc a2)
+    )
+    ls
+    init;
+
+test1 : Nat = listSort_FoldL Nat Nat (\(x:Nat) (_:Nat)-> x) 0 ls1;
