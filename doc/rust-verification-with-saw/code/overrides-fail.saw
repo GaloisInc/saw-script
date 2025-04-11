@@ -1,0 +1,33 @@
+enable_experimental;
+
+m <- mir_load_module "overrides.linked-mir.json";
+
+let g_even_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x % 2 == 0 }};
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 }});
+};
+
+let g_odd_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  mir_precond {{ x % 2 == 1 }};
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 }});
+};
+
+let f_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 3 }});
+};
+
+g_even_ov <- mir_verify m "overrides::g" [] false g_even_spec z3;
+// g_odd_ov  <- mir_verify m "overrides::g" [] false g_odd_spec  z3;
+mir_verify m "overrides::f" [g_even_ov] false f_spec z3;

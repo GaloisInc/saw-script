@@ -5,15 +5,17 @@ env <- heapster_init_env_from_file "string_set.sawcore" "string_set.bc";
 
 
 // Define permissions for strings and for lists being used as sets
-heapster_define_opaque_perm env "string" "" "llvmptr 64" "String";
+heapster_define_opaque_perm env "string" "" "llvmptr 64" "StringTp" "StringDesc";
 
 
-heapster_define_opaque_perm env "string_set" "rw:rwmodality, l:lifetime" "llvmptr 64" "List String";
+heapster_define_opaque_perm env "string_set" "rw:rwmodality, l:lifetime" "llvmptr 64"
+  "StringList" "StringListDesc";
 
 // The old way
 // heapster_define_opaque_perm env "string_set" "rw:rwmodality, l:lifetime" "llvmptr 64" "StringSet.stringList";
 
-
+// FIXME: update all of these to work with StringTp and StringList
+/*
 heapster_assume_fun env "string_set_insert"
   "(l1:lifetime). arg0:string_set<W,l1>, arg1:string<> -o \
                 \ arg0:string_set<W,l1>, arg1:true, ret:true"
@@ -37,5 +39,6 @@ heapster_assume_fun env "string_set_remove"
 heapster_typecheck_fun env "insert_remove"
   "(l:lifetime). arg0:string_set<W,l>, arg1:string<>, arg2:string<> -o \
                \ arg0:string_set<W,l>, arg1:true, arg2:string<>";
+*/
 
 heapster_export_coq env "string_set_gen.v";

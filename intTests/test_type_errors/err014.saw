@@ -1,0 +1,12 @@
+// Trigger the "Record field names mismatch" message.
+//
+// This is produced by trying to unify two record types with
+// different field names.
+//
+// Here just do a base case of that.
+
+let foo (x: { a : Int }) : { a : Int } = { a = x.a };
+
+let bar : { b : Int } = { b = 3 };
+
+let baz = foo bar;

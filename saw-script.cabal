@@ -1,9 +1,9 @@
 Cabal-version: 2.4
 Name:          saw-script
-Version:       0.9.0.99
+Version:       1.3.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
-Build-type:    Custom
+Build-type:    Simple
 License:       BSD-3-Clause
 License-file:  LICENSE
 
@@ -11,77 +11,47 @@ extra-source-files:
     src/SAWScript/Parser.y
     src/SAWScript/Lexer.x
 
-custom-setup
-  setup-depends:
-      Cabal >= 1.24
-    , base
-    , directory
-    , filepath
-    , process
-
 library
   default-language: Haskell2010
   build-depends:
+
+      -- upstream packages from hackage
       base >= 4.9
-    , aeson >= 2.0 && < 2.1
-    , aig
+    , aeson >= 2.0 && < 2.3
     , array
     , binary
     , bimap
     , bytestring
-    , bv-sized >= 1.0 && < 1.1
+    , cborg-json
     , containers
     , constraints >= 0.6
-    , cryptol
-    , cryptol-saw-core
-    , crucible >= 0.4
-    , crucible-jvm
-    , crucible-llvm >= 0.2
-    , crucible-mir
+    , cryptohash-sha256 >= 0.11.102.1
     , deepseq
+    , directory >= 1.2.4.0
     , either
-    , elf-edit
     , exceptions
     , executable-path
     , extra
-    , directory >= 1.2.4.0
     , fgl
     , filepath
-    , flexdis86
     , free
     , haskeline
-    , heapster-saw
-    , hobbits >= 1.3.1
-    , galois-dwarf >= 0.2.2
+    , indexed-traversable
     , IfElse
-    , jvm-parser
-    , language-sally
     , lens
-    , llvm-pretty >= 0.8
-    , llvm-pretty-bc-parser >= 0.1.3.1
-    , macaw-base
-    , macaw-x86
-    , macaw-symbolic
-    , macaw-x86-symbolic
     , modern-uri >= 0.3.2 && < 0.4
     , mtl >= 2.1
     , old-locale
     , old-time
     , panic
-    , parameterized-utils
     , parsec
     , pretty
     , prettyprinter
     , pretty-show
     , process
     , reflection
-    , rme
-    , saw-core
-    , saw-core-aig
-    , saw-core-coq
-    , saw-core-sbv
-    , saw-core-what4
-    , sbv >= 9.1 && < 9.3
+    , sbv >= 9.1 && < 10.11
+    , serialise
     , split
     , temporary
     , template-haskell
@@ -93,14 +63,53 @@ library
     , unordered-containers
     , utf8-string
     , vector
+    , zenc
+
+      -- galois packages from hackage
+    , bv-sized >= 1.0 && < 1.1
+
+      -- packages in git submodules
+      -- (hobbits is for now actually a source-repository-package)
+    , aig
+    , crucible >= 0.4
+    , crucible-jvm
+    , crucible-llvm >= 0.2
+    , crucible-mir
+    , cryptol
+    , elf-edit
+    , flexdis86
+    , galois-dwarf >= 0.2.2
+    , hobbits >= 1.3.1
+    , jvm-parser
+    , language-sally
+    , llvm-pretty >= 0.8
+    , llvm-pretty-bc-parser >= 0.1.3.1
+    , lmdb-simple
+    , macaw-base
+    , macaw-x86
+    , macaw-symbolic
+    , macaw-x86-symbolic
+    , parameterized-utils
     , what4 >= 0.4
     , what4-transition-system
-    , zenc
+
+      -- internal subpackages in the saw tree
+    , cryptol-saw-core
+    , heapster-saw
+    , rme
+    , saw-core
+    , saw-core-aig
+    , saw-core-coq
+    , saw-core-sbv
+    , saw-core-what4
 
   hs-source-dirs: src
 
   exposed-modules:
+    SAWScript.GitRev
+
     SAWScript.AST
+    SAWScript.ASTUtil
     SAWScript.AutoMatch
     SAWScript.AutoMatch.Interaction
     SAWScript.AutoMatch.ArgMapping
@@ -109,6 +118,8 @@ library
     SAWScript.AutoMatch.LLVM
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
+    SAWScript.Bisimulation
+    SAWScript.Bisimulation.BisimTheorem
     SAWScript.Builtins
     SAWScript.CongruenceClosure
     SAWScript.Exceptions
@@ -126,6 +137,9 @@ library
     SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
+    SAWScript.Search
+    SAWScript.SolverCache
+    SAWScript.SolverVersions
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
@@ -137,15 +151,19 @@ library
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
+    SAWScript.Crucible.Common.ResolveSetupValue
     SAWScript.Crucible.Common.Setup.Builtins
     SAWScript.Crucible.Common.Setup.Type
+    SAWScript.Crucible.Common.Setup.Value
 
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.Boilerplate
     SAWScript.Crucible.LLVM.CrucibleLLVM
+    SAWScript.Crucible.LLVM.FFI
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
     SAWScript.Crucible.LLVM.ResolveSetupValue
+    SAWScript.Crucible.LLVM.Setup.Value
     SAWScript.Crucible.LLVM.Skeleton
     SAWScript.Crucible.LLVM.Skeleton.Builtins
     SAWScript.Crucible.LLVM.X86
@@ -155,8 +173,14 @@ library
     SAWScript.Crucible.JVM.MethodSpecIR
     SAWScript.Crucible.JVM.Override
     SAWScript.Crucible.JVM.ResolveSetupValue
+    SAWScript.Crucible.JVM.Setup.Value
 
     SAWScript.Crucible.MIR.Builtins
+    SAWScript.Crucible.MIR.MethodSpecIR
+    SAWScript.Crucible.MIR.Override
+    SAWScript.Crucible.MIR.ResolveSetupValue
+    SAWScript.Crucible.MIR.Setup.Value
+    SAWScript.Crucible.MIR.TypeShape
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
@@ -167,6 +191,7 @@ library
     SAWScript.Prover.MRSolver.Monad
     SAWScript.Prover.MRSolver.SMT
     SAWScript.Prover.MRSolver.Solver
+    SAWScript.Prover.MRSolver.Evidence
     SAWScript.Prover.MRSolver.Term
     SAWScript.Prover.RME
     SAWScript.Prover.ABC
@@ -204,7 +229,6 @@ executable saw
 
   other-modules:
     Paths_saw_script
-    GitRev
     SAWScript.REPL
     SAWScript.REPL.Command
     SAWScript.REPL.Haskeline
@@ -215,13 +239,13 @@ executable saw
 
   autogen-modules:
     Paths_saw_script
-    GitRev
 
   build-depends:
-      base >= 4
+
+      -- upstream packages from hackage
+      base >= 4.5
     , ansi-terminal
-    , containers
-    , cryptol
+    , containers >= 0.5.8
     , directory
     , either
     , exceptions
@@ -229,12 +253,18 @@ executable saw
     , haskeline
     , mtl
     , QuickCheck
+    , text
     , transformers
-    , saw-script
-    , saw-core
-    , heapster-saw
-    , cryptol-saw-core
+
+      -- packages in git submodules
     , aig
+    , cryptol
+
+      -- internal subpackages in the saw tree
+    , cryptol-saw-core
+    , heapster-saw
+    , saw-core
+    , saw-script
 
   GHC-options: -O2 -Wall -Werror -threaded -fno-ignore-asserts -fno-spec-constr-count -rtsopts
 
@@ -247,7 +277,9 @@ test-suite integration_tests
 
   main-is: IntegrationTest.hs
 
-  build-depends: base
+  build-depends:
+                 -- upstream packages from hackage
+                 base
                , directory
                , filemanip
                , filepath

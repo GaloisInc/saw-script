@@ -32,7 +32,7 @@ import Numeric
 import Numeric.Natural
 import qualified Data.BitVector.Sized as BV
 import System.FilePath
-import GHC.TypeNats
+import GHC.TypeNats (KnownNat, natVal)
 import Data.Functor.Product
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
 import qualified Control.Monad.Fail as Fail
@@ -41,7 +41,6 @@ import qualified Data.Type.RList as RL
 
 import What4.ProgramLoc
 import What4.Partial
-import What4.InterpretedFloatingPoint (X86_80Val(..))
 import What4.Interface (StringLiteral(..))
 import What4.Utils.Word16String (Word16String)
 
@@ -275,7 +274,7 @@ instance Closable ProgramLoc where
 instance Liftable ProgramLoc where
   mbLift = unClosed . mbLift . fmap toClosed
 
--- | Pretty-print a 'Position' with a "short" filename, without the path
+-- | Pretty-print a 'Position' with a \"short\" filename, without the path
 ppShortFileName :: Position -> PP.Doc ann
 ppShortFileName (SourcePos path l c) =
   PP.pretty (takeFileName $ Text.unpack path)
@@ -428,7 +427,7 @@ instance Closable (BadBehavior e) where
 -- instance NuMatchingAny1 e => Liftable (BadBehavior e) where
   -- mbLift = unClosed . mbLift . fmap toClosed
 
--- NOTE: Crucible objects can never contain any Hobbits names, but "proving"
+-- NOTE: Crucible objects can never contain any Hobbits names, but \"proving\"
 -- that would require introspection of opaque types like 'Index' and 'Nonce',
 -- and would also be inefficient, so we just use 'unsafeClose'
 

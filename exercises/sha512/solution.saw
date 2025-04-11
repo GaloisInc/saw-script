@@ -23,7 +23,7 @@ let SHA512_CBLOCK = 128;
 let SHA512_DIGEST_LENGTH = 64;
 
 // Size of the SHA512 context struct
-let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
+let SHA512_CTX_SIZE = llvm_sizeof m (llvm_alias "struct.sha512_state_st");
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,7 +54,7 @@ let SHA512_CTX_SIZE = llvm_sizeof m (llvm_struct "struct.sha512_state_st");
  * through the function, subject to precondition constraints.  For example,
  * if a precondition states that a variable `sha_ptr` is a pointer to an
  * `sha512_state_st` struct:
- *     ctx_ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+ *     ctx_ptr <- llvm_alloc (llvm_alias "struct.sha512_state_st");
  * And the function call description takes `sha_ptr` as an input:
  *     llvm_execute_func [sha_ptr];
  * Then SAW will reason about the function over all possible `sha512_state_st`
@@ -180,7 +180,7 @@ let pointer_to_fresh_sha512_state_st name n = do {
   let state = {{ { h = h, block = (block # zero) : [SHA512_CBLOCK][8], n = `n : [32], sz = sz } }};
 
   // `ptr` is a pointer to a `sha512_state_st` struct
-  ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+  ptr <- llvm_alloc (llvm_alias "struct.sha512_state_st");
   points_to_sha512_state_st_common ptr (h, sz, block, {{ `n : [32]}}) n;
 
   return (state, ptr);
@@ -200,7 +200,7 @@ let points_to_sha512_state_st ptr state num = do {
  */
 let SHA512_Init_spec = do {
   // Precondition: `sha_ptr` is a pointer to a `sha512_state_st` struct
-  sha_ptr <- llvm_alloc (llvm_struct "struct.sha512_state_st");
+  sha_ptr <- llvm_alloc (llvm_alias "struct.sha512_state_st");
 
   // Call function with `sha_ptr`
   llvm_execute_func [sha_ptr];

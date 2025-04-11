@@ -16,12 +16,19 @@ Description:
 
 library
   build-depends:
-    aig,
+
+    -- upstream packages from hackage
     base == 4.*,
     containers,
-    saw-core,
     text,
-    vector
+    vector,
+
+    -- packages in git submodules
+    aig,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Simulator.BitBlast

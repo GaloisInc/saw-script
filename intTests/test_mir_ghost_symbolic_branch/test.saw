@@ -1,0 +1,24 @@
+enable_experimental;
+
+m <- mir_load_module "test.linked-mir.json";
+
+g <- declare_ghost_state "g";
+
+let f_spec = do {
+    x <- mir_fresh_var "x" mir_u32;
+
+    mir_execute_func [mir_term x];
+
+    mir_ghost_value g x;
+};
+
+let g_spec = do {
+    b <- mir_fresh_var "b" mir_bool;
+
+    mir_execute_func [mir_term b];
+
+    mir_ghost_value g ({{ if b then 27 else 42 : [32] }});
+};
+
+f_ov <- mir_unsafe_assume_spec m "test::f" f_spec;
+mir_verify m "test::g" [f_ov] false g_spec z3;

@@ -1,0 +1,27 @@
+// Trigger the message we get when records have the same fields
+// but not the same types.
+//
+// Currently this trips on the first inconsistent field and prints
+// "mismatch of type constructors" on it, which is not particularly
+// friendly.
+
+typedef t1 = {
+   amethyst: Int,
+   moonstone: Int,
+   obsidian: Int,
+   turquoise: Int
+};
+
+typedef t2 = {
+   amethyst: String,
+   moonstone: String,
+   obsidian: String,
+   turquoise: String
+};
+
+
+let x : t1 = { amethyst=3, moonstone=4, obsidian=5, turquoise=6 };
+let f (x: t2) = x.amethyst;
+
+let y = f x;
+

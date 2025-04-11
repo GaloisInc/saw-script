@@ -46,7 +46,7 @@ heapsterRequireName = "heapster.require"
 -- | The monad we use for extracting hints, which just has 'String' errors
 type ExtractM = Except String
 
--- | Extract block hints from calls to `heapster.require` in the Crucible CFG.
+-- | Extract block hints from calls to @heapster.require@ in the Crucible CFG.
 extractHints ::
   forall ghosts args outs blocks init ret.
   PermEnv ->
@@ -147,7 +147,7 @@ extractStmtsHint who env globals tops inputs = loop Ctx.zeroSize
 -- (global) ghost context string and spec string by looking them up
 -- in the global map.
 --
--- Will throw an error if the `require` is malformed (malformed spec strings
+-- Will throw an error if the @require@ is malformed (malformed spec strings
 -- or references out-of-scope values)
 extractHintFromSequence ::
   forall tops ctx rest blocks ret.
@@ -198,7 +198,7 @@ extractHintFromSequence who env globals tops blockIns sz s =
 
 -- | Assemble a Hint
 --
--- Will throw an error if the `require` is malformed (malformed spec strings
+-- Will throw an error if the @require@ is malformed (malformed spec strings
 -- or references out-of-scope values)
 requireArgsToHint ::
   String {-^ A string representing the block in which this call appears (for errors) -} ->
@@ -231,13 +231,12 @@ renameParsedCtx sub ctx = ctx { parsedCtxNames = renamed }
                            Constant (substNames x)) (parsedCtxNames ctx)
     substNames x = fromMaybe x (lookup x sub)
 
--- | Build a susbstitution to apply to block arguments based on the actual arguments
--- provided to a `requires` call, i.e. given
---
--- heapster.require(..., ..., %11, %50)
--- if %11 corresponds to block argument 1 and %50 to block argument 0, with block arg 2
--- unused,
--- then return the substitution [("arg1", "arg0"), ("arg1, arg0"), ("arg2", "arg2")]
+-- | Build a susbstitution to apply to block arguments based on the actual
+-- arguments provided to a @requires@ call, i.e. given
+-- @heapster.require(..., ..., %11, %50)@
+-- if @%11@ corresponds to block argument 1 and @%50@ to block argument 0,
+-- with block arg 2 unused, then return the substitution
+-- @[("arg1", "arg0"), ("arg1, arg0"), ("arg2", "arg2")]@
 buildHintSub ::
   forall block_args.
   CtxRepr block_args ->
@@ -279,7 +278,7 @@ mkBlockEntryHint cfg blockId tops ghosts valPerms  =
     blocks = fmapFC blockInputs $ cfgBlockMap cfg
 
 -- | Like mkArgParsedContext, but with all of the names
--- set to "topi" instead of "argi"
+-- set to \"topi\" instead of \"argi\"
 mkTopParsedCtx :: CruCtx ctx -> ParsedCtx ctx
 mkTopParsedCtx = mkPrefixParsedCtx "top"
 

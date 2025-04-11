@@ -1,8 +1,26 @@
 
 module iter_linked_list where
 
-import Prelude;
+import SpecM;
 
+-- Type description for the List type over a single free variable for a type
+-- description that describes the elements
+ListDesc : TpDesc;
+ListDesc =
+    (Tp_Sum
+       Tp_Unit
+       (Tp_Pair
+          (varKindExpr Kind_Tp 1)
+          (varKindExpr Kind_Tp 0)));
+
+-- The type described by ListDesc
+ListTpF : TpDesc -> sort 0;
+ListTpF T = indElem (unfoldIndTpDesc (envConsElem Kind_Tp T nilTpEnv) ListDesc);
+
+primitive appendList : (T:TpDesc) -> ListTpF T -> ListTpF T -> ListTpF T;
+
+-- FIXME: get the following definitions working
+{-
 List_def : (a:sort 0) -> sort 0;
 List_def a = List a;
 
@@ -61,3 +79,4 @@ transListF a b l1 l2 =
   (\ (_:#()) -> l2)
   (\ (x:a) (_:ListF a #()) (rec:ListF a b) -> ConsF a b x rec)
   l1;
+-}

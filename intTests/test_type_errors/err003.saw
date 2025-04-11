@@ -1,0 +1,8 @@
+
+let bar = do {
+   typedef t = Nonexistent;
+
+   let foo (a: t) = a;
+
+   return 0;
+};

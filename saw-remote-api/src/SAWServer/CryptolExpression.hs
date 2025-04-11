@@ -19,8 +19,7 @@ import Data.Maybe (fromMaybe)
 import Cryptol.Eval (EvalOpts(..))
 import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv)
-import Cryptol.ModuleSystem.Interface (noIfaceParams)
+import Cryptol.ModuleSystem.Env (ModuleEnv, ModContextParams(..))
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
 import Cryptol.Parser.AST ( Expr, PName )
@@ -75,7 +74,7 @@ getTypedTermOfCExp fileReader sc cenv expr =
           let ifDecls = getAllIfaceDecls env
           let range = fromMaybe emptyRange (getLoc re)
           prims <- getPrimMap
-          tcEnv <- genInferInput range prims noIfaceParams ifDecls
+          tcEnv <- genInferInput range prims NoParams ifDecls
           let tcEnv' = tcEnv { inpVars = Map.union (eExtraTypes cenv) (inpVars tcEnv)
                              , inpTSyns = Map.union (eExtraTSyns cenv) (inpTSyns tcEnv)
                              }
@@ -91,7 +90,8 @@ getTypedTermOfCExp fileReader sc cenv expr =
 
 moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =
-  do mapM_ (liftIO . print . pp) warnings
+  do -- TODO: Printing warnings directly to stdout here is questionable (#2129)
+     mapM_ (liftIO . print . pp) warnings
      case result of
        Right (a, me) -> return (a, me)
        Left err      -> Argo.raise $ cryptolError err warnings

@@ -1,0 +1,159 @@
+enable_experimental;
+
+let f_generic_spec (x : Term) = do {
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term x);
+};
+
+let f_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  f_generic_spec x;
+};
+
+let f2_spec = do {
+  let x = {{ 2 : [32] }};
+  f_generic_spec x;
+};
+
+let f3_spec = do {
+  let x = {{ 3 : [32] }};
+  f_generic_spec x;
+};
+
+let g_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x + 1 }});
+};
+
+let g2_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_term {{ 3 : [32] }});
+};
+
+let h_spec = g_spec;
+
+let p_spec_1 = do {
+  x_ptr <- mir_alloc mir_u32;
+  x <- mir_fresh_var "x" mir_u32;
+  mir_points_to x_ptr (mir_term x);
+
+  y_ptr <- mir_alloc mir_u32;
+  y <- mir_fresh_var "y" mir_u32;
+  mir_points_to y_ptr (mir_term y);
+
+  mir_execute_func [x_ptr, y_ptr];
+
+  mir_return (mir_term {{ x + y }});
+};
+
+let p_spec_2 = do {
+  x_ptr <- mir_alloc mir_u32;
+  x <- mir_fresh_var "x" mir_u32;
+  mir_points_to x_ptr (mir_term x);
+
+  mir_execute_func [x_ptr, x_ptr];
+
+  mir_return (mir_term {{ 2 * x }});
+};
+
+let q_spec = p_spec_1;
+
+let side_spec_1 = do {
+  a_ptr <- mir_alloc_mut mir_u32;
+  a <- mir_fresh_var "a" mir_u32;
+  mir_points_to a_ptr (mir_term a);
+
+  mir_execute_func [a_ptr];
+
+  mir_points_to a_ptr (mir_term {{ 0 : [32] }});
+  mir_return (mir_term a);
+};
+
+let side_spec_2 = do {
+  a_ptr <- mir_alloc_mut mir_u32;
+  a <- mir_fresh_var "a" mir_u32;
+  mir_points_to a_ptr (mir_term a);
+
+  mir_execute_func [a_ptr];
+
+  mir_return (mir_term a);
+};
+
+// This spec is erroneous. See the comments below in the "Avoid unsoundness"
+// part of the test.
+let foo_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+
+  mir_execute_func [mir_term x];
+
+  mir_return (mir_term {{ x }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+////////////
+// Basics //
+////////////
+
+f_ov  <- mir_unsafe_assume_spec m "test::f" f_spec;
+f2_ov <- mir_unsafe_assume_spec m "test::f" f2_spec;
+f3_ov <- mir_unsafe_assume_spec m "test::f" f3_spec;
+
+// `g` should fail without an override for `f`...
+fails (
+  mir_verify m "test::g" [] false g_spec z3
+);
+// ...but should succeed with an `f` override.
+mir_verify m "test::g" [f_ov] false g_spec z3;
+// `h` never calls `f`, but it's still fine to redundantly pass an `f` override
+mir_verify m "test::h" [f_ov] false h_spec z3;
+
+// `g2` will succeed with both a generic `f` override as well as a specialized
+// one where the argument and result values are concrete.
+mir_verify m "test::g2" [f_ov] false g2_spec z3;
+mir_verify m "test::g2" [f2_ov] false g2_spec z3;
+mir_verify m "test::g2" [f_ov, f2_ov] false g2_spec z3;
+
+// Overrides that fail to match.
+fails (
+  mir_verify m "test::g" [f3_ov] false g_spec z3
+);
+fails (
+  mir_verify m "test::g2" [f3_ov] false g2_spec z3
+);
+
+//////////////
+// Pointers //
+//////////////
+
+p_ov_1 <- mir_unsafe_assume_spec m "test::p" p_spec_1;
+p_ov_2 <- mir_unsafe_assume_spec m "test::p" p_spec_2;
+
+mir_verify m "test::q" [p_ov_1] false q_spec z3;
+fails (
+  mir_verify m "test::q" [p_ov_2] false q_spec z3
+);
+
+///////////////////////
+// Avoid unsoundness //
+///////////////////////
+
+side_ov_1 <- mir_verify m "test::side_effect" [] false side_spec_1 z3;
+side_ov_2 <- mir_verify m "test::side_effect" [] false side_spec_2 z3;
+
+// This should not verify, as invoking `side_effect` should cause `foo` to
+// always return `0` rather than the argument value.
+fails (
+  mir_verify m "test::foo" [side_ov_1] false foo_spec z3
+);
+// This should not verify, as side_spec_2 underspecifies the mutable
+// allocation `a_ptr` in its postconditions. SAW will catch this when attempting
+// to use side_ov_2 as an override.
+fails (
+  mir_verify m "test::foo" [side_ov_2] false foo_spec z3
+);

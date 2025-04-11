@@ -1,19 +1,14 @@
 
 module rust_data where
 
-import Prelude;
+import SpecM;
 
-unfoldListPermH : (a:sort 0) -> List a -> Either #() (#() * a * List a);
-unfoldListPermH a l =
-  List__rec a (\ (_:List a) -> Either #() (#() * a * List a))
-  (Left #() (#() * a * List a) ())
-  (\ (x:a) (l:List a) (_:Either #() (#() * a * List a)) ->
-     Right #() (#() * a * List a) ((), x, l))
-  l;
+-- A type description for the list type over a type description T contained in
+-- deBruijn index 0 (which is index 1 inside the Tp_Ind constructor)
+ListDesc : TpDesc;
+ListDesc = Tp_Ind (Tp_Sum Tp_Unit (Tp_Pair (Tp_Var 1) (Tp_Var 0)));
 
-foldListPermH : (a:sort 0) -> Either #() (#() * a * List a) -> List a;
-foldListPermH a =
-  either #() (#() * a * List a) (List a)
-         (\ (_ : #()) -> Nil a)
-         (\ (tup : (#() * a * List a)) ->
-            Cons a tup.(2).(1) tup.(2).(2));
+-- Convert ListDesc applied to a type argument given by type description to a
+-- type
+ListDescType : TpDesc -> sort 0;
+ListDescType T = indElem (Tp_Sum Tp_Unit (Tp_Pair T (Tp_Ind (Tp_Sum Tp_Unit (Tp_Pair T (Tp_Var 0))))));

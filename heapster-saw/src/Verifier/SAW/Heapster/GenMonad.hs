@@ -3,6 +3,7 @@
 {-# Language FlexibleInstances, MultiParamTypeClasses #-} -- MonadState
 {-# Language PolyKinds #-} -- gopenBinding
 {-# Language TypeFamilies #-} -- Equality constraints
+{-# Language TypeOperators #-} -- Equality constraints
 {-# Language RankNTypes #-}
 module Verifier.SAW.Heapster.GenMonad (
   -- * Core definitions
@@ -11,13 +12,14 @@ module Verifier.SAW.Heapster.GenMonad (
   gcaptureCC, gmapRet, gabortM, gparallel, startBinding,
   startNamedBinding, gopenBinding, gopenNamedBinding,
   -- * State operations
-  gmodify,
+  gmodify, gput,
   -- * Transformations
   addReader,
   ) where
 
 import Data.Binding.Hobbits ( nuMulti, nuMultiWithElim1, Mb, Name, RAssign )
-import Control.Monad.State ( ap, MonadState(get, put) )
+import Control.Monad ( ap )
+import Control.Monad.State ( MonadState(get, put) )
 import Control.Monad.Trans.Class ( MonadTrans(lift) )
 import Control.Monad.Trans.Reader
 import Data.Proxy
@@ -61,9 +63,9 @@ instance (s1 ~ s2, r1 ~ r2) => MonadTrans (GenStateContT s1 r1 s2 r2) where
 
 -- | Capture the current continuation while preserving the state.
 gcaptureCC :: ((a -> m r1) -> m r2) -> GenStateContT s r1 s r2 m a
-gcaptureCC f = GenStateContT \s k -> f (k s) 
+gcaptureCC f = GenStateContT \s k -> f (k s)
 
--- | Run two generalized monad computations "in parallel" and combine their
+-- | Run two generalized monad computations \"in parallel\" and combine their
 -- results
 gparallel ::
   (m r1 -> m r2 -> m r3) ->

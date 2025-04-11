@@ -12,7 +12,7 @@
 	url = https://github.com/GaloisInc/jvm-parser.git
 [submodule "deps/llvm-pretty"]
 	path = deps/llvm-pretty
-	url = https://github.com/elliottt/llvm-pretty.git
+	url = https://github.com/GaloisInc/llvm-pretty.git
 [submodule "deps/llvm-pretty-bc-parser"]
 	path = deps/llvm-pretty-bc-parser
 	url = https://github.com/GaloisInc/llvm-pretty-bc-parser.git
@@ -42,7 +42,13 @@
 	url = https://github.com/galoisinc/argo
 [submodule "deps/language-rust"]
 	path = deps/language-rust
-	url = https://github.com/harpocrates/language-rust.git
+	url = https://github.com/GaloisInc/language-rust.git
 [submodule "deps/language-sally"]
 	path = deps/language-sally
 	url = https://github.com/GaloisInc/language-sally
+[submodule "deps/lmdb"]
+	path = deps/lmdb
+	url = https://github.com/GaloisInc/lmdb.git
+[submodule "deps/mir-json"]
+	path = deps/mir-json
+	url = https://github.com/GaloisInc/mir-json.git

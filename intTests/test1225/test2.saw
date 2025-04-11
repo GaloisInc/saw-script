@@ -1,0 +1,2 @@
+let x = parse_core_mod "Prelude" " {- -} True";
+print_term x;

@@ -1,0 +1,11 @@
+// This was not allowed even prior to Dec 2024.
+//
+// This case checks what happens if you take a tuple in the wrong
+// monad and bind it to a tuple pattern.
+
+let f x = do {
+   llvm_assert {{ True }};
+   return (x, x);
+};
+
+(a, b) <- f 0;

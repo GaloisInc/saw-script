@@ -35,8 +35,7 @@ RUN mkdir -p ~/.ghcup/bin && \
 # Build and install SAW
 WORKDIR /home/heapster
 # Necessary to deal with SSH URLs in some submodules
-RUN git config --global url."https://github.com/".insteadOf git@github.com: && \
-  git config --global url."https://".insteadOf git://
+RUN git config --global url."https://github.com/".insteadOf git@github.com:
 RUN git clone https://github.com/GaloisInc/saw-script.git && \
   cd saw-script && \
   git checkout ${heapster_commit} && \

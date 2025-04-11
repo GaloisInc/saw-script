@@ -1,0 +1,3 @@
+// Trigger the "Record lookup on non-record argument" message.
+
+let foo (x: Int) = x.nonexistent;

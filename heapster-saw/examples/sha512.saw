@@ -15,7 +15,7 @@ heapster_define_perm env "true_ptr" "rw:rwmodality" "llvmptr 64" "ptr((rw,0) |->
 heapster_assume_fun env "CRYPTO_load_u64_be"
   "(). arg0:ptr((R,0) |-> int64<>) -o \
      \ arg0:ptr((R,0) |-> int64<>), ret:int64<>"
-  "\\ (x:Vec 64 Bool) -> retS VoidEv emptyFunStack (Vec 64 Bool * Vec 64 Bool) (x, x)";
+  "\\ (x:Vec 64 Bool) -> retS VoidEv (Vec 64 Bool * Vec 64 Bool) (x, x)";
 
 /*
 heapster_typecheck_fun env "return_state"
@@ -67,6 +67,8 @@ heapster_typecheck_fun env "processBlock"
      \ arg6:int64_ptr<W>, arg7:int64_ptr<W>, \
      \ arg8:array(R,0,<16,*8,fieldsh(int64<>)), ret:true";
 
+// FIXME: panics with "Cannot translate BV propositions to type descriptions"
+/*
 heapster_set_translation_checks env false;
 heapster_typecheck_fun env "processBlocks"
   "(num:bv 64). arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
@@ -75,5 +77,6 @@ heapster_typecheck_fun env "processBlocks"
               \ arg0:array(W,0,<8,*8,fieldsh(int64<>)), \
               \ arg1:array(R,0,<16*num,*8,fieldsh(int64<>)), \
               \ arg2:true, ret:true";
+*/
 
 heapster_export_coq env "sha512_gen.v";

@@ -1,0 +1,10 @@
+//
+// Exercise failure of the first unify call (via checkExpr) in the
+// Application case of inferExpr. This is the check of the function
+// against (->).
+//
+
+let q = 3;
+let x = q 6;
+
+

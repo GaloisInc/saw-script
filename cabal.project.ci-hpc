@@ -1,0 +1,3 @@
+-- concatenated with cabal.project when run in the CI HPC build
+package saw-script
+  coverage: true

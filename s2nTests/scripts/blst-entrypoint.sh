@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -xe
 
+export IN_SAW_CI=yes
+
 cd /workdir
 ./scripts/install.sh
 cp /saw-bin/cryptol bin/cryptol
@@ -13,6 +15,8 @@ cp /saw-bin/z3-4.8.8 bin/z3
 
 export PATH=/workdir/bin:$PATH
 export CRYPTOLPATH=/workdir/cryptol-specs:/workdir/spec
+export SAW_SOLVER_CACHE_PATH=/saw-cache
+saw --clean-mismatched-versions-solver-cache
 
 abc -h || true
 z3 --version

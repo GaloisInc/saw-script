@@ -1,0 +1,1 @@
+prove abc {{ error "Descriptive error message" : Bit }};

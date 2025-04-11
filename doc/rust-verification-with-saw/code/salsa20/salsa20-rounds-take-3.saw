@@ -1,0 +1,72 @@
+enable_experimental;
+
+m <- mir_load_module "salsa20.linked-mir.json";
+import "Salsa20.cry";
+import "Salsa20Extras.cry";
+
+let STATE_WORDS = 16;
+let BLOCK_SIZE = 64;
+
+let quarter_round_spec = do {
+  a <- mir_fresh_var "a" mir_usize;
+  b <- mir_fresh_var "b" mir_usize;
+  c <- mir_fresh_var "c" mir_usize;
+  d <- mir_fresh_var "d" mir_usize;
+  let indices = {{ [a, b, c, d] }};
+  mir_precond {{    indices == [0, 1, 2, 3]
+                 \/ indices == [5, 6, 7, 4]
+                 \/ indices == [10, 11, 8, 9]
+                 \/ indices == [15, 12, 13, 14]
+                 \/ indices == [0, 4, 8, 12]
+                 \/ indices == [5, 9, 13, 1]
+                 \/ indices == [10, 14, 2, 6]
+                 \/ indices == [15, 3, 7, 11]
+              }};
+  state_ref <- mir_alloc_mut (mir_array STATE_WORDS mir_u32);
+  state_arr <- mir_fresh_var "state" (mir_array STATE_WORDS mir_u32);
+  mir_points_to state_ref (mir_term state_arr);
+
+  mir_execute_func [ mir_term a
+                   , mir_term b
+                   , mir_term c
+                   , mir_term d
+                   , state_ref
+                   ];
+
+  let state_arr' = {{ updates state_arr indices (quarterround (state_arr @@ indices)) }};
+  mir_points_to state_ref (mir_term state_arr');
+};
+
+quarter_round_ov <-
+  mir_unsafe_assume_spec m "salsa20::core#1::quarter_round" quarter_round_spec;
+  // Temporarily commented out to save time:
+  //
+  // mir_verify m "salsa20::core#1::quarter_round" [] false quarter_round_spec z3;
+
+let r_adt num_rounds = mir_find_adt m (str_concat "salsa20::rounds::R" (show num_rounds)) [];
+let phantom_data_adt r = mir_find_adt m "core::marker::PhantomData" [mir_adt r];
+let core_adt r = mir_find_adt m "salsa20::core#1::Core" [mir_adt r];
+
+let rounds_spec num_rounds = do {
+  let r = r_adt num_rounds;
+  let core_adt_inst = core_adt r;
+  self_ref <- mir_alloc_mut (mir_adt core_adt_inst);
+  self_state <- mir_fresh_var "self_state" (mir_array STATE_WORDS mir_u32);
+  let self_rounds = mir_struct_value (phantom_data_adt r) [];
+  let self_val = mir_struct_value core_adt_inst [mir_term self_state, self_rounds];
+  mir_points_to self_ref self_val;
+
+  state_ref <- mir_alloc_mut (mir_array STATE_WORDS mir_u32);
+  state_arr <- mir_fresh_var "state" (mir_array STATE_WORDS mir_u32);
+  mir_points_to state_ref (mir_term state_arr);
+
+  mir_execute_func [self_ref, state_ref];
+
+  mir_points_to self_ref self_val;
+  mir_points_to state_ref (mir_term {{ Salsa20_rounds `num_rounds self_state state_arr }});
+};
+
+rounds_8_spec_ov <-
+  mir_verify m "salsa20::core#1::{impl#0}::rounds::_inst6e4a2d7250998ef7" [quarter_round_ov] false (rounds_spec 8) z3;
+rounds_20_spec_ov <-
+  mir_verify m "salsa20::core#1::{impl#0}::rounds::_instfa33e77d840484a0" [quarter_round_ov] false (rounds_spec 20) z3;

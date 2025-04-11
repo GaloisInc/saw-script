@@ -12,24 +12,39 @@ module SAWScript.Import
   , findAndLoadFile
   ) where
 
+import qualified Data.Text.IO as TextIO (readFile)
+import qualified Data.Text as Text
+import Control.Exception
+import System.Directory
 
+import SAWScript.Position (Pos)
 import SAWScript.AST
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Options
 import SAWScript.Parser
-
-import System.Directory
-import Control.Exception
+import SAWScript.Token (Token)
 
 loadFile :: Options -> FilePath -> IO [Stmt]
 loadFile opts fname = do
   printOutLn opts Info $ "Loading file " ++ show fname
-  ftext <- readFile fname
-  either throwIO return (parseFile fname ftext)
+  ftext <- TextIO.readFile fname
+  let (tokens, optmsg) = lexSAW fname ftext
+  case optmsg of
+      Nothing -> return ()
+      Just (vrb, pos, txt) -> do
+          -- XXX: the print functions should take care of printing the position
+          -- (clean this up when we clean out the printing infrastructure)
+          let txt' = show pos ++ ": " ++ Text.unpack txt
+          -- XXX: the print functions should also take care of exiting on an error
+          -- (immediately or later). For now, throw errors and print anything else.
+          case vrb of
+              Error -> throwIO $ userError txt'
+              _ -> printOutLn opts vrb txt'
+  either throwIO return (parseFile tokens)
 
-parseFile :: FilePath -> String -> Either ParseError [Stmt]
-parseFile fname input =
-  case parseModule (lexSAW fname input) of
+parseFile :: [Token Pos] -> Either ParseError [Stmt]
+parseFile tokens = do
+  case parseModule tokens of
     Left err -> Left err
     Right stmts -> Right stmts
 

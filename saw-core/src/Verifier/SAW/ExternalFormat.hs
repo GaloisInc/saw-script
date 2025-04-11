@@ -17,7 +17,9 @@ module Verifier.SAW.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
-import Control.Monad.State.Strict as State
+import Control.Monad (forM)
+import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans.Class (MonadTrans(..))
 #if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
 #endif
@@ -221,7 +223,7 @@ scReadExternal sc input =
          tf <- parse tokens
          t <- lift $ scTermF sc tf
          (ts, nms, vs) <- State.get
-         put (Map.insert i t ts, nms, vs)
+         State.put (Map.insert i t ts, nms, vs)
     go [] = pure () -- empty lines are ignored
 
     readM :: forall a. Read a => String -> ReadM a

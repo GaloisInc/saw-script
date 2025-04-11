@@ -1,0 +1,29 @@
+/* Test the prove_bisim command with a compositional circuit */
+
+import "Comp.cry";
+
+enable_experimental;
+
+// Prove 'andImp' and 'andSpec' simulate each other
+and_res <- prove_bisim z3
+                       []
+                       {{ andStateRel }}
+                       {{ andOutputRel }}
+                       {{ andImp }}
+                       {{ andSpec }};
+
+// Prove 'nandImp' and 'nandSpec' simulate each other, using 'and_res' in the
+// process.
+nand_res <- prove_bisim (do {
+    unfolding ["nandImp", "nandSpec"];
+    w4_unint_z3 ["andImp", "andSpec" ];
+  })
+  [and_res] {{ \x -> nandStateRel x }} {{ \x -> nandOutputRel x }} {{ nandImp }} {{ nandSpec }};
+
+// Test using theorem that doesn't apply
+prove_bisim z3
+            [nand_res]
+            {{ andStateRel }}
+            {{ andOutputRel }}
+            {{ andImp }}
+            {{ andSpec }};

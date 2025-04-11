@@ -60,10 +60,10 @@ import qualified SAWScript.Crucible.Common as Common
 
 import SAWScript.Yosys.Utils
 import SAWScript.Yosys.IR
-import SAWScript.Yosys.Netgraph
 import SAWScript.Yosys.State
 import SAWScript.Yosys.Theorem
 import SAWScript.Yosys.TransitionSystem
+import SAWScript.Yosys.Netgraph
 
 --------------------------------------------------------------------------------
 -- ** Building the module graph from Yosys IR
@@ -82,7 +82,7 @@ yosysIRModgraph ir =
     moduleToNode :: (Text, Module) -> (Module, Text, [Text])
     moduleToNode (nm, m) = (m, nm, deps)
       where
-        deps = view cellType <$> Map.elems (m ^. moduleCells)
+        deps = Text.pack . show . view cellType <$> Map.elems (m ^. moduleCells)
     nodes = moduleToNode <$> Map.assocs (ir ^. yosysModules)
     (_modgraphGraph, _modgraphNodeFromVertex, _modgraphVertexFromKey)
       = Graph.graphFromEdges nodes
@@ -251,5 +251,5 @@ yosys_verify_sequential_sally ::
   TopLevel ()
 yosys_verify_sequential_sally s path q fixed = do
   sc <- getSharedContext
-  sym <- liftIO $ Common.newSAWCoreExprBuilder sc
+  sym <- liftIO $ Common.newSAWCoreExprBuilder sc False
   queryModelChecker sym sc s path q . Set.fromList $ Text.pack <$> fixed

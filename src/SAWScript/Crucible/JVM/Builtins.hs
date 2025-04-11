@@ -44,20 +44,27 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_alloc_object
     , jvm_alloc_array
     , jvm_setup_with_tag
+    , jvm_ghost_value
+    , jvm_equal
     ) where
 
 import           Control.Lens
 
 import qualified Control.Monad.Catch as X
-import           Control.Monad.State
+import           Control.Monad (foldM, forM, forM_, guard, unless, when)
+import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Reader (runReaderT)
+import           Control.Monad.State (MonadState(..), StateT(..), execStateT, gets)
 import qualified Control.Monad.State.Strict as Strict
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
 import           Data.List
+import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe, isNothing)
@@ -67,7 +74,6 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector as V
-import           Data.Void (absurd)
 import           Prettyprinter
 import           System.IO
 
@@ -109,6 +115,7 @@ import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Builtins (ghost_value)
 import SAWScript.Exceptions
 import SAWScript.Panic
 import SAWScript.Proof
@@ -219,7 +226,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      let jc = cc^.jccJVMContext
 
      pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_verify_prestate" pos
+     let loc = SS.toW4Loc "_SAW_jvm_verify" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
@@ -277,7 +284,7 @@ jvm_unsafe_assume_spec cls nm setup =
      pos <- getPosition
      -- cls' is either cls or a (transitive) superclass of cls
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
-     let loc = SS.toW4Loc "_SAW_assume_spec" pos
+     let loc = SS.toW4Loc "_SAW_JVM_unsafe_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$>
              execStateT (runReaderT (runJVMSetupM setup) Setup.makeCrucibleSetupRO) st0
@@ -375,7 +382,7 @@ verifyPrestate cc mspec globals0 =
      let tyenv = MS.csAllocations mspec
      let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-     let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
+     let prestateLoc = W4.mkProgramLoc "_SAW_JVM_verifyPrestate" W4.InternalPos
      W4.setCurrentProgramLoc sym prestateLoc
 
      --let cvar = CJ.dynamicClassTable (cc^.jccJVMContext)
@@ -412,7 +419,8 @@ verifyPrestate cc mspec globals0 =
      (env, globals1) <- runStateT (Map.traverseWithKey doAlloc preallocs) globals0'
 
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
-     cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
+     (globals3, cs) <-
+       setupPrestateConditions mspec cc env globals2 (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
 
      -- Check the type of the return setup value
@@ -432,7 +440,7 @@ verifyPrestate cc mspec globals0 =
               ]
        (Nothing, _) -> return ()
 
-     return (args, cs, env, globals2)
+     return (args, cs, env, globals3)
 
 -- | Check two Types for register compatibility.
 registerCompatible :: J.Type -> J.Type -> Bool
@@ -537,32 +545,43 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
         _ ->
           panic "setupPrePointsTo" ["invalid invariant", "jvm_modifies in pre-state"]
 
--- | Collects boolean terms that should be assumed to be true.
+-- | Sets up globals (ghost variable), and collects boolean terms
+-- that should be assumed to be true.
 setupPrestateConditions ::
   MethodSpec ->
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
+  Crucible.SymGlobalState Sym ->
   [SetupCondition] ->
-  IO [Crucible.LabeledPred Term AssumptionReason]
+  IO ( Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term AssumptionReason]
+     )
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    aux acc [] = return acc
+    aux acc globals [] = return (globals, acc)
 
-    aux acc (MS.SetupCond_Equal loc val1 val2 : xs) =
+    aux acc globals (MS.SetupCond_Equal loc val1 val2 : xs) =
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (loc, "equality precondition")
-         aux (lp:acc) xs
+         aux (lp:acc) globals xs
 
-    aux acc (MS.SetupCond_Pred loc tm : xs) =
+    aux acc globals (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (loc, "precondition") in
-      aux (lp:acc) xs
+      aux (lp:acc) globals xs
 
-    aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
+    aux acc globals (MS.SetupCond_Ghost _md var val : xs) =
+      case val of
+        TypedTerm (TypedTermSchema sch) tm ->
+          aux acc (Crucible.insertGlobal var (sch,tm) globals) xs
+        TypedTerm tp _ ->
+          fail $ unlines
+            [ "Setup term for global variable expected to have Cryptol schema type, but got"
+            , show (MS.ppTypedTermType tp)
+            ]
 
 --------------------------------------------------------------------------------
 
@@ -594,12 +613,12 @@ registerOverride ::
   Crucible.SimContext (SAWCruciblePersonality Sym) Sym CJ.JVM ->
   W4.ProgramLoc ->
   IORef MetadataMap {- ^ metadata map -} ->
-  [MethodSpec] ->
+  NonEmpty MethodSpec ->
   Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc mdMap cs =
   do let sym = cc^.jccSym
      let jc = cc^.jccJVMContext
-     let c0 = head cs
+     let c0 = NE.head cs
      let method = c0 ^. MS.csMethod
 
      sc <- saw_ctx <$> liftIO (sawCoreState sym)
@@ -620,6 +639,8 @@ registerOverride opts cc _ctx top_loc mdMap cs =
 
 --------------------------------------------------------------------------------
 
+-- | Simulate a JVM function with Crucible as part of a 'jvm_verify' command,
+-- making sure to install any overrides that the user supplies.
 verifySimulate ::
   Options ->
   JVMCrucibleContext ->
@@ -655,7 +676,13 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat m
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
-          let simctx = CJ.jvmSimContext bak halloc stdout jc verbosity SAWCruciblePersonality
+          -- TODO: Use crucible-jvm's jvmSimContext here (instead of manually
+          -- calling mkDelayedBindings/initSimContext), once
+          -- https://github.com/GaloisInc/crucible/issues/1128 has been fixed
+          -- upstream.
+          let bindings = CJ.mkDelayedBindings jc verbosity
+          let simctx = Crucible.initSimContext bak intrinsics halloc stdout
+                         bindings CJ.jvmExtensionImpl SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
@@ -739,7 +766,7 @@ verifyPoststate cc mspec env0 globals ret mdMap =
   jccWithBackend cc $ \bak ->
   do opts <- getOptions
      sc <- getSharedContext
-     poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
+     poststateLoc <- SS.toW4Loc "_SAW_JVM_verifyPoststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      -- This discards all the obligations generated during
@@ -817,7 +844,7 @@ setupCrucibleContext jclass =
      cb <- getJavaCodebase
      sc <- getSharedContext
      pathSatSolver <- gets rwPathSatSolver
-     sym <- io $ newSAWCoreExprBuilder sc
+     sym <- io $ newSAWCoreExprBuilder sc False
      bak <- io $ newSAWCoreBackend pathSatSolver sym
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
@@ -1416,11 +1443,37 @@ jvm_setup_with_tag ::
 jvm_setup_with_tag tag m =
   JVMSetupM (Setup.setupWithTag tag (runJVMSetupM m))
 
+jvm_ghost_value ::
+  MS.GhostGlobal ->
+  TypedTerm ->
+  JVMSetupM ()
+jvm_ghost_value ghost val = JVMSetupM $
+  ghost_value ghost val
+
+jvm_equal :: SetupValue -> SetupValue -> JVMSetupM ()
+jvm_equal val1 val2 =
+  JVMSetupM $
+  do loc <- getW4Position "jvm_equal"
+     st <- get
+     let cc = st ^. Setup.csCrucibleContext
+         env = MS.csAllocations (st ^. Setup.csMethodSpec)
+         nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ty1 <- typeOfSetupValue cc env nameEnv val1
+     ty2 <- typeOfSetupValue cc env nameEnv val2
+
+     let b = registerCompatible ty1 ty2
+     unless b $ throwCrucibleSetup loc $ unlines
+       [ "Incompatible types when asserting equality:"
+       , show ty1
+       , show ty2
+       ]
+     Setup.crucible_equal loc val1 val2
+
 --------------------------------------------------------------------------------
 
 -- | Sort a list of things and group them into equivalence classes.
 groupOn ::
   Ord b =>
   (a -> b) {- ^ equivalence class projection -} ->
-  [a] -> [[a]]
-groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)
+  [a] -> [NonEmpty a]
+groupOn f = NE.groupBy ((==) `on` f) . sortBy (compare `on` f)

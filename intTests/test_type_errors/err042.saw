@@ -1,0 +1,7 @@
+//
+// Trigger the "Not a monomorphic type" message associated with
+// polymorphic binds.
+//
+// In this test, trigger it at the top level.
+
+_ <- return [];

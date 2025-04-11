@@ -18,6 +18,7 @@ module SAWScript.Proof
   , splitConj
   , splitDisj
   , unfoldProp
+  , unfoldFixOnceProp
   , simplifyProp
   , hoistIfsInProp
   , evalProp
@@ -63,7 +64,7 @@ module SAWScript.Proof
   , cofinSetMember
 
   , TheoremDB
-  , newTheoremDB
+  , emptyTheoremDB
   , reachableTheorems
 
   , Theorem
@@ -129,9 +130,11 @@ module SAWScript.Proof
   , predicateToSATQuery
   ) where
 
+import           Control.Monad (foldM, forM_, unless)
 import qualified Control.Monad.Fail as F
-import           Control.Monad.Except
-import           Data.IORef
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
+import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
 import           Data.List
 import           Data.Maybe (fromMaybe)
@@ -167,6 +170,7 @@ import What4.ProgramLoc (ProgramLoc)
 
 import SAWScript.Position
 import SAWScript.Prover.SolverStats
+import qualified SAWScript.Prover.MRSolver.Evidence as MRSolver
 import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.TermModel as TM
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
@@ -292,7 +296,7 @@ splitImpl sc (Prop p)
 
   -- Handle the case of (H1 -> H2), where H1 and H2 are in Prop
   | Just (_nm, arg, c) <- asPi p
-  , looseVars c == emptyBitSet -- make sure this is a nondependent Pi (AKA arrow type)
+  , termIsClosed c -- make sure this is a nondependent Pi (AKA arrow type)
   = termToMaybeProp sc arg >>= \case
       Nothing -> return Nothing
       Just h  -> return (Just (h, Prop c))
@@ -375,6 +379,13 @@ unfoldProp sc unints (Prop tm) =
   do tm' <- scUnfoldConstantSet sc True unints tm
      return (Prop tm')
 
+-- | Unfold one time all the fixpoint constants appearing in the proposition
+-- whose VarIndex is found in the given set.
+unfoldFixOnceProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
+unfoldFixOnceProp sc unints (Prop tm) =
+  do tm' <- scUnfoldOnceFixConstantSet sc True unints tm
+     return (Prop tm')
+
 -- | Rewrite the proposition using the provided Simpset
 simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
 simplifyProp sc ss (Prop tm) =
@@ -455,15 +466,15 @@ unbindAndFreshenProp sc (Prop p0) = loop [] [] p0
 -- | Evaluate the given proposition by round-tripping
 --   through the What4 formula representation.  This will
 --   perform a variety of simplifications and rewrites.
-evalProp :: SharedContext -> Set VarIndex -> Prop -> IO Prop
-evalProp sc unints p =
+evalProp :: SharedContext -> Bool -> Set VarIndex -> Prop -> IO Prop
+evalProp sc what4PushMuxOps unints p =
   do (ecs, body) <- unbindAndFreshenProp sc p
      body' <-
        case asEqTrue body of
          Just t -> pure t
          Nothing -> fail ("goal_eval: expected EqTrue\n" ++ scPrettyTerm defaultPPOpts (unProp p))
 
-     sym <- Common.newSAWCoreExprBuilder sc
+     sym <- Common.newSAWCoreExprBuilder sc what4PushMuxOps
      st <- Common.sawCoreState sym
      (_names, (_mlabels, p')) <- W4Sim.w4Eval sym st sc mempty unints body'
      t1 <- W4Sim.toSC sym st p'
@@ -902,25 +913,21 @@ data Theorem =
 data TheoremDB =
   TheoremDB
   -- TODO, maybe this should be a summary or something simpler?
-  { theoremMap :: IORef (Map.Map TheoremNonce Theorem)
+  { theoremMap :: Map.Map TheoremNonce Theorem
   }
 
-newTheoremDB :: IO TheoremDB
-newTheoremDB = TheoremDB <$> newIORef mempty
+emptyTheoremDB :: TheoremDB
+emptyTheoremDB = TheoremDB mempty
 
-recordTheorem :: TheoremDB -> Theorem -> IO Theorem
-recordTheorem db thm@Theorem{ _thmNonce = n } =
-  do modifyIORef (theoremMap db) (Map.insert n thm)
-     return thm
+recordTheorem :: TheoremDB -> Theorem -> TheoremDB
+recordTheorem db thm@Theorem{ _thmNonce = n } = TheoremDB (Map.insert n thm (theoremMap db))
 
 -- | Given a set of root values, find all the theorems in this database
 --   that are transitively used in the proofs of those theorems.
 --   This function will panic if any of the roots or reachable theorems
 --   are not found in the database.
-reachableTheorems :: TheoremDB -> Set TheoremNonce -> IO (Map TheoremNonce Theorem)
-reachableTheorems db roots =
-  do m <- readIORef (theoremMap db)
-     pure $! Set.foldl' (loop m) mempty roots
+reachableTheorems :: TheoremDB -> Set TheoremNonce -> Map TheoremNonce Theorem
+reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots
 
  where
    loop m visited curr
@@ -942,11 +949,11 @@ reachableTheorems db roots =
 --   does not totally guarantee the theorem is true, as it does
 --   not verify any solver-provided proofs, and it accepts admitted
 --   propositions and quickchecked propositions as valid.
-validateTheorem :: SharedContext -> TheoremDB -> Theorem -> IO ()
+validateTheorem :: SharedContext -> Bool -> TheoremDB -> Theorem -> IO ()
 
-validateTheorem sc db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
-   do hyps <- Map.keysSet <$> readIORef (theoremMap db)
-      (deps,_) <- checkEvidence sc e p
+validateTheorem sc what4PushMuxOps db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
+   do let hyps = Map.keysSet (theoremMap db)
+      (deps,_) <- checkEvidence sc what4PushMuxOps e p
       unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep hyps)
              (fail $ unlines ["Theorem failed to declare its dependencies correctly"
                              , show deps, show thmDep ])
@@ -1041,6 +1048,12 @@ data Evidence
     --   evidence is used to check the modified sequent.
   | UnfoldEvidence !(Set VarIndex) !Evidence
 
+    -- | This type of evidence is used to modify a sequent via unfolding fixpoint
+    --   constant definitions once.  The sequent is modified by unfolding
+    --   constants identified via the given set of @VarIndex@; then the provided
+    --   evidence is used to check the modified sequent.
+  | UnfoldFixOnceEvidence !(Set VarIndex) !Evidence
+
     -- | This type of evidence is used to modify a sequent via evaluation
     --   into the the What4 formula representation. During evaluation, the
     --   constants identified by the given set of @VarIndex@ are held
@@ -1076,10 +1089,10 @@ data Evidence
     --   sequent calculus axiom, which connects a hypothesis to a conclusion.
   | AxiomEvidence
 
-    -- | FIXME: This is a placeholder for evidence that will be generated by
-    --   MRSolver - currently this trivial evidence is given whenever MRSolver
-    --   completes without error (see 'proveRefinement' in @Builtins.hs@)
-  | MrSolverEvidence
+    -- | Evidence generated by running the @mrsolver@ tactic.
+    --   FIXME: Add a @[Evidence]@ here when MRSolver is updated to support
+    --   returning unsolved goals.
+  | MrSolverEvidence !(MRSolver.MREvidence TheoremNonce)
 
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
@@ -1148,24 +1161,26 @@ structuralEvidence _sqt (StructuralEvidence sqt' e) = StructuralEvidence sqt' e
 structuralEvidence sqt e = StructuralEvidence sqt e
 
 -- | Construct a theorem directly via a proof term.
-proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO Theorem
+proofByTerm :: SharedContext -> TheoremDB -> Term -> Pos -> Text -> IO (Theorem, TheoremDB)
 proofByTerm sc db prf loc rsn =
   do ty <- scTypeOf sc prf
      p  <- termToProp sc ty
      n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp      = p
-       , _thmStats     = mempty
-       , _thmEvidence  = ProofTerm prf
-       , _thmLocation  = loc
-       , _thmProgramLoc = Nothing
-       , _thmReason    = rsn
-       , _thmNonce     = n
-       , _thmDepends   = mempty
-       , _thmElapsedTime = 0
-       , _thmSummary = ProvedTheorem mempty
-       }
+     let thm =
+          Theorem
+          { _thmProp      = p
+          , _thmStats     = mempty
+          , _thmEvidence  = ProofTerm prf
+          , _thmLocation  = loc
+          , _thmProgramLoc = Nothing
+          , _thmReason    = rsn
+          , _thmNonce     = n
+          , _thmDepends   = mempty
+          , _thmElapsedTime = 0
+          , _thmSummary = ProvedTheorem mempty
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | Construct a theorem directly from a proposition and evidence
 --   for that proposition.  The evidence will be validated to
@@ -1173,6 +1188,7 @@ proofByTerm sc db prf loc rsn =
 --   error will be raised.
 constructTheorem ::
   SharedContext ->
+  Bool ->
   TheoremDB ->
   Prop ->
   Evidence ->
@@ -1180,37 +1196,39 @@ constructTheorem ::
   Maybe ProgramLoc ->
   Text ->
   NominalDiffTime ->
-  IO Theorem
-constructTheorem sc db p e loc ploc rsn elapsed =
-  do (deps,sy) <- checkEvidence sc e p
+  IO (Theorem, TheoremDB)
+constructTheorem sc what4PushMuxOps db p e loc ploc rsn elapsed =
+  do (deps,sy) <- checkEvidence sc what4PushMuxOps e p
      n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp  = p
-       , _thmStats = mempty
-       , _thmEvidence = e
-       , _thmLocation = loc
-       , _thmProgramLoc = ploc
-       , _thmReason   = rsn
-       , _thmNonce    = n
-       , _thmDepends  = deps
-       , _thmElapsedTime = elapsed
-       , _thmSummary  = sy
-       }
+     let thm =
+          Theorem
+          { _thmProp  = p
+          , _thmStats = mempty
+          , _thmEvidence = e
+          , _thmLocation = loc
+          , _thmProgramLoc = ploc
+          , _thmReason   = rsn
+          , _thmNonce    = n
+          , _thmDepends  = deps
+          , _thmElapsedTime = elapsed
+          , _thmSummary  = sy
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 
 -- | Given a theorem with quantified variables, build a new theorem that
 --   specializes the leading quantifiers with the given terms.
 --   This will fail if the given terms to not match the quantifier structure
 --   of the given theorem.
-specializeTheorem :: SharedContext -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO Theorem
-specializeTheorem _sc _db _loc _rsn thm [] = return thm
-specializeTheorem sc db loc rsn thm ts =
+specializeTheorem :: SharedContext -> Bool -> TheoremDB -> Pos -> Text -> Theorem -> [Term] -> IO (Theorem, TheoremDB)
+specializeTheorem _sc _what4PushMuxOps db _loc _rsn thm [] = return (thm, db)
+specializeTheorem sc what4PushMuxOps db loc rsn thm ts =
   do res <- specializeProp sc (_thmProp thm) ts
      case res of
        Left err -> fail (unlines (["specialize_theorem: failed to specialize"] ++ TC.prettyTCError err))
        Right p' ->
-         constructTheorem sc db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
+         constructTheorem sc what4PushMuxOps db p' (ApplyEvidence thm (map Left ts)) loc Nothing rsn 0
 
 specializeProp :: SharedContext -> Prop -> [Term] -> IO (Either TC.TCError Prop)
 specializeProp sc (Prop p0) ts0 = TC.runTCM (loop p0 ts0) sc Nothing []
@@ -1231,22 +1249,24 @@ admitTheorem ::
   Prop ->
   Pos ->
   Text ->
-  IO Theorem
+  IO (Theorem, TheoremDB)
 admitTheorem db msg p loc rsn =
   do n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp        = p
-       , _thmStats       = solverStats "ADMITTED" (propSize p)
-       , _thmEvidence    = Admitted msg loc (propToSequent p)
-       , _thmLocation    = loc
-       , _thmProgramLoc  = Nothing
-       , _thmReason      = rsn
-       , _thmNonce       = n
-       , _thmDepends     = mempty
-       , _thmElapsedTime = 0
-       , _thmSummary     = AdmittedTheorem msg
-       }
+     let thm =
+          Theorem
+          { _thmProp        = p
+          , _thmStats       = solverStats "ADMITTED" (propSize p)
+          , _thmEvidence    = Admitted msg loc (propToSequent p)
+          , _thmLocation    = loc
+          , _thmProgramLoc  = Nothing
+          , _thmReason      = rsn
+          , _thmNonce       = n
+          , _thmDepends     = mempty
+          , _thmElapsedTime = 0
+          , _thmSummary     = AdmittedTheorem msg
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | Construct a theorem that an external solver has proved.
 solverTheorem ::
@@ -1256,22 +1276,24 @@ solverTheorem ::
   Pos ->
   Text ->
   NominalDiffTime ->
-  IO Theorem
+  IO (Theorem, TheoremDB)
 solverTheorem db p stats loc rsn elapsed =
   do n  <- freshNonce globalNonceGenerator
-     recordTheorem db
-       Theorem
-       { _thmProp      = p
-       , _thmStats     = stats
-       , _thmEvidence  = SolverEvidence stats (propToSequent p)
-       , _thmLocation  = loc
-       , _thmReason    = rsn
-       , _thmProgramLoc = Nothing
-       , _thmNonce     = n
-       , _thmDepends   = mempty
-       , _thmElapsedTime = elapsed
-       , _thmSummary = ProvedTheorem stats
-       }
+     let thm =
+          Theorem
+          { _thmProp      = p
+          , _thmStats     = stats
+          , _thmEvidence  = SolverEvidence stats (propToSequent p)
+          , _thmLocation  = loc
+          , _thmReason    = rsn
+          , _thmProgramLoc = Nothing
+          , _thmNonce     = n
+          , _thmDepends   = mempty
+          , _thmElapsedTime = elapsed
+          , _thmSummary = ProvedTheorem stats
+          }
+     let db' = recordTheorem db thm
+     pure (thm, db')
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
 -- some metadata.
@@ -1455,7 +1477,7 @@ normalizeConcl sc p =
          case asPi t of
            Just (_nm, arg, body)
              -- check that this is non-dependent Pi (AKA arrow type)
-             | looseVars body == emptyBitSet ->
+             | termIsClosed body ->
              termToMaybeProp sc arg >>= \case
                Nothing -> return (RawSequent [] [p])
                Just h  ->
@@ -1507,8 +1529,9 @@ normalizeConclBoolCommit sc b =
 
 -- | Verify that the given evidence in fact supports the given proposition.
 --   Returns the identifiers of all the theorems depended on while checking evidence.
-checkEvidence :: SharedContext -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
-checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
+checkEvidence :: SharedContext -> Bool -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
+checkEvidence sc what4PushMuxOps = \e p -> do
+                              nenv <- scGetNamingEnv sc
                               check nenv e (propToSequent p)
 
   where
@@ -1520,7 +1543,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
     -- and the given evidence must match the expected prop.
     checkApply nenv mkSqt (Prop p) (Right e:es)
       | Just (_lnm, tp, body) <- asPi p
-      , looseVars body == emptyBitSet
+      , termIsClosed body
       = do (d1,sy1) <- check nenv e . mkSqt =<< termToProp sc tp
            (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
            return (Set.union d1 d2, sy1 <> sy2, p')
@@ -1642,6 +1665,10 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
         do sqt' <- traverseSequentWithFocus (unfoldProp sc vars) sqt
            check nenv e' sqt'
 
+      UnfoldFixOnceEvidence vars e' ->
+        do sqt' <- traverseSequentWithFocus (unfoldFixOnceProp sc vars) sqt
+           check nenv e' sqt'
+
       NormalizePropEvidence opqueSet e' ->
         do modmap <- scGetModuleMap sc
            sqt' <- traverseSequentWithFocus (normalizeProp sc modmap opqueSet) sqt
@@ -1658,7 +1685,7 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
            check nenv e' sqt'
 
       EvalEvidence vars e' ->
-        do sqt' <- traverseSequentWithFocus (evalProp sc vars) sqt
+        do sqt' <- traverseSequentWithFocus (evalProp sc what4PushMuxOps vars) sqt
            check nenv e' sqt'
 
       ConversionEvidence sqt' e' ->
@@ -1696,9 +1723,16 @@ checkEvidence sc = \e p -> do nenv <- scGetNamingEnv sc
              ]
            return (mempty, ProvedTheorem mempty)
 
-      MrSolverEvidence ->
-        -- TODO Fill this in when we have evidence for MrSolver
-        return (mempty, ProvedTheorem mempty)
+      MrSolverEvidence mre ->
+        case sequentState sqt of
+          ConclFocus _p _mkSqt ->
+            do (d, stats) <- MRSolver.checkMREvidence mre
+               -- FIXME: Check that p actually does match the MRSolverEvidence
+               return (d, ProvedTheorem stats)
+          _ -> fail $ unlines $
+                    [ "MRSolver evidence requires a conclusion-focused sequent"
+                    , prettySequent defaultPPOpts nenv sqt
+                    ]
 
       CutEvidence p ehyp egl ->
         do d1 <- check nenv ehyp (addHypothesis p sqt)
@@ -1782,20 +1816,22 @@ finishProof ::
   ProofState ->
   Bool {- ^ should we record the theorem in the database? -} ->
   Bool {- ^ do we need to normalize the sequent to match the final goal ? -} ->
-  IO ProofResult
+  Bool {- ^ If 'True', push certain @ExprBuilder@ operations (e.g., @zext@) down
+            to the branches of @ite@ expressions -} ->
+  IO (ProofResult, TheoremDB)
 finishProof sc db conclProp
     ps@(ProofState gs (concl,loc,ploc,rsn) stats _ checkEv start)
-    recordThm useSequentGoals =
+    recordThm useSequentGoals what4PushMuxOps =
   case gs of
     [] ->
       do e <- checkEv []
          let e' = if useSequentGoals
                    then NormalizeSequentEvidence concl e
                    else e
-         (deps,sy) <- checkEvidence sc e' conclProp
+         (deps,sy) <- checkEvidence sc what4PushMuxOps e' conclProp
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
-         thm <- (if recordThm then recordTheorem db else return)
+         let theorem =
                    Theorem
                    { _thmProp = conclProp
                    , _thmStats = stats
@@ -1808,9 +1844,10 @@ finishProof sc db conclProp
                    , _thmElapsedTime = diffUTCTime end start
                    , _thmSummary = sy
                    }
-         pure (ValidProof stats thm)
+         let db' = if recordThm then recordTheorem db theorem else db
+         pure (ValidProof stats theorem, db')
     _ : _ ->
-         pure (UnfinishedProof ps)
+         pure (UnfinishedProof ps, db)
 
 -- | A type describing counterexamples.
 type CEX = [(ExtCns Term, FirstOrderValue)]
@@ -1947,7 +1984,7 @@ sequentToSATQuery sc unintSet sqt =
                        body' <- instantiateVar sc 0 etm body
                        processUnivAssert mmap ((ec,fot):vars) xs body'
                   Nothing
-                    | looseVars body == emptyBitSet ->
+                    | termIsClosed body ->
                       case asEqTrue tp' of
                         Just x  -> processUnivAssert mmap vars (x:xs) body
                         Nothing ->
@@ -1980,7 +2017,7 @@ sequentToSATQuery sc unintSet sqt =
                        body' <- instantiateVar sc 0 etm body
                        processConcl mmap (Map.insert ec fot vars, xs) body'
                   Nothing
-                    | looseVars body == emptyBitSet ->
+                    | termIsClosed body ->
                         do asrt <- processAssert mmap tp
                            processConcl mmap (vars, asrt : xs) body
                     | otherwise ->

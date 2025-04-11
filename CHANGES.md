@@ -1,4 +1,251 @@
-# Nightly
+# next next -- TBA
+
+The way git information gets compiled in (so it can be reported with
+e.g. saw --version) has been changed.
+You must build with build.sh after git changes for those changes to
+show through; builds done directly with cabal will not update the git
+info.
+(If you really want you can run the update script by hand instead, of
+course.)
+Note that build.sh is in any case the recommended way to build.
+
+# next -- TBA
+
+## New Features
+
+* Support `bmux` gates in exported Yosys directly to avoid reliance on `bmuxmap`
+
+## Bug fixes
+
+* Invoking the Cryptol `error` function in SAW now preserves the error message
+  instead of throwing it away.
+
+# Version 1.3 -- 2025-03-21
+
+This release supports [version
+1](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#1) of
+`mir-json`'s schema.
+
+## New Features
+
+* SAW documentation is now built and deployed as part of CI.
+  In the future, this will only happen for the `master` branch and version tags,
+  but for the time being also occurs for PR source branches.
+
+* SAW documentation is now under a single Sphinx umbrella, resulting in a
+  complete overhaul of the `doc/` directory (#1723). Generally speaking, all
+  _content_ has stayed the same, and only organization has changed. Most
+  importantly for users, the PDF artifacts included in CI-generated releases
+  have different names and render with Sphinx styling.
+
+* The contributor docs have been improved and modernized.
+
+* The saw executable now accepts a -B or --batch option to run a file of
+  REPL commands, similar to the -b option in Cryptol.
+
+* Add a `bitwuzla` family of proof scripts that use the Bitwuzla SMT solver.
+
+* Add a `:search` REPL command, which searches the value environment by type.
+  For example, to find everything involving the LLVMSetup monad you can do
+  `:search (LLVMSetup _)`.
+
+* Add a `:tenv` REPL command, which is like `:env` but prints the type
+  environment instead of the variable environment. `:t` is still short
+  for `:type`.
+
+* Add `mir_equal` and `jvm_equal` commands, which mirror the `llvm_equal`
+  command for the MIR and JVM backends, respectively.
+
+* Explicitly check that the `mir-json` schema version is supported when parsing
+  a MIR JSON file. If the version is not supported, it will be rejected. This
+  helps ensure that unsupported `mir-json` files do not cause unintended
+  results.
+
+* Emit a warning when parsing an LLVM bitcode metadata record that SAW
+  does not support. (Previously, SAW would throw a fatal error if this
+  occurred, so this change makes SAW more permissive with respect to
+  unsupported LLVM versions.)
+
+* The modified copies of the Rust standard libraries that `mir-json` depends on
+  (and SAW therefore ingests when performing MIR verification) now live in the
+  `mir-json` repo rather than in the `crucible` repo. See the [`mir-json`
+  README](https://github.com/GaloisInc/mir-json/blob/master/README.md) for
+  details.
+
+## Bug fixes
+
+* An off-by-one error in `listSortDrop` in the SAWCore prelude has
+  been fixed (#2241).
+
+* git submodule update --init --recursive no longer causes an infinite
+  checkout loop. (However, using --recursive clones a considerable
+  number of unnecessary trees and is still not recommended.)
+
+* The saw executable's usage message now fits into a terminal. (#405)
+
+* Invalid verbosity level specifications passed to the saw
+  executable's -v (SAWScript verbosity) and -d (simulator verbosity)
+  options are now rejected.
+  (The previous behavior for -v was to select maximum debug output.
+  It is unclear what effect negative verbosity levels might have had
+  with -d.)
+
+* SAW now accepts Unicode input beyond characters 0..255, including in
+  embedded Cryptol fragments and saw-core modules, and allows the same
+  Unicode code points in identifiers as Cryptol.
+  It is thus now possible to refer to Cryptol objects whose names
+  include extended characters.
+  (#2042)
+
+* Function types in records no longer require gratuitous parentheses.
+  (#1994)
+
+* Unexpected special-case type behavior of monad binds in the
+  syntactic top level has been removed.
+  (This was _not_ specifically associated with the TopLevel monad, so
+  top-level binds and binds in functions in TopLevel, or in nested
+  do-blocks, would behave differently.)
+  See issue #2162.
+
+  There are three primary visible consequences.
+  The first is that the REPL no longer accepts
+  non-monadic expressions.
+  These can still be evaluated and printed; just prefix them with
+  ```return```.
+  (Affordances specifically for the REPL so this is not required there
+  may be restored in the future.)
+
+  The second is that statements of the form ```x <- e;``` where ```e```
+  is a pure (non-monadic) term used to be (improperly) accepted at the
+  top level of scripts.
+  These statements now generate a warning.
+  This will become an error in a future release and such statements
+  should be rewritten as ```let x = e;```.
+  For example, ```t <- unfold_term ["reverse"] {{ reverse 0b01 }};```
+  should be changed to ```let t = unfold_term ["reverse"] {{ reverse 0b01 }};```.
+
+  The third is that statements of the form ```x <- s;``` or just ```s;```
+  where ```s``` is a term in the _wrong_ monad also used to be
+  improperly accepted at the top level of scripts.
+  These statements silently did nothing.
+  They will now generate a warning.
+  This will become an error in a future release.
+  Such statements should be removed or rewritten.
+  For example, it used to be possible to write ```llvm_assert {{ False }};```
+  at the top level (outside any specification) and it would be ignored.
+  ```llvm_assert``` is only meaningful within an LLVM specification.
+
+* A number of SAWScript type checking problems have been fixed,
+  including issues #2077 and #2105.
+  Some previously accepted scripts and specs may be rejected and need
+  (generally minor) adjustment.
+  Prior to these changes the typechecker allowed unbound type variables
+  in a number of places (such as on the right-hand side of typedefs, and
+  in function signatures), so for example type names contaning typos
+  would not necessarily have been caught and will now fail.
+  ```typedef t = nonexistent``` was previously accepted and now is not.
+  These problems could trigger panics, but there does not appear to have
+  been any way to produce unsoundness in the sense of false
+  verifications.
+
+* Counterexamples including SMT arrays are now printed with the array
+  contents instead of placeholder text.
+
+* Due to the regressions seen in issues #1946 and #1944, the experimental compositional hardware verification work has been reverted.
+
+* Fix a bug in which an LLVM override would fail to apply when matching an
+  argument against a string constant.
+
+* Assorted other minor bugs and annoyances have been fixed, and a
+  number of error messages have been improved, particularly type errors.
+
+# Version 1.2 -- 2024-08-30
+
+## New Features
+
+* Add `mir_str_slice_value` and `mir_str_slice_range_value` functions, which
+  allow taking `&str` slices. For more information, see the documentation in the
+  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#string-slices).
+
+* Add `mir_mux_values` command for muxing two MIR values.
+
+* Add support for GHC 9.8.
+
+## Bug fixes
+
+* Fix bug that caused MIR to incorrectly reject overrides with multiple const slice arguments
+
+* Error messages have been improved such that the locations printed with type errors and other diagnostics now have a much stronger connection with reality.
+
+# Version 1.1 -- 2024-02-05
+
+## New Features
+* SAW now supports loading and reasoning about Cryptol declarations that make use of numeric constraint guards.  For more information on numeric constraint guards, see the [relavent section of the Cryptol reference manual](https://galoisinc.github.io/cryptol/master/BasicSyntax.html#numeric-constraint-guards).
+
+* Add an experimental `mir_verify` command, along with related utilities for
+  constructing specifications for MIR/Rust programs. For more information, see
+  the `mir_*` commands documented in the [SAW
+  manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
+* SAW now supports importing Cryptol modules containing [`foreign`
+  declarations](https://galoisinc.github.io/cryptol/master/FFI.html). For more
+  information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#cryptol-and-its-role-in-saw).
+
+* Building on the above feature, SAW now supports automatically
+  generating LLVM setup scripts for Cryptol FFI functions with the
+  `llvm_ffi_setup` command. For more information, see the [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#verifying-cryptol-ffi-functions).
+
+* Ghost state is now supported with the JVM and MIR language backends:
+  * The `llvm_declare_ghost_state` command is now deprecated in favor of the
+    new `declare_ghost_state` command, as nothing about this command is
+    LLVM-specific.
+  * Add `jvm_ghost_value` and `mir_ghost_value` commands in addition to the
+    existing `llvm_ghost_value` command.
+
+* SAW now includes an experimental `set_solver_cache_path` command, which
+  caches the results of tactics which call out to automated provers. This can
+  save a considerable amount of time when repeatedly running proof scripts. For
+  more information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#caching-solver-results).
+
+* Add experimental support for verifying hardware circuits via VHDL and Yosys.
+  There is now a family of experimental `yosys_*` commands that support this.
+  For more information, see the
+  [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#analyzing-hardware-circuits-using-yosys).
+
+* Extend `llvm_verify_x86` in order to handle x86 functions that spill arguments
+  to the stack.
+
+## Bug fixes
+
+* Fix a bug in which SAW failed to expand type synonyms used in the definition
+  of another type synonym.
+
+* Fix a bug in which SAW would fail to load LLVM bitcode files produced by Apple
+  Clang on macOS.
+
+* Overall, closed issues #1818, #1822, #1824, #1828, #1834, #1839, #1842,
+  #1843, #1847, #1852, #1854, #1856, 1857, #1859, #1864, #1870, #1875, #1883,
+  #1884, #1888, #1892, #1894, #1897, #1900, #1909, #1914, #1917, #1923, #1927,
+  #1929, #1932, #1938, #1942, #1945, #1961, #1968, #1970, #1973, #1985, #2003,
+  and #2005.
+
+* Overall, merged pull requests #1882, #1885, #1889, #1890, #1891, #1893,
+  #1898, #1899, #1904, #1905, #1907, #1908, #1911, #1913, #1915, #1916, #1919,
+  #1920, #1921, #1922, #1924, #1925, #1928, #1930, #1931, #1933, #1934, #1935,
+  #1936, #1937, #1939, #1940, #1941, #1943, #1947, #1948, #1949, #1950, #1951,
+  #1952, #1955, #1958, #1959, #1962, #1963, #1969, #1971, #1972, #1974, #1986,
+  #1986, #1987, #1991, #1992, #1993, #2001, #2004, #2006, #2007, #2008, #2009,
+  #2010, #2011, #2012, #2013, #2014, #2015, #2020, #2021, #2022, and #2024.
+
+# Version 1.0 -- 2023-06-26
+
+## New Features
+* SAW now implements Heapster, which allows extracting functional specifications
+  of memory-safe C programs to Coq. There is now a family of experimental
+  `heapster_*` commands that support this. For more information, refer to the
+  [Heapster README](heapster-saw/README.md).
 
 * New commands `enable_what4_eval` and `disable_what4_eval` to enable or
   disable What4 translation for SAWCore expressions during Crucible symbolic
@@ -72,6 +319,21 @@
   and executing the remaining context of a proof in such an
   interactive session.
 
+* A new experimental `llvm_verify_x86_with_invariant` command that
+  allows verification certain kinds of simple loops by using a
+  user-provided loop invariant.
+
+* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
+  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
+  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
+  earlier.)
+
+* Add experimental support for verifying Rust programs. For more information,
+  see the `mir_*` commands documented in the
+  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+
+## Changes
+
 * A significant overhaul of the SAW proof and tactics system.  Under
   the hood, tactics now manipulate _sequents_ instead of just
   propositions. This allows more the user to specify more precise goal
@@ -86,18 +348,41 @@
 * The experimental and rarely-used `goal_assume` tactic has been
   removed. The use case it was targeting is better solved via sequents.
 
-* A new experimental `llvm_verify_x86_with_invariant` command that
-  allows verification certain kinds of simple loops by using a
-  user-provided loop invariant.
+* Support LLVM versions up to 16.
 
-* Add a `cvc5` family of proof scripts that use the CVC5 SMT solver.
-  (Note that the `sbv_cvc5` and `sbv_unint_cvc5` are non-functional
-  on Windows at this time due to a downstream issue with CVC5 1.0.4 and
-  earlier.)
+## Bug fixes
 
-* Add experimental support for verifying Rust programs. For more information,
-  see the `mir_*` commands documented in the
-  [SAW manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md).
+* Overall, closed issues #288, #300, #372, #415, #695, #705, #718, #722, #736,
+  #737, #738, #739, #740, #1037, #1155, #1259, #1316, #1358, #1409, #1412,
+  #1460, #1461, #1462, #1472, #1493, #1494, #1502, #1507, #1520, #1533, #1537,
+  #1558, #1561, #1562, #1565, #1566, #1567, #1579, #1584, #1588, #1591, #1601,
+  #1618, #1619, #1632, #1635, #1644, #1647, #1662, #1668, #1669, #1678, #1680,
+  #1684, #1691, #1702, #1703, #1726, #1741, #1742, #1744, #1748, #1767, #1768,
+  #1780, #1784, #1785, #1794, #1801, #1813, #1822, #1824, #1828, #1834, #1839,
+  #1847, #1852, #1854, #1856, #1857, #1864, #1870, and #1875.
+
+* Overall, merged pull requests #378, #630, #651, #710, #712, #725, #753, #795,
+  #802, #857, #859, #984, #1000, #1002, #1095, #1110, #1117, #1150, #1172,
+  #1194, #1273, #1297, #1313, #1359, #1374, #1385, #1386, #1422, #1452, #1467,
+  #1469, #1470, #1473, #1474, #1475, #1477, #1478, #1480, #1481, #1482, #1483,
+  #1484, #1485, #1486, #1487, #1488, #1489, #1490, #1491, #1495, #1496, #1497,
+  #1501, #1503, #1504, #1505, #1506, #1509, #1510, #1511, #1512, #1513, #1514,
+  #1515, #1518, #1519, #1521, #1523, #1524, #1525, #1527, #1528, #1529, #1530,
+  #1531, #1534, #1535, #1536, #1538, #1539, #1543, #1544, #1545, #1546, #1547,
+  #1549, #1550, #1552, #1553, #1554, #1555, #1557, #1559, #1564, #1568, #1574,
+  #1576, #1582, #1583, #1587, #1589, #1590, #1592, #1593, #1594, #1596, #1597,
+  #1598, #1599, #1600, #1602, #1604, #1605, #1609, #1610, #1614, #1615, #1617,
+  #1622, #1624, #1625, #1626, #1627, #1628, #1629, #1630, #1631, #1633, #1634,
+  #1636, #1637, #1645, #1648, #1649, #1650, #1651, #1652, #1654, #1655, #1656,
+  #1657, #1658, #1659, #1660, #1661, #1666, #1667, #1670, #1671, #1672, #1673,
+  #1675, #1679, #1682, #1686, #1687, #1688, #1689, #1690, #1692, #1693, #1694,
+  #1695, #1696, #1697, #1698, #1700, #1705, #1708, #1710, #1711, #1712, #1713,
+  #1717, #1718, #1722, #1724, #1725, #1727, #1736, #1738, #1739, #1743, #1746,
+  #1749, #1750, #1752, #1755, #1756, #1757, #1769, #1770, #1771, #1773, #1774,
+  #1775, #1776, #1777, #1778, #1786, #1790, #1792, #1795, #1796, #1797, #1798,
+  #1802, #1804, #1806, #1809, #1811, #1815, #1817, #1821, #1829, #1830, #1832,
+  #1833, #1835, #1838, #1840, #1841, #1844, #1846, #1849, #1850, #1853, #1855,
+  #1858, #1860, #1861, #1862, #1863, #1866, #1871, #1872, #1874, and #1878.
 
 # Version 0.9
 

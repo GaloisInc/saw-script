@@ -20,12 +20,15 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Exception (Exception, throw)
 import Control.Monad.Catch (MonadThrow)
 
+import Data.Bifunctor (bimap)
 import qualified Data.List as List
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Graph as Graph
+
+import Text.Encoding.Z (zEncodeString)
 
 import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedTerm as SC
@@ -49,8 +52,7 @@ data YosysError
   = YosysError Text
   | YosysErrorTypeError Text Text
   | YosysErrorNoSuchOutputBitvec Text YosysBitvecConsumer
-  | YosysErrorNoSuchCellType Text Text
-  | YosysErrorUnsupportedPmux
+  | YosysErrorNoSuchSubmodule Text Text
   | YosysErrorUnsupportedFF Text
   | YosysErrorInvalidOverrideTarget
   | YosysErrorOverrideNameNotFound Text
@@ -82,28 +84,16 @@ instance Show YosysError where
     , "It is possible that this represents an undetected cycle in the netgraph.\n"
     , reportBugText
     ]
-  show (YosysErrorNoSuchCellType mnm cnm)
-    | Just ('$', _) <- Text.uncons mnm
-    = Text.unpack $ mconcat
-      [ "Error: The cell type \"", mnm
-      , "\", which is the type of the cell with name \"", cnm
-      , "\", is not a supported primitive cell type.\n"
-      , reportBugText
+  show (YosysErrorNoSuchSubmodule submoduleName cellName) =
+    Text.unpack $ mconcat
+      [ "Error: Encountered a cell \""
+      , cellName
+      , "\" with type \""
+      , submoduleName
+      , "\", but could not find a submodule named \""
+      , submoduleName
+      , "\"."
       ]
-    | otherwise = Text.unpack $ mconcat
-      [ "Error: The cell type \"", mnm
-      , "\", which is the type of the cell with name \"", cnm
-      , "\", refers to a submodule of the circuit.\n"
-      , "Using such submodules during translation of sequential circuits is not currently supported by SAW.\n"
-      , "It may be helpful to use the \"flatten\" tactic within Yosys.\n"
-      , consultYosysManual
-      ]
-  show YosysErrorUnsupportedPmux = Text.unpack $ mconcat
-    [ "Error: The circuit contains cells with type \"$pmux\".\n"
-    , "These cells are not currently supported by SAW.\n"
-    , "It may be helpful to replace $pmux cells using the \"pmuxtree\" tactic within Yosys.\n"
-    , consultYosysManual
-    ]
   show (YosysErrorUnsupportedFF mnm) = Text.unpack $ mconcat
     [ "Error: The circuit contains cells with type \"", mnm, "\".\n"
     , "These cells are not currently supported by SAW.\n"
@@ -150,6 +140,20 @@ reverseTopSort =
 validateTerm :: MonadIO m => SC.SharedContext -> Text -> SC.Term -> m SC.Term
 validateTerm sc msg t = liftIO (SC.TC.scTypeCheck sc Nothing t) >>= \case
   Right _ -> pure t
+  Left err ->
+    throw
+    . YosysErrorTypeError msg
+    . Text.pack
+    . unlines
+    $ SC.TC.prettyTCError err
+
+-- | Check that a SAWCore term is well-typed and has a specific type
+validateTermAtType :: MonadIO m => SC.SharedContext -> Text ->
+                      SC.Term -> SC.Term -> m ()
+validateTermAtType sc msg trm tp =
+  liftIO (SC.TC.runTCM (SC.TC.typeInferComplete trm >>= \tp_trm ->
+                         SC.TC.checkSubtype tp_trm tp) sc Nothing []) >>= \case
+  Right _ -> return ()
   Left err ->
     throw
     . YosysErrorTypeError msg
@@ -259,3 +263,39 @@ eqBvRecords sc cty a b = do
       , "\nhas no fields"
       ]
     (e:es) -> foldM (\x y -> liftIO $ SC.scAnd sc x y) e es
+
+-- | Encode the given string such that is a valid Cryptol identifier. 
+-- Since Yosys cell names often look like "\42", this makes it much easier to manipulate state records,
+-- which are keyed by cell name.
+cellIdentifier :: Text -> Text
+cellIdentifier = Text.pack . zEncodeString . Text.unpack
+
+-- | Build a SAWCore type corresponding to the Cryptol record type with the given field types
+fieldsToType ::
+  MonadIO m =>
+  SC.SharedContext ->
+  Map Text (SC.Term, C.Type) ->
+  m SC.Term
+fieldsToType sc = cryptolRecordType sc . fmap fst
+
+-- | Build a Cryptol record type with the given field types
+fieldsToCryptolType ::
+  MonadIO m =>
+  Map Text (SC.Term, C.Type) ->
+  m C.Type
+fieldsToCryptolType fields = pure . C.tRec . C.recordFromFields $ bimap C.mkIdent snd <$> Map.assocs fields
+
+-- | Given a bit pattern ([b]) and a term, construct a map associating that output pattern with
+-- the term, and each bit of that pattern with the corresponding bit of the term.
+deriveTermsByIndices :: (MonadIO m, Ord b) => SC.SharedContext -> [b] -> SC.Term -> m (Map [b] SC.Term)
+deriveTermsByIndices sc rep t = do
+  boolty <- liftIO $ SC.scBoolType sc
+  telems <- forM [0..length rep - 1] $ \index -> do
+    tlen <- liftIO . SC.scNat sc . fromIntegral $ length rep
+    idx <- liftIO . SC.scNat sc $ fromIntegral index
+    bit <- liftIO $ SC.scAt sc tlen boolty t idx
+    liftIO $ SC.scSingle sc boolty bit
+  pure . Map.fromList $ mconcat
+    [ [(rep, t)]
+    , zip ((:[]) <$> rep) telems
+    ]

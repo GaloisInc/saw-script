@@ -1,4 +1,5 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module Main where
@@ -6,6 +7,7 @@ module Main where
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Map as Map
+import Data.Text (Text)
 
 import Text.Heredoc (there)
 
@@ -54,8 +56,8 @@ checkTranslation sc (name, term) =
             putStrLn $ unlines $ TC.prettyTCError err
             fail "internal type error"
 
-superclassContents :: String
+superclassContents :: Text
 superclassContents = [there|test/superclass.cry|]
 
-instanceContents :: String
+instanceContents :: Text
 instanceContents = [there|test/instance.cry|]

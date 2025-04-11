@@ -2,11 +2,11 @@
 enable_experimental;
 import "SpecPrims.cry" as SpecPrims;
 import "monadify.cry";
-load_sawcore_from_file "../../cryptol-saw-core/saw/CryptolM.sawcore";
+// load_sawcore_from_file "../../cryptol-saw-core/saw/CryptolM.sawcore";
 
 // Set the monadification of the Cryptol exists and forall functions
-set_monadification "SpecPrims::exists" "Prelude.existsS" true;
-set_monadification "SpecPrims::forall" "Prelude.forallS" true;
+set_monadification "SpecPrims::exists" "SpecM.existsS" true;
+set_monadification "SpecPrims::forall" "SpecM.forallS" true;
 
 let run_test name cry_term mon_term_expected =
   do { print (str_concat "Test: " name);
@@ -21,50 +21,50 @@ let run_test name cry_term mon_term_expected =
               print_term mon_term_expected;
               exit 1; }; };
 
-my_abs <- unfold_term ["my_abs"] {{ my_abs }};
-my_abs_M <- parse_core_mod "CryptolM" "\
-\ \\(x : (mseq VoidEv emptyFunStack (TCNum 64) Bool)) -> \
-\   bindS VoidEv emptyFunStack (isFinite (TCNum 64)) \
-\         (mseq VoidEv emptyFunStack (TCNum 64) Bool) \
-\         (assertFiniteS VoidEv emptyFunStack (TCNum 64)) \
+let my_abs = unfold_term ["my_abs"] {{ my_abs }};
+let my_abs_M = parse_core_mod "CryptolM" "\
+\ \\(x : (mseq VoidEv (TCNum 64) Bool)) -> \
+\   bindS VoidEv (isFinite (TCNum 64)) \
+\         (mseq VoidEv (TCNum 64) Bool) \
+\         (assertFiniteS VoidEv (TCNum 64)) \
 \     (\\(x' : (isFinite (TCNum 64))) -> \
-\        bindS VoidEv emptyFunStack (isFinite (TCNum 64)) \
-\              (mseq VoidEv emptyFunStack (TCNum 64) Bool) \
-\              (assertFiniteS VoidEv emptyFunStack (TCNum 64)) \
+\        bindS VoidEv (isFinite (TCNum 64)) \
+\              (mseq VoidEv (TCNum 64) Bool) \
+\              (assertFiniteS VoidEv (TCNum 64)) \
 \          (\\(x'' : (isFinite (TCNum 64))) -> \
-\             ite (SpecM VoidEv emptyFunStack (mseq VoidEv emptyFunStack (TCNum 64) Bool)) \
-\               (ecLt (mseq VoidEv emptyFunStack (TCNum 64) Bool) (PCmpMSeqBool VoidEv emptyFunStack (TCNum 64) x') x \
-\                  (ecNumber (TCNum 0) (mseq VoidEv emptyFunStack (TCNum 64) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 64) x''))) \
-\               (bindS VoidEv emptyFunStack (isFinite (TCNum 64)) \
-\                      (mseq VoidEv emptyFunStack (TCNum 64) Bool) \
-\                      (assertFiniteS VoidEv emptyFunStack (TCNum 64)) \
+\             ite (SpecM VoidEv (mseq VoidEv (TCNum 64) Bool)) \
+\               (ecLt (mseq VoidEv (TCNum 64) Bool) (PCmpMSeqBool VoidEv (TCNum 64) x') x \
+\                  (ecNumber (TCNum 0) (mseq VoidEv (TCNum 64) Bool) (PLiteralSeqBoolM VoidEv (TCNum 64) x''))) \
+\               (bindS VoidEv (isFinite (TCNum 64)) \
+\                      (mseq VoidEv (TCNum 64) Bool) \
+\                      (assertFiniteS VoidEv (TCNum 64)) \
 \                  (\\(x''' : (isFinite (TCNum 64))) -> \
-\                     retS VoidEv emptyFunStack \
-\                             (mseq VoidEv emptyFunStack (TCNum 64) Bool) \
-\                             (ecNeg (mseq VoidEv emptyFunStack (TCNum 64) Bool) (PRingMSeqBool VoidEv emptyFunStack (TCNum 64) x''') x))) \
-\               (retS VoidEv emptyFunStack (mseq VoidEv emptyFunStack (TCNum 64) Bool) x)))";
+\                     retS VoidEv \
+\                             (mseq VoidEv (TCNum 64) Bool) \
+\                             (ecNeg (mseq VoidEv (TCNum 64) Bool) (PRingMSeqBool VoidEv (TCNum 64) x''') x))) \
+\               (retS VoidEv (mseq VoidEv (TCNum 64) Bool) x)))";
 run_test "my_abs" my_abs my_abs_M;
 
-err_if_lt0 <- unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
-err_if_lt0_M <- parse_core_mod "CryptolM" "\
-\ \\(x : (mseq VoidEv emptyFunStack (TCNum 64) Bool)) -> \
-\   bindS VoidEv emptyFunStack (isFinite (TCNum 64)) (mseq VoidEv emptyFunStack (TCNum 64) Bool) (assertFiniteS VoidEv emptyFunStack (TCNum 64)) \
+let err_if_lt0 = unfold_term ["err_if_lt0"] {{ err_if_lt0 }};
+let err_if_lt0_M = parse_core_mod "CryptolM" "\
+\ \\(x : (mseq VoidEv (TCNum 64) Bool)) -> \
+\   bindS VoidEv (isFinite (TCNum 64)) (mseq VoidEv (TCNum 64) Bool) (assertFiniteS VoidEv (TCNum 64)) \
 \     (\\(x' : (isFinite (TCNum 64))) -> \
-\        bindS VoidEv emptyFunStack (isFinite (TCNum 64)) (mseq VoidEv emptyFunStack (TCNum 64) Bool) (assertFiniteS VoidEv emptyFunStack (TCNum 64)) \
+\        bindS VoidEv (isFinite (TCNum 64)) (mseq VoidEv (TCNum 64) Bool) (assertFiniteS VoidEv (TCNum 64)) \
 \          (\\(x'' : (isFinite (TCNum 64))) -> \
-\             ite (SpecM VoidEv emptyFunStack (mseq VoidEv emptyFunStack (TCNum 64) Bool)) \
-\               (ecLt (mseq VoidEv emptyFunStack (TCNum 64) Bool) (PCmpMSeqBool VoidEv emptyFunStack (TCNum 64) x') x \
-\                  (ecNumber (TCNum 0) (mseq VoidEv emptyFunStack (TCNum 64) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 64) x''))) \
-\               (bindS VoidEv emptyFunStack (isFinite (TCNum 8)) (mseq VoidEv emptyFunStack (TCNum 64) Bool) (assertFiniteS VoidEv emptyFunStack (TCNum 8)) \
+\             ite (SpecM VoidEv (mseq VoidEv (TCNum 64) Bool)) \
+\               (ecLt (mseq VoidEv (TCNum 64) Bool) (PCmpMSeqBool VoidEv (TCNum 64) x') x \
+\                  (ecNumber (TCNum 0) (mseq VoidEv (TCNum 64) Bool) (PLiteralSeqBoolM VoidEv (TCNum 64) x''))) \
+\               (bindS VoidEv (isFinite (TCNum 8)) (mseq VoidEv (TCNum 64) Bool) (assertFiniteS VoidEv (TCNum 8)) \
 \                  (\\(x''' : (isFinite (TCNum 8))) -> \
-\                     ecErrorM VoidEv emptyFunStack (mseq VoidEv emptyFunStack (TCNum 64) Bool) (TCNum 5) \
-\                       (seqToMseq VoidEv emptyFunStack (TCNum 5) (mseq VoidEv emptyFunStack (TCNum 8) Bool) \
-\                          [ ecNumber (TCNum 120) (mseq VoidEv emptyFunStack (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 8) x''') \
-\                          , (ecNumber (TCNum 32) (mseq VoidEv emptyFunStack (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 8) x''')) \
-\                          , ecNumber (TCNum 60) (mseq VoidEv emptyFunStack (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 8) x''') \
-\                          , (ecNumber (TCNum 32) (mseq VoidEv emptyFunStack (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 8) x''')) \
-\                          , ecNumber (TCNum 48) (mseq VoidEv emptyFunStack (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv emptyFunStack (TCNum 8) x''') ]))) \
-\               (retS VoidEv emptyFunStack (mseq VoidEv emptyFunStack (TCNum 64) Bool) x)))";
+\                     ecErrorM VoidEv (mseq VoidEv (TCNum 64) Bool) (TCNum 5) \
+\                       (seqToMseq VoidEv (TCNum 5) (mseq VoidEv (TCNum 8) Bool) \
+\                          [ ecNumber (TCNum 120) (mseq VoidEv (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv (TCNum 8) x''') \
+\                          , (ecNumber (TCNum 32) (mseq VoidEv (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv (TCNum 8) x''')) \
+\                          , ecNumber (TCNum 60) (mseq VoidEv (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv (TCNum 8) x''') \
+\                          , (ecNumber (TCNum 32) (mseq VoidEv (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv (TCNum 8) x''')) \
+\                          , ecNumber (TCNum 48) (mseq VoidEv (TCNum 8) Bool) (PLiteralSeqBoolM VoidEv (TCNum 8) x''') ]))) \
+\               (retS VoidEv (mseq VoidEv (TCNum 64) Bool) x)))";
 run_test "err_if_lt0" err_if_lt0 err_if_lt0_M;
 
 /*
@@ -77,55 +77,50 @@ print "Monadified term:";
 print_term sha1M;
 */
 
-fib <- unfold_term ["fib"] {{ fib }};
-fibM <- parse_core_mod "CryptolM" "\
-\ \\(_x : (mseq VoidEv emptyFunStack (TCNum 64) Bool)) -> \
-\   multiArgFixS VoidEv emptyFunStack \
-\                (LRT_Fun (mseq VoidEv emptyFunStack (TCNum 64) Bool) \
-\                   (\\(_ : (mseq VoidEv emptyFunStack (TCNum 64) Bool)) -> \
-\                      LRT_Ret (mseq VoidEv emptyFunStack (TCNum 64) Bool))) \
-\     ((\\ (stk:FunStack) -> \
-\      (\\(fib : ((mseq VoidEv stk (TCNum 64) Bool) -> \
-\                 (SpecM VoidEv stk (mseq VoidEv stk (TCNum 64) Bool)))) -> \
-\         \\(x : (mseq VoidEv stk (TCNum 64) Bool)) -> \
-\           bindS VoidEv stk (isFinite (TCNum 64)) (mseq VoidEv stk (TCNum 64) Bool) (assertFiniteS VoidEv stk (TCNum 64)) \
-\             (\\(x' : (isFinite (TCNum 64))) -> \
-\                bindS VoidEv stk (isFinite (TCNum 64)) (mseq VoidEv stk (TCNum 64) Bool) (assertFiniteS VoidEv stk (TCNum 64)) \
-\                  (\\(x'' : (isFinite (TCNum 64))) -> \
-\                     ite (SpecM VoidEv stk (mseq VoidEv stk (TCNum 64) Bool)) \
-\                       (ecEq (mseq VoidEv stk (TCNum 64) Bool) (PEqMSeqBool VoidEv stk (TCNum 64) x') x \
-\                          (ecNumber (TCNum 0) (mseq VoidEv stk (TCNum 64) Bool) (PLiteralSeqBoolM VoidEv stk (TCNum 64) x''))) \
-\                       (bindS VoidEv stk (isFinite (TCNum 64)) (mseq VoidEv stk (TCNum 64) Bool) (assertFiniteS VoidEv stk (TCNum 64)) \
-\                          (\\(x''' : (isFinite (TCNum 64))) -> \
-\                             retS VoidEv stk (mseq VoidEv stk (TCNum 64) Bool) \
-\                               (ecNumber (TCNum 1) (mseq VoidEv stk (TCNum 64) Bool) \
-\                                  (PLiteralSeqBoolM VoidEv stk (TCNum 64) x''')))) \
-\                       (bindS VoidEv stk (isFinite (TCNum 64)) (mseq VoidEv stk (TCNum 64) Bool) (assertFiniteS VoidEv stk (TCNum 64)) \
-\                          (\\(x''' : (isFinite (TCNum 64))) -> \
-\                             bindS VoidEv stk (isFinite (TCNum 64)) (mseq VoidEv stk (TCNum 64) Bool) (assertFiniteS VoidEv stk (TCNum 64)) \
-\                               (\\(x'''' : (isFinite (TCNum 64))) -> \
-\                                  bindS VoidEv stk (mseq VoidEv stk (TCNum 64) Bool) (mseq VoidEv stk (TCNum 64) Bool) \
+let fib = unfold_term ["fib"] {{ fib }};
+let fibM = parse_core_mod "CryptolM" "\
+\ \\(_x : Vec 64 Bool) -> \
+\    FixS VoidEv (Tp_Arr (Tp_bitvector 64) (Tp_M (Tp_bitvector 64))) \
+\      (\\(fib : (Vec 64 Bool -> SpecM VoidEv (Vec 64 Bool))) -> \
+\        \\(x : Vec 64 Bool) -> \
+\           bindS VoidEv (isFinite (TCNum 64)) (Vec 64 Bool) (assertFiniteS VoidEv (TCNum 64)) \
+\             (\\(x1 : isFinite (TCNum 64)) -> \
+\                bindS VoidEv (isFinite (TCNum 64)) (Vec 64 Bool) \
+\                             (assertFiniteS VoidEv (TCNum 64)) \
+\                  (\\(x2 : isFinite (TCNum 64)) -> \
+\                     ite (SpecM VoidEv (Vec 64 Bool)) \
+\                       (ecEq (Vec 64 Bool) (PEqMSeqBool VoidEv (TCNum 64) x1) x \
+\                          (ecNumber (TCNum 0) (Vec 64 Bool) \
+\                                    (PLiteralSeqBoolM VoidEv (TCNum 64) x2))) \
+\                       (bindS VoidEv (isFinite (TCNum 64)) (Vec 64 Bool) \
+\                              (assertFiniteS VoidEv (TCNum 64)) \
+\                          (\\(x3 : (isFinite (TCNum 64))) -> \
+\                             retS VoidEv (Vec 64 Bool) \
+\                               (ecNumber (TCNum 1) (Vec 64 Bool) \
+\                                         (PLiteralSeqBoolM VoidEv (TCNum 64) x3)))) \
+\                       (bindS VoidEv (isFinite (TCNum 64)) (Vec 64 Bool) \
+\                              (assertFiniteS VoidEv (TCNum 64)) \
+\                          (\\(x3 : (isFinite (TCNum 64))) -> \
+\                             bindS VoidEv (isFinite (TCNum 64)) (Vec 64 Bool) \
+\                                   (assertFiniteS VoidEv (TCNum 64)) \
+\                               (\\(x4 : (isFinite (TCNum 64))) -> \
+\                                  bindS VoidEv (Vec 64 Bool) (Vec 64 Bool) \
 \                                    (fib \
-\                                       (ecMinus (mseq VoidEv stk (TCNum 64) Bool) (PRingMSeqBool VoidEv stk (TCNum 64) x''') x \
-\                                          (ecNumber (TCNum 1) (mseq VoidEv stk (TCNum 64) Bool) \
-\                                             (PLiteralSeqBoolM VoidEv stk (TCNum 64) x'''')))) \
-\                                    (\\(x''''' : (mseq VoidEv stk (TCNum 64) Bool)) -> \
-\                                       retS VoidEv stk (mseq VoidEv stk (TCNum 64) Bool) \
-\                                         (ecMul (mseq VoidEv stk (TCNum 64) Bool) (PRingMSeqBool VoidEv stk (TCNum 64) x''') x \
-\                                            x'''''))))))))) \
-\      (pushFunStack (singletonFrame (LRT_Fun (mseq VoidEv emptyFunStack (TCNum 64) Bool) \
-\                                            (\\ (_:Vec 64 Bool) -> \
-\                                               LRT_Ret (mseq VoidEv emptyFunStack (TCNum 64) Bool)))) \
-\                    emptyFunStack)) \
-\     _x";
+\                                       (ecMinus (Vec 64 Bool) (PRingMSeqBool VoidEv (TCNum 64) x3) x \
+\                                          (ecNumber (TCNum 1) (Vec 64 Bool) \
+\                                                    (PLiteralSeqBoolM VoidEv (TCNum 64) x4)))) \
+\                                    (\\(x5 : Vec 64 Bool) -> \
+\                                       retS VoidEv (Vec 64 Bool) (ecMul (Vec 64 Bool) \
+\                                            (PRingMSeqBool VoidEv (TCNum 64) x3) x x5)))))))) \
+\      _x";
 run_test "fib" fib fibM;
 
-noErrors <- unfold_term ["noErrors"] {{ SpecPrims::noErrors }};
-noErrorsM <- parse_core_mod "CryptolM" "\\(a : sort 0) -> existsS VoidEv emptyFunStack a";
+let noErrors = unfold_term ["noErrors"] {{ SpecPrims::noErrors }};
+let noErrorsM = parse_core_mod "CryptolM" "\\(a : sort 0) -> existsS VoidEv a";
 run_test "noErrors" noErrors noErrorsM;
 
-fibSpecNoErrors <- unfold_term ["fibSpecNoErrors"] {{ fibSpecNoErrors }};
-fibSpecNoErrorsM <- parse_core_mod "CryptolM" "\
-\ \\(__p1 : (mseq VoidEv emptyFunStack (TCNum 64) Bool)) -> \
-\   existsS VoidEv emptyFunStack (mseq VoidEv emptyFunStack (TCNum 64) Bool)";
+let fibSpecNoErrors = unfold_term ["fibSpecNoErrors"] {{ fibSpecNoErrors }};
+let fibSpecNoErrorsM = parse_core_mod "CryptolM" "\
+\ \\(__p1 : (mseq VoidEv (TCNum 64) Bool)) -> \
+\   existsS VoidEv (mseq VoidEv (TCNum 64) Bool)";
 run_test "fibSpecNoErrors" fibSpecNoErrors fibSpecNoErrorsM;

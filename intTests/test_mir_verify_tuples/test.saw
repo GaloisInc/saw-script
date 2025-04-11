@@ -1,0 +1,44 @@
+enable_experimental;
+
+let f_spec = do {
+  x <- mir_fresh_var "x" mir_u32;
+  y <- mir_fresh_var "y" mir_u32;
+  let s = mir_tuple_value [mir_term x, mir_term y];
+
+  mir_execute_func [s];
+
+  let s' = mir_tuple_value [mir_term {{ y + 1 }}, mir_term {{ x + 2 }}];
+  mir_return s';
+};
+
+let g_spec = do {
+  s_ptr <- mir_alloc (mir_tuple [mir_u32, mir_u32]);
+  x <- mir_fresh_var "x" mir_u32;
+  y <- mir_fresh_var "y" mir_u32;
+  let s = mir_tuple_value [mir_term x, mir_term y];
+  mir_points_to s_ptr s;
+
+  mir_execute_func [s_ptr];
+
+  let s' = mir_tuple_value [mir_term {{ y + 1 }}, mir_term {{ x + 2 }}];
+  mir_return s';
+};
+
+let h_spec = do {
+  s_ptr <- mir_alloc_mut (mir_tuple [mir_u32, mir_u32]);
+  x <- mir_fresh_var "x" mir_u32;
+  y <- mir_fresh_var "y" mir_u32;
+  let s = mir_tuple_value [mir_term x, mir_term y];
+  mir_points_to s_ptr s;
+
+  mir_execute_func [s_ptr];
+
+  let s' = mir_tuple_value [mir_term {{ y + 1 }}, mir_term {{ x + 2 }}];
+  mir_points_to s_ptr s';
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [] false g_spec z3;
+mir_verify m "test::h" [] false h_spec z3;

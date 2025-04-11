@@ -16,9 +16,6 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 
 
-checkGroundTerm :: Term -> Bool
-checkGroundTerm t = looseVars t == emptyBitSet
-
 namedMsg :: Ident -> String -> String
 namedMsg sym msg = "In " ++ show sym ++ ": " ++ msg
 
@@ -26,11 +23,11 @@ checkDef :: Def -> Assertion
 checkDef d = do
   let sym = defIdent d
   let tp = defType d
-  assertBool (namedMsg sym "Type is not ground.") (checkGroundTerm tp)
+  assertBool (namedMsg sym "Type is not ground.") (termIsClosed tp)
   case defBody d of
     Nothing -> return ()
     Just body ->
-      assertBool (namedMsg sym "Body is not ground.") (checkGroundTerm body)
+      assertBool (namedMsg sym "Body is not ground.") (termIsClosed body)
 
 checkPrelude :: Assertion
 checkPrelude =

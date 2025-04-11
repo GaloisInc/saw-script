@@ -22,8 +22,15 @@ import Test.Tasty.HUnit ( testCase, (@=?), assertBool )
 import Test.Tasty.ExpectedFailure ( ignoreTest )
 
 
--- | Reads from DISABLED_TESTS env var or disabled_tests.txt file
--- (preference is given to the former) and returns the list of tests.
+-- | Compute the list of tests to disable in this run of the test suite. This
+-- reads from the following locations:
+--
+-- * The @DISABLED_TESTS@ environment variable, or if that is not defined, the
+--   @disabled_tests.txt@ file (preference given to the former).
+--
+-- * If the @ENABLE_HPC@ environment variable is defined, the
+--   @disabled_tests_hpc.txt@ file.
+--
 -- Shell-style comments are removed, and test names are assumed to be
 -- a single word without whitespace.  The input can separate testnames
 -- with any type of whitespace (space, tab, newline).
@@ -32,13 +39,19 @@ import Test.Tasty.ExpectedFailure ( ignoreTest )
 getDisabledTestList :: FilePath -> IO [String]
 getDisabledTestList testdir = do
   let dtfile = testdir </> "disabled_tests.txt"
+  let dtHpcFile = testdir </> "disabled_tests_hpc.txt"
   dset <- lookupEnv "DISABLED_TESTS" >>= \case
     Just d -> return d
     Nothing -> readFile dtfile
+  dsetHpc <- lookupEnv "ENABLE_HPC" >>= \case
+    Just _ -> readFile dtHpcFile
+    Nothing -> return ""
   let removeComment = takeWhile ((/=) '#')
       stripWhitespace = words
       processInput = join . map (stripWhitespace . removeComment) . lines
-  return $ processInput dset
+  let tests1 = processInput dsetHpc
+  let tests2 = processInput dset
+  return $ tests1 ++ tests2
 
 
 -- | Gets the list of tests (subdirectories) to run given the base
@@ -89,6 +102,7 @@ envVarAssocList = map envVarAssoc
 --     - JAVA_HOME = path to java installation
 --     - TESTBASE = path to intTests directory
 --     - SAW_JDK_JAR = path to rt.jar
+--     - SAW_SOLVER_CACHE_PATH = optional path to solver result cache
 --
 --  These environment variables may already be set to supply default
 --  locations for these components.
@@ -132,7 +146,8 @@ testParams intTestBase verbose = do
       addEnvVar evs e = do v <- lookupEnv e
                            return $ updEnvVars e (fromMaybe "" v) evs
   -- override eVars0 with any environment variables set in this process
-  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "JAVAC", "JAVA_HOME", "SAW_JDK_JAR" ]
+  e1 <- foldM addEnvVar eVars0 [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH",
+                                 "JAVAC", "JAVA_HOME", "SAW_JDK_JAR" ]
 
   -- Create a pathlist of jars for invoking saw
   let jarsDir = absTestBase </> "jars"
@@ -183,6 +198,7 @@ check_cryptol_specs testPath disabled tests = testCase "cryptol-specs Available"
                           , "test0035_aes_consistent"
                           , "test_w4"
                           , "test_examples"
+                          , "test_ffi_verify_salsa"
                           ]
       cspec_dir = takeDirectory testPath </> "deps" </> "cryptol-specs"
   in if need_cryptol_spec

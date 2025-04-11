@@ -13,6 +13,7 @@ Stability   : provisional
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -20,7 +21,7 @@ Stability   : provisional
 
 module SAWScript.Crucible.Common.Override
   ( Pointer
-  , Pointer'
+  , MS.Pointer'
   , OverrideState
   , OverrideState'(..)
   , osAsserts
@@ -32,6 +33,10 @@ module SAWScript.Crucible.Common.Override
   , setupValueSub
   , termSub
   , termEqs
+  --
+  , OverrideEnv
+  , OverrideEnv'(..)
+  , oeConditionalPred
   --
   , OverrideFailureReason(..)
   , ppOverrideFailureReason
@@ -47,17 +52,35 @@ module SAWScript.Crucible.Common.Override
   , addTermEq
   , addAssert
   , addAssume
+  , withConditionalPred
   , readGlobal
   , writeGlobal
   , failure
   , getSymInterface
+  , enforceCompleteSubstitution
+  , refreshTerms
+  , OverrideWithPreconditions(..)
+  , owpPreconditions
+  , owpMethodSpec
+  , partitionOWPsConcrete
+  , partitionBySymbolicPreds
+  , findFalsePreconditions
+  , unsatPreconditions
+  , ppConcreteFailure
   --
   , assignmentToList
   , MetadataMap
+  --
+  , learnGhost
+  , executeGhost
+  , instantiateExtMatchTerm
+  , matchTerm
   ) where
 
 import qualified Control.Exception as X
 import           Control.Lens
+import           Control.Monad (foldM, unless, when)
+import           Control.Monad.Reader (MonadReader(..), ReaderT(..))
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
@@ -66,8 +89,11 @@ import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
-import           Data.Kind (Type)
+import qualified Data.Map as Map
 import           Data.Map (Map)
+import           Data.Maybe (fromMaybe)
+import           Data.Proxy (Proxy(..))
+import qualified Data.Set as Set
 import           Data.Set (Set)
 import           Data.Typeable (Typeable)
 import           Data.Void
@@ -78,9 +104,15 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
 import           Data.Parameterized.TraversableFC (toListFC)
 
+import           Verifier.SAW.Prelude as SAWVerifier (scEq)
 import           Verifier.SAW.SharedTerm as SAWVerifier
+import           Verifier.SAW.TypedAST as SAWVerifier
 import           Verifier.SAW.TypedTerm as SAWVerifier
 
+import qualified Cryptol.Utils.PP as Cryptol (pp)
+
+import qualified Lang.Crucible.Backend as Crucible
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr, GlobalVar)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
@@ -91,8 +123,10 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
 import           SAWScript.Exceptions
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (Backend, OnlineSolver, Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
+import           SAWScript.Crucible.Common.Setup.Value as MS
+import           SAWScript.Utils (bullets)
 
 -- TODO, not sure this is the best place for this definition
 type MetadataMap =
@@ -103,19 +137,28 @@ type MetadataMap =
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
-type family Pointer' ext sym :: Type
-
-type Pointer ext = Pointer' ext Sym
+type Pointer ext = MS.Pointer' ext Sym
 
 data OverrideState' sym ext = OverrideState
   { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex (Pointer' ext sym)
+    _setupValueSub :: Map AllocIndex (MS.Pointer' ext sym)
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
 
-    -- | Equalities of SAW Core terms
-  , _termEqs :: [(Term, ConditionMetadata, Crucible.SimError)]
+    -- | Equalities of SAW Core terms. The four elements of each tuple are:
+    --
+    -- * A 'W4.Pred' representing the path condition for the part of the
+    --   program in which the term equality occurs.
+    --   See @Note [oeConditionalPred]@.
+    --
+    -- * A 'Term' representing the term equality.
+    --
+    -- * A 'ConditionMetadata' value describing the term equality.
+    --
+    -- * A 'Crucible.SimError' to report in the event that the term equality
+    --   fails to hold.
+  , _termEqs :: [(W4.Pred sym, Term, ConditionMetadata, Crucible.SimError)]
 
     -- | Free variables available for unification
   , _osFree :: Set VarIndex
@@ -161,6 +204,76 @@ initialState sym globals allocs terms free loc = OverrideState
   , _setupValueSub   = allocs
   , _osLocation      = loc
   }
+
+--------------------------------------------------------------------------------
+-- ** OverrideEnv
+
+-- | The environment used in the reader portion of `OverrideMatcher'`.
+newtype OverrideEnv' sym = OverrideEnv
+  { _oeConditionalPred :: W4.Pred sym
+    -- ^ The predicate that is used to construct an implication for any
+    --   assumption or assertion as part of the specification.
+    --   See @Note [oeConditionalPred]@.
+  }
+
+-- | `OverrideEnv'` instantiated at type 'Sym'.
+type OverrideEnv = OverrideEnv' Sym
+
+makeLenses ''OverrideEnv'
+
+-- | The initial override matching environment starts with a trivial path
+-- condition of @True@ (i.e., 'W4.truePred). See @Note [oeConditionalPred]@.
+initialEnv ::
+  W4.IsExprBuilder sym =>
+  sym ->
+  OverrideEnv' sym
+initialEnv sym = OverrideEnv
+  { _oeConditionalPred = W4.truePred sym
+  }
+
+{-
+Note [oeConditionalPred]
+~~~~~~~~~~~~~~~~~~~~~~~~
+oeConditionalPred is a predicate that is used to construct an implication for
+any assumption or assertion used in a specification. That is, oeConditionalPred
+can be thought of as the path condition for the part of the specification where
+the assumption/assertion is created. By default, the oeConditionalPred is
+simply `True` (see `initialEnv`), so when an assertion is created, e.g.,
+
+  llvm_assert {{ x == 2*y }};
+
+Then the overall assertion would be `True ==> (x == 2*y)`. An implication with
+`True` as the premise is not very interesting, of course, but other parts of
+the program may add additional premises (see the `withConditionalPred`
+function).
+
+Currently, the only place in SAW where non-trivial `oeConditionalPred`s are
+added is when matching against an `llvm_conditional_points_to` statement. For
+instance, consider this spec (taken from #1945):
+
+  let test_spec = do {
+    p <- llvm_alloc (llvm_int 8);
+    x <- llvm_fresh_var "x" (llvm_int 8);
+    llvm_points_to p (llvm_term x);
+
+    llvm_execute_func [p];
+
+    llvm_conditional_points_to {{ x == 1 }} p (llvm_term {{ 1 : [8] }});
+  };
+
+The `llvm_conditional_points_to` statement in the postcondition generates an
+assertion that checks `x` (the value that `p` points to) against `1 : [8]`. But
+we only want to check this under the assumption that `x` already equals `1` due
+to the `x == 1` part of the `llvm_conditional_points_to` statement. To do this,
+the implementation of `llvm_conditional_points_to` will add `x == 1` to the
+oeConditionalPred. This way, the assertion that gets generated will be:
+
+  (x == 1 /\ True) ==> (x == 1)
+
+Here, leaving out the (x == 1) premise would be catastrophic, as that would
+result in the far more general assertion `True ==> (x == 1)`. (This was
+ultimately the cause of #1945.)
+-}
 
 --------------------------------------------------------------------------------
 -- ** OverrideFailureReason
@@ -273,7 +386,7 @@ instance ( PP.Pretty (ExtType ext)
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
-         , Typeable ext 
+         , Typeable ext
          ) => X.Exception (OverrideFailure ext)
 
 --------------------------------------------------------------------------------
@@ -287,18 +400,19 @@ data RW
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher' sym ext rorw m a =
-  OM (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m) a)
+  OM (ReaderT (OverrideEnv' sym) (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m)) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
 type OverrideMatcher ext rorw a = OverrideMatcher' Sym ext rorw IO a
 
 instance Wrapped (OverrideMatcher' sym ext rorw m a) where
 
+deriving instance Monad m => MonadReader (OverrideEnv' sym) (OverrideMatcher' sym ext rorw m)
 deriving instance Monad m => MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw m)
 deriving instance Monad m => MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw m)
 
 instance MonadTrans (OverrideMatcher' sym ext rorw) where
-    lift f = OM $ lift $ lift f
+    lift f = OM $ lift $ lift $ lift f
 
 throwOverrideMatcher :: Monad m => String -> OverrideMatcher' sym ext rorw m a
 throwOverrideMatcher msg = do
@@ -311,7 +425,7 @@ instance Monad m => Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
 -- | "Run" function for OverrideMatcher. The final result and state
 -- are returned. The state will contain the updated globals and substitutions
 runOverrideMatcher ::
-   Monad m =>
+   (Monad m, W4.IsExprBuilder sym) =>
    sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState sym {- ^ initial global variables        -} ->
    Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
@@ -321,31 +435,55 @@ runOverrideMatcher ::
    OverrideMatcher' sym ext md m a {- ^ matching action                 -} ->
    m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
 runOverrideMatcher sym g a t free loc (OM m) =
-  runExceptT (runStateT m (initialState sym g a t free loc))
+  runExceptT (runStateT (runReaderT m (initialEnv sym)) (initialState sym g a t free loc))
 
 addTermEq ::
   Term {- ^ term equality -} ->
   ConditionMetadata ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher ext rorw ()
-addTermEq t md r =
-  OM (termEqs %= cons (t, md, r))
+addTermEq t md r = do
+  env <- ask
+  let cond = env ^. oeConditionalPred
+  OM (termEqs %= cons (cond, t, md, r))
 
 addAssert ::
-  Monad m =>
+  (MonadIO m, W4.IsExprBuilder sym) =>
   W4.Pred sym       {- ^ property -} ->
   ConditionMetadata ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher' sym ext rorw m ()
-addAssert p md r =
-  OM (osAsserts %= cons (md,W4.LabeledPred p r))
+addAssert p md r = do
+  sym <- getSymInterface
+  env <- ask
+  p' <- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p
+  OM (osAsserts %= cons (md,W4.LabeledPred p' r))
 
 addAssume ::
-  Monad m =>
+  (MonadIO m, W4.IsExprBuilder sym) =>
   W4.Pred sym       {- ^ property -} ->
   ConditionMetadata ->
   OverrideMatcher' sym ext rorw m ()
-addAssume p md = OM (osAssumes %= cons (md,p))
+addAssume p md = do
+  sym <- getSymInterface
+  env <- ask
+  p' <- liftIO $ W4.impliesPred sym (env ^. oeConditionalPred) p
+  OM (osAssumes %= cons (md,p'))
+
+-- | Add an additional premise to the path condition when executing an
+-- `OverrideMatcher'` subcomputation. See @Note [oeConditionalPred]@ for an
+-- explanation of where this is used.
+withConditionalPred ::
+  (MonadIO m, W4.IsExprBuilder sym) =>
+  W4.Pred sym {- ^ The additional premise -} ->
+  OverrideMatcher' sym ext rorw m a {- ^ The subcomputation -} ->
+  OverrideMatcher' sym ext rorw m a
+withConditionalPred premise om = do
+  sym <- getSymInterface
+  env <- ask
+  premise' <- liftIO $ W4.andPred sym premise (env ^. oeConditionalPred)
+  let env' = env & oeConditionalPred .~ premise'
+  local (const env') om
 
 readGlobal ::
   Monad m =>
@@ -371,10 +509,139 @@ failure ::
   W4.ProgramLoc ->
   OverrideFailureReason ext ->
   OverrideMatcher' sym ext md m a
-failure loc e = OM (lift (throwE (OF loc e)))
+failure loc e = OM (lift (lift (throwE (OF loc e))))
 
 getSymInterface :: Monad m => OverrideMatcher' sym ext md m sym
 getSymInterface = OM (use syminterface)
+
+-- | Verify that all of the fresh variables for the given
+-- state spec have been "learned". If not, throws
+-- 'AmbiguousVars' exception.
+enforceCompleteSubstitution ::
+  W4.ProgramLoc ->
+  MS.StateSpec ext ->
+  OverrideMatcher ext w ()
+enforceCompleteSubstitution loc ss =
+
+  do sub <- OM (use termSub)
+
+     let -- predicate matches terms that are not covered by the computed
+         -- term substitution
+         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
+
+         -- list of all terms not covered by substitution
+         missing = filter isMissing (view MS.csFreshVars ss)
+
+     unless (null missing) (failure loc (AmbiguousVars missing))
+
+-- | Allocate fresh variables for all of the "fresh" vars
+-- used in this phase and add them to the term substitution.
+refreshTerms ::
+  SharedContext    {- ^ shared context -} ->
+  MS.StateSpec ext {- ^ current phase spec -} ->
+  OverrideMatcher ext w ()
+refreshTerms sc ss =
+  do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
+     OM (termSub %= Map.union extension)
+  where
+    freshenTerm (TypedExtCns _cty ec) =
+      do ec' <- liftIO $ scFreshEC sc (toShortName (ecName ec)) (ecType ec)
+         new <- liftIO $ scExtCns sc ec'
+         return (ecVarIndex ec, new)
+
+-- | An override packaged together with its preconditions, labeled with some
+--   human-readable info about each condition.
+data OverrideWithPreconditions ext =
+  OverrideWithPreconditions
+    { _owpPreconditions :: [(MS.ConditionMetadata, LabeledPred Sym)]
+         -- ^ c.f. '_osAsserts'
+    , _owpMethodSpec :: MS.CrucibleMethodSpecIR ext
+    , owpState :: OverrideState ext
+    }
+  deriving (Generic)
+
+makeLenses ''OverrideWithPreconditions
+
+-- | Partition into three groups:
+--   * Preconditions concretely succeed
+--   * Preconditions concretely fail
+--   * Preconditions are symbolic
+partitionOWPsConcrete :: forall ext.
+  Sym ->
+  [OverrideWithPreconditions ext] ->
+  IO ([OverrideWithPreconditions ext], [OverrideWithPreconditions ext], [OverrideWithPreconditions ext])
+partitionOWPsConcrete sym =
+  let trav = owpPreconditions . each . _2 . W4.labeledPred
+  in W4.partitionByPredsM (Just sym) $
+       foldlMOf trav (W4.andPred sym) (W4.truePred sym)
+
+-- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
+--   concretized values.
+partitionBySymbolicPreds ::
+  (OnlineSolver solver, Foldable t) =>
+  Backend solver {- ^ solver connection -} ->
+  (a -> W4.Pred Sym) {- ^ how to extract predicates -} ->
+  t a ->
+  IO (Map Crucible.BranchResult [a])
+partitionBySymbolicPreds sym getPred =
+  let step mp a =
+        Crucible.considerSatisfiability sym Nothing (getPred a) <&> \k ->
+          Map.insertWith (++) k [a] mp
+  in foldM step Map.empty
+
+-- | Find individual preconditions that are symbolically false
+--
+-- We should probably be using unsat cores for this.
+findFalsePreconditions ::
+  OnlineSolver solver =>
+  Backend solver ->
+  OverrideWithPreconditions ext ->
+  IO [(MS.ConditionMetadata, LabeledPred Sym)]
+findFalsePreconditions bak owp =
+  fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
+    partitionBySymbolicPreds bak (view (_2 . W4.labeledPred)) (owp ^. owpPreconditions)
+
+-- | Is this group of predicates collectively unsatisfiable?
+unsatPreconditions ::
+  OnlineSolver solver =>
+  Backend solver {- ^ solver connection -} ->
+  Fold s (W4.Pred Sym) {- ^ how to extract predicates -} ->
+  s {- ^ a container full of predicates -}->
+  IO Bool
+unsatPreconditions bak container getPreds = do
+  let sym = Crucible.backendGetSym bak
+  conj <- W4.andAllOf sym container getPreds
+  Crucible.considerSatisfiability bak Nothing conj >>=
+    \case
+      Crucible.NoBranch False -> pure True
+      _ -> pure False
+
+-- | Print a message about failure of an override's preconditions
+ppFailure ::
+  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
+  OverrideWithPreconditions ext ->
+  [LabeledPred Sym] ->
+  PP.Doc ann
+ppFailure owp false =
+  PP.vcat
+  [ MS.ppMethodSpec (owp ^. owpMethodSpec)
+    -- TODO: remove viaShow when crucible switches to prettyprinter
+  , bullets '*' (map (PP.viaShow . Crucible.ppSimError)
+                  (false ^.. traverse . W4.labeledPredMsg))
+  ]
+
+-- | Print a message about concrete failure of an override's preconditions
+--
+-- Assumes that the override it's being passed does have concretely failing
+-- preconditions. Otherwise, the error won't make much sense.
+ppConcreteFailure ::
+  (PP.Pretty (ExtType ext), PP.Pretty (MethodId ext)) =>
+  OverrideWithPreconditions ext ->
+  PP.Doc ann
+ppConcreteFailure owp =
+  let (_, false, _) =
+        W4.partitionLabeledPreds (Proxy :: Proxy Sym) (map snd (owp ^. owpPreconditions))
+  in ppFailure owp false
 
 ------------------------------------------------------------------------
 
@@ -383,3 +650,106 @@ assignmentToList ::
   Ctx.Assignment (Crucible.RegEntry sym) ctx ->
   [Crucible.AnyValue sym]
 assignmentToList = toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x y)
+
+------------------------------------------------------------------------
+
+learnGhost ::
+  SharedContext                                          ->
+  MS.ConditionMetadata                                   ->
+  PrePost                                                ->
+  MS.GhostGlobal                                            ->
+  TypedTerm                                              ->
+  OverrideMatcher ext md ()
+learnGhost sc md prepost var (TypedTerm (TypedTermSchema schEx) tmEx) =
+  do (sch,tm) <- readGlobal var
+     when (sch /= schEx) $ fail $ unlines $
+       [ "Ghost variable had the wrong type:"
+       , "- Expected: " ++ show (Cryptol.pp schEx)
+       , "- Actual:   " ++ show (Cryptol.pp sch)
+       ]
+     instantiateExtMatchTerm sc md prepost tm tmEx
+learnGhost _sc _md _prepost _var (TypedTerm tp _)
+  = fail $ unlines
+      [ "Ghost variable expected value has improper type"
+      , "expected Cryptol schema type, but got"
+      , show (MS.ppTypedTermType tp)
+      ]
+
+executeGhost ::
+  SharedContext ->
+  MS.ConditionMetadata ->
+  MS.GhostGlobal ->
+  TypedTerm ->
+  OverrideMatcher ext RW ()
+executeGhost sc _md var (TypedTerm (TypedTermSchema sch) tm) =
+  do s <- OM (use termSub)
+     tm' <- liftIO (scInstantiateExt sc s tm)
+     writeGlobal var (sch,tm')
+executeGhost _sc _md _var (TypedTerm tp _) =
+  fail $ unlines
+    [ "executeGhost: improper value type"
+    , "expected Cryptol schema type, but got"
+    , show (MS.ppTypedTermType tp)
+    ]
+
+-- | NOTE: The two 'Term' arguments must have the same type.
+instantiateExtMatchTerm ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  MS.ConditionMetadata ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
+  OverrideMatcher ext md ()
+instantiateExtMatchTerm sc md prepost actual expected = do
+  sub <- OM (use termSub)
+  matchTerm sc md prepost actual =<< liftIO (scInstantiateExt sc sub expected)
+
+matchTerm ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  MS.ConditionMetadata ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
+  OverrideMatcher ext md ()
+
+matchTerm _ _ _ real expect | real == expect = return ()
+matchTerm sc md prepost real expect =
+  do let loc = MS.conditionLoc md
+     free <- OM (use osFree)
+     case unwrapTermF expect of
+       FTermF (ExtCns ec)
+         | Set.member (ecVarIndex ec) free ->
+         do assignTerm sc md prepost (ecVarIndex ec) real
+
+       _ ->
+         do t <- liftIO $ scEq sc real expect
+            let expect' = showTerm expect
+                real' = showTerm real
+            let msg = unlines $
+                  [ "Literal equality " ++ MS.stateCond prepost
+                  , "Expected term: "
+                  , expect'
+                  , "Actual term:"
+                  , real'
+                  ]
+            addTermEq t md $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+--  where prettyTerm = show . ppTermDepth 20
+
+assignTerm ::
+  SharedContext      {- ^ context for constructing SAW terms    -} ->
+  MS.ConditionMetadata ->
+  PrePost                                                          ->
+  VarIndex {- ^ external constant index -} ->
+  Term     {- ^ value                   -} ->
+  OverrideMatcher ext md ()
+
+assignTerm sc md prepost var val =
+  do mb <- OM (use (termSub . at var))
+     case mb of
+       Nothing -> OM (termSub . at var ?= val)
+       Just old ->
+         matchTerm sc md prepost val old
+
+--          do t <- liftIO $ scEq sc old val
+--             p <- liftIO $ resolveSAWPred cc t
+--             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ MS.stateCond prepost))

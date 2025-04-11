@@ -13,11 +13,8 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Grammar
-  ( Decl(..)
-  , Term(..)
-  , parseSAW
+  ( parseSAW
   , parseSAWTerm
-  , lexer
   ) where
 
 import Control.Applicative ((<$>))
@@ -28,6 +25,7 @@ import qualified Data.ByteString.Lazy.UTF8 as B
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import Data.Traversable
 import Data.Word
 import Numeric.Natural
@@ -46,7 +44,7 @@ import Verifier.SAW.Lexer
 
 %tokentype { PosPair Token }
 %monad { Parser }
-%lexer { lexer } { PosPair _ TEnd }
+%lexer { lexer >>= } { PosPair _ TEnd }
 %error { parseError }
 %expect 0
 
@@ -251,70 +249,47 @@ rlist1(p) :: { [p] }
 
 {
 data ParseError
-  = UnexpectedLex [Word8]
+  = UnexpectedLex Text
   | UnexpectedToken Token
   | ParseError String
   deriving (Show)
 
-newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State AlexInput) a }
+newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State LexerState) a }
   deriving (Applicative, Functor, Monad)
 
 addError :: Pos -> ParseError -> Parser a
 addError p err = Parser $ throwError (PosPair p err)
 
-setInput :: AlexInput -> Parser ()
-setInput inp = Parser $ put inp
-
 parsePos :: Parser Pos
 parsePos = Parser $ gets pos
 
-lexer :: (PosPair Token -> Parser a) -> Parser a
-lexer f = do
-  let go prevErr next = do
-        let addErrors =
-              case prevErr of
-                Nothing -> return ()
-                Just (po,l) -> addError po (UnexpectedLex (reverse l))
-        s <- Parser get
-        let inp@(PosPair p (Buffer _ b)) = s
-            end = addErrors >> next (PosPair p TEnd)
-        case alexScan inp 0 of
-          AlexEOF -> end
-          AlexError _ ->
-            case alexGetByte inp of
-              Just (w,inp') -> do
-                setInput inp'
-                case prevErr of
-                  Nothing -> go (Just (p,[w])) next
-                  Just (po,l) -> go (Just (po,w:l)) next
-              Nothing -> end
-          AlexSkip inp' _ -> addErrors >> setInput inp' >> go Nothing next
-          AlexToken inp' l act -> do
-            addErrors
-            setInput inp'
-            let v = act (B.toString (B.take (fromIntegral l) b))
-            next (PosPair p v)
-  let read i tkn =
-        case val tkn of
-          TCmntS -> go Nothing (read (i+1))
-          TCmntE | i > 0 -> go Nothing (read (i-1))
-                 | otherwise -> do
-                     addError (pos tkn) (UnexpectedLex (fmap (fromIntegral . fromEnum) "-}"))
-                     go Nothing (read 0)
-          _ | i > 0 -> go Nothing (read i)
-            | otherwise -> f tkn
-  go Nothing (read (0::Integer))
+lexer :: Parser (PosPair Token)
+lexer = do
+  inp <- Parser get
+  let (inp', errors, result) = lexSAWCore inp
+  Parser $ put inp'
+  let issue (pos, msg) = case msg of
+        InvalidInput chars -> addError pos $ UnexpectedLex chars
+        UnclosedComment -> addError pos $ ParseError "Unclosed Comment"
+        MissingEOL ->
+          -- XXX: this should be a warning but we have no such ability here yet
+          --addWarning pos $ "No newline at end of file"
+          return ()
+  -- XXX: this can only actually throw one error. Fix this up when we
+  -- clean out the error printing infrastructure.
+  mapM issue errors
+  return result
 
 -- | Run parser given a directory for the base (used for making pathname relative),
 -- bytestring to parse, and parser to run.
-runParser :: Parser a -> FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) a
-runParser (Parser m) base path b = evalState (runExceptT m) initState
-  where initState = initialAlexInput base path b
+runParser :: Parser a -> FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) a
+runParser (Parser m) base path txt = evalState (runExceptT m) initState
+  where initState = initialLexerState base path txt
 
-parseSAW :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Module
+parseSAW :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) Module
 parseSAW = runParser parseSAW2
 
-parseSAWTerm :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Term
+parseSAWTerm :: FilePath -> FilePath -> LText.Text -> Either (PosPair ParseError) Term
 parseSAWTerm = runParser parseSAWTerm2
 
 parseError :: PosPair Token -> Parser a

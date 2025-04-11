@@ -1,0 +1,11 @@
+bc <- llvm_load_module "test.bc";
+
+let f_contract = do {
+  x <- llvm_alloc (llvm_pointer (llvm_int 8));
+  llvm_execute_func [x];
+  p <- llvm_alloc (llvm_int 8);
+  llvm_points_to x p;
+  llvm_points_to p (llvm_term {{ 42 : [8] }});
+};
+
+llvm_verify bc "f" [] false f_contract abc;

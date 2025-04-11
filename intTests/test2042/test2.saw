@@ -1,0 +1,2 @@
+// However, we shouldn't be able to use just anything as an identifier.
+let 😸 = true;

@@ -83,7 +83,7 @@ module Verifier.SAW.TypedAST
  , VarIndex
    -- * Utility functions
   , BitSet, emptyBitSet, inBitSet, unionBitSets, intersectBitSets
-  , decrBitSet, completeBitSet
+  , decrBitSet, completeBitSet, termIsClosed
  ) where
 
 import Control.Exception (assert)

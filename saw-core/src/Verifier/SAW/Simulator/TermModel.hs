@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ImplicitParams #-}
 
 {- |
 Module      : Verifier.SAW.Simulator.TermModel
@@ -18,7 +19,7 @@ module Verifier.SAW.Simulator.TermModel
        ( TmValue, TermModel, Value(..), TValue(..)
        , VExtra(..)
        , readBackValue, readBackTValue
-       , normalizeSharedTerm
+       , normalizeSharedTerm, normalizeSharedTerm'
        , extractUninterp
        ) where
 
@@ -66,7 +67,7 @@ extractUninterp ::
   IO (Term, ReplaceUninterpMap)
 extractUninterp sc m addlPrims ecVals unintSet opaqueSet t =
   do mapref <- newIORef mempty
-     cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union (constMap sc cfg) addlPrims)
+     cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union addlPrims (constMap sc cfg))
                              (extcns cfg mapref) (uninterpreted cfg mapref) (neutral cfg) (primHandler cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
@@ -135,9 +136,21 @@ normalizeSharedTerm ::
   Set VarIndex {- ^ opaque constants -} ->
   Term ->
   IO Term
-normalizeSharedTerm sc m addlPrims ecVals opaqueSet t =
+normalizeSharedTerm sc m addlPrims =
+  normalizeSharedTerm' sc m (const $ Map.union addlPrims)
+
+normalizeSharedTerm' ::
+  SharedContext ->
+  ModuleMap ->
+  (Sim.SimulatorConfig TermModel -> Map Ident TmPrim -> Map Ident TmPrim)
+    {- ^ function which adds additional primitives -} ->
+  Map VarIndex TmValue {- ^ ExtCns values -} ->
+  Set VarIndex {- ^ opaque constants -} ->
+  Term ->
+  IO Term
+normalizeSharedTerm' sc m primsFn ecVals opaqueSet t =
   do let ?recordEC = \_ec -> return ()
-     cfg <- mfix (\cfg -> Sim.evalGlobal' m (Map.union (constMap sc cfg) addlPrims)
+     cfg <- mfix (\cfg -> Sim.evalGlobal' m (primsFn cfg (constMap sc cfg))
                               (extcns cfg) (constants cfg) (neutral cfg) (primHandler cfg))
      v <- Sim.evalSharedTerm cfg t
      tv <- evalType cfg =<< scTypeOf sc t
@@ -420,7 +433,9 @@ readBackValue sc cfg = loop
          vs' <- Map.fromList <$> traverse build vs
          scRecord sc vs'
 
-    loop tv _v = panic "readBackValue" ["type mismatch", show tv]
+    loop tv v = panic "readBackValue" ["Type mismatch",
+                                       "Expected type: " ++ show tv,
+                                       "For value: " ++ show v]
 
     readBackCtorArgs cnm (VPiType _nm tv body) (v:vs) =
       do v' <- force v

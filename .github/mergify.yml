@@ -8,7 +8,7 @@ pull_request_rules:
     conditions:
       - "#approved-reviews-by>=1"
       - check-success=mergify
-      - label=ready-to-merge
+      - label="PR: ready to merge"
     actions:
       update: {}
       queue:
@@ -17,11 +17,12 @@ pull_request_rules:
   - name: Delete head branch after merge
     conditions:
       - merged
-      - label!=keep-branch-after-merge
+      # disabled October 2024
+      # - label!=keep-branch-after-merge
     actions:
       delete_head_branch: {}
   - name: Keep pull requests with keep-updated label updated
     conditions:
-      - label=keep-updated
+      - label="PR: keep updated"
     actions:
       update: {}

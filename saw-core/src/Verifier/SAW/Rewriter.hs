@@ -62,13 +62,14 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Monad.Identity
-import Control.Monad.State
+import Control.Monad (MonadPlus(..), (>=>), guard, join, unless)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import Data.IORef
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
 import qualified Data.List as List
+import Data.List.Extra (nubOrd)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -245,8 +246,8 @@ scMatch sc pat term =
     -- saves the names associated with those bound variables.
     match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState ->
              MaybeT IO MatchState
-    match _ _ (STApp i _ fv _) (STApp j _ _ _) s
-      | fv == emptyBitSet && i == j = return s
+    match _ _ t@(STApp i _ _ _) (STApp j _ _ _) s
+      | termIsClosed t && i == j = return s
     match depth env x y s@(MatchState m cs) =
       -- (lift $ putStrLn $ "matching (lhs): " ++ scPrettyTerm defaultPPOpts x) >>
       -- (lift $ putStrLn $ "matching (rhs): " ++ scPrettyTerm defaultPPOpts y) >>
@@ -325,6 +326,9 @@ boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
 vecEqIdent :: Ident
 vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
 
+pairEqIdent :: Ident
+pairEqIdent = mkIdent (mkModuleName ["Prelude"]) "pairEq"
+
 arrayEqIdent :: Ident
 arrayEqIdent = mkIdent (mkModuleName ["Prelude"]) "arrayEq"
 
@@ -393,6 +397,7 @@ ruleOfProp sc term ann =
     (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) -> eqRule x y
+    (R.asApplyAll -> (R.isGlobalDef pairEqIdent -> Just (), [_, _, _, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef arrayEqIdent -> Just (), [_, _, x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intEqIdent -> Just (), [x, y])) -> eqRule x y
     (R.asApplyAll -> (R.isGlobalDef intModEqIdent -> Just (), [_, x, y])) -> eqRule x y
@@ -875,8 +880,7 @@ replaceTerm :: Ord a =>
   Term         {- ^ the term in which to perform the replacement -} ->
   IO (Set a, Term)
 replaceTerm sc ss (pat, repl) t = do
-    let fvs = looseVars pat
-    unless (fvs == emptyBitSet) $ fail $ unwords
+    unless (termIsClosed pat) $ fail $ unwords
        [ "replaceTerm: term to replace has free variables!", scPrettyTerm defaultPPOpts t ]
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
@@ -937,7 +941,10 @@ hoistIfs sc t = do
    let ss :: Simpset () = addRules rules emptySimpset
 
    (t', conds) <- doHoistIfs sc ss cache itePat . snd =<< rewriteSharedTerm sc ss t
-   splitConds sc ss (map fst conds) t'
+
+   -- remove duplicate conditions from the list, as muxing in SAW can result in
+   -- many copies of the same condition, which cause a performance issue
+   splitConds sc ss (nubOrd $ map fst conds) t'
 
 
 splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term

@@ -1,0 +1,115 @@
+enable_experimental;
+
+// A basic spec that uses the initial value of S1.
+let f1_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_static_initializer "test::S1");
+};
+
+// An alternative spec that uses a different initial value for S1.
+let f1_alt_spec = do {
+  let s1_static = mir_static "test::S1";
+  let init = mir_term {{ 42 : [32] }};
+  mir_points_to s1_static init;
+
+  mir_execute_func [];
+
+  mir_points_to s1_static init;
+  mir_return init;
+};
+
+// A buggy spec that refers to a non-existent static initializer value.
+let f1_fail_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_static_initializer "test::S1_fake");
+};
+
+// A buggy spec that refers to a non-existent static value.
+let f1_fail_alt_spec = do {
+  let s1_static = mir_static "test::S1_fake";
+  let init = mir_term {{ 42 : [32] }};
+  mir_points_to s1_static init;
+
+  mir_execute_func [];
+
+  mir_points_to s1_static init;
+  mir_return init;
+};
+
+// A spec that matches against a static in the return value.
+let f2_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_static "test::S2");
+};
+
+// A basic spec that uses the initial value of S3.
+let f3_spec = do {
+  let s3_static = mir_static "test::S3";
+  mir_points_to s3_static (mir_static_initializer "test::S3");
+
+  mir_execute_func [];
+
+  let ret = mir_term {{ 4 : [32] }};
+  mir_points_to s3_static ret;
+  mir_return ret;
+};
+
+// An alternative spec that uses a different initial value for S3.
+let f3_alt_spec = do {
+  let s3_static = mir_static "test::S3";
+  let init = {{ 42 : [32] }};
+  mir_points_to s3_static (mir_term init);
+
+  mir_execute_func [];
+
+  let ret = mir_term {{ init + 1 }};
+  mir_points_to s3_static ret;
+  mir_return ret;
+};
+
+// A buggy spec that does not initialize S3 (a mutable static value).
+let f3_fail_spec = do {
+  mir_execute_func [];
+
+  mir_return (mir_term {{ 4 : [32] }});
+};
+
+// A spec that ensures that fresh allocations do not alias with static
+// references.
+let g_spec = do {
+  r_ref <- mir_alloc mir_u32;
+
+  mir_execute_func [r_ref];
+
+  mir_return (mir_term {{ False }});
+};
+
+// g(&S1) should return True.
+let g_alt_spec = do {
+  mir_execute_func [mir_static "test::S1"];
+
+  mir_return (mir_term {{ True }});
+};
+
+m <- mir_load_module "test.linked-mir.json";
+
+mir_verify m "test::f1" [] false f1_spec z3;
+mir_verify m "test::f1" [] false f1_alt_spec z3;
+mir_verify m "test::f2" [] false f2_spec z3;
+mir_verify m "test::f3" [] false f3_spec z3;
+mir_verify m "test::f3" [] false f3_alt_spec z3;
+mir_verify m "test::g" [] false g_spec z3;
+mir_verify m "test::g" [] false g_alt_spec z3;
+
+fails (
+  mir_verify m "test::f1" [] false f1_fail_spec z3
+);
+fails (
+  mir_verify m "test::f1" [] false f1_fail_alt_spec z3
+);
+fails (
+  mir_verify m "test::f3" [] false f3_fail_spec z3
+);

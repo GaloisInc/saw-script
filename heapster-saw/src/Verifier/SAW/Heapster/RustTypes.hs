@@ -36,9 +36,11 @@ import GHC.TypeLits
 import qualified Data.BitVector.Sized as BV
 import Data.Functor.Constant
 import Data.Functor.Product
-import Control.Applicative
-import Control.Monad.Reader
-import Control.Monad.Except
+import qualified Control.Applicative as App
+import Control.Monad (MonadPlus(..))
+import Control.Monad.Except (Except, MonadError(..), runExcept)
+import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
+import Control.Monad.Trans.Class (MonadTrans(..))
 import Control.Monad.Trans.Maybe
 import qualified Control.Monad.Fail as Fail
 
@@ -290,8 +292,8 @@ inRustCtx :: NuMatching a => RustCtx ctx -> RustConvM a ->
              RustConvM (Mb ctx a)
 inRustCtx ctx m = inRustCtxF ctx (const m)
 
--- | Class for a generic "conversion from Rust" function, given the bit width of
--- the pointer type
+-- | Class for a generic \"conversion from Rust\" function, given the bit width
+-- of the pointer type
 class RsConvert w a b | w a -> b where
   rsConvert :: (1 <= w, KnownNat w) => prx w -> a -> RustConvM b
 
@@ -347,7 +349,7 @@ mkShapeFun nm ctx f = \some_exprs exprs_str -> case some_exprs of
 constShapeFun :: RustName -> PermExpr (LLVMShapeType w) -> ShapeFun w
 constShapeFun nm sh = mkShapeFun nm CruCtxNil (const sh)
 
--- | Test if a shape is "option-like", meaning it is a tagged union shape with
+-- | Test if a shape is \"option-like\", meaning it is a tagged union shape with
 -- two tags, one of which has contents and one which has no contents; i.e., it
 -- is of the form
 --
@@ -358,7 +360,7 @@ constShapeFun nm sh = mkShapeFun nm CruCtxNil (const sh)
 -- > (fieldsh(eq(llvmword(bv1)))) orsh (fieldsh(eq(llvmword(bv2)));sh)
 --
 -- where @sh@ is non-empty. If so, return the non-empty shape @sh@, called the
--- "payload" shape.
+-- \"payload\" shape.
 matchOptionLikeShape :: PermExpr (LLVMShapeType w) ->
                         Maybe (PermExpr (LLVMShapeType w))
 matchOptionLikeShape top_sh = case asTaggedUnionShape top_sh of
@@ -370,7 +372,7 @@ matchOptionLikeShape top_sh = case asTaggedUnionShape top_sh of
                               [sh, PExpr_EmptyShape])) -> Just sh
   _ -> Nothing
 
--- | Test if a shape-in-binding is "option-like" as per 'matchOptionLikeShape'
+-- | Test if a shape-in-binding is \"option-like\" as per 'matchOptionLikeShape'
 matchMbOptionLikeShape :: Mb ctx (PermExpr (LLVMShapeType w)) ->
                           Maybe (Mb ctx (PermExpr (LLVMShapeType w)))
 matchMbOptionLikeShape =
@@ -440,7 +442,7 @@ namedShapeShapeFun _ w (SomeNamedShape nmsh) =
 -- @Foo<X>::Bar<Y,Z>::Baz@ just becomes @[Foo,Bar,Baz]@
 newtype RustName = RustName [Ident] deriving (Eq)
 
--- | Convert a 'RustName' to a string by interspersing "::"
+-- | Convert a 'RustName' to a string by interspersing @"::"@
 flattenRustName :: RustName -> String
 flattenRustName (RustName ids) = concat $ intersperse "::" $ map name ids
 
@@ -457,7 +459,7 @@ instance RsConvert w RustName (ShapeFun w) where
            do n <- lookupName str (LLVMShapeRepr (natRepr w))
               return $ constShapeFun nm (PExpr_Var n)
 
--- | Get the "name" = sequence of identifiers out of a Rust path
+-- | Get the \"name\" = sequence of identifiers out of a Rust path
 rsPathName :: Path a -> RustName
 rsPathName (Path _ segments _) =
   RustName $ map (\(PathSegment rust_id _ _) -> rust_id) segments
@@ -482,7 +484,7 @@ isNamedParams :: PathParameters a -> Bool
 isNamedParams (AngleBracketed _ tys _ _) = all isNamedType tys
 isNamedParams _ = error "Parenthesized types not supported"
 
--- | Decide whether a Rust type definition is polymorphic and "Option-like";
+-- | Decide whether a Rust type definition is polymorphic and \"Option-like\";
 -- that is, it contains only one data-bearing variant, and the data is of the
 -- polymorphic type
 isPolyOptionLike :: Item Span -> Bool
@@ -898,24 +900,24 @@ instance PermPretty Some3FunPerm where
   permPrettyM (Some3FunPerm fun_perm) = permPrettyM fun_perm
 
 -- | Try to convert a 'Some3FunPerm' to a 'SomeFunPerm' at a specific type
-un3SomeFunPerm :: CruCtx args -> TypeRepr ret -> Some3FunPerm ->
-                  RustConvM (SomeFunPerm args ret)
+un3SomeFunPerm :: (Fail.MonadFail m) => CruCtx args -> TypeRepr ret -> Some3FunPerm ->
+                  m (SomeFunPerm args ret)
 un3SomeFunPerm args ret (Some3FunPerm fun_perm)
   | Just Refl <- testEquality args (funPermArgs fun_perm)
   , Just Refl <- testEquality ret (funPermRet fun_perm) =
     return $ SomeFunPerm fun_perm
 un3SomeFunPerm args ret (Some3FunPerm fun_perm) =
-  rsPPInfo >>= \ppInfo ->
-  fail $ renderDoc $ vsep
-  [ pretty "Unexpected LLVM type for function permission:"
-  , permPretty ppInfo fun_perm
-  , pretty "Actual LLVM type of function:"
-    <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
-    <+> PP.group (permPretty ppInfo ret)
-  , pretty "Expected LLVM type of function:"
-    <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
-    <+> pretty "=>"
-    <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
+  let ppInfo = emptyPPInfo in
+    fail $ renderDoc $ vsep
+    [ pretty "Unexpected LLVM type for function permission:"
+    , permPretty ppInfo fun_perm
+    , pretty "Actual LLVM type of function:"
+      <+> PP.group (permPretty ppInfo args) <+> pretty "=>"
+      <+> PP.group (permPretty ppInfo ret)
+    , pretty "Expected LLVM type of function:"
+      <+> PP.group (permPretty ppInfo (funPermArgs fun_perm))
+      <+> pretty "=>"
+      <+> PP.group (permPretty ppInfo (funPermRet fun_perm)) ]
 
 -- | This is the more general form of 'funPerm3FromArgLayout, where there can be
 -- ghost variables in the 'ArgLayout'
@@ -1313,7 +1315,7 @@ data SomeMbWithPerms a where
 instance Functor SomeMbWithPerms where
   fmap f (SomeMbWithPerms ctx ps mb_a) = SomeMbWithPerms ctx ps (fmap f mb_a)
 
-instance Applicative SomeMbWithPerms where
+instance App.Applicative SomeMbWithPerms where
   pure a = SomeMbWithPerms CruCtxNil (emptyMb MNil) $ emptyMb a
   liftA2 f (SomeMbWithPerms ctx1 mb_ps1 mb_a1) (SomeMbWithPerms ctx2 mb_ps2 mb_a2) =
     SomeMbWithPerms (appendCruCtx ctx1 ctx2)
@@ -1323,7 +1325,7 @@ instance Applicative SomeMbWithPerms where
      flip fmap mb_a1 $ \a1 -> flip fmap mb_a2 $ \a2 -> f a1 a2)
 
 -- NOTE: the Monad instance fails here because it requires the output type of f
--- to satisfy NuMatching. That is, it is a "restricted monad", that is only a
+-- to satisfy NuMatching. That is, it is a \"restricted monad\", that is only a
 -- monad over types that satisfy the NuMatching restriction. Thus we define
 -- bindSomeMbWithPerms to add this restriction.
 {-
@@ -1548,7 +1550,16 @@ rsConvertFun _ _ _ _ = fail "rsConvertFun: unsupported Rust function type"
 parseFunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                         PermEnv -> prx w -> CruCtx args -> TypeRepr ret ->
                         String -> m (SomeFunPerm args ret)
-parseFunPermFromRust env w args ret str
+parseFunPermFromRust env w args ret str =
+  do get3SomeFunPerm <- parseSome3FunPermFromRust env w str
+     un3SomeFunPerm args ret get3SomeFunPerm
+
+
+-- | Just like `parseFunPermFromRust`, but returns a `Some3FunPerm`
+parseSome3FunPermFromRust :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
+                        PermEnv -> prx w ->
+                        String -> m Some3FunPerm
+parseSome3FunPermFromRust env w str
   | Just i <- findIndex (== '>') str
   , (gen_str, fn_str) <- splitAt (i+1) str
   , Right (Generics rust_ls1 rust_tvars wc span) <-
@@ -1556,10 +1567,7 @@ parseFunPermFromRust env w args ret str
   , Right (BareFn _ abi rust_ls2 fn_tp _) <-
       parse (inputStreamFromString fn_str) =
     runLiftRustConvM (mkRustConvInfo env) $
-    do some_fun_perm <-
-         rsConvertFun w abi (Generics
-                             (rust_ls1 ++ rust_ls2) rust_tvars wc span) fn_tp
-       un3SomeFunPerm args ret some_fun_perm
+    rsConvertFun w abi (Generics (rust_ls1 ++ rust_ls2) rust_tvars wc span) fn_tp
 
   | Just i <- findIndex (== '>') str
   , (gen_str, _) <- splitAt (i+1) str
@@ -1570,7 +1578,7 @@ parseFunPermFromRust env w args ret str
   , (_, fn_str) <- splitAt (i+1) str
   , Left err <- parse @(Ty Span) (inputStreamFromString fn_str) =
     fail ("Error parsing generics: " ++ show err)
-parseFunPermFromRust _ _ _ _ str =
+parseSome3FunPermFromRust _ _ str =
     fail ("Malformed Rust type: " ++ str)
 
 -- | Parse a polymorphic Rust type declaration and convert it to a Heapster
@@ -1579,10 +1587,7 @@ parseFunPermFromRust _ _ _ _ str =
 parseNamedShapeFromRustDecl :: (Fail.MonadFail m, 1 <= w, KnownNat w) =>
                                PermEnv -> prx w -> String ->
                                m (SomePartialNamedShape w)
-parseNamedShapeFromRustDecl env w str
-  | Right item <- parse @(Item Span) (inputStreamFromString str) =
-    runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item
-  | Left err <- parse @(Item Span) (inputStreamFromString str) =
-    fail ("Error parsing top-level item: " ++ show err)
-parseNamedShapeFromRustDecl _ _ str =
-  fail ("Malformed Rust type: " ++ str)
+parseNamedShapeFromRustDecl env w str =
+  case parse @(Item Span) (inputStreamFromString str) of
+   Right item -> runLiftRustConvM (mkRustConvInfo env) $ rsConvert w item
+   Left err -> fail ("Error parsing top-level item: " ++ show err)

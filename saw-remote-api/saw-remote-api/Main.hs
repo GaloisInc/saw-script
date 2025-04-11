@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
+
 import qualified Argo
 import qualified Argo.DefaultMain as Argo (defaultMain)
 import qualified Argo.Doc as Doc
@@ -38,6 +40,11 @@ import SAWServer.LLVMVerify
       llvmVerifyX86 )
 import SAWServer.MIRCrucibleSetup
     ( mirLoadModuleDescr, mirLoadModule )
+import SAWServer.MIRFindADT
+    ( mirFindADTDescr, mirFindADT )
+import SAWServer.MIRVerify
+    ( mirAssumeDescr, mirAssume,
+      mirVerifyDescr, mirVerify )
 import SAWServer.ProofScript
     ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
 import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
@@ -51,6 +58,7 @@ import SAWServer.Yosys
 
 main :: IO ()
 main = do
+  setLocaleEncoding utf8
   theApp <- Argo.mkApp
                "SAW RPC Server"
                serverDocs
@@ -121,6 +129,18 @@ sawMethods =
       "SAW/MIR/load module"
       mirLoadModuleDescr
       mirLoadModule
+  , Argo.command
+     "SAW/MIR/verify"
+     mirVerifyDescr
+     mirVerify
+  , Argo.command
+     "SAW/MIR/assume"
+     mirAssumeDescr
+     mirAssume
+  , Argo.command
+     "SAW/MIR/find ADT"
+     mirFindADTDescr
+     mirFindADT
   -- Yosys
   , Argo.command
      "SAW/Yosys/import"

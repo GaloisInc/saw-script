@@ -1,0 +1,7 @@
+import "Test.cry";
+
+// we should be able to refer to non-ascii identifiers in imported Cryptol
+let pi = {{ π }};
+
+// and we should be able to have our own non-ascii identifiers too
+let lá = true;

@@ -42,6 +42,7 @@ import Control.Applicative ((<$), (<$>))
 #endif
 import qualified Control.Monad.State as MTL
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -220,19 +221,19 @@ processEquivalences ((x,y):rest) cc
   | xCl == yCl = processEquivalences rest cc
   | otherwise =
     processEquivalences
-      ([ (l,r) | l:rl <- Map.elems appClassListMap, r <- rl ] ++ rest)
+      ([ (l,r) | l NE.:| rl <- Map.elems appClassListMap, r <- rl ] ++ rest)
       (cc { ccElementMap = Map.fromListWith Set.union
                          $ map (\(cl,tl) -> (mapFn cl, tl))
                          $ Map.toList (ccElementMap cc)
           , ccRepMap = Map.insert xCl yCl $ Map.map mapFn repMap
-          , ccAppMap = Map.map head appClassListMap
+          , ccAppMap = Map.map NE.head appClassListMap
           })
  where repMap = ccRepMap cc
        xCl = Map.findWithDefault x x repMap
        yCl = Map.findWithDefault y y repMap
        mapFn z = if z == xCl then yCl else z
-       appClassListMap = Map.fromListWith (++)
-         [ (ClassApp (mapFn <$> app), [mapFn cl])
+       appClassListMap = Map.fromListWith (<>)
+         [ (ClassApp (mapFn <$> app), mapFn cl NE.:| [])
          | (ClassApp app,cl) <- Map.toList (ccAppMap cc) ]
 
 type Comp f = MTL.State (CCSet f)

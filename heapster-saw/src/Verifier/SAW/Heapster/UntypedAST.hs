@@ -66,6 +66,7 @@ data AstExpr
   | ExFieldSh Pos (Maybe AstExpr) AstExpr -- ^ field shape
   | ExPtrSh Pos (Maybe AstExpr) (Maybe AstExpr) AstExpr -- ^ pointer shape
   | ExArraySh Pos AstExpr AstExpr AstExpr -- ^ array shape
+  | ExTupleSh Pos AstExpr -- ^ field shape
   | ExFalseSh Pos               -- ^ false shape
 
   | ExEqual Pos AstExpr AstExpr -- ^ equal bitvector proposition
@@ -110,6 +111,7 @@ instance HasPos AstExpr where
   pos (ExOrSh       p _ _      ) = p
   pos (ExExSh       p _ _ _    ) = p
   pos (ExFieldSh    p _ _      ) = p
+  pos (ExTupleSh    p _        ) = p
   pos (ExPtrSh      p _ _ _    ) = p
   pos (ExEqual      p _ _      ) = p
   pos (ExNotEqual   p _ _      ) = p

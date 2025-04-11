@@ -22,6 +22,7 @@ module Verifier.SAW.Term.Pretty
   , renderSawDoc
   , SawStyle(..)
   , PPOpts(..)
+  , MemoStyle(..)
   , defaultPPOpts
   , depthPPOpts
   , ppNat
@@ -46,17 +47,21 @@ module Verifier.SAW.Term.Pretty
 
 import Data.Char (intToDigit, isDigit)
 import Data.Maybe (isJust)
-import Control.Monad.Reader
-import Control.Monad.State.Strict as State
+import Control.Monad (forM)
+import Control.Monad.Reader (MonadReader(..), Reader, asks, runReader)
+import Control.Monad.State.Strict (MonadState(..), State, execState)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
 #endif
 import qualified Data.Foldable as Fold
+import Data.Hashable (hash)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Numeric (showIntAtBase)
+import Numeric (showIntAtBase, showHex)
 import Prettyprinter
 import Prettyprinter.Render.Terminal
 import Text.URI
@@ -106,12 +111,46 @@ data PPOpts = PPOpts { ppBase :: Int
                      , ppColor :: Bool
                      , ppShowLocalNames :: Bool
                      , ppMaxDepth :: Maybe Int
+                     , ppNoInlineMemoFresh :: [Int]
+                        -- ^ The numeric identifiers, as seen in the 'memoFresh'
+                        -- field of 'MemoVar', of variables that shouldn't be
+                        -- inlined
+                     , ppNoInlineIdx :: Set TermIndex -- move to PPState?
+                     , ppMemoStyle :: MemoStyle
                      , ppMinSharing :: Int }
+
+-- | How should memoization variables be displayed?
+--
+-- Note: actual text stylization is the province of 'ppMemoVar', this just
+-- describes the semantic information 'ppMemoVar' should be prepared to display.
+data MemoStyle
+  = Incremental
+  -- ^ 'Incremental' says to display a term's memoization variable with the
+  -- value of a counter that increments after a term is memoized. The first
+  -- term to be memoized will be displayed with '1', the second with '2', etc.
+  | Hash Int
+  -- ^ 'Hash i' says to display a term's memoization variable with the first 'i'
+  -- digits of the term's hash.
+  | HashIncremental Int
+  -- ^ 'HashIncremental i' says to display a term's memoization variable with
+  -- _both_ the first 'i' digits of the term's hash _and_ the value of the
+  -- counter described in 'Incremental'.
 
 -- | Default options for pretty-printing
 defaultPPOpts :: PPOpts
-defaultPPOpts = PPOpts { ppBase = 10, ppColor = False,
-                         ppShowLocalNames = True, ppMaxDepth = Nothing, ppMinSharing = 2 }
+defaultPPOpts =
+  PPOpts
+    { ppBase = 10
+    , ppColor = False
+    , ppNoInlineMemoFresh = mempty
+    , ppNoInlineIdx = mempty
+    , ppShowLocalNames = True
+    , ppMaxDepth = Nothing
+    , ppMinSharing = 2
+    , ppMemoStyle = Incremental }
+    -- If 'ppMemoStyle' changes its default, be sure to update the help text in
+    -- the interpreter functions that control the memoization style to reflect
+    -- this change to users.
 
 -- | Options for printing with a maximum depth
 depthPPOpts :: Int -> PPOpts
@@ -205,9 +244,18 @@ consVarNaming (VarNaming names) name =
 -- * Pretty-printing monad
 --------------------------------------------------------------------------------
 
--- | Memoization variables, which are like deBruijn index variables but for
--- terms that we are memoizing during printing
-type MemoVar = Int
+-- | Memoization variables contain several pieces of information about the term
+-- they bind. What subset is displayed when they're printed is governed by the
+-- 'ppMemoStyle' field of 'PPOpts', in tandem with 'ppMemoVar'.
+data MemoVar =
+  MemoVar
+    {
+      -- | A unique value - like a deBruijn index, but evinced only during
+      -- printing when a term is to be memoized.
+      memoFresh :: Int,
+      -- | A likely-unique value - the hash of the term this 'MemoVar'
+      -- represents.
+      memoHash :: Int }
 
 -- | The local state used by pretty-printing computations
 data PPState =
@@ -221,8 +269,8 @@ data PPState =
     ppNaming :: VarNaming,
     -- | The top-level naming environment
     ppNamingEnv :: SAWNamingEnv,
-    -- | The next "memoization variable" to generate
-    ppNextMemoVar :: MemoVar,
+    -- | A source of freshness for memoization variables
+    ppMemoFresh :: Int,
     -- | Memoization table for the global, closed terms, mapping term indices to
     -- "memoization variables" that are in scope
     ppGlobalMemoTable :: IntMap MemoVar,
@@ -233,9 +281,12 @@ data PPState =
 
 emptyPPState :: PPOpts -> SAWNamingEnv -> PPState
 emptyPPState opts ne =
-  PPState { ppOpts = opts, ppDepth = 0, ppNaming = emptyVarNaming,
+  PPState { ppOpts = opts,
+            ppDepth = 0,
+            ppNaming = emptyVarNaming,
             ppNamingEnv = ne,
-            ppNextMemoVar = 1, ppGlobalMemoTable = IntMap.empty,
+            ppMemoFresh = 1,
+            ppGlobalMemoTable = IntMap.empty,
             ppLocalMemoTable = IntMap.empty }
 
 -- | The pretty-printing monad
@@ -289,22 +340,47 @@ withBoundVarM basename m =
                               ppLocalMemoTable = IntMap.empty }) m
      return (var, ret)
 
--- | Run a computation in the context of a fresh "memoization variable" that is
--- bound to the given term index, passing the new memoization variable to the
--- computation. If the flag is true, use the global table, otherwise use the
--- local table.
-withMemoVar :: Bool -> TermIndex -> (MemoVar -> PPM a) -> PPM a
-withMemoVar global_p idx f =
-  do memo_var <- ppNextMemoVar <$> ask
-     local (\s -> add_to_table global_p memo_var s) (f memo_var)
-       where
-         add_to_table True v st =
-           st { ppNextMemoVar = v + 1,
-                ppGlobalMemoTable = IntMap.insert idx v (ppGlobalMemoTable st) }
-         add_to_table False v st =
-           st { ppNextMemoVar = v + 1,
-                ppLocalMemoTable = IntMap.insert idx v (ppLocalMemoTable st) }
+-- | Attempt to memoize the given term (index) 'termIdx' and run a computation
+-- in the context that the attempt produces. If memoization succeeds, the
+-- context will contain a binding (global in scope if 'global_p' is set, local
+-- if not) of a fresh memoization variable to the term, and the fresh variable
+-- will be supplied to the computation. If memoization fails, the context will
+-- not contain such a binding, and no fresh variable will be supplied.
+withMemoVar :: Bool -> TermIndex -> Int -> (Maybe MemoVar -> PPM a) -> PPM a
+withMemoVar global_p termIdx termHash f =
+  do
+    memoFresh <- asks ppMemoFresh
+    let memoVar = MemoVar { memoFresh = memoFresh, memoHash = termHash }
+    memoFreshSkips <- asks (ppNoInlineMemoFresh . ppOpts)
+    termIdxSkips <- asks (ppNoInlineIdx . ppOpts)
+    case memoFreshSkips of
+      -- Even if we must skip this memoization variable, we still want to
+      -- "pretend" we memoized by calling `freshen`, so that non-inlined
+      -- memoization identifiers are kept constant between two
+      -- otherwise-identical terms with differing inline strategies.
+      (skip:skips)
+        | skip == memoFresh ->
+          local (freshen . addIdxSkip . setMemoFreshSkips skips) (f Nothing)
+      _
+        | termIdx `Set.member` termIdxSkips -> f Nothing
+        | otherwise -> local (freshen . bind memoVar) (f (Just memoVar))
+  where
+    bind = if global_p then bindGlobal else bindLocal
 
+    bindGlobal memoVar PPState{ .. } =
+      PPState { ppGlobalMemoTable = IntMap.insert termIdx memoVar ppGlobalMemoTable, .. }
+
+    bindLocal memoVar PPState{ .. } =
+      PPState { ppLocalMemoTable = IntMap.insert termIdx memoVar ppLocalMemoTable, .. }
+
+    setMemoFreshSkips memoSkips PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineMemoFresh = memoSkips, ..}, ..}
+
+    addIdxSkip PPState{ ppOpts = PPOpts{ .. }, .. } =
+      PPState { ppOpts = PPOpts { ppNoInlineIdx = Set.insert termIdx ppNoInlineIdx, .. }, .. }
+
+    freshen PPState{ .. } =
+      PPState { ppMemoFresh = ppMemoFresh + 1, .. }
 
 --------------------------------------------------------------------------------
 -- * The Pretty-Printing of Specific Constructs
@@ -330,9 +406,17 @@ ppNat (PPOpts{..}) i
     value  = showIntAtBase (toInteger ppBase) (digits !!) i ""
     digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
--- | Pretty-print a memoization variable
-ppMemoVar :: MemoVar -> SawDoc
-ppMemoVar mv = "x@" <> pretty mv
+-- | Pretty-print a memoization variable, according to 'ppMemoStyle'
+ppMemoVar :: MemoVar -> PPM SawDoc
+ppMemoVar MemoVar{..} = asks (ppMemoStyle . ppOpts) >>= \case
+  Incremental ->
+    pure ("x@" <> pretty memoFresh)
+  Hash prefixLen ->
+    pure ("x@" <> pretty (take prefixLen hashStr))
+  HashIncremental prefixLen ->
+    pure ("x" <> pretty memoFresh <> "@" <> pretty (take prefixLen hashStr))
+  where
+    hashStr = showHex (abs memoHash) ""
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
@@ -344,16 +428,22 @@ ppAppList :: Prec -> SawDoc -> [SawDoc] -> SawDoc
 ppAppList _ f [] = f
 ppAppList p f args = ppParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 
--- | Pretty-print "let x1 = t1 ... xn = tn in body"
-ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> SawDoc
+-- | Pretty-print "let x = t ... x' = t' in body"
+ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> PPM SawDoc
 ppLetBlock defs body =
-  vcat
-  [ "let" <+> lbrace <+> align (vcat (map ppEqn defs))
-  , indent 4 rbrace
-  , " in" <+> body
-  ]
+  do
+    lets <- align . vcat <$> mapM ppEqn defs
+    pure $
+      vcat
+        [ "let" <+> lbrace <+> lets
+        , indent 4 rbrace
+        , " in" <+> body
+        ]
   where
-    ppEqn (var,d) = ppMemoVar var <+> pretty '=' <+> d
+    ppEqn (var,d) =
+      do
+        mv <- ppMemoVar var
+        pure $ mv <+> pretty '=' <+> d
 
 
 -- | Pretty-print pairs as "(x, y)"
@@ -544,7 +634,7 @@ ppTerm' prec = atNextDepthM "..." . ppTerm'' where
   ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
        case maybe_memo_var of
-         Just memo_var -> return $ ppMemoVar memo_var
+         Just memo_var -> ppMemoVar memo_var
          Nothing -> ppTermF prec tf
 
 
@@ -641,7 +731,7 @@ filterOccurenceMap min_occs global_p =
     IntMap.filter
       (\(t,cnt) ->
         cnt >= min_occs && shouldMemoizeTerm t &&
-        (if global_p then looseVars t == emptyBitSet else True))
+        (if global_p then termIsClosed t else True))
 
 
 -- For each (TermIndex, Term) pair in the occurrence map, pretty-print the
@@ -656,17 +746,19 @@ ppLets _ [] [] baseDoc = baseDoc
 
 -- When we have run out of (idx,term) pairs, pretty-print a let binding for
 -- all the accumulated bindings around the term
-ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) <$> baseDoc
+ppLets _ [] bindings baseDoc = ppLetBlock (reverse bindings) =<< baseDoc
 
 -- To add an (idx,term) pair, first check if idx is already bound, and, if
 -- not, add a new MemoVar bind it to idx
-ppLets global_p ((idx, (t_rhs,_)):idxs) bindings baseDoc =
-  do isBound <- isJust <$> memoLookupM idx
+ppLets global_p ((termIdx, (term,_)):idxs) bindings baseDoc =
+  do isBound <- isJust <$> memoLookupM termIdx
      if isBound then ppLets global_p idxs bindings baseDoc else
-       do doc_rhs <- ppTerm' PrecTerm t_rhs
-          withMemoVar global_p idx $ \memo_var ->
-            ppLets global_p idxs ((memo_var, doc_rhs):bindings) baseDoc
-
+       do termDoc <- ppTerm' PrecTerm term
+          withMemoVar global_p termIdx (hash term) $ \memoVarM ->
+            let bindings' = case memoVarM of
+                  Just memoVar -> (memoVar, termDoc):bindings
+                  Nothing -> bindings
+            in  ppLets global_p idxs bindings' baseDoc
 
 -- | Pretty-print a term inside a binder for a variable of the given name,
 -- returning both the result of pretty-printing and the fresh name actually used
@@ -700,7 +792,7 @@ ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 
 -- | Pretty-print a term, but only to a maximum depth
 ppTermDepth :: Int -> Term -> SawDoc
-ppTermDepth depth t = ppTerm (depthPPOpts depth) t
+ppTermDepth depth = ppTerm (depthPPOpts depth)
 
 -- | Like 'ppTerm', but also supply a context of bound names, where the most
 -- recently-bound variable is listed first in the context

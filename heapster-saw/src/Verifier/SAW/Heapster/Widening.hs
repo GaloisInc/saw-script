@@ -7,7 +7,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -31,11 +30,13 @@ module Verifier.SAW.Heapster.Widening where
 
 import Data.Maybe
 import Data.List
+import Data.Functor (void)
 import Data.Functor.Constant
 import Data.Functor.Product
-import Control.Monad.State
--- import Control.Monad.Cont
-import GHC.TypeLits
+import Control.Monad (ap, zipWithM)
+import Control.Monad.State (MonadState(..), StateT(..), modify)
+import Control.Monad.Trans.Class (MonadTrans(..))
+import GHC.TypeLits (KnownNat)
 import Control.Lens hiding ((:>), Index, Empty, ix, op)
 import Control.Monad.Extra (concatMapM)
 
@@ -80,7 +81,7 @@ newtype ExtVarPermsFun vars =
                      RAssign Name vars -> ExtVarPerms vars }
 
 -- | A map from free variables to their permissions and whether they have been
--- "visited" yet
+-- \"visited\" yet
 type WidNameMap = NameMap (Product ValuePerm (Constant Bool))
 
 -- | Modify the entry in a 'WidNameMap' associated with a particular free

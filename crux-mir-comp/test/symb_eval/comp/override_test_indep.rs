@@ -8,7 +8,7 @@ fn f(x: (u8, u8)) -> (u8, u8) {
     (x.1, x.0)
 }
 
-#[crux_test]
+#[crux::test]
 fn f_test() {
     clobber_globals();
     let x = <(u8, u8)>::symbolic("x");
@@ -33,7 +33,7 @@ fn f_spec() -> MethodSpec {
     msb.finish()
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f1() {
     let a = u8::symbolic("a");
     let b = u8::symbolic("b");
@@ -44,7 +44,7 @@ fn use_f1() {
     crucible_assert!(d < 10);
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f2() {
     f_spec().enable();
 
@@ -57,7 +57,7 @@ fn use_f2() {
     crucible_assert!(d < 10);
 }
 
-#[crux_test]
+#[crux::test]
 fn use_f3() {
     let a = u8::symbolic("a");
     let b = u8::symbolic("b");

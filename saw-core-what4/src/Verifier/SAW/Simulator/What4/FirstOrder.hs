@@ -29,6 +29,8 @@ module Verifier.SAW.Simulator.What4.FirstOrder
   ) where
 
 import qualified Data.BitVector.Sized as BV
+import qualified Data.Map as Map
+import Data.Foldable.WithIndex (ifoldlM)
 import Data.Parameterized.TraversableFC (FoldableFC(..))
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context hiding (replicate)
@@ -38,6 +40,7 @@ import Verifier.SAW.Simulator.What4.PosNat
 import Verifier.SAW.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
 
 import What4.BaseTypes
+import What4.IndexLit
 import What4.Expr.GroundEval
 
 ---------------------------------------------------------------------
@@ -111,12 +114,50 @@ groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
 groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"
 groundToFOV (BaseFloatRepr _)       _ = Left "Floating point is not FOV"
-groundToFOV (BaseArrayRepr (Empty :> ty) b) _
-  | Right fot1 <- typeReprToFOT ty
-  , Right fot2 <- typeReprToFOT b
-  = pure $ FOVArray fot1 fot2
-groundToFOV (BaseArrayRepr _idx _b) _ = Left "Unsupported FOV Array"
+groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayMapping _) = do
+    -- ArrayMapping is an array represented as a function call we can
+    -- use to extract values. We can't do anything useful with this
+    -- because we don't have any clue what key values to look at and
+    -- no good way to figure that out either. So return a placeholder
+    -- value in FirstOrderValue.
+    --
+    -- (The frustrating part is that in many cases the _user_ will
+    -- know what key values to look at, but has no way to tell us.)
+    --
+    -- In principle we could change groundToFOV to return any of an
+    -- error, a FirstOrderValue, or a separate FunctionArrayValue
+    -- type, and use that channel to return the actual function
+    -- handle. (Including the function handle in a FirstOrderValue
+    -- value is problematic as things stand.) However, there's nothing
+    -- to be gained by doing this without a way to figure out what
+    -- key values to look at. And realistically, if we ever _do_
+    -- come up with a way to figure out what key values to look at,
+    -- it should be implemented in What4 so What4 never returns
+    -- ArrayMapping.
+    --
+    -- (See Note [FOVArray] in in saw-core:Verifier.SAW.FiniteValue
+    -- where FirstOrderValue is defined.)
+    ty_idx' <- typeReprToFOT ty_idx
+    ty_val' <- typeReprToFOT ty_val
+    pure $ FOVOpaqueArray ty_idx' ty_val'
+groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayConcrete dfl values) = do
+    ty_idx' <- typeReprToFOT ty_idx
+    dfl' <- groundToFOV ty_val dfl
+    let convert idx values' v = do
+          let idx' = indexToFOV idx
+          v' <- groundToFOV ty_val v
+          return $ Map.insert idx' v' values'
+    values' <- ifoldlM convert Map.empty values
+    pure $ FOVArray ty_idx' dfl' values'
+groundToFOV (BaseArrayRepr _ _) _ =
+    Left "Unsupported FOV array (unexpected key type)"
 groundToFOV (BaseStructRepr ctx) tup  = FOVTuple <$> tupleToList ctx tup
+
+indexToFOV :: Assignment IndexLit (EmptyCtx ::> ty) -> FirstOrderValue
+indexToFOV (Empty :> IntIndexLit k) =
+    FOVInt k
+indexToFOV (Empty :> BVIndexLit w k) =
+    FOVWord (natValue w) (BV.asUnsigned k)
 
 
 tupleToList :: Assignment BaseTypeRepr ctx ->

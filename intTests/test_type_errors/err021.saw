@@ -1,0 +1,8 @@
+// Trigger the "Selecting a missing (record) field" message.
+
+typedef t = {
+   a: Int,
+   b: Int
+};
+
+let foo (x: t) = x.nonexistent;

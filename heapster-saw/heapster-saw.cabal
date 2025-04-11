@@ -15,33 +15,42 @@ Description:
 
 library
   build-depends:
+
+    -- upstream packages from hackage
     base == 4.*,
+    aeson >= 1.5 && < 2.3,
     array ^>= 0.5.3,
-    saw-core,
+    bytestring,
+    containers,
+    extra,
+    filepath,
+    lens,
+    mtl,
+    pretty,
+    prettyprinter >= 1.7.0,
+    reflection,
+    text,
+    template-haskell,
+    th-abstraction,
+    transformers,
+    vector,
+
+    -- galois packages from hackage
+    bv-sized,
+
+    -- packages in git submodules
+    -- (hobbits is for now actually a source-repository-package)
     crucible,
     crucible-llvm,
-    what4,
-    parameterized-utils,
-    lens,
-    text,
-    llvm-pretty >= 0.8,
-    reflection,
-    -- ansi-wl-pprint,
-    prettyprinter >= 1.7.0,
-    pretty,
-    transformers,
-    mtl,
-    containers,
-    bv-sized,
-    bytestring,
-    vector,
-    filepath,
-    language-rust,
     hobbits ^>= 1.4,
-    aeson >= 1.5 && < 2.1,
-    th-abstraction,
-    template-haskell,
-    extra
+    language-rust,
+    llvm-pretty >= 0.8,
+    parameterized-utils,
+    what4,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
   hs-source-dirs: src
   build-tool-depends:
     alex:alex,
@@ -52,7 +61,6 @@ library
     Verifier.SAW.Heapster.IDESupport
     Verifier.SAW.Heapster.HintExtract
     Verifier.SAW.Heapster.Implication
-    Verifier.SAW.Heapster.IRTTranslation
     Verifier.SAW.Heapster.Lexer
     Verifier.SAW.Heapster.LLVMGlobalConst
     Verifier.SAW.Heapster.Located
@@ -84,7 +92,9 @@ test-suite prover_tests
 
   main-is: Main.hs
 
-  build-depends: base
+  build-depends:
+                 -- upstream packages from hackage
+                 base
                , directory
                , filemanip
                , filepath
@@ -92,7 +102,12 @@ test-suite prover_tests
                , tasty
                , tasty-hunit
                , tasty-expected-failure
-               , heapster-saw
-               , hobbits ^>= 1.4
+
+                 -- packages in git submodules
+                 -- (hobbits is for now actually a source-repository-package)
                , crucible
                , crucible-llvm
+               , hobbits ^>= 1.4
+
+                 -- this package's own library
+               , heapster-saw

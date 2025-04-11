@@ -1,0 +1,4 @@
+// comments don't break cryptol's whitespace-sensitive parsing
+let {{ x : Bit -> Bit /*
+*/     x y = y
+}};

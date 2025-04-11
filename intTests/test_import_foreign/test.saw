@@ -1,0 +1,7 @@
+import "test.cry";
+
+// requires definition of add
+prove_print z3 {{ \x y -> add x y == x + y }};
+
+// does not require definition of f
+prove_print (unint_z3 ["f"]) {{ \x -> f x + 1 == 1 + f x }};

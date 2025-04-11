@@ -1,0 +1,4 @@
+import Primitive::Symmetric::Cipher::Stream::Salsa20 (Salsa20_encrypt)
+
+foreign cipher : {a, w} (a >= 1, 2 >= a, w <= 2^^70) => [16*a][8] -> [8][8] -> [w][8] -> [w][8]
+cipher = Salsa20_encrypt

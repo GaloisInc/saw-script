@@ -1,0 +1,5 @@
+-- We should now be able to have non-ascii identifiers in saw-core
+module test4 where
+import Prelude;
+lá : Bool;
+lá = True;

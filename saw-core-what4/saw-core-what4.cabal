@@ -15,19 +15,27 @@ Description:
 
 library
   build-depends:
+
+    -- upstream packages from hackage
     base >= 4.9,
     bv-sized >= 1.0.0,
     containers,
+    indexed-traversable,
     lens,
     mtl,
-    saw-core,
-    what4,
     panic,
     text,
     transformers,
     vector,
+    reflection,
+
+    -- packages in git submodules
     parameterized-utils >= 1.0.8 && < 2.2,
-    reflection
+    what4,
+
+    -- internal subpackages in the saw tree
+    saw-core
+
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Simulator.What4

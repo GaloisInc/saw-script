@@ -2,12 +2,14 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Mir.Compositional.Clobber
 where
 
 import Control.Lens ((^.), (^?), ix)
-import Control.Monad.Except
+import Control.Monad (forM_)
+import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
@@ -22,6 +24,8 @@ import What4.ProgramLoc
 import Lang.Crucible.Backend
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
+
+import SAWScript.Crucible.MIR.TypeShape
 
 import Mir.Generator (CollectionState, collection, staticMap, StaticVar(..))
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
@@ -58,7 +62,16 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (TransparentShape _ shp) rv = go shp rv
-    go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
+    go (EnumShape _ _ _ _ _) _rv =
+      error "Enums not currently supported in overrides"
+    go (FnPtrShape _ _ _) _rv =
+        error "Function pointers not currently supported in overrides"
+    go (RefShape _ _ _ _) _rv = error "clobberSymbolic: RefShape NYI"
+    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        ref' <- go refShp ref
+        len' <- go lenShp len
+        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
@@ -103,7 +116,16 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
     go (TransparentShape _ shp) rv = go shp rv
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
-    go (RefShape _ _ _tpr) rv = return rv
+    go (RefShape _ _ _ _tpr) rv = return rv
+    go (SliceShape _ ty mutbl tpr) (Ctx.Empty Ctx.:> RV ref Ctx.:> RV len) = do
+        let (refShp, lenShp) = sliceShapeParts ty mutbl tpr
+        ref' <- go refShp ref
+        len' <- go lenShp len
+        pure $ Ctx.Empty Ctx.:> RV ref' Ctx.:> RV len'
+    go (EnumShape _ _ _ _ _) _rv =
+      error "Enums not currently supported in overrides"
+    go (FnPtrShape _ _ _) _rv =
+        error "Function pointers not currently supported in overrides"
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (p sym) sym MIR rtp args ret (RegValue' sym tp)
@@ -132,6 +154,8 @@ freshSymbolic sym loc nameStr shp = go shp
         return expr
     go (ArrayShape (M.TyArray _ len) _ shp) =
         MirVector_Vector <$> V.replicateM len (go shp)
+    go (FnPtrShape _ _ _) =
+        error "Function pointers not currently supported in overrides"
     go shp = error $ "freshSymbolic: " ++ show (shapeType shp) ++ " NYI"
 
 

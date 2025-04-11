@@ -9,6 +9,7 @@ module SAWScript.AutoMatch.Declaration
   , declSig
   ) where
 
+import Data.Text (Text, unpack)
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -17,8 +18,8 @@ import Control.Arrow ( (&&&) )
 import Cryptol.TypeCheck.AST (Type(..), TCon(..), TC(..))
 import Cryptol.Utils.PP
 
--- | Names are strings
-type Name = String
+-- | Names are strings (for which we'll use Text)
+type Name = Text
 
 -- | Arguments are names with (Cryptol) types
 data Arg = Arg { argName :: Name
@@ -28,7 +29,7 @@ data Arg = Arg { argName :: Name
 instance Show Arg where
    showsPrec d (Arg n t) =
       showParen (d > app_prec) $
-         showString n
+         showString (unpack n)
          . showString " : "
          . showString (pretty t)
       where app_prec = 10
@@ -42,7 +43,7 @@ data Decl = Decl { declName :: Name
 instance Show Decl where
    showsPrec d (Decl n t as) =
       showParen (d > app_prec) $
-         showString n
+         showString (unpack n)
          . showString " : "
          . showString "("
          . showString (intercalate ", " (map show as))

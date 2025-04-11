@@ -1,0 +1,7 @@
+verific -vhdl demo.vhd
+hierarchy -check -top PrimeSelector
+stat
+write_json bmux.json
+bmuxmap
+stat
+write_json mux.json

@@ -1,0 +1,8 @@
+ --------------------------------
+ -- ProofScript
+
+Parse error at <stdin>:1:1-1:12: Unexpected `ProofScript'
+ --------------------------------
+ -- (ProofScript)
+
+Parse error at <stdin>:1:13-1:14: Unexpected `)'

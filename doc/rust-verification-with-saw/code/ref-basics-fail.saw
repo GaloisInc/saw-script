@@ -1,0 +1,11 @@
+enable_experimental;
+
+let read_ref_fail_spec = do {
+  r <- mir_alloc mir_u32;
+  mir_execute_func [r];
+  // mir_return ??;
+};
+
+m <- mir_load_module "ref-basics.linked-mir.json";
+
+mir_verify m "ref_basics::read_ref" [] false read_ref_fail_spec z3;
