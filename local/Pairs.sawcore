@@ -16,7 +16,26 @@ PairsL = ListSort__rec
           (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
                (PairType rec tp));
 
+---- ListSort combinators [to Prelude] -----------------------------
 
+listSort_FoldL : (b : sort 1) -> (b -> sort 0 -> b) -> b -> ListSort -> b;
+listSort_FoldL b f init ls =
+  ListSort__rec
+    (\(_ls: ListSort) -> b->b)
+    (\(x: b)-> x)
+    (\(A: sort 0) (l: ListSort) (g: b->b) ->
+       \(acc: b)-> g (f acc A)  -- <- has type b->b
+    )
+    ls
+    init;
+
+listSort_Reverse : ListSort -> ListSort;
+listSort_Reverse = listSort_FoldL
+                     ListSort
+                     (\(ls: ListSort) (A:sort 0)-> LS_Cons A ls)
+                     (LS_Nil);
+
+---- Testing -------------------------------------------------------
 ls1 : ListSort;
 ls1 = LS_Cons (Vec 1 Bool) (LS_Cons (Vec 2 Bool) LS_Nil);
 
@@ -171,26 +190,15 @@ testbR : sort 0 = PairsR ls1;
 testbL : sort 0 = PairsL ls1;
 testbA : sort 0 = arrowsType ls1 Nat;
 
--- test1 : sort 0 = testbR;
+test1 : sort 0 = testbR;
 test2 : sort 0 = testbL;
 test3 : sort 0 = testbA;
 
 
 ---- latest:
 
-listSort_FoldL : (b : sort 1) -> (b -> sort 0 -> b) -> b -> ListSort -> b;
-listSort_FoldL b f init ls =
-  ListSort__rec
-    (\(ls': ListSort) -> b->b)
-    (\(x: b)-> x)
-    (\(A: sort 0) (l: ListSort) (g: b->b) ->
-       -- of type: P(LS_Cons A l) == b->b
-       -- g
-       -- \(acc: b)-> g (f acc a2)
-       \(acc: b)-> g (f acc A)
-    )
-    ls
-    init;
+test4 : Nat      = listSort_FoldL Nat (\(x:Nat) (_:sort 0)-> Succ x) 0 ls1;
 
--- test1 : Nat = listSort_FoldL Nat Nat (\(x:Nat) (_:Nat)-> x) 0 ls1;
-test1 : Nat = 0;
+test5 : ListSort = listSort_Reverse ls1;
+
+test6 : ListSort = ls1;
