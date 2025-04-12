@@ -16,5 +16,8 @@ let printNorm_e2 = printNorm "Pairs";   // Module name!
 printNorm_e2 "test1";
 printNorm_e2 "test2";
 printNorm_e2 "test3";
+printNorm_e2 "test4";
+printNorm_e2 "test5";
+printNorm_e2 "test6";
 
 print "done";
