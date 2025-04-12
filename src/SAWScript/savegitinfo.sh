@@ -3,15 +3,17 @@
 # usage: saw/SAWScript/savegitinfo.sh
 
 set -e
-
+unset CDPATH   # `./` ensure no echoing of current directory in output
 WHERE=$(dirname "$0")
 
 # Run "git describe" in directory $1 and wrap the output in Maybe
-# (put the chdir inside so we get Nothing back if it fails)
 gitdescribe() {
     local output
 
-    output=$(cd $1 && git describe --always --dirty)
+    # Note: we get Nothing back if cd fails
+    # Note: cd inside `output=` ensures no extraneous output from errors.
+    output=$(cd ./$1 && git describe --always --dirty)
+      # `./` reduces echoing of current directory when CDPATH is set.
     if [ $? != 0 ]; then
         echo Nothing
     else
