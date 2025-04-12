@@ -106,6 +106,7 @@ import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
 import           SAWScript.Crucible.MIR.Builtins
 import           SAWScript.Crucible.LLVM.X86
+import           SAWScript.Crucible.LLVM.AArch32
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import           SAWScript.Crucible.LLVM.FFI
@@ -3829,6 +3830,21 @@ primitives = Map.fromList
     [ "Set the timeout for the SMT solver during the LLVM and X86 Crucible symbolic execution,"
     ,"in milliseconds (0 is no timeout). The default is 10000ms (10s)."
     ,"This is used for path-sat checks, and sat checks when applying overrides."
+    ]
+
+  , prim "llvm_verify_aarch32"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_aarch32)
+    Experimental
+    [ "Verify an AArch32 function from an ELF file for use as an override in an"
+    , "LLVM verification. The first argument specifies the LLVM module"
+    , "containing the _caller_. The second and third specify the ELF file"
+    , "name and symbol name of the function to be verifier. The fourth"
+    , "specifies the names and sizes (in bytes) of global variables to"
+    , "initialize, and the fifth whether to perform path satisfiability"
+    , "checking. The last argument is the LLVM specification of the calling"
+    , "context against which to verify the function. Returns a method spec"
+    , "that can be used as an override when verifying other LLVM functions."
     ]
 
   , prim "llvm_array_value"

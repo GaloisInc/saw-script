@@ -52,3 +52,15 @@
 [submodule "deps/mir-json"]
 	path = deps/mir-json
 	url = https://github.com/GaloisInc/mir-json.git
+[submodule "deps/asl-translator"]
+	path = deps/asl-translator
+	url = https://github.com/GaloisInc/asl-translator
+[submodule "deps/arm-asl-parser"]
+	path = deps/arm-asl-parser
+	url = https://github.com/GaloisInc/arm-asl-parser
+[submodule "deps/dismantle"]
+	path = deps/dismantle
+	url = https://github.com/travitch/dismantle
+[submodule "deps/semmc"]
+	path = deps/semmc
+	url = https://github.com/GaloisInc/semmc

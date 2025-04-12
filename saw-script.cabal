@@ -71,6 +71,7 @@ library
       -- packages in git submodules
       -- (hobbits is for now actually a source-repository-package)
     , aig
+    , asl-translator
     , crucible >= 0.4
     , crucible-jvm
     , crucible-llvm >= 0.2
@@ -87,6 +88,8 @@ library
     , lmdb-simple
     , macaw-base
     , macaw-x86
+    , macaw-aarch32
+    , macaw-aarch32-symbolic
     , macaw-symbolic
     , macaw-x86-symbolic
     , parameterized-utils
@@ -148,6 +151,8 @@ library
 
     SAWScript.HeapsterBuiltins
 
+    SAWScript.Crucible.CrucibleSAW.SAWCore
+
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
@@ -167,6 +172,7 @@ library
     SAWScript.Crucible.LLVM.Skeleton
     SAWScript.Crucible.LLVM.Skeleton.Builtins
     SAWScript.Crucible.LLVM.X86
+    SAWScript.Crucible.LLVM.AArch32
 
     SAWScript.Crucible.JVM.Builtins
     SAWScript.Crucible.JVM.BuiltinsJVM
