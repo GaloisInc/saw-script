@@ -139,7 +139,7 @@ span.spaces    { background: white }
 <span class="lineno">  120 </span>natFun :: VMonad l =&gt; (Natural -&gt; Prim l) -&gt; Prim l
 <span class="lineno">  121 </span><span class="decl"><span class="istickedoff">natFun = PrimFilterFun <span class="nottickedoff">&quot;expected Nat&quot;</span> r</span>
 <span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">where r (VNat n) = pure n</span>
-<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (primName -&gt; &quot;Prelude.Zero&quot;) [] [])  = pure 0</span>
+<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (primName -&gt; &quot;Prelude.Zero&quot;) [] [])  = <span class="nottickedoff">pure 0</span></span>
 <span class="lineno">  124 </span><span class="spaces">        </span><span class="istickedoff">r (VCtorApp (primName -&gt; &quot;Prelude.Succ&quot;) [] [x]) = <span class="nottickedoff">succ &lt;$&gt; (r =&lt;&lt; lift (force x))</span></span>
 <span class="lineno">  125 </span><span class="spaces">        </span><span class="istickedoff">r _ = <span class="nottickedoff">mzero</span></span></span>
 <span class="lineno">  126 </span>
@@ -709,7 +709,7 @@ span.spaces    { background: white }
 <span class="lineno">  690 </span>divModNatOp :: (HasCallStack, VMonad l, Show (Extra l)) =&gt; BasePrims l -&gt; Prim l
 <span class="lineno">  691 </span><span class="decl"><span class="istickedoff">divModNatOp bp = binNatOp <span class="nottickedoff">bp</span> <span class="nottickedoff">max</span></span>
 <span class="lineno">  692 </span><span class="spaces">                 </span><span class="istickedoff">(\m n -&gt; let (q,r) = divMod m n in</span>
-<span class="lineno">  693 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, ready $ vNat r])</span>
+<span class="lineno">  693 </span><span class="spaces">                          </span><span class="istickedoff">pure $ vTuple [ready $ vNat q, <span class="nottickedoff">ready $ vNat r</span>])</span>
 <span class="lineno">  694 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">(\w x1 x2 -&gt; do q &lt;- VBVToNat w . VWord &lt;$&gt; bpBvUDiv bp x1 x2</span></span>
 <span class="lineno">  695 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">r &lt;- VBVToNat w . VWord &lt;$&gt; bpBvURem bp x1 x2</span></span>
 <span class="lineno">  696 </span><span class="spaces">                                 </span><span class="istickedoff"><span class="nottickedoff">pure $ vTuple [ready q, ready r])</span></span></span>
@@ -744,10 +744,10 @@ span.spaces    { background: white }
 <span class="lineno">  725 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \z -&gt;</span>
 <span class="lineno">  726 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \s -&gt;</span>
 <span class="lineno">  727 </span><span class="spaces">  </span><span class="istickedoff">natFun $ \n -&gt; Prim $</span>
-<span class="lineno">  728 </span><span class="spaces">    </span><span class="istickedoff">if n == 0</span>
-<span class="lineno">  729 </span><span class="spaces">    </span><span class="istickedoff">then force z</span>
+<span class="lineno">  728 </span><span class="spaces">    </span><span class="istickedoff">if <span class="tickonlyfalse">n == 0</span></span>
+<span class="lineno">  729 </span><span class="spaces">    </span><span class="istickedoff">then <span class="nottickedoff">force z</span></span>
 <span class="lineno">  730 </span><span class="spaces">    </span><span class="istickedoff">else do s' &lt;- force s</span>
-<span class="lineno">  731 </span><span class="spaces">            </span><span class="istickedoff">apply s' (ready (VNat (n - 1)))</span></span>
+<span class="lineno">  731 </span><span class="spaces">            </span><span class="istickedoff">apply s' <span class="nottickedoff">(ready (VNat (n - 1)))</span></span></span>
 <span class="lineno">  732 </span>
 <span class="lineno">  733 </span>--------------------------------------------------------------------------------
 <span class="lineno">  734 </span>-- Strings
@@ -933,7 +933,7 @@ span.spaces    { background: white }
 <span class="lineno">  914 </span><span class="decl"><span class="istickedoff">appV bp xs ys =</span>
 <span class="lineno">  915 </span><span class="spaces">  </span><span class="istickedoff">case (xs, ys) of</span>
 <span class="lineno">  916 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, _) | V.null xv -&gt; return ys</span>
-<span class="lineno">  917 </span><span class="spaces">    </span><span class="istickedoff">(_, VVector yv) | V.null yv -&gt; return xs</span>
+<span class="lineno">  917 </span><span class="spaces">    </span><span class="istickedoff">(_, VVector yv) | <span class="tickonlyfalse">V.null yv</span> -&gt; <span class="nottickedoff">return xs</span></span>
 <span class="lineno">  918 </span><span class="spaces">    </span><span class="istickedoff">(VWord xw, VWord yw) -&gt; lift (VWord &lt;$&gt; bpBvJoin bp xw yw)</span>
 <span class="lineno">  919 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VVector yv) -&gt; return $ VVector ((V.++) xv yv)</span>
 <span class="lineno">  920 </span><span class="spaces">    </span><span class="istickedoff">(VVector xv, VWord yw) -&gt; lift (liftM (\yv -&gt; VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw))</span>
