@@ -2,20 +2,6 @@ module Pairs where
 
 import Prelude;
 
-PairsR : ListSort -> sort 0;
-PairsR = ListSort__rec
-          (\ (_:ListSort) -> sort 0)
-          UnitType
-          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
-               (PairType tp rec));
-
-PairsL : ListSort -> sort 0;
-PairsL = ListSort__rec
-          (\ (_:ListSort) -> sort 0)
-          UnitType
-          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
-               (PairType rec tp));
-
 ---- ListSort combinators [to Prelude] -----------------------------
 
 listSort_FoldL : (b : sort 1) -> (b -> sort 0 -> b) -> b -> ListSort -> b;
@@ -35,7 +21,31 @@ listSort_Reverse = listSort_FoldL
                      (\(ls: ListSort) (A:sort 0)-> LS_Cons A ls)
                      (LS_Nil);
 
+---- Pairs... ------------------------------------------------------
+
+PairsR : ListSort -> sort 0;
+PairsR = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType tp rec));
+
+PairsL : ListSort -> sort 0;
+PairsL = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType rec tp));
+
+  -- PairsL [t1,t2,t3] == ((((UnitType),t3),t2),t1)
+
+PairsLeftFold: ListSort -> sort 0;
+PairsLeftFold ls = PairsL (listSort_Reverse ls);
+
+  -- PairsLeftFold [t1,t2,t3] == ((((UnitType),t1),t2),t3)
+
 ---- Testing -------------------------------------------------------
+
 ls1 : ListSort;
 ls1 = LS_Cons (Vec 1 Bool) (LS_Cons (Vec 2 Bool) LS_Nil);
 
@@ -76,75 +86,35 @@ UnCurryN2 b =
 
 -}
 
-{-
-listSort_FoldL : (a b : sort 1) -> (b -> a -> b) -> b -> ListSort -> b;
-listSort_FoldL a b f init ls =
-  listSort_cases
-    b
-    ls
-    (\(a: sort 0) (l:ListSort) a ->  )
-  (\(x : b)-> x)
-  ls
-  init
--}
-
-{-
--- A ListSort with the first n (or all, if n > length) entries removed
-listSortReverse : ListSort -> ListSort;
-listSortReverse ss =
-  Nat__rec
-    (\(_:Nat) -> ListSort -> ListSort)
-    (\(l : ListSort) -> l)
-    (\(_ : Nat) (rec_n' : ListSort -> ListSort) ->
-       (\(l : ListSort)->
-          rec_n' (listSort_cases ListSort
-                    LS_Nil
-                    (\(_:sort 0) (tail:ListSort) (_:ListSort) -> tail)
-                    l
-                 )
-      ))
-    n
-    ss;
--}
-
-{-
-DEAD CODE:
-arrowsTypeL : ListSort -> sort 0 -> sort 0;
-arrowsTypeL as b =
-  ListSort__rec (\ (_:ListSort) -> sort 0)
-    b
-    (\ (a:sort 0) (_:ListSort) (rec:sort 0) -> rec -> a )
-    as;
--}
-{-
-UnCurryN : (ls: ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b;
+UnCurryN : (ls: ListSort) -> (b: sort 0)
+        -> arrowsType ls b -> PairsLeftFold ls -> b;
 UnCurryN =
   ListSort__rec
-       (\(ls:ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b) -- P
-       (\(b: sort 0) (x: b) (_y: UnitType) -> x)                          -- P(LS_Nil)
+       -- P:
+       (\(ls:ListSort) -> (b: sort 0)
+         -> arrowsType ls b -> PairsLeftFold ls -> b)
+       -- P(LS_Nil):
+       (\(b: sort 0) (x: b) (_y: UnitType) -> x)
+
+       -- ((A:sort 0) -> (l:ListSort) -> P ls -> P (LS_Cons A ls)):
        (\ (A:   sort 0)
           (ls:  ListSort)
-          (rec: (b: sort 0) -> arrowsType ls b -> PairsL ls -> b)
+          (rec: (b: sort 0) -> arrowsType ls b -> PairsLeftFold ls -> b)
           -- the following must be of type
           --     P(LS_Cons A ls)
-          --  == (b: sort 0) -> arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
+          --  == (b: sort 0) ->
+          --     arrowsType (LS_Cons A ls) b ->
+          --     PairsLeftFold (LS_Cons A ls) -> b;
          -> \(b: sort 0)->
-            \(f: arrowsType (LS_Cons A ls))->
-            uncurry (PairsL ls) A b (rec (A->b) f)
+            \(f: arrowsType ls (A->b)) ->
+               uncurry (PairsLeftFold ls) A b (rec (A->b) f)
        );
 
 
--- inferred for `f`
---   A -> arrowsType ls b
--- expected for `f`
---   arrowsType ls (A -> B)
-
-testa : arrowsType ls1 Bool -> PairsL ls1 -> Bool;
+testa : arrowsType ls1 Bool -> PairsLeftFold ls1 -> Bool;
 testa = UnCurryN ls1 Bool;
--}
 
 {-
-
 REF:
   arrowsTypeL [T1,T2] b  ==  (b->T1)->T2
   arrowsTypeR [T1,T2] b  ==  T1->(T2->b)
