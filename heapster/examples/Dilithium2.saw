@@ -1,0 +1,440 @@
+enable_experimental;
+
+import "Dilithium2.cry";
+
+// The required `dilithium2.bc` file is to be built by:
+// 1. Cloning the `standard` branch of the official Dilithium reference
+//    implementation (https://github.com/pq-crystals/dilithium) - specifially,
+//    the commit `918af1a6eaedcedf9fdd8aaaca6c1fccd5a7a51f` is the latest that
+//    has been confirmed to work (NB: if you update this commit hash be sure to
+//    also update the commit hash in the `heapster/examples/Makefile`)
+// 2. Applying the `dilithium.patch` file provided in this directory
+// 3. Running `LLVM_COMPILER=clang make bitcode` in the `ref` directory of the
+//    patched `dilithium` repo
+// 4. Copying the `libpqcrystals_dilithium2_ref.so.bc` file generated in the
+//    `ref` directory of the patched `dilithium` repo into
+//    `heapster/examples` as `dilithium2.bc`
+// Run `make Dilithium2.bc` to perform these steps automatically, or see the
+// `Makefile` in this directory for more detail.
+env <- heapster_init_env "Dilithium2" "dilithium2.bc";
+
+
+////////////////////////////////
+// Basic Heapster permissions //
+////////////////////////////////
+
+include "specPrims.saw";
+
+heapster_define_perm env "int64" " " "llvmptr 64" "exists x:bv 64.eq(llvmword(x))";
+heapster_define_perm env "int32" " " "llvmptr 32" "exists x:bv 32.eq(llvmword(x))";
+heapster_define_perm env "int16" " " "llvmptr 16" "exists x:bv 16.eq(llvmword(x))";
+heapster_define_perm env "int8"  " " "llvmptr 8"  "exists x:bv 8.eq(llvmword(x))";
+
+heapster_assume_fun_rename env "llvm.memcpy.p0i8.p0i8.i64" "memcpy"
+  "(rw:rwmodality, l1:lifetime, l2:lifetime, \
+   \ b:llvmblock 64, len:bv 64). \
+  \ arg0:[l1]memblock(W,0,len,emptysh), arg1:[l2]memblock(rw,0,len,eqsh(len,b)), \
+  \ arg2:eq(llvmword(len)) -o \
+  \ arg0:[l1]memblock(W,0,len,eqsh(len,b)), arg1:[l2]memblock(rw,0,len,eqsh(len,b))"
+  "\\ (len:Vec 64 Bool) -> retS VoidEv #() ()";
+
+heapster_assume_fun_rename env "llvm.memmove.p0i8.p0i8.i64" "memmove"
+  "(rw:rwmodality, l1:lifetime, l2:lifetime, len:bv 64). \
+  \ arg0:[l1]memblock(W,0,len,emptysh), arg1:[l2]array(rw,0,<len,*1,fieldsh(8,int8<>)), \
+  \ arg2:eq(llvmword(len)) -o \
+  \ arg0:[l1]array(W,0,<len,*1,fieldsh(8,int8<>)), arg1:[l2]array(rw,0,<len,*1,fieldsh(8,int8<>))"
+  "\\ (len:Vec 64 Bool) (v:BVVec 64 len (Vec 8 Bool)) -> \
+      \ retS VoidEv (BVVec 64 len (Vec 8 Bool) * BVVec 64 len (Vec 8 Bool)) (v, v)";
+
+heapster_assume_fun_rename env "llvm.memset.p0i8.i64" "memset"
+  "(l1:lifetime, len:bv 64). \
+  \ arg0:[l1]memblock(W,0,len,emptysh), arg1:int8<>, arg2:eq(llvmword(len)) -o \
+  \ arg0:[l1]array(W,0,<len,*1,fieldsh(8,int8<>))"
+  "\\ (len:Vec 64 Bool) (x:Vec 8 Bool) -> \
+      \ retS VoidEv (BVVec 64 len (Vec 8 Bool)) (repeatBVVec 64 len (Vec 8 Bool) x)";
+
+
+//////////////////////////////////////
+// Heapster permissions for C types //
+//////////////////////////////////////
+
+heapster_define_llvmshape env "keccak_state_sh" 64 "" "arraysh(<25, *8, fieldsh(64, int64<>)); fieldsh(32, int32<>)";
+heapster_define_perm env "keccak_state"        "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 208, keccak_state_sh<>)";
+heapster_define_perm env "uninit_keccak_state" "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 208, emptysh)";
+
+heapster_define_llvmshape env "poly_sh"      64 "" "arraysh(<256, *4, fieldsh(32, int32<>))";
+heapster_define_llvmshape env "polyvecl_sh"  64 "" "arraysh(<4, *1024, poly_sh<>)";
+heapster_define_llvmshape env "polyveck_sh"  64 "" "arraysh(<4, *1024, poly_sh<>)";
+heapster_define_llvmshape env "polymatlk_sh" 64 "" "arraysh(<4, *4096, polyvecl_sh<>)";
+
+heapster_define_perm env "poly"      "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 1024, poly_sh<>)";
+heapster_define_perm env "polyvecl"  "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 4096, polyvecl_sh<>)";
+heapster_define_perm env "polyveck"  "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 4096, polyveck_sh<>)";
+heapster_define_perm env "polymatlk" "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 16384, polymatlk_sh<>)";
+
+heapster_define_perm env "uninit_poly"      "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 1024, emptysh)";
+heapster_define_perm env "uninit_polyvecl"  "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 4096, emptysh)";
+heapster_define_perm env "uninit_polyveck"  "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 4096, emptysh)";
+heapster_define_perm env "uninit_polymatlk" "rw:rwmodality" "llvmptr 64" "memblock(rw, 0, 16384, emptysh)";
+
+
+//////////////////////////////////////////////////
+// Heapster assumptions of auxilliary functions //
+//////////////////////////////////////////////////
+
+// randombytes.c
+
+heapster_assume_fun_rename_prim env "randombytes" "randombytes"
+  "(len:bv 64). arg0:memblock(W,0,len,emptysh), arg1:eq(llvmword(len)) \
+  \          -o arg0:array(W,0,<len,*1,fieldsh(8,int8<>))";
+
+// fips202.c
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium_fips202_ref_shake256_init" "shake256_init"
+  "(). arg0:uninit_keccak_state<W> -o arg0:keccak_state<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium_fips202_ref_shake256_absorb" "shake256_absorb"
+  "(len:bv 64). arg0:keccak_state<W>, arg1:array(W,0,<len,*1,fieldsh(8,int8<>)), arg2:eq(llvmword(len)) \
+  \          -o arg0:keccak_state<W>, arg1:array(W,0,<len,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium_fips202_ref_shake256_finalize" "shake256_finalize"
+  "(). arg0:keccak_state<W> -o arg0:keccak_state<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium_fips202_ref_shake256_squeeze" "shake256_squeeze"
+  "(len:bv 64). arg0:memblock(W,0,len,emptysh), arg1:eq(llvmword(len)), arg2:keccak_state<W> \
+  \          -o arg0:array(W,0,<len,*1,fieldsh(8,int8<>)), arg2:keccak_state<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium_fips202_ref_shake256" "shake256"
+  "(outlen:bv 64, inlen:bv 64). arg0:memblock(W,0,outlen,emptysh), arg1:eq(llvmword(outlen)), \
+  \                             arg2:array(W,0,<inlen,*1,fieldsh(8,int8<>)), arg3:eq(llvmword(inlen)) \
+  \                          -o arg0:array(W,0,<outlen,*1,fieldsh(8,int8<>)), \
+  \                             arg2:array(W,0,<inlen,*1,fieldsh(8,int8<>))";
+
+// poly.c
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_poly_challenge" "poly_challenge"
+  "(). arg0:uninit_poly<W>, arg1:array(W,0,<32,*1,fieldsh(8,int8<>)) \
+  \ -o arg0:poly<W>, arg1:array(W,0,<32,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_poly_ntt" "poly_ntt"
+  "(). arg0:poly<W> -o arg0:poly<W>";
+
+// polyvec.c
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvec_matrix_expand" "polyvec_matrix_expand"
+  "(). arg0:uninit_polymatlk<W>, arg1:array(W,0,<32,*1,fieldsh(8,int8<>)) \
+  \ -o arg0:polymatlk<W>, arg1:array(W,0,<32,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvec_matrix_pointwise_montgomery" "polyvec_matrix_pointwise_montgomery"
+  "(). arg0:uninit_polyveck<W>, arg1:polymatlk<W>, arg2:polyvecl<W> \
+  \ -o arg0:polyveck<W>, arg1:polymatlk<W>, arg2:polyvecl<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_uniform_eta" "polyvecl_uniform_eta"
+  "(). arg0:uninit_polyvecl<W>, arg1:array(W,0,<64,*1,fieldsh(8,int8<>)), arg2:int16<> \
+  \ -o arg0:polyvecl<W>, arg1:array(W,0,<64,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_uniform_gamma1" "polyvecl_uniform_gamma1"
+  "(). arg0:uninit_polyvecl<W>, arg1:array(W,0,<64,*1,fieldsh(8,int8<>)), arg2:int16<> \
+  \ -o arg0:polyvecl<W>, arg1:array(W,0,<64,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_reduce" "polyvecl_reduce"
+  "(). arg0:polyvecl<W> -o arg0:polyvecl<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_add" "polyvecl_add"
+  "(). arg0:polyvecl<W>, arg1:eq(arg0), arg2:polyvecl<W> \
+  \ -o arg0:polyvecl<W>, arg1:eq(arg0), arg2:polyvecl<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_ntt" "polyvecl_ntt"
+  "(). arg0:polyvecl<W> -o arg0:polyvecl<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_invntt_tomont" "polyvecl_invntt_tomont"
+  "(). arg0:polyvecl<W> -o arg0:polyvecl<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_pointwise_poly_montgomery" "polyvecl_pointwise_poly_montgomery"
+  "(). arg0:uninit_polyvecl<W>, arg1:poly<W>, arg2:polyvecl<W> \
+  \ -o arg0:polyvecl<W>, arg1:poly<W>, arg2:polyvecl<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyvecl_chknorm" "polyvecl_chknorm"
+  "(). arg0:polyvecl<W>, arg1:int32<> -o arg0:polyvecl<W>, ret:int32<>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_uniform_eta" "polyveck_uniform_eta"
+  "(). arg0:uninit_polyveck<W>, arg1:array(W,0,<64,*1,fieldsh(8,int8<>)), arg2:int16<> \
+  \ -o arg0:polyveck<W>, arg1:array(W,0,<64,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_reduce" "polyveck_reduce"
+  "(). arg0:polyveck<W> -o arg0:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_caddq" "polyveck_caddq"
+  "(). arg0:polyveck<W> -o arg0:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_add" "polyveck_add"
+  "(). arg0:polyveck<W>, arg1:eq(arg0), arg2:polyveck<W> \
+  \ -o arg0:polyveck<W>, arg1:eq(arg0), arg2:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_sub" "polyveck_sub"
+  "(). arg0:polyveck<W>, arg1:eq(arg0), arg2:polyveck<W> \
+  \ -o arg0:polyveck<W>, arg1:eq(arg0), arg2:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_shiftl" "polyveck_shiftl"
+  "(). arg0:polyveck<W> -o arg0:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_ntt" "polyveck_ntt"
+  "(). arg0:polyveck<W> -o arg0:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_invntt_tomont" "polyveck_invntt_tomont"
+  "(). arg0:polyveck<W> -o arg0:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_pointwise_poly_montgomery" "polyveck_pointwise_poly_montgomery"
+  "(). arg0:uninit_polyveck<W>, arg1:poly<W>, arg2:polyveck<W> \
+  \ -o arg0:polyveck<W>, arg1:poly<W>, arg2:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_chknorm" "polyveck_chknorm"
+  "(). arg0:polyveck<W>, arg1:int32<> -o arg0:polyveck<W>, ret:int32<>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_power2round" "polyveck_power2round"
+  "(). arg0:polyveck<W>, arg1:uninit_polyveck<W>, arg2:eq(arg0) \
+  \ -o arg0:polyveck<W>, arg1:polyveck<W>, arg2:eq(arg0)";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_decompose" "polyveck_decompose"
+  "(). arg0:polyveck<W>, arg1:uninit_polyveck<W>, arg2:eq(arg0) \
+  \ -o arg0:polyveck<W>, arg1:polyveck<W>, arg2:eq(arg0)";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_make_hint" "polyveck_make_hint"
+  "(). arg0:uninit_polyveck<W>, arg1:polyveck<W>, arg2:polyveck<W> \
+  \ -o arg0:polyveck<W>, arg1:polyveck<W>, arg2:polyveck<W>, ret:int32<>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_use_hint" "polyveck_use_hint"
+  "(). arg0:polyveck<W>, arg1:eq(arg0), arg2:polyveck<W> \
+  \ -o arg0:polyveck<W>, arg1:eq(arg0), arg2:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_polyveck_pack_w1" "polyveck_pack_w1"
+  "(). arg0:memblock(W,0,768,emptysh), arg1:polyveck<W> \
+  \ -o arg0:array(W,0,<768,*1,fieldsh(8,int8<>)), arg1:polyveck<W>";
+
+// packing.c
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_pack_pk" "pack_pk"
+  "(). arg0:memblock(W,0,1312,emptysh), arg1:array(W,0,<32,*1,fieldsh(8,int8<>)), arg2:polyveck<W> \
+  \ -o arg0:array(W,0,<1312,*1,fieldsh(8,int8<>)), arg1:array(W,0,<32,*1,fieldsh(8,int8<>)), arg2:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_unpack_pk" "unpack_pk"
+  "(). arg0:memblock(W,0,32,emptysh), arg1:uninit_polyveck<W>, arg2:array(W,0,<1312,*1,fieldsh(8,int8<>)) \
+  \ -o arg0:array(W,0,<32,*1,fieldsh(8,int8<>)), arg1:polyveck<W>, arg2:array(W,0,<1312,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_pack_sk" "pack_sk"
+  "(). arg0:memblock(W,0,2560,emptysh), arg1:array(W,0,<32,*1,fieldsh(8,int8<>)), \
+  \    arg2:array(W,0,<64,*1,fieldsh(8,int8<>)), arg3:array(W,0,<32,*1,fieldsh(8,int8<>)), \
+  \    arg4:polyveck<W>, arg5:polyvecl<W>, arg6:polyveck<W> \
+  \ -o arg0:array(W,0,<2560,*1,fieldsh(8,int8<>)), arg1:array(W,0,<32,*1,fieldsh(8,int8<>)), \
+  \    arg2:array(W,0,<64,*1,fieldsh(8,int8<>)), arg3:array(W,0,<32,*1,fieldsh(8,int8<>)), \
+  \    arg4:polyveck<W>, arg5:polyvecl<W>, arg6:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_unpack_sk" "unpack_sk"
+  "(). arg0:memblock(W,0,32,emptysh), arg1:memblock(W,0,64,emptysh), \
+  \    arg2:memblock(W,0,32,emptysh), arg3:uninit_polyvecl<W>, arg4:uninit_polyvecl<W>, \
+  \    arg5:uninit_polyvecl<W>, arg6:array(W,0,<2560,*1,fieldsh(8,int8<>)) \
+  \ -o arg0:array(W,0,<32,*1,fieldsh(8,int8<>)), arg1:array(W,0,<64,*1,fieldsh(8,int8<>)), \
+  \    arg2:array(W,0,<32,*1,fieldsh(8,int8<>)), arg3:polyvecl<W>, arg4:polyvecl<W>, \
+  \    arg5:polyvecl<W>, arg6:array(W,0,<2560,*1,fieldsh(8,int8<>))";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_pack_sig" "pack_sig"
+  "(). arg0:memblock(W,0,2420,emptysh), arg1:array(W,0,<32,*1,fieldsh(8,int8<>)), \
+  \    arg2:polyvecl<W>, arg3:polyveck<W> \
+  \ -o arg0:array(W,0,<2420,*1,fieldsh(8,int8<>)), arg1:array(W,0,<32,*1,fieldsh(8,int8<>)), \
+  \    arg2:polyvecl<W>, arg3:polyveck<W>";
+
+heapster_assume_fun_rename_prim env "pqcrystals_dilithium2_ref_unpack_sig" "unpack_sig"
+  "(). arg0:memblock(W,0,32,emptysh), arg1:uninit_polyvecl<W>, arg2:uninit_polyveck<W>, \
+  \    arg3:array(W,0,<2420,*1,fieldsh(8,int8<>)) \
+  \ -o arg0:array(W,0,<32,*1,fieldsh(8,int8<>)), arg1:polyvecl<W>, arg2:polyveck<W>, \
+  \    arg3:array(W,0,<2420,*1,fieldsh(8,int8<>)), ret:int32<>";
+
+
+/////////////////////////////////////
+// Heapster typechecking of sign.c //
+/////////////////////////////////////
+
+heapster_typecheck_fun_rename env "pqcrystals_dilithium2_ref_keypair" "crypto_sign_keypair"
+  "(). arg0:memblock(W,0,1312,emptysh), arg1:memblock(W,0,2560,emptysh) \
+  \ -o arg0:array(W,0,<1312,*1,fieldsh(8,int8<>)), arg1:array(W,0,<2560,*1,fieldsh(8,int8<>)), ret:int32<>";
+
+heapster_typecheck_fun_rename env "pqcrystals_dilithium2_ref_signature" "crypto_sign_signature"
+  "(mlen:bv 64). arg0:memblock(W,0,2420,emptysh), arg1:ptr((W,0) |-> true), \
+  \              arg2:array(W,0,<mlen,*1,fieldsh(8,int8<>)), arg3:eq(llvmword(mlen)), \
+  \              arg4:array(W,0,<2560,*1,fieldsh(8,int8<>)) \
+  \           -o arg0:array(W,0,<2420,*1,fieldsh(8,int8<>)), arg1:ptr((W,0) |-> int64<>), \
+  \              arg2:array(W,0,<mlen,*1,fieldsh(8,int8<>)), \
+  \              arg4:array(W,0,<2560,*1,fieldsh(8,int8<>)), ret:int32<>";
+
+heapster_typecheck_fun_rename env "pqcrystals_dilithium2_ref" "crypto_sign"
+  "(mlen:bv 64). arg0:memblock(W,0,2420,emptysh) * memblock(W,2420,mlen,emptysh), \
+  \              arg1:ptr((W,0) |-> true), \
+  \              arg2:array(W,0,<mlen,*1,fieldsh(8,int8<>)), arg3:eq(llvmword(mlen)), \
+  \              arg4:array(W,0,<2560,*1,fieldsh(8,int8<>)) \
+  \           -o arg0:array(W,0,<2420,*1,fieldsh(8,int8<>)) * array(W,2420,<mlen,*1,fieldsh(8,int8<>)), \
+  \              arg1:ptr((W,0) |-> int64<>), \
+  \              arg2:array(W,0,<mlen,*1,fieldsh(8,int8<>)), arg3:eq(llvmword(mlen)), \
+  \              arg4:array(W,0,<2560,*1,fieldsh(8,int8<>)), ret:int32<>";
+
+heapster_typecheck_fun_rename env "pqcrystals_dilithium2_ref_verify" "crypto_sign_verify"
+  "(slen:bv 64, mlen: bv 64). \
+  \    arg0:array(W,0,<2420,*1,fieldsh(8,int8<>)), arg1:eq(llvmword(slen)), \
+  \    arg2:array(W,0,<mlen,*1,fieldsh(8,int8<>)), arg3:eq(llvmword(mlen)), \
+  \    arg4:array(W,0,<1312,*1,fieldsh(8,int8<>)) \
+  \ -o arg0:array(W,0,<2420,*1,fieldsh(8,int8<>)), \
+  \    arg2:array(W,0,<mlen,*1,fieldsh(8,int8<>)), \
+  \    arg4:array(W,0,<1312,*1,fieldsh(8,int8<>)), ret:int32<>";
+
+// heapster_set_debug_level env 1;
+
+// heapster_typecheck_fun_rename env "pqcrystals_dilithium2_ref_open" "crypto_sign_open"
+//   "(smlen: bv 64). \
+//   \    arg0:memblock(W,0,smlen,emptysh), arg1:ptr((W,0) |-> true), \
+//   \    arg2:array(W,0,<smlen,*1,fieldsh(8,int8<>)), arg3:eq(llvmword(smlen)), \
+//   \    arg4:array(W,0,<1312,*1,fieldsh(8,int8<>)) \
+//   \ -o arg0:array(W,0,<smlen,*1,fieldsh(8,int8<>)), arg1:ptr((W,0) |-> int64<>), \
+//   \    arg2:array(W,0,<smlen,*1,fieldsh(8,int8<>)), \
+//   \    arg4:array(W,0,<1312,*1,fieldsh(8,int8<>)), ret:int32<>";
+
+
+//////////////////////////////////////////////
+// The saw-core terms generated by Heapster //
+//////////////////////////////////////////////
+
+let randombytes = parse_core_mod "Dilithium2" "randombytes";
+let shake256_init = parse_core_mod "Dilithium2" "shake256_init";
+let shake256_absorb = parse_core_mod "Dilithium2" "shake256_absorb";
+let shake256_finalize = parse_core_mod "Dilithium2" "shake256_finalize";
+let shake256_squeeze = parse_core_mod "Dilithium2" "shake256_squeeze";
+let shake256 = parse_core_mod "Dilithium2" "shake256";
+let poly_challenge = parse_core_mod "Dilithium2" "poly_challenge";
+let poly_ntt = parse_core_mod "Dilithium2" "poly_ntt";
+let polyvec_matrix_expand = parse_core_mod "Dilithium2" "polyvec_matrix_expand";
+let polyvec_matrix_pointwise_montgomery = parse_core_mod "Dilithium2" "polyvec_matrix_pointwise_montgomery";
+let polyvecl_uniform_eta = parse_core_mod "Dilithium2" "polyvecl_uniform_eta";
+let polyvecl_uniform_gamma1 = parse_core_mod "Dilithium2" "polyvecl_uniform_gamma1";
+let polyvecl_reduce = parse_core_mod "Dilithium2" "polyvecl_reduce";
+let polyvecl_add = parse_core_mod "Dilithium2" "polyvecl_add";
+let polyvecl_ntt = parse_core_mod "Dilithium2" "polyvecl_ntt";
+let polyvecl_invntt_tomont = parse_core_mod "Dilithium2" "polyvecl_invntt_tomont";
+let polyvecl_pointwise_poly_montgomery = parse_core_mod "Dilithium2" "polyvecl_pointwise_poly_montgomery";
+let polyvecl_chknorm = parse_core_mod "Dilithium2" "polyvecl_chknorm";
+let polyveck_uniform_eta = parse_core_mod "Dilithium2" "polyveck_uniform_eta";
+let polyveck_reduce = parse_core_mod "Dilithium2" "polyveck_reduce";
+let polyveck_caddq = parse_core_mod "Dilithium2" "polyveck_caddq";
+let polyveck_add = parse_core_mod "Dilithium2" "polyveck_add";
+let polyveck_sub = parse_core_mod "Dilithium2" "polyveck_sub";
+let polyveck_shiftl = parse_core_mod "Dilithium2" "polyveck_shiftl";
+let polyveck_ntt = parse_core_mod "Dilithium2" "polyveck_ntt";
+let polyveck_invntt_tomont = parse_core_mod "Dilithium2" "polyveck_invntt_tomont";
+let polyveck_pointwise_poly_montgomery = parse_core_mod "Dilithium2" "polyveck_pointwise_poly_montgomery";
+let polyveck_chknorm = parse_core_mod "Dilithium2" "polyveck_chknorm";
+let polyveck_power2round = parse_core_mod "Dilithium2" "polyveck_power2round";
+let polyveck_decompose = parse_core_mod "Dilithium2" "polyveck_decompose";
+let polyveck_make_hint = parse_core_mod "Dilithium2" "polyveck_make_hint";
+let polyveck_use_hint = parse_core_mod "Dilithium2" "polyveck_use_hint";
+let polyveck_pack_w1 = parse_core_mod "Dilithium2" "polyveck_pack_w1";
+let pack_pk = parse_core_mod "Dilithium2" "pack_pk";
+let unpack_pk = parse_core_mod "Dilithium2" "unpack_pk";
+let pack_sk = parse_core_mod "Dilithium2" "pack_sk";
+let unpack_sk = parse_core_mod "Dilithium2" "unpack_sk";
+let pack_sig = parse_core_mod "Dilithium2" "pack_sig";
+let unpack_sig = parse_core_mod "Dilithium2" "unpack_sig";
+let crypto_sign_keypair = parse_core_mod "Dilithium2" "crypto_sign_keypair";
+let crypto_sign_signature = parse_core_mod "Dilithium2" "crypto_sign_signature";
+let crypto_sign = parse_core_mod "Dilithium2" "crypto_sign";
+let crypto_sign_verify = parse_core_mod "Dilithium2" "crypto_sign_verify";
+
+
+////////////////////////////////////////////////////
+// Mr. Solver assumptions of auxilliary functions //
+////////////////////////////////////////////////////
+
+print "Admitting refinements of auxiliary functions:";
+thm_randombytes <- prove_extcore (admit "randombytes") (refines [] randombytes {{ randombytes }});
+thm_shake256_init <- prove_extcore (admit "shake256_init") (refines [] shake256_init {{ shake256_init }});
+thm_shake256_absorb <- prove_extcore (admit "shake256_absorb") (refines [] shake256_absorb {{ shake256_absorb }});
+thm_shake256_finalize <- prove_extcore (admit "shake256_finalize") (refines [] shake256_finalize {{ shake256_finalize }});
+thm_shake256_squeeze <- prove_extcore (admit "shake256_squeeze") (refines [] shake256_squeeze {{ shake256_squeeze }});
+thm_shake256 <- prove_extcore (admit "shake256") (refines [] shake256 {{ shake256 }});
+thm_poly_challenge <- prove_extcore (admit "poly_challenge") (refines [] poly_challenge {{ poly_challenge }});
+thm_poly_ntt <- prove_extcore (admit "poly_ntt") (refines [] poly_ntt {{ poly_ntt }});
+thm_polyvec_matrix_expand <- prove_extcore (admit "polyvec_matrix_expand") (refines [] polyvec_matrix_expand {{ polyvec_matrix_expand }});
+thm_polyvec_matrix_pointwise_montgomery <- prove_extcore (admit "polyvec_matrix_pointwise_montgomery") (refines [] polyvec_matrix_pointwise_montgomery {{ polyvec_matrix_pointwise_montgomery }});
+thm_polyvecl_uniform_eta <- prove_extcore (admit "polyvecl_uniform_eta") (refines [] polyvecl_uniform_eta {{ polyvecl_uniform_eta }});
+thm_polyvecl_uniform_gamma1 <- prove_extcore (admit "polyvecl_uniform_gamma1") (refines [] polyvecl_uniform_gamma1 {{ polyvecl_uniform_gamma1 }});
+thm_polyvecl_reduce <- prove_extcore (admit "polyvecl_reduce") (refines [] polyvecl_reduce {{ polyvecl_reduce }});
+thm_polyvecl_add <- prove_extcore (admit "polyvecl_add") (refines [] polyvecl_add {{ polyvecl_add }});
+thm_polyvecl_ntt <- prove_extcore (admit "polyvecl_ntt") (refines [] polyvecl_ntt {{ polyvecl_ntt }});
+thm_polyvecl_invntt_tomont <- prove_extcore (admit "polyvecl_invntt_tomont") (refines [] polyvecl_invntt_tomont {{ polyvecl_invntt_tomont }});
+thm_polyvecl_pointwise_poly_montgomery <- prove_extcore (admit "polyvecl_pointwise_poly_montgomery") (refines [] polyvecl_pointwise_poly_montgomery {{ polyvecl_pointwise_poly_montgomery }});
+thm_polyvecl_chknorm <- prove_extcore (admit "polyvecl_chknorm") (refines [] polyvecl_chknorm {{ polyvecl_chknorm }});
+thm_polyveck_uniform_eta <- prove_extcore (admit "polyveck_uniform_eta") (refines [] polyveck_uniform_eta {{ polyveck_uniform_eta }});
+thm_polyveck_reduce <- prove_extcore (admit "polyveck_reduce") (refines [] polyveck_reduce {{ polyveck_reduce }});
+thm_polyveck_caddq <- prove_extcore (admit "polyveck_caddq") (refines [] polyveck_caddq {{ polyveck_caddq }});
+thm_polyveck_add <- prove_extcore (admit "polyveck_add") (refines [] polyveck_add {{ polyveck_add }});
+thm_polyveck_sub <- prove_extcore (admit "polyveck_sub") (refines [] polyveck_sub {{ polyveck_sub }});
+thm_polyveck_shiftl <- prove_extcore (admit "polyveck_shiftl") (refines [] polyveck_shiftl {{ polyveck_shiftl }});
+thm_polyveck_ntt <- prove_extcore (admit "polyveck_ntt") (refines [] polyveck_ntt {{ polyveck_ntt }});
+thm_polyveck_invntt_tomont <- prove_extcore (admit "polyveck_invntt_tomont") (refines [] polyveck_invntt_tomont {{ polyveck_invntt_tomont }});
+thm_polyveck_pointwise_poly_montgomery <- prove_extcore (admit "polyveck_pointwise_poly_montgomery") (refines [] polyveck_pointwise_poly_montgomery {{ polyveck_pointwise_poly_montgomery }});
+thm_polyveck_chknorm <- prove_extcore (admit "polyveck_chknorm") (refines [] polyveck_chknorm {{ polyveck_chknorm }});
+thm_polyveck_power2round <- prove_extcore (admit "polyveck_power2round") (refines [] polyveck_power2round {{ polyveck_power2round }});
+thm_polyveck_decompose <- prove_extcore (admit "polyveck_decompose") (refines [] polyveck_decompose {{ polyveck_decompose }});
+thm_polyveck_make_hint <- prove_extcore (admit "polyveck_make_hint") (refines [] polyveck_make_hint {{ polyveck_make_hint }});
+thm_polyveck_use_hint <- prove_extcore (admit "polyveck_use_hint") (refines [] polyveck_use_hint {{ polyveck_use_hint }});
+thm_polyveck_pack_w1 <- prove_extcore (admit "polyveck_pack_w1") (refines [] polyveck_pack_w1 {{ polyveck_pack_w1 }});
+thm_pack_pk <- prove_extcore (admit "pack_pk") (refines [] pack_pk {{ pack_pk }});
+thm_unpack_pk <- prove_extcore (admit "unpack_pk") (refines [] unpack_pk {{ unpack_pk }});
+thm_pack_sk <- prove_extcore (admit "pack_sk") (refines [] pack_sk {{ pack_sk }});
+thm_unpack_sk <- prove_extcore (admit "unpack_sk") (refines [] unpack_sk {{ unpack_sk }});
+thm_pack_sig <- prove_extcore (admit "pack_sig") (refines [] pack_sig {{ pack_sig }});
+thm_unpack_sig <- prove_extcore (admit "unpack_sig") (refines [] unpack_sig {{ unpack_sig }});
+print "(Done admitting refinements of auxiliary functions)\n";
+
+let assumed_fns = addrefns [
+  thm_randombytes, thm_shake256_init, thm_shake256_absorb, thm_shake256_finalize,
+  thm_shake256_squeeze, thm_shake256, thm_poly_challenge, thm_poly_ntt,
+  thm_polyvec_matrix_expand, thm_polyvec_matrix_pointwise_montgomery,
+  thm_polyvecl_uniform_eta, thm_polyvecl_uniform_gamma1, thm_polyvecl_reduce,
+  thm_polyvecl_add, thm_polyvecl_ntt, thm_polyvecl_invntt_tomont,
+  thm_polyvecl_pointwise_poly_montgomery, thm_polyvecl_chknorm,
+  thm_polyveck_uniform_eta, thm_polyveck_reduce, thm_polyveck_caddq,
+  thm_polyveck_add, thm_polyveck_sub, thm_polyveck_shiftl, thm_polyveck_ntt,
+  thm_polyveck_invntt_tomont, thm_polyveck_pointwise_poly_montgomery,
+  thm_polyveck_chknorm, thm_polyveck_power2round, thm_polyveck_decompose,
+  thm_polyveck_make_hint, thm_polyveck_use_hint, thm_polyveck_pack_w1,
+  thm_pack_pk, thm_unpack_pk, thm_pack_sk, thm_unpack_sk, thm_pack_sig, 
+  thm_unpack_sig ] empty_rs;
+
+
+////////////////////////
+// Mr. Solver: sign.c //
+////////////////////////
+
+thm_crypto_sign_keypair <-
+  prove_extcore
+    (mrsolver_with assumed_fns)
+    (refines [] crypto_sign_keypair {{ crypto_sign_keypair }});
+
+thm_crypto_sign_signature <-
+  prove_extcore
+    (mrsolver_with assumed_fns)
+    (refines [] crypto_sign_signature {{ crypto_sign_signature }});
+
+let {{
+  crypto_sign_spec : {mlen} Literal mlen [64] =>
+    [mlen][8] -> [CRYPTO_SECRETKEYBYTES][8] ->
+    ([CRYPTO_BYTES][8], [mlen][8], [64], [mlen][8], [CRYPTO_SECRETKEYBYTES][8], [32])
+  crypto_sign_spec m sk = assuming (`mlen < (-2420)) (crypto_sign m sk)
+}};
+
+thm_crypto_sign <-
+  prove_extcore
+    (mrsolver_with (addrefns [thm_crypto_sign_signature] assumed_fns))
+    (refines [] crypto_sign {{ crypto_sign_spec }});
+
+thm_crypto_sign_verify <-
+  prove_extcore
+    (mrsolver_with assumed_fns)
+    (refines [] crypto_sign_verify {{ crypto_sign_verify }});

@@ -45,16 +45,16 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Simulator
 import Lang.Crucible.Types
 
-import qualified Verifier.SAW.Prelude as SAW
-import qualified Verifier.SAW.Recognizer as SAW
-import qualified Verifier.SAW.SharedTerm as SAW
-import qualified Verifier.SAW.Term.Functor as SAW
-import qualified Verifier.SAW.TypedTerm as SAW
+import qualified SAWCore.Prelude as SAW
+import qualified SAWCore.Recognizer as SAW
+import qualified SAWCore.SharedTerm as SAW
+import qualified SAWCore.Term.Functor as SAW
+import qualified CryptolSAWCore.TypedTerm as SAW
 
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
-import qualified SAWScript.Crucible.Common.Override as MS
-import SAWScript.Crucible.MIR.MethodSpecIR
-import SAWScript.Crucible.MIR.TypeShape
+import qualified SAWCentral.Crucible.Common.MethodSpec as MS
+import qualified SAWCentral.Crucible.Common.Override as MS
+import SAWCentral.Crucible.MIR.MethodSpecIR
+import SAWCentral.Crucible.MIR.TypeShape
 
 import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
