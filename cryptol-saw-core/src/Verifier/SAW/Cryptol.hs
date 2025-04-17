@@ -80,6 +80,7 @@ import qualified Cryptol.Utils.Ident as C
   , identText, interactiveName
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
+  , unpackIdent
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
@@ -91,6 +92,7 @@ import qualified Verifier.SAW.Simulator.Concrete as SC
 import qualified Verifier.SAW.Simulator.Value as SC
 import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.SCTypeCheck               as SC
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName, ModuleName)
 
@@ -2226,6 +2228,8 @@ genCodeForEnum sc env nt cs =
   putStrLn $ "MYLOG: eithers_type: " ++ showTerm eithers_type
   putStrLn $ "MYLOG: eithers_rhs:  " ++ showTerm eithers_rhs
   scInsertDef sc preludeName eithers_ident eithers_type eithers_rhs
+
+  checkSAWCore sc (eithers_ident, eithers_rhs)
     -- NOTE: these are not type-checked!  TODO?
 
   -------------------------------------------------------------
@@ -2249,6 +2253,7 @@ genCodeForEnum sc env nt cs =
            return (typeLeft, typeRight)
 
   putStrLn "MYLOG: pt7"
+
   -------------------------------------------------------------
   -- Code to do *just* the injection into the Sum type:
 
@@ -2279,7 +2284,6 @@ genCodeForEnum sc env nt cs =
         -- NOTE: we don't add the constructor arguments to the Env, as
         -- the only references to these new definitions are in the generated
         -- SAWCore code.
-
         -- create the vars (& names) for constructor arguments
         paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
         let paramNames = map (\x-> Text.pack ("x" ++ show x))
@@ -2292,6 +2296,8 @@ genCodeForEnum sc env nt cs =
                       (zip paramNames scConArgTypes)
                       conBody1
         conBody3 <- addTypeAbstractions conBody2
+        checkSAWCore sc (C.nameIdent conName, conBody3)
+          -- FIXME: remove eventually (or not)?
         return (conName, conBody3)
 
   putStrLn "MYLOG: pt8"
@@ -2299,3 +2305,15 @@ genCodeForEnum sc env nt cs =
              mkConstructor scConArgTypes ctor
 
   return ctors
+
+checkSAWCore :: (Show i) => SharedContext -> (i, Term) -> IO ()
+checkSAWCore sc (ident, term) =
+  do let ident' = show ident
+     putStrLn $ "MYLOG: checkSAWCore: " ++ ident'
+     result <- SC.scTypeCheck sc Nothing term
+     case result of
+       Right _ -> pure ()
+       Left err ->
+         do putStrLn $ "Type error when checking " -- ++ ident'
+            putStrLn $ unlines $ SC.prettyTCError err
+            -- fail "internal type error"
