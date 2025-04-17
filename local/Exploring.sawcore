@@ -23,22 +23,43 @@ Malformed declaration for "ListSortX"
 Universe level of constructors should be strictly contained in that of the datatype
 -}
 
----- List1 : -------------------------------------------------------
-
-testLS_1 : ListSort = LS_Cons (Nat->Nat) LS_Nil;
-
+---- utilities -----------------------------------------------------
 
 xx : Nat = 1;
 
+PairsR : ListSort -> sort 0;
+PairsR = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType tp rec));
+
+
+---- ListSort -------------------------------------------------------
+
+testLS_1 : ListSort = LS_Cons (Nat->Nat) LS_Nil;
+testLS_2 : ListSort = LS_Cons Nat (LS_Cons Bool LS_Nil);
+testLS_3 : ListSort = LS_Cons (Nat->Nat) (LS_Cons Bool LS_Nil);
+
+{-
+uncurry [t1,t2] :
+-}
+
+---- List1 : -------------------------------------------------------
+
+
+
 testL1_1 : List1 Nat;
 testL1_1 = Cons1 Nat xx (Cons1 Nat xx (Nil1 Nat));
+  -- Note: each List1 constructor has the type/sort parameter.
 
 testL1_2 : List1 (Nat->Nat) = Nil1 (Nat->Nat);
 testL1_3 : List1 (ListSort) = Nil1 (ListSort);
 testL1_4 : List1 (ListSort) = Cons1 ListSort testLS_1 (Nil1 ListSort);
 
 testL1_5 : (a : sort 0) -> List1 a;
-testL1_5 a = Nil1 a;  -- !
+testL1_5 a = Nil1 a;
+  -- we can 'downsort' ??
 
 testL1_6 : (a : sort 1) -> List1 a;
 testL1_6 a = Nil1 a;  -- !
@@ -46,12 +67,19 @@ testL1_6 a = Nil1 a;  -- !
 -- testL1_7 : List1 (sort 1);
 -- testL1_7 = Cons (sort 1) Nat (Cons (sort 1) Bool (Nil1 (sort 1)));
 
+testL1_a : List1 ListSort =
+  Cons1 ListSort testLS_1
+  (Cons1 ListSort testLS_2
+  (Nil1 ListSort));
+
 
 {-
 fails (learning):
 
 testL1_7 : List1 (sort 1);
 testL1_7 = Nil1 Nat;  -- !
+
+testL1_b : ListSort = map1 PairsR testL1_a;
 -}
 
 

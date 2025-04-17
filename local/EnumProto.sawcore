@@ -126,7 +126,6 @@ Note
 
 -}
 
-
 ETT_eithers : (as : sort 0)
            -> (b: sort 0)
            -> (ETT__ArgType_C1 as -> b)
