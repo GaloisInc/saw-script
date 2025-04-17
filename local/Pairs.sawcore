@@ -9,7 +9,7 @@ listSort_FoldL b f init ls =
   ListSort__rec
     (\(_ls: ListSort) -> b->b)
     (\(x: b)-> x)
-    (\(A: sort 0) (l: ListSort) (g: b->b) ->
+    (\(A: sort 0) (_: ListSort) (g: b->b) ->
        \(acc: b)-> g (f acc A)  -- <- has type b->b
     )
     ls
@@ -54,36 +54,6 @@ i.e., arrowsType:
   MyCurry : ListSort -> sort 0 -> sort 0
   MyCurry []     a = a
   MyCurry (t:ts) b = t -> MyCurry ts b)
--}
-
-{-
-UnCurryN1 : (ls: ListSort) -> (b: sort 0) -> arrowsType ls b -> PairsL ls -> b;
-UnCurryN1 ls b f =
-  ListSort__rec
-       (\(ls:ListSort) -> PairsL ls -> b)          -- P
-       (\(_:UnitType)-> f)                         -- P(LS_Nil)
-       (\ (tp:sort 0) (ls:ListSort) (rec: arrowsType ls b) ->
-            uncurry tp (PairsL ls) b rec
-       )
-  f;
-
-  -- ^ HIGHLY FLAWED.
-
-UnCurryN2 : (b: sort 0) -> (ls: ListSort) -> arrowsType ls b -> PairsL ls -> b;
-UnCurryN2 b =
-  ListSort__rec
-       (\(ls:ListSort) -> arrowsType ls b -> PairsL ls -> b)          -- P
-       (\(x:b) (_:UnitType)-> x)                                      -- P(LS_Nil)
-       (\ (A:   sort 0)
-          (ls:  ListSort)
-          (rec: arrowsType ls b -> PairsL ls -> b)
-          -- P(LS_Cons A ls) ==
-          --    arrowsType (LS_Cons A ls) b -> PairsL (LS_Cons A ls) -> b;
-         -> \(f: arrowsType (LS_Cons A ls) b) -> uncurry (PairsL ls) A b (rec f)
-       );
-
-   -- ^ NO, each induction step must instantiate 'b' differently!
-
 -}
 
 UnCurryN : (ls: ListSort) -> (b: sort 0)
