@@ -24,8 +24,13 @@ enum ETT as = C1 CT1
 ETT__ArgType_C1 (as : sort 0) : sort 0 = as;
 ETT__ArgType_C2 (as : sort 0) : sort 0 = Bool;
 ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
-
   -- NOTE: don't need to name these, just use the below.
+
+
+-- a variant of the above, need this now, for Uncurry:
+ETT__ArgType_C1_LS (as : sort 0) : ListSort = LS_Cons as LS_Nil;
+ETT__ArgType_C2_LS (as : sort 0) : ListSort = LS_Cons Bool LS_Nil;
+ETT__ArgType_C3_LS (as : sort 0) : ListSort = LS_Cons UnitType (LS_Cons as LS_Nil);
 
 ETT__LS : sort 0 -> ListSort;
 ETT__LS as = LS_Cons (ETT__ArgType_C1 as)
@@ -204,5 +209,24 @@ return (normalize_term (parse_core_mod "EnumProto" "TypeOfUnCurryLS (ETT__LS Nat
 
 ---- Now, curried eithers/case: ------------------------------------
 
-TypeOfUnCurryLS : ListSort -> sort 0 -> sort 1;
-TypeOfUnCurryLS ls b = arrowsType ls b -> pairsLeftFold ls -> b;
+TypeOfUnCurryLS : sort 0 -> ListSort -> sort 1;
+TypeOfUnCurryLS b ls = arrowsType ls b -> pairsLeftFold ls -> b;
+
+{-
+ETT_case :  (as : sort 0)
+         -> (b: sort 0)
+         -> (TypeOfUncurryLS b (ETT__ArgType_C1_LS as))
+         -> (TypeOfUncurryLS b (ETT__ArgType_C2_LS as))
+         -> (TypeOfUncurryLS b (ETT__ArgType_C2_LS as))
+         -> ETT as
+         -> b;
+ETT_case as b f1 f2 f3 =
+  ETT_eithers as b () () ()
+
+         -> (b: sort 0)
+         -> (TypeOfUncurryLS b (ETT__ArgType_C1_LS as))
+         -> (TypeOfUncurryLS b (ETT__ArgType_C2_LS as))
+         -> (TypeOfUncurryLS b (ETT__ArgType_C2_LS as))
+         -> ETT as
+         -> b;
+-}
