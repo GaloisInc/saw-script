@@ -2,38 +2,6 @@ module EnumProto where
 
 import Prelude;
 
----- Import Eithers by Hand ----------------------------------------
--- import Eithers;  -- DOES NOT WORK!!, Thus
-
-
--- A right-nested sequence of Either types, defined as
---   Eithers' [] = Void
---   Eithers' (tp:tps) = Either tp (Eithers' tps)
-Eithers' : ListSort -> sort 0;
-Eithers' = ListSort__rec
-            (\ (_:ListSort) -> sort 0)
-            Void
-            (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
-               (Either tp rec));
-
-
--- An eliminator for the Eithers' type
-eithers' : (a:sort 0) -> (es:FunsTo a) -> Eithers' (FunsToIns a es) -> a;
-eithers' a =
-  FunsTo__rec
-    a
-    (\ (es: FunsTo a) -> Eithers' (FunsToIns a es) -> a) -- P
-    (\ (v:Void) -> elimVoid a v)                         -- P(FunsToNil a)
-    (\ (tp : sort 0)                                     -- type arg
-       (f  : tp -> a)                                     --
-       (es : FunsTo a)                                    --
-       (rec: Eithers' (FunsToIns a es) -> a)              -- P es
-    ->
-       -- P (FunsTo_Cons a tp f es):
-       either tp (Eithers' (FunsToIns a es)) a f rec
-    );
-
-
 -------------------------------------------------------------------
 -- Prototyping the Translation
 -------------------------------------------------------------------
@@ -62,29 +30,30 @@ ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
 ETT__LS : sort 0 -> ListSort;
 ETT__LS as = LS_Cons (ETT__ArgType_C1 as)
              (LS_Cons (ETT__ArgType_C2 as)
-               LS_Nil);
+             (LS_Cons (ETT__ArgType_C3 as)
+               LS_Nil));
 
 -- Define the type:
 ETT : (as : sort 0) -> sort 0;
-ETT as = Eithers' (ETT__LS as);
+ETT as = EithersV (ETT__LS as);
+
+---- For Later, type-level lists we'll use for the case/eithers: ---
+-- we don't put into environment, we'll do in the code generation:
+
+ETT_C1_LS : (as: sort 0) -> ListSort;
+ETT_C1_LS as = LS_Nil;
+
+ETT_C2_LS : (as: sort 0) -> ListSort;
+ETT_C2_LS as = LS_Cons Bool LS_Nil;
+
+ETT_C3_LS : (as: sort 0) -> ListSort;
+ETT_C3_LS as = LS_Cons UnitType (LS_Cons as LS_Nil);
+
 
 ---- SawCore: Constructors -----------------------------------------
 
 -- constructors (these aren't new, already in Cryptol, and AFAIK mapped into SawCore),
 -- thus straightforward names.
-C1 : (as : sort 0) -> ETT__ArgType_C1 as -> ETT as;
-C1 as x = Left (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_Nil)) x;
-
-C2 : (as : sort 0) -> ETT__ArgType_C2 as -> ETT as;
-C2 as x = Right (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_Nil))
-                    (Left (ETT__ArgType_C2 as) (Eithers' LS_Nil)
-                      x);
-
--- implement per the below framework:
-C1' : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
-C1' as x = Left (listSortGet (ETT__LS as) 0)
-                (Eithers' (listSortDrop (ETT__LS as) 1))
-                x;
 
 {-
 C0..C3:
@@ -107,82 +76,128 @@ C2 a b.. = \z1 z2..->
          $ C[z1,z2,...]
 -}
 
--- For now (after all these TEMPESTS) just do the above ^.
---  later, see Eithers.sawcore for explorations re 'generic' injection.
+
+-- implement per the above framework:
+C1 : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
+C1 as x = Left (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+               x;
+
+-- C1c : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
+-- C1c as x = Left (listSortGet (ETT__LS as) 0)
+--                (EithersV (listSortDrop (ETT__LS as) 1))
+--                x;
+--   -- TODO: make curried!
+
+C2 : (as : sort 0) -> listSortGet (ETT__LS as) 1 -> ETT as;
+C2 as x =
+  Right (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+  (Left (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
+   x);
+
+C3 : (as : sort 0) -> listSortGet (ETT__LS as) 2 -> ETT as;
+C3 as x =
+ Right   (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+  (Right (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
+   (Left (listSortGet (ETT__LS as) 2) (EithersV (listSortDrop (ETT__LS as) 3))
+   x));
+
 
 ---- SawCore: case/eithers function --------------------------------
 
-{- Design Alts:
-
-Note
- 1. eithers'/eithersV
-
-  - requires generating a `es:FunsTo` for every instantiation to which we want    a case;
-  - thus, adding code on every case in code.
-
- 2. ETT_eithers2
-  - nice: you can use eithers'/eithersV but you write just one time.
-  - TODO: you need to make the alt-functions curried.
-
--}
-
-ETT_eithers : (as : sort 0)
-           -> (b: sort 0)
-           -> (ETT__ArgType_C1 as -> b)
-           -> (ETT__ArgType_C2 as -> b)
-           -> ETT as
-           -> b;
-ETT_eithers as b f1 f2 =
-  either (ETT__ArgType_C1 as) (Eithers' (LS_Cons (ETT__ArgType_C2 as) LS_Nil)) b f1
-    (either (ETT__ArgType_C2 as) Void b f2
-       (elimVoid b));
-
-
-ETT_eithers2 : (as : sort 0)
+ETT_eithers  : (as : sort 0)
             -> (b: sort 0)
             -> (ETT__ArgType_C1 as -> b)
             -> (ETT__ArgType_C2 as -> b)
+            -> (ETT__ArgType_C3 as -> b)
             -> ETT as
             -> b;
-ETT_eithers2 as b f1 f2 =
-  eithers' b (FunsTo_Cons b (ETT__ArgType_C1 as) f1
+ETT_eithers as b f1 f2 f3 =
+  eithersV b (FunsTo_Cons b (ETT__ArgType_C1 as) f1
              (FunsTo_Cons b (ETT__ArgType_C2 as) f2
-             (FunsTo_Nil b)));
+             (FunsTo_Cons b (ETT__ArgType_C3 as) f3
+             (FunsTo_Nil b))));
 
 
 -- NOTE: See Eithers.sawcore for a discussion of other alternatives.
 
+---- ListSort combinators [TODO: move to Prelude] -----------------------------
+
+listSort_FoldL : (b : sort 1) -> (b -> sort 0 -> b) -> b -> ListSort -> b;
+listSort_FoldL b f init ls =
+  ListSort__rec
+    (\(_ls: ListSort) -> b->b)
+    (\(x: b)-> x)
+    (\(A: sort 0) (_: ListSort) (g: b->b) ->
+       \(acc: b)-> g (f acc A)  -- <- has type b->b
+    )
+    ls
+    init;
+
+listSort_Reverse : ListSort -> ListSort;
+listSort_Reverse = listSort_FoldL
+                     ListSort
+                     (\(ls: ListSort) (A:sort 0)-> LS_Cons A ls)
+                     (LS_Nil);
+
+---- Pairs... ------------------------------------------------------
+
+PairsR : ListSort -> sort 0;
+PairsR = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType tp rec));
+
+PairsL : ListSort -> sort 0;
+PairsL = ListSort__rec
+          (\ (_:ListSort) -> sort 0)
+          UnitType
+          (\ (tp:sort 0) (_:ListSort) (rec:sort 0) ->
+               (PairType rec tp));
+
+  -- PairsL [t1,t2,t3] == ((((UnitType),t3),t2),t1)
+
+pairsLeftFold: ListSort -> sort 0;
+pairsLeftFold ls = PairsL (listSort_Reverse ls);
+
+  -- PairsLeftFold [t1,t2,t3] == ((((UnitType),t1),t2),t3)
+
+---- Specialized Eithers, new try! ----------------------------------
+
+TypeOfUnCurryLS : ListSort -> sort 0 -> sort 1;
+TypeOfUnCurryLS ls b = arrowsType ls b -> pairsLeftFold ls -> b;
 
 
 ---- examples of ETT ------------------------------------------
 
+fun : ETT Nat -> Bool;
+fun = ETT_eithers Nat Bool
+        (\(n : ETT__ArgType_C1 Nat) -> equal0Nat n)
+        (\(b : ETT__ArgType_C2 Nat) -> b          )
+        (\(n : ETT__ArgType_C3 Nat) -> True       );
+
+
 val1 : ETT  Nat;
 val1 = C1 Nat 5;
 
-val2 : (as : sort 0) -> ETT  as;
+val2 : (as : sort 0) -> ETT as;
 val2 as = C2 as True;
 
-fun : ETT Nat -> Bool;
-fun = ETT_eithers2 Nat Bool
-        (\(n : ETT__ArgType_C1 Nat) -> equal0Nat n)
-        (\(b : ETT__ArgType_C2 Nat) -> b          );
+val3 : ETT Nat = C3 Nat (PairValue UnitType Nat   Unit 1);
 
-
----- test misc -----------------------------------------------------
-
-test20 : sort 0 = listSortGet (ETT__LS Nat) 0;
-test21 : sort 0 = listSortGet (ETT__LS Nat) 1;
-test22 : sort 0 = listSortGet (ETT__LS Nat) 2;
-
-test1 : sort 0 = test20;
 
 ---- tests ---------------------------------------------------------
 
-test10  : ETT Nat = val1;
-test11  : Bool    = fun val1;
-test12  : Bool    = fun (C1 Nat      0);
-test12' : Bool    = fun (C1' Nat      0);
-test13  : Bool    = fun (C2 Nat  False);
-test14  : Bool    = fun (C2 Nat  True);
+test00 : sort 0 = listSortGet (ETT__LS Nat) 0;
+test01 : sort 0 = listSortGet (ETT__LS Nat) 1;
+test02 : sort 0 = listSortGet (ETT__LS Nat) 2;
 
--- test1  : Bool    = test14;
+test10  : ETT Nat = val1;
+test11  : ETT Nat = val2 Nat;
+test12  : ETT Nat = val3;
+
+test13  : Bool    = fun val1;
+test14  : Bool    = fun (C1 Nat      0);
+test15  : Bool    = fun (C2 Nat  False);
+test16  : Bool    = fun (val2 Nat);
+test17  : Bool    = fun val3;
