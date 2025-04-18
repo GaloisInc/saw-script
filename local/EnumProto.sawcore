@@ -10,8 +10,8 @@ import Prelude;
 {-
 - Cryptol
 enum ETT as = C1
-            | C2 Bool
-            | C3 UnitType as
+            | C2 Nat
+            | C3 Bool as
              -- 'as' can be free in CT1, CT2, ... types
   -- ETT = Enum Test Type
 -}
@@ -22,21 +22,21 @@ enum ETT as = C1
 
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
 ETT__ArgType_C1 (as : sort 0) : sort 0 = UnitType;
-ETT__ArgType_C2 (as : sort 0) : sort 0 = Bool;
-ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
+ETT__ArgType_C2 (as : sort 0) : sort 0 = Nat;
+ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType Bool as;
   -- NOTE: don't need to name these, just use the below.
 
 
 -- a variant of the above, need this now, for Uncurry:
-ETT__ArgType_C1_LS (as : sort 0) : ListSort = LS_Cons as LS_Nil;
-ETT__ArgType_C2_LS (as : sort 0) : ListSort = LS_Cons Bool LS_Nil;
-ETT__ArgType_C3_LS (as : sort 0) : ListSort = LS_Cons UnitType (LS_Cons as LS_Nil);
+ETT__ArgType_C1_LS (as : sort 0) : ListSort = LS_Nil;
+ETT__ArgType_C2_LS (as : sort 0) : ListSort = LS_Cons Nat LS_Nil;
+ETT__ArgType_C3_LS (as : sort 0) : ListSort = LS_Cons Bool (LS_Cons as LS_Nil);
 
 ETT__LS : sort 0 -> ListSort;
-ETT__LS as = LS_Cons (ETT__ArgType_C1 as)
-             (LS_Cons (ETT__ArgType_C2 as)
-             (LS_Cons (ETT__ArgType_C3 as)
-               LS_Nil));
+ETT__LS as = LS_Cons    (ETT__ArgType_C1 as)
+              (LS_Cons  (ETT__ArgType_C2 as)
+               (LS_Cons (ETT__ArgType_C3 as)
+                 LS_Nil));
 
 -- Define the type:
 ETT : (as : sort 0) -> sort 0;
@@ -169,18 +169,18 @@ ETT_eithers as b f1 f2 f3 =
 
 fun : ETT Nat -> Bool;
 fun = ETT_eithers Nat Bool
-        (\(n : ETT__ArgType_C1 Nat) -> equal0Nat n)
-        (\(b : ETT__ArgType_C2 Nat) -> b          )
-        (\(n : ETT__ArgType_C3 Nat) -> True       );
+        (\(_ : ETT__ArgType_C1 Nat) -> True)
+        (\(n : ETT__ArgType_C2 Nat) -> equal0Nat n)
+        (\(x : ETT__ArgType_C3 Nat) -> False      );
 
 
 val1 : ETT  Nat;
-val1 = C1 Nat 5;
+val1 = C1 Nat Unit;
 
 val2 : (as : sort 0) -> ETT as;
-val2 as = C2 as True;
+val2 as = C2 as 1;
 
-val3 : ETT Nat = C3 Nat (PairValue UnitType Nat   Unit 1);
+val3 : ETT Nat = C3 Nat (PairValue Bool Nat True 2);
 
 
 ---- tests ---------------------------------------------------------
@@ -194,8 +194,8 @@ test11  : ETT Nat = val2 Nat;
 test12  : ETT Nat = val3;
 
 test13  : Bool    = fun val1;
-test14  : Bool    = fun (C1 Nat      0);
-test15  : Bool    = fun (C2 Nat  False);
+test14  : Bool    = fun (C1 Nat Unit);
+test15  : Bool    = fun (C2 Nat 2);
 test16  : Bool    = fun (val2 Nat);
 test17  : Bool    = fun val3;
 
