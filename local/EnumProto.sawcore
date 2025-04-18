@@ -171,19 +171,35 @@ fun = ETT_eithers Nat Bool
 
 ---- Now, curried eithers/case: ------------------------------------
 
-ETT_case :  (as : sort 0)
+ETT_case1 :  (as : sort 0)
+          -> (b: sort 0)
+          -> (arrowsType (ETT__ArgType_C1_LS as) b)
+          -> (arrowsType (ETT__ArgType_C2_LS as) b)
+          -> (arrowsType (ETT__ArgType_C3_LS as) b)
+          -> ETT as
+          -> b;
+ETT_case1 as b f1 f2 f3 =
+  ETT_eithers as b
+    (\(x: ETT__ArgType_C1 as) -> f1)
+    (\(x: ETT__ArgType_C2 as) -> f2 (x.1))
+    (\(x: ETT__ArgType_C3 as) -> f3 x.1 x.2);
+
+-- or inlining ETT_eithers:
+
+ETT_case2 : (as : sort 0)
          -> (b: sort 0)
          -> (arrowsType (ETT__ArgType_C1_LS as) b)
          -> (arrowsType (ETT__ArgType_C2_LS as) b)
          -> (arrowsType (ETT__ArgType_C3_LS as) b)
          -> ETT as
          -> b;
-ETT_case as b f1 f2 f3 =
-  ETT_eithers as b
-    (\(x: ETT__ArgType_C1 as) -> f1)
-    (\(x: ETT__ArgType_C2 as) -> f2 (x.1))
-    (\(x: ETT__ArgType_C3 as) -> f3 x.1 x.2);
 
+ETT_case2 as b f1 f2 f3 =
+  eithersV b
+    (FunsTo_Cons b (ETT__ArgType_C1 as) (\(x: ETT__ArgType_C1 as) -> f1)
+    (FunsTo_Cons b (ETT__ArgType_C2 as) (\(x: ETT__ArgType_C2 as) -> f2 x.1)
+    (FunsTo_Cons b (ETT__ArgType_C3 as) (\(x: ETT__ArgType_C3 as) -> f3 x.1 x.2)
+    (FunsTo_Nil b))));
 
 ---- tests ---------------------------------------------------------
 
