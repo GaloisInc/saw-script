@@ -102,24 +102,6 @@ C3 as x =
    x));
 
 
----- SawCore: case/eithers function --------------------------------
-
-ETT_eithers  : (as : sort 0)
-            -> (b: sort 0)
-            -> (ETT__ArgType_C1 as -> b)
-            -> (ETT__ArgType_C2 as -> b)
-            -> (ETT__ArgType_C3 as -> b)
-            -> ETT as
-            -> b;
-ETT_eithers as b f1 f2 f3 =
-  eithersV b (FunsTo_Cons b (ETT__ArgType_C1 as) f1
-             (FunsTo_Cons b (ETT__ArgType_C2 as) f2
-             (FunsTo_Cons b (ETT__ArgType_C3 as) f3
-             (FunsTo_Nil b))));
-
-
--- NOTE: See Eithers.sawcore for a discussion of other alternatives.
-
 ---- ListSort combinators [TODO: move to Prelude] -----------------------------
 
 listSort_FoldL : (b : sort 1) -> (b -> sort 0 -> b) -> b -> ListSort -> b;
@@ -162,10 +144,20 @@ pairsLeftFold ls = PairsL (listSort_Reverse ls);
 
   -- PairsLeftFold [t1,t2,t3] == ((((UnitType),t1),t2),t3)
 
----- Specialized Eithers, new try! ----------------------------------
+---- SawCore: case/eithers function --------------------------------
 
-TypeOfUnCurryLS : ListSort -> sort 0 -> sort 1;
-TypeOfUnCurryLS ls b = arrowsType ls b -> pairsLeftFold ls -> b;
+ETT_eithers  : (as : sort 0)
+            -> (b: sort 0)
+            -> (ETT__ArgType_C1 as -> b)
+            -> (ETT__ArgType_C2 as -> b)
+            -> (ETT__ArgType_C3 as -> b)
+            -> ETT as
+            -> b;
+ETT_eithers as b f1 f2 f3 =
+  eithersV b (FunsTo_Cons b (ETT__ArgType_C1 as) f1
+             (FunsTo_Cons b (ETT__ArgType_C2 as) f2
+             (FunsTo_Cons b (ETT__ArgType_C3 as) f3
+             (FunsTo_Nil b))));
 
 
 ---- examples of ETT ------------------------------------------
@@ -201,3 +193,16 @@ test14  : Bool    = fun (C1 Nat      0);
 test15  : Bool    = fun (C2 Nat  False);
 test16  : Bool    = fun (val2 Nat);
 test17  : Bool    = fun val3;
+
+---- more: sawscript from command line -----------------------------
+
+{-
+
+return (normalize_term (parse_core_mod "EnumProto" "TypeOfUnCurryLS (ETT__LS Nat) (Vec 0 Bool)"))
+
+-}
+
+---- Now, curried eithers/case: ------------------------------------
+
+TypeOfUnCurryLS : ListSort -> sort 0 -> sort 1;
+TypeOfUnCurryLS ls b = arrowsType ls b -> pairsLeftFold ls -> b;
