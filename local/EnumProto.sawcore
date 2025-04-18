@@ -152,7 +152,7 @@ ETT_eithers as b f1 f2 f3 =
              (FunsTo_Nil b))));
 
 
----- examples of ETT ------------------------------------------
+---- Examples ------------------------------------------------------
 
 val1 : ETT  Nat;
 val1 = C1 Nat Unit;
@@ -168,6 +168,21 @@ fun = ETT_eithers Nat Bool
         (\(x : ETT__ArgType_C2 Nat) -> equal0Nat (x.1))
         (\(x : ETT__ArgType_C3 Nat) -> x.1);
 
+
+---- Now, curried eithers/case: ------------------------------------
+
+ETT_case :  (as : sort 0)
+         -> (b: sort 0)
+         -> (arrowsType (ETT__ArgType_C1_LS as) b)
+         -> (arrowsType (ETT__ArgType_C2_LS as) b)
+         -> (arrowsType (ETT__ArgType_C3_LS as) b)
+         -> ETT as
+         -> b;
+ETT_case as b f1 f2 f3 =
+  ETT_eithers as b
+    (\(x: ETT__ArgType_C1 as) -> f1)
+    (\(x: ETT__ArgType_C2 as) -> f2 (x.1))
+    (\(x: ETT__ArgType_C3 as) -> f3 x.1 x.2);
 
 
 ---- tests ---------------------------------------------------------
@@ -206,23 +221,3 @@ return (normalize_term (type (parse_core_mod "EnumProto" "ETT_case")))
   -- NOTE: can't do.
 
 -}
-
----- Now, curried eithers/case: ------------------------------------
-
-TypeOfUnCurryLS : sort 0 -> ListSort -> sort 1;
-TypeOfUnCurryLS b ls = arrowsType ls b -> TupleR ls -> b;
-
-typeC3 : sort 1 = TypeOfUnCurryLS (Vec 3 Bool) (ETT__ArgType_C3_LS Nat);
-
-ETT_case :  (as : sort 0)
-         -> (b: sort 0)
-         -> (arrowsType (ETT__ArgType_C1_LS as) b)
-         -> (arrowsType (ETT__ArgType_C2_LS as) b)
-         -> (arrowsType (ETT__ArgType_C3_LS as) b)
-         -> ETT as
-         -> b;
-ETT_case as b f1 f2 f3 =
-  ETT_eithers as b
-    (\(x: ETT__ArgType_C1 as) -> f1)
-    (\(x: ETT__ArgType_C2 as) -> f2 (x.1))
-    (\(x: ETT__ArgType_C3 as) -> f3 x.1 x.2);
