@@ -139,7 +139,7 @@ listSort_Reverse = listSort_FoldL
                      (\(ls: ListSort) (A:sort 0)-> LS_Cons A ls)
                      (LS_Nil);
 
----- Pairs... ------------------------------------------------------
+---- Pairs... [TODO: Move to Prelude] ------------------------------
 
 PairsR : ListSort -> sort 0;
 PairsR = ListSort__rec
