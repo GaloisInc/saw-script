@@ -9,11 +9,11 @@ import Prelude;
 ---- Cryptol: ------------------------------------------------------
 {-
 - Cryptol
--- ETT = Enum Test Type
-enum ETT as = C1 CT1
-            | C2 CT2
-            | C3 CT3a CT3b  -- not done yet!
+enum ETT as = C1
+            | C2 Bool
+            | C3 UnitType as
              -- 'as' can be free in CT1, CT2, ... types
+  -- ETT = Enum Test Type
 -}
 
 ---- SawCore: Type Definitions -------------------------------------
@@ -21,7 +21,7 @@ enum ETT as = C1 CT1
 -- Just Like EnumLib3, but let's inline things:
 
 -- NOTE all the 'base types' (elements of the sum) should all be parameterized by 'as':
-ETT__ArgType_C1 (as : sort 0) : sort 0 = as;
+ETT__ArgType_C1 (as : sort 0) : sort 0 = UnitType;
 ETT__ArgType_C2 (as : sort 0) : sort 0 = Bool;
 ETT__ArgType_C3 (as : sort 0) : sort 0 = PairType UnitType as;
   -- NOTE: don't need to name these, just use the below.
