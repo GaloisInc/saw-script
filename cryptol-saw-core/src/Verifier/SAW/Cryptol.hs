@@ -2130,7 +2130,7 @@ genCodeForEnum sc env nt cs =
                             suffix)
       tl_ident      = newIdent "__TL"
       sumTy_ident   = newIdent "__TY"
-      eithers_ident = newIdent "__eithers"
+      case_ident    = newIdent "__case"
 
   -------------------------------------------------------------
   -- Create access to needed SAWCore Prelude types & definitions:
@@ -2201,14 +2201,15 @@ genCodeForEnum sc env nt cs =
   putStrLn "MYLOG: pt6"
 
   -------------------------------------------------------------
-  -- Create an `eithers` specialized to the enum.
+  -- Create an `case/eithers` specialized to the enum.
 
   sumTy_applied <- scGlobalApply sc sumTy_ident tyParamsVars
     -- <- Nope!
+    -- FIXME:[?] what does ^ mean?
     -- but if you could do scAbstractExts with a 'Pi' (vs Lambda)
     -- would this all work?
 
-  eithers_type <-
+  case_type <-
     do
     result <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
           -- N.B.: scFun's aren't included in deBruijn's!
@@ -2221,16 +2222,15 @@ genCodeForEnum sc env nt cs =
       =<< scFun sc sumTy_applied
                    result
 
+  case_rhs  <- addTypeAbstractions =<< scTuple sc []
+    -- FIXME[F1]: TODO!
 
-  eithers_rhs  <- addTypeAbstractions =<< scTuple sc []
-    -- FIXME: TODO!
+  putStrLn $ "MYLOG: case_type: " ++ showTerm case_type
+  putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
+  scInsertDef sc preludeName case_ident case_type case_rhs
 
-  putStrLn $ "MYLOG: eithers_type: " ++ showTerm eithers_type
-  putStrLn $ "MYLOG: eithers_rhs:  " ++ showTerm eithers_rhs
-  scInsertDef sc preludeName eithers_ident eithers_type eithers_rhs
-
-  checkSAWCore sc (eithers_ident, eithers_rhs)
-    -- NOTE: these are not type-checked!  TODO?
+  checkSAWCoreTypeChecks sc (case_ident, case_rhs)
+    -- FIXME: later: check that the type matches what we expect.
 
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
@@ -2296,7 +2296,7 @@ genCodeForEnum sc env nt cs =
                       (zip paramNames scConArgTypes)
                       conBody1
         conBody3 <- addTypeAbstractions conBody2
-        checkSAWCore sc (C.nameIdent conName, conBody3)
+        checkSAWCoreTypeChecks sc (C.nameIdent conName, conBody3)
           -- FIXME: remove eventually (or not)?
         return (conName, conBody3)
 
@@ -2306,10 +2306,10 @@ genCodeForEnum sc env nt cs =
 
   return ctors
 
-checkSAWCore :: (Show i) => SharedContext -> (i, Term) -> IO ()
-checkSAWCore sc (ident, term) =
+checkSAWCoreTypeChecks :: (Show i) => SharedContext -> (i, Term) -> IO ()
+checkSAWCoreTypeChecks sc (ident, term) =
   do let ident' = show ident
-     putStrLn $ "MYLOG: checkSAWCore: " ++ ident'
+     putStrLn $ "MYLOG: checkSAWCoreTypeChecks: " ++ ident'
      result <- SC.scTypeCheck sc Nothing term
      case result of
        Right _ -> pure ()
