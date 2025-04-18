@@ -7,6 +7,9 @@
   function can only be used with LLVM verification, and attempting to use this
   function with JVM or MIR verification will raise an error.
 
+* Add a `Quickcheck(n)` proof script, where `n` is the number of randomly
+  sampled inputs. This is the Python counterpart to SAWScript's `quickcheck`.
+
 ## 1.3 - 2025-03-21
 
 * Bump the lmdb Python bindings to 1.6.2 to gain support for Python 3.13.
