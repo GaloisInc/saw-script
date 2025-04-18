@@ -79,6 +79,7 @@ data ProofTactic
   | Simplify ServerName
   | Admit
   | Trivial
+  | Quickcheck Integer
 
 newtype ProofScript = ProofScript [ProofTactic]
 
@@ -127,6 +128,7 @@ instance FromJSON ProofTactic where
         "simplify"         -> Simplify <$> o .: "rules"
         "admit"            -> pure Admit
         "trivial"          -> pure Trivial
+        "quickcheck"       -> Quickcheck <$> o .: "number of inputs"
         _                  -> empty
 
 instance FromJSON ProofScript where
@@ -299,6 +301,9 @@ interpretProofScript (ProofScript ts) = go ts
             W4_Z3 unints          -> return $ SB.w4_unint_z3 unints
         go [Trivial]                  = return $ SB.trivial
         go [Admit]                    = return $ SB.assumeUnsat -- TODO: admit
+        go [Quickcheck n]             = tl $ do
+          sc <- SV.getSharedContext
+          return $ SB.quickcheckGoal sc n
         go (BetaReduceGoal : rest)    = do
           m <- go rest
           return (SB.beta_reduce_goal >> m)

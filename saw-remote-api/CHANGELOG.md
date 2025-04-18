@@ -7,6 +7,10 @@
   should be allocated. This field can only be used with LLVM, and attempting to
   use this field with JVM or MIR verification will raise an error.
 
+* Add support for the `quickcheck` tactic, which is the remote API counterpart
+  to SAWScript's `quickcheck`. This also accepts a `"number of inputs"` fields
+  containing an integer with the number of randomly sampled inputs.
+
 ## 1.3 -- 2025-03-21
 
 * No changes specifically to the remote API.

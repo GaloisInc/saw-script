@@ -121,6 +121,14 @@ class Trivial(ProofTactic):
   def to_json(self) -> Any:
     return { "tactic": "trivial" }
 
+class Quickcheck(ProofTactic):
+  def __init__(self, num_inputs : int) -> None:
+    self.num_inputs = num_inputs
+
+  def to_json(self) -> Any:
+    return { "tactic": "quickcheck",
+             "number of inputs": self.num_inputs }
+
 class ProofScript:
   def __init__(self, tactics : List[ProofTactic]) -> None:
     self.tactics = tactics
