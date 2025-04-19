@@ -2239,11 +2239,12 @@ genCodeForEnum sc env nt ctors =
     -- FIXME:[C2] What in the world mean the previous 3 lines?
     --           A bug currently?
 
+  let mkAltFuncTypes b = mapM (\ts->scFunAll sc ts b) argTypes_eachCtor
   case_type <-
       do
       b <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
             -- N.B.: scFun's aren't included in deBruijn's!
-      altFuncTypes <- mapM (\ty->scFun sc ty b) represType_eachCtor
+      altFuncTypes <- mkAltFuncTypes b
 
       scPiAbstractExts sc tyParamsECs
           -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
@@ -2251,19 +2252,22 @@ genCodeForEnum sc env nt ctors =
         =<< scFunAll sc altFuncTypes
         =<< scFun sc sumTy_applied b
 
-
   case_rhs <-
       do
-      b <- scTupleType sc []  -- FIXME: TODO: new polymorphic arg.
-      let funcNames = map (\x-> Text.pack ("f" ++ show x))
-                          (take numCtors [(1 ::Int)..])
-
-      -- The 'base' of the de Bruijn indices are inside the 'body' below,
-      --  thus, the following two defs:
+      -- Create needed vars for SAWCore expression
+      --  - generating something like:
+      --    \tyvars..-> \(b: sort)->(\f1 f2 ... ->
+      --       eithersV b (FunsToCons b ... (\x-> f1 ...) ...)
+      --  - the 'base' of the de Bruijn indices are inside `body` below,
+      --    thus, the following two defs:
       x <- scLocalVar sc 0
-      funcVars  <- reverse <$> mapM (scLocalVar sc) (take numCtors [1 ..])
+      funcVars  <- reverse <$> mapM (scLocalVar sc) [1..numCtors]
 
-      funcTypes <- mapM (\ty->scFun sc ty b) represType_eachCtor
+      bEC <- scFreshEC sc "b" sort0
+      b   <- scExtCns sc bEC  -- bEC into Term variable
+
+      let funcNames = map (\n-> Text.pack ("f" ++ show n)) [1..numCtors]
+      funcTypes <- mkAltFuncTypes b
       funcDefs  <- flip mapM (zip3 funcVars represType_eachCtor ctors) $
                      \(funcVar,ty,ctor) ->
                          do
@@ -2274,10 +2278,10 @@ genCodeForEnum sc env nt ctors =
                          scLambda sc "x" ty body
 
       funsToList <- scMakeFunsTo b (zip represType_eachCtor funcDefs)
-      e <- sc_eithersV b funsToList
-      lam <- scLambdaList sc (zip funcNames funcTypes) e
-      -- FIXME:TODO add the type abstraction for 'b'
-      addTypeAbstractions lam
+      e    <- sc_eithersV b funsToList
+      lam  <- scLambdaList sc (zip funcNames funcTypes) e
+      tlam <- scAbstractExts sc [bEC] lam
+      addTypeAbstractions tlam
 
   putStrLn $ "MYLOG: case_type: " ++ showTerm case_type
   putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
