@@ -2256,17 +2256,20 @@ genCodeForEnum sc env nt ctors =
       b <- scTupleType sc []  -- FIXME: TODO: new polymorphic arg.
       let funcNames = map (\x-> Text.pack ("f" ++ show x))
                           (take numCtors [(1 ::Int)..])
-      funcVars  <- reverse <$> mapM (scLocalVar sc) (take numCtors [0 ..])
+
+      -- The 'base' of the de Bruijn indices are inside the 'body' below,
+      --  thus, the following two defs:
+      x <- scLocalVar sc 0
+      funcVars  <- reverse <$> mapM (scLocalVar sc) (take numCtors [1 ..])
+
       funcTypes <- mapM (\ty->scFun sc ty b) represType_eachCtor
       funcDefs  <- flip mapM (zip3 funcVars represType_eachCtor ctors) $
-                     \(fVar,ty,ctor) ->
+                     \(funcVar,ty,ctor) ->
                          do
                          let n = length (C.ecFields ctor)
-                         x <- scLocalVar sc 0
-                         -- FIXME: the funcVars are now off by one?
                          funcArgs <- flip mapM [1..n] $ \i->
                                        scTupleSelector sc x i n
-                         body <- scApplyAll sc fVar funcArgs
+                         body <- scApplyAll sc funcVar funcArgs
                          scLambda sc "x" ty body
 
       funsToList <- scMakeFunsTo b (zip represType_eachCtor funcDefs)
