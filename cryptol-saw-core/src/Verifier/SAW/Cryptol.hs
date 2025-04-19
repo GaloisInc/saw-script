@@ -321,7 +321,7 @@ importType sc env ty =
            C.Enum {} ->
              -- The (parameterized) type should be in the sc env,
              -- just apply types to it:
-             scGlobalApply sc (identOfEnumType nt) =<< traverse go ts
+             scGlobalApply sc (identOfEnumType n) =<< traverse go ts
            C.Abstract
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' (envPrimTypes env) ->
@@ -2108,10 +2108,11 @@ genCodeForEnum ::
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt ctors =
   do
+  let ntName' = ntName nt
 
   -- MT: Debugging
   putStrLn "\nMYLOG: genCodeForEnum :\n"
-  putStrLn $ "  " ++ show (C.identText $ C.nameIdent (ntName nt))
+  putStrLn $ "  " ++ show (C.identText $ C.nameIdent ntName')
 
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
@@ -2137,9 +2138,9 @@ genCodeForEnum sc env nt ctors =
 
   -------------------------------------------------------------
    -- Common naming conventions:
-  let sumTy_ident   = identOfEnumType nt -- (i.e., ... "__TY")
-      case_ident    = identOfEnumCase nt
-      tl_ident      = newIdent nt "__TL"
+  let sumTy_ident   = identOfEnumType ntName'
+      case_ident    = identOfEnumCase ntName'
+      tl_ident      = newIdent ntName' "__TL"
 
   -------------------------------------------------------------
   -- Definitions to access needed SAWCore Prelude types & definitions:
@@ -2350,17 +2351,17 @@ genCodeForEnum sc env nt ctors =
   putStrLn "MYLOG: pt8"
   return defn_eachCtor
 
-identOfEnumType :: NominalType -> Ident
 identOfEnumType nt = newIdent nt "__TY"
+identOfEnumType :: C.Name -> Ident
 
-identOfEnumCase :: NominalType -> Ident
+identOfEnumCase :: C.Name -> Ident
 identOfEnumCase nt = newIdent nt "__case"
 
-newIdent :: NominalType -> Text -> Ident
-newIdent nt suffix =
+newIdent :: C.Name -> Text -> Ident
+newIdent name suffix =
   mkIdent
-    preludeName  -- FIXME: later, move to module where enum is defined.
-    (C.identText (C.nameIdent (ntName nt)) `Text.append` suffix)
+    preludeName  -- FIXME: Move to the local module.
+    (C.identText (C.nameIdent name) `Text.append` suffix)
 
 
 -- | checkSAWCoreTypeChecks sc nm term mType - typeChecks term.
