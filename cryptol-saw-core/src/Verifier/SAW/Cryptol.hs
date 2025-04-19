@@ -80,7 +80,7 @@ import qualified Cryptol.Utils.Ident as C
   , identText, interactiveName
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
-  , unpackIdent
+  -- , unpackIdent
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
@@ -94,7 +94,8 @@ import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck               as SC
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName, ModuleName)
+import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
+ -- FIXME: ModuleName?
 
 -- local modules:
 import Verifier.SAW.Cryptol.Panic
@@ -102,10 +103,11 @@ import Verifier.SAW.Cryptol.Panic
 
 -- MT: Debugging:
 -- import Text.Show.Pretty
-import qualified Data.HashMap.Strict as HMap
+-- import qualified Data.HashMap.Strict as HMap
 
 -- MT: maybe temporary:
-import Verifier.SAW.Name (preludeName,identName)
+import Verifier.SAW.Name (preludeName)
+-- import Verifier.SAW.Name (identName)
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
