@@ -2120,6 +2120,7 @@ genCodeForEnum sc env nt ctors =
 
   let tyParamsInfo  = C.ntParams nt
       tyParamsNames = map tparamToLocalName tyParamsInfo
+      numCtors      = length ctors
 
   tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
                    importKind sc (C.tpKind tpi)
@@ -2267,9 +2268,9 @@ genCodeForEnum sc env nt ctors =
   -- Create needed SawCore types for the Left/Right constructors;
   -- each Either in the nested Either's needs a pair of types:
   --
-  -- FIXME: add doc/help to understand: show textual example.
+  -- FIXME[D]: add doc/help to understand: show textual example.
 
-  tps <- flip mapM [0..length ctors - 1] $ \i->
+  tps <- flip mapM [0 .. numCtors-1] $ \i->
            do
            typeLeft  <- do
                         n <- scNat sc (fromIntegral i)
