@@ -1212,9 +1212,9 @@ importExpr sc env expr =
       -- generated if-then-else
       Fold.foldrM (propGuardToIte typ') err arms
 
-    C.ECase {} -> panic "importExpr"
-                    ["`case` expressions are not yet supported"]
-                  -- FIXME:MT: implement
+    C.ECase s alts dflt -> do
+      let ty = fastTypeOf (envC env) expr -- need the
+      importCase sc env ty s alts dflt
 
   where
     the :: String -> Maybe a -> IO a
@@ -1322,8 +1322,9 @@ importExpr' sc env schema expr =
     C.ELocated _ e ->
       importExpr' sc env schema e
 
-    C.ECase {} -> panic "importExpr" ["`case` is not yet supported"]
-                  -- FIXME:MT: implement.
+    C.ECase {} -> fallback
+                  -- FIXME:MT: can we use fallback?!
+                  -- OLD: panic "importExpr" ["`case` is not yet supported"]
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
@@ -2351,8 +2352,39 @@ genCodeForEnum sc env nt ctors =
   putStrLn "MYLOG: pt8"
   return defn_eachCtor
 
-identOfEnumType nt = newIdent nt "__TY"
+
+importCase ::
+  SharedContext -> Env ->
+  C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
+importCase sc env b scrutinee altsMap _mDfltAlt =
+  do
+  let scrutineeTy = fastTypeOf (envC env) scrutinee
+  (nm,ctors,types) <- case scrutineeTy of
+      C.TNominal (NominalType {ntName=nm, ntDef=C.Enum ctors}) ts ->
+          return (nm,ctors,ts)
+      _ ->
+          panic "importCase"
+            [ "`case` expression scrutinee does not have Enum type"
+            , pretty scrutineeTy
+            ]
+  -- translate Map into alts that match constructors
+  --  Currently: [no missing, no dflt].  FIXME:TODO: allow for.
+  alts <- return []
+
+  -- translate each alt into a function (C.Expr, then sawcore?)
+  funcs <- return [] -- mapM alts
+
+  types'     <- mapM (importType sc env) types
+  b'         <- importType sc env b        -- b is type of whole case expr
+  scrutinee' <- importExpr sc env scrutinee
+  funcs'     <- mapM (importExpr sc env) funcs
+
+  scGlobalApply sc (identOfEnumCase nm) $
+    types' ++ [b'] ++ funcs' ++ [scrutinee']
+
+
 identOfEnumType :: C.Name -> Ident
+identOfEnumType nt = newIdent nt "__TY"
 
 identOfEnumCase :: C.Name -> Ident
 identOfEnumCase nt = newIdent nt "__case"
