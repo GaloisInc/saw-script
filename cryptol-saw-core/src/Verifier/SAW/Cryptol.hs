@@ -2186,10 +2186,11 @@ genCodeForEnum sc env nt ctors =
   tl_type  <- scFunAll sc tyParamsKinds scListSort
   putStrLn "MYLOG: pt5a"
 
-  (argTypes_eachCtor :: [[Term]]) <- do
-     -- add tyParamsInfo to env as it is needed to allow `importType` to work:
+  (argTypes_eachCtor :: [[Term]]) <-
+    -- add tyParamsInfo to env as it is needed to allow `importType`
+    -- to work:
+    do
     env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
-
     flip mapM ctors $ \c->
       mapM (\t-> do
               t' <- importType sc env' t
