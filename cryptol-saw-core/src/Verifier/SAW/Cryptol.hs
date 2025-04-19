@@ -2282,7 +2282,7 @@ genCodeForEnum sc env nt ctors =
   putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
   scInsertDef sc preludeName case_ident case_type case_rhs
 
-  checkSAWCoreTypeChecks sc (case_ident, case_rhs)
+  checkSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
     -- FIXME: later: check that the type matches what we expect.
     -- Or, write a scInsertDefChecked
 
@@ -2353,7 +2353,7 @@ genCodeForEnum sc env nt ctors =
                       (zip paramNames argTypes)
                       conBody1
         conBody3 <- addTypeAbstractions conBody2
-        checkSAWCoreTypeChecks sc (C.nameIdent conName, conBody3)
+        checkSAWCoreTypeChecks sc (C.nameIdent conName) conBody3 Nothing
           -- FIXME: remove eventually (or not)?
         return (conName, conBody3)
 
@@ -2362,13 +2362,25 @@ genCodeForEnum sc env nt ctors =
 
 
 -- | checkSAWCoreTypeChecks sc (nm, term) - typeChecks term.
-checkSAWCoreTypeChecks :: (Show i) => SharedContext -> (i, Term) -> IO ()
-checkSAWCoreTypeChecks sc (ident, term) =
+checkSAWCoreTypeChecks :: (Show i) =>
+  SharedContext -> i -> Term -> Maybe Term -> IO ()
+checkSAWCoreTypeChecks sc ident term mType =
   do let ident' = show ident
      putStrLn $ "MYLOG: checkSAWCoreTypeChecks: " ++ ident'
      result <- SC.scTypeCheck sc Nothing term
      case result of
-       Right _ -> pure ()
+       Right ty1 ->
+         case mType of
+           Nothing  ->
+             pure ()
+           Just ty2 -> do
+             eq <- scConvertible sc True ty1 ty2
+             if eq then
+               pure ()
+             else
+               do
+               putStrLn $ "Expected type does not match the inferred:"
+               putStrLn $ showTerm ty2
        Left err ->
          do putStrLn $ "Type error when checking " -- ++ ident'
             putStrLn $ unlines $ SC.prettyTCError err
