@@ -2239,22 +2239,41 @@ genCodeForEnum sc env nt ctors =
     --           A bug currently?
 
   case_type <-
-    do
-    result <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
-          -- N.B.: scFun's aren't included in deBruijn's!
-    decons <- flip mapM represType_eachCtor $ \ty ->
-                scFun sc ty result
-    scPiAbstractExts sc tyParamsECs
-        -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
-      =<< scPi sc "result" sort0
-      =<< scFunAll sc decons
-      =<< scFun sc sumTy_applied
-                   result
+      do
+      b <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
+            -- N.B.: scFun's aren't included in deBruijn's!
+      altFuncTypes <- mapM (\ty->scFun sc ty b) represType_eachCtor
 
-  -- FIXME[F1]: TODO:
-  case_rhs <- do
-              x <- scTuple sc []
-              addTypeAbstractions x
+      scPiAbstractExts sc tyParamsECs
+          -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
+        =<< scPi sc "b" sort0
+        =<< scFunAll sc altFuncTypes
+        =<< scFun sc sumTy_applied b
+
+
+  case_rhs <-
+      do
+      b <- scTupleType sc []  -- FIXME: TODO: new polymorphic arg.
+      let funcNames = map (\x-> Text.pack ("f" ++ show x))
+                          (take numCtors [(1 ::Int)..])
+      funcVars  <- reverse <$> mapM (scLocalVar sc) (take numCtors [0 ..])
+      funcTypes <- mapM (\ty->scFun sc ty b) represType_eachCtor
+      funcDefs  <- flip mapM (zip3 funcVars represType_eachCtor ctors) $
+                     \(fVar,ty,ctor) ->
+                         do
+                         let n = length (C.ecFields ctor)
+                         x <- scLocalVar sc 0
+                         -- FIXME: the funcVars are now off by one?
+                         funcArgs <- flip mapM [1..n] $ \i->
+                                       scTupleSelector sc x i n
+                         body <- scApplyAll sc fVar funcArgs
+                         scLambda sc "x" ty body
+
+      funsToList <- scMakeFunsTo b (zip represType_eachCtor funcDefs)
+      e <- sc_eithersV b funsToList
+      lam <- scLambdaList sc (zip funcNames funcTypes) e
+      -- FIXME:TODO add the type abstraction for 'b'
+      addTypeAbstractions lam
 
   putStrLn $ "MYLOG: case_type: " ++ showTerm case_type
   putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
