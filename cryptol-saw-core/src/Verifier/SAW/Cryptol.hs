@@ -1345,7 +1345,7 @@ importExpr' sc env schema expr =
     fallback :: IO Term
     fallback =
       do let t1 = fastTypeOf (envC env) expr
-         t2 <- the "falback: schema is not mono" (C.isMono schema)
+         t2 <- the "fallback: schema is not mono" (C.isMono schema)
          expr' <- importExpr sc env expr
          coerceTerm sc env t1 t2 expr'
 
