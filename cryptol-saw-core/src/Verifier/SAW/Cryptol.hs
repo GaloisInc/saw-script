@@ -319,12 +319,9 @@ importType sc env ty =
          case ntDef nt of
            C.Struct stru -> go (plainSubst s (C.TRec (C.ntFields stru)))
            C.Enum {} ->
-             do
-             enumType <- scTupleType sc []
-               -- FIXME:MT: implement
-               -- - what CAN you do at Cryptol level?
-             -- go (plainSubst s enumType)
-             return enumType
+             -- The (parameterized) type should be in the sc env,
+             -- just apply types to it:
+             scGlobalApply sc (identOfEnumType nt) =<< traverse go ts
            C.Abstract
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' (envPrimTypes env) ->
@@ -2095,7 +2092,6 @@ genCodeForNominalTypes sc nominalMap env0 =
             e <- importExpr sc env fnWithTAbs
             return [(con, e)]
 
-
 -- | genCodeForEnum ... - called when we see enum definition in the Cryptol module.
 --    - This action does two things
 --       1. Returns the names & defintions of the constructors of the enum.
@@ -2141,14 +2137,9 @@ genCodeForEnum sc env nt ctors =
 
   -------------------------------------------------------------
    -- Common naming conventions:
-  let newIdent suffix = mkIdent
-                          preludeName
-                          (Text.append
-                             (C.identText (C.nameIdent (ntName nt)))
-                            suffix)
-      tl_ident      = newIdent "__TL"
-      sumTy_ident   = newIdent "__TY"
-      case_ident    = newIdent "__case"
+  let sumTy_ident   = identOfEnumType nt -- (i.e., ... "__TY")
+      case_ident    = identOfEnumCase nt
+      tl_ident      = newIdent nt "__TL"
 
   -------------------------------------------------------------
   -- Definitions to access needed SAWCore Prelude types & definitions:
@@ -2358,6 +2349,19 @@ genCodeForEnum sc env nt ctors =
 
   putStrLn "MYLOG: pt8"
   return defn_eachCtor
+
+identOfEnumType :: NominalType -> Ident
+identOfEnumType nt = newIdent nt "__TY"
+
+identOfEnumCase :: NominalType -> Ident
+identOfEnumCase nt = newIdent nt "__case"
+
+newIdent :: NominalType -> Text -> Ident
+newIdent nt suffix =
+  mkIdent
+    preludeName  -- FIXME: later, move to module where enum is defined.
+    (C.identText (C.nameIdent (ntName nt)) `Text.append` suffix)
+
 
 -- | checkSAWCoreTypeChecks sc nm term mType - typeChecks term.
 --     if mType == Just type' then ensure this
