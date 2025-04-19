@@ -2200,12 +2200,12 @@ genCodeForEnum sc env nt ctors =
 
   putStrLn "MYLOG: pt5b"
 
-  sawcoreType_eachCtor <- flip mapM argTypes_eachCtor $ \ts ->
+  represType_eachCtor <- flip mapM argTypes_eachCtor $ \ts ->
                            scTupleType sc ts
 
   putStrLn "MYLOG: pt5c"
   tl_rhs   <- do
-              ls <- scMakeListSort sawcoreType_eachCtor
+              ls <- scMakeListSort represType_eachCtor
               addTypeAbstractions ls
   putStrLn "MYLOG: pt5d"
   scInsertDef sc preludeName tl_ident tl_type tl_rhs
@@ -2241,7 +2241,7 @@ genCodeForEnum sc env nt ctors =
     do
     result <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
           -- N.B.: scFun's aren't included in deBruijn's!
-    decons <- flip mapM sawcoreType_eachCtor $ \ty ->
+    decons <- flip mapM represType_eachCtor $ \ty ->
                 scFun sc ty result
     scPiAbstractExts sc tyParamsECs
         -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
@@ -2303,11 +2303,10 @@ genCodeForEnum sc env nt ctors =
                            scInjectRight (n-1) y
 
   -------------------------------------------------------------
-  -- Create each the constructor defn:
-  let
-      -- | generate constructor definitions:
-      mkCtorDefn :: HasCallStack => [Term] -> C.EnumCon -> IO (C.Name,Term)
-      mkCtorDefn argTypes ctor =
+  -- Create the definition for each constructor:
+  defn_eachCtor <-
+    flip mapM (zip argTypes_eachCtor ctors) $
+        \(argTypes, ctor)->
         do
         let
           conName     = C.ecName ctor
@@ -2336,11 +2335,7 @@ genCodeForEnum sc env nt ctors =
         return (conName, conBody3)
 
   putStrLn "MYLOG: pt8"
-  def_eachCtor <- flip mapM (zip argTypes_eachCtor ctors) $
-                    \(argTypes, ctor)->
-                      mkCtorDefn argTypes ctor
-
-  return def_eachCtor
+  return defn_eachCtor
 
 
 -- | checkSAWCoreTypeChecks sc (nm, term) - typeChecks term.
