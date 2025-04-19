@@ -1215,7 +1215,7 @@ importExpr sc env expr =
 
     C.ECase {} -> panic "importExpr"
                     ["`case` expressions are not yet supported"]
-                  -- MT:FIXME: implement
+                  -- FIXME:MT: implement
 
   where
     the :: String -> Maybe a -> IO a
@@ -1324,6 +1324,7 @@ importExpr' sc env schema expr =
       importExpr' sc env schema e
 
     C.ECase {} -> panic "importExpr" ["`case` is not yet supported"]
+                  -- FIXME:MT: implement.
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
@@ -2093,10 +2094,21 @@ genCodeForNominalTypes sc nominalMap env0 =
             return [(con, e)]
 
 
+-- | genCodeForEnum ... - called when we see enum definition in the Cryptol module.
+--    - This action does two things
+--       1. Returns the names & defintions of the constructors of the enum.
+--          This fit with the code for other nominals, needed because
+--          the "rest" of cryptol code to be translated needs to see the
+--          onstructors in the Cryptol environments.
+--
+--       2. It adds many other definitions to the SAWCore environment
+--          (in the sc :: SharedContext).  These definitions are only
+--          used by other generated sawcore code, so we don't need to
+--          return this information back to the Cryptol environment(s).
 genCodeForEnum ::
   (HasCallStack) =>
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
-genCodeForEnum sc env nt cs =
+genCodeForEnum sc env nt ctors =
   do
 
   -- MT: Debugging
@@ -2106,7 +2118,7 @@ genCodeForEnum sc env nt cs =
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
 
-  let tyParamsInfo = C.ntParams nt
+  let tyParamsInfo  = C.ntParams nt
       tyParamsNames = map tparamToLocalName tyParamsInfo
 
   tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
@@ -2117,7 +2129,10 @@ genCodeForEnum sc env nt cs =
 
   putStrLn "MYLOG: pt3"
   let
-      -- | add a type abstraction for each type parameter
+      -- | add a type abstraction for each type parameter.
+      --
+      --   N.B.: by using ExtCns we can write SAWCore in (`t`) that
+      --   need not keep track of de Bruijn's for the type parameters.
       addTypeAbstractions :: Term -> IO Term
       addTypeAbstractions t = scAbstractExts sc tyParamsECs t
 
@@ -2133,7 +2148,7 @@ genCodeForEnum sc env nt cs =
       case_ident    = newIdent "__case"
 
   -------------------------------------------------------------
-  -- Create access to needed SAWCore Prelude types & definitions:
+  -- Definitions to access needed SAWCore Prelude types & definitions:
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
   -- scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
@@ -2142,12 +2157,23 @@ genCodeForEnum sc env nt cs =
 
   let scLS_Cons s ls = scCtorApp sc "Prelude.LS_Cons" [s,ls]
 
-      scEithersV ls = scGlobalApply sc "Prelude.EithersV" [ls]
-      scLeft  a b x = scCtorApp sc "Prelude.Left"  [a,b,x]
-      scRight a b x = scCtorApp sc "Prelude.Right" [a,b,x]
+      scEithersV ls    = scGlobalApply sc "Prelude.EithersV" [ls]
+      sc_eithersV b ls = scGlobalApply sc "Prelude.eithersV" [b,ls]
+      scLeft  a b x    = scCtorApp sc "Prelude.Left"  [a,b,x]
+      scRight a b x    = scCtorApp sc "Prelude.Right" [a,b,x]
 
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
+
+      -- | scMakeFunsTo b tvs - create FunsTo list of type `FunsTo b`, given
+      --    the list of (type, val :: type->b) pairs
+      scMakeFunsTo :: Term -> [(Term,Term)] -> IO Term
+      scMakeFunsTo b tvs =
+        do
+        scFunsTo_Nil <- scCtorApp sc "Prelude.FunsTo_Nil"  [b]
+        let scFunsTo_Cons (t,v) r =
+              scCtorApp sc "Prelude.FunsTo_Cons" [b,t,v,r]
+        Fold.foldrM scFunsTo_Cons scFunsTo_Nil tvs
 
   putStrLn "MYLOG: pt4"
 
@@ -2159,27 +2185,27 @@ genCodeForEnum sc env nt cs =
   tl_type  <- scFunAll sc tyParamsKinds scListSort
   putStrLn "MYLOG: pt5a"
 
-  (typeListEachCtor :: [[Term]]) <- do
+  (argTypes_eachCtor :: [[Term]]) <- do
      -- add tyParamsInfo to env as it is needed to allow `importType` to work:
     env' <- Fold.foldrM (\tp env'-> bindTParam sc tp env') env tyParamsInfo
 
-    flip mapM cs $ \c->
+    flip mapM ctors $ \c->
       mapM (\t-> do
               t' <- importType sc env' t
-                -- here, type params are de bruijn's ^
+                -- here ^, type params are de bruijn's
               instantiateVarList sc 0 tyParamsVars t'
-                -- here, type params are ExtCns ^
+                -- here ^, type params are ExtCns
            )
            (C.ecFields c)
 
   putStrLn "MYLOG: pt5b"
 
-  sawcoreTypeEachCtor <- flip mapM typeListEachCtor $ \ts ->
+  sawcoreType_eachCtor <- flip mapM argTypes_eachCtor $ \ts ->
                            scTupleType sc ts
 
   putStrLn "MYLOG: pt5c"
   tl_rhs   <- do
-              ls <- scMakeListSort sawcoreTypeEachCtor
+              ls <- scMakeListSort sawcoreType_eachCtor
               addTypeAbstractions ls
   putStrLn "MYLOG: pt5d"
   scInsertDef sc preludeName tl_ident tl_type tl_rhs
@@ -2205,25 +2231,29 @@ genCodeForEnum sc env nt cs =
 
   sumTy_applied <- scGlobalApply sc sumTy_ident tyParamsVars
     -- <- Nope!
-    -- FIXME:[?] what does ^ mean?
     -- but if you could do scAbstractExts with a 'Pi' (vs Lambda)
     -- would this all work?
+    --
+    -- FIXME:[C2] What in the world mean the previous 3 lines?
+    --           A bug currently?
 
   case_type <-
     do
     result <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
           -- N.B.: scFun's aren't included in deBruijn's!
-    decons <- flip mapM sawcoreTypeEachCtor $ \ty ->
+    decons <- flip mapM sawcoreType_eachCtor $ \ty ->
                 scFun sc ty result
     scPiAbstractExts sc tyParamsECs
-        -- BTW, rather generalize **.SharedTerm.scAbstractExts?
+        -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
       =<< scPi sc "result" sort0
       =<< scFunAll sc decons
       =<< scFun sc sumTy_applied
                    result
 
-  case_rhs  <- addTypeAbstractions =<< scTuple sc []
-    -- FIXME[F1]: TODO!
+  -- FIXME[F1]: TODO:
+  case_rhs <- do
+              x <- scTuple sc []
+              addTypeAbstractions x
 
   putStrLn $ "MYLOG: case_type: " ++ showTerm case_type
   putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
@@ -2231,12 +2261,15 @@ genCodeForEnum sc env nt cs =
 
   checkSAWCoreTypeChecks sc (case_ident, case_rhs)
     -- FIXME: later: check that the type matches what we expect.
+    -- Or, write a scInsertDefChecked
 
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
   -- each Either in the nested Either's needs a pair of types:
+  --
+  -- FIXME: add doc/help to understand: show textual example.
 
-  tps <- flip mapM [0..length cs - 1] $ \i->
+  tps <- flip mapM [0..length ctors - 1] $ \i->
            do
            typeLeft  <- do
                         n <- scNat sc (fromIntegral i)
@@ -2270,30 +2303,32 @@ genCodeForEnum sc env nt cs =
                            scInjectRight (n-1) y
 
   -------------------------------------------------------------
-  -- Create all the constructors:
+  -- Create each the constructor defn:
   let
       -- | generate constructor definitions:
-      mkConstructor :: HasCallStack => [Term] -> C.EnumCon -> IO (C.Name,Term)
-      mkConstructor scConArgTypes c =
+      mkCtorDefn :: HasCallStack => [Term] -> C.EnumCon -> IO (C.Name,Term)
+      mkCtorDefn argTypes ctor =
         do
         let
-          conName     = C.ecName c
-          conNumber   = C.ecNumber c
-          numArgs     = length scConArgTypes
+          conName     = C.ecName ctor
+          conNumber   = C.ecNumber ctor
+          numArgs     = length argTypes
 
         -- NOTE: we don't add the constructor arguments to the Env, as
-        -- the only references to these new definitions are in the generated
+        -- the only references to these arguments are in the generated
         -- SAWCore code.
-        -- create the vars (& names) for constructor arguments
+
+        -- create the vars (& names) for constructor arguments:
         paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
         let paramNames = map (\x-> Text.pack ("x" ++ show x))
                              (take numArgs [(0 ::Int)..])
 
         -- create the constructor:
+        -- FIXME[C2]: refactor!
         conBody0 <- scTuple sc paramVars
         conBody1 <- scNthInjection conNumber conBody0
         conBody2 <- scLambdaList sc
-                      (zip paramNames scConArgTypes)
+                      (zip paramNames argTypes)
                       conBody1
         conBody3 <- addTypeAbstractions conBody2
         checkSAWCoreTypeChecks sc (C.nameIdent conName, conBody3)
@@ -2301,11 +2336,14 @@ genCodeForEnum sc env nt cs =
         return (conName, conBody3)
 
   putStrLn "MYLOG: pt8"
-  ctors <- flip mapM (zip typeListEachCtor cs) $ \(scConArgTypes,ctor)->
-             mkConstructor scConArgTypes ctor
+  def_eachCtor <- flip mapM (zip argTypes_eachCtor ctors) $
+                    \(argTypes, ctor)->
+                      mkCtorDefn argTypes ctor
 
-  return ctors
+  return def_eachCtor
 
+
+-- | checkSAWCoreTypeChecks sc (nm, term) - typeChecks term.
 checkSAWCoreTypeChecks :: (Show i) => SharedContext -> (i, Term) -> IO ()
 checkSAWCoreTypeChecks sc (ident, term) =
   do let ident' = show ident
