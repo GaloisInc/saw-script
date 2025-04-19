@@ -2247,7 +2247,6 @@ genCodeForEnum sc env nt ctors =
       b <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
             -- N.B.: scFun's aren't included in deBruijn's!
       altFuncTypes <- mkAltFuncTypes b
-
       scPiAbstractExts sc tyParamsECs
           -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
         =<< scPi sc "b" sort0
@@ -2279,11 +2278,11 @@ genCodeForEnum sc env nt ctors =
                          body <- scApplyAll sc funcVar funcArgs
                          scLambda sc "x" ty body
 
-      funsToList <- scMakeFunsTo b (zip represType_eachCtor funcDefs)
-      e    <- sc_eithersV b funsToList
-      lam  <- scLambdaList sc (zip funcNames funcTypes) e
-      tlam <- scAbstractExts sc [bEC] lam
-      addTypeAbstractions tlam
+      addTypeAbstractions
+        =<< scAbstractExts sc [bEC]
+        =<< scLambdaList sc (zip funcNames funcTypes)
+        =<< sc_eithersV b
+        =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
 
   putStrLn $ "MYLOG: case_type: " ++ showTerm case_type
   putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
@@ -2337,8 +2336,8 @@ genCodeForEnum sc env nt ctors =
         \(argTypes, ctor)->
         do
         let
-          conName     = C.ecName ctor
-          conNumber   = C.ecNumber ctor
+          ctorName     = C.ecName ctor
+          ctorNumber   = C.ecNumber ctor
           numArgs     = length argTypes
 
         -- NOTE: we don't add the constructor arguments to the Env, as
@@ -2346,21 +2345,16 @@ genCodeForEnum sc env nt ctors =
         -- SAWCore code.
 
         -- create the vars (& names) for constructor arguments:
-        paramVars <- reverse <$> mapM (scLocalVar sc) (take numArgs [0 ..])
-        let paramNames = map (\x-> Text.pack ("x" ++ show x))
-                             (take numArgs [(0 ::Int)..])
+        paramVars <- reverse <$> mapM (scLocalVar sc) [0..numArgs-1]
+        let paramNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
 
         -- create the constructor:
-        -- FIXME[C2]: refactor!
-        conBody0 <- scTuple sc paramVars
-        conBody1 <- scNthInjection conNumber conBody0
-        conBody2 <- scLambdaList sc
-                      (zip paramNames argTypes)
-                      conBody1
-        conBody3 <- addTypeAbstractions conBody2
-        checkSAWCoreTypeChecks sc (C.nameIdent conName) conBody3 Nothing
-          -- FIXME: remove eventually (or not)?
-        return (conName, conBody3)
+        ctorBody <- addTypeAbstractions
+                    =<< scLambdaList sc (zip paramNames argTypes)
+                    =<< scNthInjection ctorNumber
+                    =<< scTuple sc paramVars
+        checkSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
+        return (ctorName, ctorBody)
 
   putStrLn "MYLOG: pt8"
   return defn_eachCtor
