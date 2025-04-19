@@ -2290,8 +2290,6 @@ genCodeForEnum sc env nt ctors =
   scInsertDef sc preludeName case_ident case_type case_rhs
 
   checkSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
-    -- FIXME: later: check that the type matches what we expect.
-    -- Or, write a scInsertDefChecked
 
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
@@ -2367,8 +2365,9 @@ genCodeForEnum sc env nt ctors =
   putStrLn "MYLOG: pt8"
   return defn_eachCtor
 
-
--- | checkSAWCoreTypeChecks sc (nm, term) - typeChecks term.
+-- | checkSAWCoreTypeChecks sc nm term mType - typeChecks term.
+--     if mType == Just type' then ensure this
+--         term :: type'
 checkSAWCoreTypeChecks :: (Show i) =>
   SharedContext -> i -> Term -> Maybe Term -> IO ()
 checkSAWCoreTypeChecks sc ident term mType =
