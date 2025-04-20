@@ -2372,8 +2372,8 @@ importCase sc env b scrutinee altsMap _mDfltAlt =
             , pretty scrutineeTy
             ]
 
-  -- translate Map into alts that match constructors
-  --  Currently: [no missing, no dflt].
+  -- translate Map into alts that match constructors:
+  --  Currently: not supporting dflts.
   --    FIXME:TODO: allow for.
   alts <- flip mapM ctors $ \c->
             case Map.lookup (C.nameIdent $ C.ecName c) altsMap of
