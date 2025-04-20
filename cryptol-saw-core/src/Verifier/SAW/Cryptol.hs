@@ -2316,7 +2316,7 @@ genCodeForEnum sc env nt ctors =
 
   let
       scInjectRight :: Int -> Term -> IO Term
-      scInjectRight n x | n <= 0    = return x
+      scInjectRight n x | n < 0     = return x
                         | otherwise = do
                             y <- scRight (fst (tps!!n)) (snd (tps!!n)) x
                             scInjectRight (n-1) y
