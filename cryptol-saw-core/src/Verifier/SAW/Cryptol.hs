@@ -1213,8 +1213,12 @@ importExpr sc env expr =
       Fold.foldrM (propGuardToIte typ') err arms
 
     C.ECase s alts dflt -> do
-      let ty = fastTypeOf (envC env) expr -- need the
-      importCase sc env ty s alts dflt
+      let ty = fastTypeOf (envC env) expr
+          -- need the type of whole expression as a type-arg in SAWCore
+      e <- importCase sc env ty s alts dflt
+      putStrLn $ "MYLOG: case expr: " ++ showTerm e
+        -- FIXME: a way to show without getting confused by "de Bruijn env"?
+      return e
 
   where
     the :: String -> Maybe a -> IO a
@@ -2367,13 +2371,24 @@ importCase sc env b scrutinee altsMap _mDfltAlt =
             [ "`case` expression scrutinee does not have Enum type"
             , pretty scrutineeTy
             ]
+
   -- translate Map into alts that match constructors
-  --  Currently: [no missing, no dflt].  FIXME:TODO: allow for.
-  alts <- return []
+  --  Currently: [no missing, no dflt].
+  --    FIXME:TODO: allow for.
+  alts <- flip mapM ctors $ \c->
+            case Map.lookup (C.nameIdent $ C.ecName c) altsMap of
+              Just a  -> return a
+              Nothing -> panic "importCase"
+                           [ "alts of case don't match the enum type" ++
+                               show nm
+                           ]
 
-  -- translate each alt into a function (C.Expr, then sawcore?)
-  funcs <- return [] -- mapM alts
+  -- translate each alt into a Cryptol function:
+  let funcs = map (\(C.CaseAlt as body)->
+                      foldr (\(n,t) e-> C.EAbs n t e) body as)
+                  alts
 
+  -- the Cryptol to SAWCore translations:
   types'     <- mapM (importType sc env) types
   b'         <- importType sc env b        -- b is type of whole case expr
   scrutinee' <- importExpr sc env scrutinee
