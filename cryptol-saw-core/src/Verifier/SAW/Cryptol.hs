@@ -1328,7 +1328,6 @@ importExpr' sc env schema expr =
 
     C.ECase {} -> fallback
                   -- FIXME:MT: can we use fallback?!
-                  -- OLD: panic "importExpr" ["`case` is not yet supported"]
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
@@ -2151,8 +2150,6 @@ genCodeForEnum sc env nt ctors =
   -- Definitions to access needed SAWCore Prelude types & definitions:
   sort0          <- scSort sc (mkSort 0)
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
-  -- scListSortDrop <- scGlobalDef sc ("Prelude.listSortDrop")
-  -- scListSortGet  <- scGlobalDef sc ("Prelude.listSortGet")
   scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
 
   let scLS_Cons s ls = scCtorApp sc "Prelude.LS_Cons" [s,ls]
