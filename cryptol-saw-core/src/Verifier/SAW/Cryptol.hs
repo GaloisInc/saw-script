@@ -2105,7 +2105,7 @@ genCodeForNominalTypes sc nominalMap env0 =
 
 -- | genCodeForEnum ... - called when we see enum definition in the Cryptol module.
 --    - This action does two things
---       1. Returns the names & defintions of the constructors of the enum.
+--       1. Returns the names & definitions of the constructors of the enum.
 --          This fit with the code for other nominals, needed because
 --          the "rest" of cryptol code to be translated needs to see the
 --          onstructors in the Cryptol environments.
@@ -2148,7 +2148,7 @@ genCodeForEnum sc env nt ctors =
       addTypeAbstractions t = scAbstractExts sc tyParamsECs t
 
   -------------------------------------------------------------
-   -- Common naming conventions:
+  -- Common naming conventions:
   let sumTy_ident   = identOfEnumType ntName'
       case_ident    = identOfEnumCase ntName'
       tl_ident      = newIdent ntName' "__TL"

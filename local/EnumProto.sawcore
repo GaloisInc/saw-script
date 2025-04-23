@@ -116,12 +116,6 @@ C1 : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
 C1 as x = Left (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
                x;
 
--- C1c : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
--- C1c as x = Left (listSortGet (ETT__LS as) 0)
---                (EithersV (listSortDrop (ETT__LS as) 1))
---                x;
---   -- TODO: make curried!
-
 C2 : (as : sort 0) -> listSortGet (ETT__LS as) 1 -> ETT as;
 C2 as x =
   Right (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
