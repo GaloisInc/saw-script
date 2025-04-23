@@ -1685,13 +1685,18 @@ proveEq sc env t1 t2
         | map fst (C.canonicalFields tm1) == map fst (C.canonicalFields tm2) ->
           proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
 
-      -- XXX: add a case for `enum`
-      -- 1. Match constructors by names, and prove fields as tuples
-      -- 2. We need some way to combine the proofs of equality of
-      -- the fields, into a proof for equality of the whole type
-      -- for sums
+      (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_),
+       C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum _},_)) ->
+        panic "proveEq" ["Enum types unsupported.", pretty t1, pretty t2]
 
-      -- FIXME:MT:TODO - requires some thought here.
+        -- XXX: add a case for `enum`
+        -- 1. Match constructors by names, and prove fields as tuples
+        -- 2. We need some way to combine the proofs of equality of
+        -- the fields, into a proof for equality of the whole type
+        -- for sums
+        --
+        -- XXX: Not sure what purpose of `proveEq` is, but wouldn't Enum
+        --   types have name (not structural) equality?
 
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
@@ -1706,6 +1711,8 @@ tNoUser initialTy =
         if null params then C.TRec (C.ntFields fs)
                        else panic "tNoUser" ["Nominal type with parameters"]
                         -- XXX: We should instantiate, see #2019
+                        -- XXX: What about Enums?
+                        --   Which also have type params, #2019 again.
     t -> t
 
 
