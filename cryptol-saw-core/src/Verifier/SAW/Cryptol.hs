@@ -2295,7 +2295,7 @@ genCodeForEnum sc env nt ctors =
            return (typeLeft, typeRight)
 
   -------------------------------------------------------------
-  -- Code to do *just* the injection into the Sum type:
+  -- Code to do the nth injection into the Sum type:
 
   let
       scInjectRight :: Int -> Term -> IO Term
@@ -2419,9 +2419,10 @@ importCase sc env b scrutinee altsMap mDfltAlt =
   scrutinee' <- importExpr sc env scrutinee
   funcs'     <- mapM (importExpr sc env) funcs
 
-  scGlobalApply sc (identOfEnumCase nm) $
-    types' ++ [b'] ++ funcs' ++ [scrutinee']
-
+  caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
+                  types' ++ [b'] ++ funcs' ++ [scrutinee']
+  -- FIXME: add typecheck of this.
+  return caseExpr
 
 identOfEnumType :: C.Name -> Ident
 identOfEnumType nt = newIdent nt "__TY"
