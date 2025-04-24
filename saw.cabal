@@ -62,6 +62,33 @@ library saw-version
 
 
 ------------------------------------------------------------
+-- saw-support
+
+-- Support material shared by the rest of SAW.
+library saw-support
+  default-language: Haskell2010
+  visibility: public
+
+  build-depends:
+    -- upstream packages from hackage
+    base >= 4.9,
+    panic,
+    text,
+
+    -- packages in git submodules
+    -- (none)
+
+    -- internal packages in the saw tree
+    saw-version
+
+  hs-source-dirs: saw-support/src
+  exposed-modules:
+     SAWSupport.PanicSupport
+
+  GHC-options: -Wall -Werror -Wcompat
+
+
+------------------------------------------------------------
 -- saw-core
 
 -- The SAWCore intermediate language
@@ -676,7 +703,6 @@ library saw-script
     , IfElse
     , lens
     , mtl >= 2.1
-    , panic
     , pretty
     , prettyprinter
     , pretty-show
@@ -700,6 +726,7 @@ library saw-script
 
       -- internal sublibraries in the saw tree
     , saw:saw-version
+    , saw:saw-support
     , saw:saw-core
     , saw:cryptol-saw-core
     , saw:saw-core-coq

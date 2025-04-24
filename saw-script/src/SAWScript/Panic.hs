@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {- |
 Module      : SAWScript.Panic
 License     : BSD3
@@ -5,30 +6,18 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
-{-# LANGUAGE Trustworthy, TemplateHaskell #-}
-module SAWScript.Panic
-  (HasCallStack, panic) where
+module SAWScript.Panic (panic) where
 
-import Panic hiding (panic)
-import qualified Panic as Panic
+import qualified Data.Text as Text
+--import Data.Text (Text)
 
-data SAW = SAW
+import SAWSupport.PanicSupport
 
--- | Raise a fatal error. The purpose of 'panic' is to indicate
--- conditions caused by programmer errors (e.g. violation of datatype
--- invariants), not problems caused by bad user input.
-panic ::
-  HasCallStack =>
-  -- | Location of problem
-  String ->
-  -- | Problem description (lines)
-  [String] ->
-  a
-panic = Panic.panic SAW
-
-instance PanicComponent SAW where
-  panicComponentName _ = "SAW"
-  panicComponentIssues _ = "https://github.com/GaloisInc/saw-script/issues"
-
-  {-# Noinline panicComponentRevision #-}
-  panicComponentRevision = $useGitRevision
+-- | Raise a fatal error. See commentary in PanicSupport.
+--   Arguments are "location" (one string) and "description" (multiple
+--   strings).
+--
+--   For now take String rather than Text. We can update all the call
+--   sites to Text later.
+panic :: HasCallStack => String -> [String] -> a
+panic loc descs = doPanic "saw-script" (Text.pack loc) (map Text.pack descs)
