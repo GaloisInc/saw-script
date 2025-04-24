@@ -1,24 +1,21 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module CryptolSAWCore.Panic
  ( panic, unimplemented )
  where
 
-import Panic hiding (panic)
-import qualified Panic as Panic
+import qualified Data.Text as Text
 
-data CryptolSawCore = CryptolSawCore
+import SAWSupport.PanicSupport
 
+-- | Raise a fatal error. See commentary in PanicSupport.
+--   Arguments are "location" (one string) and "description" (multiple
+--   strings).
+--
+--   For now take String rather than Text. We can update all the call
+--   sites to Text later.
 panic :: HasCallStack => String -> [String] -> a
-panic = Panic.panic CryptolSawCore
-
-instance PanicComponent CryptolSawCore where
-  panicComponentName _ = "cryptol-saw-core"
-  panicComponentIssues _ = "https://github.com/GaloisInc/saw-script/issues"
-
-  {-# Noinline panicComponentRevision #-}
-  panicComponentRevision = $useGitRevision
+panic loc msgs = doPanic "cryptol-saw-core" (Text.pack loc) (map Text.pack msgs)
 
 unimplemented :: HasCallStack => String -> a
 unimplemented name = panic "unimplemented" [name]
-

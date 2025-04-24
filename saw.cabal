@@ -219,7 +219,6 @@ library cryptol-saw-core
     integer-gmp,
     modern-uri,
     mtl,
-    panic,
     sbv,
     template-haskell,
     text,
@@ -232,6 +231,7 @@ library cryptol-saw-core
     what4,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: cryptol-saw-core/src
@@ -376,7 +376,6 @@ library saw-core-what4
     indexed-traversable,
     lens,
     mtl,
-    panic,
     reflection,
     text,
     transformers,
@@ -387,6 +386,7 @@ library saw-core-what4
     what4,
 
     -- internal sublibaries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: saw-core-what4/src
@@ -512,7 +512,6 @@ library saw-central
     , mtl >= 2.1
     , old-locale
     , old-time
-    , panic
     , pretty
     , prettyprinter
     , process
@@ -568,6 +567,7 @@ library saw-central
 
       -- internal subpackages/sublibraries in the saw tree
     , rme
+    , saw:saw-support
     , saw:saw-core
     , saw:saw-core-aig
     , saw:saw-core-coq
