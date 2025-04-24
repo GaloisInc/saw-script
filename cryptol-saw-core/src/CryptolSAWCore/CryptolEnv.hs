@@ -63,7 +63,7 @@ import System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
 import CryptolSAWCore.Panic
 import SAWCore.Name (ecName)
 import SAWCore.Recognizer (asConstant)
-import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars)
+import SAWCore.SharedTerm (NameInfo, SharedContext, Term, incVars, showTerm)
 
 import qualified CryptolSAWCore.Cryptol as C
 
@@ -473,10 +473,16 @@ updateFFITypes m env = env { eFFITypes = eFFITypes' }
       Just tm ->
         case asConstant tm of
           Just (ec, _) -> ecName ec
-          Nothing -> panic "updateFFITypes"
-            ["SAWCore term of Cryptol name is not Constant", show nm, show tm]
-      Nothing -> panic "updateFFITypes"
-        ["Cannot find foreign function in term env", show nm]
+          Nothing ->
+            panic "updateFFITypes" [
+                "SAWCore term of Cryptol name is not Constant",
+                "Name: " <> Text.pack (show nm),
+                "Term: " <> Text.pack (showTerm tm)
+            ]
+      Nothing ->
+        panic "updateFFITypes" [
+            "Cannot find foreign function in term environment: " <> Text.pack (show nm)
+        ]
 
 bindCryptolModule :: (P.ModName, CryptolModule) -> CryptolEnv -> CryptolEnv
 bindCryptolModule (modName, CryptolModule sm tm) env =
