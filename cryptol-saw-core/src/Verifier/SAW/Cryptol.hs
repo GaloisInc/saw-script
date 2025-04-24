@@ -2121,6 +2121,7 @@ genCodeForEnum ::
 genCodeForEnum sc env nt ctors =
   do
   let ntName' = ntName nt
+      numCtors      = length ctors
 
   -- MT: Debugging
   putStrLn "\nMYLOG: genCodeForEnum :\n"
@@ -2131,7 +2132,6 @@ genCodeForEnum sc env nt ctors =
 
   let tyParamsInfo  = C.ntParams nt
       tyParamsNames = map tparamToLocalName tyParamsInfo
-      numCtors      = length ctors
 
   tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
                    importKind sc (C.tpKind tpi)
@@ -2139,7 +2139,6 @@ genCodeForEnum sc env nt ctors =
                    scFreshEC sc nm k
   tyParamsVars <- mapM (scExtCns sc) tyParamsECs
 
-  putStrLn "MYLOG: pt3"
   let
       -- | add a type abstraction for each type parameter.
       --
@@ -2160,8 +2159,7 @@ genCodeForEnum sc env nt ctors =
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
   scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
 
-  let scLS_Cons s ls = scCtorApp sc "Prelude.LS_Cons" [s,ls]
-
+  let scLS_Cons s ls   = scCtorApp sc "Prelude.LS_Cons" [s,ls]
       scEithersV ls    = scGlobalApply sc "Prelude.EithersV" [ls]
       sc_eithersV b ls = scGlobalApply sc "Prelude.eithersV" [b,ls]
       scLeft  a b x    = scCtorApp sc "Prelude.Left"  [a,b,x]
@@ -2180,15 +2178,10 @@ genCodeForEnum sc env nt ctors =
               scCtorApp sc "Prelude.FunsTo_Cons" [b,t,v,r]
         Fold.foldrM scFunsTo_Cons scFunsTo_Nil tvs
 
-  putStrLn "MYLOG: pt4"
-
   -------------------------------------------------------------
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
   --  - the types maintain the same exact type vars (see tyParamsInfo)
-
-  tl_type  <- scFunAll sc tyParamsKinds scListSort
-  putStrLn "MYLOG: pt5a"
 
   (argTypes_eachCtor :: [[Term]]) <-
     -- add tyParamsInfo to env as it is needed to allow `importType`
@@ -2204,19 +2197,12 @@ genCodeForEnum sc env nt ctors =
            )
            (C.ecFields c)
 
-  putStrLn "MYLOG: pt5b"
-
   represType_eachCtor <- flip mapM argTypes_eachCtor $ \ts ->
                            scTupleType sc ts
 
-  putStrLn "MYLOG: pt5c"
-  tl_rhs   <- do
-              ls <- scMakeListSort represType_eachCtor
-              addTypeAbstractions ls
-  putStrLn "MYLOG: pt5d"
+  tl_rhs   <- addTypeAbstractions =<< scMakeListSort represType_eachCtor
+  tl_type  <- scFunAll sc tyParamsKinds scListSort
   scInsertDef sc preludeName tl_ident tl_type tl_rhs
-
-  putStrLn "MYLOG: pt5"
 
   -------------------------------------------------------------
   -- Create the definition for the Sawcore Sum (to which we map the
@@ -2226,27 +2212,20 @@ genCodeForEnum sc env nt ctors =
   tl_applied <- scGlobalApply sc tl_ident tyParamsVars
 
   sumTy_type <- scFunAll sc tyParamsKinds sort0
-  sumTy_rhs  <- scEithersV tl_applied >>= addTypeAbstractions
+  sumTy_rhs  <- addTypeAbstractions =<< scEithersV tl_applied
 
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
-
-  putStrLn "MYLOG: pt6"
 
   -------------------------------------------------------------
   -- Create an `case/eithers` specialized to the enum.
 
   sumTy_applied <- scGlobalApply sc sumTy_ident tyParamsVars
-    -- <- Nope!
-    -- but if you could do scAbstractExts with a 'Pi' (vs Lambda)
-    -- would this all work?
-    --
-    -- FIXME:[C2] What in the world mean the previous 3 lines?
-    --           A bug currently?
 
   let mkAltFuncTypes b = mapM (\ts->scFunAll sc ts b) argTypes_eachCtor
   case_type <-
       do
-      b <- scLocalVar sc 0 -- all uses are direct under the 'Pi'
+      b <- scLocalVar sc 0
+            -- all uses are direct under the 'Pi'
             -- N.B.: scFun's aren't included in deBruijn's!
       altFuncTypes <- mkAltFuncTypes b
       scPiAbstractExts sc tyParamsECs
@@ -2314,8 +2293,6 @@ genCodeForEnum sc env nt ctors =
 
            return (typeLeft, typeRight)
 
-  putStrLn "MYLOG: pt7"
-
   -------------------------------------------------------------
   -- Code to do *just* the injection into the Sum type:
 
@@ -2358,7 +2335,6 @@ genCodeForEnum sc env nt ctors =
         checkSAWCoreTypeChecks sc (C.nameIdent ctorName) ctorBody Nothing
         return (ctorName, ctorBody)
 
-  putStrLn "MYLOG: pt8"
   return defn_eachCtor
 
 
