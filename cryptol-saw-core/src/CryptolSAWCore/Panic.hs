@@ -1,10 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module CryptolSAWCore.Panic
- ( panic, unimplemented )
- where
+module CryptolSAWCore.Panic (panic) where
 
-import qualified Data.Text as Text
 import Data.Text (Text)
 
 import SAWSupport.PanicSupport
@@ -14,6 +11,3 @@ import SAWSupport.PanicSupport
 --   strings).
 panic :: HasCallStack => Text -> [Text] -> a
 panic loc msgs = doPanic "cryptol-saw-core" loc msgs
-
-unimplemented :: HasCallStack => String -> a
-unimplemented name = panic "unimplemented" [Text.pack name]

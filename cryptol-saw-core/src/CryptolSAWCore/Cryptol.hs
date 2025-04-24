@@ -300,7 +300,10 @@ importType sc env ty =
   case ty of
     C.TVar tvar ->
       case tvar of
-        C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
+        C.TVFree{} {- Int Kind (Set TVar) Doc -} ->
+            panic "importType" [
+                "TVFree in TVar is not supported: " <> Text.pack (pretty ty)
+            ]
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
             Just (t, j) -> incVars sc 0 j t
             Nothing ->
@@ -1898,7 +1901,10 @@ importMatches sc env [C.Let decl]
      e <- importExpr sc env expr
      ty1 <- case C.dSignature decl of
               C.Forall [] [] ty1 -> return ty1
-              _ -> unimplemented "polymorphic Let"
+              _ -> panic "importMatches" [
+                       "Unimplemented: polymorphic Let",
+                       "   " <> Text.pack (pretty decl)
+                   ]
      a <- importType sc env ty1
      result <- scGlobalApply sc "Prelude.single" [a, e]
      return (result, C.tOne, ty1, [(C.dName decl, ty1)])
@@ -1922,7 +1928,10 @@ importMatches sc env (C.Let decl : matches) =
      e <- importExpr sc env expr
      ty1 <- case C.dSignature decl of
               C.Forall [] [] ty1 -> return ty1
-              _ -> unimplemented "polymorphic Let"
+              _ -> panic "importMatches" [
+                       "Unimplemented: polymorphic Let",
+                       "   " <> Text.pack (pretty decl)
+                   ]
      a <- importType sc env ty1
      env' <- bindName sc (C.dName decl) (C.dSignature decl) env
      (body, len, ty2, args) <- importMatches sc env' matches
