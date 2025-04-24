@@ -288,8 +288,12 @@ constMap sym =
 swBvWidth :: SWord sym -> Int
 swBvWidth x
   | w <= toInteger (maxBound :: Int) = fromInteger w
-  | otherwise = panic "SAWCoreWhat4.What4.swBvWidth" ["bitvector too long", show w]
+  | otherwise = croak
  where w = SW.bvWidth x
+       croak = panic "swBvWidth" [
+           "Bitvector too long: width " <> Text.pack (show w) <>
+               ", value " <> Text.pack (show x)
+        ]
 
 toBool :: SValue sym -> IO (SBool sym)
 toBool (VBool b) = return b
@@ -543,7 +547,7 @@ streamGetOp sym =
       VBVToNat _ w ->
         do ilv <- toWord sym w
            selectV sym (lazyMux @sym (muxBVal sym tp)) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
-      v -> panic "streamGetOp" ["Expected Nat value", show v]
+      v -> panic "streamGetOp" ["Expected Nat value, found: " <> Text.pack (show v)]
 
 lookupSStream :: SValue sym -> Natural -> IO (SValue sym)
 lookupSStream (VExtra (SStream f r)) n = do
@@ -568,7 +572,8 @@ muxWhat4Extra sym (VDataType (primName -> "Prelude.Stream") [TValue tp] [] ) c x
                   muxBVal sym tp c xi yi
      r <- newIORef Map.empty
      return (SStream f r)
-muxWhat4Extra _ tp _ _ _ = panic "muxWhat4Extra" ["Type mismatch", show tp]
+muxWhat4Extra _ tp _ _ _ =
+     panic "muxWhat4Extra" ["Type mismatch: " <> Text.pack (show tp)]
 
 
 -- | Lifts a strict mux operation to a lazy mux
@@ -623,7 +628,11 @@ arrayConstant sym ity _elTy elm
   , Just (Some elm_expr) <- valueToSymExpr elm =
     SArray <$> W.constantArray sym (Ctx.Empty Ctx.:> idx_repr) elm_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayConstant" ["argument type mismatch"]
+    panic "arrayConstant" [
+        "Argument type mismatch",
+        "Index type: " <> Text.pack (show ity),
+        "Element: " <> Text.pack (show elm)
+    ]
 
 arrayLookup ::
   W.IsSymExprBuilder sym =>
@@ -637,12 +646,20 @@ arrayLookup sym arr idx
   , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr <- W.exprType arr_expr
   , Just Refl <- testEquality idx_repr (W.exprType idx_expr) = do
     elm_expr <- W.arrayLookup sym arr_expr (Ctx.Empty Ctx.:> idx_expr)
-    maybe
-      (panic "SAWCoreWhat4.What4.Panic.arrayLookup" ["argument type mismatch"])
-      return
-      (symExprToValue elm_repr elm_expr)
+    case symExprToValue elm_repr elm_expr of
+      Just v -> return v
+      Nothing ->
+          panic "arrayLookup" [
+             "Returned element has the wrong type",
+             "Type: " <> Text.pack (show elm_repr),
+             "Value: " <> Text.pack (show $ W.printSymExpr elm_expr)
+          ]
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayLookup" ["argument type mismatch"]
+      panic "arrayLookup" [
+          "Invalid arguments",
+          "array: " <> Text.pack (show arr),
+          "index: " <> Text.pack (show idx)
+      ]
 
 arrayUpdate ::
   W.IsSymExprBuilder sym =>
@@ -660,7 +677,12 @@ arrayUpdate sym arr idx elm
   , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
     SArray <$> W.arrayUpdate sym arr_expr (Ctx.Empty Ctx.:> idx_expr) elm_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayUpdate" ["argument type mismatch"]
+      panic "arrayUpdate" [
+         "Invalid arguments",
+          "array: " <> Text.pack (show arr),
+          "index: " <> Text.pack (show idx),
+          "element: " <> Text.pack (show elm)
+      ]
 
 arrayCopy ::
   W.IsSymExprBuilder sym =>
@@ -684,7 +706,14 @@ arrayCopy sym dest_arr dest_idx src_arr src_idx len
   , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
     SArray <$> W.arrayCopy sym dest_arr_expr dest_idx_expr src_arr_expr src_idx_expr len_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayCopy" ["argument type mismatch"]
+      panic "arrayCopy" [
+         "Invalid arguments",
+          "dest array: " <> Text.pack (show dest_arr),
+          "dest index: " <> Text.pack (show dest_idx),
+          "src array: " <> Text.pack (show src_arr),
+          "src index: " <> Text.pack (show src_idx),
+          "length: " <> Text.pack (show len)
+      ]
 
 arraySet ::
   W.IsSymExprBuilder sym =>
@@ -705,7 +734,13 @@ arraySet sym arr idx elm len
   , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
     SArray <$> W.arraySet sym arr_expr idx_expr elm_expr len_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arraySet" ["argument type mismatch"]
+      panic "arraySet" [
+         "Invalid arguments",
+          "array: " <> Text.pack (show arr),
+          "index: " <> Text.pack (show idx),
+          "element: " <> Text.pack (show elm),
+          "length: " <> Text.pack (show len)
+      ]
 
 arrayRangeEq ::
   W.IsSymExprBuilder sym =>
@@ -729,7 +764,14 @@ arrayRangeEq sym x_arr x_idx y_arr y_idx len
   , Just Refl <- testEquality idx_repr (W.exprType len_expr) =
     W.arrayRangeEq sym x_arr_expr x_idx_expr y_arr_expr y_idx_expr len_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayRangeEq" ["argument type mismatch"]
+      panic "arrayRangeEq" [
+          "Invalid arguments",
+          "x array: " <> Text.pack (show x_arr),
+          "x index: " <> Text.pack (show x_idx),
+          "y array: " <> Text.pack (show y_arr),
+          "y index: " <> Text.pack (show y_idx),
+          "length: " <> Text.pack (show len)
+      ]
 
 arrayEq ::
   W.IsSymExprBuilder sym =>
@@ -746,7 +788,11 @@ arrayEq sym lhs_arr rhs_arr
   , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
     W.arrayEq sym lhs_arr_expr rhs_arr_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayEq" ["argument type mismatch"]
+      panic "arrayEq" [
+         "Invalid arguments",
+          "LHS array: " <> Text.pack (show lhs_arr),
+          "RHS array: " <> Text.pack (show rhs_arr)
+      ]
 
 arrayIte ::
   W.IsSymExprBuilder sym =>
@@ -764,7 +810,12 @@ arrayIte sym cond lhs_arr rhs_arr
   , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
     SArray <$> W.arrayIte sym cond lhs_arr_expr rhs_arr_expr
   | otherwise =
-    panic "SAWCoreWhat4.What4.Panic.arrayIte" ["argument type mismatch"]
+      panic "arrayIte" [
+          "Invalid arguments",
+          "Condition: " <> Text.pack (show $ W.printSymExpr cond),
+          "LHS array: " <> Text.pack (show lhs_arr),
+          "RHS array: " <> Text.pack (show rhs_arr)
+      ]
 
 ----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as
@@ -1112,7 +1163,7 @@ argTypes :: IsSymExprBuilder sym => Value (What4 sym) -> IO [TValue (What4 sym)]
 argTypes v =
    case v of
      TValue t -> loop t
-     _ -> panic "Expected type value" [show v]
+     _ -> panic "argTypes" ["Expected type value: " <> Text.pack (show v)]
 
   where
     loop (VPiType _nm v1 body) =
@@ -1330,7 +1381,9 @@ rebuildTerm sym st sc tv sv =
              x' <- rebuildTerm sym st sc tx vx
              y' <- rebuildTerm sym st sc ty vy
              scPairValue sc x' y'
-        _ -> fail "panic: rebuildTerm: internal error: pair wasn't a pair"
+        _ -> panic "rebuildTerm" [
+                 "Pair wasn't a pair: found " <> Text.pack (show tv)
+             ]
     VCtorApp _ _ _ ->
       chokeOn "constructors (VCtorApp)"
     VVector xs ->
@@ -1340,7 +1393,9 @@ rebuildTerm sym st sc tv sv =
              xs' <- traverse (rebuildTerm sym st sc tx) vs
              tx' <- termOfTValue sc tx
              scVectorReduced sc tx' xs'
-        _ -> fail "panic: rebuildTerm: internal error: vector wasn't a vector"
+        _ -> panic "rebuildTerm" [
+                 "Vector wasn't a vector: found " <> Text.pack (show tv)
+             ]
     VBool x ->
       toSC sym st x
     VWord x ->
