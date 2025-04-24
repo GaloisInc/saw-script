@@ -1,0 +1,23 @@
+// test1d.cry
+
+module Test1d where
+
+// as in Test1b
+
+enum Either a b = Left a
+                | Right b
+
+er1 : Either Bit [16]
+er1 = Right 1
+
+f1 e = case e of
+        Right x -> x
+        _       -> 0
+
+f2 e = case e of
+        Right x -> x
+        _       -> 1
+
+f3 e = case e of
+        Right x -> x
+        _       -> 2

@@ -1,0 +1,3 @@
+// test3b.cry
+
+newtype T a = { unT : a}

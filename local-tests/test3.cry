@@ -1,0 +1,5 @@
+newtype T = { unT : [8] }
+
+newtype Pt = { x : [8], y : [8]}
+
+// enum M = A | B

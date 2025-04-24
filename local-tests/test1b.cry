@@ -1,0 +1,51 @@
+// Test1b.cry
+
+module Test1b where
+
+enum Either a b = Left a
+                | Right b
+
+er1 : Either Bit [16]
+er1 = Right 1
+
+f e = case e of
+        Right x -> x
+        Left  _ -> 0
+
+t1 = f er1
+     // 1
+
+t2 = 10 + case er1 of
+            Right y -> y
+            Left  _ -> 2
+     // 11
+
+t3 = case Right 5 of
+       Right z -> z + 0x100
+       Left _  -> 3
+     // 261
+
+t4 = case Right (1,2) of
+       Right (_,z) -> z + 0x100
+       Left _      -> 3
+     // 258
+
+t5 = case Right {x=1,y=2} of
+       Right {x=x',y=_} -> x' + 0x100
+       Left _           -> 3
+     // 257
+
+t6 = case Left 0x5 of
+       Left [b1,b2,_,_] -> [0,0,b1,b2]
+       Right _          -> 0x5
+    // 1
+
+// what in the world is happening here: ?
+
+t7 = case Left 0x5 of
+       Left (p1#p2) -> p1
+       Right _      -> 0x7
+
+t8 = case Left 0x5 of
+       Left (p1#p2) -> p2
+       Right _      -> 0x7

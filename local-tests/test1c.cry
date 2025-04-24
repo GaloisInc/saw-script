@@ -1,0 +1,39 @@
+module Test1c where
+
+// test1c.cry (refer to what's in EnumProto.sawcore)
+
+enum ETT b = C1
+           | C2 [8]
+           | C3 Bool b
+
+// aha: bug/fixme:
+/*
+f1 : {c} ETT c -> [8]
+f1 e1 = case e1 of
+          C1 -> 101
+          _  -> 102
+*/
+
+f1 : ETT Bool -> [8]
+f1 e = case e of
+          C1 -> 101
+          C2 _  -> 102
+          C3 _ _  -> 103
+
+/*
+THIS CAUSES: Location:  importType TVBound: TV is not in type environment
+f2 : ETT Bool -> [8]
+f2 e = case e of
+          C1      -> 101
+          _       -> 105
+  // creates two default alts, with different
+*/
+
+t11 = f1 C1
+t13 = f1 (C3 True False)
+
+/*
+t21 = f2 C1
+t22 = f2 (C2 3)
+t23 = f2 (C3 True False)
+*/

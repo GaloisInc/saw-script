@@ -1,0 +1,5 @@
+// test1e.cry
+x =  C0 True
+
+enum T1D = C0 Bool
+         | C1 ()

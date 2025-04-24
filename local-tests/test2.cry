@@ -1,0 +1,4 @@
+// Test.cry
+
+f : Option ()
+f = None
