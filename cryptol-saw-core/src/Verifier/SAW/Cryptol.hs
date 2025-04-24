@@ -85,6 +85,7 @@ import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
+import qualified Cryptol.Utils.PP as PP
 import Cryptol.Utils.PP (pretty)
 
 -- saw-core
@@ -2341,7 +2342,7 @@ genCodeForEnum sc env nt ctors =
 importCase ::
   SharedContext -> Env ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
-importCase sc env b scrutinee altsMap _mDfltAlt =
+importCase sc env b scrutinee altsMap mDfltAlt =
   do
   let scrutineeTy = fastTypeOf (envC env) scrutinee
   (nm,ctors,types) <- case scrutineeTy of
@@ -2353,16 +2354,59 @@ importCase sc env b scrutinee altsMap _mDfltAlt =
             , pretty scrutineeTy
             ]
 
-  -- translate Map into alts that match constructors:
-  --  Currently: not supporting dflts.
-  --    FIXME:TODO: allow for.
-  alts <- flip mapM ctors $ \c->
-            case Map.lookup (C.nameIdent $ C.ecName c) altsMap of
+  -- Create a sequential set of `C.CaseAlt`s that exactly match the
+  -- Enum constructors:
+  --   - preconditions:
+  --      Assume `altsMap` is valid, thus not checking for
+  --      extraneous entries. (Call panic if a missing alternative
+  --      not covered by possible default in `mDfltAlt`.)
+
+  let -- | create a constructor specific alt-function from the "default expr"
+      useDefaultAlt ctor = case mDfltAlt of
+        Nothing ->
+            panic "importCase"
+                    ["missing CaseAlt and no default CaseAlt" ++ show nm]
+        Just (C.CaseAlt [(nm',_)] dfltE)
+            | nameIsUnusedPat nm' ->
+                do
+                -- let unRefdName = C.asLocal C.NSValue (C.ecName ctor)
+                -- let unRefdName = nm'
+                  -- FIXME: works?!
+                  -- C.asLocal is suspect
+                putStrLn $ "MYLOG: default alt name: " ++ pretty nm'
+                putStrLn $ "MYLOG: default alt name: " ++ show nm'
+                let vts' = map (\ty-> (nm',ty)) (C.ecFields ctor)
+                  -- TODO: Does this work for multi-arg constructors?!
+                return (C.CaseAlt vts' dfltE)
+
+            | otherwise ->
+                panic "importCase: unsupported case expression"
+                  ["default case alternative that binds scrutinee is not supported."
+                  , pretty nm
+                  ]
+
+          where
+          nameIsUnusedPat nm'' =
+            Text.take 3 (nameToLocalName nm'') == "__p"
+            -- The information that this is an unused pattern is long gone,
+            -- this name is created using `getIdent` in
+            --   deps/cryptol/src/Cryptol/Parser/Name.hs
+            -- FIXME:
+            --  - Clearly this is undesirable coupling.
+            --  - Best (but pervasive) solution is to have a more
+            --    precise type for default CaseAlt, it is currently
+            --    too general.
+
+        Just (C.CaseAlt nts _) ->
+            panic "importCase: default CaseAlt is malformed"
+              [ "assumed invariant is that only one variable pattern can be in the default CaseAlt"
+              , show $ PP.ppList $ map PP.pp (map fst nts)
+              ]
+
+  alts <- flip mapM ctors $ \ctor->
+            case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
               Just a  -> return a
-              Nothing -> panic "importCase"
-                           [ "alts of case don't match the enum type" ++
-                               show nm
-                           ]
+              Nothing -> useDefaultAlt ctor
 
   -- translate each alt into a Cryptol function:
   let funcs = map (\(C.CaseAlt as body)->
