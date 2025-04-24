@@ -1695,8 +1695,9 @@ proveEq sc env t1 t2
         -- the fields, into a proof for equality of the whole type
         -- for sums
         --
-        -- XXX: Not sure what purpose of `proveEq` is, but wouldn't Enum
-        --   types have name (not structural) equality?
+        -- XXX: Response to above: Not sure what purpose of `proveEq`
+        -- is, but wouldn't Enum types have name (not structural)
+        -- equality?
 
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
