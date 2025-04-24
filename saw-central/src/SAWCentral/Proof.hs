@@ -175,7 +175,7 @@ import SAWCentral.Crucible.Common as Common
 import qualified SAWCore.Simulator.TermModel as TM
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreWhat4.ReturnTrip as W4Sim
-import SAWCentral.Panic(panic)
+import SAWCentral.Panic (panic)
 
 -- | A proposition is a saw-core type of type `Prop`.
 -- In particular, this includes any pi type whose result
@@ -939,7 +939,13 @@ reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots
             (thmDepends thm)
 
      | otherwise =
-         panic "reachableTheorems" ["Could not find theorem with identifier", show (indexValue curr)]
+         let curr' = Text.pack (show (indexValue curr))
+             m' = map (\(k, _v) -> Text.pack (show k)) $ Map.toList m
+         in
+         panic "reachableTheorems" [
+             "Could not find theorem with identifier: " <> curr',
+             "Theorems in database: " <> Text.intercalate " " m'
+         ]
 
 
 -- | Check that the purported theorem is valid.

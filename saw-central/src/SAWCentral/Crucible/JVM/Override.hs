@@ -65,6 +65,7 @@ import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import           Data.Void (absurd)
 import qualified Prettyprinter as PP
 
@@ -956,7 +957,9 @@ resolveAllocIndexJVM i =
      case Map.lookup i m of
        Just rval -> pure rval
        Nothing ->
-         panic "JVMSetup" ["resolveAllocIndexJVM", "Unresolved prestate variable:" ++ show i]
+         panic "JVMSetup (in resolveAllocIndexJVM)" [
+             "Unresolved prestate variable: " <> Text.pack (show i)
+         ]
 
 resolveSetupValueJVM ::
   Options              ->

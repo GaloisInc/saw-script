@@ -219,9 +219,10 @@ asUserType cellType =
     CellTypeUserType t -> t
     CellTypeUnsupportedPrimitive t -> t
     _ ->
-      panic "asUserType"
-            [  "Expected a user defined type, but got a primitive type: "
-            ++ show cellType ]
+      panic "asUserType" [
+          "Expected a user defined type, but got a primitive type: " <>
+              Text.pack (show cellType)
+      ]
 
 -- | A cell within an HDL module.
 data Cell bs = Cell

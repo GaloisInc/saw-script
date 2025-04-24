@@ -337,10 +337,10 @@ constructExpandedSetupValue cc sc = go
                   [0..n-1]
               pure $ MS.SetupArray elemTy elems
             _ ->
-              panic "constructExpandedSetupValue"
-                    [ "ArrayShape with non-TyArray type:"
-                    , show (PP.pretty ty)
-                    ]
+              panic "constructExpandedSetupValue" [
+                  "ArrayShape with non-TyArray type: " ,
+                  "   " <> Text.pack (show (PP.pretty ty))
+              ]
         StructShape ty _ fldShps ->
           case ty of
             Mir.TyAdt adtName _ _ ->
@@ -351,10 +351,9 @@ constructExpandedSetupValue cc sc = go
                       flds <- goFlds pfx fldShps
                       pure $ MS.SetupStruct adt flds
                     _ ->
-                      panic "constructExpandedSetupValue"
-                            [ "Expected struct, encountered " ++
-                              show kind
-                            ]
+                      panic "constructExpandedSetupValue" [
+                          "Expected struct, encountered " <> Text.pack (show kind)
+                      ]
                 Nothing ->
                   adt_not_found_panic "StructShape" adtName
             _ ->
@@ -368,11 +367,13 @@ constructExpandedSetupValue cc sc = go
                     Mir.Enum _ ->
                       MS.SetupEnum <$> goEnum pfx adt discrShp variantShps
                     Mir.Struct ->
-                      panic "constructExpandedSetupValue"
-                            ["Expected enum, encountered struct"]
+                      panic "constructExpandedSetupValue" [
+                          "Expected enum, encountered struct"
+                      ]
                     Mir.Union ->
-                      panic "constructExpandedSetupValue"
-                            ["Expected enum, encountered union"]
+                      panic "constructExpandedSetupValue" [
+                          "Expected enum, encountered union"
+                      ]
                 Nothing ->
                   adt_not_found_panic "EnumShape" adtName
             _ ->
@@ -396,16 +397,16 @@ constructExpandedSetupValue cc sc = go
                                  $ MirSetupEnumVariant adt variant 0 [val]
 
                       |  otherwise
-                      -> panic "constructExpandedSetupValue"
-                               [ "`repr(transparent)` enum that doesn't have exactly one variant"
-                               , "Enum: " ++ show adtNm
-                               , "Number of variants: " ++ show (length variants)
-                               ]
+                      -> panic "constructExpandedSetupValue" [
+                             "`repr(transparent)` enum that doesn't have exactly one variant",
+                             "Enum: " <> Text.pack (show adtNm),
+                             "Number of variants: " <> Text.pack (show (length variants))
+                         ]
                     Mir.Union ->
-                      panic "constructExpandedSetupValue"
-                            [ "Unexpected `repr(transparent)` union:"
-                            , show adtName
-                            ]
+                      panic "constructExpandedSetupValue" [
+                          "Unexpected `repr(transparent)` union: " <>
+                              Text.pack (show adtName)
+                      ]
                 Nothing ->
                   adt_not_found_panic "TransparentShape" adtName
             _ ->
@@ -510,19 +511,18 @@ constructExpandedSetupValue cc sc = go
         Just cty ->
           Setup.freshVariable sc pfx cty
 
-    adt_not_found_panic :: String -> Mir.DefId -> a
+    adt_not_found_panic :: Text -> Mir.DefId -> a
     adt_not_found_panic shapeName adtName =
-      panic "constructExpandedSetupValue"
-            [ "Could not find ADT in " ++ shapeName ++ ":"
-            , show adtName
-            ]
+      panic "constructExpandedSetupValue" [
+          "Could not find ADT in " <> shapeName <> ": " <> Text.pack (show adtName)
+      ]
 
-    non_adt_type_panic :: String -> Mir.Ty -> a
+    non_adt_type_panic :: Text -> Mir.Ty -> a
     non_adt_type_panic shapeName ty =
-      panic "constructExpandedSetupValue"
-            [ shapeName ++ " with non-TyAdt type:"
-            , show (PP.pretty ty)
-            ]
+      panic "constructExpandedSetupValue" [
+          shapeName <> " with non-TyAdt type: ",
+          "   " <> Text.pack (show $ PP.pretty ty)
+      ]
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
@@ -1378,10 +1378,9 @@ getEnumVariantShortName variant
   = variantNm
 
   | otherwise
-  = panic "getEnumVariantShortName"
-          [ "Malformed enum variant identifier"
-          , show $ variant ^. Mir.vname
-          ]
+  = panic "getEnumVariantShortName" [
+        "Malformed enum variant identifier: " <> Text.pack (show $ variant ^. Mir.vname)
+    ]
 
 getMIRCrucibleContext :: CrucibleSetup MIR MIRCrucibleContext
 getMIRCrucibleContext = view Setup.csCrucibleContext <$> get
@@ -1462,18 +1461,19 @@ setupCrucibleContext rm =
        Just e ->
          pure e
        Nothing ->
-         panic "setupCrucibleContext"
-               [ "static initializer should not require arguments:"
-               , show staticInitArgTys
-               ]
+         panic "setupCrucibleContext" [
+             "static initializer should not require arguments; found:",
+             "   " <> Text.pack (show staticInitArgTys)
+         ]
+
      Refl <- case testEquality staticInitRetTy Crucible.UnitRepr of
        Just e ->
          pure e
        Nothing ->
-         panic "setupCrucibleContext"
-               [ "static initializer should return ():"
-               , show staticInitRetTy
-               ]
+         panic "setupCrucibleContext" [
+             "static initializer should return ():",
+             Text.pack (show staticInitRetTy)
+         ]
 
      let bindings = Crucible.fnBindingsFromList $
                     map (\(Crucible.AnyCFG cfg) ->
@@ -1499,10 +1499,11 @@ setupCrucibleContext rm =
                        Just static' ->
                          static'
                        Nothing ->
-                         panic "setupCrucibleContext"
-                               [ "staticDefId not in statics map:"
-                               , show staticDefId
-                               ] in
+                         panic "setupCrucibleContext" [
+                             "staticDefId not in statics map: " <>
+                                 Text.pack (show staticDefId)
+                         ]
+               in
                case Crucible.lookupGlobal gv globalsAllStatics of
                  Just rv ->
                    let pair = MapF.Pair gv (Crucible.RV rv) in
@@ -1510,10 +1511,10 @@ setupCrucibleContext rm =
                      then (globals, pair)
                      else (Crucible.insertGlobal gv rv globals, pair)
                  Nothing ->
-                   panic "setupCrucibleContext"
-                         [ "Static GlobalVar not in SymGlobalState:"
-                         , show gv
-                         ])
+                   panic "setupCrucibleContext" [
+                       "Static GlobalVar not in SymGlobalState: " <> Text.pack (show gv)
+                   ]
+             )
              globals0
              (cs ^. Mir.staticMap . to Map.toList)
      let staticInitializerMap = MapF.fromList staticInitializerPairs
