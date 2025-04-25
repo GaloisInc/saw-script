@@ -69,6 +69,10 @@ multiple versions of some solvers.
 The easiest way to get this is to download a
 [what4-solvers binary snapshot](https://github.com/GaloisInc/what4-solvers).
 
+If you use haskell-language-server, SAW ships with a `hie.yaml` that
+should be sufficient to get it to understand the project structure.
+There are also some tools for vim and emacs available in the tree.
+
 
 # Building
 
@@ -122,6 +126,19 @@ goal is to assess compatibility with different library versions. To do
 so, run the following before building or testing:
 
     ln -s cabal.GHC-<VER>.config cabal.project.freeze
+
+## Build system updates
+
+After any update to the Cabal project structure (new subpackages, new
+libraries, moving package elements around, etc.) regenerate the
+`hie.yaml` file used by haskell-language-server.
+The procedure for this is:
+
+- Commit your changes first (so the commit hash recorded in the new
+  hie.yaml reflects your changes)
+- Run mkhie.sh
+- Examine the diff to hie.yaml in case something broke
+- Commit hie.yaml with a commit message like "Regen hie.yaml"
 
 
 # Testing

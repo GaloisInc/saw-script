@@ -11,6 +11,8 @@ Note that build.sh is in any case the recommended way to build.
 
 ## New Features
 
+* SAW now ships with a `hie.yaml` file for haskell-language-server.
+
 * Add new SAWScript commands `term_eval` and `term_eval_unint`.
   These are like `goal_eval` and `goal_eval_unint` proof tactics
   but work on arbitrary terms rather than proof goals.
