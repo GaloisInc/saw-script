@@ -1052,7 +1052,7 @@ primeECPrims =
 -- 'scTypeOf' on the result of @'importExpr' sc env expr@ must yield a
 -- type that is equivalent (i.e. convertible) with the one returned by
 -- @'importSchema' sc env ('fastTypeOf' ('envC' env) expr)@.
-importExpr :: SharedContext -> Env -> C.Expr -> IO Term
+importExpr :: (HasCallStack) => SharedContext -> Env -> C.Expr -> IO Term
 importExpr sc env expr =
   case expr of
     C.EList es t ->
@@ -1263,7 +1263,7 @@ importExpr sc env expr =
 -- Essentially, this function should be used when the expression's type is known
 -- (such as with a type annotation), and 'importExpr' should be used when the
 -- type must be inferred.
-importExpr' :: SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
+importExpr' :: (HasCallStack) => SharedContext -> Env -> C.Schema -> C.Expr -> IO Term
 importExpr' sc env schema expr =
   case expr of
     C.ETuple es ->
@@ -2348,17 +2348,19 @@ genCodeForEnum sc env nt ctors =
 
 
 importCase ::
+  (HasCallStack) =>
   SharedContext -> Env ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
 importCase sc env b scrutinee altsMap mDfltAlt =
   do
   let scrutineeTy = fastTypeOf (envC env) scrutinee
-  (nm,ctors,types) <- case scrutineeTy of
-      C.TNominal (NominalType {ntName=nm, ntDef=C.Enum ctors}) ts ->
-          return (nm,ctors,ts)
+  (nm,ctors,tyParams,tyArgs) <- case scrutineeTy of
+      C.TNominal (NominalType {ntName=nm, ntParams=tyParams, ntDef=C.Enum ctors})
+                 tyArgs ->
+          return (nm,ctors,tyParams,tyArgs)
       _ ->
           panic "importCase"
-            [ "`case` expression scrutinee does not have Enum type"
+            [ "`case` expression scrutinee does not have an Enum type"
             , pretty scrutineeTy
             ]
 
@@ -2380,20 +2382,24 @@ importCase sc env b scrutinee altsMap mDfltAlt =
         Just (C.CaseAlt [(nm',_)] dfltE)
             | nameIsUnusedPat nm' ->
                 do
-                -- let unRefdName = C.asLocal C.NSValue (C.ecName ctor)
-                -- let unRefdName = nm'
-                  -- FIXME: works?!
-                  -- C.asLocal is suspect
-                putStrLn $ "MYLOG: default alt name: " ++ pretty nm'
-                putStrLn $ "MYLOG: default alt name: " ++ show nm'
-                let vts' = map (\ty-> (nm',ty)) (C.ecFields ctor)
-                  -- TODO: Does this work for multi-arg constructors?!
-                return (C.CaseAlt vts' dfltE)
+                -- NOTE nm' is unused Name
+                putStrLn $ "MYLOG: useDefaultAlt: cname: " ++ pretty (C.ecName ctor)
+                putStrLn $ "MYLOG: useDefaultAlt: patname: " ++ pretty nm'
+                putStrLn $ "MYLOG: useDefaultAlt: patname: " ++ show   nm'
+                let sub  = C.listSubst (zip (map C.TVBound tyParams) tyArgs)
+                    vts  = map
+                             (\ty-> (nm',plainSubst sub ty))
+                             (C.ecFields ctor)
+                  -- N.B.: to avoid extra name construction, we are using
+                  --  the same name (un-referenced!) nm' for each of the arguments
+                  --  of the casealt function.  This appears to work.
+
+                return (C.CaseAlt vts dfltE)
 
             | otherwise ->
-                panic "importCase: unsupported case expression"
+                panic "importCase: unsupported style of case expression"
                   ["default case alternative that binds scrutinee is not supported."
-                  , pretty nm
+                  , "pattern: " ++ pretty nm
                   ]
 
           where
@@ -2427,14 +2433,19 @@ importCase sc env b scrutinee altsMap mDfltAlt =
                   alts
 
   -- the Cryptol to SAWCore translations:
-  types'     <- mapM (importType sc env) types
+  tyArgs'    <- mapM (importType sc env) tyArgs
   b'         <- importType sc env b        -- b is type of whole case expr
   scrutinee' <- importExpr sc env scrutinee
   funcs'     <- mapM (importExpr sc env) funcs
 
   caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
-                  types' ++ [b'] ++ funcs' ++ [scrutinee']
-  -- FIXME: add typecheck of this.
+                  tyArgs'             -- case is expecting the type arguments
+                                      --  that the enumtype is instantiated to
+                  ++ [b']             -- the result type of case expression
+                  ++ funcs'           -- the eliminator funcs, one for each constructor
+                  ++ [scrutinee']     -- scrutinee of case, of enum type
+
+  -- FIXME: add typecheck of this:
   return caseExpr
 
 identOfEnumType :: C.Name -> Ident
