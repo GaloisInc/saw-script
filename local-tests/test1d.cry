@@ -10,6 +10,9 @@ enum Either a b = Left a
 v_er1 : Either Bit [16]
 v_er1 = Right 1
 
+v_er1_p : {a} Either a [16]
+v_er1_p = Right 1
+
 v_el1 : Either Bit [16]
 v_el1 = Left True
 
@@ -17,9 +20,25 @@ f1 e = case e of
         Right x -> x
         _       -> 0
 
+/*
+f1' : {c} Either c [8] -> [8]
+f1' e = case e of
+          Right x -> x
+          _       -> 0
+// RESULTS IN
+//   Location:  importType TVBound: TV (a) is not in type environment
+//                                  -- !
+*/
+
+
 f1NoDflt e = case e of
                  Right x -> x
                  Left _  -> 0
+
+f1NoDflt' : {c} Either c [8] -> [8]
+f1NoDflt' e = case e of
+                Right x -> x
+                Left _  -> 0
 
 f2 y e = case e of
            Right x -> x
@@ -81,3 +100,4 @@ return (normalize_term {{ t_f1NoDflt_l }})
 /*
  - the types are ~confusing as we end up with various type constraints!
  - but AFAIK, types and values are good.
+*/
