@@ -2369,7 +2369,10 @@ importCase sc env b scrutinee altsMap mDfltAlt =
   --      extraneous entries. (Call panic if a missing alternative
   --      not covered by possible default in `mDfltAlt`.)
 
-  let -- | create a constructor specific alt-function from the "default expr"
+  let
+      -- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',
+      -- create a ctor specific alt-function from the "default expr".
+      useDefaultAlt :: (HasCallStack) => C.EnumCon -> IO C.CaseAlt
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
             panic "importCase"
@@ -2396,18 +2399,20 @@ importCase sc env b scrutinee altsMap mDfltAlt =
           where
           nameIsUnusedPat nm'' =
             Text.take 3 (nameToLocalName nm'') == "__p"
-            -- The information that this is an unused pattern is long gone,
-            -- this name is created using `getIdent` in
+
+            -- Beyond the prefix, the indication that this is an unused pattern
+            -- is long gone.
+            -- This name is created using `getIdent` in
             --   deps/cryptol/src/Cryptol/Parser/Name.hs
             -- FIXME:
             --  - Clearly this is undesirable coupling.
-            --  - Best (but pervasive) solution is to have a more
-            --    precise type for default CaseAlt, it is currently
+            --  - Best (but non-local, pervasive) solution is to have a more
+            --    precise type for default CaseAlt, the type is currently
             --    too general.
 
         Just (C.CaseAlt nts _) ->
-            panic "importCase: default CaseAlt is malformed"
-              [ "assumed invariant is that only one variable pattern can be in the default CaseAlt"
+            panic "importCase: default CaseAlt breaks invariant"
+              [ "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt"
               , show $ PP.ppList $ map PP.pp (map fst nts)
               ]
 
@@ -2468,6 +2473,6 @@ checkSAWCoreTypeChecks sc ident term mType =
                putStrLn $ "Expected type does not match the inferred:"
                putStrLn $ showTerm ty2
        Left err ->
-         do putStrLn $ "Type error when checking " -- ++ ident'
+         do putStrLn $ "Type error when checking " ++ ident'
             putStrLn $ unlines $ SC.prettyTCError err
             -- fail "internal type error"

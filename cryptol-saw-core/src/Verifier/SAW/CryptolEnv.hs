@@ -130,6 +130,10 @@ data ImportVisibility
 
 -- | The environment for capturing the Cryptol interpreter state as well as the
 --   SAWCore translations and associated state.
+--
+--  FIXME[D]: The differences in function between this and the similar
+--   C.Env?
+
 data CryptolEnv = CryptolEnv
   { eImports    :: [(ImportVisibility, P.Import)]
                                         -- ^ Declarations of imported Cryptol modules
