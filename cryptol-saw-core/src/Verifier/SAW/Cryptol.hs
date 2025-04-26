@@ -308,8 +308,12 @@ importType sc env ty =
         C.TVFree{} {- Int Kind (Set TVar) Doc -} -> unimplemented "TVFree"
         C.TVBound v -> case Map.lookup (C.tpUnique v) (envT env) of
                          Just (t, j) -> incVars sc 0 j t
-                         Nothing -> panic "importType TVBound: TV is not in type environment"
-                                      [show v]
+                         Nothing ->
+                           panic
+                             ("importType TVBound: TV '"
+                              ++ pretty v
+                              ++"' is not in type environment")
+                             [show v]
     C.TUser _ _ t  -> go t -- look through type synonyms
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
@@ -1288,7 +1292,8 @@ importExpr' sc env schema expr =
              C.Forall (tp1 : tparams) props ty ->
                let s = C.singleTParamSubst tp1 (C.TVar (C.TVBound tp))
                in return (C.Forall tparams (map (plainSubst s) props) (plainSubst s ty))
-             C.Forall [] _ _ -> panic "importExpr'" ["internal error: unexpected type abstraction"]
+             C.Forall [] _ _ -> panic "importExpr'"
+                                  ["internal error: unexpected type abstraction"]
          env' <- bindTParam sc tp env
          k <- importKind sc (C.tpKind tp)
          e' <- importExpr' sc env' schema' e
@@ -1857,55 +1862,7 @@ importMatches sc env (C.Let decl : matches) =
 --------------------------------------------------------------------------------
 -- Utilities
 
---- MT:FIXME: add doc.
-asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe (Either C.Kind C.Type)
-asCryptolTypeValue v =
-  case v of
-    SC.VBoolType -> return (Right C.tBit)
-    SC.VIntType -> return (Right C.tInteger)
-    SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
-    SC.VArrayType v1 v2 -> do
-      Right t1 <- asCryptolTypeValue v1
-      Right t2 <- asCryptolTypeValue v2
-      return (Right (C.tArray t1 t2))
-    SC.VVecType n v2 -> do
-      Right t2 <- asCryptolTypeValue v2
-      return (Right (C.tSeq (C.tNum n) t2))
-
-    SC.VDataType (primName -> "Prelude.Stream") [SC.TValue v1] [] ->
-        do Right t1 <- asCryptolTypeValue v1
-           return (Right (C.tSeq C.tInf t1))
-
-    SC.VDataType (primName -> "Cryptol.Num") [] [] ->
-      return (Left C.KNum)
-
-    SC.VDataType _ _ _ -> Nothing
-
-    SC.VUnitType -> return (Right (C.tTuple []))
-    SC.VPairType v1 v2 -> do
-      Right t1 <- asCryptolTypeValue v1
-      Right t2 <- asCryptolTypeValue v2
-      case C.tIsTuple t2 of
-        Just ts -> return (Right (C.tTuple (t1 : ts)))
-        Nothing -> return (Right (C.tTuple [t1, t2]))
-
-    SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
-      do Right t1 <- asCryptolTypeValue v1
-         Right t2 <- asCryptolTypeValue v2
-         return (Right (C.tFun t1 t2))
-
-    SC.VSort s
-      | s == mkSort 0 -> return (Left C.KType)
-      | otherwise     -> Nothing
-
-    -- TODO?
-    SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
-    SC.VStringType -> Nothing
-    SC.VRecordType{} -> Nothing
-    SC.VRecursorType{} -> Nothing
-    SC.VTyTerm{} -> Nothing
-
-
+-- | When possible, convert back from a SAWCore type to a Cryptol Type, or Kind.
 scCryptolType :: SharedContext -> Term -> IO (Maybe (Either C.Kind C.Type))
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
@@ -1917,6 +1874,57 @@ scCryptolType sc t =
              | Just !ret <- asCryptolTypeValue tv -> return $ Just ret
            _ -> return Nothing)
        (\ (_::SomeException) -> return Nothing)
+
+
+  where
+
+  asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe (Either C.Kind C.Type)
+  asCryptolTypeValue v =
+    case v of
+      SC.VBoolType -> return (Right C.tBit)
+      SC.VIntType -> return (Right C.tInteger)
+      SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
+      SC.VArrayType v1 v2 -> do
+        Right t1 <- asCryptolTypeValue v1
+        Right t2 <- asCryptolTypeValue v2
+        return (Right (C.tArray t1 t2))
+      SC.VVecType n v2 -> do
+        Right t2 <- asCryptolTypeValue v2
+        return (Right (C.tSeq (C.tNum n) t2))
+
+      SC.VDataType (primName -> "Prelude.Stream") [SC.TValue v1] [] ->
+          do Right t1 <- asCryptolTypeValue v1
+             return (Right (C.tSeq C.tInf t1))
+
+      SC.VDataType (primName -> "Cryptol.Num") [] [] ->
+        return (Left C.KNum)
+
+      SC.VDataType _ _ _ -> Nothing
+
+      SC.VUnitType -> return (Right (C.tTuple []))
+      SC.VPairType v1 v2 -> do
+        Right t1 <- asCryptolTypeValue v1
+        Right t2 <- asCryptolTypeValue v2
+        case C.tIsTuple t2 of
+          Just ts -> return (Right (C.tTuple (t1 : ts)))
+          Nothing -> return (Right (C.tTuple [t1, t2]))
+
+      SC.VPiType _nm v1 (SC.VNondependentPi v2) ->
+        do Right t1 <- asCryptolTypeValue v1
+           Right t2 <- asCryptolTypeValue v2
+           return (Right (C.tFun t1 t2))
+
+      SC.VSort s
+        | s == mkSort 0 -> return (Left C.KType)
+        | otherwise     -> Nothing
+
+      -- TODO?
+      SC.VPiType _nm _v1 (SC.VDependentPi _) -> Nothing
+      SC.VStringType -> Nothing
+      SC.VRecordType{} -> Nothing
+      SC.VRecursorType{} -> Nothing
+      SC.VTyTerm{} -> Nothing
+
 
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
@@ -2121,8 +2129,8 @@ genCodeForEnum ::
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc env nt ctors =
   do
-  let ntName' = ntName nt
-      numCtors      = length ctors
+  let ntName'  = ntName nt
+      numCtors = length ctors
 
   -- MT: Debugging
   putStrLn "\nMYLOG: genCodeForEnum :\n"
@@ -2316,9 +2324,9 @@ genCodeForEnum sc env nt ctors =
         \(argTypes, ctor)->
         do
         let
-          ctorName     = C.ecName ctor
-          ctorNumber   = C.ecNumber ctor
-          numArgs     = length argTypes
+          ctorName   = C.ecName ctor
+          ctorNumber = C.ecNumber ctor
+          numArgs    = length argTypes
 
         -- NOTE: we don't add the constructor arguments to the Env, as
         -- the only references to these arguments are in the generated
