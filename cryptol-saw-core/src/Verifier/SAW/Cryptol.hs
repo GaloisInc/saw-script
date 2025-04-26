@@ -2113,6 +2113,7 @@ genCodeForNominalTypes sc nominalMap env0 =
             e <- importExpr sc env fnWithTAbs
             return [(con, e)]
 
+
 -- | genCodeForEnum ... - called when we see enum definition in the Cryptol module.
 --    - This action does two things
 --       1. Returns the names & definitions of the constructors of the enum.
@@ -2364,13 +2365,6 @@ importCase sc env b scrutinee altsMap mDfltAlt =
             , pretty scrutineeTy
             ]
 
-  -- Create a sequential set of `C.CaseAlt`s that exactly match the
-  -- Enum constructors:
-  --   - preconditions:
-  --      Assume `altsMap` is valid, thus not checking for
-  --      extraneous entries. (Call panic if a missing alternative
-  --      not covered by possible default in `mDfltAlt`.)
-
   let
       -- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',
       -- create a ctor specific alt-function from the "default expr".
@@ -2422,6 +2416,12 @@ importCase sc env b scrutinee altsMap mDfltAlt =
               , show $ PP.ppList $ map PP.pp (map fst nts)
               ]
 
+  -- Create a sequential set of `C.CaseAlt`s that exactly match the constructors:
+  --   - preconditions:
+  --      Assume `altsMap` is valid, thus not checking for
+  --      extraneous entries. (Call panic if a missing alternative
+  --      not covered by possible default in `mDfltAlt`.)
+
   alts <- flip mapM ctors $ \ctor->
             case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
               Just a  -> return a
@@ -2440,12 +2440,11 @@ importCase sc env b scrutinee altsMap mDfltAlt =
 
   caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
                   tyArgs'             -- case is expecting the type arguments
-                                      --  that the enumtype is instantiated to
+                                      --   that the enumtype is instantiated to
                   ++ [b']             -- the result type of case expression
                   ++ funcs'           -- the eliminator funcs, one for each constructor
                   ++ [scrutinee']     -- scrutinee of case, of enum type
 
-  -- FIXME: add typecheck of this:
   return caseExpr
 
 identOfEnumType :: C.Name -> Ident
@@ -2461,8 +2460,8 @@ newIdent name suffix =
     (C.identText (C.nameIdent name) `Text.append` suffix)
 
 
--- | checkSAWCoreTypeChecks sc nm term mType - typeChecks term.
---     if mType == Just type' then ensure this
+-- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) `term`.
+--     if mType == Just type' then ensure the following
 --         term :: type'
 checkSAWCoreTypeChecks :: (Show i) =>
   SharedContext -> i -> Term -> Maybe Term -> IO ()
@@ -2487,3 +2486,5 @@ checkSAWCoreTypeChecks sc ident term mType =
          do putStrLn $ "Type error when checking " ++ ident'
             putStrLn $ unlines $ SC.prettyTCError err
             -- fail "internal type error"
+
+  -- FIXME: todo: replace above with panics.
