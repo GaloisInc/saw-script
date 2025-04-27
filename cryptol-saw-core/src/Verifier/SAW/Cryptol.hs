@@ -80,7 +80,6 @@ import qualified Cryptol.Utils.Ident as C
   , identText, interactiveName
   , ModPath(..), modPathSplit, ogModule, ogFromParam, Namespace(NSValue)
   , modNameChunksText
-  -- , unpackIdent
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.Type as C (NominalType(..))
@@ -102,13 +101,8 @@ import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 import Verifier.SAW.Cryptol.Panic
 
 
--- MT: Debugging:
--- import Text.Show.Pretty
--- import qualified Data.HashMap.Strict as HMap
-
--- MT: maybe temporary:
+-- FIXME:MT: maybe temporary:
 import Verifier.SAW.Name (preludeName)
--- import Verifier.SAW.Name (identName)
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
 import Language.Haskell.TH
@@ -121,12 +115,8 @@ $(runIO (mkSharedContext >>= \sc ->
 
 
 --------------------------------------------------------------------------------
--- FIXME:MT:doc:
--- Type (?!) Environments
-
 -- | SharedTerms are paired with a deferred shift amount for loose variables
 --
---   FIXME:MT:doc: loose==free?  'deferred shift amount' = ??
 data Env = Env
   { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
   , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
@@ -136,8 +126,9 @@ data Env = Env
               --   given field selectors (in reverse order!) to the term.
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
-              -- FIXME:MT:doc: assuming the De Bruijn indexes index this list?
-              -- FIXME:MT: this appears to be write-only!
+              -- FIXME: assuming this environment is to be indexed by De Bruijn indexes?
+              -- FIXME: this field appears to be never read
+              --   - verify and remove if so.
   , envRefPrims :: Map C.PrimIdent C.Expr
   , envPrims :: Map C.PrimIdent Term -- ^ Translations for other primitives
   , envPrimTypes :: Map C.PrimIdent Term -- ^ Translations for primitive types
@@ -147,8 +138,19 @@ emptyEnv :: Env
 emptyEnv =
   Env Map.empty Map.empty Map.empty Map.empty [] Map.empty Map.empty Map.empty
 
--- FIXME:MT:doc : possible to create a [documented] abstraction here for
---  - "loose vars", lift*,
+-- FIXME: Regarding De Bruijn indices and documenting the use of
+--   - are there abstractions (better abstractions) for managing them?
+--   - should they really belong in this module?
+--   - The term 'lift' is highly overused, how about another term?
+
+-- FIXME: Can we define the terminology here (or elsewhere):
+--   - loose = ?  same as free?
+--   - 'dangling bound variables' = ??
+--   - 'deferred shift amount' = ??
+
+-- FIXME: A small effort has been made in this module to document the assumptions
+-- regarding the De Bruijn assumptions/conventions of the generated SAWCore.
+-- More of this would be desirable.
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -156,13 +158,7 @@ liftTerm (t, j) = (t, j + 1)
 liftProp :: (Term, [FieldName], Int) -> (Term, [FieldName], Int)
 liftProp (t, fns, j) = (t, fns, j + 1)
 
--- | Increment dangling bound variables of all types [MT: 'types', really?]
---   in environment.
-
---
---   FIXME:MT:doc: What does the above mean?!  dangling==loose,
---   FIXME[C]: 'lift' is overloaded/overused.  Is this De Bruijn terminology??
-
+-- | Increment dangling bound variables of various sorts in environment.
 liftEnv :: Env -> Env
 liftEnv env =
   Env { envT = fmap liftTerm (envT env)
@@ -184,7 +180,7 @@ bindTParam sc tp env = do
                 , envS = k : envS env
                 }
 
--- | bindName - bind name in appropriate environments to De Bruijn index 0. [MT: true?]
+-- | bindName - bind name in appropriate environments to De Bruijn index 0.
 bindName :: SharedContext -> C.Name -> C.Schema -> Env -> IO Env
 bindName sc name schema env = do
   let env' = liftEnv env
@@ -1220,10 +1216,7 @@ importExpr sc env expr =
     C.ECase s alts dflt -> do
       let ty = fastTypeOf (envC env) expr
           -- need the type of whole expression as a type-arg in SAWCore
-      e <- importCase sc env ty s alts dflt
-      putStrLn $ "MYLOG: case expr: " ++ showTerm e
-        -- FIXME: a way to show without getting confused by "de Bruijn env"?
-      return e
+      importCase sc env ty s alts dflt
 
   where
     the :: String -> Maybe a -> IO a
@@ -1333,7 +1326,7 @@ importExpr' sc env schema expr =
       importExpr' sc env schema e
 
     C.ECase {} -> fallback
-                  -- FIXME:MT: can we use fallback?!
+                  -- FIXME: Not sure using fallback is correct here.
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
@@ -1984,7 +1977,6 @@ exportValue ty v = case ty of
     case fields of
       TV.TVStruct fs   -> exportValue (TV.TVRec fs) v
       TV.TVEnum {}     -> error "exportValue: TODO enum"
-                          -- MT:FIXME: this needed?!
       TV.TVAbstract {} -> error "exportValue: TODO abstract types"
 
 
@@ -2016,12 +2008,16 @@ exportRecordValue fields v =
 --   term environment.
 --
 --   - For structs, make identity functions that take the record which
---     the newtype  wraps.
---   - Enum types create
---     - multiple constructor functions
---     - a case function for the type
---     - a number of 'internal' only sawcore
+--     the newtype wraps.
+--
 --   - Abstract types do not produce any functions.
+--
+--   - Enum types create these definitions
+--     - multiple constructor functions (added to Cryptol Env)
+--     - a number of 'internal' only SAWCore definitions
+--       - case function for the type (not used directly by Cryptol code).
+--       - multiple definitions that define the Enum's representation
+--         type in SAWCore
 
 genCodeForNominalTypes ::
   (HasCallStack) =>
@@ -2042,16 +2038,14 @@ genCodeForNominalTypes sc nominalMap env0 =
 
       ns <- newDefsForNominal env nt
       let conTs = C.nominalTypeConTypes nt
-          constrs = map (\(x,e) -> (x,(e,0))) ns
-            -- FIXME:MT: above 'magic' code, where's the abstraction?
-            --  - it's the De Bruijn indexing!
+          constrs = map
+                      (\(x,e) -> (x,(e,0)))  -- the De Bruijn 'magic'
+                      ns
       let env' = env { envE = foldr (uncurry Map.insert) (envE env) constrs
                      , envC = foldr (uncurry Map.insert) (envC env) conTs
                      }
-      -- MT: DEBUGGING:
-      -- putStrLn $ "\nMYLOG: scGetModuleMap:"
-      -- hm <- scGetModuleMap sc
-      -- mapM_ print (HMap.keys hm)
+        -- NOTE: the Cryptol schemas for the Struct & Enum constructors get added to
+        --       the Cryptol environment.
 
       case ntDef nt of
         C.Abstract ->
@@ -2077,21 +2071,9 @@ genCodeForNominalTypes sc nominalMap env0 =
                         ++ show (C.identText $ C.nameIdent n)
              putStrLn $ "  MYLOG: EXPR: " ++ showTerm e
              putStrLn $ "  MYLOG: AST : " ++ take 240 (show e)
-              -- showTerm t = scPrettyTerm defaultPPOpts t
-              --  ... in ../SAW/Term/PRetty.hs
-              -- also means to show with 'env/named-things'
           )
 
       return env'
-
-      -- NOTE: in the above, C.nominalTypeConTypes gets Cryptol
-      -- schemas for Struct & Enum constructors.
-
-      -- MT:
-      -- - Q. Is the (name of) the nominal type in some environment?
-      --    - think so, note 'importType' goes from TVar to var in Term
-      --    - [ ] test this
-
 
     -- | Create functions/constructors for Nominal Types.
     newDefsForNominal ::
@@ -2104,14 +2086,16 @@ genCodeForNominalTypes sc nominalMap env0 =
 
         C.Struct fs -> do
             let recTy      = C.TRec (C.ntFields fs)
-                con        = C.ntConName fs
-                paramName  = C.asLocal C.NSValue con
-                             -- feels odd: using name of constructor as the
-                             -- name of the constructor argument.
+                conNm      = C.ntConName fs
+                paramName  = C.asLocal C.NSValue conNm
+                             -- NOTE: We use name of constructor as the
+                             -- name of the constructor argument! Thus we can
+                             -- avoid need for a new unique name.
+                             -- FIXME: this doesn't seem foolproof!
                 fn         = C.EAbs paramName recTy (C.EVar paramName)
                 fnWithTAbs = foldr C.ETAbs fn (C.ntParams nt)
             e <- importExpr sc env fnWithTAbs
-            return [(con, e)]
+            return [(conNm, e)]
 
 
 -- | genCodeForEnum ... - called when we see enum definition in the Cryptol module.
@@ -2133,7 +2117,6 @@ genCodeForEnum sc env nt ctors =
   let ntName'  = ntName nt
       numCtors = length ctors
 
-  -- MT: Debugging
   putStrLn "\nMYLOG: genCodeForEnum :\n"
   putStrLn $ "  " ++ show (C.identText $ C.nameIdent ntName')
 
@@ -2145,9 +2128,9 @@ genCodeForEnum sc env nt ctors =
 
   tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
                    importKind sc (C.tpKind tpi)
-  tyParamsECs <- flip mapM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
+  tyParamsECs   <- flip mapM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
                    scFreshEC sc nm k
-  tyParamsVars <- mapM (scExtCns sc) tyParamsECs
+  tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
 
   let
       -- | add a type abstraction for each type parameter.
@@ -2159,9 +2142,9 @@ genCodeForEnum sc env nt ctors =
 
   -------------------------------------------------------------
   -- Common naming conventions:
-  let sumTy_ident   = identOfEnumType ntName'
-      case_ident    = identOfEnumCase ntName'
-      tl_ident      = newIdent ntName' "__TL"
+  let sumTy_ident = identOfEnumType ntName'
+      case_ident  = identOfEnumCase ntName'
+      tl_ident    = newIdent ntName' "__TL"
 
   -------------------------------------------------------------
   -- Definitions to access needed SAWCore Prelude types & definitions:
@@ -2236,10 +2219,9 @@ genCodeForEnum sc env nt ctors =
       do
       b <- scLocalVar sc 0
             -- all uses are direct under the 'Pi'
-            -- N.B.: scFun's aren't included in deBruijn's!
+            -- N.B.: scFun's aren't included in De Bruijn's!
       altFuncTypes <- mkAltFuncTypes b
       scPiAbstractExts sc tyParamsECs
-          -- FIXME[R]: BTW, maybe generalize **.SharedTerm.scAbstractExts?
         =<< scPi sc "b" sort0
         =<< scFunAll sc altFuncTypes
         =<< scFun sc sumTy_applied b
@@ -2284,8 +2266,6 @@ genCodeForEnum sc env nt ctors =
   -------------------------------------------------------------
   -- Create needed SawCore types for the Left/Right constructors;
   -- each Either in the nested Either's needs a pair of types:
-  --
-  -- FIXME[D]: add doc/help to understand: show textual example.
 
   tps <- flip mapM [0 .. numCtors-1] $ \i->
            do
@@ -2346,7 +2326,6 @@ genCodeForEnum sc env nt ctors =
         return (ctorName, ctorBody)
 
   return defn_eachCtor
-
 
 importCase ::
   (HasCallStack) =>
@@ -2456,8 +2435,11 @@ identOfEnumCase nt = newIdent nt "__case"
 newIdent :: C.Name -> Text -> Ident
 newIdent name suffix =
   mkIdent
-    preludeName  -- FIXME: Move to the local module.
+    preludeName
+       -- FIXME: These generated definitions should not be added to the prelude but to
+       --        the module where the Enum (or ...) is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
+
 
 
 -- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) `term`.
@@ -2479,12 +2461,12 @@ checkSAWCoreTypeChecks sc ident term mType =
              if eq then
                pure ()
              else
-               do
-               putStrLn $ "Expected type does not match the inferred:"
-               putStrLn $ showTerm ty2
+               panic "checkSAWCoreTypeChecks"
+                 [ "Expected type does not match the inferred type:"
+                 , showTerm ty2
+                 ]
        Left err ->
-         do putStrLn $ "Type error when checking " ++ ident'
-            putStrLn $ unlines $ SC.prettyTCError err
-            -- fail "internal type error"
-
-  -- FIXME: todo: replace above with panics.
+           panic "checkSAWCoreTypeChecks"
+             [ "Internal type error when checking " ++ ident'
+             , unlines $ SC.prettyTCError err
+             ]
