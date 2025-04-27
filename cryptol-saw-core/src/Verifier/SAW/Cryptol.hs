@@ -2004,15 +2004,15 @@ exportRecordValue fields v =
     run = SC.runIdentity . force
 
 
--- | Generate functions, required by nominal types, to insert into the
+-- | Generate functions, required by 'NominalType's, to be inserted into the
 --   term environment.
 --
---   - For structs, make identity functions that take the record which
+--   - For 'C.Struct', make identity functions that take the record which
 --     the newtype wraps.
 --
---   - Abstract types do not produce any functions.
+--   - For 'C.Abstract', no functions need be produced.
 --
---   - Enum types create these definitions
+--   - 'C.Enum' will will create these definitions
 --     - multiple constructor functions (added to Cryptol Env)
 --     - a number of 'internal' only SAWCore definitions
 --       - case function for the type (not used directly by Cryptol code).
@@ -2075,7 +2075,7 @@ genCodeForNominalTypes sc nominalMap env0 =
 
       return env'
 
-    -- | Create functions/constructors for Nominal Types.
+    -- | Create functions/constructors for different 'NominalType's.
     newDefsForNominal ::
       HasCallStack => Env -> NominalType -> IO [(C.Name,Term)]
     newDefsForNominal env nt =
@@ -2098,7 +2098,7 @@ genCodeForNominalTypes sc nominalMap env0 =
             return [(conNm, e)]
 
 
--- | genCodeForEnum ... - called when we see enum definition in the Cryptol module.
+-- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
 --       1. Returns the names & definitions of the constructors of the enum.
 --          This fit with the code for other nominals, needed because
@@ -2184,7 +2184,7 @@ genCodeForEnum sc env nt ctors =
     flip mapM ctors $ \c->
       mapM (\t-> do
               t' <- importType sc env' t
-                -- here ^, type params are de bruijn's
+                -- here ^, type params are De Bruijn's
               instantiateVarList sc 0 tyParamsVars t'
                 -- here ^, type params are ExtCns
            )
@@ -2198,7 +2198,7 @@ genCodeForEnum sc env nt ctors =
   scInsertDef sc preludeName tl_ident tl_type tl_rhs
 
   -------------------------------------------------------------
-  -- Create the definition for the Sawcore Sum (to which we map the
+  -- Create the definition for the SAWCore sum (to which we map the
   -- enum type).
 
   -- the Typelist(tl) applied to the [free] type arguments.
@@ -2335,9 +2335,10 @@ genCodeForEnum sc env nt ctors =
 --   - Note missing functionality:
 --     - not implemented yet: default case alternatives that bind the whole scrutinee,
 --       i.e.,
---         case S of
---           C1 ... -> E
---           y      -> E[y]  -- y == S   <- NOT IMPLEMD YET
+--
+--       >  case S of
+--       >    C1 ... -> E
+--       >    y      -> E[y]  -- y == S   <- NOT IMPLEMD YET
 --
 importCase ::
   (HasCallStack) =>
@@ -2459,8 +2460,8 @@ newIdent name suffix =
 
 
 
--- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) `term`.
---     if mType == Just type' then ensure the following
+-- | checkSAWCoreTypeChecks sc nm term mType - typeChecks (SAWCore) @term@.
+--     if @mType == Just type'@ then ensure the following
 --         term :: type'
 checkSAWCoreTypeChecks :: (Show i) =>
   SharedContext -> i -> Term -> Maybe Term -> IO ()
