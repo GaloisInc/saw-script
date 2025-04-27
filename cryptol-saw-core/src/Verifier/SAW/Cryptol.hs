@@ -2327,6 +2327,12 @@ genCodeForEnum sc env nt ctors =
 
   return defn_eachCtor
 
+-- | importCase - translates Cryptol case expr to application of the
+--   the generated SAWCore ENUMNAME__case function.
+--
+--   - Note missing functionality:
+--     - default case alt that binds the
+
 importCase ::
   (HasCallStack) =>
   SharedContext -> Env ->
@@ -2344,9 +2350,21 @@ importCase sc env b scrutinee altsMap mDfltAlt =
             , pretty scrutineeTy
             ]
 
+  -- Create a sequential set of `C.CaseAlt`s that exactly match the constructors:
+  --   - preconditions:
+  --      Assume `altsMap` is valid, thus not checking for extraneous
+  --      entries. (Call panic if a missing alternative is not covered
+  --      by presence of default in `mDfltAlt`.)
+
+  -- First, define what to do if alternative for constructor is missing:
   let
       -- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',
-      -- create a ctor specific alt-function from the "default expr".
+      -- create a ctor specific alt-function from the mDfltAlt
+      -- "default expr".
+      --   - For each constructor we may need to generate a default alternative,
+      --     (the code cannot be shared as the arity and types for each constructor
+      --     will be different).
+
       useDefaultAlt :: (HasCallStack) => C.EnumCon -> IO C.CaseAlt
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
@@ -2365,7 +2383,7 @@ importCase sc env b scrutinee altsMap mDfltAlt =
                              (C.ecFields ctor)
                   -- N.B.: to avoid extra name construction, we are using
                   --  the same name (un-referenced!) nm' for each of the arguments
-                  --  of the casealt function.  This appears to work.
+                  --  of the CaseAlt function.  This appears to work.
 
                 return (C.CaseAlt vts dfltE)
 
@@ -2379,9 +2397,8 @@ importCase sc env b scrutinee altsMap mDfltAlt =
           nameIsUnusedPat nm'' =
             Text.take 3 (nameToLocalName nm'') == "__p"
 
-            -- Beyond the prefix, the indication that this is an unused pattern
-            -- is long gone.
-            -- This name is created using `getIdent` in
+            -- Except for the prefix, the indication that this is an unused pattern
+            -- is long gone. This name is created using `getIdent` in
             --   deps/cryptol/src/Cryptol/Parser/Name.hs
             -- FIXME:
             --  - Clearly this is undesirable coupling.
@@ -2395,18 +2412,13 @@ importCase sc env b scrutinee altsMap mDfltAlt =
               , show $ PP.ppList $ map PP.pp (map fst nts)
               ]
 
-  -- Create a sequential set of `C.CaseAlt`s that exactly match the constructors:
-  --   - preconditions:
-  --      Assume `altsMap` is valid, thus not checking for
-  --      extraneous entries. (Call panic if a missing alternative
-  --      not covered by possible default in `mDfltAlt`.)
-
+  -- now create one alternative ( 'CaseAlt') for each ctor:
   alts <- flip mapM ctors $ \ctor->
             case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
               Just a  -> return a
               Nothing -> useDefaultAlt ctor
 
-  -- translate each alt into a Cryptol function:
+  -- translate each CaseAlt into a Cryptol function:
   let funcs = map (\(C.CaseAlt as body)->
                       foldr (\(n,t) e-> C.EAbs n t e) body as)
                   alts
@@ -2416,7 +2428,6 @@ importCase sc env b scrutinee altsMap mDfltAlt =
   b'         <- importType sc env b        -- b is type of whole case expr
   scrutinee' <- importExpr sc env scrutinee
   funcs'     <- mapM (importExpr sc env) funcs
-
   caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
                   tyArgs'             -- case is expecting the type arguments
                                       --   that the enumtype is instantiated to
