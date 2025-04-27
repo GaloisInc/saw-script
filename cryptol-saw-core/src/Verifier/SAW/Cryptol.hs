@@ -2237,8 +2237,8 @@ genCodeForEnum sc env nt ctors =
       x <- scLocalVar sc 0
       funcVars  <- reverse <$> mapM (scLocalVar sc) [1..numCtors]
 
-      bEC <- scFreshEC sc "b" sort0
-      b   <- scExtCns sc bEC  -- bEC into Term variable
+      bExtCn <- scFreshEC sc "b" sort0
+      b      <- scExtCns sc bExtCn  -- bExtCn into Term variable
 
       let funcNames = map (\n-> Text.pack ("f" ++ show n)) [1..numCtors]
       funcTypes <- mkAltFuncTypes b
@@ -2252,7 +2252,7 @@ genCodeForEnum sc env nt ctors =
                          scLambda sc "x" ty body
 
       addTypeAbstractions
-        =<< scAbstractExts sc [bEC]
+        =<< scAbstractExts sc [bExtCn]
         =<< scLambdaList sc (zip funcNames funcTypes)
         =<< sc_eithersV b
         =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
@@ -2264,39 +2264,41 @@ genCodeForEnum sc env nt ctors =
   checkSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
 
   -------------------------------------------------------------
-  -- Create needed SawCore types for the Left/Right constructors;
-  -- each Either in the nested Either's needs a pair of types:
+  -- Define function for N-th injection into the whole Sum (nested Either's):
 
-  tps <- flip mapM [0 .. numCtors-1] $ \i->
-           do
-           typeLeft  <- do
-                        n <- scNat sc (fromIntegral i)
-                        scGlobalApply sc "Prelude.listSortGet"
-                          [tl_applied, n]
+  scNthInjection <-
+      do
+      -- Create needed SawCore types for the Left/Right constructors
+      -- (each Either in the nested Either's needs a pair of types):
+      tps <- flip mapM [0 .. numCtors-1] $ \i->
+               do
+               typeLeft  <- do
+                            n <- scNat sc (fromIntegral i)
+                            scGlobalApply sc "Prelude.listSortGet"
+                              [tl_applied, n]
 
-           typeRight <- do
-                        n <- scNat sc (fromIntegral i + 1)
-                        tl_remainder <-
-                          scGlobalApply sc "Prelude.listSortDrop"
-                            [tl_applied, n]
-                        scEithersV tl_remainder
+               typeRight <- do
+                            n <- scNat sc (fromIntegral i + 1)
+                            tl_remainder <-
+                              scGlobalApply sc "Prelude.listSortDrop"
+                                [tl_applied, n]
+                            scEithersV tl_remainder
 
-           return (typeLeft, typeRight)
+               return (typeLeft, typeRight)
 
-  -------------------------------------------------------------
-  -- Code to do the nth injection into the Sum type:
+      let
+        scInjectRight :: Int -> Term -> IO Term
+        scInjectRight n x | n < 0     = return x
+                          | otherwise = do
+                              y <- scRight (fst (tps!!n)) (snd (tps!!n)) x
+                              scInjectRight (n-1) y
 
-  let
-      scInjectRight :: Int -> Term -> IO Term
-      scInjectRight n x | n < 0     = return x
-                        | otherwise = do
-                            y <- scRight (fst (tps!!n)) (snd (tps!!n)) x
-                            scInjectRight (n-1) y
+        scNthInjection :: Int -> Term -> IO Term
+        scNthInjection n x = do
+                             y <- scLeft (fst (tps!!n)) (snd (tps!!n)) x
+                             scInjectRight (n-1) y
 
-      scNthInjection :: Int -> Term -> IO Term
-      scNthInjection n x = do
-                           y <- scLeft (fst (tps!!n)) (snd (tps!!n)) x
-                           scInjectRight (n-1) y
+      return scNthInjection
 
   -------------------------------------------------------------
   -- Create the definition for each constructor:
@@ -2327,12 +2329,16 @@ genCodeForEnum sc env nt ctors =
 
   return defn_eachCtor
 
--- | importCase - translates Cryptol case expr to application of the
---   the generated SAWCore ENUMNAME__case function.
+-- | importCase - translates a Cryptol case expr to SAWCore: an application
+--   of the generated SAWCore ENUMNAME__case function to appropriate arguments.
 --
 --   - Note missing functionality:
---     - default case alt that binds the
-
+--     - not implemented yet: default case alternatives that bind the whole scrutinee,
+--       i.e.,
+--         case S of
+--           C1 ... -> E
+--           y      -> E[y]  -- y == S   <- NOT IMPLEMD YET
+--
 importCase ::
   (HasCallStack) =>
   SharedContext -> Env ->
