@@ -99,9 +99,6 @@ import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
 
 -- local modules:
 import Verifier.SAW.Cryptol.Panic
-
-
--- FIXME:MT: maybe temporary:
 import Verifier.SAW.Name (preludeName)
 
 -- Type-check the Prelude, Cryptol, SpecM, and CryptolM modules at compile time
@@ -115,8 +112,8 @@ $(runIO (mkSharedContext >>= \sc ->
 
 
 --------------------------------------------------------------------------------
--- | SharedTerms are paired with a deferred shift amount for loose variables
---
+-- | Type Environments
+--   SharedTerms are paired with a deferred shift amount for loose variables
 data Env = Env
   { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
   , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
