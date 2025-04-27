@@ -2044,32 +2044,6 @@ genCodeForNominalTypes sc nominalMap env0 =
         -- NOTE: the Cryptol schemas for the Struct & Enum constructors get added to
         --       the Cryptol environment.
 
-      case ntDef nt of
-        C.Abstract ->
-            return ()
-        _          ->
-            do
-            putStrLn "\nMYLOG: updateEnvForNominal.. FOR NOMINAL TYPE :\n"
-            putStrLn $ "  " ++ show (C.identText $ C.nameIdent (ntName nt))
-            putStrLn $ "  " ++ show (ntName nt)
-
-      unless (null conTs) $
-        do
-        putStrLn $ "\nMYLOG: conTs:"
-        mapM_ (\t -> putStrLn $ "  " ++ show t) conTs
-        putStrLn "\n\n"
-      unless (null ns) $
-        do
-        putStrLn "\nMYLOG: environment extended with nominal defns:"
-        flip mapM_ ns $
-          (\(n,e)->
-             do
-             putStrLn $ "  MYLOG: NAME: "
-                        ++ show (C.identText $ C.nameIdent n)
-             putStrLn $ "  MYLOG: EXPR: " ++ showTerm e
-             putStrLn $ "  MYLOG: AST : " ++ take 240 (show e)
-          )
-
       return env'
 
     -- | Create functions/constructors for different 'NominalType's.
@@ -2113,9 +2087,6 @@ genCodeForEnum sc env nt ctors =
   do
   let ntName'  = ntName nt
       numCtors = length ctors
-
-  putStrLn "\nMYLOG: genCodeForEnum :\n"
-  putStrLn $ "  " ++ show (C.identText $ C.nameIdent ntName')
 
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
@@ -2254,8 +2225,6 @@ genCodeForEnum sc env nt ctors =
         =<< sc_eithersV b
         =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
 
-  putStrLn $ "MYLOG: case_type: " ++ showTerm case_type
-  putStrLn $ "MYLOG: case_rhs:  " ++ showTerm case_rhs
   scInsertDef sc preludeName case_ident case_type case_rhs
 
   checkSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
@@ -2378,9 +2347,6 @@ importCase sc env b scrutinee altsMap mDfltAlt =
             | nameIsUnusedPat nm' ->
                 do
                 -- NOTE nm' is unused Name
-                putStrLn $ "MYLOG: useDefaultAlt: cname: " ++ pretty (C.ecName ctor)
-                putStrLn $ "MYLOG: useDefaultAlt: patname: " ++ pretty nm'
-                putStrLn $ "MYLOG: useDefaultAlt: patname: " ++ show   nm'
                 let sub  = C.listSubst (zip (map C.TVBound tyParams) tyArgs)
                     vts  = map
                              (\ty-> (nm',plainSubst sub ty))
@@ -2464,7 +2430,6 @@ checkSAWCoreTypeChecks :: (Show i) =>
   SharedContext -> i -> Term -> Maybe Term -> IO ()
 checkSAWCoreTypeChecks sc ident term mType =
   do let ident' = show ident
-     putStrLn $ "MYLOG: checkSAWCoreTypeChecks: " ++ ident'
      result <- SC.scTypeCheck sc Nothing term
      case result of
        Right ty1 ->
