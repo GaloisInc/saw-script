@@ -50,7 +50,7 @@ import qualified Data.Set as Set
 import Data.Set ( Set )
 import qualified Data.Text as Text
 import Data.Text (Text)
-import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
+import System.Directory (getCurrentDirectory, setCurrentDirectory)
 import System.FilePath (takeDirectory)
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
@@ -485,8 +485,8 @@ interpretFile file runMain =
   where
     interp =
       do  opts <- getOptions
-          io $ setCurrentDirectory (takeDirectory file)
           stmts <- io $ SAWScript.Import.loadFile opts file
+          io $ setCurrentDirectory (takeDirectory file)
           mapM_ stmtWithPrint stmts
           when runMain interpretMain
           writeVerificationSummary
@@ -619,8 +619,7 @@ processFile proxy opts file mbSubshell mbProofSubshell = do
   let ro'' = case mbProofSubshell of
               Nothing -> ro'
               Just m  -> ro'{ roProofSubshell = m }
-  file' <- canonicalizePath file
-  _ <- runTopLevel (interpretFile file' True) ro'' rw
+  _ <- runTopLevel (interpretFile file True) ro'' rw
             `X.catch` (handleException opts)
   return ()
 
@@ -846,8 +845,7 @@ set_crucible_timeout t = do
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
-  file' <- io $ canonicalizePath file
-  interpretFile file' False
+  interpretFile file False
 
 set_ascii :: Bool -> TopLevel ()
 set_ascii b = do
