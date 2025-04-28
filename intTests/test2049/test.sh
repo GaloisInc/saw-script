@@ -19,6 +19,7 @@ sed < test.rawlog > test.log '
         s/^..............//
     }
     s,'"$CURDIR"'/,,
+    s,\(solverStatsGoalSize.=.\)[0-9N]*,\1N,g
 '
 
 # diff

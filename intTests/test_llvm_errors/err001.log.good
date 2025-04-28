@@ -14,7 +14,7 @@ let { x@1 = Prelude.Vec 32 Prelude.Bool
 Actual term:
 Prelude.bvMul 32 (Prelude.bvNat 32 2) fresh:x#818
 
- SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = 389}
+ SolverStats {solverStatsSolvers = fromList ["SBV->Z3"], solverStatsGoalSize = N}
  ----------Counterexample----------
    x: NNN
  ----------------------------------

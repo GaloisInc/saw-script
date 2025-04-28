@@ -1,7 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -9,10 +7,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeOperators #-}
 
 {- |
 Module      : SAWCore.Term.Functor
-Copyright   : Galois, Inc. 2012-2015
+Copyright   : Galois, Inc. 2012-2025
 License     : BSD3
 Maintainer  : huffman@galois.com
 Stability   : experimental
@@ -68,6 +67,7 @@ import Data.Bits
 import Data.Foldable (Foldable)
 #endif
 import qualified Data.Foldable as Foldable (and, foldl')
+import Data.Function (on)
 import Data.Hashable
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -387,27 +387,45 @@ data TermF e
     | Constant !(ExtCns e) !(Maybe e)
       -- ^ An abstract constant packaged with its type and definition.
       -- The body and type should be closed terms.
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+  deriving (Show, Functor, Foldable, Traversable, Generic)
+
+instance (e ~ Term) => Eq (TermF e) where
+  (==) = alphaEquivTermF
+
+instance (e ~ Term) => Ord (TermF e) where
+  compare u v = case (u, v) of
+    (FTermF l, FTermF r) -> compare l r
+    (FTermF _, _) -> LT
+    (App _ _, FTermF _) -> GT
+    (App ll lr, App rl rr) -> compare (ll, lr) (rl, rr)
+    (App _ _, _) -> LT
+    (Lambda {}, FTermF _) -> GT
+    (Lambda {}, App _ _) -> GT
+    (Lambda _ ll lr, Lambda _ rl rr) -> compare (ll, lr) (rl, rr)
+    (Lambda {}, _) -> LT
+
+    (Pi {}, LocalVar _) -> LT
+    (Pi {}, Constant _ _) -> LT
+    (Pi _ ll lr, Pi _ rl rr) -> compare (ll, lr) (rl, rr)
+    (Pi {}, _) -> GT
+    (LocalVar _, Constant _ _) -> LT
+    (LocalVar l, LocalVar r) -> compare l r
+    (LocalVar _, _) -> GT
+    (Constant ll lr, Constant rl rr) -> compare (ll, lr) (rl, rr)
+    (Constant _ _, _) -> GT
 
 -- See the commentary on 'Hashable Term' for an explanation of this instance
 -- and a note on uniqueness.
-instance Hashable e => Hashable (TermF e) where
+instance (e ~ Term, Hashable e) => Hashable (TermF e) where
   hashWithSalt salt (FTermF ftf) = salt `hashWithSalt` ftf
   hashWithSalt salt (App t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Lambda _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (Pi _ t u) = salt `hashWithSalt` t `hashWithSalt` u
   hashWithSalt salt (LocalVar i) = salt `hashWithSalt` i
-  hashWithSalt salt (Constant ec _) = salt `hashWithSalt` ec
+  hashWithSalt salt (Constant ec d) = salt `hashWithSalt` ec `hashWithSalt` d
 -- NB: we may someday wish to improve this instance, for a couple reasons.
 --
--- 1. Hash 'Constant's based on their definition, if it exists, rather than
--- always using their type. Represented as an 'ExtCns', it contains unavoidable
--- freshness derived from a global counter (via 'scFreshGlobalVar' as
--- initialized in 'SAWCore.SharedTerm.mkSharedContext'), but their
--- definition does not necessarily contain the same freshness.
--- (Q: If we did this, would we also have to update 'alphaEquiv'?)
---
--- 2. Improve the default, XOR-based hashing scheme to improve collision
+-- 1. Improve the default, XOR-based hashing scheme to improve collision
 -- resistance. A polynomial-based approach may be fruitful. For a constructor
 -- with fields numbered 1..n, evaluate a polynomial along the lines of:
 -- coeff(0) * salt ^ 0 + coeff(1) + salt ^ 1 + ... + coeff(n) * salt ^ n
@@ -528,13 +546,19 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1 _) (Constant x2 _) = ecVarIndex x1 == ecVarIndex x2
+    termf (Constant x1 b1) (Constant x2 b2) = ecVarIndex x1 == ecVarIndex x2 && case (b1, b2) of
+      (Just t1, Just t2) -> term t1 t2
+      (Nothing, Nothing) -> True
+      _ -> False
     termf _ _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
     ftermf ftf1 ftf2 = case zipWithFlatTermF term ftf1 ftf2 of
                          Nothing -> False
                          Just ftf3 -> Foldable.and ftf3
+
+alphaEquivTermF :: TermF Term -> TermF Term -> Bool
+alphaEquivTermF = alphaEquiv `on` Unshared
 
 instance Ord Term where
   compare (STApp{stAppIndex = i}) (STApp{stAppIndex = j}) | i == j = EQ
