@@ -15,6 +15,7 @@ module SAWScript.Search (
  ) where
 
 import Data.Functor.Classes(Eq1(..), Ord1(..)) -- for liftEq, liftCompare
+import Data.Text (Text)
 import Data.List (sortBy)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -99,9 +100,9 @@ data SearchPattern = SearchPattern {
 
 -- Panic if we see a unification var; they aren't supposed to escape
 -- the typechecker.
-unifyVarPanic :: String -> String -> a
+unifyVarPanic :: Text -> Text -> a
 unifyVarPanic who what =
-    panic ("search / " ++ who) [what ++ " contained a unification var"]
+    panic ("search / " <> who) [what <> " contained a unification var"]
 
 ------------------------------------------------------------
 -- Exact matching {{{
