@@ -240,11 +240,12 @@ library cryptol-saw-core
      CryptolSAWCore.Cryptol
      CryptolSAWCore.CryptolEnv
      CryptolSAWCore.Monadify
-     CryptolSAWCore.Panic
      CryptolSAWCore.Prelude
      CryptolSAWCore.PreludeM
      CryptolSAWCore.Simpset
      CryptolSAWCore.TypedTerm
+  other-modules:
+     CryptolSAWCore.Panic
   -- GHC-options: -Wall -Werror
   GHC-options: -Wall
 
@@ -405,8 +406,9 @@ library saw-core-what4
      SAWCoreWhat4.What4
      SAWCoreWhat4.FirstOrder
      SAWCoreWhat4.PosNat
-     SAWCoreWhat4.Panic
      SAWCoreWhat4.ReturnTrip
+  other-modules:
+     SAWCoreWhat4.Panic
 
   GHC-options: -Wall -Werror
 
@@ -760,7 +762,6 @@ library saw-script
     SAWScript.Import
     SAWScript.Interpreter
     SAWScript.Lexer
-    SAWScript.Panic
     SAWScript.Parser
     SAWScript.Search
     SAWScript.Token
@@ -774,6 +775,9 @@ library saw-script
     SAWScript.REPL.Logo
     SAWScript.REPL.Monad
     SAWScript.REPL.Trie
+
+  other-modules:
+    SAWScript.Panic
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
