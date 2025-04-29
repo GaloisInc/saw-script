@@ -504,8 +504,8 @@ span.spaces    { background: white }
 <span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">interp =</span>
 <span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">do  opts &lt;- getOptions</span>
-<span class="lineno">  488 </span><span class="spaces">          </span><span class="istickedoff">io $ setCurrentDirectory (takeDirectory file)</span>
-<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff">stmts &lt;- io $ SAWScript.Import.loadFile opts file</span>
+<span class="lineno">  488 </span><span class="spaces">          </span><span class="istickedoff">stmts &lt;- io $ SAWScript.Import.loadFile opts file</span>
+<span class="lineno">  489 </span><span class="spaces">          </span><span class="istickedoff">io $ setCurrentDirectory (takeDirectory file)</span>
 <span class="lineno">  490 </span><span class="spaces">          </span><span class="istickedoff">mapM_ stmtWithPrint stmts</span>
 <span class="lineno">  491 </span><span class="spaces">          </span><span class="istickedoff">when runMain interpretMain</span>
 <span class="lineno">  492 </span><span class="spaces">          </span><span class="istickedoff">writeVerificationSummary</span>
