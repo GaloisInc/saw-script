@@ -73,12 +73,12 @@ import Lang.Crucible.CFG.Expr
 import qualified Lang.Crucible.CFG.Expr as Expr
 import Lang.Crucible.CFG.Core
 
-import SAWCore.Utils (panic) -- XXX why is this using another library's panic hook?
 import SAWCore.Name
 import SAWCore.OpenTerm
 import SAWCore.Term.Functor hiding (Constant)
 import SAWCore.SharedTerm hiding (Constant)
 
+import Heapster.Panic
 -- import Heapster.GenMonad
 import Heapster.CruUtil
 import Heapster.Permissions
