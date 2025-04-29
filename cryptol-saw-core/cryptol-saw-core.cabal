@@ -36,6 +36,7 @@ library
     panic,
     sbv,
     template-haskell,
+    unordered-containers,
     text,
     vector,
 
@@ -48,8 +49,8 @@ library
     saw-core,
     saw-core-aig,
     saw-core-sbv,
-    saw-core-what4,
-    unordered-containers
+    saw-core-what4
+
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Cryptol
