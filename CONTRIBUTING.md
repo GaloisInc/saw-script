@@ -136,7 +136,9 @@ The procedure for this is:
 
 - Commit your changes first (so the commit hash recorded in the new
   hie.yaml reflects your changes)
-- Run mkhie.sh
+- Run mkhie.sh: `./mkhie.sh > hie.yaml.new; mv hie.yaml.new hie.yaml`
+  (doing it in two steps prevents git from spuriously reporting that the
+  tree is dirty)
 - Examine the diff to hie.yaml in case something broke
 - Commit hie.yaml with a commit message like "Regen hie.yaml"
 
