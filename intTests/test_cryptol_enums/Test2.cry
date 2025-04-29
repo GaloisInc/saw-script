@@ -1,0 +1,86 @@
+module Test2 where
+
+// Our data type, constructors of arity 0, 1, and 2+.
+// ETT = Enum Type Test
+enum ETT a b = C1
+             | C2 a
+             | C3 Bool b
+
+
+f1 : {c, d} ETT c d -> [8]
+f1 e1 = case e1 of
+          C1 -> 101
+          _  -> 102
+
+// test: any change if no signature?
+f1' e1 = case e1 of
+           C1 -> 101
+           _  -> 102
+
+f2 : ETT Bool () -> [8]
+f2 e = case e of
+         C1     -> 101
+         C3 _ _ -> 103
+         C2 _   -> 102
+
+f3 : ETT Bool () -> [8]
+f3 e = case e of
+         C1      -> 101
+         _       -> 105
+           // ^ compiles to two default functions but they have different
+           //   types.
+
+t11 = f1 C1
+t12 = f1 (C2 ())
+t13 = f1 (C3 True False)
+
+t31 = f3 C1
+t32 = f3 (C2 False)
+t33 = f3 (C3 True ())
+
+/*
+return (type {{ f1  }})
+return (type {{ f1' }})
+
+return (normalize_term {{ t11 }})
+return (normalize_term {{ t12 }})
+return (normalize_term {{ t13 }})
+
+return (eval_int {{ t31 }})
+return (eval_int {{ t32 }})
+return (eval_int {{ t33 }})
+*/
+
+
+/***********************************************************
+ * Sanity check on currying constructors.
+ */
+
+cc3 : {a, b} b -> ETT a b
+cc3 = C3 True
+
+/***********************************************************
+ * test that we're referencing proper variables
+ */
+
+x : [16]
+x = 2
+
+y : [16]
+y = 1
+
+f4 : [16] -> ETT [16] [16] -> [16]
+f4 z e = 4 + z + case e of
+                   C3 _ b   ->     b + z + y + 32
+                   C2 a     -> a +     z + y + 16
+                   _        ->         z + x + 8
+
+t43a = f4 64 (C3 False 512) // 4+64   + 512   + 64+1+32   -- 677
+t42a = f4 64 (C2 128)       // 4+64 + 128     + 64+ 1+16  -- 277
+t41a = f4 64 C1             // 4+64          + 64+2+8    -- 142
+
+/*
+return (eval_int {{ t41a }})
+return (eval_int {{ t42a }})
+return (eval_int {{ t43a }})
+*/

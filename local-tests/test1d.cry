@@ -52,19 +52,6 @@ f2 e = case e of
 good: AS WE EXPECT.
 */
 
-/*
-f3 e = case e of
-        Right x -> x
-        y       -> 0
-  Message:   default case alternative that binds scrutinee is not supported.
-  - a way to get location info?
-*/
-/*
-f4 e = case e of
-        Right x  -> Right x
-        y       -> y
-        // ERROR!
-*/
 
 t_f1_er1 = f1 v_er1
 t_f1_el1 = f1 v_el1
@@ -101,9 +88,4 @@ return (type {{ t_f1NoDflt_r }})
 return (type {{ t_f1NoDflt_l }})
 return (normalize_term {{ t_f1NoDflt_r }})
 return (normalize_term {{ t_f1NoDflt_l }})
-*/
-
-/*
- - the types are ~confusing as we end up with various type constraints!
- - but AFAIK, types and values are good.
 */
