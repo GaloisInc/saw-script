@@ -118,11 +118,12 @@ import qualified Data.Text as T
 import qualified Text.URI as URI
 import Data.Type.Equality
 
-import SAWCore.Utils
 import SAWCore.Name
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import SAWCore.OpenTerm
+
+import CryptolSAWCore.Panic
 import CryptolSAWCore.TypedTerm
 import CryptolSAWCore.Cryptol (Env)
 import SAWCore.Recognizer
@@ -600,9 +601,11 @@ monadifyTpExpr ctx (asLocalVar -> Just i)
   | i < length ctx
   , (_,_,Just (SomeTpExpr k e)) <- ctx!!i = SomeTpExpr k e
 monadifyTpExpr ctx tp =
-  panic "monadifyTpExpr"
-  ["not a valid type or numeric expression for monadification: "
-   ++ ppTermInTypeCtx ctx tp]
+  -- XXX this doesn't look like it should be a panic
+  panic "monadifyTpExpr" [
+      "Not a valid type or numeric expression for monadification: " <>
+          T.pack (ppTermInTypeCtx ctx tp)
+  ]
 
 -- | Convert a SAW core 'Term' to a monadification type, or panic if this is not
 -- possible
@@ -611,7 +614,7 @@ monadifyType :: (HasCallStack, HasSpecMEvType) => MonadifyTypeCtx -> Term ->
 monadifyType ctx t
   | SomeTpExpr MKTypeRepr tp <- monadifyTpExpr ctx t = tp
 monadifyType ctx t =
-  panic "monadifyType" ["Not a type: " ++ ppTermInTypeCtx ctx t]
+  panic "monadifyType" ["Not a type: " <> T.pack (ppTermInTypeCtx ctx t)]
 
 -- | Convert a SAW core 'Term' to a type-level numeric expression, or panic if
 -- this is not possible
@@ -620,7 +623,7 @@ monadifyNum :: (HasCallStack, HasSpecMEvType) => MonadifyTypeCtx -> Term ->
 monadifyNum ctx t
   | SomeTpExpr MKNumRepr e <- monadifyTpExpr ctx t = e
 monadifyNum ctx t =
-  panic "monadifyNum" ["Not a numeric expression: " ++ ppTermInTypeCtx ctx t]
+  panic "monadifyNum" ["Not a numeric expression: " <> T.pack (ppTermInTypeCtx ctx t)]
 
 
 ----------------------------------------------------------------------
