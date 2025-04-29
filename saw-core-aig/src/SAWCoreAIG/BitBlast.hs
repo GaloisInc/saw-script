@@ -45,7 +45,8 @@ import SAWCore.TypedAST
 import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
-import SAWCore.Utils (panic)
+
+import SAWCoreAIG.Panic
 
 import qualified Data.AIG as AIG
 
@@ -314,7 +315,7 @@ muxBExtra be (VDataType (primName -> "Prelude.Stream") [TValue tp] []) c x y =
                   muxBVal be tp c xi yi
      r <- newIORef Map.empty
      return (BStream f r)
-muxBExtra _ tp _ _ _ = panic "AIG: muxBExtra" ["Type mismatch", show tp]
+muxBExtra _ tp _ _ _ = panic "muxBExtra" ["Type mismatch: " <> Text.pack (show tp)]
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
 genShift ::

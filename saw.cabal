@@ -316,11 +316,16 @@ library saw-core-aig
     aig,
 
     -- internal sublibraries in the saw tree
+    saw:saw-support,
     saw:saw-core
 
   hs-source-dirs: saw-core-aig/src
+
   exposed-modules:
      SAWCoreAIG.BitBlast
+  other-modules:
+     SAWCoreAIG.Panic
+
   GHC-options: -Wall -Werror
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
