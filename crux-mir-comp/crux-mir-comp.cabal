@@ -26,6 +26,7 @@ library
                  containers,
                  extra,
                  lens,
+                 prettyprinter,
                  text,
 
                  -- packages in git submodules

@@ -41,7 +41,7 @@ import Data.List (tails)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import Data.Map (Map)
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes)
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some (Some(..))
@@ -148,7 +148,7 @@ checkMutableAllocPostconds opts sc cc cs = do
           resolveSetupValueMIR opts cc sc cs ref
         case testRefShape refShp of
           Just IsRefShape{} ->
-            pure $ Some $ MirReferenceMuxConcrete refVal
+            pure $ MirReferenceMuxConcrete refVal
           Nothing ->
             panic "checkMutableAllocPostconds" [
                 "Unexpected non-reference type:",
@@ -166,7 +166,7 @@ checkMutableAllocPostconds opts sc cc cs = do
   let mutAllocRefs =
         map
           (\(Some mp, Some spec) ->
-            ( Some $ MirReferenceMuxConcrete $ mp ^. mpRef
+            ( MirReferenceMuxConcrete $ mp ^. mpRef
             , spec ^. maConditionMetadata
             ))
           (Map.elems (Map.intersectionWith (,) sub mutAllocSpecs))
@@ -185,7 +185,7 @@ checkMutableAllocPostconds opts sc cc cs = do
         map
         (\(mutStaticDid, (_, Mir.StaticVar gv)) ->
           ( mutStaticDid
-          , Some $ MirReferenceMuxConcrete $ staticRefMux sym gv
+          , MirReferenceMuxConcrete $ staticRefMux sym gv
           ))
         (Map.toList
           (Map.intersectionWith
@@ -219,17 +219,14 @@ checkMutableAllocPostconds opts sc cc cs = do
 -- | A newtype around 'Mir.MirReferenceMux' that allows comparing values that
 -- are known to be fully concrete.
 -- See @Note [MIR compositional verification and mutable allocations]@.
-newtype MirReferenceMuxConcrete tp =
-  MirReferenceMuxConcrete (Mir.MirReferenceMux Sym tp)
+newtype MirReferenceMuxConcrete =
+  MirReferenceMuxConcrete (Mir.MirReferenceMux Sym)
 
-instance W4.TestEquality MirReferenceMuxConcrete where
-  testEquality x y = PC.orderingF_refl (PC.compareF x y)
+instance Eq MirReferenceMuxConcrete where
+  x == y = compare x y == EQ
 
-instance PC.EqF MirReferenceMuxConcrete where
-  eqF x y = isJust (W4.testEquality x y)
-
-instance PC.OrdF MirReferenceMuxConcrete where
-  compareF (MirReferenceMuxConcrete x) (MirReferenceMuxConcrete y) =
+instance Ord MirReferenceMuxConcrete where
+  compare (MirReferenceMuxConcrete x) (MirReferenceMuxConcrete y) =
     cmpRefMuxConcretely Proxy x y
 
 -- | Compare two 'Mir.MirReferenceMux' values that are known to be concrete.
@@ -238,12 +235,12 @@ instance PC.OrdF MirReferenceMuxConcrete where
 -- 'W4.truePred'. If this is not the case, this function will panic.
 -- See @Note [MIR compositional verification and mutable allocations]@.
 cmpRefMuxConcretely ::
-  forall sym tp1 tp2 proxy.
+  forall sym proxy.
   Crucible.IsSymInterface sym =>
   proxy sym ->
-  Mir.MirReferenceMux sym tp1 ->
-  Mir.MirReferenceMux sym tp2 ->
-  PC.OrderingF tp1 tp2
+  Mir.MirReferenceMux sym ->
+  Mir.MirReferenceMux sym ->
+  Ordering
 cmpRefMuxConcretely sym (Mir.MirReferenceMux fmt1) (Mir.MirReferenceMux fmt2) =
   cmpRefConcretely sym
     (fancyMuxTreeConcrete fmt1) (fancyMuxTreeConcrete fmt2)
@@ -268,17 +265,19 @@ cmpRefMuxConcretely sym (Mir.MirReferenceMux fmt1) (Mir.MirReferenceMux fmt2) =
 cmpRefConcretely ::
   Crucible.IsSymInterface sym =>
   proxy sym ->
-  Mir.MirReference sym tp1 ->
-  Mir.MirReference sym tp2 ->
-  PC.OrderingF tp1 tp2
-cmpRefConcretely sym (Mir.MirReference r1 p1) (Mir.MirReference r2 p2) =
-  cmpRootConcretely r1 r2 <<>> cmpPathConcretely sym p1 p2
-cmpRefConcretely sym (Mir.MirReference_Integer tpr1 i1) (Mir.MirReference_Integer tpr2 i2) =
-  PC.compareF tpr1 tpr2 <<>> cmpSymBVConcretely sym i1 i2 <<>> PC.EQF
-cmpRefConcretely _ (Mir.MirReference _ _) (Mir.MirReference_Integer _ _) =
-  PC.LTF
-cmpRefConcretely _ (Mir.MirReference_Integer _ _) (Mir.MirReference _ _) =
-  PC.GTF
+  Mir.MirReference sym ->
+  Mir.MirReference sym ->
+  Ordering
+cmpRefConcretely sym (Mir.MirReference (tpr1 :: Crucible.TypeRepr tp1) r1 p1) (Mir.MirReference (tpr2 :: Crucible.TypeRepr tp2) r2 p2) =
+  PC.toOrdering @tp1 @tp2 $
+    PC.compareF tpr1 tpr2 <<>> cmpRootConcretely r1 r2 <<>> cmpPathConcretely sym p1 p2
+cmpRefConcretely sym (Mir.MirReference_Integer i1) (Mir.MirReference_Integer i2) =
+  PC.toOrdering @Mir.SizeBits @Mir.SizeBits $
+    cmpSymBVConcretely sym i1 i2
+cmpRefConcretely _ (Mir.MirReference _ _ _) (Mir.MirReference_Integer _) =
+  LT
+cmpRefConcretely _ (Mir.MirReference_Integer _) (Mir.MirReference _ _ _) =
+  GT
 
 -- | Compare two 'Mir.MirReferenceRoot' values that are known to be concrete.
 -- Like the 'Mir.refRootEq' function, this will panic if it attempts to compare
@@ -463,14 +462,12 @@ important for specifications that have lots of mutable allocations or mutable
 static items.
 
 There is one wrinkle not mentioned in the plan above: how exactly do you put
-`MirReferenceMux tp` values (where each `tp` can potentially be different) into
-the same Set? At a first approximation, we actually put `Some MirReferenceMux`
-values, which lets us ignore the `tp` parameter. But that's still not the full
-story, since that would require MirReferenceMux to have an OrdF instance in
-order to use Set operations, and MirReferenceMux has no such instance. Indeed,
-it's not clear how to define such an instance: MirReferenceMux values can
-contain symbolic information in the general case, which makes it tricky to
-return a definite True-or-False answer regarding whether two values are equal.
+MirReferenceMux values into a Set? Doing so would require MirReferenceMux to
+have an Ord instance in order to use Set operations, and MirReferenceMux has no
+such instance. Indeed, it's not clear how to define such an instance:
+MirReferenceMux values can contain symbolic information in the general case,
+which makes it tricky to return a definite True-or-False answer regarding
+whether two values are equal.
 
 Thankfully, it happens to be the case that all MirReferenceMux values that we
 check in `checkMutableAllocPostconds` are concrete. Therefore, we can compare
@@ -489,7 +486,7 @@ comparisons. More precisely:
   the `cmpSymBVConcretely` function.
 
 * We create a MirReferenceMuxConcrete newtype around MirReferenceMux, and
-  we give MirReferenceMuxConcrete an OrdF instance defined in terms of
+  we give MirReferenceMuxConcrete an Ord instance defined in terms of
   `cmpRefMuxConcretely`. We then put MirReferenceMuxConcrete values into
   the Set in step (1) of the plan above.
 
@@ -1229,7 +1226,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
              matchSlice expectedArrRefTy expectedArrRef = do
                arrLen <- arrRefTyLen expectedArrRefTy
                Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> _ <-
-                 liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualElemTpr actualSliceRef
+                 liftIO $ Mir.mirRef_peelIndexIO bak iTypes actualSliceRef
                let actualArrTy = Mir.TyArray actualElemTy arrLen
                let actualArrTpr = Mir.MirVectorRepr actualElemTpr
                let actualArrRefTy = Mir.TyRef actualArrTy actualMutbl

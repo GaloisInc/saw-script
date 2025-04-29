@@ -79,7 +79,7 @@ data TypeShape (tp :: CrucibleType) where
              -- ^ Is the reference mutable or immutable?
              -> TypeRepr tp
              -- ^ The Crucible representation of the pointee type
-             -> TypeShape (MirReferenceType tp)
+             -> TypeShape MirReferenceType
     -- | A shape for a slice reference of type @&[T]@ or @&str@, which is
     -- represented in @crucible-mir@ as a 'MirSlice', i.e., a 'StructType'
     -- where:
@@ -105,7 +105,7 @@ data TypeShape (tp :: CrucibleType) where
                -- ^ Is the reference mutable or immutable?
                -> TypeRepr tp
                -- ^ The Crucible representation of the element type.
-               -> TypeShape (MirSlice tp)
+               -> TypeShape MirSlice
     -- | A shape for an enum type. Like 'StructShape', this is indexed by
     -- 'AnyType', so code that matches on 'EnumShape' may need to further match
     -- on the 'VariantShape's in order to bring additional type information into
@@ -306,8 +306,8 @@ shapeType = go
     go (StructShape _ _ _flds) = AnyRepr
     go (EnumShape _ _ _ _ _variants) = AnyRepr
     go (TransparentShape _ shp) = go shp
-    go (RefShape _ _ _ tpr) = MirReferenceRepr tpr
-    go (SliceShape _ _ _ tpr) = MirSliceRepr tpr
+    go (RefShape _ _ _ _) = MirReferenceRepr
+    go (SliceShape _ _ _ _) = MirSliceRepr
     go (FnPtrShape _ args ret) = FunctionHandleRepr args ret
 
 fieldShapeType :: FieldShape tp -> TypeRepr tp
@@ -386,7 +386,7 @@ data IsRefShape (tp :: CrucibleType) where
              -- ^ Is the reference mutable or immutable?
              -> TypeRepr tp
              -- ^ The Crucible representation of the pointee type
-             -> IsRefShape (MirReferenceType tp)
+             -> IsRefShape MirReferenceType
 
 -- | Check that a 'TypeShape' is equal to a 'RefShape'. If so, return 'Just' a
 -- witness of that equality. Otherwise, return 'Nothing'.
@@ -402,7 +402,7 @@ sliceShapeParts ::
     M.Ty ->
     M.Mutability ->
     TypeRepr tp ->
-    (TypeShape (MirReferenceType tp), TypeShape UsizeType)
+    (TypeShape MirReferenceType, TypeShape UsizeType)
 sliceShapeParts referentTy refMutbl referentTpr =
     ( RefShape refTy referentTy refMutbl referentTpr
     , PrimShape usizeTy BaseUsizeRepr
