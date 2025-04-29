@@ -7,15 +7,19 @@ enum ETT a b = C1
              | C3 Bool b
 
 
+/*******************************************************/
+
+
 f1 : {c, d} ETT c d -> [8]
 f1 e1 = case e1 of
           C1 -> 101
           _  -> 102
 
-// test: any change if no signature?
+// test: any change if no signature?  inference mess anything up?
 f1' e1 = case e1 of
            C1 -> 101
            _  -> 102
+
 
 f2 : ETT Bool () -> [8]
 f2 e = case e of
@@ -38,7 +42,16 @@ t31 = f3 C1
 t32 = f3 (C2 False)
 t33 = f3 (C3 True ())
 
-/*
+results1 = [ t11 == 101
+           , t12 == 102
+           , t13 == 102
+           , t31 == 101
+           , t32 == 105
+           , t33 == 105
+           ]
+
+/* sawcript idioms:
+
 return (type {{ f1  }})
 return (type {{ f1' }})
 
@@ -60,7 +73,7 @@ cc3 : {a, b} b -> ETT a b
 cc3 = C3 True
 
 /***********************************************************
- * test that we're referencing proper variables
+ * tests that we're referencing proper variables when generating code for case expressions
  */
 
 x : [16]
@@ -79,7 +92,13 @@ t43a = f4 64 (C3 False 512) // 4+64   + 512   + 64+1+32   -- 677
 t42a = f4 64 (C2 128)       // 4+64 + 128     + 64+ 1+16  -- 277
 t41a = f4 64 C1             // 4+64          + 64+2+8    -- 142
 
-/*
+results2 = [ t43a == 677
+           , t42a == 277
+           , t41a == 142
+           ]
+
+/* sawcript idioms:
+
 return (eval_int {{ t41a }})
 return (eval_int {{ t42a }})
 return (eval_int {{ t43a }})
