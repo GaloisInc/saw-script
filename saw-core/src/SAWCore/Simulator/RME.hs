@@ -41,6 +41,7 @@ import Data.RME (RME)
 import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
+import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
@@ -48,7 +49,6 @@ import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType, toFiniteType)
 import SAWCore.SharedTerm
 import SAWCore.TypedAST (ModuleMap)
-import SAWCore.Utils (panic)
 import SAWCore.SATQuery
 
 #if !MIN_VERSION_base(4,8,0)
@@ -298,7 +298,7 @@ muxInt b x y =
 muxExtra :: TValue ReedMuller -> RME -> RExtra -> RExtra -> RExtra
 muxExtra (VDataType (primName -> "Prelude.Stream") [TValue tp] []) b (AStream xs) (AStream ys) =
   AStream (muxRValue tp b <$> xs <*> ys)
-muxExtra tp _ _ _ = panic "RME.muxExtra" ["type mismatch", show tp]
+muxExtra tp _ _ _ = panic "muxExtra" ["Type mismatch: " <> Text.pack (show tp)]
 
 muxRValue :: TValue ReedMuller -> RME -> RValue -> RValue -> RValue
 muxRValue tp b x y = runIdentity $ Prims.muxValue prims tp b x y
@@ -378,8 +378,7 @@ streamGetOp =
                k1 = k0 + 1
          pure $ loop (0::Integer) (V.toList (toWord bv))
 
-    _ -> panic "Verifer.SAW.Simulator.RME.streamGetOp"
-               [ "Expected Nat value", show ix ]
+    _ -> panic "streamGetOp" ["Expected Nat value; found " <> Text.pack (show ix)]
 
 
 ------------------------------------------------------------
@@ -449,4 +448,4 @@ withBitBlastedSATQuery sc addlPrims satq cont =
      let bval = bitBlastBasic modmap addlPrims varMap t
      case bval of
        VBool anf -> cont anf varShapes
-       _ -> panic "SAWCore.Simulator.RME.bitBlast" ["non-boolean result type."]
+       _ -> panic "withBitBlastedSATQuery" ["Non-boolean result type " <> Text.pack (show bval)]

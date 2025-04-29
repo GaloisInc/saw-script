@@ -30,6 +30,7 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Except
 
 import Data.IORef
+import qualified Data.Text as Text
 import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
 import Data.Map (Map)
@@ -39,6 +40,7 @@ import qualified Data.Set as Set
 import Numeric.Natural
 
 
+import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..))
 import qualified SAWCore.Prim as Prim
 import SAWCore.Prelude.Constants
@@ -48,7 +50,6 @@ import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.TypedAST
        ( ModuleMap, FlatTermF(..), toShortName, dtPrimName )
 import SAWCore.SharedTerm
-import SAWCore.Utils (panic)
 
 ------------------------------------------------------------
 
@@ -282,7 +283,11 @@ readBackTValue sc cfg = loop
        return (v':vs')
 
   readBackDataTypeParams _ [] = return []
-  readBackDataTypeParams _ _ = panic "readBackTValue" ["Arity mismatch in data type in readback"]
+  readBackDataTypeParams ty _ =
+      panic "readBackTValue / readBackDataTypeParams" [
+          "Arity mismatch in data type in readback",
+          "Remaining type: " <> Text.pack (show ty)
+      ]
 
   readBackPis (VPiType nm t pibody) =
     do t' <- loop t
@@ -425,17 +430,35 @@ readBackValue sc cfg = loop
       do let fm = Map.fromList fs
          let build (k,v) =
                   case Map.lookup k fm of
-                    Nothing -> panic "readBackValue" ["field mismatch in record value"
-                                                     , show (map fst fs), show (map snd fs) ]
+                    Nothing ->
+                       panic "readBackValue / loop" $ [
+                           "Field mismatch in record value:",
+                           "Fields in type:"
+                         ] ++ fs' ++ [
+                           "Fields in value:"
+                         ] ++ vs'
+                       where showField (f, ty) =
+                                 "   " <> f <> ": " <> Text.pack (show ty)
+                             showValue (f, _v) =
+                                 -- v is a thunk, can't print it
+                                 -- XXX: we're going to force them all
+                                 -- anyway, maybe do that as a first
+                                 -- pass on vs?
+                                 "   " <> f
+                             fs' = map showField fs
+                             vs' = map showValue vs
                     Just t ->
                        do tm <- loop t =<< force v
                           return (k,tm)
          vs' <- Map.fromList <$> traverse build vs
          scRecord sc vs'
 
-    loop tv v = panic "readBackValue" ["Type mismatch",
-                                       "Expected type: " ++ show tv,
-                                       "For value: " ++ show v]
+    loop tv v =
+        panic "readBackValue / loop" [
+            "Type mismatch",
+            "Type we have: " <> Text.pack (show tv),
+            "For value: " <> Text.pack (show v)
+        ]
 
     readBackCtorArgs cnm (VPiType _nm tv body) (v:vs) =
       do v' <- force v
@@ -444,7 +467,10 @@ readBackValue sc cfg = loop
          ts <- readBackCtorArgs cnm ty vs
          pure (t:ts)
     readBackCtorArgs _ (VDataType _ _ _) [] = pure []
-    readBackCtorArgs cnm _ _ = panic "readBackCtorArgs" ["constructor type mismatch", show cnm]
+    readBackCtorArgs cnm _ _ =
+      panic "readBackValue / readBackCtorArgs" [
+          "Constructor type mismatch: " <> Text.pack (show cnm)
+      ]
 
 
     readBackFuns (VPiType _ tv pibody) (VFun nm f) =

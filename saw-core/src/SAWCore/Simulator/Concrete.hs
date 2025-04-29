@@ -30,6 +30,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
+import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Simulator as Sim
@@ -37,7 +38,7 @@ import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.TypedAST (ModuleMap)
 import SAWCore.SharedTerm
-import SAWCore.Utils (panic)
+
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
@@ -327,5 +328,4 @@ streamGetOp =
     VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
     VIntToNat (VInt i) -> return $ IntTrie.apply (toStream xs) i
     VBVToNat _ w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
-    n -> panic "SAWCore.Simulator.Concrete.streamGetOp"
-               ["Expected Nat value", show n]
+    n -> panic "streamGetOp" ["Expected Nat value; found " <> Text.pack (show n)]

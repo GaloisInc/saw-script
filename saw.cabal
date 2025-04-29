@@ -114,7 +114,6 @@ library saw-core
     modern-uri >= 0.3.2 && < 0.4,
     MonadRandom,
     mtl,
-    panic,
     pretty,
     prettyprinter >= 1.7.0,
     prettyprinter-ansi-terminal >= 1.1.2,
@@ -133,7 +132,8 @@ library saw-core
     parameterized-utils,
 
     -- internal subpackages in the saw tree
-    rme
+    rme,
+    saw:saw-support,
 
   hs-source-dirs: saw-core/src
   exposed-modules:
@@ -177,6 +177,7 @@ library saw-core
      SAWCore.Change
      SAWCore.Utils
   other-modules:
+     SAWCore.Panic
      SAWCore.UnionFind
 
   GHC-options: -Wall -Werror -Wcompat

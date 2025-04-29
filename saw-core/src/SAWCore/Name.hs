@@ -70,7 +70,8 @@ import           Text.URI
 import qualified Language.Haskell.TH.Syntax as TH
 import           Instances.TH.Lift () -- for instance TH.Lift Text
 
-import SAWCore.Utils (panic, internalError)
+import SAWCore.Panic (panic)
+import SAWCore.Utils (internalError)
 
 
 -- Module Names ----------------------------------------------------------------
@@ -219,7 +220,7 @@ toAbsoluteName (ModuleIdentifier i) = identText i
 toAbsoluteName (ImportedName uri _) = render uri
 
 moduleIdentToURI :: Ident -> URI
-moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constructed ident URI", show ident]) $
+moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to construct ident URI: " <> identText ident]) $
   do sch  <- mkScheme "sawcore"
      path <- mapM mkPathPiece (identPieces ident)
      pure URI
@@ -279,7 +280,7 @@ primNameToExtCns :: PrimName e -> ExtCns e
 primNameToExtCns (PrimName varIdx nm tp) = EC varIdx (ModuleIdentifier nm) tp
 
 scFreshNameURI :: Text -> VarIndex -> URI
-scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
+scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to construct name URI: <> " <> nm <> "  " <> Text.pack (show i)]) $
   do sch <- mkScheme "fresh"
      nm' <- mkPathPiece (if Text.null nm then "_" else nm)
      i'  <- mkFragment (Text.pack (show i))
@@ -340,7 +341,11 @@ resolveName env nm =
     findName v m =
       case Map.lookup v m of
         Just nmi -> nmi
-        Nothing -> panic "resolveName" ["Unbound VarIndex when resolving name", show nm, show v]
+        Nothing ->
+            panic "resolveName" [
+                "Unbound VarIndex when resolving name: " <> nm,
+                "Index: " <> Text.pack (show v)
+            ]
 
 -- | Return the first alias (according to 'nameAliases') that is
 -- unambiguous in the naming environment. If there is no unambiguous

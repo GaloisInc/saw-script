@@ -109,19 +109,21 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Reader
-import Data.Text (Text, pack)
+import qualified Data.Text as Text
+import Data.Text (Text)
 import Numeric.Natural
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
+import SAWCore.Panic
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
 import SAWCore.SharedTerm
 import SAWCore.SCTypeCheck
 import SAWCore.Module
 import SAWCore.Recognizer
-import SAWCore.Utils
+
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
@@ -300,7 +302,7 @@ tupleTypeOpenTerm' ts = foldr1 pairTypeOpenTerm ts
 -- the number of types used to make the tuple type and the second is the index.
 projTupleOpenTerm' :: Natural -> Natural -> OpenTerm -> OpenTerm
 projTupleOpenTerm' 0 _ _ =
-  panic "projTupleOpenTerm'" ["projection of empty tuple!"]
+  panic "projTupleOpenTerm'" ["Projection of empty tuple!"]
 projTupleOpenTerm' 1 0 tup = tup
 projTupleOpenTerm' _ 0 tup = pairLeftOpenTerm tup
 projTupleOpenTerm' len i tup =
@@ -545,8 +547,13 @@ sigmaOpenTermMulti _ [] _ [] trm = trm
 sigmaOpenTermMulti x (tp:tps) tp_f (trm_l:trms_l) trm_r =
   sigmaOpenTerm x tp (\t -> sigmaTypeOpenTermMulti x tps (tp_f . (t:))) trm_l $
   sigmaOpenTermMulti x tps (tp_f . (trm_l:)) trms_l trm_r
-sigmaOpenTermMulti _ _ _ _ _ =
-  panic "sigmaOpenTermMulti" ["The number of types and arguments disagree"]
+sigmaOpenTermMulti _ tps _ trms _ =
+  panic "sigmaOpenTermMulti" [
+     "The number of types and arguments disagree:",
+     Text.pack (show $ length tps) <> " Remaining types",
+     Text.pack (show $ length trms) <> " remaining terms",
+     "(sorry, the values themselves are unresolved monadic computations)"
+  ]
 
 -- | Take a nested dependent pair (of the type returned by
 -- 'sigmaTypeOpenTermMulti') and apply a function @f@ to all of its projections
@@ -764,8 +771,13 @@ substTpDescMulti :: OpenTerm -> [OpenTerm] -> [OpenTerm] -> OpenTerm
 substTpDescMulti d [] [] = d
 substTpDescMulti d (k_d:k_ds) (e:es) =
   substTpDescMulti (substTpDesc d k_d e) k_ds es
-substTpDescMulti _ _ _ =
-  panic "substTpDescMulti" ["Mismatched number of kinds versus expressions"]
+substTpDescMulti _ ks es =
+  panic "substTpDescMulti" [
+      "Mismatched number of kinds versus expressions",
+      Text.pack (show $ length ks) <> " remaining kinds",
+      Text.pack (show $ length es) <> " remaining exprs",
+      "(sorry, the terms themselves are unresolved monadic computations)"
+  ]
 
 -- | Build the type description that performs 0 or more explicit substitutions
 -- into a type description given by an identifier
@@ -819,7 +831,7 @@ bindSOpenTerm ev a b m f =
 errorSOpenTerm :: EventType -> OpenTerm -> String -> OpenTerm
 errorSOpenTerm ev ret_tp msg =
   applyGlobalOpenTerm "SpecM.errorS"
-  [evTypeTerm ev, ret_tp, stringLitOpenTerm (pack msg)]
+  [evTypeTerm ev, ret_tp, stringLitOpenTerm (Text.pack msg)]
 
 -- | Build a @SpecM@ computation that uses @LetRecS@ to bind multiple
 -- corecursive functions in a body computation

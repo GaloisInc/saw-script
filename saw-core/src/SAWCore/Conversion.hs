@@ -112,17 +112,18 @@ import Control.Applicative (Applicative(..), (<$>), (<*>))
 import Control.Lens (view, _1, _2)
 import Control.Monad (ap, guard, liftM, liftM2, (>=>), (<=<))
 import Data.Bits
+import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
+import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
 import SAWCore.Recognizer ((:*:)(..))
 import SAWCore.Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.TermNet as Net
-import SAWCore.Utils (panic)
 import SAWCore.Term.Functor
 
 -- | A hack to allow storage of conversions in a term net.
@@ -398,7 +399,7 @@ mkTupleSelector :: Int -> Term -> TermBuilder Term
 mkTupleSelector i t
   | i == 1 = mkTermF (FTermF (PairLeft t))
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
-  | otherwise = panic "SAWCore.Conversion.mkTupleSelector" ["non-positive index:", show i]
+  | otherwise = panic "mkTupleSelector" ["non-positive index: " <> Text.pack (show i)]
 
 mkCtor :: PrimName Term -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
@@ -527,8 +528,10 @@ tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) act
   where
     action (ts, i)
       | i > length ts =
-          panic "SAWCore.Conversion.tupleConversion"
-          ["index out of bounds:", show (i, length ts)]
+          panic "SAWCore.tupleConversion" [
+              "index " <> Text.pack (show i) <> " out of bounds; limit is " <>
+                  Text.pack (show $ length ts)
+          ]
       | otherwise =
           Just (return (ts !! (i - 1)))
 

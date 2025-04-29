@@ -11,18 +11,14 @@ Declarations here should refer primarily to terms defined in other packages.
 SAW-specific declarations should be stored in separate modules.
 -}
 
-{-# LANGUAGE Trustworthy, TemplateHaskell #-}
+{-# LANGUAGE Trustworthy #-}
 
 module SAWCore.Utils
   ( internalError
-  , panic
   , sumBy
   ) where
 
 import Data.Foldable
-
-import Panic hiding (panic)
-import qualified Panic as Panic
 
 sumBy :: (Foldable t, Num b) => (a -> b) -> t a -> b
 sumBy f = foldl' fn 0
@@ -30,15 +26,3 @@ sumBy f = foldl' fn 0
 
 internalError :: String -> a
 internalError msg = error $ "internal: " ++ msg
-
-data SawCore = SawCore
-
-panic :: HasCallStack => String -> [String] -> a
-panic = Panic.panic SawCore
-
-instance PanicComponent SawCore where
-  panicComponentName _ = "SawCore"
-  panicComponentIssues _ = "https://github.com/GaloisInc/saw-script/issues"
-
-  {-# Noinline panicComponentRevision #-}
-  panicComponentRevision = $useGitRevision

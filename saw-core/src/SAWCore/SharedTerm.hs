@@ -315,10 +315,10 @@ import Numeric.Natural (Natural)
 import Prelude hiding (maximum)
 import Text.URI
 
+import SAWCore.Panic (panic)
 import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.Name
-import SAWCore.Utils (panic)
 import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
@@ -745,9 +745,11 @@ scBuildCtor sc d c arg_struct =
     -- correct way.
     let iota_fun rec cs_fs args =
           do let elim = case Map.lookup varidx cs_fs of
-                          Just e -> e
-                          Nothing -> panic "ctorIotaReduction"
-                                       ["no eliminator for constructor", show c]
+                   Just e -> e
+                   Nothing ->
+                     panic "ctorIotaReduction" [
+                         "no eliminator for constructor " <> Text.pack (show c)
+                     ]
              instantiateVarList sc 0 (reverse ([rec,elim]++args)) iota_red
 
     -- Finally, return the required Ctor record

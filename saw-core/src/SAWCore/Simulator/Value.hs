@@ -34,10 +34,10 @@ import qualified Data.Vector as V
 import Numeric.Natural
 import GHC.Stack
 
+import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
 import SAWCore.SharedTerm
 import SAWCore.TypedAST
-import SAWCore.Utils (panic)
 import SAWCore.Term.Pretty
 
 import SAWCore.Simulator.MonadLazy
@@ -243,11 +243,11 @@ vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
-valPairLeft v = panic "SAWCore.Simulator.Value.valPairLeft" ["Not a pair value:", show v]
+valPairLeft v = panic "valPairLeft" ["Not a pair value: " <> Text.pack (show v)]
 
 valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairRight (VPair _ t2) = force t2
-valPairRight v = panic "SAWCore.Simulator.Value.valPairRight" ["Not a pair value:", show v]
+valPairRight v = panic "valPairRight" ["Not a pair value: " <> Text.pack (show v)]
 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
@@ -256,17 +256,18 @@ valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldNam
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
 valRecordProj v@(VRecordValue _) fld =
-  panic "SAWCore.Simulator.Value.valRecordProj"
-  ["Record field not found:", show fld, "in value:", show v]
+  panic "valRecordProj" [
+      "Record field " <> Text.pack (show fld) <> " not found in value: " <>
+          Text.pack (show v)
+  ]
 valRecordProj v _ =
-  panic "SAWCore.Simulator.Value.valRecordProj"
-  ["Not a record value:", show v]
+  panic "valRecordProj" ["Not a record value: " <> Text.pack (show v)]
 
 apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun _ f) x = f x
 apply (TValue (VPiType _ _ body)) x = TValue <$> applyPiBody body x
 
-apply v _x = panic "SAWCore.Simulator.Value.apply" ["Not a function value:", show v]
+apply v _x = panic "apply" ["Not a function value: " <> Text.pack (show v)]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
 applyAll = foldM apply
