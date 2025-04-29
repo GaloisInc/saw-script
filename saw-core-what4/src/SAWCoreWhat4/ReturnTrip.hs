@@ -63,7 +63,8 @@ import           What4.Symbol
 
 import qualified SAWCore.SharedTerm as SC
 import qualified SAWCore.TypedAST as SC
-import           SAWCore.Utils (panic) -- XXX why is this using another library's panic?
+
+import           SAWCoreWhat4.Panic
 
 data SAWCoreState n
   = SAWCoreState
@@ -472,9 +473,8 @@ applyExprSymFn sym st sc fn args =
   do mp <- readIORef (saw_symMap st)
      mk <-
        case Map.lookup (indexValue (B.symFnId fn)) mp of
-         Nothing -> panic "SAWCore.applyExprSymFn"
-                    [ "Unknown symbolic function."
-                    , "*** Name: " ++ show fn
+         Nothing -> panic "applyExprSymFn" [
+                        "Unknown symbolic function " <> Text.pack (show fn)
                     ]
          Just mk -> return mk
      ts <- evaluateAsgn args
