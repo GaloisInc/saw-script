@@ -1,5 +1,10 @@
 module Test where
 
+// i.e., do we compile:
+
 enum Foo a b = Bar a | Baz b
 
-// i.e., do we compile?
+// do we see Prelude Enums?  Example from original 2052 PR:
+
+f : Option ()
+f = None
