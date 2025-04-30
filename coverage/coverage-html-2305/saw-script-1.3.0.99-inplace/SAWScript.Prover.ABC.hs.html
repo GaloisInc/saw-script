@@ -105,18 +105,18 @@ span.spaces    { background: white }
 <span class="lineno">   86 </span>  Bool -&gt;
 <span class="lineno">   87 </span>  SATQuery -&gt;
 <span class="lineno">   88 </span>  TopLevel (Maybe CEX, String)
-<span class="lineno">   89 </span><span class="decl"><span class="istickedoff">w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd</span>
-<span class="lineno">   90 </span><span class="spaces">  </span><span class="istickedoff">where cmd tmp tmpCex = &quot;%read &quot; ++ tmp ++</span>
-<span class="lineno">   91 </span><span class="spaces">                         </span><span class="istickedoff">&quot;; %blast; &amp;sweep -C 5000; &amp;syn4; &amp;cec -m; write_aiger_cex &quot; ++</span>
-<span class="lineno">   92 </span><span class="spaces">                         </span><span class="istickedoff">tmpCex</span></span>
+<span class="lineno">   89 </span><span class="decl"><span class="nottickedoff">w4AbcVerilog = w4AbcExternal Exporter.writeVerilogSAT cmd</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">where cmd tmp tmpCex = &quot;%read &quot; ++ tmp ++</span>
+<span class="lineno">   91 </span><span class="spaces">                         </span><span class="nottickedoff">&quot;; %blast; &amp;sweep -C 5000; &amp;syn4; &amp;cec -m; write_aiger_cex &quot; ++</span>
+<span class="lineno">   92 </span><span class="spaces">                         </span><span class="nottickedoff">tmpCex</span></span>
 <span class="lineno">   93 </span>
 <span class="lineno">   94 </span>w4AbcAIGER ::
 <span class="lineno">   95 </span>  Bool -&gt;
 <span class="lineno">   96 </span>  SATQuery -&gt;
 <span class="lineno">   97 </span>  TopLevel (Maybe CEX, String)
 <span class="lineno">   98 </span><span class="decl"><span class="istickedoff">w4AbcAIGER =</span>
-<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">do w4AbcExternal Exporter.writeAIG_SAT cmd</span>
-<span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">where cmd tmp tmpCex = &quot;read_aiger &quot; ++ tmp ++ &quot;; sat; write_cex &quot; ++ tmpCex</span></span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">do w4AbcExternal Exporter.writeAIG_SAT <span class="nottickedoff">cmd</span></span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">where <span class="nottickedoff">cmd tmp tmpCex = &quot;read_aiger &quot; ++ tmp ++ &quot;; sat; write_cex &quot; ++ tmpCex</span></span></span>
 <span class="lineno">  101 </span>
 <span class="lineno">  102 </span>w4AbcExternal ::
 <span class="lineno">  103 </span>  (FilePath -&gt; SATQuery -&gt; TopLevel [(ExtCns Term, FiniteType)]) -&gt;
@@ -128,54 +128,54 @@ span.spaces    { background: white }
 <span class="lineno">  109 </span><span class="spaces">       </span><span class="istickedoff">-- Create a temporary directory to put input and output files</span>
 <span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">do canonTmpDir &lt;- liftIO getCanonicalTemporaryDirectory</span>
 <span class="lineno">  111 </span><span class="spaces">       </span><span class="istickedoff">tmpDir &lt;- liftIO $ createTempDirectory canonTmpDir &quot;saw_abc_external&quot;</span>
-<span class="lineno">  112 </span><span class="spaces">       </span><span class="istickedoff">let tmp = tmpDir &lt;/&gt; &quot;abc_verilog.v&quot;</span>
-<span class="lineno">  113 </span><span class="spaces">           </span><span class="istickedoff">tmpCex = tmpDir &lt;/&gt; &quot;abc_verilog.cex&quot;</span>
+<span class="lineno">  112 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">tmp = tmpDir &lt;/&gt; &quot;abc_verilog.v&quot;</span></span>
+<span class="lineno">  113 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">tmpCex = tmpDir &lt;/&gt; &quot;abc_verilog.cex&quot;</span></span>
 <span class="lineno">  114 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  115 </span><span class="spaces">       </span><span class="istickedoff">(argNames, argTys) &lt;- unzip &lt;$&gt; exporter tmp satq</span>
+<span class="lineno">  115 </span><span class="spaces">       </span><span class="istickedoff">(argNames, argTys) &lt;- <span class="nottickedoff">unzip</span> &lt;$&gt; exporter <span class="nottickedoff">tmp</span> satq</span>
 <span class="lineno">  116 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  117 </span><span class="spaces">       </span><span class="istickedoff">-- Run ABC and remove temporaries</span>
-<span class="lineno">  118 </span><span class="spaces">       </span><span class="istickedoff">let execName = &quot;abc&quot;</span>
-<span class="lineno">  119 </span><span class="spaces">           </span><span class="istickedoff">args = [&quot;-q&quot;, argFn tmp tmpCex]</span>
-<span class="lineno">  120 </span><span class="spaces">       </span><span class="istickedoff">(_out, _err) &lt;- liftIO $ readProcessExitIfFailure execName args</span>
-<span class="lineno">  121 </span><span class="spaces">       </span><span class="istickedoff">cexExists &lt;- liftIO $ doesFileExist tmpCex</span>
+<span class="lineno">  118 </span><span class="spaces">       </span><span class="istickedoff">let <span class="nottickedoff">execName = &quot;abc&quot;</span></span>
+<span class="lineno">  119 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">args = [&quot;-q&quot;, argFn tmp tmpCex]</span></span>
+<span class="lineno">  120 </span><span class="spaces">       </span><span class="istickedoff">(_out, _err) &lt;- <span class="nottickedoff">liftIO $ readProcessExitIfFailure execName args</span></span>
+<span class="lineno">  121 </span><span class="spaces">       </span><span class="istickedoff">cexExists &lt;- <span class="nottickedoff">liftIO $ doesFileExist tmpCex</span></span>
 <span class="lineno">  122 </span><span class="spaces">       </span><span class="istickedoff">res &lt;-</span>
-<span class="lineno">  123 </span><span class="spaces">         </span><span class="istickedoff">if cexExists</span>
-<span class="lineno">  124 </span><span class="spaces">           </span><span class="istickedoff">then do</span>
-<span class="lineno">  125 </span><span class="spaces">             </span><span class="istickedoff">-- If a counterexample file exists, parse and report the results.</span>
-<span class="lineno">  126 </span><span class="spaces">             </span><span class="istickedoff">cexText &lt;- liftIO $ C8.unpack &lt;$&gt; C8.readFile tmpCex</span>
-<span class="lineno">  127 </span><span class="spaces">             </span><span class="istickedoff">cex &lt;- liftIO $ parseAigerCex cexText argTys</span>
-<span class="lineno">  128 </span><span class="spaces">             </span><span class="istickedoff">case cex of</span>
-<span class="lineno">  129 </span><span class="spaces">               </span><span class="istickedoff">Left parseErr -&gt; <span class="nottickedoff">fail parseErr</span></span>
-<span class="lineno">  130 </span><span class="spaces">               </span><span class="istickedoff">Right vs -&gt; return $ Just model</span>
-<span class="lineno">  131 </span><span class="spaces">                 </span><span class="istickedoff">where model = zip argNames (map toFirstOrderValue vs)</span>
-<span class="lineno">  132 </span><span class="spaces">           </span><span class="istickedoff">else</span>
-<span class="lineno">  133 </span><span class="spaces">             </span><span class="istickedoff">-- Otherwise, there is no counterexample.</span>
-<span class="lineno">  134 </span><span class="spaces">             </span><span class="istickedoff">return Nothing</span>
-<span class="lineno">  135 </span><span class="spaces">       </span><span class="istickedoff">liftIO $ removeDirectoryRecursive tmpDir</span>
-<span class="lineno">  136 </span><span class="spaces">       </span><span class="istickedoff">return (res, &quot;abc_verilog&quot;)</span></span>
+<span class="lineno">  123 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">if cexExists</span></span>
+<span class="lineno">  124 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">then do</span></span>
+<span class="lineno">  125 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- If a counterexample file exists, parse and report the results.</span></span>
+<span class="lineno">  126 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">cexText &lt;- liftIO $ C8.unpack &lt;$&gt; C8.readFile tmpCex</span></span>
+<span class="lineno">  127 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">cex &lt;- liftIO $ parseAigerCex cexText argTys</span></span>
+<span class="lineno">  128 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">case cex of</span></span>
+<span class="lineno">  129 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Left parseErr -&gt; fail parseErr</span></span>
+<span class="lineno">  130 </span><span class="spaces">               </span><span class="istickedoff"><span class="nottickedoff">Right vs -&gt; return $ Just model</span></span>
+<span class="lineno">  131 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">where model = zip argNames (map toFirstOrderValue vs)</span></span>
+<span class="lineno">  132 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">else</span></span>
+<span class="lineno">  133 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">-- Otherwise, there is no counterexample.</span></span>
+<span class="lineno">  134 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return Nothing</span></span>
+<span class="lineno">  135 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">liftIO $ removeDirectoryRecursive tmpDir</span></span>
+<span class="lineno">  136 </span><span class="spaces">       </span><span class="istickedoff"><span class="nottickedoff">return (res, &quot;abc_verilog&quot;)</span></span></span>
 <span class="lineno">  137 </span>
 <span class="lineno">  138 </span>parseAigerCex :: String -&gt; [FiniteType] -&gt; IO (Either String [FiniteValue])
-<span class="lineno">  139 </span><span class="decl"><span class="istickedoff">parseAigerCex text tys =</span>
-<span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">case lines text of</span>
-<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">-- Output from `write_cex`</span>
-<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">[cex] -&gt;</span>
-<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff">case words cex of</span>
-<span class="lineno">  144 </span><span class="spaces">        </span><span class="istickedoff">-- Queries with no variables will result in a blank line of output.</span>
-<span class="lineno">  145 </span><span class="spaces">        </span><span class="istickedoff">[] -&gt; pure $ liftCexBB tys []</span>
-<span class="lineno">  146 </span><span class="spaces">        </span><span class="istickedoff">[bits] -&gt; liftCexBB tys &lt;$&gt; mapM bitToBool bits</span>
-<span class="lineno">  147 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;invalid counterexample line: &quot; ++ cex</span></span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">-- Output from `write_aiger_cex`</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">[_, cex] -&gt;</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">case words cex of</span>
-<span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff">-- Queries with no variables will result in an empty vector of output.</span>
-<span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff">[_] -&gt; pure $ liftCexBB tys []</span>
-<span class="lineno">  153 </span><span class="spaces">        </span><span class="istickedoff">[bits, _] -&gt; <span class="nottickedoff">liftLECexBB tys &lt;$&gt; mapM bitToBool bits</span></span>
-<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;invalid counterexample line: &quot; ++ cex</span></span>
-<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;invalid counterexample text: &quot; ++ text</span></span>
-<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">bitToBool '0' = return False</span>
-<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">bitToBool '1' = return True</span>
-<span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">bitToBool c   = <span class="nottickedoff">fail (&quot;invalid bit: &quot; ++ [c])</span></span></span>
+<span class="lineno">  139 </span><span class="decl"><span class="nottickedoff">parseAigerCex text tys =</span>
+<span class="lineno">  140 </span><span class="spaces">  </span><span class="nottickedoff">case lines text of</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="nottickedoff">-- Output from `write_cex`</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="nottickedoff">[cex] -&gt;</span>
+<span class="lineno">  143 </span><span class="spaces">      </span><span class="nottickedoff">case words cex of</span>
+<span class="lineno">  144 </span><span class="spaces">        </span><span class="nottickedoff">-- Queries with no variables will result in a blank line of output.</span>
+<span class="lineno">  145 </span><span class="spaces">        </span><span class="nottickedoff">[] -&gt; pure $ liftCexBB tys []</span>
+<span class="lineno">  146 </span><span class="spaces">        </span><span class="nottickedoff">[bits] -&gt; liftCexBB tys &lt;$&gt; mapM bitToBool bits</span>
+<span class="lineno">  147 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail $ &quot;invalid counterexample line: &quot; ++ cex</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="nottickedoff">-- Output from `write_aiger_cex`</span>
+<span class="lineno">  149 </span><span class="spaces">    </span><span class="nottickedoff">[_, cex] -&gt;</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="nottickedoff">case words cex of</span>
+<span class="lineno">  151 </span><span class="spaces">        </span><span class="nottickedoff">-- Queries with no variables will result in an empty vector of output.</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="nottickedoff">[_] -&gt; pure $ liftCexBB tys []</span>
+<span class="lineno">  153 </span><span class="spaces">        </span><span class="nottickedoff">[bits, _] -&gt; liftLECexBB tys &lt;$&gt; mapM bitToBool bits</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail $ &quot;invalid counterexample line: &quot; ++ cex</span>
+<span class="lineno">  155 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;invalid counterexample text: &quot; ++ text</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="nottickedoff">bitToBool '0' = return False</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="nottickedoff">bitToBool '1' = return True</span>
+<span class="lineno">  159 </span><span class="spaces">    </span><span class="nottickedoff">bitToBool c   = fail (&quot;invalid bit: &quot; ++ [c])</span></span>
 <span class="lineno">  160 </span>
 <span class="lineno">  161 </span>
 <span class="lineno">  162 </span>abcSatExternal :: MonadIO m =&gt;
