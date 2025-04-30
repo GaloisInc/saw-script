@@ -88,7 +88,8 @@ import qualified Verifier.SAW.TermNet as Net
 
 type DeBruijnIndex = Int
 type FieldName = Text
-type LocalName = Text -- FIXME:MT: use/meaning, for user interface but not used semantically?
+type LocalName = Text
+  -- FIXME[d]: Document the use or meaning, for user interface but not used semantically? Always?
 
 instance Hashable a => Hashable (Vector a) where
     hashWithSalt x v = hashWithSalt x (V.toList v)

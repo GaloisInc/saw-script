@@ -95,7 +95,6 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck               as SC
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, FieldName, LocalName)
- -- FIXME: ModuleName?
 
 -- local modules:
 import Verifier.SAW.Cryptol.Panic
