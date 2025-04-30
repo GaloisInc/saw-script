@@ -5295,6 +5295,18 @@ primitives = Map.fromList
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
     pureVal x _ _ = toValue x
 
+    -- pureVal can be used for anything with a ToValue instance,
+    -- including functions. However, functions in TopLevel need to use
+    -- funVal* instead; the IsValue instances capture incorrectly and
+    -- you get a function that returns a VTopLevel instead of executing
+    -- in TopLevel. (There isn't a special-case IsValue instance for
+    -- a -> TopLevel t, because that would require overlapping instances;
+    -- but there is an IsValue instance for TopLevel t by itself (that
+    -- produces VTopLevel) so use of pureVal matches that and the
+    -- generic IsValue instance for a -> t.)
+    --
+    -- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?
+
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> Options -> BuiltinContext -> Value
     funVal1 f _ _ = VLambda $ \a -> fmap toValue (f (fromValue a))
