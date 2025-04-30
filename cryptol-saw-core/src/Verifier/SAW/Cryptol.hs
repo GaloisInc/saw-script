@@ -2113,6 +2113,21 @@ genCodeForNominalTypes sc nominalMap env0 =
 --          (in the sc :: SharedContext).  These definitions are only
 --          used by other generated sawcore code, so we don't need to
 --          return this information back to the Cryptol environment(s).
+--
+--    - N.B. PLEASE refer to doc/developer/translating-enums.md for a
+--      description of this translation at a more abstract level.  The
+--      example there is what is used below to explain the below code
+--      by SawCore examples.  The running example we use is
+--
+--      > enum ETT as = C1
+--      >             | C2 Nat
+--      >             | C3 Bool as
+--
+--   FIXME: the uses of 'preludeName' should all be removed and new
+--     definitions should be added to the module name being processed.
+--     (At one point this was problematic, TODO: figure out and
+--     resolve.)
+--
 genCodeForEnum ::
   (HasCallStack) =>
   SharedContext -> Env -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
@@ -2123,21 +2138,26 @@ genCodeForEnum sc env nt ctors =
 
   -------------------------------------------------------------
   -- Common code to handle type parameters of the nominal type:
+  --  - ExtCns are used to capture each of the type variables.
 
   let tyParamsInfo  = C.ntParams nt
       tyParamsNames = map tparamToLocalName tyParamsInfo
 
+  -- | the kinds of the type Params:
   tyParamsKinds <- flip mapM tyParamsInfo $ \tpi ->
                    importKind sc (C.tpKind tpi)
+  -- | the type Params captured using ExtCns:
   tyParamsECs   <- flip mapM (zip tyParamsKinds tyParamsNames) $ \(k,nm) ->
                    scFreshEC sc nm k
+  -- | create references to the type Params:
   tyParamsVars  <- mapM (scExtCns sc) tyParamsECs
 
   let
-      -- | add a type abstraction for each type parameter.
+      -- | @addTypeAbstractions t@ - create the SAWCore type
+      --   abstractions around @t@ (holding the type Param references)
       --
-      --   N.B.: by using ExtCns we can write SAWCore in (`t`) that
-      --   need not keep track of de Bruijn's for the type parameters.
+      --    N.B.: by using ExtCns we can write SAWCore in (`t`) that
+      --    need not keep track of de Bruijn's for the type parameters.
       addTypeAbstractions :: Term -> IO Term
       addTypeAbstractions t = scAbstractExts sc tyParamsECs t
 
@@ -2145,7 +2165,8 @@ genCodeForEnum sc env nt ctors =
   -- Common naming conventions:
   let sumTy_ident = identOfEnumType ntName'
       case_ident  = identOfEnumCase ntName'
-      tl_ident    = newIdent ntName' "__TL"
+      tl_ident    = newIdent ntName' "__LS"
+                    -- name for the 'type list', type is ListSort (thus LS)
 
   -------------------------------------------------------------
   -- Definitions to access needed SAWCore Prelude types & definitions:
@@ -2153,11 +2174,14 @@ genCodeForEnum sc env nt ctors =
   scListSort     <- scDataTypeApp sc "Prelude.ListSort" []
   scLS_Nil       <- scCtorApp sc "Prelude.LS_Nil"  []
 
-  let scLS_Cons s ls   = scCtorApp sc "Prelude.LS_Cons" [s,ls]
+  let scLS_Cons s ls   = scCtorApp     sc "Prelude.LS_Cons" [s,ls]
+
       scEithersV ls    = scGlobalApply sc "Prelude.EithersV" [ls]
       sc_eithersV b ls = scGlobalApply sc "Prelude.eithersV" [b,ls]
-      scLeft  a b x    = scCtorApp sc "Prelude.Left"  [a,b,x]
-      scRight a b x    = scCtorApp sc "Prelude.Right" [a,b,x]
+
+     -- to create values of the Either type:
+      scLeft  a b x    = scCtorApp     sc "Prelude.Left"  [a,b,x]
+      scRight a b x    = scCtorApp     sc "Prelude.Right" [a,b,x]
 
       scMakeListSort :: [Term] -> IO Term
       scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
@@ -2176,7 +2200,20 @@ genCodeForEnum sc env nt ctors =
   -- Create TypeList(tl) for the Enum, add to SAWCore environment:
   --  - elements of list are the elements of the Sum.
   --  - the types maintain the same exact type vars (see tyParamsInfo)
+  -- Using the running example, we want to add the following to the
+  -- SAWCore environment:
+  --
+  --   > ETT__LS : sort 0 -> ListSort;
+  --   > ETT__LS as = LS_Cons     (scTupleType [])
+  --   >               (LS_Cons  (scTupleType [Nat])
+  --   >                (LS_Cons (scTupleType [Bool,as])
+  --   >                  LS_Nil));
 
+  --  cheating a little in the above syntax.
+  --   - scTupleType is not sawcore, it represents what's created with `scTupleType' function
+  --   - using list syntax for th ListSort lists that are the arguments to the above.
+
+  -- argTypes_eachCtor is the sum of products matrix for our enumtype:
   (argTypes_eachCtor :: [[Term]]) <-
     -- add tyParamsInfo to env as it is needed to allow `importType`
     -- to work:
@@ -2187,10 +2224,11 @@ genCodeForEnum sc env nt ctors =
               t' <- importType sc env' t
                 -- here ^, type params are De Bruijn's
               instantiateVarList sc 0 tyParamsVars t'
-                -- here ^, type params are ExtCns
+                -- here ^, type params are references to ExtCns
            )
            (C.ecFields c)
 
+  -- map the list of types to the product type:
   represType_eachCtor <- flip mapM argTypes_eachCtor $ \ts ->
                            scTupleType sc ts
 
@@ -2200,7 +2238,11 @@ genCodeForEnum sc env nt ctors =
 
   -------------------------------------------------------------
   -- Create the definition for the SAWCore sum (to which we map the
-  -- enum type).
+  -- enum type).  For the running example we would see this:
+  --
+  -- > ETT : (as : sort 0) -> sort 0;
+  -- > ETT as = EithersV (ETT__LS as);
+  --
 
   -- the Typelist(tl) applied to the [free] type arguments.
   tl_applied <- scGlobalApply sc tl_ident tyParamsVars
@@ -2211,7 +2253,24 @@ genCodeForEnum sc env nt ctors =
   scInsertDef sc preludeName sumTy_ident sumTy_type sumTy_rhs
 
   -------------------------------------------------------------
-  -- Create an `case/eithers` specialized to the enum.
+  -- Create a `case` function specialized to the enum type.
+  -- For the running example, we will define this:
+  --
+  --   > ETT_case  : (as : sort 0)
+  --   >          -> (b: sort 0)
+  --   >          -> (arrowsType []        b)
+  --   >          -> (arrowsType [Nat]     b)
+  --   >          -> (arrowsType [Bool,as] b)
+  --   >          -> ETT as
+  --   >          -> b;
+  --   > ETT_case as b f1 f2 f3 =
+  --   >   eithersV b
+  --   >     (FunsTo_Cons b (ETT__ArgType_C1 as) (\(x: scTupleType []       ) -> f1)
+  --   >     (FunsTo_Cons b (ETT__ArgType_C2 as) (\(x: scTupleType [Nat]    ) -> f2 x.1)
+  --   >     (FunsTo_Cons b (ETT__ArgType_C3 as) (\(x: scTupleType [Bool,as]) -> f3 x.1 x.2)
+  --   >     (FunsTo_Nil b))));
+  --
+  -- Using the same syntax cheats we did above.
 
   sumTy_applied <- scGlobalApply sc sumTy_ident tyParamsVars
 
@@ -2263,6 +2322,34 @@ genCodeForEnum sc env nt ctors =
   checkSAWCoreTypeChecks sc case_ident case_rhs (Just case_type)
 
   -------------------------------------------------------------
+  -- There's a bit of 'tedium' in creating the constructors, let's look at our
+  -- running example, the SAWCore constructors we want are these:
+  --
+  --   > ```
+  --   > C1 : (as : sort 0) -> listSortGet (ETT__LS as) 0 -> ETT as;
+  --   > C1 as x =
+  --   >   Left (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+  --   >        x;
+  --   >
+  --   > C2 : (as : sort 0) -> listSortGet (ETT__LS as) 1 -> ETT as;
+  --   > C2 as x =
+  --   >   Right (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+  --   >   (Left (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
+  --   >    x);
+  --   >
+  --   > C3 : (as : sort 0) -> listSortGet (ETT__LS as) 2 -> ETT as;
+  --   > C3 as x =
+  --   >  Right   (listSortGet (ETT__LS as) 0) (EithersV (listSortDrop (ETT__LS as) 1))
+  --   >   (Right (listSortGet (ETT__LS as) 1) (EithersV (listSortDrop (ETT__LS as) 2))
+  --   >    (Left (listSortGet (ETT__LS as) 2) (EithersV (listSortDrop (ETT__LS as) 3))
+  --   >    x));
+  --   > ```
+  --
+  -- One can see that we try to encapsulate all the enum specific data in the
+  -- @ETT__LS as@ structure.
+
+
+-------------------------------------------------------------
   -- Define function for N-th injection into the whole Sum (nested Either's):
 
   scNthInjection <-
@@ -2330,9 +2417,9 @@ genCodeForEnum sc env nt ctors =
 
 
 -- | importCase - translates a Cryptol case expr to SAWCore: an application
---   of the generated SAWCore ENUMNAME__case function to appropriate arguments.
+--   of the generated SAWCore <NAME>__case function to appropriate arguments.
 --
---   - Note missing functionality:
+--   - Note missing functionality: (FIXME)
 --     - not implemented yet: default case alternatives that bind the whole scrutinee,
 --       i.e.,
 --
@@ -2387,7 +2474,9 @@ importCase sc env b scrutinee altsMap mDfltAlt =
                              (C.ecFields ctor)
                   -- N.B.: to avoid extra name construction, we are using
                   --  the same name (un-referenced!) nm' for each of the arguments
-                  --  of the CaseAlt function.  This appears to work.
+                  --  of the CaseAlt function.  This appears to work.  However, if the
+                  --  '_' name *was* actually referenced, it would not be what we would want
+                  --  However, typechecking would ascertain this.
 
                 return (C.CaseAlt vts dfltE)
 
@@ -2441,7 +2530,8 @@ importCase sc env b scrutinee altsMap mDfltAlt =
 
   return caseExpr
 
--- Shared naming cnoventions for Enum support:
+
+-- Shared naming conventions for Enum support:
 
 identOfEnumType :: C.Name -> Ident
 identOfEnumType nt = newIdent nt "__TY"
