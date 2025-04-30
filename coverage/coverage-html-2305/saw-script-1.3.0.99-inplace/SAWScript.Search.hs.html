@@ -1,0 +1,547 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWScript.Search
+<span class="lineno">    3 </span>Description : Namespace search for saw-script.
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : dholland
+<span class="lineno">    6 </span>Stability   : provisional
+<span class="lineno">    7 </span>-}
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>module SAWScript.Search (
+<span class="lineno">   12 </span>    SearchPattern,
+<span class="lineno">   13 </span>    compileSearchPattern,
+<span class="lineno">   14 </span>    matchSearchPattern
+<span class="lineno">   15 </span> ) where
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>import Data.Functor.Classes(Eq1(..), Ord1(..)) -- for liftEq, liftCompare
+<span class="lineno">   18 </span>import Data.List (sortBy)
+<span class="lineno">   19 </span>import Data.Map (Map)
+<span class="lineno">   20 </span>import qualified Data.Map as Map
+<span class="lineno">   21 </span>import Data.Set (Set)
+<span class="lineno">   22 </span>import qualified Data.Set as Set
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import SAWScript.AST
+<span class="lineno">   25 </span>import SAWScript.ASTUtil (namedTyVars)
+<span class="lineno">   26 </span>import SAWScript.Panic (panic)
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>--
+<span class="lineno">   29 </span>-- Type matching for :search.
+<span class="lineno">   30 </span>--
+<span class="lineno">   31 </span>-- The idea with :search is that it's like Coq's search: you give it
+<span class="lineno">   32 </span>-- some things to look for and it searches the current symbol table
+<span class="lineno">   33 </span>-- for objects that mention those things. Because (in saw-script at
+<span class="lineno">   34 </span>-- least) we aren't in Coq's dependently-typed world and we have
+<span class="lineno">   35 </span>-- stratified values and types, and because most of what we want to
+<span class="lineno">   36 </span>-- search for will be builtins that have no actual body to examine,
+<span class="lineno">   37 </span>-- the things we look for will be types.
+<span class="lineno">   38 </span>--
+<span class="lineno">   39 </span>-- The type pattern is therefore an optional forall quantifier (using
+<span class="lineno">   40 </span>-- the SAW/Cryptol {a} syntax) followed by one or more types. We use
+<span class="lineno">   41 </span>-- both forall-bound and unbound/free type variables in the pattern
+<span class="lineno">   42 </span>-- for matching purposes. Type variables that are externally bound
+<span class="lineno">   43 </span>-- (typedef names, abstract types) are treated as literal search
+<span class="lineno">   44 </span>-- terms. The pattern will match any type that mentions all the things
+<span class="lineno">   45 </span>-- in the pattern.
+<span class="lineno">   46 </span>--
+<span class="lineno">   47 </span>-- Searching for [a] -&gt; a will match e.g. sum : [Int] -&gt; Int and head :
+<span class="lineno">   48 </span>-- {t} [t] -&gt; t, but not length : {t} [t] -&gt; Int. In the first case
+<span class="lineno">   49 </span>-- Int is a consistent substitution for a, and the type [a] -&gt; a is
+<span class="lineno">   50 </span>-- mentioned; in the second case t is a consistent substitution. In
+<span class="lineno">   51 </span>-- the third case there isn't a consistent substitution.
+<span class="lineno">   52 </span>--
+<span class="lineno">   53 </span>-- Searching for {a} [a] -&gt; a will only match {t} [t] -&gt; t (of those
+<span class="lineno">   54 </span>-- cases) because it requires a forall-bound variable as a the
+<span class="lineno">   55 </span>-- substitution for a.
+<span class="lineno">   56 </span>--
+<span class="lineno">   57 </span>-- Currently searching for [a] [b] will still match sum, because
+<span class="lineno">   58 </span>-- Int for both a and b is a consistent substitution. This is not
+<span class="lineno">   59 </span>-- entirely desirable behavior but it seem difficult to avoid.
+<span class="lineno">   60 </span>--
+<span class="lineno">   61 </span>-- How it works:
+<span class="lineno">   62 </span>--
+<span class="lineno">   63 </span>-- I'm not interested in chasing after higher-order unification in
+<span class="lineno">   64 </span>-- depth, at least for now, because it's a big deal, so the match
+<span class="lineno">   65 </span>-- strategy we use is as follows:
+<span class="lineno">   66 </span>--
+<span class="lineno">   67 </span>-- 1. Match each type in the pattern against the observed (&quot;target&quot;)
+<span class="lineno">   68 </span>-- type. If any of them fail, we don't match.
+<span class="lineno">   69 </span>--
+<span class="lineno">   70 </span>-- 2. A type in the pattern matches (overall) if it matches (exactly)
+<span class="lineno">   71 </span>-- either the target type or a subcomponent of the target type.
+<span class="lineno">   72 </span>--
+<span class="lineno">   73 </span>-- 3. As we go we collect mappings between the tyvars in the pattern
+<span class="lineno">   74 </span>-- and the tyvars appearing in the target type. There can be multiple
+<span class="lineno">   75 </span>-- such mappings because there's more than one possible way for a type
+<span class="lineno">   76 </span>-- to match a pattern fragment. Each one of these is a Candidate.
+<span class="lineno">   77 </span>--
+<span class="lineno">   78 </span>-- 4. A type that's a type var in the foralls of the pattern can only
+<span class="lineno">   79 </span>-- match a type var that's forall-bound in the target type's
+<span class="lineno">   80 </span>-- scheme. If we don't have an entry for it in the forall mapping yet,
+<span class="lineno">   81 </span>-- add one; if we do and it doesn't match, fail.
+<span class="lineno">   82 </span>--
+<span class="lineno">   83 </span>-- 5. A type that's a type var in the free type variables of the pattern
+<span class="lineno">   84 </span>-- can match any type, but only one. If we don't have an entry for it
+<span class="lineno">   85 </span>-- in the freeVars mapping yet, add one; if we do and it doesn't match,
+<span class="lineno">   86 </span>-- fail.
+<span class="lineno">   87 </span>--
+<span class="lineno">   88 </span>-- 6. A type that's a previously bound type var must match exactly.
+<span class="lineno">   89 </span>--
+<span class="lineno">   90 </span>-- FUTURE: maybe we should expand all typedefs before matching...
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>-- &quot;Compiled&quot; pattern. Opaque outside this module.
+<span class="lineno">   94 </span>data SearchPattern = SearchPattern {
+<span class="lineno">   95 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">spForalls</span></span></span> :: Set Name,   -- ^ forall-bound tyvars in the pattern
+<span class="lineno">   96 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">spFreeVars</span></span></span> :: Set Name,  -- ^ free tyvars in the pattern
+<span class="lineno">   97 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">spTypes</span></span></span> :: [Type]        -- ^ types appearing in the pattern
+<span class="lineno">   98 </span> }
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>-- Panic if we see a unification var; they aren't supposed to escape
+<span class="lineno">  101 </span>-- the typechecker.
+<span class="lineno">  102 </span>unifyVarPanic :: String -&gt; String -&gt; a
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">unifyVarPanic who what =</span>
+<span class="lineno">  104 </span><span class="spaces">    </span><span class="nottickedoff">panic (&quot;search / &quot; ++ who) [what ++ &quot; contained a unification var&quot;]</span></span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>------------------------------------------------------------
+<span class="lineno">  107 </span>-- Exact matching {{{
+<span class="lineno">  108 </span>
+<span class="lineno">  109 </span>-- | Match two types exactly (no alpha equivalence, no substitutions, etc.)
+<span class="lineno">  110 </span>--
+<span class="lineno">  111 </span>-- This could be just (==) but we deliberately don't want an Eq instance
+<span class="lineno">  112 </span>-- for types as it's an invitation for mistakes.
+<span class="lineno">  113 </span>matchExact :: Type -&gt; Type -&gt; Bool
+<span class="lineno">  114 </span><span class="decl"><span class="istickedoff">matchExact ty1 ty2 = case (ty1, ty2) of</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">(TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) -&gt;</span>
+<span class="lineno">  116 </span><span class="spaces">        </span><span class="istickedoff">ctor1 == ctor2 &amp;&amp;</span>
+<span class="lineno">  117 </span><span class="spaces">        </span><span class="istickedoff">length args1 == length args2 &amp;&amp;</span>
+<span class="lineno">  118 </span><span class="spaces">        </span><span class="istickedoff">liftEq matchExact args1 args2</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">(TyRecord _pos1 members1, TyRecord _pos2 members2) -&gt;</span>
+<span class="lineno">  120 </span><span class="spaces">        </span><span class="istickedoff">-- member maps must be equivalent via matchExact</span>
+<span class="lineno">  121 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">liftEq matchExact members1 members2</span></span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="istickedoff">(TyVar _pos1 a1, TyVar _pos2 a2) -&gt;</span>
+<span class="lineno">  123 </span><span class="spaces">        </span><span class="istickedoff">a1 == a2</span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">(TyUnifyVar _pos1 a1, TyUnifyVar _pos2 a2) -&gt;</span>
+<span class="lineno">  125 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">a1 == a2</span></span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="istickedoff">(TyCon _ _ _, _) -&gt;</span>
+<span class="lineno">  127 </span><span class="spaces">        </span><span class="istickedoff">False</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="istickedoff">(TyRecord _ _, _) -&gt;</span>
+<span class="lineno">  129 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">False</span></span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">(TyVar _ _, _) -&gt;</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="istickedoff">False</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">(TyUnifyVar _ _, _) -&gt;</span>
+<span class="lineno">  133 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">False</span></span></span>
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>-- }}}
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>------------------------------------------------------------
+<span class="lineno">  139 </span>-- Substitutions {{{
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>-- | A single match candidate
+<span class="lineno">  142 </span>--
+<span class="lineno">  143 </span>-- We accumulate substitutions for the forall-bound and free type
+<span class="lineno">  144 </span>-- variables in the pattern; because of things like matching a tuple
+<span class="lineno">  145 </span>-- against a scalar pattern (where several of the tuple elements might
+<span class="lineno">  146 </span>-- match and they aren't necessarily all the same) there can be more
+<span class="lineno">  147 </span>-- than one candidate substitution consistent with what we've seen so
+<span class="lineno">  148 </span>-- far.
+<span class="lineno">  149 </span>data Candidate = Candidate {
+<span class="lineno">  150 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">cForallSubst</span></span></span> :: Map Name Name,
+<span class="lineno">  151 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">cFreeVarSubst</span></span></span> :: Map Name Type
+<span class="lineno">  152 </span> }
+<span class="lineno">  153 </span>
+<span class="lineno">  154 </span>-- | The starting (empty) candidate.
+<span class="lineno">  155 </span>emptyCandidate :: Candidate
+<span class="lineno">  156 </span><span class="decl"><span class="istickedoff">emptyCandidate = Candidate {</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">cForallSubst = Map.empty,</span>
+<span class="lineno">  158 </span><span class="spaces">    </span><span class="istickedoff">cFreeVarSubst = Map.empty</span>
+<span class="lineno">  159 </span><span class="spaces"> </span><span class="istickedoff">}</span></span>
+<span class="lineno">  160 </span>
+<span class="lineno">  161 </span>-- | Two match candidates are the same if the types in them are the
+<span class="lineno">  162 </span>-- same under matchExact.
+<span class="lineno">  163 </span>--
+<span class="lineno">  164 </span>-- The substitutions in the candidates are fragments of the target
+<span class="lineno">  165 </span>-- type (not the pattern) so they will always have the same spelling
+<span class="lineno">  166 </span>-- as other fragments of the target type, and we don't have to mod
+<span class="lineno">  167 </span>-- by alpha-equivalence.
+<span class="lineno">  168 </span>instance <span class="decl"><span class="nottickedoff">Eq Candidate</span></span> where
+<span class="lineno">  169 </span>    <span class="decl"><span class="nottickedoff">c1 == c2 =</span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="nottickedoff">cForallSubst c1 == cForallSubst c2</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="nottickedoff">&amp;&amp; liftEq matchExact (cFreeVarSubst c1) (cFreeVarSubst c2)</span></span>
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>-- | In order to have a Set we also need an Ord instance, and since
+<span class="lineno">  174 </span>-- there's no Ord for types we end up needing to make one up. The
+<span class="lineno">  175 </span>-- semantics of the ordering doesn't matter; it just needs to be
+<span class="lineno">  176 </span>-- self-consistent. (Also we need to not accidentally expose it;
+<span class="lineno">  177 </span>-- we can't just make an Ord instance for Type.)
+<span class="lineno">  178 </span>--
+<span class="lineno">  179 </span>-- Note that the Type ordering needs to be (and is supposed to be)
+<span class="lineno">  180 </span>-- consistent with matchExact. That is:
+<span class="lineno">  181 </span>--    forall ty1 ty2. compareType ty1 ty2 == Eq &lt;-&gt; matchExact ty1 ty2
+<span class="lineno">  182 </span>-- so that
+<span class="lineno">  183 </span>--    forall c1 c2. compare c1 c2 == Eq &lt;-&gt; c1 == c2
+<span class="lineno">  184 </span>--
+<span class="lineno">  185 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Candidate</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  186 </span>    <span class="decl"><span class="istickedoff">compare c1 c2 =</span>
+<span class="lineno">  187 </span><span class="spaces">        </span><span class="istickedoff">compare (cForallSubst c1) (cForallSubst c2) &lt;&gt;</span>
+<span class="lineno">  188 </span><span class="spaces">        </span><span class="istickedoff">liftCompare compareType (cFreeVarSubst c1) (cFreeVarSubst c2)</span>
+<span class="lineno">  189 </span><span class="spaces">          </span><span class="istickedoff">where</span>
+<span class="lineno">  190 </span><span class="spaces">            </span><span class="istickedoff">compareType ty1 ty2 = case (ty1, ty2) of</span>
+<span class="lineno">  191 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) -&gt;</span>
+<span class="lineno">  192 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">compare ctor1 ctor2 &lt;&gt;</span></span>
+<span class="lineno">  193 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">liftCompare compareType args1 args2</span></span>
+<span class="lineno">  194 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyRecord _ _) -&gt; <span class="nottickedoff">LT</span></span>
+<span class="lineno">  195 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyVar _ _) -&gt; LT</span>
+<span class="lineno">  196 </span><span class="spaces">                </span><span class="istickedoff">(TyCon _ _ _, TyUnifyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
+<span class="lineno">  197 </span><span class="spaces">                </span><span class="istickedoff">(TyRecord _ _, TyCon _ _ _) -&gt; <span class="nottickedoff">GT</span></span>
+<span class="lineno">  198 </span><span class="spaces">                </span><span class="istickedoff">(TyRecord _pos1 fields1, TyRecord _pos2 fields2) -&gt;</span>
+<span class="lineno">  199 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">liftCompare compareType fields1 fields2</span></span>
+<span class="lineno">  200 </span><span class="spaces">                </span><span class="istickedoff">(TyRecord _ _, TyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
+<span class="lineno">  201 </span><span class="spaces">                </span><span class="istickedoff">(TyRecord _ _, TyUnifyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
+<span class="lineno">  202 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyCon _ _ _) -&gt; <span class="nottickedoff">GT</span></span>
+<span class="lineno">  203 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyRecord _ _) -&gt; <span class="nottickedoff">GT</span></span>
+<span class="lineno">  204 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _pos1 x1, TyVar _pos2 x2) -&gt;</span>
+<span class="lineno">  205 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">compare x1 x2</span></span>
+<span class="lineno">  206 </span><span class="spaces">                </span><span class="istickedoff">(TyVar _ _, TyUnifyVar _ _) -&gt; <span class="nottickedoff">LT</span></span>
+<span class="lineno">  207 </span><span class="spaces">                </span><span class="istickedoff">(TyUnifyVar _ _, TyCon _ _ _) -&gt; <span class="nottickedoff">GT</span></span>
+<span class="lineno">  208 </span><span class="spaces">                </span><span class="istickedoff">(TyUnifyVar _ _, TyRecord _ _) -&gt; <span class="nottickedoff">GT</span></span>
+<span class="lineno">  209 </span><span class="spaces">                </span><span class="istickedoff">(TyUnifyVar _ _, TyVar _ _) -&gt; <span class="nottickedoff">GT</span></span>
+<span class="lineno">  210 </span><span class="spaces">                </span><span class="istickedoff">(TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) -&gt;</span>
+<span class="lineno">  211 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">compare x1 x2</span></span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>
+<span class="lineno">  214 </span>-- | For a group of match candidates, use Set. This is not free, since
+<span class="lineno">  215 </span>-- it will exercise matchExact a lot, but it also means that we don't
+<span class="lineno">  216 </span>-- produce exponentially many identical candidates in simple cases.
+<span class="lineno">  217 </span>type Candidates = Set Candidate
+<span class="lineno">  218 </span>
+<span class="lineno">  219 </span>-- | Context for matching
+<span class="lineno">  220 </span>--
+<span class="lineno">  221 </span>-- This is the immutable stuff generated up front; pass it around in
+<span class="lineno">  222 </span>-- a bundle to keep things simpler.
+<span class="lineno">  223 </span>--
+<span class="lineno">  224 </span>data Match = Match {
+<span class="lineno">  225 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">mPatForalls</span></span></span> :: Set Name,  -- ^ forall-bound tyvars in the match pattern
+<span class="lineno">  226 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">mPatFreeVars</span></span></span> :: Set Name, -- ^ free tyvars in the match pattern
+<span class="lineno">  227 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">mTgtForalls</span></span></span> :: Set Name   -- ^ forall-bound tyvars in the match target
+<span class="lineno">  228 </span> }
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>-- }}}
+<span class="lineno">  231 </span>
+<span class="lineno">  232 </span>
+<span class="lineno">  233 </span>------------------------------------------------------------
+<span class="lineno">  234 </span>-- Selectivity {{{
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>-- | Compare two type pattern fragments by how selective they are.
+<span class="lineno">  237 </span>-- Approximately.
+<span class="lineno">  238 </span>--
+<span class="lineno">  239 </span>-- The idea is just to apply things that will reject a lot of
+<span class="lineno">  240 </span>-- inputs first, not to be particularly sophisticated, so what
+<span class="lineno">  241 </span>-- we'll do is score the patterns by whether they match one
+<span class="lineno">  242 </span>-- thing, a few things, a lot of things, or everything (which
+<span class="lineno">  243 </span>-- we'll manifest as the values 1-4).
+<span class="lineno">  244 </span>--
+<span class="lineno">  245 </span>-- More selective is &quot;greater than&quot;, so sortBy will put the most
+<span class="lineno">  246 </span>-- selective patterns last, so they get applied first by foldr.
+<span class="lineno">  247 </span>--
+<span class="lineno">  248 </span>compareBySelectivity :: Match -&gt; Type -&gt; Type -&gt; Ordering
+<span class="lineno">  249 </span><span class="decl"><span class="istickedoff">compareBySelectivity ctx ty1 ty2 =</span>
+<span class="lineno">  250 </span><span class="spaces">  </span><span class="istickedoff">-- score is 1..4 where 1 is most selective, but we want</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="istickedoff">-- more selective to be Gt, so flip the comparison.</span>
+<span class="lineno">  252 </span><span class="spaces">  </span><span class="istickedoff">compare (score ty2) (score ty1)</span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">where</span>
+<span class="lineno">  254 </span><span class="spaces">      </span><span class="istickedoff">score :: Type -&gt; Int</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="istickedoff">score ty = case ty of</span>
+<span class="lineno">  256 </span><span class="spaces">          </span><span class="istickedoff">TyCon _pos _ctor args -&gt;</span>
+<span class="lineno">  257 </span><span class="spaces">              </span><span class="istickedoff">-- take the max score of the args, deduct one,</span>
+<span class="lineno">  258 </span><span class="spaces">              </span><span class="istickedoff">-- clamp to 1</span>
+<span class="lineno">  259 </span><span class="spaces">              </span><span class="istickedoff">max 1 ((foldr <span class="nottickedoff">max</span> 1 $ map <span class="nottickedoff">score</span> args) - 1)</span>
+<span class="lineno">  260 </span><span class="spaces">          </span><span class="istickedoff">TyRecord _pos fields -&gt;</span>
+<span class="lineno">  261 </span><span class="spaces">              </span><span class="istickedoff">-- same treatment</span>
+<span class="lineno">  262 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">max 1 ((foldr max 1 $ map score $ Map.elems fields) - 1)</span></span>
+<span class="lineno">  263 </span><span class="spaces">          </span><span class="istickedoff">TyVar _pos x</span>
+<span class="lineno">  264 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">x == &quot;_&quot;</span> -&gt;</span>
+<span class="lineno">  265 </span><span class="spaces">              </span><span class="istickedoff">-- wildcard matches everything</span>
+<span class="lineno">  266 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">4</span></span>
+<span class="lineno">  267 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">Set.member x (mPatFreeVars ctx)</span> -&gt;</span>
+<span class="lineno">  268 </span><span class="spaces">              </span><span class="istickedoff">-- free var matches anything</span>
+<span class="lineno">  269 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">3</span></span>
+<span class="lineno">  270 </span><span class="spaces">           </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  271 </span><span class="spaces">              </span><span class="istickedoff">-- forall-bound var, treat as &quot;one thing&quot;</span>
+<span class="lineno">  272 </span><span class="spaces">              </span><span class="istickedoff">-- (even though it's not quite)</span>
+<span class="lineno">  273 </span><span class="spaces">              </span><span class="istickedoff">-- or previously-bound var, which is one thing</span>
+<span class="lineno">  274 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">1</span></span>
+<span class="lineno">  275 </span><span class="spaces">          </span><span class="istickedoff">TyUnifyVar _pos _x -&gt;</span>
+<span class="lineno">  276 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">unifyVarPanic &quot;compareBySelectivity&quot; &quot;pattern&quot;</span></span></span>
+<span class="lineno">  277 </span>
+<span class="lineno">  278 </span>-- }}}
+<span class="lineno">  279 </span>
+<span class="lineno">  280 </span>
+<span class="lineno">  281 </span>------------------------------------------------------------
+<span class="lineno">  282 </span>-- Full matching {{{
+<span class="lineno">  283 </span>
+<span class="lineno">  284 </span>-- Match types according to a current substitution, on the assumption
+<span class="lineno">  285 </span>-- that the target type and pattern must correspond fully.
+<span class="lineno">  286 </span>--
+<span class="lineno">  287 </span>-- The patterns we start out with are fragments and can match part of
+<span class="lineno">  288 </span>-- a target, but once we start matching the target we don't want to
+<span class="lineno">  289 </span>-- skip over internal parts of it.
+<span class="lineno">  290 </span>
+<span class="lineno">  291 </span>-- | Match a single target type against a single pattern type, given
+<span class="lineno">  292 </span>-- a single candidate substitution. Return an updated candidate or
+<span class="lineno">  293 </span>-- Nothing on match failure.
+<span class="lineno">  294 </span>--
+<span class="lineno">  295 </span>matchFullOnce :: Match -&gt; Candidate -&gt; Type -&gt; Type -&gt; Maybe Candidate
+<span class="lineno">  296 </span><span class="decl"><span class="istickedoff">matchFullOnce ctx cand tgtType patType =</span>
+<span class="lineno">  297 </span><span class="spaces">  </span><span class="istickedoff">case patType of</span>
+<span class="lineno">  298 </span><span class="spaces">      </span><span class="istickedoff">TyCon _patpos patCtor patArgs -&gt;</span>
+<span class="lineno">  299 </span><span class="spaces">          </span><span class="istickedoff">-- The pattern is a type constructor; only accept the same one.</span>
+<span class="lineno">  300 </span><span class="spaces">          </span><span class="istickedoff">case tgtType of</span>
+<span class="lineno">  301 </span><span class="spaces">              </span><span class="istickedoff">TyCon _tgtpos tgtCtor tgtArgs | tgtCtor == patCtor -&gt;</span>
+<span class="lineno">  302 </span><span class="spaces">                  </span><span class="istickedoff">-- If the pattern has more args, give up; if it has</span>
+<span class="lineno">  303 </span><span class="spaces">                  </span><span class="istickedoff">-- the same or fewer, match the ones that are there.</span>
+<span class="lineno">  304 </span><span class="spaces">                  </span><span class="istickedoff">if <span class="tickonlyfalse">length tgtArgs &lt; length patArgs</span> then <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  305 </span><span class="spaces">                  </span><span class="istickedoff">else</span>
+<span class="lineno">  306 </span><span class="spaces">                      </span><span class="istickedoff">-- all the args must match</span>
+<span class="lineno">  307 </span><span class="spaces">                      </span><span class="istickedoff">matchFullAllPairs ctx cand (zip tgtArgs patArgs)</span>
+<span class="lineno">  308 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  309 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  310 </span><span class="spaces">      </span><span class="istickedoff">TyRecord _patpos patFields -&gt;</span>
+<span class="lineno">  311 </span><span class="spaces">          </span><span class="istickedoff">-- The pattern is a record; only accept records. Match the</span>
+<span class="lineno">  312 </span><span class="spaces">          </span><span class="istickedoff">-- fields that exist in the pattern and accept others.</span>
+<span class="lineno">  313 </span><span class="spaces">          </span><span class="istickedoff">-- (FUTURE: if we ever get support for record inference and</span>
+<span class="lineno">  314 </span><span class="spaces">          </span><span class="istickedoff">-- with it partial record types, we can refine this.)</span>
+<span class="lineno">  315 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case tgtType of</span></span>
+<span class="lineno">  316 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">TyRecord _tgtpos tgtFields -&gt;</span></span>
+<span class="lineno">  317 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">let combine t p = (t, p)</span></span>
+<span class="lineno">  318 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">pairs = Map.intersectionWith combine tgtFields patFields</span></span>
+<span class="lineno">  319 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  320 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">-- all the fields must match</span></span>
+<span class="lineno">  321 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">matchFullAllPairs ctx cand (Map.elems pairs)</span></span>
+<span class="lineno">  322 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  323 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  324 </span><span class="spaces">      </span><span class="istickedoff">TyVar _patpos patVar</span>
+<span class="lineno">  325 </span><span class="spaces">        </span><span class="istickedoff">| patVar == &quot;_&quot; -&gt;</span>
+<span class="lineno">  326 </span><span class="spaces">              </span><span class="istickedoff">-- wildcard matches anything, go on</span>
+<span class="lineno">  327 </span><span class="spaces">              </span><span class="istickedoff">Just cand</span>
+<span class="lineno">  328 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  329 </span><span class="spaces">        </span><span class="istickedoff">| Set.member patVar (mPatFreeVars ctx) -&gt;</span>
+<span class="lineno">  330 </span><span class="spaces">              </span><span class="istickedoff">-- pattern is a free var</span>
+<span class="lineno">  331 </span><span class="spaces">              </span><span class="istickedoff">let fvSubst = cFreeVarSubst cand in</span>
+<span class="lineno">  332 </span><span class="spaces">              </span><span class="istickedoff">case Map.lookup patVar fvSubst of</span>
+<span class="lineno">  333 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  334 </span><span class="spaces">                      </span><span class="istickedoff">-- no mapping yet, capture it</span>
+<span class="lineno">  335 </span><span class="spaces">                      </span><span class="istickedoff">let fvSubst' = Map.insert patVar tgtType fvSubst</span>
+<span class="lineno">  336 </span><span class="spaces">                          </span><span class="istickedoff">cand' = cand { cFreeVarSubst = fvSubst' }</span>
+<span class="lineno">  337 </span><span class="spaces">                      </span><span class="istickedoff">in</span>
+<span class="lineno">  338 </span><span class="spaces">                      </span><span class="istickedoff">Just cand'</span>
+<span class="lineno">  339 </span><span class="spaces">                  </span><span class="istickedoff">Just prev -&gt;</span>
+<span class="lineno">  340 </span><span class="spaces">                      </span><span class="istickedoff">-- check that the mapping is identical</span>
+<span class="lineno">  341 </span><span class="spaces">                      </span><span class="istickedoff">--</span>
+<span class="lineno">  342 </span><span class="spaces">                      </span><span class="istickedoff">-- (note that because prev comes from the</span>
+<span class="lineno">  343 </span><span class="spaces">                      </span><span class="istickedoff">-- target, any forall-bound vars or whatnot in</span>
+<span class="lineno">  344 </span><span class="spaces">                      </span><span class="istickedoff">-- it must match identically and we don't have</span>
+<span class="lineno">  345 </span><span class="spaces">                      </span><span class="istickedoff">-- to worry about alpha-equivalence or other</span>
+<span class="lineno">  346 </span><span class="spaces">                      </span><span class="istickedoff">-- matching concerns)</span>
+<span class="lineno">  347 </span><span class="spaces">                      </span><span class="istickedoff">if matchExact prev tgtType then</span>
+<span class="lineno">  348 </span><span class="spaces">                          </span><span class="istickedoff">Just cand</span>
+<span class="lineno">  349 </span><span class="spaces">                      </span><span class="istickedoff">else</span>
+<span class="lineno">  350 </span><span class="spaces">                          </span><span class="istickedoff">Nothing</span>
+<span class="lineno">  351 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  352 </span><span class="spaces">        </span><span class="istickedoff">| Set.member patVar (mPatForalls ctx) -&gt;</span>
+<span class="lineno">  353 </span><span class="spaces">              </span><span class="istickedoff">-- pattern is a forall-bound var; only accept a target</span>
+<span class="lineno">  354 </span><span class="spaces">              </span><span class="istickedoff">-- forall-bound var</span>
+<span class="lineno">  355 </span><span class="spaces">              </span><span class="istickedoff">case tgtType of</span>
+<span class="lineno">  356 </span><span class="spaces">                  </span><span class="istickedoff">TyVar _tgtpos tgtVar | Set.member tgtVar (mTgtForalls ctx) -&gt;</span>
+<span class="lineno">  357 </span><span class="spaces">                      </span><span class="istickedoff">-- both forall-bound vars</span>
+<span class="lineno">  358 </span><span class="spaces">                      </span><span class="istickedoff">let fSubst = cForallSubst cand in</span>
+<span class="lineno">  359 </span><span class="spaces">                      </span><span class="istickedoff">case Map.lookup patVar fSubst of</span>
+<span class="lineno">  360 </span><span class="spaces">                          </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  361 </span><span class="spaces">                              </span><span class="istickedoff">-- no mapping yet, capture it</span>
+<span class="lineno">  362 </span><span class="spaces">                              </span><span class="istickedoff">let fSubst' = Map.insert patVar tgtVar fSubst</span>
+<span class="lineno">  363 </span><span class="spaces">                                  </span><span class="istickedoff">cand' = cand { cForallSubst = fSubst' }</span>
+<span class="lineno">  364 </span><span class="spaces">                              </span><span class="istickedoff">in</span>
+<span class="lineno">  365 </span><span class="spaces">                              </span><span class="istickedoff">Just cand'</span>
+<span class="lineno">  366 </span><span class="spaces">                          </span><span class="istickedoff">Just prev</span>
+<span class="lineno">  367 </span><span class="spaces">                            </span><span class="istickedoff">| <span class="nottickedoff">prev == tgtVar</span> -&gt;</span>
+<span class="lineno">  368 </span><span class="spaces">                                  </span><span class="istickedoff">-- same var</span>
+<span class="lineno">  369 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">Just cand</span></span>
+<span class="lineno">  370 </span><span class="spaces">                            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno">  371 </span><span class="spaces">                                  </span><span class="istickedoff">-- different, so we fail</span>
+<span class="lineno">  372 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  373 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt; Nothing</span>
+<span class="lineno">  374 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  375 </span><span class="spaces">        </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt;</span>
+<span class="lineno">  376 </span><span class="spaces">              </span><span class="istickedoff">-- bound type variable; only accept matching bound type variable</span>
+<span class="lineno">  377 </span><span class="spaces">              </span><span class="istickedoff">case tgtType of</span>
+<span class="lineno">  378 </span><span class="spaces">                  </span><span class="istickedoff">TyVar _tgtpos tgtVar | tgtVar == patVar -&gt;</span>
+<span class="lineno">  379 </span><span class="spaces">                      </span><span class="istickedoff">Just cand</span>
+<span class="lineno">  380 </span><span class="spaces">                  </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  381 </span><span class="spaces">                      </span><span class="istickedoff">Nothing</span>
+<span class="lineno">  382 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  383 </span><span class="spaces">      </span><span class="istickedoff">TyUnifyVar _patpos _patVar -&gt;</span>
+<span class="lineno">  384 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">unifyVarPanic &quot;matchFullOnce&quot; &quot;pattern&quot;</span></span></span>
+<span class="lineno">  385 </span>
+<span class="lineno">  386 </span>-- | Run matchFullOnce on a list of target and pattern type pairs.
+<span class="lineno">  387 </span>--
+<span class="lineno">  388 </span>-- All must match, so we thread a single candidate through all the
+<span class="lineno">  389 </span>-- matches and give up if any of them fail.
+<span class="lineno">  390 </span>--
+<span class="lineno">  391 </span>-- This is the recursive case used for record members and constructor
+<span class="lineno">  392 </span>-- arguments.
+<span class="lineno">  393 </span>--
+<span class="lineno">  394 </span>matchFullAllPairs :: Match -&gt; Candidate -&gt; [(Type, Type)] -&gt; Maybe Candidate
+<span class="lineno">  395 </span><span class="decl"><span class="istickedoff">matchFullAllPairs ctx cand0 pairs =</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">let once (tgtType, patType) maybeCand = case maybeCand of</span>
+<span class="lineno">  397 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; Nothing</span>
+<span class="lineno">  398 </span><span class="spaces">          </span><span class="istickedoff">Just cand -&gt; matchFullOnce ctx cand tgtType patType</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">in foldr once (Just cand0) pairs</span></span>
+<span class="lineno">  400 </span>
+<span class="lineno">  401 </span>-- }}}
+<span class="lineno">  402 </span>
+<span class="lineno">  403 </span>
+<span class="lineno">  404 </span>------------------------------------------------------------
+<span class="lineno">  405 </span>-- Fragment matching {{{
+<span class="lineno">  406 </span>
+<span class="lineno">  407 </span>-- Match a target type against a pattern, trying to find a subsection
+<span class="lineno">  408 </span>-- of the target type that the pattern successfully matches. Since in
+<span class="lineno">  409 </span>-- general there are many possible alignments, produces a set of
+<span class="lineno">  410 </span>-- candidate substitutions.
+<span class="lineno">  411 </span>
+<span class="lineno">  412 </span>-- | Try matching each subelement of one target type against one
+<span class="lineno">  413 </span>-- pattern type, with one current match candidate; return possibly
+<span class="lineno">  414 </span>-- several updated match candidates, or none on complete match
+<span class="lineno">  415 </span>-- failure.
+<span class="lineno">  416 </span>--
+<span class="lineno">  417 </span>matchFragOnceBody :: Match -&gt; Candidate -&gt; Type -&gt; Type -&gt; Candidates
+<span class="lineno">  418 </span><span class="decl"><span class="istickedoff">matchFragOnceBody ctx cand tgtType patType =</span>
+<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">let checkOnce tgtSub =</span>
+<span class="lineno">  420 </span><span class="spaces">            </span><span class="istickedoff">matchFragOnce ctx cand tgtSub patType</span>
+<span class="lineno">  421 </span><span class="spaces">        </span><span class="istickedoff">checkList tgtSubs =</span>
+<span class="lineno">  422 </span><span class="spaces">            </span><span class="istickedoff">-- each result is a candidate set, the overall result is the union</span>
+<span class="lineno">  423 </span><span class="spaces">            </span><span class="istickedoff">Set.unions $ map checkOnce tgtSubs</span>
+<span class="lineno">  424 </span><span class="spaces">    </span><span class="istickedoff">in case tgtType of</span>
+<span class="lineno">  425 </span><span class="spaces">        </span><span class="istickedoff">TyCon _tgtpos _tgtCtor tgtArgs -&gt;</span>
+<span class="lineno">  426 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a type constructor; we can match any argument.</span>
+<span class="lineno">  427 </span><span class="spaces">            </span><span class="istickedoff">checkList tgtArgs</span>
+<span class="lineno">  428 </span><span class="spaces">        </span><span class="istickedoff">TyRecord _tgtpos tgtFields -&gt;</span>
+<span class="lineno">  429 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a record. We can match any field.</span>
+<span class="lineno">  430 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">checkList (Map.elems tgtFields)</span></span>
+<span class="lineno">  431 </span><span class="spaces">        </span><span class="istickedoff">TyVar _ _ -&gt;</span>
+<span class="lineno">  432 </span><span class="spaces">            </span><span class="istickedoff">-- The target is a variable. There aren't any subelements.</span>
+<span class="lineno">  433 </span><span class="spaces">            </span><span class="istickedoff">Set.empty</span>
+<span class="lineno">  434 </span><span class="spaces">        </span><span class="istickedoff">TyUnifyVar _tgtpos _tgtVar -&gt;</span>
+<span class="lineno">  435 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">unifyVarPanic &quot;matchFragOnceBody&quot; &quot;target&quot;</span></span></span>
+<span class="lineno">  436 </span>
+<span class="lineno">  437 </span>-- | Match one observed (&quot;target&quot;) type against one pattern type, with
+<span class="lineno">  438 </span>-- one current match candidate; return possibly several updated match
+<span class="lineno">  439 </span>-- candidates, or none on complete match failure.
+<span class="lineno">  440 </span>--
+<span class="lineno">  441 </span>matchFragOnce :: Match -&gt; Candidate -&gt; Type -&gt; Type -&gt; Candidates
+<span class="lineno">  442 </span><span class="decl"><span class="istickedoff">matchFragOnce ctx cand tgtType patType =</span>
+<span class="lineno">  443 </span><span class="spaces">  </span><span class="istickedoff">let whenHere = matchFullOnce ctx cand tgtType patType</span>
+<span class="lineno">  444 </span><span class="spaces">      </span><span class="istickedoff">whenSub = matchFragOnceBody ctx cand tgtType patType</span>
+<span class="lineno">  445 </span><span class="spaces">  </span><span class="istickedoff">in case whenHere of</span>
+<span class="lineno">  446 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; whenSub</span>
+<span class="lineno">  447 </span><span class="spaces">      </span><span class="istickedoff">Just s -&gt; Set.insert s whenSub</span></span>
+<span class="lineno">  448 </span>
+<span class="lineno">  449 </span>-- | Match one target type against a list of pattern type fragments.
+<span class="lineno">  450 </span>--
+<span class="lineno">  451 </span>matchFragList :: Match -&gt; Candidate -&gt; Type -&gt; [Type] -&gt; Candidates
+<span class="lineno">  452 </span><span class="decl"><span class="istickedoff">matchFragList ctx cand0 tgtType patTypes =</span>
+<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">let oneCandidate patType cand =</span>
+<span class="lineno">  454 </span><span class="spaces">            </span><span class="istickedoff">matchFragOnce ctx cand tgtType patType</span>
+<span class="lineno">  455 </span><span class="spaces">        </span><span class="istickedoff">oneType patType cands =</span>
+<span class="lineno">  456 </span><span class="spaces">            </span><span class="istickedoff">-- each result is a candidate set, ultimate result is the union</span>
+<span class="lineno">  457 </span><span class="spaces">            </span><span class="istickedoff">let results = map (oneCandidate patType) $ Set.elems cands in</span>
+<span class="lineno">  458 </span><span class="spaces">            </span><span class="istickedoff">Set.unions results</span>
+<span class="lineno">  459 </span><span class="spaces">        </span><span class="istickedoff">-- Sort the pattern types so the most specific ones come last,</span>
+<span class="lineno">  460 </span><span class="spaces">        </span><span class="istickedoff">-- to cut down the search space as fast as possible.</span>
+<span class="lineno">  461 </span><span class="spaces">        </span><span class="istickedoff">--</span>
+<span class="lineno">  462 </span><span class="spaces">        </span><span class="istickedoff">-- (Note: last rather than first because we're using foldr, not</span>
+<span class="lineno">  463 </span><span class="spaces">        </span><span class="istickedoff">-- foldl.)</span>
+<span class="lineno">  464 </span><span class="spaces">        </span><span class="istickedoff">patTypes' = sortBy (compareBySelectivity <span class="nottickedoff">ctx</span>) patTypes</span>
+<span class="lineno">  465 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno">  466 </span><span class="spaces">    </span><span class="istickedoff">foldr oneType (Set.singleton cand0) patTypes'</span></span>
+<span class="lineno">  467 </span>
+<span class="lineno">  468 </span>-- }}}
+<span class="lineno">  469 </span>
+<span class="lineno">  470 </span>
+<span class="lineno">  471 </span>------------------------------------------------------------
+<span class="lineno">  472 </span>-- External interface {{{
+<span class="lineno">  473 </span>
+<span class="lineno">  474 </span>-- short name for the environment type we use
+<span class="lineno">  475 </span>--
+<span class="lineno">  476 </span>-- (XXX: this is pasted from the typechecker, and should probably be
+<span class="lineno">  477 </span>-- either in its public interface or shared from somewhere else, but
+<span class="lineno">  478 </span>-- sorting it out requires still-pending interpreter cleanup)
+<span class="lineno">  479 </span>type TyEnv = Map Name NamedType
+<span class="lineno">  480 </span>
+<span class="lineno">  481 </span>-- | Check and compile a type schema pattern.
+<span class="lineno">  482 </span>--
+<span class="lineno">  483 </span>-- We get passed a list of forall bindings (will often be empty)
+<span class="lineno">  484 </span>-- and one or more types. Convert this into our internal representation.
+<span class="lineno">  485 </span>--
+<span class="lineno">  486 </span>-- Type variables that are not explicitly forall-bound and not listed
+<span class="lineno">  487 </span>-- in the environment are handled as free type variables, which have
+<span class="lineno">  488 </span>-- different match semantics from forall-bound type variables. See
+<span class="lineno">  489 </span>-- notes at the top of the file.
+<span class="lineno">  490 </span>--
+<span class="lineno">  491 </span>compileSearchPattern :: TyEnv -&gt; SchemaPattern -&gt; SearchPattern
+<span class="lineno">  492 </span><span class="decl"><span class="istickedoff">compileSearchPattern tyEnv (SchemaPattern forallList tys) =</span>
+<span class="lineno">  493 </span><span class="spaces">  </span><span class="istickedoff">let foralls = Set.fromList $ map (\(_pos, name) -&gt; name) forallList</span>
+<span class="lineno">  494 </span><span class="spaces">      </span><span class="istickedoff">boundVars = Map.keysSet tyEnv</span>
+<span class="lineno">  495 </span><span class="spaces">      </span><span class="istickedoff">-- treat '_' as a bound var to avoid assorted confusion</span>
+<span class="lineno">  496 </span><span class="spaces">      </span><span class="istickedoff">boundVars' = Set.insert &quot;_&quot; boundVars</span>
+<span class="lineno">  497 </span><span class="spaces">      </span><span class="istickedoff">oneType ty freeVarsSoFar =</span>
+<span class="lineno">  498 </span><span class="spaces">        </span><span class="istickedoff">-- get all the type variables present and drop the ones already known</span>
+<span class="lineno">  499 </span><span class="spaces">        </span><span class="istickedoff">let vars0 = Map.keysSet $ namedTyVars ty</span>
+<span class="lineno">  500 </span><span class="spaces">            </span><span class="istickedoff">vars1 = vars0 Set.\\ foralls</span>
+<span class="lineno">  501 </span><span class="spaces">            </span><span class="istickedoff">vars2 = vars1 Set.\\ boundVars'</span>
+<span class="lineno">  502 </span><span class="spaces">            </span><span class="istickedoff">vars3 = vars2 Set.\\ freeVarsSoFar</span>
+<span class="lineno">  503 </span><span class="spaces">        </span><span class="istickedoff">in</span>
+<span class="lineno">  504 </span><span class="spaces">        </span><span class="istickedoff">-- add what's left to the collection of free type variables</span>
+<span class="lineno">  505 </span><span class="spaces">        </span><span class="istickedoff">Set.union freeVarsSoFar vars3</span>
+<span class="lineno">  506 </span><span class="spaces">      </span><span class="istickedoff">freeVars = foldr oneType Set.empty tys</span>
+<span class="lineno">  507 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff">SearchPattern { spForalls = foralls, spFreeVars = freeVars, spTypes = tys }</span></span>
+<span class="lineno">  509 </span>
+<span class="lineno">  510 </span>-- | Match a type pattern.
+<span class="lineno">  511 </span>--
+<span class="lineno">  512 </span>matchSearchPattern :: SearchPattern -&gt; Schema -&gt; Bool
+<span class="lineno">  513 </span><span class="decl"><span class="istickedoff">matchSearchPattern pattern (Forall tgtForallList tgtType) =</span>
+<span class="lineno">  514 </span><span class="spaces">  </span><span class="istickedoff">let tgtForalls = Set.fromList $ map (\(_pos, name) -&gt; name) tgtForallList</span>
+<span class="lineno">  515 </span><span class="spaces">      </span><span class="istickedoff">ctx = Match {</span>
+<span class="lineno">  516 </span><span class="spaces">          </span><span class="istickedoff">mPatForalls = spForalls pattern,</span>
+<span class="lineno">  517 </span><span class="spaces">          </span><span class="istickedoff">mPatFreeVars = spFreeVars pattern,</span>
+<span class="lineno">  518 </span><span class="spaces">          </span><span class="istickedoff">mTgtForalls = tgtForalls</span>
+<span class="lineno">  519 </span><span class="spaces">       </span><span class="istickedoff">}</span>
+<span class="lineno">  520 </span><span class="spaces">      </span><span class="istickedoff">cands = matchFragList ctx emptyCandidate tgtType (spTypes pattern)</span>
+<span class="lineno">  521 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">not $ Set.null cands</span></span>
+<span class="lineno">  523 </span>
+<span class="lineno">  524 </span>-- }}}
+
+</pre>
+</body>
+</html>
