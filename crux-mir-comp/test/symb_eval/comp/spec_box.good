@@ -5,7 +5,7 @@ failures:
 
 ---- spec_box/<DISAMB>::use_f[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   ./libs/crucible/lib.rs:38:41: 38:58 !test/symb_eval/comp/spec_box.rs:58:5: 58:29: error: in spec_box/<DISAMB>::use_f[0]
+[Crux]   ./libs/crucible/lib.rs:41:9: 41:79 !test/symb_eval/comp/spec_box.rs:58:5: 58:29: error: in spec_box/<DISAMB>::use_f[0]
 [Crux]   MIR assertion at test/symb_eval/comp/spec_box.rs:58:5:
 [Crux]   	d < 10
 

@@ -4,7 +4,7 @@ failures:
 
 ---- basic_err_mismatch/<DISAMB>::test[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   test/symb_eval/cryptol/basic_err_mismatch.rs:8:51: 8:60: error: in basic_err_mismatch/<DISAMB>::test[0]
+[Crux]   test/symb_eval/cryptol/basic_err_mismatch.rs:8:31: 8:61: error: in basic_err_mismatch/<DISAMB>::test[0]
 [Crux]   error loading "addByte": type mismatch in argument 1: Cryptol type [8] does not match Rust type ()
 
 [Crux] Overall status: Invalid.

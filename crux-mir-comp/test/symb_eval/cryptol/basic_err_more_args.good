@@ -4,7 +4,7 @@ failures:
 
 ---- basic_err_more_args/<DISAMB>::test[0] counterexamples ----
 [Crux] Found counterexample for verification goal
-[Crux]   test/symb_eval/cryptol/basic_err_more_args.rs:8:47: 8:56: error: in basic_err_more_args/<DISAMB>::test[0]
+[Crux]   test/symb_eval/cryptol/basic_err_more_args.rs:8:27: 8:57: error: in basic_err_more_args/<DISAMB>::test[0]
 [Crux]   error loading "addByte": type mismatch in return value: Cryptol type [8] -> [8] does not match Rust type u8
 
 [Crux] Overall status: Invalid.
